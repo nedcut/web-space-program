@@ -91,21 +91,22 @@ export class ReentryFx {
   }
 
   /**
-   * @param heatFlux stagnation heat flux, W/m² (visible from ~50 kW/m², saturates around 1.5 MW/m²)
+   * @param heatFlux stagnation heat flux, W/m² (visible from ~10 kW/m², saturates around 300 kW/m²)
    * @param airDirInto unit vector (render space) pointing into the oncoming air, i.e. along air-relative velocity
    * @param radius vessel bounding radius, m
    */
   update(heatFlux: number, airDirInto: THREE.Vector3, radius: number, time: number) {
-    const k = THREE.MathUtils.clamp((Math.log10(Math.max(heatFlux, 1)) - 4.7) / 1.5, 0, 1);
+    const k = THREE.MathUtils.clamp((Math.log10(Math.max(heatFlux, 1)) - 4.0) / 1.5, 0, 1);
     this.object.visible = k > 0.01;
     if (!this.object.visible) return;
     this.mat.uniforms.uIntensity.value = k * k;
     this.mat.uniforms.uTime.value = time;
-    const r = radius * 1.25;
-    this.object.scale.set(r, r * (1.6 + 2.5 * k), r);
+    const r = radius * 1.15;
+    const sy = r * (1.4 + 2.5 * k);
+    this.object.scale.set(r, sy, r);
     this.object.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), airDirInto);
-    // Sheath sits slightly ahead of the vessel centre.
-    this.object.position.copy(airDirInto).multiplyScalar(radius * 0.3);
+    // Place the envelope so its front cap (local y = +1) sits just ahead of the vessel and the wake trails behind.
+    this.object.position.copy(airDirInto).multiplyScalar(r * 0.75 - sy);
   }
 
   dispose() {

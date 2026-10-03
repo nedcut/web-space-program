@@ -202,7 +202,7 @@ export class FlightController {
     const east = normalize(cross(pole, up));
     let alt = 0;
     let vel = v3();
-    if (name === 'reentry') { alt = 45000; vel = add(scale(east, 2300), scale(up, -150)); }
+    if (name === 'reentry') { alt = 30000; vel = add(scale(east, 2300), scale(up, -150)); }
     if (name === 'orbit') { alt = 90000; vel = scale(east, Math.sqrt(b.gm / (b.radius + 90000))); }
     if (name === 'moon') { alt = 20000; vel = scale(east, Math.sqrt(b.gm / (b.radius + 20000))); }
     wv.mode = 'physics';
@@ -383,7 +383,7 @@ export class FlightController {
       const d = normalize(airVel);
       this.reentry.update(flux, new THREE.Vector3(d.x, d.y, d.z), wv.state.cache.boundingRadius, this.elapsed);
     } else this.reentry.update(0, new THREE.Vector3(0, 1, 0), 1, this.elapsed);
-    this.reentryHeat = Math.min(1, Math.max(0, (Math.log10(Math.max(flux, 1)) - 4.7) / 1.5));
+    this.reentryHeat = Math.min(1, Math.max(0, (Math.log10(Math.max(flux, 1)) - 4.0) / 1.5));
 
     // Camera
     const up = normalize(sub(origin, bodyState.position));
