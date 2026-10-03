@@ -8,11 +8,11 @@ export function TargetPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
   const tg = t.target;
   return (
     <div className="panel" style={{ position: 'absolute', left: 10, bottom: 34, width: 250, padding: 10, display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'auto' }}>
+      <div className="label" style={{ color: tg ? '#ff4fb8' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={tg?.name}>
+        {tg ? `Target · ${tg.name}` : 'No target'}
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span className="label" style={{ color: tg ? '#ff4fb8' : undefined, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {tg ? `Target · ${tg.name}` : 'No target'}
-        </span>
-        <button className="btn small" onClick={() => setOpen((o) => !o)}>{open ? 'Close' : 'Set target'}</button>
+        <button style={{ flex: 1 }} className="btn small" onClick={() => setOpen((o) => !o)}>{open ? 'Close' : 'Set target'}</button>
         {tg && <button className="btn small" title="Clear target" onClick={() => cb.onSetTarget(null)}>✕</button>}
       </div>
       {open && (
@@ -109,7 +109,10 @@ export function DockingIndicator({ d, hasTarget }: { d: DockingTelemetry | null;
   const okSpeed = Math.hypot(d.vx, d.vy, d.vz) < d.captureSpeed;
   const inRange = Math.hypot(d.x, d.y, d.z) < d.captureRange;
   const good = 'var(--good)', warn = 'var(--warn)', bad = 'var(--bad)';
-  const dx = dial(d.x) * R, dy = -dial(d.y) * R;
+  // Radial dial mapping (keeps the direction, compresses the distance) so the dot never leaves the dial.
+  const lr = Math.hypot(d.x, d.y);
+  const dk = lr > 1e-9 ? (dial(lr) * R) / lr : 0;
+  const dx = d.x * dk, dy = -d.y * dk;
   const tx = Math.max(-1, Math.min(1, d.tiltX)) * R, ty = -Math.max(-1, Math.min(1, d.tiltY)) * R;
   const vscale = R / Math.max(0.5, latSpeed * 4);
   const vx = d.vx * vscale * 0.6, vy = -d.vy * vscale * 0.6;

@@ -107,7 +107,16 @@ export function stepVessel(v: VesselState, input: ControlInput, env: Environment
   if (input.stage) result.newVessels.push(...activateNextStage(v, result.events).newVessels);
   const n = Math.min(MAX_SUBSTEPS, Math.max(opts.substeps ?? 1, requiredSubsteps(v, env, t, dt)));
   const h = dt / n;
-  for (let s = 0; s < n && !v.destroyed; s++) substep(v, input, env, t + s * h, h, opts, result);
+  for (let s = 0; s < n && !v.destroyed; s++) {
+    // `input.target` is the target's state at the step start; SAS evaluates at the substep midpoint, so carry
+    // the target along with its velocity (in heliocentric coordinates both move ~30 km/s: a stale target
+    // position would be hundreds of metres off and wreck target pointing at close range).
+    const tMid = t + (s + 0.5) * h;
+    const inp = input.target
+      ? { ...input, target: { position: add(input.target.position, scale(input.target.velocity, tMid - t)), velocity: input.target.velocity } }
+      : input;
+    substep(v, inp, env, t + s * h, h, opts, result);
+  }
   return result;
 }
 

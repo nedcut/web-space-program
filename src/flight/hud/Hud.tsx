@@ -232,7 +232,7 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
       </div>
 
       <TargetPanel t={t} cb={cb} />
-      {t.dockingMode && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
+      {t.dockingMode && !t.mapMode && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
 
       {/* Messages */}
       <div style={{ position: 'absolute', top: 100, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center' }}>

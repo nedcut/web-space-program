@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { Universe } from '../src/game/universe';
-import { World } from '../src/game/world';
+import { World, quatFromBasis } from '../src/game/world';
 import { PART_CATALOG } from '../src/data/parts';
 import { buildTender } from '../src/editor/stockCrafts';
 import { dockedPorts, freePorts, neutralInput } from '../src/sim/vessel';
 import { deserializeWorld, serializeWorld } from '../src/game/persistence';
 import { placeInCircularOrbit, spawnRendezvousTarget } from '../src/game/scenarios';
 import { DEFAULT_START_UT } from '../src/game/store';
-import { add, length, normalize, scale, sub } from '../src/util/vec3';
+import { add, cross, dot, length, normalize, scale, sub } from '../src/util/vec3';
+import { qRotate } from '../src/util/quat';
 
 function setup(ahead: number) {
   const u = new Universe('standard');
@@ -37,6 +38,23 @@ describe('world rendezvous & docking', () => {
     const w2 = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(w))), PART_CATALOG, w.universe);
     expect(w2.targetId).toBe(w.targetId);
     expect(w2.targetPortUid).toBe(w.targetPortUid);
+  });
+
+  it('SAS target mode points the nose at the targeted port; antiTarget away from it', () => {
+    for (const mode of ['target', 'antiTarget'] as const) {
+      const { w } = setup(100);
+      const act = w.active!.state;
+      // Start pointing 90 degrees off (radial out).
+      const up = normalize(sub(act.position, w.universe.ephem.getBodyState('earth', w.ut).position));
+      const fwd = up;
+      const side = normalize(cross(fwd, w.relativeState(w.active!).velocity));
+      act.orientation = quatFromBasis(side, fwd, cross(side, fwd));
+      for (let i = 0; i < 50 * 25; i++) w.tick(0.02, neutralInput({ sas: mode, target: w.targetState()! }));
+      const nose = qRotate(act.orientation, { x: 0, y: 1, z: 0 });
+      const toT = normalize(sub(w.targetState()!.position, act.position));
+      expect(dot(nose, toT)).toBeGreaterThan(mode === 'target' ? 0.999 : -2);
+      if (mode === 'antiTarget') expect(dot(nose, toT)).toBeLessThan(-0.999);
+    }
   });
 
   it('docks in orbit, survives save/load docked, and undocks', () => {
