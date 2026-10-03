@@ -1,0 +1,210 @@
+import type { Vec3 } from '../../util/vec3';
+import { add, length, scale, v3 } from '../../util/vec3';
+import type { Quat } from '../../util/quat';
+import { qConj, qMul, qNormalize, qRotate } from '../../util/quat';
+import type { CommandModule, LandingLegModule, SolarPanelModule } from './types';
+import type { ControlInput, StepResult, VesselState } from './runtime';
+import type { Environment } from './env';
+import { AU, G0 } from './env';
+import { m3MulVec } from './mat3';
+import { recomputeMassProperties, removePart, setGear } from './assembly';
+import { activateNextStage } from './staging';
+import { gimbalAuthority, rcsAuthority, stepEngines, stepRcs, stepReactionWheels, wheelAuthority } from './engines';
+import { computeAeroForces, controlSurfaceAuthority, updateParachutes } from './aero';
+import { gatherContacts, nearSurface, penetrationCorrection, solveContacts } from './contact';
+import { stepThermal } from './heating';
+import { computeSas } from './sas';
+import { addResource, drawResource } from './resources';
+
+/** Fixed physics step, s. */
+export const PHYSICS_DT = 1 / 50;
+const MAX_SUBSTEPS = 64;
+
+export interface StepOptions {
+  /** Minimum substeps per step (more are added automatically for stiff leg suspensions). */
+  substeps?: number;
+  /** Skip the thermal model (e.g. for performance tests). */
+  disableHeating?: boolean;
+}
+
+const clamp1 = (x: number) => Math.max(-1, Math.min(1, x));
+
+/** Body-frame angular velocity for a given orientation and inertial angular momentum. */
+function omegaFromL(v: VesselState, q: Quat, L: Vec3): Vec3 {
+  return m3MulVec(v.invInertia, qRotate(qConj(q), L));
+}
+
+/** Inertial angular momentum of the vessel about its COM. */
+export function angularMomentum(v: VesselState): Vec3 {
+  return qRotate(v.orientation, m3MulVec(v.inertia, v.angularVelocity));
+}
+
+/** Rotational kinetic energy, J. */
+export function rotationalEnergy(v: VesselState): number {
+  const Iw = m3MulVec(v.inertia, v.angularVelocity);
+  return 0.5 * (Iw.x * v.angularVelocity.x + Iw.y * v.angularVelocity.y + Iw.z * v.angularVelocity.z);
+}
+
+/**
+ * Integrate orientation over h with inertial angular momentum L held constant (torque-free motion),
+ * RK4 on q' = 1/2 q (x) omega_body(q). Exactly conserves L; gyroscopic effects (precession, intermediate-axis
+ * instability, principal-axis stability) emerge naturally.
+ */
+export function integrateOrientation(v: VesselState, q: Quat, L: Vec3, h: number): Quat {
+  const f = (qq: Quat): Quat => {
+    const qn = qNormalize(qq);
+    const w = omegaFromL(v, qn, L);
+    const d = qMul(qn, { x: w.x, y: w.y, z: w.z, w: 0 });
+    return { x: 0.5 * d.x, y: 0.5 * d.y, z: 0.5 * d.z, w: 0.5 * d.w };
+  };
+  const addq = (a: Quat, b: Quat, s: number): Quat => ({ x: a.x + b.x * s, y: a.y + b.y * s, z: a.z + b.z * s, w: a.w + b.w * s });
+  const k1 = f(q);
+  const k2 = f(addq(q, k1, h / 2));
+  const k3 = f(addq(q, k2, h / 2));
+  const k4 = f(addq(q, k3, h));
+  return qNormalize({
+    x: q.x + (h / 6) * (k1.x + 2 * k2.x + 2 * k3.x + k4.x),
+    y: q.y + (h / 6) * (k1.y + 2 * k2.y + 2 * k3.y + k4.y),
+    z: q.z + (h / 6) * (k1.z + 2 * k2.z + 2 * k3.z + k4.z),
+    w: q.w + (h / 6) * (k1.w + 2 * k2.w + 2 * k3.w + k4.w),
+  });
+}
+
+/** Total control authority (torque per unit command, per body axis). */
+export function controlAuthority(v: VesselState, input: ControlInput, env: Environment, t: number): Vec3 {
+  const air = env.air(v.position, t);
+  const speed = length(add(v.velocity, scale(air.windVelocity, -1)));
+  const parts = [wheelAuthority(v), gimbalAuthority(v), input.rcs ? rcsAuthority(v) : v3(), controlSurfaceAuthority(v, air.sample, speed)];
+  return parts.reduce((a, b) => add(a, b), v3());
+}
+
+/** Number of substeps needed for stable leg suspension integration near the ground. */
+function requiredSubsteps(v: VesselState, env: Environment, t: number, dt: number): number {
+  const ns = nearSurface(v, env, t, dt);
+  if (!ns.near) return 1;
+  let K = 0, C = 0;
+  for (const p of v.parts)
+    if (p.leg?.deployed) {
+      const m = p.def.modules[p.leg.moduleIndex] as LandingLegModule;
+      K += m.spring;
+      C += m.damper;
+    }
+  if (K <= 0 || v.mass <= 0) return 1;
+  const nK = Math.ceil((dt * Math.sqrt(K / v.mass)) / 0.2);
+  const nC = Math.ceil((C * dt) / (v.mass * 0.4));
+  return Math.max(1, nK, nC);
+}
+
+/**
+ * Advance a vessel by dt (default 1/50 s). Mutates `v` in place (deterministically) and returns vessels
+ * created by staging/destruction plus events. Translation: drift–kick–drift (2nd-order symplectic in
+ * gravity) with forces evaluated at the midpoint; rotation: angular-momentum form with RK4 orientation.
+ */
+export function stepVessel(v: VesselState, input: ControlInput, env: Environment, t: number, dt = PHYSICS_DT, opts: StepOptions = {}): StepResult {
+  const result: StepResult = { newVessels: [], events: [] };
+  if (v.destroyed || v.parts.length === 0) return result;
+  if (input.gear !== undefined) setGear(v, input.gear);
+  if (input.stage) result.newVessels.push(...activateNextStage(v, result.events).newVessels);
+  const n = Math.min(MAX_SUBSTEPS, Math.max(opts.substeps ?? 1, requiredSubsteps(v, env, t, dt)));
+  const h = dt / n;
+  for (let s = 0; s < n && !v.destroyed; s++) substep(v, input, env, t + s * h, h, opts, result);
+  return result;
+}
+
+function substep(v: VesselState, input: ControlInput, env: Environment, t: number, h: number, opts: StepOptions, result: StepResult): void {
+  const tMid = t + h / 2;
+  // Drift (half).
+  v.position = add(v.position, scale(v.velocity, h / 2));
+  const g = env.gravity(v.position, tMid);
+  const air = env.air(v.position, tMid);
+  const q = v.orientation;
+  const qInv = qConj(q);
+  const airVelocityBody = qRotate(qInv, add(v.velocity, scale(air.windVelocity, -1)));
+
+  // Contacts & buoyancy (positions at the midpoint, pre-kick velocities).
+  const cp = gatherContacts(v, env, tMid, h, length(g));
+
+  // Controls.
+  const pilot = { x: clamp1(input.pitch), y: clamp1(input.roll), z: -clamp1(input.yaw) };
+  const sasCmd = input.sas !== 'off' || v.sas.mode !== 'off' ? computeSas(v, input, env, tMid, controlAuthority(v, input, env, tMid), h) : v3();
+  const c = { x: clamp1(pilot.x + sasCmd.x), y: clamp1(pilot.y + sasCmd.y), z: clamp1(pilot.z + sasCmd.z) };
+  v.telemetry.control = { pitch: c.x, roll: c.y, yaw: -c.z };
+  const translate = { x: clamp1(input.translateX), y: clamp1(input.translateY), z: clamp1(input.translateZ) };
+
+  // Actuators (consume resources).
+  const eng = stepEngines(v, Math.max(0, Math.min(1, input.throttle)), c, air.sample.pressure, h, result.events);
+  const rcs = stepRcs(v, input.rcs, c, translate, air.sample.pressure, h);
+  const wheels = stepReactionWheels(v, c, h);
+
+  // Electrical: command module consumption & solar generation.
+  const sun = env.sun(v.position, tMid);
+  const sunBody = qRotate(qInv, sun.dir);
+  for (const p of v.parts)
+    for (const m of p.def.modules) {
+      if (m.type === 'command' && (m as CommandModule).ecPerSecond > 0) drawResource(v, p.uid, 'electricCharge', (m as CommandModule).ecPerSecond * h);
+      else if (m.type === 'solarPanel') {
+        const sp = m as SolarPanelModule;
+        const nrm = qRotate(p.rotation, { x: 0, y: 0, z: 1 });
+        const cosA = sp.tracking ? 1 : Math.max(0, nrm.x * sunBody.x + nrm.y * sunBody.y + nrm.z * sunBody.z);
+        const flux = sun.distance > 0 && isFinite(sun.distance) ? (AU / sun.distance) ** 2 : 0;
+        addResource(v, 'electricCharge', sp.chargeRate * flux * cosA * h);
+      }
+    }
+
+  // Aerodynamics & parachutes.
+  const aero = computeAeroForces(v, { air: air.sample, airVelocityBody, control: c });
+  updateParachutes(v, { air: air.sample, dynamicPressure: aero.dynamicPressure, altitudeAGL: cp.altitudeAGL }, h, result.events);
+
+  // Sum forces.
+  const Fbody = add(add(eng.forceBody, rcs.forceBody), aero.forceBody);
+  const Tbody = add(add(add(eng.torqueBody, rcs.torqueBody), wheels.torqueBody), aero.torqueBody);
+  const Fworld = add(qRotate(q, Fbody), cp.force);
+  const Tworld = add(qRotate(q, Tbody), cp.torque);
+  const m = v.mass;
+
+  // Kick.
+  v.velocity = add(v.velocity, scale(add(g, scale(Fworld, 1 / m)), h));
+  let L = add(angularMomentum(v), scale(Tworld, h));
+  v.angularVelocity = omegaFromL(v, q, L);
+
+  // Contact impulses.
+  solveContacts(v, cp.contacts);
+  L = angularMomentum(v);
+
+  // Rotate & drift (half).
+  v.orientation = integrateOrientation(v, q, L, h);
+  v.angularVelocity = omegaFromL(v, v.orientation, L);
+  v.position = add(add(v.position, scale(v.velocity, h / 2)), penetrationCorrection(cp.contacts));
+
+  // Thermal.
+  const overheated = opts.disableHeating
+    ? []
+    : stepThermal(v, { air: air.sample, airVelocityBody, sunDirBody: sunBody, sunDistance: sun.distance }, h);
+
+  // Telemetry & situation.
+  const pa = scale(Fworld, 1 / m);
+  v.telemetry.properAcceleration = pa;
+  v.telemetry.gForce = length(pa) / G0;
+  v.telemetry.mach = aero.mach;
+  v.telemetry.dynamicPressure = aero.dynamicPressure;
+  v.telemetry.staticPressure = air.sample.pressure;
+  v.telemetry.airDensity = air.sample.density;
+  v.telemetry.altitudeAGL = cp.altitudeAGL;
+  v.telemetry.thrust = eng.thrust;
+  v.situation = cp.landed ? 'landed' : cp.splashed ? 'splashed' : 'flying';
+
+  // Destruction (crash / overheat).
+  const kill: [number, 'crash' | 'overheat'][] = [...cp.impacts.map((u) => [u, 'crash'] as [number, 'crash']), ...overheated.map((u) => [u, 'overheat'] as [number, 'overheat'])];
+  for (const [uid, reason] of kill) {
+    if (!v.cache.byUid.has(uid)) continue;
+    result.events.push({ type: 'partDestroyed', vesselId: v.id, partUid: uid, reason });
+    result.newVessels.push(...removePart(v, uid));
+    if (v.destroyed) {
+      result.events.push({ type: 'vesselDestroyed', vesselId: v.id });
+      return;
+    }
+  }
+
+  // Resources changed => mass properties (shifts COM state consistently).
+  recomputeMassProperties(v, true);
+}
