@@ -5,7 +5,9 @@ import { Starfield } from '../render/sky/Starfield';
 import { SunGlare } from '../render/sky/SunGlare';
 import { MapView } from '../render/map/MapView';
 import { VesselView } from '../render/vessel/VesselView';
-import { World, type WorldVessel } from '../game/world';
+import { ReentryFx } from '../render/vessel/ReentryFx';
+import { stagnationHeatFlux } from '../sim/vessel/heating';
+import { World, quatFromBasis, type WorldVessel } from '../game/world';
 import { Universe } from '../game/universe';
 import { PART_CATALOG } from '../data/parts';
 import { RESOURCES } from '../data/resources';
@@ -64,6 +66,8 @@ export class FlightController {
   private sunLight = new THREE.DirectionalLight(0xffffff, 3.2);
   private ambient = new THREE.HemisphereLight(0x8899bb, 0x221a10, 0.12);
   private planets: PlanetLayer;
+  private reentry = new ReentryFx();
+  private reentryHeat = 0;
   private raf = 0;
   private last = performance.now();
   private disposers: (() => void)[] = [];
@@ -101,6 +105,7 @@ export class FlightController {
     this.glare = new SunGlare();
     this.scene.add(this.glare.mesh);
     this.scene.add(this.sunLight, this.sunLight.target, this.ambient);
+    this.scene.add(this.reentry.object);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(2048, 2048);
     this.sunLight.shadow.bias = -0.0004;
@@ -177,6 +182,36 @@ export class FlightController {
 
   static loadSlot(slot: string) {
     return loadWorldFromStorage(slot)?.data ?? null;
+  }
+
+  /** Dev/test scenarios (URL ?scenario=): reposition the active vessel. */
+  devScenario(name: string) {
+    const wv = this.world.active;
+    if (!wv) return;
+    const u = this.world.universe;
+    const t = this.world.ut;
+    const bodyId = name === 'moon' ? 'moon' : 'earth';
+    const b = u.body(bodyId);
+    const bs = u.ephem.getBodyState(bodyId, t);
+    const up = normalize(sub(wv.state.position, u.ephem.getBodyState(wv.body, t).position));
+    const pole = qRotate(u.ephem.bodyRotation(bodyId, t), v3(0, 0, 1));
+    const east = normalize(cross(pole, up));
+    let alt = 0;
+    let vel = v3();
+    if (name === 'reentry') { alt = 45000; vel = add(scale(east, 2300), scale(up, -150)); }
+    if (name === 'orbit') { alt = 90000; vel = scale(east, Math.sqrt(b.gm / (b.radius + 90000))); }
+    if (name === 'moon') { alt = 20000; vel = scale(east, Math.sqrt(b.gm / (b.radius + 20000))); }
+    wv.mode = 'physics';
+    wv.fixed = undefined;
+    wv.body = bodyId;
+    wv.state.position = add(bs.position, scale(up, b.radius + alt));
+    wv.state.velocity = add(bs.velocity, vel);
+    wv.state.situation = 'flying';
+    // Point retrograde-ish for re-entry, prograde otherwise.
+    const fwd = name === 'reentry' ? normalize(scale(vel, -1)) : normalize(vel);
+    const side = normalize(cross(fwd, up));
+    wv.state.orientation = quatFromBasis(side, fwd, cross(side, fwd));
+    wv.state.angularVelocity = v3();
   }
 
   startAssist(id: AssistId) {
@@ -336,6 +371,16 @@ export class FlightController {
     }
     for (const [id, view] of this.views) if (!seen.has(id)) (view.dispose(), this.views.delete(id));
 
+    // Re-entry plasma on the active vessel.
+    const airVel = this.world.surfaceVelocity(wv);
+    const airSpeed = length(airVel);
+    const flux = stagnationHeatFlux(air.density, airSpeed, Math.max(0.3, wv.state.cache.boundingRadius * 0.4));
+    if (airSpeed > 1) {
+      const d = normalize(airVel);
+      this.reentry.update(flux, new THREE.Vector3(d.x, d.y, d.z), wv.state.cache.boundingRadius, this.elapsed);
+    } else this.reentry.update(0, new THREE.Vector3(0, 1, 0), 1, this.elapsed);
+    this.reentryHeat = Math.min(1, Math.max(0, (Math.log10(Math.max(flux, 1)) - 4.7) / 1.5));
+
     // Camera
     const up = normalize(sub(origin, bodyState.position));
     const q = wv.state.orientation;
@@ -389,7 +434,7 @@ export class FlightController {
       mach: tm.mach,
       dynamicPressure: tm.dynamicPressure,
       rcsActive: this.rcsOn && (this.input.state.tx || this.input.state.ty || this.input.state.tz) ? 1 : 0,
-      reentryHeat: 0,
+      reentryHeat: this.reentryHeat,
       inMapView: this.mapMode,
       timeWarp: this.world.warp.mode === 'rails' ? [1, 5, 10, 50, 100, 1000, 10000, 100000, 1000000][this.world.warp.index] : 1,
       cameraDistance: this.cam.distance,

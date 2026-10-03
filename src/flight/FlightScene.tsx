@@ -32,6 +32,8 @@ export default function FlightScene() {
     const c = new FlightController(host.current!, craft, g.scalePreset, g.ut, g.settings.quality, audio, saved);
     if (craft && saved) c.world.launch(craft);
     game.set({ launchPending: false });
+    const scenario = new URLSearchParams(location.search).get('scenario');
+    if (scenario && mountKey === 0) c.devScenario(scenario);
     c.input.invertPitch = g.settings.invertPitch;
     c.onExit = () => setPaused((p) => !p);
     c.onQuickload = () => {
