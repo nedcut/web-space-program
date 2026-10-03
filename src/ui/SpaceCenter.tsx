@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { game, useGame } from '../game/store';
-import { MenuBackdrop } from './MenuBackdrop';
+import { HubBackdrop } from './hub/HubBackdrop';
 import { SettingsPanel } from './MainMenu';
 import { formatDate } from './format';
 
-/** Hub screen. Later: a 3D view of the launch complex. */
+/** Hub screen over a live 3D view of the launch complex. */
 export function SpaceCenter() {
   const ut = useGame((s) => s.ut);
   const craft = useGame((s) => s.craft);
@@ -17,14 +17,14 @@ export function SpaceCenter() {
       title: 'Launch Pad',
       desc: craft ? `Ready: ${craft.name}` : 'Build a vehicle first',
       disabled: !craft,
-      onClick: () => game.set({ scene: 'flight' }),
+      onClick: () => game.set({ scene: 'flight', launchPending: true }),
     },
-    { id: 'tracking', title: 'Tracking Station', desc: 'Coming soon', disabled: true, onClick: () => {} },
+    { id: 'tracking', title: 'Tracking Station', desc: 'Track vessels and explore the solar system', onClick: () => game.set({ scene: 'tracking' }) },
   ];
 
   return (
     <div className="fullscreen">
-      <MenuBackdrop />
+      <HubBackdrop />
       <div className="fullscreen" style={{ padding: '6vh 6vw', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <div>

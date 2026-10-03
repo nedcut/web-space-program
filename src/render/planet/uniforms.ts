@@ -79,3 +79,39 @@ export function createPlanetUniforms(radius: number, atmo: AtmosphereParams | nu
     uBodyRot: { value: new THREE.Matrix3() },
   };
 }
+
+// ---------------------------------------------------------------- live registry
+/**
+ * The current PlanetRenderer uniforms per body id, so other renderers (e.g. the launch site) can apply the
+ * same aerial perspective. PlanetRenderer registers on construction and unregisters on dispose.
+ */
+const live = new Map<string, PlanetUniforms>();
+let fallback: PlanetUniforms | null = null;
+
+export function registerPlanetUniforms(bodyId: string, u: PlanetUniforms): void {
+  live.set(bodyId, u);
+}
+
+export function unregisterPlanetUniforms(bodyId: string, u: PlanetUniforms): void {
+  if (live.get(bodyId) === u) live.delete(bodyId);
+}
+
+/**
+ * Uniform objects whose `.value` always reads the body's CURRENT planet uniforms (getter-backed), falling back
+ * to an atmosphere-less set (uHasAtmo = 0) when no renderer exists. Safe to bind into any material once.
+ */
+export function livePlanetUniforms(bodyId: string): Record<string, THREE.IUniform> {
+  fallback ??= createPlanetUniforms(1, null, null);
+  const out: Record<string, THREE.IUniform> = {};
+  for (const k of Object.keys(fallback) as (keyof PlanetUniforms)[]) {
+    out[k] = {
+      get value() {
+        return (live.get(bodyId) ?? fallback!)[k].value;
+      },
+      set value(_v: unknown) {
+        /* read-only proxy */
+      },
+    };
+  }
+  return out;
+}

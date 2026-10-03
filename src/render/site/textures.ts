@@ -1,0 +1,372 @@
+import * as THREE from 'three';
+
+/**
+ * Procedural canvas textures for the launch complex. All original artwork, generated at runtime.
+ * Tileable textures represent the tile size noted in each doc comment; geometry UVs are in metres / tile.
+ */
+
+function rng(seed: number) {
+  let s = seed >>> 0;
+  return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+}
+
+function canvas(w: number, h: number) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return { c, g: c.getContext('2d')! };
+}
+
+function tex(c: HTMLCanvasElement, srgb = true, repeat = true): THREE.CanvasTexture {
+  const t = new THREE.CanvasTexture(c);
+  if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  t.anisotropy = 8;
+  t.generateMipmaps = true;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  return t;
+}
+
+/** Soft blotches drawn with wrap-around so the tile stays seamless. */
+function blotches(g: CanvasRenderingContext2D, S: number, n: number, r: () => number, rMin: number, rMax: number, col: (r: () => number) => string) {
+  for (let i = 0; i < n; i++) {
+    const x = r() * S, y = r() * S, rad = rMin + r() * (rMax - rMin);
+    g.fillStyle = col(r);
+    for (const dx of [-S, 0, S]) for (const dy of [-S, 0, S]) {
+      if (x + dx + rad < 0 || x + dx - rad > S || y + dy + rad < 0 || y + dy - rad > S) continue;
+      g.beginPath();
+      g.arc(x + dx, y + dy, rad, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+}
+
+function speckle(g: CanvasRenderingContext2D, S: number, n: number, r: () => number, a = 0.12) {
+  for (let i = 0; i < n; i++) {
+    const l = r() < 0.5 ? 50 : 200;
+    g.fillStyle = `rgba(${l},${l},${l},${a * (0.4 + r())})`;
+    g.fillRect(r() * S, r() * S, 1 + r() * 1.5, 1 + r() * 1.5);
+  }
+}
+
+/** Weathered concrete slab, tile 8 m with a joint every 4 m. */
+export function concreteTexture(seed = 1, base = '#9c9a94', joints = true): THREE.CanvasTexture {
+  const S = 512;
+  const { c, g } = canvas(S, S);
+  const r = rng(seed);
+  g.fillStyle = base;
+  g.fillRect(0, 0, S, S);
+  blotches(g, S, 260, r, 6, 70, (r) => {
+    const l = r() < 0.5 ? 70 + r() * 30 : 170 + r() * 40;
+    return `rgba(${l},${l - 2},${l - 6},${0.03 + r() * 0.05})`;
+  });
+  blotches(g, S, 40, r, 10, 40, () => `rgba(60,56,48,${0.04 + r() * 0.05})`);
+  speckle(g, S, 9000, r);
+  if (joints) {
+    g.strokeStyle = 'rgba(35,34,32,0.55)';
+    g.lineWidth = 2;
+    for (const p of [0, S / 2]) {
+      g.beginPath(); g.moveTo(p + 1, 0); g.lineTo(p + 1, S); g.stroke();
+      g.beginPath(); g.moveTo(0, p + 1); g.lineTo(S, p + 1); g.stroke();
+    }
+    // Hairline cracks
+    g.strokeStyle = 'rgba(40,38,35,0.25)';
+    g.lineWidth = 1;
+    for (let i = 0; i < 10; i++) {
+      let x = r() * S, y = r() * S;
+      g.beginPath(); g.moveTo(x, y);
+      for (let k = 0; k < 6; k++) { x += (r() - 0.5) * 40; y += (r() - 0.5) * 40; g.lineTo(x, y); }
+      g.stroke();
+    }
+  }
+  return tex(c);
+}
+
+/** Blackened, soot-streaked concrete for the flame trench (tile 8 m). */
+export function sootTexture(): THREE.CanvasTexture {
+  const S = 512;
+  const { c, g } = canvas(S, S);
+  const r = rng(77);
+  g.fillStyle = '#4a4741';
+  g.fillRect(0, 0, S, S);
+  blotches(g, S, 300, r, 10, 80, (r) => `rgba(${10 + r() * 20},${10 + r() * 15},${8 + r() * 10},${0.06 + r() * 0.1})`);
+  for (let i = 0; i < 120; i++) {
+    g.fillStyle = `rgba(15,12,10,${0.05 + r() * 0.1})`;
+    g.fillRect(r() * S, 0, 2 + r() * 10, S);
+  }
+  speckle(g, S, 5000, r, 0.1);
+  return tex(c);
+}
+
+/**
+ * Launch pad deck markings for a 48 m × 48 m square centred on the pad (u = x, v = z): concrete with a large
+ * painted ring, hazard chevrons around the flame hole and a stencilled pad code. Not tiled.
+ */
+export function padDeckTexture(holeHalf: number, trenchHalf: number): THREE.CanvasTexture {
+  const S = 2048;
+  const M = 48;
+  const px = S / M;
+  const { c, g } = canvas(S, S);
+  const r = rng(5);
+  g.fillStyle = '#a19e96';
+  g.fillRect(0, 0, S, S);
+  blotches(g, S, 900, r, 10, 140, (r) => {
+    const l = r() < 0.5 ? 80 + r() * 40 : 170 + r() * 40;
+    return `rgba(${l},${l - 2},${l - 6},${0.025 + r() * 0.05})`;
+  });
+  speckle(g, S, 60000, r, 0.1);
+  const cx = S / 2, cy = S / 2;
+  // Exhaust scorching radiating from the flame hole (stronger toward the trench side, -z = top).
+  for (let i = 0; i < 70; i++) {
+    const a = r() * Math.PI * 2;
+    const len = (6 + r() * 12) * px * (Math.sin(a) < 0 ? 1.3 : 0.8);
+    const grd = g.createLinearGradient(cx, cy, cx + Math.cos(a) * len, cy + Math.sin(a) * len);
+    grd.addColorStop(0, `rgba(25,20,16,${0.15 + r() * 0.15})`);
+    grd.addColorStop(1, 'rgba(25,20,16,0)');
+    g.strokeStyle = grd;
+    g.lineWidth = (1 + r() * 3) * px;
+    g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * len, cy + Math.sin(a) * len); g.stroke();
+  }
+  const soot = g.createRadialGradient(cx, cy, holeHalf * px, cx, cy, holeHalf * px * 3.2);
+  soot.addColorStop(0, 'rgba(18,15,12,0.75)');
+  soot.addColorStop(1, 'rgba(18,15,12,0)');
+  g.fillStyle = soot;
+  g.fillRect(0, 0, S, S);
+  // Expansion joints every 6 m.
+  g.strokeStyle = 'rgba(40,38,34,0.5)';
+  g.lineWidth = 3;
+  for (let m = 0; m <= M; m += 6) {
+    g.beginPath(); g.moveTo(m * px, 0); g.lineTo(m * px, S); g.stroke();
+    g.beginPath(); g.moveTo(0, m * px); g.lineTo(S, m * px); g.stroke();
+  }
+  // Painted rings.
+  g.strokeStyle = 'rgba(236,236,230,0.8)';
+  g.lineWidth = 0.35 * px;
+  g.beginPath(); g.arc(cx, cy, 15.5 * px, 0, Math.PI * 2); g.stroke();
+  g.strokeStyle = 'rgba(92,170,230,0.75)';
+  g.lineWidth = 0.6 * px;
+  g.beginPath(); g.arc(cx, cy, 16.5 * px, 0, Math.PI * 2); g.stroke();
+  // Radial ticks every 10°, long ones on the cardinal directions.
+  g.strokeStyle = 'rgba(236,236,230,0.7)';
+  g.lineWidth = 0.2 * px;
+  for (let i = 0; i < 36; i++) {
+    const a = (i / 36) * Math.PI * 2;
+    const l0 = (i % 9 === 0 ? 12.5 : 14.2) * px, l1 = 15.3 * px;
+    g.beginPath(); g.moveTo(cx + Math.cos(a) * l0, cy + Math.sin(a) * l0); g.lineTo(cx + Math.cos(a) * l1, cy + Math.sin(a) * l1); g.stroke();
+  }
+  // Hazard chevron band around the flame hole.
+  const h0 = holeHalf * px, h1 = (holeHalf + 1.1) * px;
+  g.save();
+  g.beginPath();
+  g.rect(cx - h1, cy - h1, 2 * h1, 2 * h1);
+  g.rect(cx + h0, cy - h0, -2 * h0, 2 * h0);
+  g.clip('evenodd');
+  g.fillStyle = '#d9a72a';
+  g.fillRect(cx - h1, cy - h1, 2 * h1, 2 * h1);
+  g.fillStyle = '#1a1a1c';
+  for (let k = -40; k < 40; k++) {
+    const x = cx + k * 0.9 * px;
+    g.beginPath();
+    g.moveTo(x, cy - h1); g.lineTo(x + 0.45 * px, cy - h1); g.lineTo(x + 0.45 * px + 2 * h1, cy + h1); g.lineTo(x + 2 * h1, cy + h1);
+    g.closePath(); g.fill();
+  }
+  g.restore();
+  // Trench edge stripe (the trench runs toward -z, under the deck).
+  g.fillStyle = 'rgba(217,167,42,0.75)';
+  g.fillRect(cx - (trenchHalf + 0.6) * px, 0, 0.3 * px, cy - h1);
+  g.fillRect(cx + (trenchHalf + 0.3) * px, 0, 0.3 * px, cy - h1);
+  // Stencilled pad code, readable from the south side.
+  g.save();
+  g.translate(cx, cy + 19.2 * px);
+  g.fillStyle = 'rgba(236,236,230,0.75)';
+  g.font = `800 ${Math.round(2.6 * px)}px Inter, system-ui, sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('LC-1  ·  WSP', 0, 0);
+  g.restore();
+  // Tie-down bolts / anchor plates at the corners of the hole.
+  g.fillStyle = 'rgba(60,60,62,0.9)';
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) g.fillRect(cx + sx * (holeHalf + 2.2) * px - 0.6 * px, cy + sy * (holeHalf + 2.2) * px - 0.6 * px, 1.2 * px, 1.2 * px);
+  return tex(c, true, false);
+}
+
+/** Two-lane asphalt road: u across the width (0..1), v along (tile 24 m). */
+export function roadTexture(crawler = false): THREE.CanvasTexture {
+  const W = 256, H = 512;
+  const { c, g } = canvas(W, H);
+  const r = rng(crawler ? 31 : 21);
+  if (crawler) {
+    // Two concrete tracks with a gravel median.
+    g.fillStyle = '#8f8a80';
+    g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 9000; i++) {
+      const l = 90 + r() * 110;
+      g.fillStyle = `rgba(${l},${l - 6},${l - 14},0.5)`;
+      g.fillRect(r() * W, r() * H, 1.5, 1.5);
+    }
+    for (const [x0, x1] of [[0.04, 0.36], [0.64, 0.96]]) {
+      g.fillStyle = '#a7a39b';
+      g.fillRect(x0 * W, 0, (x1 - x0) * W, H);
+      g.fillStyle = 'rgba(40,38,35,0.45)';
+      for (let y = 0; y < H; y += H / 4) g.fillRect(x0 * W, y, (x1 - x0) * W, 2);
+    }
+    speckle(g, W, 3000, r, 0.08);
+  } else {
+    g.fillStyle = '#3e3f42';
+    g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 12000; i++) {
+      const l = 30 + r() * 70;
+      g.fillStyle = `rgba(${l},${l},${l + 2},0.5)`;
+      g.fillRect(r() * W, r() * H, 1, 1);
+    }
+    // Wheel-track wear
+    for (const x of [0.22, 0.34, 0.66, 0.78]) {
+      const grd = g.createLinearGradient((x - 0.06) * W, 0, (x + 0.06) * W, 0);
+      grd.addColorStop(0, 'rgba(90,90,92,0)');
+      grd.addColorStop(0.5, 'rgba(90,90,92,0.18)');
+      grd.addColorStop(1, 'rgba(90,90,92,0)');
+      g.fillStyle = grd;
+      g.fillRect((x - 0.06) * W, 0, 0.12 * W, H);
+    }
+    g.fillStyle = 'rgba(230,230,224,0.85)';
+    g.fillRect(0.04 * W, 0, 0.02 * W, H);
+    g.fillRect(0.94 * W, 0, 0.02 * W, H);
+    g.fillStyle = 'rgba(224,178,48,0.9)';
+    for (let y = 0; y < H; y += H / 4) g.fillRect(0.49 * W, y, 0.02 * W, H / 8);
+  }
+  return tex(c);
+}
+
+/** Ribbed steel cladding, tile 4 m (u) × 8 m (v), with horizontal sheet seams and grime streaks. */
+export function claddingTexture(): THREE.CanvasTexture {
+  const { c, g } = canvas(256, 512);
+  g.fillStyle = '#93a0ad';
+  g.fillRect(0, 0, 256, 512);
+  for (let x = 0; x < 256; x += 32) {
+    const grd = g.createLinearGradient(x, 0, x + 32, 0);
+    grd.addColorStop(0, '#7d8996');
+    grd.addColorStop(0.2, '#b0bcc8');
+    grd.addColorStop(0.35, '#9aa6b3');
+    grd.addColorStop(0.8, '#87929f');
+    grd.addColorStop(1, '#727d89');
+    g.fillStyle = grd;
+    g.fillRect(x, 0, 32, 512);
+  }
+  g.fillStyle = 'rgba(30,32,36,0.4)';
+  g.fillRect(0, 0, 256, 3);
+  const r = rng(13);
+  for (let i = 0; i < 160; i++) {
+    g.fillStyle = `rgba(40,42,46,${r() * 0.06})`;
+    g.fillRect(r() * 256, r() * 512, 2 + r() * 14, 20 + r() * 120);
+  }
+  return tex(c);
+}
+
+/** Giant hangar door: tall panels with horizontal ribs; u across the full door, v up the full height. */
+export function vabDoorTexture(): THREE.CanvasTexture {
+  const W = 512, H = 1024;
+  const { c, g } = canvas(W, H);
+  g.fillStyle = '#a3abb4';
+  g.fillRect(0, 0, W, H);
+  for (let y = 0; y < H; y += 8) {
+    g.fillStyle = y % 16 === 0 ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)';
+    g.fillRect(0, y, W, 4);
+  }
+  g.strokeStyle = 'rgba(45,50,58,0.85)';
+  g.lineWidth = 4;
+  const cols = 4;
+  for (let i = 1; i < cols; i++) { g.beginPath(); g.moveTo((i * W) / cols, 0); g.lineTo((i * W) / cols, H); g.stroke(); }
+  for (let y = H / 14; y < H; y += H / 14) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+  g.lineWidth = 10;
+  g.strokeRect(5, 5, W - 10, H - 10);
+  const r = rng(17);
+  for (let i = 0; i < 80; i++) {
+    g.fillStyle = `rgba(50,52,56,${r() * 0.06})`;
+    g.fillRect(r() * W, r() * H, 3 + r() * 10, 30 + r() * 140);
+  }
+  // Hazard band at the bottom.
+  for (let x = -64; x < W; x += 32) {
+    g.fillStyle = '#e0b230';
+    g.beginPath(); g.moveTo(x, H); g.lineTo(x + 16, H); g.lineTo(x + 40, H - 18); g.lineTo(x + 24, H - 18); g.closePath(); g.fill();
+  }
+  return tex(c, true, false);
+}
+
+/** Large painted "WSP" agency wordmark with an orbit swoosh (transparent background). */
+export function logoTexture(): THREE.CanvasTexture {
+  const W = 1024, H = 512;
+  const { c, g } = canvas(W, H);
+  g.clearRect(0, 0, W, H);
+  // Orbit ellipse behind the letters.
+  g.save();
+  g.translate(W / 2, H * 0.47);
+  g.rotate(-0.18);
+  g.strokeStyle = 'rgba(92,200,255,0.95)';
+  g.lineWidth = 22;
+  g.beginPath(); g.ellipse(0, 0, W * 0.46, H * 0.27, 0, Math.PI * 0.08, Math.PI * 1.92); g.stroke();
+  g.fillStyle = '#f2f4f7';
+  g.beginPath(); g.arc(W * 0.46 * Math.cos(Math.PI * 0.04), -H * 0.27 * Math.sin(Math.PI * 0.04) + 4, 26, 0, Math.PI * 2); g.fill();
+  g.restore();
+  g.fillStyle = '#f2f4f7';
+  g.font = '900 290px Inter, system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('WSP', W / 2, H * 0.5);
+  g.font = '700 52px Inter, system-ui, sans-serif';
+  g.fillStyle = 'rgba(242,244,247,0.9)';
+  g.fillText('WEB  SPACE  PROGRAM', W / 2, H * 0.9);
+  return tex(c, true, false);
+}
+
+/** Original agency flag: deep blue field, white diagonal band and a four-point star (transparent edges). */
+export function flagTexture(): THREE.CanvasTexture {
+  const W = 1024, H = 640;
+  const { c, g } = canvas(W, H);
+  g.fillStyle = '#173f73';
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = '#e9edf2';
+  g.beginPath(); g.moveTo(0, H * 0.78); g.lineTo(W * 0.55, 0); g.lineTo(W * 0.72, 0); g.lineTo(0, H); g.closePath(); g.fill();
+  g.fillStyle = '#d9a72a';
+  g.beginPath(); g.moveTo(W * 0.62, H); g.lineTo(W, H * 0.42); g.lineTo(W, H * 0.52); g.lineTo(W * 0.72, H); g.closePath(); g.fill();
+  // Four-point star
+  const sx = W * 0.74, sy = H * 0.3, R1 = H * 0.17, R2 = H * 0.045;
+  g.fillStyle = '#ffffff';
+  g.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
+    const rr = i % 2 === 0 ? R1 : R2;
+    g.lineTo(sx + Math.cos(a) * rr, sy + Math.sin(a) * rr);
+  }
+  g.closePath(); g.fill();
+  g.strokeStyle = 'rgba(0,0,0,0.25)';
+  g.lineWidth = 12;
+  g.strokeRect(6, 6, W - 12, H - 12);
+  return tex(c, true, false);
+}
+
+/** Office façade: window bands on concrete, tile 12 m × 4 m (one storey). */
+export function windowsTexture(): THREE.CanvasTexture {
+  const W = 512, H = 256;
+  const { c, g } = canvas(W, H);
+  const r = rng(41);
+  g.fillStyle = '#c4c2bb';
+  g.fillRect(0, 0, W, H);
+  speckle(g, W, 2500, r, 0.08);
+  const n = 6;
+  for (let i = 0; i < n; i++) {
+    const x = (i / n) * W + 8, w = W / n - 16;
+    const grd = g.createLinearGradient(0, H * 0.3, 0, H * 0.75);
+    const lit = r() < 0.3;
+    grd.addColorStop(0, lit ? '#6d8199' : '#2b3a4c');
+    grd.addColorStop(1, lit ? '#4d5f75' : '#1a2430');
+    g.fillStyle = grd;
+    g.fillRect(x, H * 0.3, w, H * 0.45);
+    g.fillStyle = 'rgba(200,215,230,0.15)';
+    g.fillRect(x, H * 0.3, w * 0.35, H * 0.45);
+    g.fillStyle = '#55595f';
+    g.fillRect(x + w / 2 - 2, H * 0.3, 4, H * 0.45);
+  }
+  g.fillStyle = 'rgba(60,60,60,0.35)';
+  g.fillRect(0, H - 6, W, 6);
+  return tex(c);
+}

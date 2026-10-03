@@ -4,6 +4,7 @@ import { GLSL_ATMOSPHERE, GLSL_RING_SHADOW } from './shaders/atmosphere.glsl';
 import type { PlanetUniforms } from './uniforms';
 import type { QualitySettings } from '../core/quality';
 import { getDetailTexture } from './textures';
+import { GLSL_CUTOUT, type TerrainCutoutUniforms } from './cutout';
 
 /** Surface lighting shared by terrain / far sphere: Lambert ↔ Lommel–Seeliger (airless regolith). */
 const GLSL_SHADE = /* glsl */ `
@@ -41,13 +42,16 @@ export interface TerrainMaterialOptions {
   detail: boolean;
   /** Body-fixed detail texture scale multiplier. */
   detailStrength: number;
+  /** Optional ground cutouts (launch pad / flame trench) where terrain fragments are discarded. */
+  cutout?: TerrainCutoutUniforms;
 }
 
 export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: TerrainMaterialOptions): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: { ...defines(q), ...(o.detail ? { USE_DETAIL: 1 } : {}) },
+    defines: { ...defines(q), ...(o.detail ? { USE_DETAIL: 1 } : {}), ...(o.cutout ? { USE_CUTOUT: 1 } : {}) },
     uniforms: {
       ...u,
+      ...(o.cutout ?? {}),
       uDetailTex: { value: getDetailTexture() },
       uRockColor: { value: new THREE.Vector3(...o.rockColor) },
       uRockBlend: { value: o.rockBlend },
@@ -85,6 +89,9 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       varying vec3 vNormalBF;
       varying vec3 vColor;
       varying vec3 vDetail;
+      #ifdef USE_CUTOUT
+      ${GLSL_CUTOUT}
+      #endif
 
       vec4 triSample(vec3 p, vec3 w, float scale) {
         vec4 a = texture2D(uDetailTex, p.yz / scale);
@@ -101,6 +108,9 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
 
       void main() {
         ${GLSL_LOGDEPTH_FRAG}
+        #ifdef USE_CUTOUT
+        applyCutout(vWorldPos);
+        #endif
         vec3 rel = vWorldPos - uPlanetCenter;
         vec3 toCam = cameraPosition - vWorldPos;
         float dist = length(toCam);

@@ -24,6 +24,7 @@ import { add, cross, dot, length, normalize, scale, sub, v3, negate, type Vec3 }
 import { qRotate } from '../util/quat';
 import { sampleAtmosphere } from '../sim/atmosphere';
 import { createPlanetLayer, type PlanetLayer } from './planets';
+import { LaunchSite } from '../render/site/LaunchSite';
 import { deserializeWorld, serializeWorld, saveWorldToStorage, loadWorldFromStorage, type SavedWorld } from '../game/persistence';
 import { createAssist, warpIndexFor, type AssistId } from './assist';
 import type { Autopilot } from '../game/autopilot';
@@ -66,6 +67,7 @@ export class FlightController {
   private sunLight = new THREE.DirectionalLight(0xffffff, 3.2);
   private ambient = new THREE.HemisphereLight(0x8899bb, 0x221a10, 0.12);
   private planets: PlanetLayer;
+  private site: LaunchSite;
   private reentry = new ReentryFx();
   private reentryHeat = 0;
   private raf = 0;
@@ -118,6 +120,8 @@ export class FlightController {
     pmrem.dispose();
 
     this.planets = createPlanetLayer(this.scene, universe, quality);
+    this.site = new LaunchSite(universe);
+    this.scene.add(this.site.root);
 
     const labelHost = document.createElement('div');
     Object.assign(labelHost.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
@@ -396,6 +400,8 @@ export class FlightController {
     sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 0.1; sc.far = r * 8;
     sc.updateProjectionMatrix();
 
+    if (wv.body === 'earth') this.site.update(origin, t);
+    else this.site.hide();
     this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.renderer.domElement.height });
     const eclipse = this.planets.sunVisibility?.(origin, sunPos) ?? 1;
     const tint = this.planets.sunTint?.(origin, sunPos) ?? [1, 1, 1];
@@ -555,6 +561,7 @@ export class FlightController {
     this.input.dispose();
     for (const v of this.views.values()) v.dispose();
     this.planets.dispose();
+    this.site.dispose();
     this.map.dispose();
     this.pipeline.dispose();
     this.pipeline.renderer.domElement.remove();

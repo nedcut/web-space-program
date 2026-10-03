@@ -7,7 +7,7 @@ import type { Quat } from '../../util/quat';
 import type { QualitySettings } from '../core/quality';
 import { screenSpaceFactor } from '../core/camera';
 import { computeAtmosphereParams, buildTransmittanceLUT, type AtmosphereParams } from './atmosphereParams';
-import { createPlanetUniforms, type PlanetUniforms } from './uniforms';
+import { createPlanetUniforms, registerPlanetUniforms, unregisterPlanetUniforms, type PlanetUniforms } from './uniforms';
 import {
   createTerrainMaterial,
   createOceanMaterial,
@@ -22,6 +22,7 @@ import {
 import { Quadtree } from './quadtree';
 import { TerrainWorkerPool } from './workerPool';
 import { buildRingProfile } from './textures';
+import { terrainCutout } from './cutout';
 
 export interface PlanetRendererOptions {
   quality: QualitySettings;
@@ -116,6 +117,7 @@ export class PlanetRenderer {
     this.atmosphere = this.kind === 'star' ? null : computeAtmosphereParams(body, this.scale);
     if (this.atmosphere) this.lut = buildTransmittanceLUT(this.atmosphere);
     this.uniforms = createPlanetUniforms(body.radius, this.atmosphere, this.lut);
+    registerPlanetUniforms(body.id, this.uniforms);
 
     if (this.kind === 'star') this.buildSun();
     else if (this.kind === 'gas') this.buildGasGiant();
@@ -200,6 +202,7 @@ export class PlanetRenderer {
       airless,
       detail: q.terrain.detail,
       detailStrength: preset === 'earth' ? 1 : preset === 'mars' ? 1.5 : 1.0,
+      cutout: terrainCutout(this.body.id),
     });
     this.materials.push(terrainMat);
     let oceanMat: THREE.ShaderMaterial | undefined;
@@ -485,6 +488,7 @@ export class PlanetRenderer {
   }
 
   dispose(): void {
+    unregisterPlanetUniforms(this.body.id, this.uniforms);
     this.quadtree?.dispose();
     this.root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).geometry.dispose();
