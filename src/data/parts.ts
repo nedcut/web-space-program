@@ -251,6 +251,33 @@ function stackDecoupler(id: string, name: string, size: number, h: number, dryMa
   };
 }
 
+/** Docking port: 'bottom' mounts to the vessel, the 'dock' node at the top is the mating face (+Y). */
+function dockingPort(id: string, name: string, size: number, h: number, dryMass: number, cost: number, capture: { range: number; speed: number; angleDeg: number }, description: string): PartDef {
+  const r = SIZE_RADIUS[size];
+  return {
+    id,
+    name,
+    manufacturer: MANUFACTURERS.tessellate,
+    description,
+    category: 'coupling',
+    dryMass,
+    cost,
+    resources: {},
+    attachNodes: [
+      { id: 'dock', position: v(0, h / 2, 0), direction: v(0, 1, 0), size },
+      { id: 'bottom', position: v(0, -h / 2, 0), direction: v(0, -1, 0), size },
+    ],
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: false,
+    shape: cyl(r * 0.92, r, h),
+    dragCoefficient: { axial: 0.8, side: 0.9 },
+    maxTemp: 2000,
+    crashTolerance: 10,
+    modules: [{ type: 'dockingPort', size, captureRange: capture.range, captureSpeed: capture.speed, captureAngle: capture.angleDeg * DEG, node: 'dock' }],
+    mesh: 'dockingPort',
+  };
+}
+
 function adapter(id: string, name: string, sizeTop: number, sizeBottom: number, h: number, dryMass: number, cost: number, description: string): PartDef {
   return {
     id,
@@ -667,6 +694,12 @@ const coupling: PartDef[] = [
     modules: [{ type: 'decoupler', ejectionImpulse: 400, node: 'srf', radial: true }],
     mesh: 'radialDecoupler',
   },
+  dockingPort('dock-0', 'Mooring Collar 0', 0, 0.2, 25, 280, { range: 0.75, speed: 0.5, angleDeg: 15 },
+    'A pocket-sized androgynous docking ring for probes. Three guide petals, six latches and an unshakeable belief that you meant to line up.'),
+  dockingPort('dock-1', 'Mooring Collar 1', 1, 0.28, 70, 520, { range: 1.0, speed: 0.6, angleDeg: 15 },
+    'The everyday 1.25 m docking collar. Magnetic soft-capture pulls the last metre for you; the latches do the rest with a satisfying clunk.'),
+  dockingPort('dock-2', 'Mooring Collar 2', 2, 0.4, 240, 1200, { range: 1.25, speed: 0.4, angleDeg: 12 },
+    'Station-grade 2.5 m berthing ring with a wide crew tunnel. Forgiving of lateral offset, unforgiving of haste.'),
 ];
 
 const structural: PartDef[] = [

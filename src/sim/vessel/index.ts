@@ -88,3 +88,23 @@ export {
   controlAuthority,
 } from './integrator';
 export type { StepOptions } from './integrator';
+
+export {
+  DOCK_CONTACT_DISTANCE,
+  UNDOCK_SEPARATION_SPEED,
+  dockingModule,
+  portInfo,
+  dockedPartner,
+  isPortFree,
+  freePorts,
+  dockedPorts,
+  portAlignment,
+  findDockingCandidates,
+  applyCaptureField,
+  systemAngularMomentum,
+  mergeVessels,
+  stepDocking,
+  rearmPorts,
+  undock,
+} from './docking';
+export type { PortInfo, PortAlignment, DockingCandidate, DockingEvent } from './docking';

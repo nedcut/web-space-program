@@ -132,8 +132,23 @@ export function buildMoonLander(catalog: PartCatalog = PART_CATALOG): CraftDef {
   return b.done();
 }
 
+/** Small orbital tug for rendezvous & docking practice (spawned in orbit by `?scenario=rendezvous`). */
+export function buildTender(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Wren Tender', 'Probe-controlled docking tug: 1.25 m docking collar on the nose, eight RCS quads, a small descent engine.');
+  const core = b.root('probe-cairn');
+  b.stack(core, 'dock-1', 'top');
+  const mono = b.stack(core, 'mono-bagel');
+  const tank = b.stack(mono, 'tank-1-mid');
+  b.stack(tank, 'eng-doldrum');
+  b.radial(mono, 'rcs-nudge', 4, 0, 45);
+  b.radial(tank, 'rcs-nudge', 4, -0.5, 45);
+  b.radial(tank, 'solar-fold', 2, 0.2, 0);
+  return b.done();
+}
+
 export const STOCK_CRAFTS: StockCraft[] = [
   { id: 'stock-kestrel', name: 'Kestrel Sounding Rocket', blurb: 'Suborbital test hop · 1 stage + capsule', build: () => buildSoundingRocket() },
   { id: 'stock-meridian', name: 'Meridian Orbiter', blurb: 'Two stages to low orbit and back', build: () => buildOrbiter() },
   { id: 'stock-selene', name: 'Selene Lunar Lander', blurb: 'Three stages · land on the Moon and return', build: () => buildMoonLander() },
+  { id: 'stock-tender', name: 'Wren Tender', blurb: 'Docking practice tug · try ?scenario=rendezvous', build: () => buildTender() },
 ];
