@@ -31,6 +31,9 @@ export interface SavedWorld {
   activeId: string | null;
   nodes: ManeuverNode[];
   vessels: SavedVessel[];
+  /** Navigation target (vessel or body id) and optional docking port uid. Absent in older saves. */
+  targetId?: string | null;
+  targetPortUid?: number | null;
 }
 
 export function serializeWorld(world: World): SavedWorld {
@@ -54,7 +57,16 @@ export function serializeWorld(world: World): SavedWorld {
       fixed: wv.fixed ? structuredClone(wv.fixed) : undefined,
     });
   }
-  return { version: SAVE_VERSION, preset: world.universe.preset, ut: world.ut, activeId: world.activeId, nodes: structuredClone(world.nodes), vessels };
+  return {
+    version: SAVE_VERSION,
+    preset: world.universe.preset,
+    ut: world.ut,
+    activeId: world.activeId,
+    nodes: structuredClone(world.nodes),
+    vessels,
+    targetId: world.targetId,
+    targetPortUid: world.targetPortUid,
+  };
 }
 
 export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>, universe?: Universe): World {
@@ -73,6 +85,7 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
   }
   world.activeId = data.activeId && world.vessels.has(data.activeId) ? data.activeId : null;
   world.nodes = data.nodes ?? [];
+  world.setTarget(data.targetId ?? null, data.targetPortUid ?? null);
   world.restoreAfterLoad();
   return world;
 }

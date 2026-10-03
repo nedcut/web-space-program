@@ -1,6 +1,45 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { formatDistance, formatSpeed, formatDuration, formatDate } from '../../ui/format';
 import { Navball, type NavballFrame, type NavballMarker } from './navball';
+import { DockingIndicator, TargetPanel } from './TargetPanel';
+
+/** Docking alignment readout: target port relative to the active port's frame (x right, y up, z along axis). */
+export interface DockingTelemetry {
+  myPort: string;
+  targetPort: string;
+  sizeMatch: boolean;
+  /** Target face position in the active port frame, m. */
+  x: number;
+  y: number;
+  z: number;
+  /** Target face velocity relative to the active face, port frame, m/s. */
+  vx: number;
+  vy: number;
+  vz: number;
+  /** Angle between the active port axis and the reversed target port axis, degrees. */
+  angle: number;
+  /** Target port facing direction (reversed) projected on the active port's right/up axes. */
+  tiltX: number;
+  tiltY: number;
+  captureRange: number;
+  captureSpeed: number;
+  /** Degrees. */
+  captureAngle: number;
+}
+
+export interface TargetTelemetry {
+  id: string;
+  name: string;
+  kind: 'vessel' | 'body';
+  /** Distance to target (bodies: to the surface), m. */
+  distance: number;
+  relSpeed: number;
+  /** Closing speed (positive = approaching), m/s. */
+  closing: number;
+  portUid: number | null;
+  ports: { uid: number; name: string }[];
+  approach: { distance: number; time: number; relSpeed: number } | null;
+}
 
 /** Snapshot of telemetry pushed to the HUD ~10–20 times per second (not every frame). */
 export interface Telemetry {
@@ -31,6 +70,12 @@ export interface Telemetry {
   messages: { id: number; text: string; level: 'info' | 'warn' | 'bad' }[];
   mapMode: boolean;
   assist: { name: string; status: string } | null;
+  target: TargetTelemetry | null;
+  targetOptions: { id: string; name: string; kind: 'vessel' | 'body'; distance: number }[];
+  dockingMode: boolean;
+  docking: DockingTelemetry | null;
+  /** Docking ports of the active vessel that join two halves (undock candidates). */
+  dockedPorts: { uid: number; name: string }[];
 }
 
 export interface HudStage {
@@ -48,6 +93,9 @@ export interface HudCallbacks {
   onMap(): void;
   onMenu(): void;
   onSpeedMode(): void;
+  onSetTarget(id: string | null, portUid?: number | null): void;
+  onToggleDocking(): void;
+  onUndock(portUid?: number): void;
 }
 
 const SAS_MODES: { id: string; label: string }[] = [
@@ -59,6 +107,8 @@ const SAS_MODES: { id: string; label: string }[] = [
   { id: 'radialOut', label: 'RAD+' },
   { id: 'radialIn', label: 'RAD−' },
   { id: 'maneuver', label: 'MNV' },
+  { id: 'target', label: 'TGT' },
+  { id: 'antiTarget', label: 'A-TGT' },
 ];
 
 export function NavballView({ getFrame }: { getFrame: () => { frame: NavballFrame; markers: NavballMarker[] } | null }) {
@@ -180,6 +230,9 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
           </div>
         </div>
       </div>
+
+      <TargetPanel t={t} cb={cb} />
+      {t.dockingMode && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
 
       {/* Messages */}
       <div style={{ position: 'absolute', top: 100, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center' }}>

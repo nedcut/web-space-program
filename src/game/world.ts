@@ -1,8 +1,8 @@
 import type { CraftDef, PartDef } from '../sim/vessel/types';
 import type { ControlInput, VesselState, VesselEvent } from '../sim/vessel/runtime';
-import { buildVessel, stepVessel, activateNextStage, neutralInput, recomputeMassProperties } from '../sim/vessel';
+import { buildVessel, stepVessel, activateNextStage, neutralInput, recomputeMassProperties, stepDocking, undock, dockedPorts, portInfo } from '../sim/vessel';
 import type { Orbit, ManeuverNode, TrajectoryPatch, StateVector } from '../sim/orbit/api';
-import { stateToElements, propagate, predictTrajectory, periapsisRadius, apoapsisRadius, timeToPeriapsis, timeToApoapsis, period, maneuverToInertialDv } from '../sim/orbit';
+import { stateToElements, propagate, predictTrajectory, periapsisRadius, apoapsisRadius, timeToPeriapsis, timeToApoapsis, period, maneuverToInertialDv, trajectoryClosestApproach, type TrajectoryApproach } from '../sim/orbit';
 import { latLonToUnit, LAUNCH_SITE } from '../sim/terrain';
 import { add, sub, length, scale, normalize, cross, dot, v3, type Vec3 } from '../util/vec3';
 import { qMul, qConj, qRotate, qNormalize, type Quat } from '../util/quat';
@@ -49,11 +49,16 @@ export class World {
   warp: WarpState = { mode: 'rails', index: 0 };
   nodes: ManeuverNode[] = [];
   messages: WorldMessage[] = [];
+  /** Navigation target: a vessel id or a body id (null = none). */
+  targetId: string | null = null;
+  /** Optional specific docking port (part uid) on the target vessel. */
+  targetPortUid: number | null = null;
   /** Real-time accumulator for fixed physics steps. */
   private acc = 0;
   private msgId = 0;
   private nodeId = 1;
   private trajectoryCache: { time: number; key: string; patches: TrajectoryPatch[] } | null = null;
+  private approachCache: { time: number; key: string; value: TrajectoryApproach | null } | null = null;
   readonly catalog: Map<string, PartDef>;
   /** Event listeners (audio, camera shake, UI). */
   onEvent: ((e: VesselEvent) => void) | null = null;
@@ -116,6 +121,17 @@ export class World {
     this.activeId = state.id;
     this.nodes = [];
     this.warp = { mode: 'rails', index: 0 };
+    return wv;
+  }
+
+  /** Add a free-flying craft with the given inertial COM state and attitude (physics mode; not made active). */
+  spawnVessel(craft: CraftDef, state: { position: Vec3; velocity: Vec3; orientation: Quat }, name = craft.name): WorldVessel {
+    let id = `v${Date.now().toString(36)}`;
+    for (let k = 1; this.vessels.has(id); k++) id = `v${Date.now().toString(36)}-${k}`;
+    const vs = buildVessel(craft, this.catalog, { id, resourceDefs: RESOURCES, ...state });
+    vs.name = name;
+    const wv: WorldVessel = { state: vs, mode: 'physics', body: this.universe.dominantBody(vs.position, this.ut) };
+    this.vessels.set(id, wv);
     return wv;
   }
 
@@ -253,6 +269,130 @@ export class World {
     wv.railsEvent = undefined;
   }
 
+  // ---------- Targets ----------
+
+  /** Set (or clear with null) the navigation target: a vessel id or body id, optionally a docking port. */
+  setTarget(id: string | null, portUid: number | null = null) {
+    if (id !== null && (id === this.activeId || (!this.vessels.has(id) && !this.universe.bodies.has(id)))) return false;
+    this.targetId = id;
+    this.targetPortUid = id !== null && this.vessels.has(id) ? portUid : null;
+    this.approachCache = null;
+    return true;
+  }
+
+  targetKind(): 'vessel' | 'body' | null {
+    if (!this.targetId) return null;
+    if (this.vessels.has(this.targetId)) return 'vessel';
+    return this.universe.bodies.has(this.targetId) ? 'body' : null;
+  }
+
+  targetName(): string | null {
+    const k = this.targetKind();
+    if (k === 'vessel') return this.vessels.get(this.targetId!)!.state.name;
+    if (k === 'body') return this.universe.body(this.targetId!).name;
+    return null;
+  }
+
+  /** Drop the target when it no longer exists (merged, destroyed, recovered) or is now the active vessel. */
+  private validateTarget() {
+    if (this.targetId === null) return;
+    if (this.targetKind() === null || this.targetId === this.activeId) {
+      this.targetId = null;
+      this.targetPortUid = null;
+      return;
+    }
+    if (this.targetPortUid !== null) {
+      const wv = this.vessels.get(this.targetId);
+      if (!wv || !wv.state.cache.byUid.has(this.targetPortUid)) this.targetPortUid = null;
+    }
+  }
+
+  /** Inertial state of the target now (the selected docking face if a port is targeted). */
+  targetState(): StateVector | null {
+    const k = this.targetKind();
+    if (k === 'body') return this.universe.ephem.getBodyState(this.targetId!, this.ut);
+    if (k !== 'vessel') return null;
+    const wv = this.vessels.get(this.targetId!)!;
+    if (this.targetPortUid !== null) {
+      const p = wv.state.cache.byUid.get(this.targetPortUid);
+      const info = p ? portInfo(wv.state, p) : null;
+      if (info) return { position: info.pos, velocity: info.vel };
+    }
+    return { position: wv.state.position, velocity: wv.state.velocity };
+  }
+
+  /** Predicted target state at time t relative to body `bodyId` (conic prediction for vessels). */
+  targetRelativeState(bodyId: string, t: number): StateVector | null {
+    const k = this.targetKind();
+    const ref = this.universe.ephem.getBodyState(bodyId, t);
+    if (k === 'body') {
+      const s = this.universe.ephem.getBodyState(this.targetId!, t);
+      return { position: sub(s.position, ref.position), velocity: sub(s.velocity, ref.velocity) };
+    }
+    if (k !== 'vessel') return null;
+    const wv = this.vessels.get(this.targetId!)!;
+    const o = this.orbitOf(wv);
+    const s = propagate(o, t);
+    const b = this.universe.ephem.getBodyState(wv.body, t);
+    return { position: sub(add(b.position, s.position), ref.position), velocity: sub(add(b.velocity, s.velocity), ref.velocity) };
+  }
+
+  /** Closest approach between the active vessel's predicted trajectory and the target (cached). */
+  closestApproach(): TrajectoryApproach | null {
+    const wv = this.active;
+    if (!wv || !this.targetId || wv.mode === 'prelaunch' || this.targetKind() === null) return null;
+    const patches = this.trajectory();
+    if (!patches.length) return null;
+    const key = `${this.targetId}|${patches.length}|${patches[0].startTime}|${this.nodes.map((n) => `${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}`).join(',')}`;
+    if (this.approachCache && this.approachCache.key === key) return this.approachCache.value;
+    let value: TrajectoryApproach | null = null;
+    try {
+      value = trajectoryClosestApproach(patches.slice(0, 3), (b, t) => this.targetRelativeState(b, t)!, this.ut);
+    } catch {
+      value = null;
+    }
+    this.approachCache = { time: this.ut, key, value };
+    return value;
+  }
+
+  // ---------- Docking ----------
+
+  /** Docking: capture field + merges between physics vessels (run after every physics step). */
+  private stepDockingAll() {
+    const phys: VesselState[] = [];
+    for (const wv of this.vessels.values()) if (wv.mode === 'physics' && !wv.state.destroyed) phys.push(wv.state);
+    if (phys.length < 2) return;
+    const events = stepDocking(phys, PHYSICS_DT, (a, b) => (a.id === this.activeId ? a : b.id === this.activeId ? b : a.mass >= b.mass ? a : b));
+    for (const e of events) {
+      this.vessels.delete(e.removed.id);
+      if (this.activeId === e.removed.id) this.activeId = e.keep.id;
+      if (this.targetId === e.removed.id || this.targetId === e.keep.id) this.setTarget(null);
+      this.trajectoryCache = null;
+      const keepWv = this.vessels.get(e.keep.id);
+      if (keepWv) keepWv.body = this.universe.dominantBody(e.keep.position, this.ut);
+      if (e.keep.id === this.activeId) this.message(`Docked with ${e.removedName}`);
+      this.handleEvent({ type: 'docked', vesselId: e.keep.id, otherId: e.removed.id });
+    }
+  }
+
+  /** Undock the active vessel at `portUid` (default: the first docked joint). Returns the new vessel id. */
+  undockActive(portUid?: number): string | null {
+    const wv = this.active;
+    if (!wv) return null;
+    if (wv.mode !== 'physics') this.unpack(wv);
+    if (wv.mode !== 'physics') return null;
+    const uid = portUid ?? dockedPorts(wv.state)[0]?.uid;
+    if (uid === undefined) return null;
+    const nv = undock(wv.state, uid);
+    if (!nv) return null;
+    if (this.vessels.has(nv.id)) nv.id = `${wv.state.id}.${++wv.state.splitCount}`;
+    this.vessels.set(nv.id, { state: nv, mode: 'physics', body: wv.body });
+    this.trajectoryCache = null;
+    this.message(`Undocked ${nv.name}`);
+    this.handleEvent({ type: 'undocked', vesselId: wv.state.id, newVesselId: nv.id });
+    return nv.id;
+  }
+
   warpContext(): WarpContext {
     const wv = this.active;
     if (!wv) return { thrusting: false, inAtmosphere: false, landed: true, altitude: 1e9, bodyRadius: 1, atmosphereHeight: 0 };
@@ -282,6 +422,7 @@ export class World {
     realDt = Math.min(realDt, 0.25);
     const now = performance.now();
     this.messages = this.messages.filter((m) => m.expires > now);
+    this.validateTarget();
     this.warp = clampWarp(this.warp, this.warpContext());
     const rate = warpRate(this.warp);
 
@@ -440,6 +581,7 @@ export class World {
         this.vessels.delete(wv.state.id);
       }
     }
+    this.stepDockingAll();
     this.ut = t + PHYSICS_DT;
     this.applyPassedNodes();
   }
@@ -448,6 +590,7 @@ export class World {
     this.onEvent?.(e);
     if (e.vesselId !== this.activeId) return;
     if (e.type === 'flameout') this.message('Flameout!', 'warn', 2);
+    if (e.type === 'docked' || e.type === 'undocked') this.approachCache = null;
     if (e.type === 'partDestroyed') {
       const why = e.reason === 'overheat' ? 'overheated and exploded' : 'was destroyed on impact';
       this.message(`A part ${why}`, 'bad', 4);
