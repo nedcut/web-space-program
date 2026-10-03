@@ -56,8 +56,19 @@ function createStore<T>(initial: T) {
 // Mission start: 2030-07-20 12:00 UTC (UTC≈TT is close enough for gameplay).
 export const DEFAULT_START_UT = (Date.UTC(2030, 6, 20, 12) - Date.UTC(2000, 0, 1, 12)) / 1000;
 
+/** Dev hook: `?scene=editor` (etc.) opens a scene directly. */
+function initialScene(): Scene {
+  try {
+    const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('scene') : null;
+    if (q && ['menu', 'spaceCenter', 'editor', 'flight', 'tracking'].includes(q)) return q as Scene;
+  } catch {
+    /* no location */
+  }
+  return 'menu';
+}
+
 export const game = createStore<GameState>({
-  scene: 'menu',
+  scene: initialScene(),
   saveId: null,
   scalePreset: 'standard',
   ut: DEFAULT_START_UT,
