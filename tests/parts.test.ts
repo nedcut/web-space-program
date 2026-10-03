@@ -81,8 +81,15 @@ describe('part catalogue', () => {
       const e = findModule(p, 'engine')!;
       expect(Object.keys(e.propellants).length).toBeGreaterThan(0);
       for (const k in e.propellants) expect(RESOURCES[k as ResourceId], `${p.id} burns ${k}`).toBeDefined();
-      expect(e.ispVac).toBeGreaterThan(e.ispAsl);
       expect(e.maxThrustVac).toBeGreaterThan(0);
+      if (e.airBreathing) {
+        // Jets: fuel-only Isp in the thousands of seconds, independent of pressure (thrust follows the Mach/density curve).
+        expect(e.ispVac).toBe(e.ispAsl);
+        expect(e.ispVac).toBeGreaterThan(1500);
+        expect(e.propellants).toEqual({ liquidFuel: 1 });
+        continue;
+      }
+      expect(e.ispVac).toBeGreaterThan(e.ispAsl);
       if (e.plume !== 'ion') {
         expect(e.ispVac).toBeGreaterThan(200);
         expect(e.ispVac).toBeLessThan(470);

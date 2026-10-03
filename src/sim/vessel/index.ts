@@ -17,6 +17,7 @@ export {
   removePart,
   applyImpulse,
   setGear,
+  gearState,
   bodyToWorld,
   getPart,
   decouplerCutChildren,
@@ -51,7 +52,16 @@ export {
   gimbalAuthority,
   rcsAuthority,
   wheelAuthority,
+  curveAt,
+  jetThrustFactor,
+  jetThrust,
+  intakeRate,
+  produceIntakeAir,
+  RHO0,
+  INTAKE_STATIC_SPEED,
+  JET_MIN_AIR_FRACTION,
 } from './engines';
+export type { EngineAir } from './engines';
 
 export { getStages, partsInStage, activateStage, activateNextStage, computeStageDeltaV } from './staging';
 export type { StageDeltaV } from './staging';
@@ -75,7 +85,7 @@ export {
   peakTemperature,
 } from './heating';
 
-export { MU_STATIC, MU_DYNAMIC, WATER_DENSITY, gatherContacts, solveContacts } from './contact';
+export { MU_STATIC, MU_DYNAMIC, WATER_DENSITY, TYRE_MU, TYRE_MU_SLIDE, ROLLING_RESISTANCE, GEAR_DEPLOY_TIME, gatherContacts, solveContacts, wheelContactPoint, updateWheelDeploy } from './contact';
 
 export { computeSas, sasTargetDirection, attitudeError, pointingError } from './sas';
 

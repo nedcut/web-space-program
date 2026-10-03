@@ -149,7 +149,56 @@ export const TEST_PARTS: PartDef[] = [
     modules: [{ type: 'heatShield', ablationRate: 0.05, maxTemp: 3400 }],
   }),
   base({ id: 'ballast', dryMass: 100, shape: { kind: 'cylinder', radiusTop: 0.5, radiusBottom: 0.5, height: 1 }, attachNodes: stack(1) }),
+  // --- Aircraft fixtures ---
+  base({
+    id: 'fuselage', category: 'fuelTank', dryMass: 1500, shape: { kind: 'cylinder', radiusTop: 0.625, radiusBottom: 0.625, height: 4 },
+    attachNodes: stack(4), resources: { liquidFuel: 1000 }, dragCoefficient: { axial: 0.3, side: 0.9 },
+  }),
+  base({
+    id: 'jet', category: 'engine', dryMass: 1000, shape: { kind: 'cylinder', radiusTop: 0.625, radiusBottom: 0.5, height: 2 },
+    attachNodes: stack(2),
+    modules: [{
+      type: 'engine', maxThrustVac: 50_000, ispVac: 6000, ispAsl: 6000, propellants: { liquidFuel: 1 }, minThrottle: 0,
+      throttleable: true, gimbalRange: 0, thrustDirection: v(0, 1, 0), spoolTime: 1.5, plume: 'jet', ignitions: -1,
+      airBreathing: { machCurve: [[0, 1], [0.8, 0.95], [1.2, 0.6], [1.6, 0]], densityExponent: 0.7, airRatio: 20 },
+    }],
+  }),
+  base({
+    id: 'intake', category: 'aero', dryMass: 50, shape: { kind: 'box', size: v(0.4, 1, 0.3) }, resources: { intakeAir: 0.2 },
+    attachNodes: [{ id: 'srf', position: v(0, 0, -0.15), direction: v(0, 0, -1), size: 0 }],
+    modules: [{ type: 'intake', area: 0.4 }],
+  }),
+  base({
+    id: 'gear', category: 'ground', dryMass: 60, shape: { kind: 'box', size: v(0.3, 0.4, 0.3) }, crashTolerance: 12,
+    attachNodes: [{ id: 'srf', position: v(0, 0, -0.15), direction: v(0, 0, -1), size: 0 }],
+    modules: [{ type: 'wheel', radius: 0.25, spring: 100_000, damper: 14_000, travel: 0.25, wheelCenter: v(0, 0, 0.7), brakeTorque: 4000, retractable: true }],
+  }),
+  base({
+    id: 'gear-steer', category: 'ground', dryMass: 60, shape: { kind: 'box', size: v(0.3, 0.4, 0.3) }, crashTolerance: 12,
+    attachNodes: [{ id: 'srf', position: v(0, 0, -0.15), direction: v(0, 0, -1), size: 0 }],
+    modules: [{ type: 'wheel', radius: 0.25, spring: 100_000, damper: 14_000, travel: 0.25, wheelCenter: v(0, 0, 0.7), brakeTorque: 1000, steerAngle: (30 * Math.PI) / 180, retractable: true }],
+  }),
 ];
+
+/** Rotation for parts hanging under a horizontal craft's belly (part +Z = body -Z, part +Y = body +Y). */
+export const BELLY: Quat = { x: 0, y: 1, z: 0, w: 0 };
+
+/**
+ * Tricycle-gear test aircraft body (nose = body +Y, top = body +Z): a fuel fuselage with a steerable nose wheel
+ * and two braked main wheels behind the COM. Optional jet + intake for propulsion tests.
+ */
+export function planeCraft(opts: { jet?: boolean; intake?: boolean } = {}): CraftDef {
+  const belly = (x: number, y: number): Vec3 => v(x, y, -0.625 - 0.15);
+  const parts: PartInstance[] = [
+    { uid: 1, partId: 'fuselage', position: v(0, 0, 0), rotation: qIdentity() },
+    { uid: 2, partId: 'gear-steer', position: belly(0, 1.6), rotation: BELLY, parent: 1, attachNode: 'srf', parentNode: 'srf' },
+    { uid: 3, partId: 'gear', position: belly(1.0, -0.6), rotation: BELLY, parent: 1, attachNode: 'srf', parentNode: 'srf' },
+    { uid: 4, partId: 'gear', position: belly(-1.0, -0.6), rotation: BELLY, parent: 1, attachNode: 'srf', parentNode: 'srf' },
+  ];
+  if (opts.jet) parts.push({ uid: 5, partId: 'jet', position: v(0, -3, 0), rotation: qIdentity(), parent: 1, attachNode: 'top', parentNode: 'bottom', stage: 0 });
+  if (opts.intake) parts.push({ uid: 6, partId: 'intake', position: v(0, 1, 0.625 + 0.15), rotation: qIdentity(), parent: 1, attachNode: 'srf', parentNode: 'srf' });
+  return { name: 'Test Plane', type: 'SPH', parts, version: 1 };
+}
 
 export const TEST_CATALOG = new Map(TEST_PARTS.map((p) => [p.id, p]));
 

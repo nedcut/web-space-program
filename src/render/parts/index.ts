@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { PartDef } from '../../sim/vessel/types';
 import type { Builder } from './builders/common';
 import { buildFin, buildWing, buildControlSurface } from './builders/aero';
+import { buildCockpit, buildFuselage, buildGear, buildIntake, buildJetEngine } from './builders/aircraft';
 import { buildPod, buildProbeCore } from './builders/command';
 import { buildBattery, buildSolarDeploy, buildSolarFixed } from './builders/electrical';
 import { buildEngine, buildIonEngine, buildSrb } from './builders/engines';
@@ -25,6 +26,7 @@ import type { DeployData } from './geom';
 
 export { createPlume, type Plume, type PlumeParams, type PlumeOptions } from './plume';
 export { disposeMaterials } from './materials';
+export { setGearPose } from './builders/aircraft';
 
 /**
  * Procedural part meshes.
@@ -41,6 +43,7 @@ export { disposeMaterials } from './materials';
  *  - 'fairingShell' / 'fairingHalfA' / 'fairingHalfB'
  *  - 'lightLens' / 'lightAnchor'              lamps (anchor looks along +Z)
  *  - 'ionGrid'                                ion engine grid (emissive)
+ *  - 'gearStrut' / 'gearSlide' / 'gearSteer' / 'gearWheel'   landing gear (see setGearPose)
  * Deployables carry JSON userData.deploy and are driven by setPartDeploy(root, t), t in [0,1].
  */
 export const MESH_BUILDERS: Record<string, Builder> = {
@@ -73,6 +76,11 @@ export const MESH_BUILDERS: Record<string, Builder> = {
   heatShield: buildHeatShield,
   landingLeg: buildLandingLeg,
   light: buildLight,
+  jetEngine: buildJetEngine,
+  intake: buildIntake,
+  cockpit: buildCockpit,
+  fuselage: buildFuselage,
+  gear: buildGear,
 };
 
 function fallback(def: PartDef): THREE.Object3D {

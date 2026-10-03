@@ -1,7 +1,8 @@
 import type { Vec3 } from '../../util/vec3';
 import { add, cross, dot, length, scale, sub, v3 } from '../../util/vec3';
 import { qRotate } from '../../util/quat';
-import type { LandingLegModule } from './types';
+import type { LandingLegModule, WheelModule } from './types';
+import type { PartState } from './runtime';
 import type { VesselState } from './runtime';
 import type { Environment, GroundSample } from './env';
 import type { Mat3 } from './mat3';
@@ -14,6 +15,10 @@ import { hullPoints, shapeVolume } from './shapes';
  *    Coulomb friction (static 0.8 / dynamic 0.6) and Baumgarte penetration recovery.
  *  - Deployed landing legs are spring/damper suspensions (force), with friction resolved as impulses
  *    in the same solver (exact static friction => no creep, no jitter). Bottoming out => rigid contact.
+ *  - Wheels (landing gear): spring/damper suspension along the gear leg (raycast-like: the tyre's lowest point
+ *    vs the ground), a simple tyre model solved as impulses: lateral grip drives side-slip to zero up to
+ *    mu(slip) * N (sticky below SLIDE_SPEED, sliding above), low rolling resistance along the wheel heading,
+ *    brakes up to min(brakeTorque / radius, mu N), steering turns the heading of steerable wheels with yaw input.
  *  - Water: per-part buoyancy (submerged fraction of an equivalent sphere) + quadratic water drag.
  *  - Crash: a part whose contact point approaches the surface faster than its crashTolerance is destroyed.
  */
@@ -26,6 +31,22 @@ export const WAVE_DAMPING_RATIO = 0.3;
 export const POSITION_CORRECTION = 0.8;
 export const PENETRATION_SLOP = 0.005;
 export const SOLVER_ITERATIONS = 10;
+/** Tyre friction coefficient (rubber on concrete) at low slip, and when sliding sideways. */
+export const TYRE_MU = 1.0;
+export const TYRE_MU_SLIDE = 0.7;
+/** Lateral slip speed above which a tyre is sliding, m/s. */
+export const TYRE_SLIDE_SPEED = 1.5;
+/** Rolling resistance coefficient of a free-rolling tyre. */
+export const ROLLING_RESISTANCE = 0.015;
+/** Time to raise/lower retractable gear, s. */
+export const GEAR_DEPLOY_TIME = 3;
+
+/** Wheel controls for the step. */
+export interface WheelControl {
+  brakes: boolean;
+  /** Drive motor command -1..1. */
+  throttle: number;
+}
 
 export interface Contact {
   partUid: number;
@@ -33,12 +54,45 @@ export interface Contact {
   r: Vec3;
   n: Vec3;
   surfaceVelocity: Vec3;
-  kind: 'rigid' | 'leg';
+  kind: 'rigid' | 'leg' | 'wheel';
   depth: number;
-  /** For legs: normal impulse already applied by the spring this step (friction budget). */
+  /** For legs/wheels: normal impulse already applied by the spring this step (friction budget). */
   legImpulse: number;
   jn: number;
   jt: Vec3;
+  /** Wheels: rolling direction (unit, tangent to the ground, inertial). */
+  fwd?: Vec3;
+  /** Wheels: max longitudinal impulse from brakes (N*s), 0 = free rolling. */
+  brakeImpulse?: number;
+  /** Wheels: accumulated lateral / longitudinal impulses. */
+  jl?: number;
+  jf?: number;
+}
+
+/** Wheel geometry in the vessel body frame: wheel centre (full extension), suspension "down" axis, heading. */
+export function wheelContactPoint(v: VesselState, p: PartState): { center: Vec3; down: Vec3; heading: Vec3; module: WheelModule } {
+  const m = p.def.modules[p.wheel!.moduleIndex] as WheelModule;
+  const center = add(p.position, qRotate(p.rotation, m.wheelCenter));
+  const down = qRotate(p.rotation, { x: 0, y: 0, z: 1 });
+  let heading = qRotate(p.rotation, { x: 0, y: 1, z: 0 });
+  const steer = p.wheel!.steer;
+  if (steer !== 0) {
+    const sx = qRotate(p.rotation, { x: 1, y: 0, z: 0 });
+    const side = sx.x >= 0 ? sx : scale(sx, -1);
+    heading = add(scale(heading, Math.cos(steer)), scale(side, Math.sin(steer)));
+  }
+  void v;
+  return { center, down, heading, module: m };
+}
+
+/** Advance retractable gear animation (contact only when fully down). */
+export function updateWheelDeploy(v: VesselState, dt: number): void {
+  for (const p of v.parts) {
+    const w = p.wheel;
+    if (!w) continue;
+    const target = w.deployed ? 1 : 0;
+    if (w.deploy !== target) w.deploy = target > w.deploy ? Math.min(1, w.deploy + dt / GEAR_DEPLOY_TIME) : Math.max(0, w.deploy - dt / GEAR_DEPLOY_TIME);
+  }
 }
 
 export interface ContactPass {
@@ -62,11 +116,12 @@ export function nearSurface(v: VesselState, env: Environment, t: number, h: numb
   return { ground: g, agl, near: agl < margin };
 }
 
-export function gatherContacts(v: VesselState, env: Environment, t: number, h: number, gravityMag: number): ContactPass {
+export function gatherContacts(v: VesselState, env: Environment, t: number, h: number, gravityMag: number, wheelCtl: WheelControl = { brakes: false, throttle: 0 }): ContactPass {
   const out: ContactPass = { force: v3(), torque: v3(), contacts: [], impacts: [], landed: false, splashed: false, altitudeAGL: NaN };
   const ns = nearSurface(v, env, t, h);
   out.altitudeAGL = ns.agl;
   for (const p of v.parts) if (p.leg) { p.leg.inContact = false; p.leg.compression = 0; }
+  for (const p of v.parts) if (p.wheel) { p.wheel.inContact = false; p.wheel.compression = 0; }
   if (!ns.near) return out;
   const omegaW = qRotate(v.orientation, v.angularVelocity);
   const impacted = new Set<number>();
@@ -113,6 +168,53 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
           out.contacts.push({ partUid: p.uid, r: rW, n: gs.normal, surfaceVelocity: gs.surfaceVelocity, kind: 'leg', depth: 0, legImpulse: F * h, jn: 0, jt: v3() });
           if (d > m.travel)
             out.contacts.push({ partUid: p.uid, r: rW, n: gs.normal, surfaceVelocity: gs.surfaceVelocity, kind: 'rigid', depth: d - m.travel, legImpulse: 0, jn: 0, jt: v3() });
+        }
+      }
+    }
+    // Wheels: suspension + tyre.
+    if (p.wheel && p.wheel.deploy >= 1) {
+      const wg = wheelContactPoint(v, p);
+      const m = wg.module;
+      const cW = toWorldOffset(wg.center);
+      const gs = env.ground(add(v.position, cW), t);
+      if (gs && !gs.isWater) {
+        const n = gs.normal;
+        // Lowest point of the tyre (a disc ~ sphere for small tilts) at full suspension extension.
+        const rW = sub(cW, scale(n, m.radius));
+        const pen = dot(sub(gs.surfacePoint, add(v.position, rW)), n);
+        if (pen > 0) {
+          const downW = qRotate(v.orientation, wg.down);
+          const cosA = Math.max(0.3, -dot(downW, n));
+          const comp = pen / cosA;
+          const x = Math.min(comp, m.travel);
+          const vrel = sub(pointVel(rW), gs.surfaceVelocity);
+          const vn = dot(vrel, n);
+          if (-vn > p.def.crashTolerance) impacted.add(p.uid);
+          const F = Math.max(0, m.spring * x * cosA - m.damper * vn);
+          const Fv = scale(n, F);
+          out.force = add(out.force, Fv);
+          out.torque = add(out.torque, cross(rW, Fv));
+          let fwd = qRotate(v.orientation, wg.heading);
+          fwd = sub(fwd, scale(n, dot(fwd, n)));
+          const fl = length(fwd);
+          fwd = fl > 1e-6 ? scale(fwd, 1 / fl) : v3();
+          // Drive motor (rovers): force along the heading, limited by grip.
+          if (m.motorTorque && wheelCtl.throttle !== 0 && fl > 1e-6) {
+            const drive = Math.max(-1, Math.min(1, wheelCtl.throttle)) * Math.min(m.motorTorque / m.radius, TYRE_MU * F);
+            const Fd = scale(fwd, drive);
+            out.force = add(out.force, Fd);
+            out.torque = add(out.torque, cross(rW, Fd));
+          }
+          p.wheel.compression = x;
+          p.wheel.inContact = true;
+          p.wheel.rollSpeed = dot(vrel, fwd);
+          out.landed = true;
+          out.contacts.push({
+            partUid: p.uid, r: rW, n, surfaceVelocity: gs.surfaceVelocity, kind: 'wheel', depth: 0, legImpulse: F * h, jn: 0, jt: v3(),
+            fwd, brakeImpulse: wheelCtl.brakes ? (m.brakeTorque / m.radius) * h : 0, jl: 0, jf: 0,
+          });
+          if (comp > m.travel)
+            out.contacts.push({ partUid: p.uid, r: rW, n, surfaceVelocity: gs.surfaceVelocity, kind: 'rigid', depth: (comp - m.travel) * cosA, legImpulse: 0, jn: 0, jt: v3() });
         }
       }
     }
@@ -178,8 +280,32 @@ export function solveContacts(v: VesselState, contacts: Contact[]): void {
     w = add(w, m3MulVec(invI, cross(r, J)));
   };
   const effMass = (r: Vec3, d: Vec3) => invM + dot(d, cross(m3MulVec(invI, cross(r, d)), r));
+  // Tyre: lateral grip (sticky / sliding) and longitudinal rolling resistance or brakes, inside a friction circle.
+  const solveTyre = (c: Contact) => {
+    const N = c.legImpulse;
+    const f = c.fwd!;
+    if (N <= 0 || dot(f, f) < 0.5) return;
+    const l = cross(c.n, f);
+    const vrel = sub(add(vel, cross(w, c.r)), c.surfaceVelocity);
+    const vl = dot(vrel, l), vf = dot(vrel, f);
+    const mu = Math.abs(vl) > TYRE_SLIDE_SPEED ? TYRE_MU_SLIDE : TYRE_MU;
+    const maxTotal = mu * N;
+    const longMax = c.brakeImpulse! > 0 ? Math.min(c.brakeImpulse!, maxTotal) : ROLLING_RESISTANCE * N;
+    let jf = c.jf! - vf / effMass(c.r, f);
+    jf = Math.max(-longMax, Math.min(longMax, jf));
+    const latMax = Math.sqrt(Math.max(0, maxTotal * maxTotal - jf * jf));
+    let jl = c.jl! - vl / effMass(c.r, l);
+    jl = Math.max(-latMax, Math.min(latMax, jl));
+    apply(add(scale(f, jf - c.jf!), scale(l, jl - c.jl!)), c.r);
+    c.jf = jf;
+    c.jl = jl;
+  };
   for (let it = 0; it < SOLVER_ITERATIONS; it++) {
     for (const c of contacts) {
+      if (c.kind === 'wheel') {
+        solveTyre(c);
+        continue;
+      }
       if (c.kind === 'rigid') {
         const vrel = sub(add(vel, cross(w, c.r)), c.surfaceVelocity);
         const vn = dot(vrel, c.n);

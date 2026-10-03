@@ -2,7 +2,7 @@ import type { Vec3 } from '../../util/vec3';
 import { add, cross, length, scale, sub, v3 } from '../../util/vec3';
 import type { Quat } from '../../util/quat';
 import { qIdentity, qRotate } from '../../util/quat';
-import type { CraftDef, DecouplerModule, PartDef, ResourceDef, ResourceId } from './types';
+import type { CraftDef, DecouplerModule, PartDef, ResourceDef, ResourceId, WheelModule } from './types';
 import type { PartState, VesselCache, VesselState } from './runtime';
 import { m3AddInPlace, m3FromQuat, m3Inverse, m3ParallelAxis, m3RotateTensor, m3Zero } from './mat3';
 import { localInertia, shapeRadius } from './shapes';
@@ -20,6 +20,8 @@ export interface BuildOptions {
   temperature?: number;
   /** Deploy landing legs at build time (default false). */
   legsDeployed?: boolean;
+  /** Wheels/landing gear down at build time (default true). Fixed gear is always down. */
+  gearDeployed?: boolean;
 }
 
 /** Thermal contact conductance per m^2 of node contact area, W/(m^2 K). */
@@ -71,6 +73,10 @@ export function buildVessel(craft: CraftDef, partCatalog: Map<string, PartDef>, 
         p.engine = { moduleIndex: i, ignited: false, flamedOut: false, throttle: 0, ignitionsLeft: m.ignitions, thrust: 0, massFlow: 0, isp: m.ispVac, gimbal: { a: 0, b: 0 } };
       else if (m.type === 'parachute' && !p.chute) p.chute = { moduleIndex: i, phase: 'stowed', progress: 0, cda: 0 };
       else if (m.type === 'landingLeg' && !p.leg) p.leg = { moduleIndex: i, deployed: !!opts.legsDeployed, compression: 0, inContact: false };
+      else if (m.type === 'wheel' && !p.wheel) {
+        const down = !m.retractable || (opts.gearDeployed ?? true);
+        p.wheel = { moduleIndex: i, deployed: down, deploy: down ? 1 : 0, compression: 0, inContact: false, steer: 0, spin: 0, rollSpeed: 0 };
+      }
       else if (m.type === 'heatShield') maxTemp = Math.max(maxTemp, m.maxTemp);
     });
     p.maxTemp = maxTemp;
@@ -107,6 +113,7 @@ export function buildVessel(craft: CraftDef, partCatalog: Map<string, PartDef>, 
       airDensity: 0,
       altitudeAGL: NaN,
       thrust: 0,
+      intakeAirRatio: NaN,
       control: { pitch: 0, yaw: 0, roll: 0 },
     },
     cache: emptyCache(),
@@ -207,7 +214,7 @@ export function recomputeMassProperties(v: VesselState, adjustState = true): voi
     m3AddInPlace(I, m3RotateTensor(R, localInertia(p.def, p.mass)));
     const d = sub(p.position, com);
     m3AddInPlace(I, m3ParallelAxis(p.mass, d));
-    br = Math.max(br, length(d) + shapeRadius(p.def) + (p.leg ? 2 : 0));
+    br = Math.max(br, length(d) + shapeRadius(p.def) + (p.leg ? 2 : 0) + (p.wheel ? wheelReach(p) : 0));
   }
   if (adjustState) {
     const drWorld = qRotate(v.orientation, sub(com, v.com));
@@ -236,6 +243,7 @@ export function cloneVessel(v: VesselState): VesselState {
       engine: p.engine ? { ...p.engine, gimbal: { ...p.engine.gimbal } } : undefined,
       chute: p.chute ? { ...p.chute } : undefined,
       leg: p.leg ? { ...p.leg } : undefined,
+      wheel: p.wheel ? { ...p.wheel } : undefined,
     })),
     position: { ...v.position },
     velocity: { ...v.velocity },
@@ -413,9 +421,28 @@ export function applyImpulse(v: VesselState, J: Vec3, pointBody: Vec3): void {
   };
 }
 
-/** Deploy or retract all landing legs. */
+/** Extra reach of a wheel beyond its part shape (wheel centre offset + tyre radius), m. */
+function wheelReach(p: PartState): number {
+  const m = p.def.modules[p.wheel!.moduleIndex] as WheelModule;
+  return length(m.wheelCenter) + m.radius;
+}
+
+/** Deploy or retract all landing legs and retractable landing gear. */
 export function setGear(v: VesselState, deployed: boolean): void {
-  for (const p of v.parts) if (p.leg) p.leg.deployed = deployed;
+  for (const p of v.parts) {
+    if (p.leg) p.leg.deployed = deployed;
+    if (p.wheel && (p.def.modules[p.wheel.moduleIndex] as WheelModule).retractable) p.wheel.deployed = deployed;
+  }
+}
+
+/** Current gear state: true if any retractable gear/leg is commanded down (undefined if the vessel has none). */
+export function gearState(v: VesselState): boolean | undefined {
+  let any: boolean | undefined;
+  for (const p of v.parts) {
+    if (p.leg) any = (any ?? false) || p.leg.deployed;
+    if (p.wheel && (p.def.modules[p.wheel.moduleIndex] as WheelModule).retractable) any = (any ?? false) || p.wheel.deployed;
+  }
+  return any;
 }
 
 /** World position of a body-frame point. */

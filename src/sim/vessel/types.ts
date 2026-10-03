@@ -9,7 +9,7 @@ import type { Quat } from '../../util/quat';
  * Parts are authored with their origin at their geometric centre.
  */
 
-export type ResourceId = 'liquidFuel' | 'oxidizer' | 'monopropellant' | 'xenon' | 'solidFuel' | 'electricCharge' | 'ablator';
+export type ResourceId = 'liquidFuel' | 'oxidizer' | 'monopropellant' | 'xenon' | 'solidFuel' | 'electricCharge' | 'ablator' | 'intakeAir';
 
 export interface ResourceDef {
   id: ResourceId;
@@ -43,6 +43,20 @@ export type PartCategory =
   | 'ground'
   | 'science';
 
+/**
+ * Air-breathing (jet) engine performance. Thrust = maxThrustVac (static, sea level) × throttle × machCurve(M)
+ * × (rho/rho0)^densityExponent × air supply fraction. Fuel flow = thrust / (Isp g0) with Isp = ispVac (= ispAsl):
+ * Isp is the fuel-specific impulse (thousands of seconds), the oxidiser comes from the intake air.
+ */
+export interface AirBreathingSpec {
+  /** Thrust multiplier vs Mach, piecewise linear [mach, multiplier] points (sorted by Mach). */
+  machCurve: [number, number][];
+  /** Thrust ∝ (rho / 1.225)^densityExponent. */
+  densityExponent: number;
+  /** Intake air consumed per kg of fuel burned (units = kg). */
+  airRatio: number;
+}
+
 /** Engine module. Thrust/Isp curves are linear in ambient pressure between vac and ASL (1 atm). */
 export interface EngineModule {
   type: 'engine';
@@ -63,9 +77,43 @@ export interface EngineModule {
   /** Throttle response time constant, seconds (0 = instant). */
   spoolTime: number;
   /** Exhaust plume visual style id. */
-  plume: 'kerolox' | 'hydrolox' | 'solid' | 'methalox' | 'ion' | 'monoprop';
+  plume: 'kerolox' | 'hydrolox' | 'solid' | 'methalox' | 'ion' | 'monoprop' | 'jet' | 'afterburner';
   /** Restartable in flight. */
   ignitions: number; // -1 = unlimited
+  /** Present for jet engines: needs intake air, thrust follows Mach/density curves. */
+  airBreathing?: AirBreathingSpec;
+}
+
+/** Air intake: produces 'intakeAir' ∝ density × airspeed × area (plus a static suction minimum). */
+export interface IntakeModule {
+  type: 'intake';
+  /** Capture area, m^2. */
+  area: number;
+}
+
+/**
+ * Wheel / landing gear. PART FRAME CONVENTION: the gear hangs along part +Z (outward from the surface it is
+ * mounted on, i.e. "down" under a fuselage); the wheel rolls along part +Y; the axle is part X.
+ */
+export interface WheelModule {
+  type: 'wheel';
+  /** Tyre radius, m. */
+  radius: number;
+  /** Suspension spring N/m and damper N*s/m. */
+  spring: number;
+  damper: number;
+  /** Suspension travel, m. */
+  travel: number;
+  /** Wheel centre (part frame) when deployed and the suspension fully extended. */
+  wheelCenter: Vec3;
+  /** Max brake torque per wheel, N*m. */
+  brakeTorque: number;
+  /** Max steering angle, radians (absent = not steerable). */
+  steerAngle?: number;
+  /** Drive motor torque, N*m (absent = free rolling). */
+  motorTorque?: number;
+  /** Can be raised (G key). Fixed gear is always down. */
+  retractable: boolean;
 }
 
 export interface RcsModule {
@@ -157,6 +205,8 @@ export type PartModule =
   | LandingLegModule
   | SolarPanelModule
   | CommandModule
+  | IntakeModule
+  | WheelModule
   | { type: 'heatShield'; ablationRate: number; maxTemp: number }
   | { type: 'fairing'; ejectionImpulse: number }
   | { type: 'light' }

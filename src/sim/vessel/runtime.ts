@@ -50,6 +50,10 @@ export interface ControlInput {
   rcs: boolean;
   /** Optional: landing gear/legs desired state (undefined = unchanged). */
   gear?: boolean;
+  /** Optional: wheel brakes applied this step. */
+  brakes?: boolean;
+  /** Optional: wheel drive motor command -1..1 (wheels with motorTorque). */
+  wheelThrottle?: number;
   /** Optional: velocity reference for prograde/retrograde (default 'orbit'). */
   sasReference?: 'orbit' | 'surface' | 'target';
   /** Optional: target state (inertial) for target/antiTarget modes and target-relative prograde. */
@@ -110,6 +114,23 @@ export interface LegState {
   inContact: boolean;
 }
 
+export interface WheelState {
+  moduleIndex: number;
+  /** Commanded gear state. */
+  deployed: boolean;
+  /** Deploy animation 0 (stowed) .. 1 (down and locked). The wheel only touches the ground at 1. */
+  deploy: number;
+  /** Current suspension compression, m. */
+  compression: number;
+  inContact: boolean;
+  /** Current steering angle, rad (telemetry/render). */
+  steer: number;
+  /** Wheel spin angle, rad (render). */
+  spin: number;
+  /** Rolling speed along the wheel heading, m/s (render/telemetry). */
+  rollSpeed: number;
+}
+
 export interface PartState {
   uid: number;
   partId: string;
@@ -139,6 +160,7 @@ export interface PartState {
   engine?: EngineState;
   chute?: ChuteState;
   leg?: LegState;
+  wheel?: WheelState;
 }
 
 export interface SasState {
@@ -164,6 +186,8 @@ export interface VesselTelemetry {
   altitudeAGL: number;
   /** Total thrust, N. */
   thrust: number;
+  /** Intake air supply / demand of air-breathing engines (1 = fully fed; NaN = no jets running). */
+  intakeAirRatio: number;
   /** Last commanded control vector after SAS (pitch, yaw, roll). */
   control: { pitch: number; yaw: number; roll: number };
 }
