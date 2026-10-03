@@ -7,3 +7,27 @@
  * oceans clamp to 0 visually but physics floats on water at 0).
  */
 export type TerrainHeightFn = (x: number, y: number, z: number) => number;
+
+/** Linear-RGB albedo output (0..1), written in place to avoid allocation in hot loops. */
+export type RGB = [number, number, number];
+
+/**
+ * A body's procedural terrain. Created by `createTerrain(body)` in ./index.ts.
+ * Everything is deterministic (seeded from `surface.seed`) and DOM/three-free, so the same
+ * object can run in physics, in Web Workers (mesh building) and in Node tests.
+ */
+export interface Terrain {
+  /** Height in meters above datum radius for a body-fixed unit vector. */
+  heightAt: TerrainHeightFn;
+  /** Upper bound on heightAt (meters). heightAt(...) <= maxHeight for every direction. */
+  maxHeight: number;
+  /** Lower bound on heightAt (meters, usually negative or 0). */
+  minHeight: number;
+  /** True if the body has a liquid ocean at height 0 (renderer draws water there). */
+  ocean: boolean;
+  /**
+   * Surface albedo (linear RGB) at unit vector (x,y,z) with precomputed height h (meters).
+   * Used for vertex colours and baked far-LOD textures. Optional: renderer falls back to palette.
+   */
+  colorAt?(x: number, y: number, z: number, h: number, out: RGB): RGB;
+}

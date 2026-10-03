@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Planet Preview — Web Space Program</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #dfe7f2; font: 12px/1.4 system-ui, sans-serif; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+      #panel { position: fixed; top: 10px; left: 10px; width: 270px; background: rgba(8, 12, 20, 0.72); border: 1px solid rgba(140, 170, 220, 0.25); border-radius: 8px; padding: 10px 12px; backdrop-filter: blur(6px); }
+      #panel.hidden { display: none; }
+      #panel label { display: flex; justify-content: space-between; align-items: center; margin: 5px 0 1px; gap: 8px; }
+      #panel input[type=range] { width: 100%; }
+      #panel select { background: #121a28; color: #dfe7f2; border: 1px solid #34425a; border-radius: 4px; padding: 2px 4px; }
+      #panel h1 { font-size: 13px; margin: 0 0 6px; letter-spacing: 0.04em; color: #9fc3ff; }
+      #stats { margin-top: 8px; font: 11px/1.35 ui-monospace, monospace; color: #9fb0c8; white-space: pre; }
+      .val { color: #fff; font-variant-numeric: tabular-nums; }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <div id="panel">
+      <h1>PLANET PREVIEW</h1>
+      <label>Body <select id="body"></select></label>
+      <label>Quality <select id="quality"><option>low</option><option selected>medium</option><option>high</option></select></label>
+      <label>Altitude <span class="val" id="altV"></span></label>
+      <input id="alt" type="range" min="0" max="1000" value="700" />
+      <label>Latitude <span class="val" id="latV"></span></label>
+      <input id="lat" type="range" min="-90" max="90" step="0.1" value="28.5" />
+      <label>Longitude <span class="val" id="lonV"></span></label>
+      <input id="lon" type="range" min="-180" max="180" step="0.1" value="-80.6" />
+      <label>Heading <span class="val" id="headV"></span></label>
+      <input id="head" type="range" min="0" max="360" step="0.5" value="90" />
+      <label>Pitch <span class="val" id="pitchV"></span></label>
+      <input id="pitch" type="range" min="-90" max="45" step="0.5" value="-90" />
+      <label>Time of day <span class="val" id="hourV"></span></label>
+      <input id="hour" type="range" min="0" max="24" step="0.05" value="10" />
+      <label>Sun declination <span class="val" id="decV"></span></label>
+      <input id="dec" type="range" min="-40" max="40" step="0.5" value="10" />
+      <label>Exposure <span class="val" id="expV"></span></label>
+      <input id="exp" type="range" min="-3" max="3" step="0.05" value="0" />
+      <label>Animate time <input id="anim" type="checkbox" /></label>
+      <div id="stats"></div>
+    </div>
+    <script type="module" src="/src/dev/planetPreview.ts"></script>
+  </body>
+</html>

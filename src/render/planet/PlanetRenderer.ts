@@ -1,0 +1,497 @@
+import * as THREE from 'three';
+import type { BodyDef } from '../../sim/bodies/types';
+import type { Terrain } from '../../sim/terrain/api';
+import { SCALE_PRESETS, type ScaleConfig } from '../../sim/bodies/scale';
+import type { Vec3 } from '../../util/vec3';
+import type { Quat } from '../../util/quat';
+import type { QualitySettings } from '../core/quality';
+import { screenSpaceFactor } from '../core/camera';
+import { computeAtmosphereParams, buildTransmittanceLUT, type AtmosphereParams } from './atmosphereParams';
+import { createPlanetUniforms, type PlanetUniforms } from './uniforms';
+import {
+  createTerrainMaterial,
+  createOceanMaterial,
+  createFarSphereMaterial,
+  createGasGiantMaterial,
+  createSkyMaterial,
+  createCloudMaterial,
+  createRingMaterial,
+  createSunMaterial,
+  type GasGiantStyle,
+} from './materials';
+import { Quadtree } from './quadtree';
+import { TerrainWorkerPool } from './workerPool';
+import { buildRingProfile } from './textures';
+
+export interface PlanetRendererOptions {
+  quality: QualitySettings;
+  /** Universe scale (for atmosphere scale heights and artistic sun falloff). Default: standard. */
+  scale?: ScaleConfig;
+  /** Shared worker pool (default: TerrainWorkerPool.shared). */
+  pool?: TerrainWorkerPool;
+  /** Solar irradiance at 1 AU in renderer HDR units (default 4). */
+  sunIlluminance?: number;
+  /** Sun-disc radiance (HDR) for the star material and the in-atmosphere sun disc (default 60). */
+  sunRadiance?: number;
+  /** Smallest terrain wavelength used when creating worker terrains (must match `terrain`). */
+  terrainMinWavelength?: number;
+}
+
+export interface PlanetUpdateParams {
+  camera: THREE.PerspectiveCamera;
+  /** Floating origin (float64 sim/inertial position that maps to render (0,0,0)). */
+  origin: Vec3;
+  /** Body centre, float64 inertial. */
+  bodyPosition: Vec3;
+  /** Body-fixed → inertial rotation. */
+  bodyRotation: Quat;
+  /** Sun centre, float64 inertial. */
+  sunPosition: Vec3;
+  /** Seconds since last frame (animation). */
+  dt: number;
+  /** Simulation time (s) for deterministic animation; defaults to accumulated dt. */
+  time?: number;
+  /** Drawing-buffer height in pixels (for LOD). Default: 1080. */
+  viewportHeight?: number;
+}
+
+export type PlanetKind = 'star' | 'gas' | 'solid';
+
+const AU = 149597870700;
+
+/**
+ * Renders one celestial body: quadtree terrain + ocean (solid bodies), baked far sphere, banded gas
+ * giant shader, sun, atmosphere shell (single scattering), clouds, rings. Add `root` to the scene and
+ * call `update()` every frame BEFORE rendering.
+ */
+export class PlanetRenderer {
+  readonly root = new THREE.Group();
+  readonly body: BodyDef;
+  readonly kind: PlanetKind;
+  readonly terrain: Terrain | null;
+  readonly atmosphere: AtmosphereParams | null;
+  readonly uniforms: PlanetUniforms;
+  private quality: QualitySettings;
+  private scale: ScaleConfig;
+  private pool: TerrainWorkerPool | null = null;
+  private quadtree: Quadtree | null = null;
+  private farSphere: THREE.Mesh | null = null;
+  private farMaterial: THREE.ShaderMaterial | null = null;
+  private farTexture: THREE.DataTexture | null = null;
+  private bakeRequested = false;
+  private sky: THREE.Mesh | null = null;
+  private clouds: THREE.Mesh | null = null;
+  private cloudRadius = 0;
+  private rings: THREE.Mesh | null = null;
+  private sunMesh: THREE.Mesh | null = null;
+  private materials: THREE.Material[] = [];
+  private lut: THREE.DataTexture | null = null;
+  private frame = 0;
+  private timeAcc = 0;
+  private sunIlluminance: number;
+  private sunRadiance: number;
+  private readonly terrainKey: string;
+  private readonly frustum = new THREE.Frustum();
+  private readonly tmpM4 = new THREE.Matrix4();
+  private readonly rotQ = new THREE.Quaternion();
+  private readonly rotM = new THREE.Matrix3();
+  private readonly rotM4 = new THREE.Matrix4();
+  private readonly tmpV = new THREE.Vector3();
+  private readonly tmpS = new THREE.Sphere();
+  /** Exposed for HUD/debug. */
+  stats = { mode: 'far' as 'far' | 'near' | 'none', chunks: 0, meshes: 0, inflight: 0, queued: 0, projectedRadiusPx: 0, altitude: 0 };
+
+  constructor(body: BodyDef, terrain: Terrain | null, opts: PlanetRendererOptions) {
+    this.body = body;
+    this.terrain = terrain;
+    this.quality = opts.quality;
+    this.scale = opts.scale ?? SCALE_PRESETS.standard;
+    this.sunIlluminance = opts.sunIlluminance ?? 4;
+    this.sunRadiance = opts.sunRadiance ?? 60;
+    this.root.name = `planet:${body.id}`;
+    this.terrainKey = `${body.id}:${body.surface?.seed}:${body.radius}:${body.surface?.relief}`;
+    const preset = body.surface?.preset ?? 'rocky';
+    this.kind = body.kind === 'star' || preset === 'star' ? 'star' : !body.solidSurface || preset === 'gasGiant' || preset === 'iceGiant' ? 'gas' : 'solid';
+
+    this.atmosphere = this.kind === 'star' ? null : computeAtmosphereParams(body, this.scale);
+    if (this.atmosphere) this.lut = buildTransmittanceLUT(this.atmosphere);
+    this.uniforms = createPlanetUniforms(body.radius, this.atmosphere, this.lut);
+
+    if (this.kind === 'star') this.buildSun();
+    else if (this.kind === 'gas') this.buildGasGiant();
+    else this.buildSolid(opts);
+
+    if (this.atmosphere) this.buildSky();
+    if (body.rings && this.kind !== 'star') this.buildRings();
+  }
+
+  // ------------------------------------------------------------------ construction
+
+  private buildSun(): void {
+    const geo = new THREE.SphereGeometry(1, this.quality.sphereSegments, this.quality.sphereSegments / 2);
+    const mat = createSunMaterial(this.body.surface?.colors ?? [], this.sunRadiance);
+    this.materials.push(mat);
+    this.sunMesh = new THREE.Mesh(geo, mat);
+    this.sunMesh.scale.setScalar(this.body.radius);
+    this.sunMesh.matrixAutoUpdate = false;
+    this.sunMesh.frustumCulled = false;
+    this.root.add(this.sunMesh);
+  }
+
+  private gasStyle(): GasGiantStyle {
+    const id = this.body.id;
+    const colors = this.body.surface?.colors ?? [];
+    if (id === 'saturn') return { style: 1, colors, bandFreq: 30, turbulence: 0.5, contrast: 0.55 };
+    if (id === 'uranus') return { style: 2, colors, bandFreq: 16, turbulence: 0.15, contrast: 0.12 };
+    if (id === 'neptune') return { style: 3, colors, bandFreq: 14, turbulence: 0.5, contrast: 0.35 };
+    if (this.body.surface?.preset === 'iceGiant') return { style: 2, colors, bandFreq: 16, turbulence: 0.2, contrast: 0.2 };
+    return { style: 0, colors, bandFreq: 26, turbulence: 1.0, contrast: 1.35 };
+  }
+
+  private buildGasGiant(): void {
+    const seg = this.quality.sphereSegments;
+    const geo = new THREE.SphereGeometry(1, seg, seg / 2);
+    geo.rotateX(Math.PI / 2); // poles on ±Z (body frame)
+    const mat = createGasGiantMaterial(this.uniforms, this.quality, this.gasStyle());
+    this.materials.push(mat);
+    const m = new THREE.Mesh(geo, mat);
+    m.scale.setScalar(this.body.radius);
+    m.matrixAutoUpdate = false;
+    m.frustumCulled = false;
+    this.farSphere = m;
+    this.root.add(m);
+  }
+
+  private buildSolid(opts: PlanetRendererOptions): void {
+    const q = this.quality;
+    const terrain = this.terrain;
+    const preset = this.body.surface?.preset ?? 'rocky';
+    const airless = this.atmosphere ? 0 : preset === 'lunar' || preset === 'mercury' || preset === 'rocky' ? 0.85 : 0.6;
+    const minH = terrain?.minHeight ?? 0;
+    const maxH = terrain?.maxHeight ?? 0;
+    const ocean = !!terrain?.ocean;
+
+    // Far sphere (always available as fallback).
+    const seg = q.sphereSegments;
+    const geo = new THREE.SphereGeometry(1, seg, seg / 2);
+    this.farMaterial = createFarSphereMaterial(this.uniforms, q, { airless, ocean, minH, maxH: Math.max(maxH, minH + 1), texWidth: q.bakedTextureWidth });
+    const pal = this.body.surface?.colors?.[1] ?? this.body.surface?.colors?.[0] ?? [0.3, 0.3, 0.3];
+    (this.farMaterial.uniforms.uFallback.value as THREE.Vector3).set(pal[0], pal[1], pal[2]);
+    this.materials.push(this.farMaterial);
+    this.farSphere = new THREE.Mesh(geo, this.farMaterial);
+    this.farSphere.scale.setScalar(this.body.radius);
+    this.farSphere.matrixAutoUpdate = false;
+    this.farSphere.frustumCulled = false;
+    this.root.add(this.farSphere);
+
+    if (!terrain) return;
+    this.pool = opts.pool ?? TerrainWorkerPool.shared(q.terrain.workers);
+    this.pool.register(this.terrainKey, this.body, terrain, opts.terrainMinWavelength ?? 6);
+
+    const rockByPreset: Record<string, [number, number, number]> = {
+      earth: [0.16, 0.145, 0.125],
+      mars: [0.22, 0.11, 0.06],
+      lunar: [0.13, 0.125, 0.12],
+    };
+    const rock = rockByPreset[preset] ?? (this.body.surface?.colors?.[0] as [number, number, number]) ?? [0.15, 0.14, 0.13];
+    const terrainMat = createTerrainMaterial(this.uniforms, q, {
+      rockColor: rock,
+      rockBlend: preset === 'earth' ? 1 : preset === 'mars' ? 0.6 : 0.35,
+      airless,
+      detail: q.terrain.detail,
+      detailStrength: preset === 'earth' ? 1 : preset === 'mars' ? 1.5 : 1.0,
+    });
+    this.materials.push(terrainMat);
+    let oceanMat: THREE.ShaderMaterial | undefined;
+    if (ocean) {
+      oceanMat = createOceanMaterial(this.uniforms, q, [0.35, 0.31, 0.22]);
+      this.materials.push(oceanMat);
+    }
+    const R = this.body.radius;
+    // Max depth so vertex spacing at the finest level ≈ minVertexSpacing.
+    const faceEdge = (Math.PI / 2) * R;
+    const maxLevel = Math.max(2, Math.min(22, Math.ceil(Math.log2(faceEdge / q.terrain.chunkResolution / q.terrain.minVertexSpacing))));
+    this.quadtree = new Quadtree({
+      terrainKey: this.terrainKey,
+      radius: R,
+      minHeight: minH,
+      maxHeight: maxH,
+      res: q.terrain.chunkResolution,
+      maxLevel,
+      ocean,
+      pool: this.pool,
+      terrainMaterial: terrainMat,
+      oceanMaterial: oceanMat,
+      maxInFlight: q.terrain.maxInFlight,
+      buildBudgetMs: q.terrain.buildBudgetMs,
+      cacheSize: q.terrain.cacheSize,
+    });
+    this.root.add(this.quadtree.group);
+
+    if (q.clouds && (preset === 'earth' || this.body.id === 'earth') && this.atmosphere) {
+      const H = this.atmosphere.atmosphereRadius - R;
+      this.cloudRadius = R + Math.min(H * 0.08, 6000);
+      const cgeo = new THREE.SphereGeometry(1, 96, 48);
+      const cmat = createCloudMaterial(this.uniforms, q, this.cloudRadius);
+      this.materials.push(cmat);
+      this.clouds = new THREE.Mesh(cgeo, cmat);
+      this.clouds.scale.setScalar(this.cloudRadius * 1.01);
+      this.clouds.matrixAutoUpdate = false;
+      this.clouds.frustumCulled = false;
+      this.clouds.renderOrder = 2;
+      this.root.add(this.clouds);
+    }
+  }
+
+  private buildSky(): void {
+    const a = this.atmosphere!;
+    const geo = new THREE.SphereGeometry(1, 96, 48);
+    const mat = createSkyMaterial(this.uniforms, this.quality);
+    mat.uniforms.uSunRadiance.value = this.sunRadiance;
+    this.materials.push(mat);
+    this.sky = new THREE.Mesh(geo, mat);
+    // Slightly larger than the atmosphere top so tessellation never clips the shell.
+    this.sky.scale.setScalar(a.atmosphereRadius * 1.002);
+    this.sky.matrixAutoUpdate = false;
+    this.sky.frustumCulled = false;
+    this.sky.renderOrder = 1;
+    this.root.add(this.sky);
+  }
+
+  private buildRings(): void {
+    const rd = this.body.rings!;
+    const envelopes: Record<string, [number, number]> = {
+      saturn: [66900, 140200],
+      uranus: [41837, 51149],
+      jupiter: [92000, 226000],
+    };
+    const profile = rd.profile ?? 'saturn';
+    const env = envelopes[profile] ?? [rd.innerRadius / 1000, rd.outerRadius / 1000];
+    const pad = 0.012;
+    const inner = rd.innerRadius * (1 - pad);
+    const outer = rd.outerRadius * (1 + pad);
+    const tex = buildRingProfile(profile, env[0] * (1 - pad), env[1] * (1 + pad), rd.opacity ?? 0.8);
+    const geo = new THREE.RingGeometry(inner, outer, this.quality.ringSegments, 4);
+    const mat = createRingMaterial(this.uniforms, this.quality, tex, inner, outer);
+    // Faint dusty rings mostly scatter light; they barely occlude what is behind them.
+    if (profile === 'jupiter') mat.uniforms.uOcclusion.value = 0.25;
+    this.materials.push(mat);
+    this.rings = new THREE.Mesh(geo, mat);
+    this.rings.matrixAutoUpdate = false;
+    this.rings.frustumCulled = false;
+    this.rings.renderOrder = 3;
+    this.root.add(this.rings);
+    this.uniforms.uHasRings.value = 1;
+    this.uniforms.uRingInner.value = inner;
+    this.uniforms.uRingOuter.value = outer;
+    this.uniforms.uRingProfile.value = tex;
+  }
+
+  // ------------------------------------------------------------------ per frame
+
+  update(p: PlanetUpdateParams): void {
+    this.frame++;
+    this.timeAcc += p.dt;
+    const time = p.time ?? this.timeAcc;
+    const u = this.uniforms;
+    const R = this.body.radius;
+    const cam = p.camera;
+    cam.updateMatrixWorld();
+
+    // Float64: body centre relative to origin, camera relative to body.
+    const bx = p.bodyPosition.x - p.origin.x;
+    const by = p.bodyPosition.y - p.origin.y;
+    const bz = p.bodyPosition.z - p.origin.z;
+    const crx = cam.position.x - bx, cry = cam.position.y - by, crz = cam.position.z - bz;
+    const camDist2 = crx * crx + cry * cry + crz * crz;
+    const camDist = Math.sqrt(camDist2);
+    u.uPlanetCenter.value.set(bx, by, bz);
+    u.uCamRel.value.set(crx, cry, crz);
+    const Ra = this.atmosphere?.atmosphereRadius ?? R;
+    u.uCamCAtm.value = (camDist - Ra) * (camDist + Ra);
+    u.uCamCGround.value = (camDist - R) * (camDist + R);
+    u.uTime.value = time;
+
+    const q = p.bodyRotation;
+    this.rotQ.set(q.x, q.y, q.z, q.w);
+    this.rotM4.makeRotationFromQuaternion(this.rotQ);
+    this.rotM.setFromMatrix4(this.rotM4);
+    u.uBodyRot.value.copy(this.rotM);
+    u.uRingNormal.value.set(0, 0, 1).applyQuaternion(this.rotQ);
+
+    // Sun direction & (artistically compressed) irradiance.
+    const sx = p.sunPosition.x - p.bodyPosition.x, sy = p.sunPosition.y - p.bodyPosition.y, sz = p.sunPosition.z - p.bodyPosition.z;
+    const sd = Math.sqrt(sx * sx + sy * sy + sz * sz) || 1;
+    u.uSunDir.value.set(sx / sd, sy / sd, sz / sd);
+    const auScaled = AU * this.scale.s;
+    const E = this.kind === 'star' ? 0 : this.sunIlluminance * Math.pow(auScaled / Math.max(sd, auScaled * 0.2), 0.3);
+    u.uSunColor.value.set(E, E * 0.985, E * 0.96);
+    if (this.sky) {
+      const mat = this.sky.material as THREE.ShaderMaterial;
+      // Angular radius of the sun as seen from this body (≈ R_sun / d).
+      mat.uniforms.uSunAngularRadius.value = Math.max((696e6 * this.scale.s) / sd, 0.0015);
+    }
+
+    // Body-fixed camera for LOD.
+    const inv = this.rotQ.clone().invert();
+    const camBF = this.tmpV.set(crx, cry, crz).applyQuaternion(inv);
+    const camBFx = camBF.x, camBFy = camBF.y, camBFz = camBF.z;
+
+    const vh = p.viewportHeight ?? 1080;
+    const sf = screenSpaceFactor(cam, vh);
+    const projR = (R / Math.max(camDist, R * 1.0001)) * sf;
+    this.stats.projectedRadiusPx = projR;
+    this.stats.altitude = camDist - R;
+
+    const placeWhole = (m: THREE.Object3D, scale: number) => {
+      m.position.set(bx, by, bz);
+      m.quaternion.copy(this.rotQ);
+      m.scale.setScalar(scale);
+      m.updateMatrix();
+    };
+
+    if (this.sunMesh) {
+      placeWhole(this.sunMesh, R);
+      (this.sunMesh.material as THREE.ShaderMaterial).uniforms.uTime.value = time;
+    }
+    if (this.sky) placeWhole(this.sky, Ra * 1.002);
+    if (this.clouds) {
+      placeWhole(this.clouds, this.cloudRadius * 1.01);
+      const cm = this.clouds.material as THREE.ShaderMaterial;
+      cm.uniforms.uCamCCloud.value = (camDist - this.cloudRadius) * (camDist + this.cloudRadius);
+    }
+    if (this.rings) placeWhole(this.rings, 1);
+
+    if (this.kind === 'gas') {
+      placeWhole(this.farSphere!, R);
+      this.stats.mode = 'far';
+      return;
+    }
+    if (this.kind !== 'solid') return;
+
+    // Far LOD texture bake (once, lazily).
+    if (this.terrain && !this.bakeRequested && this.pool) {
+      this.bakeRequested = true;
+      this.pool.bake(this.terrainKey, this.quality.bakedTextureWidth).then((res) => {
+        const tex = new THREE.DataTexture(res.data, res.width, res.height, THREE.RGBAFormat, THREE.UnsignedByteType);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+        tex.magFilter = THREE.LinearFilter;
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.generateMipmaps = true;
+        tex.anisotropy = 4;
+        tex.needsUpdate = true;
+        this.farTexture = tex;
+        if (this.farMaterial) {
+          this.farMaterial.uniforms.uMap.value = tex;
+          this.farMaterial.uniforms.uHasMap.value = 1;
+          this.farMaterial.uniforms.uHRange.value.set(res.minHeight, res.maxHeight);
+        }
+      });
+    }
+
+    const qt = this.quadtree;
+    const farThresholdPx = Math.max(140, this.quality.bakedTextureWidth / 5);
+    const wantNear = !!qt && projR > farThresholdPx;
+    if (qt && wantNear) {
+      this.tmpM4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+      this.frustum.setFromProjectionMatrix(this.tmpM4);
+      const e = this.rotM.elements;
+      const inFrustum = (x: number, y: number, z: number, r: number) => {
+        this.tmpS.center.set(bx + e[0] * x + e[3] * y + e[6] * z, by + e[1] * x + e[4] * y + e[7] * z, bz + e[2] * x + e[5] * y + e[8] * z);
+        this.tmpS.radius = r;
+        return this.frustum.intersectsSphere(this.tmpS);
+      };
+      qt.select({ camBF: { x: camBFx, y: camBFy, z: camBFz }, screenFactor: sf, maxScreenError: this.quality.terrain.maxScreenError, inFrustum, frame: this.frame });
+      qt.pump();
+      if (qt.rootsReady) {
+        qt.place(bx, by, bz, this.rotQ, this.rotM);
+        this.farSphere!.visible = false;
+        this.stats.mode = 'near';
+      } else {
+        qt.hideAll();
+        this.farSphere!.visible = true;
+        placeWhole(this.farSphere!, R);
+        this.stats.mode = 'far';
+      }
+      qt.evict(this.frame);
+      Object.assign(this.stats, { chunks: qt.stats.selected, meshes: qt.stats.meshes, inflight: qt.stats.inflight, queued: qt.stats.queued });
+    } else {
+      qt?.hideAll();
+      if (qt) qt.pump();
+      this.farSphere!.visible = true;
+      placeWhole(this.farSphere!, R);
+      this.stats.mode = 'far';
+    }
+  }
+
+  /** True when no terrain work is pending (useful for screenshots/tests). */
+  get idle(): boolean {
+    if (this.kind !== 'solid') return true;
+    const bakeDone = !this.terrain || !!this.farTexture;
+    return bakeDone && (!this.quadtree || this.stats.mode === 'far' || this.quadtree.idle);
+  }
+
+  /** Terrain height under a body-fixed unit direction (m), 0 if no terrain. */
+  heightAt(x: number, y: number, z: number): number {
+    return this.terrain ? this.terrain.heightAt(x, y, z) : 0;
+  }
+
+  /**
+   * CPU estimate of how much sunlight reaches `pointSim` (float64 inertial): 0 if the body occludes
+   * the sun, else per-channel atmospheric transmittance. Use for sun glare / lens flare intensity.
+   */
+  sunVisibility(pointSim: Vec3, bodyPosition: Vec3, sunPosition: Vec3): [number, number, number] {
+    const R = this.body.radius;
+    const ox = pointSim.x - bodyPosition.x, oy = pointSim.y - bodyPosition.y, oz = pointSim.z - bodyPosition.z;
+    let dx = sunPosition.x - pointSim.x, dy = sunPosition.y - pointSim.y, dz = sunPosition.z - pointSim.z;
+    const dl = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+    dx /= dl; dy /= dl; dz /= dl;
+    const b = ox * dx + oy * dy + oz * dz;
+    const r = Math.sqrt(ox * ox + oy * oy + oz * oz);
+    const c = (r - R) * (r + R);
+    const disc = b * b - c;
+    if (disc > 0 && -b - Math.sqrt(disc) > 0) {
+      // Soft edge using closest-approach distance
+      const closest = Math.sqrt(Math.max(0, r * r - b * b));
+      const soft = Math.min(1, Math.max(0, (closest - R * 0.995) / (R * 0.01)));
+      if (soft <= 0) return [0, 0, 0];
+    }
+    const a = this.atmosphere;
+    if (!a || r > a.atmosphereRadius * 1.5) return [1, 1, 1];
+    // Integrate optical depth to the top of the atmosphere (16 steps).
+    const ca = (r - a.atmosphereRadius) * (r + a.atmosphereRadius);
+    const da = b * b - ca;
+    if (da <= 0) return [1, 1, 1];
+    const t1 = -b + Math.sqrt(da);
+    const t0 = Math.max(0, -b - Math.sqrt(da));
+    const steps = 16;
+    const dt = (t1 - t0) / steps;
+    let odR = 0, odM = 0;
+    for (let i = 0; i < steps; i++) {
+      const t = t0 + (i + 0.5) * dt;
+      const px = ox + dx * t, py = oy + dy * t, pz = oz + dz * t;
+      const h = Math.max(0, Math.sqrt(px * px + py * py + pz * pz) - R);
+      odR += Math.exp(-h / a.rayleighScaleHeight) * dt;
+      odM += Math.exp(-h / a.mieScaleHeight) * dt;
+    }
+    return [0, 1, 2].map((k) => Math.exp(-(a.betaRayleigh[k] * odR + a.betaMieExt[k] * odM))) as [number, number, number];
+  }
+
+  setQuality(q: QualitySettings): void {
+    // Simplest robust path: callers recreate the PlanetRenderer on quality change.
+    this.quality = q;
+  }
+
+  dispose(): void {
+    this.quadtree?.dispose();
+    this.root.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).geometry.dispose();
+    });
+    for (const m of this.materials) m.dispose();
+    this.lut?.dispose();
+    this.farTexture?.dispose();
+    this.root.removeFromParent();
+  }
+}

@@ -1,0 +1,123 @@
+import type { BodyDef } from '../../sim/bodies/types';
+import type { Terrain } from '../../sim/terrain/api';
+import { buildChunk, type ChunkBuildParams, type ChunkData } from './chunkBuilder';
+import { bakeEquirect, type BakeResult } from './bake';
+
+interface Pending {
+  resolve: (v: unknown) => void;
+  reject: (e: unknown) => void;
+  worker: number;
+}
+
+/**
+ * Shared pool of terrain workers. Falls back to synchronous main-thread building if Workers are
+ * unavailable (the caller then applies its per-frame time budget).
+ */
+export class TerrainWorkerPool {
+  private static _shared: TerrainWorkerPool | null = null;
+  private workers: Worker[] = [];
+  private inflight: number[] = [];
+  private pending = new Map<number, Pending>();
+  private nextId = 1;
+  private terrains = new Map<string, Terrain>();
+  private registered = new Map<string, { body: BodyDef; minWavelength: number }>();
+  readonly available: boolean;
+
+  static shared(workerCount: number): TerrainWorkerPool {
+    if (!this._shared) this._shared = new TerrainWorkerPool(workerCount);
+    return this._shared;
+  }
+
+  constructor(workerCount: number) {
+    let ok = false;
+    if (typeof Worker !== 'undefined' && workerCount > 0) {
+      try {
+        const hc = typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 4;
+        const n = Math.max(1, Math.min(workerCount, hc - 1));
+        for (let i = 0; i < n; i++) {
+          const w = new Worker(new URL('./chunkWorker.ts', import.meta.url), { type: 'module', name: `terrain-${i}` });
+          w.onmessage = (ev) => this.onMessage(i, ev.data);
+          w.onerror = (ev) => {
+            console.warn('[terrain worker] error', ev.message);
+          };
+          this.workers.push(w);
+          this.inflight.push(0);
+        }
+        ok = this.workers.length > 0;
+      } catch (e) {
+        console.warn('[terrain worker] unavailable, using main thread', e);
+        this.workers = [];
+      }
+    }
+    this.available = ok;
+  }
+
+  get workerCount(): number {
+    return this.workers.length;
+  }
+
+  get totalInflight(): number {
+    return this.inflight.reduce((a, b) => a + b, 0);
+  }
+
+  register(key: string, body: BodyDef, terrain: Terrain, minWavelength: number): void {
+    this.terrains.set(key, terrain);
+    if (this.registered.has(key)) return;
+    this.registered.set(key, { body, minWavelength });
+    for (const w of this.workers) w.postMessage({ type: 'init', key, body, minWavelength });
+  }
+
+  private pickWorker(): number {
+    let best = 0;
+    for (let i = 1; i < this.inflight.length; i++) if (this.inflight[i] < this.inflight[best]) best = i;
+    return best;
+  }
+
+  private send<T>(msg: Record<string, unknown>): Promise<T> {
+    const id = this.nextId++;
+    const wi = this.pickWorker();
+    this.inflight[wi]++;
+    return new Promise<T>((resolve, reject) => {
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, worker: wi });
+      this.workers[wi].postMessage({ ...msg, id });
+    });
+  }
+
+  private onMessage(wi: number, data: { type: string; id: number; data?: ChunkData; result?: BakeResult; error?: string }): void {
+    const p = this.pending.get(data.id);
+    if (!p) return;
+    this.pending.delete(data.id);
+    this.inflight[wi] = Math.max(0, this.inflight[wi] - 1);
+    if (data.type === 'error') p.reject(new Error(data.error));
+    else p.resolve(data.type === 'chunk' ? data.data : data.result);
+  }
+
+  buildChunk(key: string, params: ChunkBuildParams): Promise<ChunkData> {
+    if (!this.available) return Promise.resolve(this.buildChunkSync(key, params));
+    return this.send<ChunkData>({ type: 'build', key, params });
+  }
+
+  /** Synchronous build on the calling thread (fallback path). */
+  buildChunkSync(key: string, params: ChunkBuildParams): ChunkData {
+    const t = this.terrains.get(key);
+    if (!t) throw new Error(`terrain ${key} not registered`);
+    return buildChunk(t, params);
+  }
+
+  bake(key: string, width: number): Promise<BakeResult> {
+    if (!this.available) {
+      const t = this.terrains.get(key);
+      if (!t) return Promise.reject(new Error(`terrain ${key} not registered`));
+      return Promise.resolve(bakeEquirect(t, width));
+    }
+    return this.send<BakeResult>({ type: 'bake', key, width });
+  }
+
+  dispose(): void {
+    for (const w of this.workers) w.terminate();
+    this.workers = [];
+    for (const p of this.pending.values()) p.reject(new Error('disposed'));
+    this.pending.clear();
+    if (TerrainWorkerPool._shared === this) TerrainWorkerPool._shared = null;
+  }
+}
