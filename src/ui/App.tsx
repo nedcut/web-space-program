@@ -6,6 +6,7 @@ import { SpaceCenter } from './SpaceCenter';
 
 // Heavy 3D scenes are code-split so the menu loads instantly.
 const EditorScene = lazy(() => import('../editor/EditorScene'));
+const TrackingStation = lazy(() => import('./tracking/TrackingStation'));
 const FlightScene = lazy(() => import('../flight/FlightScene'));
 
 export function App() {
@@ -17,6 +18,7 @@ export function App() {
         {scene === 'spaceCenter' && <SpaceCenter />}
         {scene === 'editor' && <EditorScene />}
         {scene === 'flight' && <FlightScene />}
+        {scene === 'tracking' && <TrackingStation />}
       </Suspense>
     </div>
   );

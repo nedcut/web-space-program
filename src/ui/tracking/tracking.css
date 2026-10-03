@@ -1,0 +1,23 @@
+.tracking-header { position: absolute; top: 16px; left: 16px; right: 16px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.tracking-header h2 { margin: 4px 0 0; font-size: 21px; font-weight: 400; letter-spacing: .08em; }
+.tracking-clock { font-size: 12px; line-height: 1.9; }
+.tracking-clock select { background: var(--panel-solid); color: var(--text); border: 1px solid var(--panel-border); border-radius: 4px; padding: 4px; margin-left: 8px; }
+.tracking-fleet { position: absolute; top: 112px; bottom: 90px; left: 16px; width: 290px; padding: 18px; overflow: auto; }
+.tracking-muted { color: var(--text-dim); font-size: 12px; line-height: 1.65; }
+.tracking-vessel { border-top: 1px solid var(--panel-border); padding: 14px 0; overflow-wrap: anywhere; }
+.tracking-apsides { font-size: 11px; margin: 8px 0; }
+.tracking-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.tracking-right { position: absolute; top: 112px; bottom: 90px; right: 16px; width: 280px; overflow: auto; }
+.tracking-bodies, .tracking-info { padding: 16px; margin-bottom: 12px; }
+.tracking-bodies > summary { cursor: pointer; margin-bottom: 8px; }
+.tracking-bodies > div { max-height: 25vh; overflow: auto; }
+.tracking-children { padding-left: 18px; border-left: 1px solid var(--panel-border); margin-left: 5px; }
+.tracking-info h2 { margin: 8px 0; font-weight: 400; }
+.tracking-info dl { font-size: 11px; margin-bottom: 0; }
+.tracking-info dl > div { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--panel-border); }
+.tracking-info dt { color: var(--text-dim); }
+.tracking-info dd { margin: 0; text-align: right; }
+.tracking-help { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); padding: 10px 16px; font-size: 11px; color: var(--text-dim); text-align: center; }
+.tracking-modal { position: absolute; inset: 0; background: #0009; display: grid; place-items: center; }
+.tracking-modal > section { padding: 24px; max-width: 440px; background: var(--panel-solid); }
+@media (max-width: 900px) { .tracking-fleet { width: 220px; } .tracking-right { width: 230px; } .tracking-header { gap: 8px; padding: 12px; } .tracking-header h2 { font-size: 16px; } }

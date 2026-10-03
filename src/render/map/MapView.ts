@@ -24,6 +24,12 @@ export interface MapUpdate {
   viewport: { width: number; height: number };
 }
 
+export interface ExtraOrbit {
+  id: string;
+  position: Vec3;
+  orbit?: Orbit;
+}
+
 const PATCH_COLORS = [0x5cc8ff, 0xffb35c, 0xd066ff, 0x6fe39a, 0xff6b6b];
 
 interface BodyVisual {
@@ -96,6 +102,68 @@ export class MapView {
   private materials: LineMaterial[] = [];
   private sunLight = new THREE.PointLight(0xffffff, 3, 0, 0);
   private lastVesselKey = '';
+  private extraOrbits: ExtraOrbit[] = [];
+  private extras = new Map<string, { icon: THREE.Sprite; line?: Line2; key: string }>();
+
+  /** Additional fleet conics and icons; positions are heliocentric float64, conics body-relative. */
+  setExtraOrbits(list: ExtraOrbit[]) { this.extraOrbits = list; }
+
+  /** Pick visible body/vessel icons at normalized device coordinates, for map double-click focus. */
+  pick(x: number, y: number): { kind: 'body' | 'vessel'; id: string } | null {
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(x, y), this.camera);
+    const candidates: { object: THREE.Object3D; kind: 'body' | 'vessel'; id: string }[] = [];
+    for (const [id, vis] of this.bodies) {
+      candidates.push({ object: vis.icon.visible ? vis.icon : vis.sphere, kind: 'body', id });
+    }
+    for (const [id, vis] of this.extras) candidates.push({ object: vis.icon, kind: 'vessel', id });
+    this.scene.updateMatrixWorld(true);
+    const hits = ray.intersectObjects(candidates.map((c) => c.object), false);
+    const hit = candidates.find((c) => c.object === hits[0]?.object);
+    return hit ? { kind: hit.kind, id: hit.id } : null;
+  }
+
+  private removeLine(line: Line2) {
+    this.scene.remove(line);
+    line.geometry.dispose();
+    line.material.dispose();
+    this.materials = this.materials.filter((m) => m !== line.material);
+  }
+
+  private updateExtras(u: MapUpdate) {
+    const ids = new Set(this.extraOrbits.map((v) => v.id));
+    for (const [id, vis] of this.extras) if (!ids.has(id)) {
+      if (vis.line) this.removeLine(vis.line);
+      this.scene.remove(vis.icon);
+      vis.icon.material.dispose();
+      this.extras.delete(id);
+    }
+    for (const item of this.extraOrbits) {
+      let vis = this.extras.get(item.id);
+      if (!vis) {
+        const icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeIconTexture('#6fe39a', true), sizeAttenuation: false, depthTest: false }));
+        icon.scale.setScalar(0.025);
+        icon.renderOrder = 11;
+        this.scene.add(icon);
+        vis = { icon, key: '' };
+        this.extras.set(item.id, vis);
+      }
+      const o = item.orbit;
+      // Orbit elements are stable on rails; callers can throttle conic updates in physics.
+      const key = o ? JSON.stringify(o) : '';
+      if (key !== vis.key) {
+        if (vis.line) this.removeLine(vis.line);
+        vis.line = undefined;
+        if (o) {
+          const pts = sampleConic(o, this.bodies.get(o.body)?.body.soi ?? Infinity, u.t, null);
+          if (pts.length > 1) vis.line = this.makeLine(pts, 0x6fe39a, 1.6, 0.8);
+        }
+        vis.key = key;
+      }
+      this.place(vis.icon, item.position, u.focus);
+      if (vis.line && o) this.place(vis.line, this.ephem.getBodyState(o.body, u.t).position, u.focus);
+    }
+  }
 
   constructor(
     bodies: Map<string, Body>,
@@ -169,8 +237,7 @@ export class MapView {
     if (key === this.lastVesselKey) return;
     this.lastVesselKey = key;
     for (const l of this.vesselLines) {
-      this.scene.remove(l);
-      l.geometry.dispose();
+      this.removeLine(l);
     }
     this.vesselLines = patches.map((p, i) => {
       const soi = bodies.get(p.orbit.body)?.body.soi ?? Infinity;
@@ -220,6 +287,10 @@ export class MapView {
       vis.label.style.display = visible && onScreen ? 'block' : 'none';
       if (onScreen) vis.label.style.left = `${(v.x * 0.5 + 0.5) * w}px`, (vis.label.style.top = `${(-v.y * 0.5 + 0.5) * h}px`);
     }
+
+    this.updateExtras(u);
+    for (const m of this.materials) m.resolution.set(u.viewport.width, u.viewport.height);
+    if (!u.vessel) this.updateVesselLines([], this.bodies);
 
     // Vessel
     this.vesselIcon.visible = !!u.vessel;
@@ -316,6 +387,8 @@ export class MapView {
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;
       m.geometry?.dispose();
+      const materials = Array.isArray(m.material) ? m.material : [m.material];
+      for (const material of materials) material?.dispose();
     });
   }
 }

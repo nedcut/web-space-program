@@ -313,6 +313,15 @@ export class World {
     if (steps >= MAX_STEPS_PER_FRAME * rate) this.acc = 0;
   }
 
+  /** Advance an unattended world, packing vessels first and processing the normal rails events.
+   * Tracking uses this when there is no active vessel (including completely empty worlds).
+   */
+  advanceRailsTo(ut: number) {
+    if (!Number.isFinite(ut) || ut < this.ut) return;
+    for (const wv of this.vessels.values()) this.pack(wv);
+    this.advanceRails(ut);
+  }
+
   /**
    * Advance all on-rails vessels to `target`, processing rails events in time order. The active vessel goes
    * first and may shorten the frame: at its SOI change (so the next frame re-clamps the warp rate for the new
