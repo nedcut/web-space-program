@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import type { Universe } from '../game/universe';
-import type { Vec3 } from '../util/vec3';
-import type { QualityId } from '../render/core';
+import { length, sub, type Vec3 } from '../util/vec3';
+import { getQuality, type QualityId } from '../render/core';
+import { PlanetRenderer } from '../render/planet/PlanetRenderer';
+import { SCALE_PRESETS } from '../sim/bodies/scale';
 
 export interface PlanetLayerUpdate {
   t: number;
@@ -12,43 +14,101 @@ export interface PlanetLayerUpdate {
   dt: number;
   /** Body the active vessel is near (gets full-detail treatment). */
   focusBody: string;
+  viewportHeight?: number;
 }
 
 export interface PlanetLayer {
   update(u: PlanetLayerUpdate): void;
-  /** 0..1 fraction of the sun visible from a point (eclipses). */
+  /** 0..1 fraction of the sun visible from a point (eclipses / atmospheric extinction, luminance). */
   sunVisibility?(point: Vec3, sunPos: Vec3): number;
+  /** Per-channel sun transmittance (for tinting the sun light at sunset). */
+  sunTint?(point: Vec3, sunPos: Vec3): [number, number, number];
   dispose(): void;
 }
 
+/** Angular radius thresholds (radians) for creating / destroying a body's renderer (hysteresis). */
+const CREATE_ANGLE = 4e-4;
+const DESTROY_ANGLE = 2e-4;
+
 /**
- * Simple fallback: shaded spheres per body. Replaced by the full planet renderer (src/render/planet) when available.
+ * Manages PlanetRenderers for the flight scene: the Sun always, plus any body large enough on screen.
+ * Renderers use the same deterministic terrain instances as the physics, so what you see is what you land on.
  */
-export function createPlanetLayer(scene: THREE.Scene, universe: Universe, _quality: QualityId): PlanetLayer {
-  const group = new THREE.Group();
-  scene.add(group);
-  const meshes = new Map<string, THREE.Mesh>();
-  for (const b of universe.bodies.values()) {
-    const c = b.surface.colors[1] ?? b.surface.colors[0] ?? [0.5, 0.5, 0.5];
-    const mat =
-      b.kind === 'star'
-        ? new THREE.MeshBasicMaterial({ color: new THREE.Color(20, 18, 15) })
-        : new THREE.MeshStandardMaterial({ color: new THREE.Color(c[0], c[1], c[2]), roughness: 0.95 });
-    const m = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), mat);
-    m.scale.setScalar(b.radius);
-    group.add(m);
-    meshes.set(b.id, m);
-  }
+export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualityId: QualityId): PlanetLayer {
+  const quality = getQuality(qualityId);
+  const scale = SCALE_PRESETS[universe.preset];
+  const renderers = new Map<string, PlanetRenderer>();
+  let lastT = 0;
+  let lastOrigin: Vec3 = { x: 0, y: 0, z: 0 };
+
+  const make = (id: string) => {
+    const b = universe.body(id);
+    const terrain = b.solidSurface ? universe.terrain(id) : null;
+    const pr = new PlanetRenderer(b, terrain, { quality, scale });
+    scene.add(pr.root);
+    renderers.set(id, pr);
+    return pr;
+  };
+
+  const occluders = (point: Vec3, sunPos: Vec3) => {
+    let lum = 1;
+    let tint: [number, number, number] = [1, 1, 1];
+    for (const [id, pr] of renderers) {
+      if (universe.body(id).kind === 'star') continue;
+      const bp = universe.ephem.getBodyState(id, lastT).position;
+      const v = pr.sunVisibility(point, bp, sunPos);
+      tint = [tint[0] * v[0], tint[1] * v[1], tint[2] * v[2]];
+    }
+    lum = 0.2126 * tint[0] + 0.7152 * tint[1] + 0.0722 * tint[2];
+    return { lum, tint };
+  };
+
   return {
     update(u) {
-      for (const [id, m] of meshes) {
-        const p = universe.ephem.getBodyState(id, u.t).position;
-        m.position.set(p.x - u.origin.x, p.y - u.origin.y, p.z - u.origin.z);
+      lastT = u.t;
+      lastOrigin = u.origin;
+      for (const b of universe.bodies.values()) {
+        const bp = universe.ephem.getBodyState(b.id, u.t).position;
+        const d = Math.max(1, length(sub(bp, u.origin)));
+        const extent = Math.max(b.radius + (b.atmosphere?.height ?? 0), b.rings?.outerRadius ?? 0);
+        const ang = extent / d;
+        const has = renderers.has(b.id);
+        const keep = b.kind === 'star' || b.id === u.focusBody;
+        if (!has && (keep || ang > CREATE_ANGLE)) make(b.id);
+        else if (has && !keep && ang < DESTROY_ANGLE) {
+          const pr = renderers.get(b.id)!;
+          pr.root.removeFromParent();
+          pr.dispose();
+          renderers.delete(b.id);
+        }
+      }
+      for (const [id, pr] of renderers) {
+        const bs = universe.ephem.getBodyState(id, u.t);
+        pr.update({
+          camera: u.camera,
+          origin: u.origin,
+          bodyPosition: bs.position,
+          bodyRotation: universe.ephem.bodyRotation(id, u.t),
+          sunPosition: u.sunPos,
+          dt: u.dt,
+          time: u.t,
+          viewportHeight: u.viewportHeight,
+        });
       }
     },
+    sunVisibility(point, sunPos) {
+      void lastOrigin;
+      return occluders(point, sunPos).lum;
+    },
+    sunTint(point, sunPos) {
+      return occluders(point, sunPos).tint;
+    },
     dispose() {
-      group.removeFromParent();
-      meshes.forEach((m) => m.geometry.dispose());
+      for (const pr of renderers.values()) {
+        pr.root.removeFromParent();
+        pr.dispose();
+      }
+      renderers.clear();
     },
   };
 }

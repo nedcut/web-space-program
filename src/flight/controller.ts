@@ -323,8 +323,11 @@ export class FlightController {
     sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 0.1; sc.far = r * 8;
     sc.updateProjectionMatrix();
 
-    this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body });
+    this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.renderer.domElement.height });
     const eclipse = this.planets.sunVisibility?.(origin, sunPos) ?? 1;
+    const tint = this.planets.sunTint?.(origin, sunPos) ?? [1, 1, 1];
+    const tmax = Math.max(1e-6, tint[0], tint[1], tint[2]);
+    this.sunLight.color.setRGB(tint[0] / tmax, tint[1] / tmax, tint[2] / tmax);
     this.sunLight.intensity = 3.2 * eclipse;
     // Sky fill: brighter in thick air (scattered skylight), dim in space (planetshine + starlight).
     const airFrac = Math.min(1, air.density / 1.0);
