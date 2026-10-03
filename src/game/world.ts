@@ -169,6 +169,40 @@ export class World {
     this.predictRailsEvent(wv);
   }
 
+  /** Make another vessel active (switching the floating origin / controls to it). */
+  switchTo(id: string): boolean {
+    const wv = this.vessels.get(id);
+    if (!wv || id === this.activeId) return false;
+    this.activeId = id;
+    this.nodes = [];
+    this.trajectoryCache = null;
+    if (wv.mode === 'rails' || wv.mode === 'landedRails') this.unpack(wv);
+    return true;
+  }
+
+  /** Cycle to the next vessel within physics range of the active one (debris, decoupled stages). */
+  focusNextNearby(): string | null {
+    const act = this.active;
+    if (!act) return null;
+    const ids = [...this.vessels.values()]
+      .filter((v) => v === act || length(sub(v.state.position, act.state.position)) < PHYSICS_RANGE)
+      .map((v) => v.state.id)
+      .sort();
+    if (ids.length < 2) return null;
+    const next = ids[(ids.indexOf(act.state.id) + 1) % ids.length];
+    this.switchTo(next);
+    return next;
+  }
+
+  /** Recover the active vessel if it's at rest on Earth (returns true when removed). */
+  recoverActive(): boolean {
+    const wv = this.active;
+    if (!wv || wv.body !== 'earth' || wv.state.situation === 'flying') return false;
+    this.vessels.delete(wv.state.id);
+    this.activeId = null;
+    return true;
+  }
+
   /** After deserialization: recompute derived rails data and resync body-fixed vessels to the current time. */
   restoreAfterLoad() {
     for (const wv of this.vessels.values()) {

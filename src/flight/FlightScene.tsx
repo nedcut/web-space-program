@@ -101,6 +101,9 @@ export default function FlightScene() {
           <div className="panel" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 260 }}>
             <div className="label" style={{ textAlign: 'center' }}>Paused</div>
             <button className="btn primary" onClick={() => setPaused(false)}>Resume</button>
+            {ctrl.current?.world.active && ctrl.current.world.active.body === 'earth' && ctrl.current.world.active.state.situation !== 'flying' && ctrl.current.world.active.mode !== 'prelaunch' && (
+              <button className="btn" onClick={() => { ctrl.current?.world.recoverActive(); exitTo('spaceCenter'); }}>Recover vessel</button>
+            )}
             <button className="btn" onClick={revert}>Revert to editor</button>
             <button className="btn" onClick={() => ctrl.current?.quicksave()}>Quicksave (F5)</button>
             <button className="btn" onClick={() => exitTo('spaceCenter')}>Space Center</button>

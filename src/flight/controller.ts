@@ -133,6 +133,7 @@ export class FlightController {
           case 'warpDown': this.world.changeWarp(-1); break;
           case 'warpStop': this.world.warp = { mode: 'rails', index: 0 }; break;
           case 'menu': this.onExit?.(); break;
+          case 'focusNext': if (this.world.focusNextNearby()) this.world.message(`Switched to ${this.world.active!.state.name}`); break;
           case 'quicksave': this.quicksave(); break;
           case 'quickload': this.onQuickload?.(); break;
           case 'toggleCamMode': this.cam.mode = this.cam.mode === 'auto' ? 'chase' : this.cam.mode === 'chase' ? 'free' : 'auto'; break;
