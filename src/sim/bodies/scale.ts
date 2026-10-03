@@ -7,9 +7,9 @@ import type { Body, BodyDef } from './types';
  *  - All lengths (radii, semi-major axes, ring radii, terrain relief) scale by s.
  *  - GM scales by s^2 so surface gravity g = GM/R^2 is preserved.
  *    => orbital velocities scale by sqrt(s), periods by sqrt(s).
- *  - Atmosphere: surface pressure, temperature and composition are preserved; vertical extent
- *    (height and layer altitudes) scales by `atmosphereScale(s)` = s^0.5 by default. This keeps
- *    atmospheres meaningful (not paper-thin) on small planets, like KSP's 70 km on a 600 km Kerbin.
+ *  - Atmosphere: surface pressure, temperature and composition are preserved; the whole vertical
+ *    profile is compressed by s^atmosphereExponent (standard: 0.1^0.3 ≈ 0.5 → Earth's atmosphere is
+ *    ~70 km tall with a ~4 km scale height), so pressure at a given fraction of the height matches reality.
  *  - Rotation periods scale by sqrt(s) so the synchronous-orbit-to-radius ratio stays similar.
  */
 export interface ScaleConfig {
@@ -23,9 +23,9 @@ export interface ScaleConfig {
 
 export const SCALE_PRESETS = {
   /** Default: KSP-like, forgiving, fun. Earth radius 637 km, orbit ~2.4 km/s. */
-  standard: { s: 0.1, atmosphereExponent: 0.5, rotationExponent: 0.5 },
+  standard: { s: 0.1, atmosphereExponent: 0.3, rotationExponent: 0.5 },
   /** Middle ground. */
-  challenging: { s: 0.32, atmosphereExponent: 0.5, rotationExponent: 0.5 },
+  challenging: { s: 0.32, atmosphereExponent: 0.3, rotationExponent: 0.5 },
   /** The real thing. */
   real: { s: 1, atmosphereExponent: 1, rotationExponent: 1 },
 } satisfies Record<string, ScaleConfig>;
@@ -46,7 +46,7 @@ export function scaleBodyDef(def: BodyDef, cfg: ScaleConfig): BodyDef {
       ? {
           ...def.atmosphere,
           height: def.atmosphere.height * atmo,
-          layers: def.atmosphere.layers?.map((l) => ({ altitude: l.altitude * atmo, lapseRate: l.lapseRate / atmo })),
+          verticalScale: (def.atmosphere.verticalScale ?? 1) * atmo,
           rayleigh: def.atmosphere.rayleigh?.map((c) => c / atmo) as [number, number, number] | undefined,
           mie: def.atmosphere.mie !== undefined ? def.atmosphere.mie / atmo : undefined,
         }

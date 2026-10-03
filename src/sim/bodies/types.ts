@@ -41,6 +41,11 @@ export interface AtmosphereDef {
   gamma: number;
   /** Altitude above which atmosphere is treated as vacuum, meters. */
   height: number;
+  /**
+   * Vertical compression applied by universe scaling (scaled altitude = real altitude * verticalScale).
+   * `layers` stay in REAL altitudes; samplers divide the query altitude by this. Undefined = 1.
+   */
+  verticalScale?: number;
   /** Optional piecewise temperature profile (like US Standard Atmosphere). If omitted, isothermal with scale height. */
   layers?: AtmosphereLayer[];
   /** Rayleigh scattering coefficients (per meter, RGB at sea level) for the renderer. */

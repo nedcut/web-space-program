@@ -10,7 +10,7 @@ function vacuum(): AtmosphereSample {
 }
 
 /** Hydrostatic ideal gas model; pass the body's surfaceGravity as g0.
- * Layer altitudes and lapse rates are used directly, including scaled profiles.
+ * Layer altitudes are real; `verticalScale` (set by universe scaling) maps query altitudes onto them.
  * Below the datum, use datum conditions. Above the last layer, continue its lapse rate.
  */
 export function sampleAtmosphere(
@@ -19,7 +19,10 @@ export function sampleAtmosphere(
   g0 = 9.80665,
 ): AtmosphereSample {
   if (!atmo || atmo.height <= 0 || altitude >= atmo.height || Number.isNaN(altitude)) return vacuum();
-  const h = Math.max(0, altitude);
+  // Scaled universes compress the real profile vertically; evaluate it at the equivalent real altitude.
+  const vs = atmo.verticalScale ?? 1;
+  const h = Math.max(0, altitude / vs);
+  const height = atmo.height / vs;
   let temperature = atmo.surfaceTemperature;
   let pressure = atmo.surfacePressure;
   const advance = (distance: number, lapse: number) => {
@@ -52,8 +55,8 @@ export function sampleAtmosphere(
     advance(h, 0);
   }
 
-  const fadeStart = atmo.height * 0.95;
-  const x = Math.max(0, Math.min(1, (h - fadeStart) / (atmo.height - fadeStart)));
+  const fadeStart = height * 0.95;
+  const x = Math.max(0, Math.min(1, (h - fadeStart) / (height - fadeStart)));
   const fade = 1 - x * x * (3 - 2 * x);
   // The cutoff tail is artificial: taper temperature and density together, so pressure
   // tapers quadratically and the returned sample still obeys the ideal-gas/sound equations.

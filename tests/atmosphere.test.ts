@@ -46,13 +46,15 @@ describe('hydrostatic atmosphere', () => {
     expect(sampleAtmosphere(model, scaleHeight, 2).pressure).toBeCloseTo(ATM / Math.E, 7);
     expect(sampleAtmosphere(model, scaleHeight, 4).pressure).toBeLessThan(sampleAtmosphere(model, scaleHeight, 2).pressure);
   });
-  it('uses scaled layer altitudes and lapse rates without rescaling them again', () => {
+  it('compresses the real profile vertically in scaled universes', () => {
     const scaled = createUniverse().get('earth')!;
-    const height = 11000 * Math.sqrt(0.1);
-    const sample = sampleAtmosphere(scaled.atmosphere, height, scaled.surfaceGravity);
-    expect(sample.temperature).toBeCloseTo(216.65, 8);
-    expect(sample.pressure).toBeGreaterThan(60000);
-    expect(sample.pressure).toBeLessThan(65000);
+    const vs = scaled.atmosphere!.verticalScale!;
+    expect(vs).toBeCloseTo(Math.pow(0.1, 0.3), 10);
+    // Scaled altitude 11 km * vs must match the real tropopause (22632 Pa, 216.65 K).
+    const sample = sampleAtmosphere(scaled.atmosphere, 11000 * vs, scaled.surfaceGravity);
+    expect(sample.temperature).toBeCloseTo(216.65, 6);
+    expect(sample.pressure).toBeGreaterThan(22500);
+    expect(sample.pressure).toBeLessThan(22800);
     expect(sampleAtmosphere(scaled.atmosphere, 0).density).toBeCloseTo(1.225, 3);
   });
   it('returns vacuum and smoothly tapers every output across the top five percent', () => {
