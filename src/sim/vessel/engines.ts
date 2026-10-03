@@ -15,6 +15,8 @@ import { availableResource, drawPropellants, drawResource, totalResource } from 
  */
 
 export const MIN_ISP = 0.1;
+/** Throttle fraction below which a spooling-down engine is considered shut off. */
+export const SPOOL_CUTOFF = 0.01;
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 
@@ -145,7 +147,11 @@ export function stepEngines(
       st.massFlow = 0;
       continue;
     }
-    st.throttle = spoolThrottle(st.throttle, targetThrottle(m, throttleCmd), isSolidMotor(m) ? 0 : m.spoolTime, dt);
+    const target = targetThrottle(m, throttleCmd);
+    st.throttle = spoolThrottle(st.throttle, target, isSolidMotor(m) ? 0 : m.spoolTime, dt);
+    // A commanded cut ends once the flow has decayed below the cutoff; otherwise the exponential lag never
+    // reaches zero (thrust and propellant drain lingering for tens of seconds, blocking rails warp).
+    if (target === 0 && st.throttle < SPOOL_CUTOFF) st.throttle = 0;
     const mdot = maxMassFlow(m) * st.throttle;
     if (mdot <= 1e-12) {
       st.thrust = 0;

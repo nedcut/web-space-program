@@ -18,6 +18,11 @@ export interface TrajectoryPredictionOptions {
   maxPatches?: number;
   /** End the prediction at atmosphere entry (default false: continue to impact, ignoring drag). */
   stopAtAtmosphere?: boolean;
+  /**
+   * Altitude above the datum radius at which 'impact' is reported (default 0). Pass the terrain's maximum
+   * height to get a conservative surface-clearance event over mountainous bodies.
+   */
+  impactAltitude?: (body: Body) => number;
 }
 interface Boundary {
   reason: TrajectoryPatch['endReason'];
@@ -70,7 +75,7 @@ export function predictTrajectory(options: TrajectoryPredictionOptions): Traject
         return { value: direction * (r - radius), rate: direction * dot(s.position, s.velocity) / r, speed: length(s.velocity), scale: radius };
       } });
     }
-    central(body.radius, 1, 'impact');
+    central(body.radius + (options.impactAltitude?.(body) ?? 0), 1, 'impact');
     if (body.atmosphere && options.stopAtAtmosphere) central(body.radius + body.atmosphere.height, 1, 'atmosphere');
     if (body.parent && Number.isFinite(body.soi)) central(body.soi, -1, 'soiExit', body.parent);
     for (const childId of body.children) {

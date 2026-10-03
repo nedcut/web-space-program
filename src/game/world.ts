@@ -2,7 +2,7 @@ import type { CraftDef, PartDef } from '../sim/vessel/types';
 import type { ControlInput, VesselState, VesselEvent } from '../sim/vessel/runtime';
 import { buildVessel, stepVessel, activateNextStage, neutralInput, recomputeMassProperties } from '../sim/vessel';
 import type { Orbit, ManeuverNode, TrajectoryPatch, StateVector } from '../sim/orbit/api';
-import { stateToElements, propagate, predictTrajectory, periapsisRadius, apoapsisRadius, timeToPeriapsis, timeToApoapsis, period } from '../sim/orbit';
+import { stateToElements, propagate, predictTrajectory, periapsisRadius, apoapsisRadius, timeToPeriapsis, timeToApoapsis, period, maneuverToInertialDv } from '../sim/orbit';
 import { latLonToUnit, LAUNCH_SITE } from '../sim/terrain';
 import { add, sub, length, scale, normalize, cross, dot, v3, type Vec3 } from '../util/vec3';
 import { qMul, qConj, qRotate, qNormalize, type Quat } from '../util/quat';
@@ -73,7 +73,7 @@ export class World {
   }
 
   /** Lowest point of the vessel along its own -Y axis, measured from the COM (positive number). */
-  private bottomOffset(v: VesselState): number {
+  bottomOffset(v: VesselState): number {
     let minY = Infinity;
     for (const p of v.parts) {
       const s = p.def.shape;
@@ -183,9 +183,13 @@ export class World {
         horizon,
         maxPatches: 1,
         stopAtAtmosphere: true,
+        // Stop warping before the highest terrain, not the datum sphere (mountains/crater rims rise km above it).
+        impactAltitude: (b) => (b.solidSurface ? Math.max(0, this.universe.terrain(b.id).maxHeight) : 0),
       });
       const p = patches[0];
-      wv.railsEvent = p && p.endReason !== 'horizon' ? { time: p.endTime, reason: p.endReason, nextBody: p.nextBody } : undefined;
+      // A 'horizon' event is kept too: when it is reached the prediction is extended (see advanceRails), so
+      // encounters further out than one horizon are not missed during long warps.
+      wv.railsEvent = p ? { time: p.endTime, reason: p.endReason, nextBody: p.nextBody } : undefined;
     } catch {
       wv.railsEvent = undefined;
     }
@@ -241,14 +245,8 @@ export class World {
     if (this.warp.mode === 'rails' && rate > 1) {
       for (const wv of this.vessels.values()) this.pack(wv);
       let target = this.ut + realDt * rate;
-      // Stop warp at the active vessel's next event (atmosphere entry, impact, SOI change handled below).
-      const act = this.active;
-      if (act?.railsEvent && act.railsEvent.time <= target && (act.railsEvent.reason === 'atmosphere' || act.railsEvent.reason === 'impact')) {
-        target = act.railsEvent.time - 1;
-        this.warp = { mode: 'rails', index: 0 };
-        this.message('Time warp stopped: approaching ' + (act.railsEvent.reason === 'atmosphere' ? 'atmosphere' : 'surface'), 'warn');
-      }
-      // Stop warp at the next maneuver node (minus a margin).
+      // Stop warp at the next maneuver node (minus a margin). Active-vessel events (SOI change, atmosphere,
+      // impact) are handled in advanceRails.
       const nextNode = this.nodes.filter((n) => n.time > this.ut).sort((a, b) => a.time - b.time)[0];
       if (nextNode && target > nextNode.time - 30 && this.ut < nextNode.time - 30) {
         target = nextNode.time - 30;
@@ -272,12 +270,20 @@ export class World {
     if (steps >= MAX_STEPS_PER_FRAME * rate) this.acc = 0;
   }
 
+  /**
+   * Advance all on-rails vessels to `target`, processing rails events in time order. The active vessel goes
+   * first and may shorten the frame: at its SOI change (so the next frame re-clamps the warp rate for the new
+   * body — at high warp one frame could otherwise also carry it through periapsis or into the surface) and
+   * just before atmosphere entry / impact (warp is cancelled). Everything else then advances to that time.
+   */
   private advanceRails(target: number) {
-    // Process rails events (SOI transitions) in order for each vessel.
-    for (const wv of [...this.vessels.values()]) {
+    const act = this.active;
+    const order = [...this.vessels.values()].sort((a, b) => (a === act ? -1 : b === act ? 1 : 0));
+    for (const wv of order) {
       if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') continue;
+      const isActive = wv === act;
       let guard = 0;
-      while (wv.mode === 'rails' && wv.railsEvent && wv.railsEvent.time <= target && guard++ < 8) {
+      while (wv.mode === 'rails' && wv.railsEvent && wv.railsEvent.time <= target && guard++ < 32) {
         const ev = wv.railsEvent;
         const s = propagate(wv.orbit!, ev.time);
         if (ev.reason === 'soiEnter' || ev.reason === 'soiExit') {
@@ -287,31 +293,48 @@ export class World {
           const vel = sub(add(oldB.velocity, s.velocity), newB.velocity);
           wv.body = ev.nextBody!;
           wv.orbit = stateToElements(this.universe.body(wv.body).gm, wv.body, pos, vel, ev.time);
-          if (wv === this.active) this.message(`Entered ${this.universe.body(wv.body).name}'s sphere of influence`);
+          if (isActive) {
+            this.message(`Entered ${this.universe.body(wv.body).name}'s sphere of influence`);
+            target = ev.time;
+          }
           const saveUt = this.ut;
           this.ut = ev.time;
           this.predictRailsEvent(wv);
           this.ut = saveUt;
+        } else if (ev.reason === 'horizon' || ev.reason === 'maneuver') {
+          // End of the predicted window without an event: predict the next window.
+          const saveUt = this.ut;
+          this.ut = ev.time;
+          this.predictRailsEvent(wv);
+          this.ut = saveUt;
+          if (wv.railsEvent && wv.railsEvent.time <= ev.time) wv.railsEvent = undefined;
+        } else if (isActive) {
+          // Never warp into the atmosphere or the ground: stop just short of it and drop to physics.
+          target = Math.max(this.ut, Math.min(target, ev.time - 1));
+          this.warp = { mode: 'rails', index: 0 };
+          this.message('Time warp stopped: approaching ' + (ev.reason === 'atmosphere' ? 'atmosphere' : 'surface'), 'warn');
+          break;
         } else {
           // Non-active vessels entering atmosphere or impacting on rails are lost.
-          if (wv !== this.active) {
-            this.vessels.delete(wv.state.id);
-          }
+          this.vessels.delete(wv.state.id);
           wv.railsEvent = undefined;
           break;
         }
       }
     }
     this.ut = target;
-    for (const wv of this.vessels.values()) {
-      if (wv.mode === 'rails' && wv.orbit) {
-        const s = propagate(wv.orbit, this.ut);
-        const bs = this.universe.ephem.getBodyState(wv.body, this.ut);
-        wv.state.position = add(bs.position, s.position);
-        wv.state.velocity = add(bs.velocity, s.velocity);
-      } else if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') {
-        this.syncFixed(wv, this.ut);
-      }
+    for (const wv of this.vessels.values()) this.syncPacked(wv, this.ut);
+  }
+
+  /** Update the inertial state of a packed (rails / body-fixed) vessel to time t. */
+  private syncPacked(wv: WorldVessel, t: number) {
+    if (wv.mode === 'rails' && wv.orbit) {
+      const s = propagate(wv.orbit, t);
+      const bs = this.universe.ephem.getBodyState(wv.body, t);
+      wv.state.position = add(bs.position, s.position);
+      wv.state.velocity = add(bs.velocity, s.velocity);
+    } else if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') {
+      this.syncFixed(wv, t);
     }
   }
 
@@ -322,6 +345,10 @@ export class World {
       if (wv.state.destroyed) continue;
       const isActive = wv === active;
       if (!isActive && active) {
+        // Packed vessels' states are only refreshed on rails frames; bring them to `t` before the range check
+        // (otherwise the check uses a stale heliocentric position, kilometres off after a few seconds).
+        // States are expressed at the end of the step, like physics-stepped vessels.
+        if (wv.mode === 'rails' || wv.mode === 'landedRails') this.syncPacked(wv, t + PHYSICS_DT);
         const d = length(sub(wv.state.position, active.state.position));
         if (d > PHYSICS_RANGE) {
           // Out of the physics bubble: pack (debris in atmosphere is removed).
@@ -420,9 +447,17 @@ export class World {
     }
     const rs = this.relativeState(wv);
     const o = stateToElements(this.universe.body(wv.body).gm, wv.body, rs.position, rs.velocity, this.ut);
-    const T = period(o);
-    const lastNode = Math.max(0, ...this.nodes.map((n) => n.time - this.ut));
-    const horizon = Math.min(3e9, Math.max(isFinite(T) ? T * 1.02 : 3e7, lastNode + (isFinite(T) ? T : 3e7)));
+    // Horizon: one revolution of the orbit that results after the last node (not the current orbit: a
+    // trans-lunar injection from a ~30 min parking orbit leads to a multi-day transfer that must be shown).
+    const upcoming = this.nodes.filter((n) => n.time >= this.ut).sort((a, b) => a.time - b.time);
+    let after = o;
+    for (const n of upcoming) {
+      const s = propagate(after, n.time);
+      after = stateToElements(after.mu, after.body, s.position, add(s.velocity, maneuverToInertialDv(s, n)), n.time);
+    }
+    const lastNode = upcoming.length ? upcoming[upcoming.length - 1].time - this.ut : 0;
+    const Tafter = period(after);
+    const horizon = Math.min(3e9, lastNode + (isFinite(Tafter) ? Tafter * 1.02 : 3e7));
     let patches: TrajectoryPatch[] = [];
     try {
       patches = predictTrajectory({
