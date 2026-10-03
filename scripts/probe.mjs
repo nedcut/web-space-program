@@ -1,0 +1,10 @@
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+page.on('console', (m) => console.log(`[${m.type()}] ${m.text()}`));
+page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}`));
+await page.goto(process.argv[2]);
+await page.waitForTimeout(4000);
+const r = await page.evaluate(() => new Promise(res => { let n=0; const t0=performance.now(); const f=()=>{ if(++n<5) requestAnimationFrame(f); else res((performance.now()-t0)/5); }; requestAnimationFrame(f); }));
+console.log('frame ms', r);
+await browser.close();

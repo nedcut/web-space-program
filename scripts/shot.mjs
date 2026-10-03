@@ -3,7 +3,7 @@
 import { chromium } from '@playwright/test';
 
 const [url, out, wait = '4000', evalJs] = process.argv.slice(2);
-const browser = await chromium.launch({
+const browser = await chromium.launch({ channel: 'chromium',
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'],
 });
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
