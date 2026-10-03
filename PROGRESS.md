@@ -9,6 +9,7 @@ npm run dev        # http://localhost:5173
 npm test           # simulation test suite
 ```
 Dev shortcuts:
+- `/?flight=stock-selene&scenario=moon` — start in low lunar orbit (`scenario=orbit`, `scenario=reentry` too)
 - `/?flight=stock-meridian` — jump straight onto the launch pad (`stock-kestrel`, `stock-meridian`, `stock-selene`)
 - `/parts-preview.html` — all parts on turntables (`?plume=1&pressure=0..1`, `?deploy=1`)
 - `/map-preview.html?focus=saturn&dist=3e8` — solar system map
@@ -23,6 +24,8 @@ Dev shortcuts:
 | T / R | SAS / RCS toggles (SAS modes on the HUD panel) |
 | I/K J/L H/N | RCS translation |
 | M | map view (maneuver planner appears there) |
+| ] | switch to nearby vessel (e.g. dropped stage) |
+| F5 / F9 | quicksave / quickload |
 | , . / | time warp down / up / stop |
 | V | camera mode (auto / chase / free) |
 | Esc | pause menu |
@@ -40,8 +43,14 @@ Dev shortcuts:
 | World runtime: launch pad, physics ↔ rails warp, SOI changes, debris | ✅ (orbit reached in autopilot test) |
 | Flight HUD, navball, staging, map view, maneuver planner | ✅ first pass |
 | Procedural audio | ✅ |
-| Vehicle Assembly editor UI | 🚧 in progress |
-| Planet renderer: LOD terrain, atmospheric scattering, Saturn rings | 🚧 in progress (flight uses plain spheres until integrated) |
-| Full Moon mission verified in sim | 🚧 in progress |
+| Vehicle Assembly editor (palette, snapping, symmetry, staging, Δv, stock crafts) | ✅ |
+| Planet renderer: LOD terrain, atmospheric scattering, oceans, clouds, gas giants, Saturn rings | ✅ integrated in flight |
+| Full Moon mission (launch → orbit → TLI → capture → landing → ascent → return) | ✅ verified by automated test |
+| Flight assist: launch to orbit, execute node, land, circularize; transfer planner | ✅ |
+| Save/load: persistent universe, autosave, quicksave F5 / F9, Continue | ✅ |
+| Vessel switching (]) and recovery | ✅ |
+| Re-entry plasma effect | ✅ (needs visual tuning on real GPU) |
+| Launch complex scenery + 3D Space Center hub | 🚧 in progress |
+| Tracking Station | 🚧 in progress |
 
 See DECISIONS.md for choices made autonomously.
