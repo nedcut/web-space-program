@@ -1,0 +1,1151 @@
+import type { AttachNode, PartDef, PartModule, ResourceId } from '../sim/vessel/types';
+import { KEROLOX_FUEL_FRACTION, KEROLOX_OX_FRACTION, RESOURCES } from './resources';
+
+/**
+ * Original part catalogue.
+ *
+ * Conventions (shared with src/render/parts):
+ *  - Part frame: +Y = nose/up. Origin at the geometric centre of the part's bounding volume
+ *    (exception: fairings, whose origin is the centre of the base ring; the shell rises above it).
+ *  - Stack nodes: 'top' at +h/2 pointing +Y, 'bottom' at -h/2 pointing -Y.
+ *  - Surface-attached (radial) parts: the mount face lies at the 'srf' node, which points -Z
+ *    (into the parent). The part extends outward along +Z; +Y stays aligned with the parent's nose.
+ *    Wings and fins have their span along +Z, chord along Y and thickness along X.
+ *  - Engines thrust along +Y (exhaust toward -Y); the nozzle exit plane is at the bottom node.
+ *  - Masses kg, thrust N, lengths m. Propellant units are litres.
+ *
+ * Balance target: the 'standard' universe (s = 0.1, Earth R = 637 km, g = 9.81) where low orbit
+ * needs ~3.4 km/s including losses. Tanks hold ~8.5x their dry mass in propellant; engines are
+ * heavier than real-world hardware (TWR 30-60) to keep vehicles in a satisfying size range.
+ */
+
+/** Node size class -> radius, m. */
+export const SIZE_RADIUS = [0.3125, 0.625, 1.25, 1.875, 2.5] as const;
+
+const DEG = Math.PI / 180;
+const v = (x: number, y: number, z: number) => ({ x, y, z });
+
+function stackNodes(h: number, sizeTop: number | null, sizeBottom: number | null): AttachNode[] {
+  const n: AttachNode[] = [];
+  if (sizeTop !== null) n.push({ id: 'top', position: v(0, h / 2, 0), direction: v(0, 1, 0), size: sizeTop });
+  if (sizeBottom !== null) n.push({ id: 'bottom', position: v(0, -h / 2, 0), direction: v(0, -1, 0), size: sizeBottom });
+  return n;
+}
+
+/** Surface-attach node at the mount face (z = -depth/2), pointing into the parent. */
+function srfNode(depth: number, y = 0): AttachNode {
+  return { id: 'srf', position: v(0, y, -depth / 2), direction: v(0, 0, -1), size: 0 };
+}
+
+const cyl = (radiusTop: number, radiusBottom: number, height: number) =>
+  ({ kind: 'cylinder', radiusTop, radiusBottom, height }) as const;
+const box = (x: number, y: number, z: number) => ({ kind: 'box', size: v(x, y, z) }) as const;
+
+export const MANUFACTURERS = {
+  halvorsen: 'Halvorsen Propulsion Works',
+  kettle: 'Kettle & Fuse Pyrotechnics',
+  tessellate: 'Tessellate Structures',
+  greywater: 'Greywater Aerodynamics',
+  northlight: 'Northlight Crew Systems',
+  brightfield: 'Brightfield Autonomics',
+  lumen: 'Lumen & Volt',
+} as const;
+
+const KEROLOX = { liquidFuel: KEROLOX_FUEL_FRACTION, oxidizer: KEROLOX_OX_FRACTION };
+
+// ---------------------------------------------------------------------------------------------
+// Fuel tanks
+// ---------------------------------------------------------------------------------------------
+
+/** Usable fraction of the cylinder volume (domes, ullage, internal structure). */
+const TANK_FILL = 0.9;
+/** Propellant mass / dry mass. */
+const TANK_MASS_RATIO = 8.5;
+
+function fuelTank(
+  id: string,
+  name: string,
+  size: number,
+  length: number,
+  finish: 'white' | 'orange' | 'steel' | 'charcoal',
+  description: string,
+): PartDef {
+  const r = SIZE_RADIUS[size];
+  const litres = Math.PI * r * r * length * 1000 * TANK_FILL;
+  const lf = Math.round(litres * KEROLOX_FUEL_FRACTION);
+  const ox = Math.round(litres * KEROLOX_OX_FRACTION);
+  const propMass = lf * RESOURCES.liquidFuel.density + ox * RESOURCES.oxidizer.density;
+  const ratio = finish === 'steel' ? TANK_MASS_RATIO * 0.9 : TANK_MASS_RATIO; // steel: heavier, tougher
+  const dryMass = Math.round(propMass / ratio);
+  return {
+    id,
+    name,
+    manufacturer: MANUFACTURERS.tessellate,
+    description,
+    category: 'fuelTank',
+    dryMass,
+    cost: Math.round(dryMass * 2.2 + litres * 0.04),
+    resources: { liquidFuel: lf, oxidizer: ox },
+    attachNodes: stackNodes(length, size, size),
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(r, r, length),
+    dragCoefficient: { axial: 0.85, side: 1.0 },
+    maxTemp: finish === 'steel' ? 1900 : 1500,
+    crashTolerance: finish === 'steel' ? 10 : 7,
+    modules: [],
+    mesh: 'tank',
+    meshParams: { finish },
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Engines
+// ---------------------------------------------------------------------------------------------
+
+interface EngineSpec {
+  id: string;
+  name: string;
+  manufacturer?: string;
+  description: string;
+  size: number;
+  height: number;
+  dryMass: number;
+  cost: number;
+  thrustVac: number;
+  ispVac: number;
+  ispAsl: number;
+  gimbalDeg: number;
+  minThrottle: number;
+  ignitions: number;
+  spool: number;
+  plume: 'kerolox' | 'hydrolox' | 'methalox';
+  /** Mesh style and nozzle exit radius. */
+  style: 'lifter' | 'vacuum' | 'lander' | 'fullflow' | 'hydrolox' | 'cluster' | 'compact';
+  exitRadius: number;
+  maxTemp?: number;
+  extra?: Record<string, number | string | boolean>;
+}
+
+function liquidEngine(s: EngineSpec): PartDef {
+  const r = SIZE_RADIUS[s.size];
+  return {
+    id: s.id,
+    name: s.name,
+    manufacturer: s.manufacturer ?? MANUFACTURERS.halvorsen,
+    description: s.description,
+    category: 'engine',
+    dryMass: s.dryMass,
+    cost: s.cost,
+    resources: {},
+    attachNodes: stackNodes(s.height, s.size, s.size),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(r, Math.max(s.exitRadius, r * 0.6), s.height),
+    dragCoefficient: { axial: 0.6, side: 0.9 },
+    maxTemp: s.maxTemp ?? 2200,
+    crashTolerance: 7,
+    modules: [
+      {
+        type: 'engine',
+        maxThrustVac: s.thrustVac,
+        ispVac: s.ispVac,
+        ispAsl: s.ispAsl,
+        propellants: { ...KEROLOX },
+        minThrottle: s.minThrottle,
+        throttleable: true,
+        gimbalRange: s.gimbalDeg * DEG,
+        thrustDirection: v(0, 1, 0),
+        spoolTime: s.spool,
+        plume: s.plume,
+        ignitions: s.ignitions,
+      },
+    ],
+    mesh: 'engine',
+    meshParams: { style: s.style, exitRadius: s.exitRadius, ...(s.extra ?? {}) },
+  };
+}
+
+interface SrbSpec {
+  id: string;
+  name: string;
+  description: string;
+  size: number;
+  height: number;
+  dryMass: number;
+  cost: number;
+  thrustVac: number;
+  ispVac: number;
+  ispAsl: number;
+  segments: number;
+}
+
+/** Fraction of an SRB's casing volume that is propellant grain (minus nozzle and bore). */
+const SRB_GRAIN_FILL = 0.85;
+
+function solidMotor(s: SrbSpec): PartDef {
+  const r = SIZE_RADIUS[s.size];
+  const nozzle = s.height * 0.08;
+  const grain = Math.round(Math.PI * r * r * (s.height - nozzle) * 1000 * SRB_GRAIN_FILL);
+  return {
+    id: s.id,
+    name: s.name,
+    manufacturer: MANUFACTURERS.kettle,
+    description: s.description,
+    category: 'engine',
+    dryMass: s.dryMass,
+    cost: s.cost,
+    resources: { solidFuel: grain },
+    attachNodes: [...stackNodes(s.height, s.size, s.size), srfNode(r * 2)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(r, r, s.height),
+    dragCoefficient: { axial: 0.8, side: 1.0 },
+    maxTemp: 2000,
+    crashTolerance: 7,
+    modules: [
+      {
+        type: 'engine',
+        maxThrustVac: s.thrustVac,
+        ispVac: s.ispVac,
+        ispAsl: s.ispAsl,
+        propellants: { solidFuel: 1 },
+        minThrottle: 1,
+        throttleable: false,
+        gimbalRange: 0,
+        thrustDirection: v(0, 1, 0),
+        spoolTime: 0.15,
+        plume: 'solid',
+        ignitions: 1,
+      },
+    ],
+    mesh: 'srb',
+    meshParams: { segments: s.segments, nozzleLength: nozzle, exitRadius: r * 0.62 },
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Small helpers for repetitive part families
+// ---------------------------------------------------------------------------------------------
+
+function stackDecoupler(id: string, name: string, size: number, h: number, dryMass: number, impulse: number, cost: number, description: string, separator = false): PartDef {
+  const r = SIZE_RADIUS[size];
+  return {
+    id,
+    name,
+    manufacturer: MANUFACTURERS.kettle,
+    description,
+    category: 'coupling',
+    dryMass,
+    cost,
+    resources: {},
+    attachNodes: stackNodes(h, size, size),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: false,
+    shape: cyl(r, r, h),
+    dragCoefficient: { axial: 0.8, side: 0.9 },
+    maxTemp: 2000,
+    crashTolerance: 9,
+    modules: [{ type: 'decoupler', ejectionImpulse: impulse, node: 'bottom' }],
+    mesh: separator ? 'separator' : 'decoupler',
+  };
+}
+
+function adapter(id: string, name: string, sizeTop: number, sizeBottom: number, h: number, dryMass: number, cost: number, description: string): PartDef {
+  return {
+    id,
+    name,
+    manufacturer: MANUFACTURERS.tessellate,
+    description,
+    category: 'structural',
+    dryMass,
+    cost,
+    resources: {},
+    attachNodes: stackNodes(h, sizeTop, sizeBottom),
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(SIZE_RADIUS[sizeTop], SIZE_RADIUS[sizeBottom], h),
+    dragCoefficient: { axial: 0.5, side: 0.95 },
+    maxTemp: 1800,
+    crashTolerance: 9,
+    modules: [],
+    mesh: 'adapter',
+  };
+}
+
+function noseCone(id: string, name: string, size: number, h: number, dryMass: number, cost: number, description: string): PartDef {
+  const r = SIZE_RADIUS[size];
+  return {
+    id,
+    name,
+    manufacturer: MANUFACTURERS.greywater,
+    description,
+    category: 'aero',
+    dryMass,
+    cost,
+    resources: {},
+    attachNodes: stackNodes(h, null, size),
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: cyl(0.02, r, h),
+    dragCoefficient: { axial: 0.18, side: 0.8 },
+    maxTemp: 2400,
+    crashTolerance: 8,
+    modules: [],
+    mesh: 'noseCone',
+  };
+}
+
+interface SurfaceSpec {
+  id: string;
+  name: string;
+  description: string;
+  dryMass: number;
+  cost: number;
+  /** Planform: root chord (at mount), tip chord, span, tip leading-edge sweep offset (m, toward -Y). */
+  rootChord: number;
+  tipChord: number;
+  span: number;
+  sweep: number;
+  thickness: number;
+  liftSlope: number;
+  deflectionDeg: number;
+  ctrlFraction: number;
+  mesh: 'fin' | 'wing' | 'controlSurface';
+  category?: 'aero' | 'control';
+}
+
+function liftingSurface(s: SurfaceSpec): PartDef {
+  const area = ((s.rootChord + s.tipChord) / 2) * s.span;
+  // Bounding box in Y: leading edge of the root at +rootChord/2 (relative to root centre),
+  // leading edge of the tip at rootChord/2 - sweep, trailing edge at that minus tipChord.
+  const yTop = Math.max(s.rootChord / 2, s.rootChord / 2 - s.sweep);
+  const yBot = Math.min(-s.rootChord / 2, s.rootChord / 2 - s.sweep - s.tipChord);
+  const height = yTop - yBot;
+  const rootCentreY = -(yTop + yBot) / 2; // root centre offset after centring the bbox
+  return {
+    id: s.id,
+    name: s.name,
+    manufacturer: MANUFACTURERS.greywater,
+    description: s.description,
+    category: s.category ?? 'aero',
+    dryMass: s.dryMass,
+    cost: s.cost,
+    resources: {},
+    attachNodes: [srfNode(s.span, rootCentreY)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: true,
+    shape: box(s.thickness, height, s.span),
+    dragCoefficient: { axial: 0.04, side: 1.2 },
+    maxTemp: 2000,
+    crashTolerance: 10,
+    modules: [{ type: 'liftingSurface', area: +area.toFixed(3), liftSlope: s.liftSlope, deflection: s.deflectionDeg * DEG, ctrlFraction: s.ctrlFraction }],
+    mesh: s.mesh,
+    meshParams: { rootChord: s.rootChord, tipChord: s.tipChord, span: s.span, sweep: s.sweep, thickness: s.thickness, ctrlFraction: s.ctrlFraction },
+  };
+}
+
+/**
+ * Landing-leg kinematics shared with the mesh builder (src/render/parts) so the rendered foot
+ * and the simulated contact point agree. `s` scales the whole leg. Leg rotates about +X at the
+ * hinge, from pointing +Y (stowed) by `deployAngle` (deployed, down and outward along +Z).
+ */
+export function landingLegLayout(s: number) {
+  const hinge = v(0, -0.38 * s, -0.02 * s);
+  const stowedLength = 0.8 * s;
+  const deployedLength = 1.15 * s;
+  const deployAngle = 140 * DEG;
+  const footPivot = v(0, hinge.y + deployedLength * Math.cos(deployAngle), hinge.z + deployedLength * Math.sin(deployAngle));
+  const padRadius = 0.12 * s;
+  const padHeight = 0.05 * s;
+  const padDrop = 0.04 * s; // ball joint to pad centre
+  const contact = v(0, footPivot.y - padDrop - padHeight / 2, footPivot.z);
+  return { hinge, stowedLength, deployedLength, deployAngle, footPivot, padRadius, padHeight, padDrop, contact };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The catalogue
+// ---------------------------------------------------------------------------------------------
+
+const pods: PartDef[] = [
+  {
+    id: 'pod-lantern-1',
+    name: 'Lantern I Capsule',
+    manufacturer: MANUFACTURERS.northlight,
+    description: 'A single-seat capsule with one excellent window and very strong opinions about re-entry angles. Cosy is a generous word.',
+    category: 'command',
+    dryMass: 1100,
+    cost: 1800,
+    resources: { electricCharge: 60, monopropellant: 15 },
+    attachNodes: stackNodes(1.6, 0, 1),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(0.3, 0.625, 1.6),
+    dragCoefficient: { axial: 0.9, side: 1.0 },
+    maxTemp: 2400,
+    crashTolerance: 14,
+    modules: [
+      { type: 'command', crew: 1, sasLevel: 1, ecPerSecond: 0.03 },
+      { type: 'reactionWheel', torque: 2000, ecRate: 0.15 },
+    ],
+    mesh: 'pod',
+    meshParams: { style: 'lantern', bodyHeight: 1.3 },
+  },
+  {
+    id: 'pod-harbor-3',
+    name: 'Harbor III Command Module',
+    manufacturer: MANUFACTURERS.northlight,
+    description: 'Three seats, two windows, one shared opinion on who sits in the middle. Quilted thermal blanket at no extra charge.',
+    category: 'command',
+    dryMass: 3800,
+    cost: 5200,
+    resources: { electricCharge: 200, monopropellant: 40 },
+    attachNodes: stackNodes(2.4, 1, 2),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(0.65, 1.25, 2.4),
+    dragCoefficient: { axial: 0.95, side: 1.0 },
+    maxTemp: 2400,
+    crashTolerance: 14,
+    modules: [
+      { type: 'command', crew: 3, sasLevel: 2, ecPerSecond: 0.08 },
+      { type: 'reactionWheel', torque: 8000, ecRate: 0.4 },
+    ],
+    mesh: 'pod',
+    meshParams: { style: 'harbor', bodyHeight: 2.0 },
+  },
+  {
+    id: 'probe-pebble',
+    name: 'Pebble Probe Core',
+    manufacturer: MANUFACTURERS.brightfield,
+    description: 'A foil-wrapped flight computer the size of a hatbox. It cannot be talked out of anything.',
+    category: 'command',
+    dryMass: 45,
+    cost: 600,
+    resources: { electricCharge: 25 },
+    attachNodes: stackNodes(0.3, 0, 0),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(0.3125, 0.3125, 0.3),
+    dragCoefficient: { axial: 0.8, side: 0.9 },
+    maxTemp: 1500,
+    crashTolerance: 10,
+    modules: [
+      { type: 'command', crew: 0, sasLevel: 1, ecPerSecond: 0.02 },
+      { type: 'reactionWheel', torque: 300, ecRate: 0.05 },
+    ],
+    mesh: 'probeCore',
+    meshParams: { style: 'pebble' },
+  },
+  {
+    id: 'probe-cairn',
+    name: 'Cairn Avionics Bus',
+    manufacturer: MANUFACTURERS.brightfield,
+    description: 'Octagonal autopilot bus with a star tracker that never blinks. Full attitude-hold suite included.',
+    category: 'command',
+    dryMass: 160,
+    cost: 1400,
+    resources: { electricCharge: 80 },
+    attachNodes: stackNodes(0.5, 1, 1),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(0.625, 0.625, 0.5),
+    dragCoefficient: { axial: 0.85, side: 0.95 },
+    maxTemp: 1600,
+    crashTolerance: 10,
+    modules: [
+      { type: 'command', crew: 0, sasLevel: 3, ecPerSecond: 0.04 },
+      { type: 'reactionWheel', torque: 2000, ecRate: 0.2 },
+    ],
+    mesh: 'probeCore',
+    meshParams: { style: 'cairn' },
+  },
+];
+
+const tanks: PartDef[] = [
+  fuelTank('tank-0-short', 'Thimble Tank', 0, 0.45, 'white', 'Small enough to fit in a backpack, if your backpack is rated for cryogenics.'),
+  fuelTank('tank-0-long', 'Spindle Tank', 0, 0.9, 'white', 'Two Thimbles that got married. Popular with probe designers and the frugal.'),
+  fuelTank('tank-1-short', 'Silo 1 Stub', 1, 0.75, 'white', 'A stubby 1.25 m tank for topping off stacks that are just a little short of ambition.'),
+  fuelTank('tank-1-mid', 'Silo 1 Standard', 1, 1.5, 'white', 'The benchmark 1.25 m tank. Orbital welds, honest stringers, zero surprises.'),
+  fuelTank('tank-1-long', 'Silo 1 Tall', 1, 3.0, 'white', 'Long, lean and full of propellant. Mind the slosh baffles.'),
+  fuelTank('tank-2-short', 'Silo 2 Stub', 2, 1.5, 'orange', 'Spray-foam insulated 2.5 m section. The orange is the foam; the foam is load-bearing for morale.'),
+  fuelTank('tank-2-mid', 'Silo 2 Standard', 2, 3.0, 'orange', 'Workhorse first-stage tank. Frost forms on the foam within minutes of fuelling.'),
+  fuelTank('tank-2-long', 'Silo 2 Tall', 2, 6.0, 'orange', 'Forty-odd tonnes of kerolox in a single foam-wrapped cylinder. Bring a big crane.'),
+  fuelTank('tank-3-mid', 'Silo 3 Standard', 3, 3.75, 'steel', 'Stainless 3.75 m section. Heavier than aluminium, shrugs off heat and dents like a champion.'),
+  fuelTank('tank-3-long', 'Silo 3 Tall', 3, 7.5, 'steel', 'A polished steel grain silo that happens to want to go to space.'),
+  {
+    id: 'mono-pip',
+    name: 'Pip Hydrazine Sphere',
+    manufacturer: MANUFACTURERS.brightfield,
+    description: 'A titanium sphere of monopropellant on a sturdy bracket. Handle with gloves. And goggles. And distance.',
+    category: 'fuelTank',
+    dryMass: 12,
+    cost: 220,
+    resources: { monopropellant: 60 },
+    attachNodes: [srfNode(0.56)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: box(0.5, 0.5, 0.56),
+    dragCoefficient: { axial: 0.5, side: 0.5 },
+    maxTemp: 1800,
+    crashTolerance: 10,
+    modules: [],
+    mesh: 'monoSphere',
+    meshParams: { radius: 0.24 },
+  },
+  {
+    id: 'mono-bagel',
+    name: 'Bagel Toroidal Tank',
+    manufacturer: MANUFACTURERS.brightfield,
+    description: 'Ring-shaped hydrazine tank with a hollow core for wiring. Not a snack, despite the paperwork.',
+    category: 'fuelTank',
+    dryMass: 40,
+    cost: 480,
+    resources: { monopropellant: 250 },
+    attachNodes: stackNodes(0.4, 1, 1),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(0.625, 0.625, 0.4),
+    dragCoefficient: { axial: 0.85, side: 0.9 },
+    maxTemp: 1800,
+    crashTolerance: 9,
+    modules: [],
+    mesh: 'monoTorus',
+  },
+  {
+    id: 'xenon-bottle',
+    name: 'Twin Xenon Bottles',
+    manufacturer: MANUFACTURERS.lumen,
+    description: 'Two carbon-overwrapped pressure vessels holding a frankly unreasonable amount of xenon.',
+    category: 'fuelTank',
+    dryMass: 30,
+    cost: 900,
+    resources: { xenon: 40 },
+    attachNodes: [srfNode(0.3)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: box(0.6, 0.8, 0.3),
+    dragCoefficient: { axial: 0.5, side: 0.7 },
+    maxTemp: 1600,
+    crashTolerance: 8,
+    modules: [],
+    mesh: 'xenonTank',
+  },
+];
+
+const engines: PartDef[] = [
+  liquidEngine({
+    id: 'eng-gust', name: 'Gust Mini-Booster', size: 0, height: 0.9, dryMass: 110, cost: 400,
+    thrustVac: 20_000, ispVac: 310, ispAsl: 265, gimbalDeg: 4, minThrottle: 0.4, ignitions: 3, spool: 0.6,
+    plume: 'kerolox', style: 'compact', exitRadius: 0.25,
+    description: 'Pocket-sized kerolox engine for sounding rockets and small upper stages. Loud for its size.',
+  }),
+  liquidEngine({
+    id: 'eng-wisp', name: 'Wisp Vacuum Thruster', size: 0, height: 1.0, dryMass: 80, cost: 650,
+    thrustVac: 9_000, ispVac: 340, ispAsl: 120, gimbalDeg: 3, minThrottle: 0.2, ignitions: 8, spool: 0.4,
+    plume: 'kerolox', style: 'vacuum', exitRadius: 0.3,
+    description: 'A delicate radiatively cooled bell for probes. Firing it at sea level is technically possible and deeply embarrassing.',
+  }),
+  liquidEngine({
+    id: 'eng-sirocco', name: 'Sirocco Lifter', size: 1, height: 2.0, dryMass: 700, cost: 1300,
+    thrustVac: 220_000, ispVac: 320, ispAsl: 285, gimbalDeg: 5, minThrottle: 0.5, ignitions: 1, spool: 1.0,
+    plume: 'kerolox', style: 'lifter', exitRadius: 0.5,
+    description: 'Gas-generator kerolox engine with a famously dependable turbopump. The workhorse of 1.25 m first stages.',
+  }),
+  liquidEngine({
+    id: 'eng-zephyr', name: 'Zephyr Vacuum Engine', size: 1, height: 2.6, dryMass: 420, cost: 1600,
+    thrustVac: 65_000, ispVac: 345, ispAsl: 255, gimbalDeg: 3, minThrottle: 0.3, ignitions: 4, spool: 0.8,
+    plume: 'kerolox', style: 'vacuum', exitRadius: 0.6,
+    description: 'Upper-stage engine with a niobium nozzle extension that glows cherry-red in a long burn.',
+  }),
+  liquidEngine({
+    id: 'eng-doldrum', name: 'Doldrum Descent Engine', size: 1, height: 0.8, dryMass: 280, cost: 1500,
+    thrustVac: 50_000, ispVac: 322, ispAsl: 230, gimbalDeg: 6, minThrottle: 0.1, ignitions: -1, spool: 0.3,
+    plume: 'kerolox', style: 'lander', exitRadius: 0.42,
+    description: 'Low-profile deep-throttling lander engine. Designed to hover patiently while you second-guess the landing site.',
+  }),
+  liquidEngine({
+    id: 'eng-chinook', name: 'Chinook Heavy Lifter', size: 2, height: 3.2, dryMass: 3100, cost: 4800,
+    thrustVac: 1_050_000, ispVac: 322, ispAsl: 288, gimbalDeg: 4, minThrottle: 0.55, ignitions: 1, spool: 1.4,
+    plume: 'kerolox', style: 'lifter', exitRadius: 1.0,
+    description: 'A megawatt-class kerolox booster engine. Rattles windows in three counties.',
+  }),
+  liquidEngine({
+    id: 'eng-foehn', name: 'Foehn Hydrolox Upper', size: 2, height: 4.0, dryMass: 1300, cost: 7200,
+    thrustVac: 200_000, ispVac: 450, ispAsl: 200, gimbalDeg: 4, minThrottle: 0.4, ignitions: 3, spool: 1.2,
+    plume: 'hydrolox', style: 'hydrolox', exitRadius: 1.2,
+    description: 'Staged-combustion hydrolox engine with a vast thin bell. Superb efficiency, invisible flame, eye-watering price.',
+  }),
+  liquidEngine({
+    id: 'eng-harmattan', name: 'Harmattan Full-Flow', size: 2, height: 3.0, dryMass: 2400, cost: 6500,
+    thrustVac: 900_000, ispVac: 355, ispAsl: 310, gimbalDeg: 5, minThrottle: 0.4, ignitions: 3, spool: 1.0,
+    plume: 'methalox', style: 'fullflow', exitRadius: 0.95, maxTemp: 2500,
+    description: 'Full-flow staged methalox engine with twin turbopumps. Clean blue flame, restartable, slightly smug.',
+  }),
+  liquidEngine({
+    id: 'eng-tempest', name: 'Tempest Quad Cluster', size: 3, height: 3.6, dryMass: 7800, cost: 11000,
+    thrustVac: 3_300_000, ispVac: 326, ispAsl: 290, gimbalDeg: 3, minThrottle: 0.6, ignitions: 1, spool: 1.6,
+    plume: 'kerolox', style: 'cluster', exitRadius: 0.72, extra: { bells: 4 },
+    description: 'Four gimballed kerolox chambers on one thrust frame. Liftoff becomes less of a question and more of a statement.',
+  }),
+  {
+    id: 'eng-whisper',
+    name: 'Whisper Ion Drive',
+    manufacturer: MANUFACTURERS.lumen,
+    description: 'Gridded xenon ion thruster. Pushes with the force of a held breath, for months on end.',
+    category: 'engine',
+    dryMass: 220,
+    cost: 6000,
+    resources: {},
+    attachNodes: stackNodes(0.5, 0, 0),
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: cyl(0.3125, 0.33, 0.5),
+    dragCoefficient: { axial: 0.7, side: 0.9 },
+    maxTemp: 1600,
+    crashTolerance: 7,
+    modules: [
+      {
+        type: 'engine',
+        maxThrustVac: 250,
+        ispVac: 4000,
+        ispAsl: 100,
+        // Volume ratio: ~0.0022 L/s xenon draws ~8 EC/s at full throttle.
+        propellants: { xenon: 1, electricCharge: 3600 },
+        minThrottle: 0,
+        throttleable: true,
+        gimbalRange: 0,
+        thrustDirection: v(0, 1, 0),
+        spoolTime: 0.5,
+        plume: 'ion',
+        ignitions: -1,
+      },
+    ],
+    mesh: 'ionEngine',
+    meshParams: { exitRadius: 0.3 },
+  },
+  solidMotor({
+    id: 'srb-sparkler', name: 'Sparkler Solid Motor', size: 0, height: 2.2, dryMass: 90, cost: 180,
+    thrustVac: 32_000, ispVac: 245, ispAsl: 215, segments: 2,
+    description: 'Cheap, cheerful and impossible to switch off. A favourite for strap-on kicks and questionable decisions.',
+  }),
+  solidMotor({
+    id: 'srb-roman-candle', name: 'Roman Candle Booster', size: 1, height: 6.0, dryMass: 1200, cost: 900,
+    thrustVac: 340_000, ispVac: 250, ispAsl: 220, segments: 3,
+    description: 'Segmented 1.25 m solid booster. About seventy seconds of extremely firm encouragement.',
+  }),
+  solidMotor({
+    id: 'srb-thunderclap', name: 'Thunderclap Heavy Booster', size: 2, height: 11.0, dryMass: 8500, cost: 4200,
+    thrustVac: 2_400_000, ispVac: 255, ispAsl: 225, segments: 4,
+    description: 'Four steel segments packed with seventy-five tonnes of grain. The launch pad will need a moment.',
+  }),
+];
+
+const coupling: PartDef[] = [
+  stackDecoupler('dec-0', 'Snap Ring 0', 0, 0.16, 15, 100, 120, 'A bolted ring with tiny explosive bolts. Small, yes. Polite, no.'),
+  stackDecoupler('dec-1', 'Snap Ring 1', 1, 0.22, 50, 300, 300, 'Clean 1.25 m stage separation. The bolts go one way, the spent stage goes the other.'),
+  stackDecoupler('dec-2', 'Snap Ring 2', 2, 0.3, 180, 800, 650, 'Heavy-duty 2.5 m decoupler with redundant pyro chains. Twice the bang, half the worry.'),
+  stackDecoupler('dec-3', 'Snap Ring 3', 3, 0.36, 400, 1500, 1100, 'Separates 3.75 m stages with the timing of a metronome and the volume of a cannon.'),
+  stackDecoupler('sep-1', 'Split Ring 1', 1, 0.26, 70, 450, 380, 'Linear-charge separator that cuts the joint clean through. Leaves nothing behind but confetti.', true),
+  stackDecoupler('sep-2', 'Split Ring 2', 2, 0.34, 230, 1100, 800, 'A 2.5 m frangible joint. Engineers describe the sound as "decisive".', true),
+  {
+    id: 'dec-radial',
+    name: 'Side Latch',
+    manufacturer: MANUFACTURERS.kettle,
+    description: 'Radial separation bracket with a spring piston that shoves boosters politely but firmly away.',
+    category: 'coupling',
+    dryMass: 40,
+    cost: 250,
+    resources: {},
+    attachNodes: [srfNode(0.24)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: true,
+    shape: box(0.2, 0.6, 0.24),
+    dragCoefficient: { axial: 0.3, side: 0.6 },
+    maxTemp: 2000,
+    crashTolerance: 9,
+    modules: [{ type: 'decoupler', ejectionImpulse: 400, node: 'srf', radial: true }],
+    mesh: 'radialDecoupler',
+  },
+];
+
+const structural: PartDef[] = [
+  adapter('adapt-0-1', 'Taper 0-1', 0, 1, 0.5, 40, 120, 'Steps a 0.625 m stack up to 1.25 m. Smoothly. Mostly.'),
+  adapter('adapt-1-2', 'Taper 1-2', 1, 2, 1.2, 200, 350, 'Interstage cone bridging 1.25 m and 2.5 m. Stringered, riveted, quietly heroic.'),
+  adapter('adapt-2-3', 'Taper 2-3', 2, 3, 1.5, 520, 700, 'A broad 2.5 to 3.75 m skirt for when the rocket gets wider at the bottom, as rockets do.'),
+  {
+    id: 'girder',
+    name: 'Lattice Girder',
+    manufacturer: MANUFACTURERS.tessellate,
+    description: 'Two metres of welded truss. Holds things apart, holds things up, holds no grudges.',
+    category: 'structural',
+    dryMass: 60,
+    cost: 90,
+    resources: {},
+    attachNodes: stackNodes(2.0, 0, 0),
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: true,
+    shape: box(0.36, 2.0, 0.36),
+    dragCoefficient: { axial: 0.6, side: 0.6 },
+    maxTemp: 2000,
+    crashTolerance: 12,
+    modules: [],
+    mesh: 'girder',
+  },
+  {
+    id: 'strut',
+    name: 'Tension Strut',
+    manufacturer: MANUFACTURERS.tessellate,
+    description: 'A purely reassuring rod. Vehicles here are rigid already, but it does look the part.',
+    category: 'structural',
+    dryMass: 5,
+    cost: 30,
+    resources: {},
+    attachNodes: [srfNode(0.12)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: box(0.08, 1.2, 0.12),
+    dragCoefficient: { axial: 0.1, side: 0.3 },
+    maxTemp: 2000,
+    crashTolerance: 12,
+    modules: [],
+    mesh: 'strut',
+    meshParams: { length: 1.2 },
+  },
+];
+
+const aero: PartDef[] = [
+  noseCone('nose-0', 'Spire 0 Nose Cone', 0, 0.9, 12, 60, 'Ogive tip for slender stacks. Points the right way, and that is half the battle.'),
+  noseCone('nose-1', 'Spire 1 Nose Cone', 1, 2.0, 70, 160, 'A tangent-ogive cone with an ablative tip. Cuts through the air like it has somewhere to be.'),
+  noseCone('nose-2', 'Spire 2 Nose Cone', 2, 4.0, 320, 400, 'Big aerodynamic cap for big stacks. Doubles as a dramatic silhouette at sunset.'),
+  {
+    id: 'fairing-1',
+    name: 'Clamshell Fairing 1',
+    manufacturer: MANUFACTURERS.greywater,
+    description: 'A 1.25 m base with a two-piece shroud that keeps fragile payloads out of the wind until it pops open.',
+    category: 'aero',
+    dryMass: 180,
+    cost: 500,
+    resources: {},
+    attachNodes: stackNodes(0.2, 1, 1),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: false,
+    shape: cyl(0.625, 0.625, 0.2),
+    dragCoefficient: { axial: 0.25, side: 0.9 },
+    maxTemp: 2200,
+    crashTolerance: 8,
+    modules: [{ type: 'fairing', ejectionImpulse: 150 }],
+    mesh: 'fairing',
+    meshParams: { shellRadius: 0.72, shellHeight: 3.6 },
+  },
+  {
+    id: 'fairing-2',
+    name: 'Clamshell Fairing 2',
+    manufacturer: MANUFACTURERS.greywater,
+    description: 'Composite 2.5 m payload shroud. Splits along its spine with a satisfying crack.',
+    category: 'aero',
+    dryMass: 620,
+    cost: 1200,
+    resources: {},
+    attachNodes: stackNodes(0.3, 2, 2),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: false,
+    shape: cyl(1.25, 1.25, 0.3),
+    dragCoefficient: { axial: 0.25, side: 0.9 },
+    maxTemp: 2200,
+    crashTolerance: 8,
+    modules: [{ type: 'fairing', ejectionImpulse: 400 }],
+    mesh: 'fairing',
+    meshParams: { shellRadius: 1.4, shellHeight: 6.5 },
+  },
+  liftingSurface({
+    id: 'fin-keel', name: 'Keel Fin', dryMass: 30, cost: 80,
+    rootChord: 1.0, tipChord: 0.45, span: 0.75, sweep: 0.45, thickness: 0.06, liftSlope: 4.0, deflectionDeg: 0, ctrlFraction: 0, mesh: 'fin',
+    description: 'Fixed swept tail fin. Keeps the pointy end forward without any electronics whatsoever.',
+  }),
+  liftingSurface({
+    id: 'fin-pivot', name: 'Pivot Winglet', dryMass: 45, cost: 260,
+    rootChord: 0.9, tipChord: 0.5, span: 0.7, sweep: 0.25, thickness: 0.06, liftSlope: 4.2, deflectionDeg: 20, ctrlFraction: 0.35, mesh: 'fin', category: 'control',
+    description: 'Tail fin with a powered trailing-edge flap. Steers in thick air when the gimbal runs out of opinions.',
+  }),
+  liftingSurface({
+    id: 'ctrl-elevon', name: 'Trim Elevon', dryMass: 25, cost: 200,
+    rootChord: 0.35, tipChord: 0.35, span: 1.0, sweep: 0, thickness: 0.05, liftSlope: 4.5, deflectionDeg: 25, ctrlFraction: 1, mesh: 'controlSurface', category: 'control',
+    description: 'All-moving control surface. Bolt it to a trailing edge and argue with physics directly.',
+  }),
+  liftingSurface({
+    id: 'wing-delta', name: 'Arrowhead Delta Wing', dryMass: 380, cost: 900,
+    rootChord: 3.2, tipChord: 0.35, span: 2.6, sweep: 2.6, thickness: 0.16, liftSlope: 3.6, deflectionDeg: 0, ctrlFraction: 0, mesh: 'wing',
+    description: 'A sharp delta with honeycomb skins. Lands fast, climbs faster, looks fantastic doing both.',
+  }),
+  liftingSurface({
+    id: 'wing-plank', name: 'Plank Wing Panel', dryMass: 110, cost: 300,
+    rootChord: 1.0, tipChord: 1.0, span: 2.0, sweep: 0, thickness: 0.1, liftSlope: 5.0, deflectionDeg: 0, ctrlFraction: 0, mesh: 'wing',
+    description: 'A straight wing section for builders who think in rectangles. Tile as required.',
+  }),
+  liftingSurface({
+    id: 'wing-swept', name: 'Swept Wing Section', dryMass: 240, cost: 650,
+    rootChord: 2.0, tipChord: 0.8, span: 3.0, sweep: 1.6, thickness: 0.12, liftSlope: 4.8, deflectionDeg: 0, ctrlFraction: 0, mesh: 'wing',
+    description: 'Moderately swept wing with a tidy taper. Transonic manners, airliner posture.',
+  }),
+];
+
+const control: PartDef[] = [
+  {
+    id: 'rcs-nudge',
+    name: 'Nudge RCS Quad',
+    manufacturer: MANUFACTURERS.brightfield,
+    description: 'Four hydrazine thrusters on one block. For docking, fine pointing and dramatic little puffs.',
+    category: 'control',
+    dryMass: 25,
+    cost: 450,
+    resources: {},
+    attachNodes: [srfNode(0.2)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: box(0.34, 0.34, 0.2),
+    dragCoefficient: { axial: 0.3, side: 0.5 },
+    maxTemp: 1800,
+    crashTolerance: 10,
+    modules: [
+      {
+        type: 'rcs',
+        thrustPerNozzle: 500,
+        ispVac: 220,
+        ispAsl: 100,
+        nozzles: [
+          { position: v(0, 0.15, 0.04), direction: v(0, 1, 0) },
+          { position: v(0, -0.15, 0.04), direction: v(0, -1, 0) },
+          { position: v(0.15, 0, 0.04), direction: v(1, 0, 0) },
+          { position: v(-0.15, 0, 0.04), direction: v(-1, 0, 0) },
+        ],
+      },
+    ],
+    mesh: 'rcsQuad',
+  },
+  {
+    id: 'wheel-gyre-0',
+    name: 'Gyre 0 Reaction Wheel',
+    manufacturer: MANUFACTURERS.brightfield,
+    description: 'Three spinning flywheels in a 0.625 m puck. Turns probes without spending a single drop.',
+    category: 'control',
+    dryMass: 40,
+    cost: 500,
+    resources: {},
+    attachNodes: stackNodes(0.2, 0, 0),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(0.3125, 0.3125, 0.2),
+    dragCoefficient: { axial: 0.8, side: 0.9 },
+    maxTemp: 1600,
+    crashTolerance: 9,
+    modules: [{ type: 'reactionWheel', torque: 1500, ecRate: 0.2 }],
+    mesh: 'reactionWheel',
+  },
+  {
+    id: 'wheel-gyre-1',
+    name: 'Gyre 1 Reaction Wheel',
+    manufacturer: MANUFACTURERS.brightfield,
+    description: 'A 1.25 m control-moment unit with a hum you can feel in your fillings.',
+    category: 'control',
+    dryMass: 120,
+    cost: 1100,
+    resources: {},
+    attachNodes: stackNodes(0.3, 1, 1),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(0.625, 0.625, 0.3),
+    dragCoefficient: { axial: 0.8, side: 0.9 },
+    maxTemp: 1600,
+    crashTolerance: 9,
+    modules: [{ type: 'reactionWheel', torque: 6000, ecRate: 0.5 }],
+    mesh: 'reactionWheel',
+  },
+];
+
+const electrical: PartDef[] = [
+  {
+    id: 'battery-brick',
+    name: 'Cell Brick',
+    manufacturer: MANUFACTURERS.lumen,
+    description: 'Radial battery pack with a cheerful charge indicator nobody can see from orbit.',
+    category: 'electrical',
+    dryMass: 8,
+    cost: 120,
+    resources: { electricCharge: 100 },
+    attachNodes: [srfNode(0.1)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: box(0.3, 0.2, 0.1),
+    dragCoefficient: { axial: 0.3, side: 0.5 },
+    maxTemp: 1400,
+    crashTolerance: 8,
+    modules: [{ type: 'battery' }],
+    mesh: 'battery',
+    meshParams: { style: 'radial' },
+  },
+  {
+    id: 'battery-drum',
+    name: 'Cell Drum 1',
+    manufacturer: MANUFACTURERS.lumen,
+    description: 'A 1.25 m ring of lithium modules. Keeps the lights on through the longest lunar night (some restrictions apply).',
+    category: 'electrical',
+    dryMass: 60,
+    cost: 650,
+    resources: { electricCharge: 1000 },
+    attachNodes: stackNodes(0.25, 1, 1),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(0.625, 0.625, 0.25),
+    dragCoefficient: { axial: 0.8, side: 0.9 },
+    maxTemp: 1400,
+    crashTolerance: 8,
+    modules: [{ type: 'battery' }],
+    mesh: 'battery',
+    meshParams: { style: 'stack' },
+  },
+  {
+    id: 'solar-patch',
+    name: 'Sunpatch Fixed Panel',
+    manufacturer: MANUFACTURERS.lumen,
+    description: 'Rigid photovoltaic tile. No moving parts, no drama, no tracking.',
+    category: 'electrical',
+    dryMass: 10,
+    cost: 200,
+    resources: {},
+    attachNodes: [srfNode(0.04)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: box(0.6, 1.0, 0.04),
+    dragCoefficient: { axial: 0.1, side: 1.1 },
+    maxTemp: 1300,
+    crashTolerance: 6,
+    modules: [{ type: 'solarPanel', chargeRate: 0.35, tracking: false }],
+    mesh: 'solarFixed',
+  },
+  {
+    id: 'solar-fold',
+    name: 'Sunfold Array',
+    manufacturer: MANUFACTURERS.lumen,
+    description: 'Accordion-folded panels on a sun-tracking boom. Unfolds with the grace of a well-trained origami crane.',
+    category: 'electrical',
+    dryMass: 25,
+    cost: 600,
+    resources: {},
+    attachNodes: [srfNode(0.16)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: box(0.44, 0.5, 0.16),
+    dragCoefficient: { axial: 0.3, side: 0.6 },
+    maxTemp: 1300,
+    crashTolerance: 6,
+    modules: [{ type: 'solarPanel', chargeRate: 1.5, tracking: true }],
+    mesh: 'solarDeploy',
+    meshParams: { panels: 4, panelLength: 0.48, panelWidth: 0.42 },
+  },
+  {
+    id: 'solar-wing',
+    name: 'Sunwing Array',
+    manufacturer: MANUFACTURERS.lumen,
+    description: 'Large tracking array with six panels per wing. Gets very upset about atmospheric flight.',
+    category: 'electrical',
+    dryMass: 90,
+    cost: 1500,
+    resources: {},
+    attachNodes: [srfNode(0.24)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: box(0.82, 0.9, 0.24),
+    dragCoefficient: { axial: 0.3, side: 0.6 },
+    maxTemp: 1300,
+    crashTolerance: 6,
+    modules: [{ type: 'solarPanel', chargeRate: 4.5, tracking: true }],
+    mesh: 'solarDeploy',
+    meshParams: { panels: 6, panelLength: 0.85, panelWidth: 0.8 },
+  },
+];
+
+const utility: PartDef[] = [
+  {
+    id: 'chute-main',
+    name: 'Bloom Main Parachute',
+    manufacturer: MANUFACTURERS.northlight,
+    description: 'Packed main canopy that opens to a 24 m ringsail. Turns a fall into a float.',
+    category: 'utility',
+    dryMass: 100,
+    cost: 420,
+    resources: {},
+    attachNodes: stackNodes(0.35, null, 0),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: false,
+    shape: cyl(0.26, 0.3125, 0.35),
+    dragCoefficient: { axial: 0.6, side: 0.8 },
+    maxTemp: 1700,
+    crashTolerance: 10,
+    modules: [{ type: 'parachute', deployedCdA: 420, semiCdA: 8, minPressure: 4000, deployAltitude: 1000, maxQ: 25_000 }],
+    mesh: 'parachute',
+    meshParams: { style: 'stack', canopyRadius: 12, colors: 'orange' },
+  },
+  {
+    id: 'chute-drogue',
+    name: 'Tug Drogue Chute',
+    manufacturer: MANUFACTURERS.northlight,
+    description: 'A small, tough drogue that steadies a tumbling capsule at speeds the main chute would rather not discuss.',
+    category: 'utility',
+    dryMass: 50,
+    cost: 300,
+    resources: {},
+    attachNodes: stackNodes(0.25, null, 0),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: false,
+    shape: cyl(0.24, 0.3125, 0.25),
+    dragCoefficient: { axial: 0.6, side: 0.8 },
+    maxTemp: 1900,
+    crashTolerance: 10,
+    modules: [{ type: 'parachute', deployedCdA: 30, semiCdA: 3, minPressure: 1500, deployAltitude: 3500, maxQ: 70_000 }],
+    mesh: 'parachute',
+    meshParams: { style: 'stack', canopyRadius: 3, colors: 'red' },
+  },
+  {
+    id: 'chute-radial',
+    name: 'Bloom Side Parachute',
+    manufacturer: MANUFACTURERS.northlight,
+    description: 'Radially mounted canopy pack. Clusters nicely; every capsule deserves a bouquet.',
+    category: 'utility',
+    dryMass: 70,
+    cost: 350,
+    resources: {},
+    attachNodes: [srfNode(0.22)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: box(0.22, 0.4, 0.22),
+    dragCoefficient: { axial: 0.4, side: 0.6 },
+    maxTemp: 1700,
+    crashTolerance: 10,
+    modules: [{ type: 'parachute', deployedCdA: 300, semiCdA: 6, minPressure: 4000, deployAltitude: 1000, maxQ: 25_000 }],
+    mesh: 'parachute',
+    meshParams: { style: 'radial', canopyRadius: 10, colors: 'white' },
+  },
+  {
+    id: 'shield-1',
+    name: 'Ember Shield 1',
+    manufacturer: MANUFACTURERS.northlight,
+    description: 'Tiled 1.25 m ablative heat shield. Chars beautifully so the crew does not.',
+    category: 'utility',
+    dryMass: 120,
+    cost: 600,
+    resources: { ablator: 150 },
+    attachNodes: stackNodes(0.2, 1, 1),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: false,
+    shape: cyl(0.625, 0.66, 0.2),
+    dragCoefficient: { axial: 1.2, side: 0.9 },
+    maxTemp: 3400,
+    crashTolerance: 12,
+    modules: [{ type: 'heatShield', ablationRate: 0.05, maxTemp: 3400 }],
+    mesh: 'heatShield',
+  },
+  {
+    id: 'shield-2',
+    name: 'Ember Shield 2',
+    manufacturer: MANUFACTURERS.northlight,
+    description: 'A 2.5 m shield for lunar-return speeds. Every tile individually blessed by the night shift.',
+    category: 'utility',
+    dryMass: 450,
+    cost: 1800,
+    resources: { ablator: 600 },
+    attachNodes: stackNodes(0.35, 2, 2),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: false,
+    shape: cyl(1.25, 1.31, 0.35),
+    dragCoefficient: { axial: 1.2, side: 0.9 },
+    maxTemp: 3600,
+    crashTolerance: 12,
+    modules: [{ type: 'heatShield', ablationRate: 0.05, maxTemp: 3600 }],
+    mesh: 'heatShield',
+  },
+  {
+    id: 'leg-stilt',
+    name: 'Stilt Landing Leg',
+    manufacturer: MANUFACTURERS.northlight,
+    description: 'Folding leg with a crushable damper and a dinner-plate foot. Good for probes and light landers.',
+    category: 'ground',
+    dryMass: 50,
+    cost: 350,
+    resources: {},
+    attachNodes: [srfNode(0.2, 0.15)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: box(0.2, 1.0, 0.2),
+    dragCoefficient: { axial: 0.3, side: 0.5 },
+    maxTemp: 1800,
+    crashTolerance: 12,
+    modules: [{ type: 'landingLeg', spring: 40_000, damper: 4_000, travel: 0.3, footPosition: landingLegLayout(1).contact }],
+    mesh: 'landingLeg',
+    meshParams: { scale: 1 },
+  },
+  {
+    id: 'leg-strider',
+    name: 'Strider Landing Leg',
+    manufacturer: MANUFACTURERS.northlight,
+    description: 'Heavy lander leg with a twin-cylinder shock strut. Rated for crewed landers and overconfident pilots.',
+    category: 'ground',
+    dryMass: 160,
+    cost: 800,
+    resources: {},
+    attachNodes: [srfNode(0.36, 0.27)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: box(0.36, 1.8, 0.36),
+    dragCoefficient: { axial: 0.3, side: 0.5 },
+    maxTemp: 1800,
+    crashTolerance: 14,
+    modules: [{ type: 'landingLeg', spring: 150_000, damper: 15_000, travel: 0.5, footPosition: landingLegLayout(1.8).contact }],
+    mesh: 'landingLeg',
+    meshParams: { scale: 1.8 },
+  },
+  {
+    id: 'light-beacon',
+    name: 'Beacon Floodlamp',
+    manufacturer: MANUFACTURERS.northlight,
+    description: 'A rugged floodlamp for night landings, EVA work and finding your keys in the lunar regolith.',
+    category: 'utility',
+    dryMass: 6,
+    cost: 90,
+    resources: {},
+    attachNodes: [srfNode(0.14)],
+    surfaceAttachable: true,
+    allowSurfaceAttachChildren: false,
+    shape: box(0.18, 0.18, 0.14),
+    dragCoefficient: { axial: 0.3, side: 0.5 },
+    maxTemp: 1400,
+    crashTolerance: 8,
+    modules: [{ type: 'light' }],
+    mesh: 'light',
+  },
+];
+
+export const PART_DEFS: PartDef[] = [...pods, ...tanks, ...engines, ...coupling, ...structural, ...aero, ...control, ...electrical, ...utility];
+
+export const PART_CATALOG: Map<string, PartDef> = new Map(PART_DEFS.map((p) => [p.id, p]));
+
+export function getPart(id: string): PartDef {
+  const p = PART_CATALOG.get(id);
+  if (!p) throw new Error(`Unknown part id: ${id}`);
+  return p;
+}
+
+/** Full (wet) mass of a part with all resources loaded, kg. */
+export function partWetMass(def: PartDef): number {
+  let m = def.dryMass;
+  for (const k in def.resources) {
+    const id = k as ResourceId;
+    m += (def.resources[id] ?? 0) * RESOURCES[id].density;
+  }
+  return m;
+}
+
+/** Convenience lookup of a module by type. */
+export function findModule<T extends PartModule['type']>(def: PartDef, type: T): Extract<PartModule, { type: T }> | undefined {
+  return def.modules.find((m) => m.type === type) as Extract<PartModule, { type: T }> | undefined;
+}

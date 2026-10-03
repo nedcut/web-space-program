@@ -1,0 +1,162 @@
+import * as THREE from 'three';
+import type { PartDef } from '../../sim/vessel/types';
+import type { Builder } from './builders/common';
+import { buildFin, buildWing, buildControlSurface } from './builders/aero';
+import { buildPod, buildProbeCore } from './builders/command';
+import { buildBattery, buildSolarDeploy, buildSolarFixed } from './builders/electrical';
+import { buildEngine, buildIonEngine, buildSrb } from './builders/engines';
+import {
+  buildAdapter,
+  buildDecoupler,
+  buildFairing,
+  buildGirder,
+  buildMonoSphere,
+  buildMonoTorus,
+  buildNoseCone,
+  buildRadialDecoupler,
+  buildSeparator,
+  buildStrut,
+  buildTank,
+  buildXenonTank,
+} from './builders/structure';
+import { buildHeatShield, buildLandingLeg, buildLight, buildParachute, buildRcsQuad, buildReactionWheel } from './builders/utility';
+import { disposeMaterials, M } from './materials';
+import type { DeployData } from './geom';
+
+export { createPlume, type Plume, type PlumeParams, type PlumeOptions } from './plume';
+export { disposeMaterials } from './materials';
+
+/**
+ * Procedural part meshes.
+ *
+ * Frame: +Y = nose, origin at the part's geometric centre, matching PartDef.attachNodes exactly.
+ * Named sub-objects for animation/effects:
+ *  - 'gimbal'          engines: rotate for thrust vectoring (see setEngineGimbal); may be several
+ *  - 'exhaustAnchor'   nozzle exit plane; +Y = thrust direction, plume extends along -Y;
+ *                      userData.exitRadius (m)
+ *  - 'controlSurface'  hinged flap; userData.hingeAxis (local axis) — see setControlDeflection
+ *  - 'legUpper' / 'legLower' / 'legFoot'      landing legs
+ *  - 'panelWing' / 'panel0..n'                deployable solar arrays
+ *  - 'chuteCanopy' (+ 'chuteLines')           parachutes (hidden until deployed)
+ *  - 'fairingShell' / 'fairingHalfA' / 'fairingHalfB'
+ *  - 'lightLens' / 'lightAnchor'              lamps (anchor looks along +Z)
+ *  - 'ionGrid'                                ion engine grid (emissive)
+ * Deployables carry JSON userData.deploy and are driven by setPartDeploy(root, t), t in [0,1].
+ */
+export const MESH_BUILDERS: Record<string, Builder> = {
+  pod: buildPod,
+  probeCore: buildProbeCore,
+  tank: buildTank,
+  monoSphere: buildMonoSphere,
+  monoTorus: buildMonoTorus,
+  xenonTank: buildXenonTank,
+  engine: buildEngine,
+  srb: buildSrb,
+  ionEngine: buildIonEngine,
+  decoupler: buildDecoupler,
+  separator: buildSeparator,
+  radialDecoupler: buildRadialDecoupler,
+  adapter: buildAdapter,
+  noseCone: buildNoseCone,
+  fairing: buildFairing,
+  girder: buildGirder,
+  strut: buildStrut,
+  fin: buildFin,
+  wing: buildWing,
+  controlSurface: buildControlSurface,
+  rcsQuad: buildRcsQuad,
+  reactionWheel: buildReactionWheel,
+  battery: buildBattery,
+  solarFixed: buildSolarFixed,
+  solarDeploy: buildSolarDeploy,
+  parachute: buildParachute,
+  heatShield: buildHeatShield,
+  landingLeg: buildLandingLeg,
+  light: buildLight,
+};
+
+function fallback(def: PartDef): THREE.Object3D {
+  const g =
+    def.shape.kind === 'cylinder'
+      ? new THREE.CylinderGeometry(def.shape.radiusTop, def.shape.radiusBottom, def.shape.height, 24)
+      : new THREE.BoxGeometry(def.shape.size.x, def.shape.size.y, def.shape.size.z);
+  const m = new THREE.Mesh(g, M.greyPanel());
+  const root = new THREE.Group();
+  root.add(m);
+  return root;
+}
+
+const templates = new Map<string, THREE.Object3D>();
+
+/**
+ * Build (or clone from cache) the mesh for a part. Clones share geometry and materials, so they
+ * are cheap; do not dispose their geometries individually — call disposePartMeshCache().
+ */
+export function buildPartMesh(def: PartDef): THREE.Object3D {
+  let t = templates.get(def.id);
+  if (!t) {
+    const builder = MESH_BUILDERS[def.mesh] ?? fallback;
+    t = builder(def);
+    t.name = def.id;
+    t.userData.partId = def.id;
+    setPartDeploy(t, 0);
+    templates.set(def.id, t);
+  }
+  return t.clone(true);
+}
+
+export function disposePartMeshCache() {
+  for (const t of templates.values())
+    t.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.geometry) m.geometry.dispose();
+    });
+  templates.clear();
+  disposeMaterials();
+}
+
+const lerp3 = (a: [number, number, number], b: [number, number, number], t: number): [number, number, number] => [
+  a[0] + (b[0] - a[0]) * t,
+  a[1] + (b[1] - a[1]) * t,
+  a[2] + (b[2] - a[2]) * t,
+];
+
+/** Drive all deployables (legs, solar arrays, chutes) in a part mesh. t = 0 stowed, 1 deployed. */
+export function setPartDeploy(root: THREE.Object3D, t: number) {
+  const k = Math.max(0, Math.min(1, t));
+  root.traverse((o) => {
+    const d = o.userData.deploy as DeployData | undefined;
+    if (!d) return;
+    if (d.pos0 && d.pos1) o.position.fromArray(lerp3(d.pos0, d.pos1, k));
+    if (d.rot0 && d.rot1) o.rotation.fromArray(lerp3(d.rot0, d.rot1, k));
+    if (d.scale0 && d.scale1) o.scale.fromArray(lerp3(d.scale0, d.scale1, k));
+    if (d.visibleAbove !== undefined) o.visible = k > d.visibleAbove;
+  });
+}
+
+/** Set thrust-vector angles (radians) on every 'gimbal' node: pitch about X, yaw about Z. */
+export function setEngineGimbal(root: THREE.Object3D, pitch: number, yaw: number) {
+  root.traverse((o) => {
+    if (o.name === 'gimbal') o.rotation.set(pitch, 0, yaw);
+  });
+}
+
+const _axis = new THREE.Vector3();
+/** Deflect every 'controlSurface' node about its hinge axis (radians). */
+export function setControlDeflection(root: THREE.Object3D, angle: number) {
+  root.traverse((o) => {
+    if (o.name !== 'controlSurface') return;
+    const a = o.userData.hingeAxis as [number, number, number] | undefined;
+    if (!a) return;
+    o.quaternion.setFromAxisAngle(_axis.fromArray(a), angle);
+  });
+}
+
+/** All nozzle exit anchors in a part mesh. */
+export function getExhaustAnchors(root: THREE.Object3D): THREE.Object3D[] {
+  const out: THREE.Object3D[] = [];
+  root.traverse((o) => {
+    if (o.name === 'exhaustAnchor') out.push(o);
+  });
+  return out;
+}

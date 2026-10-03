@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WSP — Parts Preview</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #070a10; color: #dfe7f2; font-family: system-ui, sans-serif; }
+      #app { position: fixed; inset: 0; }
+      .label { pointer-events: none; text-align: center; font-size: 11px; line-height: 1.25; text-shadow: 0 1px 3px #000; white-space: nowrap; }
+      .label b { display: block; font-size: 12px; color: #fff; font-weight: 600; }
+      .label i { color: #8fa3bd; font-style: normal; }
+      #panel { position: fixed; top: 10px; left: 10px; background: rgba(12, 16, 24, 0.82); padding: 10px 12px; border-radius: 8px; font-size: 12px; display: grid; gap: 6px; min-width: 230px; border: 1px solid #1f2a3a; }
+      #panel h1 { font-size: 13px; margin: 0 0 4px; letter-spacing: 0.04em; }
+      #panel label { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+      #panel select, #panel input[type=range] { width: 130px; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="panel">
+      <h1>PARTS PREVIEW</h1>
+      <label>Category <select id="cat"><option value="">All</option></select></label>
+      <label>Turntable <input id="spin" type="checkbox" checked /></label>
+      <label>Deploy <input id="deploy" type="range" min="0" max="1" step="0.01" value="0" /></label>
+      <label>Cycle deploy <input id="cycle" type="checkbox" /></label>
+      <label>Plumes <input id="plume" type="checkbox" /></label>
+      <label>Throttle <input id="throttle" type="range" min="0" max="1" step="0.01" value="1" /></label>
+      <label>Pressure (atm) <input id="pressure" type="range" min="0" max="1" step="0.01" value="1" /></label>
+      <label>Gimbal wiggle <input id="gimbal" type="checkbox" /></label>
+    </div>
+    <script type="module" src="/src/dev/partsPreview.ts"></script>
+  </body>
+</html>
