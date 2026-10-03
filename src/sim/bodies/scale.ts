@@ -52,7 +52,8 @@ export function scaleBodyDef(def: BodyDef, cfg: ScaleConfig): BodyDef {
         }
       : undefined,
     rings: def.rings ? { ...def.rings, innerRadius: def.rings.innerRadius * s, outerRadius: def.rings.outerRadius * s } : undefined,
-    surface: { ...def.surface, relief: def.surface.relief * Math.max(s, 0.25) },
+    // Relief shrinks a little less than radii (s^0.8) so small worlds keep some drama without absurd slopes.
+    surface: { ...def.surface, relief: def.surface.relief * Math.pow(s, 0.8) },
   };
 }
 
