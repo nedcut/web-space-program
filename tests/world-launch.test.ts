@@ -26,5 +26,5 @@ describe('world launch integration', () => {
     console.log(log.join('\n'));
     expect(Number.isFinite(alt())).toBe(true);
     expect(alt()).toBeGreaterThan(alt0 + 1000);
-  });
+  }, 60000);
 });

@@ -4,6 +4,7 @@ import { FlightController } from './controller';
 import { Hud, NavballView, type Telemetry } from './hud/Hud';
 import { GameAudio } from '../audio';
 import { ManeuverPanel } from './hud/ManeuverPanel';
+import { AssistPanel } from './hud/AssistPanel';
 
 export default function FlightScene() {
   const host = useRef<HTMLDivElement>(null);
@@ -68,6 +69,9 @@ export default function FlightScene() {
             },
           }}
         />
+      )}
+      {tele && ctrl.current && !tele.mapMode && (
+        <AssistPanel active={tele.assist} onStart={(id) => ctrl.current?.startAssist(id)} onCancel={() => ctrl.current?.cancelAssist()} />
       )}
       {tele?.mapMode && ctrl.current && <ManeuverPanel world={ctrl.current.world} />}
       {paused && (

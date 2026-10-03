@@ -22,6 +22,8 @@ import { add, cross, dot, length, normalize, scale, sub, v3, negate, type Vec3 }
 import { qRotate } from '../util/quat';
 import { sampleAtmosphere } from '../sim/atmosphere';
 import { createPlanetLayer, type PlanetLayer } from './planets';
+import { createAssist, warpIndexFor, type AssistId } from './assist';
+import type { Autopilot } from '../game/autopilot';
 import type { GameAudio } from '../audio';
 import type { ScalePresetId } from '../sim/bodies/scale';
 
@@ -48,6 +50,8 @@ export class FlightController {
   readonly map: MapView;
   mapMode = false;
   paused = false;
+  assist: Autopilot | null = null;
+  private assistWarped = false;
   sas: SasMode = 'off';
   sasOn = false;
   rcsOn = false;
@@ -147,6 +151,24 @@ export class FlightController {
     return wv ? this.world.universe.body(wv.body).radius * 1.05 : 1e5;
   }
 
+  startAssist(id: AssistId) {
+    if (!this.world.active) return;
+    try {
+      this.assist = createAssist(id, this.world);
+      this.world.message(`Assist: ${this.assist.name}`);
+    } catch (e) {
+      this.world.message((e as Error).message, 'warn');
+    }
+  }
+
+  cancelAssist(msg = 'Assist cancelled') {
+    if (!this.assist) return;
+    this.assist = null;
+    if (this.assistWarped) this.world.warp = { mode: 'rails', index: 0 };
+    this.assistWarped = false;
+    this.world.message(msg, 'warn');
+  }
+
   toggleSas() {
     this.sasOn = !this.sasOn;
     if (this.sasOn && this.sas === 'off') this.sas = 'stabilityAssist';
@@ -206,7 +228,30 @@ export class FlightController {
       maneuverDirection: maneuverDir ?? undefined,
     });
     this.stagePending = false;
-    if (!this.paused) this.world.tick(dt, ctrl);
+    let input = ctrl;
+    if (this.assist && wv && !this.paused) {
+      // Any manual attitude/throttle input cancels the assist (pilot override).
+      if (s.pitch || s.yaw || s.roll) this.cancelAssist('Assist cancelled: manual control');
+      else {
+        const step = this.assist.update(this.world);
+        input = { ...step.input, stage: step.input.stage || ctrl.stage };
+        this.input.state.throttle = step.input.throttle;
+        if (this.assist.error) this.cancelAssist(`Assist stopped: ${this.assist.error}`);
+        else if (this.assist.done) {
+          this.world.message(`${this.assist.name}: complete`);
+          this.assist = null;
+          this.input.state.throttle = 0;
+        } else if (step.coastUntil !== undefined) {
+          const idx = warpIndexFor(step.coastUntil - this.world.ut, dt);
+          this.world.warp = { mode: 'rails', index: idx };
+          this.assistWarped = idx > 0;
+        } else if (this.assistWarped) {
+          this.world.warp = { mode: 'rails', index: 0 };
+          this.assistWarped = false;
+        }
+      }
+    }
+    if (!this.paused) this.world.tick(dt, input);
     if (wv) this.render(wv, dt);
     this.updateAudio(wv);
 
@@ -424,6 +469,7 @@ export class FlightController {
         .map(([id, e]) => ({ id, name: RESOURCES[id as keyof typeof RESOURCES]?.name ?? id, amount: e.amount, max: e.max, color: RESOURCE_COLORS[id] ?? '#aaa' })),
       messages: w.messages.map((m) => ({ id: m.id, text: m.text, level: m.level })),
       mapMode: this.mapMode,
+      assist: this.assist ? { name: this.assist.name, status: this.assist.status } : null,
     };
   }
 

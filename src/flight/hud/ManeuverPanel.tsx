@@ -3,6 +3,7 @@ import type { World } from '../../game/world';
 import { timeToApoapsis, timeToPeriapsis, burnTimeEstimate, periapsisRadius, apoapsisRadius } from '../../sim/orbit';
 import { formatDistance, formatDuration } from '../../ui/format';
 import { computeStageDeltaV } from '../../sim/vessel';
+import { planTransferToBody, planCircularization } from '../../game/autopilot';
 
 /**
  * Maneuver planner shown in map view. Nodes are placed by time (Ap / Pe / custom offset) and shaped with
@@ -56,6 +57,29 @@ export function ManeuverPanel({ world }: { world: World }) {
     world.addNode(world.ut + (isFinite(t) && t > 5 ? t : 120));
   };
 
+  const [planMsg, setPlanMsg] = useState('');
+  const targets = [...body.children.map((id) => world.universe.body(id)), ...(body.parent && body.parent !== world.universe.sunId ? [world.universe.body(body.parent)] : [])]
+    .filter((b) => b.kind !== 'star')
+    .sort((a, b) => (a.orbit?.a ?? 0) - (b.orbit?.a ?? 0));
+  const planTransfer = (id: string) => {
+    world.nodes = [];
+    try {
+      const plan = planTransferToBody(world, id);
+      setPlanMsg(plan ? `Transfer planned: ${plan.dv.toFixed(0)} m/s` : 'No transfer window found');
+    } catch (e) {
+      setPlanMsg((e as Error).message);
+    }
+  };
+  const planCirc = (at: 'apoapsis' | 'periapsis') => {
+    world.nodes = [];
+    try {
+      planCircularization(world, at);
+      setPlanMsg('');
+    } catch (e) {
+      setPlanMsg((e as Error).message);
+    }
+  };
+
   const jog = (axis: 'prograde' | 'normal' | 'radial' | 'time', dir: number) => ({
     onPointerDown: (e: React.PointerEvent) => {
       e.preventDefault();
@@ -106,6 +130,24 @@ export function ManeuverPanel({ world }: { world: World }) {
         <button className="btn small" onClick={() => add('pe')}>Node @ Pe</button>
         <button className="btn small" onClick={() => add('soon')}>+2 min</button>
       </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <button className="btn small" onClick={() => planCirc('apoapsis')} disabled={orbit.e >= 1}>Circularize @ Ap</button>
+        <button className="btn small" onClick={() => planCirc('periapsis')}>@ Pe</button>
+      </div>
+      {targets.length > 0 && (
+        <select
+          className="btn small"
+          value=""
+          onChange={(e) => e.target.value && planTransfer(e.target.value)}
+          style={{ background: 'var(--panel-solid)' }}
+        >
+          <option value="">Plan transfer to…</option>
+          {targets.map((b) => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
+      )}
+      {planMsg && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{planMsg}</div>}
       {node && summary && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '64px 34px 1fr 34px', gap: 6, alignItems: 'center' }}>
