@@ -1,7 +1,31 @@
+import './theme.css';
+import { lazy, Suspense } from 'react';
+import { useGame } from '../game/store';
+import { MainMenu } from './MainMenu';
+import { SpaceCenter } from './SpaceCenter';
+
+// Heavy 3D scenes are code-split so the menu loads instantly.
+const EditorScene = lazy(() => import('../editor/EditorScene'));
+const FlightScene = lazy(() => import('../flight/FlightScene'));
+
 export function App() {
+  const scene = useGame((s) => s.scene);
   return (
-    <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}>
-      <h1 style={{ fontWeight: 300, letterSpacing: '0.3em' }}>WEB SPACE PROGRAM</h1>
+    <div className="fullscreen">
+      <Suspense fallback={<Loading />}>
+        {scene === 'menu' && <MainMenu />}
+        {scene === 'spaceCenter' && <SpaceCenter />}
+        {scene === 'editor' && <EditorScene />}
+        {scene === 'flight' && <FlightScene />}
+      </Suspense>
+    </div>
+  );
+}
+
+function Loading() {
+  return (
+    <div className="fullscreen" style={{ display: 'grid', placeItems: 'center' }}>
+      <div className="label">Loading…</div>
     </div>
   );
 }
