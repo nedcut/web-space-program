@@ -51,11 +51,7 @@ Dev shortcuts:
 | Vessel switching (]) and recovery | ✅ |
 | Re-entry plasma effect | ✅ (needs visual tuning on real GPU) |
 | Launch complex scenery + 3D Space Center hub | 🚧 in progress |
-| Tracking Station | 🚧 in progress |
+| Tracking Station (fleet, body info, warp, fly/recover) | ✅ |
 
 See DECISIONS.md for choices made autonomously.
 
-## Tracking Station implementation
-- Added lazy-loaded tracking scene, fleet situation groups and focus/fly/recover/confirmed termination controls, body tree and scaled body information, and warp controls through 1,000,000× with world/time persistence on exit.
-- Added `World.advanceRailsTo(ut)` for unattended propagation and additive `MapView.setExtraOrbits` / `pick` APIs; existing flight map API preserved. Tracking owns render resources and cleans up on scene exit.
-- Verified TypeScript, existing 271 Vitest tests plus two tracking propagation tests, and SwiftShader screenshot `/tmp/ts.png`. Space Center tile change limited to enabling navigation (other agents own its background).
