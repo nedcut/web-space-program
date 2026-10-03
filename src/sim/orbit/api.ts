@@ -21,10 +21,14 @@ export interface Orbit {
   i: number;
   lan: number;
   argPe: number;
-  /** Mean anomaly at epoch. */
+  /** Mean anomaly at epoch; Barker's D + D^3/3 for exact parabolas. */
   m0: number;
   /** Epoch, seconds. */
   epoch: number;
+  /** Semi-latus rectum; required for exact parabolas (a = Infinity, e = 1). */
+  p?: number;
+  /** Preserves precision near parabolic and degenerate radial states. Body-relative. */
+  stateAtEpoch?: StateVector;
 }
 
 /** One segment of a patched-conic trajectory prediction. */
