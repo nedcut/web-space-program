@@ -8,6 +8,8 @@ export function formatDate(ut: number): string {
 }
 
 export function formatDistance(m: number): string {
+  if (Number.isNaN(m)) return '—';
+  if (!Number.isFinite(m)) return m > 0 ? '∞' : '−∞';
   const a = Math.abs(m);
   if (a < 1e4) return `${m.toFixed(0)} m`;
   if (a < 1e7) return `${(m / 1e3).toFixed(1)} km`;
@@ -17,6 +19,7 @@ export function formatDistance(m: number): string {
 }
 
 export function formatSpeed(ms: number): string {
+  if (!Number.isFinite(ms)) return '—';
   const a = Math.abs(ms);
   return a < 1e4 ? `${ms.toFixed(1)} m/s` : `${(ms / 1e3).toFixed(2)} km/s`;
 }

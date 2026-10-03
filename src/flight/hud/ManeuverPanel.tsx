@@ -11,6 +11,7 @@ import { planTransferToBody, planCircularization } from '../../game/autopilot';
  */
 export function ManeuverPanel({ world }: { world: World }) {
   const [, force] = useState(0);
+  const [planMsg, setPlanMsg] = useState('');
   const holdRef = useRef<{ axis: 'prograde' | 'normal' | 'radial' | 'time'; dir: number; t0: number } | null>(null);
 
   useEffect(() => {
@@ -57,7 +58,6 @@ export function ManeuverPanel({ world }: { world: World }) {
     world.addNode(world.ut + (isFinite(t) && t > 5 ? t : 120));
   };
 
-  const [planMsg, setPlanMsg] = useState('');
   const targets = [...body.children.map((id) => world.universe.body(id)), ...(body.parent && body.parent !== world.universe.sunId ? [world.universe.body(body.parent)] : [])]
     .filter((b) => b.kind !== 'star')
     .sort((a, b) => (a.orbit?.a ?? 0) - (b.orbit?.a ?? 0));

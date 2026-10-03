@@ -11,6 +11,10 @@ export default function FlightScene() {
   const ctrl = useRef<FlightController | null>(null);
   const [tele, setTele] = useState<Telemetry | null>(null);
   const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
+  pausedRef.current = paused;
+  const [lost, setLost] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const initial = useRef<ReturnType<typeof game.get>['resumeWorld']>(null);
   const [mountKey, setMountKey] = useState(0);
@@ -29,8 +33,27 @@ export default function FlightScene() {
     const resume = () => audio.resume();
     window.addEventListener('pointerdown', resume, { once: true });
     window.addEventListener('keydown', resume, { once: true });
-    const c = new FlightController(host.current!, craft, g.scalePreset, g.ut, g.settings.quality, audio, saved);
-    if (craft && saved) c.world.launch(craft);
+    let c: FlightController;
+    try {
+      c = new FlightController(host.current!, craft, g.scalePreset, g.ut, g.settings.quality, audio, saved);
+      if (craft && saved) c.world.launch(craft);
+    } catch (e) {
+      audio.dispose();
+      setError((e as Error).message);
+      return;
+    }
+    if (!c.world.active) {
+      c.dispose();
+      audio.dispose();
+      game.set({ scene: 'spaceCenter' });
+      return;
+    }
+    c.paused = pausedRef.current;
+    setLost(false);
+    c.onActiveLost = () => {
+      setLost(true);
+      setPaused(true);
+    };
     game.set({ launchPending: false });
     const scenario = new URLSearchParams(location.search).get('scenario');
     if (scenario && mountKey === 0) c.devScenario(scenario);
@@ -44,8 +67,15 @@ export default function FlightScene() {
     };
     ctrl.current = c;
     const unsub = c.subscribe(setTele);
+    // Leaving the page mid-flight: autosave and ask for confirmation (Ctrl+W / Ctrl+R are throttle-adjacent).
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      c.quicksave('autosave');
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', beforeUnload);
     (window as unknown as { __flight?: FlightController }).__flight = c;
     return () => {
+      window.removeEventListener('beforeunload', beforeUnload);
       unsub();
       c.dispose();
       audio.dispose();
@@ -72,6 +102,18 @@ export default function FlightScene() {
   const revert = () => {
     game.set({ resumeWorld: initial.current, ut: initial.current?.ut ?? game.get().ut, scene: 'editor' });
   };
+
+  if (error) {
+    return (
+      <div className="fullscreen" style={{ display: 'grid', placeItems: 'center' }}>
+        <div className="panel" style={{ padding: 24, maxWidth: 420 }}>
+          <div className="label" style={{ color: 'var(--bad)' }}>Could not start flight</div>
+          <p style={{ color: 'var(--text-dim)' }}>{error}</p>
+          <button className="btn" onClick={() => game.set({ scene: 'spaceCenter', resumeWorld: null })}>Back to Space Center</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fullscreen" ref={host}>
@@ -106,8 +148,9 @@ export default function FlightScene() {
       {paused && (
         <div className="fullscreen" style={{ display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.4)' }}>
           <div className="panel" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 260 }}>
-            <div className="label" style={{ textAlign: 'center' }}>Paused</div>
-            <button className="btn primary" onClick={() => setPaused(false)}>Resume</button>
+            <div className="label" style={{ textAlign: 'center', color: lost ? 'var(--bad)' : undefined }}>{lost ? 'Vessel lost' : 'Paused'}</div>
+            {!lost && <button className="btn primary" onClick={() => setPaused(false)}>Resume</button>}
+            {lost && <button className="btn primary" onClick={() => ctrl.current?.onQuickload?.()}>Load quicksave</button>}
             {ctrl.current?.world.active && ctrl.current.world.active.body === 'earth' && ctrl.current.world.active.state.situation !== 'flying' && ctrl.current.world.active.mode !== 'prelaunch' && (
               <button className="btn" onClick={() => { ctrl.current?.world.recoverActive(); exitTo('spaceCenter'); }}>Recover vessel</button>
             )}

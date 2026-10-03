@@ -201,12 +201,12 @@ export class EditorSession {
   }
 
   launch() {
+    if (this.held) this.cancelHeld();
     const craft = this.currentCraft();
     if (!craft.parts.length) return this.toast('Build something first!', 'warn');
-    if (this.held) this.cancelHeld();
     const hasCommand = craft.parts.some((p) => CATALOG.get(p.partId)?.modules.some((m) => m.type === 'command'));
     if (!hasCommand) return this.toast('Launch blocked: the craft needs a command pod or probe core', 'bad');
-    game.set({ craft: this.currentCraft(), scene: 'flight', launchPending: true });
+    game.set({ craft, scene: 'flight', launchPending: true });
   }
 
   exit() {

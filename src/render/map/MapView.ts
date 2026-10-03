@@ -345,11 +345,12 @@ export class MapView {
   }
 
   /** Mouse controls: right/left drag to orbit, wheel to zoom. Returns a disposer. */
-  attachControls(el: HTMLElement, minDistance: () => number) {
+  attachControls(el: HTMLElement, minDistance: () => number, enabled: () => boolean = () => true) {
     let dragging = false;
     let lx = 0;
     let ly = 0;
     const down = (e: PointerEvent) => {
+      if (!enabled()) return;
       dragging = true;
       lx = e.clientX;
       ly = e.clientY;
@@ -363,6 +364,7 @@ export class MapView {
     };
     const up = () => (dragging = false);
     const wheel = (e: WheelEvent) => {
+      if (!enabled()) return;
       e.preventDefault();
       this.distance = Math.max(minDistance(), Math.min(5e13, this.distance * Math.exp(e.deltaY * 0.0012)));
     };

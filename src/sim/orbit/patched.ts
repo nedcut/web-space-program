@@ -95,7 +95,7 @@ export function predictTrajectory(options: TrajectoryPredictionOptions): Traject
     while (!event && cursor < limit) {
       if (++steps > 500000) throw new RangeError('Prediction step budget exceeded; shorten horizon');
       const s = at(cursor), r = length(s.position);
-      let dt = Math.min(3600, limit - cursor, 0.1 * Math.sqrt(r ** 3 / body.gm), 0.1 * r / Math.max(1, length(s.velocity)));
+      let dt = Math.min(limit - cursor, 0.1 * Math.sqrt(r ** 3 / body.gm), 0.1 * r / Math.max(1, length(s.velocity)));
       const samples = boundaries.map(b => b.sample(cursor));
       for (const sample of samples) dt = Math.min(dt, 0.3 * Math.max(Math.abs(sample.value), sample.scale * 0.05) / Math.max(1, sample.speed));
       dt = Math.min(limit - cursor, Math.max(0.1, dt));

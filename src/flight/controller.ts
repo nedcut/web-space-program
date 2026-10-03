@@ -70,6 +70,7 @@ export class FlightController {
   private site: LaunchSite;
   private reentry = new ReentryFx();
   private reentryHeat = 0;
+  private labelHost: HTMLDivElement;
   /** Smoothed frames per second (for the optional FPS readout). */
   fps = 60;
   private raf = 0;
@@ -125,14 +126,14 @@ export class FlightController {
     this.site = new LaunchSite(universe);
     this.scene.add(this.site.root);
 
-    const labelHost = document.createElement('div');
+    const labelHost = (this.labelHost = document.createElement('div'));
     Object.assign(labelHost.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
     host.appendChild(labelHost);
     this.map = new MapView(universe.bodies, universe.ephem, labelHost);
     this.map.setVisible(false);
 
-    this.disposers.push(this.cam.attach(canvas));
-    this.disposers.push(this.map.attachControls(canvas, () => this.mapMinDistance()));
+    this.disposers.push(this.cam.attach(canvas, () => !this.mapMode));
+    this.disposers.push(this.map.attachControls(canvas, () => this.mapMinDistance(), () => this.mapMode));
     this.disposers.push(
       this.input.onAction((a) => {
         switch (a) {
@@ -172,6 +173,9 @@ export class FlightController {
   }
 
   onQuickload: (() => void) | null = null;
+  /** Called once when the active vessel no longer exists (destroyed). */
+  onActiveLost: (() => void) | null = null;
+  private activeLost = false;
 
   quicksave(slot = 'quicksave') {
     try {
@@ -297,7 +301,7 @@ export class FlightController {
       sasReference: this.speedMode === 'surface' ? 'surface' : 'orbit',
       maneuverDirection: maneuverDir ?? undefined,
     });
-    this.stagePending = false;
+    if (!this.paused) this.stagePending = false;
     let input = ctrl;
     if (this.assist && wv && !this.paused) {
       // Any manual attitude/throttle input cancels the assist (pilot override).
@@ -322,6 +326,10 @@ export class FlightController {
       }
     }
     if (!this.paused) this.world.tick(dt, input);
+    if (wv && !this.world.active && !this.activeLost) {
+      this.activeLost = true;
+      this.onActiveLost?.();
+    }
     if (wv) this.render(wv, dt);
     this.updateAudio(wv);
 
@@ -539,7 +547,7 @@ export class FlightController {
       timeToPe: orb.timeToPe,
       throttle: this.input.state.throttle,
       gForce: st.telemetry.gForce,
-      mach: st.telemetry.mach,
+      mach: st.telemetry.airDensity > 0 ? st.telemetry.mach : 0,
       dynamicPressure: st.telemetry.dynamicPressure,
       warp: 1,
       warpLabel: warpLabel(warp) + (warp.mode === 'physics' && warp.index > 0 ? ' phys' : ''),
@@ -566,7 +574,13 @@ export class FlightController {
     this.planets.dispose();
     this.site.dispose();
     this.map.dispose();
+    this.stars.dispose();
+    this.glare.dispose();
+    this.reentry.dispose();
+    this.scene.environment?.dispose();
+    this.labelHost.remove();
     this.pipeline.dispose();
+    this.pipeline.renderer.forceContextLoss();
     this.pipeline.renderer.domElement.remove();
   }
 }

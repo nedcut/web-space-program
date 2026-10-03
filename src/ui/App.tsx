@@ -3,6 +3,7 @@ import { lazy, Suspense } from 'react';
 import { useGame } from '../game/store';
 import { MainMenu } from './MainMenu';
 import { SpaceCenter } from './SpaceCenter';
+import { ErrorBoundary } from './ErrorBoundary';
 
 // Heavy 3D scenes are code-split so the menu loads instantly.
 const EditorScene = lazy(() => import('../editor/EditorScene'));
@@ -13,6 +14,7 @@ export function App() {
   const scene = useGame((s) => s.scene);
   return (
     <div className="fullscreen">
+      <ErrorBoundary>
       <Suspense fallback={<Loading />}>
         {scene === 'menu' && <MainMenu />}
         {scene === 'spaceCenter' && <SpaceCenter />}
@@ -20,6 +22,7 @@ export function App() {
         {scene === 'flight' && <FlightScene />}
         {scene === 'tracking' && <TrackingStation />}
       </Suspense>
+      </ErrorBoundary>
     </div>
   );
 }

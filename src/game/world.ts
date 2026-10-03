@@ -52,6 +52,7 @@ export class World {
   /** Real-time accumulator for fixed physics steps. */
   private acc = 0;
   private msgId = 0;
+  private stageRequested = false;
   private nodeId = 1;
   private trajectoryCache: { time: number; key: string; patches: TrajectoryPatch[] } | null = null;
   readonly catalog: Map<string, PartDef>;
@@ -106,6 +107,12 @@ export class World {
     const zAxis = cross(east, up);
     const orientFixed = quatFromBasis(east, up, zAxis);
 
+    // Clear the pad: anything still clamped, or resting within 150 m of the pad, is recovered.
+    const padHelio = add(u.ephem.getBodyState(bodyId, this.ut).position, qRotate(bodyQuat(u, bodyId, this.ut), scale(up, body.radius + terrainH)));
+    for (const [id, other] of this.vessels) {
+      const near = length(sub(other.state.position, padHelio)) < 150;
+      if (other.mode === 'prelaunch' || (near && other.state.situation !== 'flying')) this.vessels.delete(id);
+    }
     const state = buildVessel(craft, this.catalog, { id: `v${Date.now().toString(36)}`, resourceDefs: RESOURCES, legsDeployed: false });
     state.name = craft.name;
     const bottom = this.bottomOffset(state);
@@ -285,6 +292,13 @@ export class World {
     this.warp = clampWarp(this.warp, this.warpContext());
     const rate = warpRate(this.warp);
 
+    if (input.stage) this.stageRequested = true;
+    if (this.stageRequested && this.warp.mode === 'rails' && rate > 1) {
+      // Staging during rails warp: drop out of warp; the request is consumed by the next physics step.
+      this.warp = { mode: 'rails', index: 0 };
+      return;
+    }
+
     if (this.warp.mode === 'rails' && rate > 1) {
       for (const wv of this.vessels.values()) this.pack(wv);
       let target = this.ut + realDt * rate;
@@ -303,10 +317,10 @@ export class World {
     for (const wv of this.vessels.values()) if (wv === this.active && (wv.mode === 'rails' || wv.mode === 'landedRails')) this.unpack(wv);
     this.acc += realDt * rate;
     let steps = 0;
-    let stageEdge = input.stage;
     while (this.acc >= PHYSICS_DT && steps < MAX_STEPS_PER_FRAME * rate) {
-      this.physicsStep({ ...input, stage: stageEdge });
-      stageEdge = false;
+      // A stage request is latched until a physics step actually consumes it (frames can have zero steps).
+      this.physicsStep({ ...input, stage: this.stageRequested });
+      this.stageRequested = false;
       this.acc -= PHYSICS_DT;
       steps++;
     }
@@ -432,12 +446,25 @@ export class World {
       const res = stepVessel(wv.state, ctrl, env, t, PHYSICS_DT);
       for (const nv of res.newVessels) {
         recomputeMassProperties(nv, false);
+        // Split-off vessels hold state at time t (staging happens at the start of the step); bring them to
+        // t + dt so they don't lag the parent by one step of heliocentric motion.
+        nv.position = add(nv.position, scale(nv.velocity, PHYSICS_DT));
         this.vessels.set(nv.id, { state: nv, mode: 'physics', body: wv.body });
       }
       for (const e of res.events) this.handleEvent(e);
+      // Bodies without a surface (gas giants, stars): crushed / vaporised below a small depth.
+      const bodyDef = this.universe.body(wv.body);
+      if (!bodyDef.solidSurface && !wv.state.destroyed) {
+        const depth = bodyDef.radius - length(sub(wv.state.position, this.universe.ephem.getBodyState(wv.body, t + PHYSICS_DT).position));
+        if (depth > bodyDef.radius * 0.002) {
+          wv.state.destroyed = true;
+          if (isActive) this.message(`${wv.state.name} was crushed in the depths of ${bodyDef.name}`, 'bad', 8);
+        }
+      }
       if (wv.state.destroyed) {
         if (isActive) this.message(`${wv.state.name} was destroyed`, 'bad', 8);
         this.vessels.delete(wv.state.id);
+        if (isActive) this.activeId = null;
       }
     }
     this.ut = t + PHYSICS_DT;
