@@ -1,0 +1,158 @@
+import { describe, expect, it, vi } from 'vitest';
+import { GameAudio, engineLoudness, windGain, transonicBuffeting, type AudioState } from '../src/audio';
+
+const state: AudioState = {
+  engines: [{ type: 'kerolox', thrustFraction: 1, count: 2 }],
+  ambientPressure: 101325, airspeed: 340, mach: 1, dynamicPressure: 30000,
+  rcsActive: 1, reentryHeat: 0.5, inMapView: false, timeWarp: 1, cameraDistance: 10,
+};
+
+describe('GameAudio without Web Audio', () => {
+  it('constructs and exposes every operation safely in Node, including after disposal', () => {
+    expect(globalThis.AudioContext).toBeUndefined();
+    const audio = new GameAudio();
+    const exercise = () => {
+      audio.resume();
+      for (const volume of [0, 0.5, 1, -1, NaN]) audio.setMasterVolume(volume);
+      audio.update(state);
+      audio.update({ ...state, ambientPressure: 0, inMapView: true, timeWarp: 100 });
+      audio.staging(); audio.decouple(); audio.explosion(10); audio.chuteDeploy();
+      audio.legDeploy(); audio.uiClick(); audio.uiHover(); audio.warning(); audio.touchdown(5);
+      audio.setMusic('menu'); audio.setMusic('space'); audio.setMusic('off');
+    };
+    expect(exercise).not.toThrow();
+    expect(() => { audio.dispose(); audio.dispose(); }).not.toThrow();
+    expect(exercise).not.toThrow();
+  });
+});
+
+describe('audio amplitude helpers', () => {
+  it('engine loudness is bounded and increases with thrust and pressure', () => {
+    for (const pressure of [0, 1000, 20000, 101325, 200000]) {
+      const amplitudes = [0, 0.1, 0.4, 0.8, 1, 2].map(t => engineLoudness(t, pressure));
+      expect(amplitudes).toEqual([...amplitudes].sort((a, b) => a - b));
+      for (const amplitude of amplitudes) { expect(amplitude).toBeGreaterThanOrEqual(0); expect(amplitude).toBeLessThanOrEqual(1); }
+    }
+    const pressures = [0, 1000, 20000, 101325, 200000].map(p => engineLoudness(1, p));
+    expect(pressures).toEqual([...pressures].sort((a, b) => a - b));
+    expect(engineLoudness(0, 101325)).toBe(0);
+    expect(engineLoudness(1, 0)).toBeCloseTo(0.12);
+    expect(engineLoudness(1, 101325)).toBe(1);
+  });
+
+  it('wind is silent at zero pressure and saturates monotonically', () => {
+    const gains = [0, 1, 100, 1000, 18000, 100000, 1e12].map(windGain);
+    expect(gains[0]).toBe(0);
+    expect(gains).toEqual([...gains].sort((a, b) => a - b));
+    for (const gain of gains) { expect(gain).toBeGreaterThanOrEqual(0); expect(gain).toBeLessThanOrEqual(1); }
+    expect(gains.at(-1)).toBeCloseTo(1);
+  });
+
+  it('sanitizes negative and non-finite inputs', () => {
+    for (const invalid of [-1, NaN, Infinity, -Infinity]) {
+      expect(windGain(invalid)).toBe(0);
+      expect(engineLoudness(invalid, 101325)).toBe(0);
+      expect(engineLoudness(1, invalid)).toBeCloseTo(0.12);
+    }
+  });
+
+  it('buffeting peaks around Mach one and remains bounded', () => {
+    expect(transonicBuffeting(1)).toBe(1);
+    expect(transonicBuffeting(0.9)).toBeCloseTo(transonicBuffeting(1.1));
+    expect(transonicBuffeting(0.5)).toBeLessThan(0.001);
+    expect(transonicBuffeting(2)).toBeLessThan(0.001);
+    for (const mach of [-1, NaN, 0, 0.8, 1, 1.2, 10]) {
+      expect(transonicBuffeting(mach)).toBeGreaterThanOrEqual(0);
+      expect(transonicBuffeting(mach)).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+// A small Web Audio double exercises lifecycle and scheduling without audio hardware.
+class Param {
+  value = 0;
+  targets: number[] = [];
+  setTargetAtTime(value: number) { this.value = value; this.targets.push(value); }
+  setValueAtTime(value: number) { this.value = value; }
+  linearRampToValueAtTime(value: number) { this.value = value; }
+  exponentialRampToValueAtTime(value: number) { this.value = value; }
+}
+class NodeDouble {
+  gain = new Param(); frequency = new Param(); detune = new Param(); Q = new Param();
+  threshold = new Param(); knee = new Param(); ratio = new Param();
+  type = ''; loop = false; buffer: unknown;
+  onended: (() => void) | null = null;
+  stopped = false; disconnected = false;
+  connect(node: NodeDouble) { return node; }
+  disconnect() { this.disconnected = true; }
+  start() {}
+  stop() { this.stopped = true; }
+}
+class ContextDouble {
+  static latest: ContextDouble;
+  state = 'suspended'; currentTime = 1; sampleRate = 1000;
+  destination = new NodeDouble(); nodes: NodeDouble[] = [];
+  constructor() { ContextDouble.latest = this; }
+  private node() { const node = new NodeDouble(); this.nodes.push(node); return node; }
+  createGain() { return this.node(); }
+  createDynamicsCompressor() { return this.node(); }
+  createBiquadFilter() { return this.node(); }
+  createConvolver() { return this.node(); }
+  createBufferSource() { return this.node(); }
+  createOscillator() { return this.node(); }
+  createBuffer(channels: number, length: number) {
+    const data = Array.from({ length: channels }, () => new Float32Array(length));
+    return { getChannelData: (channel: number) => data[channel] };
+  }
+  async resume() { this.state = 'running'; }
+  async close() { this.state = 'closed'; }
+}
+
+describe('Web Audio lifecycle', () => {
+  it('resumes on gesture, reuses flight voices, schedules music and cleans up all nodes', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('AudioContext', ContextDouble);
+    let audio: GameAudio | undefined;
+    try {
+      audio = new GameAudio();
+      const ctx = ContextDouble.latest;
+      expect(ctx.state).toBe('suspended');
+      audio.setMusic('menu');
+      audio.resume();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(ctx.state).toBe('running');
+      const initial = ctx.nodes.length;
+      for (let frame = 0; frame < 200; frame++) audio.update({ ...state, rcsActive: 0 });
+      expect(ctx.nodes.length).toBe(initial);
+      expect(ctx.nodes.some(node => node.gain.targets.length > 0)).toBe(true);
+      audio.staging(); audio.decouple(); audio.explosion(2); audio.chuteDeploy();
+      audio.legDeploy(); audio.uiClick(); audio.uiHover(); audio.warning(); audio.touchdown(3);
+      audio.update(state);
+      audio.setMusic('space');
+      vi.advanceTimersByTime(6000);
+      audio.setMusic('off');
+      const stoppedMusicCount = ctx.nodes.length;
+      vi.advanceTimersByTime(12000);
+      expect(ctx.nodes.length).toBe(stoppedMusicCount);
+      audio.dispose();
+      expect(ctx.state).toBe('closed');
+      expect(ctx.nodes.every(node => node.disconnected)).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      audio.resume(); audio.update(state); audio.uiClick(); audio.setMusic('menu');
+      expect(ctx.nodes.length).toBe(stoppedMusicCount);
+    } finally {
+      audio?.dispose();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it('remains safe when a browser denies context creation', () => {
+    vi.stubGlobal('AudioContext', class { constructor() { throw new Error('unavailable'); } });
+    try {
+      const audio = new GameAudio();
+      expect(() => { audio.resume(); audio.update(state); audio.setMusic('menu'); audio.dispose(); }).not.toThrow();
+    } finally { vi.unstubAllGlobals(); }
+  });
+});
