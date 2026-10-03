@@ -34,7 +34,11 @@ interface BodyVisual {
   label: HTMLDivElement;
 }
 
+const iconCache = new Map<string, THREE.CanvasTexture>();
 function makeIconTexture(color: string, ring: boolean): THREE.CanvasTexture {
+  const key = `${color}:${ring}`;
+  const hit = iconCache.get(key);
+  if (hit) return hit;
   const c = document.createElement('canvas');
   c.width = c.height = 64;
   const g = c.getContext('2d')!;
@@ -47,6 +51,7 @@ function makeIconTexture(color: string, ring: boolean): THREE.CanvasTexture {
   else g.fill();
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
+  iconCache.set(key, t);
   return t;
 }
 
@@ -218,7 +223,10 @@ export class MapView {
 
     // Vessel
     this.vesselIcon.visible = !!u.vessel;
-    for (const s of [...this.nodeIcons, ...this.apPeIcons]) this.scene.remove(s);
+    for (const s of [...this.nodeIcons, ...this.apPeIcons]) {
+      this.scene.remove(s);
+      s.material.dispose();
+    }
     this.nodeIcons = [];
     this.apPeIcons = [];
     if (u.vessel) {
@@ -227,6 +235,19 @@ export class MapView {
       for (const line of this.vesselLines) {
         const id = line.userData.body as string;
         this.place(line, this.ephem.getBodyState(id, t).position, focus);
+      }
+      // Maneuver node markers: position at node time on whichever patch contains it.
+      for (const n of u.vessel.nodes) {
+        const patch = u.vessel.patches.find((p) => n.time >= p.startTime && n.time <= p.endTime + 1e-6);
+        if (!patch) continue;
+        const pp = this.ephem.getBodyState(patch.orbit.body, t).position;
+        const np = elementsToState(patch.orbit, n.time).position;
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeIconTexture('#3c8cff', true), sizeAttenuation: false, depthTest: false }));
+        s.scale.setScalar(0.026);
+        s.renderOrder = 13;
+        this.place(s, { x: pp.x + np.x, y: pp.y + np.y, z: pp.z + np.z }, focus);
+        this.scene.add(s);
+        this.nodeIcons.push(s);
       }
       const first = u.vessel.patches[0];
       if (first) {

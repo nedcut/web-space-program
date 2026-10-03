@@ -1,0 +1,136 @@
+import { useEffect, useRef, useState } from 'react';
+import type { World } from '../../game/world';
+import { timeToApoapsis, timeToPeriapsis, burnTimeEstimate, periapsisRadius, apoapsisRadius } from '../../sim/orbit';
+import { formatDistance, formatDuration } from '../../ui/format';
+import { computeStageDeltaV } from '../../sim/vessel';
+
+/**
+ * Maneuver planner shown in map view. Nodes are placed by time (Ap / Pe / custom offset) and shaped with
+ * press-and-hold "jog" controls whose rate accelerates the longer you hold (fine control without a gizmo).
+ */
+export function ManeuverPanel({ world }: { world: World }) {
+  const [, force] = useState(0);
+  const holdRef = useRef<{ axis: 'prograde' | 'normal' | 'radial' | 'time'; dir: number; t0: number } | null>(null);
+
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    const loop = (now: number) => {
+      const dt = (now - last) / 1000;
+      last = now;
+      const h = holdRef.current;
+      const node = world.nodes[0];
+      if (h && node) {
+        const held = (now - h.t0) / 1000;
+        const rate = Math.min(500, 2 * Math.pow(3, held)); // m/s per second, accelerating
+        if (h.axis === 'time') {
+          const wv = world.active;
+          const T = wv ? 2 * Math.PI * Math.sqrt(Math.abs(world.orbitOf(wv).a) ** 3 / world.orbitOf(wv).mu) : 1000;
+          node.time = Math.max(world.ut + 5, node.time + h.dir * dt * Math.min(T / 10, 5 * Math.pow(3, held)));
+        } else {
+          node[h.axis] += h.dir * rate * dt;
+        }
+        world.nodes = [...world.nodes];
+      }
+      force((x) => (x + 1) % 1e6);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    const up = () => (holdRef.current = null);
+    window.addEventListener('pointerup', up);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('pointerup', up);
+    };
+  }, [world]);
+
+  const wv = world.active;
+  if (!wv || wv.mode === 'prelaunch') return null;
+  const orbit = world.orbitOf(wv);
+  const node = world.nodes[0];
+  const body = world.universe.body(wv.body);
+
+  const add = (when: 'ap' | 'pe' | 'soon') => {
+    const t = when === 'ap' ? timeToApoapsis(orbit, world.ut) : when === 'pe' ? timeToPeriapsis(orbit, world.ut) : 120;
+    world.nodes = [];
+    world.addNode(world.ut + (isFinite(t) && t > 5 ? t : 120));
+  };
+
+  const jog = (axis: 'prograde' | 'normal' | 'radial' | 'time', dir: number) => ({
+    onPointerDown: (e: React.PointerEvent) => {
+      e.preventDefault();
+      holdRef.current = { axis, dir, t0: performance.now() };
+    },
+  });
+
+  let summary: { dv: number; burn: number; ap: number; pe: number; next?: string } | null = null;
+  if (node) {
+    const dv = Math.hypot(node.prograde, node.normal, node.radial);
+    const thrust = wv.state.parts.reduce((s, p) => {
+      const e = p.def.modules.find((m) => m.type === 'engine');
+      return s + (e && e.type === 'engine' && p.engine?.ignited ? e.maxThrustVac : 0);
+    }, 0);
+    let isp = 300;
+    try {
+      const st = computeStageDeltaV(wv.state, 0, body.surfaceGravity)[0];
+      if (st) isp = st.isp;
+    } catch {
+      /* keep default */
+    }
+    const patches = world.trajectory();
+    const after = patches.find((p) => p.startTime >= node.time - 1e-3) ?? patches[patches.length - 1];
+    const ob = after ? world.universe.body(after.orbit.body) : body;
+    summary = {
+      dv,
+      burn: thrust > 0 ? burnTimeEstimate(dv, thrust, wv.state.mass, isp) : Infinity,
+      ap: after ? apoapsisRadius(after.orbit) - ob.radius : NaN,
+      pe: after ? periapsisRadius(after.orbit) - ob.radius : NaN,
+      next: patches.find((p) => p.endReason === 'soiEnter')?.nextBody,
+    };
+  }
+
+  const Row = ({ label, axis, color, value }: { label: string; axis: 'prograde' | 'normal' | 'radial'; color: string; value: number }) => (
+    <div style={{ display: 'grid', gridTemplateColumns: '64px 34px 1fr 34px', gap: 6, alignItems: 'center' }}>
+      <span className="label" style={{ color }}>{label}</span>
+      <button className="btn small" {...jog(axis, -1)}>−</button>
+      <span className="mono" style={{ textAlign: 'center' }}>{value.toFixed(1)}</span>
+      <button className="btn small" {...jog(axis, 1)}>+</button>
+    </div>
+  );
+
+  return (
+    <div className="panel" style={{ position: 'absolute', left: 10, top: 70, width: 270, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="label">Maneuver planner</div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button className="btn small" onClick={() => add('ap')} disabled={orbit.e >= 1}>Node @ Ap</button>
+        <button className="btn small" onClick={() => add('pe')}>Node @ Pe</button>
+        <button className="btn small" onClick={() => add('soon')}>+2 min</button>
+      </div>
+      {node && summary && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '64px 34px 1fr 34px', gap: 6, alignItems: 'center' }}>
+            <span className="label">Time</span>
+            <button className="btn small" {...jog('time', -1)}>◀</button>
+            <span className="mono" style={{ textAlign: 'center', fontSize: 12 }}>T−{formatDuration(node.time - world.ut)}</span>
+            <button className="btn small" {...jog('time', 1)}>▶</button>
+          </div>
+          <Row label="Prograde" axis="prograde" color="#d8ff3c" value={node.prograde} />
+          <Row label="Normal" axis="normal" color="#d066ff" value={node.normal} />
+          <Row label="Radial" axis="radial" color="#4fd8ff" value={node.radial} />
+          <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, fontSize: 12 }}>
+            <span className="label">Δv</span><span className="mono">{summary.dv.toFixed(1)} m/s</span>
+            <span className="label">Burn</span><span className="mono">{formatDuration(summary.burn)}</span>
+            <span className="label">New Ap</span><span className="mono">{isFinite(summary.ap) ? formatDistance(summary.ap) : 'escape'}</span>
+            <span className="label">New Pe</span><span className="mono">{formatDistance(summary.pe)}</span>
+            {summary.next && (<><span className="label">Encounter</span><span className="mono" style={{ color: 'var(--good)' }}>{world.universe.body(summary.next).name}</span></>)}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn small" onClick={() => { node.prograde = node.normal = node.radial = 0; world.nodes = [...world.nodes]; }}>Zero</button>
+            <button className="btn small danger" onClick={() => world.removeNode(node.id)}>Delete</button>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Tip: SAS → MNV points at the burn. Start the burn half the burn time before the node.</div>
+        </>
+      )}
+    </div>
+  );
+}

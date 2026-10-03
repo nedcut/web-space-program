@@ -47,6 +47,7 @@ export class FlightController {
   readonly cam = new FlightCamera();
   readonly map: MapView;
   mapMode = false;
+  paused = false;
   sas: SasMode = 'off';
   sasOn = false;
   rcsOn = false;
@@ -205,7 +206,7 @@ export class FlightController {
       maneuverDirection: maneuverDir ?? undefined,
     });
     this.stagePending = false;
-    this.world.tick(dt, ctrl);
+    if (!this.paused) this.world.tick(dt, ctrl);
     if (wv) this.render(wv, dt);
     this.updateAudio(wv);
 
@@ -422,6 +423,7 @@ export class FlightController {
         .filter(([, e]) => e.max > 0)
         .map(([id, e]) => ({ id, name: RESOURCES[id as keyof typeof RESOURCES]?.name ?? id, amount: e.amount, max: e.max, color: RESOURCE_COLORS[id] ?? '#aaa' })),
       messages: w.messages.map((m) => ({ id: m.id, text: m.text, level: m.level })),
+      mapMode: this.mapMode,
     };
   }
 

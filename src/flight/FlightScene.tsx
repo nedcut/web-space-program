@@ -3,6 +3,7 @@ import { game } from '../game/store';
 import { FlightController } from './controller';
 import { Hud, NavballView, type Telemetry } from './hud/Hud';
 import { GameAudio } from '../audio';
+import { ManeuverPanel } from './hud/ManeuverPanel';
 
 export default function FlightScene() {
   const host = useRef<HTMLDivElement>(null);
@@ -35,6 +36,10 @@ export default function FlightScene() {
     };
   }, []);
 
+  useEffect(() => {
+    if (ctrl.current) ctrl.current.paused = paused;
+  }, [paused]);
+
   const navball = useCallback(() => ctrl.current?.navball() ?? null, []);
 
   const exitTo = (scene: 'spaceCenter' | 'editor') => {
@@ -64,6 +69,7 @@ export default function FlightScene() {
           }}
         />
       )}
+      {tele?.mapMode && ctrl.current && <ManeuverPanel world={ctrl.current.world} />}
       {paused && (
         <div className="fullscreen" style={{ display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.4)' }}>
           <div className="panel" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 260 }}>

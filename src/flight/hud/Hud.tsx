@@ -29,6 +29,7 @@ export interface Telemetry {
   stages: HudStage[];
   resources: { id: string; name: string; amount: number; max: number; color: string }[];
   messages: { id: number; text: string; level: 'info' | 'warn' | 'bad' }[];
+  mapMode: boolean;
 }
 
 export interface HudStage {
