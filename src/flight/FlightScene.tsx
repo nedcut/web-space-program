@@ -98,6 +98,11 @@ export default function FlightScene() {
         <AssistPanel active={tele.assist} onStart={(id) => ctrl.current?.startAssist(id)} onCancel={() => ctrl.current?.cancelAssist()} />
       )}
       {tele?.mapMode && ctrl.current && <ManeuverPanel world={ctrl.current.world} />}
+      {tele && game.get().settings.showFps && ctrl.current && (
+        <div className="mono" style={{ position: 'absolute', left: 10, bottom: 10, fontSize: 11, color: 'var(--text-dim)' }}>
+          {ctrl.current.fps.toFixed(0)} fps · {ctrl.current.world.vessels.size} vessels
+        </div>
+      )}
       {paused && (
         <div className="fullscreen" style={{ display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.4)' }}>
           <div className="panel" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 260 }}>

@@ -70,6 +70,8 @@ export class FlightController {
   private site: LaunchSite;
   private reentry = new ReentryFx();
   private reentryHeat = 0;
+  /** Smoothed frames per second (for the optional FPS readout). */
+  fps = 60;
   private raf = 0;
   private last = performance.now();
   private disposers: (() => void)[] = [];
@@ -276,6 +278,7 @@ export class FlightController {
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     this.elapsed += dt;
+    this.fps = this.fps * 0.95 + (dt > 0 ? 1 / dt : 0) * 0.05;
     this.input.update(dt);
     const s = this.input.state;
     const wv = this.world.active;
