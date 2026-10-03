@@ -7,7 +7,7 @@ const flight = new URLSearchParams(location.search).get('flight');
 if (flight) {
   import('./editor/stockCrafts').then(({ STOCK_CRAFTS }) => {
     const sc = STOCK_CRAFTS.find((c) => c.id === flight) ?? STOCK_CRAFTS[1];
-    game.set({ craft: sc.build(), scene: 'flight' });
+    game.set({ craft: sc.build(), scene: 'flight', launchPending: true });
   });
 }
 

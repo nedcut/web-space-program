@@ -22,6 +22,7 @@ import { add, cross, dot, length, normalize, scale, sub, v3, negate, type Vec3 }
 import { qRotate } from '../util/quat';
 import { sampleAtmosphere } from '../sim/atmosphere';
 import { createPlanetLayer, type PlanetLayer } from './planets';
+import { deserializeWorld, serializeWorld, saveWorldToStorage, loadWorldFromStorage, type SavedWorld } from '../game/persistence';
 import { createAssist, warpIndexFor, type AssistId } from './assist';
 import type { Autopilot } from '../game/autopilot';
 import type { GameAudio } from '../audio';
@@ -73,15 +74,20 @@ export class FlightController {
 
   constructor(
     private host: HTMLElement,
-    craft: CraftDef,
+    craft: CraftDef | null,
     preset: ScalePresetId,
     ut: number,
     quality: QualityId,
     private audio: GameAudio | null,
+    saved?: SavedWorld | null,
   ) {
-    const universe = new Universe(preset);
-    this.world = new World(universe, PART_CATALOG, ut);
-    this.world.launch(craft);
+    if (saved) {
+      this.world = deserializeWorld(saved, PART_CATALOG);
+    } else {
+      this.world = new World(new Universe(preset), PART_CATALOG, ut);
+      if (craft) this.world.launch(craft);
+    }
+    const universe = this.world.universe;
     this.input = new FlightInput();
 
     this.pipeline = new RenderPipeline({ quality: getQuality(quality), toneMapping: 'aces', exposure: 1 });
@@ -127,6 +133,8 @@ export class FlightController {
           case 'warpDown': this.world.changeWarp(-1); break;
           case 'warpStop': this.world.warp = { mode: 'rails', index: 0 }; break;
           case 'menu': this.onExit?.(); break;
+          case 'quicksave': this.quicksave(); break;
+          case 'quickload': this.onQuickload?.(); break;
           case 'toggleCamMode': this.cam.mode = this.cam.mode === 'auto' ? 'chase' : this.cam.mode === 'chase' ? 'free' : 'auto'; break;
         }
       }),
@@ -149,6 +157,25 @@ export class FlightController {
   private mapMinDistance() {
     const wv = this.world.active;
     return wv ? this.world.universe.body(wv.body).radius * 1.05 : 1e5;
+  }
+
+  onQuickload: (() => void) | null = null;
+
+  quicksave(slot = 'quicksave') {
+    try {
+      saveWorldToStorage(slot, this.world);
+      if (slot === 'quicksave') this.world.message('Quicksaved (F9 to load)');
+    } catch (e) {
+      this.world.message(`Save failed: ${(e as Error).message}`, 'bad');
+    }
+  }
+
+  snapshot(): SavedWorld {
+    return serializeWorld(this.world);
+  }
+
+  static loadSlot(slot: string) {
+    return loadWorldFromStorage(slot)?.data ?? null;
   }
 
   startAssist(id: AssistId) {

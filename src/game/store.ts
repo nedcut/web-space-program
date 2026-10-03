@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { ScalePresetId } from '../sim/bodies/scale';
 import type { CraftDef } from '../sim/vessel/types';
+import type { SavedWorld } from './persistence';
 
 export type Scene = 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking';
 export type QualityPreset = 'low' | 'medium' | 'high';
@@ -20,6 +21,10 @@ export interface GameState {
   ut: number;
   /** Craft currently loaded in the editor / being launched. */
   craft: CraftDef | null;
+  /** World to resume when entering flight (from Continue / quickload); consumed by the flight scene. */
+  resumeWorld: SavedWorld | null;
+  /** True when entering flight should launch `craft` onto the pad (Launch button), false to just resume. */
+  launchPending: boolean;
   settings: Settings;
 }
 
@@ -73,6 +78,8 @@ export const game = createStore<GameState>({
   scalePreset: 'standard',
   ut: DEFAULT_START_UT,
   craft: null,
+  resumeWorld: null,
+  launchPending: false,
   settings: loadSettings(),
 });
 

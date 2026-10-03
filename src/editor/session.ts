@@ -206,7 +206,7 @@ export class EditorSession {
     if (this.held) this.cancelHeld();
     const hasCommand = craft.parts.some((p) => CATALOG.get(p.partId)?.modules.some((m) => m.type === 'command'));
     if (!hasCommand) return this.toast('Launch blocked: the craft needs a command pod or probe core', 'bad');
-    game.set({ craft: this.currentCraft(), scene: 'flight' });
+    game.set({ craft: this.currentCraft(), scene: 'flight', launchPending: true });
   }
 
   exit() {

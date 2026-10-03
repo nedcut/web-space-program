@@ -14,7 +14,7 @@ export interface FlightInputState {
   throttle: number;
 }
 
-export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'toggleCamMode';
+export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'toggleCamMode' | 'quicksave' | 'quickload';
 
 export class FlightInput {
   readonly state: FlightInputState = { pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, throttle: 0 };
@@ -62,6 +62,8 @@ export class FlightInput {
         case 'Escape': this.emit('menu'); break;
         case 'BracketRight': this.emit('focusNext'); break;
         case 'KeyV': this.emit('toggleCamMode'); break;
+        case 'F5': this.emit('quicksave'); e.preventDefault(); break;
+        case 'F9': this.emit('quickload'); e.preventDefault(); break;
         case 'KeyZ': this.state.throttle = 1; break;
         case 'KeyX': this.state.throttle = 0; break;
       }

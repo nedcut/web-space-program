@@ -12,20 +12,34 @@ export default function FlightScene() {
   const [tele, setTele] = useState<Telemetry | null>(null);
   const [paused, setPaused] = useState(false);
 
+  const initial = useRef<ReturnType<typeof game.get>['resumeWorld']>(null);
+  const [mountKey, setMountKey] = useState(0);
+
   useEffect(() => {
     const g = game.get();
-    if (!g.craft) {
-      game.set({ scene: 'editor' });
+    const saved = g.resumeWorld;
+    const craft = g.launchPending ? g.craft : null;
+    if (!craft && !(saved && saved.activeId)) {
+      game.set({ scene: g.craft ? 'editor' : 'spaceCenter' });
       return;
     }
+    if (mountKey === 0) initial.current = saved;
     const audio = new GameAudio();
     audio.setMasterVolume(g.settings.masterVolume);
     const resume = () => audio.resume();
     window.addEventListener('pointerdown', resume, { once: true });
     window.addEventListener('keydown', resume, { once: true });
-    const c = new FlightController(host.current!, g.craft, g.scalePreset, g.ut, g.settings.quality, audio);
+    const c = new FlightController(host.current!, craft, g.scalePreset, g.ut, g.settings.quality, audio, saved);
+    if (craft && saved) c.world.launch(craft);
+    game.set({ launchPending: false });
     c.input.invertPitch = g.settings.invertPitch;
     c.onExit = () => setPaused((p) => !p);
+    c.onQuickload = () => {
+      const data = FlightController.loadSlot('quicksave');
+      if (!data) return c.world.message('No quicksave yet (F5 to save)', 'warn');
+      game.set({ resumeWorld: data, scalePreset: data.preset, launchPending: false });
+      setMountKey((k) => k + 1);
+    };
     ctrl.current = c;
     const unsub = c.subscribe(setTele);
     (window as unknown as { __flight?: FlightController }).__flight = c;
@@ -35,7 +49,7 @@ export default function FlightScene() {
       audio.dispose();
       ctrl.current = null;
     };
-  }, []);
+  }, [mountKey]);
 
   useEffect(() => {
     if (ctrl.current) ctrl.current.paused = paused;
@@ -43,10 +57,18 @@ export default function FlightScene() {
 
   const navball = useCallback(() => ctrl.current?.navball() ?? null, []);
 
+  /** Leave flight: keep the universe (vessels stay where they are) and autosave. */
   const exitTo = (scene: 'spaceCenter' | 'editor') => {
     const c = ctrl.current;
-    if (c) game.set({ ut: c.world.ut });
+    if (c) {
+      c.quicksave('autosave');
+      game.set({ ut: c.world.ut, resumeWorld: c.snapshot() });
+    }
     game.set({ scene });
+  };
+  /** Revert: throw away this flight and return to the editor with the universe as it was before launch. */
+  const revert = () => {
+    game.set({ resumeWorld: initial.current, ut: initial.current?.ut ?? game.get().ut, scene: 'editor' });
   };
 
   return (
@@ -79,7 +101,8 @@ export default function FlightScene() {
           <div className="panel" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 260 }}>
             <div className="label" style={{ textAlign: 'center' }}>Paused</div>
             <button className="btn primary" onClick={() => setPaused(false)}>Resume</button>
-            <button className="btn" onClick={() => exitTo('editor')}>Revert to editor</button>
+            <button className="btn" onClick={revert}>Revert to editor</button>
+            <button className="btn" onClick={() => ctrl.current?.quicksave()}>Quicksave (F5)</button>
             <button className="btn" onClick={() => exitTo('spaceCenter')}>Space Center</button>
           </div>
         </div>

@@ -1,7 +1,14 @@
 import { useState } from 'react';
-import { game, updateSettings, useGame, type QualityPreset } from '../game/store';
+import { game, updateSettings, useGame, DEFAULT_START_UT, type QualityPreset } from '../game/store';
 import { SCALE_PRESETS, type ScalePresetId } from '../sim/bodies/scale';
 import { MenuBackdrop } from './MenuBackdrop';
+import { hasSave, loadWorldFromStorage } from '../game/persistence';
+
+function continueGame() {
+  const save = loadWorldFromStorage('autosave') ?? loadWorldFromStorage('quicksave');
+  if (!save) return game.set({ scene: 'spaceCenter' });
+  game.set({ resumeWorld: save.data, scalePreset: save.data.preset, ut: save.data.ut, launchPending: false, scene: 'spaceCenter' });
+}
 
 const SCALE_INFO: Record<ScalePresetId, { label: string; blurb: string }> = {
   standard: { label: 'Standard', blurb: '1/10 scale. Forgiving and fun — orbit needs about 3.4 km/s.' },
@@ -23,7 +30,7 @@ export function MainMenu() {
         {panel === 'root' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: 260 }}>
             <button className="btn primary" onClick={() => setPanel('new')}>New Sandbox</button>
-            <button className="btn" onClick={() => game.set({ scene: 'spaceCenter' })}>Continue</button>
+            <button className="btn" onClick={continueGame} disabled={!hasSave('autosave') && !hasSave('quicksave')}>Continue</button>
             <button className="btn" onClick={() => setPanel('settings')}>Settings</button>
           </div>
         )}
@@ -53,7 +60,7 @@ export function MainMenu() {
               <button className="btn ghost" onClick={() => setPanel('root')}>Back</button>
               <button
                 className="btn primary"
-                onClick={() => game.set({ scalePreset: scale, saveId: `sandbox-${Date.now()}`, scene: 'spaceCenter' })}
+                onClick={() => game.set({ scalePreset: scale, saveId: `sandbox-${Date.now()}`, resumeWorld: null, ut: DEFAULT_START_UT, scene: 'spaceCenter' })}
               >
                 Start
               </button>

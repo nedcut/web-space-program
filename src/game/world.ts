@@ -169,6 +169,15 @@ export class World {
     this.predictRailsEvent(wv);
   }
 
+  /** After deserialization: recompute derived rails data and resync body-fixed vessels to the current time. */
+  restoreAfterLoad() {
+    for (const wv of this.vessels.values()) {
+      if (wv.mode === 'rails' && wv.orbit) this.predictRailsEvent(wv);
+      if ((wv.mode === 'landedRails' || wv.mode === 'prelaunch') && wv.fixed) this.syncFixed(wv, this.ut);
+    }
+    this.trajectoryCache = null;
+  }
+
   private predictRailsEvent(wv: WorldVessel) {
     const o = wv.orbit!;
     const T = period(o);
