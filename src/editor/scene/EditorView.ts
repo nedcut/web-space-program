@@ -4,7 +4,7 @@ import { game } from '../../game/store';
 import type { PartInstance } from '../../sim/vessel/types';
 import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../../util/quat';
 import { add, sub, v3, type Vec3 } from '../../util/vec3';
-import { alignNodes, freeAttachNodes, type WorldAttachNode } from '../core';
+import { alignNodes, freeAttachNodes, mirrorPosition, mirrorRotation, type WorldAttachNode } from '../core';
 import { CATALOG, type EditorSession, type Placement, type SessionView } from '../session';
 import { surfaceTransform } from '../surface';
 import { buildHangar, HANGAR, type Hangar } from './hangar';
@@ -69,6 +69,10 @@ export class EditorView {
   private nodeGroup = new THREE.Group();
   private com: THREE.Group;
   private cot: THREE.Group;
+  private col: THREE.Group;
+  /** Horizontal building (SPH): the craft frame is turned so craft +Y (nose) points along world -Z, +Z up. */
+  private horizontal = false;
+  private shiftZ = 0;
   private partObjs = new Map<number, { obj: THREE.Object3D; partId: string }>();
   private raf = 0;
   private last = performance.now();
@@ -158,7 +162,8 @@ export class EditorView {
 
     this.com = this.makeCoM();
     this.cot = this.makeCoT();
-    this.craftGroup.add(this.com, this.cot);
+    this.col = this.makeCoL();
+    this.craftGroup.add(this.com, this.cot, this.col);
 
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(container);
@@ -183,9 +188,10 @@ export class EditorView {
   frameCraft(instant = false) {
     const s = this.session.getSnapshot().stats;
     const empty = !s.partCount;
-    const h = empty ? 7 : s.height;
-    const w = empty ? 7 : Math.max(s.width, s.depth);
-    const centreY = empty ? this.lift : this.lift + (s.bounds.min.y + s.bounds.max.y) / 2;
+    // Vertical extent in the hall: craft Y (VAB) or craft Z (SPH, built horizontally).
+    const h = empty ? 7 : this.horizontal ? s.depth : s.height;
+    const w = empty ? 7 : this.horizontal ? Math.max(s.width, s.height) : Math.max(s.width, s.depth);
+    const centreY = empty ? this.lift : this.lift + (this.horizontal ? (s.bounds.min.z + s.bounds.max.z) / 2 : (s.bounds.min.y + s.bounds.max.y) / 2);
     const fovV = (this.camera.fov * DEG) / 2;
     const fovH = Math.atan(Math.tan(fovV) * this.camera.aspect);
     const needV = (h / 2 + 1.2) / Math.tan(fovV);
@@ -208,6 +214,11 @@ export class EditorView {
   // ------------------------------------------------------------------ session sync
   private sync() {
     const snap = this.session.getSnapshot();
+    if (snap.craftType === 'SPH' !== this.horizontal) {
+      this.horizontal = snap.craftType === 'SPH';
+      this.craftGroup.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.horizontal ? -Math.PI / 2 : 0);
+      this.lastCraft = null;
+    }
     if (snap.craft !== this.lastCraft) {
       this.lastCraft = snap.craft;
       this.syncCraft(snap);
@@ -232,6 +243,7 @@ export class EditorView {
     this.applyHighlights();
     this.com.visible = snap.showCoM && snap.stats.partCount > 0;
     this.cot.visible = snap.showCoT && !!snap.stats.centreOfThrust;
+    this.col.visible = snap.showCoL && !!snap.stats.centreOfLift;
   }
 
   private syncCraft(snap: SessionView) {
@@ -254,19 +266,27 @@ export class EditorView {
 
     // Keep the craft's lowest point above the floor; shift the camera with it so the view doesn't jump.
     const s = snap.stats;
-    let newLift = s.partCount ? Math.max(3, 1.0 - s.bounds.min.y) : 3;
+    // Lowest point (craft -Y in the VAB, craft -Z in the SPH where wheels hang below) stays above the floor.
+    const low = this.horizontal ? s.bounds.min.z : s.bounds.min.y;
+    let newLift = s.partCount ? Math.max(this.horizontal ? 0.6 : 3, (this.horizontal ? 0.3 : 1.0) - low) : 3;
     // While something is held, never lower the craft (the held assembly lives in craft space too).
     if (snap.held) newLift = Math.max(newLift, this.lift);
     const d = newLift - this.lift;
     if (Math.abs(d) > 1e-6) { this.lift = newLift; this.targetY += d; this.gTargetY += d; }
     this.craftGroup.position.y = this.lift;
+    // SPH: centre the fuselage over the turntable (craft Y runs along world -Z); not while holding parts.
+    if (!snap.held) this.shiftZ = this.horizontal && s.partCount ? (s.bounds.min.y + s.bounds.max.y) / 2 : 0;
+    this.craftGroup.position.z = this.shiftZ;
+    this.craftGroup.updateMatrixWorld(true);
 
-    // CoM / CoT
+    // CoM / CoT / CoL
     toV(s.centreOfMass, this.com.position);
     if (s.centreOfThrust) toV(s.centreOfThrust, this.cot.position);
-    const scale = THREE.MathUtils.clamp(s.height / 14, 0.6, 2.2);
+    if (s.centreOfLift) toV(s.centreOfLift, this.col.position);
+    const scale = THREE.MathUtils.clamp((this.horizontal ? Math.max(s.height, s.width) : s.height) / 14, 0.6, 2.2);
     this.com.scale.setScalar(scale);
     this.cot.scale.setScalar(scale);
+    this.col.scale.setScalar(scale);
     this.buildNodeMarkers();
     if (snap.craft.parts.length > 0 && this.prevPartCount === 0 && this.lastLoad >= 0) this.frameCraft();
     this.prevPartCount = snap.craft.parts.length;
@@ -358,7 +378,7 @@ export class EditorView {
           // Held-space root rotation is R_acc * q_root; map it onto the surface orientation.
           D = qNormalize(qMul(t.rotation, qConj(root.rotation)));
           T = sub(t.position, qRotate(D, root.position));
-          placement = { kind: 'surface', parentUid: hit.uid, position: t.position, rotation: t.rotation };
+          placement = { kind: 'surface', parentUid: hit.uid, position: t.position, rotation: t.rotation, point: hit.point, normal: hit.normal };
           if (snap.held.kind === 'new') ghosts = this.counterpartGhosts(hit.uid, D, T, true);
         }
       }
@@ -394,6 +414,13 @@ export class EditorView {
         const delta = qMul(target.rotation, qConj(parent.rotation));
         out.push({ q: qNormalize(qMul(delta, D)), p: add(target.position, qRotate(delta, sub(T, parent.position))) });
       }
+    } else if (surface && snap.symmetryMode === 'mirror') {
+      if (snap.symmetry > 1) {
+        // Mirror across craft YZ (the held new part sits at the held-group origin with rotation R_h).
+        const rh = this.heldParts[0]?.rotation ?? qIdentity();
+        const full = mirrorRotation(qMul(D, rh));
+        out.push({ q: qNormalize(qMul(full, qConj(rh))), p: mirrorPosition(T) });
+      }
     } else if (surface && snap.symmetry > 1) {
       for (let i = 1; i < snap.symmetry; i++) {
         const delta = qFromAxisAngle(UP, (2 * Math.PI * i) / snap.symmetry);
@@ -428,7 +455,7 @@ export class EditorView {
   }
 
   private toScreen(p: Vec3, out: THREE.Vector2): boolean {
-    const v = toV(p).add(this.craftGroup.position).project(this.camera);
+    const v = this.craftGroup.localToWorld(toV(p)).project(this.camera);
     if (v.z > 1) return false;
     const el = this.renderer.domElement;
     out.set(((v.x + 1) / 2) * el.clientWidth, ((1 - v.y) / 2) * el.clientHeight);
@@ -444,7 +471,7 @@ export class EditorView {
     const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(n, new THREE.Vector3(0, 0, 0));
     const hit = new THREE.Vector3();
     if (!this.raycaster.ray.intersectPlane(plane, hit)) hit.set(0, this.targetY, 0);
-    hit.sub(this.craftGroup.position);
+    this.craftGroup.worldToLocal(hit);
     return fromV(hit);
   }
 
@@ -468,9 +495,12 @@ export class EditorView {
     if (!part) return null;
     const def = CATALOG.get(part.partId)!;
     if (!def.allowSurfaceAttachChildren) return null;
-    const pw = pick.hit.point.clone().sub(this.craftGroup.position);
+    const pw = this.craftGroup.worldToLocal(pick.hit.point.clone());
     let normal = new THREE.Vector3(0, 1, 0);
-    if (pick.hit.face) normal = pick.hit.face.normal.clone().applyMatrix3(new THREE.Matrix3().getNormalMatrix(pick.hit.object.matrixWorld)).normalize();
+    if (pick.hit.face) {
+      normal = pick.hit.face.normal.clone().applyMatrix3(new THREE.Matrix3().getNormalMatrix(pick.hit.object.matrixWorld)).normalize();
+      normal.applyQuaternion(this.craftGroup.quaternion.clone().invert());
+    }
     let point = fromV(pw);
     let n = fromV(normal);
     if (def.shape.kind === 'cylinder') {
@@ -572,6 +602,23 @@ export class EditorView {
     ring.rotation.x = Math.PI / 2;
     g.add(shaft, head, ring);
     g.traverse((o) => { o.renderOrder = 20; o.userData.noTint = true; });
+    g.visible = false;
+    return g;
+  }
+
+  /** Centre of lift: blue ball with an arrow along the lift direction (craft +Z = "up" for aircraft). */
+  private makeCoL(): THREE.Group {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: 0x3fa9ff, depthTest: false, transparent: true, opacity: 0.95 });
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.26, 20, 14), mat);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.3, 10), mat);
+    shaft.rotation.x = Math.PI / 2;
+    shaft.position.z = 0.75;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 14), mat);
+    head.rotation.x = Math.PI / 2;
+    head.position.z = 1.6;
+    g.add(ball, shaft, head);
+    g.traverse((o) => { o.renderOrder = 21; o.userData.noTint = true; });
     g.visible = false;
     return g;
   }
@@ -679,6 +726,7 @@ export class EditorView {
       return;
     }
     if (k === 'x') { s.cycleSymmetry(e.shiftKey ? -1 : 1); return; }
+    if (k === 'r') { s.toggleSymmetryMode(); return; }
     if (k === 'f') { this.frameCraft(); return; }
     if (e.altKey) e.preventDefault();
     if (!held) return;
@@ -689,7 +737,13 @@ export class EditorView {
     const axes: Record<string, [THREE.Vector3, number]> = {
       w: [right, -step], s: [right, step], a: [fwd, -step], d: [fwd, step], q: [new THREE.Vector3(0, 1, 0), step], e: [new THREE.Vector3(0, 1, 0), -step],
     };
-    if (axes[k]) { e.preventDefault(); const [ax, ang] = axes[k]; s.rotateHeld(fromV(ax), ang); return; }
+    if (axes[k]) {
+      e.preventDefault();
+      const [ax, ang] = axes[k];
+      // Camera axes are in the hall (world); held rotations are in the craft frame.
+      s.rotateHeld(fromV(ax.clone().applyQuaternion(this.craftGroup.quaternion.clone().invert())), ang);
+      return;
+    }
     if (k === ' ') { e.preventDefault(); s.resetHeldRotation(); }
   };
 

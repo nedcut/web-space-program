@@ -3,7 +3,7 @@ import type { CraftDef, PartDef } from '../sim/vessel/types';
 import { qRotate } from '../util/quat';
 import { v3, type Vec3 } from '../util/vec3';
 import { CraftEditor, type PartCatalog } from './core';
-import { coreSurfaceArgs, surfaceTransform } from './surface';
+import { surfaceTransform } from './surface';
 
 /**
  * Pre-built stock crafts, assembled programmatically through CraftEditor so attach positions, symmetry
@@ -16,12 +16,17 @@ export interface StockCraft {
   build(): CraftDef;
 }
 
+type Sym = 1 | 2 | 3 | 4 | 6 | 8 | 'mirror';
+
 class Builder {
   readonly ed: CraftEditor;
-  constructor(readonly catalog: PartCatalog, name: string, description: string) {
-    this.ed = new CraftEditor(catalog, { name, description, type: 'VAB', parts: [], version: 1 });
+  constructor(readonly catalog: PartCatalog, name: string, description: string, type: CraftDef['type'] = 'VAB') {
+    this.ed = new CraftEditor(catalog, { name, description, type, parts: [], version: 1 });
   }
-  private def(id: string): PartDef {
+  part(uid: number) {
+    return this.ed.craft.parts.find((x) => x.uid === uid)!;
+  }
+  def(id: string): PartDef {
     return this.catalog.get(id)!;
   }
   root(id: string): number {
@@ -36,7 +41,7 @@ class Builder {
    * Surface-attach `count` copies of `id` around a vertical cylindrical parent, at `dy` metres from the
    * parent's centre and starting azimuth `deg` (0 = +Z).
    */
-  radial(parent: number, id: string, count: 1 | 2 | 3 | 4 | 6 | 8, dy: number, deg = 0): number {
+  radial(parent: number, id: string, count: Sym, dy: number, deg = 0): number {
     const p = this.ed.craft.parts.find((x) => x.uid === parent)!;
     const pd = this.def(p.partId);
     let r = 0.5;
@@ -59,12 +64,11 @@ class Builder {
     const point = add(p.position, qRotate(p.rotation, v3(0, dy, hz)));
     return this.surface(parent, id, point, qRotate(p.rotation, v3(0, 0, 1)), 1);
   }
-  private surface(parent: number, id: string, point: Vec3, normal: Vec3, count: 1 | 2 | 3 | 4 | 6 | 8): number {
-    const def = this.def(id);
-    const t = surfaceTransform(def, point, normal, v3(0, 1, 0));
-    const args = coreSurfaceArgs(def, t.position, t.rotation);
-    this.ed.setSymmetry({ mode: 'radial', count });
-    return this.ed.surfaceAttachAtHit(id, parent, args.point, args.normal, t.rotation).uid;
+  /** Surface-attach at a craft-frame point/normal on `parent` (+Y of the new part kept along craft +Y). */
+  surface(parent: number, id: string, point: Vec3, normal: Vec3, count: Sym): number {
+    const t = surfaceTransform(this.def(id), point, normal, v3(0, 1, 0));
+    this.ed.setSymmetry(count === 'mirror' ? { mode: 'mirror' } : { mode: 'radial', count });
+    return this.ed.surfaceAttachAtHit(id, parent, point, normal, t.rotation).uid;
   }
   done(): CraftDef {
     return this.ed.craft;
@@ -132,8 +136,31 @@ export function buildMoonLander(catalog: PartCatalog = PART_CATALOG): CraftDef {
   return b.done();
 }
 
+/**
+ * Small jet: Wren cockpit, one fuselage tank, Kittiwake turbofan, Broadleaf wings, Hawktail tail surfaces,
+ * steerable nose gear and braked main gear under the wings. Takes off at ~65 m/s.
+ */
+export function buildSwift(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Swift Jet', 'Single-seat turbofan trainer. Space to start the engine, full throttle, pull up gently at 65 m/s.', 'SPH');
+  const cockpit = b.root('cockpit-wren');
+  const fuse = b.stack(cockpit, 'fuse-spar');
+  const jet = b.stack(fuse, 'jet-kittiwake');
+  b.radial(fuse, 'intake-gill', 'mirror', 0.75, 60);
+  const wing = b.radial(fuse, 'wing-broadleaf', 'mirror', -0.45, 90);
+  b.radial(jet, 'tail-hawk', 'mirror', -0.55, 90);
+  b.radial(jet, 'tail-hawk', 1, -0.45, 0);
+  b.radial(cockpit, 'gear-trundle', 1, -0.45, 180);
+  // Main gear under the wings, just behind the centre of mass.
+  const w = b.part(wing);
+  const wd = b.def('wing-broadleaf');
+  const t = wd.shape.kind === 'box' ? wd.shape.size.x : 0.1;
+  b.surface(wing, 'gear-bogie', v3(w.position.x - 1.5, w.position.y - 0.25, w.position.z - t / 2), v3(0, 0, -1), 'mirror');
+  return b.done();
+}
+
 export const STOCK_CRAFTS: StockCraft[] = [
   { id: 'stock-kestrel', name: 'Kestrel Sounding Rocket', blurb: 'Suborbital test hop · 1 stage + capsule', build: () => buildSoundingRocket() },
   { id: 'stock-meridian', name: 'Meridian Orbiter', blurb: 'Two stages to low orbit and back', build: () => buildOrbiter() },
   { id: 'stock-selene', name: 'Selene Lunar Lander', blurb: 'Three stages · land on the Moon and return', build: () => buildMoonLander() },
+  { id: 'stock-swift', name: 'Swift Jet', blurb: 'Runway takeoff · turbofan trainer aircraft', build: () => buildSwift() },
 ];

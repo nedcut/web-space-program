@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CraftDef, PartDef, PartModule } from '../src/sim/vessel/types';
 import { qFromAxisAngle, qIdentity, qRotate } from '../src/util/quat';
-import { distance, sub, v3, type Vec3 } from '../src/util/vec3';
+import { add, distance, sub, v3, type Vec3 } from '../src/util/vec3';
 import { CraftEditor, autoStage, craftStats, deserializeCraft, findBestSnap, freeAttachNodes, getStageList, insertStage, mirrorPosition, mirrorRotation, moveToStage, removeEmptyStages, serializeCraft, snapAngle, snapRotation, surfacePlacement, validateCraft } from '../src/editor/core';
 
 const engine: PartModule = { type: 'engine', maxThrustVac: 100, ispVac: 300, ispAsl: 250, propellants: { liquidFuel: 1 }, minThrottle: 0, throttleable: true, gimbalRange: 0, thrustDirection: v3(0, 1, 0), spoolTime: 0, plume: 'kerolox', ignitions: -1 };
@@ -109,14 +109,23 @@ describe('snapping and surface placement', () => {
     const held = { rootUid: 2, parts: [{ uid: 2, partId: 'tank', position: v3(), rotation: qIdentity() }] };
     expect(findBestSnap(held, ed.craft, defs, 1)!.parent.id).toBe('opposed');
   });
-  it('anchors local -X extent to the supplied hit and aligns inward', () => {
+  it('anchors the local -Z mount face to the supplied hit and aligns inward', () => {
     const d = catalog().get('tank')!; const point = v3(2, 3, 4), normal = v3(0, 0, 1);
     const placement = surfacePlacement(d, point, normal, qIdentity());
-    close(sub(placement.position, qRotate(placement.rotation, v3(0.5, 0, 0))), point);
-    close(qRotate(placement.rotation, v3(-1, 0, 0)), v3(0, 0, -1));
+    close(sub(placement.position, qRotate(placement.rotation, v3(0, 0, 0.5))), point);
+    close(qRotate(placement.rotation, v3(0, 0, -1)), v3(0, 0, -1));
     const box = { ...d, shape: { kind: 'box' as const, size: v3(4, 2, 2) } };
-    close(surfacePlacement(box, v3(), v3(1, 0, 0), qIdentity()).position, v3(2, 0, 0));
+    close(surfacePlacement(box, v3(), v3(1, 0, 0), qIdentity()).position, v3(1, 0, 0));
     expect(() => surfacePlacement(d, point, v3(), qIdentity())).toThrow();
+  });
+  it('uses the srf node (catalogue convention) when the part has one', () => {
+    const d = { ...catalog().get('wing')!, attachNodes: [{ id: 'srf', position: v3(0, 0.2, -1.5), direction: v3(0, 0, -1), size: 0 }] };
+    // Side of a fuselage: outward normal +X, keep +Y (nose) up.
+    const p = surfacePlacement(d, v3(0.6, 1, 0), v3(1, 0, 0), qIdentity());
+    close(add(p.position, qRotate(p.rotation, v3(0, 0.2, -1.5))), v3(0.6, 1, 0));
+    close(qRotate(p.rotation, v3(0, 0, 1)), v3(1, 0, 0));
+    close(qRotate(p.rotation, v3(0, 1, 0)), v3(0, 1, 0));
+    close(p.position, v3(2.1, 0.8, 0));
   });
   it('reattaches a held surface assembly without changing descendant spacing', () => {
     const { editor: ed, uids } = rocket(); ed.detachSubtree(uids[4]);
@@ -160,8 +169,8 @@ describe('symmetry and history', () => {
     ed.surfaceAttach('wing', root.uid, v3(0.5, 0, 0.25), v3(1, 0, 0));
     const [a, b] = ed.craft.parts.slice(1);
     close(b.position, mirrorPosition(a.position));
-    close(sub(b.position, qRotate(b.rotation, v3(0.5, 0, 0))), mirrorPosition(sub(a.position, qRotate(a.rotation, v3(0.5, 0, 0)))));
-    close(qRotate(b.rotation, v3(-1, 0, 0)), v3(1, 0, 0));
+    close(sub(b.position, qRotate(b.rotation, v3(0, 0, 0.5))), mirrorPosition(sub(a.position, qRotate(a.rotation, v3(0, 0, 0.5)))));
+    close(qRotate(b.rotation, v3(0, 0, -1)), v3(1, 0, 0));
   });
   it('mirrors descendant surface contacts on symmetric parents', () => {
     const ed = new CraftEditor(catalog(), { name: 'Plane', type: 'SPH', parts: [], version: 1 });
@@ -171,7 +180,7 @@ describe('symmetry and history', () => {
     const [a, b] = ed.craft.parts.filter(p => p.partId === 'wing');
     expect(a.parent).not.toBe(b.parent);
     close(b.position, mirrorPosition(a.position));
-    close(sub(b.position, qRotate(b.rotation, v3(0.5, 0, 0))), mirrorPosition(sub(a.position, qRotate(a.rotation, v3(0.5, 0, 0)))));
+    close(sub(b.position, qRotate(b.rotation, v3(0, 0, 0.5))), mirrorPosition(sub(a.position, qRotate(a.rotation, v3(0, 0, 0.5)))));
   });
   it('supports all requested radial counts and rotates about an off-origin parent', () => {
     for (const count of [1, 2, 3, 4, 6, 8] as const) {

@@ -64,14 +64,29 @@ export function shapeHalfExtents(def: PartDef): Vec3 {
   const r = Math.max(def.shape.radiusTop, def.shape.radiusBottom);
   return v3(r, def.shape.height / 2, r);
 }
-/** Surface anchor is local (-extentX,0,0), with outward direction -X.
- * Placement points that outward direction into the parent (-hit normal).
- * rotation is a preferred craft-frame orientation; alignment preserves its roll. */
+/**
+ * Surface mount of a part (catalogue convention, see src/data/parts.ts): the 'srf' attach node — the mount
+ * face, whose direction points into the parent — or, for parts without one, the centre of the local -Z face.
+ * Surface parts extend outward along +Z with +Y kept along the parent's "up".
+ */
+export function surfaceMount(def: PartDef): { position: Vec3; direction: Vec3 } {
+  const srf = def.attachNodes.find(n => n.id === 'srf');
+  if (srf) return { position: srf.position, direction: normalize(srf.direction) };
+  return { position: v3(0, 0, -shapeHalfExtents(def).z), direction: v3(0, 0, -1) };
+}
+/** Place `def` so its surface mount sits on `point` with the mount direction pointing into the parent
+ * (-normal). `rotation` is a preferred craft-frame orientation; the minimal alignment preserves its roll. */
 export function surfacePlacement(def: PartDef, point: Vec3, normal: Vec3, rotation: Quat): Transform {
   if (dot(normal, normal) < 1e-12) throw new Error('Surface normal must be nonzero');
-  const correction = qFromTo(normalize(qRotate(rotation, v3(-1, 0, 0))), negate(normalize(normal)));
+  const mount = surfaceMount(def);
+  const correction = qFromTo(normalize(qRotate(rotation, mount.direction)), negate(normalize(normal)));
   const aligned = qNormalize(qMul(correction, rotation));
-  return { position: sub(point, qRotate(aligned, v3(-shapeHalfExtents(def).x, 0, 0))), rotation: aligned };
+  return { position: sub(point, qRotate(aligned, mount.position)), rotation: aligned };
+}
+/** Craft-frame mount point and outward surface normal of a surface-attached part instance. */
+export function surfaceContact(part: PartInstance, def: PartDef): { point: Vec3; normal: Vec3 } {
+  const mount = surfaceMount(def);
+  return { point: add(part.position, qRotate(part.rotation, mount.position)), normal: negate(qRotate(part.rotation, mount.direction)) };
 }
 export const snapAngle = (angle: number, increment = Math.PI / 12): number => {
   if (!Number.isFinite(angle) || !Number.isFinite(increment) || increment <= 0) throw new Error('Invalid snap angle');
@@ -93,6 +108,11 @@ export function partBounds(part: PartInstance, def: PartDef): { min: Vec3; max: 
   const h = shapeHalfExtents(def);
   const points: Vec3[] = [];
   for (const x of [-h.x, h.x]) for (const y of [-h.y, h.y]) for (const z of [-h.z, h.z]) points.push(add(part.position, qRotate(part.rotation, v3(x, y, z))));
+  // Deployed wheels hang outside the (stowed) part shape.
+  for (const m of def.modules) if (m.type === 'wheel') {
+    const c = m.wheelCenter, r = m.radius;
+    for (const d of [v3(r, 0, 0), v3(-r, 0, 0), v3(0, r, 0), v3(0, -r, 0), v3(0, 0, r), v3(0, 0, -r)]) points.push(add(part.position, qRotate(part.rotation, add(c, d))));
+  }
   return {
     min: v3(Math.min(...points.map(p => p.x)), Math.min(...points.map(p => p.y)), Math.min(...points.map(p => p.z))),
     max: v3(Math.max(...points.map(p => p.x)), Math.max(...points.map(p => p.y)), Math.max(...points.map(p => p.z))),

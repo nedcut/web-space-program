@@ -68,7 +68,8 @@ export default function EditorScene() {
             <Hint k="W S · A D · Q E">rotate</Hint>
             <Hint k="Shift">fine</Hint>
             <Hint k="Space">reset</Hint>
-            <Hint k="X">symmetry ×{view.symmetry}</Hint>
+            <Hint k="X">{view.symmetryMode === 'mirror' ? (view.symmetry > 1 ? 'mirror on' : 'mirror off') : `symmetry ×${view.symmetry}`}</Hint>
+            <Hint k="R">radial / mirror</Hint>
             <Hint k="Alt">no surface</Hint>
             <Hint k="Esc">cancel</Hint>
             <Hint k="Del">discard</Hint>
