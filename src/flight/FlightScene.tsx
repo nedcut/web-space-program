@@ -1,3 +1,5 @@
+import { openProgram, saveProgram } from '../game/program';
+import { SciencePanel } from './hud/SciencePanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { game } from '../game/store';
 import { FlightController } from './controller';
@@ -35,8 +37,7 @@ export default function FlightScene() {
     window.addEventListener('keydown', resume, { once: true });
     let c: FlightController;
     try {
-      c = new FlightController(host.current!, craft, g.scalePreset, g.ut, g.settings.quality, audio, saved);
-      if (craft && saved) c.world.launch(craft);
+      c = new FlightController(host.current!, craft, g.scalePreset, g.ut, g.settings.quality, audio, saved, g.mode);
     } catch (e) {
       audio.dispose();
       setError((e as Error).message);
@@ -62,7 +63,7 @@ export default function FlightScene() {
     c.onQuickload = () => {
       const data = FlightController.loadSlot('quicksave');
       if (!data) return c.world.message('No quicksave yet (F5 to save)', 'warn');
-      game.set({ resumeWorld: data, scalePreset: data.preset, launchPending: false });
+      game.set({ resumeWorld: data, mode: data.mode ?? 'sandbox', scalePreset: data.preset, launchPending: false });
       setMountKey((k) => k + 1);
     };
     ctrl.current = c;
@@ -94,13 +95,15 @@ export default function FlightScene() {
     const c = ctrl.current;
     if (c) {
       c.quicksave('autosave');
-      game.set({ ut: c.world.ut, resumeWorld: c.snapshot() });
+      game.set({ ut: c.world.ut, mode: c.world.mode, resumeWorld: c.snapshot() });
     }
     game.set({ scene });
   };
   /** Revert: throw away this flight and return to the editor with the universe as it was before launch. */
   const revert = () => {
-    game.set({ resumeWorld: initial.current, ut: initial.current?.ut ?? game.get().ut, scene: 'editor' });
+    game.set({ resumeWorld: initial.current, mode: initial.current?.mode ?? game.get().mode, ut: initial.current?.ut ?? game.get().ut, launchPending: false });
+    saveProgram(openProgram());
+    game.set({ scene: 'editor' });
   };
 
   if (error) {
@@ -109,7 +112,7 @@ export default function FlightScene() {
         <div className="panel" style={{ padding: 24, maxWidth: 420 }}>
           <div className="label" style={{ color: 'var(--bad)' }}>Could not start flight</div>
           <p style={{ color: 'var(--text-dim)' }}>{error}</p>
-          <button className="btn" onClick={() => game.set({ scene: 'spaceCenter', resumeWorld: null })}>Back to Space Center</button>
+          <button className="btn" onClick={() => game.set({ scene: 'spaceCenter', launchPending: false })}>Back to Space Center</button>
         </div>
       </div>
     );
@@ -140,6 +143,7 @@ export default function FlightScene() {
           }}
         />
       )}
+      {tele && ctrl.current && !tele.mapMode && <SciencePanel world={ctrl.current.world} paused={paused} />}
       {tele && ctrl.current && !tele.mapMode && !tele.eva && !tele.noControl && (
         <AssistPanel active={tele.assist} onStart={(id) => ctrl.current?.startAssist(id)} onCancel={() => ctrl.current?.cancelAssist()} />
       )}
@@ -155,7 +159,7 @@ export default function FlightScene() {
             <div className="label" style={{ textAlign: 'center', color: lost ? 'var(--bad)' : undefined }}>{lost ? 'Vessel lost' : 'Paused'}</div>
             {!lost && <button className="btn primary" onClick={() => setPaused(false)}>Resume</button>}
             {lost && <button className="btn primary" onClick={() => ctrl.current?.onQuickload?.()}>Load quicksave</button>}
-            {ctrl.current?.world.active && ctrl.current.world.active.body === 'earth' && ctrl.current.world.active.state.situation !== 'flying' && ctrl.current.world.active.mode !== 'prelaunch' && (
+            {ctrl.current?.world.active && ctrl.current.world.active.body === 'earth' && (ctrl.current.world.active.mode === 'prelaunch' || ctrl.current.world.active.state.situation !== 'flying') && (
               <button className="btn" onClick={() => { ctrl.current?.world.recoverActive(); exitTo('spaceCenter'); }}>Recover vessel</button>
             )}
             <button className="btn" onClick={revert}>Revert to editor</button>

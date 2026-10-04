@@ -227,7 +227,9 @@ export type PartModule =
   | { type: 'heatShield'; ablationRate: number; maxTemp: number }
   | { type: 'fairing'; ejectionImpulse: number }
   | { type: 'light' }
-  | { type: 'battery' };
+  | { type: 'battery' }
+  | { type: 'science'; experiment: string }
+  | { type: 'antenna'; transmission: number };
 
 export interface PartDef {
   id: string;

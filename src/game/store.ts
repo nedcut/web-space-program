@@ -1,9 +1,10 @@
+import type { GameMode } from '../sim/science/progression';
 import { useSyncExternalStore } from 'react';
 import type { ScalePresetId } from '../sim/bodies/scale';
 import type { CraftDef } from '../sim/vessel/types';
 import type { SavedWorld } from './persistence';
 
-export type Scene = 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking';
+export type Scene = 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking' | 'research' | 'missions';
 export type QualityPreset = 'low' | 'medium' | 'high';
 
 export interface Settings {
@@ -15,6 +16,7 @@ export interface Settings {
 
 export interface GameState {
   scene: Scene;
+  mode: GameMode;
   saveId: string | null;
   scalePreset: ScalePresetId;
   /** Universal time, seconds since J2000. */
@@ -65,7 +67,7 @@ export const DEFAULT_START_UT = (Date.UTC(2030, 6, 20, 12) - Date.UTC(2000, 0, 1
 function initialScene(): Scene {
   try {
     const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('scene') : null;
-    if (q && ['menu', 'spaceCenter', 'editor', 'flight', 'tracking'].includes(q)) return q as Scene;
+    if (q && ['menu', 'spaceCenter', 'editor', 'flight', 'tracking', 'research', 'missions'].includes(q)) return q as Scene;
   } catch {
     /* no location */
   }
@@ -74,6 +76,7 @@ function initialScene(): Scene {
 
 export const game = createStore<GameState>({
   scene: initialScene(),
+  mode: 'sandbox',
   saveId: null,
   scalePreset: 'standard',
   ut: DEFAULT_START_UT,

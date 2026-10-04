@@ -1,3 +1,6 @@
+import { useGame } from '../../game/store';
+import { partUnlocked } from '../../data/technology';
+import { newProgression } from '../../sim/science/progression';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { PART_DEFS } from '../../data/parts';
 import type { PartCategory, PartDef } from '../../sim/vessel/types';
@@ -11,6 +14,9 @@ export function useThumbnails() {
 }
 
 export function Palette({ session, view }: { session: EditorSession; view: SessionView }) {
+  const mode = useGame(s => s.mode);
+  const saved = useGame(s => s.resumeWorld);
+  const available = useMemo(() => PART_DEFS.filter(p => partUnlocked(p.id, mode, saved?.progression ?? newProgression())), [mode, saved]);
   const [tab, setTab] = useState<PartCategory | 'all'>('all');
   const [query, setQuery] = useState('');
   const [hover, setHover] = useState<{ def: PartDef; y: number } | null>(null);
@@ -19,14 +25,14 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
 
   const counts = useMemo(() => {
     const c = new Map<string, number>();
-    for (const d of PART_DEFS) c.set(d.category, (c.get(d.category) ?? 0) + 1);
+    for (const d of available) c.set(d.category, (c.get(d.category) ?? 0) + 1);
     return c;
-  }, []);
+  }, [available]);
 
   const parts = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return PART_DEFS.filter((d) => (tab === 'all' || d.category === tab) && (!q || `${d.name} ${d.manufacturer} ${d.description} ${d.category}`.toLowerCase().includes(q)));
-  }, [tab, query]);
+    return available.filter((d) => (tab === 'all' || d.category === tab) && (!q || `${d.name} ${d.manufacturer} ${d.description} ${d.category}`.toLowerCase().includes(q)));
+  }, [tab, query, available]);
 
   useEffect(() => {
     // Visible parts first, then the rest of the catalogue in the background.

@@ -63,3 +63,11 @@ playable universe. Presets: `standard` (s=0.1, default), `challenging` (0.32), `
 - Every sim module gets Vitest tests in `tests/` checking physics against known real values.
 - Don't commit; the lead integrates and commits. Don't modify files outside your assigned area without saying so
   in your final report.
+
+## Science and program progression
+
+- `src/sim/science/biomes.ts`: deterministic body-fixed terrain classification and six science situations. `biomeAt(body, universe.terrain(id), direction)` shares collision/render terrain; no dependency on `Universe`, the DOM or three.js.
+- `src/sim/science/experiments.ts`: experiment definitions, subject keys and diminishing values. `progression.ts`: serializable mode, balances, archives, research IDs, seeded contracts and event reducer.
+- `src/data/technology.ts`: 25 named nodes; every catalogue part belongs to one node. Category families are sorted by cost then ID into four tiers, with an explicit starter set. Catalogue additions can shift tiers and should be reviewed for progression balance.
+- `World` owns mutable progression. `src/game/science.ts` adapts universe/vessel state to the pure science model; `World` exposes experiment, transmission, research, contract and recovery operations. Part-owned data and expedition provenance survive staging, docking and save/load. `PartState.purchaseCost` prevents salvage of unpaid scenario/EVA hardware.
+- Scene boundaries pass immutable `SavedWorld` snapshots through `game.resumeWorld`; `game.mode` drives UI. `openProgram/saveProgram` handle hub research/mission mutations and autosaves. Physics and rails evaluate progression; UI never awards rewards independently. Flight, tracking recovery, and automatic pad clearance share settlement logic.

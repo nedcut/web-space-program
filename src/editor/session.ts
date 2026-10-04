@@ -1,3 +1,5 @@
+import { partUnlocked, launchProblem } from '../data/technology';
+import { newProgression } from '../sim/science/progression';
 import { PART_CATALOG } from '../data/parts';
 import { RESOURCES } from '../data/resources';
 import { game } from '../game/store';
@@ -251,6 +253,9 @@ export class EditorSession {
     if (!craft.parts.length) return this.toast('Build something first!', 'warn');
     const hasCommand = craft.parts.some((p) => CATALOG.get(p.partId)?.modules.some((m) => m.type === 'command'));
     if (!hasCommand) return this.toast('Launch blocked: the craft needs a command pod or probe core', 'bad');
+    const g = game.get();
+    const problem = launchProblem(craft, CATALOG, g.mode, g.resumeWorld?.progression ?? newProgression());
+    if (problem) return this.toast(problem, 'bad');
     game.set({ craft, scene: 'flight', launchPending: true });
   }
 
@@ -266,6 +271,8 @@ export class EditorSession {
   }
 
   pickNew(partId: string) {
+    const g = game.get();
+    if (!partUnlocked(partId, g.mode, g.resumeWorld?.progression ?? newProgression())) return this.toast('Research this part first', 'warn');
     if (this.held?.kind === 'assembly') this.cancelHeld();
     this.held = { kind: 'new', partId, rotation: qIdentity() };
     this.touch();

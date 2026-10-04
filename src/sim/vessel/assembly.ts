@@ -239,6 +239,8 @@ export function cloneVessel(v: VesselState): VesselState {
       rotation: { ...p.rotation },
       children: [...p.children],
       crew: p.crew ? [...p.crew] : undefined,
+      scienceData: p.scienceData?.map(d => ({ ...d })),
+      visitedBodies: p.visitedBodies ? [...p.visitedBodies] : undefined,
       resources: { ...p.resources },
       maxResources: { ...p.maxResources },
       skinTemperature: [...p.skinTemperature],

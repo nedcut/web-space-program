@@ -1,3 +1,6 @@
+import { newProgression, generateContracts, acceptContract, failContract, type GameMode, type ProgressEvent } from '../sim/science/progression';
+import { unlockTech, launchProblem, launchCost } from '../data/technology';
+import { scienceContext, instruments, runExperiment, transmitScience, recoverScience, progressionEvent, evaluateProgression } from './science';
 import { generateAstronaut, crewIds, hasControl, seatCapacity, type Astronaut, type PlantedFlag } from '../sim/crew/crew';
 import { EVA_PART } from '../data/eva';
 import { stepEva } from '../sim/vessel/eva';
@@ -47,6 +50,7 @@ export interface WorldMessage {
 const bodyQuat = (u: Universe, id: string, t: number) => u.ephem.bodyRotation(id, t);
 
 export class World {
+  progression = newProgression();
   readonly universe: Universe;
   readonly vessels = new Map<string, WorldVessel>();
   crewSeed = 19690720;
@@ -73,12 +77,38 @@ export class World {
   /** Event listeners (audio, camera shake, UI). */
   onEvent: ((e: VesselEvent) => void) | null = null;
 
-  constructor(universe: Universe, catalog: Map<string, PartDef>, ut: number) {
+  constructor(universe: Universe, catalog: Map<string, PartDef>, ut: number, public mode: GameMode = 'sandbox') {
     this.universe = universe;
     this.catalog = new Map(catalog);
     this.catalog.set(EVA_PART.id, EVA_PART);
     this.ut = ut;
+    if (mode === 'career') this.refreshContracts();
   }
+
+  refreshContracts() {
+    if (this.mode !== 'career' || this.progression.contracts.some(c => c.status === 'offered')) return;
+    const p = this.progression;
+    p.contracts.push(...generateContracts(p.contractSeed, p.contractBatch++, p.milestones.includes('first-moon')));
+  }
+  acceptContract(id: string) { return this.mode === 'career' && acceptContract(this.progression, id, this.ut); }
+  abandonContract(id: string) {
+    const c = this.progression.contracts.find(c => c.id === id);
+    return this.mode === 'career' && !!c && failContract(this.progression, c);
+  }
+  unlockTech(id: string) { return this.mode !== 'sandbox' && unlockTech(this.progression, id); }
+  scienceContext(v = this.active) { return v ? scienceContext(this, v) : null; }
+  scienceInstruments(v = this.active) { return v ? instruments(this, v) : []; }
+  runExperiment(uid: number, experiment: string) { return runExperiment(this, uid, experiment); }
+  transmitScience() { return transmitScience(this); }
+  emitProgress(event: ProgressEvent) { progressionEvent(this, event); }
+  onReachedOrbit(v: WorldVessel) { this.emitProgress({ type: 'orbit', body: v.body, vesselId: v.state.id }); }
+  onLanded(v: WorldVessel) {
+    for (const p of v.state.parts) { const visited = p.visitedBodies ??= []; if (!visited.includes(v.body)) visited.push(v.body); }
+    this.emitProgress({ type: 'landed', body: v.body, vesselId: v.state.id });
+  }
+  onEnteredSoi(v: WorldVessel) { this.emitProgress({ type: 'soi', body: v.body, vesselId: v.state.id }); }
+  onScienceCollected(v: WorldVessel, biome: string) { this.emitProgress({ type: 'science', body: v.body, biome, vesselId: v.state.id }); }
+  onRecovered(v: WorldVessel) { this.emitProgress({ type: 'recovered', body: v.body, vesselId: v.state.id, visited: v.state.parts.flatMap(p => p.visitedBodies ?? []) }); }
 
   get active(): WorldVessel | null {
     return this.activeId ? (this.vessels.get(this.activeId) ?? null) : null;
@@ -131,6 +161,11 @@ export class World {
    * runway (body +Y along the runway, +Z up), ready to taxi.
    */
   launch(craft: CraftDef, site: 'pad' | 'runway' = craft.type === 'SPH' ? 'runway' : 'pad'): WorldVessel {
+    const problem = launchProblem(craft, this.catalog, this.mode, this.progression);
+    if (problem) throw new Error(problem);
+    // Validate assembly before charging or clearing the launch site.
+    buildVessel(craft, this.catalog, { id: 'validation', resourceDefs: RESOURCES });
+    if (this.mode === 'career') this.progression.funds -= launchCost(craft, this.catalog);
     if (site === 'runway') return this.launchRunway(craft);
     const u = this.universe;
     const bodyId = 'earth';
@@ -147,10 +182,11 @@ export class World {
     const padHelio = add(u.ephem.getBodyState(bodyId, this.ut).position, qRotate(bodyQuat(u, bodyId, this.ut), scale(up, body.radius + terrainH)));
     for (const [id, other] of this.vessels) {
       const near = length(sub(other.state.position, padHelio)) < 150;
-      if (other.mode === 'prelaunch' || (near && other.state.situation !== 'flying')) this.vessels.delete(id);
+      if (other.mode === 'prelaunch' || (near && other.state.situation !== 'flying')) { recoverScience(this, other); this.vessels.delete(id); }
     }
     const state = buildVessel(craft, this.catalog, { id: `v${Date.now().toString(36)}`, resourceDefs: RESOURCES, legsDeployed: false });
     state.name = craft.name;
+    if (this.mode === 'career') for (const p of state.parts) p.purchaseCost = p.def.cost;
     this.assignCrew(state);
     const bottom = this.bottomOffset(state);
     const posFixed = scale(up, body.radius + terrainH + bottom + 0.05);
@@ -180,9 +216,10 @@ export class World {
 
     const spotHelio = add(u.ephem.getBodyState(bodyId, this.ut).position, qRotate(bodyQuat(u, bodyId, this.ut), scale(up, body.radius + terrainH)));
     for (const [id, other] of this.vessels)
-      if (length(sub(other.state.position, spotHelio)) < 100 && other.state.situation !== 'flying') this.vessels.delete(id);
+      if (length(sub(other.state.position, spotHelio)) < 100 && other.state.situation !== 'flying') { recoverScience(this, other); this.vessels.delete(id); }
     const state = buildVessel(craft, this.catalog, { id: `v${Date.now().toString(36)}`, resourceDefs: RESOURCES, legsDeployed: false, gearDeployed: true });
     state.name = craft.name;
+    if (this.mode === 'career') for (const p of state.parts) p.purchaseCost = p.def.cost;
     this.assignCrew(state);
     const rest = this.restOffset(state, v3(0, 0, -1));
     const wv: WorldVessel = { state, mode: 'prelaunch', body: bodyId, fixed: { pos: scale(up, body.radius + terrainH + rest + 0.03), orient: orientFixed } };
@@ -292,6 +329,8 @@ export class World {
     v.velocity = velocity;
     // Suit is serviced/refilled aboard; its full mass is again included in the pod's dry mass.
     if (vessel.mode === 'prelaunch') this.captureFixed(vessel, this.ut);
+    (pod.scienceData ??= []).push(...eva.state.parts.flatMap(p => p.scienceData ?? []));
+    pod.visitedBodies = [...new Set([...(pod.visitedBodies ?? []), ...eva.state.parts.flatMap(p => p.visitedBodies ?? [])])];
     this.vessels.delete(eva.state.id);
     if (this.targetId === eva.state.id) this.setTarget(null);
     this.switchTo(v.id);
@@ -392,11 +431,15 @@ export class World {
   }
 
   /** Recover the active vessel if it's at rest on Earth (returns true when removed). */
-  recoverActive(): boolean {
-    const wv = this.active;
-    if (!wv || wv.body !== 'earth' || wv.state.situation === 'flying') return false;
+  recoverActive(): boolean { return this.activeId ? this.recoverVessel(this.activeId) : false; }
+
+  recoverVessel(id: string): boolean {
+    const wv = this.vessels.get(id);
+    if (!wv || wv.state.destroyed || wv.body !== 'earth' || (wv.mode !== 'prelaunch' && wv.state.situation === 'flying')) return false;
+    recoverScience(this, wv);
     this.vessels.delete(wv.state.id);
-    this.activeId = null;
+    if (this.activeId === id) { this.activeId = null; this.nodes = []; }
+    if (this.targetId === id) this.setTarget(null);
     return true;
   }
 
@@ -687,6 +730,7 @@ export class World {
           const pos = sub(add(oldB.position, s.position), newB.position);
           const vel = sub(add(oldB.velocity, s.velocity), newB.velocity);
           wv.body = ev.nextBody!;
+          this.onEnteredSoi(wv);
           wv.orbit = stateToElements(this.universe.body(wv.body).gm, wv.body, pos, vel, ev.time);
           if (isActive) {
             this.message(`Entered ${this.universe.body(wv.body).name}'s sphere of influence`);
@@ -719,6 +763,7 @@ export class World {
     }
     this.ut = target;
     for (const wv of this.vessels.values()) this.syncPacked(wv, this.ut);
+    evaluateProgression(this);
   }
 
   /** Update the inertial state of a packed (rails / body-fixed) vessel to time t. */
@@ -799,6 +844,7 @@ export class World {
     this.stepDockingAll();
     this.ut = t + PHYSICS_DT;
     this.applyPassedNodes();
+    evaluateProgression(this);
   }
 
   private handleEvent(e: VesselEvent) {

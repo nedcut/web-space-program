@@ -1,3 +1,4 @@
+import type { ScienceData } from '../science/experiments';
 import type { Vec3 } from '../../util/vec3';
 import type { Quat } from '../../util/quat';
 import type { StateVector } from '../orbit/api';
@@ -136,6 +137,11 @@ export interface WheelState {
 }
 
 export interface PartState {
+  scienceData?: ScienceData[];
+  /** Surface expedition provenance follows hardware through staging and docking. */
+  visitedBodies?: string[];
+  /** Paid launch cost; spawned/EVA hardware has no salvage value. */
+  purchaseCost?: number;
   /** Roster IDs seated in this pod; travels with the part on split/dock. */
   crew?: string[];
   uid: number;

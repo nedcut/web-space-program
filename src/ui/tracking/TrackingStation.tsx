@@ -23,7 +23,7 @@ export default function TrackingStation() {
         console.error('Tracking: could not load world', e);
       }
     }
-    return new World(new Universe(s.scalePreset), PART_CATALOG, s.ut);
+    return new World(new Universe(s.scalePreset), PART_CATALOG, s.ut, s.mode);
   });
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<TrackingView | null>(null);
@@ -37,7 +37,7 @@ export default function TrackingStation() {
     return () => {
       renderer.dispose();
       view.current = null;
-      game.set({ resumeWorld: serializeWorld(world), ut: world.ut });
+      game.set({ resumeWorld: serializeWorld(world), mode: world.mode, ut: world.ut });
       saveWorldToStorage('autosave', world);
     };
   }, [world]);
@@ -45,7 +45,7 @@ export default function TrackingStation() {
   const exit = (scene: 'spaceCenter' | 'flight') => {
     world.warp = { mode: 'rails', index: 0 };
     saveWorldToStorage('autosave', world);
-    game.set({ resumeWorld: serializeWorld(world), ut: world.ut, launchPending: false, scene });
+    game.set({ resumeWorld: serializeWorld(world), mode: world.mode, ut: world.ut, launchPending: false, scene });
   };
   const remove = (id: string) => {
     world.vessels.delete(id);
@@ -81,7 +81,7 @@ export default function TrackingStation() {
           return <article className="tracking-vessel" key={v.state.id}><strong>{v.state.name}</strong><div className="tracking-muted">{world.universe.body(v.body).name} · {v.mode === 'prelaunch' ? 'Prelaunch' : v.state.situation}</div><div className="mono tracking-apsides">Ap {o ? distance(o.ap) : '—'} / Pe {o ? distance(o.pe) : '—'}</div><div className="tracking-actions">
             <button className="btn small" onClick={() => view.current?.setFocus({ kind: 'vessel', id: v.state.id })}>Focus</button>
             <button className="btn small" onClick={() => { if (world.activeId !== v.state.id) world.nodes = []; world.activeId = v.state.id; exit('flight'); }}>Fly</button>
-            {v.body === 'earth' && (v.state.situation === 'landed' || v.state.situation === 'splashed') && <button className="btn small" onClick={() => remove(v.state.id)}>Recover</button>}
+            {v.body === 'earth' && (v.mode === 'prelaunch' || v.state.situation === 'landed' || v.state.situation === 'splashed') && <button className="btn small" onClick={() => { if (world.recoverVessel(v.state.id)) { if (focus.kind === 'vessel' && focus.id === v.state.id) view.current?.setFocus({ kind: 'body', id: 'earth' }); update(); } }}>Recover</button>}
             <button className="btn small danger" onClick={() => setTerminate(v.state.id)}>Terminate</button>
           </div></article>;
         })}</section>)}

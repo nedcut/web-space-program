@@ -1425,7 +1425,32 @@ const aircraft: PartDef[] = [
   }),
 ];
 
-export const PART_DEFS: PartDef[] = [...pods, ...tanks, ...engines, ...coupling, ...structural, ...aero, ...control, ...electrical, ...utility, ...aircraft];
+/** Compact radial instrument housings and telemetry arrays. */
+const scienceParts: PartDef[] = [
+  ['sensor-thermal', 'Ember Thermometer Probe', 'temperature', 5, 180],
+  ['sensor-pressure', 'Isobar Pressure Capsule', 'pressure', 8, 250],
+  ['sensor-seismic', 'Tremor Seismic Sensor', 'seismic', 18, 650],
+  ['sensor-magnetic', 'Flux Magnetometer Boom', 'magnetic', 22, 900],
+  ['sensor-gravity', 'Contour Gravity Gradiometer', 'gravity', 35, 1400],
+  ['sensor-exposure', 'Patina Material Exposure Bay', 'exposure', 65, 1900],
+].map(([id, name, experiment, mass, cost]) => ({
+  id: String(id), name: String(name), manufacturer: MANUFACTURERS.brightfield,
+  description: 'Records environmental measurements for the research archive. Return the hardware for full science credit.',
+  category: 'science', dryMass: Number(mass), cost: Number(cost), resources: {},
+  attachNodes: [srfNode(0.2)], surfaceAttachable: true, allowSurfaceAttachChildren: false,
+  shape: box(0.3, 0.35, 0.2), dragCoefficient: { axial: 0.3, side: 0.5 }, maxTemp: 1400, crashTolerance: 10,
+  modules: [{ type: 'science', experiment: String(experiment) }], mesh: 'instrument',
+}));
+const antennas: PartDef[] = [0, 1].map(i => ({
+  id: i ? 'antenna-relay' : 'antenna-thread', name: i ? 'Lattice Relay Array' : 'Thread Telemetry Aerial',
+  manufacturer: MANUFACTURERS.lumen, description: `Transmits ${i ? 65 : 40}% of recorded science. Recover hardware for the balance.`,
+  category: 'electrical', dryMass: i ? 35 : 5, cost: i ? 1200 : 120, resources: {},
+  attachNodes: [srfNode(0.15)], surfaceAttachable: true, allowSurfaceAttachChildren: false,
+  shape: box(0.2, i ? 0.8 : 0.4, 0.15), dragCoefficient: { axial: 0.2, side: 0.4 }, maxTemp: 1400, crashTolerance: 10,
+  modules: [{ type: 'antenna', transmission: i ? 0.65 : 0.4 }], mesh: 'instrument',
+}));
+
+export const PART_DEFS: PartDef[] = [...pods, ...tanks, ...engines, ...coupling, ...structural, ...aero, ...control, ...electrical, ...utility, ...aircraft, ...scienceParts, ...antennas];
 
 export const PART_CATALOG: Map<string, PartDef> = new Map(PART_DEFS.map((p) => [p.id, p]));
 

@@ -1,3 +1,4 @@
+import { newProgression, type GameMode, type Progression } from '../sim/science/progression';
 import type { Astronaut, PlantedFlag } from '../sim/crew/crew';
 import type { VesselState } from '../sim/vessel/runtime';
 import type { PartDef } from '../sim/vessel/types';
@@ -26,6 +27,8 @@ interface SavedVessel {
 }
 
 export interface SavedWorld {
+  mode?: GameMode;
+  progression?: Progression;
   crew?: Astronaut[];
   crewSeed?: number;
   flags?: PlantedFlag[];
@@ -62,6 +65,8 @@ export function serializeWorld(world: World): SavedWorld {
     });
   }
   return {
+    mode: world.mode,
+    progression: structuredClone(world.progression),
     crew: structuredClone(world.crew),
     crewSeed: world.crewSeed,
     flags: structuredClone(world.flags),
@@ -78,7 +83,9 @@ export function serializeWorld(world: World): SavedWorld {
 
 export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>, universe?: Universe): World {
   if (data.version !== SAVE_VERSION) throw new Error(`Unsupported save version ${data.version}`);
-  const world = new World(universe ?? new Universe(data.preset), catalog, data.ut);
+  const world = new World(universe ?? new Universe(data.preset), catalog, data.ut, data.mode ?? 'sandbox');
+  world.progression = structuredClone(data.progression ?? newProgression());
+  if (world.mode === 'career' && !world.progression.contracts.length) world.refreshContracts();
   world.crew = structuredClone(data.crew ?? []);
   world.crewSeed = data.crewSeed ?? world.crewSeed;
   world.flags = structuredClone(data.flags ?? []);

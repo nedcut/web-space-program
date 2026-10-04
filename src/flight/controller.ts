@@ -1,3 +1,4 @@
+import type { GameMode } from '../sim/science/progression';
 import { FlagView } from '../render/vessel/FlagView';
 import * as THREE from 'three';
 import { RenderPipeline, getQuality, type QualityId } from '../render/core';
@@ -102,14 +103,15 @@ export class FlightController {
     quality: QualityId,
     private audio: GameAudio | null,
     saved?: SavedWorld | null,
+    mode: GameMode = 'sandbox',
   ) {
     this.craft = craft;
     if (saved) {
       this.world = deserializeWorld(saved, PART_CATALOG);
     } else {
-      this.world = new World(new Universe(preset), PART_CATALOG, ut);
-      if (craft) this.world.launch(craft);
+      this.world = new World(new Universe(preset), PART_CATALOG, ut, mode);
     }
+    if (craft) this.world.launch(craft);
     const universe = this.world.universe;
     this.input = new FlightInput();
 

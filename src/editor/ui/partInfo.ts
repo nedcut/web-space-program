@@ -14,6 +14,7 @@ export const CATEGORY_TABS: { id: PartCategory | 'all'; label: string }[] = [
   { id: 'electrical', label: 'Electrical' },
   { id: 'utility', label: 'Utility' },
   { id: 'ground', label: 'Ground' },
+  { id: 'science', label: 'Science' },
 ];
 
 export function wetMass(def: PartDef): number {

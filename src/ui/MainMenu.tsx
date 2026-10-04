@@ -1,3 +1,8 @@
+import type { GameMode } from '../sim/science/progression';
+import { World } from '../game/world';
+import { Universe } from '../game/universe';
+import { PART_CATALOG } from '../data/parts';
+import { saveProgram } from '../game/program';
 import { useState } from 'react';
 import { game, updateSettings, useGame, DEFAULT_START_UT, type QualityPreset } from '../game/store';
 import { SCALE_PRESETS, type ScalePresetId } from '../sim/bodies/scale';
@@ -7,7 +12,7 @@ import { hasSave, loadWorldFromStorage } from '../game/persistence';
 function continueGame() {
   const save = loadWorldFromStorage('autosave') ?? loadWorldFromStorage('quicksave');
   if (!save) return game.set({ scene: 'spaceCenter' });
-  game.set({ resumeWorld: save.data, scalePreset: save.data.preset, ut: save.data.ut, launchPending: false, scene: 'spaceCenter' });
+  game.set({ resumeWorld: save.data, mode: save.data.mode ?? 'sandbox', scalePreset: save.data.preset, ut: save.data.ut, launchPending: false, scene: 'spaceCenter' });
 }
 
 const SCALE_INFO: Record<ScalePresetId, { label: string; blurb: string }> = {
@@ -18,18 +23,19 @@ const SCALE_INFO: Record<ScalePresetId, { label: string; blurb: string }> = {
 
 export function MainMenu() {
   const [panel, setPanel] = useState<'root' | 'new' | 'settings'>('root');
+  const [mode, setMode] = useState<GameMode>('sandbox');
   const [scale, setScale] = useState<ScalePresetId>('standard');
 
   return (
     <div className="fullscreen">
       <MenuBackdrop />
-      <div className="fullscreen" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 8vw' }}>
+      <div className="fullscreen" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '24px 8vw', overflowY: 'auto' }}>
         <h1 className="title-xl">WEB SPACE</h1>
         <h1 className="title-xl" style={{ color: 'var(--accent)', marginBottom: 40 }}>PROGRAM</h1>
 
         {panel === 'root' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: 260 }}>
-            <button className="btn primary" onClick={() => setPanel('new')}>New Sandbox</button>
+            <button className="btn primary" onClick={() => setPanel('new')}>New Game</button>
             <button className="btn" onClick={continueGame} disabled={!hasSave('autosave') && !hasSave('quicksave')}>Continue</button>
             <button className="btn" onClick={() => setPanel('settings')}>Settings</button>
           </div>
@@ -37,6 +43,11 @@ export function MainMenu() {
 
         {panel === 'new' && (
           <div className="panel" style={{ padding: 24, width: 440 }}>
+            <div className="label" style={{ marginBottom: 8 }}>Program mode</div>
+            <div className="seg" style={{ marginBottom: 8 }}>
+              {(['sandbox', 'science', 'career'] as GameMode[]).map(id => <button key={id} className={mode === id ? 'on' : ''} onClick={() => setMode(id)}>{id[0].toUpperCase() + id.slice(1)}</button>)}
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-dim)', minHeight: 32 }}>{mode === 'sandbox' ? 'All parts available. Build freely, without costs.' : mode === 'science' ? 'Explore, collect science and unlock new technology. Unlimited construction.' : 'Grow a funded program through research, contracts and expeditions. Starts with 60,000 cr.'}</p>
             <div className="label" style={{ marginBottom: 12 }}>Solar system scale</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {(Object.keys(SCALE_PRESETS) as ScalePresetId[]).map((id) => (
@@ -60,7 +71,11 @@ export function MainMenu() {
               <button className="btn ghost" onClick={() => setPanel('root')}>Back</button>
               <button
                 className="btn primary"
-                onClick={() => game.set({ scalePreset: scale, saveId: `sandbox-${Date.now()}`, resumeWorld: null, ut: DEFAULT_START_UT, scene: 'spaceCenter' })}
+                onClick={() => {
+                  const world = new World(new Universe(scale), PART_CATALOG, DEFAULT_START_UT, mode);
+                  saveProgram(world);
+                  game.set({ mode, scalePreset: scale, saveId: `${mode}-${Date.now()}`, craft: null, launchPending: false, ut: DEFAULT_START_UT, scene: 'spaceCenter' });
+                }}
               >
                 Start
               </button>

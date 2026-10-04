@@ -8,6 +8,8 @@ import { ErrorBoundary } from './ErrorBoundary';
 // Heavy 3D scenes are code-split so the menu loads instantly.
 const EditorScene = lazy(() => import('../editor/EditorScene'));
 const TrackingStation = lazy(() => import('./tracking/TrackingStation'));
+const Research = lazy(() => import('./Research'));
+const Missions = lazy(() => import('./Missions'));
 const FlightScene = lazy(() => import('../flight/FlightScene'));
 
 export function App() {
@@ -20,6 +22,8 @@ export function App() {
         {scene === 'spaceCenter' && <SpaceCenter />}
         {scene === 'editor' && <EditorScene />}
         {scene === 'flight' && <FlightScene />}
+        {scene === 'research' && <Research />}
+        {scene === 'missions' && <Missions />}
         {scene === 'tracking' && <TrackingStation />}
       </Suspense>
       </ErrorBoundary>

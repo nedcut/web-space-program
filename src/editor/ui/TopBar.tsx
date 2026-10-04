@@ -1,8 +1,14 @@
+import { useGame } from '../../game/store';
+import { launchCost } from '../../data/technology';
+import { PART_CATALOG } from '../../data/parts';
 import type { EditorSession, SessionView } from '../session';
 import { Icon } from './icons';
 import { fmtDv, fmtKg } from './partInfo';
 
 export function TopBar({ session, view, onLoad, onNew }: { session: EditorSession; view: SessionView; onLoad(): void; onNew(): void }) {
+  const mode = useGame(s => s.mode);
+  const funds = useGame(s => s.resumeWorld?.progression?.funds ?? 60000);
+  const cost = launchCost(view.craft, PART_CATALOG);
   const s = view.stats;
   return (
     <div className="vab-topbar panel">
@@ -51,8 +57,8 @@ export function TopBar({ session, view, onLoad, onNew }: { session: EditorSessio
         <Stat label="Δv" value={fmtDv(view.totalDvVac)} accent />
       </div>
       <div style={{ flex: 1 }} />
-      <button className="btn primary vab-launch" onClick={() => session.launch()}>
-        <Icon name="launch" size={17} /> Launch
+      <button className="btn primary vab-launch" title={mode === 'career' ? `${cost.toLocaleString()} cr launch cost · ${funds.toLocaleString()} cr available` : undefined} onClick={() => session.launch()}>
+        <Icon name="launch" size={17} /> Launch{mode === 'career' ? ` · ${cost.toLocaleString()} cr` : ''}
       </button>
       <button className="vab-ibtn" title="Exit to Space Center" onClick={() => session.exit()}><Icon name="exit" /></button>
     </div>

@@ -1,3 +1,6 @@
+import { launchProblem } from '../data/technology';
+import { PART_CATALOG } from '../data/parts';
+import { newProgression } from '../sim/science/progression';
 import { useState } from 'react';
 import { game, useGame } from '../game/store';
 import { HubBackdrop } from './hub/HubBackdrop';
@@ -6,6 +9,9 @@ import { formatDate } from './format';
 
 /** Hub screen over a live 3D view of the launch complex. */
 export function SpaceCenter() {
+  const mode = useGame(s => s.mode);
+  const p = useGame(s => s.resumeWorld?.progression);
+  const [notice, setNotice] = useState('');
   const ut = useGame((s) => s.ut);
   const craft = useGame((s) => s.craft);
   const [settings, setSettings] = useState(false);
@@ -17,9 +23,16 @@ export function SpaceCenter() {
       title: 'Launch Pad',
       desc: craft ? `Ready: ${craft.name}` : 'Build a vehicle first',
       disabled: !craft,
-      onClick: () => game.set({ scene: 'flight', launchPending: true }),
+      onClick: () => {
+        if (!craft) return;
+        const problem = launchProblem(craft, PART_CATALOG, mode, p ?? newProgression());
+        if (problem) setNotice(problem);
+        else game.set({ scene: 'flight', launchPending: true });
+      },
     },
     { id: 'tracking', title: 'Tracking Station', desc: 'Track vessels and explore the solar system', onClick: () => game.set({ scene: 'tracking' }) },
+    ...(mode !== 'sandbox' ? [{ id: 'research', title: 'Research & Development', desc: `${(p?.science ?? 0).toFixed(1)} science · Explore the technology tree`, onClick: () => game.set({ scene: 'research' }) }] : []),
+    ...(mode === 'career' ? [{ id: 'missions', title: 'Mission Control', desc: 'Commission expeditions and track contracts', onClick: () => game.set({ scene: 'missions' }) }] : []),
   ];
 
   return (
@@ -33,7 +46,9 @@ export function SpaceCenter() {
           </div>
           <div className="mono" style={{ color: 'var(--text-dim)' }}>{formatDate(ut)}</div>
         </div>
+        <div style={{ marginTop: 16 }} className="mono">{mode.toUpperCase()}{mode === 'career' && ` · ${(p?.funds ?? 60000).toLocaleString()} cr · ${p?.reputation ?? 0} reputation`}</div>
         <div style={{ flex: 1 }} />
+        {notice && <p role="status" style={{ color: 'var(--warn)' }}>{notice}</p>}
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           {tiles.map((t) => (
             <button
