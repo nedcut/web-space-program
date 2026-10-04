@@ -130,6 +130,7 @@ export default function FlightScene() {
             onMap: () => ctrl.current?.toggleMap(),
             onMenu: () => setPaused(true),
             onSpeedMode: () => ctrl.current?.cycleSpeedMode(),
+            onToggleGear: () => ctrl.current?.toggleGear(),
             onSetTarget: (id, port) => ctrl.current?.setTarget(id, port ?? null),
             onToggleDocking: () => ctrl.current?.toggleDockingMode(),
             onUndock: (uid) => ctrl.current?.undock(uid),
