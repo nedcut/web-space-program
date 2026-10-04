@@ -58,6 +58,9 @@ const STYLES: Record<PlumeType, Style> = {
   solid: { core: 0xfff4d8, edge: 0xff8a28, diamond: 0xffffff, intensity: 1.3, lengthFactor: 22, expandVac: 3.5, diamonds: 5, diamondStrength: 0.7, falloff: 1.1, coreScale: 0.65, vacDim: 0.35, pressureSensitive: true },
   ion: { core: 0x90d0ff, edge: 0x2a50ff, diamond: 0x90d0ff, intensity: 0.14, lengthFactor: 14, expandVac: 0.9, diamonds: 0, diamondStrength: 0, falloff: 2.8, coreScale: 0.35, vacDim: 1, pressureSensitive: false },
   monoprop: { core: 0xf0f0ec, edge: 0xa8acb4, diamond: 0xffffff, intensity: 0.25, lengthFactor: 6, expandVac: 2.5, diamonds: 0, diamondStrength: 0, falloff: 1.6, coreScale: 0.5, vacDim: 0.6, pressureSensitive: true },
+  // Jets: a faint hot-gas glow (turbofan) and a blue-cored orange afterburner flame with shock diamonds.
+  jet: { core: 0xffc890, edge: 0x7a5040, diamond: 0xffe0c0, intensity: 0.09, lengthFactor: 5, expandVac: 1.2, diamonds: 0, diamondStrength: 0, falloff: 2.6, coreScale: 0.55, vacDim: 1, pressureSensitive: false },
+  afterburner: { core: 0x9fb8ff, edge: 0xff7a30, diamond: 0xffd8a0, intensity: 0.55, lengthFactor: 7, expandVac: 1.2, diamonds: 5, diamondStrength: 2.2, falloff: 2.0, coreScale: 0.5, vacDim: 1, pressureSensitive: false },
 };
 
 const vertex = /* glsl */ `

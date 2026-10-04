@@ -238,6 +238,77 @@ export function roadTexture(crawler = false): THREE.CanvasTexture {
 }
 
 /** Ribbed steel cladding, tile 4 m (u) × 8 m (v), with horizontal sheet seams and grime streaks. */
+/**
+ * Runway surface tile: grooved asphalt, white edge stripes and a dashed white centreline. u spans the full
+ * 60 m width (0..1), one tile = 60 m along the runway (30 m dash + 30 m gap).
+ */
+export function runwayTexture(): THREE.CanvasTexture {
+  const W = 512, H = 512;
+  const { c, g } = canvas(W, H);
+  const r = rng(77);
+  g.fillStyle = '#35363a';
+  g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 26000; i++) {
+    const l = 28 + r() * 62;
+    g.fillStyle = `rgba(${l},${l},${l + 3},0.45)`;
+    g.fillRect(r() * W, r() * H, 1, 1);
+  }
+  // Rubber deposits along the main-gear tracks, lighter concrete-patch blotches.
+  for (const x of [0.38, 0.62]) {
+    const grd = g.createLinearGradient((x - 0.08) * W, 0, (x + 0.08) * W, 0);
+    grd.addColorStop(0, 'rgba(15,15,16,0)');
+    grd.addColorStop(0.5, 'rgba(15,15,16,0.28)');
+    grd.addColorStop(1, 'rgba(15,15,16,0)');
+    g.fillStyle = grd;
+    g.fillRect((x - 0.08) * W, 0, 0.16 * W, H);
+  }
+  blotches(g, W, 10, r, 10, 40, () => 'rgba(120,120,118,0.06)');
+  // Transverse grooves.
+  g.fillStyle = 'rgba(0,0,0,0.08)';
+  for (let y = 0; y < H; y += 6) g.fillRect(0, y, W, 1);
+  g.fillStyle = 'rgba(236,236,230,0.9)';
+  g.fillRect(0.015 * W, 0, 0.015 * W, H); // edge stripes (0.9 m)
+  g.fillRect(0.97 * W, 0, 0.015 * W, H);
+  g.fillRect(0.4925 * W, H * 0.25, 0.015 * W, H * 0.5); // centreline dash
+  return tex(c);
+}
+
+/**
+ * Runway end markings for one 60 m x 120 m end zone (u across, v from the end inward): piano-key threshold
+ * bars, a two-digit heading designator, and touchdown-zone bars. Text reads upright from the approach
+ * (canvas top = far end, v = 1).
+ */
+export function runwayEndTexture(designator: string): THREE.CanvasTexture {
+  const W = 512, H = 1024;
+  const { c, g } = canvas(W, H);
+  g.clearRect(0, 0, W, H);
+  const white = 'rgba(238,238,232,0.92)';
+  g.fillStyle = white;
+  // Canvas y=0 is v=1 (far end); the runway end (v=0) is at the bottom of the canvas.
+  const vy = (v: number) => H * (1 - v);
+  // Threshold piano keys: 8 bars per side of the centreline, 0.03..0.17 of the zone length.
+  const bars = 16;
+  for (let i = 0; i < bars; i++) {
+    const side = i < bars / 2 ? 0 : 1;
+    const k = i % (bars / 2);
+    const x0 = side === 0 ? 0.06 + k * 0.053 : 0.535 + k * 0.053;
+    g.fillRect(x0 * W, vy(0.17), 0.03 * W, vy(0.03) - vy(0.17));
+  }
+  // Designator digits (block style), upright when seen from the approach.
+  g.save();
+  g.translate(W / 2, (vy(0.2) + vy(0.38)) / 2);
+  g.font = `bold ${Math.round(H * 0.17)}px "Arial Narrow", Arial, sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(designator, 0, 0);
+  g.restore();
+  // Touchdown-zone and aiming-point bars.
+  for (const [v0, v1, w] of [[0.48, 0.56, 0.05], [0.66, 0.84, 0.09], [0.92, 0.98, 0.05]] as const) {
+    for (const x of [0.3, 0.7 - w]) g.fillRect(x * W, vy(v1), w * W, vy(v0) - vy(v1));
+  }
+  return tex(c, true, false);
+}
+
 export function claddingTexture(): THREE.CanvasTexture {
   const { c, g } = canvas(256, 512);
   g.fillStyle = '#93a0ad';

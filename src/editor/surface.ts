@@ -1,35 +1,19 @@
 import type { PartDef } from '../sim/vessel/types';
+import { surfaceMount } from './core';
 import { qNormalize, qRotate, type Quat } from '../util/quat';
 import { v3, type Vec3 } from '../util/vec3';
 
 /**
- * Surface-attachment geometry shared by the 3D view and the stock-craft builder.
- *
- * The editor core anchors surface parts at local (-extentX, 0, 0) with outward -X, while the part catalogue
- * mounts radial parts on an 'srf' node at the -Z face (part extends along +Z, +Y stays "up"). We compute the
- * desired transform in catalogue convention and feed the core a point/normal pair that reproduces it
- * exactly: with normal = R*X the core's alignment correction is the identity, and the core's resulting
- * position is point + hx * R*X.
+ * Surface-attachment helpers shared by the 3D view and the stock-craft builder. The mount convention itself
+ * (catalogue 'srf' node at the -Z face, part extending along +Z) lives in the editor core (`surfaceMount`);
+ * this only picks the preferred orientation: +Z along the outward normal, +Y as close to `up` as possible.
  */
-export function coreSurfaceArgs(def: PartDef, position: Vec3, rotation: Quat): { point: Vec3; normal: Vec3 } {
-  const hx = def.shape.kind === 'box' ? def.shape.size.x / 2 : Math.max(def.shape.radiusTop, def.shape.radiusBottom);
-  const normal = qRotate(rotation, v3(1, 0, 0));
-  return { point: v3(position.x - normal.x * hx, position.y - normal.y * hx, position.z - normal.z * hx), normal };
-}
-
-/** Local mount point for surface attachment (catalogue convention: face at -Z). */
-export function surfaceMount(def: PartDef): Vec3 {
-  const srf = def.attachNodes.find((n) => n.id === 'srf');
-  if (srf) return srf.position;
-  const hz = def.shape.kind === 'box' ? def.shape.size.z / 2 : Math.max(def.shape.radiusTop, def.shape.radiusBottom);
-  return v3(0, 0, -hz);
-}
 
 /** Root transform placing `def`'s mount point at `point` on a surface with outward `normal`. */
 export function surfaceTransform(def: PartDef, point: Vec3, normal: Vec3, up: Vec3, extra?: Quat): { position: Vec3; rotation: Quat } {
   let rotation = surfaceBasis(normal, up);
   if (extra) rotation = qNormalize(mul(rotation, extra));
-  const m = qRotate(rotation, surfaceMount(def));
+  const m = qRotate(rotation, surfaceMount(def).position);
   return { position: v3(point.x - m.x, point.y - m.y, point.z - m.z), rotation };
 }
 

@@ -2,16 +2,16 @@ import type { Vec3 } from '../../util/vec3';
 import { add, length, scale, v3 } from '../../util/vec3';
 import type { Quat } from '../../util/quat';
 import { qConj, qMul, qNormalize, qRotate } from '../../util/quat';
-import type { CommandModule, LandingLegModule, SolarPanelModule } from './types';
+import type { CommandModule, LandingLegModule, SolarPanelModule, WheelModule } from './types';
 import type { ControlInput, StepResult, VesselState } from './runtime';
 import type { Environment } from './env';
 import { AU, G0 } from './env';
 import { m3MulVec } from './mat3';
 import { recomputeMassProperties, removePart, setGear } from './assembly';
 import { activateNextStage } from './staging';
-import { gimbalAuthority, rcsAuthority, stepEngines, stepRcs, stepReactionWheels, wheelAuthority } from './engines';
+import { gimbalAuthority, produceIntakeAir, rcsAuthority, stepEngines, stepRcs, stepReactionWheels, wheelAuthority } from './engines';
 import { computeAeroForces, controlSurfaceAuthority, updateParachutes } from './aero';
-import { gatherContacts, nearSurface, penetrationCorrection, solveContacts } from './contact';
+import { gatherContacts, nearSurface, penetrationCorrection, solveContacts, updateWheelDeploy } from './contact';
 import { stepThermal } from './heating';
 import { computeSas } from './sas';
 import { addResource, drawResource } from './resources';
@@ -89,6 +89,12 @@ function requiredSubsteps(v: VesselState, env: Environment, t: number, dt: numbe
       K += m.spring;
       C += m.damper;
     }
+  for (const p of v.parts)
+    if (p.wheel && p.wheel.deploy >= 1) {
+      const m = p.def.modules[p.wheel.moduleIndex] as WheelModule;
+      K += m.spring;
+      C += m.damper;
+    }
   if (K <= 0 || v.mass <= 0) return 1;
   const nK = Math.ceil((dt * Math.sqrt(K / v.mass)) / 0.2);
   const nC = Math.ceil((C * dt) / (v.mass * 0.4));
@@ -104,6 +110,8 @@ export function stepVessel(v: VesselState, input: ControlInput, env: Environment
   const result: StepResult = { newVessels: [], events: [] };
   if (v.destroyed || v.parts.length === 0) return result;
   if (input.gear !== undefined) setGear(v, input.gear);
+  updateWheelDeploy(v, dt);
+  updateSteering(v, input.yaw);
   if (input.stage) result.newVessels.push(...activateNextStage(v, result.events).newVessels);
   const n = Math.min(MAX_SUBSTEPS, Math.max(opts.substeps ?? 1, requiredSubsteps(v, env, t, dt)));
   const h = dt / n;
@@ -120,6 +128,21 @@ export function stepVessel(v: VesselState, input: ControlInput, env: Environment
   return result;
 }
 
+/** Rolling speed at which steering authority has halved, m/s (keeps high-speed taxiing from flipping the craft). */
+export const STEER_FADE_SPEED = 12;
+
+/** Steerable wheels follow yaw input (wheels behind the COM steer the opposite way); authority fades with speed. */
+function updateSteering(v: VesselState, yaw: number): void {
+  for (const p of v.parts) {
+    if (!p.wheel) continue;
+    const m = p.def.modules[p.wheel.moduleIndex] as WheelModule;
+    if (!m.steerAngle) continue;
+    const ahead = p.position.y - v.com.y >= 0 ? 1 : -1;
+    const fade = 1 / (1 + (p.wheel.rollSpeed / STEER_FADE_SPEED) ** 2);
+    p.wheel.steer = clamp1(yaw) * m.steerAngle * fade * ahead;
+  }
+}
+
 function substep(v: VesselState, input: ControlInput, env: Environment, t: number, h: number, opts: StepOptions, result: StepResult): void {
   const tMid = t + h / 2;
   // Drift (half).
@@ -131,7 +154,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   const airVelocityBody = qRotate(qInv, add(v.velocity, scale(air.windVelocity, -1)));
 
   // Contacts & buoyancy (positions at the midpoint, pre-kick velocities).
-  const cp = gatherContacts(v, env, tMid, h, length(g));
+  const cp = gatherContacts(v, env, tMid, h, length(g), { brakes: !!input.brakes, throttle: input.wheelThrottle ?? 0 });
 
   // Controls.
   const pilot = { x: clamp1(input.pitch), y: clamp1(input.roll), z: -clamp1(input.yaw) };
@@ -141,7 +164,9 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   const translate = { x: clamp1(input.translateX), y: clamp1(input.translateY), z: clamp1(input.translateZ) };
 
   // Actuators (consume resources).
-  const eng = stepEngines(v, Math.max(0, Math.min(1, input.throttle)), c, air.sample.pressure, h, result.events);
+  produceIntakeAir(v, airVelocityBody, air.sample.density, h);
+  const machNow = air.sample.speedOfSound > 0 ? length(airVelocityBody) / air.sample.speedOfSound : 0;
+  const eng = stepEngines(v, Math.max(0, Math.min(1, input.throttle)), c, air.sample.pressure, h, result.events, { density: air.sample.density, mach: machNow });
   const rcs = stepRcs(v, input.rcs, c, translate, air.sample.pressure, h);
   const wheels = stepReactionWheels(v, c, h);
 
@@ -200,6 +225,12 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   v.telemetry.airDensity = air.sample.density;
   v.telemetry.altitudeAGL = cp.altitudeAGL;
   v.telemetry.thrust = eng.thrust;
+  v.telemetry.intakeAirRatio = eng.airRatio;
+  for (const p of v.parts)
+    if (p.wheel) {
+      if (!p.wheel.inContact) p.wheel.rollSpeed *= Math.exp(-h / 4); // free wheel spinning down
+      p.wheel.spin = (p.wheel.spin + (p.wheel.rollSpeed / (p.def.modules[p.wheel.moduleIndex] as WheelModule).radius) * h) % (2 * Math.PI);
+    }
   v.situation = cp.landed ? 'landed' : cp.splashed ? 'splashed' : 'flying';
 
   // Destruction (crash / overheat).

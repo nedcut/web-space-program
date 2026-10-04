@@ -33,6 +33,27 @@ describe('stock crafts', () => {
     expect(stats.get(0)!.twrAsl).toBeGreaterThan(1.2);
   });
 
+  it('Swift is an SPH craft with mirrored wings and gear seated on their parents', () => {
+    const craft = STOCK_CRAFTS.find((s) => s.id === 'stock-swift')!.build();
+    expect(craft.type).toBe('SPH');
+    for (const id of ['wing-broadleaf', 'gear-bogie', 'intake-gill']) {
+      const [a, b] = craft.parts.filter((p) => p.partId === id);
+      expect(a && b, id).toBeTruthy();
+      expect(b.position.x).toBeCloseTo(-a.position.x, 6);
+      expect(b.position.y).toBeCloseTo(a.position.y, 6);
+      expect(b.position.z).toBeCloseTo(a.position.z, 6);
+      expect(a.symmetryGroup).toBe(b.symmetryGroup);
+    }
+    // Wings: mount face (-Z) on the fuselage side, span outward, lift normal vertical.
+    for (const w of craft.parts.filter((p) => p.partId === 'wing-broadleaf')) {
+      const out = qRotate(w.rotation, v3(0, 0, 1));
+      expect(Math.abs(out.x)).toBeCloseTo(1, 6);
+      expect(Math.abs(qRotate(w.rotation, v3(1, 0, 0)).z)).toBeCloseTo(Math.cos((3 * Math.PI) / 180), 6); // 3 deg incidence
+    }
+    // Gear hangs straight down.
+    for (const g of craft.parts.filter((p) => p.partId.startsWith('gear-'))) expect(qRotate(g.rotation, v3(0, 0, 1)).z).toBeCloseTo(-1, 6);
+  });
+
   it('radial parts mount with their -Z face on the parent surface', () => {
     const craft = STOCK_CRAFTS[0].build();
     const fins = craft.parts.filter((p) => p.partId === 'fin-keel');

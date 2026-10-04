@@ -1,5 +1,5 @@
 /** Procedural, offline audio. This module has no simulation or rendering dependencies. */
-export type EngineType = 'kerolox' | 'hydrolox' | 'solid' | 'methalox' | 'ion' | 'monoprop';
+export type EngineType = 'kerolox' | 'hydrolox' | 'solid' | 'methalox' | 'ion' | 'monoprop' | 'jet' | 'afterburner';
 export type MusicMode = 'menu' | 'space' | 'off';
 export interface AudioState {
   engines: { thrustFraction: number; type: EngineType; count: number }[];
@@ -44,6 +44,8 @@ const TIMBRE: Record<EngineType, { cutoff: number; rumble: number; gain: number 
   methalox: { cutoff: 2900, rumble: 75, gain: 0.92 },
   ion: { cutoff: 850, rumble: 150, gain: 0.08 },
   monoprop: { cutoff: 4400, rumble: 120, gain: 0.28 },
+  jet: { cutoff: 5200, rumble: 110, gain: 0.45 },
+  afterburner: { cutoff: 2300, rumble: 60, gain: 0.9 },
 };
 
 export class GameAudio {

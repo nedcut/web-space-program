@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Terrain } from '../../sim/terrain/api';
-import { latLonToUnit, LAUNCH_SITE } from '../../sim/terrain';
+import { latLonToUnit, LAUNCH_SITE, RUNWAY } from '../../sim/terrain';
 import type { Ephemeris } from '../../sim/orbit/ephemeris';
 import type { Vec3 } from '../../util/vec3';
 import { qRotate } from '../../util/quat';
@@ -41,7 +41,7 @@ const BODY = 'earth';
 
 type Key =
   | 'concrete' | 'soot' | 'deck' | 'steel' | 'accent' | 'hazard' | 'grate' | 'white' | 'darkMetal' | 'cable'
-  | 'cladding' | 'vabClad' | 'door' | 'windows' | 'apron' | 'crawler' | 'road' | 'roofDark' | 'lamp' | 'beacon';
+  | 'cladding' | 'vabClad' | 'door' | 'windows' | 'apron' | 'crawler' | 'road' | 'roofDark' | 'lamp' | 'beacon' | 'runway';
 
 interface BatchDef {
   mat: THREE.Material;
@@ -183,6 +183,7 @@ export class LaunchSite {
     this.buildBuildings();
     this.buildVab();
     this.buildRoads();
+    this.buildRunway();
     this.buildDish();
     this.buildLights();
     this.buildVegetation();
@@ -260,6 +261,7 @@ export class LaunchSite {
       roofDark: def(std({ color: 0x3c3f44, roughness: 0.85, metalness: 0.2 }), null),
       lamp: def(this.track(new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.9, 0.74).multiplyScalar(3.2) })), null, false, false),
       beacon: def(this.track(new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.08, 0.04).multiplyScalar(8) })), null, false, false),
+      runway: def(std({ map: t(TX.runwayTexture()), roughness: 0.9, metalness: 0 }), null, false),
     };
     this.beaconMat = B.beacon.mat as THREE.MeshBasicMaterial;
     this.vabMaterials = [B.vabClad.mat as THREE.MeshStandardMaterial, B.door.mat as THREE.MeshStandardMaterial];
@@ -831,6 +833,75 @@ export class LaunchSite {
     this.road('road', [[120, -64], [240, -180], [310, -232]], 8, 0.14, 24);
     this.road('road', [[205, 172], [260, 400], [300, 700]], 8, 0.13, 24);
     this.road('road', [[133, 25], [62, 8]], 6, 0.14, 24);
+  }
+
+  // ------------------------------------------------------------------ runway
+
+  /**
+   * 2.5 km x 60 m east–west runway on the plateau (RUNWAY, matches World.launch 'runway'): asphalt strip with
+   * edge stripes and dashed centreline, painted end zones (threshold keys, 09 / 27 designators, touchdown
+   * bars), paved shoulders, a taxiway to the service road and edge lights.
+   */
+  private buildRunway() {
+    const R = RUNWAY;
+    const hl = R.length / 2;
+    const ax = R.x - R.dirX * hl, az = R.z - R.dirZ * hl;
+    const bx = R.x + R.dirX * hl, bz = R.z + R.dirZ * hl;
+    // Shoulders (blast pads past both ends), then the runway itself on top.
+    this.road('apron', [[ax - R.dirX * 60, az - R.dirZ * 60], [bx + R.dirX * 60, bz + R.dirZ * 60]], R.width + 16, 0.03, 30);
+    this.road('runway', [[ax, az], [bx, bz]], R.width, 0.06, 60);
+    // Taxiway from the service road to the runway's north edge.
+    const tx = R.x + 300, tz = R.z - R.width / 2 - 2;
+    this.road('road', [[300, 700], [tx, tz - 40], [tx, tz]], 18, 0.14, 24);
+    // End-zone markings (separate decal meshes, one texture per designator).
+    const end = (cx: number, cz: number, dx: number, dz: number, label: string) => {
+      const len = 120, n = 6;
+      const lx = dz, lz = -dx; // left of the direction of travel
+      const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+      for (let i = 0; i <= n; i++) {
+        const v = i / n;
+        for (const u of [0, 1]) {
+          const o = (u - 0.5) * R.width;
+          const x = cx + dx * v * len - lx * o, z = cz + dz * v * len - lz * o;
+          pos.push(x, this.groundY(x, z) + 0.09, z);
+          uv.push(u, v);
+        }
+        if (i > 0) {
+          const a = (i - 1) * 2;
+          idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+        }
+      }
+      const g = this.track(new THREE.BufferGeometry());
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      if (g.getAttribute('normal').getY(0) < 0) {
+        for (let i = 0; i < idx.length; i += 3) [idx[i + 1], idx[i + 2]] = [idx[i + 2], idx[i + 1]];
+        g.setIndex(idx);
+        g.computeVertexNormals();
+      }
+      const mat = this.track(withAerialPerspective(new THREE.MeshStandardMaterial({
+        map: this.track(TX.runwayEndTexture(label)), transparent: true, depthWrite: false, roughness: 0.85, metalness: 0,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      }), BODY));
+      const mesh = new THREE.Mesh(g, mat);
+      mesh.name = `site:runway-${label}`;
+      mesh.renderOrder = 1;
+      mesh.receiveShadow = true;
+      this.root.add(mesh);
+    };
+    end(ax, az, R.dirX, R.dirZ, '09');
+    end(bx, bz, -R.dirX, -R.dirZ, '27');
+    // Edge lights every 60 m (small white posts) and red/green end bars.
+    for (let d = 0; d <= R.length; d += 60) {
+      for (const side of [-1, 1]) {
+        const x = ax + R.dirX * d + R.dirZ * side * (R.width / 2 + 2), z = az + R.dirZ * d - R.dirX * side * (R.width / 2 + 2);
+        const m = this.frameAt(x, z);
+        this.add('lamp', new THREE.CylinderGeometry(0.15, 0.15, 0.25, 6).translate(0, 0.45, 0), m);
+        this.add('steel', new THREE.CylinderGeometry(0.05, 0.05, 0.35, 5).translate(0, 0.17, 0), m);
+      }
+    }
   }
 
   // ------------------------------------------------------------------ tracking dish

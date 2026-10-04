@@ -84,6 +84,27 @@ describe('part meshes (headless)', () => {
     }
   });
 
+  it('landing gear tyre sits on the simulated wheel when deployed and folds up when stowed', () => {
+    for (const def of PART_DEFS.filter((p) => findModule(p, 'wheel'))) {
+      const w = findModule(def, 'wheel')!;
+      const o = buildPartMesh(def);
+      setPartDeploy(o, 1);
+      o.updateMatrixWorld(true);
+      const bb = new THREE.Box3().setFromObject(o.getObjectByName('tyre')!, true);
+      const c = bb.getCenter(new THREE.Vector3());
+      expect(Math.abs(c.y - w.wheelCenter.y), def.id).toBeLessThan(0.02);
+      expect(Math.abs(c.z - w.wheelCenter.z), def.id).toBeLessThan(0.02);
+      expect(Math.abs(bb.max.z - (w.wheelCenter.z + w.radius)), def.id).toBeLessThan(0.02);
+      if (w.retractable) {
+        setPartDeploy(o, 0);
+        o.updateMatrixWorld(true);
+        const stowed = new THREE.Box3().setFromObject(o.getObjectByName('tyre')!, true);
+        // Folded within the part's box depth (close to the mount surface).
+        expect(stowed.max.z, def.id).toBeLessThan(def.shape.kind === 'box' ? def.shape.size.z / 2 + 0.02 : 1);
+      }
+    }
+  });
+
   it('exposes animation nodes', () => {
     const byId = (id: string) => buildPartMesh(PART_DEFS.find((p) => p.id === id)!);
     expect(byId('eng-sirocco').getObjectByName('gimbal')).toBeDefined();

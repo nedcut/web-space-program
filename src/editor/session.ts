@@ -7,7 +7,6 @@ import { qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from 
 import { sub, v3, type Vec3 } from '../util/vec3';
 import { CraftEditor, craftStats, getStageList, type CraftStats, type Stage } from './core';
 import { computeStageStats, type StageStats } from './ui/dv';
-import { coreSurfaceArgs } from './surface';
 
 export const CATALOG = PART_CATALOG;
 export const DENSITIES: Partial<Record<ResourceId, number>> = Object.fromEntries(
@@ -26,7 +25,18 @@ export type HeldState =
 export type Placement =
   | { kind: 'root' }
   | { kind: 'stack'; parentUid: number; parentNode: string; childUid: number; childNode: string }
-  | { kind: 'surface'; parentUid: number; /** Desired craft-frame transform of the held root. */ position: Vec3; rotation: Quat };
+  | {
+      kind: 'surface';
+      parentUid: number;
+      /** Desired craft-frame transform of the held root. */
+      position: Vec3;
+      rotation: Quat;
+      /** Hit point and outward surface normal on the parent (craft frame). */
+      point: Vec3;
+      normal: Vec3;
+    };
+
+export type SymmetryMode = 'radial' | 'mirror';
 
 export interface Toast { id: number; text: string; tone: 'info' | 'warn' | 'bad' | 'good' }
 
@@ -40,8 +50,13 @@ export interface SessionView {
   totalDvAsl: number;
   held: HeldState | null;
   symmetry: SymmetryCount;
+  /** Radial (around the craft's long axis) or mirror (across the craft's YZ plane; count 1 = off, 2 = on). */
+  symmetryMode: SymmetryMode;
+  /** Building orientation: VAB = vertical (rockets), SPH = horizontal (aircraft). */
+  craftType: CraftDef['type'];
   showCoM: boolean;
   showCoT: boolean;
+  showCoL: boolean;
   canUndo: boolean;
   canRedo: boolean;
   toasts: Toast[];
@@ -63,8 +78,10 @@ export class EditorSession {
   private name: string;
   private held: HeldState | null = null;
   private symmetry: SymmetryCount = 1;
+  private symmetryMode: SymmetryMode = 'radial';
   private showCoM = false;
   private showCoT = false;
+  private showCoL = false;
   private toasts: Toast[] = [];
   private toastId = 0;
   private hoverUid: number | null = null;
@@ -74,12 +91,27 @@ export class EditorSession {
   /** Bumped when a whole craft is loaded (view re-frames the camera). */
   loadCounter = 0;
 
-  constructor(craft?: CraftDef | null) {
-    this.editor = new CraftEditor(CATALOG, EMPTY);
+  constructor(craft?: CraftDef | null, type: CraftDef['type'] = 'VAB') {
+    this.editor = new CraftEditor(CATALOG, { ...EMPTY, type });
     this.name = EMPTY.name;
     this.attach(this.editor);
     if (craft) this.load(craft, false);
-    else this.refresh();
+    else {
+      this.applyTypeDefaults(type);
+      this.refresh();
+    }
+  }
+
+  /** SPH builds planes: mirror symmetry by default; VAB: radial. */
+  private applyTypeDefaults(type: CraftDef['type']) {
+    if (type === 'SPH') {
+      this.symmetryMode = 'mirror';
+      this.symmetry = 2;
+      this.showCoL = true;
+    } else {
+      this.symmetryMode = 'radial';
+      this.symmetry = 1;
+    }
   }
 
   // ------------------------------------------------------------------ store plumbing
@@ -107,7 +139,8 @@ export class EditorSession {
     this.version++;
     this.snap = {
       craft, name: this.name, stages, stageStats, stats, totalDvVac, totalDvAsl,
-      held: this.held, symmetry: this.symmetry, showCoM: this.showCoM, showCoT: this.showCoT,
+      held: this.held, symmetry: this.symmetry, symmetryMode: this.symmetryMode, craftType: craft.type,
+      showCoM: this.showCoM, showCoT: this.showCoT, showCoL: this.showCoL,
       canUndo: this.editor.canUndo || this.held?.kind === 'new', canRedo: this.editor.canRedo,
       toasts: this.toasts, hoverUid: this.hoverUid, highlightUids: this.highlightUids, version: this.version,
     };
@@ -118,7 +151,8 @@ export class EditorSession {
   private touch() {
     this.version++;
     this.snap = {
-      ...this.snap, name: this.name, held: this.held, symmetry: this.symmetry, showCoM: this.showCoM, showCoT: this.showCoT,
+      ...this.snap, name: this.name, held: this.held, symmetry: this.symmetry, symmetryMode: this.symmetryMode,
+      showCoM: this.showCoM, showCoT: this.showCoT, showCoL: this.showCoL,
       canUndo: this.editor.canUndo || this.held?.kind === 'new', canRedo: this.editor.canRedo,
       toasts: this.toasts, hoverUid: this.hoverUid, highlightUids: this.highlightUids, version: this.version,
     };
@@ -162,13 +196,24 @@ export class EditorSession {
     if (!ok) return;
     this.name = craft.name || 'Untitled Craft';
     this.held = null;
+    this.applyTypeDefaults(this.editor.craft.type);
     this.loadCounter++;
     this.refresh();
     if (announce) this.toast(`Loaded "${this.name}"`, 'good');
   }
 
   newCraft() {
-    this.load({ ...EMPTY }, false);
+    this.load({ ...EMPTY, type: this.editor.craft.type }, false);
+  }
+
+  /** Toggle the building (and launch) mode: VAB → launch pad, SPH → runway. */
+  setCraftType(type: CraftDef['type']) {
+    if (this.held) this.cancelHeld();
+    if (this.guard(() => (this.editor.setCraftType(type), true))) {
+      this.applyTypeDefaults(type);
+      this.loadCounter++; // re-frame the camera for the new orientation
+      this.refresh();
+    }
   }
 
   setName(name: string) {
@@ -303,22 +348,19 @@ export class EditorSession {
         if (p.kind === 'root') this.editor.addRoot(h.partId);
         else if (p.kind === 'stack') {
           const parent = this.editor.craft.parts.find((x) => x.uid === p.parentUid);
-          this.editor.setSymmetry({ mode: 'radial', count: parent?.symmetryGroup !== undefined ? this.symmetry : 1 });
+          if (parent?.symmetryGroup !== undefined && this.symmetryMode === 'mirror') this.editor.setSymmetry({ mode: 'mirror' });
+          else this.editor.setSymmetry({ mode: 'radial', count: parent?.symmetryGroup !== undefined ? this.symmetry : 1 });
           this.editor.attachPart(h.partId, p.parentUid, p.parentNode, p.childNode, h.rotation);
         } else {
-          this.editor.setSymmetry({ mode: 'radial', count: this.symmetry });
-          const t = coreSurfaceArgs(CATALOG.get(h.partId)!, p.position, p.rotation);
-          this.editor.surfaceAttachAtHit(h.partId, p.parentUid, t.point, t.normal, p.rotation);
+          this.applySymmetry();
+          this.editor.surfaceAttachAtHit(h.partId, p.parentUid, p.point, p.normal, p.rotation);
         }
         return true;
       }
       // Assembly picked up from the craft: push the accumulated rotation into the core first.
       const rotated = Math.abs(h.rotation.w) < 1 - 1e-9;
       if (p.kind === 'surface') {
-        const core = this.editor.held!;
-        const root = core.parts.find((x) => x.uid === core.rootUid)!;
-        const t = coreSurfaceArgs(CATALOG.get(root.partId)!, p.position, p.rotation);
-        this.editor.surfaceAttachHeld(p.parentUid, t.point, t.normal, p.rotation);
+        this.editor.surfaceAttachHeld(p.parentUid, p.point, p.normal, p.rotation);
       } else {
         if (rotated) this.editor.rotateHeld(h.rotation);
         if (p.kind === 'root') this.editor.placeHeldAsRoot();
@@ -334,17 +376,40 @@ export class EditorSession {
     return !!ok;
   }
 
+  /** Push the session's symmetry setting into the core for a new surface attachment. */
+  private applySymmetry() {
+    if (this.symmetryMode === 'mirror') {
+      if (this.symmetry > 1) this.editor.setSymmetry({ mode: 'mirror' });
+      else this.editor.setSymmetry({ mode: 'radial', count: 1 });
+    } else this.editor.setSymmetry({ mode: 'radial', count: this.symmetry });
+  }
+
   // ------------------------------------------------------------------ misc UI state
+  /** X: radial mode cycles 1..8 copies; mirror mode toggles mirroring on/off. */
   cycleSymmetry(dir = 1) {
-    const i = SYMMETRY_STEPS.indexOf(this.symmetry);
-    this.symmetry = SYMMETRY_STEPS[(i + dir + SYMMETRY_STEPS.length) % SYMMETRY_STEPS.length];
+    if (this.symmetryMode === 'mirror') this.symmetry = this.symmetry > 1 ? 1 : 2;
+    else {
+      const i = SYMMETRY_STEPS.indexOf(this.symmetry);
+      this.symmetry = SYMMETRY_STEPS[(i + dir + SYMMETRY_STEPS.length) % SYMMETRY_STEPS.length];
+    }
+    this.touch();
+  }
+  /** R: switch between radial and mirror symmetry. */
+  toggleSymmetryMode() {
+    this.symmetryMode = this.symmetryMode === 'radial' ? 'mirror' : 'radial';
+    this.symmetry = this.symmetryMode === 'mirror' ? 2 : 1;
     this.touch();
   }
   getSymmetry() {
     return this.symmetry;
   }
+  /** Number of copies a new surface attachment would get (including the original). */
+  symmetryCopies() {
+    return this.symmetryMode === 'mirror' ? (this.symmetry > 1 ? 2 : 1) : this.symmetry;
+  }
   toggleCoM() { this.showCoM = !this.showCoM; this.touch(); }
   toggleCoT() { this.showCoT = !this.showCoT; this.touch(); }
+  toggleCoL() { this.showCoL = !this.showCoL; this.touch(); }
   setHover(uid: number | null) {
     if (uid === this.hoverUid) return;
     this.hoverUid = uid;

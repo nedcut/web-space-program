@@ -1,7 +1,7 @@
 import type { CraftDef, PartInstance } from '../../sim/vessel/types';
 import { add, sub, v3, type Vec3 } from '../../util/vec3';
 import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../../util/quat';
-import { alignNodes, freeAttachNodes, mirrorPosition, mirrorRotation, requirePart, shapeHalfExtents, surfacePlacement, transformAssembly, worldNode, type HeldAssembly, type PartCatalog, type SnapCandidate } from './geometry';
+import { alignNodes, freeAttachNodes, mirrorPosition, mirrorRotation, requirePart, surfaceContact, surfacePlacement, transformAssembly, worldNode, type HeldAssembly, type PartCatalog, type SnapCandidate } from './geometry';
 import { autoStage, getStageList, insertStage, moveToStage, removeEmptyStages, type Stage } from './staging';
 import { deserializeCraft, serializeCraft } from './serialization';
 
@@ -155,12 +155,12 @@ export class CraftEditor {
     target.position = mirrorPosition(original.position);
     target.rotation = mirrorRotation(original.rotation);
     if (original.attachNode === 'srf') {
-      // Quaternions cannot encode reflection. Re-align the local -X anchor after
-      // reflecting the preferred orientation, preserving the mirrored contact point.
+      // Quaternions cannot encode reflection: M R M equals the reflection only for parts symmetric about their
+      // local YZ plane (all catalogue radial parts). Re-seat the mount on the mirrored contact point so any
+      // part still sits flush on the mirrored surface.
       const def = requirePart(this.catalog, original.partId);
-      const anchor = add(original.position, qRotate(original.rotation, v3(-shapeHalfExtents(def).x, 0, 0)));
-      const normal = qRotate(original.rotation, v3(1, 0, 0));
-      Object.assign(target, surfacePlacement(def, mirrorPosition(anchor), mirrorPosition(normal), target.rotation));
+      const contact = surfaceContact(original, def);
+      Object.assign(target, surfacePlacement(def, mirrorPosition(contact.point), mirrorPosition(contact.normal), target.rotation));
     }
   }
   attachPart(partId: string, parentUid: number, parentNodeId: string, childNodeId: string, rotation: Quat = qIdentity()): PartInstance {
@@ -271,6 +271,12 @@ export class CraftEditor {
       const origin = this.part(uid).position;
       this.state.craft.parts = rootAt(this.state.craft.parts, uid).map(p => ({ ...p, position: sub(p.position, origin) }));
     });
+  }
+  /** Switch between vertical (VAB) and horizontal (SPH) building; geometry is unchanged (craft +Y = nose). */
+  setCraftType(type: CraftDef['type']): void {
+    if (type !== 'VAB' && type !== 'SPH') throw new Error('Unsupported craft type');
+    if (this.state.craft.type === type) return;
+    this.update(() => { this.state.craft.type = type; });
   }
   autoStage(): void { this.update(() => { this.state.craft = autoStage(this.state.craft, this.catalog); }); }
   moveToStage(uid: number, stageIndex: number): void { this.update(() => { this.state.craft = moveToStage(this.state.craft, uid, stageIndex); }); }

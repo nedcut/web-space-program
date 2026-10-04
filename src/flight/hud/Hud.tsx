@@ -75,6 +75,12 @@ export interface Telemetry {
   messages: { id: number; text: string; level: 'info' | 'warn' | 'bad' }[];
   mapMode: boolean;
   assist: { name: string; status: string } | null;
+  /** Landing gear / legs state (null = vessel has none). */
+  gear: 'up' | 'down' | 'moving' | null;
+  /** Wheel brakes held (null = no wheels). */
+  brakes: boolean | null;
+  /** Jet intake air supply / demand (null = no air-breathing engine running). */
+  intakeAir: number | null;
   target: TargetTelemetry | null;
   targetOptions: { id: string; name: string; kind: 'vessel' | 'body'; distance: number }[];
   dockingMode: boolean;
@@ -101,6 +107,8 @@ export interface HudCallbacks {
   onMap(): void;
   onMenu(): void;
   onSpeedMode(): void;
+  /** G: raise / lower landing gear. */
+  onToggleGear?(): void;
   onSetTarget(id: string | null, portUid?: number | null): void;
   onToggleDocking(): void;
   onUndock(portUid?: number): void;
@@ -226,10 +234,30 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
             </button>
           ))}
           <button className={`btn small ${t.rcsOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} onClick={cb.onToggleRcs}>RCS</button>
+          {t.gear !== null && (
+            <button
+              className={`btn small ${t.gear === 'down' ? 'primary' : ''}`}
+              style={{ padding: '4px 2px', fontSize: 10, color: t.gear === 'moving' ? 'var(--warn)' : undefined }}
+              title="Landing gear (G)"
+              onClick={() => cb.onToggleGear?.()}
+            >
+              GEAR {t.gear === 'down' ? '▼' : t.gear === 'up' ? '▲' : '…'}
+            </button>
+          )}
+          {t.brakes !== null && (
+            <span className={`btn small ${t.brakes ? 'primary' : ''}`} style={{ padding: '4px 2px', fontSize: 10, textAlign: 'center', color: t.brakes ? 'var(--bad)' : undefined }} title="Wheel brakes (hold B)">
+              BRAKES
+            </span>
+          )}
+          {t.intakeAir !== null && (
+            <span className="mono" style={{ gridColumn: 'span 2', fontSize: 10, textAlign: 'center', color: t.intakeAir < 0.5 ? 'var(--bad)' : t.intakeAir < 1 ? 'var(--warn)' : 'var(--text-dim)' }} title="Intake air supply / jet demand">
+              AIR {(Math.min(t.intakeAir, 9.99) * 100).toFixed(0)}%
+            </span>
+          )}
         </div>}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <button className="panel btn" onClick={cb.onSpeedMode} style={{ padding: '4px 14px', marginBottom: 6, textAlign: 'center' }}>
-            <div className="label">{t.speedMode}</div>
+            <div className="label">{t.speedMode === 'surface' && t.dynamicPressure > 50 ? 'airspeed' : t.speedMode}</div>
             <div className="mono" style={{ fontSize: 18 }}>{formatSpeed(t.speed)}</div>
           </button>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>

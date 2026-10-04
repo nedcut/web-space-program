@@ -1,5 +1,6 @@
 import type { CraftDef, PartInstance, ResourceId } from '../../sim/vessel/types';
 import { add, scale, v3, type Vec3 } from '../../util/vec3';
+import { qRotate } from '../../util/quat';
 import { partBounds, requirePart, type PartCatalog } from './geometry';
 
 export type ResourceDensities = Partial<Record<ResourceId, number>> | ReadonlyMap<ResourceId, number>;
@@ -20,8 +21,18 @@ export interface CraftStats {
   centreOfMass: Vec3;
   /** Thrust-weighted engine origins; undefined without active engine definitions. */
   centreOfThrust?: Vec3;
-  /** Placeholder: area-weighted lifting-surface origins, not an aerodynamic model. */
+  /**
+   * Centre of lift: lifting surfaces weighted by their lift-curve slope × area × the share of their lift
+   * normal that acts in the relevant plane (SPH: the pitch plane, normal · craft +Z; VAB: perpendicular to
+   * the stack axis), each acting at its planform centre. Undefined without lifting surfaces.
+   */
   centreOfLift?: Vec3;
+}
+/** Lift weight of a lifting surface instance for the centre-of-lift estimate. */
+export function liftWeight(part: PartInstance, module: { area: number; liftSlope: number }, craftType: CraftDef['type']): number {
+  const n = qRotate(part.rotation, v3(1, 0, 0));
+  const share = craftType === 'SPH' ? Math.abs(n.z) : Math.hypot(n.x, n.z);
+  return module.area * module.liftSlope * share;
 }
 export function craftStats(craft: CraftDef, catalog: PartCatalog, densities: ResourceDensities): CraftStats {
   let mass = 0, thrust = 0, lift = 0;
@@ -32,7 +43,10 @@ export function craftStats(craft: CraftDef, catalog: PartCatalog, densities: Res
     mass += m; com = add(com, scale(part.position, m));
     for (const module of def.modules) {
       if (module.type === 'engine') { thrust += module.maxThrustVac; cot = add(cot, scale(part.position, module.maxThrustVac)); }
-      if (module.type === 'liftingSurface') { lift += module.area; col = add(col, scale(part.position, module.area)); }
+      if (module.type === 'liftingSurface') {
+        const w = liftWeight(part, module, craft.type);
+        lift += w; col = add(col, scale(part.position, w));
+      }
     }
     return partBounds(part, def);
   });
@@ -40,7 +54,7 @@ export function craftStats(craft: CraftDef, catalog: PartCatalog, densities: Res
   const max = boxes.length ? v3(Math.max(...boxes.map(b => b.max.x)), Math.max(...boxes.map(b => b.max.y)), Math.max(...boxes.map(b => b.max.z))) : v3();
   return { totalMass: mass, partCount: craft.parts.length, bounds: { min, max }, height: max.y - min.y,
     width: max.x - min.x, depth: max.z - min.z, centreOfMass: mass ? scale(com, 1 / mass) : v3(),
-    centreOfThrust: thrust ? scale(cot, 1 / thrust) : undefined, centreOfLift: lift ? scale(col, 1 / lift) : undefined };
+    centreOfThrust: thrust ? scale(cot, 1 / thrust) : undefined, centreOfLift: lift > 1e-9 ? scale(col, 1 / lift) : undefined };
 }
 export interface CraftWarning { code: 'no-command' | 'no-fuel' | 'no-parachute' | 'overlap'; message: string; partUids: number[] }
 export function validateCraft(craft: CraftDef, catalog: PartCatalog): CraftWarning[] {

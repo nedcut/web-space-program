@@ -15,6 +15,8 @@ export const RESOURCES: Record<ResourceId, ResourceDef> = {
   solidFuel: { id: 'solidFuel', name: 'Solid Propellant Grain', density: 1.8, flow: 'none' },
   electricCharge: { id: 'electricCharge', name: 'Electric Charge', density: 0, flow: 'all' },
   ablator: { id: 'ablator', name: 'Ablative Resin', density: 1.0, flow: 'none' },
+  /** Produced by intakes each step (1 unit = 1 kg of air); only a tiny buffer is held. Massless for simplicity. */
+  intakeAir: { id: 'intakeAir', name: 'Intake Air', density: 0, flow: 'all' },
 };
 
 /** Mass of a resource bundle, kg. */

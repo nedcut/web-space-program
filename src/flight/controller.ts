@@ -14,7 +14,7 @@ import { PART_CATALOG } from '../data/parts';
 import { RESOURCES } from '../data/resources';
 import type { CraftDef } from '../sim/vessel/types';
 import type { SasMode } from '../sim/vessel/runtime';
-import { neutralInput, computeStageDeltaV, freePorts, dockedPorts, type StageDeltaV, type PortInfo } from '../sim/vessel';
+import { neutralInput, computeStageDeltaV, freePorts, dockedPorts, gearState, type StageDeltaV, type PortInfo } from '../sim/vessel';
 import type { Orbit } from '../sim/orbit/api';
 import type { ExtraOrbit } from '../render/map/MapView';
 import { placeInCircularOrbit, spawnRendezvousTarget } from '../game/scenarios';
@@ -71,6 +71,8 @@ export class FlightController {
   /** Map conics of non-active vessels, refreshed at most once per second while in physics. */
   private mapOrbits = new Map<string, { orbit?: Orbit; at: number }>();
   private stagePending = false;
+  /** Gear command from G (applied once, then left to the vessel state). */
+  private gearPending: boolean | undefined = undefined;
   private views = new Map<string, VesselView>();
   private stars: Starfield;
   private glare: SunGlare;
@@ -156,6 +158,7 @@ export class FlightController {
           case 'plantFlag': if (!this.paused) this.world.plantFlag(); break;
           case 'toggleSas': this.toggleSas(); break;
           case 'toggleRcs': this.rcsOn = !this.rcsOn; break;
+          case 'toggleGear': this.toggleGear(); break;
           case 'map': this.toggleMap(); break;
           case 'warpUp': this.world.changeWarp(1); break;
           case 'warpDown': this.world.changeWarp(-1); break;
@@ -370,6 +373,16 @@ export class FlightController {
     this.stagePending = true;
   }
 
+  /** G: raise / lower landing gear and legs. */
+  toggleGear() {
+    const wv = this.world.active;
+    if (!wv) return;
+    const cur = gearState(wv.state);
+    if (cur === undefined) return;
+    this.gearPending = !cur;
+    this.world.message(this.gearPending ? 'Gear down' : 'Gear up');
+  }
+
   subscribe(fn: (t: Telemetry) => void) {
     this.telemetryListeners.add(fn);
     return () => this.telemetryListeners.delete(fn);
@@ -413,11 +426,16 @@ export class FlightController {
       sas: this.sasOn ? this.sas : 'off',
       rcs: this.rcsOn,
       stage: !wv?.state.eva && this.stagePending,
+      gear: this.gearPending,
+      brakes: s.brakes,
       sasReference: this.speedMode === 'surface' ? 'surface' : this.speedMode === 'target' && targetState ? 'target' : 'orbit',
       target: targetState ?? undefined,
       maneuverDirection: maneuverDir ?? undefined,
     });
-    if (!this.paused) this.stagePending = false;
+    if (!this.paused) {
+      this.stagePending = false;
+      this.gearPending = undefined;
+    }
     let input = ctrl;
     if (this.assist && wv && !this.paused) {
       // Any manual attitude/throttle input cancels the assist (pilot override).
@@ -816,10 +834,11 @@ export class FlightController {
       sasOn: this.sasOn,
       sasMode: this.sas,
       rcsOn: this.rcsOn,
+      ...this.groundTelemetry(wv),
       stage: st.nextStage,
       stages,
       resources: [...totals.entries()]
-        .filter(([, e]) => e.max > 0)
+        .filter(([id, e]) => e.max > 0 && id !== 'intakeAir')
         .map(([id, e]) => ({ id, name: RESOURCES[id as keyof typeof RESOURCES]?.name ?? id, amount: e.amount, max: e.max, color: RESOURCE_COLORS[id] ?? '#aaa' })),
       messages: w.messages.map((m) => ({ id: m.id, text: m.text, level: m.level })),
       mapMode: this.mapMode,
@@ -830,6 +849,25 @@ export class FlightController {
       docking: this.dockingMode ? this.dockingTelemetry() : null,
       dockedPorts: dockedPorts(st).map((p) => ({ uid: p.uid, name: p.def.name })),
     };
+  }
+
+  /** Gear / brakes / intake-air readouts for the HUD (null fields when the vessel has no such hardware). */
+  private groundTelemetry(wv: WorldVessel): Pick<Telemetry, 'gear' | 'brakes' | 'intakeAir'> {
+    const st = wv.state;
+    let gear: Telemetry['gear'] = null;
+    let wheels = false;
+    for (const p of st.parts) {
+      if (p.wheel) {
+        wheels = true;
+        const g = p.wheel.deploy >= 1 ? 'down' : p.wheel.deploy <= 0 ? 'up' : 'moving';
+        gear = gear === null || gear === g ? g : 'moving';
+      } else if (p.leg) {
+        const g = p.leg.deployed ? 'down' : 'up';
+        gear = gear === null || gear === g ? g : 'moving';
+      }
+    }
+    const air = st.telemetry.intakeAirRatio;
+    return { gear, brakes: wheels ? this.input.state.brakes : null, intakeAir: Number.isFinite(air) ? air : null };
   }
 
   dispose() {

@@ -1,7 +1,7 @@
 import type { Vec3 } from '../../util/vec3';
 import { add, cross, dot, length, normalize, scale, sub, v3 } from '../../util/vec3';
 import { qRotate } from '../../util/quat';
-import type { EngineModule, RcsModule, ReactionWheelModule, ResourceDef, ResourceId } from './types';
+import type { AirBreathingSpec, EngineModule, IntakeModule, RcsModule, ReactionWheelModule, ResourceDef, ResourceId } from './types';
 import type { PartState, VesselEvent, VesselState } from './runtime';
 import { ATM, G0 } from './env';
 import { availableResource, drawPropellants, drawResource, totalResource } from './resources';
@@ -15,6 +15,12 @@ import { availableResource, drawPropellants, drawResource, totalResource } from 
  */
 
 export const MIN_ISP = 0.1;
+/** Sea-level reference density for jet thrust lapse, kg/m^3. */
+export const RHO0 = 1.225;
+/** Equivalent inflow speed an intake gets from compressor suction when standing still, m/s. */
+export const INTAKE_STATIC_SPEED = 60;
+/** Jets flame out when the intake air supply drops below this fraction of demand (relight above it). */
+export const JET_MIN_AIR_FRACTION = 0.15;
 /** Throttle fraction below which a spooling-down engine is considered shut off. */
 export const SPOOL_CUTOFF = 0.01;
 
@@ -37,6 +43,54 @@ export const isSolidMotor = (m: EngineModule): boolean => (m.propellants.solidFu
 
 export const engineModule = (p: PartState): EngineModule | undefined =>
   p.engine ? (p.def.modules[p.engine.moduleIndex] as EngineModule) : undefined;
+
+/** Piecewise-linear lookup of a [x, y] curve (clamped to the end values). */
+export function curveAt(curve: [number, number][], x: number): number {
+  if (curve.length === 0) return 0;
+  if (x <= curve[0][0]) return curve[0][1];
+  for (let i = 1; i < curve.length; i++) {
+    const [x1, y1] = curve[i];
+    if (x <= x1) {
+      const [x0, y0] = curve[i - 1];
+      return x1 > x0 ? y0 + ((y1 - y0) * (x - x0)) / (x1 - x0) : y1;
+    }
+  }
+  return curve[curve.length - 1][1];
+}
+
+/** Jet thrust multiplier (fraction of static sea-level thrust) at a Mach number and air density. */
+export function jetThrustFactor(spec: AirBreathingSpec, mach: number, density: number): number {
+  if (density <= 0) return 0;
+  return Math.max(0, curveAt(spec.machCurve, Math.max(0, mach))) * Math.pow(density / RHO0, spec.densityExponent);
+}
+
+/** Thrust of an air-breathing engine with unlimited intake air, N. */
+export const jetThrust = (m: EngineModule, mach: number, density: number, throttle = 1): number =>
+  m.airBreathing ? m.maxThrustVac * throttle * jetThrustFactor(m.airBreathing, mach, density) : 0;
+
+/** Intake air production rate of one intake (kg/s); `cosFacing` = cosine between airflow and the intake axis. */
+export function intakeRate(mod: IntakeModule, density: number, speed: number, cosFacing: number): number {
+  if (density <= 0) return 0;
+  return density * mod.area * (speed * (0.5 + 0.5 * Math.max(0, cosFacing)) + INTAKE_STATIC_SPEED);
+}
+
+/**
+ * Intakes fill the 'intakeAir' resource for this step (intake axis = part +Y). Air is not storable: each step an
+ * intake holds exactly what it captured during that step (its nominal capacity only marks it as an air source).
+ */
+export function produceIntakeAir(v: VesselState, airVelocityBody: Vec3, density: number, dt: number): void {
+  for (const p of v.parts) {
+    for (const mod of p.def.modules) {
+      if (mod.type !== 'intake') continue;
+      const vb = add(airVelocityBody, cross(v.angularVelocity, sub(p.position, v.com)));
+      const sp = length(vb);
+      const facing = qRotate(p.rotation, { x: 0, y: 1, z: 0 });
+      const cosF = sp > 1e-6 ? dot(vb, facing) / sp : 0;
+      // Leftovers are vented: the intake only ever holds what it captured during this step.
+      p.resources.intakeAir = intakeRate(mod, density, sp, cosF) * dt;
+    }
+  }
+}
 
 /** Commanded throttle -> engine target throttle (fraction of max mass flow). */
 export function targetThrottle(m: EngineModule, cmd: number): number {
@@ -122,9 +176,17 @@ export interface ActuatorOutput {
   torqueBody: Vec3;
 }
 
+/** Ambient air state seen by the engines (air-breathing engines need it). */
+export interface EngineAir {
+  density: number;
+  mach: number;
+}
+
 /**
  * Advance all engines by dt: spool throttle, draw propellant (mixture respected), compute thrust and
- * gimballed thrust direction. Engines flame out when any propellant cannot be fully supplied.
+ * gimballed thrust direction. Rockets flame out (and shut down) when any propellant cannot be fully supplied.
+ * Air-breathing engines follow Mach/density thrust curves, share the vessel's intake air and flame out while
+ * the air supply is below JET_MIN_AIR_FRACTION of demand (relighting automatically when air returns).
  */
 export function stepEngines(
   v: VesselState,
@@ -133,10 +195,14 @@ export function stepEngines(
   pressure: number,
   dt: number,
   events: VesselEvent[],
-): ActuatorOutput & { thrust: number } {
+  air: EngineAir = { density: 0, mach: 0 },
+): ActuatorOutput & { thrust: number; airRatio: number } {
   let force = v3();
   let torque = v3();
   let total = 0;
+  // Pass 1: spool throttles; jet fuel flows and the shared intake air demand.
+  const jetFlow = new Map<number, number>();
+  let airNeed = 0;
   for (const p of v.parts) {
     const st = p.engine;
     const m = engineModule(p);
@@ -152,7 +218,39 @@ export function stepEngines(
     // A commanded cut ends once the flow has decayed below the cutoff; otherwise the exponential lag never
     // reaches zero (thrust and propellant drain lingering for tens of seconds, blocking rails warp).
     if (target === 0 && st.throttle < SPOOL_CUTOFF) st.throttle = 0;
-    const mdot = maxMassFlow(m) * st.throttle;
+    if (m.airBreathing) {
+      const mdot = jetThrust(m, air.mach, air.density, st.throttle) / (m.ispVac * G0);
+      jetFlow.set(p.uid, mdot);
+      airNeed += mdot * m.airBreathing.airRatio * dt;
+    }
+  }
+  let airFrac = 1;
+  if (airNeed > 0) {
+    const src = v.parts.find((p) => (p.maxResources.intakeAir ?? 0) > 0);
+    const avail = src ? availableResource(v, src.uid, 'intakeAir') : 0;
+    airFrac = Math.min(1, avail / airNeed);
+    if (src && airFrac >= JET_MIN_AIR_FRACTION) drawResource(v, src.uid, 'intakeAir', airNeed * airFrac);
+  }
+  // Pass 2: propellant draw and thrust.
+  for (const p of v.parts) {
+    const st = p.engine;
+    const m = engineModule(p);
+    if (!st || !m || !st.ignited) continue;
+    let mdot: number;
+    let isp: number;
+    if (m.airBreathing) {
+      isp = m.ispVac;
+      const starved = (jetFlow.get(p.uid) ?? 0) > 0 && airFrac < JET_MIN_AIR_FRACTION;
+      if (starved !== st.flamedOut) {
+        st.flamedOut = starved;
+        if (starved) events.push({ type: 'flameout', vesselId: v.id, partUid: p.uid });
+      }
+      mdot = starved ? 0 : (jetFlow.get(p.uid) ?? 0) * airFrac;
+    } else {
+      isp = ispAtPressure(m, pressure);
+      mdot = maxMassFlow(m) * st.throttle;
+    }
+    st.isp = isp;
     if (mdot <= 1e-12) {
       st.thrust = 0;
       st.massFlow = 0;
@@ -164,7 +262,6 @@ export function stepEngines(
       st.flamedOut = true;
       events.push({ type: 'flameout', vesselId: v.id, partUid: p.uid });
     }
-    st.isp = ispAtPressure(m, pressure);
     st.massFlow = mdot * f;
     // Average thrust over the step (partial supply on the final step scales thrust).
     const thrust = st.massFlow * st.isp * G0;
@@ -176,7 +273,7 @@ export function stepEngines(
     torque = add(torque, cross(sub(p.position, v.com), F));
     total += thrust;
   }
-  return { forceBody: force, torqueBody: torque, thrust: total };
+  return { forceBody: force, torqueBody: torque, thrust: total, airRatio: airNeed > 0 ? airFrac : NaN };
 }
 
 /** Gimbal torque per unit command on each axis (N*m), for SAS gain scheduling. */

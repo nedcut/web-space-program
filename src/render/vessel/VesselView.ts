@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { VesselState, PartState } from '../../sim/vessel/runtime';
 import type { EngineModule } from '../../sim/vessel/types';
-import { buildPartMesh, createPlume, getExhaustAnchors, setPartDeploy, setEngineGimbal, type Plume } from '../parts';
+import { buildPartMesh, createPlume, getExhaustAnchors, setPartDeploy, setEngineGimbal, setGearPose, type Plume } from '../parts';
+import { qRotate } from '../../util/quat';
 import type { Vec3 } from '../../util/vec3';
 
 interface PartVisual {
@@ -98,6 +99,16 @@ export class VesselView {
       const thr = p.engine.ignited && !p.engine.flamedOut ? p.engine.throttle : 0;
       for (const pl of pv.plumes) pl.update({ throttle: thr, ambientPressure, time });
       setEngineGimbal(pv.object, p.engine.gimbal.a, p.engine.gimbal.b);
+    }
+    if (p.wheel) {
+      // Gear deploy follows the simulated animation; steering sign converts body-frame steer to the part frame.
+      if (Math.abs(pv.deploy - p.wheel.deploy) > 1e-4) {
+        pv.deploy = p.wheel.deploy;
+        setPartDeploy(pv.object, pv.deploy);
+      }
+      const sx = qRotate(p.rotation, { x: 1, y: 0, z: 0 }).x;
+      setGearPose(pv.object, p.wheel.compression, sx >= 0 ? -p.wheel.steer : p.wheel.steer, p.wheel.spin);
+      return;
     }
     let target = -1;
     if (p.leg) target = p.leg.deployed ? 1 : 0;
