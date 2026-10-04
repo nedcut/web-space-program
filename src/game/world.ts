@@ -445,8 +445,19 @@ export class World {
     this.acc += realDt * rate;
     let steps = 0;
     let stageEdge = input.stage;
+    const ut0 = this.ut;
     while (this.acc >= PHYSICS_DT && steps < MAX_STEPS_PER_FRAME * rate) {
-      this.physicsStep({ ...input, stage: stageEdge });
+      // A frame runs several steps with one input. Keep `input.target` current: heliocentric positions move
+      // ~30 km/s, so a frame-old target position is kilometres off. Use the live world target when it is the
+      // one being steered to, else carry the given state along with its velocity.
+      let target = input.target;
+      if (target && this.ut !== ut0) {
+        target = (this.targetId ? this.targetState() : null) ?? {
+          position: add(target.position, scale(target.velocity, this.ut - ut0)),
+          velocity: target.velocity,
+        };
+      }
+      this.physicsStep({ ...input, stage: stageEdge, target });
       stageEdge = false;
       this.acc -= PHYSICS_DT;
       steps++;

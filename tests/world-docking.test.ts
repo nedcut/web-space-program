@@ -49,7 +49,8 @@ describe('world rendezvous & docking', () => {
       const fwd = up;
       const side = normalize(cross(fwd, w.relativeState(w.active!).velocity));
       act.orientation = quatFromBasis(side, fwd, cross(side, fwd));
-      for (let i = 0; i < 50 * 25; i++) w.tick(0.02, neutralInput({ sas: mode, target: w.targetState()! }));
+      // 0.2 s frames = 10 physics steps per input, like a slow browser frame.
+      for (let i = 0; i < 5 * 25; i++) w.tick(0.2, neutralInput({ sas: mode, target: w.targetState()! }));
       const nose = qRotate(act.orientation, { x: 0, y: 1, z: 0 });
       const toT = normalize(sub(w.targetState()!.position, act.position));
       expect(dot(nose, toT)).toBeGreaterThan(mode === 'target' ? 0.999 : -2);

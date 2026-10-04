@@ -361,7 +361,11 @@ export class FlightController {
     const s = this.input.state;
     const wv = this.world.active;
     const maneuverDir = this.maneuverDirection();
-    if (this.speedMode === 'target' && !this.world.targetId) this.speedMode = 'orbit';
+    if (!this.world.targetId) {
+      // Target gone (docked, destroyed, cleared): leave target-relative modes.
+      if (this.speedMode === 'target') this.speedMode = 'orbit';
+      if (this.sas === 'target' || this.sas === 'antiTarget') this.sas = 'stabilityAssist';
+    }
     const targetState = this.world.targetState();
     const ctrl = neutralInput({
       pitch: s.pitch,
