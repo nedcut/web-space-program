@@ -129,10 +129,10 @@ export default function FlightScene() {
             onWarp: (d) => ctrl.current?.world.changeWarp(d),
             onMap: () => ctrl.current?.toggleMap(),
             onMenu: () => setPaused(true),
-            onSpeedMode: () => {
-              const c = ctrl.current;
-              if (c) c.speedMode = c.speedMode === 'surface' ? 'orbit' : 'surface';
-            },
+            onSpeedMode: () => ctrl.current?.cycleSpeedMode(),
+            onSetTarget: (id, port) => ctrl.current?.setTarget(id, port ?? null),
+            onToggleDocking: () => ctrl.current?.toggleDockingMode(),
+            onUndock: (uid) => ctrl.current?.undock(uid),
           }}
         />
       )}

@@ -30,6 +30,24 @@ export interface ExtraOrbit {
   orbit?: Orbit;
 }
 
+/** Navigation target highlight. */
+export interface MapTarget {
+  kind: 'vessel' | 'body';
+  id: string;
+}
+
+/** Closest-approach markers: positions relative to `body` at the approach time, plus a label. */
+export interface MapApproach {
+  body: string;
+  positionA: Vec3;
+  positionB: Vec3;
+  label: string;
+}
+
+const TARGET_COLOR = 0xff4fb8;
+const TARGET_CSS = '#ff4fb8';
+const EXTRA_COLOR = 0x6fe39a;
+
 const PATCH_COLORS = [0x5cc8ff, 0xffb35c, 0xd066ff, 0x6fe39a, 0xff6b6b];
 
 interface BodyVisual {
@@ -55,6 +73,32 @@ function makeIconTexture(color: string, ring: boolean): THREE.CanvasTexture {
   g.arc(32, 32, ring ? 20 : 14, 0, Math.PI * 2);
   if (ring) g.stroke();
   else g.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  iconCache.set(key, t);
+  return t;
+}
+
+/** Closest-approach marker: a ring with four inward ticks. */
+function makeApproachTexture(color: string): THREE.CanvasTexture {
+  const key = `ca:${color}`;
+  const hit = iconCache.get(key);
+  if (hit) return hit;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  g.strokeStyle = color;
+  g.lineWidth = 5;
+  g.beginPath();
+  g.arc(32, 32, 18, 0, Math.PI * 2);
+  g.stroke();
+  for (let k = 0; k < 4; k++) {
+    const a = (k * Math.PI) / 2 + Math.PI / 4;
+    g.beginPath();
+    g.moveTo(32 + Math.cos(a) * 18, 32 + Math.sin(a) * 18);
+    g.lineTo(32 + Math.cos(a) * 29, 32 + Math.sin(a) * 29);
+    g.stroke();
+  }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   iconCache.set(key, t);
@@ -103,7 +147,39 @@ export class MapView {
   private sunLight = new THREE.PointLight(0xffffff, 3, 0, 0);
   private lastVesselKey = '';
   private extraOrbits: ExtraOrbit[] = [];
-  private extras = new Map<string, { icon: THREE.Sprite; line?: Line2; key: string }>();
+  private extras = new Map<string, { icon: THREE.Sprite; line?: Line2; key: string; targeted: boolean }>();
+  private target: MapTarget | null = null;
+  private highlightedBody: { vis: BodyVisual; color: number; width: number } | null = null;
+  private approach: MapApproach | null = null;
+  private approachIcons: THREE.Sprite[];
+  private approachLabel: HTMLDivElement;
+
+  /** Highlight the navigation target (its orbit and icon); null clears. */
+  setTarget(t: MapTarget | null) {
+    if (this.target?.id === t?.id && this.target?.kind === t?.kind) return;
+    this.target = t;
+    if (this.highlightedBody) {
+      const { vis, color, width } = this.highlightedBody;
+      if (vis.orbitLine) {
+        vis.orbitLine.material.color.setHex(color);
+        vis.orbitLine.material.linewidth = width;
+      }
+      this.highlightedBody = null;
+    }
+    if (t?.kind === 'body') {
+      const vis = this.bodies.get(t.id);
+      if (vis?.orbitLine) {
+        this.highlightedBody = { vis, color: vis.orbitLine.material.color.getHex(), width: vis.orbitLine.material.linewidth };
+        vis.orbitLine.material.color.setHex(TARGET_COLOR);
+        vis.orbitLine.material.linewidth = 2.2;
+      }
+    }
+  }
+
+  /** Closest-approach markers (null hides them). */
+  setApproach(a: MapApproach | null) {
+    this.approach = a;
+  }
 
   /** Additional fleet conics and icons; positions are heliocentric float64, conics body-relative. */
   setExtraOrbits(list: ExtraOrbit[]) { this.extraOrbits = list; }
@@ -145,8 +221,15 @@ export class MapView {
         icon.scale.setScalar(0.025);
         icon.renderOrder = 11;
         this.scene.add(icon);
-        vis = { icon, key: '' };
+        vis = { icon, key: '', targeted: false };
         this.extras.set(item.id, vis);
+      }
+      const targeted = this.target?.kind === 'vessel' && this.target.id === item.id;
+      if (targeted !== vis.targeted) {
+        vis.targeted = targeted;
+        vis.icon.material.map = makeIconTexture(targeted ? TARGET_CSS : '#6fe39a', true);
+        vis.icon.material.needsUpdate = true;
+        vis.key = ''; // rebuild the conic in the new colour
       }
       const o = item.orbit;
       // Orbit elements are stable on rails; callers can throttle conic updates in physics.
@@ -156,7 +239,7 @@ export class MapView {
         vis.line = undefined;
         if (o) {
           const pts = sampleConic(o, this.bodies.get(o.body)?.body.soi ?? Infinity, u.t, null);
-          if (pts.length > 1) vis.line = this.makeLine(pts, 0x6fe39a, 1.6, 0.8);
+          if (pts.length > 1) vis.line = vis.targeted ? this.makeLine(pts, TARGET_COLOR, 2.2, 0.95) : this.makeLine(pts, EXTRA_COLOR, 1.6, 0.8);
         }
         vis.key = key;
       }
@@ -210,6 +293,38 @@ export class MapView {
     this.vesselIcon.scale.setScalar(0.028);
     this.vesselIcon.renderOrder = 11;
     this.scene.add(this.vesselIcon);
+    this.approachIcons = ['#ffffff', TARGET_CSS].map((c) => {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeApproachTexture(c), sizeAttenuation: false, depthTest: false }));
+      s.scale.setScalar(0.03);
+      s.renderOrder = 14;
+      s.visible = false;
+      this.scene.add(s);
+      return s;
+    });
+    this.approachLabel = document.createElement('div');
+    Object.assign(this.approachLabel.style, {
+      position: 'absolute', font: '11px system-ui', color: '#ffd0ec', textShadow: '0 0 3px #000', whiteSpace: 'nowrap',
+      transform: 'translate(12px,-50%)', display: 'none',
+    });
+    this.labels.appendChild(this.approachLabel);
+  }
+
+  private updateApproach(u: MapUpdate) {
+    const a = this.approach;
+    const show = !!a && this.bodies.has(a.body);
+    for (const s of this.approachIcons) s.visible = show;
+    this.approachLabel.style.display = 'none';
+    if (!a || !show) return;
+    const bp = this.ephem.getBodyState(a.body, u.t).position;
+    this.place(this.approachIcons[0], { x: bp.x + a.positionA.x, y: bp.y + a.positionA.y, z: bp.z + a.positionA.z }, u.focus);
+    this.place(this.approachIcons[1], { x: bp.x + a.positionB.x, y: bp.y + a.positionB.y, z: bp.z + a.positionB.z }, u.focus);
+    const v = this.approachIcons[0].position.clone().project(this.camera);
+    if (v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1) {
+      this.approachLabel.textContent = a.label;
+      this.approachLabel.style.display = 'block';
+      this.approachLabel.style.left = `${(v.x * 0.5 + 0.5) * u.viewport.width}px`;
+      this.approachLabel.style.top = `${(-v.y * 0.5 + 0.5) * u.viewport.height}px`;
+    }
   }
 
   private makeLine(pts: Vec3[], color: number, width: number, opacity = 1): Line2 {
@@ -289,6 +404,7 @@ export class MapView {
     }
 
     this.updateExtras(u);
+    this.updateApproach(u);
     for (const m of this.materials) m.resolution.set(u.viewport.width, u.viewport.height);
     if (!u.vessel) this.updateVesselLines([], this.bodies);
 

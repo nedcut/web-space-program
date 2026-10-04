@@ -6,3 +6,4 @@ export * from './patched';
 export * from './maneuver';
 export * from './nbody';
 export * from './lambert';
+export * from './targeting';

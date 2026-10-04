@@ -298,3 +298,77 @@ export function buildReactionWheel(def: PartDef): THREE.Object3D {
   root.add(mk(led, M.statusLed('teal'), 'statusLight'));
   return root;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Docking ports
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Androgynous docking collar: bolted base flange, tapered white collar, dark mating ring with a crew tunnel,
+ * three inward-leaning guide petals and six latch hooks. The mating face (the 'dock' node) is the top plane.
+ */
+export function buildDockingPort(def: PartDef): THREE.Object3D {
+  const { rTop, rBot: r, h } = cylDims(def);
+  const root = grp('dockingPort');
+  const seg = 56;
+  const y0 = -h / 2;
+  const y1 = h / 2;
+  const fl = Math.min(0.04, h * 0.16);
+  const ringH = h * 0.22;
+  const rRing = rTop * 0.84;
+  const rTunnel = rTop * 0.56;
+  // Base flange + bolt heads.
+  root.add(mk(lathe([[r * 0.97, y0], [r, y0 + 0.004], [r, y0 + fl], [r * 0.95, y0 + fl]], { segments: seg }), M.aluminium(), 'flange'));
+  const bolt = cyl(0.008 + 0.005 * r, 0.008 + 0.005 * r, 0.012, 6);
+  bolt.rotateX(PI / 2);
+  root.add(mk(around(bolt, Math.round(14 * r + 8), r * 0.995, 0, y0 + fl / 2), M.chrome(), 'bolts'));
+  // Tapered collar and the mating ring.
+  root.add(
+    mk(lathe([[r * 0.95, y0 + fl], [r * 0.95, y0 + fl + 0.004], [rTop * 0.98, y1 - ringH - 0.01], [rTop * 0.9, y1 - ringH]], { segments: seg, tile: 0.6 }), M.satinWhite(), 'collar'),
+  );
+  root.add(mk(lathe([[rTop * 0.9, y1 - ringH], [rRing, y1 - ringH], [rRing, y1 - 0.006], [rRing * 0.98, y1]], { segments: seg }), M.gunmetal(), 'matingRing'));
+  // Mating face (annulus, normal up), crew tunnel and hatch.
+  root.add(mk(lathe([[rRing * 0.98, y1], [rTunnel * 1.08, y1], [rTunnel, y1 - 0.01]], { segments: seg }), M.darkMetal(), 'matingFace'));
+  root.add(mk(lathe([[rTunnel, y0 + fl], [rTunnel, y1 - 0.01]], { segments: seg }), M.innerLining(), 'tunnel'));
+  root.add(mk(lathe([[rTunnel, y0 + fl + 0.02], [rTunnel * 0.5, y0 + fl + 0.02], [0, y0 + fl + 0.02]], { segments: 32 }), M.darkMetal(), 'hatch'));
+  // Rubber seal on the face.
+  const seal = torus((rRing + rTunnel) / 2, 0.005 + 0.004 * r, 6, seg);
+  seal.translate(0, y1 - 0.004, 0);
+  root.add(mk(seal, M.rubber(), 'seal'));
+  // Guide petals: trapezoidal plates rising from the collar to the face plane, tips leaning inward.
+  const petalH = Math.min(h * 0.75, ringH + h * 0.45);
+  const petalW = rTop * 0.55;
+  const t = 0.012 + 0.006 * r;
+  const petal = new THREE.BufferGeometry();
+  {
+    const wB = petalW / 2;
+    const wT = petalW * 0.18;
+    const P = [
+      [-wB, 0, t / 2], [wB, 0, t / 2], [wT, petalH, t / 2], [-wT, petalH, t / 2],
+      [-wB, 0, -t / 2], [wB, 0, -t / 2], [wT, petalH, -t / 2], [-wT, petalH, -t / 2],
+    ];
+    const idx = [0, 1, 2, 0, 2, 3, 5, 4, 7, 5, 7, 6, 1, 5, 6, 1, 6, 2, 4, 0, 3, 4, 3, 7, 3, 2, 6, 3, 6, 7];
+    const pos: number[] = [];
+    for (const i of idx) pos.push(...P[i]);
+    petal.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const uv: number[] = [];
+    for (const i of idx) uv.push(P[i][0] + 0.5, P[i][1]);
+    petal.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    petal.computeVertexNormals();
+    petal.rotateX(-0.22); // tip toward -Z, i.e. toward the axis once placed by `around`
+    petal.translate(0, y1 - petalH * Math.cos(0.22), 0);
+  }
+  root.add(mk(around(petal, 3, rRing * 1.02, PI / 6), M.aluminium(), 'guidePetals'));
+  // Latch hooks between the petals.
+  const latch = box(0.035 + 0.03 * r, ringH * 0.7, 0.025 + 0.01 * r);
+  latch.translate(0, y1 - ringH * 0.45, 0);
+  root.add(mk(around(latch, 6, rRing + 0.006, 0), M.accent('yellow'), 'latches'));
+  // Alignment chevrons on the face + status light on the collar.
+  const chev = box(0.02 + 0.02 * r, 0.004, 0.05 + 0.03 * r);
+  chev.translate(0, y1 - 0.002, 0);
+  root.add(mk(around(chev, 3, (rRing + rTunnel) / 2, PI / 2), M.satinWhite(), 'chevrons'));
+  const led = box(0.02, 0.012, 0.01);
+  led.translate(0, y0 + fl + (h - fl - ringH) * 0.4, (r * 0.95 + rTop * 0.98) / 2 + 0.006);
+  root.add(mk(led, M.statusLed('green'), 'statusLight'));
+  return root;
+}
