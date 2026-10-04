@@ -23,7 +23,7 @@ function Portrait({ person }: { person: Astronaut }) {
 }
 
 export function CrewPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
-  return <div className="panel" style={{ position: 'absolute', left: 10, top: 170, width: 230, padding: 10, pointerEvents: 'auto', maxHeight: 220, overflowY: 'auto' }}>
+  return <div className="panel" style={{ padding: 10, pointerEvents: 'auto', maxHeight: 240, overflowY: 'auto', flexShrink: 0 }}>
     <div className="label" style={{ marginBottom: 7 }}>{t.eva ? 'EXTRAVEHICULAR ACTIVITY' : 'CREW'}{t.noControl && <span style={{ color: 'var(--warn)' }}> · No control</span>}</div>
     {t.crew.map(person => <div key={person.id} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
       <Portrait person={person} />
