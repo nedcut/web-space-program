@@ -21,6 +21,7 @@ export class FlightCamera {
   private lx = 0;
   private ly = 0;
   private smoothedUp = new THREE.Vector3(0, 0, 1);
+  private horizonBasis: THREE.Quaternion | null = null;
 
   constructor(fov = 60) {
     this.camera = new THREE.PerspectiveCamera(fov, 1, 0.1, 1e13);
@@ -39,7 +40,18 @@ export class FlightCamera {
       up = new THREE.Vector3(0, 1, 0).applyQuaternion(vesselQuat);
     } else {
       up = localUp.clone().normalize();
-      basis = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
+      // Parallel-transport the horizon basis: rotate last frame's basis by the minimal rotation taking the
+      // previous up to the new one. Avoids the singularity of building it from a fixed axis each frame.
+      if (!this.horizonBasis) {
+        this.horizonBasis = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
+      } else if (this.mode === 'free') {
+        // Free: inertial — keep the basis fixed in space.
+        up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.horizonBasis);
+      } else {
+        const prevUp = new THREE.Vector3(0, 1, 0).applyQuaternion(this.horizonBasis);
+        this.horizonBasis.premultiply(new THREE.Quaternion().setFromUnitVectors(prevUp, up)).normalize();
+      }
+      basis = this.horizonBasis;
     }
     this.smoothedUp.lerp(up, 1 - Math.exp(-dt * 4)).normalize();
 
@@ -60,8 +72,9 @@ export class FlightCamera {
     this.camera.updateProjectionMatrix();
   }
 
-  attach(el: HTMLElement) {
+  attach(el: HTMLElement, enabled: () => boolean = () => true) {
     const down = (e: PointerEvent) => {
+      if (!enabled()) return;
       if (e.button !== 2 && e.button !== 0) return;
       this.dragging = true;
       this.lx = e.clientX;
@@ -76,6 +89,7 @@ export class FlightCamera {
     };
     const up = () => (this.dragging = false);
     const wheel = (e: WheelEvent) => {
+      if (!enabled()) return;
       e.preventDefault();
       this.distance = Math.max(this.minDistance, Math.min(this.maxDistance, this.distance * Math.exp(e.deltaY * 0.001)));
     };

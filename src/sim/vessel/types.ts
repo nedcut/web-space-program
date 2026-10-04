@@ -195,8 +195,25 @@ export interface CommandModule {
   ecPerSecond: number;
 }
 
+/**
+ * Docking port. Two free ports of the same `size` whose `node`s come within `captureRange` (m), facing each
+ * other within `captureAngle` (rad) at a relative speed below `captureSpeed` (m/s) are pulled together and
+ * merged into one vessel on contact (see src/sim/vessel/docking.ts).
+ */
+export interface DockingPortModule {
+  type: 'dockingPort';
+  /** Port size class (same scale as attach node sizes); only equal sizes mate. */
+  size: number;
+  captureRange: number;
+  captureSpeed: number;
+  captureAngle: number;
+  /** Attach node id that forms the docking face. */
+  node: string;
+}
+
 export type PartModule =
   | EngineModule
+  | DockingPortModule
   | RcsModule
   | ReactionWheelModule
   | DecouplerModule

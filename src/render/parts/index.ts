@@ -20,7 +20,7 @@ import {
   buildTank,
   buildXenonTank,
 } from './builders/structure';
-import { buildHeatShield, buildLandingLeg, buildLight, buildParachute, buildRcsQuad, buildReactionWheel } from './builders/utility';
+import { buildDockingPort, buildHeatShield, buildLandingLeg, buildLight, buildParachute, buildRcsQuad, buildReactionWheel } from './builders/utility';
 import { disposeMaterials, M } from './materials';
 import type { DeployData } from './geom';
 
@@ -81,6 +81,7 @@ export const MESH_BUILDERS: Record<string, Builder> = {
   cockpit: buildCockpit,
   fuselage: buildFuselage,
   gear: buildGear,
+  dockingPort: buildDockingPort,
 };
 
 function fallback(def: PartDef): THREE.Object3D {

@@ -161,6 +161,13 @@ export interface PartState {
   chute?: ChuteState;
   leg?: LegState;
   wheel?: WheelState;
+  /**
+   * Docking ports only: set on the port that joined *into* another vessel's port when two vessels docked,
+   * remembering the absorbed vessel's identity so undocking restores it.
+   */
+  docked?: { vesselId: string; vesselName: string };
+  /** Docking ports only: disengaged after undocking until no other port is within twice the capture range. */
+  dockDisarmed?: boolean;
 }
 
 export interface SasState {
@@ -246,7 +253,9 @@ export type VesselEvent =
   | { type: 'flameout'; vesselId: string; partUid: number }
   | { type: 'chute'; vesselId: string; partUid: number; phase: ChutePhase }
   | { type: 'partDestroyed'; vesselId: string; partUid: number; reason: 'overheat' | 'crash' | 'impact' }
-  | { type: 'vesselDestroyed'; vesselId: string };
+  | { type: 'vesselDestroyed'; vesselId: string }
+  | { type: 'docked'; vesselId: string; otherId: string }
+  | { type: 'undocked'; vesselId: string; newVesselId: string };
 
 export interface StepResult {
   /** Vessels created during the step (debris, decoupled stages). */

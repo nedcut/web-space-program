@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { game } from '../../game/store';
 import { World, type WorldVessel } from '../../game/world';
 import { Universe } from '../../game/universe';
-import { deserializeWorld, serializeWorld } from '../../game/persistence';
+import { deserializeWorld, serializeWorld, saveWorldToStorage } from '../../game/persistence';
 import { PART_CATALOG } from '../../data/parts';
 import { RAILS_WARP, warpRate } from '../../game/timewarp';
 import type { Body } from '../../sim/bodies/types';
@@ -16,7 +16,14 @@ export default function TrackingStation() {
   const [world] = useState(() => {
     const s = game.get();
     // Clone the snapshot: deserialization restores mutable vessel runtime objects.
-    return s.resumeWorld ? deserializeWorld(structuredClone(s.resumeWorld), PART_CATALOG) : new World(new Universe(s.scalePreset), PART_CATALOG, s.ut);
+    if (s.resumeWorld) {
+      try {
+        return deserializeWorld(structuredClone(s.resumeWorld), PART_CATALOG);
+      } catch (e) {
+        console.error('Tracking: could not load world', e);
+      }
+    }
+    return new World(new Universe(s.scalePreset), PART_CATALOG, s.ut);
   });
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<TrackingView | null>(null);
@@ -31,11 +38,13 @@ export default function TrackingStation() {
       renderer.dispose();
       view.current = null;
       game.set({ resumeWorld: serializeWorld(world), ut: world.ut });
+      saveWorldToStorage('autosave', world);
     };
   }, [world]);
 
   const exit = (scene: 'spaceCenter' | 'flight') => {
     world.warp = { mode: 'rails', index: 0 };
+    saveWorldToStorage('autosave', world);
     game.set({ resumeWorld: serializeWorld(world), ut: world.ut, launchPending: false, scene });
   };
   const remove = (id: string) => {
