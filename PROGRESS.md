@@ -10,7 +10,7 @@ npm test           # simulation test suite
 ```
 Dev shortcuts:
 - `/?flight=stock-selene&scenario=moon` — start in low lunar orbit (`scenario=orbit`, `scenario=reentry` too)
-- `/?flight=stock-meridian` — jump straight onto the launch pad (`stock-kestrel`, `stock-meridian`, `stock-selene`)
+- `/?flight=stock-meridian` — jump straight onto the launch pad (`stock-kestrel`, `stock-meridian`, `stock-selene`); `/?flight=stock-swift` puts the Swift jet on the runway
 - `/parts-preview.html` — all parts on turntables (`?plume=1&pressure=0..1`, `?deploy=1`)
 - `/map-preview.html?focus=saturn&dist=3e8` — solar system map
 - `/planet-preview.html` — planet renderer test bench
@@ -28,6 +28,7 @@ Dev shortcuts:
 | F5 / F9 | quicksave / quickload |
 | , . / | time warp down / up / stop |
 | V | camera mode (auto / chase / free) |
+| G / B (hold) | landing gear toggle / wheel brakes |
 | Esc | pause menu |
 | Mouse drag / wheel | orbit camera / zoom |
 
@@ -52,6 +53,7 @@ Dev shortcuts:
 | Re-entry plasma effect | ✅ (needs visual tuning on real GPU) |
 | Launch complex scenery + 3D Space Center hub | ✅ |
 | Tracking Station (fleet, body info, warp, fly/recover) | ✅ |
+| Aircraft: jets + intakes, wheels/gear, SPH mode (mirror symmetry, CoL), runway, Swift jet (takeoff test) | ✅ |
 | Interplanetary transfers (Lambert/porkchop) + stock Saturn probe; Earth → Saturn orbit verified by test | ✅ |
 
 See DECISIONS.md for choices made autonomously.
