@@ -5,3 +5,4 @@ export * from './soi';
 export * from './patched';
 export * from './maneuver';
 export * from './nbody';
+export * from './lambert';

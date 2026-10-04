@@ -1,7 +1,7 @@
 import type { Body } from '../bodies/types';
 import type { ManeuverNode, Orbit, StateVector, TrajectoryPatch } from './api';
 import type { Ephemeris } from './ephemeris';
-import { period, propagate, stateToElements } from './kepler';
+import { period, propagate, stateToElements, periapsisRadius, apoapsisRadius } from './kepler';
 import { maneuverToInertialDv } from './maneuver';
 import { add, distance, dot, length, sub } from '../../util/vec3';
 
@@ -91,6 +91,18 @@ export function predictTrajectory(options: TrajectoryPredictionOptions): Traject
       const sample = b.sample(cursor);
       if (sample.value < 0 || (sample.value === 0 && sample.rate < 0)) { event = b; eventTime = cursor; break; }
     }
+    // A planet departure may wait thousands of parking revolutions. Skip time sampling only when
+    // disjoint radial envelopes prove that no surface, atmosphere, escape or child-SOI event can occur.
+    const rp = periapsisRadius(orbit), ra = apoapsisRadius(orbit);
+    const floor = body.radius + Math.max(options.impactAltitude?.(body) ?? 0,
+      options.stopAtAtmosphere ? body.atmosphere?.height ?? 0 : 0);
+    const isolated = orbit.e < 1 && rp > floor && (!body.parent || ra < body.soi) && body.children.every(id => {
+      const child = bodies.get(id);
+      if (!child || !Number.isFinite(child.soi)) return true;
+      const o = child.orbit;
+      return !!o && (ra < o.a * (1 - o.e) - child.soi || rp > o.a * (1 + o.e) + child.soi);
+    });
+    if (isolated) cursor = limit;
     let steps = 0;
     while (!event && cursor < limit) {
       if (++steps > 500000) throw new RangeError('Prediction step budget exceeded; shorten horizon');

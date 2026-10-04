@@ -536,10 +536,10 @@ export class World {
     }
     const lastNode = upcoming.length ? upcoming[upcoming.length - 1].time - this.ut : 0;
     const Tafter = period(after);
-    const horizon = Math.min(3e9, lastNode + (isFinite(Tafter) ? Tafter * 1.02 : 3e7));
+    let horizon = Math.min(3e9, lastNode + (isFinite(Tafter) ? Tafter * 1.02 : 3e7));
     let patches: TrajectoryPatch[] = [];
     try {
-      patches = predictTrajectory({
+      const predict = () => predictTrajectory({
         ephem: this.universe.ephem,
         bodies: this.universe.bodies,
         initialBody: wv.body,
@@ -549,6 +549,15 @@ export class World {
         maxPatches: 6,
         maneuvers: this.nodes,
       });
+      patches = predict();
+      // Planetary escape is locally hyperbolic but the solar transfer can last years (e.g. Saturn).
+      // Extend the map horizon using that new conic, rather than cutting it at the local escape default.
+      const solar = patches.find(p => p.orbit.body === this.universe.sunId && p.endReason === 'horizon');
+      if (wv.body !== this.universe.sunId && solar) {
+        const solarPeriod = period(solar.orbit);
+        const extended = Math.min(3e9, solar.startTime - this.ut + (isFinite(solarPeriod) ? solarPeriod * 1.02 : 3e8));
+        if (extended > horizon) { horizon = extended; patches = predict(); }
+      }
     } catch {
       patches = [];
     }

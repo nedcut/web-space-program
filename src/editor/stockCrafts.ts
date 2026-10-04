@@ -132,8 +132,33 @@ export function buildMoonLander(catalog: PartCatalog = PART_CATALOG): CraftDef {
   return b.done();
 }
 
+/** Chemical Saturn orbiter: high-thrust escape stage and restartable probe insertion stage. */
+export function buildRingrunner(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Ringrunner Saturn Probe',
+    'Three-stage Saturn explorer: heavy launcher, hydrolox departure stage, solar-powered orbital probe. Designed for the standard universe.');
+  const probe = b.root('probe-cairn');
+  b.stack(probe, 'nose-1', 'top');
+  const battery = b.stack(probe, 'battery-drum');
+  const wheel = b.stack(battery, 'wheel-gyre-1');
+  const capture = b.stack(wheel, 'tank-1-long');
+  b.radial(capture, 'solar-fold', 4, 1.0, 45);
+  b.radial(capture, 'battery-brick', 4, 0, 0);
+  const engine = b.stack(capture, 'eng-zephyr');
+  const dec = b.stack(engine, 'dec-1');
+  const adapter = b.stack(dec, 'adapt-1-2');
+  const transfer = b.stack(adapter, 'tank-2-mid');
+  const foehn = b.stack(transfer, 'eng-foehn');
+  const boosterDec = b.stack(foehn, 'dec-2');
+  const top = b.stack(boosterDec, 'tank-2-short');
+  const booster = b.stack(top, 'tank-2-long');
+  b.stack(booster, 'eng-chinook');
+  b.radial(booster, 'fin-pivot', 4, -2.6, 0);
+  return b.done();
+}
+
 export const STOCK_CRAFTS: StockCraft[] = [
   { id: 'stock-kestrel', name: 'Kestrel Sounding Rocket', blurb: 'Suborbital test hop · 1 stage + capsule', build: () => buildSoundingRocket() },
   { id: 'stock-meridian', name: 'Meridian Orbiter', blurb: 'Two stages to low orbit and back', build: () => buildOrbiter() },
   { id: 'stock-selene', name: 'Selene Lunar Lander', blurb: 'Three stages · land on the Moon and return', build: () => buildMoonLander() },
+  { id: 'stock-ringrunner', name: 'Ringrunner Saturn Probe', blurb: 'Three stages · explore the rings of Saturn', build: () => buildRingrunner() },
 ];
