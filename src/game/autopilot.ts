@@ -517,6 +517,16 @@ export interface TransferOptions {
 }
 
 /**
+ * Squash an encounter's periapsis error below the miss branch (which starts at 10): any SOI hit must score
+ * better than any miss, otherwise a grazing entry (periapsis near the SOI edge, error in the thousands) is a
+ * wall the simplex can never cross and the planner reports "no transfer" from most parking orbits.
+ * Monotonic and ≈ the raw error near the optimum. Used as a retry when the raw-error search ends in a miss.
+ */
+function hitCost(err: number): number {
+  return (9.5 * err) / (9.5 + err);
+}
+
+/**
  * Evaluate the encounter produced by applying `dv` (inertial) at `t` on `orbit`:
  * returns the predicted periapsis at the target after its SOI change, or a miss measure.
  */
@@ -616,13 +626,17 @@ export function planTransferToBody(world: World, targetId: string, opts: Transfe
 
   // ---- Refine on the patched-conic prediction.
   const dvAt = (t: number, pro: number, nor: number) => maneuverToInertialDv(propagate(o, t), { prograde: pro, normal: nor, radial: 0 });
+  let squash = false;
   const cost = (x: number[]) => {
     const t = t0 + x[0];
     if (t < earliest) return 1e6 + (earliest - t);
     const ev = evaluateEncounter(world, o, t, dvAt(t, x[1], x[2] ?? 0), targetId, horizon);
     if (!ev) return 1e6;
     const dvMag = Math.hypot(x[1], x[2] ?? 0);
-    if (ev.hit) return ((ev.periapsis - peAlt) / target.radius) ** 2 + 1e-9 * dvMag * dvMag;
+    if (ev.hit) {
+      const err = ((ev.periapsis - peAlt) / target.radius) ** 2;
+      return (squash ? hitCost(err) : err) + 1e-9 * dvMag * dvMag;
+    }
     // Missed: distance of closest approach (outbound) or remaining distance to the SOI edge (escape).
     const p0 = ev.patches[0];
     if (target.parent === central.id) {
@@ -634,14 +648,22 @@ export function planTransferToBody(world: World, targetId: string, opts: Transfe
   const dims = target.parent === central.id ? 3 : 2;
   let x = dims === 3 ? [0, pro0, 0] : [0, pro0];
   const steps = dims === 3 ? [T / 30, Math.max(2, pro0 * 0.01), Math.max(2, pro0 * 0.01)] : [T / 30, Math.max(1, pro0 * 0.02)];
-  let res = nelderMead(cost, x, steps, 400);
-  for (let restart = 0; restart < 3; restart++) {
-    x = res.x;
-    res = nelderMead(cost, x, steps.map((s) => s * 0.2), 400);
+  const x0 = x;
+  const search = () => {
+    let res = nelderMead(cost, x0, steps, 400);
+    for (let restart = 0; restart < 3; restart++) res = nelderMead(cost, res.x, steps.map((s) => s * 0.2), 400);
+    const t = t0 + res.x[0];
+    return { x: res.x, t, ev: evaluateEncounter(world, o, t, dvAt(t, res.x[1], res.x[2] ?? 0), targetId, horizon) };
+  };
+  let found = search();
+  if (!found.ev?.hit) {
+    // Retry with every hit scored below every miss, so the simplex can cross a grazing SOI entry.
+    squash = true;
+    found = search();
   }
-  x = res.x;
-  const t = t0 + x[0];
-  const ev = evaluateEncounter(world, o, t, dvAt(t, x[1], x[2] ?? 0), targetId, horizon);
+  x = found.x;
+  const t = found.t;
+  const ev = found.ev;
   if (!ev || !ev.hit) return null;
   const node = world.addNode(t);
   node.prograde = x[1];
