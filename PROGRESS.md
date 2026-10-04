@@ -52,6 +52,7 @@ Dev shortcuts:
 | Re-entry plasma effect | ✅ (needs visual tuning on real GPU) |
 | Launch complex scenery + 3D Space Center hub | ✅ |
 | Tracking Station (fleet, body info, warp, fly/recover) | ✅ |
+| Rendezvous & docking: targets, closest approach, docking ports, merge/undock, docking alignment HUD | ✅ (`/?flight=stock-tender&scenario=rendezvous`) |
 | Interplanetary transfers (Lambert/porkchop) + stock Saturn probe; Earth → Saturn orbit verified by test | ✅ |
 
 See DECISIONS.md for choices made autonomously.
