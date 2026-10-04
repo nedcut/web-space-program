@@ -3,7 +3,9 @@ import type { ControlInput, VesselState, VesselEvent } from '../sim/vessel/runti
 import { buildVessel, stepVessel, activateNextStage, neutralInput, recomputeMassProperties, stepDocking, undock, dockedPorts, portInfo } from '../sim/vessel';
 import type { Orbit, ManeuverNode, TrajectoryPatch, StateVector } from '../sim/orbit/api';
 import { stateToElements, propagate, predictTrajectory, periapsisRadius, apoapsisRadius, timeToPeriapsis, timeToApoapsis, period, maneuverToInertialDv, trajectoryClosestApproach, type TrajectoryApproach } from '../sim/orbit';
-import { latLonToUnit, LAUNCH_SITE } from '../sim/terrain';
+import { latLonToUnit, LAUNCH_SITE, RUNWAY, siteLocalToUnit } from '../sim/terrain';
+import { hullPoints } from '../sim/vessel/shapes';
+import { wheelContactPoint } from '../sim/vessel/contact';
 import { add, sub, length, scale, normalize, cross, dot, v3, type Vec3 } from '../util/vec3';
 import { qMul, qConj, qRotate, qNormalize, type Quat } from '../util/quat';
 import { Universe } from './universe';
@@ -99,8 +101,29 @@ export class World {
     return v.com.y - minY;
   }
 
-  /** Spawn a craft on the launch pad (held by launch clamps until the first stage fires). */
-  launch(craft: CraftDef): WorldVessel {
+  /**
+   * Distance from the COM to the vessel's lowest point along body direction `down` (unit, body frame): hull
+   * points of every part and the tyres of deployed wheels at full suspension extension.
+   */
+  restOffset(v: VesselState, down: Vec3): number {
+    let best = 0;
+    for (const p of v.parts) {
+      for (const hp of hullPoints(p.def)) best = Math.max(best, dot(sub(add(p.position, qRotate(p.rotation, hp)), v.com), down));
+      if (p.wheel && p.wheel.deploy >= 1) {
+        const g = wheelContactPoint(v, p);
+        best = Math.max(best, dot(sub(g.center, v.com), down) + g.module.radius);
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Spawn a craft. 'pad' (default for VAB crafts): on the launch pad, held by launch clamps until the first
+   * stage fires. 'runway' (default for SPH crafts): free on its wheels at the runway threshold, nose down the
+   * runway (body +Y along the runway, +Z up), ready to taxi.
+   */
+  launch(craft: CraftDef, site: 'pad' | 'runway' = craft.type === 'SPH' ? 'runway' : 'pad'): WorldVessel {
+    if (site === 'runway') return this.launchRunway(craft);
     const u = this.universe;
     const bodyId = 'earth';
     const body = u.body(bodyId);
@@ -124,6 +147,40 @@ export class World {
     const posFixed = scale(up, body.radius + terrainH + bottom + 0.05);
     const wv: WorldVessel = { state, mode: 'prelaunch', body: bodyId, fixed: { pos: posFixed, orient: orientFixed } };
     this.syncFixed(wv, this.ut);
+    this.vessels.set(state.id, wv);
+    this.activeId = state.id;
+    this.nodes = [];
+    this.warp = { mode: 'rails', index: 0 };
+    return wv;
+  }
+
+  private launchRunway(craft: CraftDef): WorldVessel {
+    const u = this.universe;
+    const bodyId = 'earth';
+    const body = u.body(bodyId);
+    const along = RUNWAY.length / 2 - RUNWAY.spawnInset;
+    const lx = RUNWAY.x - RUNWAY.dirX * along, lz = RUNWAY.z - RUNWAY.dirZ * along;
+    const dir = siteLocalToUnit(lx, lz, body.radius);
+    const ahead = siteLocalToUnit(lx + RUNWAY.dirX * 100, lz + RUNWAY.dirZ * 100, body.radius);
+    const terrainH = Math.max(0, u.terrain(bodyId).heightAt(dir.x, dir.y, dir.z));
+    const up = v3(dir.x, dir.y, dir.z);
+    let fwd = sub(v3(ahead.x, ahead.y, ahead.z), up);
+    fwd = normalize(sub(fwd, scale(up, dot(fwd, up))));
+    // Body axes: +Y (nose) down the runway, +Z (top) up, +X = Y × Z (right wing).
+    const orientFixed = quatFromBasis(cross(fwd, up), fwd, up);
+
+    const spotHelio = add(u.ephem.getBodyState(bodyId, this.ut).position, qRotate(bodyQuat(u, bodyId, this.ut), scale(up, body.radius + terrainH)));
+    for (const [id, other] of this.vessels)
+      if (length(sub(other.state.position, spotHelio)) < 100 && other.state.situation !== 'flying') this.vessels.delete(id);
+    const state = buildVessel(craft, this.catalog, { id: `v${Date.now().toString(36)}`, resourceDefs: RESOURCES, legsDeployed: false, gearDeployed: true });
+    state.name = craft.name;
+    const rest = this.restOffset(state, v3(0, 0, -1));
+    const wv: WorldVessel = { state, mode: 'prelaunch', body: bodyId, fixed: { pos: scale(up, body.radius + terrainH + rest + 0.03), orient: orientFixed } };
+    this.syncFixed(wv, this.ut);
+    // Free on its wheels straight away (no clamps): physics from the first step.
+    wv.mode = 'physics';
+    wv.fixed = undefined;
+    state.situation = 'landed';
     this.vessels.set(state.id, wv);
     this.activeId = state.id;
     this.nodes = [];

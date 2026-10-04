@@ -7,6 +7,36 @@ import { blendRGB, setRGB, type PresetContext, type PresetResult } from './commo
 export const LAUNCH_SITE = { lat: 28.5, lon: -80.6, elevation: 10, flatRadius: 3000, blendRadius: 3500 } as const;
 
 /**
+ * Runway on the launch-site plateau, in the pad's local tangent frame (metres: +X east, +Z south), running
+ * east–west so take-offs head out to sea like launches. It lies entirely inside LAUNCH_SITE.flatRadius
+ * (far corner ≈ 2.1 km from the pad), so the ground under it is exactly flat at the plateau elevation.
+ */
+export const RUNWAY = {
+  /** Centre of the runway. */
+  x: 0,
+  z: 1600,
+  length: 2500,
+  width: 60,
+  /** Take-off direction (unit, local XZ): toward +X (east). */
+  dirX: 1,
+  dirZ: 0,
+  /** Distance from the west end to the spawn point (past the threshold markings), m. */
+  spawnInset: 70,
+} as const;
+
+/** Body-fixed unit direction of a point given in the pad's local tangent frame (+X east, +Z south). */
+export function siteLocalToUnit(x: number, z: number, radius: number): { x: number; y: number; z: number } {
+  const up = latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon);
+  const el = Math.hypot(up.x, up.y);
+  const E = { x: -up.y / el, y: up.x / el, z: 0 };
+  // S = E × U (same basis as World.launch and LaunchSite).
+  const S = { x: E.y * up.z - E.z * up.y, y: E.z * up.x - E.x * up.z, z: E.x * up.y - E.y * up.x };
+  const px = up.x * radius + E.x * x + S.x * z, py = up.y * radius + E.y * x + S.y * z, pz = up.z * radius + E.z * x + S.z * z;
+  const l = Math.hypot(px, py, pz);
+  return { x: px / l, y: py / l, z: pz / l };
+}
+
+/**
  * Earth-like terrain: domain-warped continents with shelves and abyssal plains, ridged mountain belts,
  * rolling hills, latitude/moisture biomes. Fictional geography; a launch site plateau is guaranteed on an
  * east coast at LAUNCH_SITE.

@@ -1420,7 +1420,7 @@ const aircraft: PartDef[] = [
   }),
   liftingSurface({
     id: 'tail-hawk', name: 'Hawktail Stabilizer', dryMass: 70, cost: 380,
-    rootChord: 1.5, tipChord: 0.7, span: 1.5, sweep: 0.9, thickness: 0.08, liftSlope: 4.2, deflectionDeg: 22, ctrlFraction: 0.35, mesh: 'fin', category: 'control',
+    rootChord: 1.5, tipChord: 0.7, span: 1.5, sweep: 0.9, thickness: 0.08, liftSlope: 4.2, deflectionDeg: 22, ctrlFraction: 0.45, mesh: 'fin', category: 'control',
     description: 'Tail surface with a hinged trailing edge: mount it upright as a fin and rudder, or flat as a tailplane and elevator.',
   }),
 ];

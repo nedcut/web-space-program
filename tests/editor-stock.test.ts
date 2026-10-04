@@ -48,7 +48,7 @@ describe('stock crafts', () => {
     for (const w of craft.parts.filter((p) => p.partId === 'wing-broadleaf')) {
       const out = qRotate(w.rotation, v3(0, 0, 1));
       expect(Math.abs(out.x)).toBeCloseTo(1, 6);
-      expect(Math.abs(qRotate(w.rotation, v3(1, 0, 0)).z)).toBeCloseTo(1, 6);
+      expect(Math.abs(qRotate(w.rotation, v3(1, 0, 0)).z)).toBeCloseTo(Math.cos((3 * Math.PI) / 180), 6); // 3 deg incidence
     }
     // Gear hangs straight down.
     for (const g of craft.parts.filter((p) => p.partId.startsWith('gear-'))) expect(qRotate(g.rotation, v3(0, 0, 1)).z).toBeCloseTo(-1, 6);

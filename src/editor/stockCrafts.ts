@@ -1,6 +1,6 @@
 import { PART_CATALOG } from '../data/parts';
 import type { CraftDef, PartDef } from '../sim/vessel/types';
-import { qRotate } from '../util/quat';
+import { qFromAxisAngle, qRotate, type Quat } from '../util/quat';
 import { v3, type Vec3 } from '../util/vec3';
 import { CraftEditor, type PartCatalog } from './core';
 import { surfaceTransform } from './surface';
@@ -41,7 +41,7 @@ class Builder {
    * Surface-attach `count` copies of `id` around a vertical cylindrical parent, at `dy` metres from the
    * parent's centre and starting azimuth `deg` (0 = +Z).
    */
-  radial(parent: number, id: string, count: Sym, dy: number, deg = 0): number {
+  radial(parent: number, id: string, count: Sym, dy: number, deg = 0, extra?: Quat): number {
     const p = this.ed.craft.parts.find((x) => x.uid === parent)!;
     const pd = this.def(p.partId);
     let r = 0.5;
@@ -54,7 +54,7 @@ class Builder {
     const local: Vec3 = v3(n.x * r, dy, n.z * r);
     const point = add(p.position, qRotate(p.rotation, local));
     const normal = qRotate(p.rotation, n);
-    return this.surface(parent, id, point, normal, count);
+    return this.surface(parent, id, point, normal, count, extra);
   }
   /** Surface-attach on the outer (+Z) face of a radial part (e.g. a booster on a side latch). */
   outward(parent: number, id: string, dy = 0): number {
@@ -65,8 +65,8 @@ class Builder {
     return this.surface(parent, id, point, qRotate(p.rotation, v3(0, 0, 1)), 1);
   }
   /** Surface-attach at a craft-frame point/normal on `parent` (+Y of the new part kept along craft +Y). */
-  surface(parent: number, id: string, point: Vec3, normal: Vec3, count: Sym): number {
-    const t = surfaceTransform(this.def(id), point, normal, v3(0, 1, 0));
+  surface(parent: number, id: string, point: Vec3, normal: Vec3, count: Sym, extra?: Quat): number {
+    const t = surfaceTransform(this.def(id), point, normal, v3(0, 1, 0), extra);
     this.ed.setSymmetry(count === 'mirror' ? { mode: 'mirror' } : { mode: 'radial', count });
     return this.ed.surfaceAttachAtHit(id, parent, point, normal, t.rotation).uid;
   }
@@ -146,7 +146,8 @@ export function buildSwift(catalog: PartCatalog = PART_CATALOG): CraftDef {
   const fuse = b.stack(cockpit, 'fuse-spar');
   const jet = b.stack(fuse, 'jet-kittiwake');
   b.radial(fuse, 'intake-gill', 'mirror', 0.75, 60);
-  const wing = b.radial(fuse, 'wing-broadleaf', 'mirror', -0.45, 90);
+  // 3 deg of wing incidence (rotation about the wing's span axis, leading edge up).
+  const wing = b.radial(fuse, 'wing-broadleaf', 'mirror', -0.45, 90, qFromAxisAngle(v3(0, 0, 1), (3 * Math.PI) / 180));
   b.radial(jet, 'tail-hawk', 'mirror', -0.55, 90);
   b.radial(jet, 'tail-hawk', 1, -0.45, 0);
   b.radial(cockpit, 'gear-trundle', 1, -0.45, 180);
@@ -154,7 +155,7 @@ export function buildSwift(catalog: PartCatalog = PART_CATALOG): CraftDef {
   const w = b.part(wing);
   const wd = b.def('wing-broadleaf');
   const t = wd.shape.kind === 'box' ? wd.shape.size.x : 0.1;
-  b.surface(wing, 'gear-bogie', v3(w.position.x - 1.5, w.position.y - 0.25, w.position.z - t / 2), v3(0, 0, -1), 'mirror');
+  b.surface(wing, 'gear-bogie', v3(w.position.x - 1.5, w.position.y - 0.65, w.position.z - t / 2), v3(0, 0, -1), 'mirror');
   return b.done();
 }
 
