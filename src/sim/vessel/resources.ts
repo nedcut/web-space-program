@@ -1,3 +1,4 @@
+import { seatCapacity, SUITED_MASS } from '../crew/crew';
 import type { ResourceDef, ResourceId } from './types';
 import type { PartState, VesselState } from './runtime';
 
@@ -179,7 +180,7 @@ export function totalResource(v: VesselState, res: ResourceId): number {
 
 /** Mass of a part's current contents + dry mass. */
 export function partMass(p: PartState, defs: Record<ResourceId, ResourceDef>): number {
-  let m = p.def.dryMass;
+  let m = p.def.dryMass - (p.crew ? (seatCapacity(p) - p.crew.length) * SUITED_MASS : 0);
   for (const k in p.resources) m += (p.resources[k as ResourceId] ?? 0) * defs[k as ResourceId].density;
   return m;
 }

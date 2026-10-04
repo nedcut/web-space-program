@@ -225,11 +225,13 @@ export function recomputeMassProperties(v: VesselState, adjustState = true): voi
 export function cloneVessel(v: VesselState): VesselState {
   const c: VesselState = {
     ...v,
+    eva: v.eva ? { ...v.eva } : undefined,
     parts: v.parts.map((p) => ({
       ...p,
       position: { ...p.position },
       rotation: { ...p.rotation },
       children: [...p.children],
+      crew: p.crew ? [...p.crew] : undefined,
       resources: { ...p.resources },
       maxResources: { ...p.maxResources },
       skinTemperature: [...p.skinTemperature],

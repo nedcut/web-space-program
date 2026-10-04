@@ -41,6 +41,10 @@ export interface ControlInput {
   translateX: number;
   translateY: number;
   translateZ: number;
+  /** EVA-only camera attitude, hop edge, and run modifier. */
+  evaHeading?: Quat;
+  evaJump?: boolean;
+  evaRun?: boolean;
   /** Main throttle 0..1. */
   throttle: number;
   sas: SasMode;
@@ -111,6 +115,8 @@ export interface LegState {
 }
 
 export interface PartState {
+  /** Roster IDs seated in this pod; travels with the part on split/dock. */
+  crew?: string[];
   uid: number;
   partId: string;
   def: PartDef;
@@ -193,6 +199,7 @@ export interface VesselCache {
 }
 
 export interface VesselState {
+  eva?: { astronautId: string; walkPhase: number; walking: boolean; jetting: boolean };
   id: string;
   name: string;
   rootUid: number;

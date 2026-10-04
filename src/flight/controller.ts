@@ -1,3 +1,4 @@
+import { FlagView } from '../render/vessel/FlagView';
 import * as THREE from 'three';
 import { RenderPipeline, getQuality, type QualityId } from '../render/core';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -77,6 +78,7 @@ export class FlightController {
   private ambient = new THREE.HemisphereLight(0x8899bb, 0x221a10, 0.12);
   private planets: PlanetLayer;
   private site: LaunchSite;
+  private flags = new FlagView();
   private reentry = new ReentryFx();
   private reentryHeat = 0;
   private labelHost: HTMLDivElement;
@@ -120,7 +122,7 @@ export class FlightController {
     this.glare = new SunGlare();
     this.scene.add(this.glare.mesh);
     this.scene.add(this.sunLight, this.sunLight.target, this.ambient);
-    this.scene.add(this.reentry.object);
+    this.scene.add(this.reentry.object, this.flags.root);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(2048, 2048);
     this.sunLight.shadow.bias = -0.0004;
@@ -149,6 +151,9 @@ export class FlightController {
       this.input.onAction((a) => {
         switch (a) {
           case 'stage': this.stagePending = true; break;
+          case 'eva': this.goEva(); break;
+          case 'board': this.boardEva(); break;
+          case 'plantFlag': if (!this.paused) this.world.plantFlag(); break;
           case 'toggleSas': this.toggleSas(); break;
           case 'toggleRcs': this.rcsOn = !this.rcsOn; break;
           case 'map': this.toggleMap(); break;
@@ -159,7 +164,7 @@ export class FlightController {
           case 'focusNext': if (this.world.focusNextNearby()) this.world.message(`Switched to ${this.world.active!.state.name}`); break;
           case 'quicksave': this.quicksave(); break;
           case 'quickload': this.onQuickload?.(); break;
-          case 'toggleCamMode': this.cam.mode = this.cam.mode === 'auto' ? 'chase' : this.cam.mode === 'chase' ? 'free' : 'auto'; break;
+          case 'toggleCamMode': this.cam.mode = this.cam.mode === 'auto' ? (this.world.active?.state.eva ? 'free' : 'chase') : this.cam.mode === 'chase' ? 'free' : 'auto'; break;
         }
       }),
     );
@@ -303,7 +308,7 @@ export class FlightController {
   }
 
   startAssist(id: AssistId) {
-    if (!this.world.active) return;
+    if (!this.world.active || this.world.active.state.eva || !this.world.canControl()) return;
     try {
       this.assist = createAssist(id, this.world);
       this.world.message(`Assist: ${this.assist.name}`);
@@ -339,6 +344,28 @@ export class FlightController {
     }
   }
 
+  goEva(astronautId?: string) {
+    if (this.paused) return;
+    if (this.world.goEva(astronautId)) {
+      this.cancelAssist();
+      this.stagePending = false;
+      this.input.state.throttle = 0;
+      this.sasOn = false;
+      this.cam.mode = 'auto';
+      this.cam.distance = 6;
+    }
+  }
+
+  boardEva() {
+    if (this.paused) return;
+    if (this.world.boardEva()) {
+      this.cancelAssist();
+      this.stagePending = false;
+      this.input.state.throttle = 0;
+      this.cam.distance = Math.max(10, this.world.active!.state.cache.boundingRadius * 3);
+    }
+  }
+
   stage() {
     this.stagePending = true;
   }
@@ -361,6 +388,7 @@ export class FlightController {
     this.last = now;
     this.elapsed += dt;
     this.fps = this.fps * 0.95 + (dt > 0 ? 1 / dt : 0) * 0.05;
+    this.input.evaMode = !!this.world.active?.state.eva;
     this.input.update(dt);
     const s = this.input.state;
     const wv = this.world.active;
@@ -372,6 +400,9 @@ export class FlightController {
     }
     const targetState = this.world.targetState();
     const ctrl = neutralInput({
+      evaHeading: wv?.state.eva ? { x: this.cam.camera.quaternion.x, y: this.cam.camera.quaternion.y, z: this.cam.camera.quaternion.z, w: this.cam.camera.quaternion.w } : undefined,
+      evaJump: !!wv?.state.eva && this.stagePending,
+      evaRun: this.input.running,
       pitch: s.pitch,
       yaw: s.yaw,
       roll: s.roll,
@@ -381,7 +412,7 @@ export class FlightController {
       throttle: s.throttle,
       sas: this.sasOn ? this.sas : 'off',
       rcs: this.rcsOn,
-      stage: this.stagePending,
+      stage: !wv?.state.eva && this.stagePending,
       sasReference: this.speedMode === 'surface' ? 'surface' : this.speedMode === 'target' && targetState ? 'target' : 'orbit',
       target: targetState ?? undefined,
       maneuverDirection: maneuverDir ?? undefined,
@@ -471,6 +502,8 @@ export class FlightController {
       view.update(origin, this.elapsed, air.pressure, dt);
     }
     for (const [id, view] of this.views) if (!seen.has(id)) (view.dispose(), this.views.delete(id));
+
+    this.flags.update(this.world);
 
     // Re-entry plasma on the active vessel.
     const airVel = this.world.surfaceVelocity(wv);
@@ -759,6 +792,9 @@ export class FlightController {
 
     const warp = w.warp;
     return {
+      crew: w.crewFor(st),
+      noControl: !w.canControl(st),
+      eva: st.eva ? { fuel: st.parts[0].resources.monopropellant ?? 0, canBoard: !!w.boardingTarget(), landed: st.situation === 'landed' } : null,
       ut: w.ut,
       bodyName: b.name,
       altitudeAsl: info.altitude,
@@ -807,6 +843,7 @@ export class FlightController {
     this.stars.dispose();
     this.glare.dispose();
     this.reentry.dispose();
+    this.flags.dispose();
     this.scene.environment?.dispose();
     this.labelHost.remove();
     this.pipeline.dispose();

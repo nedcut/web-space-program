@@ -1,3 +1,4 @@
+import { buildAstronaut } from './builders/astronaut';
 import * as THREE from 'three';
 import type { PartDef } from '../../sim/vessel/types';
 import type { Builder } from './builders/common';
@@ -44,6 +45,7 @@ export { disposeMaterials } from './materials';
  * Deployables carry JSON userData.deploy and are driven by setPartDeploy(root, t), t in [0,1].
  */
 export const MESH_BUILDERS: Record<string, Builder> = {
+  astronaut: buildAstronaut,
   pod: buildPod,
   probeCore: buildProbeCore,
   tank: buildTank,

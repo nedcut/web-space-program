@@ -1,6 +1,6 @@
 # Progress Report
 
-_Last updated: 2026-10-03_
+_Last updated: 2026-10-04_
 
 ## How to run
 ```bash
@@ -69,3 +69,13 @@ See DECISIONS.md for choices made autonomously.
 - Fixed `executeNode` failing to terminate an empty burn when no permitted stages remain. Shared simplex optimizer moved to `src/util/nelderMead.ts` (autopilot re-export retained). A small `world.ts` map-horizon extension uses the post-escape solar period so Saturn encounters remain visible; patched prediction skips only parking intervals proven safe by disjoint radial envelopes.
 - Limits: impulsive planning, finite-burn corrections needed, synchronous search can pause UI for a few seconds, no gravity-assist or multi-revolution search, no direct moon departure, no Titan extension yet. Craft fuel margin and full mission verified in Standard only; rails power/thermal behavior remains the existing simulation model.
 - Final validation: `npx vitest run --disableConsoleIntercept` — 27 files / 290 tests passed in 24 seconds, including the existing full Moon mission; `npx tsc --noEmit` and `git diff --check` clean. Changes left uncommitted.
+
+## Crew and EVA (2026-10-04)
+
+- Human roster with seeded original names, courage/skill flavour stats, and procedural canvas portraits. Command pods fill automatically at launch/spawn; assignments remain on the actual pod through staging, docking, and undocking. Empty pods without a probe core display **No control** and reject input/staging.
+- **U / Go EVA** transfers the selected astronaut outside the pod hatch to a separate 100 kg vessel and follows it with the camera. **WASD** moves, **Q/E** also strafe; in space **Shift/Ctrl** translate up/down using a finite 5 kg jetpack supply. On terrain **Shift** runs and **Space** hops. Mouse drag turns the camera/astronaut. **Enter / Board** boards a free hatch within 3 m (relative speed <3 m/s) and refills the suit. **F / Flag** plants a persistent flag while landed; the first lunar flag has a special message. B/G remain untouched for aircraft integration.
+- Original procedural white/orange human suit, gold visor, backpack, animated limbs and jetpack puffs. Flags have an original agency graphic and use body-fixed coordinates with floating-origin rendering.
+- World API: `crew`, `crewSeed`, `flags`, `assignCrew(v)`, `crewFor(v?)`, `canControl(v?)`, `hatchPosition(v,pod)`, `goEva(astronautId?)`, `boardingTarget()`, `boardEva()`, `plantFlag()`. Runtime additions: `PartState.crew`, `VesselState.eva`, `ControlInput.evaHeading/evaJump/evaRun`; `stepEva` and its constants are exported from the vessel API. `SavedWorld.crew/crewSeed/flags` are optional for version-1 compatibility. The hidden part is added only to `World.catalog`, not the editor catalog.
+- Ten focused tests cover deterministic recruitment, hatch mass/COM/linear momentum, fuel-limited Δv, sustained lunar walking/hopping, hop edge latching, boarding/refill/rejection, empty-pod controls, dock/undock assignments, and save migration/roundtrip including flags. Final full suite passed: 31 files / 321 tests, including all 10 EVA tests. TypeScript and diff whitespace checks clean. SwiftShader screenshots checked orbital EVA and lunar walking/flag placement without page errors; the existing three.js shadow-map deprecation warning remains.
+- Limits: suit refill uses abstract cabin supplies; crew mortality/recovery history is not yet modeled as roster statuses. EVA uses terrain capsule contact and ballistic/jetpack flight, without vessel-hull collisions, ladders, suit aerothermal damage, or life support. Hatch transfer conserves linear momentum/combined COM, not a detailed astronaut climbing animation or angular-momentum exchange. Large-body solar coordinates stay float64. The existing terrain mesh LOD can differ slightly from the analytic contact surface near flags/feet.
+- Changes remain uncommitted. Flight `input.ts`, `controller.ts`, and `world.ts` edits are additive; adjacent required integration touched `FlightScene.tsx`, HUD/render registries, persistence, and vessel runtime/mass/clone exports.

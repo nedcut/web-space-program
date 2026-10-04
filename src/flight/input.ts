@@ -14,13 +14,15 @@ export interface FlightInputState {
   throttle: number;
 }
 
-export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'toggleCamMode' | 'quicksave' | 'quickload';
+export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'toggleCamMode' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag';
 
 export class FlightInput {
   readonly state: FlightInputState = { pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, throttle: 0 };
   private held = new Set<string>();
   private listeners = new Set<(a: FlightAction) => void>();
   invertPitch = false;
+  evaMode = false;
+  get running() { return this.held.has('ShiftLeft') || this.held.has('ShiftRight'); }
   /** Disable throttle/attitude handling, e.g. while typing in a text field. */
   enabled = true;
 
@@ -53,6 +55,9 @@ export class FlightInput {
     if (!e.repeat) {
       switch (k) {
         case 'Space': this.emit('stage'); e.preventDefault(); break;
+        case 'KeyU': this.emit('eva'); break;
+        case 'Enter': if (this.evaMode) { this.emit('board'); e.preventDefault(); } break;
+        case 'KeyF': if (this.evaMode) this.emit('plantFlag'); break;
         case 'KeyT': this.emit('toggleSas'); break;
         case 'KeyR': this.emit('toggleRcs'); break;
         case 'KeyM': this.emit('map'); break;
@@ -87,6 +92,13 @@ export class FlightInput {
     s.tx = axis('KeyL', 'KeyJ');
     s.ty = axis('KeyI', 'KeyK');
     s.tz = axis('KeyH', 'KeyN');
+    if (this.evaMode) {
+      s.tx = Math.max(-1, Math.min(1, axis('KeyD', 'KeyA') + axis('KeyE', 'KeyQ')));
+      s.ty = ((h.has('ShiftLeft') || h.has('ShiftRight') ? 1 : 0) - (h.has('ControlLeft') || h.has('ControlRight') ? 1 : 0)) * fine;
+      s.tz = axis('KeyS', 'KeyW');
+      s.pitch = s.yaw = s.roll = s.throttle = 0;
+      return;
+    }
     const thr = (h.has('ShiftLeft') || h.has('ShiftRight') ? 1 : 0) - (h.has('ControlLeft') || h.has('ControlRight') ? 1 : 0);
     if (thr) s.throttle = Math.min(1, Math.max(0, s.throttle + thr * dt * 0.8));
   }

@@ -122,6 +122,9 @@ export default function FlightScene() {
           t={tele}
           navball={<NavballView getFrame={navball} />}
           cb={{
+            onEva: (id) => ctrl.current?.goEva(id),
+            onBoard: () => ctrl.current?.boardEva(),
+            onPlantFlag: () => { if (!ctrl.current?.paused) ctrl.current?.world.plantFlag(); },
             onStage: () => ctrl.current?.stage(),
             onToggleSas: () => ctrl.current?.toggleSas(),
             onSasMode: (m) => ctrl.current?.setSasMode(m),
@@ -136,7 +139,7 @@ export default function FlightScene() {
           }}
         />
       )}
-      {tele && ctrl.current && !tele.mapMode && (
+      {tele && ctrl.current && !tele.mapMode && !tele.eva && !tele.noControl && (
         <AssistPanel active={tele.assist} onStart={(id) => ctrl.current?.startAssist(id)} onCancel={() => ctrl.current?.cancelAssist()} />
       )}
       {tele?.mapMode && ctrl.current && <ManeuverPanel world={ctrl.current.world} />}

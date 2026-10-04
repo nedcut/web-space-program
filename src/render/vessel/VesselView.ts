@@ -83,6 +83,17 @@ export class VesselView {
   }
 
   private animatePart(p: PartState, pv: PartVisual, time: number, ambientPressure: number, dt: number) {
+    const eva = this.vessel.eva;
+    if (eva) {
+      for (const side of [-1, 1]) {
+        const swing = eva.walking ? Math.sin(eva.walkPhase) * 0.48 * side : 0;
+        pv.object.getObjectByName(`arm${side}`)!.rotation.x = -swing;
+        pv.object.getObjectByName(`leg${side}`)!.rotation.x = swing;
+        const puff = pv.object.getObjectByName(`evaPuff${side}`)!;
+        puff.visible = eva.jetting;
+        puff.scale.setScalar(0.8 + 0.2 * Math.sin(time * 41 + side));
+      }
+    }
     if (p.engine) {
       const thr = p.engine.ignited && !p.engine.flamedOut ? p.engine.throttle : 0;
       for (const pl of pv.plumes) pl.update({ throttle: thr, ambientPressure, time });

@@ -1,3 +1,5 @@
+import { CrewPanel } from './CrewPanel';
+import type { Astronaut } from '../../sim/crew/crew';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { formatDistance, formatSpeed, formatDuration, formatDate } from '../../ui/format';
 import { Navball, type NavballFrame, type NavballMarker } from './navball';
@@ -43,6 +45,9 @@ export interface TargetTelemetry {
 
 /** Snapshot of telemetry pushed to the HUD ~10–20 times per second (not every frame). */
 export interface Telemetry {
+  crew: Astronaut[];
+  noControl: boolean;
+  eva: { fuel: number; canBoard: boolean; landed: boolean } | null;
   ut: number;
   bodyName: string;
   altitudeAsl: number;
@@ -85,6 +90,9 @@ export interface HudStage {
 }
 
 export interface HudCallbacks {
+  onEva(astronautId: string): void;
+  onBoard(): void;
+  onPlantFlag(): void;
   onStage(): void;
   onToggleSas(): void;
   onSasMode(mode: string): void;
@@ -210,7 +218,7 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
 
       {/* Bottom-centre: navball + speed + SAS */}
       <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
-        <div className="panel" style={{ padding: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, width: 130 }}>
+        {!t.eva && <div className="panel" style={{ padding: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, width: 130 }}>
           <button className={`btn small ${t.sasOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} onClick={cb.onToggleSas}>SAS</button>
           {SAS_MODES.map((m) => (
             <button key={m.id} className={`btn small ${t.sasOn && t.sasMode === m.id ? 'primary' : ''}`} onClick={() => cb.onSasMode(m.id)} style={{ padding: '4px 2px', fontSize: 10 }}>
@@ -218,19 +226,20 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
             </button>
           ))}
           <button className={`btn small ${t.rcsOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} onClick={cb.onToggleRcs}>RCS</button>
-        </div>
+        </div>}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <button className="panel btn" onClick={cb.onSpeedMode} style={{ padding: '4px 14px', marginBottom: 6, textAlign: 'center' }}>
             <div className="label">{t.speedMode}</div>
             <div className="mono" style={{ fontSize: 18 }}>{formatSpeed(t.speed)}</div>
           </button>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-            <ThrottleGauge value={t.throttle} />
+            {!t.eva && <ThrottleGauge value={t.throttle} />}
             {navball}
           </div>
         </div>
       </div>
 
+      {!t.mapMode && !t.dockingMode && <CrewPanel t={t} cb={cb} />}
       <TargetPanel t={t} cb={cb} />
       {t.dockingMode && !t.mapMode && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
 

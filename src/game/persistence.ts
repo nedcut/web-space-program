@@ -1,3 +1,4 @@
+import type { Astronaut, PlantedFlag } from '../sim/crew/crew';
 import type { VesselState } from '../sim/vessel/runtime';
 import type { PartDef } from '../sim/vessel/types';
 import { rebuildTopology } from '../sim/vessel';
@@ -25,6 +26,9 @@ interface SavedVessel {
 }
 
 export interface SavedWorld {
+  crew?: Astronaut[];
+  crewSeed?: number;
+  flags?: PlantedFlag[];
   version: number;
   preset: ScalePresetId;
   ut: number;
@@ -58,6 +62,9 @@ export function serializeWorld(world: World): SavedWorld {
     });
   }
   return {
+    crew: structuredClone(world.crew),
+    crewSeed: world.crewSeed,
+    flags: structuredClone(world.flags),
     version: SAVE_VERSION,
     preset: world.universe.preset,
     ut: world.ut,
@@ -72,14 +79,18 @@ export function serializeWorld(world: World): SavedWorld {
 export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>, universe?: Universe): World {
   if (data.version !== SAVE_VERSION) throw new Error(`Unsupported save version ${data.version}`);
   const world = new World(universe ?? new Universe(data.preset), catalog, data.ut);
-  for (const sv of data.vessels) {
+  world.crew = structuredClone(data.crew ?? []);
+  world.crewSeed = data.crewSeed ?? world.crewSeed;
+  world.flags = structuredClone(data.flags ?? []);
+  for (const sv of structuredClone(data.vessels)) {
     const parts = sv.state.parts.map((p) => {
-      const def = catalog.get(p.partId);
+      const def = world.catalog.get(p.partId);
       if (!def) throw new Error(`Save references unknown part ${p.partId}`);
       return { ...p, def };
     });
     const state = { ...sv.state, parts, resourceDefs: RESOURCES, cache: undefined } as unknown as VesselState;
     rebuildTopology(state);
+    if (!data.crew) world.assignCrew(state);
     const wv: WorldVessel = { state, mode: sv.mode, body: sv.body, orbit: sv.orbit, fixed: sv.fixed };
     world.vessels.set(state.id, wv);
   }
