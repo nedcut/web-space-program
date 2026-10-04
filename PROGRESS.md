@@ -32,7 +32,9 @@ Dev shortcuts:
 | Esc | pause menu |
 | Mouse drag / wheel | orbit camera / zoom |
 
-## Status (milestone 1: build → launch → orbit → Moon)
+## Status
+Milestone 1 (build → launch → orbit → Moon) is complete and verified. Beyond it: docking, aircraft, EVA, interplanetary.
+
 | Area | State |
 |---|---|
 | Real solar system (Sun, 8 planets, Pluto+Charon, Ceres, 40 moons incl. 19 Saturnian) | ✅ |
@@ -56,12 +58,13 @@ Dev shortcuts:
 | Aircraft: jets + intakes, wheels/gear, SPH mode (mirror symmetry, CoL), runway, Swift jet (takeoff test) | ✅ |
 | Rendezvous & docking: targets, closest approach, docking ports, merge/undock, docking alignment HUD | ✅ (`/?flight=stock-tender&scenario=rendezvous`) |
 | Interplanetary transfers (Lambert/porkchop) + stock Saturn probe; Earth → Saturn orbit verified by test | ✅ |
+| Crew roster + EVA: jetpack, walking on terrain, flags, boarding | ✅ (U = EVA, Enter = board, F = flag) |
 
 See DECISIONS.md for choices made autonomously.
 
 ## Saturn / interplanetary flight
 
-- `stock-ringrunner` / `buildRingrunner()` is a 26-part chemical Saturn probe (Chinook launcher, Foehn departure stage, Zephyr probe stage, tracking solar arrays and batteries), ~10.94 km/s staged vacuum Δv. Launch shortcut: `/?flight=stock-ringrunner`.
+- `stock-ringrunner` / `buildRingrunner()` is a 26-part chemical Saturn probe (Chinook launcher, Foehn departure stage, Zephyr probe stage, tracking solar arrays and batteries), ~10.94 km/s staged vacuum Δv. Launch shortcut: `/?flight=stock-ringrunner`. Also `stock-swift` (jet, starts on the runway) and `stock-tender` (docking tug).
 - The maneuver dropdown now includes sibling planets. `planTransferToBody` routes them to `planInterplanetaryTransfer(world, target, opts?)` in `src/game/interplanetary.ts`.
 - Planner options: departure range / earliest + window, flight-time range (seconds), periapsis altitude, optional capture cost. Returns the maneuver, encounter patches/UT/periapsis, Δv, nominal Lambert arrival UT and capture estimate. Nodes are only added after a verified encounter; an unsuccessful search returns null. Departure requires a bound planetary orbit above the atmosphere.
 - `planCourseCorrectionToBody(world, target, { arrivalTime, time?, periapsisAltitude?, maxDv? })` targets a planet from the heliocentric leg. Reuse the transfer's nominal arrival UT; execute corrections with `matchEnergy: false`.
@@ -70,7 +73,6 @@ See DECISIONS.md for choices made autonomously.
 - Verified standard-scale mission: ascent 2626.69 m/s; parking 811.45; departure 2917.01; corrections 91.30 + 8.84 + 2.33; Saturn capture 3209.24. Nominal flight 942.78 days, departure wait 33.33 days. Arrival periapsis 1158.96 km; final bound orbit approximately 1029 × 1290 km above Saturn, eccentricity 0.0187, mass 2019 kg.
 - Fixed `executeNode` failing to terminate an empty burn when no permitted stages remain. Shared simplex optimizer moved to `src/util/nelderMead.ts` (autopilot re-export retained). A small `world.ts` map-horizon extension uses the post-escape solar period so Saturn encounters remain visible; patched prediction skips only parking intervals proven safe by disjoint radial envelopes.
 - Limits: impulsive planning, finite-burn corrections needed, synchronous search can pause UI for a few seconds, no gravity-assist or multi-revolution search, no direct moon departure, no Titan extension yet. Craft fuel margin and full mission verified in Standard only; rails power/thermal behavior remains the existing simulation model.
-- Final validation: `npx vitest run --disableConsoleIntercept` — 27 files / 290 tests passed in 24 seconds, including the existing full Moon mission; `npx tsc --noEmit` and `git diff --check` clean. Changes left uncommitted.
 
 ## Crew and EVA (2026-10-04)
 
