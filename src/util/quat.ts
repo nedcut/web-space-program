@@ -44,13 +44,6 @@ export const qRotate = (q: Quat, v: Vec3): Vec3 => {
   };
 };
 
-/** Integrate orientation by body-frame angular velocity omega (rad/s) over dt. */
-export const qIntegrate = (q: Quat, omegaBody: Vec3, dt: number): Quat => {
-  const ang = Math.hypot(omegaBody.x, omegaBody.y, omegaBody.z) * dt;
-  if (ang < 1e-12) return q;
-  return qNormalize(qMul(q, qFromAxisAngle(omegaBody, ang)));
-};
-
 /** Shortest rotation taking unit vector a to unit vector b. */
 export const qFromTo = (a: Vec3, b: Vec3): Quat => {
   const d = a.x * b.x + a.y * b.y + a.z * b.z;

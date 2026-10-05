@@ -34,8 +34,6 @@ function fallbackMesh(def: PartDef): THREE.Object3D {
   return g;
 }
 
-export const usingFallbackMeshes = !external;
-
 /** Returns a fresh instance (shares geometry & materials with a cached template). */
 export function createPartMesh(def: PartDef): THREE.Object3D {
   let t = templates.get(def.id);

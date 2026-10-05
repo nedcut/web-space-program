@@ -16,7 +16,7 @@ export const DENSITIES: Partial<Record<ResourceId, number>> = Object.fromEntries
   Object.values(RESOURCES).map((r) => [r.id, r.density]),
 ) as Partial<Record<ResourceId, number>>;
 
-export const SYMMETRY_STEPS = [1, 2, 3, 4, 6, 8] as const;
+const SYMMETRY_STEPS = [1, 2, 3, 4, 6, 8] as const;
 export type SymmetryCount = (typeof SYMMETRY_STEPS)[number];
 
 /** What the player is holding. Positions are resolved every frame by the 3D view. */

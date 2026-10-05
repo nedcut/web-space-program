@@ -127,19 +127,3 @@ export function getQuality(id: QualityId): QualitySettings {
   return { ...p, shadowMapSize: s.shadows ? (p.shadowMapSize || 512) : 0,
     bloom: { ...p.bloom, enabled: s.bloom }, clouds: s.clouds, atmosphereScattering: s.scatter, renderScale: s.renderScale };
 }
-
-/** Heuristic default: pick low on likely-integrated GPUs / small devices. */
-export function detectDefaultQuality(gl?: WebGL2RenderingContext | null): QualityId {
-  try {
-    if (gl) {
-      const ext = gl.getExtension('WEBGL_debug_renderer_info');
-      const name = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
-      if (/swiftshader|llvmpipe|software/i.test(name)) return 'low';
-      if (/intel|uhd|iris|mali|adreno|powervr|apple m1/i.test(name)) return 'medium';
-      if (/nvidia|geforce|rtx|radeon rx|apple m[2-9]/i.test(name)) return 'high';
-    }
-  } catch {
-    /* ignore */
-  }
-  return 'medium';
-}

@@ -12,7 +12,6 @@ export interface Vec3 {
 }
 
 export const v3 = (x = 0, y = 0, z = 0): Vec3 => ({ x, y, z });
-export const clone = (a: Vec3): Vec3 => ({ x: a.x, y: a.y, z: a.z });
 export const add = (a: Vec3, b: Vec3): Vec3 => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });
 export const sub = (a: Vec3, b: Vec3): Vec3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
 export const scale = (a: Vec3, s: number): Vec3 => ({ x: a.x * s, y: a.y * s, z: a.z * s });
@@ -23,7 +22,7 @@ export const cross = (a: Vec3, b: Vec3): Vec3 => ({
   y: a.z * b.x - a.x * b.z,
   z: a.x * b.y - a.y * b.x,
 });
-export const lengthSq = (a: Vec3): number => a.x * a.x + a.y * a.y + a.z * a.z;
+const lengthSq = (a: Vec3): number => a.x * a.x + a.y * a.y + a.z * a.z;
 export const length = (a: Vec3): number => Math.sqrt(lengthSq(a));
 export const normalize = (a: Vec3): Vec3 => {
   const l = length(a);
@@ -31,18 +30,3 @@ export const normalize = (a: Vec3): Vec3 => {
 };
 export const negate = (a: Vec3): Vec3 => ({ x: -a.x, y: -a.y, z: -a.z });
 export const distance = (a: Vec3, b: Vec3): number => length(sub(a, b));
-export const lerp = (a: Vec3, b: Vec3, t: number): Vec3 => addScaled(a, sub(b, a), t);
-
-/** In-place helpers for hot loops (avoid allocation). */
-export const addInPlace = (out: Vec3, b: Vec3): Vec3 => {
-  out.x += b.x; out.y += b.y; out.z += b.z;
-  return out;
-};
-export const addScaledInPlace = (out: Vec3, b: Vec3, s: number): Vec3 => {
-  out.x += b.x * s; out.y += b.y * s; out.z += b.z * s;
-  return out;
-};
-export const set = (out: Vec3, x: number, y: number, z: number): Vec3 => {
-  out.x = x; out.y = y; out.z = z;
-  return out;
-};

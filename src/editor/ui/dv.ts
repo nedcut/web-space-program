@@ -5,8 +5,8 @@ import { computeStageDeltaV } from '../../sim/vessel/staging';
 import { getStageList } from '../core';
 
 /** Editor reference conditions (standard-scale Earth). */
-export const EDITOR_G = 9.81;
-export const ASL_PRESSURE = 101325;
+const EDITOR_G = 9.81;
+const ASL_PRESSURE = 101325;
 const G0 = 9.80665;
 
 export interface StageStats {

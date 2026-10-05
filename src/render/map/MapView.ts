@@ -8,7 +8,7 @@ import type { Body } from '../../sim/bodies/types';
 import type { Ephemeris } from '../../sim/orbit/ephemeris';
 import type { Orbit, TrajectoryPatch, ManeuverNode } from '../../sim/orbit/api';
 import { maneuverToInertialDv } from '../../sim/orbit/maneuver';
-import { formatDuration } from '../../ui/format';
+import { formatDuration } from '../../util/format';
 import { elementsToState, periapsisRadius, apoapsisRadius, timeToPeriapsis, timeToApoapsis } from '../../sim/orbit/kepler';
 import { add, sub, type Vec3 } from '../../util/vec3';
 
@@ -551,7 +551,7 @@ export class MapView {
       v.copy(vis.sphere.position).project(this.camera);
       const onScreen = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
       vis.label.style.display = visible && onScreen ? 'block' : 'none';
-      if (onScreen) vis.label.style.left = `${(v.x * 0.5 + 0.5) * w}px`, (vis.label.style.top = `${(-v.y * 0.5 + 0.5) * h}px`);
+      if (onScreen) { vis.label.style.left = `${(v.x * 0.5 + 0.5) * w}px`; vis.label.style.top = `${(-v.y * 0.5 + 0.5) * h}px`; }
     }
 
     this.updateMarkers(u);
