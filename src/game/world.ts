@@ -625,7 +625,7 @@ export class World {
         this.vessels.set(nv.id, { state: nv, mode: 'physics', body: wv.body });
       }
       for (const e of res.events) this.handleEvent(e);
-      for (const nv of res.newVessels) this.inheritFlight(wv, this.vessels.get(nv.id)!);
+      for (const nv of res.newVessels) { const child = this.vessels.get(nv.id); if (child) this.inheritFlight(wv, child); }
       // Bodies without a surface (gas giants, stars): crushed / vaporised below a small depth.
       const bodyDef = this.universe.body(wv.body);
       if (!bodyDef.solidSurface && !wv.state.destroyed) {
@@ -655,6 +655,7 @@ export class World {
     if (v) {
       if (e.type === 'decouple') this.logFlightEvent(v, 'separation', `Detached part ${e.partUid} → ${e.newVesselId}`);
       if (e.type === 'stage') this.logFlightEvent(v, 'stage', `Stage ${e.stage}`);
+      if (e.type === 'structuralFailure') this.logFlightEvent(v, 'partLoss', `Attachment ${e.partUid} broke at ${(e.loadFraction * 100).toFixed(0)}% load`);
       if (e.type === 'partDestroyed') this.logFlightEvent(v, 'partLoss', `Part ${e.partUid}: ${e.reason}`);
       if (e.type === 'docked') this.logFlightEvent(v, 'docking', e.otherId);
     }
@@ -682,7 +683,7 @@ export class World {
     const res = activateNextStage(wv.state);
     for (const nv of res.newVessels) this.vessels.set(nv.id, { state: nv, mode: 'physics', body: wv.body });
     for (const e of res.events) this.handleEvent(e);
-    for (const nv of res.newVessels) this.inheritFlight(wv, this.vessels.get(nv.id)!);
+    for (const nv of res.newVessels) { const child = this.vessels.get(nv.id); if (child) this.inheritFlight(wv, child); }
   }
 
   // ---------- Maneuver nodes ----------

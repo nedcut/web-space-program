@@ -92,6 +92,14 @@ describe('flight recorder', () => {
     recovered.launch(buildOrbiter()); expect(recovered.recoverActive()).toBe(true);
     expect(deserializeWorld(serializeWorld(recovered), PART_CATALOG).flightlog.records[0].outcome).toBe('recovered');
   });
+  it('records structural breakups as part losses while fragments inherit their history', () => {
+    const w = new World(new Universe('standard'), PART_CATALOG, 1000);
+    const vessel = w.launch(buildOrbiter());
+    for (const part of vessel.state.parts) part.def = { ...part.def, breakingForce: 1, breakingTorque: 1 };
+    for (let i = 0; i < 50; i++) w.tick(0.02, neutralInput({ stage: i === 0, throttle: 1 }));
+    expect(w.flightlog.records.some(r => r.events.some(e => e.kind === 'partLoss' && e.detail?.includes('Attachment')))).toBe(true);
+    expect(w.flightlog.records.length).toBeGreaterThan(1);
+  });
   it('does not integrate stale engine telemetry while packed during time warp', () => {
     const w = new World(new Universe('standard'), PART_CATALOG, 1000);
     const v = w.launch(buildOrbiter());
