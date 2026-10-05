@@ -29,7 +29,8 @@ Dev shortcuts:
 | , . / | time warp down / up / stop |
 | V | camera mode (auto / chase / free) |
 | G / B (hold) | landing gear toggle / wheel brakes |
-| Esc | pause menu |
+| Esc | pause menu (recover, revert to launch/editor, quickload, settings) |
+| F1 / ? button | controls cheat sheet (shown automatically on the first flight) |
 | Mouse drag / wheel | orbit camera / zoom |
 
 ## Status
@@ -95,3 +96,13 @@ See DECISIONS.md for choices made autonomously.
 - API: `new World(universe, catalog, ut, mode?)`, `world.progression`, `scienceContext`, `scienceInstruments`, `runExperiment(uid, experiment)`, `transmitScience`, `unlockTech`, `refreshContracts`, `acceptContract`, `abandonContract`, `recoverVessel(id)` / `recoverActive`. Event entry points: `onReachedOrbit`, `onLanded`, `onEnteredSoi`, `onScienceCollected`, `onRecovered`, plus `emitProgress`. Persistence: optional `SavedWorld.mode/progression`; `PartState.scienceData/visitedBodies/purchaseCost`. New scenes `research` and `missions` support the existing `?scene=` hook.
 - Verification: `tests/science.test.ts` adds 14 focused tests covering named-biome coverage/determinism, all-body/scaled situations, science decay/subjects, transmit/recovery idempotency, EVA boarding and detached instruments, complete tech assignment/editor gates, launch costs/refunds, contract event completion/deadlines/return provenance, rails milestones, and legacy/career save round trips. Full suite: 35 files / 397 tests. TypeScript and production build checked. Browser checks through `scripts/shot.mjs` at localhost:5173 covered mode choice, career creation/autosave, mission acceptance, research graph, flight Run/Transmit/Review and biome contract completion. Screenshots are in `/tmp/wsp-new-game.png`, `/tmp/wsp-research-career.png`, `/tmp/wsp-missions.png`, `/tmp/wsp-science-flight.png`. A complete UI pass also verified the initial career launch debit, full recovery credit/refund, research spending, autosave and Continue (`/tmp/wsp-career-flow.png`). Existing three.js shadow-map deprecation warning and the production three.js chunk-size warning remain.
 - Limits: transmission is instant with no charge draw, range, line-of-sight, relay routing or data mass. Contract refresh is manual; no part-testing, rescue, or agency variety. Research tiers are cost/category based and balance has not been playtested through a complete career on every scale. Biomes approximate the procedural terrain rather than authoritative geographic maps. The science panel uses the existing desktop HUD layout. No commits made; adjacent integration includes render mesh registry, vessel clone/runtime types, tracking recovery and editor toolbar.
+
+## First-play QA pass (2026-10-04)
+
+- HUD declutter: left dock with Assist / Crew / Science / Target toggles (persisted); target panel expands only with a target, crew opens on EVA, map planner shares the column. Right column stacks orbit + resources. Checked at 1280×800, 1366×768 and 1920×1080.
+- Orbital readouts show dashes while landed/prelaunch. Staging: next stage at the bottom with a Stage button; burning engines stay as the "Active" stage; numbering matches the editor (highest fires first).
+- First-flight help overlay (F1 / ?), flight loading screen (waits for focused-planet terrain, 20 s cap), pause menu: Revert to launch, Quickload, Controls, Settings (volume/invert live; quality rebuilds the scene from a snapshot). Keys are ignored while paused; Esc closes help/settings first and never dismisses "Vessel lost".
+- Transfer planner: Moon transfers failed ("No transfer window found") from most post-assist parking orbits because a grazing SOI hit scored worse than a near miss; a squashed-cost retry now finds them (1 s). Planner shows "Planning…" feedback.
+- Editor: top bar no longer clips the Launch/exit buttons at ≤1366 px; Launch warns once for TWR < 1 / no engines; load dialog flags stock craft needing research; Kestrel uses starter parts so new Science/Career programs can fly a stock rocket.
+- Hub tiles readable over the bright sky; recovery summary on the hub; New Game warns it replaces the program and clears the old quicksave; Continue restores the last editor craft; Tracking Station starts focused on the fleet.
+- Known remaining: AudioContext autoplay warnings when entering flight without a prior gesture (dev URLs only); synchronous transfer search briefly freezes the UI; tech-tree page relies on page scroll at 768 px height.
