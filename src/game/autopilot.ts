@@ -281,7 +281,25 @@ export function ascentGuidance(world: World, opts: AscentOptions): Autopilot {
           const dvLeft = Math.max(0, opts.targetApoapsis - apAlt) * f.g / Math.max(1, length(f.rs.velocity));
           throttle = throttleForFraction(clamp(dvLeft / (aMax * 2) + 0.05, 0, 1), prop.minThrottle);
         }
-        if (apAlt >= opts.targetApoapsis) ap.status = 'coast';
+        // Larger worlds need a sustained insertion burn: a ballistic hop followed by a
+        // multi-km/s burn at apoapsis falls back into the atmosphere with low-TWR upper stages.
+        const insertion = w.universe.preset !== 'standard';
+        const insertionStart = atmo > 0 ? atmo * 0.15 : Math.min(1000, opts.targetApoapsis * 0.05);
+        if (insertion && aMax > 0 && f.altitude - launchAlt > insertionStart) {
+          const vr = dot(f.rs.velocity, f.up);
+          const vt = length(sub(f.rs.velocity, scale(f.up, vr)));
+          const radius = length(f.rs.position);
+          const circular = Math.sqrt(f.body.gm / radius);
+          const desiredClimb = clamp((opts.targetApoapsis - f.altitude) / 100, -100, 350);
+          const radialAcc = f.g - vt * vt / radius + (desiredClimb - vr) / 20;
+          const horizontalAcc = Math.max(0, (0.99 * circular - vt) / 25);
+          const vertical = clamp(radialAcc, -0.5 * aMax, 0.95 * aMax);
+          const horizontal = Math.min(horizontalAcc, Math.sqrt(Math.max(0, aMax * aMax - radialAcc * radialAcc)));
+          const desiredAcc = add(scale(f.up, vertical), scale(f.east, horizontal));
+          dir = normalize(desiredAcc);
+          throttle = throttleForFraction(clamp(length(desiredAcc) / Math.max(0.1, aMax), 0, 1), prop.minThrottle);
+          if (vt > 0.97 * circular && apAlt >= opts.targetApoapsis) ap.status = 'coast';
+        } else if (!insertion && apAlt >= opts.targetApoapsis) ap.status = 'coast';
       }
       if (ap.status === 'coast') {
         dir = normalize(f.rs.velocity);
@@ -827,7 +845,7 @@ export function findLandingSite(world: World, bodyId: string, dirFixed: Vec3, ma
 export interface LandingOptions {
   /** Periapsis altitude for the deorbit burn (default -4% of the body radius: a steep-ish descent). */
   deorbitPeriapsis?: number;
-  /** Height above terrain at which the braking burn aims to stop, m (default 60). */
+  /** Height above terrain at which braking aims to stop, m (default 60, raised for large craft). */
   stopHeight?: number;
   /** Final touchdown speed, m/s (default 1.5). */
   touchdownSpeed?: number;
@@ -855,10 +873,13 @@ const PLANNING_THROTTLE = 0.75;
 
 export function landingController(world: World, opts: LandingOptions = {}): Autopilot & { touchdown: { speed: number; time: number } | null } {
   const stager = new AutoStager(opts.minStage ?? 0);
-  const stopTarget = opts.stopHeight ?? 60;
+  // Tall craft need clearance to rotate upright after cancelling orbital velocity.
+  const craftRadius = world.active?.state.cache.boundingRadius ?? 0;
+  const stopTarget = opts.stopHeight ?? (craftRadius > 8 ? 30 * craftRadius : 60);
   const vTouch = opts.touchdownSpeed ?? 1.5;
   let lastUt = world.ut;
   let gateTime = -Infinity;
+  let nextCoastSolve = -Infinity;
   let settled = 0;
   let lastSolve = -Infinity;
   let brakeFraction = 1;
@@ -911,8 +932,12 @@ export function landingController(world: World, opts: LandingOptions = {}): Auto
         if (w.ut < gateTime - 30) return { ...input(retro, 0), coastUntil: gateTime - 30 };
         // Start braking when a burn at the planning throttle would only just stop in time; the remaining
         // throttle range is the margin for terrain surprises.
+        // Re-solving a minutes-long burn at 50 Hz dominates full-size Moon missions.
+        // Sample at 2 Hz, with a full sample interval of vertical clearance as margin.
+        if (w.ut < nextCoastSolve) return input(retro, 0);
+        nextCoastSolve = w.ut + 0.5;
         const pred = predictBraking(w, wv, PLANNING_THROTTLE);
-        if (!pred.impact && pred.stopHeight > stopTarget + 0.1 * length(f.surfVel)) return input(retro, 0);
+        if (!pred.impact && pred.stopHeight > stopTarget + Math.max(0.1 * length(f.surfVel), 0.6 * Math.abs(dot(f.surfVel, f.up)))) return input(retro, 0);
         ap.status = 'brake';
       }
       if (ap.status === 'brake') {
@@ -959,15 +984,17 @@ export function landingController(world: World, opts: LandingOptions = {}): Auto
           const hSpeed = length(vHor);
           // Velocity tracking: fly over the site, sink at a rate proportional to radar altitude; while still
           // translating (or sliding sideways) near the ground, hold ~30 m.
-          const vHorDes = dist > 0.5 ? scale(normalize(eHor), Math.min(0.25 * dist, 8)) : v3();
+          // A tall stack rotates more slowly; avoid chasing the site faster than attitude can follow.
+          const response = craftRadius > 8 ? 3 : 1;
+          const vHorDes = dist > 0.5 ? scale(normalize(eHor), Math.min(0.25 * dist, 8) / response) : v3();
           let vDes = -clamp(0.2 * radar, vTouch, 25);
           if (dist > 4) vDes = clamp(0.5 * (30 - radar), -10, 3);
           else if (hSpeed > 1 && radar < 40) vDes = Math.max(vDes, -vTouch * Math.max(0, 1 - (hSpeed - 1) / 3));
-          const aUp = clamp(f.g + 2.0 * (vDes - vVert), 0, 0.95 * aMax);
+          const aUp = clamp(f.g + (2.0 / response) * (vDes - vVert), 0, 0.95 * aMax);
           // Horizontal braking gets whatever thrust is left, within a tilt limit (tighter near the ground).
           const tilt = ((radar < 10 ? 15 : 45) * Math.PI) / 180;
           const horCap = Math.min(Math.sqrt(Math.max(0, (0.95 * aMax) ** 2 - aUp * aUp)), Math.max(aUp, 0.5 * f.g) * Math.tan(tilt));
-          let aHor = scale(sub(vHorDes, vHor), 1.0);
+          let aHor = scale(sub(vHorDes, vHor), 1 / response);
           if (length(aHor) > horCap) aHor = scale(normalize(aHor), horCap);
           const aDes = add(scale(f.up, aUp), aHor);
           // Thrust only along the part of the desired acceleration the nose actually points at (SAS lags).
@@ -975,7 +1002,12 @@ export function landingController(world: World, opts: LandingOptions = {}): Auto
           // Point within the tilt cone even when no vertical thrust is wanted right now, so the engine is
           // never facing sideways when it is needed again.
           const dir = normalize(add(scale(f.up, Math.max(aUp, 0.5 * f.g)), aHor));
-          return input(dir, frac > 0 ? throttleForFraction(clamp(frac, 0, 1), prop.minThrottle) : 0);
+          // A high-thrust engine's minimum setting can exceed lunar hover thrust.
+          // Pulse that minimum rather than commanding it continuously and climbing away.
+          const demand = clamp(frac, 0, 1);
+          const pulse = demand > 0 && demand < prop.minThrottle;
+          const on = !pulse || (w.ut % 0.25) < 0.25 * demand / prop.minThrottle;
+          return input(dir, on ? throttleForFraction(demand, prop.minThrottle) : 0);
         }
       }
       if (ap.status === 'landed') {

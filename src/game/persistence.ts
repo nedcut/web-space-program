@@ -1,8 +1,9 @@
+import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { newProgression, type GameMode, type Progression } from '../sim/science/progression';
 import type { Astronaut, PlantedFlag } from '../sim/crew/crew';
 import type { VesselState } from '../sim/vessel/runtime';
 import type { PartDef } from '../sim/vessel/types';
-import { rebuildTopology } from '../sim/vessel';
+import { rebuildTopology, recomputeMassProperties } from '../sim/vessel';
 import type { ManeuverNode, Orbit } from '../sim/orbit/api';
 import type { Quat } from '../util/quat';
 import type { Vec3 } from '../util/vec3';
@@ -93,7 +94,7 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
   world.commsSettings = { ...world.commsSettings, ...data.commsSettings };
   world.transmitting = [...(data.transmitting ?? [])];
   world.surveyedBodies = [...(data.surveyedBodies ?? [])];
-  world.progression = structuredClone(data.progression ?? newProgression());
+  world.progression = structuredClone(data.progression ?? newProgression(careerScaleMultiplier(world.universe.preset)));
   if (world.mode === 'career' && !world.progression.contracts.length) world.refreshContracts();
   world.crew = structuredClone(data.crew ?? []);
   world.crewSeed = data.crewSeed ?? world.crewSeed;
@@ -106,6 +107,7 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
     });
     const state = { ...sv.state, parts, resourceDefs: RESOURCES, cache: undefined } as unknown as VesselState;
     rebuildTopology(state);
+    recomputeMassProperties(state, false);
     if (!data.crew) world.assignCrew(state);
     const wv: WorldVessel = { state, mode: sv.mode, body: sv.body, orbit: sv.orbit, fixed: sv.fixed };
     world.vessels.set(state.id, wv);

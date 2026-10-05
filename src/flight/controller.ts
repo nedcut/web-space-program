@@ -311,7 +311,7 @@ export class FlightController {
     const wv = this.world.active;
     if (!wv) return;
     if (name === 'rendezvous') {
-      placeInCircularOrbit(this.world, wv, 'earth', 90000);
+      placeInCircularOrbit(this.world, wv, 'earth', Math.max(90000, this.world.universe.body('earth').atmosphere!.height + 80000));
       if (this.craft && spawnRendezvousTarget(this.world, this.craft, 100)) {
         this.speedMode = 'target';
         this.dockingMode = true;
@@ -331,8 +331,8 @@ export class FlightController {
     const east = normalize(cross(pole, up));
     let alt = 0;
     let vel = v3();
-    if (name === 'reentry') { alt = 30000; vel = add(scale(east, 2300), scale(up, -150)); }
-    if (name === 'orbit') { alt = 90000; vel = scale(east, Math.sqrt(b.gm / (b.radius + 90000))); }
+    if (name === 'reentry') { alt = b.atmosphere!.height * 0.6; vel = add(scale(east, Math.sqrt(b.gm / (b.radius + alt)) * 0.98), scale(up, -150)); }
+    if (name === 'orbit') { alt = Math.max(90000, b.atmosphere!.height + 80000); vel = scale(east, Math.sqrt(b.gm / (b.radius + alt))); }
     if (name === 'moon') { alt = 20000; vel = scale(east, Math.sqrt(b.gm / (b.radius + 20000))); }
     wv.mode = 'physics';
     wv.fixed = undefined;

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   SUTTON_GRAVES_K_EARTH, buildVessel, peakTemperature, neutralInput, recoveryTemperature, stagnationHeatFlux, stepThermal, stepVessel, suttonGravesK,
 } from '../src/sim/vessel';
+import { PART_CATALOG } from '../src/data/parts';
+import { buildOrbiter } from '../src/editor/stockCrafts';
 import { TEST_CATALOG, stackCraft, vacuumEnv, NOSE_UP } from '../src/sim/vessel/testing';
 
 const AU = 1.495978707e11;
@@ -38,6 +40,25 @@ describe('heating', () => {
     let burnt = false;
     for (let i = 0; i < 50 * 300 && !burnt; i++) burnt = stepThermal(tank, ctx, 0.02).length > 0;
     expect(burnt).toBe(true);
+  });
+
+  it('protects a stowed chute in the shield wake, but not outboard or nose-first hardware', () => {
+    const heatChute = (outboard: boolean, backwards: boolean) => {
+      const craft = buildOrbiter();
+      craft.parts = craft.parts.filter(p => [1, 2, 3].includes(p.uid));
+      const v = buildVessel(craft, PART_CATALOG);
+      const chute = v.parts.find(p => p.def.id === 'chute-main')!;
+      if (outboard) chute.position.x += 2;
+      const ctx = { air: earthAir(1e-3), airVelocityBody: { x: 0, y: backwards ? 11000 : -11000, z: 0 },
+        sunDirBody: { x: 1, y: 0, z: 0 }, sunDistance: AU };
+      for (let i = 0; i < 50 * 60; i++) {
+        if (stepThermal(v, ctx, 0.02).includes(chute.uid)) return true;
+      }
+      return false;
+    };
+    expect(heatChute(false, false)).toBe(false);
+    expect(heatChute(true, false)).toBe(true);
+    expect(heatChute(false, true)).toBe(true);
   });
 
   it('radiative equilibrium in sunlight at 1 AU reaches radiative equilibrium (absorbed = emitted)', () => {

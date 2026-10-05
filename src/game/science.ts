@@ -1,3 +1,4 @@
+import { careerScaleMultiplier } from '../sim/bodies/scale';
 import type { World, WorldVessel } from './world';
 import { biomeAt, situationAt } from '../sim/science/biomes';
 import { EXPERIMENTS, subjectKey, bodyMultiplier, scienceValue, experimentAvailable, type ScienceContext, type ScienceData } from '../sim/science/experiments';
@@ -84,8 +85,8 @@ export function progressionEvent(w: World, event: ProgressEvent) {
     : event.type === 'soi' && event.body === 'saturn' ? ['first-saturn', 'First Saturn arrival', 150, 100000] as const : null;
   if (milestone && !w.progression.milestones.includes(milestone[0])) {
     w.progression.milestones.push(milestone[0]); w.progression.science += milestone[2];
-    if (w.mode === 'career') { w.progression.funds += milestone[3]; w.progression.reputation += 5; }
-    w.message(`${milestone[1]} · +${milestone[2]} science${w.mode === 'career' ? ` · +${milestone[3]} cr` : ''}`, 'info', 10);
+    if (w.mode === 'career') { w.progression.funds += milestone[3] * careerScaleMultiplier(w.universe.preset); w.progression.reputation += 5; }
+    w.message(`${milestone[1]} · +${milestone[2]} science${w.mode === 'career' ? ` · +${milestone[3] * careerScaleMultiplier(w.universe.preset)} cr` : ''}`, 'info', 10);
   }
 }
 /** Called after every fixed physics step and after rails propagation. */

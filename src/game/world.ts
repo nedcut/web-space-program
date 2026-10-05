@@ -1,3 +1,4 @@
+import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { defaultCommsSettings, remoteControlAllowed, NO_SIGNAL, type CommsSettings, type Network } from '../sim/comms/network';
 import { worldNetwork } from './comms';
 import { advanceISRU, isruMachinery } from '../sim/vessel/isru';
@@ -120,6 +121,7 @@ export class World {
   constructor(universe: Universe, catalog: Map<string, PartDef>, ut: number, public mode: GameMode = 'sandbox') {
     this.commsSettings = defaultCommsSettings(mode);
     this.universe = universe;
+    this.progression = newProgression(careerScaleMultiplier(universe.preset));
     this.catalog = new Map(catalog);
     this.catalog.set(EVA_PART.id, EVA_PART);
     this.ut = ut;
@@ -129,7 +131,7 @@ export class World {
   refreshContracts() {
     if (this.mode !== 'career' || this.progression.contracts.some(c => c.status === 'offered')) return;
     const p = this.progression;
-    p.contracts.push(...generateContracts(p.contractSeed, p.contractBatch++, p.milestones.includes('first-moon')));
+    p.contracts.push(...generateContracts(p.contractSeed, p.contractBatch++, p.milestones.includes('first-moon'), careerScaleMultiplier(this.universe.preset)));
   }
   acceptContract(id: string) { return this.mode === 'career' && acceptContract(this.progression, id, this.ut); }
   abandonContract(id: string) {

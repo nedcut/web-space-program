@@ -1,5 +1,5 @@
 import type { Vec3 } from '../../util/vec3';
-import { length } from '../../util/vec3';
+import { dot, length, scale, sub } from '../../util/vec3';
 import { qConj, qRotate } from '../../util/quat';
 import type { AtmosphereSample } from '../atmosphere/api';
 import type { PartState, VesselState } from './runtime';
@@ -83,6 +83,32 @@ export function peakTemperature(p: PartState): number {
   return Math.max(p.temperature, ...p.skinTemperature);
 }
 
+/**
+ * Convective heating in the near wake of an aligned heat shield. Node adjacency alone misses small
+ * exposed rims farther up a tapered capsule (notably its stowed chute). Only wholly contained parts
+ * receive protection; sideways, upstream and outboard hardware still sees stagnation heating.
+ * The finite cylindrical wake is deliberately conservative; residual heating is 3% of free stream.
+ */
+function shieldWakeFactor(p: PartState, shields: PartState[], flow: Vec3): number {
+  const shape = p.def.shape;
+  if (shape.kind !== 'cylinder') return 1;
+  const axis = qRotate(p.rotation, { x: 0, y: 1, z: 0 });
+  const axial = Math.min(1, Math.abs(dot(axis, flow)));
+  const projectedRadius = Math.max(shape.radiusTop, shape.radiusBottom) + shape.height * 0.5 * Math.sqrt(1 - axial * axial);
+  for (const shield of shields) {
+    if (shield === p || shield.def.shape.kind !== 'cylinder') continue;
+    const alignment = Math.abs(dot(qRotate(shield.rotation, { x: 0, y: 1, z: 0 }), flow));
+    if (alignment < 0.9) continue;
+    const radius = Math.max(shield.def.shape.radiusTop, shield.def.shape.radiusBottom);
+    const delta = sub(p.position, shield.position);
+    const along = dot(delta, flow);
+    if (along >= 0 || along < -8 * radius) continue;
+    const offset = length(sub(delta, scale(flow, along)));
+    if (offset + projectedRadius <= radius * alignment + 1e-6) return 0.03;
+  }
+  return 1;
+}
+
 /** Advance part temperatures by dt. Returns uids of parts exceeding their max temperature. */
 export function stepThermal(v: VesselState, ctx: ThermalContext, dt: number): number[] {
   const s = ctx.air;
@@ -94,8 +120,11 @@ export function stepThermal(v: VesselState, ctx: ThermalContext, dt: number): nu
   const hAmb = s.density > 0 ? 10 * Math.sqrt(s.density / 1.225) : 0;
   const internalPower = new Map<number, number>();
   const destroyed: number[] = [];
+  const shields = speed > 0 && s.density > 0 ? v.parts.filter(p => p.def.modules.some(m => m.type === 'heatShield')) : [];
+  const flow = speed > 0 ? scale(ctx.airVelocityBody, 1 / speed) : { x: 0, y: 0, z: 0 };
 
   for (const p of v.parts) {
+    const wake = shieldWakeFactor(p, shields, flow);
     const proj = faceAreas(p.def);
     const surf = faceSurfaceAreas(p.def);
     const exposed = v.cache.exposed.get(p.uid) ?? proj;
@@ -124,7 +153,7 @@ export function stepThermal(v: VesselState, ctx: ThermalContext, dt: number): nu
       if (Arad > 0) {
         const inc = (sign * flowComp[axis]) / Math.max(speed, 1e-9);
         if (inc > 0 && s.density > 0)
-          P += stagnationHeatFlux(s.density, speed, rn[f], k) * FACE_HEAT_FRACTION * inc * exposed[f] * (1 - T / Tr);
+          P += stagnationHeatFlux(s.density, speed, rn[f], k) * FACE_HEAT_FRACTION * wake * inc * exposed[f] * (1 - T / Tr);
         P += hAmb * Arad * (s.temperature - T);
         P -= EMISSIVITY * STEFAN_BOLTZMANN * Arad * (T ** 4 - Tsky ** 4);
         const sunInc = sign * sunComp[axis];
