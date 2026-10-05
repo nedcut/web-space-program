@@ -36,7 +36,10 @@ export class SurfaceScatter {
     this.group.name = `scatter:${body.id}`;
     this.centerTexture.needsUpdate = true;
     this.centerTexture.magFilter = this.centerTexture.minFilter = THREE.NearestFilter;
-    const palette = body.surface?.colors ?? [[0.2, 0.2, 0.2]];
+    // Earth's surface palette starts with ocean/vegetation colors; mountain stones use rock tones.
+    const palette = body.id === 'earth'
+      ? [[0.13, 0.12, 0.10], [0.16, 0.145, 0.125], [0.20, 0.19, 0.17]]
+      : body.surface?.colors ?? [[0.2, 0.2, 0.2]];
     for (let i = 0; i < 3; i++) this.addBatch(rockGeometry(i), 'rock', 16, palette[Math.min(i, palette.length - 1)], quality, u);
     if (body.id === 'earth' && this.settings.vegetation) {
       this.addBatch(plantGeometry('grass'), 'grass', 64, [0.10, 0.19, 0.035], quality, u);

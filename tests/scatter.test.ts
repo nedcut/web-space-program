@@ -64,4 +64,28 @@ describe('surface scatter', () => {
     expect(scatter.stats.cells).toBeLessThan(50);
     scatter.dispose();
   });
+  it('budgets resident cells, suspends above 3 km, and evicts cells after a camera relocation', () => {
+    const moon = body('moon'), terrain = createTerrain(moon);
+    const quality = { ...QUALITY_PRESETS.medium, scatter: { ...QUALITY_PRESETS.medium.scatter, cellsPerFrame: 1, budgetMs: 100 } };
+    const scatter = new SurfaceScatter(moon, terrain, quality, createPlanetUniforms(moon.radius, null, null));
+    const rotation = new THREE.Quaternion();
+    const camera: [number, number, number] = [moon.radius + terrain.heightAt(1, 0, 0) + 3, 0, 0];
+    scatter.update(camera, new THREE.Vector3(...camera).negate(), rotation);
+    expect(scatter.stats.cells).toBe(1);
+    const resident = scatter.group.children[0] as THREE.InstancedMesh;
+    const first = new THREE.Matrix4(); resident.getMatrixAt(0, first);
+    scatter.update([camera[0] + 3100, 0, 0], new THREE.Vector3(), rotation);
+    expect(scatter.group.visible).toBe(false);
+    expect(scatter.stats.cells).toBe(1);
+    const relocated: [number, number, number] = [0, moon.radius + terrain.heightAt(0, 1, 0) + 3, 0];
+    scatter.update(relocated, new THREE.Vector3(...relocated).negate(), rotation);
+    expect(scatter.group.visible).toBe(true);
+    expect(scatter.stats.cells).toBe(1);
+    const second = new THREE.Matrix4(); resident.getMatrixAt(0, second);
+    expect(second.elements).not.toEqual(first.elements);
+    expect(scatter.group.children).toHaveLength(3); // Medium: rocks only.
+    expect(QUALITY_PRESETS.low.scatter.radius).toBe(0);
+    scatter.dispose();
+  });
+
 });

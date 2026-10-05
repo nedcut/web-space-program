@@ -173,7 +173,10 @@ export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, cen
         vec4 local = instanceMatrix * vec4(position, 1.0);
         vec4 wp = modelMatrix * vec4(local.xyz + centre, 1.0);
         vWorldPos = wp.xyz;
-        vNormal = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal);
+        // Inverse transpose for the non-uniform instance scale (rotation columns are orthogonal).
+        mat3 basis = mat3(instanceMatrix);
+        vec3 scaleSquared = vec3(dot(basis[0], basis[0]), dot(basis[1], basis[1]), dot(basis[2], basis[2]));
+        vNormal = normalize(mat3(modelMatrix) * basis * (normal / max(scaleSquared, vec3(1e-12))));
         gl_Position = projectionMatrix * viewMatrix * wp;
         ${GLSL_LOGDEPTH_VERT}
       }`,
