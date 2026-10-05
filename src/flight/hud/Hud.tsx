@@ -97,6 +97,10 @@ export interface Telemetry {
   docking: DockingTelemetry | null;
   /** Docking ports of the active vessel that join two halves (undock candidates). */
   dockedPorts: { uid: number; name: string }[];
+  /** Abort and custom action groups: bound action count and toggle state. */
+  actionGroups: { id: string; label: string; key: string; count: number; on: boolean }[];
+  /** Lamps on (null = vessel has none). */
+  lights: boolean | null;
 }
 
 export interface HudStage {
@@ -124,6 +128,10 @@ export interface HudCallbacks {
   onUndock(portUid?: number): void;
   /** Open the controls help overlay. */
   onHelp?(): void;
+  /** Fire a custom action group ('custom1'..'custom10'). */
+  onActionGroup?(group: string): void;
+  onAbort?(): void;
+  onToggleLights?(): void;
 }
 
 const SAS_MODES: { id: string; label: string }[] = [
@@ -291,6 +299,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
 
       {/* Bottom-centre: navball + speed + SAS */}
       <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+        {!t.eva && !t.noControl && <ActionGroupStrip t={t} cb={cb} />}
         {!t.eva && <Panel className="panel" style={{ padding: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, width: 130 }}>
           <Button className={`btn small ${t.sasOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} data-tutorial="sas" onClick={cb.onToggleSas} title="Stability assist (T)">SAS</Button>
           {SAS_MODES.map((m) => (
@@ -362,6 +371,21 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
         ))}
       </div>
     </div>
+  );
+}
+
+/** Abort, lights and the custom action groups that have actions assigned. */
+function ActionGroupStrip({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
+  const abort = t.actionGroups.find(g => g.id === 'abort');
+  const custom = t.actionGroups.filter(g => g.id !== 'abort' && g.count > 0);
+  return (
+    <Panel className="panel hud-groups" aria-label="Action groups">
+      <Button className={`btn small hud-abort ${abort?.on ? 'on' : ''}`} title={`Abort (${abort?.key ?? 'Backspace'}): cut throttle and fire the Abort group${abort?.count ? ` · ${abort.count} actions` : ''}`} onClick={() => cb.onAbort?.()}>ABORT</Button>
+      {t.lights !== null && <Button className={`btn small ${t.lights ? 'primary' : ''}`} title="Lights (Y)" onClick={() => cb.onToggleLights?.()}>LIGHTS</Button>}
+      {custom.length > 0 && <div className="hud-group-keys">
+        {custom.map(g => <Button key={g.id} className={`btn small ${g.on ? 'primary' : ''}`} title={`${g.label} (${g.key}) · ${g.count} action${g.count === 1 ? '' : 's'}`} onClick={() => cb.onActionGroup?.(g.id)}>{g.id.slice(6)}</Button>)}
+      </div>}
+    </Panel>
   );
 }
 

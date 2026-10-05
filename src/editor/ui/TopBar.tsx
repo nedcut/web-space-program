@@ -65,6 +65,11 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
         <Button className={`vab-ibtn ${view.showCoT ? 'on cot' : ''}`} title="Show centre of thrust" onClick={() => session.toggleCoT()}><Icon name="cot" /></Button>
         <Button className={`vab-ibtn ${view.showCoL ? 'on col' : ''}`} title="Show centre of lift" onClick={() => session.toggleCoL()}><LiftGlyph /></Button>
       </div>
+      <div className="vab-group">
+        <Button className={`vab-ibtn ${view.mode === 'actions' ? 'on' : ''}`} aria-pressed={view.mode === 'actions'} title="Action groups: assign part actions to keys (Abort, Gear, Lights, 1–0…)" onClick={() => session.setMode(view.mode === 'actions' ? 'build' : 'actions')}>
+          <Icon name="groups" /><span style={{ fontSize: 12 }}>Actions</span>
+        </Button>
+      </div>
       <div className="vab-stats mono">
         <Stat label="Mass" value={fmtKg(s.totalMass)} />
         <Stat label="Parts" value={String(s.partCount)} />

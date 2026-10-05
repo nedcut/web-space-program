@@ -4,7 +4,9 @@ export const DEFAULT_BINDINGS = {
   translateRight: ['KeyL'], translateLeft: ['KeyJ'], translateForward: ['KeyI'], translateBack: ['KeyK'], translateUp: ['KeyH'], translateDown: ['KeyN'],
   throttleUp: ['ShiftLeft', 'ShiftRight'], throttleDown: ['ControlLeft', 'ControlRight'], throttleFull: ['KeyZ'], throttleCut: ['KeyX'],
   stage: ['Space'], toggleSas: ['KeyT'], toggleRcs: ['KeyR'], map: ['KeyM'], warpUp: ['Period'], warpDown: ['Comma'], warpStop: ['Slash'],
-  menu: ['Escape'], help: ['F1'], flightData: ['F3'], stressOverlay: ['F4'], photoMode: ['KeyP'], focusNext: ['BracketRight'], toggleCamMode: ['KeyV'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyU'], board: ['Enter'], plantFlag: ['KeyF'], toggleGear: ['KeyG'], brakes: ['KeyB'], precision: ['CapsLock'], precisionHold: ['AltLeft', 'AltRight'],
+  menu: ['Escape'], help: ['F1'], flightData: ['F3'], stressOverlay: ['F4'], photoMode: ['KeyP'], focusNext: ['BracketRight'], toggleCamMode: ['KeyV'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyU'], board: ['Enter'], plantFlag: ['KeyF'], toggleGear: ['KeyG'], brakes: ['KeyB'], toggleLights: ['KeyY'], abort: ['Backspace'],
+  actionGroup1: ['Digit1'], actionGroup2: ['Digit2'], actionGroup3: ['Digit3'], actionGroup4: ['Digit4'], actionGroup5: ['Digit5'],
+  actionGroup6: ['Digit6'], actionGroup7: ['Digit7'], actionGroup8: ['Digit8'], actionGroup9: ['Digit9'], actionGroup10: ['Digit0'], precision: ['CapsLock'], precisionHold: ['AltLeft', 'AltRight'],
   evaRight: ['KeyD', 'KeyE'], evaLeft: ['KeyA', 'KeyQ'], evaForward: ['KeyW'], evaBack: ['KeyS'], evaUp: ['ShiftLeft', 'ShiftRight'], evaDown: ['ControlLeft', 'ControlRight'], evaRun: ['ShiftLeft', 'ShiftRight'],
   editorUndo: ['Ctrl+KeyZ'], editorRedo: ['Ctrl+Shift+KeyZ', 'Ctrl+KeyY'], editorSave: ['Ctrl+KeyS'], editorCancel: ['Escape'], editorDelete: ['Delete', 'Backspace'], editorSymmetry: ['KeyX'], editorSymmetryMode: ['KeyR'], editorFrame: ['KeyF'], editorReset: ['Space'],
   editorPitchUp: ['KeyW'], editorPitchDown: ['KeyS'], editorRollLeft: ['KeyA'], editorRollRight: ['KeyD'], editorYawLeft: ['KeyQ'], editorYawRight: ['KeyE'],
@@ -59,7 +61,7 @@ export function conflicts(bindings: Bindings): { key: string; actions: Action[] 
   }
   return [...found.values()];
 }
-export function actionLabel(a: Action) { return a.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()); }
+export function actionLabel(a: Action) { return a.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).replace(/(\D)(\d+)$/, '$1 $2'); }
 
 /** Human-readable names shared by tutorial prose, help and shortcut hints. */
 export function bindingLabel(action: Action, bindings = current): string {

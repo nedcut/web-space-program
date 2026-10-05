@@ -13,9 +13,11 @@ export interface FlightInputState {
   brakes: boolean;
 }
 
-export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'toggleCamMode' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag' | 'toggleGear' | 'stressOverlay';
+export type ActionGroupKey = 'actionGroup1' | 'actionGroup2' | 'actionGroup3' | 'actionGroup4' | 'actionGroup5' | 'actionGroup6' | 'actionGroup7' | 'actionGroup8' | 'actionGroup9' | 'actionGroup10';
+export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'toggleCamMode' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag' | 'toggleGear' | 'stressOverlay' | 'toggleLights' | 'abort' | ActionGroupKey;
 
-const FLIGHT_ACTIONS: FlightAction[] = ['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'focusNext', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'board', 'plantFlag', 'toggleGear', 'stressOverlay'];
+export const ACTION_GROUP_KEYS: ActionGroupKey[] = ['actionGroup1', 'actionGroup2', 'actionGroup3', 'actionGroup4', 'actionGroup5', 'actionGroup6', 'actionGroup7', 'actionGroup8', 'actionGroup9', 'actionGroup10'];
+const FLIGHT_ACTIONS: FlightAction[] = ['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'focusNext', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'board', 'plantFlag', 'toggleGear', 'stressOverlay', 'toggleLights', 'abort', ...ACTION_GROUP_KEYS];
 export class FlightInput {
   readonly state: FlightInputState = { pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, throttle: 0, brakes: false };
   private held = new Set<string>();
@@ -71,7 +73,7 @@ export class FlightInput {
     this.held.add(e.code);
     if (e.repeat) return;
     if (actions.includes('precision')) this.precision = !this.precision;
-    for (const a of FLIGHT_ACTIONS) if (actions.includes(a) && (!(a === 'board' || a === 'plantFlag') || this.evaMode)) this.emit(a);
+    for (const a of FLIGHT_ACTIONS) if (actions.includes(a) && (!(a === 'board' || a === 'plantFlag') || this.evaMode) && !(this.evaMode && (a === 'abort' || a === 'toggleLights' || a.startsWith('actionGroup')))) this.emit(a);
     if (!this.evaMode && actions.includes('throttleFull')) this.state.throttle = 1;
     if (!this.evaMode && actions.includes('throttleCut')) this.state.throttle = 0;
   };

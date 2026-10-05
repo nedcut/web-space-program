@@ -6,7 +6,7 @@ import { RESOURCES } from '../data/resources';
 import { game } from '../game/store';
 import { Universe } from '../game/universe';
 import { deleteCraft, listCrafts, saveCraft } from '../game/saves';
-import type { CraftDef, PartInstance, ResourceId } from '../sim/vessel/types';
+import type { ActionGroupId, CraftDef, PartActionId, PartInstance, PartTweaks, ResourceId } from '../sim/vessel/types';
 import { qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../util/quat';
 import { sub, v3, type Vec3 } from '../util/vec3';
 import { CraftEditor, craftStats, getStageList, type CraftStats, type Stage, type LinkHit } from './core';
@@ -45,6 +45,11 @@ export type SymmetryMode = 'radial' | 'mirror';
 
 export interface Toast { id: number; text: string; tone: 'info' | 'warn' | 'bad' | 'good' }
 
+/** Editor interaction mode: building, or assigning part actions to action groups. */
+export type EditorMode = 'build' | 'actions';
+/** Floating part inspector panels (newest last). Unpinned panels are replaced by the next one opened. */
+export interface InspectorPanelState { uid: number; pinned: boolean }
+
 export interface SessionView {
   craft: CraftDef;
   name: string;
@@ -68,6 +73,14 @@ export interface SessionView {
   toasts: Toast[];
   hoverUid: number | null;
   highlightUids: number[];
+  /** Parts selected from the staging list or the 3D view (persistent highlight). */
+  selectedUids: number[];
+  mode: EditorMode;
+  /** Action group being edited in 'actions' mode. */
+  group: ActionGroupId;
+  /** Parts with actions in the selected group (highlighted in 'actions' mode). */
+  groupUids: number[];
+  panels: InspectorPanelState[];
   version: number;
 }
 
@@ -94,6 +107,10 @@ export class EditorSession {
   private toastId = 0;
   private hoverUid: number | null = null;
   private highlightUids: number[] = [];
+  private selectedUids: number[] = [];
+  private mode: EditorMode = 'build';
+  private group: ActionGroupId = 'custom1';
+  private panels: InspectorPanelState[] = [];
   private version = 0;
   private unsub: () => void = () => {};
   /** Bumped when a whole craft is loaded (view re-frames the camera). */
@@ -145,7 +162,12 @@ export class EditorSession {
     let totalDvVac = 0, totalDvAsl = 0;
     for (const s of stageStats.values()) { totalDvVac += s.dvVac; totalDvAsl += s.dvAsl; }
     this.version++;
+    // Drop selections/panels of parts that no longer exist (deleted, picked up).
+    const alive = new Set(craft.parts.map(p => p.uid));
+    this.selectedUids = this.selectedUids.filter(u => alive.has(u));
+    this.panels = this.panels.filter(p => alive.has(p.uid));
     this.snap = {
+      ...this.uiFields(craft),
       craft, name: this.name, stages, stageStats, stats, totalDvVac, totalDvAsl,
       held: this.held, linkStart: this.editor.linkStart, symmetry: this.symmetry, symmetryMode: this.symmetryMode, craftType: craft.type,
       showCoM: this.showCoM, showCoT: this.showCoT, showCoL: this.showCoL,
@@ -155,11 +177,16 @@ export class EditorSession {
     this.listeners.forEach((l) => l());
   }
 
+  private uiFields(craft: CraftDef = this.snap?.craft ?? this.editor.craft) {
+    return { selectedUids: this.selectedUids, mode: this.mode, group: this.group, panels: this.panels,
+      groupUids: craft.parts.filter(p => p.actions?.[this.group]?.length).map(p => p.uid) };
+  }
+
   /** Lightweight update for UI-only fields (no craft recompute). */
   private touch() {
     this.version++;
     this.snap = {
-      ...this.snap, name: this.name, held: this.held, linkStart: this.editor.linkStart, symmetry: this.symmetry, symmetryMode: this.symmetryMode,
+      ...this.snap, ...this.uiFields(), name: this.name, held: this.held, linkStart: this.editor.linkStart, symmetry: this.symmetry, symmetryMode: this.symmetryMode,
       showCoM: this.showCoM, showCoT: this.showCoT, showCoL: this.showCoL,
       canUndo: this.editor.canUndo || this.held?.kind === 'new', canRedo: this.editor.canRedo,
       toasts: this.toasts, hoverUid: this.hoverUid, highlightUids: this.highlightUids, version: this.version,
@@ -495,6 +522,56 @@ export class EditorSession {
     if (this.held?.kind === 'new') { this.held = null; this.touch(); }
     this.editor.redo();
   }
+
+  // ------------------------------------------------------------------ selection, inspector panels, part settings
+  select(uids: number[], toggle = false) {
+    const same = uids.length === this.selectedUids.length && uids.every(u => this.selectedUids.includes(u));
+    this.selectedUids = toggle && same ? [] : [...uids];
+    this.touch();
+  }
+  /** Open an inspector for a part (replacing the unpinned one) and select it. */
+  openPanel(uid: number) {
+    if (!this.editor.craft.parts.some(p => p.uid === uid)) return;
+    this.panels = [...this.panels.filter(p => p.pinned && p.uid !== uid), { uid, pinned: this.panels.find(p => p.uid === uid)?.pinned ?? false }];
+    this.selectedUids = [uid];
+    this.touch();
+  }
+  closePanel(uid: number) {
+    this.panels = this.panels.filter(p => p.uid !== uid);
+    if (this.selectedUids.length === 1 && this.selectedUids[0] === uid) this.selectedUids = [];
+    this.touch();
+  }
+  /** Esc: close the newest panel. Returns false when none was open. */
+  closeTopPanel(): boolean {
+    const top = this.panels.at(-1);
+    if (!top) return false;
+    this.closePanel(top.uid);
+    return true;
+  }
+  togglePin(uid: number) {
+    this.panels = this.panels.map(p => p.uid === uid ? { ...p, pinned: !p.pinned } : p);
+    this.touch();
+  }
+  setMode(mode: EditorMode) {
+    if (mode === this.mode) return;
+    if (this.held) this.cancelHeld();
+    this.mode = mode;
+    this.touch();
+  }
+  setGroup(group: ActionGroupId) {
+    this.group = group;
+    this.touch();
+  }
+  setPartTweaks(uid: number, tweaks: PartTweaks) { this.guard(() => this.editor.setPartTweaks(uid, tweaks)); }
+  setPartResources(uid: number, resources: Partial<Record<ResourceId, number>>) { this.guard(() => this.editor.setPartResources(uid, resources)); }
+  /** Add or remove one action of a part in the current (or given) group, mirrored across symmetry. */
+  toggleGroupAction(uid: number, action: PartActionId, group: ActionGroupId = this.group) {
+    const part = this.editor.craft.parts.find(p => p.uid === uid);
+    if (!part) return;
+    const list = part.actions?.[group] ?? [];
+    this.guard(() => this.editor.setPartActions(uid, group, list.includes(action) ? list.filter(a => a !== action) : [...list, action]));
+  }
+  clearGroup(group: ActionGroupId) { this.guard(() => this.editor.clearGroup(group)); }
 
   // Staging
   moveToStage(uid: number, index: number) { this.guard(() => this.editor.moveToStage(uid, index)); }

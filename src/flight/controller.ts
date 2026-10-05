@@ -25,9 +25,11 @@ import { sampleAtmosphere } from '../sim/atmosphere';
 import type { ScalePresetId } from '../sim/bodies/scale';
 import type { Orbit } from '../sim/orbit/api';
 import type { GameMode } from '../sim/science/progression';
-import { gearState, neutralInput, type PortInfo } from '../sim/vessel';
+import { gearState, groupBindings, lightOn, neutralInput, type PortInfo } from '../sim/vessel';
+import type { ActionGroupId, PartActionId } from '../sim/vessel/types';
+import type { FlightTweaks, SasMode, VesselCommand } from '../sim/vessel/runtime';
+import { pickPartAlongRay, partWorldPosition } from './partPick';
 import { stagnationHeatFlux } from '../sim/vessel/heating';
-import type { SasMode } from '../sim/vessel/runtime';
 import type { CraftDef } from '../sim/vessel/types';
 import { getTutorial } from '../tutorial/runtime';
 import { formatDistance, formatDuration } from '../ui/format';
@@ -99,6 +101,12 @@ export class FlightController {
   private stagePending = false;
   /** Gear command from G (applied once, then left to the vessel state). */
   private gearPending: boolean | undefined = undefined;
+  /** One-shot part actions / action groups / flight settings for the next input sent to the authority. */
+  private pendingCommands: VesselCommand[] = [];
+  private brakesWere = false;
+  /** Right-click / long-press part picks (the HUD opens an inspector panel). */
+  private partPickListeners = new Set<(uid: number) => void>();
+  private readonly raycaster = new THREE.Raycaster();
   private views = new Map<string, VesselView>();
   private stars: Starfield;
   private glare: SunGlare;
@@ -205,6 +213,7 @@ export class FlightController {
     this.disposers.push(this.cam.attach(canvas, () => !this.mapMode && !this.paused));
     this.disposers.push(this.map.attachControls(canvas, () => this.mapMinDistance(), () => this.mapMode && !this.paused));
     this.disposers.push(this.attachMapPicking(canvas));
+    this.disposers.push(this.attachPartPicking(canvas));
     this.disposers.push(
       this.input.onAction((a) => {
         if (this.photo.active) return;
@@ -216,7 +225,9 @@ export class FlightController {
           case 'board': this.boardEva(); break;
           case 'plantFlag': this.plantFlag(); break;
           case 'toggleSas': this.toggleSas(); break;
-          case 'toggleRcs': this.rcsOn = !this.rcsOn; break;
+          case 'toggleRcs': this.toggleRcs(); break;
+          case 'toggleLights': this.toggleLights(); break;
+          case 'abort': this.abort(); break;
           case 'stressOverlay': this.stressOverlay = !this.stressOverlay; this.world.message(this.stressOverlay ? 'Stress overlay: green = low, yellow = near limit, red = overloaded' : 'Stress overlay off'); break;
           case 'toggleGear': this.toggleGear(); break;
           case 'map': this.toggleMap(); break;
@@ -226,6 +237,9 @@ export class FlightController {
           case 'menu': this.onExit?.(); break;
           case 'focusNext': if (!this.network?.ownId && this.world.focusNextNearby()) this.world.message(`Switched to ${this.world.active!.state.name}`); break;
           case 'quicksave': this.quicksave(); break;
+          case 'actionGroup1': case 'actionGroup2': case 'actionGroup3': case 'actionGroup4': case 'actionGroup5':
+          case 'actionGroup6': case 'actionGroup7': case 'actionGroup8': case 'actionGroup9': case 'actionGroup10':
+            this.fireGroup(`custom${a.slice(11)}` as ActionGroupId, undefined, true); break;
           case 'quickload': if (!this.network) this.onQuickload?.(); break;
           case 'toggleCamMode': this.cam.mode = this.cam.mode === 'auto' ? (this.world.active?.state.eva ? 'free' : 'chase') : this.cam.mode === 'chase' ? 'free' : 'auto'; break;
         }
@@ -352,6 +366,118 @@ export class FlightController {
     if (!this.world.canControl()) return;
     this.sasOn = !this.sasOn;
     if (this.sasOn && this.sas === 'off') this.sas = 'stabilityAssist';
+    if (this.hasBindings('sas')) this.fireGroup('sas', this.sasOn);
+  }
+
+  toggleRcs() {
+    if (!this.world.canControl()) return;
+    this.rcsOn = !this.rcsOn;
+    if (this.hasBindings('rcs')) this.fireGroup('rcs', this.rcsOn);
+  }
+
+  // ---------- Part actions, action groups and flight settings (authoritative command path) ----------
+
+  /** Queue commands for the active vessel; the World (or multiplayer room) applies them on its next physics step. */
+  command(...commands: VesselCommand[]) {
+    if (!this.world.canControl() || !this.world.active || this.world.active.state.eva) return;
+    this.pendingCommands.push(...commands);
+  }
+  partAction(uid: number, action: PartActionId, experiment?: string) { this.command({ kind: 'part', uid, action, ...(experiment ? { experiment } : {}) }); }
+  setTweaks(uid: number, tweaks: FlightTweaks, symmetric = true) { this.command({ kind: 'tweak', uid, tweaks, symmetric }); }
+  private hasBindings(group: ActionGroupId) {
+    const v = this.world.active?.state;
+    return !!v && groupBindings(v, group).length > 0;
+  }
+  /** Fire an action group; `announce` shows a message (number keys). */
+  fireGroup(group: ActionGroupId, state?: boolean, announce = false) {
+    if (!this.world.canControl() || !this.world.active || this.world.active.state.eva) return;
+    if (announce) {
+      const n = groupBindings(this.world.active.state, group).length;
+      this.world.message(n ? `Action group ${group.slice(6)}` : `Action group ${group.slice(6)} is empty — assign actions in the editor`, n ? 'info' : 'warn', 2);
+    }
+    this.command({ kind: 'group', group, ...(state === undefined ? {} : { state }) });
+  }
+  toggleLights() {
+    const v = this.world.active?.state;
+    if (!v) return;
+    const lamps = v.parts.filter(p => p.def.modules.some(m => m.type === 'light'));
+    if (!lamps.length && !this.hasBindings('lights')) return;
+    const on = !lamps.some(lightOn);
+    this.fireGroup('lights', on);
+    if (lamps.length) this.world.message(on ? 'Lights on' : 'Lights off', 'info', 2);
+  }
+  /** Abort: cut the throttle, stop assist programs and fire the Abort group. */
+  abort() {
+    if (!this.world.canControl() || !this.world.active || this.world.active.state.eva) return;
+    this.input.state.throttle = 0;
+    if (this.assist) this.cancelAssist('Assist cancelled by abort');
+    this.fireGroup('abort');
+    this.world.message(this.hasBindings('abort') ? 'ABORT' : 'Abort: throttle cut (no Abort actions assigned)', 'bad', 3);
+  }
+  onPartPick(fn: (uid: number) => void) { this.partPickListeners.add(fn); return () => { this.partPickListeners.delete(fn); }; }
+
+  private renderOrigin(): Vec3 | null {
+    const wv = this.world.active;
+    return wv ? this.network?.pose(wv.state.id)?.position ?? wv.state.position : null;
+  }
+  /** Active-vessel part under a viewport point (CSS px relative to the canvas). */
+  pickPart(x: number, y: number): number | null {
+    const wv = this.world.active, origin = this.renderOrigin();
+    if (!wv || !origin || this.mapMode) return null;
+    const el = this.pipeline.renderer.domElement;
+    this.raycaster.setFromCamera(new THREE.Vector2((x / el.clientWidth) * 2 - 1, -(y / el.clientHeight) * 2 + 1), this.cam.camera);
+    const pose = this.network?.pose(wv.state.id);
+    const s = wv.state;
+    const r = this.raycaster.ray;
+    const hit = pickPartAlongRay(s.parts, s.com, sub(pose?.position ?? s.position, origin), pose?.orientation ?? s.orientation,
+      { x: r.origin.x, y: r.origin.y, z: r.origin.z }, { x: r.direction.x, y: r.direction.y, z: r.direction.z });
+    return hit?.uid ?? null;
+  }
+  /** Screen position (CSS px within the canvas) of an active-vessel part, or null when hidden/behind the camera. */
+  partScreenPosition(uid: number): { x: number; y: number } | null {
+    const wv = this.world.active, origin = this.renderOrigin();
+    const p = wv?.state.cache.byUid.get(uid);
+    if (!wv || !p || !origin || this.mapMode) return null;
+    const pose = this.network?.pose(wv.state.id);
+    const w = partWorldPosition(p, wv.state.com, sub(pose?.position ?? wv.state.position, origin), pose?.orientation ?? wv.state.orientation);
+    const v = new THREE.Vector3(w.x, w.y, w.z).project(this.cam.camera);
+    if (v.z > 1 || v.z < -1) return null;
+    const el = this.pipeline.renderer.domElement;
+    return { x: ((v.x + 1) / 2) * el.clientWidth, y: ((1 - v.y) / 2) * el.clientHeight };
+  }
+  /** Right-click (without dragging the camera) or a touch long-press picks a part. */
+  private attachPartPicking(el: HTMLElement) {
+    let start: { x: number; y: number; button: number; touch: boolean } | null = null;
+    let timer = 0;
+    const emit = (cx: number, cy: number) => {
+      const r = el.getBoundingClientRect();
+      const uid = this.pickPart(cx - r.left, cy - r.top);
+      if (uid !== null) this.partPickListeners.forEach(fn => fn(uid));
+    };
+    const down = (e: PointerEvent) => {
+      if (this.paused || this.photo.active) return;
+      start = { x: e.clientX, y: e.clientY, button: e.button, touch: e.pointerType === 'touch' };
+      window.clearTimeout(timer);
+      if (start.touch) timer = window.setTimeout(() => { if (start) { emit(start.x, start.y); start = null; } }, 550);
+    };
+    const move = (e: PointerEvent) => { if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 6) { start = null; window.clearTimeout(timer); } };
+    const up = (e: PointerEvent) => {
+      window.clearTimeout(timer);
+      if (start && !start.touch && start.button === 2 && e.button === 2) emit(e.clientX, e.clientY);
+      start = null;
+    };
+    const menu = (e: Event) => e.preventDefault();
+    el.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    el.addEventListener('contextmenu', menu);
+    return () => {
+      window.clearTimeout(timer);
+      el.removeEventListener('pointerdown', down);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      el.removeEventListener('contextmenu', menu);
+    };
   }
 
   setSasMode(mode: string) {
@@ -415,8 +541,9 @@ export class FlightController {
     const wv = this.world.active;
     if (!wv) return;
     const cur = gearState(wv.state);
-    if (cur === undefined) return;
-    this.gearPending = !cur;
+    if (cur === undefined && !this.hasBindings('gear')) return;
+    if (cur !== undefined) this.gearPending = !cur;
+    if (this.hasBindings('gear')) this.fireGroup('gear', !(cur ?? wv.state.groupState?.gear ?? false));
     this.world.message(this.gearPending ? 'Gear down' : 'Gear up');
   }
 
@@ -476,10 +603,15 @@ export class FlightController {
       this.input.state.throttle = 0;
       this.stagePending = false;
       this.gearPending = undefined;
+      this.pendingCommands = [];
       if (this.assist) this.cancelAssist('Assist stopped: no signal or command authority');
     }
     const s = this.input.state;
     const wv = this.world.active;
+    if (s.brakes !== this.brakesWere) {
+      this.brakesWere = s.brakes;
+      if (!this.paused && this.hasBindings('brakes')) this.fireGroup('brakes', s.brakes);
+    }
     const maneuverDir = this.maneuverDirection();
     if (!this.world.targetId) {
       // Target gone (docked, destroyed, cleared): leave target-relative modes.
@@ -508,10 +640,12 @@ export class FlightController {
       sasReference: this.speedMode === 'surface' ? 'surface' : this.speedMode === 'target' && targetState ? 'target' : 'orbit',
       target: targetState ?? undefined,
       maneuverDirection: maneuverDir ?? undefined,
+      commands: this.pendingCommands.length && !wv?.state.eva ? this.pendingCommands : undefined,
     });
     if (!this.paused) {
       this.stagePending = false;
       this.gearPending = undefined;
+      this.pendingCommands = [];
     }
     const input = assist.driveAssist.call(this, this.systems, wv, ctrl, dt);
     if (this.network) this.network.update(dt, this.paused ? neutralInput() : input);

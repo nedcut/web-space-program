@@ -106,9 +106,15 @@ export function StagingPanel({ session, view }: { session: EditorSession; view: 
                   return (
                     <div
                       key={c.key}
-                      className="vab-chip"
+                      className={`vab-chip ${c.uids.some(u => view.selectedUids.includes(u)) ? 'selected' : ''} ${view.hoverUid !== null && c.uids.includes(view.hoverUid) ? 'hot' : ''}`}
                       draggable
-                      title={`${def.name}${c.uids.length > 1 ? ` ×${c.uids.length}` : ''} — drag to another stage`}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={c.uids.some(u => view.selectedUids.includes(u))}
+                      onClick={() => session.select(c.uids, true)}
+                      onDoubleClick={() => session.openPanel(c.uids[0])}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); session.select(c.uids, true); } }}
+                      title={`${def.name}${c.uids.length > 1 ? ` ×${c.uids.length}` : ''} — click to select, double-click for details, drag to another stage`}
                       onDragStart={(e) => {
                         e.dataTransfer.setData('text/x-wsp-uid', String(c.uids[0]));
                         e.dataTransfer.effectAllowed = 'move';

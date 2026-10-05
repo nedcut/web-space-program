@@ -5,6 +5,9 @@ import { photoMode, usePhotoMode } from '../game/photoMode';
 import { SignalPanel } from './hud/SignalPanel';
 import { MultiplayerPanel } from '../net/MultiplayerPanel';
 import { ResourcePanel } from './hud/ResourcePanel';
+import { FlightInspector } from './hud/PartInspector';
+import type { InspectorPanelProps } from '../ui/inspector/Inspector';
+import type { ActionGroupId } from '../sim/vessel/types';
 import { tutorialContext, getTutorial, endTutorial, startLesson } from '../tutorial/runtime';
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
@@ -43,6 +46,9 @@ export default function FlightScene() {
   const helpRef = useRef(false);
   helpRef.current = help;
   const [showSettings, setShowSettings] = useState(false);
+  const [panels, setPanels] = useState<InspectorPanelProps[]>([]);
+  const panelsRef = useRef(panels);
+  panelsRef.current = panels;
   const settingsRef = useRef(false);
   settingsRef.current = showSettings;
   const settings = useGame((s) => s.settings);
@@ -117,6 +123,7 @@ export default function FlightScene() {
       cc.onExit = () => {
         if (getScenarioRun()?.result) return;
         if (helpRef.current) return closeHelp();
+        if (panelsRef.current.length && !pausedRef.current) return setPanels(p => p.slice(0, -1));
         if (settingsRef.current) return setShowSettings(false);
         if (lostRef.current) return setPaused(true);
         setPaused((p) => !p);
@@ -308,7 +315,10 @@ export default function FlightScene() {
             onStage: () => ctrl.current?.stage(),
             onToggleSas: () => ctrl.current?.toggleSas(),
             onSasMode: (m) => ctrl.current?.setSasMode(m),
-            onToggleRcs: () => ctrl.current && (ctrl.current.rcsOn = !ctrl.current.rcsOn),
+            onToggleRcs: () => ctrl.current?.toggleRcs(),
+            onActionGroup: (g) => ctrl.current?.fireGroup(g as ActionGroupId),
+            onAbort: () => ctrl.current?.abort(),
+            onToggleLights: () => ctrl.current?.toggleLights(),
             onWarp: (d) => ctrl.current?.changeWarp(d),
             onMap: () => ctrl.current?.toggleMap(),
             onMenu: () => setPaused(true),
@@ -321,6 +331,7 @@ export default function FlightScene() {
           }}
         />
       )}
+      {c && ready && !photo.active && !paused && <FlightInspector controller={c} panels={panels} setPanels={setPanels} />}
       {settings.showFps && c && !photo.active && <PerformanceReadout controller={c} />}
       {help && ready && !photo.active && <HelpOverlay eva={!!tele?.eva} onClose={closeHelp} />}
       {networkReady && c?.network && <MultiplayerPanel client={c.network} />}

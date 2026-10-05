@@ -1,23 +1,17 @@
 import { RESOURCES } from '../../data/resources';
+import { RESOURCE_COLORS } from '../../ui/inspector/resources';
 import { flightData, flightPredictions } from '../../game/flightData';
 import { cachedStageDeltaV } from '../../game/stageDeltaVCache';
 import { warpLabel } from '../../game/timewarp';
 import { type WorldVessel } from '../../game/world';
-import { dockedPorts, freePorts, type PortInfo, type StageDeltaV } from '../../sim/vessel';
+import { ACTION_GROUP_IDS, dockedPorts, freePorts, GROUP_LABELS, groupBindings, lightOn, type PortInfo, type StageDeltaV } from '../../sim/vessel';
+import { bindingLabel } from '../../input/bindings';
 import { qRotate } from '../../util/quat';
 import { dot, length, negate, sub, v3 } from '../../util/vec3';
 import type { FlightController } from '../controller';
 import type { DockingTelemetry, HudStage, Telemetry } from '../hud/Hud';
 import type { FlightControllerInternals } from './internals';
-const RESOURCE_COLORS: Record<string, string> = {
-  liquidFuel: '#ffb35c',
-  oxidizer: '#5cc8ff',
-  monopropellant: '#d0d0d0',
-  solidFuel: '#ff7a5c',
-  electricCharge: '#ffe14d',
-  xenon: '#b48cff',
-  ablator: '#a08060',
-};
+
 
 /** Active and target docking ports for the docking indicator (target port if selected, else the closest pair). */
 export function dockingPair(this: FlightController, _internals: FlightControllerInternals): { mine: PortInfo; theirs: PortInfo } | null {
@@ -202,6 +196,11 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     dockingMode: this.dockingMode,
     docking: this.dockingMode ? internals.dockingTelemetry() : null,
     dockedPorts: dockedPorts(st).map((p) => ({ uid: p.uid, name: p.def.name })),
+    actionGroups: ACTION_GROUP_IDS.filter(g => g === 'abort' || g.startsWith('custom')).map(g => ({
+      id: g, label: GROUP_LABELS[g], key: bindingLabel(g === 'abort' ? 'abort' : `actionGroup${g.slice(6)}` as 'actionGroup1'),
+      count: groupBindings(st, g).length, on: !!st.groupState?.[g],
+    })),
+    lights: st.parts.some(p => p.def.modules.some(m => m.type === 'light')) ? st.parts.some(p => p.def.modules.some(m => m.type === 'light') && lightOn(p)) : null,
   };
 }
 
