@@ -1,0 +1,33 @@
+.pedia { background: radial-gradient(ellipse at 85% 10%, #233446, #090e18 65%); padding: 24px 4vw; display: flex; flex-direction: column; gap: 18px; }
+.pedia header { display: flex; align-items: center; gap: 24px; }
+.pedia header .btn { margin-left: auto; }
+.pedia h1 { margin: 4px 0; font-weight: 300; letter-spacing: .08em; }
+.pedia-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; flex: 1; min-height: 0; }
+.pedia aside { display: flex; flex-direction: column; padding: 16px; gap: 16px; min-height: 0; }
+.pedia nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.pedia input { width: 100%; padding: 12px; background: #0d1725; color: white; border: 1px solid #3e5269; border-radius: 6px; }
+.pedia-index { overflow: auto; display: flex; flex-direction: column; gap: 3px; }
+.pedia-index .btn { text-align: left; flex-shrink: 0; }
+.pedia .selected { background: #284157; color: #aee4ff; }
+.pedia-article { overflow: auto; padding: 28px; }
+.pedia h2 { font-size: 32px; font-weight: 400; margin: 12px 0; }
+.pedia-intro { max-width: 850px; line-height: 1.8; font-size: 16px; color: #dae2ea; }
+.pedia-muted { font-size: 13px; color: #a4b5c9; line-height: 1.6; }
+.pedia-preview { position: relative; background: #050a12; border-radius: 12px; height: 300px; margin: 24px 0; overflow: hidden; }
+.pedia-preview canvas { width: 100%; height: 100%; display: block; }
+.pedia-preview span { position: absolute; bottom: 12px; left: 16px; }
+.pedia-preview p { position: absolute; top: 45%; left: 20px; }
+.pedia table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.pedia th, .pedia td { padding: 10px; border-bottom: 1px solid #29374a; text-align: left; }
+.pedia th { font-weight: 500; color: #c0d0e4; }
+.pedia td { font-variant-numeric: tabular-nums; }
+.pedia svg { width: 100%; max-width: 600px; background: #0b1422; border-radius: 10px; }
+.pedia svg text { fill: #b6c5d8; font-size: 11px; }
+.pedia dl { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr; gap: 10px; }
+.pedia dd { margin: 0; overflow-wrap: anywhere; }
+.pedia dt { color: #a4b5c9; }
+.pedia-module { padding: 16px; margin-bottom: 12px; background: #101d2c; border-radius: 8px; }
+.pedia-module dl { display: block; }
+.pedia-module dl div { display: grid; grid-template-columns: 1fr 2fr; padding: 5px 0; }
+.pedia a { color: #79cfff; }
+@media (max-width: 760px) { .pedia { padding: 16px; } .pedia-layout { grid-template-columns: 180px minmax(0,1fr); gap: 10px; } .pedia-article { padding: 16px; } .pedia header .pedia-muted { display: none; } .pedia th, .pedia td { padding: 6px; font-size: 12px; } }

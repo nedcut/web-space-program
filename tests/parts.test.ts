@@ -4,7 +4,7 @@ import { RESOURCES, resourceMass } from '../src/data/resources';
 import type { EngineModule, PartDef, ResourceId } from '../src/sim/vessel/types';
 
 const G0 = 9.80665;
-const BANNED = /kerbal|kerbin|jebediah|rockomax|kerbodyne|probodobodyne|mainsail|poodle|terrier|reliant|swivel|stayputnik|okto|mun\b/i;
+import { BANNED } from './forbiddenTerms';
 
 describe('resources', () => {
   it('has sane densities', () => {

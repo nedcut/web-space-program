@@ -66,6 +66,7 @@ export function SpaceCenter() {
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
           <button className="btn small" onClick={() => game.set({ scene: 'menu' })}>Main menu</button>
+          <button className="btn" onClick={() => void import('./Spacepedia').then(m => m.openPedia('spaceCenter'))}>Spacepedia</button>
           <button className="btn small" onClick={() => setSettings((v) => !v)}>Settings</button>
         </div>
         {settings && <SettingsPanel onClose={() => setSettings(false)} />}

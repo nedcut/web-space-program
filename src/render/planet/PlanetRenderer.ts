@@ -26,6 +26,8 @@ import { SurfaceScatter } from './scatter/SurfaceScatter';
 import { terrainCutout } from './cutout';
 
 export interface PlanetRendererOptions {
+  /** Portraits bake surface detail without allocating close-up terrain. */
+  farOnly?: boolean;
   quality: QualitySettings;
   /** Universe scale (for atmosphere scale heights and artistic sun falloff). Default: standard. */
   scale?: ScaleConfig;
@@ -82,6 +84,7 @@ export class PlanetRenderer {
   private farMaterial: THREE.ShaderMaterial | null = null;
   private farTexture: THREE.DataTexture | null = null;
   private bakeRequested = false;
+  private disposed = false;
   private sky: THREE.Mesh | null = null;
   private clouds: THREE.Mesh | null = null;
   private cloudRadius = 0;
@@ -192,6 +195,8 @@ export class PlanetRenderer {
     if (!terrain) return;
     this.pool = opts.pool ?? TerrainWorkerPool.shared(q.terrain.workers);
     this.pool.register(this.terrainKey, this.body, terrain, opts.terrainMinWavelength ?? 6);
+
+    if (opts.farOnly) return;
 
     const rockByPreset: Record<string, [number, number, number]> = {
       earth: [0.16, 0.145, 0.125],
@@ -386,6 +391,7 @@ export class PlanetRenderer {
     if (this.terrain && !this.bakeRequested && this.pool) {
       this.bakeRequested = true;
       this.pool.bake(this.terrainKey, this.quality.bakedTextureWidth).then((res) => {
+        if (this.disposed) return;
         const tex = new THREE.DataTexture(res.data, res.width, res.height, THREE.RGBAFormat, THREE.UnsignedByteType);
         tex.colorSpace = THREE.SRGBColorSpace;
         tex.wrapS = THREE.RepeatWrapping;
@@ -498,6 +504,7 @@ export class PlanetRenderer {
   }
 
   dispose(): void {
+    this.disposed = true;
     unregisterPlanetUniforms(this.body.id, this.uniforms);
     this.quadtree?.dispose();
     this.scatter?.dispose();

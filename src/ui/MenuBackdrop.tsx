@@ -1,7 +1,21 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-/** Lightweight 2D animated backdrop: drifting starfield and a ringed planet. Replaced by a 3D scene later. */
+/** Immediate canvas fallback crossfades into the shared planetary renderer. */
 export function MenuBackdrop() {
+  const live = useRef<HTMLCanvasElement>(null);
+  const [ready, setReady] = useState(false);
+  const readyRef = useRef(false);
+  readyRef.current = ready;
+  useEffect(() => {
+    let disposed = false;
+    let cleanup: (() => void) | undefined;
+    import('./planetPreview').then(({ mountPlanetPreview }) => {
+      if (disposed) return;
+      try { cleanup = mountPlanetPreview(live.current!, 'saturn', 'standard', true, setReady); }
+      catch { setReady(false); }
+    }).catch(() => setReady(false));
+    return () => { disposed = true; cleanup?.(); };
+  }, []);
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -20,6 +34,7 @@ export function MenuBackdrop() {
     window.addEventListener('resize', resize);
 
     const draw = (time: number) => {
+      if (readyRef.current) { raf = requestAnimationFrame(draw); return; }
       const w = canvas.width;
       const h = canvas.height;
       const t = time / 1000;
@@ -96,5 +111,8 @@ export function MenuBackdrop() {
     };
   }, []);
 
-  return <canvas ref={ref} className="fullscreen" style={{ width: '100%', height: '100%' }} />;
+  return <>
+    <canvas ref={ref} className="fullscreen" style={{ width: '100%', height: '100%' }} />
+    <canvas ref={live} aria-hidden="true" className="fullscreen" style={{ width: '100%', height: '100%', opacity: ready ? 1 : 0, transition: 'opacity 1.8s ease' }} />
+  </>;
 }
