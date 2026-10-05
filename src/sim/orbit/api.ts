@@ -33,6 +33,8 @@ export interface Orbit {
 
 /** One segment of a patched-conic trajectory prediction. */
 export interface TrajectoryPatch {
+  /** Accepted numerical states in orbit.body frame; absent in patched-conic mode. */
+  samples?: import('./numericalPrediction').TrajectorySample[];
   orbit: Orbit;
   startTime: number;
   /** End time (SOI change, impact, or prediction horizon). */

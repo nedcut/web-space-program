@@ -1,3 +1,4 @@
+import { add } from '../util/vec3';
 import { serializeWorld, deserializeWorld, type SavedWorld } from '../game/persistence';
 import type { World } from '../game/world';
 import type { VesselDelta } from './protocol';
@@ -7,7 +8,7 @@ import { recomputeMassProperties, rebuildTopology } from '../sim/vessel';
 export function vesselDeltas(world: World): VesselDelta[] {
   return [...world.vessels.values()].map(v => {
     const base = { id: v.state.id, body: v.body };
-    if (v.mode === 'rails' && v.orbit) return { ...base, mode: 'rails', orbit: structuredClone(v.orbit) };
+    if (v.mode === 'rails' && v.orbit) return { ...base, mode: 'rails', orbit: structuredClone(v.orbit), ...(world.preciseGravity ? { precise: structuredClone(v.precise) } : {}) };
     if (v.mode === 'landedRails' && v.fixed && !isruMachinery(v.state).length) return { ...base, mode: 'landedRails', fixed: structuredClone(v.fixed) };
     const s = v.state;
     const state = structuredClone({
@@ -33,6 +34,12 @@ export function applyDeltas(world: World, ut: number, deltas: VesselDelta[]) {
     v.mode = d.mode;
     v.body = d.body;
     v.orbit = d.mode === 'rails' ? structuredClone(d.orbit) : undefined;
+    v.precise = d.mode === 'rails' ? structuredClone(d.precise) : undefined;
+    if (v.precise) {
+      const ref = world.universe.ephem.getBodyState(v.precise.frame,ut);
+      v.state.position = add(ref.position,v.precise.state.position);
+      v.state.velocity = add(ref.velocity,v.precise.state.velocity);
+    }
     v.fixed = d.mode !== 'rails' ? structuredClone(d.fixed) : undefined;
     if ('state' in d && d.state) {
       const { parts, ...state } = structuredClone(d.state);
@@ -61,6 +68,8 @@ export function replaceWorld(world: World, saved: SavedWorld) {
   world.vessels.clear();
   for (const [id, v] of next.vessels) world.vessels.set(id, v);
   world.ut = next.ut;
+  world.preciseGravity = next.preciseGravity;
+  world.showLagrangePoints = next.showLagrangePoints;
   world.crew = next.crew;
   world.crewSeed = next.crewSeed;
   world.flags = next.flags;

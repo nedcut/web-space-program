@@ -1,3 +1,5 @@
+import { NumericalPrediction } from '../sim/orbit/numericalPrediction';
+import { LAGRANGE_PAIRS, lagrangePoints } from '../sim/orbit/lagrange';
 import { nearbyLandmarks } from '../sim/terrain/landmarks';
 
 import { newRecorder, trimHistory, recordFor, startRecord, appendEvent, finishRecord, type FlightRecord, type EventKind } from './flightlog/recorder';
@@ -40,6 +42,7 @@ const MAX_STEPS_PER_FRAME = 12;
 export type VesselMode = 'physics' | 'rails' | 'prelaunch' | 'landedRails';
 
 export interface WorldVessel {
+  precise?: { state: StateVector; time: number; frame: string };
   state: VesselState;
   mode: VesselMode;
   /** Dominant (reference) body id. */
@@ -78,6 +81,25 @@ export class World {
     unpack: (wv: WorldVessel) => owner.unpack(wv),
   }))(this);
 
+  preciseGravity = false;
+  showLagrangePoints = false;
+  /** Adaptive rails proposal; runtime only. */
+  preciseStep = 60;
+  setPreciseGravity(enabled: boolean) {
+    if (this.preciseGravity === enabled) return;
+    this.preciseGravity = enabled;
+    this.preciseStep = 60;
+    this.trajectoryCache = null;
+    this.numericalCache = null;
+    for (const v of this.vessels.values()) {
+      v.precise = undefined;
+      if (v.mode === 'rails') {
+        const rs = this.relativeState(v);
+        v.orbit = stateToElements(this.universe.body(v.body).gm,v.body,rs.position,rs.velocity,this.ut);
+        this.predictRailsEvent(v);
+      }
+    }
+  }
   commsSettings: CommsSettings;
   /** Persisted vessel IDs; data credit itself remains on parts through splits/docking. */
   transmitting: string[] = [];
@@ -557,7 +579,7 @@ export class World {
       if (v.mode === 'prelaunch') this.syncFixed(v, this.ut + PHYSICS_DT);
       else {
         if (v.mode !== 'physics') this.unpack(v);
-        const env = this.universe.createEnvironment(() => v.body);
+        const env = this.universe.createEnvironment(() => v.body, this.preciseGravity);
         const c = this.canControl(v.state) ? { ...input, stage: false } : neutralInput();
         if (v.state.eva) stepEva(v.state, c, env, this.ut, PHYSICS_DT);
         else stepVessel(v.state, c, env, this.ut, PHYSICS_DT);
@@ -584,9 +606,10 @@ export class World {
         // Packed vessels' states are only refreshed on rails frames; bring them to `t` before the range check
         // (otherwise the check uses a stale heliocentric position, kilometres off after a few seconds).
         // States are expressed at the end of the step, like physics-stepped vessels.
-        if (wv.mode === 'rails' || wv.mode === 'landedRails') this.syncPacked(wv, t + PHYSICS_DT);
+        if (wv.mode === 'rails' || wv.mode === 'landedRails') this.syncPacked(wv, this.preciseGravity && wv.mode === 'rails' ? t : t + PHYSICS_DT);
         const d = length(sub(wv.state.position, active.state.position));
         if (d > PHYSICS_RANGE) {
+          if (this.preciseGravity && wv.mode === 'rails') this.syncPacked(wv, t + PHYSICS_DT);
           // Out of the physics bubble: pack (debris in atmosphere is removed).
           const b = this.universe.body(wv.body);
           const alt = length(this.relativeState(wv).position) - b.radius;
@@ -618,7 +641,7 @@ export class World {
       if (wv.mode !== 'physics') continue;
       // Update dominant body (SOI transitions in physics).
       wv.body = this.universe.dominantBody(wv.state.position, t);
-      const env = this.universe.createEnvironment(() => wv.body);
+      const env = this.universe.createEnvironment(() => wv.body, this.preciseGravity);
       // A disconnected probe holds its attitude with SAS, but cannot command thrust or stage.
       const ctrl = isActive ? vesselInput : neutralInput({ sas: 'off' });
       const flight = recordFor(this.flightlog, wv.state.id);
@@ -712,6 +735,51 @@ export class World {
   private applyPassedNodes() {
     // Nodes are not auto-executed; they are removed once their time has passed by more than the burn window.
     this.nodes = this.nodes.filter((n) => n.time > this.ut - 600);
+  }
+
+  private numericalCache: { key: string; time: number; prediction: NumericalPrediction } | null = null;
+  get numericalPrediction() { return this.numericalCache?.prediction; }
+  /** Rendering only. Planners deliberately retain trajectory()'s fast patched conics. */
+  mapTrajectory(): TrajectoryPatch[] {
+    if (!this.preciseGravity) return this.trajectory();
+    const v = this.active;
+    if (!v || v.mode === 'prelaunch' || v.state.situation !== 'flying') return [];
+    const key = `${v.state.id}:${v.body}:`+this.nodes.map(n=>`${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}`).join(',');
+    const age = (v.state.telemetry.thrust > 0 ? .2 : 2)*Math.max(1,warpRate(this.warp));
+    if (!this.numericalCache || this.numericalCache.key !== key || Math.abs(this.ut-this.numericalCache.time)>age) {
+      let after = this.orbitOf(v), lastNode = this.ut;
+      for (const node of [...this.nodes].filter(n=>n.time>=this.ut).sort((a,b)=>a.time-b.time)) {
+        const at = propagate(after,node.time);
+        after = stateToElements(after.mu,after.body,at.position,add(at.velocity,maneuverToInertialDv(at,node)),node.time);
+        lastNode = node.time;
+      }
+      const orbitalPeriod = period(after);
+      const horizon = this.ut+Math.min(3e9,lastNode-this.ut+(isFinite(orbitalPeriod) ? orbitalPeriod*1.02 : 3e7));
+      this.numericalCache = {key,time:this.ut,prediction:new NumericalPrediction(this.universe.bodies,this.universe.ephem,
+        v.body,this.relativeState(v),this.ut,Math.max(this.ut+1,horizon),this.nodes,
+        b=>Math.max(b.atmosphere?.height ?? 0,b.solidSurface ? this.universe.terrain(b.id).maxHeight : 0))};
+    }
+    const deadline = performance.now()+4;
+    return this.numericalCache.prediction.advance(128,()=>performance.now()>=deadline);
+  }
+  mapGravityMarkers() {
+    const u = this.universe;
+    const markers: {body:string;position:Vec3;label:string;color:string}[] = [];
+    if (this.showLagrangePoints) for (const [primary,secondary] of LAGRANGE_PAIRS) {
+      const a = u.ephem.getBodyState(primary,this.ut), b = u.ephem.getBodyState(secondary,this.ut);
+      for (const point of lagrangePoints(u.body(primary).gm,u.body(secondary).gm,a,b)) markers.push({
+        body: primary,position:sub(point.position,a.position),label:`${u.body(primary).name}–${u.body(secondary).name} ${point.name}`,color:'#b99fff',
+      });
+    }
+    if (this.preciseGravity && this.numericalCache) {
+      const prediction = this.numericalCache.prediction;
+      for (const e of prediction.encounters) markers.push({body:e.frame,position:e.position,
+        label:`${u.body(e.body).name} closest: ${(e.distance/1000).toFixed(0)} km`,color:'#ffb35c'});
+      const patch=prediction.patches.at(-1), point=patch?.samples?.at(-1);
+      if (patch && point) markers.push({body:patch.orbit.body,position:point.position,
+        label:prediction.truncated ? 'Precise path: computation limit' : prediction.complete ? 'Precise path' : 'Precise path: computing…',color:'#6fe39a'});
+    }
+    return markers;
   }
 
   /** Patched-conic prediction for the active vessel (cached ~0.25 s of game time / when nodes change). */

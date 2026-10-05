@@ -145,3 +145,7 @@ applied explicitly with fresh World node IDs, after rejecting stale vessel/traje
 The Scenarios library and ScenarioPanel compose briefing, live objectives, retry and debrief UI.
 World’s optional `onSimulationStep` observes both physics and rails; physics reports the integrator’s
 substep engine/RCS impulse-per-mass cost. This observer never changes the underlying force model.
+
+## Optional precise gravity
+
+`World.preciseGravity` is an optional per-save setting, off by default. `sim/orbit/nbody.ts` supplies cached all-source differential gravity in translating dominant-body frames; `adaptive.ts` implements controlled RK45. `game/world/preciseRails.ts` commits fleet-wide accepted steps under a frame budget and reduces warp instead of skipping time. `numericalPrediction.ts` incrementally produces Float64 sampled patches with impulsive nodes and distance minima; MapView draws these as polylines. `World.trajectory()` deliberately stays patched-conic for planners; `mapTrajectory()` selects the numerical path. `lagrange.ts` supplies instantaneous pair markers. Massive-body ephemerides remain Keplerian. See `docs/physics/PRECISE_GRAVITY.md` for numerical limits and verification.

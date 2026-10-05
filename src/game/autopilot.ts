@@ -382,6 +382,7 @@ export interface ExecuteNodeOptions {
  * throttle tapers over the last second and engine spool-down is anticipated.
  */
 export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeOptions = {}): Autopilot & { dvUsed(): number; remaining(): number } {
+  if (world.preciseGravity) world.message('Precise gravity prediction differs from patched-conic planning. This node may need a correction burn.', 'warn', 10);
   const stager = new AutoStager(opts.minStage ?? 0);
   const alignLead = opts.alignLead ?? 40;
   const tail = opts.tail ?? 1.5;

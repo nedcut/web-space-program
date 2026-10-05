@@ -1,3 +1,4 @@
+import { createGravityModel } from '../sim/orbit/nbody';
 import { generateAsteroidField, asteroidState, asteroidDefinition } from '../sim/bodies/asteroidField';
 import { buildUniverse, SCALE_PRESETS } from '../sim/bodies/scale';
 import { BODY_DEFS } from '../data/bodies';
@@ -22,11 +23,13 @@ export class Universe {
   readonly activatedAsteroids = new Set<string>();
   readonly ephem: Ephemeris;
   readonly sunId: string;
+  readonly gravityModel: ReturnType<typeof createGravityModel>;
   private terrains = new Map<string, Terrain>();
 
   constructor(readonly preset: ScalePresetId) {
     this.bodies = createUniverse(preset);
     this.ephem = createEphemeris(this.bodies);
+    this.gravityModel = createGravityModel(this.bodies, this.ephem);
     this.sunId = [...this.bodies.values()].find((b) => b.kind === 'star')!.id;
   }
 
@@ -113,7 +116,7 @@ export class Universe {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     return {
-      integrateRelative: ['asteroid', 'comet'].includes(self.body(getDominant()).kind),
+      integrateRelative: nbody || ['asteroid', 'comet'].includes(self.body(getDominant()).kind),
       regolithConcentration(pos, t) {
         const id = getDominant();
         const dir = qRotate(qConj(self.ephem.bodyRotation(id, t)), sub(pos, self.ephem.getBodyState(id, t).position));
@@ -121,6 +124,7 @@ export class Universe {
       },
       gravity(pos, t) {
         const id = getDominant();
+        if (nbody) return self.gravityModel.acceleration(id, sub(pos, self.ephem.getBodyState(id, t).position), t);
         let acc = v3();
         const addBody = (bid: string) => {
           const bp = self.ephem.getBodyState(bid, t).position;
@@ -129,20 +133,7 @@ export class Universe {
           acc = add(acc, scale(d, self.body(bid).gm / (r2 * Math.sqrt(r2))));
         };
         addBody(id);
-        if (nbody) {
-          // Perturbations from the parent chain (third-body effect relative to the dominant body's own acceleration).
-          let p = self.body(id).parent;
-          while (p) {
-            const bp = self.ephem.getBodyState(p, t).position;
-            const dv = sub(bp, pos);
-            const dc = sub(bp, self.ephem.getBodyState(id, t).position);
-            const gm = self.body(p).gm;
-            const r1 = length(dv);
-            const r2 = length(dc);
-            acc = add(acc, sub(scale(dv, gm / (r1 * r1 * r1)), scale(dc, gm / (r2 * r2 * r2))));
-            p = self.body(p).parent;
-          }
-        }
+
         return acc;
       },
       air(pos, t) {

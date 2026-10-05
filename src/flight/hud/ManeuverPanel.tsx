@@ -135,6 +135,7 @@ export function ManeuverPanel({ world }: { world: World }) {
     {transferTarget && <TransferWindow world={world} target={transferTarget} onClose={() => setTransferTarget(null)} onPlanned={setPlanMsg} />}
     <div data-tutorial="maneuver" className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
       <div className="label">Maneuver planner</div>
+      {world.preciseGravity && <div className="label">Precise map path · planners use patched conics. Allow correction burns.</div>}
       <div style={{ display: 'flex', gap: 6 }}>
         <button className="btn small" onClick={() => add('ap')} disabled={orbit.e >= 1}>Node @ Ap</button>
         <button className="btn small" onClick={() => add('pe')}>Node @ Pe</button>

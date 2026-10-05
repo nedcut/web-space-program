@@ -1,3 +1,4 @@
+import { patchState } from '../../sim/orbit/numericalPrediction';
 import { createTerrain } from '../../sim/terrain';
 import { CometEffects } from '../planet/CometEffects';
 import { AsteroidFieldView, type FieldSource } from './AsteroidFieldView';
@@ -261,7 +262,7 @@ export class MapView {
       let pooled = markers[count++];
       if (!pooled) { pooled = { body: '', position: { x: 0,y: 0,z: 0 }, label: '',color: '#ffb35c' }; markers.push(pooled); }
       pooled.body = patch.orbit.body;
-      pooled.position = elementsToState(patch.orbit, patch.endTime).position;
+      pooled.position = patchState(patch, patch.endTime).position;
       if (refreshText || count > this.markerCount) pooled.label = `${patch.endReason === 'soiEnter' ? 'Enter' : 'Exit'} ${this.bodies.get(patch.endReason === 'soiExit' ? patch.orbit.body : patch.nextBody ?? patch.orbit.body)?.body.name ?? patch.nextBody} SOI · T−${formatDuration(patch.endTime-u.t)}`;
       pooled.color = '#ffb35c';
     }
@@ -271,7 +272,7 @@ export class MapView {
       if (!patch) continue;
       let pooled = markers[count++];
       if (!pooled) { pooled = { body: '', position: { x: 0,y: 0,z: 0 }, label: '', color: '#5cc8ff' }; markers.push(pooled); }
-      pooled.body = patch.orbit.body; pooled.position = elementsToState(patch.orbit, node.time).position;
+      pooled.body = patch.orbit.body; pooled.position = patchState(patch, node.time).position;
       if (refreshText || count > this.markerCount) pooled.label = `Node T−${formatDuration(node.time-u.t)}`;
       pooled.color = '#5cc8ff';
     }
@@ -316,7 +317,7 @@ export class MapView {
     if (!node || !patch) return;
     if (this.gizmoTime !== node.time || !this.gizmoOrbit || !sameOrbit(this.gizmoOrbit, patch.orbit)) {
       this.gizmoTime = node.time; this.gizmoOrbit = snapshotOrbit(patch.orbit);
-      this.gizmoState = elementsToState(patch.orbit, node.time);
+      this.gizmoState = patchState(patch, node.time);
       this.gizmoDirs = { prograde: maneuverToInertialDv(this.gizmoState, { prograde: 1, normal: 0, radial: 0 }), normal: maneuverToInertialDv(this.gizmoState, { prograde: 0, normal: 1, radial: 0 }), radial: maneuverToInertialDv(this.gizmoState, { prograde: 0, normal: 0, radial: 1 }) };
     }
     const position = this.gizmoState!.position, parent = this.ephem.getBodyState(patch.orbit.body, u.t).position;
@@ -622,7 +623,7 @@ export class MapView {
     for (let i = 0; unchanged && i < patches.length; i++) {
       const p = patches[i], previous = this.lastPatches[i];
       unchanged = p.startTime === previous.startTime && p.endTime === previous.endTime && p.endReason === previous.endReason
-        && sameOrbit(p.orbit, previous.orbit);
+        && p.samples === previous.samples && sameOrbit(p.orbit, previous.orbit);
     }
     if (unchanged) return;
     this.lastPatches = patches.map(p => ({ ...p, orbit: snapshotOrbit(p.orbit) }));
@@ -632,7 +633,8 @@ export class MapView {
     this.vesselLines = patches.map((p, i) => {
       const soi = bodies.get(p.orbit.body)?.body.soi ?? Infinity;
       const closed = p.orbit.e < 1 && (p.endReason === 'horizon' || p.endTime - p.startTime > 2 * Math.PI * Math.sqrt(p.orbit.a ** 3 / p.orbit.mu));
-      const pts = sampleConic(p.orbit, soi, p.startTime, closed ? null : p.endTime, 384);
+      const pts = p.samples ? p.samples.map(s => s.position) : sampleConic(p.orbit, soi, p.startTime, closed ? null : p.endTime, 384);
+      if (pts.length === 1) pts.push(pts[0]);
       const line = this.makeLine(pts, PATCH_COLORS[i % PATCH_COLORS.length], i === 0 ? 2.4 : 1.8);
       line.material.dashed = i > 0;
       line.material.dashSize = 14; line.material.gapSize = 8;
@@ -841,13 +843,13 @@ export class MapView {
         const patch = u.vessel.patches.find((p) => n.time >= p.startTime && n.time <= p.endTime + 1e-6);
         if (!patch) continue;
         const pp = this.ephem.getBodyState(patch.orbit.body, t).position;
-        const np = elementsToState(patch.orbit, n.time).position;
+        const np = patchState(patch, n.time).position;
         const s = this.pooledIcon(this.nodeIcons, nodeIndex++, '#3c8cff', true, .026, 13);
         s.position.set(pp.x+np.x-focus.x,pp.y+np.y-focus.y,pp.z+np.z-focus.z);
         s.userData.nodeId = n.id;
       }
       const first = u.vessel.patches[0];
-      if (first) {
+      if (first && !first.samples) {
         const parentPos = this.ephem.getBodyState(first.orbit.body, t).position;
         this.apsisTimes[0] = timeToPeriapsis(first.orbit,t);
         this.apsisTimes[1] = first.orbit.e < 1 ? timeToApoapsis(first.orbit,t) : Infinity;
@@ -881,7 +883,7 @@ export class MapView {
   /** Mouse controls: right/left drag to orbit, wheel to zoom. Returns a disposer. */
   attachControls(el: HTMLElement, minDistance: () => number, enabled: () => boolean = () => true) {
     let dragging = false;
-    let maneuver: { node: ManeuverNode; orbit: Orbit; axis?: 'prograde' | 'normal' | 'radial'; sign: number; start: number; dx: number; dy: number; timeMin: number; timeMax: number } | null = null;
+    let maneuver: { node: ManeuverNode; orbit: Orbit; patch: TrajectoryPatch; axis?: 'prograde' | 'normal' | 'radial'; sign: number; start: number; dx: number; dy: number; timeMin: number; timeMax: number } | null = null;
     const ndc = (e: PointerEvent) => {
       const r = el.getBoundingClientRect();
       return { x: (e.clientX - r.left) / r.width * 2 - 1, y: 1 - (e.clientY - r.top) / r.height * 2 };
@@ -895,14 +897,14 @@ export class MapView {
         const node = u.vessel!.nodes.find(n => n.id === hit?.id);
         const patch = node && u.vessel!.patches.find(p => node.time >= p.startTime && node.time <= p.endTime + 1e-6);
         if (node && patch && hit) {
-          const state = elementsToState(patch.orbit, node.time);
+          const state = patchState(patch, node.time);
           const dirs = { prograde: maneuverToInertialDv(state, { prograde: 1, normal: 0, radial: 0 }), normal: maneuverToInertialDv(state, { prograde: 0, normal: 1, radial: 0 }), radial: maneuverToInertialDv(state, { prograde: 0, normal: 0, radial: 1 }) };
           const center = this.project(state.position, patch.orbit.body, u);
           const dir = hit.axis ? dirs[hit.axis] : dirs.prograde;
           const endpoint = this.project(add(state.position, { x: dir.x * this.distance * .07 * hit.sign, y: dir.y * this.distance * .07 * hit.sign, z: dir.z * this.distance * .07 * hit.sign }), patch.orbit.body, u);
           const dx = (endpoint.x - center.x) * el.clientWidth / 2, dy = -(endpoint.y - center.y) * el.clientHeight / 2;
           const len = Math.hypot(dx, dy);
-          maneuver = { node, orbit: patch.orbit, axis: hit.axis, sign: hit.sign, start: hit.axis ? node[hit.axis] : node.time,
+          maneuver = { node, patch, orbit: patch.orbit, axis: hit.axis, sign: hit.sign, start: hit.axis ? node[hit.axis] : node.time,
             dx: len > 2 ? dx / len : 1, dy: len > 2 ? dy / len : 0,
             timeMin: Math.max(u.t + 5, patch.startTime), timeMax: Math.max(u.t + 5, Math.min(patch.startTime + (patch.orbit.e < 1 ? 2 * Math.PI * Math.sqrt(patch.orbit.a ** 3 / patch.orbit.mu) : 86400), u.vessel!.patches.find(p => p.endTime >= node.time && (p.endReason === 'soiEnter' || p.endReason === 'soiExit'))?.endTime ?? Infinity)) };
           lx = e.clientX; ly = e.clientY; e.preventDefault(); return;
@@ -921,7 +923,7 @@ export class MapView {
           const at = ndc(e);
           let best = m.node.time, error = Infinity;
           const evaluate = (time: number) => {
-            const p = this.project(elementsToState(m.orbit, time).position, m.orbit.body, u);
+            const p = this.project(patchState(m.patch, time).position, m.orbit.body, u);
             const d = (p.x - at.x) ** 2 + (p.y - at.y) ** 2;
             if (p.z < 1 && d < error) { error = d; best = time; }
           };

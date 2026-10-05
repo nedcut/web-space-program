@@ -340,7 +340,7 @@ export default function FlightScene() {
       {paused && !multiplayer && !photo.active && !report && (
         <div className="modal-backdrop">
           {showSettings ? (
-            <SettingsPanel onClose={() => setShowSettings(false)} />
+            <SettingsPanel world={c?.world} onClose={() => setShowSettings(false)} />
           ) : (
             <div className="panel" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 280 }}>
               <div className="label" style={{ textAlign: 'center', color: lost ? 'var(--bad)' : undefined }}>{lost ? 'Vessel lost' : 'Paused'}</div>

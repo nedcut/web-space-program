@@ -562,10 +562,11 @@ export class FlightController {
         focusId: `vessel:${wv.state.id}`,
         referenceBody: wv.body,
         comms: this.world.commsSettings.enabled && game.get().settings.commsOverlay ? this.world.comms : undefined,
-        vessel: { position: origin, patches: this.world.trajectory(), nodes: this.world.nodes },
+        vessel: { position: origin, patches: this.world.mapTrajectory(), nodes: this.world.nodes },
         markers: [
-          ...this.predictions.crossings.map(c => ({ body: wv.body, position: c.position, label: `${c.kind} T−${formatDuration(c.time - t)}`, color: '#d066ff' })),
-          ...(this.predictions.impact ? [{ body: wv.body, position: this.predictions.impact.position, label: `Impact T−${formatDuration(this.predictions.impact.time - t)}`, color: '#ff6b6b' }] : []),
+          ...this.world.mapGravityMarkers(),
+          ...(this.world.preciseGravity ? [] : this.predictions.crossings).map(c => ({ body: wv.body, position: c.position, label: `${c.kind} T−${formatDuration(c.time - t)}`, color: '#d066ff' })),
+          ...(!this.world.preciseGravity && this.predictions.impact ? [{ body: wv.body, position: this.predictions.impact.position, label: `Impact T−${formatDuration(this.predictions.impact.time - t)}`, color: '#ff6b6b' }] : []),
         ],
         viewport: { width: this.host.clientWidth, height: this.host.clientHeight },
       });
@@ -688,13 +689,13 @@ export class FlightController {
         c = { orbit, at: now };
         this.mapOrbits.set(id, c);
       }
-      extras.push({ id, position: v.state.position, orbit: c.orbit });
+      extras.push({ id, position: v.state.position, orbit: w.preciseGravity ? undefined : c.orbit });
     }
     for (const id of this.mapOrbits.keys()) if (!w.vessels.has(id)) this.mapOrbits.delete(id);
     this.map.setExtraOrbits(extras);
     const kind = w.targetKind();
     this.map.setTarget(kind ? { kind, id: w.targetId! } : null);
-    const ca = kind ? w.closestApproach() : null;
+    const ca = kind && !w.preciseGravity ? w.closestApproach() : null;
     this.map.setApproach(
       ca
         ? {

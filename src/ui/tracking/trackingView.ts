@@ -77,7 +77,7 @@ export class TrackingView {
     if (now - this.lastOrbits > 500) {
       this.fleet = [...world.vessels.values()].map((v) => ({
         id: v.state.id, position: v.state.position,
-        orbit: v.state.situation === 'flying' && v.mode !== 'prelaunch' ? world.orbitOf(v) : undefined,
+        orbit: !world.preciseGravity && v.state.situation === 'flying' && v.mode !== 'prelaunch' ? world.orbitOf(v) : undefined,
       }));
       this.lastOrbits = now;
     }
@@ -88,7 +88,7 @@ export class TrackingView {
     const focus = this.focus.kind === 'vessel'
       ? world.vessels.get(this.focus.id)!.state.position
       : world.universe.ephem.getBodyState(this.focus.id, world.ut).position;
-    this.map.update({ t: world.ut, focusId: this.focus.kind === 'body' ? this.focus.id : `vessel:${this.focus.id}`, referenceBody: this.focus.kind === 'body' ? this.focus.id : world.vessels.get(this.focus.id)?.body, focus, comms: world.commsSettings.enabled && game.get().settings.commsOverlay ? world.comms : undefined, viewport: { width: this.width, height: this.height } });
+    this.map.update({ t: world.ut, markers: world.mapGravityMarkers(), vessel: world.preciseGravity && world.active ? { position: world.active.state.position, patches: world.mapTrajectory(), nodes: world.nodes } : undefined, focusId: this.focus.kind === 'body' ? this.focus.id : `vessel:${this.focus.id}`, referenceBody: this.focus.kind === 'body' ? this.focus.id : world.vessels.get(this.focus.id)?.body, focus, comms: world.commsSettings.enabled && game.get().settings.commsOverlay ? world.comms : undefined, viewport: { width: this.width, height: this.height } });
     this.pipeline.renderer.setRenderTarget(null);
     this.pipeline.renderer.render(this.map.scene, this.map.camera);
     if (now - this.lastUi > 250) { this.refresh(); this.lastUi = now; }

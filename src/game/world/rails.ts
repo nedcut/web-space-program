@@ -1,3 +1,4 @@
+import { advancePrecise, preciseState, syncPrecise } from './preciseRails';
 import { period, predictTrajectory, propagate, stateToElements } from '../../sim/orbit';
 import { advanceISRU, isruMachinery } from '../../sim/vessel/isru';
 import { qConj, qMul, qNormalize, qRotate } from '../../util/quat';
@@ -49,6 +50,7 @@ export function pack(this: World, internals: WorldInternals, wv: WorldVessel): v
 
 
 export function predictRailsEvent(this: World, _internals: WorldInternals, wv: WorldVessel): void {
+  if (this.preciseGravity) { preciseState(this, wv); wv.railsEvent = undefined; return; }
   const o = wv.orbit!;
   const T = period(o);
   const horizon = Math.min(isFinite(T) ? T * 3 : 3e8, 3e9);
@@ -77,13 +79,14 @@ export function predictRailsEvent(this: World, _internals: WorldInternals, wv: W
 /** Take a vessel off rails (back to physics). */
 export function unpack(this: World, internals: WorldInternals, wv: WorldVessel): void {
   if (wv.mode === 'rails' && wv.orbit) {
-    const s = propagate(wv.orbit, this.ut);
+    const s = this.preciseGravity ? preciseState(this, wv).state : propagate(wv.orbit, this.ut);
     const bs = this.universe.ephem.getBodyState(wv.body, this.ut);
     wv.state.position = add(bs.position, s.position);
     wv.state.velocity = add(bs.velocity, s.velocity);
   } else if (wv.mode === 'landedRails') {
     internals.syncFixed(wv, this.ut);
   } else return;
+  wv.precise = undefined;
   wv.mode = 'physics';
   wv.orbit = undefined;
   wv.railsEvent = undefined;
@@ -105,6 +108,7 @@ export function advanceRailsTo(this: World, internals: WorldInternals, ut: numbe
    * just before atmosphere entry / impact (warp is cancelled). Everything else then advances to that time.
    */
 export function advanceRails(this: World, internals: WorldInternals, target: number): void {
+  if (this.preciseGravity) { advancePrecise(this, internals, target); return; }
   const startUt = this.ut;
   const act = this.active;
   const order = [...this.vessels.values()].sort((a, b) => (a === act ? -1 : b === act ? 1 : 0));
@@ -167,6 +171,7 @@ export function advanceRails(this: World, internals: WorldInternals, target: num
 
 /** Update the inertial state of a packed (rails / body-fixed) vessel to time t. */
 export function syncPacked(this: World, internals: WorldInternals, wv: WorldVessel, t: number): void {
+  if (this.preciseGravity && wv.mode === 'rails') { syncPrecise(this, wv, t); return; }
   if (wv.mode === 'rails' && wv.orbit) {
     const s = propagate(wv.orbit, t);
     const bs = this.universe.ephem.getBodyState(wv.body, t);

@@ -1,10 +1,15 @@
+import type { World } from '../game/world';
+import { openProgram, saveProgram } from '../game/program';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { updateSettings, useGame, type Settings } from '../game/store';
 import { actionLabel, conflicts, defaultBindings, getBindings, keyChord, saveBindings, subscribeBindings, type Action } from '../input/bindings';
 import { QUALITY_PRESETS } from '../render/core/quality';
 
 const TABS = ['Graphics', 'Audio', 'Controls', 'Gameplay', 'Accessibility'] as const;
-export function SettingsPanel({ onClose }: { onClose: () => void }) {
+export function SettingsPanel({ onClose, world }: { onClose: () => void; world?: World }) {
+  const [program] = useState(() => world ?? openProgram());
+  const [precise, setPrecise] = useState(program.preciseGravity);
+  const [lagrange, setLagrange] = useState(program.showLagrangePoints);
   const settings = useGame(s => s.settings);
   const bindings = useSyncExternalStore(subscribeBindings, getBindings);
   const [tab, setTab] = useState<typeof TABS[number]>('Graphics');
@@ -71,6 +76,9 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           {(['flight', 'eva', 'editor'] as const).map(group => <div key={group}><h3>{group === 'flight' ? 'Flight / aircraft / map' : group === 'eva' ? 'EVA' : 'Editor'}</h3>{(Object.keys(bindings) as Action[]).filter(a => group === 'editor' ? a.startsWith('editor') : group === 'eva' ? a.startsWith('eva') || a === 'board' || a === 'plantFlag' : !a.startsWith('editor') && !a.startsWith('eva') && a !== 'board' && a !== 'plantFlag').map(a => <div className="setting-row" key={a}><span>{actionLabel(a)}</span><button className={`btn small ${capture === a ? 'primary' : ''}`} onClick={() => setCapture(a)}>{capture === a ? 'Press a key…' : bindings[a].join(' / ') || 'Unbound'}</button></div>)}</div>)}
         </>}
         {tab === 'Gameplay' && <>
+          <label className="setting-row"><span>Precise gravity (n-body) · this save</span><input type="checkbox" checked={precise} onChange={e => { program.setPreciseGravity(e.target.checked); setPrecise(e.target.checked); if (!world) saveProgram(program); }} /></label>
+          <label className="setting-row"><span>Show Lagrange points in map</span><input type="checkbox" checked={lagrange} onChange={e => { program.showLagrangePoints=e.target.checked; setLagrange(e.target.checked); if (!world) saveProgram(program); }} /></label>
+          <p className="settings-note">Precise gravity integrates vessel perturbations and map paths. High warp may slow near encounters. Bodies stay on Kepler orbits; Lagrange markers are instantaneous approximations. Planners and autopilot use patched conics, so burns may need correction.</p>
           <label className="setting-row">HUD units<select value={settings.units} onChange={e => updateSettings({ units: e.target.value as Settings['units'] })}><option value="metric">Metric</option><option value="imperial">Imperial</option></select></label>
           {range('navballSize', 'Navball size', 140, 280, 10, ' px')}{range('hudScale', 'HUD scale', 0.75, 1.3, 0.05)}{range('cameraFov', 'Camera field of view', 40, 100, 1, '°')}{range('autoSaveInterval', 'Auto-save interval (0 = off)', 0, 300, 15, ' s')}
           <label className="setting-row"><span>Communications network</span>

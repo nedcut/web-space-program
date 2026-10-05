@@ -31,6 +31,8 @@ interface SavedVessel {
 }
 
 export interface SavedWorld {
+  preciseGravity?: boolean;
+  showLagrangePoints?: boolean;
   activatedAsteroids?: string[];
   flightlog?: import('./flightlog/recorder').RecorderState;
   latestReportId?: string | null;
@@ -75,6 +77,8 @@ export function serializeWorld(world: World): SavedWorld {
     });
   }
   return {
+    ...(world.preciseGravity ? { preciseGravity: true } : {}),
+    ...(world.showLagrangePoints ? { showLagrangePoints: true } : {}),
     flightlog: structuredClone(world.flightlog),
     latestReportId: world.latestReportId,
     commsSettings: { ...world.commsSettings },
@@ -102,6 +106,8 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
   if (data.version !== SAVE_VERSION) throw new Error(`Unsupported save version ${data.version}`);
   const world = new World(universe ?? new Universe(data.preset), catalog, data.ut, data.mode ?? 'sandbox');
   for (const id of data.activatedAsteroids ?? []) world.universe.activateAsteroid(id);
+  world.preciseGravity = data.preciseGravity === true;
+  world.showLagrangePoints = data.showLagrangePoints === true;
   world.flightlog = structuredClone(data.flightlog ?? world.flightlog);
   world.latestReportId = data.latestReportId ?? null;
   world.commsSettings = { ...world.commsSettings, ...data.commsSettings };
