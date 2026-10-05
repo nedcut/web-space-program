@@ -137,6 +137,7 @@ export interface WheelState {
 }
 
 export interface PartState {
+  bayOpen?: boolean;
   scienceData?: ScienceData[];
   /** Surface expedition provenance follows hardware through staging and docking. */
   visitedBodies?: string[];

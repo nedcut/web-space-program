@@ -33,6 +33,7 @@ export {
   drawPropellants,
   addResource,
   totalResource,
+  stepPowerSources,
   partMass,
 } from './resources';
 

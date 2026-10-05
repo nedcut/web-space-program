@@ -1450,7 +1450,99 @@ const antennas: PartDef[] = [0, 1].map(i => ({
   modules: [{ type: 'antenna', transmission: i ? 0.65 : 0.4 }], mesh: 'instrument',
 }));
 
-export const PART_DEFS: PartDef[] = [...pods, ...tanks, ...engines, ...coupling, ...structural, ...aero, ...control, ...electrical, ...utility, ...aircraft, ...scienceParts, ...antennas];
+/** Expansion hardware shares the catalogue frame and resource conventions above. */
+function hardware(id: string, name: string, category: PartDef['category'], mass: number, cost: number,
+  shape: PartDef['shape'], mesh: string, modules: PartModule[] = [], params: PartDef['meshParams'] = {},
+  size?: number, description = 'Modular expedition hardware with reinforced attachment fittings and accessible service connections.'): PartDef {
+  const depth = shape.kind === 'box' ? shape.size.z : shape.radiusTop * 2;
+  return { id, name, category, dryMass: mass, cost, shape, mesh, modules, meshParams: params, description,
+    manufacturer: category === 'electrical' ? MANUFACTURERS.lumen : category === 'ground' ? MANUFACTURERS.tread : category === 'command' || category === 'utility' ? MANUFACTURERS.northlight : category === 'science' ? MANUFACTURERS.brightfield : MANUFACTURERS.tessellate,
+    resources: {}, attachNodes: size === undefined ? [srfNode(depth)] : stackNodes(shape.kind === 'box' ? shape.size.y : shape.height, size, size),
+    surfaceAttachable: size === undefined, allowSurfaceAttachChildren: true,
+    dragCoefficient: { axial: 0.6, side: 0.9 }, maxTemp: 1600, crashTolerance: 12 };
+}
+function expandedEngine(id: string, name: string, size: number, height: number, mass: number, cost: number,
+  thrust: number, vac: number, asl: number, style: EngineSpec['style'], plume: EngineSpec['plume'], exitRadius: number): PartDef {
+  return liquidEngine({ id, name, size, height, dryMass: mass, cost, thrustVac: thrust, ispVac: vac, ispAsl: asl,
+    style, plume, exitRadius, gimbalDeg: 4, minThrottle: 0.15, ignitions: -1, spool: 0.6,
+    description: `${name} provides restartable propulsion with reinforced feed ducts and an actively cooled thrust chamber.` });
+}
+const expansion: PartDef[] = [
+  fuelTank('tank-4-short', 'Cistern 5-25 Tank', 4, 2.5, 'white', 'Five metre propellant reservoir with shallow domes and redundant fill manifolds for heavy orbital stacks.'),
+  fuelTank('tank-4-mid', 'Cistern 5-50 Tank', 4, 5, 'orange', 'Insulated five metre reservoir for large launchers. Internal baffles suppress propellant slosh during ascent.'),
+  fuelTank('tank-4-long', 'Cistern 5-100 Tank', 4, 10, 'white', 'Long five metre booster reservoir with an external service raceway and reinforced skirt attachments.'),
+  { ...expandedEngine('eng-monsoon', 'Monsoon Heavy Cluster', 4, 4.5, 14000, 23000, 6200000, 330, 295, 'cluster', 'kerolox', 0.95),
+    meshParams: { style: 'cluster', exitRadius: 0.95, bells: 4, nozzleSegments: 18, nozzleRings: 7 } },
+  adapter('adapt-3-4', 'Bellmouth 375-500 Adapter', 3, 4, 1.5, 680, 1600, 'Five metre load spreader with a tapered shell and uninterrupted propellant crossfeed.'),
+  stackDecoupler('dec-4', 'Breakwater 500 Decoupler', 4, 0.3, 620, 9000, 2100, 'Heavy five metre separation ring with distributed explosive bolts and balanced ejector springs.'),
+  { ...hardware('shield-4', 'Cinder 500 Heat Shield', 'utility', 1800, 6200, cyl(2.5, 2.62, 0.5), 'heatShield', [{ type: 'heatShield', ablationRate: 0.05, maxTemp: 3600 }], {}, 4), resources: { ablator: 2400 }, maxTemp: 3600 },
+  noseCone('nose-4', 'Spire 500 Nose Cone', 4, 3.8, 550, 1400, 'Ogive cap for five metre boosters, with a flush tip and a lightweight ribbed internal shell.'),
+  { ...expandedEngine('eng-hearth', 'Hearth Thermal Drive', 1, 3.2, 3000, 26000, 65000, 850, 185, 'vacuum', 'hydrolox', 0.6), mesh: 'nuclearEngine',
+    modules: [{ type: 'engine', maxThrustVac: 65000, ispVac: 850, ispAsl: 185, propellants: { liquidFuel: 1 }, minThrottle: 0.2,
+      throttleable: true, gimbalRange: 3 * DEG, thrustDirection: v(0,1,0), spoolTime: 2, plume: 'hydrolox', ignitions: -1 }],
+    description: 'Shielded nuclear thermal reactor heats liquid fuel without oxidizer. Heavy hardware trades low thrust for exceptional vacuum efficiency.' },
+  expandedEngine('eng-mistral', 'Mistral Methalox Engine', 0, 1.1, 150, 1000, 28000, 355, 305, 'fullflow', 'methalox', 0.27),
+  expandedEngine('eng-boreal', 'Boreal Methalox Engine', 1, 1.8, 950, 3400, 350000, 365, 320, 'fullflow', 'methalox', 0.53),
+  { ...expandedEngine('eng-needle', 'Needle Annular Aerospike', 1, 1.1, 1050, 4600, 240000, 340, 330, 'compact', 'methalox', 0.5), mesh: 'aerospike',
+    description: 'Annular combustion chambers surround a truncated expansion plug. Pressure compensation keeps specific impulse nearly constant.' },
+  { ...expandedEngine('eng-dewdrop', 'Dewdrop Maneuver Engine', 0, 0.45, 25, 280, 2500, 240, 100, 'compact', 'kerolox', 0.12),
+    modules: [{ type: 'engine', maxThrustVac: 2500, ispVac: 240, ispAsl: 100, propellants: { monopropellant: 1 }, minThrottle: 0,
+      throttleable: true, gimbalRange: 0, thrustDirection: v(0,1,0), spoolTime: 0, plume: 'monoprop', ignitions: -1 }] },
+  solidMotor({ id: 'srb-reed', name: 'Reed Slender Booster', size: 0, height: 6, dryMass: 380, cost: 700, thrustVac: 90000, ispVac: 265, ispAsl: 235, segments: 4, description: 'Long slender composite booster for light launchers, with a segmented grain and fixed expansion nozzle.' }),
+  solidMotor({ id: 'srb-furnace', name: 'Furnace Heavy Booster', size: 2, height: 12, dryMass: 9800, cost: 9200, thrustVac: 2300000, ispVac: 285, ispAsl: 250, segments: 5, description: 'Large segmented solid booster for heavy launch stacks. Once lit, its full thrust continues until the grain is spent.' }),
+  { ...solidMotor({ id: 'srb-candle', name: 'Candle Vacuum Kick Motor', size: 0, height: 0.9, dryMass: 55, cost: 500, thrustVac: 12000, ispVac: 295, ispAsl: 130, segments: 1, description: 'Compact single ignition solid kick stage for final orbit insertion and small payload escape burns.' }), meshParams: { segments: 1, nozzleLength: 0.25, exitRadius: 0.28 } },
+  ...[0,1].map(i => { const p = expandedEngine(i ? 'eng-radial-rill' : 'eng-radial-spray', i ? 'Rill Radial Descent Engine' : 'Spray Radial Thruster', 0, i ? 1 : 0.65, i ? 180 : 60, i ? 900 : 420, i ? 32000 : 8000, 315, 245, 'lander', 'kerolox', i ? 0.28 : 0.18);
+    return { ...p, surfaceAttachable: true, attachNodes: [srfNode(0.625)], mesh: 'radialEngine' }; }),
+  ...[1,2].map(i => hardware(`beam-${i}`, `Web I-Beam ${i}`, 'structural', i * 35, i * 160, box(0.22, i * 1.2, 0.22), 'framework', [], { style: 'beam' }, 0)),
+  ...[1,2].map(i => hardware(`panel-${i}`, `Deck Structural Panel ${i}`, 'structural', i * i * 30, i * 220, box(i, i, 0.08), 'framework', [], { style: 'panel' })),
+  hardware('strut-cubic', 'Cell Cubic Strut', 'structural', 18, 140, box(0.5,0.5,0.5), 'framework', [], { style: 'truss', sides: 4 }, 0),
+  hardware('truss-octagonal', 'Octant Open Truss', 'structural', 170, 650, cyl(0.625,0.625,2), 'framework', [], { style: 'truss', sides: 8 }, 1),
+  hardware('mount-radial', 'Saddle Radial Mount', 'structural', 65, 250, box(0.7,0.5,0.4), 'framework', [], { style: 'mount' }),
+  ...[1,2].map(i => hardware(`bay-cargo-${i}`, `Vault ${i === 1 ? '125' : '250'} Cargo Bay`, 'structural', i === 1 ? 350 : 1100, i * 1800,
+    cyl(SIZE_RADIUS[i],SIZE_RADIUS[i],i * 2), 'bay', [{ type: 'bay' }], { style: 'cargo' }, i,
+    'Clamshell cargo enclosure with an open interior and twin hinged doors. Use the gear toggle to open or close the bay.')),
+  ...[1,2].map(i => hardware(`bay-service-${i}`, `Locker ${i === 1 ? '125' : '250'} Service Bay`, 'structural', i * 180, i * 800,
+    cyl(SIZE_RADIUS[i],SIZE_RADIUS[i],i * 0.7), 'bay', [{ type: 'bay' }], { style: 'service' }, i,
+    'Short equipment enclosure with hinged access doors and internal mounting rails. Use the gear toggle to open or close the bay.')),
+  ...[3,4].map(i => ({ ...hardware(`fairing-${i}`, `Petal ${i === 3 ? '375' : '500'} Payload Fairing`, 'aero', i * 180, i * 900,
+    cyl(SIZE_RADIUS[i],SIZE_RADIUS[i],0.25), 'fairing', [{ type: 'fairing', ejectionImpulse: i * 300 }], { shellHeight: i * 2, shellRadius: SIZE_RADIUS[i] * 1.08 }, i),
+    description: 'Split payload shell on a reinforced base ring. The tapered enclosure protects wide orbital payloads during ascent.' })),
+  adapter('adapt-0-2', 'Collar 062-250 Docking Adapter', 0, 2, 0.7, 180, 500, 'Compact load spreader connecting a small docking port to a two and a half metre module.'),
+  adapter('adapt-1-3', 'Collar 125-375 Docking Adapter', 1, 3, 1.1, 420, 950, 'Wide station endcap supporting a standard docking port and maintaining stack crossfeed.'),
+  hardware('cabin-wayfarer', 'Wayfarer Crew Cabin', 'command', 2500, 5400, cyl(1.25,1.25,2.5), 'habitat', [{ type: 'command', crew: 4, sasLevel: 0, ecPerSecond: 0.04, controllable: false }], { windows: 8 }, 2,
+    'Four passenger seats, insulated bunks and a transfer hatch. Requires a separate cockpit or probe core for flight control.'),
+  hardware('lab-crucible', 'Crucible Orbital Laboratory', 'science', 3200, 9000, cyl(1.25,1.25,3.2), 'habitat', [{ type: 'command', crew: 2, sasLevel: 0, ecPerSecond: 0.12, controllable: false }, { type: 'science', experiment: 'exposure' }], { windows: 4, lab: true }, 2,
+    'Two-seat laboratory with material exposure equipment and insulated workstations. Requires independent flight control.'),
+  ...[1,2].map(i => hardware(`ladder-${i}`, `Rung Access Ladder ${i}`, 'utility', i * 8, i * 90, box(0.35,i * 1.2,0.12), 'framework', [], { style: 'ladder' }, undefined,
+    'Lightweight external access ladder with contrasting safety rungs. Visual access hardware; astronauts do not yet climb it.')),
+  ...[1,2].map(i => hardware(`light-${i === 1 ? 'task' : 'area'}`, i === 1 ? 'Glint Task Lamp' : 'Daybreak Area Lamp', 'utility', i * 6, i * 130, box(i * 0.2,0.22,0.2), 'light', [{ type: 'light' }])),
+  ...[1,5].map(i => hardware(`rcs-${i === 1 ? 'linear' : 'quint'}`, i === 1 ? 'Tap Linear RCS Port' : 'Flurry Five-Way RCS Block', 'control', i === 1 ? 6 : 32, i === 1 ? 160 : 620, box(0.3,0.3,0.24), 'rcsPorts',
+    [{ type: 'rcs', thrustPerNozzle: i === 1 ? 250 : 1200, ispVac: 245, ispAsl: 110,
+      nozzles: (i === 1 ? [v(0,0,1)] : [v(0,0,1),v(1,0,0),v(-1,0,0),v(0,1,0),v(0,-1,0)]).map(direction => ({ position: v(direction.x * 0.14,direction.y * 0.14,0.02 + direction.z * 0.14), direction })) }])),
+  ...[2,3].map(i => hardware(`wheel-reaction-${i}`, `Flywheel ${i === 2 ? '250' : '375'} Attitude Ring`, 'control', i * 150, i * 1300, cyl(SIZE_RADIUS[i],SIZE_RADIUS[i],0.25), 'reactionWheel', [{ type: 'reactionWheel', torque: i === 2 ? 30000 : 75000, ecRate: i === 2 ? 2.4 : 5 }], {}, i)),
+  ...[2,3].map(i => ({ ...hardware(`battery-bank-${i}`, `Reservoir ${i === 2 ? '250' : '375'} Battery Bank`, 'electrical', i * 200, i * 1700, cyl(SIZE_RADIUS[i],SIZE_RADIUS[i],0.3), 'battery', [{ type: 'battery' }], {}, i), resources: { electricCharge: i === 2 ? 8000 : 18000 } })),
+  ...[1,2].map(i => hardware(`fuelcell-${i}`, i === 1 ? 'Catalyst Fuel Cell' : 'Catalyst Fuel Cell Bank', 'electrical', i * 45, i * 650, box(i * 0.4,0.55,0.25), 'powerUnit',
+    [{ type: 'fuelCell', chargeRate: i * 3, fuelRate: i * 0.012, oxidizerRate: i * 0.022 }], { style: 'fuelCell' }, undefined,
+    'Automatically combines stack-fed liquid fuel and oxidizer to replenish electrical storage. Stops consuming propellant when batteries are full.')),
+  hardware('generator-isotope', 'Isotope Thermoelectric Generator', 'electrical', 85, 14000, box(0.35,0.65,0.35), 'powerUnit', [{ type: 'generator', chargeRate: 0.8 }], { style: 'rtg' }, undefined,
+    'Finned radioisotope generator supplies constant electrical power in darkness and far from the Sun, without consuming stored resources.'),
+  ...[1,2].map(i => hardware(`solar-grand-${i}`, i === 1 ? 'Sundial Large Solar Wing' : 'Solstice Expedition Array', 'electrical', i * 180, i * 3800, box(1.2,1.8,0.25), 'solarDeploy',
+    [{ type: 'solarPanel', chargeRate: i * 16, tracking: true }], { panels: i === 1 ? 6 : 10, panelLength: 1.5, panelWidth: 1.1 })),
+  ...[1,2].map(i => hardware(`radiator-${i}`, i === 1 ? 'Finch Cooling Panel' : 'Heron Radiator Bank', 'utility', i * 60, i * 450, box(i * 0.8,1.4,0.12), 'framework', [], { style: 'radiator' }, undefined,
+    'External ribbed radiator panel with coolant headers. Visual thermal hardware pending active heat-transfer simulation.')),
+  ...[0,1,2].map(i => ({ ...utility.find(p => p.id === (i === 2 ? 'chute-radial' : 'chute-main'))!, id: ['chute-brake','chute-heavy','chute-radial-heavy'][i], name: ['Reef High-Speed Drogue','Orchard Heavy Parachute','Orchard Radial Parachute'][i],
+    dryMass: [90,280,160][i], cost: [550,1200,850][i], description: 'Reinforced recovery canopy with a staged reefing system and high strength suspension lines for heavy payloads.',
+    modules: [{ type: 'parachute' as const, deployedCdA: [65,1500,750][i], semiCdA: [8,25,14][i], minPressure: i ? 4000 : 1500, deployAltitude: i ? 1200 : 4000, maxQ: i ? 25000 : 85000 }],
+    meshParams: { style: i === 2 ? 'radial' : 'stack', canopyRadius: [4.5,22,16][i], colors: i ? 'white' : 'red' } })),
+  { ...utility.find(p => p.id === 'leg-strider')!, id: 'leg-colossus', name: 'Colossus Landing Leg', dryMass: 420, cost: 1700,
+    shape: box(0.56,2.8,0.56), attachNodes: [srfNode(0.56,0.42)], meshParams: { scale: 2.8 },
+    modules: [{ type: 'landingLeg', spring: 400000, damper: 40000, travel: 0.7, footPosition: landingLegLayout(2.8).contact }] },
+  ...[0,1].map(i => { const p = landingGear({ id: `rover-wheel-${i}`, name: i ? 'Boulder Powered Rover Wheel' : 'Pebble Powered Rover Wheel', description: 'Fixed powered terrain wheel with steering, a sprung hub and independent braking for surface exploration.', dryMass: i ? 110 : 35, cost: i ? 850 : 350, radius: i ? 0.48 : 0.25, strut: i ? 0.55 : 0.3, fold: 0, spring: i ? 80000 : 25000, damper: i ? 7000 : 2500, travel: i ? 0.3 : 0.15, brakeTorque: i ? 1800 : 350, steerDeg: 30, crashTolerance: 18 });
+    return { ...p, modules: p.modules.map(m => m.type === 'wheel' ? { ...m, motorTorque: i ? 1500 : 250 } : m) }; }),
+  { ...hardware('rover-chassis', 'Trailhead Rover Chassis', 'structural', 220, 1200, box(1.5,2,0.35), 'framework', [], { style: 'chassis' }, 1), resources: { electricCharge: 800 } },
+];
+
+export const PART_DEFS: PartDef[] = [...pods, ...tanks, ...engines, ...coupling, ...structural, ...aero, ...control, ...electrical, ...utility, ...aircraft, ...scienceParts, ...antennas, ...expansion];
 
 export const PART_CATALOG: Map<string, PartDef> = new Map(PART_DEFS.map((p) => [p.id, p]));
 

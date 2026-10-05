@@ -389,7 +389,7 @@ function buildCluster(def: PartDef, root: THREE.Group, r: number, h: number, re:
     const ch = chamber(rc, rt, chamberLen, M.copperTubes(), 18);
     ch.position.y = yThroat;
     inner.add(ch);
-    const bl = bell({ rt, re, len: bellLen, k, segments: 26, rings: 9 });
+    const bl = bell({ rt, re, len: bellLen, k, segments: num(def, 'nozzleSegments', 26), rings: num(def, 'nozzleRings', 9) });
     bl.position.y = yThroat;
     inner.add(bl);
     inner.add(exhaustAnchor(yExit, re));

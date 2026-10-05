@@ -193,6 +193,8 @@ export interface CommandModule {
   /** Has SAS / probe core level 0..3. */
   sasLevel: number;
   ecPerSecond: number;
+  /** Passenger cabins carry crew without supplying flight control. */
+  controllable?: false;
 }
 
 /**
@@ -228,6 +230,9 @@ export type PartModule =
   | { type: 'fairing'; ejectionImpulse: number }
   | { type: 'light' }
   | { type: 'battery' }
+  | { type: 'bay' }
+  | { type: 'generator'; chargeRate: number }
+  | { type: 'fuelCell'; chargeRate: number; fuelRate: number; oxidizerRate: number }
   | { type: 'science'; experiment: string }
   | { type: 'antenna'; transmission: number };
 

@@ -58,6 +58,12 @@ export function buildFeedGroups(v: VesselState, consumerUid: number): number[][]
   if (!start) return [];
   const seen = new Set<number>([start.uid]);
   const queue: PartState[] = [start];
+  // Surface-mounted engines and fuel cells can feed from their host stack; other radial
+  // attachments still do not bridge separate stacks or bypass a decoupler.
+  if (start.attachNode === 'srf' && start.parent !== null && start.def.modules.some(m => m.type === 'engine' || m.type === 'fuelCell')) {
+    const host = v.cache.byUid.get(start.parent);
+    if (host && !isDecoupler(host)) { seen.add(host.uid); queue.push(host); }
+  }
   const found: PartState[] = [];
   while (queue.length) {
     const p = queue.shift()!;
@@ -178,6 +184,20 @@ export function totalResource(v: VesselState, res: ResourceId): number {
   let s = 0;
   for (const p of v.parts) s += p.resources[res] ?? 0;
   return s;
+}
+
+/** Continuous electrical sources. Fuel cells draw a balanced mix only for available storage. */
+export function stepPowerSources(v: VesselState, dt: number): void {
+  if (!(dt > 0)) return;
+  for (const p of v.parts) for (const m of p.def.modules) {
+    if (m.type === 'generator') addResource(v, 'electricCharge', m.chargeRate * dt);
+    if (m.type !== 'fuelCell' || m.chargeRate <= 0) continue;
+    const space = v.parts.reduce((n, q) => n + Math.max(0, (q.maxResources.electricCharge ?? 0) - (q.resources.electricCharge ?? 0)), 0);
+    const duration = Math.min(dt, space / m.chargeRate);
+    if (duration <= 0) continue;
+    const fraction = drawPropellants(v, p.uid, { liquidFuel: m.fuelRate * duration, oxidizer: m.oxidizerRate * duration });
+    addResource(v, 'electricCharge', m.chargeRate * duration * fraction);
+  }
 }
 
 /** Mass of a part's current contents + dry mass. */

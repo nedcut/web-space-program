@@ -251,7 +251,7 @@ export class EditorSession {
     if (this.held) this.cancelHeld();
     const craft = this.currentCraft();
     if (!craft.parts.length) return this.toast('Build something first!', 'warn');
-    const hasCommand = craft.parts.some((p) => CATALOG.get(p.partId)?.modules.some((m) => m.type === 'command'));
+    const hasCommand = craft.parts.some((p) => CATALOG.get(p.partId)?.modules.some((m) => m.type === 'command' && m.controllable !== false));
     if (!hasCommand) return this.toast('Launch blocked: the craft needs a command pod or probe core', 'bad');
     const g = game.get();
     const problem = launchProblem(craft, CATALOG, g.mode, g.resumeWorld?.progression ?? newProgression());

@@ -124,6 +124,7 @@ export const M = {
     return get('heatTiles', () => std({ color: 0xffffff, map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(1, 1), roughnessMap: t.roughnessMap, roughness: 1, metalness: 0 }));
   },
   ablator: () => get('ablator', () => std({ color: 0x3b2a20, roughness: 0.9, metalness: 0 })),
+  thermalGlow: () => get('thermalGlow', () => std({ color: 0x48231b, emissive: 0xff4b12, emissiveIntensity: 0.7, roughness: 0.6 })),
   glass: () =>
     get('glass', () => phys({ color: 0x0b1622, roughness: 0.04, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.6, emissive: 0x0a1a24, emissiveIntensity: 0.4 })),
   solarCells: () => {
