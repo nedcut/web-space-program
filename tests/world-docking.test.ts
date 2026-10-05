@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { describe, expect, it } from 'vitest';
 import { Universe } from '../src/game/universe';
 import { World, quatFromBasis } from '../src/game/world';
@@ -13,6 +14,7 @@ import { qRotate } from '../src/util/quat';
 function setup(ahead: number) {
   const u = new Universe('standard');
   const w = new World(u, PART_CATALOG, DEFAULT_START_UT);
+  requireIntactFlight(w);
   const craft = buildTender();
   const wv = w.launch(craft);
   placeInCircularOrbit(w, wv, 'earth', 90_000);
@@ -36,6 +38,7 @@ describe('world rendezvous & docking', () => {
     expect(ca.distance).toBeLessThan(110);
     // Target survives a save/load round trip.
     const w2 = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(w))), PART_CATALOG, w.universe);
+    requireIntactFlight(w2);
     expect(w2.targetId).toBe(w.targetId);
     expect(w2.targetPortUid).toBe(w.targetPortUid);
   });
@@ -80,6 +83,7 @@ describe('world rendezvous & docking', () => {
     expect(w.achievementProfile.unlocked.dock).toBeDefined();
 
     const w2 = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(w))), PART_CATALOG, w.universe);
+    requireIntactFlight(w2);
     expect(w2.vessels.size).toBe(1);
     const merged = w2.active!.state;
     expect(merged.parts.length).toBe(parts);

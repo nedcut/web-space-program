@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { expect, it } from 'vitest';
 import { World } from '../src/game/world';
 import { Universe } from '../src/game/universe';
@@ -11,6 +12,7 @@ import { stateToElements } from '../src/sim/orbit';
 
 function parked() {
   const w = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+  requireIntactFlight(w);
   const v = w.launch(buildRingrunner()), b = w.universe.body('earth');
   const r = b.radius + 120000, bs = w.universe.ephem.getBodyState('earth', w.ut);
   const pos = v3(r, 0, 0), vel = v3(0, Math.sqrt(b.gm / r) * Math.cos(0.5), Math.sqrt(b.gm / r) * Math.sin(0.5));

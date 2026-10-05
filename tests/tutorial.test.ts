@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { LESSONS, stableOrbit, type TutorialContext } from '../src/tutorial/lessons';
 import { World } from '../src/game/world';
@@ -14,6 +15,7 @@ import { COMPLETION_KEY, startLesson, getTutorial, endTutorial, tickTutorial, ad
 function setup(id: string) {
   const lesson = LESSONS.find(l => l.id === id)!;
   const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+  requireIntactFlight(world);
   const craft = lesson.craft();
   if (craft) { world.launch(craft); lesson.setup?.(world); }
   return world;
@@ -57,6 +59,7 @@ describe('training definitions and deterministic scenarios', () => {
       expect(w.active!.state.velocity).toEqual(second.active!.state.velocity);
       expect(w.active!.state.parts.map(p => p.partId)).toEqual(second.active!.state.parts.map(p => p.partId));
       const resumed = deserializeWorld(serializeWorld(w), PART_CATALOG);
+      requireIntactFlight(resumed);
       expect(resumed.active!.body).toBe(w.active!.body);
       expect(resumed.canControl()).toBe(true);
       expect(resumed.active!.state.destroyed).toBe(false);

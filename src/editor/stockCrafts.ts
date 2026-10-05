@@ -437,17 +437,18 @@ export function buildRelayLauncher(catalog: PartCatalog = PART_CATALOG): CraftDe
 }
 
 /** Heavy Earth delivery stack: solids assist eight isolated liquid strap-ons; the core follows. */
-function realDelivery(b: Builder, upperEngine: number) {
-  const middleSep = b.stack(upperEngine, 'dec-2');
-  const middleAdapter = b.stack(middleSep, 'adapt-2-3');
-  const wider = b.stack(middleAdapter, 'adapt-3-4');
+function realDelivery(b: Builder, upperMount: number, wideMount = false) {
+  const middleSep = b.stack(upperMount, wideMount ? 'dec-4' : 'dec-2');
+  const middleAdapter = wideMount ? middleSep : b.stack(middleSep, 'adapt-2-3');
+  const wider = wideMount ? middleAdapter : b.stack(middleAdapter, 'adapt-3-4');
   const middle = b.stack(wider, 'tank-4-long');
   const middleEngine = b.stack(middle, 'eng-monsoon');
   const boosterSep = b.stack(middleEngine, 'dec-4');
   const booster = b.stack(boosterSep, 'tank-4-long');
   const booster2 = b.stack(booster, 'tank-4-long');
   b.stack(booster2, 'eng-monsoon');
-  const latch = b.radial(booster2, 'dec-radial', 8, 0);
+  // Align the wide payload launcher's strap-on nozzles with the core instead of hanging them lower.
+  const latch = b.radial(wideMount ? booster : booster2, 'dec-radial', 8, 0);
   const strap = b.outward(latch, 'tank-4-long');
   b.stack(strap, 'nose-4', 'top');
   const strapBottom = b.stack(strap, 'tank-4-long');
@@ -466,20 +467,24 @@ export function buildRealRingrunner(catalog: PartCatalog = PART_CATALOG): CraftD
   const wheel = b.stack(battery, 'wheel-reaction-2');
   b.radial(probe, 'antenna-horizon', 1, 0, 0);
   b.radial(battery, 'generator-isotope', 2, 0, 90);
-  const cruise = b.stack(wheel, 'tank-2-long');
-  const cruise2 = b.stack(cruise, 'tank-2-long');
-  const cruise3 = b.stack(cruise2, 'tank-2-long');
-  const cruise4 = b.stack(cruise3, 'tank-2-long');
-  const cruise5 = b.stack(cruise4, 'tank-2-long');
-  for (const uid of [cruise, cruise2, cruise3, cruise4, cruise5]) b.resources.set(uid, { ...b.def('tank-2-long').resources, oxidizer: 0 });
-  const narrow = b.stack(cruise5, 'adapt-1-2', 'bottom', 'bottom');
-  const nuclear = b.stack(narrow, 'eng-hearth', 'top', 'top');
-  const sep = b.stack(nuclear, 'dec-1');
-  const wide = b.stack(sep, 'adapt-1-2');
-  const transfer = b.stack(wide, 'tank-2-long');
-  const transfer2 = b.stack(transfer, 'tank-2-long');
-  const departure = b.stack(transfer2, 'eng-foehn');
-  realDelivery(b, departure);
+  // The same fuel volume in a short, broad reservoir reduces the bending arm at the launcher.
+  const shoulder = b.stack(wheel, 'adapt-2-3');
+  const cap = b.stack(shoulder, 'adapt-3-4');
+  const cruise = b.stack(cap, 'tank-4-mid');
+  const cruise2 = b.stack(cruise, 'tank-4-short');
+  for (const uid of [cruise, cruise2]) b.resources.set(uid, { ...b.def(b.part(uid).partId).resources, oxidizer: 0 });
+  // Outer rings carry the launcher; the internal stack node feeds and supports only the engine.
+  const thrustFrame = b.stack(cruise2, 'interstage-4');
+  b.stack(thrustFrame, 'eng-hearth', 'engine', 'top');
+  const sep = b.stack(thrustFrame, 'dec-4');
+  const transfer = b.stack(sep, 'tank-4-mid');
+  // Retain the original chemical propellant budget in a shorter barrel.
+  b.resources.set(transfer, Object.fromEntries(Object.entries(b.def('tank-4-mid').resources)
+    .map(([id, amount]) => [id, amount! * 0.6])));
+  const departureFrame = b.stack(transfer, 'interstage-4');
+  b.stack(departureFrame, 'eng-foehn', 'engine-left', 'top');
+  b.stack(departureFrame, 'eng-foehn', 'engine-right', 'top');
+  realDelivery(b, departureFrame, true);
   return b.done();
 }
 
