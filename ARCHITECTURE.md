@@ -125,3 +125,15 @@ playable universe. Presets: `standard` (s=0.1, default), `challenging` (0.32), `
 - `src/data/technology.ts`: 25 named nodes; every catalogue part belongs to one node. Category families are sorted by cost then ID into four tiers, with an explicit starter set. Catalogue additions can shift tiers and should be reviewed for progression balance.
 - `World` owns mutable progression. `src/game/science.ts` adapts universe/vessel state to the pure science model; `World` exposes experiment, transmission, research, contract and recovery operations. Part-owned data and expedition provenance survive staging, docking and save/load. `PartState.purchaseCost` prevents salvage of unpaid scenario/EVA hardware.
 - Scene boundaries pass immutable `SavedWorld` snapshots through `game.resumeWorld`; `game.mode` drives UI. `openProgram/saveProgram` handle hub research/mission mutations and autosaves. Physics and rails evaluate progression; UI never awards rewards independently. Flight, tracking recovery, and automatic pad clearance share settlement logic.
+
+## Asynchronous transfer planning
+
+`game/planning/transfers.ts` holds the headless transfer algorithms, re-exported from `game/autopilot.ts`
+for existing synchronous callers. `PlanningWorld` is the minimal structural input shared by World and the
+snapshot adapter; neither the worker nor its algorithms import the World implementation, React or three.js.
+`planningSnapshot` captures the universe preset, UT, vessel ID/body/relative state/osculating orbit and nodes.
+The worker rebuilds its own Universe and temporary node allocator. Typed request IDs correlate progress,
+porkchop rows, results, errors and cancellations. Each async request owns a worker, and cancellation terminates
+it even during synchronous refinement. Node/no-Worker callers use the same handler asynchronously in-process;
+only row boundaries and pre-start work yield there. UI hooks cancel on supersession/unmount. Results are
+applied explicitly with fresh World node IDs, after rejecting stale vessel/trajectory/node-list changes.

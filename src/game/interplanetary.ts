@@ -1,6 +1,6 @@
 /** Impulsive planet-to-planet targeting, followed by full patched-conic encounter refinement. */
-import type { World } from './world';
-import type { TransferPlan } from './autopilot';
+import type { PlanningWorld, PlanningProgressReporter } from './planning/context';
+import type { TransferPlan } from './planning/transfers';
 import type { Orbit, TrajectoryPatch } from '../sim/orbit/api';
 import { solveLambert, propagate, period, periapsisRadius, predictTrajectory,
   closestApproach, inertialDvToManeuver, maneuverToInertialDv } from '../sim/orbit';
@@ -33,9 +33,9 @@ export interface InterplanetaryPlan extends TransferPlan {
   arrivalExcess: Vec3;
   captureDvEstimate: number;
 }
-const safeAltitude = (world: World, id: string) => Math.max(world.universe.body(id).radius * 0.1,
+const safeAltitude = (world: PlanningWorld, id: string) => Math.max(world.universe.body(id).radius * 0.1,
   (world.universe.body(id).atmosphere?.height ?? 0) * 2, 30000);
-function planets(world: World, from: string, to: string) {
+function planets(world: PlanningWorld, from: string, to: string) {
   const u = world.universe, a = u.body(from), b = u.body(to);
   if (from === to || a.parent !== u.sunId || b.parent !== u.sunId)
     throw new RangeError('Interplanetary targeting requires two distinct planets orbiting the Sun');
@@ -46,7 +46,7 @@ function checkRange(r: SearchRange, duration = false) {
     !Number.isInteger(r.samples ?? 25) || (r.samples ?? 25) < 2 || (r.samples ?? 25) > 200)
     throw new RangeError('Search ranges require finite min ≤ max and 2–200 samples; flight times must be positive');
 }
-function point(world: World, from: string, to: string, dep: number, tof: number, parking: number, pe: number): PorkchopPoint {
+function point(world: PlanningWorld, from: string, to: string, dep: number, tof: number, parking: number, pe: number): PorkchopPoint {
   const { a, b, mu } = planets(world, from, to), ephem = world.universe.ephem;
   const start = ephem.getRelativeState(from, dep), end = ephem.getRelativeState(to, dep + tof);
   const lambert = solveLambert(mu, start.position, end.position, tof);
@@ -58,18 +58,25 @@ function point(world: World, from: string, to: string, dep: number, tof: number,
 /** Flat row-major grid (departure outermost); singular Lambert cells are null. Does not mutate the world.
  * Scores assume circular parking/capture orbits; the flight planner accounts for the actual parking plane.
  */
-export function porkchopGrid(world: World, from: string, to: string, depRange: SearchRange, tofRange: SearchRange): (PorkchopPoint | null)[] {
+export function porkchopGrid(world: PlanningWorld, from: string, to: string, depRange: SearchRange, tofRange: SearchRange): (PorkchopPoint | null)[] {
+  return [...porkchopRows(world, from, to, depRange, tofRange)].flat();
+}
+
+/** The synchronous API and worker consume exactly the same row generator. */
+export function* porkchopRows(world: PlanningWorld, from: string, to: string, depRange: SearchRange, tofRange: SearchRange): Generator<(PorkchopPoint | null)[]> {
   const { a, b } = planets(world, from, to);
   checkRange(depRange); checkRange(tofRange, true);
   const parking = world.active?.body === from ? length(world.relativeState(world.active).position) : a.radius + safeAltitude(world, from);
-  const result: (PorkchopPoint | null)[] = [];
-  for (let i = 0; i < (depRange.samples ?? 25); i++) for (let j = 0; j < (tofRange.samples ?? 25); j++) {
-    try { result.push(point(world, from, to,
-      depRange.min + (depRange.max - depRange.min) * i / ((depRange.samples ?? 25) - 1),
-      tofRange.min + (tofRange.max - tofRange.min) * j / ((tofRange.samples ?? 25) - 1), parking, b.radius + safeAltitude(world, to))); }
-    catch { result.push(null); }
+  for (let i = 0; i < (depRange.samples ?? 25); i++) {
+    const row: (PorkchopPoint | null)[] = [];
+    for (let j = 0; j < (tofRange.samples ?? 25); j++) {
+      try { row.push(point(world, from, to,
+        depRange.min + (depRange.max - depRange.min) * i / ((depRange.samples ?? 25) - 1),
+        tofRange.min + (tofRange.max - tofRange.min) * j / ((tofRange.samples ?? 25) - 1), parking, b.radius + safeAltitude(world, to))); }
+      catch { row.push(null); }
+    }
+    yield row;
   }
-  return result;
 }
 
 /** Velocity at position r on a hyperbola with the specified outgoing asymptote v∞.
@@ -82,14 +89,14 @@ function ejectionVelocity(mu: number, r: Vec3, excess: Vec3): Vec3 {
   return add(scale(d, k), scale(q, k - speed));
 }
 
-function predict(world: World, orbit: Orbit, time: number, components: number[], horizon: number): TrajectoryPatch[] {
+function predict(world: PlanningWorld, orbit: Orbit, time: number, components: number[], horizon: number): TrajectoryPatch[] {
   const s = propagate(orbit, time);
   const dv = maneuverToInertialDv(s, { prograde: components[0], normal: components[1], radial: components[2] });
   return predictTrajectory({ ephem: world.universe.ephem, bodies: world.universe.bodies, initialBody: orbit.body,
     state: { position: s.position, velocity: add(s.velocity, dv) }, t0: time, horizon, maxPatches: orbit.body === world.universe.sunId ? 2 : 3 });
 }
 /** Continuous-ish miss objective through the SOI edge, then periapsis targeting inside the target SOI. */
-function refine(world: World, orbit: Orbit, targetId: string, time: number, initial: number[], arrival: number,
+function refine(world: PlanningWorld, orbit: Orbit, targetId: string, time: number, initial: number[], arrival: number,
   altitude: number, maxDv = Infinity, timeFreedom = 0, earliest = time, latest = Infinity): TransferPlan | null {
   const u = world.universe, target = u.body(targetId), goal = target.radius + altitude;
   const horizon = Math.max(1, arrival - time) * 1.3;
@@ -131,7 +138,7 @@ function refine(world: World, orbit: Orbit, targetId: string, time: number, init
  * ejection, then target the actual SOI encounter. Adds exactly one node on success, none on failure.
  * Moon departure is deliberately unsupported; first escape into a bound planetary parking orbit.
  */
-export function planInterplanetaryTransfer(world: World, targetPlanetId: string, opts: InterplanetaryOptions = {}): InterplanetaryPlan | null {
+export function planInterplanetaryTransfer(world: PlanningWorld, targetPlanetId: string, opts: InterplanetaryOptions = {}, report?: PlanningProgressReporter): InterplanetaryPlan | null {
   const wv = world.active;
   if (!wv) throw new RangeError('An active vessel is required');
   const { a, b, mu } = planets(world, wv.body, targetPlanetId);
@@ -150,6 +157,7 @@ export function planInterplanetaryTransfer(world: World, targetPlanetId: string,
   const parking = length(world.relativeState(wv).position);
   let best: PorkchopPoint | undefined, bestScore = Infinity;
   for (let pass = 0; pass < 3; pass++) {
+    report?.('Searching transfer windows', pass / 5);
     for (let i = 0; i < (dep.samples ?? 25); i++) for (let j = 0; j < (tof.samples ?? 25); j++) {
       try {
         const p = point(world, a.id, b.id, dep.min + (dep.max - dep.min) * i / ((dep.samples ?? 25) - 1),
@@ -177,6 +185,7 @@ export function planInterplanetaryTransfer(world: World, targetPlanetId: string,
     if (length(d) < length(dv)) { time = t; dv = d; }
   }
   const c = inertialDvToManeuver(propagate(orbit, time), dv);
+  report?.('Refining encounter', 0.7);
   const plan = refine(world, orbit, b.id, time, [c.prograde, c.normal, c.radial], choice.arrivalTime, altitude, Infinity, T / 8, depBounds.min, depBounds.max);
   if (!plan) return null;
   return { ...plan, departureTime: plan.node.time, arrivalTime: choice.arrivalTime, timeOfFlight: choice.arrivalTime - plan.node.time,
@@ -193,7 +202,7 @@ export interface CourseCorrectionOptions {
 /** Heliocentric correction seeded by Lambert from the vessel's actual position to the planet.
  * The seed aims at the centre; patched-conic refinement moves the aim point to a safe periapsis.
  */
-export function planCourseCorrectionToBody(world: World, targetPlanetId: string, opts: CourseCorrectionOptions): TransferPlan | null {
+export function planCourseCorrectionToBody(world: PlanningWorld, targetPlanetId: string, opts: CourseCorrectionOptions, report?: PlanningProgressReporter): TransferPlan | null {
   const wv = world.active, u = world.universe;
   if (!wv || wv.body !== u.sunId || u.body(targetPlanetId).parent !== u.sunId)
     throw new RangeError('Course correction requires a heliocentric vessel and a planetary target');
@@ -207,5 +216,6 @@ export function planCourseCorrectionToBody(world: World, targetPlanetId: string,
   const c = inertialDvToManeuver(s, sub(lambert.departureVelocity, s.velocity));
   const maxDv = opts.maxDv ?? 500;
   if (Math.hypot(c.prograde, c.normal, c.radial) > maxDv) return null;
+  report?.('Refining course correction', 0.2);
   return refine(world, orbit, targetPlanetId, time, [c.prograde, c.normal, c.radial], opts.arrivalTime, altitude, maxDv);
 }
