@@ -73,7 +73,7 @@ export function MultiplayerPanel({ client }: { client: MultiplayerClient }) {
       {queued && <p role="status">Queued for {queued.site}; waiting for 200 m clearance.</p>}
       <div className="mp-fleet">{[...client.world.vessels.values()].map(v => {
         const owner = client.room.players.find(p => p.vesselId === v.state.id);
-        return <div className="mp-row" key={v.state.id}><span>{v.state.name} · {owner?.name ?? 'Free'}</span><button className="btn small" disabled={!client.connected || !!owner} onClick={() => client.send({ v: 1, type: 'claim', vesselId: v.state.id })}>Claim</button><button className="btn small" onClick={() => { client.world.activeId = v.state.id; }}>View</button></div>;
+        return <div className="mp-row" key={v.state.id}><span>{v.state.name} · {owner?.name ?? 'Free'}</span><button className="btn small" disabled={!client.connected || !!owner} onClick={() => client.send({ v: 1, type: 'claim', vesselId: v.state.id })}>Claim</button><button className="btn small" disabled={!!me?.vesselId && me.vesselId !== v.state.id} onClick={() => { client.world.activeId = v.state.id; }}>View</button></div>;
       })}</div>
       {me?.vesselId && <button className="btn small" onClick={() => client.send({ v: 1, type: 'release' })}>Release vessel</button>}
     </details>
