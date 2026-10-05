@@ -1,0 +1,80 @@
+import type { PartDef } from '../../sim/vessel/types';
+import { cyl, liftingSurface, MANUFACTURERS, noseCone, stackNodes } from './builders';
+
+
+
+export const aero: PartDef[] = [
+  noseCone('nose-0', 'Spire 0 Nose Cone', 0, 0.9, 12, 60, 'Ogive tip for slender stacks. Points the right way, and that is half the battle.'),
+  noseCone('nose-1', 'Spire 1 Nose Cone', 1, 2.0, 70, 160, 'A tangent-ogive cone with an ablative tip. Cuts through the air like it has somewhere to be.'),
+  noseCone('nose-2', 'Spire 2 Nose Cone', 2, 4.0, 320, 400, 'Big aerodynamic cap for big stacks. Doubles as a dramatic silhouette at sunset.'),
+  {
+    id: 'fairing-1',
+    name: 'Clamshell Fairing 1',
+    manufacturer: MANUFACTURERS.greywater,
+    description: 'A 1.25 m base with a two-piece shroud that keeps fragile payloads out of the wind until it pops open.',
+    category: 'aero',
+    dryMass: 180,
+    cost: 500,
+    resources: {},
+    attachNodes: stackNodes(0.2, 1, 1),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: false,
+    shape: cyl(0.625, 0.625, 0.2),
+    dragCoefficient: { axial: 0.25, side: 0.9 },
+    maxTemp: 2200,
+    crashTolerance: 8,
+    modules: [{ type: 'fairing', ejectionImpulse: 150 }],
+    mesh: 'fairing',
+    meshParams: { shellRadius: 0.72, shellHeight: 3.6 },
+  },
+  {
+    id: 'fairing-2',
+    name: 'Clamshell Fairing 2',
+    manufacturer: MANUFACTURERS.greywater,
+    description: 'Composite 2.5 m payload shroud. Splits along its spine with a satisfying crack.',
+    category: 'aero',
+    dryMass: 620,
+    cost: 1200,
+    resources: {},
+    attachNodes: stackNodes(0.3, 2, 2),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: false,
+    shape: cyl(1.25, 1.25, 0.3),
+    dragCoefficient: { axial: 0.25, side: 0.9 },
+    maxTemp: 2200,
+    crashTolerance: 8,
+    modules: [{ type: 'fairing', ejectionImpulse: 400 }],
+    mesh: 'fairing',
+    meshParams: { shellRadius: 1.4, shellHeight: 6.5 },
+  },
+  liftingSurface({
+    id: 'fin-keel', name: 'Keel Fin', dryMass: 30, cost: 80,
+    rootChord: 1.0, tipChord: 0.45, span: 0.75, sweep: 0.45, thickness: 0.06, liftSlope: 4.0, deflectionDeg: 0, ctrlFraction: 0, mesh: 'fin',
+    description: 'Fixed swept tail fin. Keeps the pointy end forward without any electronics whatsoever.',
+  }),
+  liftingSurface({
+    id: 'fin-pivot', name: 'Pivot Winglet', dryMass: 45, cost: 260,
+    rootChord: 0.9, tipChord: 0.5, span: 0.7, sweep: 0.25, thickness: 0.06, liftSlope: 4.2, deflectionDeg: 20, ctrlFraction: 0.35, mesh: 'fin', category: 'control',
+    description: 'Tail fin with a powered trailing-edge flap. Steers in thick air when the gimbal runs out of opinions.',
+  }),
+  liftingSurface({
+    id: 'ctrl-elevon', name: 'Trim Elevon', dryMass: 25, cost: 200,
+    rootChord: 0.35, tipChord: 0.35, span: 1.0, sweep: 0, thickness: 0.05, liftSlope: 4.5, deflectionDeg: 25, ctrlFraction: 1, mesh: 'controlSurface', category: 'control',
+    description: 'All-moving control surface. Bolt it to a trailing edge and argue with physics directly.',
+  }),
+  liftingSurface({
+    id: 'wing-delta', name: 'Arrowhead Delta Wing', dryMass: 380, cost: 900,
+    rootChord: 3.2, tipChord: 0.35, span: 2.6, sweep: 2.6, thickness: 0.16, liftSlope: 3.6, deflectionDeg: 0, ctrlFraction: 0, mesh: 'wing',
+    description: 'A sharp delta with honeycomb skins. Lands fast, climbs faster, looks fantastic doing both.',
+  }),
+  liftingSurface({
+    id: 'wing-plank', name: 'Plank Wing Panel', dryMass: 110, cost: 300,
+    rootChord: 1.0, tipChord: 1.0, span: 2.0, sweep: 0, thickness: 0.1, liftSlope: 5.0, deflectionDeg: 0, ctrlFraction: 0, mesh: 'wing',
+    description: 'A straight wing section for builders who think in rectangles. Tile as required.',
+  }),
+  liftingSurface({
+    id: 'wing-swept', name: 'Swept Wing Section', dryMass: 240, cost: 650,
+    rootChord: 2.0, tipChord: 0.8, span: 3.0, sweep: 1.6, thickness: 0.12, liftSlope: 4.8, deflectionDeg: 0, ctrlFraction: 0, mesh: 'wing',
+    description: 'Moderately swept wing with a tidy taper. Transonic manners, airliner posture.',
+  }),
+];

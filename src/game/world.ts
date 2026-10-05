@@ -1,26 +1,28 @@
-import { defaultCommsSettings, remoteControlAllowed, NO_SIGNAL, type CommsSettings, type Network } from '../sim/comms/network';
-import { worldNetwork } from './comms';
-import { advanceISRU, isruMachinery } from '../sim/vessel/isru';
-import { concentrationAt } from '../sim/resources/deposits';
-import { newProgression, generateContracts, acceptContract, failContract, type GameMode, type ProgressEvent } from '../sim/science/progression';
-import { unlockTech, launchProblem, launchCost } from '../data/technology';
-import { scienceContext, instruments, runExperiment, transmitScience, recoverScience, progressionEvent, evaluateProgression, advanceTransmissions } from './science';
-import { generateAstronaut, crewIds, hasControl, seatCapacity, type Astronaut, type PlantedFlag } from '../sim/crew/crew';
 import { EVA_PART } from '../data/eva';
+import { defaultCommsSettings, NO_SIGNAL, type CommsSettings, type Network } from '../sim/comms/network';
+import { hasControl, type Astronaut, type PlantedFlag } from '../sim/crew/crew';
+import { maneuverToInertialDv, period, predictTrajectory, propagate, stateToElements, trajectoryClosestApproach, type TrajectoryApproach } from '../sim/orbit';
+import type { ManeuverNode, Orbit, StateVector, TrajectoryPatch } from '../sim/orbit/api';
+import { newProgression, type GameMode, type ProgressEvent } from '../sim/science/progression';
+import { activateNextStage, neutralInput, portInfo, recomputeMassProperties, stepVessel } from '../sim/vessel';
 import { stepEva } from '../sim/vessel/eva';
+import { advanceISRU, isruMachinery } from '../sim/vessel/isru';
+import type { ControlInput, PartState, VesselEvent, VesselState } from '../sim/vessel/runtime';
 import type { CraftDef, PartDef } from '../sim/vessel/types';
-import type { ControlInput, VesselState, PartState, VesselEvent } from '../sim/vessel/runtime';
-import { buildVessel, stepVessel, activateNextStage, neutralInput, recomputeMassProperties, stepDocking, undock, dockedPorts, portInfo } from '../sim/vessel';
-import type { Orbit, ManeuverNode, TrajectoryPatch, StateVector } from '../sim/orbit/api';
-import { stateToElements, propagate, predictTrajectory, periapsisRadius, apoapsisRadius, timeToPeriapsis, timeToApoapsis, period, maneuverToInertialDv, trajectoryClosestApproach, type TrajectoryApproach } from '../sim/orbit';
-import { latLonToUnit, LAUNCH_SITE, RUNWAY, siteLocalToUnit } from '../sim/terrain';
-import { hullPoints } from '../sim/vessel/shapes';
-import { wheelContactPoint } from '../sim/vessel/contact';
-import { add, sub, length, scale, normalize, cross, dot, v3, type Vec3 } from '../util/vec3';
-import { qIdentity, qFromTo, qMul, qConj, qRotate, qNormalize, type Quat } from '../util/quat';
+import type { Quat } from '../util/quat';
+import { add, length, scale, sub, type Vec3 } from '../util/vec3';
+import { worldNetwork } from './comms';
+import { advanceTransmissions, evaluateProgression, recoverScience } from './science';
+import { clampWarp, RAILS_WARP, stepWarp, warpRate, type WarpContext, type WarpState } from './timewarp';
 import { Universe } from './universe';
-import { type WarpState, warpRate, stepWarp, clampWarp, type WarpContext, RAILS_WARP } from './timewarp';
-import { RESOURCES } from '../data/resources';
+import * as crew from './world/crew';
+import * as docking from './world/docking';
+import type { WorldInternals } from './world/internals';
+import * as launch from './world/launch';
+import * as progression from './world/progression';
+import * as rails from './world/rails';
+import * as readouts from './world/readouts';
+import * as resources from './world/resources';
 
 export const PHYSICS_DT = 1 / 50;
 /** Distance from the active vessel inside which other vessels are simulated with full physics. */
@@ -50,10 +52,25 @@ export interface WorldMessage {
   expires: number;
 }
 
-/** Quaternion that maps body-fixed → inertial for the given body at time t. */
-const bodyQuat = (u: Universe, id: string, t: number) => u.ephem.bodyRotation(id, t);
 
 export class World {
+  private readonly systems: WorldInternals = ((owner: World) => ({
+    advanceRails: (target: number) => owner.advanceRails(target),
+    captureFixed: (wv: WorldVessel, t: number) => owner.captureFixed(wv, t),
+    handleEvent: (e: VesselEvent) => owner.handleEvent(e),
+    launchRunway: (craft: CraftDef, keepExisting = false) => owner.launchRunway(craft, keepExisting),
+    newVesselId: () => owner.newVesselId(),
+    pack: (wv: WorldVessel) => owner.pack(wv),
+    predictRailsEvent: (wv: WorldVessel) => owner.predictRailsEvent(wv),
+    get stageRequested() { return owner.stageRequested; },
+    set stageRequested(value: boolean) { owner.stageRequested = value; },
+    syncFixed: (wv: WorldVessel, t: number) => owner.syncFixed(wv, t),
+    syncPacked: (wv: WorldVessel, t: number) => owner.syncPacked(wv, t),
+    get trajectoryCache() { return owner.trajectoryCache; },
+    set trajectoryCache(value: { time: number; key: string; patches: TrajectoryPatch[] } | null) { owner.trajectoryCache = value; },
+    unpack: (wv: WorldVessel) => owner.unpack(wv),
+  }))(this);
+
   commsSettings: CommsSettings;
   /** Persisted vessel IDs; data credit itself remains on parts through splits/docking. */
   transmitting: string[] = [];
@@ -69,26 +86,10 @@ export class World {
   connection(v = this.active?.state) { return v ? this.comms.connections.get(v.id) ?? NO_SIGNAL : NO_SIGNAL; }
   surveyedBodies: string[] = [];
 
-  localConcentration(wv = this.active): number {
-    if (!wv) return 0;
-    const fixed = wv.mode === 'landedRails' || wv.mode === 'prelaunch' ? wv.fixed : undefined;
-    const direction = fixed?.pos ?? qRotate(qConj(bodyQuat(this.universe, wv.body, this.ut)), this.relativeState(wv).position);
-    return concentrationAt(this.universe.body(wv.body), direction);
-  }
+  localConcentration(wv = this.active): number { return resources.localConcentration.call(this, this.systems, wv); }
 
   /** A bound orbit, above terrain/atmosphere, within 10 degrees of polar relative to the body's pole. */
-  surveyBody(wv = this.active): boolean {
-    if (!wv || !wv.state.parts.some(p => p.def.modules.some(m => m.type === 'surveyScanner'))) return false;
-    const b = this.universe.body(wv.body), s = this.relativeState(wv);
-    if (!b.solidSurface || wv.state.situation !== 'flying') return false;
-    const h = normalize(cross(s.position, s.velocity));
-    const pole = qRotate(bodyQuat(this.universe, wv.body, this.ut), { x: 0, y: 0, z: 1 });
-    const orbit = stateToElements(b.gm, b.id, s.position, s.velocity, this.ut);
-    if (orbit.e >= 1 || periapsisRadius(orbit) <= b.radius + Math.max(b.atmosphere?.height ?? 0, b.surface.relief)
-      || Math.abs(dot(h, pole)) > Math.sin(Math.PI / 18)) return false;
-    if (!this.surveyedBodies.includes(b.id)) this.surveyedBodies.push(b.id);
-    return true;
-  }
+  surveyBody(wv = this.active): boolean { return resources.surveyBody.call(this, this.systems, wv); }
 
   progression = newProgression();
   readonly universe: Universe;
@@ -126,30 +127,20 @@ export class World {
     if (mode === 'career') this.refreshContracts();
   }
 
-  refreshContracts() {
-    if (this.mode !== 'career' || this.progression.contracts.some(c => c.status === 'offered')) return;
-    const p = this.progression;
-    p.contracts.push(...generateContracts(p.contractSeed, p.contractBatch++, p.milestones.includes('first-moon')));
-  }
-  acceptContract(id: string) { return this.mode === 'career' && acceptContract(this.progression, id, this.ut); }
-  abandonContract(id: string) {
-    const c = this.progression.contracts.find(c => c.id === id);
-    return this.mode === 'career' && !!c && failContract(this.progression, c);
-  }
-  unlockTech(id: string) { return this.mode !== 'sandbox' && unlockTech(this.progression, id); }
-  scienceContext(v = this.active) { return v ? scienceContext(this, v) : null; }
-  scienceInstruments(v = this.active) { return v ? instruments(this, v) : []; }
-  runExperiment(uid: number, experiment: string) { return runExperiment(this, uid, experiment); }
-  transmitScience() { return transmitScience(this); }
-  emitProgress(event: ProgressEvent) { progressionEvent(this, event); }
-  onReachedOrbit(v: WorldVessel) { this.emitProgress({ type: 'orbit', body: v.body, vesselId: v.state.id }); }
-  onLanded(v: WorldVessel) {
-    for (const p of v.state.parts) { const visited = p.visitedBodies ??= []; if (!visited.includes(v.body)) visited.push(v.body); }
-    this.emitProgress({ type: 'landed', body: v.body, vesselId: v.state.id });
-  }
-  onEnteredSoi(v: WorldVessel) { this.emitProgress({ type: 'soi', body: v.body, vesselId: v.state.id }); }
-  onScienceCollected(v: WorldVessel, biome: string) { this.emitProgress({ type: 'science', body: v.body, biome, vesselId: v.state.id }); }
-  onRecovered(v: WorldVessel) { this.emitProgress({ type: 'recovered', body: v.body, vesselId: v.state.id, visited: v.state.parts.flatMap(p => p.visitedBodies ?? []) }); }
+  refreshContracts() { return progression.refreshContracts.call(this); }
+  acceptContract(id: string) { return progression.acceptContract.call(this, id); }
+  abandonContract(id: string) { return progression.abandonContract.call(this, id); }
+  unlockTech(id: string) { return progression.unlockTech.call(this, id); }
+  scienceContext(v = this.active) { return progression.scienceContext.call(this, v); }
+  scienceInstruments(v = this.active) { return progression.scienceInstruments.call(this, v); }
+  runExperiment(uid: number, experiment: string) { return progression.runExperiment.call(this, uid, experiment); }
+  transmitScience() { return progression.transmitScience.call(this); }
+  emitProgress(event: ProgressEvent) { return progression.emitProgress.call(this, event); }
+  onReachedOrbit(v: WorldVessel) { return progression.onReachedOrbit.call(this, v); }
+  onLanded(v: WorldVessel) { return progression.onLanded.call(this, v); }
+  onEnteredSoi(v: WorldVessel) { return progression.onEnteredSoi.call(this, v); }
+  onScienceCollected(v: WorldVessel, biome: string) { return progression.onScienceCollected.call(this, v, biome); }
+  onRecovered(v: WorldVessel) { return progression.onRecovered.call(this, v); }
 
   get active(): WorldVessel | null {
     return this.activeId ? (this.vessels.get(this.activeId) ?? null) : null;
@@ -160,302 +151,58 @@ export class World {
   }
 
   /** Lowest point of the vessel along its own -Y axis, measured from the COM (positive number). */
-  bottomOffset(v: VesselState): number {
-    let minY = Infinity;
-    for (const p of v.parts) {
-      const s = p.def.shape;
-      const ext = s.kind === 'cylinder' ? s.height / 2 : s.size.y / 2;
-      // Account for rotated parts conservatively using the rotated local Y extent.
-      const upInPart = qRotate(qConj(p.rotation), v3(0, 1, 0));
-      const radial = s.kind === 'cylinder' ? Math.max(s.radiusTop, s.radiusBottom) : Math.max(s.size.x, s.size.z) / 2;
-      const extY = Math.abs(upInPart.y) * ext + Math.sqrt(Math.max(0, 1 - upInPart.y * upInPart.y)) * radial;
-      minY = Math.min(minY, p.position.y - extY);
-      for (const m of p.def.modules) {
-        if (m.type === 'landingLeg') {
-          const foot = add(p.position, qRotate(p.rotation, m.footPosition));
-          minY = Math.min(minY, foot.y);
-        }
-      }
-    }
-    return v.com.y - minY;
-  }
+  bottomOffset(v: VesselState): number { return launch.bottomOffset.call(this, this.systems, v); }
 
   /**
    * Distance from the COM to the vessel's lowest point along body direction `down` (unit, body frame): hull
    * points of every part and the tyres of deployed wheels at full suspension extension.
    */
-  restOffset(v: VesselState, down: Vec3): number {
-    let best = 0;
-    for (const p of v.parts) {
-      for (const hp of hullPoints(p.def)) best = Math.max(best, dot(sub(add(p.position, qRotate(p.rotation, hp)), v.com), down));
-      if (p.wheel && p.wheel.deploy >= 1) {
-        const g = wheelContactPoint(v, p);
-        best = Math.max(best, dot(sub(g.center, v.com), down) + g.module.radius);
-      }
-    }
-    return best;
-  }
+  restOffset(v: VesselState, down: Vec3): number { return launch.restOffset.call(this, this.systems, v, down); }
 
   /**
    * Spawn a craft. 'pad' (default for VAB crafts): on the launch pad, held by launch clamps until the first
    * stage fires. 'runway' (default for SPH crafts): free on its wheels at the runway threshold, nose down the
    * runway (body +Y along the runway, +Z up), ready to taxi.
    */
-  launch(craft: CraftDef, site: 'pad' | 'runway' = craft.type === 'SPH' ? 'runway' : 'pad', keepExisting = false): WorldVessel {
-    const problem = launchProblem(craft, this.catalog, this.mode, this.progression);
-    if (problem) throw new Error(problem);
-    // Validate assembly before charging or clearing the launch site.
-    buildVessel(craft, this.catalog, { id: 'validation', resourceDefs: RESOURCES });
-    if (this.mode === 'career') this.progression.funds -= launchCost(craft, this.catalog);
-    if (site === 'runway') return this.launchRunway(craft, keepExisting);
-    const u = this.universe;
-    const bodyId = 'earth';
-    const body = u.body(bodyId);
-    const dir = latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon);
-    const terrainH = Math.max(0, u.terrain(bodyId).heightAt(dir.x, dir.y, dir.z));
-    // Body-fixed basis at the pad: +Y up, +X east, +Z = X × Y (south).
-    const up = v3(dir.x, dir.y, dir.z);
-    const east = normalize(cross(v3(0, 0, 1), up));
-    const zAxis = cross(east, up);
-    const orientFixed = quatFromBasis(east, up, zAxis);
+  launch(craft: CraftDef, site: 'pad' | 'runway' = craft.type === 'SPH' ? 'runway' : 'pad', keepExisting = false): WorldVessel { return launch.launch.call(this, this.systems, craft, site, keepExisting); }
 
-    // Clear the pad: anything still clamped, or resting within 150 m of the pad, is recovered.
-    const padHelio = add(u.ephem.getBodyState(bodyId, this.ut).position, qRotate(bodyQuat(u, bodyId, this.ut), scale(up, body.radius + terrainH)));
-    for (const [id, other] of keepExisting ? [] : this.vessels) {
-      const near = length(sub(other.state.position, padHelio)) < 150;
-      if (other.mode === 'prelaunch' || (near && other.state.situation !== 'flying')) { recoverScience(this, other); this.vessels.delete(id); }
-    }
-    const state = buildVessel(craft, this.catalog, { id: this.newVesselId(), resourceDefs: RESOURCES, legsDeployed: false });
-    state.name = craft.name;
-    if (this.mode === 'career') for (const p of state.parts) p.purchaseCost = p.def.cost;
-    this.assignCrew(state);
-    const bottom = this.bottomOffset(state);
-    const posFixed = scale(up, body.radius + terrainH + bottom + 0.05);
-    const wv: WorldVessel = { state, mode: 'prelaunch', body: bodyId, fixed: { pos: posFixed, orient: orientFixed } };
-    this.syncFixed(wv, this.ut);
-    this.vessels.set(state.id, wv);
-    this.activeId = state.id;
-    this.nodes = [];
-    this.warp = { mode: 'rails', index: 0 };
-    return wv;
-  }
+  private launchRunway(craft: CraftDef, keepExisting = false): WorldVessel { return launch.launchRunway.call(this, this.systems, craft, keepExisting); }
 
-  private launchRunway(craft: CraftDef, keepExisting = false): WorldVessel {
-    const u = this.universe;
-    const bodyId = 'earth';
-    const body = u.body(bodyId);
-    const along = RUNWAY.length / 2 - RUNWAY.spawnInset;
-    const lx = RUNWAY.x - RUNWAY.dirX * along, lz = RUNWAY.z - RUNWAY.dirZ * along;
-    const dir = siteLocalToUnit(lx, lz, body.radius);
-    const ahead = siteLocalToUnit(lx + RUNWAY.dirX * 100, lz + RUNWAY.dirZ * 100, body.radius);
-    const terrainH = Math.max(0, u.terrain(bodyId).heightAt(dir.x, dir.y, dir.z));
-    const up = v3(dir.x, dir.y, dir.z);
-    let fwd = sub(v3(ahead.x, ahead.y, ahead.z), up);
-    fwd = normalize(sub(fwd, scale(up, dot(fwd, up))));
-    // Body axes: +Y (nose) down the runway, +Z (top) up, +X = Y × Z (right wing).
-    const orientFixed = quatFromBasis(cross(fwd, up), fwd, up);
-
-    const spotHelio = add(u.ephem.getBodyState(bodyId, this.ut).position, qRotate(bodyQuat(u, bodyId, this.ut), scale(up, body.radius + terrainH)));
-    for (const [id, other] of keepExisting ? [] : this.vessels)
-      if (length(sub(other.state.position, spotHelio)) < 100 && other.state.situation !== 'flying') { recoverScience(this, other); this.vessels.delete(id); }
-    const state = buildVessel(craft, this.catalog, { id: this.newVesselId(), resourceDefs: RESOURCES, legsDeployed: false, gearDeployed: true });
-    state.name = craft.name;
-    if (this.mode === 'career') for (const p of state.parts) p.purchaseCost = p.def.cost;
-    this.assignCrew(state);
-    const rest = this.restOffset(state, v3(0, 0, -1));
-    const wv: WorldVessel = { state, mode: 'prelaunch', body: bodyId, fixed: { pos: scale(up, body.radius + terrainH + rest + 0.03), orient: orientFixed } };
-    this.syncFixed(wv, this.ut);
-    // Free on its wheels straight away (no clamps): physics from the first step.
-    wv.mode = 'physics';
-    wv.fixed = undefined;
-    state.situation = 'landed';
-    this.vessels.set(state.id, wv);
-    this.activeId = state.id;
-    this.nodes = [];
-    this.warp = { mode: 'rails', index: 0 };
-    return wv;
-  }
-
-  private newVesselId() {
-    const base = `v${Date.now().toString(36)}`;
-    let id = base;
-    for (let i = 1; this.vessels.has(id); i++) id = `${base}-${i}`;
-    return id;
-  }
+  private newVesselId() { return launch.newVesselId.call(this, this.systems); }
 
   /** Add a free-flying craft with the given inertial COM state and attitude (physics mode; not made active). */
-  spawnVessel(craft: CraftDef, state: { position: Vec3; velocity: Vec3; orientation: Quat }, name = craft.name): WorldVessel {
-    let id = `v${Date.now().toString(36)}`;
-    for (let k = 1; this.vessels.has(id); k++) id = `v${Date.now().toString(36)}-${k}`;
-    const vs = buildVessel(craft, this.catalog, { id, resourceDefs: RESOURCES, ...state });
-    vs.name = name;
-    this.assignCrew(vs);
-    const wv: WorldVessel = { state: vs, mode: 'physics', body: this.universe.dominantBody(vs.position, this.ut) };
-    this.vessels.set(id, wv);
-    return wv;
-  }
+  spawnVessel(craft: CraftDef, state: { position: Vec3; velocity: Vec3; orientation: Quat }, name = craft.name): WorldVessel { return launch.spawnVessel.call(this, this.systems, craft, state, name); }
 
   /** Assign only newly created pods. Existing empty seats must stay empty. */
-  assignCrew(v: VesselState) {
-    for (const p of v.parts) {
-      if (!seatCapacity(p) || p.crew) continue;
-      p.crew = [];
-      for (let i = 0; i < seatCapacity(p); i++) {
-        const astronaut = generateAstronaut(this.crewSeed, this.crew.length);
-        this.crew.push(astronaut);
-        p.crew.push(astronaut.id);
-      }
-    }
-    recomputeMassProperties(v, false);
-  }
+  assignCrew(v: VesselState) { return crew.assignCrew.call(this, this.systems, v); }
 
-  crewFor(v = this.active?.state): Astronaut[] {
-    const ids = v ? crewIds(v) : [];
-    return ids.flatMap(id => this.crew.find(c => c.id === id) ?? []);
-  }
+  crewFor(v = this.active?.state): Astronaut[] { return crew.crewFor.call(this, this.systems, v); }
 
-  canControl(v = this.active?.state): boolean {
-    if (!v || !hasControl(v)) return false;
-    const crewed = crewIds(v).length > 0;
-    // Avoid solving a network for local control or a disabled difficulty setting.
-    if (remoteControlAllowed(this.commsSettings, crewed, false)) return true;
-    return this.connection(v).connected;
-  }
+  canControl(v = this.active?.state): boolean { return crew.canControl.call(this, this.systems, v); }
 
   /** Hatch is on the pod's +Z face. Public for HUD/rendezvous tools. */
-  hatchPosition(v: VesselState, pod: PartState): Vec3 {
-    const shape = pod.def.shape;
-    const radius = shape.kind === 'box' ? shape.size.z / 2 : Math.max(shape.radiusTop, shape.radiusBottom);
-    return add(v.position, qRotate(v.orientation, sub(add(pod.position, qRotate(pod.rotation, v3(0, 0, radius + 0.6))), v.com)));
-  }
+  hatchPosition(v: VesselState, pod: PartState): Vec3 { return crew.hatchPosition.call(this, this.systems, v, pod); }
 
-  goEva(astronautId?: string): WorldVessel | null {
-    const host = this.active;
-    if (!host || host.state.eva || host.state.destroyed) return null;
-    const pod = host.state.parts.find(p => p.crew?.some(id => !astronautId || id === astronautId));
-    if (!pod) { this.message('No astronaut aboard', 'warn'); return null; }
-    if (host.mode === 'rails' || host.mode === 'landedRails') this.unpack(host);
-    this.warp = { mode: 'rails', index: 0 };
-    const v = host.state;
-    const id = astronautId ?? pod.crew![0];
-    const person = this.crew.find(c => c.id === id)!;
-    const pos = this.hatchPosition(v, pod);
-    const originalPosition = { ...v.position }, velocity = { ...v.velocity }, mass = v.mass;
-    const eva = buildVessel({ name: person.name, version: 1, type: 'VAB', parts: [{ uid: 1, partId: EVA_PART.id, position: v3(), rotation: qIdentity() }] }, this.catalog, { id: `eva-${id}`, position: pos, velocity, orientation: v.orientation, resourceDefs: RESOURCES });
-    eva.eva = { astronautId: id, walkPhase: 0, walking: false, jetting: false };
-    pod.crew = pod.crew!.filter(c => c !== id);
-    recomputeMassProperties(v, false);
-    // Move the remaining COM so the combined COM and linear momentum are unchanged by hatch transfer.
-    v.position = sub(originalPosition, scale(sub(pos, originalPosition), eva.mass / v.mass));
-    v.velocity = scale(velocity, (mass - eva.mass) / v.mass);
-    if (host.mode === 'prelaunch') this.captureFixed(host, this.ut);
-    const wv: WorldVessel = { state: eva, body: host.body, mode: 'physics' };
-    this.vessels.set(eva.id, wv);
-    this.switchTo(eva.id);
-    this.stageRequested = false;
-    this.message(`${person.name} is on EVA`);
-    return wv;
-  }
+  goEva(astronautId?: string): WorldVessel | null { return crew.goEva.call(this, this.systems, astronautId); }
 
-  boardingTarget(): { vessel: WorldVessel; pod: PartState } | null {
-    const eva = this.active;
-    if (!eva?.state.eva) return null;
-    for (const vessel of this.vessels.values()) {
-      if (vessel === eva || vessel.body !== eva.body || vessel.state.destroyed) continue;
-      for (const pod of vessel.state.parts) {
-        if (seatCapacity(pod) <= (pod.crew?.length ?? 0)) continue;
-        if (length(sub(eva.state.position, this.hatchPosition(vessel.state, pod))) <= 3 && length(sub(eva.state.velocity, vessel.state.velocity)) < 3) return { vessel, pod };
-      }
-    }
-    return null;
-  }
+  boardingTarget(): { vessel: WorldVessel; pod: PartState } | null { return crew.boardingTarget.call(this, this.systems); }
 
-  boardEva(): boolean {
-    const eva = this.active;
-    const target = this.boardingTarget();
-    if (!eva?.state.eva || !target) { this.message('Move within 3 m of a free pod hatch, below 3 m/s', 'warn'); return false; }
-    const { vessel, pod } = target;
-    if (vessel.mode === 'rails' || vessel.mode === 'landedRails') this.unpack(vessel);
-    const v = vessel.state, oldMass = v.mass;
-    const velocity = scale(add(scale(v.velocity, oldMass), scale(eva.state.velocity, eva.state.mass)), 1 / (oldMass + eva.state.mass));
-    (pod.crew ??= []).push(eva.state.eva.astronautId);
-    recomputeMassProperties(v);
-    v.velocity = velocity;
-    // Suit is serviced/refilled aboard; its full mass is again included in the pod's dry mass.
-    if (vessel.mode === 'prelaunch') this.captureFixed(vessel, this.ut);
-    (pod.scienceData ??= []).push(...eva.state.parts.flatMap(p => p.scienceData ?? []));
-    pod.visitedBodies = [...new Set([...(pod.visitedBodies ?? []), ...eva.state.parts.flatMap(p => p.visitedBodies ?? [])])];
-    this.vessels.delete(eva.state.id);
-    if (this.targetId === eva.state.id) this.setTarget(null);
-    this.switchTo(v.id);
-    this.warp = { mode: 'rails', index: 0 };
-    this.stageRequested = false;
-    this.message(`Boarded ${v.name} · suit refilled`);
-    return true;
-  }
+  boardEva(): boolean { return crew.boardEva.call(this, this.systems); }
 
-  plantFlag(): PlantedFlag | null {
-    const eva = this.active;
-    if (!eva?.state.eva || eva.state.situation !== 'landed') { this.message('Land your astronaut to plant a flag', 'warn'); return null; }
-    const g = this.universe.createEnvironment(() => eva.body).ground(add(eva.state.position, qRotate(eva.state.orientation, v3(0.75, 0, 0))), this.ut);
-    if (!g || g.isWater) return null;
-    const qi = qConj(bodyQuat(this.universe, eva.body, this.ut));
-    const firstMoon = eva.body === 'moon' && !this.flags.some(f => f.body === 'moon');
-    const flag: PlantedFlag = { id: `flag-${this.flags.length}`, body: eva.body, position: qRotate(qi, sub(g.surfacePoint, this.universe.ephem.getBodyState(eva.body, this.ut).position)), orientation: qMul(qi, qMul(qFromTo(qRotate(eva.state.orientation, v3(0, 1, 0)), g.normal), eva.state.orientation)), astronautId: eva.state.eva.astronautId, plantedAt: this.ut };
-    this.flags.push(flag);
-    this.message(firstMoon ? 'First footsteps, a shared horizon. Humanity has planted its first flag on the Moon.' : `Flag planted on ${this.universe.body(eva.body).name}`, 'info', firstMoon ? 14 : 5);
-    return flag;
-  }
+  plantFlag(): PlantedFlag | null { return crew.plantFlag.call(this, this.systems); }
 
   /** Update a body-fixed vessel's inertial state from its fixed coordinates. */
-  private syncFixed(wv: WorldVessel, t: number) {
-    const u = this.universe;
-    const bs = u.ephem.getBodyState(wv.body, t);
-    const q = bodyQuat(u, wv.body, t);
-    const rel = qRotate(q, wv.fixed!.pos);
-    wv.state.position = add(bs.position, rel);
-    wv.state.velocity = add(bs.velocity, u.ephem.surfaceVelocity(wv.body, rel, t));
-    wv.state.orientation = qNormalize(qMul(q, wv.fixed!.orient));
-    // Co-rotate with the body: inertial spin axis expressed in vessel body frame.
-    const b = u.body(wv.body);
-    const spin = qRotate(q, v3(0, 0, b.rotationRate));
-    wv.state.angularVelocity = qRotate(qConj(wv.state.orientation), spin);
-  }
+  private syncFixed(wv: WorldVessel, t: number) { return rails.syncFixed.call(this, this.systems, wv, t); }
 
   /** Capture a landed vessel's body-fixed coordinates (for rails warp while landed). */
-  private captureFixed(wv: WorldVessel, t: number) {
-    const u = this.universe;
-    const bs = u.ephem.getBodyState(wv.body, t);
-    const q = bodyQuat(u, wv.body, t);
-    const qi = qConj(q);
-    wv.fixed = { pos: qRotate(qi, sub(wv.state.position, bs.position)), orient: qNormalize(qMul(qi, wv.state.orientation)) };
-  }
+  private captureFixed(wv: WorldVessel, t: number) { return rails.captureFixed.call(this, this.systems, wv, t); }
 
-  relativeState(wv: WorldVessel, t = this.ut): StateVector {
-    const bs = this.universe.ephem.getBodyState(wv.body, t);
-    return { position: sub(wv.state.position, bs.position), velocity: sub(wv.state.velocity, bs.velocity) };
-  }
+  relativeState(wv: WorldVessel, t = this.ut): StateVector { return readouts.relativeState.call(this, wv, t); }
 
-  orbitOf(wv: WorldVessel): Orbit {
-    if (wv.mode === 'rails' && wv.orbit) return wv.orbit;
-    const rs = this.relativeState(wv);
-    return stateToElements(this.universe.body(wv.body).gm, wv.body, rs.position, rs.velocity, this.ut);
-  }
+  orbitOf(wv: WorldVessel): Orbit { return readouts.orbitOf.call(this, wv); }
 
   /** Put a vessel on rails at the current time. */
-  private pack(wv: WorldVessel) {
-    if (wv.mode === 'rails' || wv.mode === 'landedRails' || wv.mode === 'prelaunch') return;
-    if (wv.state.situation !== 'flying') {
-      this.captureFixed(wv, this.ut);
-      wv.mode = 'landedRails';
-      return;
-    }
-    const rs = this.relativeState(wv);
-    wv.orbit = stateToElements(this.universe.body(wv.body).gm, wv.body, rs.position, rs.velocity, this.ut);
-    wv.mode = 'rails';
-    wv.state.angularVelocity = v3();
-    this.predictRailsEvent(wv);
-  }
+  private pack(wv: WorldVessel) { return rails.pack.call(this, this.systems, wv); }
 
   /** Make another vessel active (switching the floating origin / controls to it). */
   switchTo(id: string): boolean {
@@ -506,46 +253,10 @@ export class World {
     this.trajectoryCache = null;
   }
 
-  private predictRailsEvent(wv: WorldVessel) {
-    const o = wv.orbit!;
-    const T = period(o);
-    const horizon = Math.min(isFinite(T) ? T * 3 : 3e8, 3e9);
-    try {
-      const patches = predictTrajectory({
-        ephem: this.universe.ephem,
-        bodies: this.universe.bodies,
-        initialBody: wv.body,
-        state: propagate(o, this.ut),
-        t0: this.ut,
-        horizon,
-        maxPatches: 1,
-        stopAtAtmosphere: true,
-        // Stop warping before the highest terrain, not the datum sphere (mountains/crater rims rise km above it).
-        impactAltitude: (b) => (b.solidSurface ? Math.max(0, this.universe.terrain(b.id).maxHeight) : 0),
-      });
-      const p = patches[0];
-      // A 'horizon' event is kept too: when it is reached the prediction is extended (see advanceRails), so
-      // encounters further out than one horizon are not missed during long warps.
-      wv.railsEvent = p ? { time: p.endTime, reason: p.endReason, nextBody: p.nextBody } : undefined;
-    } catch {
-      wv.railsEvent = undefined;
-    }
-  }
+  private predictRailsEvent(wv: WorldVessel) { return rails.predictRailsEvent.call(this, this.systems, wv); }
 
   /** Take a vessel off rails (back to physics). */
-  private unpack(wv: WorldVessel) {
-    if (wv.mode === 'rails' && wv.orbit) {
-      const s = propagate(wv.orbit, this.ut);
-      const bs = this.universe.ephem.getBodyState(wv.body, this.ut);
-      wv.state.position = add(bs.position, s.position);
-      wv.state.velocity = add(bs.velocity, s.velocity);
-    } else if (wv.mode === 'landedRails') {
-      this.syncFixed(wv, this.ut);
-    } else return;
-    wv.mode = 'physics';
-    wv.orbit = undefined;
-    wv.railsEvent = undefined;
-  }
+  private unpack(wv: WorldVessel) { return rails.unpack.call(this, this.systems, wv); }
 
   // ---------- Targets ----------
 
@@ -623,7 +334,7 @@ export class World {
     if (!patches.length) return null;
     const key = `${this.targetId}|${patches.length}|${patches[0].startTime}|${this.nodes.map((n) => `${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}`).join(',')}`;
     if (this.approachCache && this.approachCache.key === key) return this.approachCache.value;
-    let value: TrajectoryApproach | null = null;
+    let value: TrajectoryApproach | null;
     try {
       value = trajectoryClosestApproach(patches.slice(0, 3), (b, t) => this.targetRelativeState(b, t)!, this.ut);
     } catch {
@@ -636,56 +347,12 @@ export class World {
   // ---------- Docking ----------
 
   /** Docking: capture field + merges between physics vessels (run after every physics step). */
-  private stepDockingAll() {
-    const phys: VesselState[] = [];
-    for (const wv of this.vessels.values()) if (wv.mode === 'physics' && !wv.state.destroyed) phys.push(wv.state);
-    if (phys.length < 2) return;
-    const events = stepDocking(phys, PHYSICS_DT, (a, b) => (a.id === this.activeId ? a : b.id === this.activeId ? b : a.mass >= b.mass ? a : b));
-    for (const e of events) {
-      this.vessels.delete(e.removed.id);
-      if (this.activeId === e.removed.id) this.activeId = e.keep.id;
-      if (this.targetId === e.removed.id || this.targetId === e.keep.id) this.setTarget(null);
-      this.trajectoryCache = null;
-      const keepWv = this.vessels.get(e.keep.id);
-      if (keepWv) keepWv.body = this.universe.dominantBody(e.keep.position, this.ut);
-      if (e.keep.id === this.activeId) this.message(`Docked with ${e.removedName}`);
-      this.handleEvent({ type: 'docked', vesselId: e.keep.id, otherId: e.removed.id });
-    }
-  }
+  private stepDockingAll() { return docking.stepDockingAll.call(this, this.systems); }
 
   /** Undock the active vessel at `portUid` (default: the first docked joint). Returns the new vessel id. */
-  undockActive(portUid?: number): string | null {
-    const wv = this.active;
-    if (!wv || !this.canControl(wv.state)) return null;
-    if (wv.mode !== 'physics') this.unpack(wv);
-    if (wv.mode !== 'physics') return null;
-    const uid = portUid ?? dockedPorts(wv.state)[0]?.uid;
-    if (uid === undefined) return null;
-    const nv = undock(wv.state, uid);
-    if (!nv) return null;
-    if (this.vessels.has(nv.id)) nv.id = `${wv.state.id}.${++wv.state.splitCount}`;
-    this.vessels.set(nv.id, { state: nv, mode: 'physics', body: wv.body });
-    this.trajectoryCache = null;
-    this.message(`Undocked ${nv.name}`);
-    this.handleEvent({ type: 'undocked', vesselId: wv.state.id, newVesselId: nv.id });
-    return nv.id;
-  }
+  undockActive(portUid?: number): string | null { return docking.undockActive.call(this, this.systems, portUid); }
 
-  warpContext(): WarpContext {
-    const wv = this.active;
-    if (!wv) return { thrusting: false, inAtmosphere: false, landed: true, altitude: 1e9, bodyRadius: 1, atmosphereHeight: 0 };
-    const b = this.universe.body(wv.body);
-    const alt = length(this.relativeState(wv).position) - b.radius;
-    const thrusting = wv.state.telemetry.thrust > 0;
-    return {
-      thrusting,
-      inAtmosphere: !!b.atmosphere && alt < b.atmosphere.height,
-      landed: wv.state.situation !== 'flying' || wv.mode === 'prelaunch',
-      altitude: alt,
-      bodyRadius: b.radius,
-      atmosphereHeight: b.atmosphere?.height ?? 0,
-    };
-  }
+  warpContext(): WarpContext { return readouts.warpContext.call(this); }
 
   changeWarp(delta: number) {
     const next = stepWarp(this.warp, delta, this.warpContext());
@@ -760,11 +427,7 @@ export class World {
   /** Advance an unattended world, packing vessels first and processing the normal rails events.
    * Tracking uses this when there is no active vessel (including completely empty worlds).
    */
-  advanceRailsTo(ut: number) {
-    if (!Number.isFinite(ut) || ut < this.ut) return;
-    for (const wv of this.vessels.values()) this.pack(wv);
-    this.advanceRails(ut);
-  }
+  advanceRailsTo(ut: number) { return rails.advanceRailsTo.call(this, this.systems, ut); }
 
   /**
    * Advance all on-rails vessels to `target`, processing rails events in time order. The active vessel goes
@@ -772,61 +435,7 @@ export class World {
    * body — at high warp one frame could otherwise also carry it through periapsis or into the surface) and
    * just before atmosphere entry / impact (warp is cancelled). Everything else then advances to that time.
    */
-  private advanceRails(target: number) {
-    const act = this.active;
-    const order = [...this.vessels.values()].sort((a, b) => (a === act ? -1 : b === act ? 1 : 0));
-    for (const wv of order) {
-      if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') continue;
-      const isActive = wv === act;
-      let guard = 0;
-      while (wv.mode === 'rails' && wv.railsEvent && wv.railsEvent.time <= target && guard++ < 32) {
-        const ev = wv.railsEvent;
-        const s = propagate(wv.orbit!, ev.time);
-        if (ev.reason === 'soiEnter' || ev.reason === 'soiExit') {
-          const oldB = this.universe.ephem.getBodyState(wv.body, ev.time);
-          const newB = this.universe.ephem.getBodyState(ev.nextBody!, ev.time);
-          const pos = sub(add(oldB.position, s.position), newB.position);
-          const vel = sub(add(oldB.velocity, s.velocity), newB.velocity);
-          wv.body = ev.nextBody!;
-          this.onEnteredSoi(wv);
-          wv.orbit = stateToElements(this.universe.body(wv.body).gm, wv.body, pos, vel, ev.time);
-          if (isActive) {
-            this.message(`Entered ${this.universe.body(wv.body).name}'s sphere of influence`);
-            target = ev.time;
-          }
-          const saveUt = this.ut;
-          this.ut = ev.time;
-          this.predictRailsEvent(wv);
-          this.ut = saveUt;
-        } else if (ev.reason === 'horizon' || ev.reason === 'maneuver') {
-          // End of the predicted window without an event: predict the next window.
-          const saveUt = this.ut;
-          this.ut = ev.time;
-          this.predictRailsEvent(wv);
-          this.ut = saveUt;
-          if (wv.railsEvent && wv.railsEvent.time <= ev.time) wv.railsEvent = undefined;
-        } else if (isActive) {
-          // Never warp into the atmosphere or the ground: stop just short of it and drop to physics.
-          target = Math.max(this.ut, Math.min(target, ev.time - 1));
-          this.warp = { mode: 'rails', index: 0 };
-          this.message('Time warp stopped: approaching ' + (ev.reason === 'atmosphere' ? 'atmosphere' : 'surface'), 'warn');
-          break;
-        } else {
-          // Non-active vessels entering atmosphere or impacting on rails are lost.
-          this.vessels.delete(wv.state.id);
-          wv.railsEvent = undefined;
-          break;
-        }
-      }
-    }
-    for (const wv of this.vessels.values()) {
-      if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, target - this.ut);
-    }
-    this.ut = target;
-    for (const wv of this.vessels.values()) this.syncPacked(wv, this.ut);
-    advanceTransmissions(this);
-    evaluateProgression(this);
-  }
+  private advanceRails(target: number) { return rails.advanceRails.call(this, this.systems, target); }
 
   /** Replica ephemeris update; does not integrate physics or resolve events. */
   syncReplicaPacked(t = this.ut) {
@@ -834,16 +443,7 @@ export class World {
   }
 
   /** Update the inertial state of a packed (rails / body-fixed) vessel to time t. */
-  private syncPacked(wv: WorldVessel, t: number) {
-    if (wv.mode === 'rails' && wv.orbit) {
-      const s = propagate(wv.orbit, t);
-      const bs = this.universe.ephem.getBodyState(wv.body, t);
-      wv.state.position = add(bs.position, s.position);
-      wv.state.velocity = add(bs.velocity, s.velocity);
-    } else if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') {
-      this.syncFixed(wv, t);
-    }
-  }
+  private syncPacked(wv: WorldVessel, t: number) { return rails.syncPacked.call(this, this.systems, wv, t); }
 
   /** One authoritative network tick. All controllers share this single UT increment.
    * Physics warp is capped at 4; rails safety considers the entire fleet. */
@@ -1050,7 +650,7 @@ export class World {
     const lastNode = upcoming.length ? upcoming[upcoming.length - 1].time - this.ut : 0;
     const Tafter = period(after);
     let horizon = Math.min(3e9, lastNode + (isFinite(Tafter) ? Tafter * 1.02 : 3e7));
-    let patches: TrajectoryPatch[] = [];
+    let patches: TrajectoryPatch[];
     try {
       const predict = () => predictTrajectory({
         ephem: this.universe.ephem,
@@ -1079,49 +679,12 @@ export class World {
   }
 
   /** Orbit summary for HUD. */
-  orbitSummary(wv: WorldVessel) {
-    const b = this.universe.body(wv.body);
-    const o = this.orbitOf(wv);
-    return {
-      orbit: o,
-      ap: apoapsisRadius(o) - b.radius,
-      pe: periapsisRadius(o) - b.radius,
-      timeToAp: timeToApoapsis(o, this.ut),
-      timeToPe: timeToPeriapsis(o, this.ut),
-    };
-  }
+  orbitSummary(wv: WorldVessel) { return readouts.orbitSummary.call(this, wv); }
 
   /** Dot helper used by HUD (vertical speed). */
-  verticalSpeed(wv: WorldVessel): number {
-    const rs = this.relativeState(wv);
-    return dot(rs.velocity, normalize(rs.position));
-  }
+  verticalSpeed(wv: WorldVessel): number { return readouts.verticalSpeed.call(this, wv); }
 
-  surfaceVelocity(wv: WorldVessel): Vec3 {
-    const rs = this.relativeState(wv);
-    return sub(rs.velocity, this.universe.ephem.surfaceVelocity(wv.body, rs.position, this.ut));
-  }
+  surfaceVelocity(wv: WorldVessel): Vec3 { return readouts.surfaceVelocity.call(this, wv); }
 }
 
-/** Quaternion from orthonormal basis columns (x, y, z are images of the unit axes). */
-export function quatFromBasis(x: Vec3, y: Vec3, z: Vec3): Quat {
-  const m00 = x.x, m01 = y.x, m02 = z.x;
-  const m10 = x.y, m11 = y.y, m12 = z.y;
-  const m20 = x.z, m21 = y.z, m22 = z.z;
-  const tr = m00 + m11 + m22;
-  let q: Quat;
-  if (tr > 0) {
-    const s = Math.sqrt(tr + 1) * 2;
-    q = { w: 0.25 * s, x: (m21 - m12) / s, y: (m02 - m20) / s, z: (m10 - m01) / s };
-  } else if (m00 > m11 && m00 > m22) {
-    const s = Math.sqrt(1 + m00 - m11 - m22) * 2;
-    q = { w: (m21 - m12) / s, x: 0.25 * s, y: (m01 + m10) / s, z: (m02 + m20) / s };
-  } else if (m11 > m22) {
-    const s = Math.sqrt(1 + m11 - m00 - m22) * 2;
-    q = { w: (m02 - m20) / s, x: (m01 + m10) / s, y: 0.25 * s, z: (m12 + m21) / s };
-  } else {
-    const s = Math.sqrt(1 + m22 - m00 - m11) * 2;
-    q = { w: (m10 - m01) / s, x: (m02 + m20) / s, y: (m12 + m21) / s, z: 0.25 * s };
-  }
-  return qNormalize(q);
-}
+export { quatFromBasis } from '../util/basis';
