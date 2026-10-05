@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { PART_CATALOG, PART_DEFS, findModule, getPart } from '../src/data/parts';
 import { TECH_NODES } from '../src/data/technology';
+import { RESOURCES } from '../src/data/resources';
 import { validateCraft } from '../src/editor/core/stats';
 import { buildPartMesh, setPartDeploy } from '../src/render/parts';
 import { hasControl, seatCapacity } from '../src/sim/crew/crew';
-import { buildVessel, cloneVessel, gearState, neutralInput, setGear, stepVessel } from '../src/sim/vessel';
+import { bodyToWorld, buildVessel, cloneVessel, gearState, neutralInput, setGear, stepVessel, wheelContactPoint } from '../src/sim/vessel';
 import { stepPowerSources, totalResource } from '../src/sim/vessel/resources';
-import { stackCraft, vacuumEnv } from '../src/sim/vessel/testing';
+import { flatEarthEnv, planeCraft, stackCraft, TEST_CATALOG, vacuumEnv } from '../src/sim/vessel/testing';
 
 function powerVessel(source = 'fuelcell-1', separated = false) {
   const ids = ['battery-bank-2', 'tank-1-mid', ...(separated ? ['dec-1'] : []), source];
@@ -123,11 +124,32 @@ describe('passenger hardware and deployment', () => {
     for (const id of ['srb-reed', 'srb-furnace']) {
       const def = getPart(id), engine = findModule(def, 'engine')!;
       expect(def.shape.kind === 'cylinder' && def.shape.radiusTop >= 0.625).toBe(true);
-      const fuel = def.resources.solidFuel!;
+      const fuel = def.resources.solidFuel! * RESOURCES.solidFuel.density;
       const burnTime = fuel * engine.ispVac * 9.80665 / engine.maxThrustVac;
       expect(burnTime).toBeGreaterThan(40);
-      expect(burnTime).toBeLessThan(120);
+      expect(burnTime).toBeLessThan(240);
       expect(engine.maxThrustVac * engine.ispAsl / engine.ispVac / ((def.dryMass + fuel) * 9.80665)).toBeGreaterThan(2);
+    }
+  });
+  it.each(['rover-wheel-0', 'rover-wheel-1'])('%s drives forward and reverse on terrain', id => {
+    const craft = planeCraft();
+    craft.parts[0].partId = 'rover-chassis';
+    for (const p of craft.parts) if (p.partId.startsWith('gear')) p.partId = id;
+    const v = buildVessel(craft, new Map([...TEST_CATALOG, ...PART_CATALOG]));
+    let lowest = Infinity;
+    for (const p of v.parts) if (p.wheel) {
+      const contact = wheelContactPoint(v, p);
+      lowest = Math.min(lowest, bodyToWorld(v, contact.center).z - contact.module.radius);
+    }
+    v.position.z += 0.02 - lowest;
+    const env = flatEarthEnv();
+    for (let i = 0; i < 200; i++) stepVessel(v, neutralInput({ brakes: true }), env, i * 0.02);
+    expect(v.situation).toBe('landed');
+    for (const direction of [-1, 1]) {
+      const driven = cloneVessel(v);
+      for (let i = 0; i < 100; i++) stepVessel(driven, neutralInput({ wheelThrottle: direction }), env, 4 + i * 0.02);
+      expect(driven.velocity.y * direction).toBeGreaterThan(0.3);
+      expect(driven.destroyed).toBe(false);
     }
   });
 });

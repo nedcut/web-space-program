@@ -429,11 +429,13 @@ export class FlightController {
       if (this.sas === 'target' || this.sas === 'antiTarget') this.sas = 'stabilityAssist';
     }
     const targetState = this.world.targetState();
+    const drivingRover = wv?.state.situation === 'landed' && wv.state.parts.some(p => p.def.modules.some(m => m.type === 'wheel' && !!m.motorTorque));
     const ctrl = neutralInput({
       evaHeading: wv?.state.eva ? { x: this.cam.camera.quaternion.x, y: this.cam.camera.quaternion.y, z: this.cam.camera.quaternion.z, w: this.cam.camera.quaternion.w } : undefined,
       evaJump: !!wv?.state.eva && this.stagePending,
       evaRun: this.input.running,
-      pitch: s.pitch,
+      pitch: drivingRover ? 0 : s.pitch,
+      wheelThrottle: drivingRover ? -s.pitch : 0,
       yaw: s.yaw,
       roll: s.roll,
       translateX: s.tx,
