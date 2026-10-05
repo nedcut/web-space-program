@@ -1,0 +1,21 @@
+{
+  "checks": [
+    {
+      "name": "Multiplayer room creation, probe ownership and server comms authority",
+      "status": "pass",
+      "detail": {
+        "comms": false,
+        "canControl": true,
+        "owner": "vmuukdx73",
+        "active": "vmuukdx73",
+        "crew": 0
+      }
+    },
+    {
+      "name": "Multiplayer console has no runtime or framebuffer errors",
+      "status": "pass"
+    }
+  ],
+  "errors": [],
+  "warnings": []
+}

@@ -1,0 +1,145 @@
+{
+  "checks": [
+    {
+      "name": "Saturn main menu",
+      "status": "pass"
+    },
+    {
+      "name": "Settings: all five tabs and persisted key capture",
+      "status": "pass"
+    },
+    {
+      "name": "New Science program → hub → editor",
+      "status": "pass",
+      "detail": {
+        "mode": "science",
+        "parts": 9,
+        "palette": 16
+      }
+    },
+    {
+      "name": "New Career program → hub → editor",
+      "status": "pass",
+      "detail": {
+        "mode": "career",
+        "parts": 9,
+        "palette": 16
+      }
+    },
+    {
+      "name": "New Sandbox program → hub → editor",
+      "status": "pass",
+      "detail": {
+        "mode": "sandbox",
+        "parts": 9,
+        "palette": 162
+      }
+    },
+    {
+      "name": "Stock editor loads: 5 m lifter, mining lander, rover, nuclear ship, station, Titan probe",
+      "status": "pass",
+      "detail": [
+        {
+          "id": "atlaswake",
+          "name": "Atlaswake Heavy Lifter",
+          "parts": 14
+        },
+        {
+          "id": "bedrock",
+          "name": "Bedrock Prospector",
+          "parts": 17
+        },
+        {
+          "id": "moonmoth",
+          "name": "Moonmoth Rover",
+          "parts": 12
+        },
+        {
+          "id": "longreach",
+          "name": "Longreach Transfer Ship",
+          "parts": 19
+        },
+        {
+          "id": "hearthlight",
+          "name": "Hearthlight Station",
+          "parts": 33
+        },
+        {
+          "id": "hazewalker",
+          "name": "Hazewalker Titan Probe",
+          "parts": 19
+        },
+        {
+          "id": "meridian",
+          "name": "Meridian Orbiter",
+          "parts": 16
+        }
+      ]
+    },
+    {
+      "name": "Editor launch → flight + all HUD panels fit 1366×768",
+      "status": "pass",
+      "detail": {
+        "x": 10,
+        "y": 64,
+        "width": 260,
+        "bottom": 758,
+        "client": 694,
+        "scroll": 1277,
+        "viewport": 768
+      }
+    },
+    {
+      "name": "Rebound flight data shortcut",
+      "status": "pass"
+    },
+    {
+      "name": "Assist launch to stable orbit (accelerated controller program)",
+      "status": "pass",
+      "detail": {
+        "steps": 13928,
+        "done": true,
+        "body": "earth",
+        "ap": 85051.92816986598,
+        "pe": 81345.12520510494,
+        "parts": 9
+      }
+    },
+    {
+      "name": "Map, maneuver node and flight data",
+      "status": "pass",
+      "detail": {
+        "map": true,
+        "nodes": [
+          {
+            "id": 2,
+            "time": 964051667.8341404,
+            "prograde": 50,
+            "normal": 0,
+            "radial": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "Map node time and delta-v handle dragging with mouse flight enabled",
+      "status": "pass",
+      "detail": {
+        "radial": 96.13499508632108,
+        "pitch": 0,
+        "yaw": 0,
+        "timeDelta": -69.12367272377014
+      }
+    },
+    {
+      "name": "Porkchop transfer-window modal",
+      "status": "pass"
+    },
+    {
+      "name": "Console has no runtime or framebuffer errors",
+      "status": "pass"
+    }
+  ],
+  "errors": [],
+  "warnings": []
+}

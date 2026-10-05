@@ -1,0 +1,77 @@
+{
+  "checks": [
+    {
+      "name": "Training 1: build, stage, launch; practice save isolation",
+      "status": "pass"
+    },
+    {
+      "name": "Training 2: rebound throttle/stage/SAS after clicking Next",
+      "status": "pass",
+      "detail": {
+        "sas": true,
+        "mode": "physics",
+        "throttle": 0
+      }
+    },
+    {
+      "name": "Lunar EVA: leave hatch, flag and board",
+      "status": "pass",
+      "detail": {
+        "flags": 1,
+        "boarded": true
+      }
+    },
+    {
+      "name": "Docking scenario: capture and undock",
+      "status": "pass",
+      "detail": {
+        "merged": true,
+        "undocked": "vmuuk6alg",
+        "vessels": 2
+      }
+    },
+    {
+      "name": "Lunar rover: drive and brake",
+      "status": "pass",
+      "detail": {
+        "speed": 1.7414827395595827,
+        "stopped": 0.220308011345331,
+        "destroyed": false
+      }
+    },
+    {
+      "name": "Lunar ISRU: drill deploys and produces feedstock",
+      "status": "pass",
+      "detail": {
+        "before": 0,
+        "after": 1.1744157541761884,
+        "destroyed": false,
+        "drill": 1
+      }
+    },
+    {
+      "name": "Titan atmospheric approach and safe chute landing",
+      "status": "pass",
+      "detail": {
+        "steps": 13870,
+        "semi": true,
+        "full": true,
+        "situation": "landed",
+        "speed": 0.454817487600834,
+        "parts": 19,
+        "originalParts": 19,
+        "destroyed": false
+      }
+    },
+    {
+      "name": "Tracking Station comms overlay and Spacepedia navigation",
+      "status": "pass"
+    },
+    {
+      "name": "Console has no runtime or framebuffer errors",
+      "status": "pass"
+    }
+  ],
+  "errors": [],
+  "warnings": []
+}
