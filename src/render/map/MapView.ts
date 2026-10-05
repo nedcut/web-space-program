@@ -170,7 +170,7 @@ export class MapView {
     const markers = [...(u.markers ?? [])];
     for (const p of u.vessel?.patches ?? []) if (p.endReason === 'soiEnter' || p.endReason === 'soiExit') {
       markers.push({ body: p.orbit.body, position: elementsToState(p.orbit, p.endTime).position,
-        label: `${p.endReason === 'soiEnter' ? 'Enter' : 'Exit'} ${this.bodies.get(p.nextBody ?? p.orbit.body)?.body.name ?? p.nextBody} SOI · T−${formatDuration(p.endTime - u.t)}`, color: '#ffb35c' });
+        label: `${p.endReason === 'soiEnter' ? 'Enter' : 'Exit'} ${this.bodies.get(p.endReason === 'soiExit' ? p.orbit.body : p.nextBody ?? p.orbit.body)?.body.name ?? p.nextBody} SOI · T−${formatDuration(p.endTime - u.t)}`, color: '#ffb35c' });
     }
     for (const n of u.vessel?.nodes ?? []) {
       const p = u.vessel!.patches.find(p => n.time >= p.startTime && n.time <= p.endTime + 1e-6);
@@ -427,7 +427,7 @@ export class MapView {
 
   /** Rebuild vessel trajectory lines when the patch set changes. */
   private updateVesselLines(patches: TrajectoryPatch[], bodies: Map<string, BodyVisual>) {
-    const key = patches.map((p) => `${p.orbit.body}:${p.orbit.a.toPrecision(8)}:${p.orbit.e.toPrecision(6)}:${p.startTime.toFixed(0)}:${p.endTime.toFixed(0)}`).join('|');
+    const key = patches.map((p) => `${p.orbit.body}:${p.orbit.a.toPrecision(8)}:${p.orbit.e.toPrecision(6)}:${p.orbit.i.toPrecision(8)}:${p.orbit.lan.toPrecision(8)}:${p.orbit.argPe.toPrecision(8)}:${p.startTime.toFixed(0)}:${p.endTime.toFixed(0)}`).join('|');
     if (key === this.lastVesselKey) return;
     this.lastVesselKey = key;
     for (const l of this.vesselLines) {
@@ -569,7 +569,7 @@ export class MapView {
           const len = Math.hypot(dx, dy);
           maneuver = { node, orbit: patch.orbit, axis: hit.axis, sign: hit.sign, start: hit.axis ? node[hit.axis] : node.time,
             dx: len > 2 ? dx / len : 1, dy: len > 2 ? dy / len : 0,
-            timeMin: Math.max(u.t + 5, patch.startTime), timeMax: Math.max(u.t + 5, Math.min(patch.startTime + (patch.orbit.e < 1 ? 2 * Math.PI * Math.sqrt(patch.orbit.a ** 3 / patch.orbit.mu) : 86400), u.vessel!.patches.find(p => p.startTime > node.time + 1e-6)?.startTime ?? Infinity)) };
+            timeMin: Math.max(u.t + 5, patch.startTime), timeMax: Math.max(u.t + 5, Math.min(patch.startTime + (patch.orbit.e < 1 ? 2 * Math.PI * Math.sqrt(patch.orbit.a ** 3 / patch.orbit.mu) : 86400), u.vessel!.patches.find(p => p.endTime >= node.time && (p.endReason === 'soiEnter' || p.endReason === 'soiExit'))?.endTime ?? Infinity)) };
           lx = e.clientX; ly = e.clientY; e.preventDefault(); return;
         }
       }

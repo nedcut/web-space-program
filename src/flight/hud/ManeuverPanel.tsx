@@ -66,13 +66,17 @@ export function ManeuverPanel({ world }: { world: World }) {
     .filter((b) => b.kind !== 'star')
     .sort((a, b) => (a.orbit?.a ?? 0) - (b.orbit?.a ?? 0));
   const planTransfer = (id: string) => {
-    world.nodes = [];
-    try {
-      const plan = planTransferToBody(world, id);
-      setPlanMsg(plan ? `Transfer planned: ${plan.dv.toFixed(0)} m/s` : 'No transfer window found');
-    } catch (e) {
-      setPlanMsg((e as Error).message);
-    }
+    // The search is synchronous (up to a few seconds): show feedback first, then compute on the next tick.
+    setPlanMsg(`Planning transfer to ${world.universe.body(id).name}…`);
+    setTimeout(() => {
+      world.nodes = [];
+      try {
+        const plan = planTransferToBody(world, id);
+        setPlanMsg(plan ? `Transfer planned: ${plan.dv.toFixed(0)} m/s, burn in ${formatDuration(plan.node.time - world.ut)}. Warp ahead with “.”, then use Assist → Execute next node.` : 'No transfer window found');
+      } catch (e) {
+        setPlanMsg((e as Error).message);
+      }
+    }, 50);
   };
   const planCirc = (at: 'apoapsis' | 'periapsis') => {
     world.nodes = [];
@@ -118,19 +122,18 @@ export function ManeuverPanel({ world }: { world: World }) {
   }
 
   const Row = ({ label, axis, color, value }: { label: string; axis: 'prograde' | 'normal' | 'radial'; color: string; value: number }) => (
-    <div style={{ display: 'grid', gridTemplateColumns: '64px 34px 1fr 34px', gap: 6, alignItems: 'center' }}>
-      <span className="label" style={{ color }}>{label}</span>
+    <div style={{ display: 'grid', gridTemplateColumns: '74px 34px 1fr 34px', gap: 6, alignItems: 'center' }}>
+      <span className="label" style={{ color, letterSpacing: '0.06em' }}>{label}</span>
       <button className="btn small" {...jog(axis, -1)}>−</button>
       <span className="mono" style={{ textAlign: 'center' }}>{value.toFixed(1)}</span>
       <button className="btn small" {...jog(axis, 1)}>+</button>
     </div>
   );
 
-  const siblingTarget = siblings.find(b => b.id === world.targetId);
   return (
     <>
     {transferTarget && <TransferWindow world={world} target={transferTarget} onClose={() => setTransferTarget(null)} onPlanned={setPlanMsg} />}
-    <div className="panel" style={{ position: 'absolute', left: 10, top: 70, width: 270, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
       <div className="label">Maneuver planner</div>
       <div style={{ display: 'flex', gap: 6 }}>
         <button className="btn small" onClick={() => add('ap')} disabled={orbit.e >= 1}>Node @ Ap</button>
@@ -146,7 +149,7 @@ export function ManeuverPanel({ world }: { world: World }) {
           className="btn small"
           value=""
           onChange={(e) => e.target.value && planTransfer(e.target.value)}
-          style={{ background: 'var(--panel-solid)' }}
+          style={{ background: 'var(--panel-solid)', color: 'var(--text)' }}
         >
           <option value="">Plan transfer to…</option>
           {targets.map((b) => (
@@ -154,11 +157,14 @@ export function ManeuverPanel({ world }: { world: World }) {
           ))}
         </select>
       )}
-      {siblingTarget && <button className="btn small" onClick={() => setTransferTarget(siblingTarget.id)}>Transfer window</button>}
+      {siblings.length > 0 && <select className="btn small" aria-label="Transfer window destination" value="" onChange={e => { if (e.target.value) setTransferTarget(e.target.value); }} style={{ background: 'var(--panel-solid)', color: 'var(--text)' }}>
+        <option value="">Explore transfer windows…</option>
+        {siblings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+      </select>}
       {planMsg && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{planMsg}</div>}
       {node && summary && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: '64px 34px 1fr 34px', gap: 6, alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '74px 34px 1fr 34px', gap: 6, alignItems: 'center' }}>
             <span className="label">Time</span>
             <button className="btn small" {...jog('time', -1)}>◀</button>
             <span className="mono" style={{ textAlign: 'center', fontSize: 12 }}>T−{formatDuration(node.time - world.ut)}</span>
@@ -178,7 +184,7 @@ export function ManeuverPanel({ world }: { world: World }) {
             <button className="btn small" onClick={() => { node.prograde = node.normal = node.radial = 0; world.nodes = [...world.nodes]; }}>Zero</button>
             <button className="btn small danger" onClick={() => world.removeNode(node.id)}>Delete</button>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Tip: SAS → MNV points at the burn. Start the burn half the burn time before the node.</div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Drag the node along its orbit or drag the coloured handles to adjust Δv. SAS → MNV points at the burn. Start the burn half the burn time before the node.</div>
         </>
       )}
     </div>

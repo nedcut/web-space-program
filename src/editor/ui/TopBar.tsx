@@ -58,7 +58,7 @@ export function TopBar({ session, view, onLoad, onNew }: { session: EditorSessio
       </div>
       <div style={{ flex: 1 }} />
       <button className="btn primary vab-launch" title={mode === 'career' ? `${cost.toLocaleString()} cr launch cost · ${funds.toLocaleString()} cr available` : undefined} onClick={() => session.launch()}>
-        <Icon name="launch" size={17} /> Launch{mode === 'career' ? ` · ${cost.toLocaleString()} cr` : ''}
+        <Icon name="launch" size={17} /> Launch{mode === 'career' && <span className="vab-launch-cost">{cost.toLocaleString()} cr</span>}
       </button>
       <button className="vab-ibtn" title="Exit to Space Center" onClick={() => session.exit()}><Icon name="exit" /></button>
     </div>

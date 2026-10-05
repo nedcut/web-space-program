@@ -1,5 +1,5 @@
 import type { Orbit, StateVector } from './api';
-import { propagate, period } from './kepler';
+import { propagate, period, timeToPeriapsis, semiLatusRectum, elementsToState, timeToTrueAnomaly } from './kepler';
 import { cross, dot, length, normalize, type Vec3 } from '../../util/vec3';
 
 export interface ImpactEstimate { time: number; position: Vec3; velocity: Vec3; speed: number }
@@ -13,8 +13,11 @@ export function ballisticImpact(orbit: Orbit, now: number, clearance: (position:
   if (clearance(initial.position, now) <= 0) return result(initial, now);
   let lo = now;
   // Quadratic spacing resolves near-surface falls while covering a full orbit.
-  for (let i = 1; i <= 512; i++) {
-    const hi = now + horizon * (i / 512) ** 2;
+  const samples = Array.from({ length: 512 }, (_, i) => now + horizon * ((i + 1) / 512) ** 2);
+  const pe = semiLatusRectum(orbit) > 0 ? timeToPeriapsis(orbit, now) : Infinity;
+  if (pe > 0 && pe < horizon) samples.push(now + pe);
+  samples.sort((a, b) => a - b);
+  for (const hi of samples) {
     if (clearance(propagate(orbit, hi).position, hi) <= 0) {
       let a = lo, b = hi;
       for (let k = 0; k < 35; k++) {
@@ -52,25 +55,22 @@ export function phaseAngle(position: Vec3, target: Vec3, normal: Vec3): number |
 }
 export interface PlaneCrossing { kind: 'AN' | 'DN'; time: number; position: Vec3 }
 /** Next ascending/descending crossings of a fixed target orbit plane, same central body. */
-export function targetPlaneNodes(orbit: Orbit, targetNormal: Vec3, now: number, horizon = period(orbit)): PlaneCrossing[] {
+export function targetPlaneNodes(orbit: Orbit, targetNormal: Vec3, now: number, horizon = Number.isFinite(period(orbit)) ? period(orbit) : 86400): PlaneCrossing[] {
   if (!Number.isFinite(horizon) || horizon <= 0) return [];
   const n = normalize(targetNormal), s = propagate(orbit, now);
   const own = normalize(cross(s.position, s.velocity));
   if (length(n) === 0 || length(cross(own, n)) < 1e-7) return [];
+  // Solve the two plane intersections in true anomaly, so eccentric orbits and
+  // crossings exactly on sampling boundaries are handled without a time scan.
+  const basis = elementsToState({ ...orbit, a: 1, e: 0, p: 1, m0: 0, epoch: 0, stateAtEpoch: undefined }, 0);
+  const nu = Math.atan2(-dot(n, basis.position), dot(n, normalize(basis.velocity)));
   const out: PlaneCrossing[] = [];
-  let lo = now + 1e-4, z = dot(propagate(orbit, lo).position, n);
-  for (let i = 1; i <= 128; i++) {
-    const hi = now + horizon * i / 128, next = dot(propagate(orbit, hi).position, n);
-    if (z * next < 0) {
-      let a = lo, b = hi;
-      for (let k = 0; k < 40; k++) {
-        const mid = (a + b) / 2;
-        if (dot(propagate(orbit, mid).position, n) * z > 0) a = mid; else b = mid;
-      }
-      const time = (a + b) / 2, state = propagate(orbit, time);
-      out.push({ kind: dot(state.velocity, n) > 0 ? 'AN' : 'DN', time, position: state.position });
-    }
-    lo = hi; z = next;
+  for (const anomaly of [nu, nu + Math.PI]) {
+    if (1 + orbit.e * Math.cos(anomaly) <= 0) continue; // beyond an unbound asymptote
+    const dt = timeToTrueAnomaly(orbit, anomaly, now + 1e-4) + 1e-4;
+    if (!Number.isFinite(dt) || dt > horizon + 1e-5) continue;
+    const time = now + dt, state = propagate(orbit, time);
+    out.push({ kind: dot(state.velocity, n) > 0 ? 'AN' : 'DN', time, position: state.position });
   }
-  return out;
+  return out.sort((a, b) => a.time - b.time);
 }

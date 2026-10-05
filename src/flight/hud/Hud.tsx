@@ -77,6 +77,8 @@ export interface Telemetry {
   resources: { id: string; name: string; amount: number; max: number; color: string }[];
   messages: { id: number; text: string; level: 'info' | 'warn' | 'bad' }[];
   mapMode: boolean;
+  /** Landed, splashed or still on the pad: orbital readouts are meaningless and shown as dashes. */
+  onSurface: boolean;
   assist: { name: string; status: string } | null;
   /** Landing gear / legs state (null = vessel has none). */
   gear: 'up' | 'down' | 'moving' | null;
@@ -115,6 +117,8 @@ export interface HudCallbacks {
   onSetTarget(id: string | null, portUid?: number | null): void;
   onToggleDocking(): void;
   onUndock(portUid?: number): void;
+  /** Open the controls help overlay. */
+  onHelp?(): void;
 }
 
 const SAS_MODES: { id: string; label: string }[] = [
@@ -159,21 +163,75 @@ function Readout({ label, value, color }: { label: string; value: ReactNode; col
   );
 }
 
-export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navball: ReactNode }) {
-  const [showData, setShowData] = useState(false);
+/** Left-column dock sections that can be toggled from the chip bar. */
+type DockId = 'assist' | 'crew' | 'science' | 'target' | 'data';
+const DOCK_KEY = 'wsp.hud.dock.v1';
+
+function loadDock(): Set<DockId> {
+  try {
+    const raw = localStorage.getItem(DOCK_KEY);
+    return new Set(raw ? (JSON.parse(raw) as DockId[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export interface HudDockSlots {
+  /** Flight-assist panel (null when assist is unavailable, e.g. EVA / no control). */
+  assist?: ReactNode;
+  /** True while an assist program is running (keeps its status visible). */
+  assistActive?: boolean;
+  science?: ReactNode;
+  /** Map-mode maneuver planner (rendered at the top of the dock in map view). */
+  maneuver?: ReactNode;
+}
+
+export function Hud({ t, cb, navball, dock }: { t: Telemetry; cb: HudCallbacks; navball: ReactNode; dock?: HudDockSlots }) {
+  const [open, setOpen] = useState<Set<DockId>>(loadDock);
+  const toggle = (id: DockId) => {
+    setOpen((o) => {
+      const n = new Set(o);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      try {
+        localStorage.setItem(DOCK_KEY, JSON.stringify([...n]));
+      } catch {
+        /* storage unavailable */
+      }
+      return n;
+    });
+  };
+  const dash = t.onSurface;
+  const showAssistChip = !!dock?.assist && !t.mapMode;
+  const showCrewChip = !t.mapMode && !t.dockingMode;
+  const showScienceChip = !!dock?.science && !t.mapMode;
+  const crewOpen = showCrewChip && (open.has('crew') || !!t.eva);
+  const targetOpen = open.has('target') || !!t.target;
+  const chip = (id: DockId, label: string, title: string, extra?: ReactNode) => (
+    <button
+      key={id}
+      className={`btn small hud-chip ${open.has(id) ? 'on' : ''}`}
+      title={title}
+      aria-pressed={open.has(id)}
+      onClick={() => toggle(id)}
+    >
+      {label}
+      {extra}
+    </button>
+  );
   return (
     <div className="overlay">
       {/* Top bar: time, warp, altitude */}
       <div className="panel" style={{ position: 'absolute', top: 10, left: 10, padding: '8px 12px', display: 'flex', gap: 10, alignItems: 'center' }}>
-        <button className="btn small" onClick={cb.onMenu}>☰</button>
-        <div className="mono" style={{ fontSize: 12, color: 'var(--text-dim)' }}>{formatDate(t.ut)}</div>
-        <button className="btn small" onClick={() => cb.onWarp(-1)}>◀</button>
-        <div className="mono" style={{ minWidth: 64, textAlign: 'center', color: t.physicsWarp ? 'var(--warn)' : 'var(--accent)' }}>
+        <button className="btn small" onClick={cb.onMenu} title="Pause menu (Esc)">☰</button>
+        <div className="mono hud-date" style={{ fontSize: 12, color: 'var(--text-dim)' }}>{formatDate(t.ut)}</div>
+        <button className="btn small" onClick={() => cb.onWarp(-1)} title="Slower time warp ( , )">◀</button>
+        <div className="mono" style={{ minWidth: 64, textAlign: 'center', color: t.physicsWarp ? 'var(--warn)' : 'var(--accent)' }} title="Time warp">
           {t.warpLabel}
         </div>
-        <button className="btn small" onClick={() => cb.onWarp(1)}>▶</button>
-        <button className="btn small" onClick={cb.onMap}>MAP</button>
-        <button className={`btn small ${showData ? 'primary' : ''}`} onClick={() => setShowData(!showData)}>Flight data</button>
+        <button className="btn small" onClick={() => cb.onWarp(1)} title="Faster time warp ( . )">▶</button>
+        <button className={`btn small ${t.mapMode ? 'primary' : ''}`} onClick={cb.onMap} title="Map view (M)">MAP</button>
+        {cb.onHelp && <button className="btn small" onClick={cb.onHelp} title="Controls help (F1)">?</button>}
       </div>
 
       <div className="panel" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '8px 18px', textAlign: 'center' }}>
@@ -182,42 +240,47 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
         {t.altitudeTerrain < 5000 && <div className="mono" style={{ fontSize: 12, color: 'var(--text-dim)' }}>radar {formatDistance(t.altitudeTerrain)}</div>}
       </div>
 
-      {showData && <FlightDataPanel data={t.flightData} onClose={() => setShowData(false)} />}
-
-      {/* Orbit info */}
-      <div className="panel" style={{ position: 'absolute', top: 10, right: 10, padding: 12, width: 230, display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <Readout label="Apoapsis" value={formatDistance(t.apoapsis)} />
-        <Readout label="T-Ap" value={formatDuration(t.timeToAp)} />
-        <Readout label="Periapsis" value={formatDistance(t.periapsis)} color={t.periapsis < 0 ? 'var(--bad)' : undefined} />
-        <Readout label="T-Pe" value={formatDuration(t.timeToPe)} />
-        <div style={{ height: 6 }} />
-        <Readout label="Vert. speed" value={formatSpeed(t.verticalSpeed)} />
-        <Readout label="G-force" value={t.gForce.toFixed(2)} color={t.gForce > 6 ? 'var(--bad)' : undefined} />
-        <Readout label="Mach" value={t.mach.toFixed(2)} />
-        <Readout label="Dyn. press." value={`${(t.dynamicPressure / 1000).toFixed(1)} kPa`} />
-      </div>
-
-      {/* Resources */}
-      <div className="panel" style={{ position: 'absolute', top: 210, right: 10, padding: 12, width: 230, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {t.resources.map((r) => (
-          <div key={r.id}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-              <span className="label">{r.name}</span>
-              <span className="mono">{r.amount.toFixed(0)}/{r.max.toFixed(0)}</span>
-            </div>
-            <div style={{ height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 3 }}>
-              <div style={{ width: `${(100 * r.amount) / Math.max(r.max, 1e-9)}%`, height: '100%', background: r.color, borderRadius: 3 }} />
-            </div>
+      {/* Right column: orbit info + resources (stacked so they never overlap) */}
+      <div className="hud-right">
+        <div className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <Readout label="Apoapsis" value={dash ? '—' : formatDistance(t.apoapsis)} />
+          <Readout label="T-Ap" value={dash ? '—' : formatDuration(t.timeToAp)} />
+          <Readout label="Periapsis" value={dash ? '—' : formatDistance(t.periapsis)} color={!dash && t.periapsis < 0 ? 'var(--bad)' : undefined} />
+          <Readout label="T-Pe" value={dash ? '—' : formatDuration(t.timeToPe)} />
+          <div style={{ height: 6 }} />
+          <Readout label="Vert. speed" value={formatSpeed(t.verticalSpeed)} />
+          <Readout label="G-force" value={t.gForce.toFixed(2)} color={t.gForce > 6 ? 'var(--bad)' : undefined} />
+          <Readout label="Mach" value={t.mach.toFixed(2)} />
+          <Readout label="Dyn. press." value={`${(t.dynamicPressure / 1000).toFixed(1)} kPa`} />
+        </div>
+        {t.resources.length > 0 && (
+          <div className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {t.resources.map((r) => (
+              <div key={r.id}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                  <span className="label">{r.name}</span>
+                  <span className="mono">{r.amount.toFixed(0)}/{r.max.toFixed(0)}</span>
+                </div>
+                <div style={{ height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 3 }}>
+                  <div style={{ width: `${(100 * r.amount) / Math.max(r.max, 1e-9)}%`, height: '100%', background: r.color, borderRadius: 3 }} />
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
 
       {/* Staging stack */}
-      <div style={{ position: 'absolute', right: 10, bottom: 10, display: 'flex', flexDirection: 'column-reverse', gap: 6, maxHeight: '45vh', overflowY: 'auto' }}>
+      <div className="hud-stages">
+        {!t.eva && !t.noControl && t.stages.length > 0 && (
+          <button className="btn small" onClick={cb.onStage} title="Activate the next stage (Space)" style={{ width: 180, flexShrink: 0 }}>
+            Stage · Space
+          </button>
+        )}
         {t.stages.map((s) => (
-          <div key={s.index} className="panel" style={{ padding: 8, width: 180, borderColor: s.index === t.stage ? 'var(--accent)' : undefined }}>
+          <div key={s.index} className="panel" style={{ padding: 8, width: 180, flexShrink: 0, borderColor: s.index === t.stage ? 'var(--accent)' : s.parts.some((p) => p.active) ? 'var(--accent-2)' : undefined }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span className="label">Stage {s.index}</span>
+              <span className="label" style={{ color: s.index === t.stage ? 'var(--accent)' : undefined }} title={s.index === t.stage ? 'Fires on the next Space press' : undefined}>{s.parts.some((p) => p.active) ? 'Active' : `${s.index === t.stage ? '▸ ' : ''}Stage ${s.index}`}</span>
               <span className="mono" style={{ fontSize: 11, color: 'var(--accent-2)' }}>{s.deltaV.toFixed(0)} m/s</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
@@ -234,13 +297,13 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
       {/* Bottom-centre: navball + speed + SAS */}
       <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
         {!t.eva && <div className="panel" style={{ padding: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, width: 130 }}>
-          <button className={`btn small ${t.sasOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} onClick={cb.onToggleSas}>SAS</button>
+          <button className={`btn small ${t.sasOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} onClick={cb.onToggleSas} title="Stability assist (T)">SAS</button>
           {SAS_MODES.map((m) => (
             <button key={m.id} className={`btn small ${t.sasOn && t.sasMode === m.id ? 'primary' : ''}`} onClick={() => cb.onSasMode(m.id)} style={{ padding: '4px 2px', fontSize: 10 }}>
               {m.label}
             </button>
           ))}
-          <button className={`btn small ${t.rcsOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} onClick={cb.onToggleRcs}>RCS</button>
+          <button className={`btn small ${t.rcsOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} onClick={cb.onToggleRcs} title="Reaction control thrusters (R)">RCS</button>
           {t.gear !== null && (
             <button
               className={`btn small ${t.gear === 'down' ? 'primary' : ''}`}
@@ -263,7 +326,7 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
           )}
         </div>}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <button className="panel btn" onClick={cb.onSpeedMode} style={{ padding: '4px 14px', marginBottom: 6, textAlign: 'center' }}>
+          <button className="panel btn" onClick={cb.onSpeedMode} title="Click to switch surface / orbit / target speed" style={{ padding: '4px 14px', marginBottom: 6, textAlign: 'center' }}>
             <div className="label">{t.speedMode === 'surface' && t.dynamicPressure > 50 ? 'airspeed' : t.speedMode}</div>
             <div className="mono" style={{ fontSize: 18 }}>{formatSpeed(t.speed)}</div>
           </button>
@@ -274,12 +337,26 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
         </div>
       </div>
 
-      {!t.mapMode && !t.dockingMode && <CrewPanel t={t} cb={cb} />}
-      <TargetPanel t={t} cb={cb} />
-      {t.dockingMode && !t.mapMode && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
+      {/* Left dock: compact toggles; panels expand underneath and scroll if space runs out. */}
+      <div className="hud-dock">
+        {t.mapMode && dock?.maneuver}
+        <div className="hud-chips">
+          {chip('data', 'Flight data', 'Detailed flight telemetry')}
+          {showAssistChip && chip('assist', 'Assist', 'Flight assist (autopilot programs)', dock?.assistActive ? <span className="hud-dot" /> : null)}
+          {showCrewChip && chip('crew', t.eva ? 'EVA' : `Crew ${t.crew.length}`, 'Crew and EVA', t.noControl ? <span className="hud-dot warn" /> : null)}
+          {showScienceChip && chip('science', 'Science', 'Science instruments and data')}
+          {chip('target', 'Target', 'Navigation target and docking', t.target ? <span className="hud-dot target" /> : null)}
+        </div>
+        {showAssistChip && (open.has('assist') || dock?.assistActive) && dock?.assist}
+        {t.dockingMode && !t.mapMode && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
+        {crewOpen && <CrewPanel t={t} cb={cb} />}
+        {showScienceChip && open.has('science') && dock?.science}
+        {targetOpen && <TargetPanel t={t} cb={cb} />}
+        {open.has('data') && <FlightDataPanel data={t.flightData} onClose={() => toggle('data')} />}
+      </div>
 
       {/* Messages */}
-      <div style={{ position: 'absolute', top: 100, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center' }}>
+      <div style={{ position: 'absolute', top: 100, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', pointerEvents: 'none' }}>
         {t.messages.map((m) => (
           <div key={m.id} className="panel" style={{ padding: '6px 14px', color: m.level === 'bad' ? 'var(--bad)' : m.level === 'warn' ? 'var(--warn)' : 'var(--text)' }}>
             {m.text}

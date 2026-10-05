@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useEffect, useRef, useState } from 'react';
 import type { World } from '../../game/world';
 import { porkchopGrid, planInterplanetaryTransfer, type PorkchopPoint } from '../../game/interplanetary';
@@ -6,6 +7,13 @@ import { formatDate, formatDuration } from '../../ui/format';
 const N = 36;
 export function TransferWindow({ world, target, onClose, onPlanned }: { world: World; target: string; onClose(): void; onPlanned(message: string): void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  const planTimer = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialog.current?.focus();
+    return () => { window.clearTimeout(planTimer.current); previous?.focus(); };
+  }, []);
   const [grid, setGrid] = useState<(PorkchopPoint | null)[]>([]);
   const [hover, setHover] = useState<PorkchopPoint | null>(null);
   const [message, setMessage] = useState('Calculating transfer windows…');
@@ -48,9 +56,9 @@ export function TransferWindow({ world, target, onClose, onPlanned }: { world: W
   const plan = (p: PorkchopPoint | null) => {
     if (!p || busy || !range) return;
     setBusy(true); setMessage('Verifying encounter and parking-orbit ejection…');
-    window.setTimeout(() => {
+    planTimer.current = window.setTimeout(() => {
+      const old = [...world.nodes];
       try {
-        const old = [...world.nodes];
         const result = planInterplanetaryTransfer(world, target, {
           departureRange: { min: Math.max(world.ut + 300, p.departureTime - range.span / (N - 1) / 2), max: p.departureTime + range.span / (N - 1) / 2, samples: 5 },
           timeOfFlightRange: { min: Math.max(1, p.timeOfFlight - (range.maxFlight - range.minFlight) / (N - 1) / 2), max: p.timeOfFlight + (range.maxFlight - range.minFlight) / (N - 1) / 2, samples: 5 },
@@ -58,11 +66,18 @@ export function TransferWindow({ world, target, onClose, onPlanned }: { world: W
         if (result) {
           world.nodes = [result.node]; onPlanned(`Transfer planned: ${result.dv.toFixed(0)} m/s`); onClose();
         } else { world.nodes = old; setMessage('No verified encounter in this cell. Choose a neighbouring window.'); }
-      } catch (e) { setMessage((e as Error).message); }
+      } catch (e) { world.nodes = old; setMessage((e as Error).message); }
       setBusy(false);
     }, 30);
   };
-  return <div className="transfer-modal" role="dialog" aria-modal="true" aria-label="Transfer window" onKeyDown={e => { if (e.key === 'Escape' && !busy) onClose(); }}>
+  return createPortal(<div ref={dialog} tabIndex={-1} className="transfer-modal" role="dialog" aria-modal="true" aria-label="Transfer window" onKeyDown={e => {
+    e.stopPropagation();
+    if (e.key === 'Escape' && !busy) onClose();
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      dialog.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    }
+  }}>
     <div className="panel transfer-plot">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span className="label">Transfer window · {world.universe.body(target).name}</span><button className="btn small" disabled={busy} onClick={onClose}>Close</button></div>
       <div className="label">Flight time ↑ · departure date →</div>
@@ -70,8 +85,8 @@ export function TransferWindow({ world, target, onClose, onPlanned }: { world: W
       {range && <div className="mono" style={{ fontSize: 11 }}>{formatDate(range.start)} → {formatDate(range.start + range.span)} · flight {formatDuration(range.minFlight)}–{formatDuration(range.maxFlight)}</div>}
       <div style={{ background: 'linear-gradient(90deg,blue,cyan,lime,yellow,red)', height: 8, borderRadius: 3 }} />
       <div className="label">Blue: lower Δv · red: higher Δv · dark: no solution</div>
-      <div className="mono" style={{ minHeight: 40, fontSize: 12 }}>{hover ? `Depart ${formatDate(hover.departureTime)} · fly ${formatDuration(hover.timeOfFlight)} · Δv ${hover.totalDv.toFixed(0)} m/s (departure ${hover.departureDv.toFixed(0)} + capture ${hover.captureDv.toFixed(0)})` : 'Grid estimates include circular capture. Click plans a verified encounter within the selected cell.'}</div>
+      <div className="mono" style={{ minHeight: 40, fontSize: 12 }}>{hover ? `Depart ${formatDate(hover.departureTime)} · arrive ${formatDate(hover.arrivalTime)} · fly ${formatDuration(hover.timeOfFlight)} · Δv ${hover.totalDv.toFixed(0)} m/s (departure ${hover.departureDv.toFixed(0)} + capture ${hover.captureDv.toFixed(0)})` : 'Grid estimates include circular capture. Click plans a verified encounter within the selected cell.'}</div>
       <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>{message}</div>
     </div>
-  </div>;
+  </div>, document.body);
 }

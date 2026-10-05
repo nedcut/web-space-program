@@ -27,9 +27,10 @@ export type FlightData = { title: string; rows: [string, string][] }[];
 export function flightData(w: World, v: WorldVessel, stages: StageDeltaV[], predictions: ReturnType<typeof flightPredictions>): FlightData {
   const u = w.universe, b = u.body(v.body), st = v.state, rs = w.relativeState(v), o = w.orbitOf(v);
   const info = u.surfaceInfo(v.body, st.position, w.ut), gravity = b.gm / info.r ** 2;
-  const stage = stages.find(s => s.thrust > 0), active = st.parts.filter(p => p.engine?.ignited);
+  const active = st.parts.filter(p => p.engine?.ignited);
+  const stage = active.length ? stages.find(s => s.stage === st.nextStage + 1) : stages.find(s => s.thrust > 0);
   const currentThrust = active.reduce((sum, p) => sum + (p.engine?.thrust ?? 0), 0);
-  const maxThrust = active.length ? (stages.find(s => s.stage === st.nextStage + 1)?.thrust ?? 0) : 0;
+  const maxThrust = stage?.thrust ?? 0;
   const vel = w.surfaceVelocity(v), local = qRotate(qConj(st.orientation), vel);
   const up = normalize(rs.position), pole = qRotate(u.ephem.bodyRotation(v.body, w.ut), v3(0, 0, 1));
   let east = normalize(cross(pole, up));

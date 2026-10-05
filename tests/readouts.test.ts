@@ -22,6 +22,29 @@ describe('pilot readout calculations', () => {
     expect(hit!.time).toBeCloseTo(20, 5);
     expect(ballisticImpact(o, 0, p => length(p) - 900, undefined, period(o))).toBeNull();
   });
+  it('detects a brief grazing contact near periapsis on an eccentric orbit', () => {
+    const o = { ...circular, a: 1e7, e: 1 - 999 / 1e7, i: 0, m0: Math.PI };
+    const hit = ballisticImpact(o, 0, p => length(p) - 1000, undefined, period(o));
+    expect(hit).not.toBeNull();
+    expect(length(hit!.position)).toBeCloseTo(1000, 2);
+  });
+  it('finds a future hyperbolic plane crossing within a bounded horizon', () => {
+    const o = { ...circular, a: -1000, e: 1.2, m0: -1 };
+    const nodes = targetPlaneNodes(o, v3(0, 0, 1), 0, 100);
+    expect(nodes.map(n => n.kind)).toEqual(['AN']);
+    expect(nodes[0].time).toBeCloseTo(Math.sqrt(1000 ** 3 / o.mu), 6);
+  });
+  it('supports exactly radial descent without an anomaly-time singularity', () => {
+    const o = stateToElements(1e6, 'test', v3(1000, 0, 0), v3(-10, 0, 0), 0);
+    const hit = ballisticImpact(o, 0, p => length(p) - 900, undefined, 20);
+    expect(hit).not.toBeNull();
+    expect(length(hit!.position)).toBeCloseTo(900, 5);
+  });
+  it('includes crossings exactly at the end of one revolution', () => {
+    const nodes = targetPlaneNodes({ ...circular, m0: 0 }, v3(0, 0, 1), 0);
+    expect(nodes.map(n => n.kind)).toEqual(['DN', 'AN']);
+    expect(nodes[1].time).toBeCloseTo(period(circular), 6);
+  });
   it('reports immediate contact and respects a finite prediction horizon', () => {
     expect(ballisticImpact(circular, 0, () => -1)?.time).toBe(0);
     expect(ballisticImpact(circular, 0, () => 1, undefined, 5)).toBeNull();

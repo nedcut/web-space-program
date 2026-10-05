@@ -28,6 +28,8 @@ export interface GameState {
   /** True when entering flight should launch `craft` onto the pad (Launch button), false to just resume. */
   launchPending: boolean;
   settings: Settings;
+  /** One-shot message shown on the Space Center hub (e.g. recovery summary). */
+  notice: string | null;
 }
 
 const SETTINGS_KEY = 'wsp.settings.v1';
@@ -84,6 +86,7 @@ export const game = createStore<GameState>({
   resumeWorld: null,
   launchPending: false,
   settings: loadSettings(),
+  notice: null,
 });
 
 export function updateSettings(patch: Partial<Settings>) {
@@ -97,4 +100,28 @@ export function updateSettings(patch: Partial<Settings>) {
 
 export function useGame<R>(selector: (s: GameState) => R): R {
   return useSyncExternalStore(game.subscribe, () => selector(game.get()));
+}
+
+// Remember the craft in the editor / on the pad across page reloads (restored by Continue).
+const CRAFT_KEY = 'wsp.craft.v1';
+let lastCraft: CraftDef | null = game.get().craft;
+game.subscribe(() => {
+  const craft = game.get().craft;
+  if (craft === lastCraft) return;
+  lastCraft = craft;
+  try {
+    if (craft) localStorage.setItem(CRAFT_KEY, JSON.stringify(craft));
+    else localStorage.removeItem(CRAFT_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+});
+
+export function loadLastCraft(): CraftDef | null {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(CRAFT_KEY) : null;
+    return raw ? (JSON.parse(raw) as CraftDef) : null;
+  } catch {
+    return null;
+  }
 }

@@ -3,7 +3,10 @@ import type { FlightData } from '../../game/flightData';
 
 export function FlightDataPanel({ data, onClose }: { data: FlightData; onClose(): void }) {
   const [sections, setSections] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem('wsp.flightDataSections') ?? 'null') ?? data.map(s => s.title); }
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem('wsp.flightDataSections') ?? 'null');
+      return Array.isArray(saved) ? saved.filter((s): s is string => typeof s === 'string') : data.map(s => s.title);
+    }
     catch { return data.map(s => s.title); }
   });
   const [configure, setConfigure] = useState(false);
@@ -14,7 +17,8 @@ export function FlightDataPanel({ data, onClose }: { data: FlightData; onClose()
     {configure && <div className="flight-data-config">{data.map(s => <label key={s.title}>
       <input type="checkbox" checked={sections.includes(s.title)} onChange={e => {
         const next = e.target.checked ? [...sections, s.title] : sections.filter(x => x !== s.title);
-        setSections(next); localStorage.setItem('wsp.flightDataSections', JSON.stringify(next));
+        setSections(next);
+        try { localStorage.setItem('wsp.flightDataSections', JSON.stringify(next)); } catch { /* storage unavailable */ }
       }} /> {s.title}</label>)}</div>}
     {data.filter(s => sections.includes(s.title)).map(s => <details key={s.title} open>
       <summary className="label">{s.title}</summary>
