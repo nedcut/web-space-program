@@ -116,8 +116,8 @@ const STYLES: Record<PlumeType, Style> = {
   monoprop: {
     hot: [0.95, 0.95, 0.92], mid: [0.75, 0.77, 0.82], cool: [0.45, 0.47, 0.55], tail: [0.5, 0.5, 0.55], diamond: [1, 1, 1],
     lengthFactor: 6, vacLength: 1.3, expandVac: 2.6, neck: 0, spread: 1.2,
-    coreAmp: 0.8, coreR: 0.5, coreLen: 0.3, envAmp: 0.35, envK: 1.6, ring: 0, coolRate: 1.5, tailAmt: 0,
-    turb: 0.5, noiseFreq: 0.7, scroll: 8, soot: 0,
+    coreAmp: 0.45, coreR: 0.5, coreLen: 0.3, envAmp: 0.11, envK: 1.6, ring: 0, coolRate: 1.5, tailAmt: 0,
+    turb: 0.7, noiseFreq: 0.7, scroll: 8, soot: 0,
     diaAmp: 0, diaSpacing: 2, diaDecay: 1, diaWidth: 0.5,
     vacDim: 0.7, haze: 0, pressureSensitive: true,
   },
@@ -141,7 +141,8 @@ const STYLES: Record<PlumeType, Style> = {
   },
 };
 
-const STEPS = 14;
+/** Volume samples per pixel: 14 normally, 8 on the Low quality preset. */
+const stepsFor = () => (game.get().settings.quality === 'low' ? 8 : 14);
 /** Hull radius margin over the nominal plume radius (envelope + turbulence extend past it). */
 const HULL_MARGIN = 1.42;
 
@@ -183,7 +184,7 @@ const volumeVertex = /* glsl */ `
   }
 `;
 
-const volumeFragment = /* glsl */ `
+const volumeFragment = (STEPS: number) => /* glsl */ `
   #include <common>
   #include <logdepthbuf_pars_fragment>
   ${profileChunk}
@@ -309,7 +310,7 @@ const volumeFragment = /* glsl */ `
     }
     if (t1 <= t0) discard;
     float dt = (t1 - t0) / float(${STEPS});
-    float jit = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+    float jit = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
     vec3 acc = vec3(0.0);
     for (int i = 0; i < ${STEPS}; i++) {
       acc += emit(ro + rd * (t0 + (float(i) + jit) * dt));
@@ -431,7 +432,7 @@ function profile(v: number, atm: number, st: Style, bulge: number, thrScale: num
 }
 
 /** Normalized atmosphere factor 0 (vacuum) .. 1 (sea level), spread smoothly over 0..1 atm. */
-export function plumeAtmosphere(ambientPressure: number): number {
+function plumeAtmosphere(ambientPressure: number): number {
   return smoothstep(0, 1, Math.sqrt(Math.max(0, ambientPressure) / 101325));
 }
 
@@ -488,7 +489,7 @@ export function createPlume(opts: PlumeOptions): Plume {
 
   const volumeMat = new THREE.ShaderMaterial({
     vertexShader: volumeVertex,
-    fragmentShader: volumeFragment,
+    fragmentShader: volumeFragment(stepsFor()),
     uniforms: u,
     transparent: true,
     depthWrite: false,
