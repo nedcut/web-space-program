@@ -5,7 +5,7 @@ import type { ScalePresetId } from '../sim/bodies/scale';
 import type { CraftDef } from '../sim/vessel/types';
 import type { SavedWorld } from './persistence';
 
-export type Scene = 'pedia' | 'training' | 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking' | 'research' | 'missions';
+export type Scene = 'scenarios' | 'pedia' | 'training' | 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking' | 'research' | 'missions';
 export type QualityPreset = 'low' | 'medium' | 'high';
 
 export interface Settings {
@@ -31,6 +31,8 @@ export interface GameState {
   scene: Scene;
   /** Practice scenes must not overwrite the saved editor craft. */
   trainingActive: boolean;
+  /** Quick-start missions suspend program persistence independently of lessons. */
+  scenarioActive: boolean;
   mode: GameMode;
   saveId: string | null;
   scalePreset: ScalePresetId;
@@ -84,7 +86,7 @@ export const DEFAULT_START_UT = (Date.UTC(2030, 6, 20, 12) - Date.UTC(2000, 0, 1
 function initialScene(): Scene {
   try {
     const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('scene') : null;
-    if (q && ['pedia', 'training', 'menu', 'spaceCenter', 'editor', 'flight', 'tracking', 'research', 'missions'].includes(q)) return q as Scene;
+    if (q && ['scenarios', 'pedia', 'training', 'menu', 'spaceCenter', 'editor', 'flight', 'tracking', 'research', 'missions'].includes(q)) return q as Scene;
   } catch {
     /* no location */
   }
@@ -95,6 +97,7 @@ export const game = createStore<GameState>({
   scene: initialScene(),
   multiplayer: null,
   trainingActive: false,
+  scenarioActive: false,
   mode: 'sandbox',
   saveId: null,
   scalePreset: 'standard',
@@ -122,7 +125,7 @@ export function useGame<R>(selector: (s: GameState) => R): R {
 /** UI preferences override a world's saved difficulty only when explicitly selected. */
 export function applyCommsSettings(world: import('./world').World) {
   // Room rules belong to the server; practice lessons use their deterministic sandbox rules.
-  if (game.get().multiplayer || game.get().trainingActive) return;
+  if (game.get().multiplayer || game.get().trainingActive || game.get().scenarioActive) return;
   const settings = game.get().settings;
   if (settings.commsEnabled !== null) world.commsSettings.enabled = settings.commsEnabled;
   if (settings.commsRestrictControl !== null) world.commsSettings.restrictControl = settings.commsRestrictControl;
@@ -132,7 +135,7 @@ export function applyCommsSettings(world: import('./world').World) {
 const CRAFT_KEY = 'wsp.craft.v1';
 let lastCraft: CraftDef | null = game.get().craft;
 game.subscribe(() => {
-  if (game.get().trainingActive) return;
+  if (game.get().trainingActive || game.get().scenarioActive) return;
   const craft = game.get().craft;
   if (craft === lastCraft) return;
   lastCraft = craft;

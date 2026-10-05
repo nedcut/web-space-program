@@ -173,6 +173,8 @@ export function gimbalDirection(v: VesselState, p: PartState, m: EngineModule, c
 }
 
 export interface ActuatorOutput {
+  /** Sum of nozzle thrust magnitudes, including opposing rotational jets. */
+  thrust?: number;
   forceBody: Vec3;
   torqueBody: Vec3;
 }
@@ -334,6 +336,7 @@ function evalRcs(v: VesselState, control: Vec3, translate: Vec3): NozzleEval[] {
 
 /** Fire RCS for rotation (control) and translation commands; draws monopropellant ('all' flow). */
 export function stepRcs(v: VesselState, enabled: boolean, control: Vec3, translate: Vec3, pressure: number, dt: number, loads?: PartLoad[]): ActuatorOutput {
+  let total = 0;
   let force = v3();
   let torque = v3();
   if (!enabled) return { forceBody: force, torqueBody: torque };
@@ -348,12 +351,13 @@ export function stepRcs(v: VesselState, enabled: boolean, control: Vec3, transla
   const f = units > 0 ? got / units : 0;
   for (const n of nozzles) {
     const thrust = n.thrustVac * n.act * f * (ispAtPressure(n, pressure) / n.ispVac);
+    total += thrust;
     const F = scale(n.fdir, thrust);
     force = add(force, F);
     torque = add(torque, cross(n.r, F));
     loads?.push({ partUid: n.partUid, point: add(n.r, v.com), force: F });
   }
-  return { forceBody: force, torqueBody: torque };
+  return { forceBody: force, torqueBody: torque, thrust: total };
 }
 
 /** RCS torque per unit rotation command on each axis (N*m). */

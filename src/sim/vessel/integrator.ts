@@ -208,6 +208,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   const Fworld = add(qRotate(q, Fbody), cp.force);
   const Tworld = add(qRotate(q, Tbody), cp.torque);
   const m = v.mass;
+  result.propulsiveDv = (result.propulsiveDv ?? 0) + (eng.thrust + (rcs.thrust ?? 0)) / m * h;
 
   // Kick.
   v.velocity = add(v.velocity, scale(add(g, scale(Fworld, 1 / m)), h));

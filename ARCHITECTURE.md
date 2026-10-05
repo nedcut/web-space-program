@@ -20,7 +20,7 @@ An original, browser-based spaceflight sandbox in the spirit of KSP, set in the 
 | `editor/` | Assembly core, stock craft, editor session, hangar and React panels | `sim`, `data`, `util`, `render`, `game` |
 | `input/`, `audio/` | Bindings/gamepad and procedural browser sound | Application settings and headless types |
 | `net/`, `server/` | Shared protocol/snapshots, browser multiplayer client/UI, Node/ws authoritative rooms | `sim`, `game`, `data`, `util`; server does not use browser scenes |
-| `flight/`, `tutorial/`, `ui/`, `main.tsx` | Scene orchestration, frame loop/HUD, isolated practice lessons, hub/tracking/pedia and application routing | Compose lower layers |
+| `flight/`, `tutorial/`, `scenarios/`, `ui/`, `main.tsx` | Scene orchestration, frame loop/HUD, isolated practice lessons, hub/tracking/pedia and application routing | Compose lower layers |
 
 `src/sim` stays DOM-free and three.js-free so physics runs in Node tests and the authoritative server.
 `npm run lint` enforces restricted imports/browser globals; `scripts/check-layering.mjs` resolves relative and
@@ -137,3 +137,11 @@ porkchop rows, results, errors and cancellations. Each async request owns a work
 it even during synchronous refinement. Node/no-Worker callers use the same handler asynchronously in-process;
 only row boundaries and pre-start work yield there. UI hooks cancel on supersession/unmount. Results are
 applied explicitly with fresh World node IDs, after rejecting stale vessel/trajectory/node-list changes.
+## Quick-start scenarios
+
+`scenarios/catalog.ts` defines original mission briefings, stock-payload setup and medal budgets.
+`evaluation.ts` adapts the assigned World vessel to observations and reduces objective/scoring state;
+`runtime.ts` owns the isolated run and prior program snapshot, and `records.ts` owns validated browser bests.
+The Scenarios library and ScenarioPanel compose briefing, live objectives, retry and debrief UI.
+World’s optional `onSimulationStep` observes both physics and rails; physics reports the integrator’s
+substep engine/RCS impulse-per-mass cost. This observer never changes the underlying force model.

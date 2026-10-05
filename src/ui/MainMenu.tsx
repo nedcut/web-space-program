@@ -36,6 +36,7 @@ export function MainMenu() {
             <button className="btn primary" onClick={() => setPanel('new')}>New Game</button>
             <button className="btn" onClick={() => setPanel('load')}>Continue</button>
             <button className="btn" onClick={() => setPanel('multiplayer')}>Multiplayer (experimental)</button>
+            <button className="btn" onClick={() => game.set({ scene: 'scenarios' })}>Scenarios · Missions</button>
             <button className="btn" onClick={() => game.set({ scene: 'training' })}>Training</button>
             <button className="btn" onClick={() => void import('./Spacepedia').then(m => m.openPedia('menu'))}>Spacepedia</button>
             <button className="btn" onClick={() => setPanel('settings')}>Settings</button>

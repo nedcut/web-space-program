@@ -324,7 +324,7 @@ export class FlightController {
   private activeLost = false;
 
   quicksave(slot = 'quicksave') {
-    if (this.network || getTutorial()) return;
+    if (this.network || getTutorial() || game.get().scenarioActive) return;
     try {
       saveWorldToStorage(slot, this.world);
       if (slot === 'quicksave') this.world.message('Quicksaved (F9 to load)');
