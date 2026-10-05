@@ -69,6 +69,12 @@ describe('stock orbiter reaches orbit', () => {
     log.push(`final phase=${phase} ap=${(orb.ap / 1000).toFixed(1)} pe=${(orb.pe / 1000).toFixed(1)} fuel-stage=${wv.state.nextStage}`);
     console.log(log.join('\n'));
     expect(phase).toBe('done');
+    world.recordFlight(wv, world.ut, true);
+    const record = world.flightlog.records.find(r => r.vesselId === wv.state.id)!;
+    expect(record.events.map(e => e.kind)).toEqual(expect.arrayContaining(['launch', 'stage', 'orbit']));
+    expect(record.stats.dvSpent).toBeGreaterThan(1000);
+    expect(record.samples.length).toBeLessThanOrEqual(1024);
+    expect(world.achievementProfile.unlocked.orbit).toBeDefined();
     expect(stableOrbit({ world })).toBe(true);
     expect(orb.pe).toBeGreaterThan(world.universe.body('earth').atmosphere!.height);
   }, 120000);

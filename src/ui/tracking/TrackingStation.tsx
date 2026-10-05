@@ -46,12 +46,14 @@ export default function TrackingStation() {
     };
   }, [world]);
 
-  const exit = (scene: 'spaceCenter' | 'flight' | 'pedia') => {
+  const exit = (scene: 'spaceCenter' | 'flight' | 'pedia' | 'flightlog') => {
     world.warp = { mode: 'rails', index: 0 };
     saveWorldToStorage('autosave', world);
     game.set({ resumeWorld: serializeWorld(world), mode: world.mode, ut: world.ut, launchPending: false, scene });
   };
   const remove = (id: string) => {
+    const vessel = world.vessels.get(id);
+    if (vessel) world.finishFlight(vessel, 'lost');
     world.vessels.delete(id);
     if (world.activeId === id) { world.activeId = null; world.nodes = []; }
     if (focus.kind === 'vessel' && focus.id === id) view.current?.setFocus({ kind: 'body', id: world.universe.sunId });
@@ -78,6 +80,7 @@ export default function TrackingStation() {
         <div className="tracking-clock"><div className="mono">{formatDate(world.ut)}</div><label className="label">Time warp <select aria-label="Time warp" value={world.warp.index} onChange={(e) => { world.warp = { mode: 'rails', index: Number(e.target.value) }; update(); }}>{RAILS_WARP.map((r, i) => <option key={r} value={i}>{r.toLocaleString()}×</option>)}</select></label><span className="mono"> {warpRate(world.warp).toLocaleString()}×</span></div>
         <label className="label"><input type="checkbox" checked={overlay} onChange={e => updateSettings({ commsOverlay: e.target.checked })} /> Signal links · red weak / green strong</label>
         <button className="btn small" onClick={() => void import('../Spacepedia').then(m => { exit('pedia'); m.openPedia('tracking'); })}>Spacepedia</button>
+        <button className="btn small" onClick={() => exit('flightlog')}>Flight log</button>
         <button className="btn small" onClick={() => exit('spaceCenter')}>Back to Space Center</button>
       </header>
       <aside className="panel tracking-fleet"><div className="label">Vessels · {world.vessels.size}</div>
@@ -87,7 +90,7 @@ export default function TrackingStation() {
           return <article className="tracking-vessel" key={v.state.id}><strong>{v.state.name}</strong><div className="tracking-muted">{world.universe.body(v.body).name} · {v.mode === 'prelaunch' ? 'Prelaunch' : v.state.situation}</div><div className="mono tracking-apsides">Ap {o ? distance(o.ap) : '—'} / Pe {o ? distance(o.pe) : '—'}</div><div className="tracking-actions">
             <button className="btn small" onClick={() => view.current?.setFocus({ kind: 'vessel', id: v.state.id })}>Focus</button>
             <button className="btn small" onClick={() => { if (world.activeId !== v.state.id) world.nodes = []; world.activeId = v.state.id; exit('flight'); }}>Fly</button>
-            {v.body === 'earth' && (v.mode === 'prelaunch' || v.state.situation === 'landed' || v.state.situation === 'splashed') && <button className="btn small" onClick={() => { if (world.recoverVessel(v.state.id)) { if (focus.kind === 'vessel' && focus.id === v.state.id) view.current?.setFocus({ kind: 'body', id: 'earth' }); update(); } }}>Recover</button>}
+            {v.body === 'earth' && (v.mode === 'prelaunch' || v.state.situation === 'landed' || v.state.situation === 'splashed') && <button className="btn small" onClick={() => { if (world.recoverVessel(v.state.id)) { if (focus.kind === 'vessel' && focus.id === v.state.id) view.current?.setFocus({ kind: 'body', id: 'earth' }); update(); exit('flightlog'); } }}>Recover</button>}
             <button className="btn small danger" onClick={() => setTerminate(v.state.id)}>Terminate</button>
           </div></article>;
         })}</section>)}

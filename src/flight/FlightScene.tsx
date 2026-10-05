@@ -1,3 +1,4 @@
+import { FlightReport } from '../ui/FlightLog';
 import { SignalPanel } from './hud/SignalPanel';
 import { MultiplayerPanel } from '../net/MultiplayerPanel';
 import { ResourcePanel } from './hud/ResourcePanel';
@@ -27,6 +28,7 @@ export default function FlightScene() {
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   pausedRef.current = paused;
+  const [report, setReport] = useState(false);
   const [lost, setLost] = useState(false);
   const lostRef = useRef(false);
   lostRef.current = lost;
@@ -96,8 +98,10 @@ export default function FlightScene() {
       const cc = c;
       cc.paused = pausedRef.current;
       setLost(false);
+      setReport(false);
       cc.onActiveLost = () => {
         setLost(true);
+        setReport(true);
         setPaused(true);
       };
       game.set({ launchPending: false });
@@ -199,10 +203,13 @@ export default function FlightScene() {
     if (getTutorial()) return endTutorial();
     const c = ctrl.current;
     if (c) {
+      if (scene === 'spaceCenter') {
+        if (c.world.active) { c.world.recordFlight(c.world.active, c.world.ut, true); c.world.logFlightEvent(c.world.active, 'checkpoint', 'Returned to Space Center'); const r = c.world.flightlog.records.find(r => r.vesselId === c.world.activeId && !r.outcome); if (r) c.world.latestReportId = r.id; }
+      }
       c.quicksave('autosave');
       game.set({ ut: c.world.ut, mode: c.world.mode, resumeWorld: c.snapshot() });
     }
-    game.set({ scene });
+    game.set({ scene: scene === 'spaceCenter' ? 'flightlog' : scene });
   };
   /** Recover the active vessel (on Earth, landed / on the pad) and summarise what it earned on the hub. */
   const recover = () => {
@@ -306,7 +313,11 @@ export default function FlightScene() {
           </div>
         </div>
       )}
-      {paused && !multiplayer && (
+      {report && lost && ctrl.current && (() => {
+        const r = ctrl.current.world.flightlog.records.find(r => r.id === ctrl.current!.world.latestReportId);
+        return r ? <div className="modal-backdrop"><div className="panel report-modal"><button className="btn" onClick={() => setReport(false)}>Close report</button><FlightReport record={r} /></div></div> : null;
+      })()}
+      {paused && !multiplayer && !report && (
         <div className="modal-backdrop">
           {showSettings ? (
             <SettingsPanel onClose={() => setShowSettings(false)} />

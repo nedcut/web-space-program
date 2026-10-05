@@ -79,7 +79,7 @@ export function launch(this: World, internals: WorldInternals, craft: CraftDef, 
   const padHelio = add(u.ephem.getBodyState(bodyId, this.ut).position, qRotate(bodyQuat(u, bodyId, this.ut), scale(up, body.radius + terrainH)));
   for (const [id, other] of keepExisting ? [] : this.vessels) {
     const near = length(sub(other.state.position, padHelio)) < 150;
-    if (other.mode === 'prelaunch' || (near && other.state.situation !== 'flying')) { recoverScience(this, other); this.vessels.delete(id); }
+    if (other.mode === 'prelaunch' || (near && other.state.situation !== 'flying')) { this.finishFlight(other, 'recovered'); recoverScience(this, other); this.vessels.delete(id); }
   }
   const state = buildVessel(craft, this.catalog, { id: internals.newVesselId(), resourceDefs: RESOURCES, legsDeployed: false });
   state.name = craft.name;
@@ -114,7 +114,7 @@ export function launchRunway(this: World, internals: WorldInternals, craft: Craf
 
   const spotHelio = add(u.ephem.getBodyState(bodyId, this.ut).position, qRotate(bodyQuat(u, bodyId, this.ut), scale(up, body.radius + terrainH)));
   for (const [id, other] of keepExisting ? [] : this.vessels)
-    if (length(sub(other.state.position, spotHelio)) < 100 && other.state.situation !== 'flying') { recoverScience(this, other); this.vessels.delete(id); }
+    if (length(sub(other.state.position, spotHelio)) < 100 && other.state.situation !== 'flying') { this.finishFlight(other, 'recovered'); recoverScience(this, other); this.vessels.delete(id); }
   const state = buildVessel(craft, this.catalog, { id: internals.newVesselId(), resourceDefs: RESOURCES, legsDeployed: false, gearDeployed: true });
   state.name = craft.name;
   if (this.mode === 'career') for (const p of state.parts) p.purchaseCost = p.def.cost;
