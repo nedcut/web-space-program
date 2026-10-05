@@ -879,7 +879,18 @@ export class FlightController {
   private updateAudio(wv: WorldVessel | null) { return audio.updateAudio.call(this, this.systems, wv); }
 
   /** Navball frame for the active vessel (called by the HUD every animation frame). */
-  navball = (): { frame: NavballFrame; markers: NavballMarker[] } | null => { return navball.navball.call(this, this.systems); };
+  navball = (): { frame: NavballFrame; markers: NavballMarker[] } | null => {
+    // Same interpolated attitude as the 3D view, so the ball turns smoothly between physics steps.
+    const w = this.world;
+    const wv = w.active;
+    if (!wv || this.network || this.mapMode) return navball.navball.call(this, this.systems);
+    const { restore } = w.renderHistory.apply(w.ut, PHYSICS_DT, w.renderAlpha, [wv], w.universe.ephem);
+    try {
+      return navball.navball.call(this, this.systems);
+    } finally {
+      restore();
+    }
+  };
 
   private telemetry(wv: WorldVessel): Telemetry { return telemetry.telemetry.call(this, this.systems, wv); }
 
