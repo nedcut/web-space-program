@@ -3,6 +3,8 @@ import type { PartDef } from '../../../sim/vessel/types';
 import { M } from '../materials';
 import { around, box, cyl, cylinder, grp, lathe, merge, mk, pipe, rod, sphere, torus, type Profile } from '../geom';
 import { boxDims, cylDims, num, srfMount, str } from './common';
+import { decals } from '../decals';
+import { Markings } from './markings';
 
 const PI = Math.PI;
 
@@ -113,7 +115,46 @@ export function buildTank(def: PartDef): THREE.Object3D {
     details.push(chine);
   }
   if (details.length) root.add(mk(details, finish === 'steel' ? M.steel() : M.gunmetal(), 'details'));
+  tankMarkings(def, root, rb, h / 2 - band, -h / 2 + band, finish);
   return root;
+}
+
+/** Manufacturer badge, part plate, agency insignia and propellant stencils on a tank body. */
+function tankMarkings(def: PartDef, root: THREE.Object3D, rb: number, yTop: number, yBot: number, finish: string) {
+  const D = new Markings(def);
+  const dark = finish === 'charcoal';
+  const ink = dark ? '#e9e7e1' : '#24272c';
+  const lo = yBot + 0.03;
+  const hi = yTop - 0.03;
+  const span = hi - lo;
+  const r = rb;
+  if (span < 0.15) return;
+  const badge = dark ? D.badgeDark : D.badge;
+  if (span > 1.1) {
+    // long tank: badge runs up the side
+    const hb = Markings.fit(badge, 0.12 + 0.12 * r, span * 0.55);
+    const len = hb * badge.aspect;
+    D.cyl(r, badge, { y: lo + span * 0.18 + len / 2, phi: -PI * 0.25, height: hb, vertical: true });
+  } else {
+    const hb = Markings.fit(badge, Math.min(0.06 + 0.05 * r, span * 0.3), r * 1.3);
+    D.cyl(r, badge, { y: lo + span * 0.62, phi: -PI * 0.25, height: hb });
+  }
+  const plate = dark ? D.plateDark : D.plate;
+  const hp = Markings.fit(plate, Math.min(0.045 + 0.03 * r, span * 0.25), r * 0.9);
+  D.cyl(r, plate, { y: lo + hp * 0.9, phi: PI * 0.25, height: hp });
+  if (span > 0.5) {
+    const ins = decals.insignia();
+    const hi2 = Math.min(0.12 + 0.18 * r, span * 0.3);
+    D.cyl(r, ins, { y: hi - hi2 * 0.8, phi: PI * 0.6, height: hi2 });
+  }
+  if (span > 0.8) {
+    const ox = decals.text('LOX', { stencil: true, color: ink });
+    const fu = decals.text('FUEL', { stencil: true, color: ink });
+    const ht = 0.035 + 0.03 * r;
+    D.cyl(r, ox, { y: hi - ht * 1.2, phi: PI * 0.25, height: ht });
+    D.cyl(r, fu, { y: lo + hp * 2 + ht, phi: PI * 0.25, height: ht });
+  }
+  D.addTo(root);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -140,6 +181,12 @@ export function buildAdapter(def: PartDef): THREE.Object3D {
   root.add(mk(lathe([[ry(t0) * 0.999 + 0.002, -h / 2 + h * t0], [ry(t1) * 0.999 + 0.002, -h / 2 + h * t1]], { segments: 56 }), M.satinWhite(), 'stripe'));
   root.add(mk([bulkhead(rTop * 0.98, h / 2, 1), bulkhead(rBot * 0.98, -h / 2, -1)], M.darkMetal()));
   root.add(mk([...boltRing(rTop, h / 2 - f / 2, Math.round(20 * rTop + 8), 0.009), ...boltRing(rBot, -h / 2 + f / 2, Math.round(20 * rBot + 8), 0.009)], M.chrome()));
+  const D = new Markings(def);
+  const rOf = (y: number) => rBot * 0.995 + ((rTop - rBot) * 0.995 * (y + h / 2)) / h;
+  const pl = D.plateDark;
+  const yP = -h / 2 + h * 0.25;
+  D.lathe(rOf, pl, { y: yP, phi: -PI / 2, height: Markings.fit(pl, h * 0.12, Math.min(rTop, rBot) * 1.2) });
+  D.addTo(root);
   return root;
 }
 
@@ -187,6 +234,11 @@ export function buildNoseCone(def: PartDef): THREE.Object3D {
       'stripe',
     ),
   );
+  const D = new Markings(def);
+  const rOf = (y: number) => ogive(R * 0.995, L, y - yb);
+  const b = D.badge;
+  D.lathe(rOf, b, { y: yb + L * 0.2, phi: -PI / 2, height: Markings.fit(b, 0.05 + 0.04 * R, R * 1.1) });
+  D.addTo(root);
   return root;
 }
 
@@ -249,6 +301,19 @@ export function buildFairing(def: PartDef): THREE.Object3D {
       if (pts.length > 1) rails.push(pipe(pts, 0.012, 5, 40));
     }
     half.add(mk(rails, M.gunmetal()));
+    // livery on each half: maker's badge up the side, agency insignia above it
+    const D = new Markings(def);
+    const yA = y0 + boat + 0.05;
+    const yB = yCyl - 0.05;
+    const span = yB - yA;
+    if (span > 0.3) {
+      const b = D.badge;
+      const hb = Markings.fit(b, 0.1 + 0.1 * rs, span * 0.6);
+      D.cyl(rs, b, { y: yA + span * 0.4, phi: phi + PI / 2, height: hb, vertical: true });
+      D.lathe((y) => (y <= yCyl ? rs : ogive(rs, L, y - yCyl)), decals.insignia(), { y: yCyl + L * 0.12, phi: phi + PI / 2, height: Math.min(0.2 + 0.2 * rs, L * 0.18) });
+      D.cyl(rs, decals.hazard(), { y: y0 + boat + 0.025, phi: phi + PI / 2, height: 0.03, width: rs * 0.5 });
+    }
+    D.addTo(half);
     shell.add(half);
   }
   root.add(shell);
@@ -280,6 +345,16 @@ export function buildDecoupler(def: PartDef): THREE.Object3D {
   // pyro boxes on the band
   const pb = box(0.05 + 0.03 * r, h - fl * 2 - 0.01, 0.03);
   root.add(mk(around(pb.translate(0, 0, r * 0.955 + 0.012), 4, 0, PI / 4), M.darkMetal(), 'pyros'));
+  // ordnance warning on each pyro box, maker's mark on the flange
+  const D = new Markings(def);
+  const sym = decals.symbol('warn');
+  const s = Math.min(0.05 + 0.03 * r, h - fl * 2 - 0.02) * 0.8;
+  for (let i = 0; i < 4; i++) {
+    const a = PI / 4 + (i * PI) / 2;
+    D.plane(sym, s, (g) => g.translate(0, 0, r * 0.955 + 0.0285).rotateY(a));
+  }
+  if (fl > 0.03) D.cyl(r, decals.logo(D.livery.id, '#f2f1ec'), { y: h / 2 - fl / 2, phi: 0, height: fl * 0.7 });
+  D.addTo(root);
   return root;
 }
 

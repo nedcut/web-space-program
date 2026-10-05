@@ -1,6 +1,24 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
+/**
+ * Tessellation detail for part templates: 1 = full ('high'), 0.5 = 'low' LOD. Set only while a
+ * template is being built (see buildPartMesh); builders keep using nominal segment counts.
+ */
+let DETAIL = 1;
+export function withDetail<T>(d: number, f: () => T): T {
+  const prev = DETAIL;
+  DETAIL = d;
+  try {
+    return f();
+  } finally {
+    DETAIL = prev;
+  }
+}
+export const detailLevel = () => DETAIL;
+/** Scale a segment count by the current detail (full circles keep at least `min`). */
+const seg = (n: number, min = 6) => (DETAIL === 1 ? n : Math.max(Math.min(n, min), Math.round(n * DETAIL)));
+
 /** Profile point [radius, y]. Repeat a point to create a hard crease. */
 export type Profile = Array<[number, number]>;
 
@@ -47,10 +65,10 @@ function autoCrease(profile: Profile, maxAngle: number): Profile {
  */
 export function lathe(profileIn: Profile, opts: LatheOpts = {}): THREE.BufferGeometry {
   const profile = autoCrease(profileIn, opts.creaseAngle ?? (35 * Math.PI) / 180);
-  const seg = opts.segments ?? 48;
-  const tile = opts.tile ?? 1;
   const phi0 = opts.phiStart ?? 0;
   const phiL = opts.phiLength ?? Math.PI * 2;
+  const segs = seg(opts.segments ?? 48, phiL > 6 ? 8 : 1);
+  const tile = opts.tile ?? 1;
   const rMax = Math.max(...profile.map((p) => p[0]), 1e-3);
   const uRep = opts.uRepeat ?? Math.max(1, Math.round((rMax * phiL) / tile));
   const n = profile.length;
@@ -87,19 +105,19 @@ export function lathe(profileIn: Profile, opts: LatheOpts = {}): THREE.BufferGeo
   const pos: number[] = [];
   const nor: number[] = [];
   const uv: number[] = [];
-  for (let i = 0; i <= seg; i++) {
-    const a = phi0 + (i / seg) * phiL;
+  for (let i = 0; i <= segs; i++) {
+    const a = phi0 + (i / segs) * phiL;
     const s = Math.sin(a);
     const c = Math.cos(a);
     for (let j = 0; j < n; j++) {
       const [r, y] = profile[j];
       pos.push(r * s, y, r * c);
       nor.push(nr[j] * s, ny[j], nr[j] * c);
-      uv.push((i / seg) * uRep, vs[j]);
+      uv.push((i / segs) * uRep, vs[j]);
     }
   }
   const idx: number[] = [];
-  for (let i = 0; i < seg; i++)
+  for (let i = 0; i < segs; i++)
     for (let j = 0; j < n - 1; j++) {
       if (same(profile[j], profile[j + 1])) continue;
       const a = i * n + j;
@@ -147,8 +165,8 @@ export function cylinder(rTop: number, rBot: number, h: number, opts: LatheOpts 
 }
 
 /** Simple three.js cylinder primitive (cheap, unit UVs), centred at y. */
-export function cyl(rTop: number, rBot: number, h: number, seg = 16, y = 0, open = false): THREE.BufferGeometry {
-  const g = new THREE.CylinderGeometry(rTop, rBot, h, seg, 1, open);
+export function cyl(rTop: number, rBot: number, h: number, segments = 16, y = 0, open = false): THREE.BufferGeometry {
+  const g = new THREE.CylinderGeometry(rTop, rBot, h, seg(segments), 1, open);
   g.translate(0, y, 0);
   return g;
 }
@@ -169,11 +187,11 @@ export function box(w: number, h: number, d: number, tile = 1): THREE.BufferGeom
 }
 
 export function sphere(r: number, w = 20, h = 14): THREE.BufferGeometry {
-  return new THREE.SphereGeometry(r, w, h);
+  return new THREE.SphereGeometry(r, seg(w, 8), seg(h, 6));
 }
 
 export function torus(R: number, r: number, radial = 10, tubular = 40): THREE.BufferGeometry {
-  const g = new THREE.TorusGeometry(R, r, radial, tubular);
+  const g = new THREE.TorusGeometry(R, r, seg(radial, 4), seg(tubular, 8));
   g.rotateX(Math.PI / 2); // lie in XZ plane around Y
   return g;
 }
@@ -181,15 +199,15 @@ export function torus(R: number, r: number, radial = 10, tubular = 40): THREE.Bu
 /** Smooth pipe through points. */
 export function pipe(points: [number, number, number][], radius: number, radialSeg = 8, tubularSeg?: number): THREE.BufferGeometry {
   const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p)), false, 'centripetal');
-  return new THREE.TubeGeometry(curve, tubularSeg ?? Math.max(8, points.length * 8), radius, radialSeg, false);
+  return new THREE.TubeGeometry(curve, seg(tubularSeg ?? Math.max(8, points.length * 8), 6), radius, seg(radialSeg, 4), false);
 }
 
 /** Rod between two points. */
-export function rod(a: [number, number, number], b: [number, number, number], r: number, seg = 6): THREE.BufferGeometry {
+export function rod(a: [number, number, number], b: [number, number, number], r: number, segments = 6): THREE.BufferGeometry {
   const va = new THREE.Vector3(...a);
   const vb = new THREE.Vector3(...b);
   const len = va.distanceTo(vb);
-  const g = new THREE.CylinderGeometry(r, r, len, seg, 1, false);
+  const g = new THREE.CylinderGeometry(r, r, len, seg(segments, 4), 1, false);
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), vb.clone().sub(va).normalize());
   g.applyQuaternion(q);
   const mid = va.add(vb).multiplyScalar(0.5);
