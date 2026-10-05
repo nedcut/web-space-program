@@ -1,11 +1,17 @@
-import { useState } from 'react';
 import { ASSIST_LABELS, type AssistId } from '../assist';
 
-/** Collapsible flight-assist menu (top-left, under the time bar). */
+const ASSIST_HINTS: Record<AssistId, string> = {
+  orbit: 'Flies the ascent and circularizes in a low orbit. Stages automatically.',
+  node: 'Points at the next maneuver node and burns it.',
+  land: 'Suicide-burn landing below the current position.',
+  circAp: 'Plans and burns a circularization at apoapsis.',
+  circPe: 'Plans and burns a circularization at periapsis.',
+};
+
+/** Flight-assist programs (shown in the HUD's left dock). */
 export function AssistPanel({ active, onStart, onCancel }: { active: { name: string; status: string } | null; onStart(id: AssistId): void; onCancel(): void }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div className="panel" style={{ position: 'absolute', top: 64, left: 10, padding: 8, width: 210 }}>
+    <div className="panel" style={{ padding: 8, flexShrink: 0 }}>
       {active ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div className="label" style={{ color: 'var(--accent)' }}>Assist · {active.name}</div>
@@ -13,18 +19,12 @@ export function AssistPanel({ active, onStart, onCancel }: { active: { name: str
           <button className="btn small danger" onClick={onCancel}>Cancel (or steer manually)</button>
         </div>
       ) : (
-        <>
-          <button className="btn small ghost" style={{ width: '100%', textAlign: 'left' }} onClick={() => setOpen((o) => !o)}>
-            {open ? '▾' : '▸'} Flight assist
-          </button>
-          {open && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-              {(Object.keys(ASSIST_LABELS) as AssistId[]).map((id) => (
-                <button key={id} className="btn small" onClick={() => { onStart(id); setOpen(false); }}>{ASSIST_LABELS[id]}</button>
-              ))}
-            </div>
-          )}
-        </>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div className="label">Flight assist</div>
+          {(Object.keys(ASSIST_LABELS) as AssistId[]).map((id) => (
+            <button key={id} className="btn small" title={ASSIST_HINTS[id]} onClick={() => onStart(id)}>{ASSIST_LABELS[id]}</button>
+          ))}
+        </div>
       )}
     </div>
   );

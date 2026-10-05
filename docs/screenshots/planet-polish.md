@@ -1,6 +1,6 @@
 # Planet visual polish
 
-All captures use Standard scale, 1280×800, ACES at exposure 1, and Medium quality unless specified. Start the isolated preview with `npx vite --port 5181 --strictPort`.
+All captures use Standard scale, a 1280×800 CSS viewport, ACES at exposure 1, and Medium quality unless specified. Resumed captures use the native 1920×1200 canvas (device pixel ratio 1.5). Start the isolated preview with `npx vite --port 5181 --strictPort`.
 
 Capture with `node scripts/shot.mjs "http://localhost:5181/planet-preview.html?..." docs/screenshots/name.png 15000`. For terrain, wait for `window.__preview.ready` before the 15-second capture delay; the initial bake can take longer on a busy SwiftShader host. URL latitude values now retain sub-degree precision, which is necessary for ring-plane flythroughs.
 
@@ -13,7 +13,7 @@ Capture with `node scripts/shot.mjs "http://localhost:5181/planet-preview.html?.
 | `enceladus-before.png`, `enceladus-plume.png` | `body=enceladus&alt=55000&lat=-20&lon=0&hour=16&dec=-20&ui=0&settle=1` |
 | `titan-haze.png` | `body=titan&alt=750000&lat=20&lon=0&hour=15&dec=10&ui=0&settle=1` |
 | `earth-night.png` | `body=earth&alt=1600000&lat=35&lon=-25&hour=19&dec=10&ui=0&settle=1` |
-| `earth-aurora.png` | `body=earth&alt=1600000&lat=65&lon=-25&hour=19&dec=10&ui=0&settle=1` |
+| `earth-aurora.png` | `body=earth&alt=1100000&lat=65&lon=-25&hour=0&dec=0&ui=0&settle=1` |
 | `sun-closeup.png` | `body=sun&alt=150000000&lat=15&lon=0&ui=0` |
 | `jupiter-storms.png` | `body=jupiter&alt=17000000&lat=-15&lon=70&hour=11&dec=0&ui=0` |
 | `neptune-dark-spot.png` | `body=neptune&alt=7000000&lat=-10&lon=-115&hour=11&dec=0&ui=0` |
@@ -23,7 +23,17 @@ Capture with `node scripts/shot.mjs "http://localhost:5181/planet-preview.html?.
 ## Implementation notes
 
 - Ring ice is visual scenery, with two instanced geometry LODs. A seeded 160 m body-fixed cell grid supplies a camera-local field (800 m Medium, 1280 m High), sampled from the same opacity profile as the distant rings. Only local offsets reach instance buffers. Field boundaries use an opaque dither fade. The camera near plane shrinks while inside the field. Chunks have no collision or orbital dynamics.
-- Low disables resolved chunks, extra volume shells/plumes, coastal lights and aurora; gas noise uses fewer octaves. Budgets live in `src/render/core/quality.ts`.
+- Low disables resolved chunks, extra volume shells/plumes, coastal lights, aurora and planetshine; gas noise uses fewer octaves. Budgets live in `src/render/core/quality.ts`.
 - Enceladus/Io plumes are bounded emissive scattering approximations, not fluid simulations. Their extent is exaggerated for readability. Titan's visual atmosphere is capped at 26% of its radius at compressed scales; this leaves the physics atmosphere unchanged. The detached layer is analytic, with a subtle cool tint above the orange haze.
 - Planetshine uses a Lambert-sphere phase law and source solid angle. A moon receives directional, tinted light from its parent when that parent's renderer is live in the same scene. Standalone planet previews have no parent renderer, so they do not demonstrate moon planetshine. No ring shadows on moons are implemented.
 - Earth settlements follow procedural land elevation, coastal preference and population noise; they are not a geographic city database. The solar close-up uses an artistic exposure transition from distant HDR radiance to a readable photosphere.
+
+## Validation after resume
+
+- Merged main at `6c7852d` without conflicts; preserved its flight/editor/menu changes.
+- `npx tsc --noEmit` passed. `npx vitest run --maxWorkers=2` passed: 36 files, 403 tests.
+- Final refinements soften storm rims, add amber haze strata, scale storm noise octaves by quality, and prevent planetshine between unattached renderers.
+
+The resumed captures use the collaborative preview on port 5181. Its page-snapshot endpoint failed, so the rendered canvas was exported through the same preview after `window.__preview.ready`; no extra browser instances were launched.
+
+Night-side verification also fixed the volume shader depth guard to match three.js `USE_LOGARITHMIC_DEPTH_BUFFER`; previously, back-face proxy depth hid aurora over the planet disc. The shader now writes the front-of-volume depth in both logarithmic and regular depth modes.

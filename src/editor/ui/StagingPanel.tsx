@@ -81,7 +81,7 @@ export function StagingPanel({ session, view }: { session: EditorSession; view: 
               onDrop={(e) => drop(s.index, e)}
             >
               <div className="vab-stage-title">
-                <span className="vab-stage-num">{s.index}</span>
+                <span className="vab-stage-num" title={s.index === 0 ? 'Fires first' : undefined}>{stages.length - 1 - s.index}</span>
                 {st && st.dvVac > 0.5 ? (
                   <span className="vab-stage-dv mono" title={`Vacuum ${fmtDv(st.dvVac)} · Sea level ${fmtDv(st.dvAsl)} · burn ${st.burnTime.toFixed(0)} s`}>
                     {fmtDv(s.index === 0 ? st.dvAsl : st.dvVac)}

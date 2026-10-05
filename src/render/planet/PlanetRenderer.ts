@@ -142,7 +142,7 @@ export class PlanetRenderer {
       const kind = this.kind === 'star' ? 'corona' : id;
       if (kind === 'enceladus' || kind === 'io' || kind === 'titan' || kind === 'earth' || kind === 'corona') {
         const extent = kind === 'enceladus' ? 1.8 : kind === 'io' ? 1.22 : kind === 'corona' ? 1.65
-          : kind === 'titan' ? 1 + (this.atmosphere!.atmosphereRadius / body.radius - 1) * 0.75 : 1.045;
+          : kind === 'titan' ? 1 + (this.atmosphere!.atmosphereRadius / body.radius - 1) * 1.18 : 1.045;
         const effect = createPlanetEffect(this.uniforms, this.quality, kind, extent);
         this.effects.push(effect);
         this.materials.push(effect.material as THREE.Material);
@@ -371,7 +371,7 @@ export class PlanetRenderer {
     u.uPlanetshineColor.value.setScalar(0);
     // Nearby parent renderers already exist in flight. Keep solar positions in float64 here.
     for (const [renderer, parent] of lightSources) {
-      if (renderer.body.id !== this.body.parent || renderer.kind === 'star' || renderer.root.parent !== this.root.parent) continue;
+      if (this.quality.id === 'low' || !this.root.parent || renderer.body.id !== this.body.parent || renderer.kind === 'star' || renderer.root.parent !== this.root.parent) continue;
       const dx = parent.position.x - p.bodyPosition.x, dy = parent.position.y - p.bodyPosition.y, dz = parent.position.z - p.bodyPosition.z;
       const distance = Math.hypot(dx, dy, dz);
       if (distance <= parent.radius) continue;

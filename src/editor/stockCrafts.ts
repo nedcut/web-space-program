@@ -82,7 +82,10 @@ export function buildSoundingRocket(catalog: PartCatalog = PART_CATALOG): CraftD
   const pod = b.root('pod-lantern-1');
   b.stack(pod, 'chute-main', 'top');
   const dec = b.stack(pod, 'dec-1');
-  const tank = b.stack(dec, 'tank-1-long');
+  // Two standard tanks rather than one tall one: same propellant, and every part is starter equipment so a
+  // brand-new Science/Career program can fly it straight away.
+  const upper = b.stack(dec, 'tank-1-mid');
+  const tank = b.stack(upper, 'tank-1-mid');
   b.stack(tank, 'eng-sirocco');
   b.radial(tank, 'fin-keel', 3, -0.95);
   return b.done();

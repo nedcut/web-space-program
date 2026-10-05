@@ -469,13 +469,15 @@ export function createGasGiantMaterial(u: PlanetUniforms, q: QualitySettings, s:
           if (r < 2.2) {
             float ang = (1.0 - smoothstep(0.0, 1.6, r)) * 5.0;
             vec2 sw = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * d;
-            float swirl = fbm3(vec3(sw * 2.5, 3.0), 4);
+            float swirl = fbm3(vec3(sw * 2.5, 3.0), DETAIL_OCTAVES);
+            float edge = r + snoise(vec3(sw * 4.0, 7.0)) * 0.085;
             vec3 red = uC3 * (0.9 + 0.3 * swirl);
-            albedo = mix(albedo, red, (1.0 - smoothstep(0.75, 1.05, r)));
-            albedo = mix(albedo, uC2 * 1.05, smoothstep(0.9, 1.05, r) * (1.0 - smoothstep(1.05, 1.5, r)) * 0.6);
+            albedo = mix(albedo, red, 1.0 - smoothstep(0.72, 1.12, edge));
+            float rim = smoothstep(0.85, 1.03, edge) * (1.0 - smoothstep(1.03, 1.42, edge));
+            albedo = mix(albedo, uC2, rim * (0.20 + 0.18 * swirl));
           }
           float ov = snoise(vec3(pr.xy * 18.0, lat * 30.0));
-          albedo = mix(albedo, uC2 * 1.1, smoothstep(0.75, 0.85, ov) * smoothstep(0.5, 0.2, abs(lat + 0.6)) * 0.7);
+          albedo = mix(albedo, uC2 * 1.1, smoothstep(0.75, 0.85, ov) * (1.0 - smoothstep(0.2, 0.5, abs(lat + 0.6))) * 0.7);
           albedo = mix(albedo, uC0 * 0.9, polar * 0.6);
         } else if (uStyle < 1.5) {
           // Saturn: subtle bands, north-polar hexagon.
@@ -503,8 +505,8 @@ export function createGasGiantMaterial(u: PlanetUniforms, q: QualitySettings, s:
           float storm = r + snoise(vec3(d * 4.0, 1.0)) * 0.09;
           albedo = mix(albedo, uC0 * (0.45 + 0.12 * snoise(vec3(d * 8.0, 4.0))), 1.0 - smoothstep(0.60, 1.05, storm));
           albedo = mix(albedo, vec3(0.63, 0.77, 0.88), exp(-pow((storm - 1.08) * 9.0, 2.0)) * 0.12 * smoothstep(-0.3, 0.8, d.y));
-          float streak = fbm3(vec3(pr.xy * 4.0, lat * 60.0), 4);
-          albedo = mix(albedo, vec3(0.9), smoothstep(0.35, 0.6, streak) * 0.55 * smoothstep(1.3, 0.9, r));
+          float streak = fbm3(vec3(pr.xy * 4.0, lat * 60.0), DETAIL_OCTAVES);
+          albedo = mix(albedo, vec3(0.9), smoothstep(0.35, 0.6, streak) * 0.55 * (1.0 - smoothstep(0.9, 1.3, r)));
         }
         // Project onto the exact sphere: tessellated triangles sag below R (km at planetary scale),
         // which would alias altitude-dependent atmosphere terms along the mesh.

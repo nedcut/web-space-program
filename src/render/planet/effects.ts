@@ -22,12 +22,18 @@ export function createPlanetEffect(u: PlanetUniforms, q: QualitySettings, kind: 
       ${GLSL_NOISE}
       uniform vec3 uCamRel, uSunDir, uSunColor;
       uniform mat3 uBodyRot;
+      uniform mat4 projectionMatrix;
       uniform float uPlanetRadius, uExtent, uTime;
       varying vec3 vWorld;
       vec2 hit(vec3 p, vec3 d, float r) {
         float b = dot(p, d), disc = b*b - dot(p,p) + r*r;
         if (disc < 0.0) return vec2(1e20, -1e20);
         return vec2(-b-sqrt(disc), -b+sqrt(disc));
+      }
+      float shellChord(vec3 ro, vec3 rd, float r, float width, float start, float end) {
+        vec2 outer = hit(ro, rd, r + width), inner = hit(ro, rd, r - width);
+        float chord = max(0.0, min(end, outer.y) - max(start, outer.x));
+        return max(0.0, chord - max(0.0, min(end, inner.y) - max(start, inner.x)));
       }
       float jet(vec3 p, vec3 axis, float height, float width) {
         float h = dot(p, axis) - 0.99;
@@ -58,21 +64,28 @@ export function createPlanetEffect(u: PlanetUniforms, q: QualitySettings, kind: 
         if (ground.x > 0.0) end = min(end, ground.x);
         if (end <= start) discard;
         // Use the front of the volume for depth tests, rather than the back-face proxy sphere.
-        #ifdef USE_LOGDEPTHBUF
-          vec4 clip = projectionMatrix * viewMatrix * vec4(cameraPosition + rdWorld * start * uPlanetRadius, 1.0);
+        vec4 clip = projectionMatrix * viewMatrix * vec4(cameraPosition + rdWorld * start * uPlanetRadius, 1.0);
+        #ifdef USE_LOGARITHMIC_DEPTH_BUFFER
           gl_FragDepth = log2(max(1e-6, 1.0 + clip.w)) * logDepthBufFC * 0.5;
+        #else
+          gl_FragDepth = clip.w > 0.0 ? clamp(clip.z / clip.w * 0.5 + 0.5, 0.0, 1.0) : 0.0;
         #endif
         vec3 color = vec3(0.0);
         float phase = 0.5 + 2.0 * pow(max(dot(rd, sun), 0.0), 6.0);
         #if defined(TITAN)
           // Analytic thin-shell chord lengths resolve detached layers even at low sample counts.
-          float r = 1.0 + (uExtent - 1.0) * 0.84;
-          vec2 outer = hit(ro, rd, r + 0.006), inner = hit(ro, rd, r - 0.006);
-          float chord = max(0.0, min(end, outer.y) - max(start, outer.x));
-          chord -= max(0.0, min(end, inner.y) - max(start, inner.x));
+          // Detach the cool layer above the main amber atmosphere, leaving a visible gap.
+          float r = 1.0 + (uExtent - 1.0) * 0.94;
+          float chord = shellChord(ro, rd, r, 0.004, start, end);
           vec3 p = ro + rd * clamp(-dot(ro, rd), start, end);
           float day = smoothstep(-0.22, 0.4, dot(normalize(p), sun));
-          color = vec3(0.075, 0.10, 0.15) * (1.0-exp(-max(chord, 0.0)*1.2)) * day * phase * uSunColor;
+          float layering = 0.8 + 0.2 * snoise(normalize(p) * vec3(3.0, 3.0, 12.0));
+          color = vec3(0.075, 0.10, 0.15) * (1.0-exp(-chord*1.2)) * layering;
+          // Thin amber strata stay below the detached cool limb layer.
+          float lower = shellChord(ro, rd, 1.0 + (uExtent - 1.0) * 0.36, 0.007, start, end);
+          float upper = shellChord(ro, rd, 1.0 + (uExtent - 1.0) * 0.56, 0.005, start, end);
+          color += vec3(0.12, 0.058, 0.018) * (1.0-exp(-lower*0.5-upper*0.35)) * layering;
+          color *= day * phase * uSunColor;
         #else
           float stepSize = (end - start) / float(STEPS);
           for (int i = 0; i < STEPS; i++) {
