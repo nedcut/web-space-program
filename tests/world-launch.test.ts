@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { describe, it, expect } from 'vitest';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
@@ -10,6 +11,7 @@ import { DEFAULT_START_UT } from '../src/game/store';
 describe('world launch integration', () => {
   it('sits on the pad, then lifts off and climbs', () => {
     const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+    requireIntactFlight(world);
     const wv = world.launch(buildOrbiter());
     const earth = world.universe.body('earth');
     const alt = () => length(world.relativeState(wv).position) - earth.radius;
