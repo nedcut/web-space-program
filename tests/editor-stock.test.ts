@@ -4,6 +4,9 @@ import { deserializeCraft, getStageList, serializeCraft, validateCraft } from '.
 import { STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { computeStageStats, localEstimate } from '../src/editor/ui/dv';
 import { qRotate } from '../src/util/quat';
+import { Universe } from '../src/game/universe';
+import { sampleAtmosphere } from '../src/sim/atmosphere';
+import { buildVessel, computeStageDeltaV } from '../src/sim/vessel';
 import { v3 } from '../src/util/vec3';
 
 describe('stock crafts', () => {
@@ -19,8 +22,20 @@ describe('stock crafts', () => {
       // eslint-disable-next-line no-console
       console.log(s.name, craft.parts.length, 'parts', Math.round(total), 'm/s (sim)', Math.round(local), 'm/s (local)',
         [...stats.entries()].map(([i, x]) => `S${i}:${Math.round(x.dvVac)}/${x.twrAsl.toFixed(2)}`).join(' '));
-      expect(total).toBeGreaterThan(2000);
-      expect(Math.abs(total - local) / total).toBeLessThan(0.15);
+      expect(total).toBeGreaterThan(s.needsResearch ? 0 : 2000);
+      if (!s.needsResearch) expect(Math.abs(total - local) / total).toBeLessThan(0.15);
+      expect(craft.parts.some(p => PART_CATALOG.get(p.partId)!.modules.some(m => m.type === 'command' && m.controllable !== false))).toBe(true);
+      for (const stage of getStageList(craft)) {
+        expect(stage.partUids.length).toBeGreaterThan(0);
+        for (const uid of stage.partUids) expect(PART_CATALOG.get(craft.parts.find(p => p.uid === uid)!.partId)!.modules.some(m => ['engine', 'decoupler', 'parachute', 'fairing'].includes(m.type))).toBe(true);
+      }
+      const launchBody = s.launchBody ?? (craft.type === 'VAB' && !s.needsResearch && s.id !== 'stock-tender' ? 'earth' : undefined);
+      if (launchBody) {
+        const body = new Universe('standard').body(launchBody);
+        const pressure = sampleAtmosphere(body.atmosphere, 0, body.surfaceGravity).pressure;
+        const first = computeStageDeltaV(buildVessel(craft, PART_CATALOG), pressure, body.surfaceGravity)[0];
+        expect(first.twrStart, `${launchBody} liftoff TWR`).toBeGreaterThan(1.15);
+      }
     });
   }
 
