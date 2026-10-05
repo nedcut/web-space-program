@@ -87,8 +87,11 @@ describe('resource machinery', () => {
     expect(a.parts[1].processTemperature).toBeCloseTo(b.parts[1].processTemperature!, 8);
     expect(a.parts[2].processTemperature).toBeCloseTo(b.parts[2].processTemperature!, 8);
   });
-  it('runs through the physics integrator and matches landed World rails catch-up', () => {
-    const w = new World(u, PART_CATALOG, 0); const wv = w.launch(craft());
+  it.each([null, 'generator-isotope', 'fuelcell-1'])('physics and landed rails agree with power source %s', source => {
+    const design = craft();
+    if (source) design.parts.push({ uid: 9, partId: source, parent: 5, attachNode: 'srf', position: v3(), rotation: qIdentity() });
+    const w = new World(u, PART_CATALOG, 0); const wv = w.launch(design);
+    wv.state.parts[4].resources.liquidFuel = 10; wv.state.parts[4].resources.oxidizer = 20;
     wv.mode = 'landedRails'; wv.state.situation = 'landed';
     wv.state.parts[1].drillDeployed = true; wv.state.parts[1].drillDeploy = 1;
     const v = cloneVessel(wv.state), c = w.localConcentration(wv);
@@ -99,6 +102,48 @@ describe('resource machinery', () => {
     w.advanceRailsTo(10);
     expect(totalResource(wv.state, 'regolith')).toBeGreaterThan(0);
     amounts(v).forEach((n, i) => expect(n).toBeCloseTo(amounts(wv.state)[i], 8));
+  });
+  it.each(['generator-isotope', 'fuelcell-1'])('advances %s during landed rails catch-up through battery and fuel boundaries', source => {
+    const design = craft();
+    design.parts.push({ uid: 9, partId: source, parent: 5, attachNode: 'srf', position: v3(), rotation: qIdentity() });
+    const w = new World(u, PART_CATALOG, 0), wv = w.launch(design);
+    wv.mode = 'landedRails'; wv.state.situation = 'landed';
+    wv.state.parts[1].drillDeployed = true; wv.state.parts[1].drillDeploy = 1;
+    for (const p of wv.state.parts) if (p.maxResources.electricCharge) p.resources.electricCharge = 0;
+    const tank = wv.state.parts[4]; tank.resources.liquidFuel = 1.2; tank.resources.oxidizer = 2.2;
+    const smallSteps = cloneVessel(wv.state), concentration = w.localConcentration(wv);
+    for (let i = 0; i < 10000; i++) advanceISRU(smallSteps, concentration, 0.02);
+    w.advanceRailsTo(200);
+    amounts(wv.state).forEach((n, i) => expect(n).toBeCloseTo(amounts(smallSteps)[i], 7));
+    expect(wv.state.parts[1].processTemperature).toBeCloseTo(smallSteps.parts[1].processTemperature!, 7);
+    // Empty batteries must still support generation-limited mining. Fuel-cell mixture is conserved.
+    const generated = source === 'generator-isotope' ? 160 : 300;
+    expect(totalResource(wv.state, 'regolith')).toBeCloseTo(generated / 2 * 0.3 * concentration, 7);
+    expect(totalResource(wv.state, 'electricCharge')).toBeCloseTo(0, 8);
+    expect(tank.resources.liquidFuel).toBeCloseTo(source === 'fuelcell-1' ? 0 : 1.2, 8);
+    expect(tank.resources.oxidizer).toBeCloseTo(source === 'fuelcell-1' ? 0 : 2.2, 8);
+  });
+  it('preserves fuel-cell crossfeed isolation and stops fuel use at full batteries', () => {
+    const design = craft();
+    design.parts.push({ uid: 9, partId: 'fuelcell-1', parent: 1, attachNode: 'srf', position: v3(), rotation: qIdentity() });
+    const isolated = buildVessel(design, PART_CATALOG);
+    isolated.parts[4].resources.liquidFuel = 10; isolated.parts[4].resources.oxidizer = 20;
+    for (const p of isolated.parts) if (p.maxResources.electricCharge) p.resources.electricCharge = 0;
+    advanceISRU(isolated, 0.5, 10000);
+    expect(totalResource(isolated, 'electricCharge')).toBe(0);
+    expect(totalResource(isolated, 'liquidFuel')).toBe(10);
+    design.parts[8].parent = 5;
+    const connected = buildVessel(design, PART_CATALOG);
+    connected.parts[4].resources.liquidFuel = 10; connected.parts[4].resources.oxidizer = 20;
+    const before = amounts(connected);
+    advanceISRU(connected, 0.5, 10000);
+    expect(amounts(connected)).toEqual(before);
+    // Refill exactly 30 EC; do not burn ten thousand seconds of propellant.
+    connected.parts[3].resources.electricCharge! -= 30;
+    advanceISRU(connected, 0.5, 10000);
+    expect(totalResource(connected, 'liquidFuel')).toBeCloseTo(9.88, 10);
+    expect(totalResource(connected, 'oxidizer')).toBeCloseTo(19.78, 10);
+    expect(totalResource(connected, 'electricCharge')).toBe(before[Object.keys(RESOURCES).indexOf('electricCharge')]);
   });
   it('reads the current location after leaving a packed surface position', () => {
     const w = new World(u, PART_CATALOG, 0), wv = w.launch(craft());

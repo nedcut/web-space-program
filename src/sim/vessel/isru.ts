@@ -1,6 +1,6 @@
 import type { PartState, VesselState } from './runtime';
 import type { ResourceId } from './types';
-import { totalResource } from './resources';
+import { flowGroups } from './resources';
 import { recomputeMassProperties } from './assembly';
 
 const IDS: ResourceId[] = ['regolith', 'electricCharge', 'liquidFuel', 'oxidizer', 'monopropellant'];
@@ -18,12 +18,17 @@ interface Process { part: PartState; rates: number[]; fraction: number; heat: nu
 
 /** Refining uses a vessel-wide transfer manifold (including stack tanks). No input is vented:
  * all recoverable feedstock mass becomes product; recipes are kg fractions, rates are L/s of feed.
- * EC is massless. Tank/deployment boundary events make long landed-rails intervals analytical. */
+ * EC is massless. Fuel cells and constant generators share the same boundary solve in physics
+ * and landed rails, preserving simultaneous supply/demand without large-dt battery top-ups.
+ * Fuel-cell draws retain their stack feed groups; refining retains its vessel-wide manifold. */
 export function advanceISRU(v: VesselState, concentration: number, dt: number): void {
   if (!(dt > 0) || v.destroyed) return;
   const machinery = isruMachinery(v);
-  if (!machinery.length) return;
-  const capacity = IDS.map(id => v.parts.reduce((s, p) => s + (p.maxResources[id] ?? 0), 0));
+  const sources = v.parts.filter(p => p.def.modules.some(m => m.type === 'generator' || m.type === 'fuelCell'));
+  if (!machinery.length && !sources.length) return;
+  // Resolve each tank separately so fuel-cell crossfeed and depletion boundaries remain visible.
+  const pools = IDS.flatMap(id => v.parts.filter(p => (p.maxResources[id] ?? 0) > 0).map(part => ({ id, part })));
+  const capacity = pools.map(({ id, part }) => part.maxResources[id]!);
   let remaining = dt;
   while (remaining > 1e-12) {
     let interval = remaining;
@@ -47,12 +52,41 @@ export function advanceISRU(v: VesselState, concentration: number, dt: number): 
         }
       }
     }
-    const amounts = IDS.map(id => totalResource(v, id));
+    const amounts = pools.map(({ id, part }) => part.resources[id] ?? 0);
+    const distribute = (rates: number[], consumer?: PartState): number[] => {
+      const result = pools.map(() => 0);
+      IDS.forEach((id, resourceIndex) => {
+        const rate = rates[resourceIndex];
+        let indices = pools.flatMap((pool, i) => pool.id === id ? [i] : []);
+        if (consumer && rate < 0) {
+          const groups = flowGroups(v, consumer.uid, id).map(group => indices.filter(i => group.includes(pools[i].part.uid)));
+          indices = groups.find(group => group.some(i => amounts[i] > EPS)) ?? groups.flat();
+        }
+        let weights = indices.map(i => rate > 0 ? Math.max(0, capacity[i] - amounts[i]) : amounts[i]);
+        let total = weights.reduce((a, b) => a + b, 0);
+        // At a boundary, incoming and outgoing flows can balance without an artificial battery buffer.
+        if (total <= EPS) { weights = indices.map(i => capacity[i]); total = weights.reduce((a, b) => a + b, 0); }
+        indices.forEach((i, j) => { result[i] = total > 0 ? rate * weights[j] / total : 0; });
+      });
+      return result;
+    };
+    for (const process of processes) {
+      if (process.rates.some((rate, i) => rate !== 0 && !pools.some(pool => pool.id === IDS[i]))) process.fraction = 0;
+      process.rates = distribute(process.rates);
+    }
+    for (const part of sources) for (const m of part.def.modules) {
+      if ((m.type !== 'generator' && m.type !== 'fuelCell') || m.chargeRate <= 0) continue;
+      if (!pools.some(pool => pool.id === 'electricCharge')) continue;
+      if (m.type === 'fuelCell' && (['liquidFuel', 'oxidizer'] as const).some(id =>
+        !flowGroups(v, part.uid, id).flat().some(uid => pools.some(pool => pool.id === id && pool.part.uid === uid)))) continue;
+      const rates = m.type === 'generator' ? [0, m.chargeRate, 0, 0, 0] : [0, m.chargeRate, -m.fuelRate, -m.oxidizerRate, 0];
+      processes.push({ part, rates: distribute(rates, part), fraction: 1, heat: 0 });
+    }
     // At empty/full boundaries throttle competing processes together. Revisit dependent constraints
     // until stable (e.g. EC starvation stops a drill that was feeding an empty converter tank).
     for (let pass = 0; pass < 64; pass++) {
       let changed = false;
-      for (let i = 0; i < IDS.length; i++) {
+      for (let i = 0; i < pools.length; i++) {
         let input = 0, output = 0;
         for (const p of processes) { const r = p.rates[i] * p.fraction; if (r > 0) input += r; else output -= r; }
         const empty = amounts[i] <= EPS;
@@ -68,21 +102,15 @@ export function advanceISRU(v: VesselState, concentration: number, dt: number): 
       }
       if (!changed) break;
     }
-    const net = IDS.map((_, i) => processes.reduce((s, p) => s + p.rates[i] * p.fraction, 0));
-    for (let i = 0; i < IDS.length; i++) {
+    const net = pools.map((_, i) => processes.reduce((s, p) => s + p.rates[i] * p.fraction, 0));
+    for (let i = 0; i < pools.length; i++) {
       if (net[i] > EPS) interval = Math.min(interval, Math.max(0, capacity[i] - amounts[i]) / net[i]);
       if (net[i] < -EPS) interval = Math.min(interval, Math.max(0, amounts[i]) / -net[i]);
     }
     if (interval <= 1e-12) break;
-    for (let i = 0; i < IDS.length; i++) {
-      const id = IDS[i], change = net[i] * interval;
-      const pool = change >= 0 ? capacity[i] - amounts[i] : amounts[i];
-      if (pool <= 0 || change === 0) continue;
-      for (const p of v.parts) {
-        const have = p.resources[id] ?? 0, cap = p.maxResources[id] ?? 0;
-        const share = change >= 0 ? Math.max(0, cap - have) : have;
-        if (share) p.resources[id] = Math.max(0, Math.min(cap, have + change * share / pool));
-      }
+    for (let i = 0; i < pools.length; i++) {
+      const { id, part } = pools[i];
+      part.resources[id] = Math.max(0, Math.min(capacity[i], amounts[i] + net[i] * interval));
     }
     for (const p of machinery) {
       if (p.def.modules.some(m => m.type === 'drill')) {

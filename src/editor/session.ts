@@ -4,6 +4,7 @@ import { newProgression } from '../sim/science/progression';
 import { PART_CATALOG } from '../data/parts';
 import { RESOURCES } from '../data/resources';
 import { game } from '../game/store';
+import { Universe } from '../game/universe';
 import { deleteCraft, listCrafts, saveCraft } from '../game/saves';
 import type { CraftDef, PartInstance, ResourceId } from '../sim/vessel/types';
 import { qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../util/quat';
@@ -16,7 +17,7 @@ export const DENSITIES: Partial<Record<ResourceId, number>> = Object.fromEntries
   Object.values(RESOURCES).map((r) => [r.id, r.density]),
 ) as Partial<Record<ResourceId, number>>;
 
-export const SYMMETRY_STEPS = [1, 2, 3, 4, 6, 8] as const;
+const SYMMETRY_STEPS = [1, 2, 3, 4, 6, 8] as const;
 export type SymmetryCount = (typeof SYMMETRY_STEPS)[number];
 
 /** What the player is holding. Positions are resolved every frame by the 3D view. */
@@ -137,7 +138,7 @@ export class EditorSession {
     const craft = this.editor.craft;
     const stats = craftStats(craft, CATALOG, DENSITIES);
     const stages = getStageList(craft);
-    const stageStats = computeStageStats(craft, CATALOG);
+    const stageStats = computeStageStats(craft, CATALOG, new Universe(game.get().scalePreset).body('earth'));
     let totalDvVac = 0, totalDvAsl = 0;
     for (const s of stageStats.values()) { totalDvVac += s.dvVac; totalDvAsl += s.dvAsl; }
     this.version++;

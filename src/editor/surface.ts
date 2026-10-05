@@ -18,7 +18,7 @@ export function surfaceTransform(def: PartDef, point: Vec3, normal: Vec3, up: Ve
 }
 
 /** Orientation for a radial part: local +Z along `normal` (outward), local +Y as close to `up` as possible. */
-export function surfaceBasis(normal: Vec3, up: Vec3): Quat {
+function surfaceBasis(normal: Vec3, up: Vec3): Quat {
   const z = norm(normal);
   let y = sub(up, scale(z, dot(up, z)));
   if (Math.hypot(y.x, y.y, y.z) < 1e-4) y = Math.abs(z.y) < 0.9 ? v3(0, 1, 0) : v3(0, 0, -1);

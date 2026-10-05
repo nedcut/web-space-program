@@ -74,6 +74,8 @@ export class Universe {
    * so queries inside one integration step are consistent.
    */
   createEnvironment(getDominant: () => string, nbody = false): Environment {
+    // Returned Environment methods have their own receiver; capture the owning universe.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     return {
       regolithConcentration(pos, t) {

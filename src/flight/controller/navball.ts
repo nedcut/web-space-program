@@ -1,0 +1,57 @@
+import { maneuverToInertialDv } from '../../sim/orbit';
+import { qRotate } from '../../util/quat';
+import { cross, length, negate, normalize, sub, v3, type Vec3 } from '../../util/vec3';
+import type { FlightController } from '../controller';
+import type { NavballFrame, NavballMarker } from '../hud/navball';
+import type { FlightControllerInternals } from './internals';
+
+/** Navball frame for the active vessel (called by the HUD every animation frame). */
+export function navball(this: FlightController, internals: FlightControllerInternals): { frame: NavballFrame; markers: NavballMarker[] } | null {
+  const wv = this.world.active;
+  if (!wv) return null;
+  const rs = this.world.relativeState(wv);
+  const up = normalize(rs.position);
+  const pole = qRotate(this.world.universe.ephem.bodyRotation(wv.body, this.world.ut), v3(0, 0, 1));
+  let east = cross(pole, up);
+  if (length(east) < 1e-9) east = cross(v3(1, 0, 0), up);
+  east = normalize(east);
+  const north = cross(up, east);
+  const q = wv.state.orientation;
+  const forward = qRotate(q, v3(0, 1, 0));
+  const top = qRotate(q, v3(0, 0, 1));
+  const ts = this.world.targetState();
+  const targetMode = this.speedMode === 'target' && !!ts;
+  const vel = this.speedMode === 'surface' ? this.world.surfaceVelocity(wv) : targetMode ? sub(wv.state.velocity, ts!.velocity) : rs.velocity;
+  const markers: NavballMarker[] = [];
+  if (ts) {
+    const toT = sub(ts.position, wv.state.position);
+    if (length(toT) > 1e-6) {
+      const d = normalize(toT);
+      markers.push({ kind: 'target', dir: d }, { kind: 'antiTarget', dir: negate(d) });
+    }
+  }
+  if (length(vel) > (targetMode ? 0.005 : 0.5)) {
+    const pro = normalize(vel);
+    markers.push({ kind: 'prograde', dir: pro }, { kind: 'retrograde', dir: negate(pro) });
+    const h = cross(rs.position, rs.velocity);
+    if (length(h) > 0) {
+      const n = normalize(h);
+      const radOut = normalize(cross(normalize(rs.velocity), n));
+      markers.push({ kind: 'normal', dir: n }, { kind: 'antinormal', dir: negate(n) });
+      markers.push({ kind: 'radialOut', dir: negate(radOut) }, { kind: 'radialIn', dir: radOut });
+    }
+  }
+  const md = internals.maneuverDirection();
+  if (md) markers.push({ kind: 'maneuver', dir: md });
+  return { frame: { east, north, up, forward, top }, markers };
+}
+
+
+export function maneuverDirection(this: FlightController, _internals: FlightControllerInternals): Vec3 | null {
+  const wv = this.world.active;
+  const node = this.world.nodes[0];
+  if (!wv || !node) return null;
+  const rs = this.world.relativeState(wv);
+  const dv = maneuverToInertialDv(rs, node);
+  return length(dv) > 0 ? normalize(dv) : null;
+}

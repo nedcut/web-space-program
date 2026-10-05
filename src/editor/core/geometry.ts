@@ -59,7 +59,7 @@ export function transformAssembly(assembly: HeldAssembly, transform: Transform):
     rotation: qNormalize(qMul(transform.rotation, part.rotation)),
   })) };
 }
-export function shapeHalfExtents(def: PartDef): Vec3 {
+function shapeHalfExtents(def: PartDef): Vec3 {
   if (def.shape.kind === 'box') return scale(def.shape.size, 0.5);
   const r = Math.max(def.shape.radiusTop, def.shape.radiusBottom);
   return v3(r, def.shape.height / 2, r);

@@ -19,7 +19,6 @@ describe('stock crafts', () => {
       const stats = computeStageStats(craft, PART_CATALOG);
       const total = [...stats.values()].reduce((a, x) => a + x.dvVac, 0);
       const local = [...localEstimate(craft, PART_CATALOG, getStageList(craft).length - 1).values()].reduce((a, x) => a + x.dvVac, 0);
-      // eslint-disable-next-line no-console
       console.log(s.name, craft.parts.length, 'parts', Math.round(total), 'm/s (sim)', Math.round(local), 'm/s (local)',
         [...stats.entries()].map(([i, x]) => `S${i}:${Math.round(x.dvVac)}/${x.twrAsl.toFixed(2)}`).join(' '));
       expect(total).toBeGreaterThan(s.needsResearch ? 0 : 2000);
@@ -34,7 +33,8 @@ describe('stock crafts', () => {
         const body = new Universe('standard').body(launchBody);
         const pressure = sampleAtmosphere(body.atmosphere, 0, body.surfaceGravity).pressure;
         const first = computeStageDeltaV(buildVessel(craft, PART_CATALOG), pressure, body.surfaceGravity)[0];
-        expect(first.twrStart, `${launchBody} liftoff TWR`).toBeGreaterThan(1.15);
+        // Real-scale heavy lifters fly lower liftoff TWR, like their real counterparts (verified in world-realscale tests).
+        expect(first.twrStart, `${launchBody} liftoff TWR`).toBeGreaterThan(s.id.endsWith('-real') ? 1.05 : 1.15);
       }
     });
   }

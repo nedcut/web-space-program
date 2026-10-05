@@ -1,63 +1,73 @@
-import { snapshotEqual } from '../util/snapshotEqual';
-import { cachedStageDeltaV } from '../game/stageDeltaVCache';
-import { applyCommsSettings, game } from '../game/store';
-import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
-import { getTutorial } from '../tutorial/runtime';
-import { flightData, flightPredictions } from '../game/flightData';
-import type { GameMode } from '../sim/science/progression';
-import { FlagView } from '../render/vessel/FlagView';
 import * as THREE from 'three';
-import { RenderPipeline, getQuality, type QualityId } from '../render/core';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import type { GameAudio } from '../audio';
+import { PART_CATALOG } from '../data/parts';
+import type { Autopilot } from '../game/autopilot';
+import { flightPredictions } from '../game/flightData';
+import { deserializeWorld, loadWorldFromStorage, saveWorldToStorage, serializeWorld, type SavedWorld } from '../game/persistence';
+import { applyCommsSettings, game } from '../game/store';
+import { Universe } from '../game/universe';
+import { World, type WorldVessel } from '../game/world';
+import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
+import { RenderPipeline, getQuality, type QualityId } from '../render/core';
+import type { ExtraOrbit } from '../render/map/MapView';
+import { MapView } from '../render/map/MapView';
+import { LaunchSite } from '../render/site/LaunchSite';
 import { Starfield } from '../render/sky/Starfield';
 import { SunGlare } from '../render/sky/SunGlare';
-import { MapView } from '../render/map/MapView';
-import { VesselView } from '../render/vessel/VesselView';
+import { FlagView } from '../render/vessel/FlagView';
 import { ReentryFx } from '../render/vessel/ReentryFx';
-import { stagnationHeatFlux } from '../sim/vessel/heating';
-import { World, quatFromBasis, type WorldVessel } from '../game/world';
-import { Universe } from '../game/universe';
-import { PART_CATALOG } from '../data/parts';
-import { RESOURCES } from '../data/resources';
-import type { CraftDef } from '../sim/vessel/types';
-import type { SasMode } from '../sim/vessel/runtime';
-import { neutralInput, freePorts, dockedPorts, gearState, type StageDeltaV, type PortInfo } from '../sim/vessel';
-import type { Orbit } from '../sim/orbit/api';
-import type { ExtraOrbit } from '../render/map/MapView';
-import { placeInCircularOrbit, spawnRendezvousTarget } from '../game/scenarios';
-import { formatDistance, formatDuration } from '../ui/format';
-import { maneuverToInertialDv } from '../sim/orbit';
-import { FlightInput } from './input';
-import { FlightCamera } from './camera';
-import { warpLabel } from '../game/timewarp';
-import type { Telemetry, HudStage, DockingTelemetry } from './hud/Hud';
-import type { NavballFrame, NavballMarker } from './hud/navball';
-import { add, cross, dot, length, normalize, scale, sub, v3, negate, type Vec3 } from '../util/vec3';
-import { qRotate } from '../util/quat';
+import { VesselView } from '../render/vessel/VesselView';
 import { sampleAtmosphere } from '../sim/atmosphere';
-import { createPlanetLayer, type PlanetLayer } from './planets';
-import { LaunchSite } from '../render/site/LaunchSite';
-import { deserializeWorld, serializeWorld, saveWorldToStorage, loadWorldFromStorage, type SavedWorld } from '../game/persistence';
-import { createAssist, warpIndexFor, type AssistId } from './assist';
-import type { Autopilot } from '../game/autopilot';
-import type { GameAudio } from '../audio';
 import type { ScalePresetId } from '../sim/bodies/scale';
+import type { Orbit } from '../sim/orbit/api';
+import type { GameMode } from '../sim/science/progression';
+import { gearState, neutralInput, type PortInfo } from '../sim/vessel';
+import { stagnationHeatFlux } from '../sim/vessel/heating';
+import type { SasMode } from '../sim/vessel/runtime';
+import type { CraftDef } from '../sim/vessel/types';
+import { getTutorial } from '../tutorial/runtime';
+import { formatDistance, formatDuration } from '../ui/format';
+import { snapshotEqual } from '../util/snapshotEqual';
+import { length, normalize, sub, type Vec3 } from '../util/vec3';
+import { type AssistId } from './assist';
+import { FlightCamera } from './camera';
+import * as assist from './controller/assist';
+import * as audio from './controller/audio';
+import type { FlightControllerInternals } from './controller/internals';
+import * as navball from './controller/navball';
+import * as scenarios from './controller/scenarios';
+import * as telemetry from './controller/telemetry';
+import type { DockingTelemetry, Telemetry } from './hud/Hud';
+import type { NavballFrame, NavballMarker } from './hud/navball';
+import { FlightInput } from './input';
+import { createPlanetLayer, type PlanetLayer } from './planets';
 
-const RESOURCE_COLORS: Record<string, string> = {
-  liquidFuel: '#ffb35c',
-  oxidizer: '#5cc8ff',
-  monopropellant: '#d0d0d0',
-  solidFuel: '#ff7a5c',
-  electricCharge: '#ffe14d',
-  xenon: '#b48cff',
-  ablator: '#a08060',
-};
 
 /**
  * Owns the flight scene: world simulation, rendering (flight + map), input, camera.
  * React only hosts the canvas and HUD; this class runs the frame loop.
  */
 export class FlightController {
+  private readonly systems: FlightControllerInternals = ((owner: FlightController) => ({
+    get assistWarped() { return owner.assistWarped; },
+    set assistWarped(value: boolean) { owner.assistWarped = value; },
+    get audio() { return owner.audio; },
+    set audio(value: GameAudio | null) { owner.audio = value; },
+    get craft() { return owner.craft; },
+    set craft(value: CraftDef | null) { owner.craft = value; },
+    dockingPair: () => owner.dockingPair(),
+    dockingTelemetry: () => owner.dockingTelemetry(),
+    groundTelemetry: (wv: WorldVessel) => owner.groundTelemetry(wv),
+    maneuverDirection: () => owner.maneuverDirection(),
+    get predictions() { return owner.predictions; },
+    set predictions(value: ReturnType<typeof flightPredictions>) { owner.predictions = value; },
+    get reentryHeat() { return owner.reentryHeat; },
+    set reentryHeat(value: number) { owner.reentryHeat = value; },
+    targetOptions: (wv: WorldVessel) => owner.targetOptions(wv),
+    targetTelemetry: (wv: WorldVessel) => owner.targetTelemetry(wv),
+  }))(this);
+
   readonly world: World;
   readonly network: MultiplayerClient | null;
   private lastOwnedVessel: string | null = null;
@@ -306,65 +316,11 @@ export class FlightController {
   }
 
   /** Dev/test scenarios (URL ?scenario=): reposition the active vessel. */
-  devScenario(name: string) {
-    if (this.network) return;
-    const wv = this.world.active;
-    if (!wv) return;
-    if (name === 'rendezvous') {
-      placeInCircularOrbit(this.world, wv, 'earth', 90000);
-      if (this.craft && spawnRendezvousTarget(this.world, this.craft, 100)) {
-        this.speedMode = 'target';
-        this.dockingMode = true;
-        this.sasOn = true;
-        this.sas = 'target';
-        this.world.message('Rendezvous: target 100 m ahead. R = RCS, I/K J/L H/N translate.', 'info', 8);
-      }
-      return;
-    }
-    const u = this.world.universe;
-    const t = this.world.ut;
-    const bodyId = name === 'moon' ? 'moon' : 'earth';
-    const b = u.body(bodyId);
-    const bs = u.ephem.getBodyState(bodyId, t);
-    const up = normalize(sub(wv.state.position, u.ephem.getBodyState(wv.body, t).position));
-    const pole = qRotate(u.ephem.bodyRotation(bodyId, t), v3(0, 0, 1));
-    const east = normalize(cross(pole, up));
-    let alt = 0;
-    let vel = v3();
-    if (name === 'reentry') { alt = 30000; vel = add(scale(east, 2300), scale(up, -150)); }
-    if (name === 'orbit') { alt = 90000; vel = scale(east, Math.sqrt(b.gm / (b.radius + 90000))); }
-    if (name === 'moon') { alt = 20000; vel = scale(east, Math.sqrt(b.gm / (b.radius + 20000))); }
-    wv.mode = 'physics';
-    wv.fixed = undefined;
-    wv.body = bodyId;
-    wv.state.position = add(bs.position, scale(up, b.radius + alt));
-    wv.state.velocity = add(bs.velocity, vel);
-    wv.state.situation = 'flying';
-    // Point retrograde-ish for re-entry, prograde otherwise.
-    const fwd = name === 'reentry' ? normalize(scale(vel, -1)) : normalize(vel);
-    const side = normalize(cross(fwd, up));
-    wv.state.orientation = quatFromBasis(side, fwd, cross(side, fwd));
-    wv.state.angularVelocity = v3();
-  }
+  devScenario(name: string) { return scenarios.devScenario.call(this, this.systems, name); }
 
-  startAssist(id: AssistId) {
-    if (this.network) return;
-    if (!this.world.active || this.world.active.state.eva || !this.world.canControl()) return;
-    try {
-      this.assist = createAssist(id, this.world);
-      this.world.message(`Assist: ${this.assist.name}`);
-    } catch (e) {
-      this.world.message((e as Error).message, 'warn');
-    }
-  }
+  startAssist(id: AssistId) { return assist.startAssist.call(this, this.systems, id); }
 
-  cancelAssist(msg = 'Assist cancelled') {
-    if (!this.assist) return;
-    this.assist = null;
-    if (this.assistWarped) this.world.warp = { mode: 'rails', index: 0 };
-    this.assistWarped = false;
-    this.world.message(msg, 'warn');
-  }
+  cancelAssist(msg = 'Assist cancelled') { return assist.cancelAssist.call(this, this.systems, msg); }
 
   toggleSas() {
     if (!this.world.canControl()) return;
@@ -530,29 +486,7 @@ export class FlightController {
       this.stagePending = false;
       this.gearPending = undefined;
     }
-    let input = ctrl;
-    if (this.assist && wv && !this.paused) {
-      // Any manual attitude/throttle input cancels the assist (pilot override).
-      if (s.pitch || s.yaw || s.roll) this.cancelAssist('Assist cancelled: manual control');
-      else {
-        const step = this.assist.update(this.world);
-        input = { ...step.input, stage: step.input.stage || ctrl.stage };
-        this.input.state.throttle = step.input.throttle;
-        if (this.assist.error) this.cancelAssist(`Assist stopped: ${this.assist.error}`);
-        else if (this.assist.done) {
-          this.world.message(`${this.assist.name}: complete`);
-          this.assist = null;
-          this.input.state.throttle = 0;
-        } else if (step.coastUntil !== undefined) {
-          const idx = warpIndexFor(step.coastUntil - this.world.ut, dt);
-          this.world.warp = { mode: 'rails', index: idx };
-          this.assistWarped = idx > 0;
-        } else if (this.assistWarped) {
-          this.world.warp = { mode: 'rails', index: 0 };
-          this.assistWarped = false;
-        }
-      }
-    }
+    const input = assist.driveAssist.call(this, this.systems, wv, ctrl, dt);
     if (this.network) this.network.update(dt, this.paused ? neutralInput() : input);
     else if (!this.paused) this.world.tick(dt, input);
     if (!this.network && wv && !this.world.active && !this.activeLost) {
@@ -579,14 +513,7 @@ export class FlightController {
     }
   };
 
-  private maneuverDirection(): Vec3 | null {
-    const wv = this.world.active;
-    const node = this.world.nodes[0];
-    if (!wv || !node) return null;
-    const rs = this.world.relativeState(wv);
-    const dv = maneuverToInertialDv(rs, node);
-    return length(dv) > 0 ? normalize(dv) : null;
-  }
+  private maneuverDirection(): Vec3 | null { return navball.maneuverDirection.call(this, this.systems); }
 
   private render(wv: WorldVessel, dt: number) {
     const u = this.world.universe;
@@ -636,7 +563,7 @@ export class FlightController {
         view.root.quaternion.set(pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w);
       }
     }
-    for (const [id, view] of this.views) if (!seen.has(id)) (view.dispose(), this.views.delete(id));
+    for (const [id, view] of this.views) if (!seen.has(id)) { view.dispose(); this.views.delete(id); }
 
     this.flags.update(this.world);
 
@@ -746,277 +673,23 @@ export class FlightController {
   }
 
   /** Active and target docking ports for the docking indicator (target port if selected, else the closest pair). */
-  private dockingPair(): { mine: PortInfo; theirs: PortInfo } | null {
-    const w = this.world;
-    const act = w.active;
-    if (!act || !w.targetId || w.targetKind() !== 'vessel') return null;
-    const theirsAll = freePorts(w.vessels.get(w.targetId)!.state);
-    const mineAll = freePorts(act.state);
-    if (!theirsAll.length || !mineAll.length) return null;
-    const dist = (a: PortInfo, b: PortInfo) => length(sub(a.pos, b.pos)) + (a.mod.size === b.mod.size ? 0 : 1e9);
-    let best: { mine: PortInfo; theirs: PortInfo } | null = null;
-    const theirs = w.targetPortUid !== null ? theirsAll.filter((p) => p.part.uid === w.targetPortUid) : theirsAll;
-    for (const t of theirs.length ? theirs : theirsAll)
-      for (const m of mineAll) if (!best || dist(m, t) < dist(best.mine, best.theirs)) best = { mine: m, theirs: t };
-    return best;
-  }
+  private dockingPair(): { mine: PortInfo; theirs: PortInfo } | null { return telemetry.dockingPair.call(this, this.systems); }
 
-  private dockingTelemetry(): DockingTelemetry | null {
-    const pair = this.dockingPair();
-    if (!pair) return null;
-    const { mine, theirs } = pair;
-    const q = this.world.active!.state.orientation;
-    const fwd = mine.dir;
-    const right = qRotate(q, qRotate(mine.part.rotation, v3(1, 0, 0)));
-    const up = qRotate(q, qRotate(mine.part.rotation, v3(0, 0, 1)));
-    const rel = sub(theirs.pos, mine.pos);
-    const rv = sub(theirs.vel, mine.vel);
-    const facing = negate(theirs.dir);
-    return {
-      myPort: mine.part.def.name,
-      targetPort: theirs.part.def.name,
-      sizeMatch: mine.mod.size === theirs.mod.size,
-      x: dot(rel, right),
-      y: dot(rel, up),
-      z: dot(rel, fwd),
-      vx: dot(rv, right),
-      vy: dot(rv, up),
-      vz: dot(rv, fwd),
-      angle: (Math.acos(Math.max(-1, Math.min(1, dot(fwd, facing)))) * 180) / Math.PI,
-      tiltX: dot(facing, right),
-      tiltY: dot(facing, up),
-      captureRange: Math.min(mine.mod.captureRange, theirs.mod.captureRange),
-      captureSpeed: Math.min(mine.mod.captureSpeed, theirs.mod.captureSpeed),
-      captureAngle: (Math.min(mine.mod.captureAngle, theirs.mod.captureAngle) * 180) / Math.PI,
-    };
-  }
+  private dockingTelemetry(): DockingTelemetry | null { return telemetry.dockingTelemetry.call(this, this.systems); }
 
-  private targetTelemetry(wv: WorldVessel): Telemetry['target'] {
-    const w = this.world;
-    const kind = w.targetKind();
-    const ts = w.targetState();
-    if (!kind || !ts) return null;
-    const rel = sub(ts.position, wv.state.position);
-    const rv = sub(wv.state.velocity, ts.velocity);
-    const d = length(rel);
-    const ca = w.closestApproach();
-    const tv = kind === 'vessel' ? w.vessels.get(w.targetId!)!.state : null;
-    return {
-      id: w.targetId!,
-      name: w.targetName() ?? '',
-      kind,
-      distance: kind === 'body' ? d - w.universe.body(w.targetId!).radius : d,
-      relSpeed: length(rv),
-      closing: d > 0 ? dot(rv, rel) / d : 0,
-      portUid: w.targetPortUid,
-      ports: tv ? freePorts(tv).map((p) => ({ uid: p.part.uid, name: p.part.def.name })) : [],
-      approach: ca ? { distance: ca.distance, time: ca.time - w.ut, relSpeed: ca.relativeSpeed } : null,
-    };
-  }
+  private targetTelemetry(wv: WorldVessel): Telemetry['target'] { return telemetry.targetTelemetry.call(this, this.systems, wv); }
 
-  private targetOptions(wv: WorldVessel): Telemetry['targetOptions'] {
-    const w = this.world;
-    const out: Telemetry['targetOptions'] = [];
-    for (const v of w.vessels.values()) {
-      if (v === wv) continue;
-      out.push({ id: v.state.id, name: v.state.name, kind: 'vessel', distance: length(sub(v.state.position, wv.state.position)) });
-    }
-    out.sort((a, b) => a.distance - b.distance);
-    const cur = w.universe.body(wv.body);
-    const bodies: Telemetry['targetOptions'] = [];
-    for (const b of w.universe.bodies.values()) {
-      if (b.id === cur.id) continue;
-      if (b.parent === cur.id || b.id === cur.parent || (cur.parent && b.parent === cur.parent)) {
-        const bp = w.universe.ephem.getBodyState(b.id, w.ut).position;
-        bodies.push({ id: b.id, name: b.name, kind: 'body', distance: length(sub(bp, wv.state.position)) - b.radius });
-      }
-    }
-    bodies.sort((a, b) => a.distance - b.distance);
-    return [...out.slice(0, 12), ...bodies];
-  }
+  private targetOptions(wv: WorldVessel): Telemetry['targetOptions'] { return telemetry.targetOptions.call(this, this.systems, wv); }
 
-  private updateAudio(wv: WorldVessel | null) {
-    if (!this.audio || !wv) return;
-    const st = wv.state;
-    let vac = 0;
-    const byType = new Map<string, { thrust: number; count: number }>();
-    for (const p of st.parts) {
-      const eng = p.def.modules.find((m) => m.type === 'engine');
-      if (!eng || eng.type !== 'engine') continue;
-      vac += eng.maxThrustVac;
-      if (p.engine && p.engine.thrust > 0) {
-        const e = byType.get(eng.plume) ?? { thrust: 0, count: 0 };
-        e.thrust += p.engine.thrust;
-        e.count++;
-        byType.set(eng.plume, e);
-      }
-    }
-    const tm = st.telemetry;
-    this.audio.update({
-      engines: [...byType.entries()].map(([type, e]) => ({ type: type as 'kerolox', thrustFraction: vac > 0 ? e.thrust / vac : 0, count: e.count })),
-      ambientPressure: tm.staticPressure,
-      airspeed: length(this.world.surfaceVelocity(wv)),
-      mach: tm.mach,
-      dynamicPressure: tm.dynamicPressure,
-      rcsActive: this.rcsOn && (this.input.state.tx || this.input.state.ty || this.input.state.tz) ? 1 : 0,
-      reentryHeat: this.reentryHeat,
-      inMapView: this.mapMode,
-      timeWarp: this.world.warp.mode === 'rails' ? [1, 5, 10, 50, 100, 1000, 10000, 100000, 1000000][this.world.warp.index] : 1,
-      cameraDistance: this.cam.distance,
-    });
-  }
+  private updateAudio(wv: WorldVessel | null) { return audio.updateAudio.call(this, this.systems, wv); }
 
   /** Navball frame for the active vessel (called by the HUD every animation frame). */
-  navball = (): { frame: NavballFrame; markers: NavballMarker[] } | null => {
-    const wv = this.world.active;
-    if (!wv) return null;
-    const rs = this.world.relativeState(wv);
-    const up = normalize(rs.position);
-    const pole = qRotate(this.world.universe.ephem.bodyRotation(wv.body, this.world.ut), v3(0, 0, 1));
-    let east = cross(pole, up);
-    if (length(east) < 1e-9) east = cross(v3(1, 0, 0), up);
-    east = normalize(east);
-    const north = cross(up, east);
-    const q = wv.state.orientation;
-    const forward = qRotate(q, v3(0, 1, 0));
-    const top = qRotate(q, v3(0, 0, 1));
-    const ts = this.world.targetState();
-    const targetMode = this.speedMode === 'target' && !!ts;
-    const vel = this.speedMode === 'surface' ? this.world.surfaceVelocity(wv) : targetMode ? sub(wv.state.velocity, ts!.velocity) : rs.velocity;
-    const markers: NavballMarker[] = [];
-    if (ts) {
-      const toT = sub(ts.position, wv.state.position);
-      if (length(toT) > 1e-6) {
-        const d = normalize(toT);
-        markers.push({ kind: 'target', dir: d }, { kind: 'antiTarget', dir: negate(d) });
-      }
-    }
-    if (length(vel) > (targetMode ? 0.005 : 0.5)) {
-      const pro = normalize(vel);
-      markers.push({ kind: 'prograde', dir: pro }, { kind: 'retrograde', dir: negate(pro) });
-      const h = cross(rs.position, rs.velocity);
-      if (length(h) > 0) {
-        const n = normalize(h);
-        const radOut = normalize(cross(normalize(rs.velocity), n));
-        markers.push({ kind: 'normal', dir: n }, { kind: 'antinormal', dir: negate(n) });
-        markers.push({ kind: 'radialOut', dir: negate(radOut) }, { kind: 'radialIn', dir: radOut });
-      }
-    }
-    const md = this.maneuverDirection();
-    if (md) markers.push({ kind: 'maneuver', dir: md });
-    return { frame: { east, north, up, forward, top }, markers };
-  };
+  navball = (): { frame: NavballFrame; markers: NavballMarker[] } | null => { return navball.navball.call(this, this.systems); };
 
-  private telemetry(wv: WorldVessel): Telemetry {
-    const w = this.world;
-    const u = w.universe;
-    const b = u.body(wv.body);
-    const info = u.surfaceInfo(wv.body, wv.state.position, w.ut);
-    const orb = w.orbitSummary(wv);
-    const rs = w.relativeState(wv);
-    const st = wv.state;
-    const target = this.targetTelemetry(wv);
-    const speed = this.speedMode === 'surface' ? length(w.surfaceVelocity(wv)) : this.speedMode === 'target' && target ? target.relSpeed : length(rs.velocity);
-
-    // Resources (totals across vessel).
-    const totals = new Map<string, { amount: number; max: number }>();
-    for (const p of st.parts) {
-      for (const [id, max] of Object.entries(p.maxResources)) {
-        const e = totals.get(id) ?? { amount: 0, max: 0 };
-        e.amount += p.resources[id as keyof typeof p.resources] ?? 0;
-        e.max += max ?? 0;
-        totals.set(id, e);
-      }
-    }
-    const pressure = st.telemetry.staticPressure;
-    let dvs: StageDeltaV[] = [];
-    try {
-      dvs = cachedStageDeltaV(st, pressure, b.surfaceGravity);
-    } catch {
-      dvs = [];
-    }
-    const stageMap = new Map<number, HudStage>();
-    for (const p of st.parts) {
-      // Engines that are already burning are listed as the current ("burning") stage so its Δv stays visible.
-      const burning = p.activated && !!p.engine?.ignited;
-      if (p.stage === undefined || (p.activated && !burning)) continue;
-      const types = p.def.modules.map((m) => m.type);
-      const icon: HudStage['parts'][number]['icon'] = types.includes('engine') ? 'engine' : types.includes('decoupler') ? 'decoupler' : types.includes('parachute') ? 'chute' : 'other';
-      const idx = burning ? st.nextStage + 1 : p.stage;
-      const s = stageMap.get(idx) ?? { index: idx, parts: [], deltaV: 0 };
-      s.parts.push({ uid: p.uid, name: p.def.name, icon, active: p.activated });
-      stageMap.set(idx, s);
-    }
-    const stages = [...stageMap.values()].sort((a, b2) => b2.index - a.index);
-    stages.forEach((s) => {
-      const d = dvs.find((x) => x.stage === s.index);
-      s.deltaV = d?.dv ?? 0;
-    });
-
-    this.predictions = flightPredictions(w, wv);
-    const warp = w.warp;
-    return {
-      flightData: flightData(w, wv, dvs, this.predictions),
-      crew: w.crewFor(st),
-      noControl: !w.canControl(st) || (!!this.network && this.network.ownId !== st.id),
-      eva: st.eva ? { fuel: st.parts[0].resources.monopropellant ?? 0, canBoard: !!w.boardingTarget(), landed: st.situation === 'landed' } : null,
-      ut: w.ut,
-      bodyName: b.name,
-      altitudeAsl: info.altitude,
-      altitudeTerrain: info.heightAboveTerrain,
-      speedMode: this.speedMode,
-      speed,
-      verticalSpeed: w.verticalSpeed(wv),
-      apoapsis: orb.ap,
-      periapsis: orb.pe,
-      timeToAp: orb.timeToAp,
-      timeToPe: orb.timeToPe,
-      throttle: this.input.state.throttle,
-      gForce: st.telemetry.gForce,
-      mach: st.telemetry.airDensity > 0 ? st.telemetry.mach : 0,
-      dynamicPressure: st.telemetry.dynamicPressure,
-      warp: 1,
-      warpLabel: warpLabel(warp) + (warp.mode === 'physics' && warp.index > 0 ? ' phys' : ''),
-      physicsWarp: warp.mode === 'physics' && warp.index > 0,
-      sasOn: this.sasOn,
-      sasMode: this.sas,
-      rcsOn: this.rcsOn,
-      ...this.groundTelemetry(wv),
-      stage: st.nextStage,
-      stages,
-      resources: [...totals.entries()]
-        .filter(([id, e]) => e.max > 0 && id !== 'intakeAir')
-        .map(([id, e]) => ({ id, name: RESOURCES[id as keyof typeof RESOURCES]?.name ?? id, amount: e.amount, max: e.max, color: RESOURCE_COLORS[id] ?? '#aaa' })),
-      messages: w.messages.map((m) => ({ id: m.id, text: m.text, level: m.level })),
-      mapMode: this.mapMode,
-      onSurface: wv.mode === 'prelaunch' || st.situation === 'landed' || st.situation === 'splashed',
-      assist: this.assist ? { name: this.assist.name, status: this.assist.status } : null,
-      target,
-      targetOptions: this.targetOptions(wv),
-      dockingMode: this.dockingMode,
-      docking: this.dockingMode ? this.dockingTelemetry() : null,
-      dockedPorts: dockedPorts(st).map((p) => ({ uid: p.uid, name: p.def.name })),
-    };
-  }
+  private telemetry(wv: WorldVessel): Telemetry { return telemetry.telemetry.call(this, this.systems, wv); }
 
   /** Gear / brakes / intake-air readouts for the HUD (null fields when the vessel has no such hardware). */
-  private groundTelemetry(wv: WorldVessel): Pick<Telemetry, 'gear' | 'brakes' | 'intakeAir'> {
-    const st = wv.state;
-    let gear: Telemetry['gear'] = null;
-    let wheels = false;
-    for (const p of st.parts) {
-      if (p.wheel) {
-        wheels = true;
-        const g = p.wheel.deploy >= 1 ? 'down' : p.wheel.deploy <= 0 ? 'up' : 'moving';
-        gear = gear === null || gear === g ? g : 'moving';
-      } else if (p.leg) {
-        const g = p.leg.deployed ? 'down' : 'up';
-        gear = gear === null || gear === g ? g : 'moving';
-      }
-    }
-    const air = st.telemetry.intakeAirRatio;
-    return { gear, brakes: wheels ? this.input.state.brakes : null, intakeAir: Number.isFinite(air) ? air : null };
-  }
+  private groundTelemetry(wv: WorldVessel): Pick<Telemetry, 'gear' | 'brakes' | 'intakeAir'> { return telemetry.groundTelemetry.call(this, this.systems, wv); }
 
   dispose() {
     this.network?.close();
@@ -1038,6 +711,3 @@ export class FlightController {
     this.pipeline.renderer.domElement.remove();
   }
 }
-
-// Silence unused import warnings for helpers kept for upcoming features.
-void add; void dot; void scale;

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useGame } from '../../game/store';
+import { game, useGame } from '../../game/store';
+import { Universe } from '../../game/universe';
 import { partUnlocked } from '../../data/technology';
 import { newProgression } from '../../sim/science/progression';
 import type { CraftDef } from '../../sim/vessel/types';
@@ -14,7 +15,7 @@ function summary(craft: CraftDef) {
   try {
     const s = craftStats(craft, CATALOG, DENSITIES);
     let dv = 0;
-    for (const x of computeStageStats(craft, CATALOG).values()) dv += x.dvVac;
+    for (const x of computeStageStats(craft, CATALOG, new Universe(game.get().scalePreset).body('earth')).values()) dv += x.dvVac;
     return `${s.partCount} parts · ${fmtKg(s.totalMass)} · ${s.height.toFixed(1)} m · ${fmtDv(dv)}`;
   } catch {
     return `${craft.parts.length} parts`;

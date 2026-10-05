@@ -1,0 +1,103 @@
+import type { PartDef } from '../../sim/vessel/types';
+import { cyl, MANUFACTURERS, stackNodes } from './builders';
+
+
+
+// ---------------------------------------------------------------------------------------------
+// The catalogue
+// ---------------------------------------------------------------------------------------------
+
+export const pods: PartDef[] = [
+  {
+    id: 'pod-lantern-1',
+    name: 'Lantern I Capsule',
+    manufacturer: MANUFACTURERS.northlight,
+    description: 'A single-seat capsule with one excellent window and very strong opinions about re-entry angles. Cosy is a generous word.',
+    category: 'command',
+    dryMass: 1100,
+    cost: 1800,
+    resources: { electricCharge: 60, monopropellant: 15 },
+    attachNodes: stackNodes(1.6, 0, 1),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(0.3, 0.625, 1.6),
+    dragCoefficient: { axial: 0.9, side: 1.0 },
+    maxTemp: 1600,
+    crashTolerance: 14,
+    modules: [
+      { type: 'command', crew: 1, sasLevel: 1, ecPerSecond: 0.03 },
+      { type: 'reactionWheel', torque: 2000, ecRate: 0.15 },
+    ],
+    mesh: 'pod',
+    meshParams: { style: 'lantern', bodyHeight: 1.3 },
+  },
+  {
+    id: 'pod-harbor-3',
+    name: 'Harbor III Command Module',
+    manufacturer: MANUFACTURERS.northlight,
+    description: 'Three seats, two windows, one shared opinion on who sits in the middle. Quilted thermal blanket at no extra charge.',
+    category: 'command',
+    dryMass: 3800,
+    cost: 5200,
+    resources: { electricCharge: 200, monopropellant: 40 },
+    attachNodes: stackNodes(2.4, 1, 2),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(0.65, 1.25, 2.4),
+    dragCoefficient: { axial: 0.95, side: 1.0 },
+    maxTemp: 1600,
+    crashTolerance: 14,
+    modules: [
+      { type: 'command', crew: 3, sasLevel: 2, ecPerSecond: 0.08 },
+      { type: 'reactionWheel', torque: 8000, ecRate: 0.4 },
+    ],
+    mesh: 'pod',
+    meshParams: { style: 'harbor', bodyHeight: 2.0 },
+  },
+  {
+    id: 'probe-pebble',
+    name: 'Pebble Probe Core',
+    manufacturer: MANUFACTURERS.brightfield,
+    description: 'A foil-wrapped flight computer the size of a hatbox. It cannot be talked out of anything.',
+    category: 'command',
+    dryMass: 45,
+    cost: 600,
+    resources: { electricCharge: 25 },
+    attachNodes: stackNodes(0.3, 0, 0),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(0.3125, 0.3125, 0.3),
+    dragCoefficient: { axial: 0.8, side: 0.9 },
+    maxTemp: 1500,
+    crashTolerance: 10,
+    modules: [
+      { type: 'command', crew: 0, sasLevel: 1, ecPerSecond: 0.02 },
+      { type: 'reactionWheel', torque: 300, ecRate: 0.05 },
+    ],
+    mesh: 'probeCore',
+    meshParams: { style: 'pebble' },
+  },
+  {
+    id: 'probe-cairn',
+    name: 'Cairn Avionics Bus',
+    manufacturer: MANUFACTURERS.brightfield,
+    description: 'Octagonal autopilot bus with a star tracker that never blinks. Full attitude-hold suite included.',
+    category: 'command',
+    dryMass: 160,
+    cost: 1400,
+    resources: { electricCharge: 80 },
+    attachNodes: stackNodes(0.5, 1, 1),
+    surfaceAttachable: false,
+    allowSurfaceAttachChildren: true,
+    shape: cyl(0.625, 0.625, 0.5),
+    dragCoefficient: { axial: 0.85, side: 0.95 },
+    maxTemp: 1600,
+    crashTolerance: 10,
+    modules: [
+      { type: 'command', crew: 0, sasLevel: 3, ecPerSecond: 0.04 },
+      { type: 'reactionWheel', torque: 2000, ecRate: 0.2 },
+    ],
+    mesh: 'probeCore',
+    meshParams: { style: 'cairn' },
+  },
+];

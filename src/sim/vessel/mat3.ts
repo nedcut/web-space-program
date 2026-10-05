@@ -5,8 +5,6 @@ import type { Quat } from '../../util/quat';
 export type Mat3 = number[];
 
 export const m3Zero = (): Mat3 => [0, 0, 0, 0, 0, 0, 0, 0, 0];
-export const m3Identity = (): Mat3 => [1, 0, 0, 0, 1, 0, 0, 0, 1];
-export const m3Diag = (a: number, b: number, c: number): Mat3 => [a, 0, 0, 0, b, 0, 0, 0, c];
 
 export const m3MulVec = (m: Mat3, v: Vec3): Vec3 => ({
   x: m[0] * v.x + m[1] * v.y + m[2] * v.z,
@@ -14,21 +12,19 @@ export const m3MulVec = (m: Mat3, v: Vec3): Vec3 => ({
   z: m[6] * v.x + m[7] * v.y + m[8] * v.z,
 });
 
-export const m3Mul = (a: Mat3, b: Mat3): Mat3 => {
+const m3Mul = (a: Mat3, b: Mat3): Mat3 => {
   const o = m3Zero();
   for (let r = 0; r < 3; r++)
     for (let c = 0; c < 3; c++) o[r * 3 + c] = a[r * 3] * b[c] + a[r * 3 + 1] * b[3 + c] + a[r * 3 + 2] * b[6 + c];
   return o;
 };
 
-export const m3Transpose = (m: Mat3): Mat3 => [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]];
+const m3Transpose = (m: Mat3): Mat3 => [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]];
 
 export const m3AddInPlace = (out: Mat3, b: Mat3): Mat3 => {
   for (let i = 0; i < 9; i++) out[i] += b[i];
   return out;
 };
-
-export const m3Scale = (m: Mat3, s: number): Mat3 => m.map((x) => x * s);
 
 /** Rotation matrix equivalent to rotating by q (q rotates local -> parent). */
 export const m3FromQuat = (q: Quat): Mat3 => {
@@ -44,7 +40,7 @@ export const m3FromQuat = (q: Quat): Mat3 => {
 /** R * I * R^T: express a tensor given in a local frame in the parent frame. */
 export const m3RotateTensor = (R: Mat3, I: Mat3): Mat3 => m3Mul(m3Mul(R, I), m3Transpose(R));
 
-export const m3Det = (m: Mat3): number =>
+const m3Det = (m: Mat3): number =>
   m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
 
 export const m3Inverse = (m: Mat3): Mat3 => {

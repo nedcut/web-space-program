@@ -165,7 +165,7 @@ export function buildEngine(def: PartDef): THREE.Object3D {
   let yG: number; // gimbal pivot (part frame)
   let rc: number;
   let chamberLen: number;
-  let k = 1.9;
+  let k: number;
   let extStart = 1;
   let outerMat: THREE.Material = M.copperTubes();
   let chamberMat: THREE.Material = M.copperTubes();

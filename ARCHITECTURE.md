@@ -8,17 +8,71 @@ An original, browser-based spaceflight sandbox in the spirit of KSP, set in the 
 - PWA (offline) via vite-plugin-pwa.
 - Path alias: `@/` → `src/`.
 
-## Layering (strict, enforced by convention)
-```
-src/util      pure math helpers (Vec3/Quat in float64)              — no deps
-src/sim       deterministic simulation, NO DOM, NO three.js          — util only
-src/data      static content: bodies, parts, resources               — sim types only
-src/render    three.js rendering                                     — sim, data, util
-src/editor    vehicle assembly building (VAB) logic + scene          — sim, data, render
-src/flight    flight scene: camera, input, HUD wiring                — everything
-src/ui        React components (menus, HUD panels)                   — everything
-```
-`src/sim` must run headless in Node (tests, and later a multiplayer server / Web Worker).
+## Module layout and dependency direction
+
+| Layer | Modules and responsibilities | Dependencies |
+| --- | --- | --- |
+| `util/` | Float64 vectors/quaternions, optimization, snapshot comparison, pure display formatting | No application layers |
+| `sim/` | Headless deterministic physics and explicit inputs | `sim`, `util`; static body catalog exception below |
+| `data/` | Bodies, resources, parts, EVA, research and encyclopedia content | `sim` types, `util`, other static data |
+| `game/` | Universe/environment adapter, mutable World, rails/warp, planners, science/comms adapters, persistence and program/store | `sim`, `data`, `util`; store uses React for subscriptions |
+| `render/` | three.js scenes, shaders, workers, terrain and part geometry | `sim`, `data`, `util`; legacy settings exceptions below |
+| `editor/` | Assembly core, stock craft, editor session, hangar and React panels | `sim`, `data`, `util`, `render`, `game` |
+| `input/`, `audio/` | Bindings/gamepad and procedural browser sound | Application settings and headless types |
+| `net/`, `server/` | Shared protocol/snapshots, browser multiplayer client/UI, Node/ws authoritative rooms | `sim`, `game`, `data`, `util`; server does not use browser scenes |
+| `flight/`, `tutorial/`, `ui/`, `main.tsx` | Scene orchestration, frame loop/HUD, isolated practice lessons, hub/tracking/pedia and application routing | Compose lower layers |
+
+`src/sim` stays DOM-free and three.js-free so physics runs in Node tests and the authoritative server.
+`npm run lint` enforces restricted imports/browser globals; `scripts/check-layering.mjs` resolves relative and
+`@/` imports, re-exports and literal dynamic imports to verify the sim boundary. The existing
+`sim/bodies/index.ts` convenience facade imports/re-exports `data/bodies.ts` to implement `createUniverse`.
+This is the sole documented sim → data exception; the catalog itself imports sim types only. Core scaling
+is independent of the catalog in `sim/bodies/scale.ts`.
+
+Known direction violations: `render/core/quality.ts`, `render/parts/plume.ts` and `render/vessel/ReentryFx.ts`
+read `game/store.ts` for current settings. These remain explicit debt; callers should eventually supply
+settings rather than render code reading the application store. Pure formatting now lives in `util/format.ts`
+with a compatibility re-export from `ui/format.ts`, and `FlagView` accepts a structural scene input rather
+than importing `World`. `LaunchSite` already follows that structural-input pattern.
+
+### Simulation modules
+
+- `sim/bodies`: body definitions/types, scale presets and pure scaling; `sim/orbit`: ephemerides, Kepler/Lambert,
+  patched conics, SOI transitions, targeting/maneuvers and prediction readouts.
+- `sim/terrain`: shared seeded terrain/noise/craters and body presets; `sim/atmosphere`: atmospheric sampling.
+- `sim/vessel`: assembly/topology, staging, mass/inertia, resource crossfeed/power, engines/RCS, SAS,
+  aero/heating, wheels/contact, rigid integration, docking, EVA and analytic ISRU.
+- `sim/comms/network.ts`: range/occlusion/relay routing; `sim/science`: biomes, experiments and progression;
+  `sim/resources/deposits.ts`: deterministic concentrations; `sim/crew/crew.ts`: roster/seats/control authority.
+
+### Application and rendering modules
+
+- `game/world.ts` remains the public World/types/physics-clock facade. `game/world/launch.ts` owns pad/runway
+  placement and spawning; `crew.ts` owns roster/EVA/boarding/flags; `rails.ts` owns packing, propagation and
+  body-fixed synchronization; `docking.ts` owns fleet merges/splits; `resources.ts` owns survey/concentration
+  hooks; `progression.ts` and `readouts.ts` adapt science/program operations and orbital/surface readouts.
+  Stable `internals.ts` contexts expose only the private operations/state these helpers need; World remains
+  the sole state owner. `game/science.ts`, `comms.ts`, `flightData.ts`, `interplanetary.ts` and `autopilot.ts`
+  adapt pure sim functions. Persistence/program/saves own world snapshots and saved craft respectively.
+- `flight/controller.ts` owns scene setup, input, fixed-step driving, rendering and disposal.
+  `flight/controller/{telemetry,navball,scenarios,assist,audio}.ts` contain the respective drivers with a stable
+  private context. `flight/assist.ts`, `camera.ts`, `input.ts`, `planets.ts` and `hud/` provide focused adapters.
+- `data/parts.ts` preserves the public catalog API. `data/parts/` contains category arrays and shared builders;
+  the facade concatenates them in the original order, including expansion and the separate `data/isru.ts`.
+  IDs, generated definitions and catalog order must remain stable across refactors.
+- `render/core`: pipeline, adaptive resolution, camera helpers and quality; `render/planet`: renderer,
+  atmosphere/effects, cube-sphere quadtree, worker-built chunks, textures and rings. `planet/scatter/` streams
+  deterministic render-only decoration. `render/site`: launch complex/aerial/textures; `render/sky`: stars and
+  sun glare; `render/map`: conics/markers/gizmos; `render/vessel`: vessel meshes, flags and re-entry effects;
+  `render/parts/builders`: category geometry and expedition/ISRU hardware.
+- `net/protocol.ts` and `snapshots.ts` define transport, `net/client.ts` predicts/reconciles owned vessels;
+  `server/{index,server,room}.ts` owns room lifetime, control ownership, launch queues and authoritative ticks.
+- `tutorial/{lessons,runtime,Training,TutorialPanel}` defines isolated practice worlds, goals and mentor UI;
+  `input/{bindings,gamepad}` supplies persistent physical-key maps and gamepad actions.
+- `src/dev/{partsPreview,planetPreview,mapPreview}.ts` and their root HTML pages are live dev entry points.
+  `knip.json` includes them, tests, workers and benchmark/browser scripts so dead-code audits retain tooling.
+  `npm run check:unused` is an audit report: exported sim contracts/barrel APIs can be reported even when
+  useful as public interfaces; inspect call sites before deleting them.
 
 ## Coordinates & precision
 - Sim: float64 everywhere. Inertial frame = ecliptic J2000, origin at Sun centre, +Z ecliptic north. Time = seconds since J2000 ("UT").
@@ -61,8 +115,8 @@ playable universe. Presets: `standard` (s=0.1, default), `challenging` (0.32), `
 ## Conventions
 - No `any` without a comment. Prefer plain functions + data over class hierarchies in sim.
 - Every sim module gets Vitest tests in `tests/` checking physics against known real values.
-- Don't commit; the lead integrates and commits. Don't modify files outside your assigned area without saying so
-  in your final report.
+- Respect assigned worktree/branch scope. Commit only when the owner requests it; report cross-area changes.
+
 
 ## Science and program progression
 

@@ -171,10 +171,6 @@ function normalTexture(hf: Field, strength: number): THREE.CanvasTexture {
 }
 
 // Distance helpers (periodic, in UV units)
-const pd = (a: number, b: number) => {
-  const d = Math.abs(a - b) % 1;
-  return Math.min(d, 1 - d);
-};
 /** 1 at the line, falling to 0 at `w` (in uv). */
 const ridge = (d: number, w: number) => Math.max(0, 1 - d / w);
 const sstep = (e0: number, e1: number, x: number) => smooth(Math.max(0, Math.min(1, (x - e0) / (e1 - e0))));

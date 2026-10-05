@@ -15,7 +15,7 @@ import { computeAeroForces, controlSurfaceAuthority, updateParachutes } from './
 import { gatherContacts, nearSurface, penetrationCorrection, solveContacts, updateWheelDeploy } from './contact';
 import { stepThermal } from './heating';
 import { computeSas } from './sas';
-import { addResource, drawResource, stepPowerSources } from './resources';
+import { addResource, drawResource } from './resources';
 
 /** Fixed physics step, s. */
 export const PHYSICS_DT = 1 / 50;
@@ -186,7 +186,6 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
       }
     }
 
-  stepPowerSources(v, h);
   advanceISRU(v, v.situation === 'landed' && v.parts.some(p => p.drillDeployed)
     ? env.regolithConcentration?.(v.position, tMid) ?? 0 : 0, h);
 

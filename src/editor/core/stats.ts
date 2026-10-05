@@ -4,7 +4,7 @@ import { qRotate } from '../../util/quat';
 import { partBounds, requirePart, type PartCatalog } from './geometry';
 
 export type ResourceDensities = Partial<Record<ResourceId, number>> | ReadonlyMap<ResourceId, number>;
-export function partMass(part: PartInstance, catalog: PartCatalog, densities: ResourceDensities): number {
+function partMass(part: PartInstance, catalog: PartCatalog, densities: ResourceDensities): number {
   const def = requirePart(catalog, part.partId);
   let mass = def.dryMass;
   for (const [resource, capacity] of Object.entries(def.resources)) {
@@ -29,7 +29,7 @@ export interface CraftStats {
   centreOfLift?: Vec3;
 }
 /** Lift weight of a lifting surface instance for the centre-of-lift estimate. */
-export function liftWeight(part: PartInstance, module: { area: number; liftSlope: number }, craftType: CraftDef['type']): number {
+function liftWeight(part: PartInstance, module: { area: number; liftSlope: number }, craftType: CraftDef['type']): number {
   const n = qRotate(part.rotation, v3(1, 0, 0));
   const share = craftType === 'SPH' ? Math.abs(n.z) : Math.hypot(n.x, n.z);
   return module.area * module.liftSlope * share;

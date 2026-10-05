@@ -19,12 +19,13 @@ export const warpLabel = (w: WarpState) => {
 
 /**
  * Minimum altitude above the datum required for each rails warp level, as a fraction of body radius
- * (or absolute floor above the atmosphere). Higher warp needs more clearance so we don't skip through terrain.
+ * (capped at standard Earth's radius). Rails propagation resolves atmosphere, terrain and SOI events
+ * independently of frame size; full-size planets must not force weeks of parking-orbit waits at 50×.
  */
 export function maxRailsIndexAt(altitude: number, bodyRadius: number, atmosphereHeight: number): number {
   if (altitude < atmosphereHeight) return 0;
   const clearance = altitude - atmosphereHeight;
-  const limits = [0, 0, 0.005, 0.01, 0.02, 0.05, 0.1, 0.5, 2].map((f) => f * bodyRadius);
+  const limits = [0, 0, 0.005, 0.01, 0.02, 0.05, 0.1, 0.5, 2].map((f) => f * Math.min(bodyRadius, 637100));
   let idx = 0;
   for (let i = 0; i < limits.length; i++) if (clearance >= limits[i]) idx = i;
   return idx;

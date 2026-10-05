@@ -15,7 +15,7 @@ for (const craft of [STOCK_CRAFTS[0], STOCK_CRAFTS[2]]) {
  view.update({x:0,y:0,z:0},0,0,.02);
  let meshes=0, triangles=0;
  view.root.traverseVisible(o=>{if(o instanceof THREE.Mesh) { meshes++; triangles+=(o.geometry.index?.count ?? o.geometry.getAttribute('position').count)/3 * (o instanceof THREE.InstancedMesh?o.count:1); }});
- let t=performance.now(); for(let i=0;i<10000;i++) view.update({x:0,y:0,z:0},i*.02,0,.02);
+ const t=performance.now(); for(let i=0;i<10000;i++) view.update({x:0,y:0,z:0},i*.02,0,.02);
  console.log(JSON.stringify({name:`vessel/${craft.id}`, meshes,triangles,updateUs:(performance.now()-t)/10})); view.dispose();
 }
 Object.assign(globalThis,{document:{createElement:node},window:{devicePixelRatio:1}});

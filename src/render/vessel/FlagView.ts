@@ -1,5 +1,15 @@
 import * as THREE from 'three';
-import type { World } from '../../game/world';
+import type { PlantedFlag } from '../../sim/crew/crew';
+import type { Ephemeris } from '../../sim/orbit/ephemeris';
+import type { Vec3 } from '../../util/vec3';
+
+/** Structural input keeps the renderer independent of the game World. */
+interface FlagScene {
+  active: { state: { position: Vec3 } } | null;
+  flags: PlantedFlag[];
+  universe: { ephem: Ephemeris };
+  ut: number;
+}
 import { add, sub } from '../../util/vec3';
 import { qMul, qRotate } from '../../util/quat';
 
@@ -27,7 +37,7 @@ export class FlagView {
     for (let i=0;i<p.count;i++) p.setZ(i, Math.sin((p.getX(i)+0.425)*16)*0.025);
     this.cloth.computeVertexNormals();
   }
-  update(world: World) {
+  update(world: FlagScene) {
     const origin = world.active?.state.position;
     if (!origin) return;
     for (const f of world.flags) {

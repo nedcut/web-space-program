@@ -1,3 +1,4 @@
+import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { newProgression, type GameMode, type Progression } from '../sim/science/progression';
 import type { Astronaut, PlantedFlag } from '../sim/crew/crew';
 import type { VesselState } from '../sim/vessel/runtime';
@@ -49,7 +50,6 @@ export interface SavedWorld {
 export function serializeWorld(world: World): SavedWorld {
   const vessels: SavedVessel[] = [];
   for (const wv of world.vessels.values()) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { cache, resourceDefs, parts, ...rest } = wv.state;
     void cache;
     void resourceDefs;
@@ -93,7 +93,7 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
   world.commsSettings = { ...world.commsSettings, ...data.commsSettings };
   world.transmitting = [...(data.transmitting ?? [])];
   world.surveyedBodies = [...(data.surveyedBodies ?? [])];
-  world.progression = structuredClone(data.progression ?? newProgression());
+  world.progression = structuredClone(data.progression ?? newProgression(careerScaleMultiplier(world.universe.preset)));
   if (world.mode === 'career' && !world.progression.contracts.length) world.refreshContracts();
   world.crew = structuredClone(data.crew ?? []);
   world.crewSeed = data.crewSeed ?? world.crewSeed;

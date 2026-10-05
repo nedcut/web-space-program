@@ -138,14 +138,13 @@ export class CraterField {
             const ry = ((h >>> 16) & 255) * (1 / 256) + 1 / 512;
             const rz = (h >>> 24) * (1 / 256) + 1 / 512;
             // Crater centre in cell → keep only cells whose centre lies near the sphere shell.
-            let px = (cx + rx) * c, py = (cy + ry) * c, pz = (cz + rz) * c;
+            const px = (cx + rx) * c, py = (cy + ry) * c, pz = (cz + rz) * c;
             const pl = Math.sqrt(px * px + py * py + pz * pz);
             if (Math.abs(pl - 1) > c * 0.5 || pl === 0) continue;
             const ddx0 = x - px / pl, ddy0 = y - py / pl, ddz0 = z - pz / pl;
             const d2 = ddx0 * ddx0 + ddy0 * ddy0 + ddz0 * ddz0;
             const lim0 = c * maxR * 1.6;
             if (d2 > lim0 * lim0) continue;
-            px /= pl; py /= pl; pz /= pl;
             const h2 = hashNext(h);
             const rs = (h2 & 65535) * (1 / 65536);
             // Size distribution inside an octave: skewed towards small.

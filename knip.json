@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/main.tsx",
+    "src/dev/*Preview.ts",
+    "src/render/planet/chunkWorker.ts",
+    "server/index.ts",
+    "tests/**/*.test.ts",
+    "scripts/**/*.{ts,mjs}"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "server/**/*.ts",
+    "tests/**/*.ts",
+    "scripts/**/*.{ts,mjs}"
+  ]
+}
