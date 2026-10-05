@@ -200,11 +200,77 @@ export function buildTender(catalog: PartCatalog = PART_CATALOG): CraftDef {
   return b.done();
 }
 
+/** Three chemical stages sized for the 7.8 km/s real Earth parking orbit. */
+export function buildRealOrbiter(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Meridian Real Orbiter', 'Real / Challenging scale: three-stage chemical launcher with an ablative return capsule.');
+  const pod = b.root('pod-lantern-1');
+  b.stack(pod, 'chute-main', 'top');
+  const shield = b.stack(pod, 'shield-1');
+  const dec = b.stack(shield, 'dec-1');
+  const upper = b.stack(dec, 'tank-1-long');
+  b.radial(upper, 'solar-fold', 2, 0.5);
+  const engine = b.stack(upper, 'eng-zephyr');
+  const sep = b.stack(engine, 'dec-1');
+  const adapter = b.stack(sep, 'adapt-1-2');
+  const middle = b.stack(adapter, 'tank-2-long');
+  const sustainer = b.stack(middle, 'eng-harmattan');
+  const sep2 = b.stack(sustainer, 'dec-2');
+  const wide = b.stack(sep2, 'adapt-2-3');
+  const booster = b.stack(wide, 'tank-3-long');
+  const booster2 = b.stack(booster, 'tank-3-long');
+  b.stack(booster2, 'eng-tempest');
+  return b.done();
+}
+
+/** Direct-ascent lunar expedition: independent descent and return propulsion. */
+export function buildRealMoonLander(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Selene Real Expedition', 'Real scale: heavy five-metre chemical Moon launcher. Separate lunar descent and ascent/return stages.');
+  const pod = b.root('pod-lantern-1');
+  b.stack(pod, 'chute-main', 'top');
+  const shield = b.stack(pod, 'shield-1');
+  const capsuleSep = b.stack(shield, 'dec-1');
+  const ascent = b.stack(capsuleSep, 'tank-1-long');
+  const ascent2 = b.stack(ascent, 'tank-1-mid');
+  b.radial(ascent, 'solar-fold', 2, 0.5);
+  const ascentEngine = b.stack(ascent2, 'eng-doldrum');
+  const descentSep = b.stack(ascentEngine, 'dec-1');
+  const adapter = b.stack(descentSep, 'adapt-1-2');
+  const wheel = b.stack(adapter, 'wheel-reaction-2');
+  const descent = b.stack(wheel, 'tank-2-mid');
+  b.radial(descent, 'battery-brick', 2, 0.8);
+  const descentEngine = b.stack(descent, 'eng-foehn');
+  b.radial(descentEngine, 'leg-strider', 4, -1.7, 45);
+  const transferSep = b.stack(descentEngine, 'dec-2');
+  const transfer = b.stack(transferSep, 'tank-2-short');
+  const transferEngine = b.stack(transfer, 'eng-foehn');
+  const transferSide = b.radial(transfer, 'tank-2-mid', 4, 0);
+  const transferSideBottom = b.stack(transferSide, 'tank-2-short');
+  b.stack(transferSideBottom, 'eng-foehn');
+  const middleSep = b.stack(transferEngine, 'dec-2');
+  const wide = b.stack(middleSep, 'adapt-2-3');
+  const wider = b.stack(wide, 'adapt-3-4');
+  const middle = b.stack(wider, 'tank-4-long');
+  const middleEngine = b.stack(middle, 'eng-monsoon');
+  const boosterSep = b.stack(middleEngine, 'dec-4');
+  const booster = b.stack(boosterSep, 'tank-4-long');
+  const booster2 = b.stack(booster, 'tank-4-long');
+  b.stack(booster2, 'eng-monsoon');
+  // Eight parallel, independently fed strap-on stages; ignite the central core after separation.
+  const latch = b.radial(booster2, 'dec-radial', 8, 0);
+  const strap = b.outward(latch, 'tank-4-long');
+  b.stack(strap, 'nose-4', 'top');
+  const strapBottom = b.stack(strap, 'tank-4-long');
+  b.stack(strapBottom, 'eng-monsoon');
+  return b.done();
+}
+
 export const STOCK_CRAFTS: StockCraft[] = [
   { id: 'stock-kestrel', name: 'Kestrel Sounding Rocket', blurb: 'Suborbital test hop · 1 stage + capsule', build: () => buildSoundingRocket() },
-  { id: 'stock-meridian', name: 'Meridian Orbiter', blurb: 'Two stages to low orbit and back', build: () => buildOrbiter() },
+  { id: 'stock-meridian', name: 'Meridian Orbiter', blurb: 'Standard scale · two stages to low orbit and back', build: () => buildOrbiter() },
   { id: 'stock-selene', name: 'Selene Lunar Lander', blurb: 'Three stages · land on the Moon and return', build: () => buildMoonLander() },
   { id: 'stock-swift', name: 'Swift Jet', blurb: 'Runway takeoff · turbofan trainer aircraft', build: () => buildSwift() },
-  { id: 'stock-ringrunner', name: 'Ringrunner Saturn Probe', blurb: 'Three stages · explore the rings of Saturn', build: () => buildRingrunner() },
+  { id: 'stock-ringrunner', name: 'Ringrunner Saturn Probe', blurb: 'Standard scale · three stages to Saturn', build: () => buildRingrunner() },
   { id: 'stock-tender', name: 'Wren Tender', blurb: 'Docking practice tug · try ?scenario=rendezvous', build: () => buildTender() },
+  { id: 'stock-meridian-real', name: 'Meridian Real Orbiter', blurb: 'Real / Challenging scale · orbital launcher and return capsule', build: () => buildRealOrbiter() },
+  { id: 'stock-selene-real', name: 'Selene Real Expedition', blurb: 'Real scale · five-metre Moon landing and return expedition', build: () => buildRealMoonLander() },
 ];

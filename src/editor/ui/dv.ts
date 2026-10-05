@@ -3,8 +3,10 @@ import { RESOURCES } from '../../data/resources';
 import { buildVessel } from '../../sim/vessel/assembly';
 import { computeStageDeltaV } from '../../sim/vessel/staging';
 import { getStageList } from '../core';
+import type { Body } from '../../sim/bodies/types';
+import { sampleAtmosphere } from '../../sim/atmosphere';
 
-/** Editor reference conditions (standard-scale Earth). */
+/** Legacy/default reference conditions for callers without a universe. */
 export const EDITOR_G = 9.81;
 export const ASL_PRESSURE = 101325;
 const G0 = 9.80665;
@@ -24,19 +26,21 @@ export interface StageStats {
  * Prefers the simulation's `computeStageDeltaV` (exact resource flow rules); falls back to a local
  * rocket-equation estimate if the sim throws on an in-progress craft.
  */
-export function computeStageStats(craft: CraftDef, catalog: Map<string, PartDef>): Map<number, StageStats> {
+export function computeStageStats(craft: CraftDef, catalog: Map<string, PartDef>, earth?: Body): Map<number, StageStats> {
+  const gravity = earth?.surfaceGravity ?? EDITOR_G;
+  const pressure = earth ? sampleAtmosphere(earth.atmosphere, 0, gravity).pressure : ASL_PRESSURE;
   const out = new Map<number, StageStats>();
   if (!craft.parts.length) return out;
   const maxStage = getStageList(craft).length - 1;
   try {
     const vessel = buildVessel(craft, catalog);
-    for (const r of computeStageDeltaV(vessel, ASL_PRESSURE, EDITOR_G)) {
+    for (const r of computeStageDeltaV(vessel, pressure, gravity)) {
       if (r.stage < 0 || r.stage > maxStage) continue;
       const idx = maxStage - r.stage;
       const prev = out.get(idx);
       const s: StageStats = {
         dvVac: r.dvVac, dvAsl: r.dvAsl,
-        twrVac: r.startMass > 0 ? r.thrustVac / (r.startMass * EDITOR_G) : 0,
+        twrVac: r.startMass > 0 ? r.thrustVac / (r.startMass * gravity) : 0,
         twrAsl: r.twrStart, burnTime: r.burnTime, startMass: r.startMass, endMass: r.endMass,
       };
       if (prev) { prev.dvVac += s.dvVac; prev.dvAsl += s.dvAsl; prev.burnTime += s.burnTime; prev.endMass = s.endMass; }
@@ -44,7 +48,7 @@ export function computeStageStats(craft: CraftDef, catalog: Map<string, PartDef>
     }
     return out;
   } catch {
-    return localEstimate(craft, catalog, maxStage);
+    return localEstimate(craft, catalog, maxStage, gravity, pressure);
   }
 }
 
@@ -52,7 +56,7 @@ const engineOf = (def: PartDef) => def.modules.find((m): m is EngineModule => m.
 const density = (id: ResourceId) => RESOURCES[id].density;
 
 /** Simple estimate: stages fire in order; decouplers drop subtrees; engines draw from stack-connected tanks. */
-export function localEstimate(craft: CraftDef, catalog: Map<string, PartDef>, maxStage: number): Map<number, StageStats> {
+export function localEstimate(craft: CraftDef, catalog: Map<string, PartDef>, maxStage: number, gravity = EDITOR_G, pressure = ASL_PRESSURE): Map<number, StageStats> {
   const out = new Map<number, StageStats>();
   const parts = new Map<number, PartInstance>(craft.parts.map((p) => [p.uid, p]));
   const def = (p: PartInstance) => catalog.get(p.partId)!;
@@ -116,8 +120,8 @@ export function localEstimate(craft: CraftDef, catalog: Map<string, PartDef>, ma
       }
       if (!burning.length) break;
       let fVac = 0, fAsl = 0, mdot = 0;
-      for (const b of burning) { mdot += b.mdot; fVac += b.mdot * b.e.ispVac * G0; fAsl += b.mdot * b.e.ispAsl * G0; }
-      if (first) { s.twrVac = fVac / (startMass * EDITOR_G); s.twrAsl = fAsl / (startMass * EDITOR_G); first = false; }
+      for (const b of burning) { mdot += b.mdot; fVac += b.mdot * b.e.ispVac * G0; fAsl += b.mdot * (b.e.ispVac + (b.e.ispAsl - b.e.ispVac) * Math.min(1, pressure / ASL_PRESSURE)) * G0; }
+      if (first) { s.twrVac = fVac / (startMass * gravity); s.twrAsl = fAsl / (startMass * gravity); first = false; }
       // Per (part,resource) drain rates in units/s, split evenly over the pool's tanks holding it.
       const rate = new Map<string, number>();
       for (const b of burning) {

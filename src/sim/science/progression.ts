@@ -17,12 +17,12 @@ export type ProgressEvent =
   | { type: 'orbit' | 'landed' | 'soi'; body: string; vesselId: string }
   | { type: 'science'; body: string; biome: string; vesselId: string }
   | { type: 'recovered'; body: string; vesselId: string; visited: string[] };
-export function newProgression(): Progression {
-  return { science: 0, funds: 60000, reputation: 0, unlocked: ['foundation'], archive: {}, nextDataId: 1,
+export function newProgression(creditsMultiplier = 1): Progression {
+  return { science: 0, funds: 60000 * creditsMultiplier, reputation: 0, unlocked: ['foundation'], archive: {}, nextDataId: 1,
     contracts: [], contractSeed: 20300720, contractBatch: 0, milestones: [] };
 }
 /** Three actionable offers per batch. Target pool expands with demonstrated achievements. */
-export function generateContracts(seed: number, batch = 0, advanced = false): Contract[] {
+export function generateContracts(seed: number, batch = 0, advanced = false, creditsMultiplier = 1): Contract[] {
   let n = (seed + Math.imul(batch, 2654435761)) >>> 0;
   const random = () => { n = (Math.imul(n, 1664525) + 1013904223) >>> 0; return n / 4294967296; };
   const bodies = advanced ? ['moon', 'mars', 'titan', 'enceladus'] : ['earth', 'moon'];
@@ -34,7 +34,7 @@ export function generateContracts(seed: number, batch = 0, advanced = false): Co
   const biome = batch === 0 ? 'Launch Complex' : scienceBiomes[Math.floor(random() * scienceBiomes.length)];
   const offer = (kind: ContractKind, target: string, title: string, f: number, b?: string): Contract => ({
     id: `survey-${batch}-${kind}`, kind, title, body: target, biome: b, status: 'offered',
-    advance: 2000 * f, reward: 10000 * f, penalty: 3000 * f, reputation: 3 * f, landed: false,
+    advance: 2000 * f * creditsMultiplier, reward: 10000 * f * creditsMultiplier, penalty: 3000 * f * creditsMultiplier, reputation: 3 * f, landed: false,
   });
   return [offer('orbit', batch === 0 ? 'earth' : body, `Establish orbit · ${label(batch === 0 ? 'earth' : body)}`, batch === 0 ? 1 : factor),
     offer('return', body === 'earth' ? 'moon' : body, `Surface expedition and return · ${label(body === 'earth' ? 'moon' : body)}`, Math.max(2, factor)),

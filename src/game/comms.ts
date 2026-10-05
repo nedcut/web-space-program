@@ -6,9 +6,9 @@ import type { World } from './world';
 
 /** Degrees, body-fixed. Ratings are metres in the playable universe, across scale presets. */
 export const GROUND_STATIONS = [
-  { id: 'ground-coastal', name: 'Coastal Launch Complex', lat: LAUNCH_SITE.lat, lon: LAUNCH_SITE.lon, range: 2e12 },
-  { id: 'ground-ochre', name: 'Ochre Plateau Station', lat: -25, lon: 45, range: 2e12 },
-  { id: 'ground-dawn', name: 'Dawn Reach Station', lat: 12, lon: 165, range: 2e12 },
+  { id: 'ground-coastal', name: 'Coastal Launch Complex', lat: LAUNCH_SITE.lat, lon: LAUNCH_SITE.lon, range: 8e12 },
+  { id: 'ground-ochre', name: 'Ochre Plateau Station', lat: -25, lon: 45, range: 8e12 },
+  { id: 'ground-dawn', name: 'Dawn Reach Station', lat: 12, lon: 165, range: 8e12 },
 ];
 
 /** Adapter only: the graph solver has no World, ephemeris, DOM or renderer dependencies. */

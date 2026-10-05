@@ -4,7 +4,7 @@ import type { Body, BodyDef } from './types';
  * Universe scaling (DECISIONS.md D-003).
  *
  * Given a scale factor s (1 = real, 0.1 = KSP-like):
- *  - All lengths (radii, semi-major axes, ring radii, terrain relief) scale by s.
+ *  - Radii, semi-major axes and ring radii scale by s (terrain relief separately uses s^0.8).
  *  - GM scales by s^2 so surface gravity g = GM/R^2 is preserved.
  *    => orbital velocities scale by sqrt(s), periods by sqrt(s).
  *  - Atmosphere: surface pressure, temperature and composition are preserved; the whole vertical
@@ -80,4 +80,9 @@ export function buildUniverse(defs: BodyDef[], cfg: ScaleConfig): Map<string, Bo
     });
   }
   return out;
+}
+
+/** Mission hardware grows faster than orbital speed; credits compensate without changing research. */
+export function careerScaleMultiplier(preset: ScalePresetId): number {
+  return (SCALE_PRESETS[preset].s / SCALE_PRESETS.standard.s) ** 2;
 }
