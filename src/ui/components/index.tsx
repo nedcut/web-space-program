@@ -42,7 +42,9 @@ export function Modal({ title, onClose, children, className = '' }: { title: str
 
 export function Tabs<T extends string>({ label, options, value, onChange, panelId, className = '' }: { label: string; options: readonly T[]; value: T; onChange: (value: T) => void; panelId: string; className?: string }) {
   return <div role="tablist" aria-label={label} className={`seg ${className}`} onKeyDown={event => {
-    const index = options.indexOf(value);
+    const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button')];
+    const focused = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const index = focused < 0 ? options.indexOf(value) : focused;
     const next = event.key === 'ArrowRight' ? (index + 1) % options.length : event.key === 'ArrowLeft' ? (index + options.length - 1) % options.length : event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : -1;
     if (next < 0) return;
     event.preventDefault(); onChange(options[next]);
