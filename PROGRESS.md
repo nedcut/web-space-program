@@ -415,3 +415,10 @@ Final quality-pass validation after merging main through `981e915` (audio, craft
 - Bennu testing exposed missing translating-frame acceleration in rigid-vessel integration. Small-body integration now follows the reference ephemeris; microgravity legs use inelastic contacts. A ten-minute standard-scale Pebblecatcher touchdown regression verifies stable late contact, low surface-relative speed and sample collection.
 - Focused checks cover periods, high-eccentricity energy/repetition, shape scaling/bounds, SOI floor and low-speed escape patches, actual renderer tail orientation, deterministic activation/save restoration, stock assembly and contacts. Full integration validation follows below.
 - Collaborative browser open succeeded, but navigation/snapshot automation repeatedly failed or timed out. No browser visual-quality claim. Local review server used port 5208; preview pages accept small-body IDs and map `ut`.
+
+### Small-body final integration validation
+
+- Merged main through `f787707` (Real Ringrunner structural interstages); source merged cleanly. Final source is `3ed0ce2`, including immediate rails-prediction refresh when targeting a newly activated asteroid and fading tapered comet tails with texture disposal.
+- `npm run lint`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` pass. Required clean `npx vitest run --maxWorkers=2`: **66 files / 834 tests pass**, 350.02 seconds, with no exclusions; Saturn also passes after main integration. All eight small-body regressions pass.
+- An earlier run saw a newly added assertion against Vite's cached pre-edit World module (833 passing, one activation assertion failure). The fresh focused run passed all eight tests, followed by the complete clean run above with source frozen. No existing tests or timeouts were relaxed.
+- Visual limitation: collaborative browser automation failed, so rendering has structural/direction tests and build coverage but no screenshot review. Shapes are radial approximations and comet emission is visual only; see DECISIONS and `docs/data/SMALL_BODIES.md` for source/model limits.
