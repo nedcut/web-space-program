@@ -28,7 +28,7 @@ export class TrackingView {
     const canvas = this.pipeline.renderer.domElement;
     Object.assign(canvas.style, { width: '100%', height: '100%', display: 'block' });
     host.appendChild(canvas);
-    this.map = new MapView(world.universe.bodies, world.universe.ephem, host, getQuality(game.get().settings.quality));
+    this.map = new MapView(world.universe.bodies, world.universe.ephem, host, getQuality(game.get().settings.quality), world.universe);
     this.focus = { kind: 'body', id: world.universe.sunId };
     this.setFocus(this.focus);
     this.detach = this.map.attachControls(canvas, () => this.focus.kind === 'body' ? world.universe.body(this.focus.id).radius * 1.2 : 10);
@@ -47,6 +47,8 @@ export class TrackingView {
     this.focus = focus;
     const u = this.world.universe;
     if (focus.kind === 'body') {
+      if (!u.bodies.has(focus.id)) this.world.setTarget(focus.id);
+      this.map.setTarget(u.activatedAsteroids.has(focus.id) ? focus : null);
       const b = u.body(focus.id);
       this.map.distance = b.kind === 'star'
         ? Math.max(...b.children.map((id) => u.body(id).orbit?.a ?? 0)) * 2.8

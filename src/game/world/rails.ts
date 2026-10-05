@@ -172,6 +172,21 @@ export function syncPacked(this: World, internals: WorldInternals, wv: WorldVess
     const bs = this.universe.ephem.getBodyState(wv.body, t);
     wv.state.position = add(bs.position, s.position);
     wv.state.velocity = add(bs.velocity, s.velocity);
+    const count = this.universe.activatedAsteroids.size;
+    this.universe.activateNearbyAsteroids(wv.state.position, t);
+    if (this.universe.activatedAsteroids.size !== count) {
+      const body = this.universe.dominantBody(wv.state.position, t);
+      if (body !== wv.body) {
+        const reference = this.universe.ephem.getBodyState(body, t);
+        wv.body = body;
+        wv.orbit = stateToElements(this.universe.body(body).gm, body,
+          sub(wv.state.position, reference.position), sub(wv.state.velocity, reference.velocity), t);
+        this.onEnteredSoi(wv);
+      }
+      // Newly materialized gravity sources must be included in the next rails prediction.
+      const previous = this.ut; this.ut = t;
+      internals.predictRailsEvent(wv); this.ut = previous;
+    }
   } else if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') {
     internals.syncFixed(wv, t);
   }

@@ -18,7 +18,7 @@ const DEG = Math.PI / 180;
 const params = new URLSearchParams(location.search);
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const PREVIEW_IDS = ['earth', 'moon', 'mars', 'saturn', 'titan', 'jupiter', 'io', 'europa', 'enceladus', 'mercury', 'venus', 'uranus', 'neptune', 'callisto', 'iapetus', 'sun'];
+const PREVIEW_IDS = ['bennu', 'ryugu', 'itokawa', '67p', 'halley', 'vesta', 'earth', 'moon', 'mars', 'saturn', 'titan', 'jupiter', 'io', 'europa', 'enceladus', 'mercury', 'venus', 'uranus', 'neptune', 'callisto', 'iapetus', 'sun'];
 const defs = new Map<string, BodyDef>(BODY_DEFS.map((d) => [d.id, d]));
 
 const canvas = $<HTMLCanvasElement>('c');

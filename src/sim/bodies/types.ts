@@ -64,9 +64,11 @@ export interface RingDef {
   opacity?: number;
 }
 
-export type BodyKind = 'star' | 'planet' | 'dwarf' | 'moon';
+export type BodyKind = 'star' | 'planet' | 'dwarf' | 'moon' | 'asteroid' | 'comet';
 
 export interface SurfaceStyle {
+  /** Radial approximation, shared by collision and rendered terrain. */
+  shape?: 'ellipsoid' | 'elongated' | 'bilobed' | 'top';
   /** Procedural terrain generator preset id, e.g. 'earth', 'lunar', 'mars', 'icy', 'gasGiant', 'volcanic'. */
   preset: string;
   /** Base colours (linear RGB) used by procedural shading. */

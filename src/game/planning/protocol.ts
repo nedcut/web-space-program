@@ -6,6 +6,7 @@ import type { CourseCorrectionOptions, InterplanetaryOptions, InterplanetaryPlan
 /** No craft, functions, class instances, render state or mutable World crosses the boundary. */
 export interface PlanningSnapshot {
   preset: ScalePresetId;
+  activatedAsteroids?: string[];
   ut: number;
   vessel: { id: string; body: string; orbit: Orbit; state: StateVector } | null;
   nodes: ManeuverNode[];

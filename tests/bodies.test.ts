@@ -64,7 +64,7 @@ describe('real solar system source data', () => {
   });
   it('has valid procedural styles and extended Saturn rings', () => {
     expect(new Set(BODY_DEFS.map(b => b.surface.seed)).size).toBe(BODY_DEFS.length);
-    const presets = new Set('star earth lunar mercury venus mars gasGiant iceGiant icy enceladus titan io europa volcanic rocky'.split(' '));
+    const presets = new Set('star earth lunar mercury venus mars gasGiant iceGiant icy enceladus titan io europa volcanic rocky irregular'.split(' '));
     for (const b of BODY_DEFS) {
       expect(presets.has(b.surface.preset)).toBe(true);
       expect(b.surface.colors.length).toBeGreaterThanOrEqual(3);

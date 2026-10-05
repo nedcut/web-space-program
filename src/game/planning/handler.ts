@@ -6,10 +6,12 @@ import type { PlanningWorld } from './context';
 import type { PlannerEvent, PlannerMessage, PlanningSnapshot } from './protocol';
 
 export function restorePlanningWorld(snapshot: PlanningSnapshot): PlanningWorld {
+  const universe = new Universe(snapshot.preset);
+  for (const id of snapshot.activatedAsteroids ?? []) universe.activateAsteroid(id);
   const nodes = snapshot.nodes.map(n => ({ ...n }));
   let id = Math.max(0, ...nodes.map(n => n.id)) + 1;
   return {
-    universe: new Universe(snapshot.preset), ut: snapshot.ut,
+    universe, ut: snapshot.ut,
     active: snapshot.vessel ?? undefined,
     orbitOf: () => { if (!snapshot.vessel) throw new Error('An active vessel is required'); return snapshot.vessel.orbit; },
     relativeState: () => { if (!snapshot.vessel) throw new Error('An active vessel is required'); return snapshot.vessel.state; },

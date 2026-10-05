@@ -41,7 +41,7 @@ export function scaleBodyDef(def: BodyDef, cfg: ScaleConfig): BodyDef {
     gm: def.gm * s * s,
     radius: def.radius * s,
     rotationPeriod: def.rotationPeriod * rot,
-    orbit: def.orbit ? { ...def.orbit, a: def.orbit.a * s } : undefined,
+    orbit: def.orbit ? { ...def.orbit, a: def.orbit.a * s, epoch: def.orbit.epoch * Math.sqrt(s) } : undefined,
     atmosphere: def.atmosphere
       ? {
           ...def.atmosphere,
@@ -53,7 +53,7 @@ export function scaleBodyDef(def: BodyDef, cfg: ScaleConfig): BodyDef {
       : undefined,
     rings: def.rings ? { ...def.rings, innerRadius: def.rings.innerRadius * s, outerRadius: def.rings.outerRadius * s } : undefined,
     // Relief shrinks a little less than radii (s^0.8) so small worlds keep some drama without absurd slopes.
-    surface: { ...def.surface, relief: def.surface.relief * Math.pow(s, 0.8) },
+    surface: { ...def.surface, relief: def.surface.relief * (def.surface.preset === 'irregular' ? s : Math.pow(s, 0.8)) },
   };
 }
 
@@ -67,7 +67,7 @@ export function buildUniverse(defs: BodyDef[], cfg: ScaleConfig): Map<string, Bo
     let soi = Infinity;
     let orbitalPeriod: number | undefined;
     if (parent && d.orbit) {
-      soi = d.orbit.a * Math.pow(d.gm / parent.gm, 0.4);
+      soi = Math.max(2 * d.radius, d.orbit.a * Math.pow(d.gm / parent.gm, 0.4));
       orbitalPeriod = 2 * Math.PI * Math.sqrt(Math.pow(d.orbit.a, 3) / (parent.gm + d.gm));
     }
     out.set(d.id, {

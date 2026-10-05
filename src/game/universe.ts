@@ -1,3 +1,6 @@
+import { generateAsteroidField, asteroidState, asteroidDefinition } from '../sim/bodies/asteroidField';
+import { buildUniverse, SCALE_PRESETS } from '../sim/bodies/scale';
+import { BODY_DEFS } from '../data/bodies';
 import { qRotate, qConj } from '../util/quat';
 import { concentrationAt } from '../sim/resources/deposits';
 import type { Body } from '../sim/bodies/types';
@@ -15,6 +18,8 @@ import { add, cross, length, normalize, scale, sub, v3, type Vec3 } from '../uti
  */
 export class Universe {
   readonly bodies: Map<string, Body>;
+  readonly asteroidField = generateAsteroidField();
+  readonly activatedAsteroids = new Set<string>();
   readonly ephem: Ephemeris;
   readonly sunId: string;
   private terrains = new Map<string, Terrain>();
@@ -23,6 +28,35 @@ export class Universe {
     this.bodies = createUniverse(preset);
     this.ephem = createEphemeris(this.bodies);
     this.sunId = [...this.bodies.values()].find((b) => b.kind === 'star')!.id;
+  }
+
+  asteroidState(id: string, t: number) {
+    const seed = this.asteroidField.find(a => a.id === id);
+    if (!seed) throw new Error(`Unknown asteroid ${id}`);
+    return asteroidState(seed, this.body(this.sunId).gm, SCALE_PRESETS[this.preset].s, t);
+  }
+
+  /** Only targeted/nearby field objects join gravity, terrain and conic prediction. */
+  activateAsteroid(id: string): boolean {
+    if (this.bodies.has(id)) return false;
+    const seed = this.asteroidField.find(a => a.id === id);
+    if (!seed) return false;
+    const b = buildUniverse([BODY_DEFS.find(b => b.id === 'sun')!, asteroidDefinition(seed)], SCALE_PRESETS[this.preset]).get(id)!;
+    this.bodies.set(id, b);
+    this.body(this.sunId).children.push(id);
+    this.activatedAsteroids.add(id);
+    return true;
+  }
+
+  activateNearbyAsteroids(position: Vec3, t: number): void {
+    // 1000 km in playable metres, irrespective of scale preset.
+    const radialDistance = length(position), s = SCALE_PRESETS[this.preset].s;
+    for (const a of this.asteroidField) {
+      if (this.activatedAsteroids.has(a.id)) continue;
+      if (radialDistance < a.orbit.a * s * (1 - a.orbit.e) - 1e6 || radialDistance > a.orbit.a * s * (1 + a.orbit.e) + 1e6) continue;
+      const state = this.asteroidState(a.id, t);
+      if (length(sub(state.position, position)) <= 1e6) this.activateAsteroid(a.id);
+    }
   }
 
   body(id: string): Body {
@@ -41,6 +75,7 @@ export class Universe {
   }
 
   dominantBody(posHelio: Vec3, t: number): string {
+    this.activateNearbyAsteroids(posHelio, t);
     return findDominantBody(this.ephem, this.bodies, posHelio, t);
   }
 
@@ -78,6 +113,7 @@ export class Universe {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     return {
+      integrateRelative: ['asteroid', 'comet'].includes(self.body(getDominant()).kind),
       regolithConcentration(pos, t) {
         const id = getDominant();
         const dir = qRotate(qConj(self.ephem.bodyRotation(id, t)), sub(pos, self.ephem.getBodyState(id, t).position));
@@ -137,7 +173,7 @@ export class Universe {
         const h = terr.ocean ? Math.max(terr.liquid?.level ?? 0, rawHeight) : rawHeight;
         const isWater = terr.ocean && rawHeight < (terr.liquid?.level ?? 0);
         // Surface normal from finite differences (≈1 m spacing in tangent directions).
-        const eps = 1 / b.radius;
+        const eps = Math.min(1 / b.radius, 1e-4);
         const tA = normalize(Math.abs(fixed.z) < 0.9 ? cross(v3(0, 0, 1), fixed) : cross(v3(1, 0, 0), fixed));
         const tB = cross(fixed, tA);
         const pA = normalize(add(fixed, scale(tA, eps)));

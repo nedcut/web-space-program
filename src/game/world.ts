@@ -322,6 +322,10 @@ export class World {
 
   /** Set (or clear with null) the navigation target: a vessel id or body id, optionally a docking port. */
   setTarget(id: string | null, portUid: number | null = null) {
+    if (id !== null && this.universe.activateAsteroid(id)) {
+      this.trajectoryCache = null;
+      for (const vessel of this.vessels.values()) if (vessel.mode === 'rails') this.predictRailsEvent(vessel);
+    }
     if (id !== null && (id === this.activeId || (!this.vessels.has(id) && !this.universe.bodies.has(id)))) return false;
     this.targetId = id;
     this.targetPortUid = id !== null && this.vessels.has(id) ? portUid : null;

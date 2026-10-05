@@ -33,6 +33,8 @@ export interface AirSample {
  * depend on the body/orbit/terrain/atmosphere implementations. All queries take inertial positions.
  */
 export interface Environment {
+  /** Integrate in the translating body frame for microgravity precision. Requires referenceBody. */
+  integrateRelative?: boolean;
   regolithConcentration?(pos: Vec3, t: number): number;
   /** Gravitational acceleration at an inertial position (m/s^2). */
   gravity(posInertial: Vec3, t: number): Vec3;

@@ -361,7 +361,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
 
 // ---------------------------------------------------------------- Far sphere (baked texture)
 
-export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, opts: { airless: number; ocean: boolean; minH: number; maxH: number; texWidth: number }): THREE.ShaderMaterial {
+export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, opts: { airless: number; ocean: boolean; minH: number; maxH: number; texWidth: number; irregular?: boolean }): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     defines: defines(q),
     uniforms: {
@@ -374,7 +374,8 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
       uOcean: { value: opts.ocean ? 1 : 0 },
       uHRange: { value: new THREE.Vector2(opts.minH, opts.maxH) },
       uTexel: { value: new THREE.Vector2(2 / opts.texWidth, 4 / opts.texWidth) },
-      uBump: { value: 3.0 },
+      uBump: { value: opts.irregular ? 1 : 3.0 },
+      uIrregular: { value: opts.irregular ? 1 : 0 },
     },
     vertexShader: /* glsl */ `
       ${GLSL_LOGDEPTH_VERT_PARS}
@@ -399,6 +400,7 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
       uniform vec2 uHRange;
       uniform vec2 uTexel;
       uniform float uBump;
+      uniform float uIrregular;
       varying vec3 vWorldPos;
       varying vec3 vObj;
       void main() {
@@ -413,7 +415,7 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
         if (dot(dx2, dx2) + dot(dy2, dy2) < dot(dx, dx) + dot(dy, dy)) { dx = dx2; dy = dy2; }
         vec3 albedo = uFallback;
         vec3 nBF = n;
-        float h = 0.0;
+        float h = uIrregular > 0.5 ? (length(vObj) - 1.0) * uPlanetRadius : 0.0;
         if (uHasMap > 0.5) {
           vec4 s = textureGrad(uMap, uv, dx, dy);
           albedo = s.rgb;
@@ -429,7 +431,7 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
           if (!water) nBF = normalize(n - (east * dE + north * dN) * uBump);
         }
         // Exact-sphere position (see gas giant note on tessellation sag).
-        vec3 rel = normalize(uBodyRot * n) * (uPlanetRadius + max(h, 0.0));
+        vec3 rel = normalize(uBodyRot * n) * (uPlanetRadius + (uIrregular > 0.5 ? h : max(h, 0.0)));
         vec3 toCam = uCamRel - rel;
         float dist = length(toCam);
         vec3 V = toCam / dist;
