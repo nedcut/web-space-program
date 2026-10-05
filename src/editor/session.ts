@@ -394,6 +394,7 @@ export class EditorSession {
       this.held = null;
       this.touch();
     }
+    if (ok && typeof document !== 'undefined') document.dispatchEvent(new Event('wsp:part-attach'));
     return !!ok;
   }
 
