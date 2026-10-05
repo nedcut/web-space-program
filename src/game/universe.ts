@@ -56,7 +56,7 @@ export class Universe {
     const uz = fixed.z * inv;
     const terrainH = b.solidSurface ? this.terrain(bodyId).heightAt(ux, uy, uz) : 0;
     const ocean = b.solidSurface && this.terrain(bodyId).ocean;
-    const surfaceH = ocean ? Math.max(0, terrainH) : terrainH;
+    const surfaceH = ocean ? Math.max(this.terrain(bodyId).liquid?.level ?? 0, terrainH) : terrainH;
     return {
       rel,
       r,
@@ -131,11 +131,11 @@ export class Universe {
         const fixed = normalize(self.ephem.toBodyFixed(id, rel, t));
         const hAt = (x: number, y: number, z: number) => {
           const h = terr.heightAt(x, y, z);
-          return terr.ocean ? Math.max(0, h) : h;
+          return terr.ocean ? Math.max(terr.liquid?.level ?? 0, h) : h;
         };
         const rawHeight = terr.heightAt(fixed.x, fixed.y, fixed.z);
-        const h = terr.ocean ? Math.max(0, rawHeight) : rawHeight;
-        const isWater = terr.ocean && rawHeight <= 0;
+        const h = terr.ocean ? Math.max(terr.liquid?.level ?? 0, rawHeight) : rawHeight;
+        const isWater = terr.ocean && rawHeight < (terr.liquid?.level ?? 0);
         // Surface normal from finite differences (≈1 m spacing in tangent directions).
         const eps = 1 / b.radius;
         const tA = normalize(Math.abs(fixed.z) < 0.9 ? cross(v3(0, 0, 1), fixed) : cross(v3(1, 0, 0), fixed));
@@ -153,6 +153,7 @@ export class Universe {
           normal: normalize(self.ephem.fromBodyFixed(id, nFixed, t)),
           surfaceVelocity: add(bs.velocity, self.ephem.surfaceVelocity(id, surfRel, t)),
           isWater,
+          liquidDensity: terr.liquid?.density,
         };
         return sample;
       },

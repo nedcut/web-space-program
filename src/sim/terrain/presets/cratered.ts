@@ -66,6 +66,11 @@ export function lunarPreset(ctx: PresetContext): PresetResult {
     return m;
   };
 
+  const namedCraters = [
+    { name: 'Wayfarer', c: latLonToUnit(-43.3,-11.2), radius: 0.027 },
+    { name: 'Bell', c: latLonToUnit(9.6,-20.1), radius: 0.03 },
+    { name: 'Glassmaker', c: latLonToUnit(23.7,-47.4), radius: 0.014 },
+  ];
   let lastMare = 0;
   let lx = NaN, ly = NaN, lz = NaN;
   const height = (x: number, y: number, z: number): number => {
@@ -78,7 +83,18 @@ export function lunarPreset(ctx: PresetContext): PresetResult {
     const crat = craters.height(x, y, z, (o) => (o < 6 ? 1 - m * 0.97 : 1 - m * 0.5));
     // Wrinkle ridges in maria.
     const wr = m > 0.01 ? m * relief * 0.02 * ridged(nMare, x * 18, y * 18, z * 18, 4) : 0;
-    return highlands * (1 - m) + mare * m + crat + wr;
+    let h = highlands * (1 - m) + mare * m + crat + wr;
+    // Bell and Wayfarer basins, at near-side impact analogues.
+    for (const {c, radius} of namedCraters) {
+      const d = Math.hypot(x-c.x, y-c.y, z-c.z) / radius;
+      if (d < 1.5) {
+        const floor = -0.20 * smoothstep(1, 0.78, d);
+        const peak = 0.16 * Math.exp(-d*d/0.018);
+        const rim = 0.065 * Math.exp(-(((d-1)/0.12)**2));
+        h += relief * (floor + peak + rim);
+      }
+    }
+    return h;
   };
 
   const HIGH = ctx.pal(1, [0.22, 0.21, 0.2]);

@@ -125,3 +125,5 @@ button, input, select, textarea { font-size: 1em; }
 .loading-bar { width: 260px; height: 3px; border-radius: 2px; background: rgba(140, 180, 255, 0.12); overflow: hidden; margin-top: 14px; }
 .loading-bar > div { width: 40%; height: 100%; background: var(--accent); animation: loading-slide 1.3s ease-in-out infinite; }
 @keyframes loading-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+
+html[data-photo-mode='true'] .photo-hide { visibility: hidden; pointer-events: none; }

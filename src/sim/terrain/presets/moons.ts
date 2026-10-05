@@ -1,3 +1,4 @@
+import { latLonToUnit } from '../geo';
 import type { RGB } from '../api';
 import { fbm, ridged, octavesFor, smoothstep, clamp } from '../fbm';
 import { hash3, hashNext, mulberry32, U32_TO_UNIT } from '../noise';
@@ -52,6 +53,7 @@ export function ioPreset(ctx: PresetContext): PresetResult {
   const nMtn = ctx.noise(3);
   const baseOct = octavesFor(R, 3, ctx.minWavelength, 2, 14);
   const seed = ctx.seed * 101;
+  const lavaLakes = [[18,30],[-26,-75],[42,130]].map(([lat,lon])=>latLonToUnit(lat,lon));
   let pat = 0;
   let ring = 0;
   let mtnMask = 0;
@@ -82,6 +84,11 @@ export function ioPreset(ctx: PresetContext): PresetResult {
       mtnMask = Math.max(mtnMask, m);
     });
     if (mtnMask > 0) h += 0.85 * mtnMask * ridged(nMtn, x * 12, y * 12, z * 12, octavesFor(R, 12, ctx.minWavelength * 2, 2.1, 12));
+    for (const c of lavaLakes) {
+      const d=Math.hypot(x-c.x,y-c.y,z-c.z);
+      const basin=smoothstep(0.025,0.019,d);
+      h=h*(1-basin)-0.18*basin;
+    }
     return relief * h;
   };
   const YEL = ctx.pal(1, [0.62, 0.52, 0.18]);

@@ -47,7 +47,7 @@ export function biomeAt(body: Body, terrain: Terrain, direction: Vec3): string {
     return level > 0.46 ? 'Highlands' : 'Plains';
   }
   if (body.id === 'titan') {
-    if (h < 0 || (lat > 0.95 && level < 0.4)) return 'Hydrocarbon Seas';
+    if (terrain.liquid && h < terrain.liquid.level) return 'Hydrocarbon Seas';
     return level > 0.48 ? 'Highlands' : 'Dunes';
   }
   if (lat > 1.15) return 'Polar Regions';
