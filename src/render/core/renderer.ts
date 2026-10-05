@@ -1,3 +1,4 @@
+import { PhotoEffectsPass } from './PhotoEffectsPass';
 import { AdaptiveQuality } from './adaptiveQuality';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -28,6 +29,7 @@ export class RenderPipeline {
   private renderPass!: RenderPass;
   private bloomPass?: UnrealBloomPass;
   private fxaaPass?: FXAAPass;
+  photoEffects!: PhotoEffectsPass;
   private quality: QualitySettings;
   private adaptive = new AdaptiveQuality();
   readonly stats = { calls: 0, triangles: 0, points: 0 };
@@ -101,6 +103,8 @@ export class RenderPipeline {
       this.fxaaPass = new FXAAPass();
       composer.addPass(this.fxaaPass);
     }
+    this.photoEffects = new PhotoEffectsPass();
+    composer.addPass(this.photoEffects);
     this.composer = composer;
     this.setSize(this.width, this.height);
   }
@@ -134,11 +138,25 @@ export class RenderPipeline {
   get effectiveRenderScale(): number { return this.quality.renderScale * this.adaptive.scale; }
 
   render(scene: THREE.Scene, camera: THREE.Camera): void {
+    this.photoEffects.scene = scene; this.photoEffects.camera = camera;
     this.renderPass.scene = scene;
     this.renderPass.camera = camera;
     this.renderer.info.reset();
     this.composer.render();
     Object.assign(this.stats, { calls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, points: this.renderer.info.render.points });
+  }
+
+  /** Render and copy synchronously, before the browser discards the drawing buffer. */
+  capture(scene: THREE.Scene, camera: THREE.PerspectiveCamera, scale: 1 | 2): HTMLCanvasElement {
+    const width = this.width, height = this.height;
+    try {
+      this.setSize(width * scale, height * scale);
+      this.render(scene, camera);
+      const canvas = document.createElement('canvas');
+      canvas.width = this.renderer.domElement.width; canvas.height = this.renderer.domElement.height;
+      const context = canvas.getContext('2d'); if (!context) throw new Error('PNG capture is unavailable.');
+      context.drawImage(this.renderer.domElement, 0, 0); return canvas;
+    } finally { this.setSize(width, height); }
   }
 
   dispose(): void {

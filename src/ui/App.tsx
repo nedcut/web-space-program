@@ -1,3 +1,5 @@
+import { PhotoPanel } from './PhotoPanel';
+import { usePhotoMode } from '../game/photoMode';
 import { Training } from '../tutorial/Training';
 import { TutorialPanel } from '../tutorial/TutorialPanel';
 import { useTutorial } from '../tutorial/runtime';
@@ -17,12 +19,14 @@ const Missions = lazy(() => import('./Missions'));
 const FlightScene = lazy(() => import('../flight/FlightScene'));
 
 export function App() {
+  const photo = usePhotoMode();
   const tutorial = useTutorial();
   const settings = useGame(s => s.settings);
   useEffect(() => {
+    document.documentElement.dataset.photoMode = String(photo.active);
     document.documentElement.dataset.highContrast = String(settings.highContrast);
     document.documentElement.dataset.reduceMotion = String(settings.reduceMotion);
-  }, [settings.highContrast, settings.reduceMotion]);
+  }, [settings.highContrast, settings.reduceMotion, photo.active]);
   const scene = useGame((s) => s.scene);
   return (
     <div className="fullscreen" style={{ width: `${100 / settings.uiScale}%`, height: `${100 / settings.uiScale}%`, transform: `scale(${settings.uiScale})`, transformOrigin: 'top left' }}>
@@ -38,7 +42,8 @@ export function App() {
         {scene === 'missions' && <Missions />}
         {scene === 'tracking' && <TrackingStation />}
       </Suspense>
-      <TutorialPanel />
+      {!photo.active && <TutorialPanel />}
+      <PhotoPanel />
       </ErrorBoundary>
     </div>
   );

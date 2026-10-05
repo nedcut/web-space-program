@@ -1,3 +1,6 @@
+import { localId } from '../util/localId';
+import { game } from './store';
+import { listSaveSlots, writeSaveSlot } from './saveSlots';
 import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { newProgression, type GameMode, type Progression } from '../sim/science/progression';
 import type { Astronaut, PlantedFlag } from '../sim/crew/crew';
@@ -121,11 +124,31 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
 const KEY_PREFIX = 'wsp.world.v1.';
 
 export function saveWorldToStorage(slot: string, world: World) {
-  localStorage.setItem(KEY_PREFIX + slot, JSON.stringify({ savedAt: Date.now(), data: serializeWorld(world) }));
+  // Preserve pre-slot programs before replacing the legacy compatibility keys.
+  if (!listSaveSlots().length) for (const legacyName of ['autosave', 'quicksave']) {
+    const raw = localStorage.getItem(KEY_PREFIX + legacyName);
+    if (raw) {
+      try {
+        const legacy = JSON.parse(raw) as { savedAt: number; data: SavedWorld };
+        if (legacy.data?.version === SAVE_VERSION) writeSaveSlot({ id: `legacy-program:${legacyName}`, programId: 'legacy-program', name: legacyName === 'autosave' ? 'Autosave' : 'Quicksave', kind: legacyName === 'autosave' ? 'auto' : 'manual', ...legacy });
+      } catch { /* A corrupt old save must not prevent a new program from saving. */ }
+    }
+  }
+  const data = serializeWorld(world), savedAt = Date.now();
+  const programId = game.get().saveId ?? 'legacy-program';
+  writeSaveSlot({ id: slot === 'autosave' ? localId() : `${programId}:${slot}`, programId, name: slot === 'autosave' ? 'Autosave' : slot === 'quicksave' ? 'Quicksave' : slot, kind: slot === 'autosave' ? 'auto' : 'manual', savedAt, data });
+  localStorage.setItem(KEY_PREFIX + slot, JSON.stringify({ savedAt, data }));
 }
 
 export function loadWorldFromStorage(slot: string): { savedAt: number; data: SavedWorld } | null {
   try {
+    const programId = game.get().saveId;
+    if (programId) {
+      const all = listSaveSlots();
+      const saved = all.find(x => x.programId === programId && (slot === 'autosave' ? x.kind === 'auto' : x.id === `${programId}:${slot}`));
+      if (saved) return { savedAt: saved.savedAt, data: saved.data };
+      if (all.some(x => x.programId === programId)) return null;
+    }
     const raw = localStorage.getItem(KEY_PREFIX + slot);
     return raw ? JSON.parse(raw) : null;
   } catch {
@@ -134,7 +157,7 @@ export function loadWorldFromStorage(slot: string): { savedAt: number; data: Sav
 }
 
 export function hasSave(slot: string) {
-  return typeof localStorage !== 'undefined' && localStorage.getItem(KEY_PREFIX + slot) !== null;
+  return typeof localStorage !== 'undefined' && loadWorldFromStorage(slot) !== null;
 }
 
 export function deleteSave(slot: string) {
