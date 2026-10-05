@@ -19,6 +19,7 @@ export interface GroundSample {
   /** Velocity of the surface material at that point (body rotation), inertial frame. */
   surfaceVelocity: Vec3;
   isWater: boolean;
+  liquidDensity?: number;
 }
 
 export interface AirSample {

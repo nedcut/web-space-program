@@ -31,6 +31,7 @@ export interface SavedWorld {
   commsSettings?: import('../sim/comms/network').CommsSettings;
   transmitting?: string[];
   surveyedBodies?: string[];
+  discoveries?: string[];
   mode?: GameMode;
   progression?: Progression;
   crew?: Astronaut[];
@@ -76,6 +77,7 @@ export function serializeWorld(world: World): SavedWorld {
     crew: structuredClone(world.crew),
     crewSeed: world.crewSeed,
     flags: structuredClone(world.flags),
+    discoveries: [...world.discoveries],
     version: SAVE_VERSION,
     preset: world.universe.preset,
     ut: world.ut,
@@ -98,6 +100,7 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
   world.crew = structuredClone(data.crew ?? []);
   world.crewSeed = data.crewSeed ?? world.crewSeed;
   world.flags = structuredClone(data.flags ?? []);
+  world.discoveries = [...new Set(data.discoveries ?? [])];
   for (const sv of structuredClone(data.vessels)) {
     const parts = sv.state.parts.map((p) => {
       const def = world.catalog.get(p.partId);

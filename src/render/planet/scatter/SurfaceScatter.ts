@@ -70,7 +70,7 @@ export class SurfaceScatter {
     if (length - this.body.radius - (this.terrain.ocean ? Math.max(0, this.terrain.maxHeight) : this.terrain.maxHeight) >= this.settings.maxAltitude) { this.group.visible = false; return; }
     const d: [number, number, number] = [camera[0] / length, camera[1] / length, camera[2] / length];
     const h = this.terrain.heightAt(...d);
-    const altitude = length - this.body.radius - (this.terrain.ocean ? Math.max(0, h) : h);
+    const altitude = length - this.body.radius - (this.terrain.ocean ? Math.max(this.terrain.liquid?.level ?? 0, h) : h);
     this.group.visible = altitude < this.settings.maxAltitude;
     if (!this.group.visible) return;
     const anchor = d.map(v => Math.floor(v * this.body.radius / (CELL_SIZE / 2))).join(':');
