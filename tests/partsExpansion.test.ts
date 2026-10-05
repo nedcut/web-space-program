@@ -119,4 +119,15 @@ describe('passenger hardware and deployment', () => {
       expect(wheel.steerAngle).toBeGreaterThan(0);
     }
   });
+  it('provides two large boosters with usable launch thrust and burn duration', () => {
+    for (const id of ['srb-reed', 'srb-furnace']) {
+      const def = getPart(id), engine = findModule(def, 'engine')!;
+      expect(def.shape.kind === 'cylinder' && def.shape.radiusTop >= 0.625).toBe(true);
+      const fuel = def.resources.solidFuel!;
+      const burnTime = fuel * engine.ispVac * 9.80665 / engine.maxThrustVac;
+      expect(burnTime).toBeGreaterThan(40);
+      expect(burnTime).toBeLessThan(120);
+      expect(engine.maxThrustVac * engine.ispAsl / engine.ispVac / ((def.dryMass + fuel) * 9.80665)).toBeGreaterThan(2);
+    }
+  });
 });
