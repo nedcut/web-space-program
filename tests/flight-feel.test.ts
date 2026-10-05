@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { AlertTracker, alertConditions, type AlertInput } from '../src/flight/alerts';
 import { HintTracker, hintFor, type HintId, type HintInput } from '../src/flight/hints';
 import { situationBanner } from '../src/flight/situation';
+import { orbitMarkerFrame } from '../src/flight/controller/navball';
+import { sasTargetDirection } from '../src/sim/vessel/sas';
+import { dot } from '../src/util/vec3';
 import { WarpDriver, warpTargets } from '../src/flight/controller/warp';
 import { PART_CATALOG } from '../src/data/parts';
 import { buildOrbiter } from '../src/editor/stockCrafts';
@@ -146,5 +149,19 @@ describe('arrival banner', () => {
     expect(situationBanner(world)?.sub).toMatch(/On the pad/);
     const o = orbiting();
     expect(situationBanner(o.world)?.sub).toMatch(/^Orbiting Earth/);
+  });
+});
+
+describe('navball markers', () => {
+  it('draws radial-out away from the body, where SAS RAD+ points', () => {
+    const { world, wv } = orbiting();
+    const rs = world.relativeState(wv);
+    const f = orbitMarkerFrame(rs.position, rs.velocity)!;
+    expect(dot(f.radialOut, rs.position)).toBeGreaterThan(0);
+    const env = world.universe.createEnvironment(() => wv.body);
+    const sas = sasTargetDirection(wv.state, 'radialOut', neutralInput({ sasReference: 'orbit' }), env, world.ut)!;
+    expect(dot(sas, f.radialOut)).toBeGreaterThan(0.999999);
+    const n = sasTargetDirection(wv.state, 'normal', neutralInput({ sasReference: 'orbit' }), env, world.ut)!;
+    expect(dot(n, f.normal)).toBeGreaterThan(0.999999);
   });
 });
