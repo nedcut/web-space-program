@@ -51,9 +51,23 @@ Dev shortcuts:
 | , . / | time warp down / up / stop |
 | V | camera mode (auto / chase / free) |
 | G / B (hold) | landing gear toggle / wheel brakes |
+| C | lights on / off |
+| Backspace | abort (cut throttle, fire the Abort group) |
+| 1 … 0 | custom action groups 1–10 (assign in the editor's **Actions** mode) |
+| Right-click a part (long-press on touch) | part panel: live status, actions (activate/shut down, deploy, decouple, chute, transmit, undock …) and settings |
 | Esc | pause menu (recover, revert to launch/editor, quickload, settings) |
 | F1 / ? button | controls cheat sheet (shown automatically on the first flight) |
 | Mouse drag / wheel | orbit camera / zoom |
+
+## Part panels, settings and action groups (2026-10-05)
+Right-click any part in the hangar or in flight for a floating panel that follows the part (pin several; Esc or × closes).
+In the editor it sets fill levels (including empty ballast), thrust limiter, gimbal, crossfeed, ejection force, control-surface
+limits, chute deploy pressure/height, deploy state at launch, RCS axes, reaction-wheel mode and lamp colour; Δv/TWR update
+immediately. The **Actions** button switches to action-group mode: pick a group (Stage, Gear, Brakes, Lights, RCS, SAS, Abort,
+1–10), click parts and tick their actions; the left list shows every binding. Staging chips select parts (and the 3D view
+highlights them); hovering a part shows a tooltip. In flight, the panel shows temperature, structural load, contents and
+engine state, offers part actions, and adjusts flight-safe settings. Stock crewed rockets come with an Abort sequence.
+Everything goes through the authoritative command path, so it works in LAN multiplayer.
 
 ## Status
 Milestone 1 (build → launch → orbit → Moon) is complete and verified. Beyond it: docking, aircraft, EVA, interplanetary, science/career, comms, mining, multiplayer prototype. Feature notes per area follow below the table.

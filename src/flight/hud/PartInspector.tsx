@@ -39,7 +39,7 @@ export function FlightInspector({ controller: c, panels, setPanels }: { controll
   return <InspectorLayer panels={panels} anchor={anchor} content={content}
     onClose={uid => setPanels(p => p.filter(x => x.uid !== uid))}
     onPin={uid => setPanels(p => p.map(x => (x.uid === uid ? { ...x, pinned: !x.pinned } : x)))}
-    insets={{ top: 64, right: 250, bottom: 12, left: 12 }} />;
+    insets={{ top: 64, right: 250, bottom: 215, left: 12 }} />;
 }
 
 function FlightPartBody({ c, part: p, copies }: { c: FlightController; part: PartState; copies: number }) {

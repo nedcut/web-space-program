@@ -11,7 +11,9 @@ import { decodeCraft, encodeCraft, validateCraft } from '../src/game/craftSharin
 import { Room } from '../server/room';
 import { decodeClient, encode, decodeServer, type ClientMessage } from '../src/net/protocol';
 import { Replica } from '../src/net/client';
-import { buildSoundingRocket } from '../src/editor/stockCrafts';
+import { buildSoundingRocket, STOCK_CRAFTS } from '../src/editor/stockCrafts';
+import { World } from '../src/game/world';
+import { Universe } from '../src/game/universe';
 import { deserializeWorld, serializeWorld } from '../src/game/persistence';
 import { PART_CATALOG } from '../src/data/parts';
 
@@ -155,6 +157,22 @@ describe('part actions and action groups', () => {
   });
 });
 
+describe('stock abort wiring', () => {
+  it('Kestrel aborts on the pad: engines stop, the capsule separates and its parachute arms', () => {
+    const craft = STOCK_CRAFTS.find(s => s.id === 'stock-kestrel')!.build();
+    expect(craft.parts.some(p => p.actions?.abort?.includes('decouple'))).toBe(true);
+    const world = new World(new Universe('standard'), PART_CATALOG, 0);
+    const wv = world.launch(craft);
+    world.tick(0.05, neutralInput({ stage: true }));
+    world.tick(0.05, neutralInput({ commands: [{ kind: 'group', group: 'abort' }] }));
+    expect(world.vessels.size).toBe(2);
+    const capsule = world.vessels.get(wv.state.id)!.state;
+    expect(capsule.parts.find(p => p.chute)!.chute!.phase).not.toBe('stowed');
+    const booster = [...world.vessels.values()].find(v => v !== wv)!.state;
+    expect(booster.parts.filter(p => p.engine).every(p => !p.engine!.ignited)).toBe(true);
+  });
+});
+
 describe('serialization', () => {
   const craft = (): CraftDef => {
     const c = buildSoundingRocket();
@@ -228,5 +246,29 @@ describe('multiplayer command path', () => {
     room.receive(id, encode({ v: 1, type: 'input', vesselId: wv.state.id, seq: 1, input: neutralInput({ commands: [{ kind: 'part', uid: engine.uid, action: 'engine.activate' }] }) }));
     room.tick();
     expect(engine.engine!.ignited).toBe(false);
+  });
+});
+
+describe('editor settings and bindings', () => {
+  it('apply across symmetry, validate offered keys and coalesce slider undo steps', async () => {
+    const { CraftEditor } = await import('../src/editor/core');
+    const ed = new CraftEditor(TEST_CATALOG, stackCraft(['capsule', 'tank', 'engine']));
+    ed.setSymmetry({ mode: 'radial', count: 3 });
+    const leg = ed.surfaceAttach('leg', 2, { x: 0.625, y: 0, z: 0 }, { x: 1, y: 0, z: 0 });
+    const legs = ed.craft.parts.filter(p => p.partId === 'leg');
+    expect(legs).toHaveLength(3);
+    ed.setPartTweaks(leg.uid, { extended: true });
+    expect(ed.craft.parts.filter(p => p.tweaks?.extended).length).toBe(3);
+    expect(() => ed.setPartTweaks(leg.uid, { thrustLimit: 0.5 })).toThrow();
+    ed.setPartActions(leg.uid, 'gear', ['deploy.toggle', 'decouple']);
+    expect(ed.craft.parts.filter(p => p.partId === 'leg').every(p => JSON.stringify(p.actions) === '{"gear":["deploy.toggle"]}')).toBe(true);
+    const undoBefore = (ed as unknown as { past: unknown[] }).past.length;
+    for (const f of [0.9, 0.7, 0.5]) ed.setPartResources(2, { liquidFuel: 710 * f });
+    expect((ed as unknown as { past: unknown[] }).past.length).toBe(undoBefore + 1);
+    expect(ed.craft.parts[1].resources).toEqual({ liquidFuel: 355 });
+    ed.undo();
+    expect(ed.craft.parts[1].resources).toBeUndefined();
+    ed.clearGroup('gear');
+    expect(ed.craft.parts.some(p => p.actions)).toBe(false);
   });
 });

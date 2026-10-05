@@ -16,6 +16,7 @@ export const WORLD_ACTIONS: ReadonlySet<PartActionId> = new Set<PartActionId>(['
 /** Actions with an on/off sense that an action group can direct. */
 export const TOGGLE_ACTIONS: ReadonlySet<PartActionId> = new Set<PartActionId>(['engine.toggle', 'gimbal.toggle', 'deploy.toggle', 'crossfeed.toggle', 'light.toggle', 'rcs.toggle', 'wheel.toggle', 'drill.toggle', 'converter.toggle']);
 export const MAX_COMMANDS = 32;
+const DIRECTED_GROUPS: ReadonlySet<ActionGroupId> = new Set<ActionGroupId>(['gear', 'brakes', 'lights', 'rcs', 'sas']);
 
 export const GROUP_LABELS: Record<ActionGroupId, string> = {
   stage: 'Stage', gear: 'Gear', brakes: 'Brakes', lights: 'Lights', rcs: 'RCS', sas: 'SAS', abort: 'Abort',
@@ -147,10 +148,14 @@ export function expandCommands(v: VesselState, cmds: readonly VesselCommand[]): 
   const out: VesselCommand[] = [];
   for (const c of cmds.slice(0, MAX_COMMANDS)) {
     if (c.kind !== 'group') { out.push(c); continue; }
-    // Stage and Abort are momentary: each bound toggle flips its own part. Other groups carry an on/off state.
+    // Groups that mirror a vessel control (gear, brakes, lights, RCS, SAS) direct their toggles to the control's new
+    // state. Stage, Abort and the custom groups flip each bound toggle on its own part; custom groups still record an
+    // on/off state for the HUD.
+    const directed = DIRECTED_GROUPS.has(c.group);
     const momentary = c.group === 'stage' || c.group === 'abort';
-    const state = momentary ? c.state : c.state ?? !(v.groupState?.[c.group] ?? false);
-    v.groupState = { ...v.groupState, [c.group]: momentary ? true : state! };
+    const groupOn = momentary ? true : c.state ?? !(v.groupState?.[c.group] ?? false);
+    const state = directed ? groupOn : c.state;
+    v.groupState = { ...v.groupState, [c.group]: groupOn };
     const bound = groupBindings(v, c.group);
     if (c.group === 'lights') for (const p of v.parts) if (has(p.def, 'light') && !bound.some(b => b.uid === p.uid && b.action === 'light.toggle')) bound.push({ uid: p.uid, action: 'light.toggle' });
     for (const b of bound) out.push({ kind: 'part', uid: b.uid, action: b.action, state });

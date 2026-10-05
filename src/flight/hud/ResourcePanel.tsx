@@ -3,7 +3,8 @@ import type { World } from '../../game/world';
 import type { MapView } from '../../render/map/MapView';
 import { totalResource } from '../../sim/vessel/resources';
 
-export function ResourcePanel({ world, map, mapMode, paused }: { world: World; map: MapView; mapMode: boolean; paused: boolean }) {
+/** `act` routes drill/converter toggles through the authoritative command path (multiplayer-safe). */
+export function ResourcePanel({ world, map, mapMode, paused, act }: { world: World; map: MapView; mapMode: boolean; paused: boolean; act?: (uid: number, action: 'drill.toggle' | 'converter.toggle') => void }) {
   const overlay = map.resourceOverlayEnabled;
   const [, refresh] = useState(0);
   const wv = world.active;
@@ -22,12 +23,12 @@ export function ResourcePanel({ world, map, mapMode, paused }: { world: World; m
       {parts.map(p => <div key={p.uid} style={{ fontSize: 12, marginTop: 8 }}>
         <strong>{p.def.name}</strong>
         {p.def.modules.some(m => m.type === 'surfaceScanner') && <div>{v.situation === 'landed' ? `Local concentration: ${(world.localConcentration() * 100).toFixed(1)}%` : 'Land to read local concentration'}</div>}
-        {p.def.modules.some(m => m.type === 'drill') && <div><button className="btn small" disabled={disabled} onClick={() => { p.drillDeployed = !p.drillDeployed; refresh(n => n + 1); }}>{p.drillDeployed ? 'Retract drill' : 'Deploy drill'}</button><div>{v.situation !== 'landed' ? 'Requires solid ground' : (p.drillDeploy ?? 0) < 1 ? 'Drill stowed / deploying' : 'Extracting when charge and tank space permit'}</div></div>}
+        {p.def.modules.some(m => m.type === 'drill') && <div><button className="btn small" disabled={disabled} onClick={() => { if (act) act(p.uid, 'drill.toggle'); else p.drillDeployed = !p.drillDeployed; refresh(n => n + 1); }}>{p.drillDeployed ? 'Retract drill' : 'Deploy drill'}</button><div>{v.situation !== 'landed' ? 'Requires solid ground' : (p.drillDeploy ?? 0) < 1 ? 'Drill stowed / deploying' : 'Extracting when charge and tank space permit'}</div></div>}
         {p.def.modules.some(m => m.type === 'converter') && <div>
           <select aria-label="Converter recipe" disabled={disabled} value={p.converterRecipe ?? 'kerolox'} onChange={e => { p.converterRecipe = e.target.value as 'kerolox' | 'monopropellant'; refresh(n => n + 1); }}>
             <option value="kerolox">Fuel + oxidizer</option><option value="monopropellant">Monopropellant</option>
           </select>
-          <button className="btn small" disabled={disabled} onClick={() => { p.converterRunning = !p.converterRunning; refresh(n => n + 1); }}>{p.converterRunning ? 'Stop converter' : 'Start converter'}</button>
+          <button className="btn small" disabled={disabled} onClick={() => { if (act) act(p.uid, 'converter.toggle'); else p.converterRunning = !p.converterRunning; refresh(n => n + 1); }}>{p.converterRunning ? 'Stop converter' : 'Start converter'}</button>
         </div>}
         {p.processTemperature !== undefined && <div>Process core: {p.processTemperature.toFixed(0)} K</div>}
         {p.def.modules.some(m => m.type === 'surveyScanner') && <div><button className="btn small" disabled={disabled || world.surveyedBodies.includes(wv.body)} onClick={() => {

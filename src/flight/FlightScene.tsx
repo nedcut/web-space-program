@@ -304,7 +304,7 @@ export default function FlightScene() {
             assistActive: !!tele.assist,
             signal: c.world.commsSettings.enabled ? <SignalPanel world={c.world} /> : undefined,
             resources: (tele.mapMode || active?.state.parts.some(p => p.def.modules.some(m => ['drill', 'converter', 'surfaceScanner', 'surveyScanner'].includes(m.type))))
-              ? <ResourcePanel world={c.world} map={c.map} mapMode={tele.mapMode} paused={paused} /> : undefined,
+              ? <ResourcePanel world={c.world} map={c.map} mapMode={tele.mapMode} paused={paused} act={(uid, a) => ctrl.current?.partAction(uid, a)} /> : undefined,
             science: <SciencePanel world={c.world} paused={paused} />,
             maneuver: <ManeuverPanel world={c.world} />,
           }}

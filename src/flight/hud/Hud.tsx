@@ -1,6 +1,6 @@
 import { Icon } from '../../ui/components/Icon';
 import { Button, Panel, Tooltip } from '../../ui/components';
-import { isTyping, matches } from '../../input/bindings';
+import { bindingLabel, isTyping, matches } from '../../input/bindings';
 import { snapshotEqual } from '../../util/snapshotEqual';
 import { FlightDataPanel } from './FlightDataPanel';
 import type { FlightData } from '../../game/flightData';
@@ -381,7 +381,7 @@ function ActionGroupStrip({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
   return (
     <Panel className="panel hud-groups" aria-label="Action groups">
       <Button className={`btn small hud-abort ${abort?.on ? 'on' : ''}`} title={`Abort (${abort?.key ?? 'Backspace'}): cut throttle and fire the Abort group${abort?.count ? ` · ${abort.count} actions` : ''}`} onClick={() => cb.onAbort?.()}>ABORT</Button>
-      {t.lights !== null && <Button className={`btn small ${t.lights ? 'primary' : ''}`} title="Lights (Y)" onClick={() => cb.onToggleLights?.()}>LIGHTS</Button>}
+      {t.lights !== null && <Button className={`btn small ${t.lights ? 'primary' : ''}`} title={`Lights (${bindingLabel('toggleLights')})`} onClick={() => cb.onToggleLights?.()}>LIGHTS</Button>}
       {custom.length > 0 && <div className="hud-group-keys">
         {custom.map(g => <Button key={g.id} className={`btn small ${g.on ? 'primary' : ''}`} title={`${g.label} (${g.key}) · ${g.count} action${g.count === 1 ? '' : 's'}`} onClick={() => cb.onActionGroup?.(g.id)}>{g.id.slice(6)}</Button>)}
       </div>}
