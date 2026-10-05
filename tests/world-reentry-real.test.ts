@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { expect, it } from 'vitest';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
@@ -43,6 +44,8 @@ it.each(['shield', 'capsule', 'tank'] as const)('real LEO reentry: %s', payload 
     if (e.type === 'partDestroyed') events.push(`${e.partUid}:${e.reason}`);
     if (e.type === 'chute' && e.phase === 'full') deployed = true;
   };
+  // The unshielded fixtures deliberately destroy hardware; the surviving capsule must stay intact.
+  if (shielded) requireIntactFlight(world);
   for (let i = 0; i < 50 * 2400 && world.active && vessel.state.situation === 'flying'; i++) {
     const f = localFrame(world, vessel);
     maxSpeed = Math.max(maxSpeed, length(f.surfVel));
