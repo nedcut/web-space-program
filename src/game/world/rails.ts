@@ -129,6 +129,8 @@ export function advanceRails(this: World, internals: WorldInternals, target: num
         }
         const saveUt = this.ut;
         this.ut = ev.time;
+        internals.syncPacked(wv, ev.time);
+        this.recordFlight(wv, ev.time, true);
         internals.predictRailsEvent(wv);
         this.ut = saveUt;
       } else if (ev.reason === 'horizon' || ev.reason === 'maneuver') {
@@ -146,6 +148,7 @@ export function advanceRails(this: World, internals: WorldInternals, target: num
         break;
       } else {
         // Non-active vessels entering atmosphere or impacting on rails are lost.
+        this.finishFlight(wv, 'lost', ev.time);
         this.vessels.delete(wv.state.id);
         wv.railsEvent = undefined;
         break;
@@ -156,7 +159,7 @@ export function advanceRails(this: World, internals: WorldInternals, target: num
     if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, target - this.ut);
   }
   this.ut = target;
-  for (const wv of this.vessels.values()) internals.syncPacked(wv, this.ut);
+  for (const wv of this.vessels.values()) { internals.syncPacked(wv, this.ut); this.recordFlight(wv); }
   advanceTransmissions(this);
   evaluateProgression(this);
   this.onSimulationStep?.(this.ut - startUt, 0);

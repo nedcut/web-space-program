@@ -31,6 +31,8 @@ interface SavedVessel {
 }
 
 export interface SavedWorld {
+  flightlog?: import('./flightlog/recorder').RecorderState;
+  latestReportId?: string | null;
   commsSettings?: import('../sim/comms/network').CommsSettings;
   transmitting?: string[];
   surveyedBodies?: string[];
@@ -72,6 +74,8 @@ export function serializeWorld(world: World): SavedWorld {
     });
   }
   return {
+    flightlog: structuredClone(world.flightlog),
+    latestReportId: world.latestReportId,
     commsSettings: { ...world.commsSettings },
     transmitting: [...world.transmitting],
     surveyedBodies: [...world.surveyedBodies],
@@ -95,6 +99,8 @@ export function serializeWorld(world: World): SavedWorld {
 export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>, universe?: Universe): World {
   if (data.version !== SAVE_VERSION) throw new Error(`Unsupported save version ${data.version}`);
   const world = new World(universe ?? new Universe(data.preset), catalog, data.ut, data.mode ?? 'sandbox');
+  world.flightlog = structuredClone(data.flightlog ?? world.flightlog);
+  world.latestReportId = data.latestReportId ?? null;
   world.commsSettings = { ...world.commsSettings, ...data.commsSettings };
   world.transmitting = [...(data.transmitting ?? [])];
   world.surveyedBodies = [...(data.surveyedBodies ?? [])];

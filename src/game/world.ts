@@ -1,4 +1,9 @@
 import { nearbyLandmarks } from '../sim/terrain/landmarks';
+
+import { newRecorder, trimHistory, recordFor, startRecord, appendEvent, finishRecord, type FlightRecord, type EventKind } from './flightlog/recorder';
+import { awardAchievements } from './flightlog/achievements';
+import { loadAchievements, saveAchievements } from './flightlog/storage';
+import { recordVessel } from './flightlog/worldRecorder';
 import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { EVA_PART } from '../data/eva';
 import { defaultCommsSettings, NO_SIGNAL, type CommsSettings, type Network } from '../sim/comms/network';
@@ -111,6 +116,34 @@ export class World {
   /** A bound orbit, above terrain/atmosphere, within 10 degrees of polar relative to the body's pole. */
   surveyBody(wv = this.active): boolean { return resources.surveyBody.call(this, this.systems, wv); }
 
+  flightlog = newRecorder();
+  achievementProfile = loadAchievements();
+  latestReportId: string | null = null;
+  checkAchievements(r: FlightRecord) {
+    const earned = awardAchievements(this.achievementProfile.unlocked, r, this.achievementProfile.flags, this.ut);
+    if (earned.length) { saveAchievements(this.achievementProfile); for (const a of earned) this.message(`Achievement · ${a.name}`, 'info', 8); }
+  }
+  recordFlight(v: WorldVessel, ut = this.ut, force = false) { return recordVessel(this, v, ut, force); }
+  logFlightEvent(v: WorldVessel, kind: EventKind, detail?: string) {
+    const r = recordFor(this.flightlog, v.state.id) ?? startRecord(this.flightlog, v.state.id, v.state.name, this.ut);
+    appendEvent(r, this.ut, kind, v.body, { detail }); this.checkAchievements(r);
+  }
+  closeFlightRecord(v: WorldVessel, outcome: NonNullable<FlightRecord['outcome']>, ut = this.ut) {
+    const r = recordFor(this.flightlog, v.state.id);
+    if (r) { finishRecord(r, ut, outcome); this.checkAchievements(r); trimHistory(this.flightlog); }
+  }
+  finishFlight(v: WorldVessel, outcome: 'recovered' | 'lost', ut = this.ut) {
+    this.recordFlight(v, ut, true);
+    const r = recordFor(this.flightlog, v.state.id);
+    if (r) { finishRecord(r, ut, outcome); this.latestReportId = r.id; this.checkAchievements(r); trimHistory(this.flightlog); }
+  }
+  inheritFlight(parent: WorldVessel, child: WorldVessel) {
+    const source = recordFor(this.flightlog, parent.state.id);
+    if (!source) { this.recordFlight(child, this.ut, true); return; }
+    const target = startRecord(this.flightlog, child.state.id, child.state.name, source.start);
+    const identity = { id: target.id, vesselId: target.vesselId, name: target.name };
+    Object.assign(target, structuredClone(source), identity);
+  }
   progression = newProgression();
   readonly universe: Universe;
   readonly vessels = new Map<string, WorldVessel>();
@@ -187,7 +220,7 @@ export class World {
    * stage fires. 'runway' (default for SPH crafts): free on its wheels at the runway threshold, nose down the
    * runway (body +Y along the runway, +Z up), ready to taxi.
    */
-  launch(craft: CraftDef, site: 'pad' | 'runway' = craft.type === 'SPH' ? 'runway' : 'pad', keepExisting = false): WorldVessel { return launch.launch.call(this, this.systems, craft, site, keepExisting); }
+  launch(craft: CraftDef, site: 'pad' | 'runway' = craft.type === 'SPH' ? 'runway' : 'pad', keepExisting = false): WorldVessel { const v = launch.launch.call(this, this.systems, craft, site, keepExisting); this.recordFlight(v, this.ut, true); return v; }
 
   private launchRunway(craft: CraftDef, keepExisting = false): WorldVessel { return launch.launchRunway.call(this, this.systems, craft, keepExisting); }
 
@@ -206,13 +239,13 @@ export class World {
   /** Hatch is on the pod's +Z face. Public for HUD/rendezvous tools. */
   hatchPosition(v: VesselState, pod: PartState): Vec3 { return crew.hatchPosition.call(this, this.systems, v, pod); }
 
-  goEva(astronautId?: string): WorldVessel | null { return crew.goEva.call(this, this.systems, astronautId); }
+  goEva(astronautId?: string): WorldVessel | null { const host = this.active; const v = crew.goEva.call(this, this.systems, astronautId); if (v) { this.recordFlight(v, this.ut, true); this.logFlightEvent(v, 'eva'); if (host) this.logFlightEvent(host, 'eva'); } return v; }
 
   boardingTarget(): { vessel: WorldVessel; pod: PartState } | null { return crew.boardingTarget.call(this, this.systems); }
 
-  boardEva(): boolean { return crew.boardEva.call(this, this.systems); }
+  boardEva(): boolean { const v = this.active; const ok = crew.boardEva.call(this, this.systems); if (ok && v) this.closeFlightRecord(v, 'boarded'); return ok; }
 
-  plantFlag(): PlantedFlag | null { return crew.plantFlag.call(this, this.systems); }
+  plantFlag(): PlantedFlag | null { const flag = crew.plantFlag.call(this, this.systems); if (flag && this.active) { if (!this.achievementProfile.flags.includes(flag.body)) this.achievementProfile.flags.push(flag.body); this.logFlightEvent(this.active, 'flag'); saveAchievements(this.achievementProfile); } return flag; }
 
   /** Update a body-fixed vessel's inertial state from its fixed coordinates. */
   private syncFixed(wv: WorldVessel, t: number) { return rails.syncFixed.call(this, this.systems, wv, t); }
@@ -260,6 +293,7 @@ export class World {
   recoverVessel(id: string): boolean {
     const wv = this.vessels.get(id);
     if (!wv || wv.state.destroyed || wv.body !== 'earth' || (wv.mode !== 'prelaunch' && wv.state.situation === 'flying')) return false;
+    this.finishFlight(wv, 'recovered');
     recoverScience(this, wv);
     this.vessels.delete(wv.state.id);
     if (this.activeId === id) { this.activeId = null; this.nodes = []; }
@@ -552,10 +586,11 @@ export class World {
           // Out of the physics bubble: pack (debris in atmosphere is removed).
           const b = this.universe.body(wv.body);
           const alt = length(this.relativeState(wv).position) - b.radius;
-          if (b.atmosphere && alt < b.atmosphere.height && wv.state.situation === 'flying') this.vessels.delete(wv.state.id);
+          if (b.atmosphere && alt < b.atmosphere.height && wv.state.situation === 'flying') { this.finishFlight(wv, 'lost'); this.vessels.delete(wv.state.id); }
           else {
             this.pack(wv);
             if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, PHYSICS_DT);
+            this.recordFlight(wv, t + PHYSICS_DT);
           }
           continue;
         }
@@ -572,6 +607,7 @@ export class World {
           advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, PHYSICS_DT);
           // States are expressed at the end of the step (t + dt), like physics-stepped vessels.
           this.syncFixed(wv, t + PHYSICS_DT);
+          this.recordFlight(wv, t + PHYSICS_DT);
           continue;
         }
       }
@@ -581,6 +617,8 @@ export class World {
       const env = this.universe.createEnvironment(() => wv.body);
       // A disconnected probe holds its attitude with SAS, but cannot command thrust or stage.
       const ctrl = isActive ? vesselInput : neutralInput({ sas: 'off' });
+      const flight = recordFor(this.flightlog, wv.state.id);
+      if (flight && wv.state.situation === 'flying' && wv.state.telemetry.altitudeAGL < 100) flight.touchdownSpeed = length(this.surfaceVelocity(wv));
       const res = wv.state.eva ? stepEva(wv.state, ctrl, env, t, PHYSICS_DT) : stepVessel(wv.state, ctrl, env, t, PHYSICS_DT);
       if (isActive) propulsiveDv += res.propulsiveDv ?? 0;
       for (const nv of res.newVessels) {
@@ -591,6 +629,7 @@ export class World {
         this.vessels.set(nv.id, { state: nv, mode: 'physics', body: wv.body });
       }
       for (const e of res.events) this.handleEvent(e);
+      for (const nv of res.newVessels) { const child = this.vessels.get(nv.id); if (child) this.inheritFlight(wv, child); }
       // Bodies without a surface (gas giants, stars): crushed / vaporised below a small depth.
       const bodyDef = this.universe.body(wv.body);
       if (!bodyDef.solidSurface && !wv.state.destroyed) {
@@ -600,7 +639,9 @@ export class World {
           if (isActive) this.message(`${wv.state.name} was crushed in the depths of ${bodyDef.name}`, 'bad', 8);
         }
       }
+      this.recordFlight(wv, t + PHYSICS_DT);
       if (wv.state.destroyed) {
+        this.finishFlight(wv, 'lost', t + PHYSICS_DT);
         if (isActive) this.message(`${wv.state.name} was destroyed`, 'bad', 8);
         this.vessels.delete(wv.state.id);
         if (isActive) this.activeId = null;
@@ -615,6 +656,14 @@ export class World {
   }
 
   private handleEvent(e: VesselEvent) {
+    const v = this.vessels.get(e.vesselId);
+    if (v) {
+      if (e.type === 'decouple') this.logFlightEvent(v, 'separation', `Detached part ${e.partUid} → ${e.newVesselId}`);
+      if (e.type === 'stage') this.logFlightEvent(v, 'stage', `Stage ${e.stage}`);
+      if (e.type === 'structuralFailure') this.logFlightEvent(v, 'partLoss', `Attachment ${e.partUid} broke at ${(e.loadFraction * 100).toFixed(0)}% load`);
+      if (e.type === 'partDestroyed') this.logFlightEvent(v, 'partLoss', `Part ${e.partUid}: ${e.reason}`);
+      if (e.type === 'docked') this.logFlightEvent(v, 'docking', e.otherId);
+    }
     this.onEvent?.(e);
     if (e.vesselId !== this.activeId) return;
     if (e.type === 'structuralFailure') this.message('Structural failure — attachment broke!', 'bad', 4);
@@ -639,6 +688,7 @@ export class World {
     const res = activateNextStage(wv.state);
     for (const nv of res.newVessels) this.vessels.set(nv.id, { state: nv, mode: 'physics', body: wv.body });
     for (const e of res.events) this.handleEvent(e);
+    for (const nv of res.newVessels) { const child = this.vessels.get(nv.id); if (child) this.inheritFlight(wv, child); }
   }
 
   // ---------- Maneuver nodes ----------

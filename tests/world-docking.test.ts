@@ -76,6 +76,8 @@ describe('world rendezvous & docking', () => {
     expect(w.targetId).toBeNull();
     expect(w.active!.state.parts.length).toBe(parts);
     expect(dockedPorts(w.active!.state).length).toBe(1);
+    expect(w.flightlog.records.some(r => r.events.some(e => e.kind === 'docking'))).toBe(true);
+    expect(w.achievementProfile.unlocked.dock).toBeDefined();
 
     const w2 = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(w))), PART_CATALOG, w.universe);
     expect(w2.vessels.size).toBe(1);
