@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hashString, persistTextures, takeCachedTextures } from '../core/textureCache';
 
 /**
  * Procedural, tileable canvas textures for part materials. Everything is generated at runtime from
@@ -176,12 +177,29 @@ const ridge = (d: number, w: number) => Math.max(0, 1 - d / w);
 const sstep = (e0: number, e1: number, x: number) => smooth(Math.max(0, Math.min(1, (x - e0) / (e1 - e0))));
 
 const cache = new Map<string, TexSet>();
+/** Content hash of the shared generator code; each texture set adds a hash of its own generator. */
+let sourceHash = '';
+const generatorHash = () => (sourceHash ||= hashString([
+  mulberry32, vnoise, fbm, grayTexture, rgbTexture, normalTexture, texFromCanvas, Field, ridge, sstep, smooth, mod, hash2,
+].map(String).join('\n') + PERM.join(',')));
+
 function cached(key: string, make: () => TexSet): TexSet {
   // Headless (Node tests): no canvas, so materials fall back to flat parameters.
   if (typeof document === 'undefined') return {};
   let t = cache.get(key);
   if (!t) {
-    t = make();
+    // Warm loads reuse the PNGs stored in IndexedDB by an earlier session (see render/core/textureCache).
+    const id = `parts:${key}:${generatorHash()}:${hashString(String(make))}`;
+    const stored = takeCachedTextures(id);
+    if (stored) {
+      t = {};
+      for (const e of stored) t[e.slot as keyof TexSet] = texFromCanvas(e.canvas, e.srgb);
+    } else {
+      t = make();
+      persistTextures(`parts:${key}`, id, (Object.entries(t) as [string, THREE.Texture | undefined][])
+        .filter((e): e is [string, THREE.Texture] => !!e[1] && e[1].image instanceof HTMLCanvasElement)
+        .map(([slot, tex]) => ({ slot, srgb: tex.colorSpace === THREE.SRGBColorSpace, canvas: tex.image as HTMLCanvasElement })));
+    }
     cache.set(key, t);
   }
   return t;

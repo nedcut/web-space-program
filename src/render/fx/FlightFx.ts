@@ -17,6 +17,8 @@ export class FlightFx {
   readonly root = new THREE.Group();
   pool: ParticlePool;
   private readonly light = new THREE.PointLight(0xffa040,0,80,2);
+  /** The burst flash light. Its visibility changes the scene's light count (and so every shader key). */
+  get flashLight(): THREE.PointLight { return this.light; }
   private readonly point = new THREE.Vector3();
   private readonly velocity = new THREE.Vector3();
   private readonly up = new THREE.Vector3();

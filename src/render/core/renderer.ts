@@ -32,7 +32,10 @@ export class RenderPipeline {
   photoEffects!: PhotoEffectsPass;
   private quality: QualitySettings;
   private adaptive = new AdaptiveQuality();
-  readonly stats = { calls: 0, triangles: 0, points: 0 };
+  private gpuTimer: GpuTimer | null;
+  /** Smoothed GPU time per frame (ms) from timer queries; NaN when the browser does not expose them. */
+  gpuMs = NaN;
+  readonly stats = { calls: 0, triangles: 0, points: 0, programs: 0, textures: 0, geometries: 0 };
   // Low/adaptive resolution can round a 1px bootstrap canvas down to zero. Scene constructors
   // run PMREM baking before their first resize, so the initial default framebuffer must be valid.
   private width = 64;
@@ -55,8 +58,13 @@ export class RenderPipeline {
     r.toneMapping = toneMappingConst(opts.toneMapping ?? 'aces');
     r.toneMappingExposure = opts.exposure ?? 1;
     r.shadowMap.enabled = opts.quality.shadowMapSize > 0;
-    r.shadowMap.type = THREE.PCFSoftShadowMap;
+    // three r18x replaces PCFSoftShadowMap with PCFShadowMap at the first shadow render; setting it
+    // up front keeps shader keys stable, so programs compiled during warm-up are reused.
+    r.shadowMap.type = THREE.PCFShadowMap;
     r.setClearColor(0x000000, 1);
+    // Shader info-log queries force a synchronous compile wait; production builds skip them.
+    r.debug.checkShaderErrors = !!import.meta.env?.DEV;
+    this.gpuTimer = GpuTimer.create(r.getContext());
     this.buildComposer();
   }
 
@@ -132,7 +140,9 @@ export class RenderPipeline {
   }
 
   updateAdaptive(frameMs: number, enabled: boolean): void {
-    if (this.adaptive.update(frameMs, enabled)) this.setSize(this.width, this.height);
+    const gpu = this.gpuTimer?.poll();
+    if (gpu !== undefined) this.gpuMs = Number.isFinite(this.gpuMs) ? this.gpuMs * 0.9 + gpu * 0.1 : gpu;
+    if (this.adaptive.update(frameMs, enabled, gpu)) this.setSize(this.width, this.height);
   }
 
   get effectiveRenderScale(): number { return this.quality.renderScale * this.adaptive.scale; }
@@ -142,8 +152,27 @@ export class RenderPipeline {
     this.renderPass.scene = scene;
     this.renderPass.camera = camera;
     this.renderer.info.reset();
+    this.gpuTimer?.begin();
     this.composer.render();
-    Object.assign(this.stats, { calls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, points: this.renderer.info.render.points });
+    this.gpuTimer?.end();
+    this.captureStats();
+  }
+
+  /** Direct (non-composited) render used by the map view. */
+  renderMap(scene: THREE.Scene, camera: THREE.Camera): void {
+    this.renderer.info.reset();
+    this.renderer.setRenderTarget(null);
+    this.gpuTimer?.begin();
+    this.renderer.render(scene, camera);
+    this.gpuTimer?.end();
+    this.captureStats();
+  }
+
+  private captureStats(): void {
+    const info = this.renderer.info;
+    const s = this.stats;
+    s.calls = info.render.calls; s.triangles = info.render.triangles; s.points = info.render.points;
+    s.programs = info.programs?.length ?? 0; s.textures = info.memory.textures; s.geometries = info.memory.geometries;
   }
 
   /** Render and copy synchronously, before the browser discards the drawing buffer. */
@@ -160,6 +189,7 @@ export class RenderPipeline {
   }
 
   dispose(): void {
+    this.gpuTimer?.dispose();
     for (const pass of this.composer.passes) pass.dispose();
     this.composer.dispose();
     this.renderer.dispose();
@@ -174,5 +204,59 @@ function toneMappingConst(id: ToneMappingId): THREE.ToneMapping {
       return THREE.NeutralToneMapping;
     default:
       return THREE.ACESFilmicToneMapping;
+  }
+}
+
+interface TimerQueryExt { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number }
+
+/** Non-blocking GPU frame timing via EXT_disjoint_timer_query_webgl2 (results arrive a few frames late). */
+class GpuTimer {
+  private pending: WebGLQuery[] = [];
+  private free: WebGLQuery[] = [];
+  private active: WebGLQuery | null = null;
+
+  private constructor(private gl: WebGL2RenderingContext, private ext: TimerQueryExt) {}
+
+  static create(gl: WebGLRenderingContext | WebGL2RenderingContext): GpuTimer | null {
+    if (typeof WebGL2RenderingContext === 'undefined' || !(gl instanceof WebGL2RenderingContext)) return null;
+    const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2') as TimerQueryExt | null;
+    return ext ? new GpuTimer(gl, ext) : null;
+  }
+
+  begin(): void {
+    if (this.active || this.pending.length >= 4) return;
+    const q = this.free.pop() ?? this.gl.createQuery();
+    if (!q) return;
+    this.gl.beginQuery(this.ext.TIME_ELAPSED_EXT, q);
+    this.active = q;
+  }
+
+  end(): void {
+    if (!this.active) return;
+    this.gl.endQuery(this.ext.TIME_ELAPSED_EXT);
+    this.pending.push(this.active);
+    this.active = null;
+  }
+
+  /** Latest completed measurement in ms, or undefined when none completed since the last poll. */
+  poll(): number | undefined {
+    const gl = this.gl;
+    let result: number | undefined;
+    while (this.pending.length) {
+      const q = this.pending[0];
+      if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
+      const disjoint = gl.getParameter(this.ext.GPU_DISJOINT_EXT) as boolean;
+      const ns = gl.getQueryParameter(q, gl.QUERY_RESULT) as number;
+      this.pending.shift();
+      this.free.push(q);
+      if (!disjoint) result = ns / 1e6;
+    }
+    return result;
+  }
+
+  dispose(): void {
+    for (const q of [...this.pending, ...this.free]) this.gl.deleteQuery(q);
+    if (this.active) this.gl.deleteQuery(this.active);
+    this.pending = []; this.free = []; this.active = null;
   }
 }

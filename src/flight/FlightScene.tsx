@@ -9,7 +9,7 @@ import { tutorialContext, getTutorial, endTutorial, startLesson } from '../tutor
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { game, useGame } from '../game/store';
+import { game, updateSettings, useGame } from '../game/store';
 import { FlightController } from './controller';
 import { Hud, NavballView, type Telemetry } from './hud/Hud';
 import type { GameAudio } from '../audio';
@@ -21,8 +21,13 @@ import { SettingsPanel } from '../ui/MainMenu';
 import type { CraftDef } from '../sim/vessel/types';
 import { isTyping, matches } from '../input/bindings';
 import { hasSave, saveNamedWorld } from '../game/persistence';
+import { useRenderProfile } from './hud/useRenderProfile';
+import { PerfOverlay } from './hud/PerfOverlay';
+import { textureCacheReady } from '../render/core/textureCache';
+import { frameProfiler } from '../util/frameProfiler';
 
 export default function FlightScene() {
+  useRenderProfile();
   const photo = usePhotoMode();
   const host = useRef<HTMLDivElement>(null);
   const ctrl = useRef<FlightController | null>(null);
@@ -143,17 +148,18 @@ export default function FlightScene() {
       unsub = cc.subscribe(setTele);
       // Leaving the page mid-flight: autosave and ask for confirmation (Ctrl+W / Ctrl+R are throttle-adjacent).
       window.addEventListener('beforeunload', beforeUnload);
-      (window as unknown as { __flight?: FlightController }).__flight = cc;
+      Object.assign(window as unknown as Record<string, unknown>, { __flight: cc, __perf: frameProfiler });
       readyTimer = window.setInterval(() => {
         if (!cc.network && !cc.sceneReady) return;
         window.clearInterval(readyTimer);
+        performance.mark('wsp:flight:ready');
         setReady(true);
         if (!cc.network && !getTutorial() && !getScenarioRun() && !helpSeen()) setHelp(true);
       }, 200);
     };
     let timer = 0;
     const raf = requestAnimationFrame(() => {
-      timer = window.setTimeout(start, 30);
+      timer = window.setTimeout(() => void textureCacheReady().then(start), 30);
     });
     return () => {
       disposed = true;
@@ -201,9 +207,14 @@ export default function FlightScene() {
     setHelp(false);
   };
 
-  // F1 toggles the controls help (prevent the browser's own help page).
+  // F1 toggles the controls help (prevent the browser's own help page); F8 the performance overlay.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!isTyping(e.target) && !e.repeat && matches('perfOverlay', e)) {
+        e.preventDefault();
+        updateSettings({ perfOverlay: !game.get().settings.perfOverlay });
+        return;
+      }
       if (isTyping(e.target) || e.repeat || !matches('help', e)) return;
       e.preventDefault();
       if (helpRef.current) closeHelp();
@@ -322,6 +333,7 @@ export default function FlightScene() {
         />
       )}
       {settings.showFps && c && !photo.active && <PerformanceReadout controller={c} />}
+      {settings.perfOverlay && c && !photo.active && <PerfOverlay controller={c} />}
       {help && ready && !photo.active && <HelpOverlay eva={!!tele?.eva} onClose={closeHelp} />}
       {networkReady && c?.network && <MultiplayerPanel client={c.network} />}
       {paused && multiplayer && (
@@ -382,6 +394,6 @@ function PerformanceReadout({ controller: c }: { controller: FlightController })
   const [, refresh] = useState(0);
   useEffect(() => { const id = window.setInterval(() => refresh(n => n + 1), 500); return () => window.clearInterval(id); }, []);
   return <div className="mono" style={{ position: 'absolute', bottom: 8, right: 12, color: '#9fb9c8', fontSize: 11, pointerEvents: 'none' }}>
-    {c.fps.toFixed(0)} fps · {c.pipeline.stats.calls} calls · {c.pipeline.stats.triangles.toLocaleString()} tris · {(c.pipeline.effectiveRenderScale * 100).toFixed(0)}% scale · {c.world.vessels.size} vessels
+    {c.fps.toFixed(0)} fps{Number.isFinite(c.pipeline.gpuMs) ? ` · GPU ${c.pipeline.gpuMs.toFixed(1)} ms` : ''} · {c.pipeline.stats.calls} calls · {c.pipeline.stats.triangles.toLocaleString()} tris · {(c.pipeline.effectiveRenderScale * 100).toFixed(0)}% scale · {c.world.vessels.size} vessels
   </div>;
 }

@@ -31,6 +31,7 @@ import type { SasMode } from '../sim/vessel/runtime';
 import type { CraftDef } from '../sim/vessel/types';
 import { getTutorial } from '../tutorial/runtime';
 import { formatDistance, formatDuration } from '../ui/format';
+import { frameProfiler as prof } from '../util/frameProfiler';
 import { snapshotEqual } from '../util/snapshotEqual';
 import { length, normalize, sub, type Vec3 } from '../util/vec3';
 import { type AssistId } from './assist';
@@ -46,6 +47,9 @@ import type { NavballFrame, NavballMarker } from './hud/navball';
 import { FlightInput } from './input';
 import { createPlanetLayer, type PlanetLayer } from './planets';
 
+
+const graphicsKeyOf = (s: { quality: string; shadows: boolean; bloom: boolean; renderScale: number }) =>
+  `${s.quality}:${s.shadows}:${s.bloom}:${s.renderScale}`;
 
 /**
  * Owns the flight scene: world simulation, rendering (flight + map), input, camera.
@@ -125,6 +129,13 @@ export class FlightController {
   private elapsed = 0;
   onExit: (() => void) | null = null;
   private framesRendered = 0;
+  /**
+   * Shader warm-up: the first frame updates the scene without drawing, then every material in the
+   * flight and map scenes (including hidden plumes, FX and the map) is compiled with
+   * `compileAsync` (parallel, non-blocking where KHR_parallel_shader_compile exists) behind the
+   * loading screen, so the first stage/map/explosion does not stall on a shader compile.
+   */
+  private warmup: 'pending' | 'compiling' | 'done' = 'pending';
   private startedAt = performance.now();
 
   /**
@@ -132,7 +143,7 @@ export class FlightController {
    * build (or after a timeout on slow machines). Drives the flight loading overlay.
    */
   get sceneReady(): boolean {
-    if (this.framesRendered < 3) return false;
+    if (this.warmup !== 'done' || this.framesRendered < 3) return false;
     if (performance.now() - this.startedAt > 20000) return true;
     const body = this.world.active?.body;
     return !body || (this.planets.isIdle?.(body) ?? true);
@@ -149,6 +160,7 @@ export class FlightController {
     mode: GameMode = 'sandbox',
     multiplayer?: MultiplayerConfig | null,
   ) {
+    performance.mark('wsp:flight:construct:start');
     this.craft = craft;
     this.network = multiplayer ? new MultiplayerClient(multiplayer) : null;
     if (this.network) {
@@ -181,7 +193,9 @@ export class FlightController {
     this.effects = new FlightFx(quality);
     this.scene.add(this.effects.root, this.reentry.object, this.flags.root);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.set(2048, 2048);
+    this.sunLight.shadow.mapSize.set(q.shadowMapSize || 512, q.shadowMapSize || 512);
+    // The pipeline was just built from these settings; do not rebuild it on the first frame.
+    if (game.get().settings.quality === quality) this.graphicsKey = graphicsKeyOf(game.get().settings);
     this.sunLight.shadow.bias = -0.0004;
     this.sunLight.shadow.normalBias = 0.02;
 
@@ -192,7 +206,7 @@ export class FlightController {
     pmrem.dispose();
 
     this.planets = createPlanetLayer(this.scene, universe, quality);
-    this.site = new LaunchSite(universe);
+    this.site = new LaunchSite(universe, { vegetationDensity: q.siteVegetation });
     this.scene.add(this.site.root);
 
     const labelHost = (this.labelHost = document.createElement('div'));
@@ -254,6 +268,7 @@ export class FlightController {
     this.disposers.push(() => ro.disconnect());
     this.resize();
     this.raf = requestAnimationFrame(this.frame);
+    performance.measure('wsp:flight:construct', 'wsp:flight:construct:start');
   }
 
   /** Click (not drag) on a map icon selects it as the navigation target. */
@@ -436,6 +451,8 @@ export class FlightController {
   private graphicsKey = '';
   private frame = (now: number) => {
     this.raf = requestAnimationFrame(this.frame);
+    prof.beginFrame(now);
+    let t0 = prof.now();
     const frameMs = now - this.last;
     const dt = Math.min(0.1, frameMs / 1000);
     this.last = now;
@@ -450,7 +467,7 @@ export class FlightController {
     const settings = game.get().settings;
     this.input.enabled = !this.paused;
     if (!this.photo.active) this.cam.camera.fov = settings.cameraFov;
-    const graphicsKey = JSON.stringify([settings.quality, settings.shadows, settings.bloom, settings.renderScale]);
+    const graphicsKey = graphicsKeyOf(settings);
     if (graphicsKey !== this.graphicsKey) {
       this.graphicsKey = graphicsKey;
       const quality = getQuality(settings.quality);
@@ -514,19 +531,30 @@ export class FlightController {
       this.gearPending = undefined;
     }
     const input = assist.driveAssist.call(this, this.systems, wv, ctrl, dt);
+    prof.add('input', t0);
+    t0 = prof.now();
     if (this.network) this.network.update(dt, this.paused ? neutralInput() : input);
     else if (!this.paused) this.world.tick(dt, input);
+    prof.add('sim', t0);
     if (!this.network && wv && !this.world.active && !this.activeLost) {
       this.activeLost = true;
       this.onActiveLost?.();
     }
     const renderVessel = this.world.active;
-    if (renderVessel) {
+    if (renderVessel && this.warmup !== 'done') {
+      this.render(renderVessel, dt, false);
+      if (this.warmup === 'pending') this.startWarmup(renderVessel);
+    } else if (renderVessel) {
+      const first = this.framesRendered === 0 ? performance.now() : 0;
       this.render(renderVessel, dt);
+      if (first) performance.measure('wsp:flight:firstFrame', { start: first });
       this.framesRendered++;
     }
+    t0 = prof.now();
     this.updateAudio(wv);
+    prof.add('audio', t0);
 
+    t0 = prof.now();
     this.telemetryTimer += dt;
     if (this.telemetryTimer > 0.1 && wv) {
       this.telemetryTimer = 0;
@@ -538,11 +566,46 @@ export class FlightController {
         this.telemetryListeners.forEach((l) => l(t));
       }
     }
+    prof.add('telemetry', t0);
+    prof.endFrame();
   };
+
+  private startWarmup(wv: WorldVessel) {
+    this.warmup = 'compiling';
+    const start = performance.now();
+    const r = this.pipeline.renderer;
+    const finish = () => {
+      if (this.warmup !== 'compiling') return;
+      this.warmup = 'done';
+      performance.measure('wsp:flight:shaderWarmup', { start });
+    };
+    try {
+      // Map materials render straight to the canvas; flight materials into the HDR target.
+      // Frame the map as opening it would (toggleMap resets the distance on every open anyway).
+      if (!this.mapMode) this.map.distance = this.world.universe.body(wv.body).radius * 4;
+      this.updateMapScene(wv);
+      r.setRenderTarget(null);
+      const map = r.compileAsync(this.map.scene, this.map.camera);
+      r.setRenderTarget(this.pipeline.composer.readBuffer);
+      // Explosion/decouple flashes add a point light, which changes every program key: build both.
+      const flash = this.effects.flashLight;
+      const wasVisible = flash.visible;
+      flash.visible = !wasVisible;
+      const flashVariant = r.compileAsync(this.scene, this.cam.camera);
+      flash.visible = wasVisible;
+      const flight = r.compileAsync(this.scene, this.cam.camera);
+      r.setRenderTarget(null);
+      Promise.all([map, flashVariant, flight]).then(finish, finish);
+      // Never hold the loading screen on a driver that does not report completion.
+      setTimeout(finish, 15000);
+    } catch {
+      finish();
+    }
+  }
 
   private maneuverDirection(): Vec3 | null { return navball.maneuverDirection.call(this, this.systems); }
 
-  private render(wv: WorldVessel, dt: number) {
+  private render(wv: WorldVessel, dt: number, submit = true) {
     const photoDt = dt;
     if (this.photo.active) dt = 0;
     const u = this.world.universe;
@@ -554,24 +617,13 @@ export class FlightController {
     const air = sampleAtmosphere(u.body(wv.body).atmosphere, length(sub(origin, bodyState.position)) - u.body(wv.body).radius, u.body(wv.body).surfaceGravity);
 
     for (const label of this.playerLabels.values()) label.style.display = 'none';
+    let t0 = prof.now();
     if (this.mapMode) {
-      this.updateMapTargets(wv);
-      this.map.update({
-        t,
-        focus: origin,
-        focusId: `vessel:${wv.state.id}`,
-        referenceBody: wv.body,
-        comms: this.world.commsSettings.enabled && game.get().settings.commsOverlay ? this.world.comms : undefined,
-        vessel: { position: origin, patches: this.world.mapTrajectory(), nodes: this.world.nodes },
-        markers: [
-          ...this.world.mapGravityMarkers(),
-          ...(this.world.preciseGravity ? [] : this.predictions.crossings).map(c => ({ body: wv.body, position: c.position, label: `${c.kind} T−${formatDuration(c.time - t)}`, color: '#d066ff' })),
-          ...(!this.world.preciseGravity && this.predictions.impact ? [{ body: wv.body, position: this.predictions.impact.position, label: `Impact T−${formatDuration(this.predictions.impact.time - t)}`, color: '#ff6b6b' }] : []),
-        ],
-        viewport: { width: this.host.clientWidth, height: this.host.clientHeight },
-      });
-      this.pipeline.renderer.setRenderTarget(null);
-      this.pipeline.renderer.render(this.map.scene, this.map.camera);
+      this.updateMapScene(wv);
+      prof.add('map', t0);
+      t0 = prof.now();
+      if (submit) this.pipeline.renderMap(this.map.scene, this.map.camera);
+      prof.add('render', t0);
       return;
     }
 
@@ -599,6 +651,8 @@ export class FlightController {
     for (const [id, view] of this.views) if (!seen.has(id)) { view.dispose(); this.views.delete(id); }
 
     this.flags.update(this.world);
+    prof.add('vessels', t0);
+    t0 = prof.now();
 
     // Re-entry plasma on the active vessel.
     const airVel = this.world.surfaceVelocity(wv);
@@ -618,6 +672,7 @@ export class FlightController {
     const camera = this.cam.camera;
     this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors);
     if (!this.paused) this.effects.shake(camera, game.get().settings.reduceMotion);
+    prof.add('fx', t0);
     if (this.network) {
       const live = new Set<string>();
       for (const p of this.network.room.players) {
@@ -653,6 +708,7 @@ export class FlightController {
       sc.updateProjectionMatrix();
     }
 
+    t0 = prof.now();
     if (wv.body === 'earth') this.site.update(origin, t);
     else this.site.hide();
     this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.renderer.domElement.height });
@@ -666,7 +722,31 @@ export class FlightController {
     this.scene.environmentIntensity = 0.12 + 0.5 * airFrac * eclipse;
     this.stars.update(camera);
     this.glare.update(camera, sd, eclipse);
-    this.pipeline.render(this.scene, camera);
+    prof.add('planets', t0);
+    t0 = prof.now();
+    if (submit) this.pipeline.render(this.scene, camera);
+    prof.add('render', t0);
+  }
+
+  /** Map conics/markers for the current frame (also used to build map materials for shader warm-up). */
+  private updateMapScene(wv: WorldVessel) {
+    const t = this.world.ut;
+    const origin = this.network?.pose(wv.state.id)?.position ?? wv.state.position;
+    this.updateMapTargets(wv);
+    this.map.update({
+      t,
+      focus: origin,
+      focusId: `vessel:${wv.state.id}`,
+      referenceBody: wv.body,
+      comms: this.world.commsSettings.enabled && game.get().settings.commsOverlay ? this.world.comms : undefined,
+      vessel: { position: origin, patches: this.world.mapTrajectory(), nodes: this.world.nodes },
+      markers: [
+        ...this.world.mapGravityMarkers(),
+        ...(this.world.preciseGravity ? [] : this.predictions.crossings).map(c => ({ body: wv.body, position: c.position, label: `${c.kind} T−${formatDuration(c.time - t)}`, color: '#d066ff' })),
+        ...(!this.world.preciseGravity && this.predictions.impact ? [{ body: wv.body, position: this.predictions.impact.position, label: `Impact T−${formatDuration(this.predictions.impact.time - t)}`, color: '#ff6b6b' }] : []),
+      ],
+      viewport: { width: this.host.clientWidth, height: this.host.clientHeight },
+    });
   }
 
   /** Fleet icons/conics, target highlight and closest-approach markers for the map view. */

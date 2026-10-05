@@ -135,6 +135,11 @@ function quad(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vec
  * (≈25 draw calls). Each frame `update()` places the root with the floating origin and the body rotation, and
  * drives the terrain cutout so the pad deck / trench replace the terrain surface exactly.
  */
+export interface LaunchSiteOptions {
+  /** Fraction of scrub/pine instances to keep (quality presets thin vegetation on Low). Default 1. */
+  vegetationDensity?: number;
+}
+
 export class LaunchSite {
   readonly root = new THREE.Group();
   /** Invisible pick volumes (userData.siteId: SiteObjectId) for hub interaction. */
@@ -157,7 +162,7 @@ export class LaunchSite {
   private readonly tmpQ = new THREE.Quaternion();
   private readonly tmpM = new THREE.Matrix4();
 
-  constructor(private universe: SiteUniverse) {
+  constructor(private universe: SiteUniverse, private options: LaunchSiteOptions = {}) {
     this.root.name = 'launchSite';
     this.root.matrixAutoUpdate = true;
     const body = universe.body(BODY);
@@ -1001,19 +1006,37 @@ export class LaunchSite {
     }
     const foliage = (color: number) =>
       this.track(withAerialPerspective(new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0 }), BODY));
+    // Instances are bucketed into 800 m cells so frustum culling (and the vessel-hugging shadow
+    // camera) skips vegetation that is off screen, instead of drawing all ~4k plants every pass.
+    // Colours consume the random sequence in the original order, so placement/tint are unchanged.
+    const CELL = 800;
+    const density = this.options.vegetationDensity ?? 1;
+    let kept = 0;
     const mk = (geo: THREE.BufferGeometry, mat: THREE.Material, list: THREE.Matrix4[], name: string, tint: [number, number]) => {
       if (!list.length) return;
-      const im = new THREE.InstancedMesh(this.track(geo), mat, list.length);
+      const shared = this.track(geo);
+      const cells = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
+      const pos = new THREE.Vector3();
       list.forEach((m, i) => {
-        im.setMatrixAt(i, m);
         const k = tint[0] + rnd() * (tint[1] - tint[0]);
-        im.setColorAt(i, new THREE.Color(k, k * (0.95 + rnd() * 0.1), k * (0.85 + rnd() * 0.2)));
+        const c = new THREE.Color(k, k * (0.95 + rnd() * 0.1), k * (0.85 + rnd() * 0.2));
+        if (density < 1 && (i * 0.6180339887) % 1 >= density) return; // even thinning (golden-ratio sequence)
+        kept++;
+        pos.setFromMatrixPosition(m);
+        const key = `${Math.floor((pos.x + CELL / 2) / CELL)},${Math.floor((pos.z + CELL / 2) / CELL)}`;
+        let cell = cells.get(key);
+        if (!cell) cells.set(key, (cell = []));
+        cell.push({ m, c });
       });
-      im.castShadow = true;
-      im.receiveShadow = true;
-      im.name = name;
-      im.computeBoundingSphere();
-      this.root.add(im);
+      for (const cell of cells.values()) {
+        const im = new THREE.InstancedMesh(shared, mat, cell.length);
+        cell.forEach(({ m, c }, i) => { im.setMatrixAt(i, m); im.setColorAt(i, c); });
+        im.castShadow = true;
+        im.receiveShadow = true;
+        im.name = name;
+        im.computeBoundingSphere();
+        this.root.add(im);
+      }
     };
     // Lumpy scrub: a few overlapping jittered blobs, smooth-shaded.
     const blobs: THREE.BufferGeometry[] = [];
@@ -1037,7 +1060,7 @@ export class LaunchSite {
       new THREE.ConeGeometry(1.3, 4, 7).translate(0, 11, 0),
     ].map(toNonIndexed);
     mk(mergeGeometries(pineParts)!, foliage(0x2f4024), pines, 'site:pines', [0.7, 1.05]);
-    this.vegetationCount = bushes.length + pines.length;
+    this.vegetationCount = kept;
     pineParts.forEach((g) => g.dispose());
   }
 

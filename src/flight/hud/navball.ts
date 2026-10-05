@@ -42,6 +42,7 @@ const MARKER_STYLE: Record<MarkerKind, { color: string; glyph: string }> = {
   antiTarget: { color: '#ff4fb8', glyph: 'anti-target' },
   maneuver: { color: '#3c8cff', glyph: 'maneuver' },
 };
+const MARKER_KINDS = Object.keys(MARKER_STYLE) as MarkerKind[];
 
 function buildTexture(): THREE.CanvasTexture {
   const W = 2048;
@@ -112,6 +113,10 @@ export class Navball {
   private overlay: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private size: number;
+  /** Last drawn state (ball axes, marker positions, colour scheme); identical frames are skipped. */
+  private lastKey = new Float64Array(0);
+  private lastColourBlind = false;
+  private bezel: CanvasGradient | null = null;
 
   constructor(size = 210) {
     this.size = size;
@@ -151,7 +156,28 @@ export class Navball {
     return new THREE.Vector3(-dot(d, f.north), dot(d, f.up), dot(d, f.east));
   }
 
+  /** True when nothing visible changed since the last draw (common on the pad / while coasting). */
+  private unchanged(frame: NavballFrame, markers: NavballMarker[], colourBlind: boolean): boolean {
+    const n = 16 + markers.length * 4;
+    let key = this.lastKey;
+    const same = key.length === n && colourBlind === this.lastColourBlind;
+    if (key.length !== n) key = this.lastKey = new Float64Array(n);
+    let changed = !same;
+    const put = (i: number, v: number) => { if (Math.abs(key[i] - v) > 1e-6) { key[i] = v; changed = true; } };
+    const vecs = [frame.east, frame.north, frame.up, frame.forward, frame.top];
+    for (let k = 0; k < 5; k++) { put(k * 3, vecs[k].x); put(k * 3 + 1, vecs[k].y); put(k * 3 + 2, vecs[k].z); }
+    put(15, markers.length);
+    for (let m = 0; m < markers.length; m++) {
+      const b = 16 + m * 4, mk = markers[m];
+      put(b, MARKER_KINDS.indexOf(mk.kind)); put(b + 1, mk.dir.x); put(b + 2, mk.dir.y); put(b + 3, mk.dir.z);
+    }
+    this.lastColourBlind = colourBlind;
+    return !changed;
+  }
+
   update(frame: NavballFrame, markers: NavballMarker[]) {
+    const colourBlind = game.get().settings.colourBlind;
+    if (this.unchanged(frame, markers, colourBlind)) return;
     const fwd = this.toBall(frame, frame.forward).normalize();
     const top = this.toBall(frame, frame.top).normalize();
     const dist = this.camera.position.length();
@@ -165,10 +191,12 @@ export class Navball {
     const s = this.overlay.width;
     ctx.clearRect(0, 0, s, s);
     // Bezel shading.
-    const rg = ctx.createRadialGradient(s / 2, s / 2, s * 0.38, s / 2, s / 2, s * 0.5);
-    rg.addColorStop(0, 'rgba(0,0,0,0)');
-    rg.addColorStop(1, 'rgba(0,0,0,0.55)');
-    ctx.fillStyle = rg;
+    if (!this.bezel) {
+      this.bezel = ctx.createRadialGradient(s / 2, s / 2, s * 0.38, s / 2, s / 2, s * 0.5);
+      this.bezel.addColorStop(0, 'rgba(0,0,0,0)');
+      this.bezel.addColorStop(1, 'rgba(0,0,0,0.55)');
+    }
+    ctx.fillStyle = this.bezel;
     ctx.beginPath();
     ctx.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2);
     ctx.fill();
@@ -178,7 +206,7 @@ export class Navball {
       v.copy(this.toBall(frame, m.dir)).normalize();
       if (v.dot(fwd) < 0.05) continue; // behind the ball
       v.project(this.camera);
-      drawMarker(ctx, (v.x * 0.5 + 0.5) * s, (-v.y * 0.5 + 0.5) * s, s / 210, { ...MARKER_STYLE[m.kind], color: game.get().settings.colourBlind ? ({ prograde: '#f0e442', retrograde: '#f0e442', normal: '#ffffff', antinormal: '#ffffff', radialOut: '#56b4e9', radialIn: '#56b4e9', target: '#e69f00', antiTarget: '#e69f00', maneuver: '#cc79a7' }[m.kind]) : MARKER_STYLE[m.kind].color });
+      drawMarker(ctx, (v.x * 0.5 + 0.5) * s, (-v.y * 0.5 + 0.5) * s, s / 210, { ...MARKER_STYLE[m.kind], color: colourBlind ? ({ prograde: '#f0e442', retrograde: '#f0e442', normal: '#ffffff', antinormal: '#ffffff', radialOut: '#56b4e9', radialIn: '#56b4e9', target: '#e69f00', antiTarget: '#e69f00', maneuver: '#cc79a7' }[m.kind]) : MARKER_STYLE[m.kind].color });
     }
     // Fixed vessel reticle.
     ctx.strokeStyle = '#ffb000';

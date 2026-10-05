@@ -13,7 +13,11 @@ export interface Settings {
   masterVolume: number;
   invertPitch: boolean;
   showFps: boolean;
+  /** Detailed performance overlay (fps graph, CPU breakdown, GPU stats). */
+  perfOverlay: boolean;
   adaptiveQuality: boolean;
+  /** Version of the automatic graphics configuration last applied (see render/core/quality.ts). */
+  graphicsProfile: number;
   /** null follows the current program's saved setting / mode default. */
   commsEnabled: boolean | null;
   commsRestrictControl: boolean | null;
@@ -52,7 +56,7 @@ export interface GameState {
 const SETTINGS_KEY = 'wsp.settings.v1';
 
 function loadSettings(): Settings {
-  const defaults: Settings = { quality: 'medium', masterVolume: 0.8, invertPitch: false, showFps: false, adaptiveQuality: false, shadows: true, bloom: true, clouds: true, scatter: true, renderScale: 1, musicVolume: 1, sfxVolume: 1, gamepadEnabled: true, deadZone: 0.15, sensitivity: 1, inputSmoothing: 0, mouseFlight: false, units: 'metric', navballSize: 200, hudScale: 1, cameraFov: 60, autoSaveInterval: 60, uiScale: 1, highContrast: false, reduceMotion: false, colourBlind: false, commsEnabled: null, commsRestrictControl: null, commsOverlay: true };
+  const defaults: Settings = { quality: 'medium', masterVolume: 0.8, invertPitch: false, showFps: false, perfOverlay: false, adaptiveQuality: true, graphicsProfile: 0, shadows: true, bloom: true, clouds: true, scatter: true, renderScale: 1, musicVolume: 1, sfxVolume: 1, gamepadEnabled: true, deadZone: 0.15, sensitivity: 1, inputSmoothing: 0, mouseFlight: false, units: 'metric', navballSize: 200, hudScale: 1, cameraFov: 60, autoSaveInterval: 60, uiScale: 1, highContrast: false, reduceMotion: false, colourBlind: false, commsEnabled: null, commsRestrictControl: null, commsOverlay: true };
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SETTINGS_KEY) : null;
     return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;

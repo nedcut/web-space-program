@@ -4,7 +4,7 @@ import { Button, Slider, Toggle, Tabs, Segmented } from './components';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { updateSettings, useGame, type Settings } from '../game/store';
 import { actionLabel, conflicts, defaultBindings, getBindings, keyChord, saveBindings, subscribeBindings, type Action } from '../input/bindings';
-import { QUALITY_PRESETS } from '../render/core/quality';
+import { presetSettings } from '../render/core/quality';
 
 const TABS = ['Graphics', 'Audio', 'Controls', 'Gameplay', 'Accessibility'] as const;
 export function SettingsPanel({ onClose, world }: { onClose: () => void; world?: World }) {
@@ -59,9 +59,10 @@ export function SettingsPanel({ onClose, world }: { onClose: () => void; world?:
       <Tabs label="Settings categories" options={TABS} value={tab} panelId="settings-content" className="settings-tabs" onChange={t => { setCapture(null); setTab(t); }} />
       <div role="tabpanel" id="settings-content" aria-label={tab} className="settings-content">
         {tab === 'Graphics' && <>
-          <div className="setting-row"><span>Quality preset</span><Segmented label="Quality preset" options={['low', 'medium', 'high'] as const} value={settings.quality} onChange={q => { const p = QUALITY_PRESETS[q]; updateSettings({ quality: q, shadows: p.shadowMapSize > 0, bloom: p.bloom.enabled, clouds: p.clouds, scatter: true, renderScale: p.renderScale }); }} /></div>
+          <div className="setting-row"><span>Quality preset</span><Segmented label="Quality preset" options={['low', 'medium', 'high'] as const} value={settings.quality} onChange={q => updateSettings(presetSettings(q))} /></div>
           {check('shadows', 'Shadows')}{check('bloom', 'Bloom')}{check('clouds', 'Clouds')}{check('scatter', 'Atmospheric scattering')}
-          {check('adaptiveQuality', 'Adaptive render scale')}{range('renderScale', 'Render scale', 0.5, 1.5, 0.05)}{check('showFps', 'Show FPS / draw calls / triangles')}
+          {check('adaptiveQuality', 'Adaptive render scale')}{range('renderScale', 'Render scale', 0.5, 1.5, 0.05)}{check('showFps', 'Show FPS / draw calls / triangles')}{check('perfOverlay', 'Performance overlay: frame graph, CPU/GPU breakdown (F8)')}
+          <p className="settings-note">Adaptive render scale lowers the 3D resolution (to 50%) when frames run late and restores it when there is headroom. Low suits older integrated GPUs; Medium targets 60 fps on current laptop GPUs.</p>
           <p className="settings-note">Graphics changes apply immediately in flight. Other scenes use the new settings when you enter them.</p>
         </>}
         {tab === 'Audio' && <>{range('masterVolume', 'Master volume', 0, 1, 0.05)}{range('musicVolume', 'Music volume', 0, 1, 0.05)}{range('sfxVolume', 'Effects volume', 0, 1, 0.05)}</>}

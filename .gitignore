@@ -7,3 +7,4 @@ playwright-report
 .claude/worktrees
 
 .vite-cache
+.tmp/

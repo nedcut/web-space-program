@@ -23,17 +23,44 @@ it('stage cache matches uncached calculations exactly through drain, pressure, c
 });
 
 describe('adaptive scale', () => {
-  it('requires sustained thresholds, honors hysteresis, bounds and manual reset', () => {
+  const run = (q: AdaptiveQuality, ms: number, seconds: number, gpu?: number) => { for (let t = 0; t < seconds * 1000; t += ms) q.update(ms, true, gpu); };
+  it('drops after two over-budget windows, never below 0.5, and resets when disabled', () => {
     const q = new AdaptiveQuality();
-    for(let i=0;i<99;i++) q.update(30,true);
-    expect(q.scale).toBe(1); q.update(30,true); expect(q.scale).toBe(.9);
-    for(let i=0;i<299;i++) q.update(10,true);
-    expect(q.scale).toBe(.9); q.update(10,true); expect(q.scale).toBe(1);
-    for(let i=0;i<10000;i++) q.update(30,true);
-    expect(q.scale).toBe(.5); expect(q.update(16,false)).toBe(true); expect(q.scale).toBe(1);
-    for(let i=0;i<99;i++) q.update(30,true);
-    q.update(16,true);q.update(30,true);expect(q.scale).toBe(1);
-    q.update(10000,true); expect(q.scale).toBe(1);
+    run(q, 16.7, 3);
+    expect(q.scale).toBe(1);
+    run(q, 33.4, 1.05);
+    expect(q.scale).toBe(1); // one bad window is not enough
+    run(q, 33.4, 1.05);
+    expect(q.scale).toBe(0.85); // every frame missed: larger step
+    run(q, 33.4, 30);
+    expect(q.scale).toBe(0.5);
+    expect(q.update(16, false)).toBe(true);
+    expect(q.scale).toBe(1);
+  });
+  it('ignores isolated hitches, suspended frames and CPU-bound slowness', () => {
+    const q = new AdaptiveQuality();
+    for (let i = 0; i < 600; i++) q.update(i % 60 === 0 ? 40 : 16.7, true); // ~2% hitches
+    q.update(10000, true);
+    expect(q.scale).toBe(1);
+    run(q, 33.4, 5, 4); // GPU only busy 4 ms: resolution would not help
+    expect(q.scale).toBe(1);
+    run(q, 16.7, 3, 16); // GPU saturated even though frames hit vsync
+    expect(q.scale).toBeLessThan(1);
+  });
+  it('recovers with headroom after a cooldown and backs off after oscillation', () => {
+    const q = new AdaptiveQuality();
+    run(q, 33.4, 2.2);
+    expect(q.scale).toBe(0.85);
+    run(q, 16.7, 3);
+    expect(q.scale).toBe(0.85); // 4 s cooldown
+    run(q, 16.7, 2.5);
+    expect(q.scale).toBe(0.95);
+    run(q, 33.4, 3); // the increase failed immediately
+    expect(q.scale).toBe(0.8);
+    run(q, 16.7, 6);
+    expect(q.scale).toBe(0.8); // cooldown doubled to 8 s
+    run(q, 16.7, 4);
+    expect(q.scale).toBe(0.9);
   });
 });
 it('batching preserves world bounds, transparent leaves and shared geometry', () => {

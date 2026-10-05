@@ -120,7 +120,7 @@ export class HubScene {
     pmrem.dispose();
 
     this.planets = createPlanetLayer(this.scene, this.universe, opts.quality);
-    this.site = new LaunchSite(this.universe);
+    this.site = new LaunchSite(this.universe, { vegetationDensity: q.siteVegetation });
     this.scene.add(this.site.root);
     this.t = findGoldenHour(this.universe, this.site, opts.ut);
 

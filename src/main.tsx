@@ -1,6 +1,12 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './ui/App';
 import { game } from './game/store';
+import { autoConfigureGraphics } from './render/core/quality';
+import { preloadTextureCache } from './render/core/textureCache';
+
+// First run / new graphics profile: choose a preset for this GPU (weak iGPUs start on Low).
+const graphicsNotice = autoConfigureGraphics();
+if (graphicsNotice) game.set({ notice: graphicsNotice });
 
 // Dev shortcut: ?flight=<stock-craft-id>&scale=real jumps onto the pad in the selected universe.
 const params = new URLSearchParams(location.search);
@@ -15,4 +21,10 @@ if (flight) {
   });
 }
 
+// Dev/perf shortcut: ?mission=<scenario-id> starts a quick-start scenario (e.g. ring-skimmer at Saturn).
+const mission = params.get('mission');
+if (mission) import('./scenarios/runtime').then(({ startScenario }) => startScenario(mission));
+
 createRoot(document.getElementById('root')!).render(<App />);
+// Decode procedurally generated textures saved by an earlier session (off the main thread).
+setTimeout(() => void preloadTextureCache(), 0);

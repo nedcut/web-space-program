@@ -7,12 +7,14 @@ import { timeToApoapsis, timeToPeriapsis, burnTimeEstimate, periapsisRadius, apo
 import { formatDistance, formatDuration } from '../../ui/format';
 import { computeStageDeltaV } from '../../sim/vessel';
 import { planCircularization } from '../../game/autopilot';
+import { useRenderProfile } from './useRenderProfile';
 
 /**
  * Maneuver planner shown in map view. Nodes are placed by time (Ap / Pe / custom offset) and shaped with
  * press-and-hold "jog" controls whose rate accelerates the longer you hold (fine control without a gizmo).
  */
 export function ManeuverPanel({ world }: { world: World }) {
+  useRenderProfile();
   const [, force] = useState(0);
   const planner = usePlanner(world);
   const [planMsg, setPlanMsg] = useState('');

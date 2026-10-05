@@ -31,6 +31,7 @@ const FLIGHT_KEYS: [Action[] | string, string][] = [
   [['flightData'], 'Detailed flight data panel'],
   [['stressOverlay'], 'Structural stress overlay'],
   [['photoMode'], 'Photo mode (single player)'],
+  [['perfOverlay'], 'Performance overlay (fps, CPU/GPU breakdown)'],
   [['warpDown', 'warpUp', 'warpStop'], 'Time warp slower / faster / stop'],
   [['toggleCamMode'], 'Camera mode (auto / chase / free)'],
   [['focusNext'], 'Switch to a nearby vessel'],

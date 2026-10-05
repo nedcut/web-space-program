@@ -2,6 +2,7 @@ import { Icon } from '../../ui/components/Icon';
 import { Button, Panel, Tooltip } from '../../ui/components';
 import { isTyping, matches } from '../../input/bindings';
 import { snapshotEqual } from '../../util/snapshotEqual';
+import { frameProfiler as prof } from '../../util/frameProfiler';
 import { FlightDataPanel } from './FlightDataPanel';
 import type { FlightData } from '../../game/flightData';
 import { useGame } from '../../game/store';
@@ -147,8 +148,10 @@ export function NavballView({ getFrame }: { getFrame: () => { frame: NavballFram
     host.current!.appendChild(nb.element);
     let raf = 0;
     const loop = () => {
+      const t0 = prof.now();
       const f = getFrame();
       if (f) nb.update(f.frame, f.markers);
+      prof.add('navball', t0);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
