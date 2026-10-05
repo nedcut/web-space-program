@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { describe, expect, it } from 'vitest';
 import { PART_CATALOG } from '../src/data/parts';
 import { buildMoonRover, buildRoverLander, buildSSTO } from '../src/editor/stockCrafts';
@@ -12,6 +13,7 @@ describe('showcase fleet operations', () => {
   it('Moonmoth settles on its powered wheels and drives on lunar terrain', () => {
     const universe = new Universe('standard');
     const world = new World(universe, PART_CATALOG, DEFAULT_START_UT);
+    requireIntactFlight(world);
     const moon = universe.body('moon');
     const up = normalize(v3(1, 0, 0));
     const position = add(universe.ephem.getBodyState('moon', world.ut).position, scale(up, moon.radius));
@@ -41,6 +43,7 @@ describe('showcase fleet operations', () => {
 
   it('delivery staging retains a controllable rover and separates a controllable lander', () => {
     const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+    requireIntactFlight(world);
     const wv = world.launch(buildRoverLander());
     activateStage(wv.state, 2);
     const split = activateStage(wv.state, 1);
@@ -52,6 +55,7 @@ describe('showcase fleet operations', () => {
 
   it('Daybreak takes off from the runway on jets with its rocket still dormant', () => {
     const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+    requireIntactFlight(world);
     const wv = world.launch(buildSSTO(), 'runway');
     const alt0 = world.universe.surfaceInfo('earth', wv.state.position, world.ut).heightAboveTerrain;
     world.tick(0.02, neutralInput({ stage: true }));
