@@ -4,6 +4,7 @@ import { game } from '../game/store';
 import { EditorView } from './scene/EditorView';
 import { EditorSession } from './session';
 import { STOCK_CRAFTS } from './stockCrafts';
+import { CraftImportDialog } from './ui/CraftImportDialog';
 import { LoadDialog } from './ui/LoadDialog';
 import { Palette } from './ui/Palette';
 import { StagingPanel } from './ui/StagingPanel';
@@ -24,6 +25,7 @@ export default function EditorScene() {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const [showLoad, setShowLoad] = useState(false);
+  const [importSource, setImportSource] = useState<{ initial?: string; file?: File } | null>(() => { const code = new URLSearchParams(location.hash.slice(1)).get('craft'); return code ? { initial: code } : null; });
 
   useEffect(() => {
     const v = new EditorView(host.current!, session);
@@ -46,13 +48,14 @@ export default function EditorScene() {
 
   const held = view.held;
   return (
-    <div className="fullscreen vab-root">
+    <div className="fullscreen vab-root" onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }} onDrop={e => { e.preventDefault(); if (e.dataTransfer.files[0]) setImportSource({ file: e.dataTransfer.files[0] }); }}>
       <div ref={host} className="fullscreen vab-canvas" />
       <div className="fullscreen vab-vignette" />
       <TopBar
         session={session}
         view={view}
         onLoad={() => setShowLoad(true)}
+        onImport={() => setImportSource({})}
         onNew={() => {
           if (view.craft.parts.length && !window.confirm('Start a new craft? Unsaved changes will be lost.')) return;
           session.newCraft();
@@ -96,6 +99,7 @@ export default function EditorScene() {
           <button className="btn small" onClick={() => setShowLoad(true)}>Browse stock vehicles</button>
         </div>
       )}
+      {importSource && <CraftImportDialog session={session} {...importSource} onClose={() => { setImportSource(null); if (location.hash.startsWith('#craft=')) history.replaceState(null, '', location.pathname + location.search); }} />}
       {showLoad && <LoadDialog session={session} onClose={() => setShowLoad(false)} />}
     </div>
   );

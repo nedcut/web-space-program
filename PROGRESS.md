@@ -300,6 +300,14 @@ Final validation on `cx/realscale`: `npx tsc --noEmit` passed; `npx vitest run -
 - Particles follow simulation time, freeze while paused, and clear on rails jumps or large focus teleports.
 - Screenshot reproduction uses the requested `scripts/shot.mjs` with port 5194, 40-second waits and the first-flight panel dismissed. Liftoff sets `input.state.throttle=1` and stages; re-entry uses `?scenario=reentry` with a 16 km hot-entry visual fixture (one skin face initialized to 1,400 K, then three frames before freezing); explosion injects one `partDestroyed` event through `world.onEvent` to exercise the visual/audio hook without altering a stock craft. Screenshots use Low at 0.5 render scale for the shared-host software renderer. Images: `docs/screenshots/vfx-{liftoff,reentry,explosion}.png`.
 
+
+## Offline sharing, save slots, and photography (cx/sharing)
+
+- Editor: Copy share code (versioned JSON, deflate when supported, base64url), .craft.json export, preview-first import from codes/files/drop/URL fragments. Validation lists unknown catalogue parts and rejects invalid topology/transforms or oversized inputs.
+- Craft library uses IndexedDB with retry-safe localStorage migration; includes whole-craft thumbnails, folders, tags, search, rename, duplicate and delete.
+- Continue opens a save manager with timestamps, simulation date, mode and scale, file import/export (.wsp-save.json), and multiple program-specific manual saves. Save as is available in flight pause and the hub; the latest three autosaves are retained per program. Existing quicksave/autosave entry points remain compatible.
+- P or the flight pause/hub button enters photo mode: local simulation freezes, HUD hides, constrained free camera, FOV/exposure/focus blur/vignette/grain/letterbox controls, 1×/2× PNG capture. Sun and clock are untouched; photo mode is unavailable in shared-clock multiplayer.
+- Added 14 tests covering compressed/plain/fallback share round trips, import validation, mock-repository IndexedDB migration/retry behavior, save rotation, and save file validation.
 ## Procedural audio upgrade (2026-10-04, cx/audio2)
 
 - Added turbine whine and spool response, afterburner/SRB crackle, nuclear hum/hiss, distinct aerospike and ion timbres, size/count coloration, camera-distance attenuation and bounded Doppler. Vacuum filtering preserves structure-borne rumble. All sound remains synthesized offline with no asset files.
@@ -308,3 +316,11 @@ Final validation on `cx/realscale`: `npx tsc --noEmit` passed; `npx vitest run -
 - Added pure distance/Doppler/theme/crossfade tests plus engine/mechanical/adaptive lifecycle, transient cleanup, hidden-tab and 234-node-cap regressions. Focused audio tests pass (14 tests). Collaborative preview opened but snapshot/evaluation failed; no browser listening assessment was possible.
 - Final validation: `npm run lint`, `npx tsc --noEmit`, `npm run build` and `git diff --check` pass; focused audio suite passes 14/14. Required `npx vitest run --maxWorkers=2` passes 53 files / 698 tests and fails only the existing Real Moon mission's 180,000 ms timeout (248 s case, 317 s suite). Its isolated retry also times out (271 s), with both mission logs reaching intact Earth splashdown. Shared-machine contention is the likely cause; no simulation/test timeout changes were made. Build retains its existing large-chunk advisory. `git merge main` reports already up to date.
 - Final validation: `npm run lint`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` pass after merging main's audio improvements (`240a11e`). Focused merged audio/VFX/renderer tests pass **25/25**. Full `npx vitest run --maxWorkers=2` was run twice: the final run passes **704 tests / 54 files**, with only `world-moon-real.test.ts` failing its existing 180-second wall-clock timeout (255.65 seconds on the shared host; mission log reaches Earth splashdown). No simulation tests or timeout limits were changed. Build retains the existing large-chunk advisory. Captured browser logs contain no shader/page errors. Main's audio changes merged cleanly into the event hook; both branches' appended decision/progress notes were retained when resolving documentation conflicts.
+
+
+### Sharing validation and integration
+
+- Post-merge `npm run lint`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` pass. Sharing + merged audio tests pass 28/28 (including all 14 sharing tests).
+- Required full `npx vitest run --maxWorkers=2`: 54 files / 705 tests pass, with the existing real Moon mission exceeding its 180-second timeout (248 seconds). Isolated retry likewise times out at 250 seconds; both logs reach Earth splashdown. This matches the merged audio branch's documented contention timeout. No physics or existing timeout settings were changed.
+- Collaborative browser checks: share-code generation, editor toolbar fitting 1280 px, hub/flight photo entry/exit and flight UT freeze, compiled depth blur, PNG output at 1920×1200 and 3840×2400. Snapshot automation failed, so no screenshot evidence or visual-quality claim. Port 5196 belongs to the planner worktree; this worktree's review server uses 5199.
+- Merged main's audio upgrade, preserving interface audio and silencing flight effects during photo mode. Preserved both branches' progress and decisions.

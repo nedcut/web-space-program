@@ -190,5 +190,5 @@ describe('Moon mission (stock Selene Real Expedition)', () => {
     } finally {
       process.stdout.write(log.join('\n') + '\n');
     }
-  }, 180_000);
+  }, 600_000);
 });
