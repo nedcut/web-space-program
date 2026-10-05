@@ -1,3 +1,4 @@
+import { bodyBreadcrumbs } from '../../render/map/presentation';
 import { useEffect, useRef, useState } from 'react';
 import { game, updateSettings, useGame } from '../../game/store';
 import { World, type WorldVessel } from '../../game/world';
@@ -68,7 +69,7 @@ export default function TrackingStation() {
   }
   const body = focus.kind === 'body' ? world.universe.body(focus.id) : world.universe.body(world.vessels.get(focus.id)?.body ?? world.universe.sunId);
   const tree = (b: Body) => <div key={b.id}>
-    {b.children.length ? <details open={b.kind === 'star'}><summary><button className="btn ghost small" onClick={() => view.current?.setFocus({ kind: 'body', id: b.id })}>{b.name}</button></summary><div className="tracking-children">{b.children.map((id) => tree(world.universe.body(id)))}</div></details>
+    {b.children.length ? <details open={b.kind === 'star' || bodyBreadcrumbs(body, world.universe.bodies).some(parent => parent.id === b.id)}><summary><button className="btn ghost small" onClick={() => view.current?.setFocus({ kind: 'body', id: b.id })}>{b.name}</button></summary><div className="tracking-children">{b.children.map((id) => tree(world.universe.body(id)))}</div></details>
       : <button className="btn ghost small" onClick={() => view.current?.setFocus({ kind: 'body', id: b.id })}>{b.name}</button>}
   </div>;
 
@@ -96,7 +97,7 @@ export default function TrackingStation() {
         })}</section>)}
       </aside>
       <aside className="tracking-right"><details className="panel tracking-bodies" open><summary className="label">Celestial bodies</summary>{tree(world.universe.body(world.universe.sunId))}</details>
-        <section className="panel tracking-info"><div className="label">{focus.kind === 'vessel' ? 'Reference body' : 'Focused body'} · {world.universe.preset} scale</div><h2>{body.name}</h2><p className="tracking-muted">{body.description ?? 'No description available.'}</p><dl>
+        <section className="panel tracking-info"><div className="label">{focus.kind === 'vessel' ? 'Reference body' : 'Focused body'} · {world.universe.preset} scale</div><nav aria-label="Focus path" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>{bodyBreadcrumbs(body, world.universe.bodies).map((b,i) => <span key={b.id}>{i > 0 && ' › '}<button className="btn ghost small" aria-current={b.id === body.id ? 'location' : undefined} onClick={() => view.current?.setFocus({ kind: 'body', id: b.id })}>{b.name}</button></span>)}</nav><h2>{body.name}</h2><p className="tracking-muted">{body.description ?? 'No description available.'}</p><dl>
           {Object.entries({ Radius: distance(body.radius), 'Surface gravity': `${body.surfaceGravity.toFixed(2)} m/s²`, 'Sphere of influence': distance(body.soi), 'Atmosphere height': body.atmosphere ? distance(body.atmosphere.height) : 'None', 'Surface pressure': `${((body.atmosphere?.surfacePressure ?? 0) / 1000).toFixed(2)} kPa`, 'Orbital period': body.orbitalPeriod ? formatDuration(body.orbitalPeriod) : '—', Rotation: `${formatDuration(Math.abs(body.rotationPeriod))}${body.rotationPeriod < 0 ? ' (retrograde)' : ''}`, Moons: body.children.filter((id) => world.universe.body(id).kind === 'moon').length }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
         </dl></section>
       </aside>

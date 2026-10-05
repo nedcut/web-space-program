@@ -23,7 +23,7 @@ ui.appendChild(sel);
 let t = DEFAULT_START_UT;
 const loop = () => {
   t += +(params.get('rate') ?? 0);
-  map.update({ t, focus: ephem.getBodyState(focusId, t).position, viewport: { width: innerWidth, height: innerHeight } });
+  map.update({ t, focusId, focus: ephem.getBodyState(focusId, t).position, viewport: { width: innerWidth, height: innerHeight } });
   renderer.render(map.scene, map.camera);
   requestAnimationFrame(loop);
 };

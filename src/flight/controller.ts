@@ -559,6 +559,7 @@ export class FlightController {
       this.map.update({
         t,
         focus: origin,
+        focusId: wv.body,
         comms: this.world.commsSettings.enabled && game.get().settings.commsOverlay ? this.world.comms : undefined,
         vessel: { position: origin, patches: this.world.trajectory(), nodes: this.world.nodes },
         markers: [
