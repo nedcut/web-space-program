@@ -88,8 +88,9 @@ export class RingParticles {
           float diffuse = max(dot(normalize(vNormal), uSunDir), 0.0);
           float planetPhase = 0.5 + 0.5 * dot(normalize(rel), uSunDir);
           float shine = 0.10 * pow(uPlanetRadius / length(rel), 2.0) * planetPhase;
-          vec3 ice = mix(vec3(0.38, 0.32, 0.24), vec3(0.82, 0.88, 0.91), 0.7 + 0.2 * vNormal.z);
-          gl_FragColor = vec4(ice * uSunColor * ((diffuse * 0.8 + forward * 0.35) * shadow + shine + 0.006) / 3.14159265, 1.0);
+          // Water ice dusted with the rings' reddish-tan contaminants (matches the ring texture tint).
+          vec3 ice = mix(vec3(0.30, 0.26, 0.21), vec3(0.74, 0.69, 0.60), 0.45 + 0.25 * vNormal.z);
+          gl_FragColor = vec4(ice * uSunColor * ((diffuse * 0.6 + forward * 0.35) * shadow + shine + 0.006) / 3.14159265, 1.0);
         }`,
     });
     const capacity = (this.reach * 2 + 1) ** 2 * this.chunksPerCell;
