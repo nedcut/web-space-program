@@ -14,6 +14,7 @@ import { AssistPanel } from './hud/AssistPanel';
 import { HelpOverlay, helpSeen, markHelpSeen } from './hud/HelpOverlay';
 import { SettingsPanel } from '../ui/MainMenu';
 import type { CraftDef } from '../sim/vessel/types';
+import { isTyping, matches } from '../input/bindings';
 import { hasSave } from '../game/persistence';
 
 export default function FlightScene() {
@@ -160,20 +161,20 @@ export default function FlightScene() {
     if (ctrl.current) ctrl.current.paused = paused;
   }, [paused, tele === null]);
 
-  // Live settings: volume and pitch inversion apply immediately; quality re-creates the scene from a snapshot.
+  // Input reads settings each frame; planet quality, clouds and scattering rebuild from a snapshot.
   useEffect(() => {
     audioRef.current?.setMasterVolume(settings.masterVolume);
-    if (ctrl.current) ctrl.current.input.invertPitch = settings.invertPitch;
-  }, [settings.masterVolume, settings.invertPitch]);
-  const quality = useRef(settings.quality);
+  }, [settings.masterVolume]);
+  const sceneGraphics = JSON.stringify([settings.quality, settings.clouds, settings.scatter]);
+  const quality = useRef(sceneGraphics);
   useEffect(() => {
-    if (quality.current === settings.quality) return;
-    quality.current = settings.quality;
+    if (quality.current === sceneGraphics) return;
+    quality.current = sceneGraphics;
     const c = ctrl.current;
     if (!c || c.network || !c.world.active) return;
     game.set({ resumeWorld: c.snapshot(), ut: c.world.ut, launchPending: false });
     setMountKey((k) => k + 1);
-  }, [settings.quality]);
+  }, [sceneGraphics]);
 
   const closeHelp = () => {
     markHelpSeen();
@@ -183,7 +184,7 @@ export default function FlightScene() {
   // F1 toggles the controls help (prevent the browser's own help page).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== 'F1') return;
+      if (isTyping(e.target) || e.repeat || !matches('help', e)) return;
       e.preventDefault();
       if (helpRef.current) closeHelp();
       else setHelp(true);
@@ -258,6 +259,9 @@ export default function FlightScene() {
       <div className="fullscreen" ref={host} />
       {tele && c && (
         <Hud
+          precision={c.input.precisionActive}
+          stageProgress={c.input.stageProgress}
+          gamepadConnected={c.input.gamepadConnected}
           t={tele}
           navball={<NavballView getFrame={navball} />}
           dock={multiplayer ? undefined : {

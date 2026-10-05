@@ -1,5 +1,6 @@
 import { FlightDataPanel } from './FlightDataPanel';
 import type { FlightData } from '../../game/flightData';
+import { useGame } from '../../game/store';
 import { CrewPanel } from './CrewPanel';
 import type { Astronaut } from '../../sim/crew/crew';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -135,9 +136,10 @@ const SAS_MODES: { id: string; label: string }[] = [
 ];
 
 export function NavballView({ getFrame }: { getFrame: () => { frame: NavballFrame; markers: NavballMarker[] } | null }) {
+  const size = useGame(s => s.settings.navballSize);
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const nb = new Navball(200);
+    const nb = new Navball(size);
     host.current!.appendChild(nb.element);
     let raf = 0;
     const loop = () => {
@@ -150,7 +152,7 @@ export function NavballView({ getFrame }: { getFrame: () => { frame: NavballFram
       cancelAnimationFrame(raf);
       nb.dispose();
     };
-  }, [getFrame]);
+  }, [getFrame, size]);
   return <div ref={host} />;
 }
 
@@ -188,7 +190,10 @@ export interface HudDockSlots {
   maneuver?: ReactNode;
 }
 
-export function Hud({ t, cb, navball, dock }: { t: Telemetry; cb: HudCallbacks; navball: ReactNode; dock?: HudDockSlots }) {
+export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadConnected }: { t: Telemetry; cb: HudCallbacks; navball: ReactNode; dock?: HudDockSlots; precision?: boolean; stageProgress?: number; gamepadConnected?: boolean }) {
+  const settings = useGame(s => s.settings);
+  const distance = (m: number) => settings.units === 'imperial' ? (!Number.isFinite(m) ? '—' : Math.abs(m) < 1609.344 ? `${(m / 0.3048).toFixed(0)} ft` : `${(m / 1609.344).toFixed(2)} mi`) : formatDistance(m);
+  const speed = (v: number) => settings.units === 'imperial' ? `${(v * 2.236936).toFixed(1)} mph` : formatSpeed(v);
   const [open, setOpen] = useState<Set<DockId>>(loadDock);
   const toggle = (id: DockId) => {
     setOpen((o) => {
@@ -223,7 +228,7 @@ export function Hud({ t, cb, navball, dock }: { t: Telemetry; cb: HudCallbacks; 
     </button>
   );
   return (
-    <div className="overlay">
+    <div className="overlay" style={{ width: `${100 / settings.hudScale}%`, height: `${100 / settings.hudScale}%`, transform: `scale(${settings.hudScale})`, transformOrigin: 'top left' }}>
       {/* Top bar: time, warp, altitude */}
       <div className="panel" style={{ position: 'absolute', top: 10, left: 10, padding: '8px 12px', display: 'flex', gap: 10, alignItems: 'center' }}>
         <button className="btn small" onClick={cb.onMenu} title="Pause menu (Esc)">☰</button>
@@ -234,24 +239,26 @@ export function Hud({ t, cb, navball, dock }: { t: Telemetry; cb: HudCallbacks; 
         </div>
         <button className="btn small" onClick={() => cb.onWarp(1)} title="Faster time warp ( . )">▶</button>
         <button className={`btn small ${t.mapMode ? 'primary' : ''}`} data-tutorial="map" onClick={cb.onMap} title="Map view (M)">MAP</button>
+        <span className="mono" style={{ fontSize: 11, color: precision ? 'var(--accent)' : 'var(--text-dim)' }}>{precision ? 'PRECISION' : 'NORMAL'}</span>
+        {gamepadConnected && <span className="mono" style={{ fontSize: 11 }}>PAD{stageProgress ? ` · STAGE ${(stageProgress * 100).toFixed(0)}%` : ''}</span>}
         {cb.onHelp && <button className="btn small" onClick={cb.onHelp} title="Controls help (F1)">?</button>}
       </div>
 
       <div className="panel" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '8px 18px', textAlign: 'center' }}>
         <div className="label">{t.bodyName} · altitude</div>
-        <div className="mono" style={{ fontSize: 26 }}>{formatDistance(t.altitudeAsl)}</div>
-        {t.altitudeTerrain < 5000 && <div className="mono" style={{ fontSize: 12, color: 'var(--text-dim)' }}>radar {formatDistance(t.altitudeTerrain)}</div>}
+        <div className="mono" style={{ fontSize: 26 }}>{distance(t.altitudeAsl)}</div>
+        {t.altitudeTerrain < 5000 && <div className="mono" style={{ fontSize: 12, color: 'var(--text-dim)' }}>radar {distance(t.altitudeTerrain)}</div>}
       </div>
 
       {/* Right column: orbit info + resources (stacked so they never overlap) */}
       <div className="hud-right">
         <div className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <Readout label="Apoapsis" value={dash ? '—' : formatDistance(t.apoapsis)} />
+          <Readout label="Apoapsis" value={dash ? '—' : distance(t.apoapsis)} />
           <Readout label="T-Ap" value={dash ? '—' : formatDuration(t.timeToAp)} />
-          <Readout label="Periapsis" value={dash ? '—' : formatDistance(t.periapsis)} color={!dash && t.periapsis < 0 ? 'var(--bad)' : undefined} />
+          <Readout label="Periapsis" value={dash ? '—' : distance(t.periapsis)} color={!dash && t.periapsis < 0 ? 'var(--bad)' : undefined} />
           <Readout label="T-Pe" value={dash ? '—' : formatDuration(t.timeToPe)} />
           <div style={{ height: 6 }} />
-          <Readout label="Vert. speed" value={formatSpeed(t.verticalSpeed)} />
+          <Readout label="Vert. speed" value={speed(t.verticalSpeed)} />
           <Readout label="G-force" value={t.gForce.toFixed(2)} color={t.gForce > 6 ? 'var(--bad)' : undefined} />
           <Readout label="Mach" value={t.mach.toFixed(2)} />
           <Readout label="Dyn. press." value={`${(t.dynamicPressure / 1000).toFixed(1)} kPa`} />
@@ -284,7 +291,7 @@ export function Hud({ t, cb, navball, dock }: { t: Telemetry; cb: HudCallbacks; 
           <div key={s.index} className="panel" style={{ padding: 8, width: 180, flexShrink: 0, borderColor: s.index === t.stage ? 'var(--accent)' : s.parts.some((p) => p.active) ? 'var(--accent-2)' : undefined }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span className="label" style={{ color: s.index === t.stage ? 'var(--accent)' : undefined }} title={s.index === t.stage ? 'Fires on the next Space press' : undefined}>{s.parts.some((p) => p.active) ? 'Active' : `${s.index === t.stage ? '▸ ' : ''}Stage ${s.index}`}</span>
-              <span className="mono" style={{ fontSize: 11, color: 'var(--accent-2)' }}>{s.deltaV.toFixed(0)} m/s</span>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--accent-2)' }}>{speed(s.deltaV)}</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
               {s.parts.map((p) => (
@@ -331,7 +338,7 @@ export function Hud({ t, cb, navball, dock }: { t: Telemetry; cb: HudCallbacks; 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <button className="panel btn" onClick={cb.onSpeedMode} title="Click to switch surface / orbit / target speed" style={{ padding: '4px 14px', marginBottom: 6, textAlign: 'center' }}>
             <div className="label">{t.speedMode === 'surface' && t.dynamicPressure > 50 ? 'airspeed' : t.speedMode}</div>
-            <div className="mono" style={{ fontSize: 18 }}>{formatSpeed(t.speed)}</div>
+            <div className="mono" style={{ fontSize: 18 }}>{speed(t.speed)}</div>
           </button>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
             {!t.eva && <span data-tutorial="throttle"><ThrottleGauge value={t.throttle} /></span>}

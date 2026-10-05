@@ -1,3 +1,4 @@
+import { game } from '../../game/store';
 /**
  * Render quality presets. `low` targets integrated laptop GPUs at 60 fps; `high` a discrete GPU.
  * Every renderer subsystem reads its knobs from here — never hard-code quality-dependent numbers.
@@ -49,6 +50,8 @@ export interface QualitySettings {
   ringSegments: number;
   stars: { count: number; milkyWay: boolean };
   clouds: boolean;
+  /** User toggle: atmospheric scattering (sky shells / aerial perspective). */
+  atmosphereScattering?: boolean;
 }
 
 export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
@@ -106,7 +109,10 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
 };
 
 export function getQuality(id: QualityId): QualitySettings {
-  return QUALITY_PRESETS[id];
+  const p = QUALITY_PRESETS[id];
+  const s = game.get().settings;
+  return { ...p, shadowMapSize: s.shadows ? (p.shadowMapSize || 1024) : 0,
+    bloom: { ...p.bloom, enabled: s.bloom }, clouds: s.clouds, atmosphereScattering: s.scatter, renderScale: s.renderScale };
 }
 
 /** Heuristic default: pick low on likely-integrated GPUs / small devices. */

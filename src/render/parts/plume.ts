@@ -1,3 +1,4 @@
+import { game } from '../../game/store';
 import * as THREE from 'three';
 import type { EngineModule } from '../../sim/vessel/types';
 
@@ -227,7 +228,7 @@ export function createPlume(opts: PlumeOptions): Plume {
       group.visible = thr > 0.001;
       const atm = st.pressureSensitive ? THREE.MathUtils.smoothstep(ambientPressure / 101325, 0.0, 0.35) : 0;
       for (const m of mats) {
-        m.uniforms.uTime.value = time;
+        m.uniforms.uTime.value = game.get().settings.reduceMotion ? 0 : time;
         m.uniforms.uThrottle.value = thr;
         m.uniforms.uAtm.value = atm;
       }

@@ -1,11 +1,13 @@
 import { MultiplayerSetup } from '../net/MultiplayerPanel';
+import { SettingsPanel } from './SettingsPanel';
+export { SettingsPanel } from './SettingsPanel';
 import type { GameMode } from '../sim/science/progression';
 import { World } from '../game/world';
 import { Universe } from '../game/universe';
 import { PART_CATALOG } from '../data/parts';
 import { saveProgram } from '../game/program';
 import { useState } from 'react';
-import { game, updateSettings, useGame, DEFAULT_START_UT, loadLastCraft, type QualityPreset } from '../game/store';
+import { game, DEFAULT_START_UT, loadLastCraft } from '../game/store';
 import { SCALE_PRESETS, type ScalePresetId } from '../sim/bodies/scale';
 import { MenuBackdrop } from './MenuBackdrop';
 import { deleteSave, hasSave, loadWorldFromStorage } from '../game/persistence';
@@ -95,47 +97,6 @@ export function MainMenu() {
         {panel === 'settings' && <SettingsPanel onClose={() => setPanel('root')} />}
       </div>
       <div style={{ position: 'absolute', bottom: 16, right: 20 }} className="label">v0.1 · pre-alpha</div>
-    </div>
-  );
-}
-
-export function SettingsPanel({ onClose }: { onClose: () => void }) {
-  const settings = useGame((s) => s.settings);
-  return (
-    <div className="panel" style={{ padding: 24, width: 440, display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div>
-        <div className="label" style={{ marginBottom: 8 }}>Graphics quality</div>
-        <div className="seg">
-          {(['low', 'medium', 'high'] as QualityPreset[]).map((q) => (
-            <button key={q} className={settings.quality === q ? 'on' : ''} onClick={() => updateSettings({ quality: q })}>
-              {q[0].toUpperCase() + q.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
-      <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span className="label">Master volume</span>
-        <input type="range" min={0} max={1} step={0.05} value={settings.masterVolume} onChange={(e) => updateSettings({ masterVolume: +e.target.value })} />
-      </label>
-      <label style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span className="label">Invert pitch</span>
-        <input type="checkbox" checked={settings.invertPitch} onChange={(e) => updateSettings({ invertPitch: e.target.checked })} />
-      </label>
-      <label style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span className="label">Show FPS</span>
-        <input type="checkbox" checked={settings.showFps} onChange={(e) => updateSettings({ showFps: e.target.checked })} />
-      </label>
-      <label className="label">Communications network
-        <select aria-label="Communications network" value={settings.commsEnabled === null ? 'default' : String(settings.commsEnabled)} onChange={e => updateSettings({ commsEnabled: e.target.value === 'default' ? null : e.target.value === 'true' })}>
-          <option value="default">Program setting (new: Science/Career on, Sandbox off)</option><option value="true">On</option><option value="false">Off</option>
-        </select>
-      </label>
-      <label className="label">Restrict disconnected probes
-        <input type="checkbox" checked={settings.commsRestrictControl ?? true} onChange={e => updateSettings({ commsRestrictControl: e.target.checked })} />
-      </label>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button className="btn" onClick={onClose}>Done</button>
-      </div>
     </div>
   );
 }

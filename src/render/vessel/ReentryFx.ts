@@ -1,3 +1,4 @@
+import { game } from '../../game/store';
 import * as THREE from 'three';
 
 /**
@@ -100,7 +101,7 @@ export class ReentryFx {
     this.object.visible = k > 0.01;
     if (!this.object.visible) return;
     this.mat.uniforms.uIntensity.value = k * k;
-    this.mat.uniforms.uTime.value = time;
+    this.mat.uniforms.uTime.value = game.get().settings.reduceMotion ? 0 : time;
     const r = radius * 1.15;
     const sy = r * (1.4 + 2.5 * k);
     this.object.scale.set(r, sy, r);

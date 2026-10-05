@@ -173,8 +173,8 @@ export class FlightController {
     this.map = new MapView(universe.bodies, universe.ephem, labelHost);
     this.map.setVisible(false);
 
-    this.disposers.push(this.cam.attach(canvas, () => !this.mapMode));
-    this.disposers.push(this.map.attachControls(canvas, () => this.mapMinDistance(), () => this.mapMode));
+    this.disposers.push(this.cam.attach(canvas, () => !this.mapMode && !this.paused));
+    this.disposers.push(this.map.attachControls(canvas, () => this.mapMinDistance(), () => this.mapMode && !this.paused));
     this.disposers.push(this.attachMapPicking(canvas));
     this.disposers.push(
       this.input.onAction((a) => {
@@ -446,6 +446,8 @@ export class FlightController {
     this.cam.setAspect(w / h);
   }
 
+  private autosaveTimer = 0;
+  private graphicsKey = '';
   private frame = (now: number) => {
     this.raf = requestAnimationFrame(this.frame);
     const dt = Math.min(0.1, (now - this.last) / 1000);
@@ -458,6 +460,18 @@ export class FlightController {
       this.stagePending = false;
       this.sasOn = false;
     }
+    const settings = game.get().settings;
+    this.input.enabled = !this.paused;
+    this.cam.camera.fov = settings.cameraFov;
+    const graphicsKey = JSON.stringify([settings.quality, settings.shadows, settings.bloom, settings.renderScale]);
+    if (graphicsKey !== this.graphicsKey) {
+      this.graphicsKey = graphicsKey;
+      this.pipeline.setQuality(getQuality(settings.quality));
+    }
+    if (!this.paused && settings.autoSaveInterval > 0) {
+      this.autosaveTimer += dt;
+      if (this.autosaveTimer >= settings.autoSaveInterval) { this.autosaveTimer = 0; this.quicksave('autosave'); }
+    } else if (!settings.autoSaveInterval) this.autosaveTimer = 0;
     this.input.evaMode = !!this.world.active?.state.eva;
     applyCommsSettings(this.world);
     this.input.update(dt);

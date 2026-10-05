@@ -17,6 +17,11 @@ export interface Settings {
   commsEnabled: boolean | null;
   commsRestrictControl: boolean | null;
   commsOverlay: boolean;
+  shadows: boolean; bloom: boolean; clouds: boolean; scatter: boolean; renderScale: number;
+  musicVolume: number; sfxVolume: number;
+  gamepadEnabled: boolean; deadZone: number; sensitivity: number; inputSmoothing: number; mouseFlight: boolean;
+  units: 'metric' | 'imperial'; navballSize: number; hudScale: number; cameraFov: number; autoSaveInterval: number;
+  uiScale: number; highContrast: boolean; reduceMotion: boolean; colourBlind: boolean;
 }
 
 export interface GameState {
@@ -44,7 +49,7 @@ export interface GameState {
 const SETTINGS_KEY = 'wsp.settings.v1';
 
 function loadSettings(): Settings {
-  const defaults: Settings = { quality: 'medium', masterVolume: 0.8, invertPitch: false, showFps: false, commsEnabled: null, commsRestrictControl: null, commsOverlay: true };
+  const defaults: Settings = { quality: 'medium', masterVolume: 0.8, invertPitch: false, showFps: false, shadows: true, bloom: true, clouds: true, scatter: true, renderScale: 1, musicVolume: 1, sfxVolume: 1, gamepadEnabled: true, deadZone: 0.15, sensitivity: 1, inputSmoothing: 0, mouseFlight: false, units: 'metric', navballSize: 200, hudScale: 1, cameraFov: 60, autoSaveInterval: 60, uiScale: 1, highContrast: false, reduceMotion: false, colourBlind: false, commsEnabled: null, commsRestrictControl: null, commsOverlay: true };
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SETTINGS_KEY) : null;
     return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
