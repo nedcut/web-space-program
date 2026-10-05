@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { describe, it, expect } from 'vitest';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
@@ -39,6 +40,7 @@ describe('Moon mission (stock Selene Real Expedition)', () => {
     const log: string[] = [];
     const t0 = world.ut;
     world.onEvent = e => { if (e.type === 'partDestroyed') log.push(JSON.stringify(e)); };
+    requireIntactFlight(world);
 
     // Thrust delta-v meter (integrated thrust acceleration), reported per phase.
     let dvTotal = 0;
@@ -190,5 +192,5 @@ describe('Moon mission (stock Selene Real Expedition)', () => {
     } finally {
       process.stdout.write(log.join('\n') + '\n');
     }
-  }, 180_000);
+  }, 600_000); // Long mission with structural checks; allow concurrent worktree test runs.
 });

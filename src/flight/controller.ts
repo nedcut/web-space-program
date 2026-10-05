@@ -49,6 +49,7 @@ import { createPlanetLayer, type PlanetLayer } from './planets';
  * React only hosts the canvas and HUD; this class runs the frame loop.
  */
 export class FlightController {
+  private stressOverlay = false;
   private readonly systems: FlightControllerInternals = ((owner: FlightController) => ({
     get assistWarped() { return owner.assistWarped; },
     set assistWarped(value: boolean) { owner.assistWarped = value; },
@@ -201,6 +202,7 @@ export class FlightController {
           case 'plantFlag': this.plantFlag(); break;
           case 'toggleSas': this.toggleSas(); break;
           case 'toggleRcs': this.rcsOn = !this.rcsOn; break;
+          case 'stressOverlay': this.stressOverlay = !this.stressOverlay; this.world.message(this.stressOverlay ? 'Stress overlay: green = low, yellow = near limit, red = overloaded' : 'Stress overlay off'); break;
           case 'toggleGear': this.toggleGear(); break;
           case 'map': this.toggleMap(); break;
           case 'warpUp': this.changeWarp(1); break;
@@ -218,6 +220,7 @@ export class FlightController {
       if (!this.audio) return;
       if (e.type === 'stage') this.audio.staging();
       if (e.type === 'decouple') this.audio.decouple();
+      if (e.type === 'structuralFailure') this.audio.explosion(0.3);
       if (e.type === 'partDestroyed') this.audio.explosion(1);
       if (e.type === 'chute') this.audio.chuteDeploy();
       if (e.type === 'docked' || e.type === 'undocked') this.audio.decouple();
@@ -556,6 +559,7 @@ export class FlightController {
       view.setVessel(v.state);
       const debris = v !== wv && !v.state.parts.some(p => p.def.modules.some(m => m.type === 'command'));
       const distant = debris && length(sub(v.state.position, origin)) > 2000;
+      view.setStressOverlay(this.stressOverlay);
       view.update(origin, this.elapsed, air.pressure, dt, distant);
       const pose = this.network?.pose(v.state.id);
       if (pose) {

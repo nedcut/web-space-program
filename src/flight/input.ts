@@ -13,9 +13,9 @@ export interface FlightInputState {
   brakes: boolean;
 }
 
-export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'toggleCamMode' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag' | 'toggleGear';
+export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'toggleCamMode' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag' | 'toggleGear' | 'stressOverlay';
 
-const FLIGHT_ACTIONS: FlightAction[] = ['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'focusNext', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'board', 'plantFlag', 'toggleGear'];
+const FLIGHT_ACTIONS: FlightAction[] = ['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'focusNext', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'board', 'plantFlag', 'toggleGear', 'stressOverlay'];
 export class FlightInput {
   readonly state: FlightInputState = { pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, throttle: 0, brakes: false };
   private held = new Set<string>();

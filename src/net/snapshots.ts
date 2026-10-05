@@ -17,7 +17,7 @@ export function vesselDeltas(world: World): VesselDelta[] {
       parts: s.parts.map(p => ({ uid: p.uid, resources: p.resources, mass: p.mass, temperature: p.temperature,
         skinTemperature: p.skinTemperature, activated: p.activated, engine: p.engine, chute: p.chute, leg: p.leg, wheel: p.wheel,
         bayOpen: p.bayOpen, drillDeployed: p.drillDeployed, drillDeploy: p.drillDeploy, converterRunning: p.converterRunning,
-        converterRecipe: p.converterRecipe, processTemperature: p.processTemperature, dockDisarmed: p.dockDisarmed })),
+        converterRecipe: p.converterRecipe, processTemperature: p.processTemperature, dockDisarmed: p.dockDisarmed, structuralFatigue: p.structuralFatigue })),
     });
     if (v.mode === 'landedRails' && v.fixed) return { ...base, mode: 'landedRails', fixed: structuredClone(v.fixed), state };
     return { ...base, mode: v.mode === 'prelaunch' ? 'prelaunch' : 'physics', fixed: structuredClone(v.fixed), state };

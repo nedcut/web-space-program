@@ -13,6 +13,8 @@ interface PartVisual {
   deploy: number;
   static: boolean;
   partId: string;
+  surfaces: Map<THREE.Mesh, THREE.Material | THREE.Material[]>;
+  stressMaterial?: THREE.MeshBasicMaterial;
 }
 
 /**
@@ -25,6 +27,14 @@ export class VesselView {
   private parts = new Map<number, PartVisual>();
   private lastTopology?: VesselState['cache'];
   private batch?: THREE.Group;
+  private stressOverlay = false;
+
+  setStressOverlay(enabled: boolean) {
+    if (this.stressOverlay === enabled) return;
+    this.stressOverlay = enabled;
+    this.rebuild();
+  }
+
   private geometryKey = '';
   private layoutKey(): string {
     return this.vessel.parts.map(p => `${p.uid}:${p.partId}:${p.position.x},${p.position.y},${p.position.z}:${p.rotation.x},${p.rotation.y},${p.rotation.z},${p.rotation.w}`).join('|');
@@ -54,14 +64,18 @@ export class VesselView {
       if (!alive.has(uid) || this.vessel.cache.byUid.get(uid)?.partId !== pv.partId) {
         this.inner.remove(pv.object);
         pv.plumes.forEach((pl) => pl.dispose());
+        pv.stressMaterial?.dispose();
         this.parts.delete(uid);
       }
     }
     for (const p of this.vessel.parts) {
       if (this.parts.has(p.uid)) continue;
       const obj = buildPartMesh(p.def);
+      const surfaces = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
       obj.traverse((o) => {
         if ((o as THREE.Mesh).isMesh) {
+          const mesh = o as THREE.Mesh;
+          surfaces.set(mesh, mesh.material);
           o.castShadow = true;
           o.receiveShadow = true;
         }
@@ -76,7 +90,7 @@ export class VesselView {
         }
       }
       this.inner.add(obj);
-      this.parts.set(p.uid, { uid: p.uid, partId: p.partId, object: obj, plumes, deploy: 0, static: false });
+      this.parts.set(p.uid, { uid: p.uid, partId: p.partId, object: obj, plumes, surfaces, deploy: 0, static: false });
     }
     const staticObjects: THREE.Object3D[] = [];
     const staticKinds = new Set(['tank', 'adapter', 'girder', 'strut', 'noseCone', 'battery', 'reactionWheel', 'probeCore', 'heatShield', 'monoSphere', 'monoTorus', 'xenonTank', 'framework', 'habitat', 'rcsQuad', 'rcsPorts', 'instrument', 'decoupler', 'separator', 'radialDecoupler']);
@@ -86,7 +100,13 @@ export class VesselView {
       obj.quaternion.set(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
       const pv = this.parts.get(p.uid)!;
       pv.static = staticKinds.has(p.def.mesh);
-      if (pv.static) staticObjects.push(obj);
+      if (this.stressOverlay) {
+        pv.stressMaterial ??= new THREE.MeshBasicMaterial({ color: 0x44cc55 });
+        for (const mesh of pv.surfaces.keys()) mesh.material = pv.stressMaterial;
+      } else {
+        for (const [mesh, material] of pv.surfaces) mesh.material = material;
+      }
+      if (pv.static && !this.stressOverlay) staticObjects.push(obj);
     }
     this.batch = batchStaticParts(staticObjects);
     this.inner.add(this.batch);
@@ -109,7 +129,12 @@ export class VesselView {
     this.inner.position.set(-v.com.x, -v.com.y, -v.com.z);
     for (const p of v.parts) {
       const pv = this.parts.get(p.uid);
-      if (!pv || pv.static) continue;
+      if (!pv) continue;
+      if (this.stressOverlay && pv.stressMaterial) {
+        const load = v.cache.jointLoads?.get(p.uid)?.fraction ?? 0;
+        pv.stressMaterial.color.setHSL((1 - Math.min(1, load)) / 3, 0.85, 0.5);
+      }
+      if (pv.static) continue;
       pv.object.position.set(p.position.x, p.position.y, p.position.z);
       pv.object.quaternion.set(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
       this.animatePart(p, pv, time, ambientPressure, dt);
@@ -161,7 +186,10 @@ export class VesselView {
   dispose() {
     if (this.batch) disposeStaticBatch(this.batch);
     this.impostor.geometry.dispose(); this.impostor.material.dispose();
-    for (const pv of this.parts.values()) pv.plumes.forEach((pl) => pl.dispose());
+    for (const pv of this.parts.values()) {
+      pv.plumes.forEach((pl) => pl.dispose());
+      pv.stressMaterial?.dispose();
+    }
     this.root.removeFromParent();
   }
 }

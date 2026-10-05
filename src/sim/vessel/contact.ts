@@ -1,6 +1,7 @@
+import type { PartLoad } from './loads';
 import type { Vec3 } from '../../util/vec3';
 import { add, cross, dot, length, scale, sub, v3 } from '../../util/vec3';
-import { qRotate } from '../../util/quat';
+import { qConj, qRotate } from '../../util/quat';
 import type { LandingLegModule, WheelModule } from './types';
 import type { PartState } from './runtime';
 import type { VesselState } from './runtime';
@@ -102,6 +103,8 @@ export interface ContactPass {
   contacts: Contact[];
   /** Parts that hit the ground/water faster than their crash tolerance. */
   impacts: number[];
+  /** Incoming normal speeds relative to the moving surface, including water. */
+  impactSpeeds: Map<number, number>;
   landed: boolean;
   splashed: boolean;
   altitudeAGL: number;
@@ -116,8 +119,8 @@ export function nearSurface(v: VesselState, env: Environment, t: number, h: numb
   return { ground: g, agl, near: agl < margin };
 }
 
-export function gatherContacts(v: VesselState, env: Environment, t: number, h: number, gravityMag: number, wheelCtl: WheelControl = { brakes: false, throttle: 0 }): ContactPass {
-  const out: ContactPass = { force: v3(), torque: v3(), contacts: [], impacts: [], landed: false, splashed: false, altitudeAGL: NaN };
+export function gatherContacts(v: VesselState, env: Environment, t: number, h: number, gravityMag: number, wheelCtl: WheelControl = { brakes: false, throttle: 0 }, loads?: PartLoad[]): ContactPass {
+  const out: ContactPass = { force: v3(), torque: v3(), contacts: [], impacts: [], impactSpeeds: new Map(), landed: false, splashed: false, altitudeAGL: NaN };
   const ns = nearSurface(v, env, t, h);
   out.altitudeAGL = ns.agl;
   for (const p of v.parts) if (p.leg) { p.leg.inContact = false; p.leg.compression = 0; }
@@ -125,6 +128,13 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
   if (!ns.near) return out;
   const omegaW = qRotate(v.orientation, v.angularVelocity);
   const impacted = new Set<number>();
+  const impact = (uid: number, speed: number) => {
+    impacted.add(uid);
+    out.impactSpeeds.set(uid, Math.max(out.impactSpeeds.get(uid) ?? 0, speed));
+  };
+  const record = (partUid: number, r: Vec3, force: Vec3) => {
+    if (loads) loads.push({ partUid, point: add(v.com, qRotate(qConj(v.orientation), r)), force: qRotate(qConj(v.orientation), force) });
+  };
   const pointVel = (rW: Vec3) => add(v.velocity, cross(omegaW, rW));
   const toWorldOffset = (pBody: Vec3) => qRotate(v.orientation, sub(pBody, v.com));
 
@@ -139,10 +149,10 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
       if (depth <= 0) continue;
       const approach = -dot(sub(pointVel(rW), gs.surfaceVelocity), gs.normal);
       if (gs.isWater) {
-        if (approach > p.def.crashTolerance && depth < approach * h + 0.05) impacted.add(p.uid);
+        if (approach > p.def.crashTolerance && depth < approach * h + 0.05) impact(p.uid, approach);
         continue;
       }
-      if (approach > p.def.crashTolerance) impacted.add(p.uid);
+      if (approach > p.def.crashTolerance) impact(p.uid, approach);
       out.contacts.push({ partUid: p.uid, r: rW, n: gs.normal, surfaceVelocity: gs.surfaceVelocity, kind: 'rigid', depth, legImpulse: 0, jn: 0, jt: v3() });
       out.landed = true;
     }
@@ -157,9 +167,10 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
         if (d > 0) {
           const x = Math.min(d, m.travel);
           const vn = dot(sub(pointVel(rW), gs.surfaceVelocity), gs.normal);
-          if (-vn > p.def.crashTolerance) impacted.add(p.uid);
+          if (-vn > p.def.crashTolerance) impact(p.uid, -vn);
           const F = Math.max(0, m.spring * x - m.damper * vn);
           const Fv = scale(gs.normal, F);
+          record(p.uid, rW, Fv);
           out.force = add(out.force, Fv);
           out.torque = add(out.torque, cross(rW, Fv));
           p.leg.compression = x;
@@ -189,9 +200,10 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
           const x = Math.min(comp, m.travel);
           const vrel = sub(pointVel(rW), gs.surfaceVelocity);
           const vn = dot(vrel, n);
-          if (-vn > p.def.crashTolerance) impacted.add(p.uid);
+          if (-vn > p.def.crashTolerance) impact(p.uid, -vn);
           const F = Math.max(0, m.spring * x * cosA - m.damper * vn);
           const Fv = scale(n, F);
+          record(p.uid, rW, Fv);
           out.force = add(out.force, Fv);
           out.torque = add(out.torque, cross(rW, Fv));
           let fwd = qRotate(v.orientation, wg.heading);
@@ -202,6 +214,7 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
           if (m.motorTorque && wheelCtl.throttle !== 0 && fl > 1e-6) {
             const drive = Math.max(-1, Math.min(1, wheelCtl.throttle)) * Math.min(m.motorTorque / m.radius, TYRE_MU * F);
             const Fd = scale(fwd, drive);
+            record(p.uid, rW, Fd);
             out.force = add(out.force, Fd);
             out.torque = add(out.torque, cross(rW, Fd));
           }
@@ -244,6 +257,7 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
         drag = Math.min(drag, (0.25 * v.mass * sp) / (h * n));
         F = add(F, scale(vrel, -drag / sp));
       }
+      record(p.uid, rW, F);
       out.force = add(out.force, F);
       out.torque = add(out.torque, cross(rW, F));
     }
@@ -269,8 +283,15 @@ export function penetrationCorrection(contacts: Contact[]): Vec3 {
 }
 
 /** Resolve contact impulses (sequential impulses). Mutates velocity & angularVelocity. */
-export function solveContacts(v: VesselState, contacts: Contact[]): void {
+export function solveContacts(v: VesselState, contacts: Contact[], loads?: PartLoad[], dt = 0.02, impacts: number[] = []): void {
   if (contacts.length === 0) return;
+  // Crushed hardware yields instead of stopping the entire rigid body in a single step.
+  const limits = new Map<number, number>();
+  for (const uid of impacts) {
+    const cs = contacts.filter(c => c.partUid === uid && c.kind === 'rigid');
+    const speed = Math.max(0, ...cs.map(c => -dot(sub(add(v.velocity, cross(qRotate(v.orientation, v.angularVelocity), c.r)), c.surfaceVelocity), c.n)));
+    limits.set(uid, 0.35 * (v.cache.byUid.get(uid)?.mass ?? 0) * speed / Math.max(1, cs.length));
+  }
   const invI = worldInvInertia(v);
   const invM = 1 / v.mass;
   let vel = { ...v.velocity };
@@ -310,7 +331,7 @@ export function solveContacts(v: VesselState, contacts: Contact[]): void {
         const vrel = sub(add(vel, cross(w, c.r)), c.surfaceVelocity);
         const vn = dot(vrel, c.n);
         const dj = -vn / effMass(c.r, c.n);
-        const jnNew = Math.max(0, c.jn + dj);
+        const jnNew = Math.min(limits.get(c.partUid) ?? Infinity, Math.max(0, c.jn + dj));
         apply(scale(c.n, jnNew - c.jn), c.r);
         c.jn = jnNew;
       }
@@ -327,6 +348,12 @@ export function solveContacts(v: VesselState, contacts: Contact[]): void {
       apply(sub(jtNew, c.jt), c.r);
       c.jt = jtNew;
     }
+  }
+  if (loads) for (const c of contacts) {
+    const J = c.kind === 'wheel'
+      ? add(scale(c.fwd!, c.jf ?? 0), scale(cross(c.n, c.fwd!), c.jl ?? 0))
+      : add(scale(c.n, c.jn), c.jt);
+    loads.push({ partUid: c.partUid, point: add(v.com, qRotate(qConj(v.orientation), c.r)), force: scale(qRotate(qConj(v.orientation), J), 1 / dt) });
   }
   v.velocity = vel;
   v.angularVelocity = qRotate({ x: -v.orientation.x, y: -v.orientation.y, z: -v.orientation.z, w: v.orientation.w }, w);

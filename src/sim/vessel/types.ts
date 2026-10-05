@@ -265,6 +265,9 @@ export interface PartDef {
   maxTemp: number;
   /** Impact tolerance, m/s. */
   crashTolerance: number;
+  /** Attachment strength overrides, N and N m. The weaker endpoint wins. */
+  breakingForce?: number;
+  breakingTorque?: number;
   modules: PartModule[];
   /** Procedural mesh builder id (see src/render/parts). */
   mesh: string;

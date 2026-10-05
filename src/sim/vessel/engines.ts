@@ -1,3 +1,4 @@
+import type { PartLoad } from './loads';
 import type { Vec3 } from '../../util/vec3';
 import { add, cross, dot, length, normalize, scale, sub, v3 } from '../../util/vec3';
 import { qRotate } from '../../util/quat';
@@ -196,6 +197,7 @@ export function stepEngines(
   dt: number,
   events: VesselEvent[],
   air: EngineAir = { density: 0, mach: 0 },
+  loads?: PartLoad[],
 ): ActuatorOutput & { thrust: number; airRatio: number } {
   let force = v3();
   let torque = v3();
@@ -269,6 +271,7 @@ export function stepEngines(
     const g = gimbalDirection(v, p, m, control);
     st.gimbal = { a: g.a, b: g.b };
     const F = scale(g.dir, thrust);
+    loads?.push({ partUid: p.uid, point: p.position, force: F });
     force = add(force, F);
     torque = add(torque, cross(sub(p.position, v.com), F));
     total += thrust;
@@ -298,6 +301,7 @@ export function gimbalAuthority(v: VesselState): Vec3 {
 }
 
 interface NozzleEval {
+  partUid: number;
   r: Vec3;
   fdir: Vec3;
   act: number;
@@ -321,7 +325,7 @@ function evalRcs(v: VesselState, control: Vec3, translate: Vec3): NozzleEval[] {
         const aT = Math.max(0, dot(fdir, translate));
         const aR = tl > 1e-6 ? Math.max(0, dot(scale(tq, 1 / tl), control)) : 0;
         const act = Math.min(1, aT + aR);
-        out.push({ r, fdir, act, thrustVac: m.thrustPerNozzle, ispVac: m.ispVac, ispAsl: m.ispAsl });
+        out.push({ partUid: p.uid, r, fdir, act, thrustVac: m.thrustPerNozzle, ispVac: m.ispVac, ispAsl: m.ispAsl });
       }
     }
   }
@@ -329,7 +333,7 @@ function evalRcs(v: VesselState, control: Vec3, translate: Vec3): NozzleEval[] {
 }
 
 /** Fire RCS for rotation (control) and translation commands; draws monopropellant ('all' flow). */
-export function stepRcs(v: VesselState, enabled: boolean, control: Vec3, translate: Vec3, pressure: number, dt: number): ActuatorOutput {
+export function stepRcs(v: VesselState, enabled: boolean, control: Vec3, translate: Vec3, pressure: number, dt: number, loads?: PartLoad[]): ActuatorOutput {
   let force = v3();
   let torque = v3();
   if (!enabled) return { forceBody: force, torqueBody: torque };
@@ -347,6 +351,7 @@ export function stepRcs(v: VesselState, enabled: boolean, control: Vec3, transla
     const F = scale(n.fdir, thrust);
     force = add(force, F);
     torque = add(torque, cross(n.r, F));
+    loads?.push({ partUid: n.partUid, point: add(n.r, v.com), force: F });
   }
   return { forceBody: force, torqueBody: torque };
 }
@@ -368,7 +373,7 @@ export function rcsAuthority(v: VesselState): Vec3 {
 }
 
 /** Reaction wheel torque (body) for a command; draws EC. */
-export function stepReactionWheels(v: VesselState, control: Vec3, dt: number): ActuatorOutput {
+export function stepReactionWheels(v: VesselState, control: Vec3, dt: number, loads?: PartLoad[]): ActuatorOutput {
   let maxTorque = 0;
   let ecRate = 0;
   for (const p of v.parts)
@@ -388,6 +393,8 @@ export function stepReactionWheels(v: VesselState, control: Vec3, dt: number): A
     const src = v.parts.find((p) => (p.maxResources.electricCharge ?? 0) > 0);
     f = src ? drawResource(v, src.uid, 'electricCharge', need) / need : 0;
   }
+  if (loads) for (const p of v.parts) for (const m of p.def.modules)
+    if (m.type === 'reactionWheel') loads.push({ partUid: p.uid, point: p.position, force: v3(), torque: scale(c, m.torque * f) });
   return { forceBody: v3(), torqueBody: scale(c, maxTorque * f) };
 }
 
