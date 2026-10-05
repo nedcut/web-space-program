@@ -20,7 +20,7 @@ An original, browser-based spaceflight sandbox in the spirit of KSP, set in the 
 | `editor/` | Assembly core, stock craft, editor session, hangar and React panels | `sim`, `data`, `util`, `render`, `game` |
 | `input/`, `audio/` | Bindings/gamepad and procedural browser sound | Application settings and headless types |
 | `net/`, `server/` | Shared protocol/snapshots, browser multiplayer client/UI, Node/ws authoritative rooms | `sim`, `game`, `data`, `util`; server does not use browser scenes |
-| `flight/`, `tutorial/`, `ui/`, `main.tsx` | Scene orchestration, frame loop/HUD, isolated practice lessons, hub/tracking/pedia and application routing | Compose lower layers |
+| `flight/`, `tutorial/`, `scenarios/`, `ui/`, `main.tsx` | Scene orchestration, frame loop/HUD, isolated practice lessons, hub/tracking/pedia and application routing | Compose lower layers |
 
 `src/sim` stays DOM-free and three.js-free so physics runs in Node tests and the authoritative server.
 `npm run lint` enforces restricted imports/browser globals; `scripts/check-layering.mjs` resolves relative and
@@ -125,3 +125,12 @@ playable universe. Presets: `standard` (s=0.1, default), `challenging` (0.32), `
 - `src/data/technology.ts`: 25 named nodes; every catalogue part belongs to one node. Category families are sorted by cost then ID into four tiers, with an explicit starter set. Catalogue additions can shift tiers and should be reviewed for progression balance.
 - `World` owns mutable progression. `src/game/science.ts` adapts universe/vessel state to the pure science model; `World` exposes experiment, transmission, research, contract and recovery operations. Part-owned data and expedition provenance survive staging, docking and save/load. `PartState.purchaseCost` prevents salvage of unpaid scenario/EVA hardware.
 - Scene boundaries pass immutable `SavedWorld` snapshots through `game.resumeWorld`; `game.mode` drives UI. `openProgram/saveProgram` handle hub research/mission mutations and autosaves. Physics and rails evaluate progression; UI never awards rewards independently. Flight, tracking recovery, and automatic pad clearance share settlement logic.
+
+## Quick-start scenarios
+
+`scenarios/catalog.ts` defines original mission briefings, stock-payload setup and medal budgets.
+`evaluation.ts` adapts the assigned World vessel to observations and reduces objective/scoring state;
+`runtime.ts` owns the isolated run and prior program snapshot, and `records.ts` owns validated browser bests.
+The Scenarios library and ScenarioPanel compose briefing, live objectives, retry and debrief UI.
+World’s optional `onSimulationStep` observes both physics and rails; physics reports the integrator’s
+substep engine/RCS impulse-per-mass cost. This observer never changes the underlying force model.

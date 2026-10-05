@@ -28,6 +28,7 @@ describe('mission catalog and World setup', () => {
     expect(w.mode).toBe('sandbox'); expect(w.commsSettings.enabled).toBe(false);
     const restored = deserializeWorld(serializeWorld(w), PART_CATALOG);
     expect(restored.active!.state.position).toEqual(v.state.position);
+    if (s.id === 'grand-tour') expect(w.orbitSummary(v).pe).toBeGreaterThan(w.universe.body('titan').atmosphere!.height);
     const before = observeWorld(setup, v.state.parts.length);
     expect(before.alive).toBe(true);
     expect(evaluateMission(s.id, initialMission(w.ut), before, 0).status).toBe('flying');
