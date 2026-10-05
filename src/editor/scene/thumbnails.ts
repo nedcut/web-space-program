@@ -63,10 +63,14 @@ function schedule() {
       refreshArmed = false;
       if (texturesFinal) return;
       texturesFinal = true;
-      const stale = [...cache.keys()];
-      for (const id of stale) cache.delete(id);
-      const defs = stale.map((id) => byId.get(id)).filter((d): d is PartDef => !!d);
-      requestThumbnails(defs);
+      // Re-render in place: keep the provisional image visible until its replacement is ready.
+      for (const id of cache.keys()) {
+        const d = byId.get(id);
+        if (!d || queued.has(id)) continue;
+        queued.add(id);
+        queue.push(d);
+      }
+      schedule();
     });
   }
   void Promise.race([ready, new Promise((r) => setTimeout(r, 2500))]).then(() =>
