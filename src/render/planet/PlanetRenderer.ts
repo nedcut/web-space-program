@@ -1,3 +1,4 @@
+import { SurfaceFeatures } from './SurfaceFeatures';
 import * as THREE from 'three';
 import type { BodyDef } from '../../sim/bodies/types';
 import type { Terrain } from '../../sim/terrain/api';
@@ -74,6 +75,7 @@ const AU = 149597870700;
  * call `update()` every frame BEFORE rendering.
  */
 export class PlanetRenderer {
+  private surfaceFeatures?: SurfaceFeatures;
   readonly root = new THREE.Group();
   readonly body: BodyDef;
   readonly kind: PlanetKind;
@@ -157,6 +159,9 @@ export class PlanetRenderer {
         this.root.add(effect);
       }
     }
+    if (body.id === 'titan') {
+      for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.TITAN_HAZE = 1;
+    }
     if (body.id === 'earth' && this.quality.planetDetails.surfaceEmission) {
       for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.EARTH_DETAILS = 1;
     }
@@ -213,7 +218,7 @@ export class PlanetRenderer {
     // Far sphere (always available as fallback).
     const seg = q.sphereSegments;
     const geo = new THREE.SphereGeometry(1, seg, seg / 2);
-    this.farMaterial = createFarSphereMaterial(this.uniforms, q, { airless, ocean, minH, maxH: Math.max(maxH, minH + 1), texWidth: q.bakedTextureWidth });
+    this.farMaterial = createFarSphereMaterial(this.uniforms, q, { airless, ocean: ocean && this.body.id !== 'titan', minH, maxH: Math.max(maxH, minH + 1), texWidth: q.bakedTextureWidth });
     const pal = this.body.surface?.colors?.[1] ?? this.body.surface?.colors?.[0] ?? [0.3, 0.3, 0.3];
     (this.farMaterial.uniforms.uFallback.value as THREE.Vector3).set(pal[0], pal[1], pal[2]);
     this.materials.push(this.farMaterial);
@@ -247,7 +252,7 @@ export class PlanetRenderer {
     this.materials.push(terrainMat);
     let oceanMat: THREE.ShaderMaterial | undefined;
     if (ocean) {
-      oceanMat = createOceanMaterial(this.uniforms, q, [0.35, 0.31, 0.22]);
+      oceanMat = createOceanMaterial(this.uniforms, q, [0.35, 0.31, 0.22], terrain?.liquid?.kind === 'hydrocarbon');
       this.materials.push(oceanMat);
     }
     const R = this.body.radius;
@@ -270,6 +275,7 @@ export class PlanetRenderer {
       cacheSize: q.terrain.cacheSize,
     });
     this.root.add(this.quadtree.group);
+    if (terrain) { this.surfaceFeatures = new SurfaceFeatures(this.body, terrain); this.root.add(this.surfaceFeatures.group); }
     if (q.scatter.radius > 0) {
       this.scatter = new SurfaceScatter(this.body, terrain, q, this.uniforms);
       this.root.add(this.scatter.group);
@@ -407,6 +413,7 @@ export class PlanetRenderer {
     const camBF = this.tmpV.set(crx, cry, crz).applyQuaternion(inv);
     const camBFx = camBF.x, camBFy = camBF.y, camBFz = camBF.z;
 
+    this.surfaceFeatures?.update(this.scatterOffset.set(bx, by, bz), this.rotQ, cam.position, time, u.uSunDir.value);
     this.scatter?.update([camBFx, camBFy, camBFz], this.scatterOffset.set(bx, by, bz), this.rotQ);
 
     const vh = p.viewportHeight ?? 1080;
@@ -578,6 +585,7 @@ export class PlanetRenderer {
     this.ringTexture?.dispose();
     this.quadtree?.dispose();
     this.scatter?.dispose();
+    this.surfaceFeatures?.dispose();
     this.root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).geometry.dispose();
     });

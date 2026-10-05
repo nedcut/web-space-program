@@ -267,6 +267,7 @@ export interface VesselState {
 }
 
 export type VesselEvent =
+  | { type: 'anomalyDiscovered'; vesselId: string; body: string; landmarkId: string }
   | { type: 'stage'; vesselId: string; stage: number }
   | { type: 'decouple'; vesselId: string; partUid: number; newVesselId: string }
   | { type: 'engineIgnited'; vesselId: string; partUid: number }

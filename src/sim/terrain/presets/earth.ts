@@ -121,6 +121,15 @@ export function earthPreset(ctx: PresetContext): PresetResult {
       const hills = fbm(nHill, x * 30, y * 30, z * 30, Math.min(hillOct, 10), 2, 0.5);
       h = -relief * (0.012 * shelf + 0.28 * slope + 0.2 * abyss) + relief * (0.12 * abyss * ridge * ridge + 0.015 * hills * shelf);
     }
+    // Estuary and inland lagoon; plateau blending below preserves launch flatness.
+    const ll = Math.atan2(y, x) * 180 / Math.PI;
+    const la = Math.asin(clamp(z, -1, 1)) * 180 / Math.PI;
+    if (la > 28 && la < 32 && ll > -84 && ll < -80.5) {
+      const river = Math.abs(ll - (-81.35 - 0.35*Math.sin((la-28)*3)));
+      const lake = Math.hypot((la-30.2)/0.3, (ll+82.1)/0.24);
+      const wet = Math.max(smoothstep(0.035, 0.012, river), smoothstep(1, 0.8, lake));
+      h = mix(h, -relief*0.004, wet);
+    }
     // Launch pad plateau.
     if (siteNear > 0.05) {
       const dm = angleTo(x, y, z, site) * R;

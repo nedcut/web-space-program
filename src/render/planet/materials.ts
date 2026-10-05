@@ -225,14 +225,15 @@ export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, cen
 
 // ---------------------------------------------------------------- Ocean
 
-export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabed: [number, number, number]): THREE.ShaderMaterial {
+export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabed: [number, number, number], hydrocarbon = false): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     defines: defines(q),
     uniforms: {
       ...u,
       uDetailTex: { value: getDetailTexture() },
       uSeabed: { value: new THREE.Vector3(...seabed) },
-      uDeep: { value: new THREE.Vector3(0.002, 0.011, 0.03) },
+      uHydrocarbon: { value: hydrocarbon ? 1 : 0 },
+      uDeep: { value: hydrocarbon ? new THREE.Vector3(0.003, 0.004, 0.002) : new THREE.Vector3(0.002, 0.011, 0.03) },
       uShallow: { value: new THREE.Vector3(0.01, 0.07, 0.075) },
     },
     vertexShader: /* glsl */ `
@@ -257,6 +258,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
       ${baseHeader()}
       uniform mat3 uBodyRot;
       uniform sampler2D uDetailTex;
+      uniform float uHydrocarbon;
       uniform vec3 uSeabed;
       uniform vec3 uDeep;
       uniform vec3 uShallow;
@@ -293,6 +295,12 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         vec3 g = waveGrad(vDetail, w, 64.0, vec2(t * 1.3, t * 0.7)) * fade1
                + waveGrad(vDetail, w, 23.0, vec2(-t * 0.9, t * 1.6)) * fade1 * 0.7
                + waveGrad(vDetail, w, 512.0, vec2(t * 2.0, -t * 1.1)) * fade2 * 0.6;
+        if (uHydrocarbon > 0.5) {
+          g *= 0.18;
+          vec3 cell = fract(vDetail / 3.0) - 0.5;
+          float rain = sin(length(cell) * 70.0 - t * 9.0) * exp(-length(cell)*7.0);
+          g += cell * rain * 0.09 * fade1;
+        }
         g -= dot(g, upBF) * upBF;
         vec3 nBF = normalize(upBF - g * 0.9);
         vec3 N = normalize(uBodyRot * nBF);
@@ -306,6 +314,17 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         float rough = clamp(0.05 + dist * 2e-7, 0.05, 0.2);
         // Rough-surface Schlick: unresolved wave facets cap grazing reflectance.
         float F = 0.02 + (0.55 - 0.02) * pow(1.0 - NdV, 5.0);
+        if (uHydrocarbon > 0.5) {
+          // The optically thick methane haze is dominated by diffuse light. A bounded
+          // analytic sky reflection avoids an under-resolved six-step reflected-ray march.
+          float day = smoothstep(-0.25, 0.2, dot(up, L));
+          vec3 haze = vec3(0.18, 0.105, 0.035) * day;
+          float glint = pow(NdH, 800.0) * NdL * 0.12;
+          vec3 hydro = uDeep * (0.15 + day) + haze * (F + glint);
+          hydro = mix(hydro, haze * 0.55, 1.0-exp(-dist/16000.0));
+          gl_FragColor = vec4(hydro, 1.0);
+          return;
+        }
         vec3 sunT = sunTransmittance(rel) * ringShadow(rel);
         float k = rough * 0.5;
         float G = (NdL / (NdL * (1.0 - k) + k)) * (NdV / (NdV * (1.0 - k) + k));
@@ -333,7 +352,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         body = mix(bed, body, smoothstep(0.0, 6.0, vDepth));
         vec3 col = mix(body, skyL, F) + spec;
         // foam at the very shoreline
-        col += lightIn * 0.4 * (1.0 - smoothstep(0.0, 0.6, vDepth)) * fade1;
+        col += lightIn * 0.4 * (1.0 - uHydrocarbon) * (1.0 - smoothstep(0.0, 0.6, vDepth)) * fade1;
         col = applyAerialPerspective(col, -V, dist, AERIAL_STEPS * uStepScale);
         gl_FragColor = vec4(col, 1.0);
       }`,

@@ -760,7 +760,7 @@ export function predictBraking(world: World, wv: WorldVessel, fraction: number, 
   const heightAt = (pos: Vec3, t: number) => {
     const f = normalize(u.ephem.toBodyFixed(wv.body, pos, t));
     const h = terrain.heightAt(f.x, f.y, f.z);
-    return length(pos) - body.radius - Math.max(h, terrain.ocean ? 0 : -Infinity) - bottom;
+    return length(pos) - body.radius - Math.max(h, terrain.ocean ? (terrain.liquid?.level ?? 0) : -Infinity) - bottom;
   };
   let t = 0;
   let lastCheck = -Infinity;

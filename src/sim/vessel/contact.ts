@@ -233,14 +233,15 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
       const f = Math.max(0, Math.min(1, 0.5 + depth / Math.max(0.05, size)));
       if (f <= 0) continue;
       out.splashed = true;
-      let F = scale(gs.normal, WATER_DENSITY * V * f * gravityMag);
+      const density = gs.liquidDensity ?? WATER_DENSITY;
+      let F = scale(gs.normal, density * V * f * gravityMag);
       const vrel = sub(pointVel(rW), gs.surfaceVelocity);
       const sp = length(vrel);
       if (sp > 1e-9) {
         // Quadratic form drag + linear wave-radiation damping (zeta ~0.3 of the heave stiffness).
-        const kHeave = (WATER_DENSITY * V * gravityMag) / Math.max(0.05, size);
+        const kHeave = (density * V * gravityMag) / Math.max(0.05, size);
         const cLin = 2 * WAVE_DAMPING_RATIO * Math.sqrt((kHeave * v.mass) / n) * f;
-        let drag = 0.5 * WATER_DENSITY * Math.pow(V, 2 / 3) * f * sp * sp + cLin * sp;
+        let drag = 0.5 * density * Math.pow(V, 2 / 3) * f * sp * sp + cLin * sp;
         drag = Math.min(drag, (0.25 * v.mass * sp) / (h * n));
         F = add(F, scale(vrel, -drag / sp));
       }
