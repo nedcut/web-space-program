@@ -55,6 +55,7 @@ export function replaceWorld(world: World, saved: SavedWorld) {
   world.crew = next.crew;
   world.crewSeed = next.crewSeed;
   world.flags = next.flags;
+  world.discoveries = next.discoveries;
   world.mode = next.mode;
   world.progression = next.progression;
   world.commsSettings = next.commsSettings;

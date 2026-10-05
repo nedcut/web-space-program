@@ -4,7 +4,7 @@
  *
  * heightAt(bodyId, x, y, z): (x,y,z) is a unit vector in the BODY-FIXED frame (rotates with the body,
  * +Z = north pole, +X = prime meridian). Returns meters above the body's datum radius (may be negative;
- * oceans clamp to 0 visually but physics floats on water at 0).
+ * liquids use the shared body-specific level for rendering and buoyancy).
  */
 export type TerrainHeightFn = (x: number, y: number, z: number) => number;
 
@@ -23,8 +23,10 @@ export interface Terrain {
   maxHeight: number;
   /** Lower bound on heightAt (meters, usually negative or 0). */
   minHeight: number;
-  /** True if the body has a liquid ocean at height 0 (renderer draws water there). */
+  /** True if the body has a liquid surface (liquid.level, or legacy datum zero). */
   ocean: boolean;
+  /** Shared liquid datum (metres) and bulk density (kg/m³). */
+  liquid?: { level: number; density: number; kind: 'water' | 'hydrocarbon' };
   /**
    * Surface albedo (linear RGB) at unit vector (x,y,z) with precomputed height h (meters).
    * Used for vertex colours and baked far-LOD textures. Optional: renderer falls back to palette.

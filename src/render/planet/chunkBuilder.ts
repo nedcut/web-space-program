@@ -19,7 +19,7 @@ export interface ChunkBuildParams extends ChunkKey {
   /** Quads per edge. */
   res: number;
   radius: number;
-  /** Generate an ocean surface mesh where the terrain dips below 0. */
+  /** Generate a liquid mesh where terrain dips below its shared datum. */
   ocean: boolean;
 }
 
@@ -37,7 +37,7 @@ export interface ChunkData extends ChunkKey {
   /** Body-fixed position minus a 1024 m-aligned per-chunk offset (seamless detail texturing). */
   detail: Float32Array;
   indices: Uint16Array | Uint32Array;
-  /** Optional ocean mesh (same grid at radius R, attribute depth). */
+  /** Optional ocean mesh (same grid at radius R + liquid level, attribute depth). */
   ocean?: {
     positions: Float32Array;
     normals: Float32Array;
@@ -219,7 +219,8 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
   const indices = buildIndices(N, true);
 
   let ocean: ChunkData['ocean'];
-  if (p.ocean && minH < 0.5) {
+  const liquidLevel = terrain.liquid?.level ?? 0;
+  if (p.ocean && minH < liquidLevel + 0.5) {
     const oN = N * N + 4 * N;
     const opos = new Float32Array(oN * 3);
     const onrm = new Float32Array(oN * 3);
@@ -227,12 +228,12 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
     const odet = new Float32Array(oN * 3);
     const writeO = (vi: number, k: number, sink: number) => {
       const dx = dirs[k * 3], dy = dirs[k * 3 + 1], dz = dirs[k * 3 + 2];
-      const r = R - sink;
+      const r = R + liquidLevel - sink;
       const X = dx * r, Y = dy * r, Z = dz * r;
       opos[vi * 3] = X - cx; opos[vi * 3 + 1] = Y - cy; opos[vi * 3 + 2] = Z - cz;
       onrm[vi * 3] = dx; onrm[vi * 3 + 1] = dy; onrm[vi * 3 + 2] = dz;
       odet[vi * 3] = X - offX; odet[vi * 3 + 1] = Y - offY; odet[vi * 3 + 2] = Z - offZ;
-      odep[vi] = -hs[k];
+      odep[vi] = liquidLevel - hs[k];
     };
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) writeO(j * N + i, (j + 1) * G + (i + 1), 0);
     const oskirt = Math.max(edge / res, 2);

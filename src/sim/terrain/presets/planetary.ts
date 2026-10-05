@@ -101,7 +101,7 @@ export function marsPreset(ctx: PresetContext): PresetResult {
     const duneMask = north * smoothstep(0.1, 0.4, nDune.noise(x * 6, y * 6, z * 6));
     h += 0.0025 * duneMask * dune * dune;
     // Polar caps (layered ice domes).
-    h += 0.04 * smoothstep(0.94, 0.985, Math.abs(z));
+    h += 0.04 * smoothstep(0.94, 0.985, Math.abs(z)) + 0.002 * Math.sin(Math.abs(z)*2400) * smoothstep(0.94, 0.97, Math.abs(z));
     const crat = craters.height(x, y, z, (o) => 1 - north * (o < 4 ? 0.85 : 0.4));
     return relief * h + crat;
   };
@@ -179,6 +179,7 @@ export function titanPreset(ctx: PresetContext): PresetResult {
   const nMtn = ctx.noise(4);
   const baseOct = octavesFor(R, 3, ctx.minWavelength, 2, 14);
   const xanadu = latLonToUnit(-10, -100);
+  const seas = [[76,40,0.12],[80,115,0.08],[69,-55,0.045]].map(([lat,lon,width])=>({c:latLonToUnit(lat,lon),width}));
   let lastDune = 0;
   let lastLake = 0;
   let lastHigh = 0;
@@ -199,9 +200,16 @@ export function titanPreset(ctx: PresetContext): PresetResult {
     if (z > 0.75) {
       const l = smoothstep(0.1, 0.25, fbm(nLake, x * 6, y * 6, z * 6, 5)) * smoothstep(0.75, 0.9, z);
       lastLake = l;
-      h -= 0.25 * l;
+      // Sable Sea and Lantern Sea: irregular connected northern depressions.
+      let named = 0;
+      for (const {c,width} of seas) {
+        const d = Math.hypot(x-c.x,y-c.y,z-c.z)/width;
+        if (d < 1.2) named = Math.max(named, smoothstep(1,0.55,d+0.13*nLake.noise(x*45,y*45,z*45)));
+      }
+      lastLake = Math.max(l, named);
+      h = h * (1-named) - 0.25 * lastLake;
     }
-    return relief * h;
+    return relief * (z < 0.75 ? Math.max(-0.10, h) : h);
   };
   const PLAIN = ctx.pal(1, [0.3, 0.2, 0.1]);
   const DUNE = ctx.pal(0, [0.1, 0.07, 0.045]);

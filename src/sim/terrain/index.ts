@@ -65,7 +65,9 @@ export function createTerrain(body: BodyDef, opts: CreateTerrainOptions = {}): T
     },
     maxHeight: hi,
     minHeight: lo,
-    ocean: !!body.surface?.ocean,
+    ocean: !!body.surface?.ocean || body.id === 'titan',
+    liquid: body.id === 'titan' ? { level: -ctx.relief * 0.12, density: 550, kind: 'hydrocarbon' }
+      : body.surface?.ocean ? { level: 0, density: 1000, kind: 'water' } : undefined,
     colorAt: p.colorAt,
   };
 }

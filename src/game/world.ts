@@ -1,3 +1,4 @@
+import { nearbyLandmarks } from '../sim/terrain/landmarks';
 import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { EVA_PART } from '../data/eva';
 import { defaultCommsSettings, NO_SIGNAL, type CommsSettings, type Network } from '../sim/comms/network';
@@ -86,6 +87,24 @@ export class World {
   }
   connection(v = this.active?.state) { return v ? this.comms.connections.get(v.id) ?? NO_SIGNAL : NO_SIGNAL; }
   surveyedBodies: string[] = [];
+  discoveries: string[] = [];
+
+  discoverLandmarks() {
+    for (const v of this.vessels.values()) {
+      if (v.state.destroyed) continue;
+      const body = this.universe.body(v.body);
+      if (!body.solidSurface) continue;
+      const rel = sub(v.state.position, this.universe.ephem.getBodyState(v.body, this.ut).position);
+      if (Math.abs(length(rel) - body.radius) > this.universe.terrain(v.body).maxHeight + 2000) continue;
+      const fixed = this.universe.ephem.toBodyFixed(v.body, rel, this.ut);
+      for (const l of nearbyLandmarks(body, this.universe.terrain(v.body), fixed, this.discoveries)) {
+        this.discoveries.push(l.id);
+        if (this.mode !== 'sandbox') this.progression.science += 25;
+        this.onEvent?.({ type: 'anomalyDiscovered', vesselId: v.state.id, body: v.body, landmarkId: l.id });
+        this.message(`Discovered ${l.name}${this.mode === 'sandbox' ? '' : ' · +25 science'}`, 'info', 8);
+      }
+    }
+  }
 
   localConcentration(wv = this.active): number { return resources.localConcentration.call(this, this.systems, wv); }
 
@@ -373,6 +392,7 @@ export class World {
 
   /** Advance the simulation by `realDt` seconds of wall time with the given control input for the active vessel. */
   tick(realDt: number, input: ControlInput) {
+    this.discoverLandmarks();
     if (!this.canControl()) { input = this.disconnectedInput(this.active?.state); this.stageRequested = false; this.evaJumpRequested = false; }
     realDt = Math.min(realDt, 0.25);
     const now = performance.now();
