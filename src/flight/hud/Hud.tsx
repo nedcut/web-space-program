@@ -351,7 +351,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
 
       <StageFlash count={t.feel.stagedCount} stage={t.stage} />
       <Countdown value={t.feel.countdown} />
-      {!t.mapMode && <FlightHint hint={t.feel.hint} onDismiss={cb.onDismissHint} />}
+      {!t.mapMode && <FlightHint hint={t.feel.hint} onDismiss={cb.onDismissHint} navballSize={settings.navballSize} />}
 
       {/* Left dock: compact toggles; panels expand underneath and scroll if space runs out. */}
       <div className="hud-dock">

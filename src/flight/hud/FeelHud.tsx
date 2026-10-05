@@ -104,10 +104,10 @@ export function Countdown({ value }: { value: number | null }) {
   );
 }
 
-export function FlightHint({ hint, onDismiss }: { hint: Hint | null; onDismiss?: () => void }) {
+export function FlightHint({ hint, onDismiss, navballSize = 200 }: { hint: Hint | null; onDismiss?: () => void; navballSize?: number }) {
   if (!hint) return null;
   return (
-    <Panel className="feel-hint" role="note">
+    <Panel className="feel-hint" role="note" style={{ bottom: navballSize + 92 }}>
       <span style={{ flex: 1 }}>{hint.text}</span>
       <Button className="btn small ghost" onClick={onDismiss} title="Hide this hint">✕</Button>
     </Panel>
