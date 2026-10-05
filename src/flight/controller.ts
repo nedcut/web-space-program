@@ -587,15 +587,9 @@ export class FlightController {
       r.setRenderTarget(null);
       const map = r.compileAsync(this.map.scene, this.map.camera);
       r.setRenderTarget(this.pipeline.composer.readBuffer);
-      // Explosion/decouple flashes add a point light, which changes every program key: build both.
-      const flash = this.effects.flashLight;
-      const wasVisible = flash.visible;
-      flash.visible = !wasVisible;
-      const flashVariant = r.compileAsync(this.scene, this.cam.camera);
-      flash.visible = wasVisible;
       const flight = r.compileAsync(this.scene, this.cam.camera);
       r.setRenderTarget(null);
-      Promise.all([map, flashVariant, flight]).then(finish, finish);
+      Promise.all([map, flight]).then(finish, finish);
       // Never hold the loading screen on a driver that does not report completion.
       setTimeout(finish, 15000);
     } catch {

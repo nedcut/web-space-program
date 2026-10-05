@@ -16,9 +16,12 @@ const spark = new THREE.Color(10,4,.6), dust = new THREE.Color();
 export class FlightFx {
   readonly root = new THREE.Group();
   pool: ParticlePool;
+  /**
+   * Burst flash. It stays visible at zero intensity between bursts: toggling visibility would change
+   * the scene's light count, which is part of every shader key, and recompile all lit materials
+   * (a multi-second stall on the first decouple on Windows/ANGLE).
+   */
   private readonly light = new THREE.PointLight(0xffa040,0,80,2);
-  /** The burst flash light. Its visibility changes the scene's light count (and so every shader key). */
-  get flashLight(): THREE.PointLight { return this.light; }
   private readonly point = new THREE.Vector3();
   private readonly velocity = new THREE.Vector3();
   private readonly up = new THREE.Vector3();
@@ -123,9 +126,9 @@ export class FlightFx {
     }
     this.flash *= Math.exp(-step*8);
     this.flashPosition.addScaledVector(this.flashVelocity,step);
-    this.light.visible = this.flash>.001;
-    if(this.light.visible) this.light.position.copy(this.flashPosition).sub(origin);
-    this.light.intensity=this.flash*1500;
+    const lit = this.flash>.001;
+    if(lit) this.light.position.copy(this.flashPosition).sub(origin);
+    this.light.intensity=lit ? this.flash*1500 : 0;
     this.pool.update(origin,this.clock,pixelScale);
     this.pool.ground(v.position,this.up,altitude);
   }
