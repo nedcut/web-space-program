@@ -1,3 +1,4 @@
+import { game } from '../../game/store';
 import * as THREE from 'three';
 import type { Vec3 } from '../../util/vec3';
 import { dot } from '../../util/vec3';
@@ -177,7 +178,7 @@ export class Navball {
       v.copy(this.toBall(frame, m.dir)).normalize();
       if (v.dot(fwd) < 0.05) continue; // behind the ball
       v.project(this.camera);
-      drawMarker(ctx, (v.x * 0.5 + 0.5) * s, (-v.y * 0.5 + 0.5) * s, s / 210, MARKER_STYLE[m.kind]);
+      drawMarker(ctx, (v.x * 0.5 + 0.5) * s, (-v.y * 0.5 + 0.5) * s, s / 210, { ...MARKER_STYLE[m.kind], color: game.get().settings.colourBlind ? ({ prograde: '#f0e442', retrograde: '#f0e442', normal: '#ffffff', antinormal: '#ffffff', radialOut: '#56b4e9', radialIn: '#56b4e9', target: '#e69f00', antiTarget: '#e69f00', maneuver: '#cc79a7' }[m.kind]) : MARKER_STYLE[m.kind].color });
     }
     // Fixed vessel reticle.
     ctx.strokeStyle = '#ffb000';

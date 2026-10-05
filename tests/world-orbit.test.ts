@@ -1,3 +1,4 @@
+import { stableOrbit } from '../src/tutorial/lessons';
 import { describe, it, expect } from 'vitest';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
@@ -68,6 +69,7 @@ describe('stock orbiter reaches orbit', () => {
     log.push(`final phase=${phase} ap=${(orb.ap / 1000).toFixed(1)} pe=${(orb.pe / 1000).toFixed(1)} fuel-stage=${wv.state.nextStage}`);
     console.log(log.join('\n'));
     expect(phase).toBe('done');
+    expect(stableOrbit({ world })).toBe(true);
     expect(orb.pe).toBeGreaterThan(world.universe.body('earth').atmosphere!.height);
   }, 120000);
 });

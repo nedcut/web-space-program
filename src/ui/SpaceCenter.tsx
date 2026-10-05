@@ -68,11 +68,7 @@ export function SpaceCenter() {
           <button className="btn small" onClick={() => game.set({ scene: 'menu' })}>Main menu</button>
           <button className="btn small" onClick={() => setSettings((v) => !v)}>Settings</button>
         </div>
-        {settings && (
-          <div style={{ position: 'absolute', top: '20vh', left: '50%', transform: 'translateX(-50%)' }}>
-            <SettingsPanel onClose={() => setSettings(false)} />
-          </div>
-        )}
+        {settings && <SettingsPanel onClose={() => setSettings(false)} />}
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { advanceISRU } from './isru';
 import type { Vec3 } from '../../util/vec3';
 import { add, length, scale, v3 } from '../../util/vec3';
 import type { Quat } from '../../util/quat';
@@ -14,7 +15,7 @@ import { computeAeroForces, controlSurfaceAuthority, updateParachutes } from './
 import { gatherContacts, nearSurface, penetrationCorrection, solveContacts, updateWheelDeploy } from './contact';
 import { stepThermal } from './heating';
 import { computeSas } from './sas';
-import { addResource, drawResource } from './resources';
+import { addResource, drawResource, stepPowerSources } from './resources';
 
 /** Fixed physics step, s. */
 export const PHYSICS_DT = 1 / 50;
@@ -184,6 +185,10 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
         addResource(v, 'electricCharge', sp.chargeRate * flux * cosA * h);
       }
     }
+
+  stepPowerSources(v, h);
+  advanceISRU(v, v.situation === 'landed' && v.parts.some(p => p.drillDeployed)
+    ? env.regolithConcentration?.(v.position, tMid) ?? 0 : 0, h);
 
   // Aerodynamics & parachutes.
   const aero = computeAeroForces(v, { air: air.sample, airVelocityBody, control: c });

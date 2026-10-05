@@ -9,7 +9,7 @@ import type { Quat } from '../../util/quat';
  * Parts are authored with their origin at their geometric centre.
  */
 
-export type ResourceId = 'liquidFuel' | 'oxidizer' | 'monopropellant' | 'xenon' | 'solidFuel' | 'electricCharge' | 'ablator' | 'intakeAir';
+export type ResourceId = 'liquidFuel' | 'oxidizer' | 'monopropellant' | 'xenon' | 'solidFuel' | 'electricCharge' | 'ablator' | 'intakeAir' | 'regolith';
 
 export interface ResourceDef {
   id: ResourceId;
@@ -193,6 +193,8 @@ export interface CommandModule {
   /** Has SAS / probe core level 0..3. */
   sasLevel: number;
   ecPerSecond: number;
+  /** Passenger cabins carry crew without supplying flight control. */
+  controllable?: false;
 }
 
 /**
@@ -212,6 +214,10 @@ export interface DockingPortModule {
 }
 
 export type PartModule =
+  | { type: 'drill'; rate: number; ecRate: number; heat: number }
+  | { type: 'converter'; rate: number; ecRate: number; heat: number }
+  | { type: 'surveyScanner' }
+  | { type: 'surfaceScanner' }
   | EngineModule
   | DockingPortModule
   | RcsModule
@@ -228,8 +234,11 @@ export type PartModule =
   | { type: 'fairing'; ejectionImpulse: number }
   | { type: 'light' }
   | { type: 'battery' }
+  | { type: 'bay' }
+  | { type: 'generator'; chargeRate: number }
+  | { type: 'fuelCell'; chargeRate: number; fuelRate: number; oxidizerRate: number }
   | { type: 'science'; experiment: string }
-  | { type: 'antenna'; transmission: number };
+  | { type: 'antenna'; transmission: number; range: number; relay: boolean };
 
 export interface PartDef {
   id: string;

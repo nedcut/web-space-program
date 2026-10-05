@@ -25,6 +25,7 @@ import { buildRingProfile } from './textures';
 import { RingParticles } from './RingParticles';
 import { createPlanetEffect } from './effects';
 import { reflectedIrradiance, type PlanetLightSource } from './planetshine';
+import { SurfaceScatter } from './scatter/SurfaceScatter';
 import { terrainCutout } from './cutout';
 
 export interface PlanetRendererOptions {
@@ -80,6 +81,7 @@ export class PlanetRenderer {
   private quality: QualitySettings;
   private scale: ScaleConfig;
   private pool: TerrainWorkerPool | null = null;
+  private scatter: SurfaceScatter | null = null;
   private quadtree: Quadtree | null = null;
   private farSphere: THREE.Mesh | null = null;
   private farMaterial: THREE.ShaderMaterial | null = null;
@@ -125,6 +127,7 @@ export class PlanetRenderer {
     this.atmosphere = this.kind === 'star' ? null : computeAtmosphereParams(body, this.scale);
     if (this.atmosphere) this.lut = buildTransmittanceLUT(this.atmosphere);
     this.uniforms = createPlanetUniforms(body.radius, this.atmosphere, this.lut);
+    if (opts.quality.atmosphereScattering === false) this.uniforms.uHasAtmo.value = 0;
     registerPlanetUniforms(body.id, this.uniforms);
     // Optically thick Titan needs the same integration budget on its disc and limb to avoid a seam.
     if (body.id === 'titan' && this.quality.planetDetails.volumeSteps > 0) {
@@ -135,12 +138,12 @@ export class PlanetRenderer {
     else if (this.kind === 'gas') this.buildGasGiant();
     else this.buildSolid(opts);
 
-    if (this.atmosphere) this.buildSky();
+    if (this.atmosphere && opts.quality.atmosphereScattering !== false) this.buildSky();
     if (body.rings && this.kind !== 'star') this.buildRings();
     if (this.quality.planetDetails.volumeSteps > 0) {
       const id = body.id;
       const kind = this.kind === 'star' ? 'corona' : id;
-      if (kind === 'enceladus' || kind === 'io' || kind === 'titan' || kind === 'earth' || kind === 'corona') {
+      if (kind === 'enceladus' || kind === 'io' || (kind === 'titan' && opts.quality.atmosphereScattering !== false) || kind === 'earth' || kind === 'corona') {
         const extent = kind === 'enceladus' ? 1.8 : kind === 'io' ? 1.22 : kind === 'corona' ? 1.65
           : kind === 'titan' ? 1 + (this.atmosphere!.atmosphereRadius / body.radius - 1) * 1.18 : 1.045;
         const effect = createPlanetEffect(this.uniforms, this.quality, kind, extent);
@@ -230,6 +233,7 @@ export class PlanetRenderer {
       rockBlend: preset === 'earth' ? 1 : preset === 'mars' ? 0.6 : 0.35,
       airless,
       detail: q.terrain.detail,
+      duneRipples: preset === 'mars',
       detailStrength: preset === 'earth' ? 1 : preset === 'mars' ? 1.5 : 1.0,
       cutout: terrainCutout(this.body.id),
     });
@@ -259,6 +263,10 @@ export class PlanetRenderer {
       cacheSize: q.terrain.cacheSize,
     });
     this.root.add(this.quadtree.group);
+    if (q.scatter.radius > 0) {
+      this.scatter = new SurfaceScatter(this.body, terrain, q, this.uniforms);
+      this.root.add(this.scatter.group);
+    }
 
     if (q.clouds && (preset === 'earth' || this.body.id === 'earth') && this.atmosphere) {
       const H = this.atmosphere.atmosphereRadius - R;
@@ -392,6 +400,8 @@ export class PlanetRenderer {
     const camBF = this.tmpV.set(crx, cry, crz).applyQuaternion(inv);
     const camBFx = camBF.x, camBFy = camBF.y, camBFz = camBF.z;
 
+    this.scatter?.update([camBFx, camBFy, camBFz], new THREE.Vector3(bx, by, bz), this.rotQ);
+
     const vh = p.viewportHeight ?? 1080;
     const sf = screenSpaceFactor(cam, vh);
     const projR = (R / Math.max(camDist, R * 1.0001)) * sf;
@@ -498,7 +508,7 @@ export class PlanetRenderer {
   get idle(): boolean {
     if (this.kind !== 'solid') return true;
     const bakeDone = !this.terrain || !!this.farTexture;
-    return bakeDone && (!this.quadtree || this.stats.mode === 'far' || this.quadtree.idle);
+    return (!this.scatter?.group.visible || this.scatter.idle) && bakeDone && (!this.quadtree || this.stats.mode === 'far' || this.quadtree.idle);
   }
 
   /** Terrain height under a body-fixed unit direction (m), 0 if no terrain. */
@@ -558,6 +568,7 @@ export class PlanetRenderer {
     this.ringParticles?.dispose();
     this.ringTexture?.dispose();
     this.quadtree?.dispose();
+    this.scatter?.dispose();
     this.root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).geometry.dispose();
     });

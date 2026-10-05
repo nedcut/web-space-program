@@ -1,3 +1,4 @@
+import { isTyping, matches } from '../../input/bindings';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { game } from '../../game/store';
@@ -114,11 +115,11 @@ export class EditorView {
     const quality = game.get().settings.quality;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     const dpr = window.devicePixelRatio || 1;
-    this.renderer.setPixelRatio(Math.min(dpr, quality === 'high' ? 2 : quality === 'medium' ? 1.5 : 1));
+    this.renderer.setPixelRatio(Math.min(dpr, quality === 'high' ? 2 : quality === 'medium' ? 1.5 : 1) * game.get().settings.renderScale);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.shadowMap.enabled = quality !== 'low';
+    this.renderer.shadowMap.enabled = game.get().settings.shadows;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.domElement.style.display = 'block';
     this.renderer.domElement.style.touchAction = 'none';
@@ -136,7 +137,7 @@ export class EditorView {
     this.scene.add(hemi);
     this.key = new THREE.DirectionalLight(0xfff1dc, 2.7);
     this.key.position.set(14, 40, 18);
-    this.key.castShadow = quality !== 'low';
+    this.key.castShadow = game.get().settings.shadows;
     const sm = quality === 'high' ? 2048 : 1024;
     this.key.shadow.mapSize.set(sm, sm);
     this.key.shadow.bias = -0.0004;
@@ -707,27 +708,23 @@ export class EditorView {
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
-    const t = e.target as HTMLElement | null;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (isTyping(e.target) || e.repeat) return;
     this.altDown = e.altKey;
     const s = this.session;
     const held = s.getSnapshot().held;
-    const k = e.key.toLowerCase();
-    const ctrl = e.ctrlKey || e.metaKey;
-    if (ctrl && k === 'z') { e.preventDefault(); if (e.shiftKey) s.redo(); else s.undo(); return; }
-    if (ctrl && k === 'y') { e.preventDefault(); s.redo(); return; }
-    if (ctrl && k === 's') { e.preventDefault(); s.save(); return; }
-    if (ctrl) return;
-    if (k === 'escape') { s.cancelHeld(); return; }
-    if (k === 'delete' || k === 'backspace') {
+    if (matches('editorRedo', e)) { e.preventDefault(); s.redo(); return; }
+    if (matches('editorUndo', e)) { e.preventDefault(); s.undo(); return; }
+    if (matches('editorSave', e)) { e.preventDefault(); s.save(); return; }
+    if (matches('editorCancel', e)) { s.cancelHeld(); return; }
+    if (matches('editorDelete', e)) {
       e.preventDefault();
       if (held) s.deleteHeld();
       else if (s.getSnapshot().hoverUid !== null) s.deletePart(s.getSnapshot().hoverUid!);
       return;
     }
-    if (k === 'x') { s.cycleSymmetry(e.shiftKey ? -1 : 1); return; }
-    if (k === 'r') { s.toggleSymmetryMode(); return; }
-    if (k === 'f') { this.frameCraft(); return; }
+    if (matches('editorSymmetry', e)) { s.cycleSymmetry(e.shiftKey ? -1 : 1); return; }
+    if (matches('editorSymmetryMode', e)) { s.toggleSymmetryMode(); return; }
+    if (matches('editorFrame', e)) { this.frameCraft(); return; }
     if (e.altKey) e.preventDefault();
     if (!held) return;
     const step = (e.shiftKey ? 5 : 15) * DEG;
@@ -737,14 +734,15 @@ export class EditorView {
     const axes: Record<string, [THREE.Vector3, number]> = {
       w: [right, -step], s: [right, step], a: [fwd, -step], d: [fwd, step], q: [new THREE.Vector3(0, 1, 0), step], e: [new THREE.Vector3(0, 1, 0), -step],
     };
-    if (axes[k]) {
+    const rotationKey = ([['editorPitchUp', 'w'], ['editorPitchDown', 's'], ['editorRollLeft', 'a'], ['editorRollRight', 'd'], ['editorYawLeft', 'q'], ['editorYawRight', 'e']] as const).find(([a]) => matches(a, e))?.[1];
+    if (rotationKey) {
       e.preventDefault();
-      const [ax, ang] = axes[k];
+      const [ax, ang] = axes[rotationKey];
       // Camera axes are in the hall (world); held rotations are in the craft frame.
       s.rotateHeld(fromV(ax.clone().applyQuaternion(this.craftGroup.quaternion.clone().invert())), ang);
       return;
     }
-    if (k === ' ') { e.preventDefault(); s.resetHeldRotation(); }
+    if (matches('editorReset', e)) { e.preventDefault(); s.resetHeldRotation(); }
   };
 
   private onKeyUp = (e: KeyboardEvent) => {

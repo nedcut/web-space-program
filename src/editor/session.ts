@@ -1,3 +1,4 @@
+import { getTutorial, endTutorial } from '../tutorial/runtime';
 import { partUnlocked, launchProblem } from '../data/technology';
 import { newProgression } from '../sim/science/progression';
 import { PART_CATALOG } from '../data/parts';
@@ -252,7 +253,7 @@ export class EditorSession {
     if (this.held) this.cancelHeld();
     const craft = this.currentCraft();
     if (!craft.parts.length) return this.toast('Build something first!', 'warn');
-    const hasCommand = craft.parts.some((p) => CATALOG.get(p.partId)?.modules.some((m) => m.type === 'command'));
+    const hasCommand = craft.parts.some((p) => CATALOG.get(p.partId)?.modules.some((m) => m.type === 'command' && m.controllable !== false));
     if (!hasCommand) return this.toast('Launch blocked: the craft needs a command pod or probe core', 'bad');
     const g = game.get();
     const problem = launchProblem(craft, CATALOG, g.mode, g.resumeWorld?.progression ?? newProgression());
@@ -271,6 +272,7 @@ export class EditorSession {
   }
 
   exit() {
+    if (getTutorial()) return endTutorial();
     if (this.held) this.cancelHeld();
     const craft = this.currentCraft();
     game.set({ craft: craft.parts.length ? craft : null, scene: 'spaceCenter' });

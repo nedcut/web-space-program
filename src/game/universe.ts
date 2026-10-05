@@ -1,3 +1,5 @@
+import { qRotate, qConj } from '../util/quat';
+import { concentrationAt } from '../sim/resources/deposits';
 import type { Body } from '../sim/bodies/types';
 import { createUniverse, type ScalePresetId } from '../sim/bodies';
 import { createEphemeris, type Ephemeris } from '../sim/orbit/ephemeris';
@@ -74,6 +76,11 @@ export class Universe {
   createEnvironment(getDominant: () => string, nbody = false): Environment {
     const self = this;
     return {
+      regolithConcentration(pos, t) {
+        const id = getDominant();
+        const dir = qRotate(qConj(self.ephem.bodyRotation(id, t)), sub(pos, self.ephem.getBodyState(id, t).position));
+        return concentrationAt(self.body(id), dir);
+      },
       gravity(pos, t) {
         const id = getDominant();
         let acc = v3();

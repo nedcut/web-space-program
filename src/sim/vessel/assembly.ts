@@ -77,6 +77,7 @@ export function buildVessel(craft: CraftDef, partCatalog: Map<string, PartDef>, 
         const down = !m.retractable || (opts.gearDeployed ?? true);
         p.wheel = { moduleIndex: i, deployed: down, deploy: down ? 1 : 0, compression: 0, inContact: false, steer: 0, spin: 0, rollSpeed: 0 };
       }
+      else if (m.type === 'bay') p.bayOpen = false;
       else if (m.type === 'heatShield') maxTemp = Math.max(maxTemp, m.maxTemp);
     });
     p.maxTemp = maxTemp;
@@ -344,7 +345,7 @@ export function removePart(v: VesselState, uid: number): VesselState[] {
       for (const u of set) {
         const q = v.cache.byUid.get(u)!;
         mass += q.mass;
-        if (q.def.modules.some((m) => m.type === 'command')) cmd = 1;
+        if (q.def.modules.some((m) => m.type === 'command' && m.controllable !== false)) cmd = 1;
       }
       return cmd * 1e12 + mass;
     };
@@ -434,6 +435,7 @@ function wheelReach(p: PartState): number {
 /** Deploy or retract all landing legs and retractable landing gear. */
 export function setGear(v: VesselState, deployed: boolean): void {
   for (const p of v.parts) {
+    if (p.bayOpen !== undefined) p.bayOpen = deployed;
     if (p.leg) p.leg.deployed = deployed;
     if (p.wheel && (p.def.modules[p.wheel.moduleIndex] as WheelModule).retractable) p.wheel.deployed = deployed;
   }
@@ -443,6 +445,7 @@ export function setGear(v: VesselState, deployed: boolean): void {
 export function gearState(v: VesselState): boolean | undefined {
   let any: boolean | undefined;
   for (const p of v.parts) {
+    if (p.bayOpen !== undefined) any = (any ?? false) || p.bayOpen;
     if (p.leg) any = (any ?? false) || p.leg.deployed;
     if (p.wheel && (p.def.modules[p.wheel.moduleIndex] as WheelModule).retractable) any = (any ?? false) || p.wheel.deployed;
   }

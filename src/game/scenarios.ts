@@ -57,3 +57,23 @@ export function spawnRendezvousTarget(world: World, craft: CraftDef, ahead = 100
   world.setTarget(wv.state.id, port ? port.part.uid : null);
   return wv;
 }
+
+/** Place an upright craft at rest on analytic terrain; useful for surface training and missions. */
+export function placeOnSurface(world: World, wv: WorldVessel, bodyId: string, direction = v3(1, 0, 0)) {
+  const u = world.universe;
+  const up = normalize(direction);
+  const rotation = u.ephem.bodyRotation(bodyId, world.ut);
+  const inertialUp = qRotate(rotation, up);
+  const east = normalize(cross(qRotate(rotation, v3(0, 0, 1)), inertialUp));
+  const rel = scale(inertialUp, u.body(bodyId).radius + u.terrain(bodyId).heightAt(up.x, up.y, up.z) + world.bottomOffset(wv.state) + 0.05);
+  const bs = u.ephem.getBodyState(bodyId, world.ut);
+  wv.body = bodyId;
+  wv.mode = 'physics';
+  wv.fixed = undefined;
+  wv.state.position = add(bs.position, rel);
+  wv.state.velocity = add(bs.velocity, u.ephem.surfaceVelocity(bodyId, rel, world.ut));
+  wv.state.orientation = quatFromBasis(east, inertialUp, cross(east, inertialUp));
+  wv.state.angularVelocity = v3();
+  wv.state.situation = 'landed';
+  for (const part of wv.state.parts) if (part.leg) part.leg.deployed = true;
+}

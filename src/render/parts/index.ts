@@ -1,3 +1,5 @@
+import { buildFramework, buildBay, buildHabitat, buildPowerUnit, buildRcsPorts, buildNuclearEngine, buildRadialEngine, buildAerospike } from './builders/expedition';
+import { buildISRU } from './builders/isru';
 import { buildInstrument } from './builders/science';
 import { buildAstronaut } from './builders/astronaut';
 import * as THREE from 'three';
@@ -49,6 +51,9 @@ export { setGearPose } from './builders/aircraft';
  * Deployables carry JSON userData.deploy and are driven by setPartDeploy(root, t), t in [0,1].
  */
 export const MESH_BUILDERS: Record<string, Builder> = {
+  framework: buildFramework, bay: buildBay, habitat: buildHabitat, powerUnit: buildPowerUnit, rcsPorts: buildRcsPorts,
+  nuclearEngine: buildNuclearEngine, radialEngine: buildRadialEngine, aerospike: buildAerospike,
+  isru: buildISRU,
   instrument: buildInstrument,
   astronaut: buildAstronaut,
   pod: buildPod,

@@ -30,8 +30,8 @@ Capture with `node scripts/shot.mjs "http://localhost:5181/planet-preview.html?.
 
 ## Validation after resume
 
-- Merged main at `6c7852d` without conflicts; preserved its flight/editor/menu changes.
-- `npx tsc --noEmit` passed. `npx vitest run --maxWorkers=2` passed: 36 files, 403 tests.
+- Merged main at `6c7852d`, then the newer integration at `f77318c`; preserved surface scatter, graphics settings and both sides of the documentation. Titan haze also respects the atmosphere-scattering toggle.
+- Final post-merge `npx tsc --noEmit` passed. `npx vitest run --maxWorkers=2` passed: 45 files, 633 tests.
 - Final refinements soften storm rims, add amber haze strata, scale storm noise octaves by quality, and prevent planetshine between unattached renderers.
 
 The resumed captures use the collaborative preview on port 5181. Its page-snapshot endpoint failed, so the rendered canvas was exported through the same preview after `window.__preview.ready`; no extra browser instances were launched.

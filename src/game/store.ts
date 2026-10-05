@@ -1,10 +1,11 @@
+import type { MultiplayerConfig } from '../net/client';
 import type { GameMode } from '../sim/science/progression';
 import { useSyncExternalStore } from 'react';
 import type { ScalePresetId } from '../sim/bodies/scale';
 import type { CraftDef } from '../sim/vessel/types';
 import type { SavedWorld } from './persistence';
 
-export type Scene = 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking' | 'research' | 'missions';
+export type Scene = 'training' | 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking' | 'research' | 'missions';
 export type QualityPreset = 'low' | 'medium' | 'high';
 
 export interface Settings {
@@ -12,10 +13,23 @@ export interface Settings {
   masterVolume: number;
   invertPitch: boolean;
   showFps: boolean;
+  /** null follows the current program's saved setting / mode default. */
+  commsEnabled: boolean | null;
+  commsRestrictControl: boolean | null;
+  commsOverlay: boolean;
+  shadows: boolean; bloom: boolean; clouds: boolean; scatter: boolean; renderScale: number;
+  musicVolume: number; sfxVolume: number;
+  gamepadEnabled: boolean; deadZone: number; sensitivity: number; inputSmoothing: number; mouseFlight: boolean;
+  units: 'metric' | 'imperial'; navballSize: number; hudScale: number; cameraFov: number; autoSaveInterval: number;
+  uiScale: number; highContrast: boolean; reduceMotion: boolean; colourBlind: boolean;
 }
 
 export interface GameState {
+  /** Opt-in LAN mode; null keeps single-player behavior. Never persisted. */
+  multiplayer: MultiplayerConfig | null;
   scene: Scene;
+  /** Practice scenes must not overwrite the saved editor craft. */
+  trainingActive: boolean;
   mode: GameMode;
   saveId: string | null;
   scalePreset: ScalePresetId;
@@ -35,7 +49,7 @@ export interface GameState {
 const SETTINGS_KEY = 'wsp.settings.v1';
 
 function loadSettings(): Settings {
-  const defaults: Settings = { quality: 'medium', masterVolume: 0.8, invertPitch: false, showFps: false };
+  const defaults: Settings = { quality: 'medium', masterVolume: 0.8, invertPitch: false, showFps: false, shadows: true, bloom: true, clouds: true, scatter: true, renderScale: 1, musicVolume: 1, sfxVolume: 1, gamepadEnabled: true, deadZone: 0.15, sensitivity: 1, inputSmoothing: 0, mouseFlight: false, units: 'metric', navballSize: 200, hudScale: 1, cameraFov: 60, autoSaveInterval: 60, uiScale: 1, highContrast: false, reduceMotion: false, colourBlind: false, commsEnabled: null, commsRestrictControl: null, commsOverlay: true };
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SETTINGS_KEY) : null;
     return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
@@ -69,7 +83,7 @@ export const DEFAULT_START_UT = (Date.UTC(2030, 6, 20, 12) - Date.UTC(2000, 0, 1
 function initialScene(): Scene {
   try {
     const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('scene') : null;
-    if (q && ['menu', 'spaceCenter', 'editor', 'flight', 'tracking', 'research', 'missions'].includes(q)) return q as Scene;
+    if (q && ['training', 'menu', 'spaceCenter', 'editor', 'flight', 'tracking', 'research', 'missions'].includes(q)) return q as Scene;
   } catch {
     /* no location */
   }
@@ -78,6 +92,8 @@ function initialScene(): Scene {
 
 export const game = createStore<GameState>({
   scene: initialScene(),
+  multiplayer: null,
+  trainingActive: false,
   mode: 'sandbox',
   saveId: null,
   scalePreset: 'standard',
@@ -102,10 +118,18 @@ export function useGame<R>(selector: (s: GameState) => R): R {
   return useSyncExternalStore(game.subscribe, () => selector(game.get()));
 }
 
+/** UI preferences override a world's saved difficulty only when explicitly selected. */
+export function applyCommsSettings(world: import('./world').World) {
+  const settings = game.get().settings;
+  if (settings.commsEnabled !== null) world.commsSettings.enabled = settings.commsEnabled;
+  if (settings.commsRestrictControl !== null) world.commsSettings.restrictControl = settings.commsRestrictControl;
+}
+
 // Remember the craft in the editor / on the pad across page reloads (restored by Continue).
 const CRAFT_KEY = 'wsp.craft.v1';
 let lastCraft: CraftDef | null = game.get().craft;
 game.subscribe(() => {
+  if (game.get().trainingActive) return;
   const craft = game.get().craft;
   if (craft === lastCraft) return;
   lastCraft = craft;

@@ -36,5 +36,5 @@ export const fmtKN = (n: number) => (n < 1000 ? `${n.toFixed(0)} N` : `${(n / 10
 export const fmtDv = (v: number) => `${Math.round(v).toLocaleString('en-US')} m/s`;
 
 export const RESOURCE_SHORT: Record<ResourceId, string> = {
-  liquidFuel: 'Fuel', oxidizer: 'Oxidizer', monopropellant: 'Monoprop', xenon: 'Xenon', solidFuel: 'Solid grain', electricCharge: 'Charge', ablator: 'Ablator', intakeAir: 'Air',
+  regolith: 'Regolith', liquidFuel: 'Fuel', oxidizer: 'Oxidizer', monopropellant: 'Monoprop', xenon: 'Xenon', solidFuel: 'Solid grain', electricCharge: 'Charge', ablator: 'Ablator', intakeAir: 'Air',
 };

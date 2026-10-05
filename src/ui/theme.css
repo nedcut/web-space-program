@@ -62,6 +62,33 @@ input[type='range'] { accent-color: var(--accent); }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: rgba(140, 180, 255, 0.2); border-radius: 4px; }
 
+.flight-data { padding: 10px; flex-shrink: 0; font-size: 11px; }
+.flight-data-title { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.flight-data-title > span { flex: 1; }
+.flight-data details { border-top: 1px solid var(--panel-border); padding: 8px 0; }
+.flight-data summary { cursor: pointer; margin-bottom: 7px; }
+.flight-data-row { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; }
+.flight-data-row > span:first-child, .flight-data-note { color: var(--text-dim); }
+.flight-data-row .mono { text-align: right; }
+.flight-data-config { display: grid; gap: 5px; padding-bottom: 8px; }
+.flight-data-note { font-size: 10px; line-height: 1.5; }
+.transfer-modal { position: fixed; inset: 0; display: grid; place-items: center; background: #02030acc; z-index: 40; pointer-events: auto; }
+.transfer-plot { max-height: calc(100vh - 30px); overflow-y: auto; width: min(700px, calc(100vw - 30px)); padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.transfer-plot canvas { width: 100%; aspect-ratio: 1.8; cursor: crosshair; }
+button, input, select, textarea { font-size: 1em; }
+.settings-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, .72); display: grid; place-items: center; padding: 20px; }
+.settings-dialog { width: min(780px, 100%); max-height: 100%; display: flex; flex-direction: column; padding: 24px; gap: 14px; outline: none; }
+.settings-dialog h2 { margin: 0; }
+.settings-tabs { flex-wrap: wrap; flex-shrink: 0; }
+.settings-content { overflow: auto; min-height: 0; padding-right: 8px; }
+.setting-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+.setting-row output { display: inline-block; min-width: 60px; text-align: right; font-variant-numeric: tabular-nums; }
+.settings-note { color: var(--text-dim); font-size: 13px; line-height: 1.6; }
+.settings-warning { padding: 12px; border: 1px solid var(--warn); border-radius: 6px; margin: 12px 0; color: var(--warn); font-size: 13px; }
+[data-high-contrast="true"] { --text: #fff; --text-dim: #eee; --accent: #7ddfff; }
+[data-high-contrast="true"] .overlay .panel { background: #05090f; border-color: #fff; }
+[data-reduce-motion="true"] *, [data-reduce-motion="true"] *::before, [data-reduce-motion="true"] *::after { animation: none !important; transition: none !important; }
+@media (max-width: 600px) { .settings-dialog { padding: 14px; } .setting-row { flex-wrap: wrap; } .settings-tabs button { padding: 8px; } }
 /* ---------------------------------------------------------------- flight HUD layout */
 .hud-right { position: absolute; top: 10px; right: 10px; width: 230px; display: flex; flex-direction: column; gap: 8px; }
 .hud-stages {

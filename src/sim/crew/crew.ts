@@ -21,7 +21,7 @@ export interface PlantedFlag {
 export const SUITED_MASS = 100;
 export const seatCapacity = (p: PartState) => p.def.modules.reduce((n, m) => n + (m.type === 'command' ? m.crew : 0), 0);
 export const crewIds = (v: VesselState) => v.eva ? [v.eva.astronautId] : v.parts.flatMap(p => p.crew ?? []);
-export const hasControl = (v: VesselState) => !v.destroyed && (!!v.eva || v.parts.some(p => (p.crew?.length ?? 0) > 0 || p.def.modules.some(m => m.type === 'command' && m.crew === 0)));
+export const hasControl = (v: VesselState) => !v.destroyed && (!!v.eva || v.parts.some(p => p.def.modules.some(m => m.type === 'command' && m.controllable !== false && (m.crew === 0 || (p.crew?.length ?? 0) > 0))));
 
 /** Stable integer PRNG: names/stats depend only on roster seed and recruitment index. */
 export function generateAstronaut(seed: number, index: number): Astronaut {

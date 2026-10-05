@@ -1,3 +1,4 @@
+import { game } from '../src/game/store';
 import { describe, expect, it, vi } from 'vitest';
 import { GameAudio, engineLoudness, windGain, transonicBuffeting, type AudioState } from '../src/audio';
 
@@ -109,6 +110,31 @@ class ContextDouble {
 }
 
 describe('Web Audio lifecycle', () => {
+  it('applies master/music/effects settings live, including menu effects, and unsubscribes', () => {
+    vi.stubGlobal('AudioContext', ContextDouble);
+    const original = game.get().settings;
+    let audio: GameAudio | undefined;
+    try {
+      game.set({ settings: { ...original, masterVolume: 0.4, musicVolume: 0.5, sfxVolume: 0.25 } });
+      audio = new GameAudio();
+      const ctx = ContextDouble.latest;
+      const [master, , effects, , music] = ctx.nodes;
+      expect(master.gain.value).toBeCloseTo(0.4);
+      expect(effects.gain.value).toBeCloseTo(0.25);
+      audio.setMusic('menu');
+      expect(music.gain.value).toBeCloseTo(0.06);
+      game.set({ settings: { ...game.get().settings, musicVolume: 0, sfxVolume: 0 } });
+      expect(effects.gain.value).toBe(0); expect(music.gain.value).toBe(0);
+      audio.update({ ...state, inMapView: true });
+      game.set({ settings: { ...game.get().settings, sfxVolume: 0.5 } });
+      expect(effects.gain.value).toBeCloseTo(0.09);
+      audio.dispose();
+      const count = master.gain.targets.length;
+      game.set({ settings: original });
+      expect(master.gain.targets).toHaveLength(count);
+    } finally { audio?.dispose(); game.set({ settings: original }); vi.unstubAllGlobals(); }
+  });
+
   it('resumes on gesture, reuses flight voices, schedules music and cleans up all nodes', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('AudioContext', ContextDouble);
