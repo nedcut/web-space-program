@@ -18,6 +18,8 @@ export function TutorialPanel() {
     };
     frame = requestAnimationFrame(tick);
     return () => { cancelAnimationFrame(frame); highlighted?.classList.remove('tutorial-pulse'); };
+    // The frame loop reads the live tutorial store; restarting on each step would clear its highlight.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run?.epoch]);
   if (!run || !step) return null;
   return <aside className="panel tutorial-panel" aria-label="Training instructions" onKeyDown={e => e.stopPropagation()} onKeyUp={e => e.stopPropagation()}>

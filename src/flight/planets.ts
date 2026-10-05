@@ -53,7 +53,6 @@ export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualit
   };
 
   const occluders = (point: Vec3, sunPos: Vec3) => {
-    let lum = 1;
     let tint: [number, number, number] = [1, 1, 1];
     for (const [id, pr] of renderers) {
       if (universe.body(id).kind === 'star') continue;
@@ -61,7 +60,7 @@ export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualit
       const v = pr.sunVisibility(point, bp, sunPos);
       tint = [tint[0] * v[0], tint[1] * v[1], tint[2] * v[2]];
     }
-    lum = 0.2126 * tint[0] + 0.7152 * tint[1] + 0.0722 * tint[2];
+    const lum = 0.2126 * tint[0] + 0.7152 * tint[1] + 0.0722 * tint[2];
     return { lum, tint };
   };
 

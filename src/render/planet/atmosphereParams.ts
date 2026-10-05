@@ -49,10 +49,10 @@ export function computeAtmosphereParams(body: BodyDef, scale: ScaleConfig = SCAL
   let betaMs: [number, number, number] = [mie, mie, mie];
   let betaMe: [number, number, number] = [mie * 1.11, mie * 1.11, mie * 1.11];
   let mieG: [number, number, number] = [0.8, 0.8, 0.8];
-  let Hm = Hr * 0.15;
+  let Hm: number;
   let betaO: [number, number, number] = [0, 0, 0];
-  let ozoneCenter = 25000 * atmoFactor;
-  let ozoneWidth = 15000 * atmoFactor;
+  const ozoneCenter = 25000 * atmoFactor;
+  const ozoneWidth = 15000 * atmoFactor;
   let ambient = 1;
   let multiScatter = 0.35;
 

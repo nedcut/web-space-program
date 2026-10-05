@@ -5,7 +5,7 @@ import { World } from '../src/game/world';
 import { PART_CATALOG } from '../src/data/parts';
 import { buildOrbiter } from '../src/editor/stockCrafts';
 import { neutralInput } from '../src/sim/vessel';
-import { add, cross, length, normalize, scale, dot } from '../src/util/vec3';
+import { add, cross, length, normalize, scale } from '../src/util/vec3';
 import { qRotate } from '../src/util/quat';
 import { DEFAULT_START_UT } from '../src/game/store';
 

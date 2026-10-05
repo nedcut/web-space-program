@@ -49,7 +49,7 @@ class Builder {
   radial(parent: number, id: string, count: Sym, dy: number, deg = 0, extra?: Quat): number {
     const p = this.ed.craft.parts.find((x) => x.uid === parent)!;
     const pd = this.def(p.partId);
-    let r = 0.5;
+    let r: number;
     if (pd.shape.kind === 'cylinder') {
       const t = Math.min(1, Math.max(0, dy / pd.shape.height + 0.5));
       r = pd.shape.radiusBottom + (pd.shape.radiusTop - pd.shape.radiusBottom) * t;

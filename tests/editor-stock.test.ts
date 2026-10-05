@@ -19,7 +19,6 @@ describe('stock crafts', () => {
       const stats = computeStageStats(craft, PART_CATALOG);
       const total = [...stats.values()].reduce((a, x) => a + x.dvVac, 0);
       const local = [...localEstimate(craft, PART_CATALOG, getStageList(craft).length - 1).values()].reduce((a, x) => a + x.dvVac, 0);
-      // eslint-disable-next-line no-console
       console.log(s.name, craft.parts.length, 'parts', Math.round(total), 'm/s (sim)', Math.round(local), 'm/s (local)',
         [...stats.entries()].map(([i, x]) => `S${i}:${Math.round(x.dvVac)}/${x.twrAsl.toFixed(2)}`).join(' '));
       expect(total).toBeGreaterThan(s.needsResearch ? 0 : 2000);

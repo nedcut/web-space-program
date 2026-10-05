@@ -49,7 +49,6 @@ export interface SavedWorld {
 export function serializeWorld(world: World): SavedWorld {
   const vessels: SavedVessel[] = [];
   for (const wv of world.vessels.values()) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { cache, resourceDefs, parts, ...rest } = wv.state;
     void cache;
     void resourceDefs;

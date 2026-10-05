@@ -10,6 +10,6 @@ await page.evaluate(() => window.__flight.startAssist('orbit'));
 for (let i = 1; i <= 3; i++) {
   await page.waitForTimeout((+secs * 1000) / 3);
   await page.screenshot({ path: `/tmp/assist-${i}.png` });
-  console.log(i, await page.evaluate(() => { const f = window.__flight; const w = f.world; const a = w.active; const fr = performance.now(); return { ut: (w.ut - 964051200).toFixed(1), mode: a?.mode, status: f.assist?.status, alt: a ? (w.universe.surfaceInfo(a.body, a.state.position, w.ut).altitude/1000).toFixed(2) : null }; }));
+  console.log(i, await page.evaluate(() => { const f = window.__flight; const w = f.world; const a = w.active; return { ut: (w.ut - 964051200).toFixed(1), mode: a?.mode, status: f.assist?.status, alt: a ? (w.universe.surfaceInfo(a.body, a.state.position, w.ut).altitude/1000).toFixed(2) : null }; }));
 }
 await browser.close();

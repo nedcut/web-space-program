@@ -91,7 +91,7 @@ export class Room {
         return;
       case 'warp': p.warp = m.rate; return;
       case 'chat': this.event({ type: 'chat', playerId: p.id, name: p.name, text: m.text.trim() }); return;
-      case 'launch':
+      case 'launch': {
         if (this.queue.some(q => q.playerId === p.id)) throw new Error('You already have a queued launch');
         if (this.world.vessels.size >= 32) throw new Error('Prototype fleet limit reached (32 vessels)');
         const assembled = buildVessel(m.craft, this.world.catalog, { id: 'validate', resourceDefs: RESOURCES });
@@ -103,6 +103,7 @@ export class Room {
         this.processQueue();
         this.fullSnapshot();
         return;
+      }
       case 'action': {
         if (!p.vesselId) throw new Error('Claim a vessel first');
         const focus = this.world.activeId;

@@ -2,7 +2,7 @@ import { World, PHYSICS_DT } from '../game/world';
 import { RAILS_WARP } from '../game/timewarp';
 import { Universe } from '../game/universe';
 import { PART_CATALOG } from '../data/parts';
-import { neutralInput, type ControlInput } from '../sim/vessel';
+import type { ControlInput } from '../sim/vessel';
 import { add, sub, scale, length, v3, type Vec3 } from '../util/vec3';
 import { qNormalize, type Quat } from '../util/quat';
 import { applyDeltas, replaceWorld } from './snapshots';
@@ -11,7 +11,7 @@ import { decodeServer, encode, WARP_RATES, type ClientMessage, type RoomState, t
 export interface MultiplayerConfig { url: string; room: string; name: string }
 export interface Pose { position: Vec3; velocity: Vec3; orientation: Quat; body: string }
 interface Frame { tick: number; ut: number; poses: Map<string, Pose> }
-export const blendQuat = (a: Quat, b: Quat, t: number): Quat => {
+const blendQuat = (a: Quat, b: Quat, t: number): Quat => {
   const sign = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w < 0 ? -1 : 1;
   return qNormalize({ x: a.x * (1 - t) + b.x * t * sign, y: a.y * (1 - t) + b.y * t * sign, z: a.z * (1 - t) + b.z * t * sign, w: a.w * (1 - t) + b.w * t * sign });
 };

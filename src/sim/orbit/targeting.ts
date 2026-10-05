@@ -48,7 +48,7 @@ export function trajectoryClosestApproach(
       for (let k = 1; k <= n; k++) {
         const t = start + ((end - start) * k) / n;
         const d = sep(t);
-        if (d < bd) (bd = d), (time = t);
+        if (d < bd) { bd = d; time = t; }
       }
       let lo = Math.max(start, time - (end - start) / n), hi = Math.min(end, time + (end - start) / n);
       for (let k = 0; k < 60; k++) {

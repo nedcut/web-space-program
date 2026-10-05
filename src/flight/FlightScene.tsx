@@ -154,12 +154,12 @@ export default function FlightScene() {
       if (tutorialContext.flight === c) { delete tutorialContext.flight; delete tutorialContext.world; }
       setTele(null);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mountKey]);
 
+  const awaitingTelemetry = tele === null;
   useEffect(() => {
     if (ctrl.current) ctrl.current.paused = paused;
-  }, [paused, tele === null]);
+  }, [paused, awaitingTelemetry]);
 
   // Input reads settings each frame; planet quality, clouds and scattering rebuild from a snapshot.
   useEffect(() => {
