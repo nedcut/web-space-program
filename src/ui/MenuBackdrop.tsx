@@ -10,12 +10,17 @@ export function MenuBackdrop() {
   useEffect(() => {
     let disposed = false;
     let cleanup: (() => void) | undefined;
-    import('./planetPreview').then(({ mountPlanetPreview }) => {
+    // Load three.js and compile the Saturn shaders once the menu is interactive (the 2D
+    // fallback below is visible meanwhile), so they do not compete with the first clicks.
+    const load = () => import('./planetPreview').then(({ mountPlanetPreview }) => {
       if (disposed) return;
       try { cleanup = mountPlanetPreview(live.current!, 'saturn', 'standard', true, setReady); }
       catch { setReady(false); }
     }).catch(() => setReady(false));
-    return () => { disposed = true; cleanup?.(); };
+    // Safari lacks requestIdleCallback.
+    const hasIdle = typeof window.requestIdleCallback === 'function';
+    const handle = hasIdle ? window.requestIdleCallback(() => void load(), { timeout: 1500 }) : window.setTimeout(() => void load(), 300);
+    return () => { disposed = true; if (hasIdle) window.cancelIdleCallback(handle); else window.clearTimeout(handle); cleanup?.(); };
   }, []);
   const ref = useRef<HTMLCanvasElement>(null);
 

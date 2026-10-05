@@ -3,6 +3,7 @@ import { isTyping, matches } from '../../input/bindings';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { game } from '../../game/store';
+import { QUALITY_PRESETS } from '../../render/core/quality';
 import type { PartInstance } from '../../sim/vessel/types';
 import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../../util/quat';
 import { add, sub, v3, type Vec3 } from '../../util/vec3';
@@ -120,7 +121,7 @@ export class EditorView {
     const quality = game.get().settings.quality;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     const dpr = window.devicePixelRatio || 1;
-    this.renderer.setPixelRatio(Math.min(dpr, quality === 'high' ? 2 : quality === 'medium' ? 1.5 : 1) * game.get().settings.renderScale);
+    this.renderer.setPixelRatio(Math.min(dpr, QUALITY_PRESETS[quality].maxPixelRatio) * game.get().settings.renderScale);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -781,6 +782,7 @@ export class EditorView {
 
   // ------------------------------------------------------------------ frame loop
   private resize() {
+    this.idleFor = Infinity;
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
     this.renderer.setSize(w, h, false);
     this.renderer.domElement.style.width = '100%';
@@ -823,11 +825,20 @@ export class EditorView {
       this.updatePlacement();
     } else if (this.snapKey) this.pulseMarkers();
     const t1 = performance.now();
+    // The hangar is static: skip GPU work while nothing moves (re-render at 2 Hz as a safety net).
+    const settling = Math.abs(this.gYaw - this.yaw) + Math.abs(this.gPitch - this.pitch) + Math.abs(this.gTargetY - this.targetY) + Math.abs(this.gDist - this.dist) / Math.max(1, this.dist) > 1e-5;
+    const changed = key !== this.renderedKey || settling || !!this.snapKey;
+    this.idleFor = changed ? 0 : this.idleFor + dt;
+    if (!changed && this.idleFor < 0.5) return;
+    if (!changed) this.idleFor = 0;
+    this.renderedKey = key;
     this.renderer.render(this.scene, this.camera);
     const t2 = performance.now();
     this.timing = { update: t1 - t0, render: t2 - t1, calls: this.renderer.info.render.calls, tris: this.renderer.info.render.triangles };
   };
   private frameKey = '';
+  private renderedKey = '';
+  private idleFor = Infinity;
   private pulseMarkers() {
     for (const m of this.nodeMarkers) if (m.key === this.snapKey) m.mesh.scale.setScalar(m.base * (1.5 + Math.sin(performance.now() / 120) * 0.2));
   }

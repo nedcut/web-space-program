@@ -19,11 +19,13 @@ import { ErrorBoundary } from './ErrorBoundary';
 const Scenarios = lazy(() => import('../scenarios/Scenarios'));
 const FlightLog = lazy(() => import('./FlightLog'));
 const Spacepedia = lazy(() => import('./Spacepedia'));
-const EditorScene = lazy(() => import('../editor/EditorScene'));
+const loadEditor = () => import('../editor/EditorScene');
+const loadFlight = () => import('../flight/FlightScene');
+const EditorScene = lazy(loadEditor);
 const TrackingStation = lazy(() => import('./tracking/TrackingStation'));
 const Research = lazy(() => import('./Research'));
 const Missions = lazy(() => import('./Missions'));
-const FlightScene = lazy(() => import('../flight/FlightScene'));
+const FlightScene = lazy(loadFlight);
 
 export function App() {
   const photo = usePhotoMode();
@@ -37,6 +39,15 @@ export function App() {
     document.documentElement.dataset.reduceMotion = String(settings.reduceMotion);
   }, [settings.highContrast, settings.reduceMotion, photo.active]);
   const scene = useGame((s) => s.scene);
+  // Warm the next scenes' code while the player is busy elsewhere (no work on the menu itself).
+  useEffect(() => {
+    const next = scene === 'spaceCenter' ? [loadEditor, loadFlight] : scene === 'editor' ? [loadFlight] : [];
+    if (!next.length) return;
+    const run = () => next.forEach((load) => void load().catch(() => undefined));
+    const hasIdle = typeof window.requestIdleCallback === 'function';
+    const handle = hasIdle ? window.requestIdleCallback(run, { timeout: 4000 }) : window.setTimeout(run, 2000);
+    return () => { if (hasIdle) window.cancelIdleCallback(handle); else window.clearTimeout(handle); };
+  }, [scene]);
   return (
     <div className="fullscreen" style={{ width: `${100 / settings.uiScale}%`, height: `${100 / settings.uiScale}%`, transform: `scale(${settings.uiScale})`, transformOrigin: 'top left' }}>
       <ErrorBoundary>

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hashString, persistTextures, takeCachedTextures } from '../core/textureCache';
 
 /**
  * Procedural canvas textures for the launch complex. All original artwork, generated at runtime.
@@ -50,7 +51,7 @@ function speckle(g: CanvasRenderingContext2D, S: number, n: number, r: () => num
 }
 
 /** Weathered concrete slab, tile 8 m with a joint every 4 m. */
-export function concreteTexture(seed = 1, base = '#9c9a94', joints = true): THREE.CanvasTexture {
+function concreteTextureImpl(seed = 1, base = '#9c9a94', joints = true): THREE.CanvasTexture {
   const S = 512;
   const { c, g } = canvas(S, S);
   const r = rng(seed);
@@ -83,7 +84,7 @@ export function concreteTexture(seed = 1, base = '#9c9a94', joints = true): THRE
 }
 
 /** Blackened, soot-streaked concrete for the flame trench (tile 8 m). */
-export function sootTexture(): THREE.CanvasTexture {
+function sootTextureImpl(): THREE.CanvasTexture {
   const S = 512;
   const { c, g } = canvas(S, S);
   const r = rng(77);
@@ -102,7 +103,7 @@ export function sootTexture(): THREE.CanvasTexture {
  * Launch pad deck markings for a 48 m × 48 m square centred on the pad (u = x, v = z): concrete with a large
  * painted ring, hazard chevrons around the flame hole and a stencilled pad code. Not tiled.
  */
-export function padDeckTexture(holeHalf: number, trenchHalf: number): THREE.CanvasTexture {
+function padDeckTextureImpl(holeHalf: number, trenchHalf: number): THREE.CanvasTexture {
   const S = 2048;
   const M = 48;
   const px = S / M;
@@ -191,7 +192,7 @@ export function padDeckTexture(holeHalf: number, trenchHalf: number): THREE.Canv
 }
 
 /** Two-lane asphalt road: u across the width (0..1), v along (tile 24 m). */
-export function roadTexture(crawler = false): THREE.CanvasTexture {
+function roadTextureImpl(crawler = false): THREE.CanvasTexture {
   const W = 256, H = 512;
   const { c, g } = canvas(W, H);
   const r = rng(crawler ? 31 : 21);
@@ -242,7 +243,7 @@ export function roadTexture(crawler = false): THREE.CanvasTexture {
  * Runway surface tile: grooved asphalt, white edge stripes and a dashed white centreline. u spans the full
  * 60 m width (0..1), one tile = 60 m along the runway (30 m dash + 30 m gap).
  */
-export function runwayTexture(): THREE.CanvasTexture {
+function runwayTextureImpl(): THREE.CanvasTexture {
   const W = 512, H = 512;
   const { c, g } = canvas(W, H);
   const r = rng(77);
@@ -278,7 +279,7 @@ export function runwayTexture(): THREE.CanvasTexture {
  * bars, a two-digit heading designator, and touchdown-zone bars. Text reads upright from the approach
  * (canvas top = far end, v = 1).
  */
-export function runwayEndTexture(designator: string): THREE.CanvasTexture {
+function runwayEndTextureImpl(designator: string): THREE.CanvasTexture {
   const W = 512, H = 1024;
   const { c, g } = canvas(W, H);
   g.clearRect(0, 0, W, H);
@@ -309,7 +310,7 @@ export function runwayEndTexture(designator: string): THREE.CanvasTexture {
   return tex(c, true, false);
 }
 
-export function claddingTexture(): THREE.CanvasTexture {
+function claddingTextureImpl(): THREE.CanvasTexture {
   const { c, g } = canvas(256, 512);
   g.fillStyle = '#93a0ad';
   g.fillRect(0, 0, 256, 512);
@@ -334,7 +335,7 @@ export function claddingTexture(): THREE.CanvasTexture {
 }
 
 /** Giant hangar door: tall panels with horizontal ribs; u across the full door, v up the full height. */
-export function vabDoorTexture(): THREE.CanvasTexture {
+function vabDoorTextureImpl(): THREE.CanvasTexture {
   const W = 512, H = 1024;
   const { c, g } = canvas(W, H);
   g.fillStyle = '#a3abb4';
@@ -364,7 +365,7 @@ export function vabDoorTexture(): THREE.CanvasTexture {
 }
 
 /** Large painted "WSP" agency wordmark with an orbit swoosh (transparent background). */
-export function logoTexture(): THREE.CanvasTexture {
+function logoTextureImpl(): THREE.CanvasTexture {
   const W = 1024, H = 512;
   const { c, g } = canvas(W, H);
   g.clearRect(0, 0, W, H);
@@ -390,7 +391,7 @@ export function logoTexture(): THREE.CanvasTexture {
 }
 
 /** Original agency flag: deep blue field, white diagonal band and a four-point star (transparent edges). */
-export function flagTexture(): THREE.CanvasTexture {
+function flagTextureImpl(): THREE.CanvasTexture {
   const W = 1024, H = 640;
   const { c, g } = canvas(W, H);
   g.fillStyle = '#173f73';
@@ -416,7 +417,7 @@ export function flagTexture(): THREE.CanvasTexture {
 }
 
 /** Office façade: window bands on concrete, tile 12 m × 4 m (one storey). */
-export function windowsTexture(): THREE.CanvasTexture {
+function windowsTextureImpl(): THREE.CanvasTexture {
   const W = 512, H = 256;
   const { c, g } = canvas(W, H);
   const r = rng(41);
@@ -441,3 +442,41 @@ export function windowsTexture(): THREE.CanvasTexture {
   g.fillRect(0, H - 6, W, 6);
   return tex(c);
 }
+
+// ---------------------------------------------------------------------------------------------
+// Caching: canvases are reused within a session (hub → flight) and persisted across sessions in
+// IndexedDB, keyed by arguments plus a hash of the drawing code (see render/core/textureCache).
+// ---------------------------------------------------------------------------------------------
+const memory = new Map<string, { canvas: HTMLCanvasElement; srgb: boolean; repeat: boolean }>();
+let helpersHash = '';
+function cachedSite<A extends unknown[]>(name: string, make: (...args: A) => THREE.CanvasTexture): (...args: A) => THREE.CanvasTexture {
+  return (...args: A) => {
+    if (typeof document === 'undefined') return make(...args);
+    helpersHash ||= hashString([rng, canvas, tex, blotches, speckle].map(String).join('\n'));
+    const group = `site:${name}:${JSON.stringify(args)}`;
+    const id = `${group}:${helpersHash}:${hashString(String(make))}`;
+    let entry = memory.get(id);
+    if (!entry) {
+      const stored = takeCachedTextures(id)?.[0];
+      if (stored) memory.set(id, (entry = { canvas: stored.canvas, srgb: stored.srgb, repeat: stored.slot === 'repeat' }));
+    }
+    if (entry) return tex(entry.canvas, entry.srgb, entry.repeat);
+    const t = make(...args);
+    const fresh = { canvas: t.image as HTMLCanvasElement, srgb: t.colorSpace === THREE.SRGBColorSpace, repeat: t.wrapS === THREE.RepeatWrapping };
+    memory.set(id, fresh);
+    persistTextures(group, id, [{ slot: fresh.repeat ? 'repeat' : 'clamp', srgb: fresh.srgb, canvas: fresh.canvas }]);
+    return t;
+  };
+}
+
+export const concreteTexture = cachedSite('concreteTexture', concreteTextureImpl);
+export const sootTexture = cachedSite('sootTexture', sootTextureImpl);
+export const padDeckTexture = cachedSite('padDeckTexture', padDeckTextureImpl);
+export const roadTexture = cachedSite('roadTexture', roadTextureImpl);
+export const runwayTexture = cachedSite('runwayTexture', runwayTextureImpl);
+export const runwayEndTexture = cachedSite('runwayEndTexture', runwayEndTextureImpl);
+export const claddingTexture = cachedSite('claddingTexture', claddingTextureImpl);
+export const vabDoorTexture = cachedSite('vabDoorTexture', vabDoorTextureImpl);
+export const logoTexture = cachedSite('logoTexture', logoTextureImpl);
+export const flagTexture = cachedSite('flagTexture', flagTextureImpl);
+export const windowsTexture = cachedSite('windowsTexture', windowsTextureImpl);

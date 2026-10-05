@@ -114,7 +114,11 @@ async function measure(page, cdp, label) {
   }
   // --nogpu: skip GPU submission so the remaining main-thread work runs at its natural rate.
   if (args.nogpu) await page.evaluate(() => { const p = window.__flight.pipeline; p.composer.render = () => {}; p.renderMap = () => {}; });
-  await page.evaluate(() => { window.__perf.enabled = true; window.__perf.reset(); });
+  await page.evaluate(() => {
+    window.__perf.enabled = true; window.__perf.reset();
+    // Independent rAF counter (older builds' profilers only retain the last 240 frames).
+    const c = (window.__rafCount = { n: 0, on: true }); const tick = () => { if (!c.on) return; c.n++; requestAnimationFrame(tick); }; requestAnimationFrame(tick);
+  });
   await cdp.send('Performance.enable');
   const m0 = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
   if (args.cpu) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start'); }
@@ -125,7 +129,7 @@ async function measure(page, cdp, label) {
     const s = window.__perf.summary();
     const info = p.renderer.info;
     return { summary: s, stats: { ...p.stats, programs: info.programs?.length ?? 0 }, scale: p.effectiveRenderScale,
-      canvas: [p.renderer.domElement.width, p.renderer.domElement.height], frames: window.__perf.totalFrames };
+      canvas: [p.renderer.domElement.width, p.renderer.domElement.height], frames: (window.__rafCount.on = false, window.__rafCount.n) };
   });
   const m1 = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
   const frames = out.frames || 1;
