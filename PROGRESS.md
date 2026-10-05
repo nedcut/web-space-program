@@ -2,6 +2,23 @@
 
 _Last updated: 2026-10-04_
 
+## Start here (for Ned)
+**Run it:** `npm install && npm run dev`, open http://localhost:5173. Pick **New Game → Sandbox → Standard** for the easiest start;
+the first flight shows a controls cheat sheet (F1 brings it back). **Training** on the main menu has 8 guided lessons.
+
+**What exists:** the real solar system (Sun, 8 planets, Pluto, Ceres, 40 moons — Saturn and its 19 moons get special
+treatment: rings you can fly through, the polar hexagon, Enceladus plumes, Titan's haze); ~160 original parts and 22 stock
+crafts; rockets, planes, rovers, stations, docking, EVA, mining, comms relays; Sandbox / Science / Career modes; three scale
+presets (Standard 1/10, Challenging, Real — all verified by automated missions); an experimental LAN multiplayer prototype
+(see MULTIPLAYER.md); Spacepedia encyclopedia; rebindable controls + gamepad.
+
+**Verified by automated tests (~675):** reaching orbit at all three scales, Moon landing + return (standard and real scale),
+Earth → Saturn orbit, Titan landing, real-scale re-entry, jet takeoff, docking, EVA, save/load determinism.
+
+**Please check on your laptop (I could only test with a slow software renderer):** frame rate on each graphics preset
+(Settings → Graphics; there's an adaptive-resolution option), loading time, and the overall feel of flying. Then tell me
+what feels wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
+
 ## How to run
 ```bash
 npm install
@@ -34,7 +51,7 @@ Dev shortcuts:
 | Mouse drag / wheel | orbit camera / zoom |
 
 ## Status
-Milestone 1 (build → launch → orbit → Moon) is complete and verified. Beyond it: docking, aircraft, EVA, interplanetary.
+Milestone 1 (build → launch → orbit → Moon) is complete and verified. Beyond it: docking, aircraft, EVA, interplanetary, science/career, comms, mining, multiplayer prototype. Feature notes per area follow below the table.
 
 | Area | State |
 |---|---|
@@ -43,7 +60,7 @@ Milestone 1 (build → launch → orbit → Moon) is complete and verified. Beyo
 | Orbital mechanics: Kepler, ephemeris, patched conics, SOI transitions, maneuver nodes | ✅ tested |
 | Atmospheres (layered US-Std-76 for Earth; Mars, Venus, Titan, giants) | ✅ tested |
 | Vessel physics: rigid body, fuel flow, pressure-dependent engines, Mach drag, lift, heating, chutes, legs, SAS | ✅ tested |
-| 153 original parts with procedural PBR models + exhaust plumes | ✅ |
+| ~160 original parts with procedural PBR models + exhaust plumes | ✅ |
 | World runtime: launch pad, physics ↔ rails warp, SOI changes, debris | ✅ (orbit reached in autopilot test) |
 | Flight HUD, navball, staging, map view, maneuver planner | ✅ first pass |
 | Procedural audio | ✅ |
