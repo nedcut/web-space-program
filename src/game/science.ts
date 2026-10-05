@@ -5,6 +5,7 @@ import { EXPERIMENTS, subjectKey, bodyMultiplier, scienceValue, experimentAvaila
 import { evaluateContracts, failContract, type ProgressEvent } from '../sim/science/progression';
 import { dot } from '../util/vec3';
 import { latLonToUnit, LAUNCH_SITE } from '../sim/terrain';
+import { isExtended } from '../sim/vessel/tweaks';
 
 export function scienceContext(w: World, vessel: WorldVessel): ScienceContext {
   const b = w.universe.body(vessel.body);
@@ -54,8 +55,8 @@ function credit(w: World, data: ScienceData, fraction: number): number {
 export function transmitScience(w: World): number {
   const v = w.active;
   if (!v || !w.canControl(v.state)) return 0;
-  const fraction = Math.max(0, ...v.state.parts.flatMap(p => p.def.modules.map(m => m.type === 'antenna' ? m.transmission : 0)));
-  if (!fraction) { w.message('Fit a telemetry antenna to transmit data', 'warn'); return 0; }
+  const fraction = Math.max(0, ...v.state.parts.filter(isExtended).flatMap(p => p.def.modules.map(m => m.type === 'antenna' ? m.transmission : 0)));
+  if (!fraction) { w.message(v.state.parts.some(p => p.def.modules.some(m => m.type === 'antenna')) ? 'Extend an antenna to transmit data' : 'Fit a telemetry antenna to transmit data', 'warn'); return 0; }
   if (w.commsSettings.enabled) {
     if (!w.connection(v.state).connected) { w.message('No signal — transmission unavailable', 'warn'); return 0; }
     if (!w.transmitting.includes(v.state.id)) w.transmitting.push(v.state.id);
@@ -115,7 +116,7 @@ export function advanceTransmissions(w: World) {
   w.transmitting = w.transmitting.filter(id => {
     const v = w.vessels.get(id);
     if (!v) return false;
-    const fraction = Math.max(0, ...v.state.parts.flatMap(p => p.def.modules.map(m => m.type === 'antenna' ? m.transmission : 0)));
+    const fraction = Math.max(0, ...v.state.parts.filter(isExtended).flatMap(p => p.def.modules.map(m => m.type === 'antenna' ? m.transmission : 0)));
     if (!fraction) return true; // Antenna loss pauses the job; replacement/docking may restore it.
     const connection = w.commsSettings.enabled ? w.connection(v.state) : { strength: 1 };
     // Cap catch-up to the graph sampling window: never assume a link persisted across a rails jump.

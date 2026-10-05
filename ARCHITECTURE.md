@@ -41,7 +41,10 @@ than importing `World`. `LaunchSite` already follows that structural-input patte
   patched conics, SOI transitions, targeting/maneuvers and prediction readouts.
 - `sim/terrain`: shared seeded terrain/noise/craters and body presets; `sim/atmosphere`: atmospheric sampling.
 - `sim/vessel`: assembly/topology, staging, mass/inertia, resource crossfeed/power, engines/RCS, SAS,
-  aero/heating, wheels/contact, rigid integration, docking, EVA and analytic ISRU.
+  aero/heating, wheels/contact, rigid integration, docking, EVA and analytic ISRU. `tweaks.ts` holds per-part player
+  settings and their descriptors/validation; `actions.ts` holds part actions, action groups and the one-shot
+  `ControlInput.commands` applied by the authority (World / multiplayer room). UI for both lives in `ui/inspector`
+  (shared floating panels), `editor/ui/{PartInspector,ActionGroupsPanel}` and `flight/hud/PartInspector`.
 - `sim/hazards`: pressure ratings/overload, equipment heat soak, dipole-like radiation dose and Sun occlusion; `game/world/hazards.ts` integrates packed exposure and roster dose.
 - `sim/comms/network.ts`: range/occlusion/relay routing; `sim/science`: biomes, experiments and progression;
   `sim/resources/deposits.ts`: deterministic concentrations; `sim/crew/crew.ts`: roster/seats/control authority.

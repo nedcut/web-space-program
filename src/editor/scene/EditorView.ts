@@ -11,6 +11,7 @@ import { surfaceTransform } from '../surface';
 import { createStudioEnvironment } from '../../render/core/studioEnv';
 import { buildHangar, HANGAR, type Hangar } from './hangar';
 import { createPartMesh } from './partMesh';
+import { setLightAppearance } from '../../render/parts';
 
 const DEG = Math.PI / 180;
 const SNAP_PX = 64;
@@ -54,6 +55,8 @@ const HOVER_TINT = { key: 'hover', color: 0x2a8fd0, intensity: 0.55 };
 const STAGE_TINT = { key: 'stage', color: 0xffb35c, intensity: 0.6 };
 const BAD_TINT = { key: 'bad', color: 0xc02020, intensity: 0.7 };
 const SNAP_TINT = { key: 'snap', color: 0x1f9a55, intensity: 0.35 };
+const SELECT_TINT = { key: 'select', color: 0x79d7ee, intensity: 0.75 };
+const GROUP_TINT = { key: 'group', color: 0x9b6bff, intensity: 0.6 };
 
 /**
  * Vehicle assembly 3D view: hangar, craft meshes, held-part interaction (stack snapping, surface attach,
@@ -107,6 +110,9 @@ export class EditorView {
   private lift = 3;
   private hoverSet = new Set<number>();
   private stageSet = new Set<number>();
+  private selectSet = new Set<number>();
+  private groupSet = new Set<number>();
+  private longPress = 0;
   private heldParts: PartInstance[] = [];
   private ghostCount = 0;
   private nodeMarkers: { mesh: THREE.Mesh; key: string; base: number }[] = [];
@@ -251,6 +257,8 @@ export class EditorView {
     }
     // Highlights
     this.stageSet = new Set(snap.highlightUids);
+    this.selectSet = new Set(snap.selectedUids);
+    this.groupSet = new Set(snap.mode === 'actions' ? snap.groupUids : []);
     this.applyHighlights();
     this.com.visible = snap.showCoM && snap.stats.partCount > 0;
     this.cot.visible = snap.showCoT && !!snap.stats.centreOfThrust;
@@ -273,6 +281,8 @@ export class EditorView {
       }
       toV(p.position, entry.obj.position);
       toQ(p.rotation, entry.obj.quaternion);
+      if (p.tweaks?.lightOn !== undefined || p.tweaks?.lightColor !== undefined || CATALOG.get(p.partId)!.modules.some(m => m.type === 'light'))
+        setLightAppearance(entry.obj, p.tweaks?.lightOn !== false, p.tweaks?.lightColor);
     }
     for (const [uid, e] of this.partObjs) if (!seen.has(uid)) { this.craftGroup.remove(e.obj); this.partObjs.delete(uid); }
 
@@ -579,7 +589,7 @@ export class EditorView {
   // ------------------------------------------------------------------ highlights
   private applyHighlights() {
     for (const [uid, e] of this.partObjs) {
-      setTint(e.obj, this.stageSet.has(uid) ? STAGE_TINT : this.hoverSet.has(uid) ? HOVER_TINT : null);
+      setTint(e.obj, this.stageSet.has(uid) ? STAGE_TINT : this.selectSet.has(uid) ? SELECT_TINT : this.hoverSet.has(uid) ? HOVER_TINT : this.groupSet.has(uid) ? GROUP_TINT : null);
     }
   }
 
@@ -591,9 +601,9 @@ export class EditorView {
       const p = this.pickPart();
       if (p) {
         uid = p.uid;
-        // Highlight what a click would pick up: the part and its subtree.
+        // Highlight what a click would pick up: the part and its subtree (just the part in action-group mode).
         set = new Set([uid]);
-        let grew = true;
+        let grew = snap.mode === 'build';
         while (grew) {
           grew = false;
           for (const q of snap.craft.parts) if (q.parent !== undefined && set.has(q.parent) && !set.has(q.uid)) { set.add(q.uid); grew = true; }
@@ -670,6 +680,17 @@ export class EditorView {
     this.renderer.domElement.setPointerCapture(e.pointerId);
     this.drag = { button: e.button, x: e.clientX, y: e.clientY, moved: false, id: e.pointerId };
     if (e.button === 1) e.preventDefault();
+    window.clearTimeout(this.longPress);
+    if (e.pointerType === 'touch') {
+      // Touch long-press opens the part inspector (right-click equivalent).
+      const d = this.drag;
+      this.longPress = window.setTimeout(() => {
+        if (this.drag !== d || d.moved || this.session.getSnapshot().held) return;
+        d.moved = true; // consume: no click on release
+        const pick = this.pickPart();
+        if (pick) this.session.openPanel(pick.uid);
+      }, 550);
+    }
   };
 
   private onPointerMove = (e: PointerEvent) => {
@@ -696,6 +717,12 @@ export class EditorView {
     const d = this.drag;
     this.drag = null;
     try { this.renderer.domElement.releasePointerCapture(e.pointerId); } catch { /* not captured */ }
+    window.clearTimeout(this.longPress);
+    if (d && !d.moved && d.button === 2 && !this.session.getSnapshot().held) {
+      const pick = this.pickPart();
+      if (pick) this.session.openPanel(pick.uid);
+      return;
+    }
     if (!d || d.moved || d.button !== 0) return;
     this.click();
   };
@@ -722,10 +749,25 @@ export class EditorView {
       return;
     }
     const pick = this.pickPart();
+    if (pick && snap.mode === 'actions') { this.session.openPanel(pick.uid); return; }
     if (pick) {
       this.hoverSet.clear();
       this.session.pickUp(pick.uid);
     }
+  }
+
+  /** Screen position (CSS px within the canvas) of a part centre, or null when behind the camera. */
+  partScreenPosition(uid: number): { x: number; y: number } | null {
+    const e = this.partObjs.get(uid);
+    if (!e) return null;
+    const v = e.obj.getWorldPosition(new THREE.Vector3()).project(this.camera);
+    if (v.z > 1) return null;
+    const el = this.renderer.domElement;
+    return { x: ((v.x + 1) / 2) * el.clientWidth, y: ((1 - v.y) / 2) * el.clientHeight };
+  }
+  /** Pointer position for hover tooltips (CSS px within the canvas), when inside and not dragging. */
+  pointer(): { x: number; y: number } | null {
+    return this.mouseInside && !this.drag ? { ...this.mousePx } : null;
   }
 
   private onWheel = (e: WheelEvent) => {
@@ -753,7 +795,7 @@ export class EditorView {
     if (matches('editorRedo', e)) { e.preventDefault(); s.redo(); return; }
     if (matches('editorUndo', e)) { e.preventDefault(); s.undo(); return; }
     if (matches('editorSave', e)) { e.preventDefault(); s.save(); return; }
-    if (matches('editorCancel', e)) { s.cancelHeld(); return; }
+    if (matches('editorCancel', e)) { if (held) s.cancelHeld(); else s.closeTopPanel(); return; }
     if (matches('editorDelete', e)) {
       e.preventDefault();
       if (held) s.deleteHeld();
@@ -844,6 +886,7 @@ export class EditorView {
 
   dispose() {
     this.disposed = true;
+    window.clearTimeout(this.longPress);
     cancelAnimationFrame(this.raf);
     this.unsub();
     this.ro.disconnect();

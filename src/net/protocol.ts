@@ -1,4 +1,6 @@
 import { validCraftLinks } from '../sim/vessel/links';
+import { validCommands, validGroupActions } from '../sim/vessel/actions';
+import { validTweaks } from '../sim/vessel/tweaks';
 import type { SavedWorld } from '../game/persistence';
 import type { WorldVessel } from '../game/world';
 import type { ControlInput, PartState, VesselEvent, VesselState } from '../sim/vessel/runtime';
@@ -22,8 +24,8 @@ export type ClientMessage = Envelope & (
   | { type: 'chat'; text: string }
   | { type: 'action'; action: 'eva' | 'board' | 'flag' | 'undock'; uid?: number; astronautId?: string }
 );
-export type PartDelta = Pick<PartState, 'uid' | 'resources' | 'mass' | 'temperature' | 'skinTemperature' | 'activated' | 'engine' | 'chute' | 'leg' | 'wheel' | 'bayOpen' | 'drillDeployed' | 'drillDeploy' | 'converterRunning' | 'converterRecipe' | 'processTemperature' | 'dockDisarmed' | 'structuralFatigue' | 'linkFatigue' | 'link'>;
-export type DynamicState = Pick<VesselState, 'position' | 'velocity' | 'orientation' | 'angularVelocity' | 'mass' | 'com' | 'inertia' | 'invInertia' | 'nextStage' | 'situation' | 'sas' | 'telemetry' | 'eva' | 'destroyed'> & { parts: PartDelta[] };
+export type PartDelta = Pick<PartState, 'uid' | 'tweaks' | 'resources' | 'mass' | 'temperature' | 'skinTemperature' | 'activated' | 'engine' | 'chute' | 'leg' | 'wheel' | 'bayOpen' | 'drillDeployed' | 'drillDeploy' | 'converterRunning' | 'converterRecipe' | 'processTemperature' | 'dockDisarmed' | 'structuralFatigue' | 'linkFatigue' | 'link'>;
+export type DynamicState = Pick<VesselState, 'position' | 'velocity' | 'orientation' | 'angularVelocity' | 'mass' | 'com' | 'inertia' | 'invInertia' | 'nextStage' | 'situation' | 'sas' | 'telemetry' | 'eva' | 'destroyed' | 'groupState'> & { parts: PartDelta[] };
 export type HazardDelta = Pick<PartState, 'uid' | 'radiationDose' | 'ambientTemperature' | 'pressureExposure' | 'pressureWarned' | 'heatWarned' | 'electronicsDegraded' | 'electronicsFailed'> & { electricCharge?: number };
 export type VesselDelta = { id: string; body: string; hazards?: HazardDelta[]; crewDose?: { id: string; dose: number }[] } & (
   | { mode: 'rails'; orbit: NonNullable<WorldVessel['orbit']>; precise?: WorldVessel['precise'] }
@@ -70,6 +72,7 @@ function validInput(x: unknown): boolean {
   if (!['gear', 'brakes', 'evaJump', 'evaRun'].every(k => x[k] === undefined || typeof x[k] === 'boolean')) return false;
   if (x.wheelThrottle !== undefined && !num(x.wheelThrottle, 1)) return false;
   if (x.sasReference !== undefined && !['orbit', 'surface', 'target'].includes(String(x.sasReference))) return false;
+  if (x.commands !== undefined && !validCommands(x.commands)) return false;
   return (x.evaHeading === undefined || vec(x.evaHeading, true)) && (x.maneuverDirection === undefined || vec(x.maneuverDirection)) &&
     (x.target === undefined || (record(x.target) && vec(x.target.position) && vec(x.target.velocity)));
 }
@@ -82,6 +85,8 @@ export function validCraft(x: unknown): x is CraftDef {
     if (p.parent !== undefined && !Number.isSafeInteger(p.parent)) return false;
     if (p.stage !== undefined && (!num(p.stage, 100) || !Number.isInteger(p.stage))) return false;
     if (p.resources !== undefined && (!record(p.resources) || !Object.values(p.resources).every(v => num(v, 1e9) && v >= 0))) return false;
+    if (p.tweaks !== undefined && !validTweaks(p.tweaks)) return false;
+    if (p.actions !== undefined && !validGroupActions(p.actions)) return false;
     ids.add(p.uid);
   }
   const parts = x.parts as CraftDef['parts'];

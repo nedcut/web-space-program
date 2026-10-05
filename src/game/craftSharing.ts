@@ -1,4 +1,6 @@
 import { validCraftLinks } from '../sim/vessel/links';
+import { validGroupActions } from '../sim/vessel/actions';
+import { validTweaks } from '../sim/vessel/tweaks';
 import type { CraftDef, PartDef } from '../sim/vessel/types';
 
 export const MAX_CRAFT_BYTES = 2_000_000;
@@ -32,6 +34,8 @@ export function validateCraft(input: unknown, catalog: ReadonlyMap<string, PartD
     for (const k of ['stage', 'symmetryGroup']) if (p[k] !== undefined && (!Number.isSafeInteger(p[k]) || Number(p[k]) < 0 || Number(p[k]) > 10000)) errors.push(`Invalid ${k}.`);
     for (const k of ['attachNode', 'parentNode']) if (p[k] !== undefined && (typeof p[k] !== 'string' || String(p[k]).length > 100)) errors.push(`Invalid ${k}.`);
     if (p.resources !== undefined && (!record(p.resources) || Object.values(p.resources).some(v => !finite(v) || Number(v) < 0))) errors.push('Invalid resource quantities.');
+    if (p.tweaks !== undefined && !validTweaks(p.tweaks)) errors.push(`Invalid part settings on ${p.uid}.`);
+    if (p.actions !== undefined && !validGroupActions(p.actions)) errors.push(`Invalid action groups on ${p.uid}.`);
   }
   if (!errors.length && !validCraftLinks(input.parts as CraftDef['parts'])) errors.push('Invalid part link.');
   if (roots !== 1) errors.push('Craft must have exactly one root.');

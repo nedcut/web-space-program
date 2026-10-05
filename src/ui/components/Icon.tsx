@@ -42,6 +42,8 @@ const paths: Record<string, ReactElement> = {
   sym: <><circle cx="12" cy="12" r="2" />{P('M12 3v5M12 16v5M3 12h5M16 12h5')}</>,
   frame: <>{P('M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5')}</>,
   wand: <>{P('M4 20L16 8M14 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1z')}</>,
+  close: P('M6 6l12 12M18 6 6 18'),
+  groups: <>{P('M4 5h4v4H4zM4 15h4v4H4zM11 7h9M11 17h9M11 12h6')}</>,
 };
 
 export function Icon({ name, size = 18, stroke = 1.6 }: { name: PartCategory | keyof typeof paths; size?: number; stroke?: number }) {

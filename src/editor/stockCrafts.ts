@@ -1,6 +1,6 @@
 import type { ScalePresetId } from '../sim/bodies/scale';
 import { PART_CATALOG } from '../data/parts';
-import type { CraftDef, PartDef } from '../sim/vessel/types';
+import type { CraftDef, PartActionId, PartDef } from '../sim/vessel/types';
 import { qFromAxisAngle, qRotate, type Quat } from '../util/quat';
 import { v3, type Vec3 } from '../util/vec3';
 import { CraftEditor, type PartCatalog } from './core';
@@ -621,5 +621,43 @@ export const STOCK_CRAFTS: StockCraft[] = ([
   { scale: 'real', id: 'stock-selene-real', name: 'Selene Real Expedition', blurb: 'Real scale · five-metre Moon landing and return expedition', build: () => buildRealMoonLander() },
 ] satisfies StockCraft[]).map(stock => ({
   ...stock,
-  build: () => ({ ...stock.build(), stockId: stock.id }),
+  build: () => wireStockGroups({ ...stock.build(), stockId: stock.id }),
 }));
+
+/**
+ * Default action groups for stock designs. Crewed launchers get an Abort sequence (shut down liquid engines, drop the
+ * stack below the capsule, arm the capsule's parachutes); retractable solar arrays and antennas toggle on group 1.
+ */
+export function wireStockGroups(craft: CraftDef, catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const parts = craft.parts.map(p => ({ ...p }));
+  const byUid = new Map(parts.map(p => [p.uid, p]));
+  const def = (p: CraftDef['parts'][number]) => catalog.get(p.partId)!;
+  const bind = (p: CraftDef['parts'][number], group: 'abort' | 'custom1', action: PartActionId) => {
+    if (p.actions?.[group]?.includes(action)) return;
+    p.actions = { ...p.actions, [group]: [...(p.actions?.[group] ?? []), action] };
+  };
+  const root = parts.find(p => p.parent === undefined);
+  const crewed = !!root && def(root).modules.some(m => m.type === 'command' && m.crew > 0);
+  if (crewed) {
+    // First stack decoupler below the capsule: follow stack children from the root.
+    type Part = CraftDef['parts'][number];
+    let cur: Part | undefined = root, escape: Part | undefined;
+    for (let guard = 0; cur && guard < 6 && !escape; guard++) {
+      const parentUid: number = cur.uid;
+      const child: Part | undefined = parts.find(p => p.parent === parentUid && p.attachNode !== 'srf' && p.parentNode === 'bottom');
+      if (child && def(child).modules.some(m => m.type === 'decoupler')) escape = child;
+      cur = child;
+    }
+    if (escape) {
+      const dropped = (p: CraftDef['parts'][number]) => { for (let q: typeof p | undefined = p; q; q = q.parent === undefined ? undefined : byUid.get(q.parent)) if (q.parent === escape!.uid) return true; return false; };
+      bind(escape, 'abort', 'decouple');
+      for (const p of parts) {
+        const mods = def(p).modules;
+        if (mods.some(m => m.type === 'parachute') && !dropped(p)) bind(p, 'abort', 'chute.deploy');
+        if (mods.some(m => m.type === 'engine' && !(m.propellants.solidFuel ?? 0))) bind(p, 'abort', 'engine.shutdown');
+      }
+    }
+  }
+  for (const p of parts) if (def(p).modules.some(m => (m.type === 'solarPanel' && m.tracking) || m.type === 'antenna')) bind(p, 'custom1', 'deploy.toggle');
+  return { ...craft, parts };
+}

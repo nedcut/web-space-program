@@ -144,3 +144,10 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); opacity: .8;
 label.panel:has(.scale-radio:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 [tabindex="-1"]:focus-visible { outline: none; }
+
+/* Action-group strip (bottom-centre HUD). */
+.hud-groups { padding: 8px; display: flex; flex-direction: column; gap: 4px; width: 92px; }
+.hud-groups .btn { padding: 4px 2px; font-size: 10px; }
+.hud-abort { color: var(--bad); border-color: rgba(255, 146, 148, 0.45); background: rgba(255, 107, 107, 0.1); letter-spacing: 0.08em; font-weight: 650; }
+.hud-abort:hover, .hud-abort.on { background: rgba(255, 107, 107, 0.24); border-color: var(--bad); }
+.hud-group-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }

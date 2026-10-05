@@ -4,7 +4,7 @@ import { batchStaticParts, disposeStaticBatch } from './staticBatch';
 import * as THREE from 'three';
 import type { VesselState, PartState } from '../../sim/vessel/runtime';
 import type { EngineModule } from '../../sim/vessel/types';
-import { buildPartMesh, createPlume, getExhaustAnchors, setPartDeploy, setEngineGimbal, setGearPose, type Plume } from '../parts';
+import { buildPartMesh, createPlume, getExhaustAnchors, setLightAppearance, setPartDeploy, setEngineGimbal, setGearPose, type Plume } from '../parts';
 import { qRotate } from '../../util/quat';
 import type { Vec3 } from '../../util/vec3';
 
@@ -172,6 +172,7 @@ export class VesselView {
         puff.scale.setScalar(0.8 + 0.2 * Math.sin(time * 41 + side));
       }
     }
+    if (!this.stressOverlay && p.def.modules.some(m => m.type === 'light')) setLightAppearance(pv.object, p.tweaks?.lightOn !== false, p.tweaks?.lightColor);
     if (p.engine) {
       const thr = p.engine.ignited && !p.engine.flamedOut ? p.engine.throttle : 0;
       for (const pl of pv.plumes) pl.update({ throttle: thr, ambientPressure, time });
@@ -196,6 +197,8 @@ export class VesselView {
     if (p.bayOpen !== undefined) target = p.bayOpen ? 1 : 0;
     if (p.leg) target = p.leg.deployed ? 1 : 0;
     if (p.chute) target = p.chute.phase === 'full' ? 1 : p.chute.phase === 'semi' ? 0.35 : 0;
+    // Retractable solar arrays follow their extended setting (catalogue default: extended).
+    if (p.def.modules.some(m => m.type === 'solarPanel' && m.tracking)) target = p.tweaks?.extended === false ? 0 : 1;
     if (target >= 0 && Math.abs(pv.deploy - target) > 1e-3) {
       pv.deploy += Math.sign(target - pv.deploy) * Math.min(Math.abs(target - pv.deploy), dt * 0.6);
       setPartDeploy(pv.object, pv.deploy);

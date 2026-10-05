@@ -162,6 +162,28 @@ export function setPartDeploy(root: THREE.Object3D, t: number) {
   });
 }
 
+/**
+ * Lamp lens appearance (on/off, colour). The lens gets its own material clone on first use so colours stay per part;
+ * editor tint bookkeeping (userData.baseMat) follows the clone.
+ */
+export function setLightAppearance(root: THREE.Object3D, on: boolean, color = '#fff1cf') {
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || o.name !== 'lightLens') return;
+    let mat = o.userData.lampMat as THREE.MeshStandardMaterial | undefined;
+    if (!mat) {
+      const prev = (o.userData.baseMat ?? mesh.material) as THREE.MeshStandardMaterial;
+      mat = prev.clone();
+      o.userData.lampMat = mat;
+      if (mesh.material === prev) mesh.material = mat;
+      if (o.userData.baseMat !== undefined) o.userData.baseMat = mat;
+    } else if (o.userData.baseMat === undefined && mesh.material !== mat) mesh.material = mat;
+    mat.emissive.set(color);
+    mat.emissiveIntensity = on ? 2.5 : 0;
+    mat.color.set(on ? color : '#8a8f96');
+  });
+}
+
 /** Set thrust-vector angles (radians) on every 'gimbal' node: pitch about X, yaw about Z. */
 export function setEngineGimbal(root: THREE.Object3D, pitch: number, yaw: number) {
   root.traverse((o) => {

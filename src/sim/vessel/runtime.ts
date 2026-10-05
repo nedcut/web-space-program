@@ -3,7 +3,7 @@ import type { Vec3 } from '../../util/vec3';
 import type { Quat } from '../../util/quat';
 import type { StateVector } from '../orbit/api';
 import type { Mat3 } from './mat3';
-import type { PartDef, PartLink, ResourceDef, ResourceId } from './types';
+import type { ActionGroupId, PartActionId, PartDef, PartGroupActions, PartLink, PartTweaks, ResourceDef, ResourceId } from './types';
 
 /**
  * Runtime (flight) state of vessels. Everything here is plain data except `def` (shared reference to the
@@ -65,7 +65,19 @@ export interface ControlInput {
   target?: StateVector;
   /** Optional: maneuver burn direction (inertial unit vector) for 'maneuver' mode. */
   maneuverDirection?: Vec3;
+  /** Optional one-shot commands (part actions, action groups, flight tweaks), applied once by the authority. */
+  commands?: VesselCommand[];
 }
+
+/** Flight-adjustable tweak keys (the rest are editor-only). */
+export type FlightTweaks = Pick<PartTweaks, 'thrustLimit' | 'gimbalLimit' | 'gimbalLock' | 'crossfeed' | 'deflectionLimit' | 'deflectionInvert'
+  | 'chuteMinPressure' | 'chuteDeployAltitude' | 'rcsEnabled' | 'rcsAxes' | 'wheelMode' | 'lightOn' | 'lightColor'>;
+
+/** Player commands carried by ControlInput. `state` directs toggles (true = on/extend), absent flips. */
+export type VesselCommand =
+  | { kind: 'group'; group: ActionGroupId; state?: boolean }
+  | { kind: 'part'; uid: number; action: PartActionId; state?: boolean; experiment?: string }
+  | { kind: 'tweak'; uid: number; tweaks: FlightTweaks; symmetric?: boolean };
 
 export const neutralInput = (overrides: Partial<ControlInput> = {}): ControlInput => ({
   pitch: 0,
@@ -137,6 +149,10 @@ export interface WheelState {
 }
 
 export interface PartState {
+  /** Player settings (copied from the craft, some adjustable in flight). */
+  tweaks?: PartTweaks;
+  /** Action-group bindings. */
+  actions?: PartGroupActions;
   link?: PartLink;
   linkFatigue?: number;
   /** Short overload exposure, seconds; absent when fully recovered. */
@@ -250,6 +266,8 @@ export interface VesselCache {
 }
 
 export interface VesselState {
+  /** Toggle state of action groups (absent = off). Replaced, never mutated in place (splits share it). */
+  groupState?: Partial<Record<ActionGroupId, boolean>>;
   eva?: { astronautId: string; walkPhase: number; walking: boolean; jetting: boolean };
   id: string;
   name: string;

@@ -8,7 +8,7 @@ const cache = new WeakMap<VesselState, { topology: VesselState['cache']; key: st
 export function cachedStageDeltaV(v: VesselState, pressure: number, gravity: number): StageDeltaV[] {
   const usesCharge = v.parts.some(p => p.def.modules.some(m => m.type === 'engine' && !!m.propellants.electricCharge));
   const key = JSON.stringify([pressure, gravity, v.nextStage, v.rootUid, v.mass, v.parts.map(p => [
-    p.uid, p.partId, p.parent, p.attachNode, p.parentNode, p.stage, p.activated, p.crew,
+    p.uid, p.partId, p.parent, p.attachNode, p.parentNode, p.stage, p.activated, p.crew, p.tweaks, p.actions?.stage,
     p.engine?.moduleIndex, p.engine?.ignited, p.engine?.ignitionsLeft,
     Object.entries(p.resources).filter(([id]) => usesCharge || id !== 'electricCharge'),
   ])]);

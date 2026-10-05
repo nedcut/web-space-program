@@ -37,6 +37,7 @@ import {
 } from '../sim/orbit';
 import { add, sub, scale, length, normalize, dot, cross, v3, type Vec3 } from '../util/vec3';
 import { qRotate } from '../util/quat';
+import { thrustLimit } from '../sim/vessel/tweaks';
 
 // ---------------------------------------------------------------------------------------------------
 // Common types & helpers
@@ -86,8 +87,9 @@ export function propulsion(v: VesselState): Propulsion {
   for (const p of v.parts) {
     if (!p.engine || !p.engine.ignited || p.engine.flamedOut) continue;
     const m = p.def.modules[p.engine.moduleIndex] as EngineModule;
-    thrust += m.maxThrustVac;
-    massFlow += m.maxThrustVac / (m.ispVac * G0);
+    const limit = thrustLimit(p);
+    thrust += m.maxThrustVac * limit;
+    massFlow += m.maxThrustVac * limit / (m.ispVac * G0);
     minThrottle = Math.max(minThrottle, m.throttleable ? m.minThrottle : 1);
     spoolTime = Math.max(spoolTime, m.spoolTime);
   }

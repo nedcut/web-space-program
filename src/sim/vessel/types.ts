@@ -304,8 +304,65 @@ export interface PartLink {
   broken?: boolean;
 }
 
+/** Per-axis RCS enable mask (absent axis = enabled). Rotation: pitch/yaw/roll; translation: body X/Y/Z. */
+export interface RcsAxes { pitch?: boolean; yaw?: boolean; roll?: boolean; lateral?: boolean; fore?: boolean; vertical?: boolean }
+
+/** Reaction wheel authority mode: which commands drive the wheel. */
+export type WheelMode = 'normal' | 'sasOnly' | 'pilotOnly' | 'off';
+
+/**
+ * Per-part player settings ("tweakables"). Every field is optional; absent = catalogue behaviour, so older crafts,
+ * saves and network peers are unaffected. Additive extension of craft/save/protocol v1 (see DECISIONS).
+ */
+export interface PartTweaks {
+  /** Engines: fraction of rated mass flow (and thrust) 0..1. */
+  thrustLimit?: number;
+  /** Engines: fraction of the rated gimbal range 0..1. */
+  gimbalLimit?: number;
+  /** Engines: gimbal locked straight. */
+  gimbalLock?: boolean;
+  /** Decouplers (default off) / docking ports (default on): stack propellant may flow through this part. */
+  crossfeed?: boolean;
+  /** Decouplers: fraction of the rated ejection impulse 0..1. */
+  ejectionScale?: number;
+  /** Control surfaces: fraction of the rated deflection 0..1. */
+  deflectionLimit?: number;
+  /** Control surfaces: reverse deflection sense. */
+  deflectionInvert?: boolean;
+  /** Parachutes: minimum static pressure to begin (semi) deployment, Pa. */
+  chuteMinPressure?: number;
+  /** Parachutes: height above terrain for full deployment, m. */
+  chuteDeployAltitude?: number;
+  /** Deployables (solar arrays, antennas, legs, gear, bays): extended state. Absent = catalogue/launch default. */
+  extended?: boolean;
+  /** RCS blocks: thruster block enabled (default true) and per-axis mask. */
+  rcsEnabled?: boolean;
+  rcsAxes?: RcsAxes;
+  /** Reaction wheels. */
+  wheelMode?: WheelMode;
+  /** Lamps: on (default true) and colour '#rrggbb'. */
+  lightOn?: boolean;
+  lightColor?: string;
+}
+
+export const ACTION_GROUP_IDS = ['stage', 'gear', 'brakes', 'lights', 'rcs', 'sas', 'abort',
+  'custom1', 'custom2', 'custom3', 'custom4', 'custom5', 'custom6', 'custom7', 'custom8', 'custom9', 'custom10'] as const;
+export type ActionGroupId = (typeof ACTION_GROUP_IDS)[number];
+
+export const PART_ACTION_IDS = ['engine.activate', 'engine.shutdown', 'engine.toggle', 'gimbal.toggle', 'deploy.extend', 'deploy.retract',
+  'deploy.toggle', 'decouple', 'fairing.jettison', 'chute.deploy', 'chute.cut', 'crossfeed.toggle', 'light.toggle', 'rcs.toggle',
+  'wheel.toggle', 'drill.toggle', 'converter.toggle', 'science.run', 'science.transmit', 'undock'] as const;
+export type PartActionId = (typeof PART_ACTION_IDS)[number];
+
+/** Actions a part contributes to each action group. */
+export type PartGroupActions = Partial<Record<ActionGroupId, PartActionId[]>>;
+
 /** A part placed in a craft (editor output / save format). */
 export interface PartInstance {
+  /** Player settings; see PartTweaks. */
+  tweaks?: PartTweaks;
+  /** Action-group bindings of this part. */
+  actions?: PartGroupActions;
   link?: PartLink;
   /** Unique within the craft. */
   uid: number;

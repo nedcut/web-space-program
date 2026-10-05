@@ -1,23 +1,23 @@
 import { RESOURCES } from '../../data/resources';
+import { RESOURCE_COLORS } from '../../ui/inspector/resources';
 import { flightData, flightPredictions } from '../../game/flightData';
 import { cachedStageDeltaV } from '../../game/stageDeltaVCache';
 import { warpLabel } from '../../game/timewarp';
 import { type WorldVessel } from '../../game/world';
-import { dockedPorts, freePorts, type PortInfo, type StageDeltaV } from '../../sim/vessel';
+import { ACTION_GROUP_IDS, dockedPorts, freePorts, GROUP_LABELS, groupBindings, lightOn, type PortInfo, type StageDeltaV } from '../../sim/vessel';
+import { bindingLabel } from '../../input/bindings';
 import { qRotate } from '../../util/quat';
 import { dot, length, negate, sub, v3 } from '../../util/vec3';
 import type { FlightController } from '../controller';
 import type { DockingTelemetry, HudStage, Telemetry } from '../hud/Hud';
 import type { FlightControllerInternals } from './internals';
-const RESOURCE_COLORS: Record<string, string> = {
-  liquidFuel: '#ffb35c',
-  oxidizer: '#5cc8ff',
-  monopropellant: '#d0d0d0',
-  solidFuel: '#ff7a5c',
-  electricCharge: '#ffe14d',
-  xenon: '#b48cff',
-  ablator: '#a08060',
-};
+
+import { AlertTracker } from '../alerts';
+import { warpTargets } from './warp';
+import { game } from '../../game/store';
+import { getTutorial } from '../../tutorial/runtime';
+
+const alertTrackers = new WeakMap<FlightController, AlertTracker>();
 
 /** Active and target docking ports for the docking indicator (target port if selected, else the closest pair). */
 export function dockingPair(this: FlightController, _internals: FlightControllerInternals): { mine: PortInfo; theirs: PortInfo } | null {
@@ -160,11 +160,60 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   });
 
   internals.predictions = flightPredictions(w, wv);
+  const ground = internals.groundTelemetry(wv);
+  let heat = 0;
+  let hottest: string | undefined;
+  let ignited = false;
+  let flameout = false;
+  for (const p of st.parts) {
+    let f = p.temperature / p.maxTemp;
+    for (const t of p.skinTemperature) f = Math.max(f, t / p.maxTemp);
+    if (f > heat) { heat = f; hottest = p.def.name; }
+    if (p.engine?.ignited) { ignited = true; if (p.engine.flamedOut) flameout = true; }
+  }
+  const ec = totals.get('electricCharge');
+  const vs = w.verticalSpeed(wv);
+  const surfaceSpeed = length(w.surfaceVelocity(wv));
+  let tracker = alertTrackers.get(this);
+  if (!tracker) alertTrackers.set(this, (tracker = new AlertTracker()));
+  const flying = st.situation === 'flying' && wv.mode !== 'prelaunch';
+  const noControl = !w.canControl(st) || (!!this.network && this.network.ownId !== st.id);
+  const alerts = tracker.update({
+    noControl,
+    eva: !!st.eva,
+    flying,
+    heatFraction: heat,
+    hottestPart: hottest,
+    gForce: st.telemetry.gForce,
+    agl: info.heightAboveTerrain,
+    verticalSpeed: vs,
+    horizontalSpeed: Math.sqrt(Math.max(0, surfaceSpeed * surfaceSpeed - vs * vs)),
+    chutes: st.parts.some((p) => p.chute?.phase === 'semi' || p.chute?.phase === 'full'),
+    gear: ground.gear,
+    thrusting: ignited && this.input.state.throttle > 0,
+    stageBurnTime: ignited ? (dvs.find((d) => d.stage === st.nextStage + 1)?.burnTime ?? Number.NaN) : Number.NaN,
+    flameout: flameout && this.input.state.throttle > 0,
+    power: ec && ec.max > 0 ? ec.amount / ec.max : Number.NaN,
+  }, performance.now() / 1000);
+  const warpTo = this.warpDriver.target;
+  const settings = game.get().settings;
+  const hint = this.hints.update({
+    enabled: settings.flightHints && !this.network && !getTutorial() && !game.get().scenarioActive && wv.body === 'earth' && !st.eva && !this.assist,
+    flying,
+    altitude: info.altitude,
+    surfaceSpeed,
+    apoapsis: orb.ap,
+    periapsis: orb.pe,
+    timeToAp: orb.timeToAp,
+    atmosphereHeight: b.atmosphere?.height ?? 0,
+    throttle: this.input.state.throttle,
+    hasThrust: dvs.some((d) => d.dv > 1),
+  });
   const warp = w.warp;
   return {
     flightData: flightData(w, wv, dvs, internals.predictions),
     crew: w.crewFor(st),
-    noControl: !w.canControl(st) || (!!this.network && this.network.ownId !== st.id),
+    noControl,
     eva: st.eva ? { fuel: st.parts[0].resources.monopropellant ?? 0, canBoard: !!w.boardingTarget(), landed: st.situation === 'landed' } : null,
     ut: w.ut,
     bodyName: b.name,
@@ -172,7 +221,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     altitudeTerrain: info.heightAboveTerrain,
     speedMode: this.speedMode,
     speed,
-    verticalSpeed: w.verticalSpeed(wv),
+    verticalSpeed: vs,
     apoapsis: orb.ap,
     periapsis: orb.pe,
     timeToAp: orb.timeToAp,
@@ -187,7 +236,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     sasOn: this.sasOn,
     sasMode: this.sas,
     rcsOn: this.rcsOn,
-    ...internals.groundTelemetry(wv),
+    ...ground,
     stage: st.nextStage,
     stages,
     resources: [...totals.entries()]
@@ -202,6 +251,20 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     dockingMode: this.dockingMode,
     docking: this.dockingMode ? internals.dockingTelemetry() : null,
     dockedPorts: dockedPorts(st).map((p) => ({ uid: p.uid, name: p.def.name })),
+    actionGroups: ACTION_GROUP_IDS.filter(g => g === 'abort' || g.startsWith('custom')).map(g => ({
+      id: g, label: GROUP_LABELS[g], key: bindingLabel(g === 'abort' ? 'abort' : `actionGroup${g.slice(6)}` as 'actionGroup1'),
+      count: groupBindings(st, g).length, on: !!st.groupState?.[g],
+    })),
+    lights: st.parts.some(p => p.def.modules.some(m => m.type === 'light')) ? st.parts.some(p => p.def.modules.some(m => m.type === 'light') && lightOn(p)) : null,
+    feel: {
+      alerts,
+      cameraMode: this.cam.mode,
+      stagedCount: this.stagedCount,
+      warpTargets: this.network || this.assist ? [] : warpTargets(w).map((o) => ({ id: o.id, label: o.label, in: o.time - w.ut })),
+      warpTo: warpTo ? { label: warpTo.label, remaining: Math.max(0, warpTo.time - w.ut) } : null,
+      countdown: this.countdown === null ? null : Math.ceil(this.countdown),
+      hint,
+    },
   };
 }
 

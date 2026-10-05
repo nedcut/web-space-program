@@ -7,6 +7,7 @@ import { timeToApoapsis, timeToPeriapsis, burnTimeEstimate, periapsisRadius, apo
 import { formatDistance, formatDuration } from '../../ui/format';
 import { computeStageDeltaV } from '../../sim/vessel';
 import { planCircularization } from '../../game/autopilot';
+import { thrustLimit } from '../../sim/vessel/tweaks';
 
 /**
  * Maneuver planner shown in map view. Nodes are placed by time (Ap / Pe / custom offset) and shaped with
@@ -100,7 +101,7 @@ export function ManeuverPanel({ world }: { world: World }) {
     const dv = Math.hypot(node.prograde, node.normal, node.radial);
     const thrust = wv.state.parts.reduce((s, p) => {
       const e = p.def.modules.find((m) => m.type === 'engine');
-      return s + (e && e.type === 'engine' && p.engine?.ignited ? e.maxThrustVac : 0);
+      return s + (e && e.type === 'engine' && p.engine?.ignited ? e.maxThrustVac * thrustLimit(p) : 0);
     }, 0);
     let isp = 300;
     try {
