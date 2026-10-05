@@ -6,6 +6,7 @@ import { game } from './game/store';
 const params = new URLSearchParams(location.search);
 const preset = params.get('scale');
 if (preset === 'standard' || preset === 'challenging' || preset === 'real') game.set({ scalePreset: preset });
+if (new URLSearchParams(location.hash.slice(1)).has('craft')) game.set({ scene: 'editor' });
 const flight = params.get('flight');
 if (flight) {
   import('./editor/stockCrafts').then(({ STOCK_CRAFTS }) => {

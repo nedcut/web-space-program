@@ -1,3 +1,6 @@
+import { photoMode } from '../game/photoMode';
+import { openProgram } from '../game/program';
+import { saveNamedWorld } from '../game/persistence';
 import { launchProblem } from '../data/technology';
 import { PART_CATALOG } from '../data/parts';
 import { newProgression } from '../sim/science/progression';
@@ -39,7 +42,7 @@ export function SpaceCenter() {
   return (
     <div className="fullscreen">
       <HubBackdrop />
-      <div className="fullscreen" style={{ padding: '6vh 6vw', display: 'flex', flexDirection: 'column' }}>
+      <div className="fullscreen photo-hide" style={{ padding: '6vh 6vw', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <div>
             <div className="label">Coastal Launch Complex</div>
@@ -65,8 +68,10 @@ export function SpaceCenter() {
           ))}
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+          <button className="btn small" onClick={() => { const name = window.prompt('Save slot name', 'Program save'); if (name?.trim()) { try { saveNamedWorld(name, openProgram()); setNotice('Program saved.'); } catch (e) { setNotice((e as Error).message); } } }}>Save as…</button>
           <button className="btn small" onClick={() => game.set({ scene: 'menu' })}>Main menu</button>
           <button className="btn" onClick={() => void import('./Spacepedia').then(m => m.openPedia('spaceCenter'))}>Spacepedia</button>
+          <button className="btn small" onClick={() => photoMode.open()}>Photo mode (P)</button>
           <button className="btn small" onClick={() => setSettings((v) => !v)}>Settings</button>
         </div>
         {settings && <SettingsPanel onClose={() => setSettings(false)} />}
