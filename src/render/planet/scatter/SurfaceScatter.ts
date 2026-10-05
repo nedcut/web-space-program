@@ -66,7 +66,9 @@ export class SurfaceScatter {
   get idle(): boolean { return this.pending.length === 0 && !this.active; }
 
   update(camera: [number, number, number], bodyOffset: THREE.Vector3, rotation: THREE.Quaternion): void {
-    const length = Math.hypot(...camera), d = camera.map(v => v / length) as [number, number, number];
+    const length = Math.hypot(...camera);
+    if (length - this.body.radius - (this.terrain.ocean ? Math.max(0, this.terrain.maxHeight) : this.terrain.maxHeight) >= this.settings.maxAltitude) { this.group.visible = false; return; }
+    const d: [number, number, number] = [camera[0] / length, camera[1] / length, camera[2] / length];
     const h = this.terrain.heightAt(...d);
     const altitude = length - this.body.radius - (this.terrain.ocean ? Math.max(0, h) : h);
     this.group.visible = altitude < this.settings.maxAltitude;

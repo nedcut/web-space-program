@@ -1,3 +1,4 @@
+import { batchStaticParts, disposeStaticBatch } from './staticBatch';
 import * as THREE from 'three';
 import type { VesselState, PartState } from '../../sim/vessel/runtime';
 import type { EngineModule } from '../../sim/vessel/types';
@@ -10,6 +11,8 @@ interface PartVisual {
   object: THREE.Object3D;
   plumes: Plume[];
   deploy: number;
+  static: boolean;
+  partId: string;
 }
 
 /**
@@ -20,10 +23,17 @@ export class VesselView {
   readonly root = new THREE.Group();
   private inner = new THREE.Group();
   private parts = new Map<number, PartVisual>();
-  private lastPartCount = -1;
+  private lastTopology?: VesselState['cache'];
+  private batch?: THREE.Group;
+  private geometryKey = '';
+  private layoutKey(): string {
+    return this.vessel.parts.map(p => `${p.uid}:${p.partId}:${p.position.x},${p.position.y},${p.position.z}:${p.rotation.x},${p.rotation.y},${p.rotation.z},${p.rotation.w}`).join('|');
+  }
+  private readonly impostor = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3)), new THREE.PointsMaterial({ color: 0xbcc9d8, size: 3, sizeAttenuation: false }));
 
   constructor(private vessel: VesselState) {
-    this.root.add(this.inner);
+    this.root.add(this.inner, this.impostor);
+    this.impostor.visible = false;
     this.rebuild();
   }
 
@@ -36,9 +46,12 @@ export class VesselView {
   }
 
   private rebuild() {
+    if (this.batch) disposeStaticBatch(this.batch);
+    // Restore static leaves hidden by the previous batch before regrouping after staging/docking.
+    for (const pv of this.parts.values()) pv.object.traverse(o => { if (o.userData.batchedVisible) { o.visible = true; delete o.userData.batchedVisible; } });
     const alive = new Set(this.vessel.parts.map((p) => p.uid));
     for (const [uid, pv] of this.parts) {
-      if (!alive.has(uid)) {
+      if (!alive.has(uid) || this.vessel.cache.byUid.get(uid)?.partId !== pv.partId) {
         this.inner.remove(pv.object);
         pv.plumes.forEach((pl) => pl.dispose());
         this.parts.delete(uid);
@@ -63,20 +76,40 @@ export class VesselView {
         }
       }
       this.inner.add(obj);
-      this.parts.set(p.uid, { uid: p.uid, object: obj, plumes, deploy: 0 });
+      this.parts.set(p.uid, { uid: p.uid, partId: p.partId, object: obj, plumes, deploy: 0, static: false });
     }
-    this.lastPartCount = this.vessel.parts.length;
+    const staticObjects: THREE.Object3D[] = [];
+    const staticKinds = new Set(['tank', 'adapter', 'girder', 'strut', 'noseCone', 'battery', 'reactionWheel', 'probeCore', 'heatShield', 'monoSphere', 'monoTorus', 'xenonTank', 'framework', 'habitat', 'rcsQuad', 'rcsPorts', 'instrument', 'decoupler', 'separator', 'radialDecoupler']);
+    for (const p of this.vessel.parts) {
+      const obj = this.parts.get(p.uid)!.object;
+      obj.position.set(p.position.x, p.position.y, p.position.z);
+      obj.quaternion.set(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
+      const pv = this.parts.get(p.uid)!;
+      pv.static = staticKinds.has(p.def.mesh);
+      if (pv.static) staticObjects.push(obj);
+    }
+    this.batch = batchStaticParts(staticObjects);
+    this.inner.add(this.batch);
+    for (const obj of staticObjects) obj.traverse(o => { o.matrixAutoUpdate = false; });
+    this.geometryKey = this.layoutKey();
+    this.lastTopology = this.vessel.cache;
   }
 
-  update(origin: Vec3, time: number, ambientPressure: number, dt: number) {
+  update(origin: Vec3, time: number, ambientPressure: number, dt: number, distant = false) {
     const v = this.vessel;
-    if (v.parts.length !== this.lastPartCount) this.rebuild();
+    if (v.cache !== this.lastTopology) {
+      if (this.geometryKey !== this.layoutKey()) this.rebuild();
+      this.lastTopology = v.cache;
+    }
     this.root.position.set(v.position.x - origin.x, v.position.y - origin.y, v.position.z - origin.z);
     this.root.quaternion.set(v.orientation.x, v.orientation.y, v.orientation.z, v.orientation.w);
+    this.inner.visible = !distant;
+    this.impostor.visible = distant;
+    if (distant) return;
     this.inner.position.set(-v.com.x, -v.com.y, -v.com.z);
     for (const p of v.parts) {
       const pv = this.parts.get(p.uid);
-      if (!pv) continue;
+      if (!pv || pv.static) continue;
       pv.object.position.set(p.position.x, p.position.y, p.position.z);
       pv.object.quaternion.set(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
       this.animatePart(p, pv, time, ambientPressure, dt);
@@ -126,6 +159,8 @@ export class VesselView {
   }
 
   dispose() {
+    if (this.batch) disposeStaticBatch(this.batch);
+    this.impostor.geometry.dispose(); this.impostor.material.dispose();
     for (const pv of this.parts.values()) pv.plumes.forEach((pl) => pl.dispose());
     this.root.removeFromParent();
   }

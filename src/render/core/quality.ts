@@ -69,10 +69,10 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     id: 'low',
     scatter: { radius: 0, maxAltitude: 0, vegetation: false, cellsPerFrame: 0, budgetMs: 0 },
     maxPixelRatio: 1,
-    renderScale: 0.85,
+    renderScale: 0.5,
     msaaSamples: 0,
     fxaa: true,
-    bloom: { enabled: true, strength: 0.3, radius: 0.4, threshold: 3.0 },
+    bloom: { enabled: false, strength: 0.3, radius: 0.4, threshold: 3.0 },
     shadowMapSize: 0,
     terrain: { chunkResolution: 24, maxScreenError: 6, minVertexSpacing: 6, buildBudgetMs: 3, workers: 2, maxInFlight: 6, cacheSize: 400, detail: false },
     atmosphere: { viewSteps: 10, aerialSteps: 4 },
@@ -124,7 +124,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
 export function getQuality(id: QualityId): QualitySettings {
   const p = QUALITY_PRESETS[id];
   const s = game.get().settings;
-  return { ...p, shadowMapSize: s.shadows ? (p.shadowMapSize || 1024) : 0,
+  return { ...p, shadowMapSize: s.shadows ? (p.shadowMapSize || 512) : 0,
     bloom: { ...p.bloom, enabled: s.bloom }, clouds: s.clouds, atmosphereScattering: s.scatter, renderScale: s.renderScale };
 }
 

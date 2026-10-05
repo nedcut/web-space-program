@@ -138,6 +138,7 @@ export function sampleConic(o: Orbit, soi: number, t0: number, t1: number | null
 
 export class MapView {
   readonly scene = new THREE.Scene();
+  private linkColor = new THREE.Color();
   private commsLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, depthTest: false }));
   readonly camera = new THREE.PerspectiveCamera(50, 1, 1, 1e15);
   /** Spherical camera coords around focus. */
@@ -165,7 +166,7 @@ export class MapView {
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2(x, y), this.camera);
     this.scene.updateMatrixWorld(true);
-    const objects = [...this.gizmo.filter(g => g.icon.visible).map(g => g.icon), ...this.nodeIcons];
+    const objects = [...this.gizmo.filter(g => g.icon.visible).map(g => g.icon), ...this.nodeIcons.filter(s => s.visible)];
     const hit = ray.intersectObjects(objects, false)[0]?.object;
     if (!hit) return null;
     const handle = this.gizmo.find(g => g.icon === hit);
@@ -488,19 +489,30 @@ export class MapView {
     this.commsLines.visible = !!u.comms;
     if (u.comms) {
       const nodes = new Map(u.comms.nodes.map(n => [n.id, n]));
-      const positions: number[] = [], colors: number[] = [];
+      const count = u.comms.links.length * 2;
+      let position = this.commsLines.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+      let color = this.commsLines.geometry.getAttribute('color') as THREE.BufferAttribute | undefined;
+      if (!position || position.count < count) {
+        this.commsLines.geometry.dispose();
+        this.commsLines.geometry = new THREE.BufferGeometry();
+        const capacity = Math.max(16, count * 2);
+        position = new THREE.BufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
+        color = new THREE.BufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
+        this.commsLines.geometry.setAttribute('position', position);
+        this.commsLines.geometry.setAttribute('color', color);
+      }
+      let index = 0;
       for (const link of u.comms.links) {
-        const color = new THREE.Color().setHSL(link.strength * 0.33, 0.85, 0.55);
+        this.linkColor.setHSL(link.strength * 0.33, 0.85, 0.55);
         for (const id of [link.a, link.b]) {
-          // Subtract floating origin in float64 before converting into GPU attributes.
-          const p = sub(nodes.get(id)!.position, focus);
-          positions.push(p.x, p.y, p.z); colors.push(color.r, color.g, color.b);
+          const p = nodes.get(id)!.position;
+          position.setXYZ(index, p.x - focus.x, p.y - focus.y, p.z - focus.z);
+          color!.setXYZ(index++, this.linkColor.r, this.linkColor.g, this.linkColor.b);
         }
       }
-      this.commsLines.geometry.dispose();
-      this.commsLines.geometry = new THREE.BufferGeometry();
-      this.commsLines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      this.commsLines.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      position.needsUpdate = true; color!.needsUpdate = true;
+      this.commsLines.geometry.setDrawRange(0, count);
+      this.commsLines.frustumCulled = false;
     }
     for (const m of this.materials) m.resolution.set(u.viewport.width, u.viewport.height);
     this.camera.aspect = u.viewport.width / u.viewport.height;
@@ -551,12 +563,9 @@ export class MapView {
 
     // Vessel
     this.vesselIcon.visible = !!u.vessel;
-    for (const s of [...this.nodeIcons, ...this.apPeIcons]) {
-      this.scene.remove(s);
-      s.material.dispose();
-    }
-    this.nodeIcons = [];
-    this.apPeIcons = [];
+    for (const s of this.nodeIcons) s.visible = false;
+    for (const s of this.apPeIcons) if (s) s.visible = false;
+    let nodeIndex = 0;
     if (u.vessel) {
       this.place(this.vesselIcon, u.vessel.position, focus);
       this.updateVesselLines(u.vessel.patches, this.bodies);
@@ -570,13 +579,9 @@ export class MapView {
         if (!patch) continue;
         const pp = this.ephem.getBodyState(patch.orbit.body, t).position;
         const np = elementsToState(patch.orbit, n.time).position;
-        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeIconTexture('#3c8cff', true), sizeAttenuation: false, depthTest: false }));
-        s.scale.setScalar(0.026);
-        s.renderOrder = 13;
+        const s = this.pooledIcon(this.nodeIcons, nodeIndex++, '#3c8cff', true, .026, 13);
         this.place(s, { x: pp.x + np.x, y: pp.y + np.y, z: pp.z + np.z }, focus);
-        this.scene.add(s);
         s.userData.nodeId = n.id;
-        this.nodeIcons.push(s);
       }
       const first = u.vessel.patches[0];
       if (first) {
@@ -586,15 +591,22 @@ export class MapView {
         for (const [dt, color] of markers) {
           if (!isFinite(dt) || t + dt > first.endTime) continue;
           const p = elementsToState(first.orbit, t + dt).position;
-          const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeIconTexture(color, false), sizeAttenuation: false, depthTest: false }));
-          s.scale.setScalar(0.014);
-          s.renderOrder = 12;
+          const s = this.pooledIcon(this.apPeIcons, color === '#6fe39a' ? 0 : 1, color, false, .014, 12);
           this.place(s, { x: parentPos.x + p.x, y: parentPos.y + p.y, z: parentPos.z + p.z }, focus);
-          this.scene.add(s);
-          this.apPeIcons.push(s);
         }
       }
     }
+  }
+
+  private pooledIcon(pool: THREE.Sprite[], index: number, color: string, ring: boolean, size: number, order: number): THREE.Sprite {
+    let sprite = pool[index];
+    if (!sprite) {
+      sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeIconTexture(color, ring), sizeAttenuation: false, depthTest: false }));
+      sprite.scale.setScalar(size); sprite.renderOrder = order;
+      pool[index] = sprite; this.scene.add(sprite);
+    }
+    sprite.visible = true;
+    return sprite;
   }
 
   /** Apsis readouts for UI. */

@@ -131,8 +131,9 @@ export class Universe {
           const h = terr.heightAt(x, y, z);
           return terr.ocean ? Math.max(0, h) : h;
         };
-        const h = hAt(fixed.x, fixed.y, fixed.z);
-        const isWater = terr.ocean && terr.heightAt(fixed.x, fixed.y, fixed.z) <= 0;
+        const rawHeight = terr.heightAt(fixed.x, fixed.y, fixed.z);
+        const h = terr.ocean ? Math.max(0, rawHeight) : rawHeight;
+        const isWater = terr.ocean && rawHeight <= 0;
         // Surface normal from finite differences (≈1 m spacing in tangent directions).
         const eps = 1 / b.radius;
         const tA = normalize(Math.abs(fixed.z) < 0.9 ? cross(v3(0, 0, 1), fixed) : cross(v3(1, 0, 0), fixed));

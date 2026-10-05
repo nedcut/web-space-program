@@ -5,6 +5,15 @@ import { recomputeMassProperties } from './assembly';
 
 const IDS: ResourceId[] = ['regolith', 'electricCharge', 'liquidFuel', 'oxidizer', 'monopropellant'];
 const EPS = 1e-10;
+const machineryCache = new WeakMap<VesselState['cache'], PartState[]>();
+export function isruMachinery(v: VesselState): PartState[] {
+  let parts = machineryCache.get(v.cache);
+  if (!parts) {
+    parts = v.parts.filter(p => p.def.modules.some(m => m.type === 'drill' || m.type === 'converter'));
+    machineryCache.set(v.cache, parts);
+  }
+  return parts;
+}
 interface Process { part: PartState; rates: number[]; fraction: number; heat: number }
 
 /** Refining uses a vessel-wide transfer manifold (including stack tanks). No input is vented:
@@ -12,7 +21,7 @@ interface Process { part: PartState; rates: number[]; fraction: number; heat: nu
  * EC is massless. Tank/deployment boundary events make long landed-rails intervals analytical. */
 export function advanceISRU(v: VesselState, concentration: number, dt: number): void {
   if (!(dt > 0) || v.destroyed) return;
-  const machinery = v.parts.filter(p => p.def.modules.some(m => m.type === 'drill' || m.type === 'converter'));
+  const machinery = isruMachinery(v);
   if (!machinery.length) return;
   const capacity = IDS.map(id => v.parts.reduce((s, p) => s + (p.maxResources[id] ?? 0), 0));
   let remaining = dt;

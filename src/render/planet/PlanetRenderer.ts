@@ -107,6 +107,8 @@ export class PlanetRenderer {
   private readonly terrainKey: string;
   private readonly frustum = new THREE.Frustum();
   private readonly tmpM4 = new THREE.Matrix4();
+  private readonly inverseRotation = new THREE.Quaternion();
+  private readonly scatterOffset = new THREE.Vector3();
   private readonly rotQ = new THREE.Quaternion();
   private readonly rotM = new THREE.Matrix3();
   private readonly rotM4 = new THREE.Matrix4();
@@ -401,11 +403,11 @@ export class PlanetRenderer {
     }
 
     // Body-fixed camera for LOD.
-    const inv = this.rotQ.clone().invert();
+    const inv = this.inverseRotation.copy(this.rotQ).invert();
     const camBF = this.tmpV.set(crx, cry, crz).applyQuaternion(inv);
     const camBFx = camBF.x, camBFy = camBF.y, camBFz = camBF.z;
 
-    this.scatter?.update([camBFx, camBFy, camBFz], new THREE.Vector3(bx, by, bz), this.rotQ);
+    this.scatter?.update([camBFx, camBFy, camBFz], this.scatterOffset.set(bx, by, bz), this.rotQ);
 
     const vh = p.viewportHeight ?? 1080;
     const sf = screenSpaceFactor(cam, vh);

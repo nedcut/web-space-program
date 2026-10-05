@@ -55,7 +55,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         {tab === 'Graphics' && <>
           <div className="setting-row"><span>Quality preset</span><div className="seg">{(['low', 'medium', 'high'] as const).map(q => <button key={q} className={settings.quality === q ? 'on' : ''} onClick={() => { const p = QUALITY_PRESETS[q]; updateSettings({ quality: q, shadows: p.shadowMapSize > 0, bloom: p.bloom.enabled, clouds: p.clouds, scatter: true, renderScale: p.renderScale }); }}>{q}</button>)}</div></div>
           {check('shadows', 'Shadows')}{check('bloom', 'Bloom')}{check('clouds', 'Clouds')}{check('scatter', 'Atmospheric scattering')}
-          {range('renderScale', 'Render scale', 0.5, 1.5, 0.05)}{check('showFps', 'Show FPS')}
+          {check('adaptiveQuality', 'Adaptive render scale')}{range('renderScale', 'Render scale', 0.5, 1.5, 0.05)}{check('showFps', 'Show FPS / draw calls / triangles')}
           <p className="settings-note">Graphics changes apply immediately in flight. Other scenes use the new settings when you enter them.</p>
         </>}
         {tab === 'Audio' && <>{range('masterVolume', 'Master volume', 0, 1, 0.05)}{range('musicVolume', 'Music volume', 0, 1, 0.05)}{range('sfxVolume', 'Effects volume', 0, 1, 0.05)}</>}
@@ -80,7 +80,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           </label>
           <label className="setting-row"><span>Restrict disconnected probes</span><input type="checkbox" checked={settings.commsRestrictControl ?? true} onChange={e => updateSettings({ commsRestrictControl: e.target.checked })} /></label>
           {check('commsOverlay', 'Show comms links in map view')}
-          {check('showFps', 'Show FPS')}
+          {check('showFps', 'Show FPS / draw calls / triangles')}
         </>}
         {tab === 'Accessibility' && <>{range('uiScale', 'UI scale', 0.8, 1.3, 0.05)}{check('highContrast', 'High-contrast HUD')}{check('reduceMotion', 'Reduce motion (camera effects / flicker)')}{check('colourBlind', 'Colour-blind-friendly navball markers')}</>}
       </div>
