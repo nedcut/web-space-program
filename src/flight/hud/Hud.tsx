@@ -1,3 +1,4 @@
+import { isTyping, matches } from '../../input/bindings';
 import { snapshotEqual } from '../../util/snapshotEqual';
 import { FlightDataPanel } from './FlightDataPanel';
 import type { FlightData } from '../../game/flightData';
@@ -191,7 +192,7 @@ export interface HudDockSlots {
   maneuver?: ReactNode;
 }
 
-export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadConnected }: { t: Telemetry; cb: HudCallbacks; navball: ReactNode; dock?: HudDockSlots; precision?: boolean; stageProgress?: number; gamepadConnected?: boolean }) {
+export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadConnected, shortcutsEnabled = true }: { t: Telemetry; cb: HudCallbacks; navball: ReactNode; dock?: HudDockSlots; precision?: boolean; stageProgress?: number; gamepadConnected?: boolean; shortcutsEnabled?: boolean }) {
   const settings = useGame(s => s.settings);
   const distance = (m: number) => settings.units === 'imperial' ? (!Number.isFinite(m) ? '—' : Math.abs(m) < 1609.344 ? `${(m / 0.3048).toFixed(0)} ft` : `${(m / 1609.344).toFixed(2)} mi`) : formatDistance(m);
   const speed = (v: number) => settings.units === 'imperial' ? `${(v * 2.236936).toFixed(1)} mph` : formatSpeed(v);
@@ -209,6 +210,15 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
       return n;
     });
   };
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (!shortcutsEnabled || e.repeat || isTyping(e.target) || !matches('flightData', e)) return;
+      e.preventDefault();
+      toggle('data');
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [shortcutsEnabled]);
   const dash = t.onSurface;
   const showAssistChip = !!dock?.assist && !t.mapMode;
   const showCrewChip = !t.mapMode && !t.dockingMode;

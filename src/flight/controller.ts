@@ -486,6 +486,7 @@ export class FlightController {
       if (this.autosaveTimer >= settings.autoSaveInterval) { this.autosaveTimer = 0; this.quicksave('autosave'); }
     } else if (!settings.autoSaveInterval) this.autosaveTimer = 0;
     this.input.evaMode = !!this.world.active?.state.eva;
+    this.input.mouseEnabled = !this.mapMode;
     applyCommsSettings(this.world);
     this.input.update(dt);
     if (!this.world.canControl()) {

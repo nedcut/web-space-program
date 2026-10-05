@@ -1,7 +1,7 @@
 import { FlightInput } from '../src/flight/input';
 import { game } from '../src/game/store';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BINDINGS_KEY, conflicts, defaultBindings, getBindings, loadBindings, saveBindings, matches, isTyping } from '../src/input/bindings';
+import { BINDINGS_KEY, conflicts, defaultBindings, getBindings, loadBindings, saveBindings, matches, isTyping, bindingText } from '../src/input/bindings';
 import { deadZone, mapGamepad } from '../src/input/gamepad';
 
 const memory = () => {
@@ -80,6 +80,10 @@ describe('keyboard matching', () => {
     saveBindings({ ...defaultBindings(), editorFrame: ['Alt+KeyP'] }, memory());
     expect(matches('editorFrame', key('KeyP', { altKey: true }))).toBe(true);
   });
+  it('renders lesson instructions from current bindings, including unbound actions', () => {
+    const bindings = { ...defaultBindings(), stage: ['KeyP'], map: [], throttleUp: ['Equal'] };
+    expect(bindingText('Press {stage}; hold {throttleUp}; map {map}.', bindings)).toBe('Press P; hold Equal; map Unbound.');
+  });
   it('blocks editable fields and the settings modal', () => {
     class ElementDouble { constructor(private editable: boolean) {} closest() { return this.editable ? this : null; } }
     vi.stubGlobal('HTMLElement', ElementDouble);
@@ -142,6 +146,49 @@ describe('flight gamepad actions', () => {
       expect(h.actions).not.toContain('stage');
       expect(h.input.running).toBe(false);
     } finally { h.input.dispose(); }
+  });
+  it('routes rebound EVA, boarding, flag, gear and brake controls', () => {
+    const h = harness(); const settings = game.get().settings;
+    const key = (code: string) => h.target.dispatchEvent(Object.assign(new Event('keydown'), { code, ctrlKey: false, shiftKey: false, metaKey: false, altKey: false, repeat: false }));
+    try {
+      game.set({ settings: { ...settings, gamepadEnabled: false } });
+      saveBindings({ ...defaultBindings(), eva: ['KeyY'], board: ['KeyC'], plantFlag: ['F8'], toggleGear: ['KeyO'], brakes: ['KeyP'] }, memory());
+      key('KeyO'); key('KeyY'); key('KeyP'); h.input.update(0.1);
+      expect(h.actions).toEqual(['toggleGear', 'eva']); expect(h.input.state.brakes).toBe(true);
+      h.input.evaMode = true; key('KeyC'); key('F8');
+      expect(h.actions.slice(-2)).toEqual(['board', 'plantFlag']);
+    } finally { h.input.dispose(); game.set({ settings }); }
+  });
+  it('keeps map dragging out of optional mouse-flight attitude controls', () => {
+    const h = harness(); const settings = game.get().settings;
+    class CanvasDouble {}
+    vi.stubGlobal('HTMLCanvasElement', CanvasDouble);
+    try {
+      game.set({ settings: { ...settings, mouseFlight: true, gamepadEnabled: false, inputSmoothing: 0, invertPitch: false } });
+      const move = new Event('pointermove');
+      Object.defineProperty(move, 'target', { value: new CanvasDouble() });
+      Object.assign(move, { buttons: 1, movementX: 30, movementY: 20 });
+      h.target.dispatchEvent(move); h.input.update(0.1);
+      expect(h.input.state.yaw).toBeCloseTo(0.3);
+      h.input.mouseEnabled = false; h.input.update(0.1);
+      expect(h.input.state.yaw).toBe(0); expect(h.input.state.pitch).toBe(0);
+      h.target.dispatchEvent(move); h.input.mouseEnabled = true; h.input.update(0.1);
+      expect(h.input.state.yaw).toBe(0);
+    } finally { h.input.dispose(); game.set({ settings }); vi.unstubAllGlobals(); }
+  });
+  it('applies pitch inversion changes live while preserving simultaneous throttle and attitude', () => {
+    const h = harness(); const settings = game.get().settings;
+    const key = (code: string, ctrlKey = false) => h.target.dispatchEvent(Object.assign(new Event('keydown'), { code, ctrlKey, shiftKey: false, metaKey: false, altKey: false, repeat: false }));
+    try {
+      game.set({ settings: { ...settings, invertPitch: true, gamepadEnabled: false, inputSmoothing: 0 } });
+      key('KeyW'); h.input.update(0.1); expect(h.input.state.pitch).toBe(1);
+      game.set({ settings: { ...game.get().settings, invertPitch: false } });
+      h.input.update(0.1); expect(h.input.state.pitch).toBe(-1);
+      key('ControlLeft', true); h.input.update(0.1);
+      expect(h.input.state.pitch).toBe(-1);
+      saveBindings({ ...defaultBindings(), pitchUp: ['Ctrl+KeyW'] }, memory());
+      h.input.update(0.1); expect(h.input.state.pitch).toBe(-1);
+    } finally { h.input.dispose(); game.set({ settings }); }
   });
   it('uses rebound continuous keys and clears them while paused', () => {
     const h = harness(); const settings = game.get().settings;

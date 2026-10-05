@@ -50,7 +50,7 @@ export function lunarTrainer(): CraftDef {
   for (const p of craft.parts) if (p.parent === engine.uid || (p.parent != null && removed.has(p.parent))) removed.add(p.uid);
   return { ...craft, name: 'Selene Training Lander', parts: craft.parts.filter(p => !removed.has(p.uid)).map(p => ({ ...p, stage: p.partId === 'chute-main' || p.partId === 'dec-1' ? 0 : 1 })) };
 }
-const map = step('map', 'Press M to open the map. The orbit line shows where you will coast without thrust.', c => !!c.flight?.mapMode, '[data-tutorial="map"]');
+const map = step('map', 'Press {map} to open the map. The orbit line shows where you will coast without thrust.', c => !!c.flight?.mapMode, '[data-tutorial="map"]');
 const node = step('node', 'Choose Circularize @ Ap in the maneuver planner. A node describes a future change in velocity; Execute node in Flight assist can fly its burn.', c => !!c.world?.nodes.length, '[data-tutorial="maneuver"]');
 export const LESSONS: Lesson[] = [
   { id: 'building', title: 'Building your first rocket', description: 'Assemble, stage and launch a small rocket.', scene: 'editor', craft: () => null, steps: [
@@ -67,15 +67,15 @@ export const LESSONS: Lesson[] = [
     step('launch', 'Click Launch. Your design will appear on the pad; you can begin First flight next.', c => !!c.world?.active, '.vab-launch'),
   ] },
   { id: 'first-flight', title: 'First flight', description: 'Lift off, climb to 10 km and return under a chute.', scene: 'flight', craft: buildSoundingRocket, steps: [
-    step('throttle', 'Hold Shift to raise throttle, or press Z for full power. Set at least half throttle before releasing the clamps.', c => (c.flight?.input.state.throttle ?? 0) >= 0.5, '[data-tutorial="throttle"]'),
-    step('stage', 'Press Space to activate your engine and release the launch clamps.', c => !!c.world?.active && c.world.active.mode !== 'prelaunch'),
-    step('sas', 'Press T to enable SAS stability assist. It holds your attitude while you climb.', c => !!c.flight?.sasOn, '[data-tutorial="sas"]'),
-    step('climb', 'Keep the nose up and reach 10 km. Press X to cut thrust after the climb; coast back down.', c => altitude(c) >= 10000),
-    step('chute', 'On descent, stage the parachute with Space. It arms first, then opens when pressure and speed are safe.', c => !!c.world?.active?.state.parts.some(p => p.chute?.phase === 'semi' || p.chute?.phase === 'full')),
+    step('throttle', 'Hold {throttleUp} to raise throttle, or press {throttleFull} for full power. Set at least half throttle before releasing the clamps.', c => (c.flight?.input.state.throttle ?? 0) >= 0.5, '[data-tutorial="throttle"]'),
+    step('stage', 'Press {stage} to activate your engine and release the launch clamps.', c => !!c.world?.active && c.world.active.mode !== 'prelaunch'),
+    step('sas', 'Press {toggleSas} to enable SAS stability assist. It holds your attitude while you climb.', c => !!c.flight?.sasOn, '[data-tutorial="sas"]'),
+    step('climb', 'Keep the nose up and reach 10 km. Press {throttleCut} to cut thrust after the climb; coast back down.', c => altitude(c) >= 10000),
+    step('chute', 'On descent, stage the parachute with {stage}. It arms first, then opens when pressure and speed are safe.', c => !!c.world?.active?.state.parts.some(p => p.chute?.phase === 'semi' || p.chute?.phase === 'full')),
     step('landing', 'Let the open chute slow the capsule all the way to the surface.', landed),
   ] },
   { id: 'orbit', title: 'Getting to orbit', description: 'Gravity turn, map, apoapsis and circularisation.', scene: 'flight', craft: buildOrbiter, steps: [
-    step('turn', 'Launch with Z, T and Space. Above 500 m, gently lean east using D. Keep turning toward the horizon as you climb. Flight assist → Launch to orbit is available for practice.', c => {
+    step('turn', 'Launch with {throttleFull}, {toggleSas} and {stage}. Above 500 m, gently lean east using {yawRight}. Keep turning toward the horizon as you climb. Flight assist → Launch to orbit is available for practice.', c => {
       const w = c.world, v = w?.active;
       return !!w && !!v && altitude(c) > 500 && dot(qRotate(v.state.orientation, { x: 0, y: 1, z: 0 }), normalize(w.relativeState(v).position)) < 0.98;
     }), map,
@@ -89,7 +89,7 @@ export const LESSONS: Lesson[] = [
     step('capture', 'At lunar periapsis, burn retrograde or plan Circularize @ Pe. Slow down until the lunar orbit is bound and its periapsis stays above the surface.', c => c.world?.active?.body === 'moon' && stableOrbit(c)),
   ] },
   { id: 'moon-landing', title: 'Landing on the Moon', description: 'Radar altitude, powered descent and landing legs.', scene: 'flight', craft: lunarTrainer, setup: w => placeInCircularOrbit(w, w.active!, 'moon', 20000), steps: [
-    step('legs', 'Press G to extend the legs, then Space to ignite the lander engine. Begin a retrograde burn to lower periapsis toward the surface.', c => !!c.world?.active?.state.parts.some(p => p.leg?.deployed)),
+    step('legs', 'Press {toggleGear} to extend the legs, then {stage} to ignite the lander engine. Begin a retrograde burn to lower periapsis toward the surface.', c => !!c.world?.active?.state.parts.some(p => p.leg?.deployed)),
     step('descent', 'The Moon has no air: a parachute cannot help. Burn retrograde to start descending. Flight assist → Land can demonstrate the powered descent.', c => !!c.world?.active && c.world.verticalSpeed(c.world.active) < -5),
     step('radar', 'Below 5 km watch radar altitude: it measures terrain clearance. A last-moment braking burn needs distance ≈ speed² / (2 × net deceleration). Begin earlier to leave a margin.', c => radarAltitude(c) < 5000),
     step('burn', 'Use throttle to brake your descent, then reduce power to settle gently onto the deployed legs. Land assist calculates the braking point for this craft.', c => !!c.world?.active && c.world.active.state.telemetry.thrust > 0 && radarAltitude(c) < 5000),
@@ -97,19 +97,19 @@ export const LESSONS: Lesson[] = [
   ] },
   { id: 'docking', title: 'Rendezvous & docking', description: 'Target, closest approach and RCS port alignment.', scene: 'flight', craft: buildTender, setup: w => { placeInCircularOrbit(w, w.active!, 'earth', 90000); spawnRendezvousTarget(w, buildTender(), 100); w.setTarget(null); }, steps: [
     step('target', 'Open the Target panel, then choose Wren Tender Target in its selector. Matching orbits brings you close; matching velocity keeps you close.', c => c.world?.targetKind() === 'vessel', '[data-tutorial="target"]'),
-    step('approach', 'Open the map with M and inspect closest approach. Our practice target starts 100 m ahead; approach slowly rather than accelerating straight at it.', c => !!c.flight?.mapMode && !!c.world?.closestApproach()),
-    step('mode', 'Return from the map. Enable docking mode and RCS (R). I/K, J/L and H/N translate; the docking indicator shows port alignment.', c => !!c.flight?.dockingMode && !!c.flight.rcsOn, '[data-tutorial="docking"]'),
+    step('approach', 'Open the map with {map} and inspect closest approach. Our practice target starts 100 m ahead; approach slowly rather than accelerating straight at it.', c => !!c.flight?.mapMode && !!c.world?.closestApproach()),
+    step('mode', 'Return from the map. Enable docking mode and RCS ({toggleRcs}). {translateForward}/{translateBack}, {translateLeft}/{translateRight} and {translateUp}/{translateDown} translate; the docking indicator shows port alignment.', c => !!c.flight?.dockingMode && !!c.flight.rcsOn, '[data-tutorial="docking"]'),
     step('dock', 'Align the ports, cancel sideways velocity and close below 0.5 m/s. The collars capture automatically when their faces meet.', c => !!c.world?.active?.state.parts.some(p => !!p.docked)),
   ] },
   { id: 'plane', title: 'Flying a plane', description: 'Runway acceleration, rotation and landing.', scene: 'flight', craft: buildSwift, steps: [
-    step('runway', 'Welcome to the runway. Space starts the jet; Z commands full throttle. Keep the wings level while you accelerate.', c => !!c.world?.active && length(c.world.surfaceVelocity(c.world.active)) > 30),
-    step('rotate', 'At about 65 m/s, gently pull up with S. Climb clear of the runway before retracting gear with G.', c => altitude(c) > 300 && c.world?.active?.state.situation === 'flying'),
-    step('return', 'Circle back, lower gear with G and reduce throttle. Make a shallow approach, flare just above the runway, then hold B to brake after touchdown.', c => landed(c) && !!c.world?.active && length(c.world.surfaceVelocity(c.world.active)) < 5),
+    step('runway', 'Welcome to the runway. {stage} starts the jet; {throttleFull} commands full throttle. Keep the wings level while you accelerate.', c => !!c.world?.active && length(c.world.surfaceVelocity(c.world.active)) > 30),
+    step('rotate', 'At about 65 m/s, gently pull up with {pitchDown}. Climb clear of the runway before retracting gear with {toggleGear}.', c => altitude(c) > 300 && c.world?.active?.state.situation === 'flying'),
+    step('return', 'Circle back, lower gear with {toggleGear} and reduce throttle. Make a shallow approach, flare just above the runway, then hold {brakes} to brake after touchdown.', c => landed(c) && !!c.world?.active && length(c.world.surfaceVelocity(c.world.active)) < 5),
   ] },
   { id: 'eva', title: 'EVA', description: 'Step outside, use a jetpack, plant a flag and board.', scene: 'flight', craft: lunarTrainer, setup: w => placeOnSurface(w, w.active!, 'moon'), steps: [
-    step('eva', 'Our lander is already on the Moon. Press U or Go EVA to step outside. WASD walks; drag the view to choose your heading.', c => !!c.world?.active?.state.eva),
-    step('jetpack', 'Press Space to hop, then hold Shift above the ground to thrust upward. Ctrl thrusts down. Your finite monopropellant supply powers the jetpack; come back near the hatch.', c => !!c.world?.active?.state.eva && c.world.active.state.parts.some(p => (p.resources.monopropellant ?? 5) < 4.99)),
-    step('flag', 'Settle onto the ground and press F to plant your expedition flag.', c => !!c.world?.flags.length),
-    step('board', 'Walk back to the hatch, within 3 m and below 3 m/s relative speed. Press Enter or Board to return to the cabin.', c => !!c.world?.active && !c.world.active.state.eva && c.world.crewFor().length > 0),
+    step('eva', 'Our lander is already on the Moon. Press {eva} or Go EVA to step outside. {evaForward}/{evaLeft}/{evaBack}/{evaRight} walks; drag the view to choose your heading.', c => !!c.world?.active?.state.eva),
+    step('jetpack', 'Press {stage} to hop, then hold {evaUp} above the ground to thrust upward. {evaDown} thrusts down. Your finite monopropellant supply powers the jetpack; come back near the hatch.', c => !!c.world?.active?.state.eva && c.world.active.state.parts.some(p => (p.resources.monopropellant ?? 5) < 4.99)),
+    step('flag', 'Settle onto the ground and press {plantFlag} to plant your expedition flag.', c => !!c.world?.flags.length),
+    step('board', 'Walk back to the hatch, within 3 m and below 3 m/s relative speed. Press {board} or Board to return to the cabin.', c => !!c.world?.active && !c.world.active.state.eva && c.world.crewFor().length > 0),
   ] },
 ];

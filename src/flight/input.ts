@@ -29,8 +29,8 @@ export class FlightInput {
   get precisionActive() { return this.precision || this.down('precisionHold'); }
   gamepadConnected = false;
   stageProgress = 0;
-  invertPitch = false;
   evaMode = false;
+  mouseEnabled = true;
   enabled = true;
   get running() { return this.enabled && (this.down('evaRun') || this.buttons.has(10)); }
   constructor(private target: Window = window) {
@@ -50,7 +50,7 @@ export class FlightInput {
   private onBlur = () => { this.held.clear(); this.mouse = { x: 0, y: 0 }; this.resetPad(); };
   private onMouse = (e: PointerEvent) => {
     // Right-button drag remains the camera control; left-button drag is optional flight assist.
-    if (game.get().settings.mouseFlight && e.buttons === 1 && e.target instanceof HTMLCanvasElement) {
+    if (this.mouseEnabled && game.get().settings.mouseFlight && e.buttons === 1 && e.target instanceof HTMLCanvasElement) {
       this.mouse.x = Math.max(-1, Math.min(1, this.mouse.x + e.movementX * 0.01));
       this.mouse.y = Math.max(-1, Math.min(1, this.mouse.y + e.movementY * 0.01));
     } else this.mouse = { x: 0, y: 0 };
@@ -119,8 +119,8 @@ export class FlightInput {
       pitch: 0, yaw: 0, roll: 0, tx: axis('evaRight', 'evaLeft') + analog.tx,
       ty: axis('evaUp', 'evaDown') + analog.ty + analog.throttle, tz: axis('evaBack', 'evaForward') + analog.tz,
     } : {
-      pitch: (axis('pitchDown', 'pitchUp') + analog.pitch + (settings.mouseFlight ? this.mouse.y : 0)) * (settings.invertPitch || this.invertPitch ? -1 : 1),
-      yaw: axis('yawRight', 'yawLeft') + analog.yaw + (settings.mouseFlight ? this.mouse.x : 0), roll: axis('rollRight', 'rollLeft') + analog.roll,
+      pitch: (axis('pitchDown', 'pitchUp') + analog.pitch + (settings.mouseFlight && this.mouseEnabled ? this.mouse.y : 0)) * (settings.invertPitch ? -1 : 1),
+      yaw: axis('yawRight', 'yawLeft') + analog.yaw + (settings.mouseFlight && this.mouseEnabled ? this.mouse.x : 0), roll: axis('rollRight', 'rollLeft') + analog.roll,
       tx: axis('translateRight', 'translateLeft') + analog.tx, ty: axis('translateForward', 'translateBack') + analog.ty, tz: axis('translateUp', 'translateDown') + analog.tz,
     };
     const alpha = settings.inputSmoothing > 0 ? 1 - Math.exp(-dt / settings.inputSmoothing) : 1;

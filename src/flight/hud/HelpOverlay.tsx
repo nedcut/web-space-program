@@ -28,6 +28,7 @@ const FLIGHT_KEYS: [Action[] | string, string][] = [
   [['translateForward', 'translateBack', 'translateLeft', 'translateRight', 'translateUp', 'translateDown'], 'RCS translate'],
   [['toggleGear', 'brakes'], 'Landing gear / wheel brakes'],
   [['map'], 'Map view + maneuver planner'],
+  [['flightData'], 'Detailed flight data panel'],
   [['warpDown', 'warpUp', 'warpStop'], 'Time warp slower / faster / stop'],
   [['toggleCamMode'], 'Camera mode (auto / chase / free)'],
   [['focusNext'], 'Switch to a nearby vessel'],

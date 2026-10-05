@@ -103,7 +103,6 @@ export default function FlightScene() {
       game.set({ launchPending: false });
       const scenario = new URLSearchParams(location.search).get('scenario');
       if (scenario && mountKey === 0 && !getTutorial()) cc.devScenario(scenario);
-      cc.input.invertPitch = game.get().settings.invertPitch;
       // Esc: close the help overlay first; never un-pause the "vessel lost" screen (there is nothing to fly).
       cc.onExit = () => {
         if (helpRef.current) return closeHelp();
@@ -259,6 +258,7 @@ export default function FlightScene() {
       <div className="fullscreen" ref={host} />
       {tele && c && (
         <Hud
+          shortcutsEnabled={ready && !paused && !help && !showSettings}
           precision={c.input.precisionActive}
           stageProgress={c.input.stageProgress}
           gamepadConnected={c.input.gamepadConnected}

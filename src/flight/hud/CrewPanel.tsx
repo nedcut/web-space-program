@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { bindingLabel, getBindings, subscribeBindings } from '../../input/bindings';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import type { Astronaut } from '../../sim/crew/crew';
 import type { Telemetry, HudCallbacks } from './Hud';
 
@@ -23,6 +24,8 @@ function Portrait({ person }: { person: Astronaut }) {
 }
 
 export function CrewPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
+  const bindings = useSyncExternalStore(subscribeBindings, getBindings);
+  const key = (action: Parameters<typeof bindingLabel>[0]) => bindingLabel(action, bindings);
   return <div className="panel" style={{ padding: 10, pointerEvents: 'auto', maxHeight: 240, overflowY: 'auto', flexShrink: 0 }}>
     <div className="label" style={{ marginBottom: 7 }}>{t.eva ? 'EXTRAVEHICULAR ACTIVITY' : 'CREW'}{t.noControl && <span style={{ color: 'var(--warn)' }}> · No control</span>}</div>
     {t.crew.map(person => <div key={person.id} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
@@ -30,18 +33,18 @@ export function CrewPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 12 }}>{person.name}</div>
         <div style={{ fontSize: 10, color: 'var(--text-dim)' }} title="Personality stats — flavour only">Courage {person.courage} · Skill {person.skill}</div>
-        {!t.eva && <button className="btn small" onClick={() => cb.onEva(person.id)} style={{ marginTop: 4 }}>Go EVA · U</button>}
+        {!t.eva && <button className="btn small" onClick={() => cb.onEva(person.id)} style={{ marginTop: 4 }}>Go EVA · {key('eva')}</button>}
       </div>
     </div>)}
     {!t.crew.length && <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{t.noControl ? 'An astronaut or probe core is required.' : 'Uncrewed · remote control'}</div>}
     {t.eva && <>
       <div className="mono" style={{ fontSize: 11, marginBottom: 6 }}>Jetpack {t.eva.fuel.toFixed(2)} / 5 kg</div>
       <div style={{ display: 'flex', gap: 5 }}>
-        <button className="btn small" disabled={!t.eva.canBoard} onClick={cb.onBoard}>Board · Enter</button>
-        <button className="btn small" disabled={!t.eva.landed} onClick={cb.onPlantFlag}>Flag · F</button>
+        <button className="btn small" disabled={!t.eva.canBoard} onClick={cb.onBoard}>Board · {key('board')}</button>
+        <button className="btn small" disabled={!t.eva.landed} onClick={cb.onPlantFlag}>Flag · {key('plantFlag')}</button>
       </div>
       <div style={{ fontSize: 10, marginTop: 7, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        WASD move · Q/E strafe<br />{t.eva.landed ? 'Shift run · Space hop' : 'Shift/Ctrl rise / descend'}<br />Mouse drag to turn · Board within 3 m
+        {key('evaForward')}/{key('evaLeft')}/{key('evaBack')}/{key('evaRight')} move<br />{t.eva.landed ? `${key('evaRun')} run · ${key('stage')} hop` : `${key('evaUp')}/${key('evaDown')} rise / descend`}<br />Mouse drag to turn · Board within 3 m
       </div>
     </>}
   </div>;
