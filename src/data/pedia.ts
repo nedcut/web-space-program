@@ -15,7 +15,13 @@ const portraits: Record<string, string> = {
   janus: 'Janus shares nearly the same orbit as Epimetheus. When the pair approach, their gravitational interaction exchanges their inner and outer orbital roles instead of letting them collide. The game represents them with independent mean orbits.',
   epimetheus: 'Epimetheus and Janus are co-orbital companions. Their mutual gravity makes them trade orbital lanes about every four years. Epimetheus is smaller, so its lane changes more than Janus’s. This interaction is not reproduced by the game’s fixed Keplerian rails.',
 };
-export const BODY_ARTICLES = BODY_DEFS.map(body => ({ id: body.id, name: body.name, kind: 'body' as const, text: portraits[body.id] ?? body.description ?? `${body.name} is a ${body.kind} in our solar system.` }));
+export const BODY_HAZARDS: Record<string, string> = {
+  venus: 'Hazards: 737 K and about 9.2 MPa at datum. Ordinary probes crush or heat-soak within minutes. Kiln pressure-rated hardware has a finite insulated reserve: about 105 real-scale minutes, or 33 Standard minutes. Every exposed part needs its own pressure rating.',
+  jupiter: 'Hazards: intense equatorial radiation belts. Dose accumulates even during time warp and inside moon SOIs. Electronics degrade at half their rated dose and fail at full dose. Bastion shielding reduces connected-vessel dose tenfold. Deep atmosphere pressure rises below the cloud datum; there is no solid surface.',
+  saturn: 'Hazards: moderate equatorial radiation belts compared with Jupiter; short ring and moon expeditions remain feasible. Deep atmospheric dives eventually exceed pressure ratings. There is no solid surface.',
+  earth: 'Hazards: mild Van Allen radiation belts above low orbit. Earth and the Moon eclipse solar panels; batteries must carry the craft through shadow.',
+};
+export const BODY_ARTICLES = BODY_DEFS.map(body => ({ id: body.id, name: body.name, kind: 'body' as const, text: (portraits[body.id] ?? body.description ?? `${body.name} is a ${body.kind} in our solar system.`) + " " + (BODY_HAZARDS[body.id] ?? "Hazards: solar panels stop charging in planetary shadow. Pressure and heat ratings apply wherever an atmosphere is present.") }));
 export const PART_ARTICLES = PART_DEFS.map(part => ({ id: part.id, name: part.name, kind: 'part' as const, text: part.description, research: TECH_NODES.find(n => n.parts.includes(part.id))! }));
 export const FLIGHT_SCHOOL = [
   { id: 'apoapsis', name: 'Apoapsis & periapsis', text: 'Apoapsis is the farthest point of an orbit from its focus; periapsis is the closest. A prograde burn near periapsis raises apoapsis. Altitude subtracts the body’s datum radius from the distance to its centre.', diagram: 'orbit' },

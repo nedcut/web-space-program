@@ -1,3 +1,4 @@
+import { advancePackedHazards, advanceCrewDose } from './world/hazards';
 import { nearbyLandmarks } from '../sim/terrain/landmarks';
 
 import { newRecorder, trimHistory, recordFor, startRecord, appendEvent, finishRecord, type FlightRecord, type EventKind } from './flightlog/recorder';
@@ -594,6 +595,7 @@ export class World {
           else {
             this.pack(wv);
             if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, PHYSICS_DT);
+            advancePackedHazards(this, this.systems, wv, t, t + PHYSICS_DT);
             this.recordFlight(wv, t + PHYSICS_DT);
           }
           continue;
@@ -610,6 +612,7 @@ export class World {
         } else {
           advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, PHYSICS_DT);
           // States are expressed at the end of the step (t + dt), like physics-stepped vessels.
+          advancePackedHazards(this, this.systems, wv, t, t + PHYSICS_DT);
           this.syncFixed(wv, t + PHYSICS_DT);
           this.recordFlight(wv, t + PHYSICS_DT);
           continue;
@@ -623,6 +626,7 @@ export class World {
       const ctrl = isActive ? vesselInput : neutralInput({ sas: 'off' });
       const flight = recordFor(this.flightlog, wv.state.id);
       if (flight && wv.state.situation === 'flying' && wv.state.telemetry.altitudeAGL < 100) flight.touchdownSpeed = length(this.surfaceVelocity(wv));
+      advanceCrewDose(this, wv, PHYSICS_DT);
       const res = wv.state.eva ? stepEva(wv.state, ctrl, env, t, PHYSICS_DT) : stepVessel(wv.state, ctrl, env, t, PHYSICS_DT);
       if (isActive) propulsiveDv += res.propulsiveDv ?? 0;
       for (const nv of res.newVessels) {
@@ -634,15 +638,6 @@ export class World {
       }
       for (const e of res.events) this.handleEvent(e);
       for (const nv of res.newVessels) { const child = this.vessels.get(nv.id); if (child) this.inheritFlight(wv, child); }
-      // Bodies without a surface (gas giants, stars): crushed / vaporised below a small depth.
-      const bodyDef = this.universe.body(wv.body);
-      if (!bodyDef.solidSurface && !wv.state.destroyed) {
-        const depth = bodyDef.radius - length(sub(wv.state.position, this.universe.ephem.getBodyState(wv.body, t + PHYSICS_DT).position));
-        if (depth > bodyDef.radius * 0.002) {
-          wv.state.destroyed = true;
-          if (isActive) this.message(`${wv.state.name} was crushed in the depths of ${bodyDef.name}`, 'bad', 8);
-        }
-      }
       this.recordFlight(wv, t + PHYSICS_DT);
       if (wv.state.destroyed) {
         this.finishFlight(wv, 'lost', t + PHYSICS_DT);
@@ -670,12 +665,13 @@ export class World {
     }
     this.onEvent?.(e);
     if (e.vesselId !== this.activeId) return;
+    if (e.type === 'hazardWarning') this.message(e.message, 'warn', 6);
     if (e.type === 'linkBroken') this.message('Structural brace broke!', 'bad', 4);
     if (e.type === 'structuralFailure') this.message('Structural failure — attachment broke!', 'bad', 4);
     if (e.type === 'flameout') this.message('Flameout!', 'warn', 2);
     if (e.type === 'docked' || e.type === 'undocked') this.approachCache = null;
     if (e.type === 'partDestroyed') {
-      const why = e.reason === 'overheat' ? 'overheated and exploded' : 'was destroyed on impact';
+      const why = e.reason === 'pressure' ? 'collapsed under ambient pressure' : e.reason === 'overheat' ? 'overheated and exploded' : 'was destroyed on impact';
       this.message(`A part ${why}`, 'bad', 4);
     }
   }

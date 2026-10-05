@@ -6,7 +6,11 @@ import { recomputeMassProperties, rebuildTopology } from '../sim/vessel';
 
 export function vesselDeltas(world: World): VesselDelta[] {
   return [...world.vessels.values()].map(v => {
-    const base = { id: v.state.id, body: v.body };
+    const base = { id: v.state.id, body: v.body,
+      crewDose: world.crew.filter(c => v.state.eva?.astronautId === c.id || v.state.parts.some(p => p.crew?.includes(c.id))).map(c => ({ id: c.id, dose: c.radiationDose ?? 0 })),
+      hazards: v.state.parts.map(p => ({ uid: p.uid, electricCharge: p.resources.electricCharge,
+      radiationDose: p.radiationDose, ambientTemperature: p.ambientTemperature, pressureExposure: p.pressureExposure,
+      pressureWarned: p.pressureWarned, heatWarned: p.heatWarned, electronicsDegraded: p.electronicsDegraded, electronicsFailed: p.electronicsFailed })) };
     if (v.mode === 'rails' && v.orbit) return { ...base, mode: 'rails', orbit: structuredClone(v.orbit) };
     if (v.mode === 'landedRails' && v.fixed && !isruMachinery(v.state).length) return { ...base, mode: 'landedRails', fixed: structuredClone(v.fixed) };
     const s = v.state;
@@ -30,6 +34,14 @@ export function applyDeltas(world: World, ut: number, deltas: VesselDelta[]) {
   for (const d of deltas) {
     const v = world.vessels.get(d.id);
     if (!v) continue; // Topology always arrives in a preceding full snapshot, on the same ordered socket.
+    for (const dose of d.crewDose ?? []) { const c = world.crew.find(c => c.id === dose.id); if (c) c.radiationDose = dose.dose; }
+    for (const { electricCharge, ...hazard } of d.hazards ?? []) {
+      const p = v.state.cache.byUid.get(hazard.uid);
+      if (p) {
+        Object.assign(p, hazard);
+        if (electricCharge !== undefined) p.resources.electricCharge = electricCharge;
+      }
+    }
     v.mode = d.mode;
     v.body = d.body;
     v.orbit = d.mode === 'rails' ? structuredClone(d.orbit) : undefined;

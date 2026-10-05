@@ -35,6 +35,8 @@ export interface AirSample {
 export interface Environment {
   /** Integrate in the translating body frame for microgravity precision. Requires referenceBody. */
   integrateRelative?: boolean;
+  hazardTimeScale?: number;
+  radiation?(pos: Vec3, t: number): number;
   regolithConcentration?(pos: Vec3, t: number): number;
   /** Gravitational acceleration at an inertial position (m/s^2). */
   gravity(posInertial: Vec3, t: number): Vec3;
@@ -43,7 +45,7 @@ export interface Environment {
   /** Ground under the position (terrain or ocean surface), or null if there is no surface (gas giant / far away). */
   ground(posInertial: Vec3, t: number): GroundSample | null;
   /** Sun direction (unit, from position toward the Sun) & distance (m) for solar power and heating. */
-  sun(posInertial: Vec3, t: number): { dir: Vec3; distance: number };
+  sun(posInertial: Vec3, t: number): { dir: Vec3; distance: number; exposure?: number };
   /**
    * OPTIONAL: state of the dominant (reference) body. Used by SAS orbital modes (prograde/normal/radial).
    * If absent, inertial velocity is used for prograde and gravity direction for radial.

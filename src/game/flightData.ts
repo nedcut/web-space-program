@@ -1,3 +1,4 @@
+import { pressureLimit, operatingLimit } from '../sim/hazards/vessel';
 import type { World, WorldVessel } from './world';
 import { ballisticImpact, targetPlaneNodes, phaseAngle, suicideBurn, period, burnTimeEstimate, periapsisRadius } from '../sim/orbit';
 import { biomeAt } from '../sim/science/biomes';
@@ -53,7 +54,18 @@ export function flightData(w: World, v: WorldVessel, stages: StageDeltaV[], pred
     phase = phaseAngle(a.position, t.position, cross(a.position, a.velocity));
   }
   const dt = (n: number) => Number.isFinite(n) ? formatDuration(n) : '—';
+  const env = u.createEnvironment(() => v.body), air = env.air(st.position, w.ut).sample;
+  const rate = env.radiation?.(st.position, w.ut) ?? 0;
   return [
+    { title: 'Hazards', rows: [
+      ['Pressure / weakest rating', `${(air.pressure / 1e6).toFixed(3)} / ${(Math.min(...st.parts.map(p => pressureLimit(p.def))) / 1e6).toFixed(2)} MPa`],
+      ['Ambient / equipment limit', `${air.temperature.toFixed(0)} / ${Math.min(...st.parts.map(p => operatingLimit(p.def))).toFixed(0)} K`],
+      ['Hottest equipment soak', `${Math.max(...st.parts.map(p => p.ambientTemperature ?? 288)).toFixed(0)} K`],
+      ['Radiation (external)', `${(rate * 3600).toPrecision(3)} Gy/h`],
+      ['Accumulated (shielded)', `${Math.max(0, ...st.parts.map(p => p.radiationDose ?? 0)).toPrecision(3)} Gy`],
+      ['Crew dose (maximum)', `${Math.max(0, ...w.crew.filter(c => st.eva?.astronautId === c.id || st.parts.some(p => p.crew?.includes(c.id))).map(c => c.radiationDose ?? 0)).toPrecision(3)} Sv`],
+      ['Sun exposure', env.sun(st.position, w.ut).exposure === 0 ? 'Shadow — no solar power' : 'Sunlight'],
+    ] },
     { title: 'Propulsion', rows: [
       ['TWR current / max', `${(currentThrust / st.mass / gravity).toFixed(2)} / ${(maxThrust / st.mass / gravity).toFixed(2)}`],
       ['Stage Δv / vacuum', `${(stage?.dv ?? 0).toFixed(0)} / ${(stage?.dvVac ?? 0).toFixed(0)} m/s`],

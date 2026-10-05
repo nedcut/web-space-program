@@ -219,6 +219,7 @@ export type LinkModule =
   | { type: 'fuelLine'; maxLength: number };
 
 export type PartModule =
+  | { type: 'radiationShield'; factor: number }
   | LinkModule
   | { type: 'drill'; rate: number; ecRate: number; heat: number }
   | { type: 'converter'; rate: number; ecRate: number; heat: number }
@@ -269,6 +270,14 @@ export interface PartDef {
   dragCoefficient: { axial: number; side: number };
   /** Max skin temperature before destruction, K. */
   maxTemp: number;
+  /** External pressure rating, Pa; absent uses category defaults. */
+  maxPressure?: number;
+  /** Isolated equipment temperature limit (skin retains maxTemp), K. */
+  maxOperatingTemp?: number;
+  /** Heat-soak time constant at Venus datum, real-scale seconds. */
+  heatSoakTime?: number;
+  /** Electronics total ionizing dose limit, Gy. */
+  maxRadiationDose?: number;
   /** Impact tolerance, m/s. */
   crashTolerance: number;
   /** Attachment strength overrides, N and N m. The weaker endpoint wins. */

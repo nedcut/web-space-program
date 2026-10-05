@@ -12,7 +12,7 @@ import { faceAreas, faceNoseRadius, faceSurfaceAreas } from './shapes';
  *    scaled by the face's incidence and by (1 - T_skin/T_recovery) (hot walls stop heating / cool);
  *  - radiative cooling of each exposed skin (Stefan–Boltzmann, emissivity 0.8) — shielded faces
  *    (covered by a neighbour) neither heat nor radiate;
- *  - sunlight absorbed per face by incidence (no planetary shadowing — pass distance = Infinity in shadow);
+ *  - sunlight absorbed per face by incidence (environment occlusion is passed as distance = Infinity in shadow);
  *  - low-speed convective exchange with ambient air;
  *  - skin <-> internal conduction, internal <-> neighbour conduction across attach nodes;
  *  - ablative heat shields consume ablator to absorb heat on hot skins.
