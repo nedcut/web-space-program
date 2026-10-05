@@ -28,6 +28,10 @@ describe('mission catalog and World setup', () => {
     expect(w.mode).toBe('sandbox'); expect(w.commsSettings.enabled).toBe(false);
     const restored = deserializeWorld(serializeWorld(w), PART_CATALOG);
     expect(restored.active!.state.position).toEqual(v.state.position);
+    if (s.id === 'moon-return') {
+      expect(w.orbitSummary(v).pe).toBeGreaterThan(10000);
+      expect(w.orbitSummary(v).pe).toBeLessThan(25000);
+    }
     if (s.id === 'grand-tour') expect(w.orbitSummary(v).pe).toBeGreaterThan(w.universe.body('titan').atmosphere!.height);
     const before = observeWorld(setup, v.state.parts.length);
     expect(before.alive).toBe(true);
@@ -35,6 +39,15 @@ describe('mission catalog and World setup', () => {
     let steps = 0; w.onSimulationStep = (dt, dv) => { steps++; expect(dt).toBeGreaterThan(0); expect(dv).toBeGreaterThanOrEqual(0); };
     w.tick(0.02, neutralInput()); expect(steps).toBe(1);
   });
+  it('returns the limited-fuel Homeward capsule through actual entry and chute touchdown', () => {
+    const setup = setupScenario(scenario('moon-return')), w = setup.world, count = w.active!.state.parts.length;
+    let state = initialMission(w.ut); state.previous = observeWorld(setup, count);
+    w.onSimulationStep = (dt, dv) => { state = evaluateMission('moon-return', state, observeWorld(setup, count), dt, dv); };
+    w.stageActive(); w.stageActive();
+    for (let i = 0; i < 12000 && state.status === 'flying'; i++) w.tick(0.25, neutralInput({ sas: 'retrograde', sasReference: 'surface' }));
+    expect(state.status, state.reason).toBe('success'); expect(state.chute).toBe(true); expect(state.dv).toBe(0); expect(state.landingSpeed).toBeLessThan(8);
+    expect(w.active!.state.parts.some(p => p.partId === 'pod-harbor-3')).toBe(true);
+  }, 60000);
   it('captures into a terrain-clearing Mars orbit under shield-first drag alone', () => {
     const setup = setupScenario(scenario('mars-aerobrake')), w = setup.world, count = w.active!.state.parts.length;
     let state = initialMission(w.ut); state.previous = observeWorld(setup, count);
