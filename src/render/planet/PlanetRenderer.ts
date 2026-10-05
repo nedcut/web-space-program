@@ -159,6 +159,9 @@ export class PlanetRenderer {
         this.root.add(effect);
       }
     }
+    if (body.id === 'titan') {
+      for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.TITAN_HAZE = 1;
+    }
     if (body.id === 'earth' && this.quality.planetDetails.surfaceEmission) {
       for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.EARTH_DETAILS = 1;
     }

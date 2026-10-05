@@ -105,6 +105,12 @@ void integrateScattering(vec3 rel0, vec3 rd, float t0, float t1, int steps, out 
     T *= segT;
   }
   inscatter = uSunColor * L;
+  #ifdef TITAN_HAZE
+    // Deep haze still receives diffuse light after direct transmittance underflows.
+    // Approximate the higher scattering orders omitted by this single-scattering marcher.
+    float diffuseDay = smoothstep(-0.25, 0.2, dot(normalize(rel0), uSunDir));
+    inscatter += uSunColor * vec3(0.08, 0.043, 0.013) * diffuseDay * (vec3(1.0)-T);
+  #endif
   transmittance = T;
 }
 
@@ -138,6 +144,9 @@ vec3 skyAmbient(vec3 rel, vec3 n) {
   vec3 tau = (uBetaR * uHr + uBetaMs * uHm);
   vec3 scatterCol = (vec3(1.0) - exp(-tau)) * mix(vec3(1.0), tZen, 0.5);
   float hemi = 0.5 + 0.5 * dot(n, up);
+  #ifdef TITAN_HAZE
+    scatterCol = max(scatterCol, vec3(0.12,0.07,0.025));
+  #endif
   return uSunColor * scatterCol * day * hemi * 0.35 * uAmbient;
 }
 `;

@@ -314,6 +314,17 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         float rough = clamp(0.05 + dist * 2e-7, 0.05, 0.2);
         // Rough-surface Schlick: unresolved wave facets cap grazing reflectance.
         float F = 0.02 + (0.55 - 0.02) * pow(1.0 - NdV, 5.0);
+        if (uHydrocarbon > 0.5) {
+          // The optically thick methane haze is dominated by diffuse light. A bounded
+          // analytic sky reflection avoids an under-resolved six-step reflected-ray march.
+          float day = smoothstep(-0.25, 0.2, dot(up, L));
+          vec3 haze = vec3(0.18, 0.105, 0.035) * day;
+          float glint = pow(NdH, 800.0) * NdL * 0.12;
+          vec3 hydro = uDeep * (0.15 + day) + haze * (F + glint);
+          hydro = mix(hydro, haze * 0.55, 1.0-exp(-dist/16000.0));
+          gl_FragColor = vec4(hydro, 1.0);
+          return;
+        }
         vec3 sunT = sunTransmittance(rel) * ringShadow(rel);
         float k = rough * 0.5;
         float G = (NdL / (NdL * (1.0 - k) + k)) * (NdV / (NdV * (1.0 - k) + k));

@@ -89,11 +89,7 @@ function loadBody(id: string): void {
 let readyFrames = 0;
 let renderedFrames = 0;
 const SETTLE = params.get('settle') === '1';
-const state = {
-  ready: false, stats: {} as Record<string, unknown>,
-  /** Capture in the same task as rendering: WebGL discards its buffer after compositing. */
-  capture: () => { pipeline.render(scene, camera); return canvas.toDataURL('image/jpeg', 0.85); },
-};
+const state = { ready: false, stats: {} as Record<string, unknown> };
 (window as unknown as { __preview: typeof state }).__preview = state;
 
 bodySel.addEventListener('change', () => loadBody(bodySel.value));

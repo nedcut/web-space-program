@@ -48,9 +48,20 @@ export class SurfaceFeatures {
         const m = new THREE.Mesh(new THREE.BoxGeometry(x,y,z), mat); m.position.set(px,py,pz); group.add(m);
       };
       if (l.kind === 'arch') {
-        const arch = new THREE.Mesh(new THREE.TorusGeometry(18,5,7,28,Math.PI),rock);
+        const geometry = new THREE.TorusGeometry(18,5,7,28,Math.PI);
+        const points = geometry.attributes.position;
+        for (let i=0;i<points.count;i++) {
+          const x=points.getX(i), y=points.getY(i), z=points.getZ(i);
+          const erosion = Math.sin(x*0.7+y*1.3+z*0.8)*0.65 + Math.sin(x*1.9-z)*0.35;
+          points.setXYZ(i,x+erosion*0.6,y+erosion,z+erosion*0.5);
+        }
+        geometry.computeVertexNormals();
+        const arch = new THREE.Mesh(geometry,rock);
         arch.position.y = 2; group.add(arch);
-        box(10,8,12,-18,0,0); box(10,8,12,18,0,0);
+        for (const x of [-18,18]) {
+          const foot = new THREE.Mesh(new THREE.DodecahedronGeometry(8,0),rock);
+          foot.position.set(x,-2,0); group.add(foot);
+        }
       } else if (l.kind === 'probe') {
         box(2,1.5,2,0,1,0,metal); box(0.12,5,0.12,0,3,0,metal);
         for (const x of [-1,1]) box(1,0.3,5,x*2,0.2,0,metal);
@@ -79,7 +90,7 @@ export class SurfaceFeatures {
         for(let i=0;i<pos.count;i++) pos.setY(i, -(pos.getX(i)**2+pos.getZ(i)**2)/(2*body.radius));
         geometry.computeVertexNormals();
         const mat=new THREE.ShaderMaterial({
-          uniforms: { time: this.time },
+          uniforms: { time: this.time, radius: { value: radius } },
           vertexShader: `#include <common>
             #include <logdepthbuf_pars_vertex>
             varying vec3 p;
@@ -88,12 +99,22 @@ export class SurfaceFeatures {
             }`,
           fragmentShader: `#include <common>
             #include <logdepthbuf_pars_fragment>
-            uniform float time; varying vec3 p;
+            uniform float time; uniform float radius; varying vec3 p;
+            vec2 hash(vec2 v){return fract(sin(vec2(dot(v,vec2(127.1,311.7)),dot(v,vec2(269.5,183.3))))*43758.5453);}
             void main(){
             #include <logdepthbuf_fragment>
-            vec2 q=p.xz*0.007;
-            float fissure=abs(sin(q.x+sin(q.y*1.7))*sin(q.y+cos(q.x*1.3)));
-            float glow=1.0-smoothstep(0.01,0.12,fissure);
+            float angle=atan(p.z,p.x);
+            if(length(p.xz)/radius > 0.92+0.035*sin(angle*7.0)+0.025*sin(angle*13.0)) discard;
+            vec2 q=p.xz*0.006;
+            q+=vec2(sin(q.y*0.73),cos(q.x*0.61))*0.4;
+            vec2 cell=floor(q), f=fract(q);
+            float first=10.0, second=10.0;
+            for(int x=-1;x<=1;x++) for(int y=-1;y<=1;y++) {
+              vec2 offset=vec2(float(x),float(y));
+              float d=length(offset+hash(cell+offset)-f);
+              if(d<first){second=first;first=d;}else{second=min(second,d);}
+            }
+            float glow=1.0-smoothstep(0.015,0.075,second-first);
             float pulse=0.85+0.15*sin(time*0.6+q.x);
             gl_FragColor=vec4(mix(vec3(0.022,0.007,0.004),vec3(3.5,0.4,0.015)*pulse,glow),1.0);
             #include <tonemapping_fragment>

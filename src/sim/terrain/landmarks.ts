@@ -27,5 +27,12 @@ export function landmarkPosition(body: BodyDef, terrain: Terrain, landmark: Land
   return scale(d, body.radius + terrain.heightAt(d.x, d.y, d.z));
 }
 export function nearbyLandmarks(body: BodyDef, terrain: Terrain, position: Vec3, known: readonly string[]): Landmark[] {
-  return LANDMARKS.filter(l => l.body === body.id && !known.includes(l.id) && length(sub(position, landmarkPosition(body, terrain, l))) <= 2000);
+  return LANDMARKS.filter(l => {
+    if (l.body !== body.id || known.includes(l.id)) return false;
+    // Broad phase avoids expensive terrain sampling for distant landmarks every physics tick.
+    const d = latLonToUnit(l.lat, l.lon);
+    const margin = 2000 + Math.max(Math.abs(terrain.minHeight), Math.abs(terrain.maxHeight));
+    if (length(sub(position, scale(d, body.radius))) > margin) return false;
+    return length(sub(position, landmarkPosition(body, terrain, l))) <= 2000;
+  });
 }
