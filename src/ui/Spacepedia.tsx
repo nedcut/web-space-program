@@ -10,6 +10,7 @@ import { mountPartTurntable } from '../editor/scene/thumbnails';
 import './pedia.css';
 import { LANDMARKS } from '../sim/terrain/landmarks';
 
+const NO_DISCOVERIES: readonly string[] = [];
 let returnScene: Scene = 'menu';
 export function openPedia(from: Scene) { returnScene = from; game.set({ scene: 'pedia' }); }
 
@@ -54,7 +55,7 @@ function Diagram({ kind = 'orbit', e = 0.45 }: { kind?: string; e?: number }) {
   </svg>;
 }
 export default function Spacepedia() {
-  const discoveries = useGame(s => s.resumeWorld?.discoveries ?? []);
+  const discoveries = useGame(s => s.resumeWorld?.discoveries) ?? NO_DISCOVERIES;
   const preset = useGame(s => s.scalePreset);
   const bodies = useMemo(() => buildUniverse(BODY_DEFS, SCALE_PRESETS[preset]), [preset]);
   const realBodies = useMemo(() => buildUniverse(BODY_DEFS, SCALE_PRESETS.real), []);
