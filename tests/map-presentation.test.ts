@@ -5,6 +5,9 @@ import { createEphemeris } from '../src/sim/orbit/ephemeris';
 import { MapView } from '../src/render/map/MapView';
 import { bodyBreadcrumbs, familyColor, placeLabel } from '../src/render/map/presentation';
 import { acquireSurfaceBake } from '../src/render/planet/sharedBake';
+import { PlanetRenderer } from '../src/render/planet/PlanetRenderer';
+import { QUALITY_PRESETS } from '../src/render/core/quality';
+import { livePlanetUniforms } from '../src/render/planet/uniforms';
 import { TerrainWorkerPool } from '../src/render/planet/workerPool';
 import { createTerrain } from '../src/sim/terrain';
 
@@ -42,6 +45,26 @@ describe('map presentation', () => {
     b.release(); await Promise.resolve(); expect(dispose).toHaveBeenCalledOnce();
     pool.dispose();
   });
+  it('shares flight/map surface textures without replacing flight lighting', async () => {
+    const body = createUniverse('standard').get('moon')!, terrain = createTerrain(body), pool = new TerrainWorkerPool(0);
+    const quality = { ...QUALITY_PRESETS.low, bakedTextureWidth: 16 };
+    const flight = new PlanetRenderer(body, terrain, { farOnly: true, pool, quality });
+    const map = new PlanetRenderer(body, terrain, { farOnly: true, pool, quality, registerUniforms: false });
+    const bake = vi.spyOn(pool, 'bake');
+    const camera = new THREE.PerspectiveCamera(); camera.position.set(3e6,0,0);
+    const input = { camera, origin: { x: 0,y: 0,z: 0 }, bodyPosition: { x: 0,y: 0,z: 0 },
+      bodyRotation: { x: 0,y: 0,z: 0,w: 1 }, sunPosition: { x: 1e10,y: 0,z: 0 }, dt: 0 };
+    flight.update(input); map.update({ ...input, origin: { x: 1e5,y: 0,z: 0 } });
+    await Promise.resolve(); await Promise.resolve();
+    const texture = (renderer: PlanetRenderer) => ((renderer.root.children[0] as THREE.Mesh).material as THREE.ShaderMaterial).uniforms.uMap.value;
+    expect(bake).toHaveBeenCalledOnce(); expect(texture(flight)).toBe(texture(map));
+    expect(livePlanetUniforms('moon').uPlanetCenter.value).toBe(flight.uniforms.uPlanetCenter.value);
+    expect(map.uniforms.uPlanetCenter.value.x).toBe(-1e5);
+    const dispose = vi.spyOn(texture(flight), 'dispose');
+    map.dispose(); await Promise.resolve(); expect(dispose).not.toHaveBeenCalled();
+    flight.dispose(); await Promise.resolve(); expect(dispose).toHaveBeenCalledOnce();
+    pool.dispose();
+  });
   it('retains conics, picks instanced body icons, and supports overlays and target changes', () => {
     vi.stubGlobal('document', { createElement: host });
     const bodies = createUniverse('standard'), ephem = createEphemeris(bodies);
@@ -58,6 +81,14 @@ describe('map presentation', () => {
     expect(map.scene.children.filter(o => o.type === 'Sprite')).toHaveLength(5); // Sun, active, approach pair, fleet.
     map.setResourceOverlay(['moon']); map.setResourceOverlay([], false);
     map.setApproach({ body: 'earth', positionA: { x: 1e6, y: 0, z: 0 }, positionB: { x: 2e6, y: 0, z: 0 }, label: 'Approach' });
-    map.update(input); map.dispose();
+    map.update(input);
+    map.update({ ...input, focusId: 'vessel:first', referenceBody: 'sun' });
+    map.distance = 2e11;
+    map.update({ ...input, focusId: 'vessel:second', referenceBody: 'sun', focus: { x: 1e11,y: 0,z: 0 } });
+    const sun = map.scene.children.find(o => o.type === 'Mesh' && o.scale.x === bodies.get('sun')!.radius)!;
+    expect(Math.abs(sun.position.x)).toBeLessThan(1e11);
+    expect(map.camera.position.length()).toBeGreaterThan(2e11);
+    expect(map.camera.position.length()).toBeLessThan(6e11);
+    map.dispose();
   });
 });

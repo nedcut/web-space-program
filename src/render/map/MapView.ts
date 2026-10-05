@@ -1,5 +1,5 @@
 import { PlanetRenderer, type PlanetUpdateParams } from '../planet/PlanetRenderer';
-import { QUALITY_PRESETS } from '../core/quality';
+import { QUALITY_PRESETS, type QualitySettings } from '../core/quality';
 import { createTerrain } from '../../sim/terrain';
 import { SCALE_PRESETS } from '../../sim/bodies/scale';
 import { BodyIcons } from './BodyIcons';
@@ -31,6 +31,8 @@ export interface MapUpdate {
   t: number;
   /** Optional stable identity enables focus animation while the object moves. */
   focusId?: string;
+  /** Body ancestry to display when the focus is a vessel. */
+  referenceBody?: string;
   /** Heliocentric position of the focused object (float64). */
   focus: Vec3;
   /** Active vessel trajectory (patched conics) and its heliocentric position. */
@@ -474,6 +476,7 @@ export class MapView {
     bodies: Map<string, Body>,
     private ephem: Ephemeris,
     labelHost: HTMLElement,
+    private quality: QualitySettings = QUALITY_PRESETS.medium,
   ) {
     this.scene.background = new THREE.Color(0x050914);
     this.sunId = [...bodies.values()].find(b => b.kind === 'star')!.id;
@@ -714,11 +717,27 @@ export class MapView {
       vis.sphere.userData.mapVisible = visible;
       const resolved = visible && angular*h > 1.5;
       if (resolved && !vis.renderer) {
-        const quality = { ...QUALITY_PRESETS.low, bakedTextureWidth: QUALITY_PRESETS.medium.bakedTextureWidth };
+        const quality = { ...QUALITY_PRESETS.low, bakedTextureWidth: this.quality.bakedTextureWidth };
         const sunRadius = this.bodies.get(this.sunId)!.body.radius;
         const scale = { ...SCALE_PRESETS.standard, s: sunRadius / 696340000 };
         vis.renderer = new PlanetRenderer(vis.body, vis.body.solidSurface ? createTerrain(vis.body) : null,
           { farOnly: true, quality, scale, registerUniforms: false, sunRadiance: 4 });
+        // Flight's HDR compositor transforms these shaders; direct map rendering needs its own output transform.
+        vis.renderer.root.traverse(object => {
+          if (!(object instanceof THREE.Mesh)) return;
+          const materials = Array.isArray(object.material) ? object.material : [object.material];
+          for (const material of materials) {
+            if (!(material instanceof THREE.ShaderMaterial) || material.fragmentShader.includes('colorspace_fragment')) continue;
+            const premultiplied = material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor;
+            material.fragmentShader = material.fragmentShader.replace(/\}\s*$/, `
+              ${premultiplied ? 'gl_FragColor.rgb /= max(gl_FragColor.a, .00001);' : ''}
+              #include <tonemapping_fragment>
+              #include <colorspace_fragment>
+              ${premultiplied ? 'gl_FragColor.rgb *= gl_FragColor.a;' : ''}
+            }`);
+            material.needsUpdate = true;
+          }
+        });
         this.scene.add(vis.renderer.root);
       }
       const resource = this.resourceBodies.has(vis.body.id);
@@ -764,9 +783,10 @@ export class MapView {
     if (this.hoverBody && this.soi.visible) {
       this.soi.position.copy(this.hoverBody.sphere.position); this.soi.scale.setScalar(this.hoverBody.body.soi);
     }
-    const focusBody = this.bodies.get(identity);
-    if (focusBody && this.breadcrumb.dataset.focus !== identity) {
-      this.breadcrumb.dataset.focus = identity;
+    const breadcrumbId = u.referenceBody ?? identity;
+    const focusBody = this.bodies.get(breadcrumbId);
+    if (focusBody && this.breadcrumb.dataset.focus !== breadcrumbId) {
+      this.breadcrumb.dataset.focus = breadcrumbId;
       const chain: string[] = [];
       let body: Body | undefined = focusBody.body;
       while (body) { chain.unshift(body.name); body = body.parent ? this.bodies.get(body.parent)?.body : undefined; }

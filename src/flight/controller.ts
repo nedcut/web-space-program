@@ -199,7 +199,7 @@ export class FlightController {
     Object.assign(labelHost.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
     labelHost.classList.add('photo-hide');
     host.appendChild(labelHost);
-    this.map = new MapView(universe.bodies, universe.ephem, labelHost);
+    this.map = new MapView(universe.bodies, universe.ephem, labelHost, q);
     this.map.setVisible(false);
 
     this.disposers.push(this.cam.attach(canvas, () => !this.mapMode && !this.paused));
@@ -559,7 +559,8 @@ export class FlightController {
       this.map.update({
         t,
         focus: origin,
-        focusId: wv.body,
+        focusId: `vessel:${wv.state.id}`,
+        referenceBody: wv.body,
         comms: this.world.commsSettings.enabled && game.get().settings.commsOverlay ? this.world.comms : undefined,
         vessel: { position: origin, patches: this.world.trajectory(), nodes: this.world.nodes },
         markers: [

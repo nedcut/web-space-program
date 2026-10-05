@@ -36,6 +36,8 @@ const result = await page.evaluate(async () => {
   if (map.scene.children.filter(o => o.type === 'Line2').some((o,i) => o.geometry !== geometries[i])) throw new Error('Stable conics rebuilt');
   if (!lines.some(o => o.material.dashed)) throw new Error('Future patch not dashed');
   const detach = map.attachControls(canvas, () => 10);
+  window.dispatchEvent(new PointerEvent('pointermove', { clientX: 640,clientY: 400 }));
+  if (!Array.from(host.querySelectorAll('div')).some(el => el.textContent.includes('Period') && el.style.display === 'block')) throw new Error('Body hover tooltip missing');
   const handles = map.scene.children.filter(o => o.type === 'Sprite' && o.renderOrder === 15);
   let picked;
   for (const handle of handles) {
@@ -50,7 +52,13 @@ const result = await page.evaluate(async () => {
   if (node.prograde === 10) throw new Error('Maneuver dragging did not change delta-v');
   map.setResourceOverlay(['earth']); map.update(input); renderer.render(map.scene,map.camera);
   map.setResourceOverlay([],false); map.update(input); renderer.render(map.scene,map.camera);
-  const stats = { stableConics: geometries.length, maneuverDeltaV: node.prograde, rendererCalls: renderer.info.render.calls };
+  const startDistance = map.camera.position.length();
+  const destination = ephem.getBodyState('saturn',0).position;
+  map.distance = 2e8;
+  map.update({ ...input, focusId: 'saturn', focus: destination, vessel: undefined });
+  const transitionDistance = map.camera.position.length();
+  if (!(transitionDistance >= startDistance && transitionDistance < map.distance)) throw new Error('Focus distance jumped rather than animated');
+  const stats = { transitionDistance, stableConics: geometries.length, maneuverDeltaV: node.prograde, rendererCalls: renderer.info.render.calls };
   detach(); map.dispose(); renderer.dispose(); host.remove(); return stats;
 });
 await page.goto(`${base}/?scene=tracking`, { waitUntil: 'load' });

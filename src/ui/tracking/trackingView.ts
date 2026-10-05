@@ -28,7 +28,7 @@ export class TrackingView {
     const canvas = this.pipeline.renderer.domElement;
     Object.assign(canvas.style, { width: '100%', height: '100%', display: 'block' });
     host.appendChild(canvas);
-    this.map = new MapView(world.universe.bodies, world.universe.ephem, host);
+    this.map = new MapView(world.universe.bodies, world.universe.ephem, host, getQuality(game.get().settings.quality));
     this.focus = { kind: 'body', id: world.universe.sunId };
     this.setFocus(this.focus);
     this.detach = this.map.attachControls(canvas, () => this.focus.kind === 'body' ? world.universe.body(this.focus.id).radius * 1.2 : 10);
@@ -86,7 +86,7 @@ export class TrackingView {
     const focus = this.focus.kind === 'vessel'
       ? world.vessels.get(this.focus.id)!.state.position
       : world.universe.ephem.getBodyState(this.focus.id, world.ut).position;
-    this.map.update({ t: world.ut, focusId: this.focus.kind === 'body' ? this.focus.id : world.vessels.get(this.focus.id)?.body, focus, comms: world.commsSettings.enabled && game.get().settings.commsOverlay ? world.comms : undefined, viewport: { width: this.width, height: this.height } });
+    this.map.update({ t: world.ut, focusId: this.focus.kind === 'body' ? this.focus.id : `vessel:${this.focus.id}`, referenceBody: this.focus.kind === 'body' ? this.focus.id : world.vessels.get(this.focus.id)?.body, focus, comms: world.commsSettings.enabled && game.get().settings.commsOverlay ? world.comms : undefined, viewport: { width: this.width, height: this.height } });
     this.pipeline.renderer.setRenderTarget(null);
     this.pipeline.renderer.render(this.map.scene, this.map.camera);
     if (now - this.lastUi > 250) { this.refresh(); this.lastUi = now; }
