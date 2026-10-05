@@ -20,15 +20,15 @@ export function buildInstrument(def: PartDef): THREE.Object3D {
   const D = new Markings(def);
   // mount plate with corner bolts
   const pt = 0.014;
-  const plate = box(w * 0.92, h * 0.92, pt);
+  const plate = box(w * 0.78, h * 0.82, pt);
   plate.translate(0, 0, zm + pt / 2);
-  root.add(mk(plate, M.gunmetal(), 'mountPlate'));
+  root.add(mk(plate, M.aluminium(), 'mountPlate'));
   const bolts: THREE.BufferGeometry[] = [];
   for (const sx of [-1, 1])
     for (const sy of [-1, 1]) {
       const b = cyl(0.008, 0.008, 0.008, 6);
       b.rotateX(PI / 2);
-      b.translate(sx * w * 0.4, sy * h * 0.4, zm + pt + 0.004);
+      b.translate(sx * w * 0.34, sy * h * 0.36, zm + pt + 0.004);
       bolts.push(b);
     }
   root.add(mk(bolts, M.chrome()));
@@ -253,7 +253,7 @@ function dish(c: Ctx, large: boolean) {
   const ribs: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * PI * 2;
-    ribs.push(rod([Math.cos(a) * R * 0.12, Math.sin(a) * R * 0.12, zPost + 0.015], [Math.cos(a) * R * 0.95, Math.sin(a) * R * 0.95, zPost + 0.02 + depth * 0.9], 0.005, 4));
+    ribs.push(rod([Math.cos(a) * R * 0.12, Math.sin(a) * R * 0.12, zPost + 0.005], [Math.cos(a) * R * 0.9, Math.sin(a) * R * 0.9, zPost + depth * 0.62], 0.005, 4));
   }
   c.root.add(mk(ribs, M.gunmetal(), 'ribs'));
   // feed: tripod struts to a horn (and sub-reflector for the large dish)
