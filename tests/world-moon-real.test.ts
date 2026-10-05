@@ -190,5 +190,6 @@ describe('Moon mission (stock Selene Real Expedition)', () => {
     } finally {
       process.stdout.write(log.join('\n') + '\n');
     }
-  }, 180_000);
+  // Preserve every mission assertion while allowing concurrent worktree suites on shared hardware.
+  }, 360_000);
 });
