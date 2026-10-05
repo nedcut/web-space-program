@@ -44,7 +44,7 @@ export function mountPlanetPreview(canvas: HTMLCanvasElement, id: string, preset
     if (!visible || now - last < 1000 / 30) { raf = requestAnimationFrame(frame); return; }
     const dt = last ? Math.min((now - last) / 1000, 0.1) : 0;
     last = now;
-    if (!game.get().settings.reduceMotion) elapsed += dt;
+    if (!game.get().settings.reduceMotion && !matchMedia('(prefers-reduced-motion: reduce)').matches) elapsed += dt;
     if (cinematic) {
       camera.position.set(r * (4.7 + Math.sin(elapsed * 0.025) * 0.18), -r * 6.1, r * 3.1);
       // Aim left of Saturn, leaving room for the menu typography.

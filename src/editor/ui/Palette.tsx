@@ -1,3 +1,4 @@
+import { Button, Panel } from '../../ui/components';
 import { useGame } from '../../game/store';
 import { partUnlocked } from '../../data/technology';
 import { newProgression } from '../../sim/science/progression';
@@ -52,9 +53,9 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
     >
       <div className="vab-tabs">
         {CATEGORY_TABS.filter((t) => t.id === 'all' || counts.get(t.id)).map((t) => (
-          <button key={t.id} className={`vab-tab ${tab === t.id ? 'on' : ''}`} title={t.label} onClick={() => setTab(t.id)}>
+          <Button key={t.id} className={`vab-tab ${tab === t.id ? 'on' : ''}`} title={t.label} onClick={() => setTab(t.id)}>
             <Icon name={t.id} size={19} />
-          </button>
+          </Button>
         ))}
       </div>
       <div className="vab-palette-main">
@@ -69,7 +70,7 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
           {parts.map((d) => {
             const src = getThumbnail(d.id);
             return (
-              <button
+              <Button
                 key={d.id}
                 className={`vab-card ${view.held?.kind === 'new' && view.held.partId === d.id ? 'on' : ''}`}
                 onMouseEnter={(e) => setHover({ def: d, y: (e.currentTarget as HTMLElement).getBoundingClientRect().top })}
@@ -81,7 +82,7 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
               >
                 <div className="vab-thumb">{src ? <img src={src} alt="" draggable={false} /> : <div className="vab-thumb-wait" />}</div>
                 <div className="vab-card-name">{d.name}</div>
-              </button>
+              </Button>
             );
           })}
           {!parts.length && <div className="vab-empty">No parts match “{query}”.</div>}
@@ -131,7 +132,7 @@ function PartTooltip({ def, y }: { def: PartDef; y: number }) {
   rows.push(['Attach', [def.attachNodes.some((n) => n.id !== 'srf') ? 'stack' : '', def.surfaceAttachable ? 'surface' : ''].filter(Boolean).join(' + ') || '—']);
   const top = Math.max(64, Math.min(y - 20, window.innerHeight - 380));
   return (
-    <div className="vab-tooltip panel" style={{ top }}>
+    <Panel className="vab-tooltip panel" style={{ top }}>
       <div className="vab-tt-name">{def.name}</div>
       <div className="vab-tt-mfr">{def.manufacturer}</div>
       <div className="vab-tt-desc">{def.description}</div>
@@ -145,6 +146,6 @@ function PartTooltip({ def, y }: { def: PartDef; y: number }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </Panel>
   );
 }

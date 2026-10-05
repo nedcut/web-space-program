@@ -1,0 +1,24 @@
+/* Observatory — shared, offline-only design foundations. */
+:root {
+  color-scheme: dark;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
+  --radius-sm: 6px; --radius: 12px; --radius-lg: 18px;
+  --type-xs: 11px; --type-sm: 13px; --type-base: 14px; --type-lg: 18px;
+  --type-title: clamp(26px, 2.5vw, 38px);
+  --sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', 'Liberation Mono', Menlo, Consolas, monospace;
+  --bg: #070d16; --panel-solid: #101d2b;
+  --panel: linear-gradient(145deg, rgba(22, 38, 54, .94), rgba(10, 21, 33, .94));
+  --surface-raised: #182c3e; --surface-soft: rgba(154, 197, 224, .045);
+  --panel-border: rgba(155, 195, 222, .20); --border-strong: rgba(155, 195, 222, .38);
+  --text: #e8f0f6; --text-dim: #a0b3c5; --accent: #79d7ee; --accent-2: #edbd7b;
+  --good: #8cd5ba; --warn: #f1c97b; --bad: #ff9294;
+  --accent-soft: rgba(121, 215, 238, .12); --accent-border: rgba(121, 215, 238, .4);
+  --good-soft: rgba(140, 213, 186, .1);
+  --shadow-panel: 0 8px 28px #0004, inset 0 1px 0 #ffffff05;
+  --shadow-modal: 0 24px 100px #0009;
+  --blur-panel: 16px; --ease-ui: cubic-bezier(.2, .7, .2, 1); --duration-ui: 160ms;
+  --screen-padding: clamp(24px, 3vw, 48px);
+  --screen-bg: radial-gradient(ellipse at 85% 0%, #19344566, transparent 55%), linear-gradient(135deg, #101c2b, #070e18 75%);
+}

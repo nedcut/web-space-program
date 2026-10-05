@@ -1,3 +1,4 @@
+import { Button } from './components';
 import { useState } from 'react';
 import { game } from '../game/store';
 import { openProgram, saveProgram } from '../game/program';
@@ -19,9 +20,9 @@ export default function Research() {
     <header className="program-header">
       <div><div className="label">Coastal Launch Complex · {world.mode}</div><h1>Research & Development</h1><p>Follow a question. Build the instrument. Open the next frontier.</p></div>
       <div className="program-balance"><strong>{p.science.toFixed(1)}</strong><span className="label">available science</span></div>
-      <button className="btn" onClick={() => { saveProgram(world); game.set({ scene: 'spaceCenter' }); }}>Space Center</button>
+      <Button className="btn" onClick={() => { saveProgram(world); game.set({ scene: 'spaceCenter' }); }}>Space Center</Button>
     </header>
-    <nav className="program-tabs"><button className={`btn ${!archive ? 'primary' : ''}`} onClick={() => showArchive(false)}>Technology · 25 nodes</button><button className={`btn ${archive ? 'primary' : ''}`} onClick={() => showArchive(true)}>Science archive · {Object.keys(p.archive).length} subjects</button></nav>
+    <nav className="program-tabs"><Button className={`btn ${!archive ? 'primary' : ''}`} onClick={() => showArchive(false)}>Technology · 25 nodes</Button><Button className={`btn ${archive ? 'primary' : ''}`} onClick={() => showArchive(true)}>Science archive · {Object.keys(p.archive).length} subjects</Button></nav>
     {archive ? <section className="program-archive panel">
       <h2>Collected knowledge</h2><p>Recorded data earns credit when transmitted or recovered. The archive shows credited science.</p>
       {!Object.keys(p.archive).length ? <p>No observations yet. Fit an Ember probe, or run crew observations from a command pod.</p> :
@@ -34,15 +35,15 @@ export default function Research() {
               const a = xy(TECH_NODES.find(n => n.id === id)!), b = xy(n);
               return <path key={`${id}-${n.id}`} d={`M${a.x + 164},${a.y + 36} C${a.x + 177},${a.y + 36} ${b.x - 22},${b.y + 36} ${b.x},${b.y + 36}`} fill="none" stroke={unlocked(n.id) ? '#59c5c2' : '#344c64'} strokeWidth="2" />;
             }))}</svg>
-            {TECH_NODES.map(n => { const pos = xy(n), ready = n.requires.every(unlocked); return <button key={n.id} className={`tech-node ${unlocked(n.id) ? 'unlocked' : ready ? 'ready' : ''} ${selected === n.id ? 'selected' : ''}`} style={{ left: pos.x, top: pos.y }} onClick={() => select(n.id)} aria-pressed={selected === n.id}>
+            {TECH_NODES.map(n => { const pos = xy(n), ready = n.requires.every(unlocked); return <Button key={n.id} className={`tech-node ${unlocked(n.id) ? 'unlocked' : ready ? 'ready' : ''} ${selected === n.id ? 'selected' : ''}`} style={{ left: pos.x, top: pos.y }} onClick={() => select(n.id)} aria-pressed={selected === n.id}>
               <span>{n.name}</span><small>{unlocked(n.id) ? 'RESEARCHED' : `${n.cost} SCIENCE`} · {n.parts.length} parts</small>
-            </button>; })}
+            </Button>; })}
           </div>
         </section>
         <aside className="research-detail panel"><div className="label">Technology dossier</div><h2>{node.name}</h2>
           <p>{node.requires.length ? `Requires ${node.requires.map(id => TECH_NODES.find(n => n.id === id)!.name).join(', ')}` : 'Your starting equipment for the first observations and flights.'}</p>
           <ul>{node.parts.map(id => <li key={id}>{PART_CATALOG.get(id)?.name}</li>)}</ul>
-          <button className="btn primary" disabled={!available} onClick={() => { world.unlockTech(node.id); saveProgram(world); refresh(n => n + 1); }}>{unlocked(node.id) ? 'Researched' : `Research · ${node.cost} science`}</button>
+          <Button className="btn primary" disabled={!available} onClick={() => { world.unlockTech(node.id); saveProgram(world); refresh(n => n + 1); }}>{unlocked(node.id) ? 'Researched' : `Research · ${node.cost} science`}</Button>
           {!unlocked(node.id) && <p>{!node.requires.every(unlocked) ? 'Complete the preceding research first.' : p.science < node.cost ? `${(node.cost - p.science).toFixed(1)} more science needed.` : 'Ready to research.'}</p>}
         </aside>
       </div>

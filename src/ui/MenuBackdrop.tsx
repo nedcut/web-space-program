@@ -1,3 +1,4 @@
+import { game } from '../game/store';
 import { useEffect, useRef, useState } from 'react';
 
 /** Immediate canvas fallback crossfades into the shared planetary renderer. */
@@ -37,7 +38,7 @@ export function MenuBackdrop() {
       if (readyRef.current) { raf = requestAnimationFrame(draw); return; }
       const w = canvas.width;
       const h = canvas.height;
-      const t = time / 1000;
+      const t = game.get().settings.reduceMotion || matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : time / 1000;
       ctx.fillStyle = '#04060c';
       ctx.fillRect(0, 0, w, h);
 
@@ -112,7 +113,7 @@ export function MenuBackdrop() {
   }, []);
 
   return <>
-    <canvas ref={ref} className="fullscreen" style={{ width: '100%', height: '100%' }} />
-    <canvas ref={live} aria-hidden="true" className="fullscreen" style={{ width: '100%', height: '100%', opacity: ready ? 1 : 0, transition: 'opacity 1.8s ease' }} />
+    <canvas ref={ref} className="fullscreen" style={{ width: '100%', height: '100%', opacity: ready ? 0 : 1, transition: 'opacity 0.6s ease' }} />
+    <canvas ref={live} aria-hidden="true" className="fullscreen" style={{ width: '100%', height: '100%', opacity: ready ? 1 : 0, transition: 'opacity 0.6s ease' }} />
   </>;
 }

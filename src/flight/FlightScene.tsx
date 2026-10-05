@@ -1,3 +1,4 @@
+import { Panel, Button } from '../ui/components';
 import { attachScenarioWorld, endScenario, getScenarioRun, startScenario } from '../scenarios/runtime';
 import { FlightReport } from '../ui/FlightLog';
 import { photoMode, usePhotoMode } from '../game/photoMode';
@@ -267,11 +268,11 @@ export default function FlightScene() {
   if (error) {
     return (
       <div className="fullscreen" style={{ display: 'grid', placeItems: 'center' }}>
-        <div className="panel" style={{ padding: 24, maxWidth: 420 }}>
+        <Panel className="panel" style={{ padding: 24, maxWidth: 420 }}>
           <div className="label" style={{ color: 'var(--bad)' }}>Could not start flight</div>
           <p style={{ color: 'var(--text-dim)' }}>{error}</p>
-          <button className="btn" onClick={() => getScenarioRun() ? endScenario() : getTutorial() ? endTutorial() : game.set({ scene: multiplayer ? 'menu' : 'spaceCenter', multiplayer: null, launchPending: false })}>{multiplayer ? 'Back to menu' : 'Back to Space Center'}</button>
-        </div>
+          <Button className="btn" onClick={() => getScenarioRun() ? endScenario() : getTutorial() ? endTutorial() : game.set({ scene: multiplayer ? 'menu' : 'spaceCenter', multiplayer: null, launchPending: false })}>{multiplayer ? 'Back to menu' : 'Back to Space Center'}</Button>
+        </Panel>
       </div>
     );
   }
@@ -325,42 +326,42 @@ export default function FlightScene() {
       {networkReady && c?.network && <MultiplayerPanel client={c.network} />}
       {paused && multiplayer && (
         <div className="modal-backdrop">
-          <div className="panel" style={{ padding: 24, display: 'grid', gap: 10 }}>
+          <Panel className="pause-card" style={{ padding: 24, display: 'grid', gap: 10 }}>
             <p>Flight controls suspended. The shared clock continues.</p>
-            <button className="btn" onClick={() => setPaused(false)}>Resume controls</button>
-            <button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls (F1)</button>
-            <button className="btn" onClick={() => game.set({ multiplayer: null, scene: 'menu' })}>Disconnect</button>
-          </div>
+            <Button className="btn" onClick={() => setPaused(false)}>Resume controls</Button>
+            <Button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls (F1)</Button>
+            <Button className="btn" onClick={() => game.set({ multiplayer: null, scene: 'menu' })}>Disconnect</Button>
+          </Panel>
         </div>
       )}
       {report && lost && !photo.active && ctrl.current && (() => {
         const r = ctrl.current.world.flightlog.records.find(r => r.id === ctrl.current!.world.latestReportId);
-        return r ? <div className="modal-backdrop"><div className="panel report-modal"><button className="btn" onClick={() => setReport(false)}>Close report</button><FlightReport record={r} /></div></div> : null;
+        return r ? <div className="modal-backdrop"><Panel className="panel report-modal"><Button className="btn" onClick={() => setReport(false)}>Close report</Button><FlightReport record={r} /></Panel></div> : null;
       })()}
       {paused && !multiplayer && !photo.active && !report && (
         <div className="modal-backdrop">
           {showSettings ? (
             <SettingsPanel world={c?.world} onClose={() => setShowSettings(false)} />
           ) : (
-            <div className="panel" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 280 }}>
+            <Panel className="pause-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 280 }}>
               <div className="label" style={{ textAlign: 'center', color: lost ? 'var(--bad)' : undefined }}>{lost ? 'Vessel lost' : 'Paused'}</div>
-              {!lost && <button className="btn" onClick={() => photoMode.open()}>Photo mode</button>}
-              {!lost && <button className="btn primary" onClick={() => setPaused(false)}>Resume <span className="kbd" style={{ marginLeft: 6 }}>Esc</span></button>}
-              {getTutorial() && <button className="btn" onClick={() => startLesson(getTutorial()!.lesson.id)}>Restart lesson</button>}
-              {lost && !getTutorial() && !getScenarioRun() && hasSave('quicksave') && <button className="btn primary" onClick={() => ctrl.current?.onQuickload?.()}>Load quicksave</button>}
+              {!lost && <Button className="btn" onClick={() => photoMode.open()}>Photo mode</Button>}
+              {!lost && <Button className="btn primary" onClick={() => setPaused(false)}>Resume <span className="kbd" style={{ marginLeft: 6 }}>Esc</span></Button>}
+              {getTutorial() && <Button className="btn" onClick={() => startLesson(getTutorial()!.lesson.id)}>Restart lesson</Button>}
+              {lost && !getTutorial() && !getScenarioRun() && hasSave('quicksave') && <Button className="btn primary" onClick={() => ctrl.current?.onQuickload?.()}>Load quicksave</Button>}
               {canRecover && (
-                <button className="btn" onClick={recover}>Recover vessel</button>
+                <Button className="btn" onClick={recover}>Recover vessel</Button>
               )}
-              {launched.current && <button className="btn" onClick={revertToLaunch}>Revert to launch</button>}
-              {launched.current && <button className="btn" onClick={revert}>Revert to editor</button>}
-              {!lost && !getTutorial() && !getScenarioRun() && <button className="btn" onClick={() => { const name = window.prompt('Save slot name', 'Mission save'); if (name?.trim() && ctrl.current) { try { saveNamedWorld(name, ctrl.current.world); ctrl.current.world.message('Mission saved.'); } catch (e) { ctrl.current.world.message((e as Error).message, 'bad'); } } }}>Save as…</button>}
-              {!lost && !getTutorial() && !getScenarioRun() && <button className="btn" onClick={() => ctrl.current?.quicksave()}>Quicksave <span className="kbd" style={{ marginLeft: 6 }}>F5</span></button>}
-              {!lost && !getTutorial() && !getScenarioRun() && hasSave('quicksave') && <button className="btn" onClick={() => ctrl.current?.onQuickload?.()}>Quickload <span className="kbd" style={{ marginLeft: 6 }}>F9</span></button>}
-              <button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls <span className="kbd" style={{ marginLeft: 6 }}>F1</span></button>
-              <button className="btn" onClick={() => setShowSettings(true)}>Settings</button>
-              <button className="btn" onClick={() => exitTo('spaceCenter')}>{getScenarioRun() ? 'Back to scenarios' : getTutorial() ? 'Back to lessons' : 'Space Center'}</button>
+              {launched.current && <Button className="btn" onClick={revertToLaunch}>Revert to launch</Button>}
+              {launched.current && <Button className="btn" onClick={revert}>Revert to editor</Button>}
+              {!lost && !getTutorial() && !getScenarioRun() && <Button className="btn" onClick={() => { const name = window.prompt('Save slot name', 'Mission save'); if (name?.trim() && ctrl.current) { try { saveNamedWorld(name, ctrl.current.world); ctrl.current.world.message('Mission saved.'); } catch (e) { ctrl.current.world.message((e as Error).message, 'bad'); } } }}>Save as…</Button>}
+              {!lost && !getTutorial() && !getScenarioRun() && <Button className="btn" onClick={() => ctrl.current?.quicksave()}>Quicksave <span className="kbd" style={{ marginLeft: 6 }}>F5</span></Button>}
+              {!lost && !getTutorial() && !getScenarioRun() && hasSave('quicksave') && <Button className="btn" onClick={() => ctrl.current?.onQuickload?.()}>Quickload <span className="kbd" style={{ marginLeft: 6 }}>F9</span></Button>}
+              <Button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls <span className="kbd" style={{ marginLeft: 6 }}>F1</span></Button>
+              <Button className="btn" onClick={() => setShowSettings(true)}>Settings</Button>
+              <Button className="btn" onClick={() => exitTo('spaceCenter')}>{getScenarioRun() ? 'Back to scenarios' : getTutorial() ? 'Back to lessons' : 'Space Center'}</Button>
               <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>{(getTutorial() || getScenarioRun()) ? 'Practice is separate from your saved program.' : 'Progress is autosaved when you leave flight.'}</div>
-            </div>
+            </Panel>
           )}
         </div>
       )}

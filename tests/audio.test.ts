@@ -113,6 +113,23 @@ class ContextDouble {
 }
 
 describe('Web Audio lifecycle', () => {
+  it('does not create audio before a gesture and retains the requested theme', () => {
+    const construct = vi.fn();
+    vi.stubGlobal('AudioContext', class extends ContextDouble { constructor() { super(); construct(); } });
+    vi.stubGlobal('navigator', { userActivation: { hasBeenActive: false } });
+    const audio = new GameAudio();
+    try {
+      audio.setMusic('saturn'); audio.update(state); audio.uiHover(); audio.resume();
+      expect(construct).not.toHaveBeenCalled();
+      vi.stubGlobal('navigator', { userActivation: { hasBeenActive: true } });
+      audio.resume();
+      expect(construct).toHaveBeenCalledTimes(1);
+      expect(ContextDouble.latest.nodes[4].gain.value).toBeGreaterThan(0);
+      audio.resume();
+      expect(construct).toHaveBeenCalledTimes(1);
+    } finally { audio.dispose(); vi.unstubAllGlobals(); }
+  });
+
   it('applies master/music/effects settings live, including menu effects, and unsubscribes', () => {
     vi.stubGlobal('AudioContext', ContextDouble);
     const original = game.get().settings;
@@ -120,6 +137,7 @@ describe('Web Audio lifecycle', () => {
     try {
       game.set({ settings: { ...original, masterVolume: 0.4, musicVolume: 0.5, sfxVolume: 0.25 } });
       audio = new GameAudio();
+      audio.resume();
       const ctx = ContextDouble.latest;
       const [master, , effects, , music] = ctx.nodes;
       expect(master.gain.value).toBeCloseTo(0.4);
@@ -144,8 +162,9 @@ describe('Web Audio lifecycle', () => {
     let audio: GameAudio | undefined;
     try {
       audio = new GameAudio();
+      audio.resume();
       const ctx = ContextDouble.latest;
-      expect(ctx.state).toBe('suspended');
+      expect(ctx.state).toBe('running');
       audio.setMusic('menu');
       audio.resume();
       await Promise.resolve();

@@ -129,7 +129,7 @@ export class GameAudio {
   };
   private musicLevel() { return (this.musicMode === 'off' ? 0 : this.musicMode === 'menu' || this.musicMode === 'saturn' ? 0.12 : 0.085) * this.musicVolume; }
 
-  constructor() {
+  private initialize(): void {
     // Some browsers expose the prefixed constructor. Node deliberately has neither.
     const host = globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext };
     const Context = host.AudioContext ?? host.webkitAudioContext;
@@ -204,6 +204,15 @@ export class GameAudio {
 
   /** Call synchronously from the first pointer/key gesture. Safe to call again. */
   resume(): void {
+    if (this.disposed) return;
+    // Scene effects and synthetic events must not allocate/start an audio graph.
+    if (typeof navigator !== 'undefined' && navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
+    if (!this.context) {
+      const pendingMusic = this.musicMode;
+      this.initialize();
+      this.musicMode = 'off';
+      this.setMusic(pendingMusic);
+    }
     if (!this.disposed && !this.hidden && this.context?.state === 'suspended') {
       void this.context.resume().then(() => {
         if (!this.disposed && this.musicMode !== 'off' && this.musicSources.size === 0) this.pad();
@@ -298,7 +307,9 @@ export class GameAudio {
   }
 
   setMusic(mode: MusicMode): void {
-    if (!this.context || this.disposed || !this.musicGain || mode === this.musicMode) return;
+    if (this.disposed) return;
+    if (!this.context) { this.musicMode = mode; return; }
+    if (!this.musicGain || mode === this.musicMode) return;
     const theme = mode === 'space' ? 'cruise' : mode === 'menu' ? 'saturn' : mode;
     this.musicMode = mode;
     if (this.musicTimer !== undefined) clearInterval(this.musicTimer);

@@ -1,3 +1,4 @@
+import { Button, Modal } from '../components';
 import { bodyBreadcrumbs } from '../../render/map/presentation';
 import { useEffect, useRef, useState } from 'react';
 import { game, updateSettings, useGame } from '../../game/store';
@@ -69,8 +70,8 @@ export default function TrackingStation() {
   }
   const body = focus.kind === 'body' ? world.universe.body(focus.id) : world.universe.body(world.vessels.get(focus.id)?.body ?? world.universe.sunId);
   const tree = (b: Body) => <div key={b.id}>
-    {b.children.length ? <details open={b.kind === 'star' || bodyBreadcrumbs(body, world.universe.bodies).some(parent => parent.id === b.id)}><summary><button className="btn ghost small" onClick={() => view.current?.setFocus({ kind: 'body', id: b.id })}>{b.name}</button></summary><div className="tracking-children">{b.children.map((id) => tree(world.universe.body(id)))}</div></details>
-      : <button className="btn ghost small" onClick={() => view.current?.setFocus({ kind: 'body', id: b.id })}>{b.name}</button>}
+    {b.children.length ? <details open={b.kind === 'star' || bodyBreadcrumbs(body, world.universe.bodies).some(parent => parent.id === b.id)}><summary><Button className="btn ghost small" onClick={() => view.current?.setFocus({ kind: 'body', id: b.id })}>{b.name}</Button></summary><div className="tracking-children">{b.children.map((id) => tree(world.universe.body(id)))}</div></details>
+      : <Button className="btn ghost small" onClick={() => view.current?.setFocus({ kind: 'body', id: b.id })}>{b.name}</Button>}
   </div>;
 
   return <div className="fullscreen tracking-station">
@@ -81,29 +82,29 @@ export default function TrackingStation() {
         <div className="tracking-clock"><div className="mono">{formatDate(world.ut)}</div><label className="label">Time warp <select aria-label="Time warp" value={world.warp.index} onChange={(e) => { world.warp = { mode: 'rails', index: Number(e.target.value) }; update(); }}>{RAILS_WARP.map((r, i) => <option key={r} value={i}>{r.toLocaleString()}×</option>)}</select></label><span className="mono"> {warpRate(world.warp).toLocaleString()}×</span></div>
         <label className="label"><input type="checkbox" checked={overlay} onChange={e => updateSettings({ commsOverlay: e.target.checked })} /> Signal links · red weak / green strong</label>
         <label className="label"><input type="checkbox" checked={world.showLagrangePoints} onChange={e => { world.showLagrangePoints=e.target.checked; update(); }} /> Lagrange points</label>
-        <button className="btn small" onClick={() => void import('../Spacepedia').then(m => { exit('pedia'); m.openPedia('tracking'); })}>Spacepedia</button>
-        <button className="btn small" onClick={() => exit('flightlog')}>Flight log</button>
-        <button className="btn small" onClick={() => exit('spaceCenter')}>Back to Space Center</button>
+        <Button className="btn small" onClick={() => void import('../Spacepedia').then(m => { exit('pedia'); m.openPedia('tracking'); })}>Spacepedia</Button>
+        <Button className="btn small" onClick={() => exit('flightlog')}>Flight log</Button>
+        <Button className="btn small" onClick={() => exit('spaceCenter')}>Back to Space Center</Button>
       </header>
       <aside className="panel tracking-fleet"><div className="label">Vessels · {world.vessels.size}</div>
         {!world.vessels.size && <p className="tracking-muted">No vessels to track yet. Launch a vehicle from the Space Center to begin a mission.</p>}
         {[...groups].map(([group, vessels]) => <section key={group}><h3 className="label">{group}</h3>{vessels.map((v) => {
           const o = v.state.situation === 'flying' && v.mode !== 'prelaunch' ? world.orbitSummary(v) : null;
           return <article className="tracking-vessel" key={v.state.id}><strong>{v.state.name}</strong><div className="tracking-muted">{world.universe.body(v.body).name} · {v.mode === 'prelaunch' ? 'Prelaunch' : v.state.situation}</div><div className="mono tracking-apsides">Ap {o ? distance(o.ap) : '—'} / Pe {o ? distance(o.pe) : '—'}</div><div className="tracking-actions">
-            <button className="btn small" onClick={() => view.current?.setFocus({ kind: 'vessel', id: v.state.id })}>Focus</button>
-            <button className="btn small" onClick={() => { if (world.activeId !== v.state.id) world.nodes = []; world.activeId = v.state.id; exit('flight'); }}>Fly</button>
-            {v.body === 'earth' && (v.mode === 'prelaunch' || v.state.situation === 'landed' || v.state.situation === 'splashed') && <button className="btn small" onClick={() => { if (world.recoverVessel(v.state.id)) { if (focus.kind === 'vessel' && focus.id === v.state.id) view.current?.setFocus({ kind: 'body', id: 'earth' }); update(); exit('flightlog'); } }}>Recover</button>}
-            <button className="btn small danger" onClick={() => setTerminate(v.state.id)}>Terminate</button>
+            <Button className="btn small" onClick={() => view.current?.setFocus({ kind: 'vessel', id: v.state.id })}>Focus</Button>
+            <Button className="btn small" onClick={() => { if (world.activeId !== v.state.id) world.nodes = []; world.activeId = v.state.id; exit('flight'); }}>Fly</Button>
+            {v.body === 'earth' && (v.mode === 'prelaunch' || v.state.situation === 'landed' || v.state.situation === 'splashed') && <Button className="btn small" onClick={() => { if (world.recoverVessel(v.state.id)) { if (focus.kind === 'vessel' && focus.id === v.state.id) view.current?.setFocus({ kind: 'body', id: 'earth' }); update(); exit('flightlog'); } }}>Recover</Button>}
+            <Button className="btn small danger" onClick={() => setTerminate(v.state.id)}>Terminate</Button>
           </div></article>;
         })}</section>)}
       </aside>
       <aside className="tracking-right"><details className="panel tracking-bodies" open><summary className="label">Celestial bodies</summary>{tree(world.universe.body(world.universe.sunId))}</details>
-        <section className="panel tracking-info"><div className="label">{focus.kind === 'vessel' ? 'Reference body' : 'Focused body'} · {world.universe.preset} scale</div><nav aria-label="Focus path" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>{bodyBreadcrumbs(body, world.universe.bodies).map((b,i) => <span key={b.id}>{i > 0 && ' › '}<button className="btn ghost small" aria-current={b.id === body.id ? 'location' : undefined} onClick={() => view.current?.setFocus({ kind: 'body', id: b.id })}>{b.name}</button></span>)}</nav><h2>{body.name}</h2><p className="tracking-muted">{body.description ?? 'No description available.'}</p><dl>
+        <section className="panel tracking-info"><div className="label">{focus.kind === 'vessel' ? 'Reference body' : 'Focused body'} · {world.universe.preset} scale</div><nav aria-label="Focus path" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>{bodyBreadcrumbs(body, world.universe.bodies).map((b,i) => <span key={b.id}>{i > 0 && ' › '}<Button className="btn ghost small" aria-current={b.id === body.id ? 'location' : undefined} onClick={() => view.current?.setFocus({ kind: 'body', id: b.id })}>{b.name}</Button></span>)}</nav><h2>{body.name}</h2><p className="tracking-muted">{body.description ?? 'No description available.'}</p><dl>
           {Object.entries({ Radius: distance(body.radius), 'Surface gravity': `${body.surfaceGravity.toFixed(2)} m/s²`, 'Sphere of influence': distance(body.soi), 'Atmosphere height': body.atmosphere ? distance(body.atmosphere.height) : 'None', 'Surface pressure': `${((body.atmosphere?.surfacePressure ?? 0) / 1000).toFixed(2)} kPa`, 'Orbital period': body.orbitalPeriod ? formatDuration(body.orbitalPeriod) : '—', Rotation: `${formatDuration(Math.abs(body.rotationPeriod))}${body.rotationPeriod < 0 ? ' (retrograde)' : ''}`, Moons: body.children.filter((id) => world.universe.body(id).kind === 'moon').length }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
         </dl></section>
       </aside>
       <footer className="panel tracking-help">Drag to orbit · Scroll to zoom · Double-click an icon to focus<br />Warp is limited by the active vessel’s altitude and encounter safety.</footer>
-      {terminate && <div className="tracking-modal"><section className="panel" role="dialog" aria-modal="true" aria-labelledby="terminate-title"><h2 id="terminate-title">Terminate vessel?</h2><p>{world.vessels.get(terminate)?.state.name} will be permanently removed from this world.</p><div className="tracking-actions"><button className="btn" onClick={() => setTerminate(null)}>Cancel</button><button className="btn danger" onClick={() => { remove(terminate); setTerminate(null); }}>Confirm termination</button></div></section></div>}
+      {terminate && <Modal title="Terminate vessel?" onClose={() => setTerminate(null)}><p>{world.vessels.get(terminate)?.state.name} will be permanently removed from this world.</p><div className="tracking-actions"><Button className="btn" onClick={() => setTerminate(null)}>Cancel</Button><Button className="btn danger" onClick={() => { remove(terminate); setTerminate(null); }}>Confirm termination</Button></div></Modal>}
     </div>
   </div>;
 }

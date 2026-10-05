@@ -1,3 +1,5 @@
+import { Icon } from './components/Icon';
+import { Button, Panel } from './components';
 import { SaveLoadDialog } from './SaveLoadDialog';
 import { MultiplayerSetup } from '../net/MultiplayerPanel';
 import { SettingsPanel } from './SettingsPanel';
@@ -27,27 +29,28 @@ export function MainMenu() {
   return (
     <div className="fullscreen">
       <MenuBackdrop />
-      <div className="fullscreen" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '24px 8vw', overflowY: 'auto' }}>
-        <h1 className="title-xl">WEB SPACE</h1>
-        <h1 className="title-xl" style={{ color: 'var(--accent)', marginBottom: 40 }}>PROGRAM</h1>
+      <div className="fullscreen menu-composition">
+        <div className="label menu-kicker"><Icon name="orbit" /> A solar system of possibilities</div>
+        <h1 className="menu-title">WEB SPACE<span>PROGRAM</span></h1>
+        <p className="menu-caption">Build with purpose. Fly with curiosity.</p>
 
         {panel === 'root' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: 260 }}>
-            <button className="btn primary" onClick={() => setPanel('new')}>New Game</button>
-            <button className="btn" onClick={() => setPanel('load')}>Continue</button>
-            <button className="btn" onClick={() => setPanel('multiplayer')}>Multiplayer (experimental)</button>
-            <button className="btn" onClick={() => game.set({ scene: 'scenarios' })}>Scenarios · Missions</button>
-            <button className="btn" onClick={() => game.set({ scene: 'training' })}>Training</button>
-            <button className="btn" onClick={() => void import('./Spacepedia').then(m => m.openPedia('menu'))}>Spacepedia</button>
-            <button className="btn" onClick={() => setPanel('settings')}>Settings</button>
+          <div className="menu-actions">
+            <Button className="btn primary" onClick={() => setPanel('new')}><Icon name="rocket" />New Game<span className="menu-go"><Icon name="arrow" /></span></Button>
+            <Button className="btn" onClick={() => setPanel('load')}><Icon name="log" />Continue</Button>
+            <Button className="btn" onClick={() => setPanel('multiplayer')}><Icon name="orbit" />Multiplayer (experimental)</Button>
+            <Button className="btn" onClick={() => game.set({ scene: 'scenarios' })}><Icon name="orbit" />Scenarios · Missions</Button>
+            <Button className="btn" onClick={() => game.set({ scene: 'training' })}><Icon name="science" />Training</Button>
+            <Button className="btn" onClick={() => void import('./Spacepedia').then(m => m.openPedia('menu'))}><Icon name="book" />Spacepedia</Button>
+            <Button className="btn" onClick={() => setPanel('settings')}><Icon name="settings" />Settings</Button>
           </div>
         )}
 
         {panel === 'new' && (
-          <div className="panel" style={{ padding: 24, width: 440 }}>
+          <Panel className="menu-new">
             <div className="label" style={{ marginBottom: 8 }}>Program mode</div>
             <div className="seg" style={{ marginBottom: 8 }}>
-              {(['sandbox', 'science', 'career'] as GameMode[]).map(id => <button key={id} className={mode === id ? 'on' : ''} onClick={() => setMode(id)}>{id[0].toUpperCase() + id.slice(1)}</button>)}
+              {(['sandbox', 'science', 'career'] as GameMode[]).map(id => <Button key={id} className={mode === id ? 'on' : ''} onClick={() => setMode(id)}>{id[0].toUpperCase() + id.slice(1)}</Button>)}
             </div>
             <p style={{ fontSize: 13, color: 'var(--text-dim)', minHeight: 32 }}>{mode === 'sandbox' ? 'All parts available. Build freely, without costs.' : mode === 'science' ? 'Explore, collect science and unlock new technology. Unlimited construction.' : 'Grow a funded program through research, contracts and expeditions. Starts with 60,000 cr.'}</p>
             <div className="label" style={{ marginBottom: 12 }}>Solar system scale</div>
@@ -63,7 +66,7 @@ export function MainMenu() {
                     background: scale === id ? 'rgba(92,200,255,0.1)' : undefined,
                   }}
                 >
-                  <input type="radio" name="scale" checked={scale === id} onChange={() => setScale(id)} style={{ display: 'none' }} />
+                  <input type="radio" name="scale" checked={scale === id} onChange={() => setScale(id)} className="scale-radio" />
                   <div style={{ fontWeight: 600 }}>{SCALE_INFO[id].label}</div>
                   <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>{SCALE_INFO[id].blurb}</div>
                 </label>
@@ -73,8 +76,8 @@ export function MainMenu() {
               <p style={{ fontSize: 12, color: 'var(--warn)', margin: '14px 0 0' }}>Previous programs remain available in Continue.</p>
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
-              <button className="btn ghost" onClick={() => setPanel('root')}>Back</button>
-              <button
+              <Button className="btn ghost" onClick={() => setPanel('root')}>Back</Button>
+              <Button
                 className="btn primary"
                 onClick={() => {
                   const world = new World(new Universe(scale), PART_CATALOG, DEFAULT_START_UT, mode);
@@ -85,9 +88,9 @@ export function MainMenu() {
                 }}
               >
                 Start
-              </button>
+              </Button>
             </div>
-          </div>
+          </Panel>
         )}
 
         {panel === 'load' && <SaveLoadDialog onClose={() => setPanel('root')} />}
