@@ -24,6 +24,7 @@ export function ManeuverPanel({ world }: { world: World }) {
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
+    let shown = 0;
     const loop = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
@@ -41,7 +42,12 @@ export function ManeuverPanel({ world }: { world: World }) {
         }
         world.nodes = [...world.nodes];
       }
-      force((x) => (x + 1) % 1e6);
+      // Readouts refresh at 10 Hz (every frame only while a jog button is held): a full panel
+      // render with Δv/trajectory lookups each frame cost ~0.5 ms of main thread in map view.
+      if (h || now - shown >= 100) {
+        shown = now;
+        force((x) => (x + 1) % 1e6);
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);

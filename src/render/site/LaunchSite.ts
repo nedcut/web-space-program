@@ -1006,10 +1006,10 @@ export class LaunchSite {
     }
     const foliage = (color: number) =>
       this.track(withAerialPerspective(new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0 }), BODY));
-    // Instances are bucketed into 800 m cells so frustum culling (and the vessel-hugging shadow
+    // Instances are bucketed into 1400 m cells so frustum culling (and the vessel-hugging shadow
     // camera) skips vegetation that is off screen, instead of drawing all ~4k plants every pass.
     // Colours consume the random sequence in the original order, so placement/tint are unchanged.
-    const CELL = 800;
+    const CELL = 1400;
     const density = this.options.vegetationDensity ?? 1;
     let kept = 0;
     const mk = (geo: THREE.BufferGeometry, mat: THREE.Material, list: THREE.Matrix4[], name: string, tint: [number, number]) => {

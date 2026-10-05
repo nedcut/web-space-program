@@ -150,6 +150,14 @@ async function measure(page, cdp, label) {
       const cf = n.callFrame; const key = `${cf.functionName || '(anon)'} ${cf.url.split('/').pop()}:${cf.lineNumber + 1}`;
       self.set(key, (self.get(key) ?? 0) + t);
     }
+    // Main-thread JS by bundle (three.js lives in the large shared vendor chunk) and native GL calls.
+    const byChunk = new Map();
+    for (const n of profile.nodes) {
+      const t = dt.get(n.id) ?? 0; if (!t) continue;
+      const url = n.callFrame.url; const chunk = url ? url.split('/').pop().replace(/-[\w-]{8}\.js$/, '') : (n.callFrame.functionName.startsWith('(') ? n.callFrame.functionName : 'native');
+      byChunk.set(chunk, (byChunk.get(chunk) ?? 0) + t);
+    }
+    out.cpuByChunk = Object.fromEntries([...byChunk.entries()].sort((a, b) => b[1] - a[1]).slice(0, 14).map(([k, us]) => [k, +(us / 1000 / frames).toFixed(3)]));
     out.cpuTop = [...self.entries()].filter(([k]) => !k.startsWith('(idle)') && !k.startsWith('(program)')).sort((a, b) => b[1] - a[1]).slice(0, 25).map(([k, us]) => [k, +(us / 1000 / frames).toFixed(3)]);
   }
   if (args.heap) {
@@ -166,6 +174,7 @@ async function measure(page, cdp, label) {
   console.log(`   cpu avg ${s.cpuMs.avg.toFixed(2)} ms p95 ${s.cpuMs.p95.toFixed(2)} max ${s.cpuMs.max.toFixed(1)} | script/frame ${out.metrics.scriptMsPerFrame.toFixed(2)} ms, task/frame ${out.metrics.taskMsPerFrame.toFixed(2)} ms, style ${out.metrics.styleMsPerFrame.toFixed(2)}, layout ${out.metrics.layoutMsPerFrame.toFixed(2)}, heap ${out.metrics.heapMB.toFixed(0)} MB`);
   console.log(`   sections: ${sec}`);
   console.log(`   gpu: ${out.stats.calls} calls, ${out.stats.triangles} tris, ${out.stats.points} pts, ${out.stats.programs} programs, ${out.stats.textures} tex, ${out.stats.geometries} geo; canvas ${out.canvas.join('x')} scale ${out.scale}`);
+  if (out.cpuByChunk) console.log(`   cpu by bundle (ms/frame): ${Object.entries(out.cpuByChunk).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
   if (out.cpuTop) console.log('   cpu top (ms/frame):\n' + out.cpuTop.map(([k, v]) => `     ${v}  ${k}`).join('\n'));
   if (out.alloc) console.log(`   alloc ${out.alloc.kbPerFrame.toFixed(1)} kB/frame; top (kB/frame):\n` + out.alloc.top.map(([k, v]) => `     ${v}  ${k}`).join('\n'));
 }
