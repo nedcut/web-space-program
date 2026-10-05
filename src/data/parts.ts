@@ -1,3 +1,4 @@
+import { ISRU_PARTS } from './isru';
 import type { AttachNode, PartDef, PartModule, ResourceId } from '../sim/vessel/types';
 import { KEROLOX_FUEL_FRACTION, KEROLOX_OX_FRACTION, RESOURCES } from './resources';
 
@@ -1450,7 +1451,7 @@ const antennas: PartDef[] = [0, 1].map(i => ({
   modules: [{ type: 'antenna', transmission: i ? 0.65 : 0.4 }], mesh: 'instrument',
 }));
 
-export const PART_DEFS: PartDef[] = [...pods, ...tanks, ...engines, ...coupling, ...structural, ...aero, ...control, ...electrical, ...utility, ...aircraft, ...scienceParts, ...antennas];
+export const PART_DEFS: PartDef[] = [...ISRU_PARTS, ...pods, ...tanks, ...engines, ...coupling, ...structural, ...aero, ...control, ...electrical, ...utility, ...aircraft, ...scienceParts, ...antennas];
 
 export const PART_CATALOG: Map<string, PartDef> = new Map(PART_DEFS.map((p) => [p.id, p]));
 

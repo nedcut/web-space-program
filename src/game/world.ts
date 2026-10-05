@@ -1,3 +1,5 @@
+import { advanceISRU } from '../sim/vessel/isru';
+import { concentrationAt } from '../sim/resources/deposits';
 import { newProgression, generateContracts, acceptContract, failContract, type GameMode, type ProgressEvent } from '../sim/science/progression';
 import { unlockTech, launchProblem, launchCost } from '../data/technology';
 import { scienceContext, instruments, runExperiment, transmitScience, recoverScience, progressionEvent, evaluateProgression } from './science';
@@ -50,6 +52,28 @@ export interface WorldMessage {
 const bodyQuat = (u: Universe, id: string, t: number) => u.ephem.bodyRotation(id, t);
 
 export class World {
+  surveyedBodies: string[] = [];
+
+  localConcentration(wv = this.active): number {
+    if (!wv) return 0;
+    const direction = wv.fixed?.pos ?? qRotate(qConj(bodyQuat(this.universe, wv.body, this.ut)), this.relativeState(wv).position);
+    return concentrationAt(this.universe.body(wv.body), direction);
+  }
+
+  /** A bound orbit, above terrain/atmosphere, within 10 degrees of polar relative to the body's pole. */
+  surveyBody(wv = this.active): boolean {
+    if (!wv || !wv.state.parts.some(p => p.def.modules.some(m => m.type === 'surveyScanner'))) return false;
+    const b = this.universe.body(wv.body), s = this.relativeState(wv);
+    if (!b.solidSurface || wv.state.situation !== 'flying') return false;
+    const h = normalize(cross(s.position, s.velocity));
+    const pole = qRotate(bodyQuat(this.universe, wv.body, this.ut), { x: 0, y: 0, z: 1 });
+    const orbit = stateToElements(b.gm, b.id, s.position, s.velocity, this.ut);
+    if (orbit.e >= 1 || periapsisRadius(orbit) <= b.radius + Math.max(b.atmosphere?.height ?? 0, b.surface.relief)
+      || Math.abs(dot(h, pole)) > Math.sin(Math.PI / 18)) return false;
+    if (!this.surveyedBodies.includes(b.id)) this.surveyedBodies.push(b.id);
+    return true;
+  }
+
   progression = newProgression();
   readonly universe: Universe;
   readonly vessels = new Map<string, WorldVessel>();
@@ -761,6 +785,9 @@ export class World {
         }
       }
     }
+    for (const wv of this.vessels.values()) {
+      if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') advanceISRU(wv.state, this.localConcentration(wv), target - this.ut);
+    }
     this.ut = target;
     for (const wv of this.vessels.values()) this.syncPacked(wv, this.ut);
     evaluateProgression(this);
@@ -795,7 +822,10 @@ export class World {
           const b = this.universe.body(wv.body);
           const alt = length(this.relativeState(wv).position) - b.radius;
           if (b.atmosphere && alt < b.atmosphere.height && wv.state.situation === 'flying') this.vessels.delete(wv.state.id);
-          else this.pack(wv);
+          else {
+            this.pack(wv);
+            if (wv.mode === 'landedRails') advanceISRU(wv.state, this.localConcentration(wv), PHYSICS_DT);
+          }
           continue;
         }
         if (wv.mode === 'rails' || wv.mode === 'landedRails') this.unpack(wv);
@@ -807,6 +837,7 @@ export class World {
           wv.fixed = undefined;
           this.message('Liftoff!');
         } else {
+          advanceISRU(wv.state, this.localConcentration(wv), PHYSICS_DT);
           // States are expressed at the end of the step (t + dt), like physics-stepped vessels.
           this.syncFixed(wv, t + PHYSICS_DT);
           continue;

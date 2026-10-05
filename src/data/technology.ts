@@ -1,3 +1,4 @@
+import { ISRU_PARTS } from './isru';
 import { PART_DEFS } from './parts';
 import type { CraftDef, PartDef } from '../sim/vessel/types';
 import type { GameMode, Progression } from '../sim/science/progression';
@@ -6,6 +7,7 @@ const starters = new Set(['pod-lantern-1', 'tank-0-short', 'tank-1-short', 'tank
   'dec-0', 'dec-1', 'fin-keel', 'chute-main', 'shield-1', 'battery-brick', 'antenna-thread', 'sensor-thermal']);
 // Small stack separators are essential even if catalogue IDs evolve.
 for (const p of PART_DEFS) if (p.modules.some(m => m.type === 'decoupler' && !m.radial) && p.cost <= 400) starters.add(p.id);
+const resourceParts = new Set(ISRU_PARTS.map(p => p.id));
 const branches = [
   ['propulsion', 'Propellant Practice', 'Vacuum Craft', 'Heavy Combustion', 'Farflight Propulsion'],
   ['structures', 'Load Paths', 'Modular Structures', 'Orbital Assembly', 'Expedition Hardware'],
@@ -24,10 +26,15 @@ function branch(p: PartDef): string {
 }
 export const TECH_NODES: TechNode[] = [{ id: 'foundation', name: 'First Principles', cost: 0, requires: [], parts: PART_DEFS.filter(p => starters.has(p.id)).map(p => p.id), column: 0, row: 2 }];
 for (const [row, [id, ...names]] of branches.entries()) {
-  const parts = PART_DEFS.filter(p => !starters.has(p.id) && branch(p) === id).sort((a, b) => a.cost - b.cost || a.id.localeCompare(b.id));
+  const parts = PART_DEFS.filter(p => !starters.has(p.id) && !resourceParts.has(p.id) && branch(p) === id).sort((a, b) => a.cost - b.cost || a.id.localeCompare(b.id));
   names.forEach((name, tier) => TECH_NODES.push({ id: `${id}-${tier}`, name, cost: [10, 35, 90, 180][tier],
     requires: [tier ? `${id}-${tier - 1}` : 'foundation'],
     parts: parts.filter((_, i) => Math.min(3, Math.floor(i * 4 / parts.length)) === tier).map(p => p.id), column: tier + 1, row }));
+}
+// Explicit assignments preserve the existing cost-sorted tiers when ISRU equipment is added.
+for (const p of ISRU_PARTS) {
+  const tier = p.id === 'scanner-assay' || p.id === 'regolith-hopper' ? 1 : p.id === 'drill-quarry' || p.id === 'converter-foundry' ? 3 : 2;
+  TECH_NODES.find(n => n.id === `discovery-${tier}`)!.parts.push(p.id);
 }
 export function partUnlocked(partId: string, mode: GameMode, p: Progression): boolean {
   return mode === 'sandbox' || TECH_NODES.some(n => n.parts.includes(partId) && p.unlocked.includes(n.id));

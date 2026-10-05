@@ -110,6 +110,11 @@ export class VesselView {
       setGearPose(pv.object, p.wheel.compression, sx >= 0 ? -p.wheel.steer : p.wheel.steer, p.wheel.spin);
       return;
     }
+    if (p.drillDeploy !== undefined) {
+      pv.deploy = p.drillDeploy;
+      setPartDeploy(pv.object, pv.deploy);
+      return;
+    }
     let target = -1;
     if (p.leg) target = p.leg.deployed ? 1 : 0;
     if (p.chute) target = p.chute.phase === 'full' ? 1 : p.chute.phase === 'semi' ? 0.35 : 0;

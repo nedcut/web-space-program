@@ -27,6 +27,7 @@ interface SavedVessel {
 }
 
 export interface SavedWorld {
+  surveyedBodies?: string[];
   mode?: GameMode;
   progression?: Progression;
   crew?: Astronaut[];
@@ -65,6 +66,7 @@ export function serializeWorld(world: World): SavedWorld {
     });
   }
   return {
+    surveyedBodies: [...world.surveyedBodies],
     mode: world.mode,
     progression: structuredClone(world.progression),
     crew: structuredClone(world.crew),
@@ -84,6 +86,7 @@ export function serializeWorld(world: World): SavedWorld {
 export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>, universe?: Universe): World {
   if (data.version !== SAVE_VERSION) throw new Error(`Unsupported save version ${data.version}`);
   const world = new World(universe ?? new Universe(data.preset), catalog, data.ut, data.mode ?? 'sandbox');
+  world.surveyedBodies = [...(data.surveyedBodies ?? [])];
   world.progression = structuredClone(data.progression ?? newProgression());
   if (world.mode === 'career' && !world.progression.contracts.length) world.refreshContracts();
   world.crew = structuredClone(data.crew ?? []);

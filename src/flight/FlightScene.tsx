@@ -1,3 +1,4 @@
+import { ResourcePanel } from './hud/ResourcePanel';
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -143,6 +144,7 @@ export default function FlightScene() {
           }}
         />
       )}
+      {tele && ctrl.current && <ResourcePanel world={ctrl.current.world} map={ctrl.current.map} mapMode={tele.mapMode} paused={paused} />}
       {tele && ctrl.current && !tele.mapMode && <SciencePanel world={ctrl.current.world} paused={paused} />}
       {tele && ctrl.current && !tele.mapMode && !tele.eva && !tele.noControl && (
         <AssistPanel active={tele.assist} onStart={(id) => ctrl.current?.startAssist(id)} onCancel={() => ctrl.current?.cancelAssist()} />
