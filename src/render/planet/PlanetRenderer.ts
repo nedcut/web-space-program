@@ -222,7 +222,17 @@ export class PlanetRenderer {
     // Far sphere (always available as fallback).
     const seg = q.sphereSegments;
     const geo = new THREE.SphereGeometry(1, seg, seg / 2);
-    this.farMaterial = createFarSphereMaterial(this.uniforms, q, { airless, ocean: ocean && this.body.id !== 'titan', minH, maxH: Math.max(maxH, minH + 1), texWidth: q.bakedTextureWidth });
+    if (preset === 'irregular' && terrain) {
+      const positions = geo.getAttribute('position');
+      const p = new THREE.Vector3();
+      for (let i = 0; i < positions.count; i++) {
+        p.fromBufferAttribute(positions, i).normalize();
+        p.multiplyScalar(1 + terrain.heightAt(p.x, p.y, p.z) / this.body.radius);
+        positions.setXYZ(i, p.x, p.y, p.z);
+      }
+      geo.computeVertexNormals(); geo.computeBoundingSphere();
+    }
+    this.farMaterial = createFarSphereMaterial(this.uniforms, q, { airless, ocean: ocean && this.body.id !== 'titan', minH, maxH: Math.max(maxH, minH + 1), texWidth: q.bakedTextureWidth, irregular: preset === 'irregular' });
     const pal = this.body.surface?.colors?.[1] ?? this.body.surface?.colors?.[0] ?? [0.3, 0.3, 0.3];
     (this.farMaterial.uniforms.uFallback.value as THREE.Vector3).set(pal[0], pal[1], pal[2]);
     this.materials.push(this.farMaterial);

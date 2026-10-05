@@ -62,7 +62,7 @@ export function createEphemeris(bodies: Map<string, Body>): Ephemeris {
     if (b.parent && b.orbit) {
       const o = b.orbit;
       const orbit: Orbit = { ...o, body: b.parent, mu: body(b.parent).gm + b.gm, m0: o.meanAnomalyAtEpoch };
-      const raw = propagate(orbit, t), q = planes.get(id)!;
+      const raw = propagate(orbit, t), q = planes.get(id) ?? referencePlane(b);
       state = { position: qRotate(q, raw.position), velocity: qRotate(q, raw.velocity) };
     }
     relative.set(id, state); return state;

@@ -31,6 +31,7 @@ interface SavedVessel {
 }
 
 export interface SavedWorld {
+  activatedAsteroids?: string[];
   flightlog?: import('./flightlog/recorder').RecorderState;
   latestReportId?: string | null;
   commsSettings?: import('../sim/comms/network').CommsSettings;
@@ -93,12 +94,14 @@ export function serializeWorld(world: World): SavedWorld {
     vessels,
     targetId: world.targetId,
     targetPortUid: world.targetPortUid,
+    activatedAsteroids: [...world.universe.activatedAsteroids],
   };
 }
 
 export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>, universe?: Universe): World {
   if (data.version !== SAVE_VERSION) throw new Error(`Unsupported save version ${data.version}`);
   const world = new World(universe ?? new Universe(data.preset), catalog, data.ut, data.mode ?? 'sandbox');
+  for (const id of data.activatedAsteroids ?? []) world.universe.activateAsteroid(id);
   world.flightlog = structuredClone(data.flightlog ?? world.flightlog);
   world.latestReportId = data.latestReportId ?? null;
   world.commsSettings = { ...world.commsSettings, ...data.commsSettings };

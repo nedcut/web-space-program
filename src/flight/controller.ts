@@ -199,7 +199,7 @@ export class FlightController {
     Object.assign(labelHost.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
     labelHost.classList.add('photo-hide');
     host.appendChild(labelHost);
-    this.map = new MapView(universe.bodies, universe.ephem, labelHost, q);
+    this.map = new MapView(universe.bodies, universe.ephem, labelHost, q, universe);
     this.map.setVisible(false);
 
     this.disposers.push(this.cam.attach(canvas, () => !this.mapMode && !this.paused));

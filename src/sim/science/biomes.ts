@@ -5,6 +5,7 @@ import { add, cross, dot, normalize, scale, type Vec3 } from '../../util/vec3';
 
 export type Situation = 'landed' | 'splashed' | 'flyingLow' | 'flyingHigh' | 'spaceLow' | 'spaceHigh';
 export const BIOMES: Record<string, readonly string[]> = {
+  ...Object.fromEntries(['vesta', 'pallas', 'hygiea', 'bennu', 'ryugu', 'itokawa', 'eros', 'psyche', 'halley', '67p'].map(id => [id, ['Surface']])),
   earth: ['Oceans', 'Shores', 'Grasslands', 'Deserts', 'Mountains', 'Ice Caps', 'Launch Complex'],
   moon: ['Highlands', 'Lowland Maria', 'Polar Craters', 'Crater Rims'],
   mars: ['Plains', 'Highlands', 'Canyons', 'Polar Caps', 'Volcanic Rise'],
@@ -14,6 +15,7 @@ export const GENERIC_BIOMES = ['Lowlands', 'Highlands', 'Ridges', 'Polar Regions
 
 /** Body-fixed direction, using exactly the terrain sampled by collision and rendering. */
 export function biomeAt(body: Body, terrain: Terrain, direction: Vec3): string {
+  if (body.kind === 'asteroid' || body.kind === 'comet') return 'Surface';
   if (!body.solidSurface) return 'Atmospheric Bands';
   const d = normalize(direction), lat = Math.abs(Math.asin(d.z));
   const h = terrain.heightAt(d.x, d.y, d.z);

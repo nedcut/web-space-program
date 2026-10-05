@@ -1,3 +1,4 @@
+import { SMALL_BODY_DEFS } from './smallBodies';
 import type { AtmosphereDef, BodyDef, OrbitalElements, SurfaceStyle } from '../sim/bodies/types';
 
 /** Real SI source data, never gameplay-scaled.
@@ -946,4 +947,5 @@ export const BODY_DEFS: BodyDef[] = [
     solidSurface: true,
     description: "Pluto’s large companion, with deep canyons and a reddish polar cap.",
   },
+  ...SMALL_BODY_DEFS,
 ];

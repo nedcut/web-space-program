@@ -5,7 +5,7 @@ export interface PlanningTask<T> { id: number; result: Promise<T>; cancel(): voi
 let nextId = 1;
 export function planningSnapshot(world: World): PlanningSnapshot {
   const vessel = world.active;
-  return structuredClone({ preset: world.universe.preset, ut: world.ut, nodes: world.nodes,
+  return structuredClone({ preset: world.universe.preset, activatedAsteroids: [...world.universe.activatedAsteroids], ut: world.ut, nodes: world.nodes,
     vessel: vessel ? { id: vessel.state.id, body: vessel.body, orbit: world.orbitOf(vessel), state: world.relativeState(vessel) } : null });
 }
 
