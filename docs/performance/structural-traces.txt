@@ -1,6 +1,6 @@
 Structural-load determinism verification
 Baseline: 31fdfba (before implementation)
-Verified implementation: b1b9371 + main merge 3084d95
+Verified implementation: b175b34 (includes main 981e915 and fatigue replication fix)
 Command: npx tsx scripts/bench/determinism.ts
 All ten 100-step serialized World traces are byte-identical (SHA-256):
 
