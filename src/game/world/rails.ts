@@ -105,6 +105,7 @@ export function advanceRailsTo(this: World, internals: WorldInternals, ut: numbe
    * just before atmosphere entry / impact (warp is cancelled). Everything else then advances to that time.
    */
 export function advanceRails(this: World, internals: WorldInternals, target: number): void {
+  const startUt = this.ut;
   const act = this.active;
   const order = [...this.vessels.values()].sort((a, b) => (a === act ? -1 : b === act ? 1 : 0));
   for (const wv of order) {
@@ -158,6 +159,7 @@ export function advanceRails(this: World, internals: WorldInternals, target: num
   for (const wv of this.vessels.values()) internals.syncPacked(wv, this.ut);
   advanceTransmissions(this);
   evaluateProgression(this);
+  this.onSimulationStep?.(this.ut - startUt, 0);
 }
 
 /** Update the inertial state of a packed (rails / body-fixed) vessel to time t. */

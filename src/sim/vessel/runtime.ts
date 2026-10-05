@@ -278,6 +278,8 @@ export type VesselEvent =
   | { type: 'undocked'; vesselId: string; newVesselId: string };
 
 export interface StepResult {
+  /** Integrated engine and RCS impulse per mass for this step, m/s (excludes aero/contact). */
+  propulsiveDv?: number;
   /** Vessels created during the step (debris, decoupled stages). */
   newVessels: VesselState[];
   events: VesselEvent[];

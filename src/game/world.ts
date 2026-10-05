@@ -118,6 +118,8 @@ export class World {
   readonly catalog: Map<string, PartDef>;
   /** Event listeners (audio, camera shake, UI). */
   onEvent: ((e: VesselEvent) => void) | null = null;
+  /** Optional headless observer after each physics/rails step; dt and active propulsion cost in m/s. */
+  onSimulationStep: ((dt: number, propulsiveDv: number) => void) | null = null;
 
   constructor(universe: Universe, catalog: Map<string, PartDef>, ut: number, public mode: GameMode = 'sandbox') {
     this.commsSettings = defaultCommsSettings(mode);
@@ -508,6 +510,7 @@ export class World {
 
   private physicsStep(input: ControlInput, inputs?: ReadonlyMap<string, ControlInput>) {
     const t = this.ut;
+    let propulsiveDv = 0;
     const active = this.active;
     for (const wv of [...this.vessels.values()]) {
       if (wv.state.destroyed) continue;
@@ -559,6 +562,7 @@ export class World {
       // A disconnected probe holds its attitude with SAS, but cannot command thrust or stage.
       const ctrl = isActive ? vesselInput : neutralInput({ sas: 'off' });
       const res = wv.state.eva ? stepEva(wv.state, ctrl, env, t, PHYSICS_DT) : stepVessel(wv.state, ctrl, env, t, PHYSICS_DT);
+      if (isActive) propulsiveDv += res.propulsiveDv ?? 0;
       for (const nv of res.newVessels) {
         recomputeMassProperties(nv, false);
         // Split-off vessels hold state at time t (staging happens at the start of the step); bring them to
@@ -587,6 +591,7 @@ export class World {
     this.applyPassedNodes();
     advanceTransmissions(this);
     evaluateProgression(this);
+    this.onSimulationStep?.(PHYSICS_DT, propulsiveDv);
   }
 
   private handleEvent(e: VesselEvent) {

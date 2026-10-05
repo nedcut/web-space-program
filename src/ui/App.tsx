@@ -1,3 +1,5 @@
+import { ScenarioPanel } from '../scenarios/ScenarioPanel';
+import { useScenarioRun } from '../scenarios/runtime';
 import { Training } from '../tutorial/Training';
 import { TutorialPanel } from '../tutorial/TutorialPanel';
 import { useTutorial } from '../tutorial/runtime';
@@ -9,6 +11,7 @@ import { SpaceCenter } from './SpaceCenter';
 import { ErrorBoundary } from './ErrorBoundary';
 
 // Heavy 3D scenes are code-split so the menu loads instantly.
+const Scenarios = lazy(() => import('../scenarios/Scenarios'));
 const Spacepedia = lazy(() => import('./Spacepedia'));
 const EditorScene = lazy(() => import('../editor/EditorScene'));
 const TrackingStation = lazy(() => import('./tracking/TrackingStation'));
@@ -18,6 +21,7 @@ const FlightScene = lazy(() => import('../flight/FlightScene'));
 
 export function App() {
   const tutorial = useTutorial();
+  const scenario = useScenarioRun();
   const settings = useGame(s => s.settings);
   useEffect(() => {
     document.documentElement.dataset.highContrast = String(settings.highContrast);
@@ -28,17 +32,19 @@ export function App() {
     <div className="fullscreen" style={{ width: `${100 / settings.uiScale}%`, height: `${100 / settings.uiScale}%`, transform: `scale(${settings.uiScale})`, transformOrigin: 'top left' }}>
       <ErrorBoundary>
       <Suspense fallback={<Loading />}>
+        {scene === 'scenarios' && <Scenarios />}
         {scene === 'pedia' && <Spacepedia />}
         {scene === 'training' && <Training />}
         {scene === 'menu' && <MainMenu />}
         {scene === 'spaceCenter' && <SpaceCenter />}
-        {scene === 'editor' && <EditorScene key={tutorial?.epoch ?? 0} />}
-        {scene === 'flight' && <FlightScene key={tutorial?.epoch ?? 0} />}
+        {scene === 'editor' && <EditorScene key={scenario ? `scenario-${scenario.epoch}` : tutorial?.epoch ?? 0} />}
+        {scene === 'flight' && <FlightScene key={scenario ? `scenario-${scenario.epoch}` : tutorial?.epoch ?? 0} />}
         {scene === 'research' && <Research />}
         {scene === 'missions' && <Missions />}
         {scene === 'tracking' && <TrackingStation />}
       </Suspense>
       <TutorialPanel />
+      {scene === 'flight' && <ScenarioPanel />}
       </ErrorBoundary>
     </div>
   );
