@@ -4,7 +4,7 @@ export const DEFAULT_BINDINGS = {
   translateRight: ['KeyL'], translateLeft: ['KeyJ'], translateForward: ['KeyI'], translateBack: ['KeyK'], translateUp: ['KeyH'], translateDown: ['KeyN'],
   throttleUp: ['ShiftLeft', 'ShiftRight'], throttleDown: ['ControlLeft', 'ControlRight'], throttleFull: ['KeyZ'], throttleCut: ['KeyX'],
   stage: ['Space'], toggleSas: ['KeyT'], toggleRcs: ['KeyR'], map: ['KeyM'], warpUp: ['Period'], warpDown: ['Comma'], warpStop: ['Slash'],
-  menu: ['Escape'], help: ['F1'], flightData: ['F3'], stressOverlay: ['F4'], focusNext: ['BracketRight'], toggleCamMode: ['KeyV'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyU'], board: ['Enter'], plantFlag: ['KeyF'], toggleGear: ['KeyG'], brakes: ['KeyB'], precision: ['CapsLock'], precisionHold: ['AltLeft', 'AltRight'],
+  menu: ['Escape'], help: ['F1'], flightData: ['F3'], stressOverlay: ['F4'], photoMode: ['KeyP'], focusNext: ['BracketRight'], toggleCamMode: ['KeyV'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyU'], board: ['Enter'], plantFlag: ['KeyF'], toggleGear: ['KeyG'], brakes: ['KeyB'], precision: ['CapsLock'], precisionHold: ['AltLeft', 'AltRight'],
   evaRight: ['KeyD', 'KeyE'], evaLeft: ['KeyA', 'KeyQ'], evaForward: ['KeyW'], evaBack: ['KeyS'], evaUp: ['ShiftLeft', 'ShiftRight'], evaDown: ['ControlLeft', 'ControlRight'], evaRun: ['ShiftLeft', 'ShiftRight'],
   editorUndo: ['Ctrl+KeyZ'], editorRedo: ['Ctrl+Shift+KeyZ', 'Ctrl+KeyY'], editorSave: ['Ctrl+KeyS'], editorCancel: ['Escape'], editorDelete: ['Delete', 'Backspace'], editorSymmetry: ['KeyX'], editorSymmetryMode: ['KeyR'], editorFrame: ['KeyF'], editorReset: ['Space'],
   editorPitchUp: ['KeyW'], editorPitchDown: ['KeyS'], editorRollLeft: ['KeyA'], editorRollRight: ['KeyD'], editorYawLeft: ['KeyQ'], editorYawRight: ['KeyE'],
@@ -44,7 +44,7 @@ export function matches(action: Action, e: KeyboardEvent): boolean {
   return current[action].some(k => k === chord || (!k.includes('+') && k === e.code && !e.metaKey && !e.ctrlKey));
 }
 export function context(action: Action) { return action.startsWith('editor') ? 'editor' : action.startsWith('eva') || action === 'board' || action === 'plantFlag' ? 'eva' : 'flight'; }
-const SHARED_ACTIONS = new Set<Action>(['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'help', 'flightData', 'stressOverlay', 'focusNext', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'toggleGear', 'precision', 'precisionHold']);
+const SHARED_ACTIONS = new Set<Action>(['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'help', 'flightData', 'stressOverlay', 'photoMode', 'focusNext', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'toggleGear', 'precision', 'precisionHold']);
 export function conflicts(bindings: Bindings): { key: string; actions: Action[] }[] {
   const groups = new Map<string, Action[]>();
   for (const a of Object.keys(bindings) as Action[]) for (const k of new Set(bindings[a])) {

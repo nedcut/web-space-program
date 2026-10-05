@@ -31,6 +31,10 @@ describe('cross-feature save and vessel integration', () => {
     world.launch(expedition());
     world.commsSettings = { enabled: true, restrictControl: false };
     world.surveyedBodies = ['moon', 'titan'];
+    world.discoveries = ['titan-sounding-stones'];
+    world.logFlightEvent(world.active!, 'checkpoint', 'Combined save QA');
+    world.latestReportId = world.flightlog.records[0].id;
+    world.active!.state.parts[1].structuralFatigue = 0.04;
     world.transmitting = [world.activeId!];
     world.progression.science = 57;
     world.flags.push({ id: 'qa-flag', body: 'moon', position: { x: 180000, y: 0, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 }, astronautId: world.crew[0].id, plantedAt: world.ut });
@@ -58,7 +62,7 @@ describe('cross-feature save and vessel integration', () => {
   it('migrates pre-extension saves with crew, comms and resource defaults', () => {
     const world = makeWorld(); world.launch(buildOrbiter());
     const saved = serializeWorld(world);
-    for (const key of ['mode', 'progression', 'crew', 'crewSeed', 'flags', 'commsSettings', 'transmitting', 'surveyedBodies', 'targetId', 'targetPortUid'] as const) delete saved[key];
+    for (const key of ['mode', 'progression', 'crew', 'crewSeed', 'flags', 'commsSettings', 'transmitting', 'surveyedBodies', 'targetId', 'targetPortUid', 'discoveries', 'flightlog', 'latestReportId'] as const) delete saved[key];
     for (const v of saved.vessels) for (const p of v.state.parts) delete p.crew;
     const restored = deserializeWorld(json(saved), PART_CATALOG, universe);
     expect(restored.canControl()).toBe(true);
@@ -66,6 +70,11 @@ describe('cross-feature save and vessel integration', () => {
     expect(restored.commsSettings.enabled).toBe(false);
     expect(restored.surveyedBodies).toEqual([]);
     expect(restored.flags).toEqual([]);
+    expect(restored.discoveries).toEqual([]);
+    expect(restored.flightlog.records).toEqual([]);
+    expect(restored.latestReportId).toBeNull();
+    restored.recordFlight(restored.active!, restored.ut, true);
+    expect(restored.flightlog.records).toHaveLength(1);
     expect(restored.active!.state.cache.boundingRadius).toBeGreaterThan(0);
   });
 
@@ -163,6 +172,16 @@ describe('communications and multiplayer integration', () => {
     world.surveyedBodies = ['moon'];
     world.commsSettings.enabled = true;
     world.transmitting = [v.state.id];
+    world.discoveries = ['qa-landmark'];
+    world.logFlightEvent(v, 'partLoss', 'Structural failure');
+    world.latestReportId = world.flightlog.records[0].id;
+    const saved = serializeWorld(world);
+    replaceWorld(replica, saved);
+    expect(replica.flightlog).toEqual(world.flightlog);
+    expect(replica.latestReportId).toBe(world.latestReportId);
+    expect(replica.discoveries).toEqual(world.discoveries);
+    replica.flightlog.records[0].events.length = 0;
+    expect(saved.flightlog!.records[0].events.length).toBeGreaterThan(0);
     replaceWorld(replica, serializeWorld(world));
     expect(replica.surveyedBodies).toEqual(['moon']);
     expect(replica.transmitting).toEqual([v.state.id]);

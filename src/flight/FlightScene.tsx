@@ -344,7 +344,7 @@ export default function FlightScene() {
           ) : (
             <div className="panel" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 280 }}>
               <div className="label" style={{ textAlign: 'center', color: lost ? 'var(--bad)' : undefined }}>{lost ? 'Vessel lost' : 'Paused'}</div>
-              {!lost && <button className="btn" onClick={() => photoMode.open()}>Photo mode (P)</button>}
+              {!lost && <button className="btn" onClick={() => photoMode.open()}>Photo mode</button>}
               {!lost && <button className="btn primary" onClick={() => setPaused(false)}>Resume <span className="kbd" style={{ marginLeft: 6 }}>Esc</span></button>}
               {getTutorial() && <button className="btn" onClick={() => startLesson(getTutorial()!.lesson.id)}>Restart lesson</button>}
               {lost && !getTutorial() && !getScenarioRun() && hasSave('quicksave') && <button className="btn primary" onClick={() => ctrl.current?.onQuickload?.()}>Load quicksave</button>}

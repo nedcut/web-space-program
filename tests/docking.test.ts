@@ -4,6 +4,7 @@ import { RESOURCES } from '../src/data/resources';
 import { buildTender } from '../src/editor/stockCrafts';
 import {
   angularMomentum,
+  mergeVessels,
   buildVessel,
   dockedPorts,
   freePorts,
@@ -52,6 +53,28 @@ function run(vs: VesselState[], seconds: number): VesselState[] {
 }
 
 describe('docking', () => {
+  it('keeps fatigue on the same physical joints when docking reverses the incoming tree', () => {
+    const [a, b] = pair(0, 0);
+    const portA = freePorts(a)[0].part, portB = freePorts(b)[0].part;
+    const edges = b.parts.filter(p => p.parent !== null).map((part, i) => {
+      part.structuralFatigue = (i + 1) * 0.001;
+      return { part, parent: b.cache.byUid.get(part.parent!)!, fatigue: part.structuralFatigue };
+    });
+    expect(portB.parent).not.toBeNull();
+    mergeVessels(a, b, portA.uid, portB.uid);
+    expect(portB.structuralFatigue).toBeUndefined(); // newly created docking latch
+    for (const { part, parent, fatigue } of edges) {
+      const child = part.parent === parent.uid ? part : parent;
+      expect(child.structuralFatigue).toBe(fatigue);
+    }
+    const detached = undock(a, portA.uid)!;
+    expect(detached).toBeTruthy();
+    for (const { part, parent, fatigue } of edges) {
+      const child = part.parent === parent.uid ? part : parent;
+      expect(child.structuralFatigue).toBe(fatigue);
+    }
+  });
+
   it('two vessels approaching at 0.2 m/s on aligned ports merge, conserving momentum', () => {
     const [A, B] = pair(0.9, 0.2);
     const mass = A.mass + B.mass;

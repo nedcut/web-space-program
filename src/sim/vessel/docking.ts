@@ -286,7 +286,11 @@ export function mergeVessels(keep: VesselState, other: VesselState, keepPortUid:
     par.parent = child.uid;
     par.attachNode = link.parentNode;
     par.parentNode = link.attachNode;
+    // Fatigue belongs to this attachment, whose child changes when the edge reverses.
+    if (child.structuralFatigue !== undefined) par.structuralFatigue = child.structuralFatigue;
+    else delete par.structuralFatigue;
   }
+  delete po.structuralFatigue; // the newly captured docking latch has no prior overload
   po.parent = pk.uid;
   po.attachNode = b.mod.node;
   po.parentNode = a.mod.node;

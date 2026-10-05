@@ -1,6 +1,6 @@
 import { localId } from '../util/localId';
 import { game } from './store';
-import { listSaveSlots, writeSaveSlot } from './saveSlots';
+import { SLOTS_KEY, listSaveSlots, writeSaveSlot } from './saveSlots';
 import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { newProgression, type GameMode, type Progression } from '../sim/science/progression';
 import type { Astronaut, PlantedFlag } from '../sim/crew/crew';
@@ -134,7 +134,7 @@ const KEY_PREFIX = 'wsp.world.v1.';
 
 export function saveWorldToStorage(slot: string, world: World, displayName?: string) {
   // Preserve pre-slot programs before replacing the legacy compatibility keys.
-  if (!listSaveSlots().length) for (const legacyName of ['autosave', 'quicksave']) {
+  if (localStorage.getItem(SLOTS_KEY) === null) for (const legacyName of ['autosave', 'quicksave']) {
     const raw = localStorage.getItem(KEY_PREFIX + legacyName);
     if (raw) {
       try {
@@ -151,13 +151,12 @@ export function saveWorldToStorage(slot: string, world: World, displayName?: str
 
 export function loadWorldFromStorage(slot: string): { savedAt: number; data: SavedWorld } | null {
   try {
-    const programId = game.get().saveId;
-    if (programId) {
-      const all = listSaveSlots();
-      const saved = all.find(x => x.programId === programId && (slot === 'autosave' ? x.kind === 'auto' : x.id === `${programId}:${slot}`));
-      if (saved) return { savedAt: saved.savedAt, data: saved.data };
-      if (all.some(x => x.programId === programId)) return null;
-    }
+    const programId = game.get().saveId ?? 'legacy-program';
+    const saved = listSaveSlots().find(x => x.programId === programId && (slot === 'autosave' ? x.kind === 'auto' : x.id === `${programId}:${slot}`));
+    if (saved) return { savedAt: saved.savedAt, data: saved.data };
+    // Only an unmigrated legacy program may read the compatibility keys. A new
+    // or deleted program must never fall back to another program's last save.
+    if (programId !== 'legacy-program' || localStorage.getItem(SLOTS_KEY) !== null) return null;
     const raw = localStorage.getItem(KEY_PREFIX + slot);
     return raw ? JSON.parse(raw) : null;
   } catch {
