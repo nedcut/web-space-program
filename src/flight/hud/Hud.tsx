@@ -265,9 +265,8 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
           <Readout label="Dyn. press." value={`${(t.dynamicPressure / 1000).toFixed(1)} kPa`} />
         </div>
         <ResourceReadouts resources={t.resources} />
-      </div>
 
-      {/* Staging stack */}
+      {/* Staging stack: fills the remaining column height, so it can never overlap the panels above */}
       <div className="hud-stages">
         {!t.eva && !t.noControl && t.stages.length > 0 && (
           <button className="btn small" onClick={cb.onStage} title="Activate the next stage (Space)" style={{ width: 180, flexShrink: 0 }}>
@@ -275,6 +274,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
           </button>
         )}
         <StageReadouts stages={t.stages} stage={t.stage} imperial={settings.units === 'imperial'} />
+      </div>
       </div>
 
       {/* Bottom-centre: navball + speed + SAS */}
