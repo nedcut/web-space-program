@@ -24,6 +24,7 @@ export interface FlightRecord {
   touchdownSpeed?: number;
   downrange?: number;
   encounter?: { body: string; parent: string; speed: number; dv: number };
+  deltaVEstimate?: { ut: number; value: number; spent: number; topology: string };
   ringPosition?: { body: string; x: number; y: number; z: number };
 }
 export interface RecorderState { records: FlightRecord[]; sequence: number }
@@ -104,6 +105,9 @@ export function crossesRingPlane(from: { x: number; y: number; z: number }, to: 
   const radius = Math.hypot(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
   return radius >= inner && radius <= outer;
 }
+export function eventLabel(kind: EventKind): string {
+  return ({ launch: 'Liftoff', stage: 'Stage activated', separation: 'Hardware separated', soi: 'Sphere of influence changed', orbit: 'Stable orbit achieved', landing: 'Touchdown', splashdown: 'Splashdown', docking: 'Vessels docked', eva: 'Astronaut on EVA', flag: 'Flag planted', partLoss: 'Part lost', recovery: 'Vessel recovered', loss: 'Vessel lost', checkpoint: 'Flight checkpoint', boarding: 'Astronaut boarded', assist: 'Gravity assist', rings: 'Ring plane crossed' } satisfies Record<EventKind, string>)[kind];
+}
 export function summaryText(r: FlightRecord) {
-  return `${r.name} · ${r.outcome ?? 'In progress'}\nDuration: ${Math.round((r.end ?? r.last?.ut ?? r.start) - r.start)} s\nMaximum altitude: ${Math.round(r.stats.maxAltitude)} m · Speed: ${Math.round(r.stats.maxSpeed)} m/s · G-load: ${r.stats.maxG.toFixed(2)} g\nΔv spent: ${Math.round(r.stats.dvSpent)} m/s · Distance travelled: ${Math.round(r.stats.distance)} m\nBodies visited: ${r.bodies.join(', ')}\n${r.events.map(e => `T+${e.time.toFixed(1)} ${e.kind} · ${e.body}${e.speed !== undefined ? ` · ${e.speed.toFixed(2)} m/s` : ''}${e.biome ? ` · ${e.biome}` : ''}${e.detail ? ` · ${e.detail}` : ''}`).join('\n')}`;
+  return `${r.name} · ${r.outcome ?? 'In progress'}\nDuration: ${Math.round((r.end ?? r.last?.ut ?? r.start) - r.start)} s\nMaximum altitude: ${Math.round(r.stats.maxAltitude)} m · Speed: ${Math.round(r.stats.maxSpeed)} m/s · G-load: ${r.stats.maxG.toFixed(2)} g\nΔv spent: ${Math.round(r.stats.dvSpent)} m/s · Distance travelled: ${Math.round(r.stats.distance)} m\nBodies visited: ${r.bodies.join(', ')}\n${r.events.map(e => `T+${e.time.toFixed(1)} ${eventLabel(e.kind)} · ${e.body}${e.speed !== undefined ? ` · ${e.speed.toFixed(2)} m/s` : ''}${e.biome ? ` · ${e.biome}` : ''}${e.detail ? ` · ${e.detail}` : ''}`).join('\n')}`;
 }

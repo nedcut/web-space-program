@@ -34,10 +34,17 @@ export function recordVessel(w: World, v: WorldVessel, ut = w.ut, force = false)
   const dt = last ? Math.max(0, ut - (r.integrationUt ?? last.ut)) : 0;
   r.stats.dvSpent += telemetry.thrust / Math.max(1, s.mass) * dt;
   r.integrationUt = ut;
+  // Full staging projections are expensive for large craft. Refresh at 1 Hz (or immediately after
+  // topology changes), and subtract measured thrust Δv between projections.
+  const topology = `${v.body}:${s.nextStage}:${s.parts.map(p => `${p.uid}:${p.engine?.ignited}:${p.engine?.moduleIndex}`).join(',')}`;
+  if (!r.deltaVEstimate || r.deltaVEstimate.topology !== topology || ut - r.deltaVEstimate.ut >= 1) {
+    r.deltaVEstimate = { ut, topology, spent: r.stats.dvSpent, value: cachedStageDeltaV(s, s.telemetry.staticPressure, 9.80665).reduce((sum, stage) => sum + stage.dv, 0) };
+  }
+  const dv = Math.max(0, r.deltaVEstimate.value - (r.stats.dvSpent - r.deltaVEstimate.spent));
   const ringPass = !!b.rings && (Math.abs(fixed.z) < Math.max(100, speed * 0.25) && planar >= b.rings.innerRadius && planar <= b.rings.outerRadius || !!r.ringPosition && r.ringPosition.body === v.body && crossesRingPlane(r.ringPosition, fixed, b.rings.innerRadius, b.rings.outerRadius));
   r.ringPosition = { body: v.body, ...fixed };
   observe(r, { inertialSpeed: length(relative.velocity), clearance: Number.isFinite(s.telemetry.altitudeAGL) ? s.telemetry.altitudeAGL : radius - b.radius, ut, body: v.body, altitude: radius - b.radius, speed, vertical, horizontal: Math.sqrt(Math.max(0, speed * speed - vertical * vertical)), ap: o.ap, pe: o.pe, mach: telemetry.mach, q: telemetry.dynamicPressure, g: telemetry.gForce, temperature, mass: s.mass,
-    dv: cachedStageDeltaV(s, s.telemetry.staticPressure, b.gm / radius ** 2).reduce((sum, stage) => sum + stage.dv, 0),
+    dv,
     thrustAcceleration: telemetry.thrust / Math.max(1, s.mass),
     flying: s.situation === 'flying', prelaunch: v.mode === 'prelaunch', stableOrbit: s.situation === 'flying' && orbit.e < 1 && o.pe > Math.max(b.atmosphere?.height ?? 0, w.universe.terrain(b.id).maxHeight), parts: s.parts.length,
     shield: s.parts.some(p => p.def.modules.some(m => m.type === 'heatShield')), plane: s.parts.some(p => p.def.modules.some(m => m.type === 'liftingSurface')),

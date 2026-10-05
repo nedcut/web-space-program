@@ -3,7 +3,7 @@ import { game } from '../game/store';
 import { openProgram } from '../game/program';
 import { ACHIEVEMENTS } from '../game/flightlog/achievements';
 import { loadAchievements } from '../game/flightlog/storage';
-import { orderedSamples, summaryText, type FlightRecord } from '../game/flightlog/recorder';
+import { eventLabel, orderedSamples, summaryText, type FlightRecord } from '../game/flightlog/recorder';
 import './flightlog.css';
 
 function Chart({ record, title, y, x = 0, unit }: { record: FlightRecord; title: string; y: number; x?: number; unit: string }) {
@@ -41,7 +41,7 @@ export function FlightReport({ record }: { record: FlightRecord }) {
     {share && <label>Copy this flight summary<textarea readOnly value={summaryText(record)} onFocus={e => e.currentTarget.select()} /></label>}
     <dl className="report-stats">{stats.map(([name, value]) => <div className="panel" key={name}><dt>{name}</dt><dd>{value}</dd></div>)}</dl>
     <div className="report-charts"><Chart record={record} title="Altitude vs time" y={1} unit="m" /><Chart record={record} title="Surface velocity vs time" y={2} unit="m/s" /><Chart record={record} title="Ascent profile · altitude vs downrange" y={1} x={13} unit="m" /><Chart record={record} title="G-load vs time" y={9} unit="g" /></div>
-    <h3>Event timeline</h3><ol className="report-events">{record.events.map((e, i) => <li key={i}><span className="mono">T+{e.time.toFixed(1)} s</span><strong>{e.kind}</strong><span>{e.body}{e.detail && ` · ${e.detail}`}{e.speed !== undefined && ` · ${e.speed.toFixed(2)} m/s`}{e.biome && ` · ${e.biome}`}</span></li>)}</ol>
+    <h3>Event timeline</h3><ol className="report-events">{record.events.map((e, i) => <li key={i}><span className="mono">T+{e.time.toFixed(1)} s</span><strong>{eventLabel(e.kind)}</strong><span>{e.body}{e.detail && ` · ${e.detail}`}{e.speed !== undefined && ` · ${e.speed.toFixed(2)} m/s`}{e.biome && ` · ${e.biome}`}</span></li>)}</ol>
     <p className="label">Live charts retain the latest 1,024 samples; completed reports retain up to 128 of those samples. Event history retains the latest 256 events. Peak statistics cover the whole flight. Distance and downrange integrate sampled surface-relative speed.</p>
   </article>;
 }
