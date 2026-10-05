@@ -1,3 +1,4 @@
+import { acquireSurfaceBake } from './sharedBake';
 import { SurfaceFeatures } from './SurfaceFeatures';
 import * as THREE from 'three';
 import type { BodyDef } from '../../sim/bodies/types';
@@ -32,6 +33,8 @@ import { terrainCutout } from './cutout';
 export interface PlanetRendererOptions {
   /** Portraits bake surface detail without allocating close-up terrain. */
   farOnly?: boolean;
+  /** Map uniforms must not replace the live flight lighting registry. */
+  registerUniforms?: boolean;
   quality: QualitySettings;
   /** Universe scale (for atmosphere scale heights and artistic sun falloff). Default: standard. */
   scale?: ScaleConfig;
@@ -91,6 +94,7 @@ export class PlanetRenderer {
   private farMaterial: THREE.ShaderMaterial | null = null;
   private farTexture: THREE.DataTexture | null = null;
   private bakeRequested = false;
+  private surfaceBake?: ReturnType<typeof acquireSurfaceBake>;
   private disposed = false;
   private sky: THREE.Mesh | null = null;
   private clouds: THREE.Mesh | null = null;
@@ -127,7 +131,7 @@ export class PlanetRenderer {
     this.sunIlluminance = opts.sunIlluminance ?? 4;
     this.sunRadiance = opts.sunRadiance ?? 60;
     this.root.name = `planet:${body.id}`;
-    this.terrainKey = `${body.id}:${body.surface?.seed}:${body.radius}:${body.surface?.relief}`;
+    this.terrainKey = `${JSON.stringify(body)}:${opts.terrainMinWavelength ?? 6}`;
     const preset = body.surface?.preset ?? 'rocky';
     this.kind = body.kind === 'star' || preset === 'star' ? 'star' : !body.solidSurface || preset === 'gasGiant' || preset === 'iceGiant' ? 'gas' : 'solid';
 
@@ -135,7 +139,7 @@ export class PlanetRenderer {
     if (this.atmosphere) this.lut = buildTransmittanceLUT(this.atmosphere);
     this.uniforms = createPlanetUniforms(body.radius, this.atmosphere, this.lut);
     if (opts.quality.atmosphereScattering === false) this.uniforms.uHasAtmo.value = 0;
-    registerPlanetUniforms(body.id, this.uniforms);
+    if (opts.registerUniforms !== false) registerPlanetUniforms(body.id, this.uniforms);
     // Optically thick Titan needs the same integration budget on its disc and limb to avoid a seam.
     if (body.id === 'titan' && this.quality.planetDetails.volumeSteps > 0) {
       this.uniforms.uStepScale.value = Math.ceil(64 / this.quality.atmosphere.aerialSteps);
@@ -387,7 +391,7 @@ export class PlanetRenderer {
     u.uSunColor.value.set(E, E * 0.985, E * 0.96);
     const source = lightSources.get(this)!;
     Object.assign(source.position, p.bodyPosition);
-    Object.assign(source.sunDirection, { x: sx / sd, y: sy / sd, z: sz / sd });
+    source.sunDirection.x = sx / sd; source.sunDirection.y = sy / sd; source.sunDirection.z = sz / sd;
     source.irradiance = E;
     u.uPlanetshineColor.value.setScalar(0);
     // Nearby parent renderers already exist in flight. Keep solar positions in float64 here.
@@ -462,24 +466,17 @@ export class PlanetRenderer {
     // Far LOD texture bake (once, lazily).
     if (this.terrain && !this.bakeRequested && this.pool) {
       this.bakeRequested = true;
-      this.pool.bake(this.terrainKey, this.quality.bakedTextureWidth).then((res) => {
+      this.surfaceBake = acquireSurfaceBake(this.pool, this.terrainKey, this.quality.bakedTextureWidth);
+      this.surfaceBake.promise.then((res) => {
         if (this.disposed) return;
-        const tex = new THREE.DataTexture(res.data, res.width, res.height, THREE.RGBAFormat, THREE.UnsignedByteType);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.wrapS = THREE.RepeatWrapping;
-        tex.wrapT = THREE.ClampToEdgeWrapping;
-        tex.magFilter = THREE.LinearFilter;
-        tex.minFilter = THREE.LinearMipmapLinearFilter;
-        tex.generateMipmaps = true;
-        tex.anisotropy = 4;
-        tex.needsUpdate = true;
+        const tex = res.texture;
         this.farTexture = tex;
         if (this.farMaterial) {
           this.farMaterial.uniforms.uMap.value = tex;
           this.farMaterial.uniforms.uHasMap.value = 1;
           this.farMaterial.uniforms.uHRange.value.set(res.minHeight, res.maxHeight);
         }
-      });
+      }).catch(() => { if (!this.disposed) { this.surfaceBake?.release(); this.surfaceBake = undefined; this.bakeRequested = false; } });
     }
 
     const qt = this.quadtree;
@@ -591,7 +588,7 @@ export class PlanetRenderer {
     });
     for (const m of this.materials) m.dispose();
     this.lut?.dispose();
-    this.farTexture?.dispose();
+    this.surfaceBake?.release();
     this.root.removeFromParent();
   }
 }
