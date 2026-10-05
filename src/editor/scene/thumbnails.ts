@@ -184,3 +184,32 @@ export function mountPartTurntable(canvas: HTMLCanvasElement, def: PartDef, redu
   raf = requestAnimationFrame(frame);
   return () => { cancelAnimationFrame(raf); resize.disconnect(); visibility.disconnect(); environment.dispose(); r.dispose(); r.forceContextLoss(); };
 }
+
+/** Whole-craft preview shares the catalogue renderer and cached mesh geometry. */
+export function renderCraftThumbnail(craft: import('../../sim/vessel/types').CraftDef, catalog: ReadonlyMap<string, PartDef>): string {
+  setup();
+  const holder = new THREE.Group();
+  for (const p of craft.parts) {
+    const def = catalog.get(p.partId); if (!def) continue;
+    const mesh = createPartMesh(def);
+    mesh.position.set(p.position.x, p.position.y, p.position.z);
+    mesh.quaternion.set(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
+    holder.add(mesh);
+  }
+  const box = new THREE.Box3().setFromObject(holder);
+  const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 0.1);
+  const dist = radius / Math.sin(camera!.fov * Math.PI / 360) * 1.1;
+  holder.position.sub(box.getCenter(new THREE.Vector3()));
+  scene!.add(holder);
+  try {
+    camera!.position.copy(new THREE.Vector3(1, 0.5, 1.5).normalize().multiplyScalar(dist));
+    camera!.near = dist / 100; camera!.far = dist * 4;
+    camera!.updateProjectionMatrix(); camera!.lookAt(0, 0, 0);
+    renderer!.render(scene!, camera!);
+    return renderer!.domElement.toDataURL('image/png');
+  } finally {
+    scene!.remove(holder);
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => !queue.length && teardown(), 4000);
+  }
+}
