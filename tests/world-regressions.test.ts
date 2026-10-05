@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { describe, it, expect } from 'vitest';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
@@ -9,6 +10,7 @@ import { DEFAULT_START_UT } from '../src/game/store';
 
 const mk = () => {
   const w = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+  requireIntactFlight(w);
   w.launch(buildOrbiter());
   return w;
 };
