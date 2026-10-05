@@ -9,7 +9,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { game, useGame } from '../game/store';
 import { FlightController } from './controller';
 import { Hud, NavballView, type Telemetry } from './hud/Hud';
-import { GameAudio } from '../audio';
+import type { GameAudio } from '../audio';
+import { getGameAudio } from '../audio/ui';
 import { ManeuverPanel } from './hud/ManeuverPanel';
 import { AssistPanel } from './hud/AssistPanel';
 import { HelpOverlay, helpSeen, markHelpSeen } from './hud/HelpOverlay';
@@ -74,7 +75,7 @@ export default function FlightScene() {
     // Construction is heavy and synchronous: defer it a couple of frames so the loading screen paints first.
     const start = () => {
       if (disposed) return;
-      audio = new GameAudio();
+      audio = getGameAudio();
       audio.setMasterVolume(g.settings.masterVolume);
       audioRef.current = audio;
       window.addEventListener('pointerdown', resume, { once: true });
@@ -82,14 +83,14 @@ export default function FlightScene() {
       try {
         c = new FlightController(host.current!, craft, g.scalePreset, g.ut, game.get().settings.quality, audio, saved, g.mode, g.multiplayer);
       } catch (e) {
-        audio.dispose();
+        audio.silenceFlight();
         audio = null;
         setError((e as Error).message);
         return;
       }
       if (!g.multiplayer && !c.world.active) {
         c.dispose();
-        audio.dispose();
+        audio.silenceFlight();
         c = null;
         audio = null;
         game.set({ scene: 'spaceCenter' });
@@ -151,7 +152,7 @@ export default function FlightScene() {
       window.removeEventListener('keydown', resume);
       unsub?.();
       c?.dispose();
-      audio?.dispose();
+      audio?.silenceFlight();
       if (audioRef.current === audio) audioRef.current = null;
       ctrl.current = null;
       if (tutorialContext.flight === c) { delete tutorialContext.flight; delete tutorialContext.world; }
@@ -162,6 +163,7 @@ export default function FlightScene() {
   const awaitingTelemetry = tele === null;
   useEffect(() => {
     if (ctrl.current) ctrl.current.paused = paused;
+    if (paused) audioRef.current?.silenceFlight();
   }, [paused, awaitingTelemetry]);
 
   // Input reads settings each frame; planet quality, clouds and scattering rebuild from a snapshot.
