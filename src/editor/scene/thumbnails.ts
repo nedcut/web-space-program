@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { createStudioEnvironment } from '../../render/core/studioEnv';
+import { partTexturesReady } from '../../render/parts/textures';
 import type { PartDef } from '../../sim/vessel/types';
 import { createPartMesh } from './partMesh';
 
@@ -33,8 +34,11 @@ export function subscribeThumbnails(l: () => void) {
   return () => void listeners.delete(l);
 }
 
+const byId = new Map<string, PartDef>();
+
 export function requestThumbnails(defs: PartDef[]) {
   for (const d of defs) {
+    byId.set(d.id, d);
     if (cache.has(d.id) || queued.has(d.id)) continue;
     queued.add(d.id);
     queue.push(d);
@@ -42,13 +46,35 @@ export function requestThumbnails(defs: PartDef[]) {
   schedule();
 }
 
+let texturesFinal = false;
+let refreshArmed = false;
+
 function schedule() {
   if (scheduled || !queue.length) return;
   scheduled = true;
-  requestAnimationFrame(() => {
-    scheduled = false;
-    pump();
-  });
+  // Build queued meshes first so their procedural textures are requested. Wait briefly for the
+  // texture worker (instant on IndexedDB cache hits); on a slow first visit render anyway and
+  // re-render everything once the final textures land, so placeholders never stick.
+  for (const d of queue) createPartMesh(d);
+  const ready = partTexturesReady();
+  if (!refreshArmed) {
+    refreshArmed = true;
+    void ready.then(() => {
+      refreshArmed = false;
+      if (texturesFinal) return;
+      texturesFinal = true;
+      const stale = [...cache.keys()];
+      for (const id of stale) cache.delete(id);
+      const defs = stale.map((id) => byId.get(id)).filter((d): d is PartDef => !!d);
+      requestThumbnails(defs);
+    });
+  }
+  void Promise.race([ready, new Promise((r) => setTimeout(r, 2500))]).then(() =>
+    requestAnimationFrame(() => {
+      scheduled = false;
+      pump();
+    }),
+  );
 }
 
 function setup() {
@@ -63,11 +89,9 @@ function setup() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setClearColor(0x000000, 0);
   scene = new THREE.Scene();
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
+  envRT = createStudioEnvironment(renderer, { variant: 'thumbnail' });
   scene.environment = envRT.texture;
   scene.environmentIntensity = 0.9;
-  pmrem.dispose();
   const key = new THREE.DirectionalLight(0xffffff, 2.2);
   key.position.set(3, 5, 4);
   scene.add(key);
@@ -143,9 +167,7 @@ export function mountPartTurntable(canvas: HTMLCanvasElement, def: PartDef, redu
   r.toneMapping = THREE.ACESFilmicToneMapping;
   r.toneMappingExposure = 1.15;
   const s = new THREE.Scene();
-  const pmrem = new THREE.PMREMGenerator(r);
-  const environment = pmrem.fromScene(new RoomEnvironment(), 0.04);
-  pmrem.dispose();
+  const environment = createStudioEnvironment(r, { variant: 'thumbnail' });
   s.environment = environment.texture;
   s.environmentIntensity = 0.9;
   const key = new THREE.DirectionalLight(0xffffff, 2.2);

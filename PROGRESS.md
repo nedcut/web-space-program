@@ -24,6 +24,20 @@ structural limits on every stock mission, n-body L4 stability, save/load determi
 (Settings → Graphics; there's an adaptive-resolution option), loading time, and the overall feel of flying. Then tell me
 what feels wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
 
+## Art pass: parts, plumes, hangar (2026-10-05, op/artpass)
+
+- **Direction:** `docs/ART.md` sets out the palette, material families, wear rules, decal placement and liveries for all ten manufacturers plus the agency. Every manufacturer has an original, procedurally drawn mark.
+- **Materials:** Part textures are generated in a worker and cached in IndexedDB, with packed ORM maps. Painted surfaces now show panel seams, rivets, welds, grime and chips under a clear coat. Foam, MLI foil, honeycomb ablator, scorched engine bays, tyre tread and deck plate each have their own look.
+- **Decals:** Tanks, pods, engines, SRBs, decouplers, fairings, nose cones, adapters, probes and instruments now carry maker badges, part plates, insignia and stencils.
+- **Geometry:**
+  - Pods: window bezels, framed hatches with hinges and handles, rescue markings.
+  - Landing legs: hoses and ribbed pads.
+  - Science instruments and antennas: a distinct design for each (probe, capsule, penetrator, boom, gradiometer, carousel, exposure tray, whip, Yagi, dishes).
+- **Plumes:** Plumes are volumetric, with sea-level shock diamonds, vacuum expansion, per-propellant colour and throttle response.
+- **Lighting:** Flight uses a procedural sky/planetshine environment. The hangar, preview and thumbnails use a procedural studio environment.
+- **Performance:** The Low quality preset builds half-tessellation, decal-free part meshes (−43% triangles). High-detail triangles rose about 5%.
+- Screenshots are in `docs/screenshots/art/`.
+
 ## How to run
 ```bash
 npm install

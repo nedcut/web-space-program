@@ -4,9 +4,9 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { PART_DEFS, findModule, partWetMass } from '../data/parts';
+import { createStudioEnvironment } from '../render/core/studioEnv';
 import { buildPartMesh, createPlume, getExhaustAnchors, setControlDeflection, setEngineGimbal, setPartDeploy, type Plume } from '../render/parts';
 import type { PartDef } from '../sim/vessel/types';
 
@@ -32,30 +32,64 @@ labels.domElement.style.pointerEvents = 'none';
 app.appendChild(labels.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0e15);
-scene.fog = new THREE.Fog(0x0a0e15, 60, 160);
-const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.85;
+const BG = 0x0b1018;
+scene.background = new THREE.Color(BG);
+scene.fog = new THREE.Fog(BG, 60, 160);
+const studio = createStudioEnvironment(renderer, { variant: 'preview' }).texture;
+scene.environment = studio;
+scene.environmentIntensity = 0.9;
 
-const sun = new THREE.DirectionalLight(0xfff4e5, 3.0);
+// Three-point studio rig: warm key (the only shadow caster), cool fill, warm rim; a faint hemisphere lift.
+const sun = new THREE.DirectionalLight(0xfff3e6, 2.8);
 sun.position.set(30, 50, 25);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.02;
+sun.shadow.radius = 4;
 scene.add(sun);
 scene.add(sun.target);
-const rim = new THREE.DirectionalLight(0x88aaff, 0.8);
-rim.position.set(-30, 20, -40);
+const fill = new THREE.DirectionalLight(0xa8c8ff, 0.7);
+fill.position.set(-35, 18, 30);
+scene.add(fill);
+// Rim from the back-left side: its glint on the glossy floor reflects away from the default camera.
+const rim = new THREE.DirectionalLight(0xffe6d0, 1.4);
+rim.position.set(-45, 22, -14);
 scene.add(rim);
+scene.add(new THREE.HemisphereLight(0xbcd0ec, 0x1a1d22, 0.25));
 
 const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.05, 2000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-// floor
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: 0x10141c, roughness: 0.85, metalness: 0.1 }));
+// Seamless studio floor: a soft light pool under the gallery fading into the background colour (no horizon line).
+function floorPoolTexture(): THREE.Texture {
+  const S = 1024;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  const gr = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  gr.addColorStop(0, '#3a4452');
+  gr.addColorStop(0.12, '#2a323d');
+  gr.addColorStop(0.35, '#121821');
+  gr.addColorStop(1, '#080c12');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, S, S);
+  // Fine grid, fading with the pool.
+  g.globalCompositeOperation = 'overlay';
+  g.strokeStyle = 'rgba(160,190,220,0.1)';
+  g.lineWidth = 1;
+  for (let i = 0; i <= 160; i++) {
+    const x = (i / 160) * S;
+    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, S); g.stroke();
+    g.beginPath(); g.moveTo(0, x); g.lineTo(S, x); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ map: floorPoolTexture(), roughness: 0.55, metalness: 0, envMap: studio, envMapIntensity: 0.18 }));
 floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
 scene.add(floor);
@@ -77,7 +111,7 @@ let cells: Cell[] = [];
 const gallery = new THREE.Group();
 scene.add(gallery);
 const pedestalGeo = new THREE.CylinderGeometry(1.1, 1.2, 0.08, 48);
-const pedestalMat = new THREE.MeshStandardMaterial({ color: 0x1a2030, roughness: 0.4, metalness: 0.6 });
+const pedestalMat = new THREE.MeshStandardMaterial({ color: 0x29323e, roughness: 0.38, metalness: 0.3, envMap: studio, envMapIntensity: 0.45 });
 
 function fmtMass(kg: number) {
   return kg >= 1000 ? `${(kg / 1000).toFixed(kg >= 10000 ? 0 : 1)} t` : `${Math.round(kg)} kg`;
@@ -155,10 +189,15 @@ function build() {
   const w = cols * spacing;
   const d = rows * spacing * 1.15;
   floor.visible = !plumesOn();
+
   const dist = (single ? 4.2 + w * 0.9 : Math.max(w, d) * 1.05) * (plumesOn() ? 1.3 : 1);
   camera.position.set(dist * 0.12, dist * (single ? 0.3 : 0.75), dist * (single ? 0.95 : 0.7));
   controls.target.set(0, plumesOn() ? 0 : single ? 1.25 : 0.6, single ? 0 : d * 0.04);
   if (plumesOn()) camera.position.y = 1.2;
+  // Floor pool sized to the gallery; fog dissolves its far edge into the background (no horizon line).
+  floor.scale.setScalar(Math.max(w, d, 6) * 10);
+  (scene.fog as THREE.Fog).near = dist * 1.8;
+  (scene.fog as THREE.Fog).far = dist * 5;
   sun.shadow.camera.left = sun.shadow.camera.bottom = -Math.max(w, d) * 0.7;
   sun.shadow.camera.right = sun.shadow.camera.top = Math.max(w, d) * 0.7;
   sun.shadow.camera.far = 200;
