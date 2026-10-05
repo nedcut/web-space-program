@@ -664,7 +664,7 @@ export class World {
   }
 
   private disconnectedInput(v?: VesselState): ControlInput {
-    return neutralInput({ sas: v && hasControl(v) ? v.sas.mode : 'off' });
+    return neutralInput({ sas: v && hasControl(v) && v.sas.mode !== 'off' ? 'stabilityAssist' : 'off' });
   }
 
   /** Advance the simulation by `realDt` seconds of wall time with the given control input for the active vessel. */
@@ -843,7 +843,7 @@ export class World {
       // Update dominant body (SOI transitions in physics).
       wv.body = this.universe.dominantBody(wv.state.position, t);
       const env = this.universe.createEnvironment(() => wv.body);
-      // A disconnected probe keeps its last SAS mode, but cannot command thrust or stage.
+      // A disconnected probe holds its attitude with SAS, but cannot command thrust or stage.
       const ctrl = isActive ? (this.canControl(wv.state) ? input : this.disconnectedInput(wv.state)) : neutralInput({ sas: 'off' });
       const res = wv.state.eva ? stepEva(wv.state, ctrl, env, t, PHYSICS_DT) : stepVessel(wv.state, ctrl, env, t, PHYSICS_DT);
       for (const nv of res.newVessels) {

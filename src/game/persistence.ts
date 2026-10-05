@@ -132,3 +132,11 @@ export function loadWorldFromStorage(slot: string): { savedAt: number; data: Sav
 export function hasSave(slot: string) {
   return typeof localStorage !== 'undefined' && localStorage.getItem(KEY_PREFIX + slot) !== null;
 }
+
+export function deleteSave(slot: string) {
+  try {
+    localStorage.removeItem(KEY_PREFIX + slot);
+  } catch {
+    /* storage unavailable */
+  }
+}

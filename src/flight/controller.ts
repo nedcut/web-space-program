@@ -95,6 +95,19 @@ export class FlightController {
   private telemetryTimer = 0;
   private elapsed = 0;
   onExit: (() => void) | null = null;
+  private framesRendered = 0;
+  private startedAt = performance.now();
+
+  /**
+   * True once the scene has rendered a few frames and the focused planet's terrain has finished its initial
+   * build (or after a timeout on slow machines). Drives the flight loading overlay.
+   */
+  get sceneReady(): boolean {
+    if (this.framesRendered < 3) return false;
+    if (performance.now() - this.startedAt > 20000) return true;
+    const body = this.world.active?.body;
+    return !body || (this.planets.isIdle?.(body) ?? true);
+  }
 
   constructor(
     private host: HTMLElement,
@@ -154,6 +167,8 @@ export class FlightController {
     this.disposers.push(this.attachMapPicking(canvas));
     this.disposers.push(
       this.input.onAction((a) => {
+        // While paused (pause menu, vessel lost) only the menu toggle and quickload are live.
+        if (this.paused && a !== 'menu' && a !== 'quickload') return;
         switch (a) {
           case 'stage': this.stagePending = true; break;
           case 'eva': this.goEva(); break;
@@ -478,7 +493,10 @@ export class FlightController {
       this.activeLost = true;
       this.onActiveLost?.();
     }
-    if (wv) this.render(wv, dt);
+    if (wv) {
+      this.render(wv, dt);
+      this.framesRendered++;
+    }
     this.updateAudio(wv);
 
     this.telemetryTimer += dt;
@@ -810,14 +828,17 @@ export class FlightController {
     }
     const stageMap = new Map<number, HudStage>();
     for (const p of st.parts) {
-      if (p.stage === undefined || p.activated) continue;
+      // Engines that are already burning are listed as the current ("burning") stage so its Δv stays visible.
+      const burning = p.activated && !!p.engine?.ignited;
+      if (p.stage === undefined || (p.activated && !burning)) continue;
       const types = p.def.modules.map((m) => m.type);
       const icon: HudStage['parts'][number]['icon'] = types.includes('engine') ? 'engine' : types.includes('decoupler') ? 'decoupler' : types.includes('parachute') ? 'chute' : 'other';
-      const s = stageMap.get(p.stage) ?? { index: p.stage, parts: [], deltaV: 0 };
+      const idx = burning ? st.nextStage + 1 : p.stage;
+      const s = stageMap.get(idx) ?? { index: idx, parts: [], deltaV: 0 };
       s.parts.push({ uid: p.uid, name: p.def.name, icon, active: p.activated });
-      stageMap.set(p.stage, s);
+      stageMap.set(idx, s);
     }
-    const stages = [...stageMap.values()].sort((a, b2) => a.index - b2.index);
+    const stages = [...stageMap.values()].sort((a, b2) => b2.index - a.index);
     stages.forEach((s) => {
       const d = dvs.find((x) => x.stage === s.index);
       s.deltaV = d?.dv ?? 0;
@@ -857,6 +878,7 @@ export class FlightController {
         .map(([id, e]) => ({ id, name: RESOURCES[id as keyof typeof RESOURCES]?.name ?? id, amount: e.amount, max: e.max, color: RESOURCE_COLORS[id] ?? '#aaa' })),
       messages: w.messages.map((m) => ({ id: m.id, text: m.text, level: m.level })),
       mapMode: this.mapMode,
+      onSurface: wv.mode === 'prelaunch' || st.situation === 'landed' || st.situation === 'splashed',
       assist: this.assist ? { name: this.assist.name, status: this.assist.status } : null,
       target,
       targetOptions: this.targetOptions(wv),

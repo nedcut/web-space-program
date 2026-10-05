@@ -42,6 +42,19 @@ describe('communications geometry and routing', () => {
     nodes[1].relay = false;
     expect(solveNetwork(nodes, bodies).connections.get('probe')!.connected).toBe(false);
   });
+  it('routes through multiple relays and loses service when an intermediate relay disappears', () => {
+    const nodes = [
+      node('ground', 0, 0, { ground: true, range: 100 }),
+      node('first', 60, 0, { relay: true, range: 100 }),
+      node('second', 120, 0, { relay: true, range: 100 }),
+      node('probe', 180, 0, { range: 100 }),
+    ];
+    const route = solveNetwork(nodes, []).connections.get('probe')!;
+    expect(route.path).toEqual(['probe', 'second', 'first', 'ground']);
+    expect(route.strength).toBeCloseTo(0.352 ** 3);
+    expect(route.delay).toBeCloseTo(180 / LIGHT_SPEED, 12);
+    expect(solveNetwork(nodes.filter(n => n.id !== 'first'), []).connections.get('probe')!.connected).toBe(false);
+  });
   it('chooses the strongest product path over a weaker direct link', () => {
     const net = solveNetwork([node('ground', 0, 0, { ground: true, range: 100 }), node('relay', 40, 0, { relay: true, range: 100 }), node('probe', 80, 0, { range: 100 })], []);
     expect(net.connections.get('probe')!.path).toEqual(['probe', 'relay', 'ground']);
@@ -75,7 +88,7 @@ describe('world communications integration', () => {
     const w = world(); const v = w.launch(craft(false, false)); w.commsSettings.enabled = true;
     expect(w.canControl()).toBe(false);
     w.tick(0.02, neutralInput({ stage: true, throttle: 1 })); expect(v.mode).toBe('prelaunch');
-    placeInCircularOrbit(w, v, 'earth', 90000); v.state.sas.mode = 'stabilityAssist';
+    placeInCircularOrbit(w, v, 'earth', 90000); v.state.sas.mode = 'prograde';
     w.tick(0.02, neutralInput({ sas: 'off', pitch: 1, throttle: 1, stage: true }));
     expect(v.state.sas.mode).toBe('stabilityAssist');
     expect(v.state.angularVelocity.x).toBeCloseTo(0, 5);

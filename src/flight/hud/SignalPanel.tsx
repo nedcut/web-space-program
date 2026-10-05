@@ -6,7 +6,7 @@ export function SignalPanel({ world }: { world: World }) {
   const c = world.commsSettings.enabled ? world.connection() : null;
   const names = c?.path.map(id => world.comms.nodes.find(n => n.id === id)?.name ?? id) ?? [];
   const bars = c?.connected ? Math.max(1, Math.ceil(c.strength * 4)) : 0;
-  return <section className="panel" aria-label="Communications status" style={{ position: 'absolute', right: 12, top: 100, width: 240, padding: 10, pointerEvents: 'auto', fontSize: 12 }}>
+  return <section className="panel" aria-label="Communications status" style={{ flexShrink: 0, overflowWrap: 'anywhere', padding: 10, pointerEvents: 'auto', fontSize: 12 }}>
     <strong style={{ color: c && !c.connected ? 'var(--warn)' : 'var(--accent)' }}>
       <span aria-hidden="true">{'▰'.repeat(bars)}{'▱'.repeat(4 - bars)} </span>
       {!c ? 'Network disabled' : c.connected ? `Signal ${Math.round(c.strength * 100)}%` : 'No signal'}
