@@ -1,3 +1,4 @@
+import { TransferWindow } from './TransferWindow';
 import { useEffect, useRef, useState } from 'react';
 import type { World } from '../../game/world';
 import { timeToApoapsis, timeToPeriapsis, burnTimeEstimate, periapsisRadius, apoapsisRadius } from '../../sim/orbit';
@@ -12,6 +13,7 @@ import { planTransferToBody, planCircularization } from '../../game/autopilot';
 export function ManeuverPanel({ world }: { world: World }) {
   const [, force] = useState(0);
   const [planMsg, setPlanMsg] = useState('');
+  const [transferTarget, setTransferTarget] = useState<string | null>(null);
   const holdRef = useRef<{ axis: 'prograde' | 'normal' | 'radial' | 'time'; dir: number; t0: number } | null>(null);
 
   useEffect(() => {
@@ -129,6 +131,8 @@ export function ManeuverPanel({ world }: { world: World }) {
   );
 
   return (
+    <>
+    {transferTarget && <TransferWindow world={world} target={transferTarget} onClose={() => setTransferTarget(null)} onPlanned={setPlanMsg} />}
     <div data-tutorial="maneuver" className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
       <div className="label">Maneuver planner</div>
       <div style={{ display: 'flex', gap: 6 }}>
@@ -153,6 +157,10 @@ export function ManeuverPanel({ world }: { world: World }) {
           ))}
         </select>
       )}
+      {siblings.length > 0 && <select className="btn small" aria-label="Transfer window destination" value="" onChange={e => { if (e.target.value) setTransferTarget(e.target.value); }} style={{ background: 'var(--panel-solid)', color: 'var(--text)' }}>
+        <option value="">Explore transfer windows…</option>
+        {siblings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+      </select>}
       {planMsg && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{planMsg}</div>}
       {node && summary && (
         <>
@@ -176,9 +184,10 @@ export function ManeuverPanel({ world }: { world: World }) {
             <button className="btn small" onClick={() => { node.prograde = node.normal = node.radial = 0; world.nodes = [...world.nodes]; }}>Zero</button>
             <button className="btn small danger" onClick={() => world.removeNode(node.id)}>Delete</button>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Tip: SAS → MNV points at the burn. Start the burn half the burn time before the node.</div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Drag the node along its orbit or drag the coloured handles to adjust Δv. SAS → MNV points at the burn. Start the burn half the burn time before the node.</div>
         </>
       )}
     </div>
+    </>
   );
 }

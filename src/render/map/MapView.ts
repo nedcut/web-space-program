@@ -7,8 +7,10 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import type { Body } from '../../sim/bodies/types';
 import type { Ephemeris } from '../../sim/orbit/ephemeris';
 import type { Orbit, TrajectoryPatch, ManeuverNode } from '../../sim/orbit/api';
+import { maneuverToInertialDv } from '../../sim/orbit/maneuver';
+import { formatDuration } from '../../ui/format';
 import { elementsToState, periapsisRadius, apoapsisRadius, timeToPeriapsis, timeToApoapsis } from '../../sim/orbit/kepler';
-import { sub, type Vec3 } from '../../util/vec3';
+import { add, sub, type Vec3 } from '../../util/vec3';
 
 /**
  * Map view ("tracking" view): conic orbit lines for bodies and vessels, body spheres + icons,
@@ -24,6 +26,7 @@ export interface MapUpdate {
   focus: Vec3;
   /** Active vessel trajectory (patched conics) and its heliocentric position. */
   vessel?: { position: Vec3; patches: TrajectoryPatch[]; nodes: ManeuverNode[] };
+  markers?: { body: string; position: Vec3; label: string; color: string }[];
   viewport: { width: number; height: number };
 }
 
@@ -148,6 +151,82 @@ export class MapView {
   private vesselLines: Line2[] = [];
   private vesselIcon: THREE.Sprite;
   private nodeIcons: THREE.Sprite[] = [];
+  private markerVisuals: { icon: THREE.Sprite; label: HTMLDivElement }[] = [];
+  private lastUpdate: MapUpdate | null = null;
+  private gizmo: { arrow: THREE.ArrowHelper; icon: THREE.Sprite; axis: 'prograde' | 'normal' | 'radial'; sign: number }[] = [];
+
+  private project(p: Vec3, body: string, u: MapUpdate) {
+    const relative = sub(add(this.ephem.getBodyState(body, u.t).position, p), u.focus);
+    return new THREE.Vector3(relative.x, relative.y, relative.z).project(this.camera);
+  }
+
+  /** Maneuver sprites are picked separately so camera drag and target selection remain independent. */
+  pickManeuver(x: number, y: number) {
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(x, y), this.camera);
+    this.scene.updateMatrixWorld(true);
+    const objects = [...this.gizmo.filter(g => g.icon.visible).map(g => g.icon), ...this.nodeIcons];
+    const hit = ray.intersectObjects(objects, false)[0]?.object;
+    if (!hit) return null;
+    const handle = this.gizmo.find(g => g.icon === hit);
+    return { id: handle ? this.lastUpdate?.vessel?.nodes[0]?.id : hit.userData.nodeId as number,
+      axis: handle?.axis, sign: handle?.sign ?? 1 };
+  }
+
+  private updateMarkers(u: MapUpdate) {
+    const markers = [...(u.markers ?? [])];
+    for (const p of u.vessel?.patches ?? []) if (p.endReason === 'soiEnter' || p.endReason === 'soiExit') {
+      markers.push({ body: p.orbit.body, position: elementsToState(p.orbit, p.endTime).position,
+        label: `${p.endReason === 'soiEnter' ? 'Enter' : 'Exit'} ${this.bodies.get(p.endReason === 'soiExit' ? p.orbit.body : p.nextBody ?? p.orbit.body)?.body.name ?? p.nextBody} SOI · T−${formatDuration(p.endTime - u.t)}`, color: '#ffb35c' });
+    }
+    for (const n of u.vessel?.nodes ?? []) {
+      const p = u.vessel!.patches.find(p => n.time >= p.startTime && n.time <= p.endTime + 1e-6);
+      if (p) markers.push({ body: p.orbit.body, position: elementsToState(p.orbit, n.time).position,
+        label: `Node T−${formatDuration(n.time - u.t)}`, color: '#5cc8ff' });
+    }
+    while (this.markerVisuals.length < markers.length) {
+      const icon = new THREE.Sprite(new THREE.SpriteMaterial({ sizeAttenuation: false, depthTest: false }));
+      icon.scale.setScalar(0.018); icon.renderOrder = 12; this.scene.add(icon);
+      const label = document.createElement('div');
+      Object.assign(label.style, { position: 'absolute', font: '11px system-ui', whiteSpace: 'nowrap', textShadow: '0 0 4px black', transform: 'translate(12px,-50%)' });
+      this.labels.appendChild(label); this.markerVisuals.push({ icon, label });
+    }
+    this.markerVisuals.forEach((vis, i) => {
+      const m = markers[i]; vis.icon.visible = !!m; vis.label.style.display = 'none';
+      if (!m) return;
+      vis.icon.material.map = makeIconTexture(m.color, true);
+      this.place(vis.icon, add(this.ephem.getBodyState(m.body, u.t).position, m.position), u.focus);
+      const p = vis.icon.position.clone().project(this.camera);
+      if (p.z < 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1) {
+        vis.label.textContent = m.label; vis.label.style.color = m.color; vis.label.style.display = 'block';
+        vis.label.style.left = `${(p.x * .5 + .5) * u.viewport.width}px`;
+        vis.label.style.top = `${(-p.y * .5 + .5) * u.viewport.height}px`;
+      }
+    });
+  }
+
+  private updateGizmo(u: MapUpdate) {
+    const node = u.vessel?.nodes[0];
+    const patch = node ? u.vessel?.patches.find(p => node.time >= p.startTime && node.time <= p.endTime + 1e-6) : null;
+    if (!this.gizmo.length) for (const [axis, color] of [['prograde', '#d8ff3c'], ['normal', '#d066ff'], ['radial', '#4fd8ff']] as const) for (const sign of [-1, 1]) {
+      const arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 1, color);
+      const icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeIconTexture(color, false), sizeAttenuation: false, depthTest: false }));
+      icon.scale.setScalar(.022); icon.renderOrder = 15;
+      this.scene.add(arrow, icon); this.gizmo.push({ arrow, icon, axis, sign });
+    }
+    for (const g of this.gizmo) { g.arrow.visible = g.icon.visible = !!patch; }
+    if (!node || !patch) return;
+    const state = elementsToState(patch.orbit, node.time);
+    const dirs = { prograde: maneuverToInertialDv(state, { prograde: 1, normal: 0, radial: 0 }), normal: maneuverToInertialDv(state, { prograde: 0, normal: 1, radial: 0 }), radial: maneuverToInertialDv(state, { prograde: 0, normal: 0, radial: 1 }) };
+    const origin = sub(add(this.ephem.getBodyState(patch.orbit.body, u.t).position, state.position), u.focus);
+    const base = new THREE.Vector3(origin.x, origin.y, origin.z);
+    const size = base.distanceTo(this.camera.position) * .07;
+    for (const g of this.gizmo) {
+      const d = dirs[g.axis], direction = new THREE.Vector3(d.x, d.y, d.z).multiplyScalar(g.sign);
+      g.arrow.position.copy(base); g.arrow.setDirection(direction); g.arrow.setLength(size, size * .2, size * .08);
+      g.icon.position.copy(base).addScaledVector(direction, size);
+    }
+  }
   private apPeIcons: THREE.Sprite[] = [];
   private labels: HTMLDivElement;
   private materials: LineMaterial[] = [];
@@ -386,7 +465,7 @@ export class MapView {
 
   /** Rebuild vessel trajectory lines when the patch set changes. */
   private updateVesselLines(patches: TrajectoryPatch[], bodies: Map<string, BodyVisual>) {
-    const key = patches.map((p) => `${p.orbit.body}:${p.orbit.a.toPrecision(8)}:${p.orbit.e.toPrecision(6)}:${p.startTime.toFixed(0)}:${p.endTime.toFixed(0)}`).join('|');
+    const key = patches.map((p) => `${p.orbit.body}:${p.orbit.a.toPrecision(8)}:${p.orbit.e.toPrecision(6)}:${p.orbit.i.toPrecision(8)}:${p.orbit.lan.toPrecision(8)}:${p.orbit.argPe.toPrecision(8)}:${p.startTime.toFixed(0)}:${p.endTime.toFixed(0)}`).join('|');
     if (key === this.lastVesselKey) return;
     this.lastVesselKey = key;
     for (const l of this.vesselLines) {
@@ -403,6 +482,7 @@ export class MapView {
   }
 
   update(u: MapUpdate) {
+    this.lastUpdate = u;
     const { t, focus } = u;
     if (!this.commsLines.parent) { this.scene.add(this.commsLines); this.commsLines.renderOrder = 5; }
     this.commsLines.visible = !!u.comms;
@@ -462,6 +542,8 @@ export class MapView {
       if (onScreen) vis.label.style.left = `${(v.x * 0.5 + 0.5) * w}px`, (vis.label.style.top = `${(-v.y * 0.5 + 0.5) * h}px`);
     }
 
+    this.updateMarkers(u);
+    this.updateGizmo(u);
     this.updateExtras(u);
     this.updateApproach(u);
     for (const m of this.materials) m.resolution.set(u.viewport.width, u.viewport.height);
@@ -493,6 +575,7 @@ export class MapView {
         s.renderOrder = 13;
         this.place(s, { x: pp.x + np.x, y: pp.y + np.y, z: pp.z + np.z }, focus);
         this.scene.add(s);
+        s.userData.nodeId = n.id;
         this.nodeIcons.push(s);
       }
       const first = u.vessel.patches[0];
@@ -522,22 +605,65 @@ export class MapView {
   /** Mouse controls: right/left drag to orbit, wheel to zoom. Returns a disposer. */
   attachControls(el: HTMLElement, minDistance: () => number, enabled: () => boolean = () => true) {
     let dragging = false;
+    let maneuver: { node: ManeuverNode; orbit: Orbit; axis?: 'prograde' | 'normal' | 'radial'; sign: number; start: number; dx: number; dy: number; timeMin: number; timeMax: number } | null = null;
+    const ndc = (e: PointerEvent) => {
+      const r = el.getBoundingClientRect();
+      return { x: (e.clientX - r.left) / r.width * 2 - 1, y: 1 - (e.clientY - r.top) / r.height * 2 };
+    };
     let lx = 0;
     let ly = 0;
     const down = (e: PointerEvent) => {
       if (!enabled()) return;
+      if (e.button === 0 && this.lastUpdate?.vessel) {
+        const u = this.lastUpdate, at = ndc(e), hit = this.pickManeuver(at.x, at.y);
+        const node = u.vessel!.nodes.find(n => n.id === hit?.id);
+        const patch = node && u.vessel!.patches.find(p => node.time >= p.startTime && node.time <= p.endTime + 1e-6);
+        if (node && patch && hit) {
+          const state = elementsToState(patch.orbit, node.time);
+          const dirs = { prograde: maneuverToInertialDv(state, { prograde: 1, normal: 0, radial: 0 }), normal: maneuverToInertialDv(state, { prograde: 0, normal: 1, radial: 0 }), radial: maneuverToInertialDv(state, { prograde: 0, normal: 0, radial: 1 }) };
+          const center = this.project(state.position, patch.orbit.body, u);
+          const dir = hit.axis ? dirs[hit.axis] : dirs.prograde;
+          const endpoint = this.project(add(state.position, { x: dir.x * this.distance * .07 * hit.sign, y: dir.y * this.distance * .07 * hit.sign, z: dir.z * this.distance * .07 * hit.sign }), patch.orbit.body, u);
+          const dx = (endpoint.x - center.x) * el.clientWidth / 2, dy = -(endpoint.y - center.y) * el.clientHeight / 2;
+          const len = Math.hypot(dx, dy);
+          maneuver = { node, orbit: patch.orbit, axis: hit.axis, sign: hit.sign, start: hit.axis ? node[hit.axis] : node.time,
+            dx: len > 2 ? dx / len : 1, dy: len > 2 ? dy / len : 0,
+            timeMin: Math.max(u.t + 5, patch.startTime), timeMax: Math.max(u.t + 5, Math.min(patch.startTime + (patch.orbit.e < 1 ? 2 * Math.PI * Math.sqrt(patch.orbit.a ** 3 / patch.orbit.mu) : 86400), u.vessel!.patches.find(p => p.endTime >= node.time && (p.endReason === 'soiEnter' || p.endReason === 'soiExit'))?.endTime ?? Infinity)) };
+          lx = e.clientX; ly = e.clientY; e.preventDefault(); return;
+        }
+      }
       dragging = true;
       lx = e.clientX;
       ly = e.clientY;
     };
     const move = (e: PointerEvent) => {
+      if (!enabled()) { maneuver = null; dragging = false; return; }
+      if (maneuver && this.lastUpdate) {
+        const m = maneuver, u = this.lastUpdate;
+        if (m.axis) m.node[m.axis] = m.start + ((e.clientX - lx) * m.dx + (e.clientY - ly) * m.dy) * m.sign * 2;
+        else {
+          const at = ndc(e);
+          let best = m.node.time, error = Infinity;
+          const evaluate = (time: number) => {
+            const p = this.project(elementsToState(m.orbit, time).position, m.orbit.body, u);
+            const d = (p.x - at.x) ** 2 + (p.y - at.y) ** 2;
+            if (p.z < 1 && d < error) { error = d; best = time; }
+          };
+          const step = (m.timeMax - m.timeMin) / 512;
+          for (let i = 0; i <= 512; i++) evaluate(m.timeMin + i * step);
+          const center = best;
+          for (let i = -20; i <= 20; i++) evaluate(Math.max(m.timeMin, Math.min(m.timeMax, center + i * step / 20)));
+          m.node.time = best;
+        }
+        return;
+      }
       if (!dragging) return;
       this.yaw -= (e.clientX - lx) * 0.005;
       this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch + (e.clientY - ly) * 0.005));
       lx = e.clientX;
       ly = e.clientY;
     };
-    const up = () => (dragging = false);
+    const up = () => { dragging = false; maneuver = null; };
     const wheel = (e: WheelEvent) => {
       if (!enabled()) return;
       e.preventDefault();
@@ -546,11 +672,13 @@ export class MapView {
     el.addEventListener('pointerdown', down);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
     el.addEventListener('wheel', wheel, { passive: false });
     return () => {
       el.removeEventListener('pointerdown', down);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
       el.removeEventListener('wheel', wheel);
     };
   }

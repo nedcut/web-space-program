@@ -1,3 +1,5 @@
+import { FlightDataPanel } from './FlightDataPanel';
+import type { FlightData } from '../../game/flightData';
 import { CrewPanel } from './CrewPanel';
 import type { Astronaut } from '../../sim/crew/crew';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -45,6 +47,7 @@ export interface TargetTelemetry {
 
 /** Snapshot of telemetry pushed to the HUD ~10–20 times per second (not every frame). */
 export interface Telemetry {
+  flightData: FlightData;
   crew: Astronaut[];
   noControl: boolean;
   eva: { fuel: number; canBoard: boolean; landed: boolean } | null;
@@ -161,7 +164,7 @@ function Readout({ label, value, color }: { label: string; value: ReactNode; col
 }
 
 /** Left-column dock sections that can be toggled from the chip bar. */
-type DockId = 'assist' | 'crew' | 'science' | 'resources' | 'target';
+type DockId = 'assist' | 'crew' | 'science' | 'resources' | 'target' | 'data';
 const DOCK_KEY = 'wsp.hud.dock.v1';
 
 function loadDock(): Set<DockId> {
@@ -342,6 +345,7 @@ export function Hud({ t, cb, navball, dock }: { t: Telemetry; cb: HudCallbacks; 
         {dock?.signal}
         {t.mapMode && dock?.maneuver}
         <div className="hud-chips">
+          {chip('data', 'Flight data', 'Detailed flight telemetry')}
           {showAssistChip && chip('assist', 'Assist', 'Flight assist (autopilot programs)', dock?.assistActive ? <span className="hud-dot" /> : null)}
           {showCrewChip && chip('crew', t.eva ? 'EVA' : `Crew ${t.crew.length}`, 'Crew and EVA', t.noControl ? <span className="hud-dot warn" /> : null)}
           {showScienceChip && chip('science', 'Science', 'Science instruments and data')}
@@ -354,6 +358,7 @@ export function Hud({ t, cb, navball, dock }: { t: Telemetry; cb: HudCallbacks; 
         {showScienceChip && open.has('science') && dock?.science}
         {open.has('resources') && dock?.resources}
         {targetOpen && <TargetPanel t={t} cb={cb} />}
+        {open.has('data') && <FlightDataPanel data={t.flightData} onClose={() => toggle('data')} />}
       </div>
 
       {/* Messages */}
