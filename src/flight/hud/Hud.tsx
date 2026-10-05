@@ -11,7 +11,7 @@ import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { formatDistance, formatSpeed, formatDuration, formatDate } from '../../ui/format';
 import { Navball, type NavballFrame, type NavballMarker } from './navball';
 import { DockingIndicator, TargetPanel } from './TargetPanel';
-import { AlertStack, CameraModeChip, StageFlash, WarpToControl, type FeelTelemetry } from './FeelHud';
+import { AlertStack, CameraModeChip, Countdown, FlightHint, StageFlash, WarpToControl, type FeelTelemetry } from './FeelHud';
 import type { WarpTargetId } from '../controller/warp';
 
 /** Docking alignment readout: target port relative to the active port's frame (x right, y up, z along axis). */
@@ -133,6 +133,7 @@ export interface HudCallbacks {
   /** Warp to an event / cancel warp-to. */
   onWarpTo?(id: WarpTargetId): void;
   onCancelWarpTo?(): void;
+  onDismissHint?(): void;
 }
 
 const SAS_MODES: { id: string; label: string }[] = [
@@ -349,6 +350,8 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
       </div>
 
       <StageFlash count={t.feel.stagedCount} stage={t.stage} />
+      <Countdown value={t.feel.countdown} />
+      {!t.mapMode && <FlightHint hint={t.feel.hint} onDismiss={cb.onDismissHint} />}
 
       {/* Left dock: compact toggles; panels expand underneath and scroll if space runs out. */}
       <div className="hud-dock">

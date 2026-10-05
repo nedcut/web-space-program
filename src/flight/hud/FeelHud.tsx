@@ -4,6 +4,8 @@ import { formatDuration } from '../../ui/format';
 import type { FlightAlert } from '../alerts';
 import { CAMERA_MODE_INFO, type CameraMode } from '../camera';
 import type { WarpTargetId } from '../controller/warp';
+import type { Hint } from '../hints';
+import type { SituationBannerText } from '../situation';
 import './feel.css';
 
 /** HUD "feel" layer: cautions, camera mode, staging flash and warp-to. */
@@ -13,6 +15,9 @@ export interface FeelTelemetry {
   stagedCount: number;
   warpTargets: { id: WarpTargetId; label: string; in: number }[];
   warpTo: { label: string; remaining: number } | null;
+  /** Whole seconds left on the launch countdown. */
+  countdown: number | null;
+  hint: Hint | null;
 }
 
 /** Caution/warning lamps: red for immediate danger, amber for attention. Highest priority first. */
@@ -87,4 +92,35 @@ export function StageFlash({ count, stage }: { count: number; stage: number }) {
   }, [count]);
   if (!shown) return null;
   return <div key={shown.key} className="feel-stage-flash" aria-hidden>STAGE {shown.stage}</div>;
+}
+
+export function Countdown({ value }: { value: number | null }) {
+  if (value === null) return null;
+  return (
+    <div className="feel-countdown" aria-live="assertive">
+      <div key={value} className="n">{value}</div>
+      <div className="label">Space to launch now</div>
+    </div>
+  );
+}
+
+export function FlightHint({ hint, onDismiss }: { hint: Hint | null; onDismiss?: () => void }) {
+  if (!hint) return null;
+  return (
+    <Panel className="feel-hint" role="note">
+      <span style={{ flex: 1 }}>{hint.text}</span>
+      <Button className="btn small ghost" onClick={onDismiss} title="Hide this hint">✕</Button>
+    </Panel>
+  );
+}
+
+/** Vessel name + situation, shown for a few seconds when a flight starts. */
+export function ArrivalBanner({ banner }: { banner: SituationBannerText | null }) {
+  if (!banner) return null;
+  return (
+    <div className="feel-banner" aria-live="polite">
+      <div className="name">{banner.name}</div>
+      <div className="sub">{banner.sub}</div>
+    </div>
+  );
 }

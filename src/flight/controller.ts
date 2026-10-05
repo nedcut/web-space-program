@@ -42,6 +42,7 @@ import * as navball from './controller/navball';
 import * as scenarios from './controller/scenarios';
 import * as telemetry from './controller/telemetry';
 import { WarpDriver, type WarpTargetId } from './controller/warp';
+import { HintTracker } from './hints';
 import type { DockingTelemetry, Telemetry } from './hud/Hud';
 import type { NavballFrame, NavballMarker } from './hud/navball';
 import { FlightInput } from './input';
@@ -91,6 +92,8 @@ export class FlightController {
   sas: SasMode = 'off';
   /** Warp-to targets and the rails warp ramp. */
   readonly warpDriver = new WarpDriver();
+  /** First-orbit coaching hints (remembered per browser profile). */
+  readonly hints = new HintTracker();
   /** Stage events on the active vessel (the HUD flashes when this changes). */
   stagedCount = 0;
   sasOn = false;
@@ -216,7 +219,7 @@ export class FlightController {
         // While paused (pause menu, vessel lost) only the menu toggle and quickload are live.
         if (this.paused && a !== 'menu' && a !== 'quickload') return;
         switch (a) {
-          case 'stage': this.stagePending = true; break;
+          case 'stage': this.requestStage(); break;
           case 'eva': this.goEva(); break;
           case 'board': this.boardEva(); break;
           case 'plantFlag': this.plantFlag(); break;
@@ -373,10 +376,36 @@ export class FlightController {
   toggleMap() {
     this.mapMode = !this.mapMode;
     this.map.setVisible(this.mapMode);
+    this.flashFade();
     if (this.mapMode) {
       const wv = this.world.active;
-      if (wv) this.map.distance = this.world.universe.body(wv.body).radius * 4;
+      if (wv) {
+        const r = this.world.universe.body(wv.body).radius;
+        this.map.distance = r * 4;
+        // Pull back from just above the vessel's body so the switch reads as zooming out, not a cut.
+        if (!game.get().settings.reduceMotion) this.map.animateFrom(r * 1.6);
+      }
     }
+  }
+
+  private fadeEl: HTMLDivElement | null = null;
+  /** Brief dip to black that fades out over ~0.35 s (instant under Reduce motion: transitions are off). */
+  private flashFade() {
+    if (game.get().settings.reduceMotion) return;
+    let el = this.fadeEl;
+    if (!el) {
+      el = this.fadeEl = document.createElement('div');
+      Object.assign(el.style, { position: 'absolute', inset: '0', background: '#02060d', pointerEvents: 'none', opacity: '0' });
+      el.classList.add('photo-hide');
+      this.host.appendChild(el);
+    }
+    const node = el;
+    node.style.transition = 'none';
+    node.style.opacity = '0.85';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      node.style.transition = 'opacity 0.35s ease-out';
+      node.style.opacity = '0';
+    }));
   }
 
   goEva(astronautId?: string) {
@@ -429,7 +458,40 @@ export class FlightController {
 
   stage() {
     if (!this.world.canControl()) return;
+    this.requestStage();
+  }
+
+  /** Seconds left on the launch countdown (null when none is running). */
+  countdown: number | null = null;
+
+  /** Stage now, or start the optional launch countdown when the first stage would release the clamps. */
+  private requestStage() {
+    const wv = this.world.active;
+    if (this.countdown !== null) {
+      // Stage again during the count: go now.
+      this.countdown = null;
+      this.stagePending = true;
+      return;
+    }
+    if (game.get().settings.launchCountdown && wv?.mode === 'prelaunch' && !wv.state.eva && !this.network && !getTutorial() && this.world.canControl()) {
+      this.countdown = 3;
+      this.audio?.uiClick();
+      this.world.message('Launch countdown — Space again to go now', 'info', 3);
+      return;
+    }
     this.stagePending = true;
+  }
+
+  private tickCountdown(dt: number) {
+    if (this.countdown === null || this.paused) return;
+    const wv = this.world.active;
+    if (!wv || wv.mode !== 'prelaunch' || !this.world.canControl()) { this.countdown = null; return; }
+    const before = Math.ceil(this.countdown);
+    this.countdown -= dt;
+    if (this.countdown <= 0) {
+      this.countdown = null;
+      this.stagePending = true;
+    } else if (Math.ceil(this.countdown) !== before) this.audio?.uiClick();
   }
 
   /** G: raise / lower landing gear and legs. */
@@ -495,6 +557,7 @@ export class FlightController {
     this.input.mouseEnabled = !this.mapMode;
     applyCommsSettings(this.world);
     this.input.update(dt);
+    this.tickCountdown(dt);
     if (!this.world.canControl()) {
       this.input.state.throttle = 0;
       this.stagePending = false;
@@ -840,6 +903,7 @@ export class FlightController {
     this.flags.dispose();
     this.scene.environment?.dispose();
     this.labelHost.remove();
+    this.fadeEl?.remove();
     this.pipeline.dispose();
     this.pipeline.renderer.forceContextLoss();
     this.pipeline.renderer.domElement.remove();

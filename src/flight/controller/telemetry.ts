@@ -11,6 +11,8 @@ import type { DockingTelemetry, HudStage, Telemetry } from '../hud/Hud';
 import type { FlightControllerInternals } from './internals';
 import { AlertTracker } from '../alerts';
 import { warpTargets } from './warp';
+import { game } from '../../game/store';
+import { getTutorial } from '../../tutorial/runtime';
 
 const alertTrackers = new WeakMap<FlightController, AlertTracker>();
 const RESOURCE_COLORS: Record<string, string> = {
@@ -200,6 +202,19 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     power: ec && ec.max > 0 ? ec.amount / ec.max : Number.NaN,
   }, performance.now() / 1000);
   const warpTo = this.warpDriver.target;
+  const settings = game.get().settings;
+  const hint = this.hints.update({
+    enabled: settings.flightHints && !this.network && !getTutorial() && !game.get().scenarioActive && wv.body === 'earth' && !st.eva && !this.assist,
+    flying,
+    altitude: info.altitude,
+    surfaceSpeed,
+    apoapsis: orb.ap,
+    periapsis: orb.pe,
+    timeToAp: orb.timeToAp,
+    atmosphereHeight: b.atmosphere?.height ?? 0,
+    throttle: this.input.state.throttle,
+    hasThrust: dvs.some((d) => d.dv > 1),
+  });
   const warp = w.warp;
   return {
     flightData: flightData(w, wv, dvs, internals.predictions),
@@ -248,6 +263,8 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
       stagedCount: this.stagedCount,
       warpTargets: this.network || this.assist ? [] : warpTargets(w).map((o) => ({ id: o.id, label: o.label, in: o.time - w.ut })),
       warpTo: warpTo ? { label: warpTo.label, remaining: Math.max(0, warpTo.time - w.ut) } : null,
+      countdown: this.countdown === null ? null : Math.ceil(this.countdown),
+      hint,
     },
   };
 }

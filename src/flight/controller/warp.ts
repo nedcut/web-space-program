@@ -24,7 +24,8 @@ export const WARP_RAMP_TAU = 0.25;
 /** Warp targets that make sense for the active vessel right now. */
 export function warpTargets(world: World): WarpTargetOption[] {
   const wv = world.active;
-  if (!wv || wv.mode === 'prelaunch' || wv.state.situation !== 'flying' || wv.state.eva) return [];
+  // Offer warp only while coasting: under thrust the targets move and rails warp is refused anyway.
+  if (!wv || wv.mode === 'prelaunch' || wv.state.situation !== 'flying' || wv.state.eva || wv.state.telemetry.thrust > 0) return [];
   const out: WarpTargetOption[] = [];
   const now = world.ut;
   const add = (id: WarpTargetId, t: number) => {

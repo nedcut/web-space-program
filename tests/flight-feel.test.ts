@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AlertTracker, alertConditions, type AlertInput } from '../src/flight/alerts';
+import { HintTracker, hintFor, type HintId, type HintInput } from '../src/flight/hints';
+import { situationBanner } from '../src/flight/situation';
 import { WarpDriver, warpTargets } from '../src/flight/controller/warp';
 import { PART_CATALOG } from '../src/data/parts';
 import { buildOrbiter } from '../src/editor/stockCrafts';
@@ -107,4 +109,42 @@ describe('time warp feel', () => {
     expect(o.timeToAp).toBeLessThan(20);
     expect(frames / 60).toBeLessThan(20);
   }, 60000);
+});
+
+describe('first-orbit hints', () => {
+  const base: HintInput = { enabled: true, flying: true, altitude: 2000, surfaceSpeed: 120, apoapsis: 3000, periapsis: -600000, timeToAp: 30, atmosphereHeight: 70000, throttle: 1, hasThrust: true };
+  const id = (i: Partial<HintInput>, seen: HintId[] = []) => hintFor({ ...base, ...i }, new Set(seen))?.id ?? null;
+  it('walks through turn → coast → circularise → orbit', () => {
+    expect(id({})).toBe('turn');
+    expect(id({ altitude: 40000, surfaceSpeed: 1500, apoapsis: 80000 })).toBe('coast');
+    expect(id({ altitude: 70000, surfaceSpeed: 2000, apoapsis: 80000, throttle: 0, timeToAp: 40 })).toBe('circularize');
+    expect(id({ altitude: 80000, apoapsis: 82000, periapsis: 75000, throttle: 0 })).toBe('orbit');
+    expect(id({ enabled: false })).toBeNull();
+    expect(id({ flying: false })).toBeNull();
+    expect(id({}, ['turn'])).toBeNull();
+  });
+  it('remembers a hint once its moment has passed or it is dismissed', () => {
+    const saved: string[][] = [];
+    const t = new HintTracker(new Set(), (s) => saved.push([...s]));
+    expect(t.update(base)?.id).toBe('turn');
+    expect(t.update({ ...base, surfaceSpeed: 600, altitude: 20000 })).toBeNull();
+    expect(saved.at(-1)).toEqual(['turn']);
+    expect(t.update(base)).toBeNull();
+    expect(t.update({ ...base, altitude: 40000, surfaceSpeed: 1500, apoapsis: 80000 })?.id).toBe('coast');
+    t.dismiss();
+    expect(saved.at(-1)).toEqual(['turn', 'coast']);
+  });
+  it('mentions the live key bindings', () => {
+    expect(hintFor(base, new Set())!.text).toContain('D');
+  });
+});
+
+describe('arrival banner', () => {
+  it('describes pad and orbit situations', () => {
+    const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+    world.launch(buildOrbiter());
+    expect(situationBanner(world)?.sub).toMatch(/On the pad/);
+    const o = orbiting();
+    expect(situationBanner(o.world)?.sub).toMatch(/^Orbiting Earth/);
+  });
 });
