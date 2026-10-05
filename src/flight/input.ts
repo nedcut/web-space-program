@@ -18,6 +18,8 @@ export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp
 const FLIGHT_ACTIONS: FlightAction[] = ['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'focusNext', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'board', 'plantFlag', 'toggleGear', 'stressOverlay'];
 export class FlightInput {
   readonly state: FlightInputState = { pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, throttle: 0, brakes: false };
+  /** Camera orbit/zoom rates from arrow keys, +/- and RB + right stick (-1..1). */
+  readonly camera = { yaw: 0, pitch: 0, zoom: 0 };
   private held = new Set<string>();
   private listeners = new Set<(a: FlightAction) => void>();
   private buttons = new Set<number>();
@@ -90,12 +92,13 @@ export class FlightInput {
         this.held.clear(); this.mouse = { x: 0, y: 0 }; this.stageHeld = this.stageProgress = 0; this.stageConfirmed = true;
       } else this.onBlur();
       Object.assign(this.state, { pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, brakes: false });
+      Object.assign(this.camera, { yaw: 0, pitch: 0, zoom: 0 });
       return;
     }
     const pads = settings.gamepadEnabled ? this.target.navigator.getGamepads?.() : undefined;
     const pad = pads && [...pads].find(p => p?.connected && p.mapping === 'standard');
     this.gamepadConnected = !!pad;
-    let analog = { pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, throttle: 0, brakes: false, run: false };
+    let analog = { pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, throttle: 0, brakes: false, run: false, cameraYaw: 0, cameraPitch: 0 };
     if (pad) {
       analog = mapGamepad(pad, settings.deadZone, settings.sensitivity, this.evaMode);
       const now = new Set(pad.buttons.flatMap((b, i) => b.pressed ? [i] : []));
@@ -115,6 +118,9 @@ export class FlightInput {
     const fine = this.precisionActive ? 0.35 : 1;
     const axis = (pos: Action, neg: Action) => Number(this.down(pos)) - Number(this.down(neg));
     const clamp = (v: number) => Math.max(-1, Math.min(1, v));
+    this.camera.yaw = clamp(axis('cameraRight', 'cameraLeft') + analog.cameraYaw);
+    this.camera.pitch = clamp(axis('cameraUp', 'cameraDown') + analog.cameraPitch);
+    this.camera.zoom = axis('cameraZoomOut', 'cameraZoomIn');
     const targets = this.evaMode ? {
       pitch: 0, yaw: 0, roll: 0, tx: axis('evaRight', 'evaLeft') + analog.tx,
       ty: axis('evaUp', 'evaDown') + analog.ty + analog.throttle, tz: axis('evaBack', 'evaForward') + analog.tz,

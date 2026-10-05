@@ -32,9 +32,9 @@ import type { CraftDef } from '../sim/vessel/types';
 import { getTutorial } from '../tutorial/runtime';
 import { formatDistance, formatDuration } from '../ui/format';
 import { snapshotEqual } from '../util/snapshotEqual';
-import { length, normalize, sub, type Vec3 } from '../util/vec3';
+import { cross, length, normalize, sub, type Vec3 } from '../util/vec3';
 import { type AssistId } from './assist';
-import { FlightCamera } from './camera';
+import { CAMERA_MODE_INFO, FlightCamera } from './camera';
 import * as assist from './controller/assist';
 import * as audio from './controller/audio';
 import type { FlightControllerInternals } from './controller/internals';
@@ -227,11 +227,15 @@ export class FlightController {
           case 'focusNext': if (!this.network?.ownId && this.world.focusNextNearby()) this.world.message(`Switched to ${this.world.active!.state.name}`); break;
           case 'quicksave': this.quicksave(); break;
           case 'quickload': if (!this.network) this.onQuickload?.(); break;
-          case 'toggleCamMode': this.cam.mode = this.cam.mode === 'auto' ? (this.world.active?.state.eva ? 'free' : 'chase') : this.cam.mode === 'chase' ? 'free' : 'auto'; break;
+          case 'toggleCamMode': this.world.message(`Camera: ${CAMERA_MODE_INFO[this.cam.cycleMode(!!this.world.active?.state.eva)].label} — ${CAMERA_MODE_INFO[this.cam.mode].hint}`, 'info', 2.5); break;
         }
       }),
     );
     this.world.onEvent = (e) => {
+      if (e.vesselId === this.world.activeId && !game.get().settings.reduceMotion) {
+        if (e.type === 'stage') this.cam.addKick(0.35);
+        else if (e.type === 'decouple' || e.type === 'structuralFailure') this.cam.addKick(0.6);
+      }
       if (isBurstEvent(e)) {
         const vessel = this.world.vessels.get(e.vesselId) ?? this.world.active;
         if (vessel) {
@@ -378,7 +382,6 @@ export class FlightController {
       this.input.state.throttle = 0;
       this.sasOn = false;
       this.cam.mode = 'auto';
-      this.cam.distance = 6;
     }
   }
 
@@ -389,7 +392,6 @@ export class FlightController {
       this.cancelAssist();
       this.stagePending = false;
       this.input.state.throttle = 0;
-      this.cam.distance = Math.max(10, this.world.active!.state.cache.boundingRadius * 3);
     }
   }
 
@@ -623,10 +625,8 @@ export class FlightController {
     this.reentryHeat = Math.min(1, Math.max(0, (Math.log10(Math.max(flux, 1)) - 4.0) / 1.5));
 
     // Camera
-    const up = normalize(sub(origin, bodyState.position));
-    const q = wv.state.orientation;
     if (this.photo.active) this.photo.update(photoDt);
-    else this.cam.update(new THREE.Vector3(up.x, up.y, up.z), new THREE.Quaternion(q.x, q.y, q.z, q.w), dt);
+    else this.updateCamera(wv, origin, bodyState, airVel, t, dt);
     const camera = this.cam.camera;
     this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors);
     if (!this.paused) this.effects.shake(camera, game.get().settings.reduceMotion);
@@ -679,6 +679,65 @@ export class FlightController {
     this.stars.update(camera);
     this.glare.update(camera, sd, eclipse);
     this.pipeline.render(this.scene, camera);
+  }
+
+  private readonly camUp = new THREE.Vector3();
+  private readonly camQuat = new THREE.Quaternion();
+  private readonly camVel = new THREE.Vector3();
+  private readonly camNormal = new THREE.Vector3();
+  private readonly camProbe = { x: 0, y: 0, z: 0 };
+
+  /** Feed the orbit camera its reference frame, framing size, terrain clearance and rumble for this frame. */
+  private updateCamera(wv: WorldVessel, origin: Vec3, bodyState: { position: Vec3; velocity: Vec3 }, airVel: Vec3, t: number, dt: number) {
+    const u = this.world.universe;
+    const body = u.body(wv.body);
+    const st = wv.state;
+    const r = sub(origin, bodyState.position);
+    const alt = length(r) - body.radius;
+    const up = normalize(r);
+    const orbVel = sub(st.velocity, bodyState.velocity);
+    const n = cross(r, orbVel);
+    const nLen = length(n);
+    const atmo = body.atmosphere?.height ?? 0;
+    const h0 = atmo > 0 ? atmo : Math.max(5000, body.radius * 0.03);
+    const flying = st.situation === 'flying' && wv.mode !== 'prelaunch';
+    const spaceBlend = flying ? Math.max(0, Math.min(1, (alt - h0) / h0)) : 0;
+    const inAir = st.telemetry.dynamicPressure > 200 || alt < h0 * 0.5;
+    const vel = inAir ? airVel : orbVel;
+    const tel = st.telemetry;
+    const agl = Number.isFinite(tel.altitudeAGL) ? tel.altitudeAGL : alt;
+    const settings = game.get().settings;
+    let rumble = 0;
+    if (!settings.reduceMotion && !this.paused) {
+      const weight = Math.max(1, st.mass * body.surfaceGravity);
+      const launch = Math.min(1, tel.thrust / (weight * 1.5)) * Math.exp(-Math.max(0, agl) / 250);
+      const transonic = Math.exp(-(((tel.mach - 1) / 0.25) ** 2));
+      const buffet = Math.min(1, tel.dynamicPressure / 40000) * (0.35 + 0.65 * transonic);
+      rumble = Math.min(0.8, launch * 0.7 + buffet * 0.5);
+    }
+    const probe = this.camProbe;
+    this.cam.drive.yaw = this.input.camera.yaw;
+    this.cam.drive.pitch = this.input.camera.pitch;
+    this.cam.drive.zoom = this.input.camera.zoom;
+    const q = st.orientation;
+    this.cam.update({
+      up: this.camUp.set(up.x, up.y, up.z),
+      vesselQuat: this.camQuat.set(q.x, q.y, q.z, q.w),
+      velocity: this.camVel.set(vel.x, vel.y, vel.z),
+      orbitNormal: nLen > 1e-6 ? this.camNormal.set(n.x / nLen, n.y / nLen, n.z / nLen) : null,
+      spaceBlend,
+      vesselId: st.id,
+      radius: st.cache.boundingRadius,
+      // Terrain sampling only matters when the camera could reach the ground.
+      clearance: body.solidSurface && agl < this.cam.distance * 1.5 + 50
+        ? (p) => {
+            probe.x = origin.x + p.x; probe.y = origin.y + p.y; probe.z = origin.z + p.z;
+            return u.surfaceInfo(wv.body, probe, t).heightAboveTerrain;
+          }
+        : undefined,
+      rumble,
+      groundFraming: flying ? 0 : 1,
+    }, dt);
   }
 
   /** Fleet icons/conics, target highlight and closest-approach markers for the map view. */
