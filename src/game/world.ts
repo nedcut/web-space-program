@@ -618,10 +618,10 @@ export class World {
       if (flight && wv.state.situation === 'flying' && wv.state.telemetry.altitudeAGL < 100) flight.touchdownSpeed = length(this.surfaceVelocity(wv));
       const res = wv.state.eva ? stepEva(wv.state, ctrl, env, t, PHYSICS_DT) : stepVessel(wv.state, ctrl, env, t, PHYSICS_DT);
       for (const nv of res.newVessels) {
+        if (nv.destroyed) continue;
         recomputeMassProperties(nv, false);
-        // Split-off vessels hold state at time t (staging happens at the start of the step); bring them to
-        // t + dt so they don't lag the parent by one step of heliocentric motion.
-        nv.position = add(nv.position, scale(nv.velocity, PHYSICS_DT));
+        // Stages split at step start; structural/crash fragments split at a substep end.
+        nv.position = add(nv.position, scale(nv.velocity, PHYSICS_DT - (res.newVesselTimeOffsets?.[nv.id] ?? 0)));
         this.vessels.set(nv.id, { state: nv, mode: 'physics', body: wv.body });
       }
       for (const e of res.events) this.handleEvent(e);
@@ -660,6 +660,7 @@ export class World {
     }
     this.onEvent?.(e);
     if (e.vesselId !== this.activeId) return;
+    if (e.type === 'structuralFailure') this.message('Structural failure — attachment broke!', 'bad', 4);
     if (e.type === 'flameout') this.message('Flameout!', 'warn', 2);
     if (e.type === 'docked' || e.type === 'undocked') this.approachCache = null;
     if (e.type === 'partDestroyed') {

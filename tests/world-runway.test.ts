@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { describe, expect, it } from 'vitest';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
@@ -12,6 +13,7 @@ const DEG = 180 / Math.PI;
 
 function setup() {
   const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+  requireIntactFlight(world);
   const wv = world.launch(buildSwift());
   const earth = world.universe.body('earth');
   const up = () => normalize(world.relativeState(wv).position);

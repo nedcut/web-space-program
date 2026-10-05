@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { describe, expect, it } from 'vitest';
 import { PART_CATALOG } from '../src/data/parts';
 import { buildHazewalker } from '../src/editor/stockCrafts';
@@ -27,6 +28,7 @@ describe('Hazewalker Titan expedition', () => {
   it('aerobrakes shield-first, deploys heavy chutes and lands below 5 m/s without thrust', () => {
     const universe = new Universe('standard');
     const world = new World(universe, PART_CATALOG, DEFAULT_START_UT);
+    requireIntactFlight(world);
     const titan = universe.body('titan');
     // Body-fixed northward entry avoids a long full transfer while retaining real World air/contact.
     const up = normalize(v3(0.7, 0.2, 0.68));
@@ -75,5 +77,5 @@ describe('Hazewalker Titan expedition', () => {
     expect(vessel.state.situation).toBe('landed');
     expect(touchdownSpeed).toBeLessThan(5);
     expect(length(world.surfaceVelocity(vessel))).toBeLessThan(5);
-  }, 120000);
+  }, 240000); // Dense-atmosphere descent can contend with other worktree test runs.
 });

@@ -21,7 +21,7 @@ export type ClientMessage = Envelope & (
   | { type: 'chat'; text: string }
   | { type: 'action'; action: 'eva' | 'board' | 'flag' | 'undock'; uid?: number; astronautId?: string }
 );
-export type PartDelta = Pick<PartState, 'uid' | 'resources' | 'mass' | 'temperature' | 'skinTemperature' | 'activated' | 'engine' | 'chute' | 'leg' | 'wheel' | 'bayOpen' | 'drillDeployed' | 'drillDeploy' | 'converterRunning' | 'converterRecipe' | 'processTemperature' | 'dockDisarmed'>;
+export type PartDelta = Pick<PartState, 'uid' | 'resources' | 'mass' | 'temperature' | 'skinTemperature' | 'activated' | 'engine' | 'chute' | 'leg' | 'wheel' | 'bayOpen' | 'drillDeployed' | 'drillDeploy' | 'converterRunning' | 'converterRecipe' | 'processTemperature' | 'dockDisarmed' | 'structuralFatigue'>;
 export type DynamicState = Pick<VesselState, 'position' | 'velocity' | 'orientation' | 'angularVelocity' | 'mass' | 'com' | 'inertia' | 'invInertia' | 'nextStage' | 'situation' | 'sas' | 'telemetry' | 'eva' | 'destroyed'> & { parts: PartDelta[] };
 export type VesselDelta = { id: string; body: string } & (
   | { mode: 'rails'; orbit: NonNullable<WorldVessel['orbit']> }

@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { expect, it } from 'vitest';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
@@ -9,6 +10,7 @@ import { period } from '../src/sim/orbit';
 
 it.each(['challenging', 'real'] as const)('%s orbital mission', (preset) => {
   const world = new World(new Universe(preset), PART_CATALOG, DEFAULT_START_UT);
+  requireIntactFlight(world);
   world.launch(buildRealOrbiter());
   const vessel = world.active!;
   const target = preset === 'real' ? 220000 : 140000;

@@ -147,7 +147,10 @@ export function rebuildTopology(v: VesselState): void {
       else p.parent = null;
     }
   }
-  for (const p of v.parts) p.children.sort((a, b) => a - b);
+  for (const p of v.parts) {
+    p.children.sort((a, b) => a - b);
+    if (p.parent === null) delete p.structuralFatigue;
+  }
   v.cache = c;
   // Depths (BFS from root).
   const root = c.byUid.get(v.rootUid);

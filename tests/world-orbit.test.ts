@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { stableOrbit } from '../src/tutorial/lessons';
 import { describe, it, expect } from 'vitest';
 import { Universe } from '../src/game/universe';
@@ -61,6 +62,7 @@ export function flyToOrbit(world: World, targetAp: number, log: string[]) {
 describe('stock orbiter reaches orbit', () => {
   it('gravity turn to a ~85 km orbit', () => {
     const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+    requireIntactFlight(world);
     world.launch(buildOrbiter());
     const log: string[] = [];
     const phase = flyToOrbit(world, 85000, log);
