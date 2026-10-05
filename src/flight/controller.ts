@@ -1,4 +1,4 @@
-import { FlightFx } from '../render/fx/FlightFx';
+import { FlightFx, isBurstEvent } from '../render/fx/FlightFx';
 
 import { PhotoCamera } from '../render/core/PhotoCamera';
 import * as THREE from 'three';
@@ -232,11 +232,11 @@ export class FlightController {
       }),
     );
     this.world.onEvent = (e) => {
-      if (e.type === 'partDestroyed' || e.type === 'decouple') {
+      if (isBurstEvent(e)) {
         const vessel = this.world.vessels.get(e.vesselId) ?? this.world.active;
         if (vessel) {
           if (!this.views.get(e.vesselId)?.partPosition(e.partUid, this.effectPosition)) this.effectPosition.copy(vessel.state.position);
-          this.effects.burst(this.effectPosition, e.type === 'decouple', vessel.state.velocity);
+          this.effects.burst(this.effectPosition, e.type !== 'partDestroyed', vessel.state.velocity);
         }
       }
       if (!this.audio) return;

@@ -1,8 +1,13 @@
 import * as THREE from 'three';
-import type { VesselState } from '../../sim/vessel/runtime';
+import type { VesselEvent, VesselState } from '../../sim/vessel/runtime';
 import type { Vec3 } from '../../util/vec3';
 import type { QualityId } from '../core/quality';
 import { ParticlePool } from './ParticlePool';
+
+type BurstEvent = Extract<VesselEvent, { type: 'partDestroyed' | 'decouple' | 'structuralFailure' }>;
+export function isBurstEvent(event: VesselEvent): event is BurstEvent {
+  return event.type === 'partDestroyed' || event.type === 'decouple' || event.type === 'structuralFailure';
+}
 
 export const FX_BUDGET = { low: { count: 128, rate: 12 }, medium: { count: 512, rate: 40 }, high: { count: 1024, rate: 80 } } as const;
 const smoke = new THREE.Color(.38,.36,.32), steam = new THREE.Color(.8,.82,.85), fire = new THREE.Color(8,2,.15);

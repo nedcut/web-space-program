@@ -1,3 +1,5 @@
+import { isBurstEvent } from '../src/render/fx/FlightFx';
+import type { VesselEvent } from '../src/sim/vessel/runtime';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { crossesRingPlane, appendEvent, ARCHIVE_SAMPLE_CAP, HISTORY_CAP, trimHistory, EVENT_CAP, finishRecord, newRecorder, observe, SAMPLE_CAP, orderedSamples, sampleInterval, startRecord, summaryText, type Observation } from '../src/game/flightlog/recorder';
 import { ACHIEVEMENTS, awardAchievements } from '../src/game/flightlog/achievements';
@@ -95,10 +97,13 @@ describe('flight recorder', () => {
   it('records structural breakups as part losses while fragments inherit their history', () => {
     const w = new World(new Universe('standard'), PART_CATALOG, 1000);
     const vessel = w.launch(buildOrbiter());
+    const effects: VesselEvent[] = [];
+    w.onEvent = e => { if (isBurstEvent(e)) effects.push(e); };
     for (const part of vessel.state.parts) part.def = { ...part.def, breakingForce: 1, breakingTorque: 1 };
     for (let i = 0; i < 50; i++) w.tick(0.02, neutralInput({ stage: i === 0, throttle: 1 }));
     expect(w.flightlog.records.some(r => r.events.some(e => e.kind === 'partLoss' && e.detail?.includes('Attachment')))).toBe(true);
     expect(w.flightlog.records.length).toBeGreaterThan(1);
+    expect(effects.some(e => e.type === 'structuralFailure')).toBe(true);
   });
   it('does not integrate stale engine telemetry while packed during time warp', () => {
     const w = new World(new Universe('standard'), PART_CATALOG, 1000);
