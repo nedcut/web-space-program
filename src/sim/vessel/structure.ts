@@ -1,3 +1,6 @@
+import { distributeStrutLoads } from './struts';
+import { activeLinks, linkModule } from './links';
+import { rebuildTopology } from './assembly';
 import { add, cross, dot, length, normalize, scale, sub, v3 } from '../../util/vec3';
 import type { Vec3 } from '../../util/vec3';
 import { qRotate } from '../../util/quat';
@@ -118,14 +121,33 @@ export function evaluateJointLoads(v: VesselState, loads: PartLoad[], omega = v.
     parent.force.x += f.x; parent.force.y += f.y; parent.force.z += f.z;
     parent.moment.x += m.x; parent.moment.y += m.y; parent.moment.z += m.z;
   }
+  distributeStrutLoads(v, out, uid => byUid.get(uid)!.point, uid => byUid.get(uid)!.strength);
   v.cache.jointLoads = out;
   return out;
 }
 
 /** 80 ms continuous exposure at >=2x rating; recovery only below 85%, so brief numerical spikes do not flicker. */
-export function overloadedJoints(v: VesselState, loads: PartLoad[], dt: number, omega = v.angularVelocity): number[] {
+export function overloadedJoints(v: VesselState, loads: PartLoad[], dt: number, omega = v.angularVelocity, result?: StepResult): number[] {
   const cuts: number[] = [];
-  for (const [uid, load] of evaluateJointLoads(v, loads, omega)) {
+  let readings = evaluateJointLoads(v, loads, omega);
+  let broken = false;
+  for (const p of activeLinks(v, 'strut')) {
+    const spec = linkModule(p)!;
+    if (spec.type !== 'strut') continue;
+    const fraction = (v.cache.strutLoads?.get(p.uid) ?? 0) / spec.strength;
+    const fatigue = fraction > 1 ? (p.linkFatigue ?? 0) + dt * Math.min(1, fraction - 1)
+      : fraction < 0.85 ? Math.max(0, (p.linkFatigue ?? 0) - dt * 2) : p.linkFatigue ?? 0;
+    if (fatigue > 0) p.linkFatigue = fatigue; else delete p.linkFatigue;
+    if (fatigue >= 0.08) {
+      p.link!.broken = true; delete p.linkFatigue; broken = true;
+      result?.events.push({ type: 'linkBroken', vesselId: v.id, partUid: p.uid, targetUid: p.link!.targetUid, loadFraction: fraction });
+    }
+  }
+  if (broken) {
+    rebuildTopology(v);
+    readings = evaluateJointLoads(v, loads, omega);
+  }
+  for (const [uid, load] of readings) {
     const p = v.cache.byUid.get(uid)!;
     let fatigue = p.structuralFatigue ?? 0;
     if (load.fraction > 1) fatigue += dt * Math.min(1, load.fraction - 1);

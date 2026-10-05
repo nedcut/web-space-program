@@ -1,3 +1,4 @@
+import { LinkView } from '../../render/vessel/LinkView';
 import { isTyping, matches } from '../../input/bindings';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -68,6 +69,10 @@ export class EditorView {
   private heldMeshes = new THREE.Group();
   private ghostGroup = new THREE.Group();
   private nodeGroup = new THREE.Group();
+  private links = new LinkView();
+  private linkPreviewGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+  private linkPreviewMaterial = new THREE.LineBasicMaterial({ color: 0x6fe39a, depthTest: false });
+  private linkPreview = new THREE.Line(this.linkPreviewGeometry, this.linkPreviewMaterial);
   private com: THREE.Group;
   private cot: THREE.Group;
   private col: THREE.Group;
@@ -158,7 +163,8 @@ export class EditorView {
     this.hangar = buildHangar(this.renderer);
     this.scene.add(this.hangar.group);
     this.scene.add(this.craftGroup);
-    this.craftGroup.add(this.heldGroup, this.ghostGroup, this.nodeGroup);
+    this.craftGroup.add(this.heldGroup, this.ghostGroup, this.nodeGroup, this.links.root, this.linkPreview);
+    this.linkPreview.visible = false;
     this.heldGroup.add(this.heldMeshes);
 
     this.com = this.makeCoM();
@@ -248,6 +254,7 @@ export class EditorView {
   }
 
   private syncCraft(snap: SessionView) {
+    this.links.update(snap.craft.parts);
     const seen = new Set<number>();
     for (const p of snap.craft.parts) {
       seen.add(p.uid);
@@ -340,6 +347,22 @@ export class EditorView {
   private updatePlacement() {
     const snap = this.session.getSnapshot();
     this.snapKey = null;
+    this.linkPreview.visible = false;
+    if (this.session.isLinkPlacement()) {
+      this.placement = null; this.heldGroup.visible = false; this.ghostGroup.visible = false;
+      const hit = this.surfaceHit(), start = snap.linkStart?.hit;
+      if (start && this.mouseInside) {
+        const end = hit?.point ?? this.cursorCraftPoint();
+        const positions = this.linkPreviewGeometry.getAttribute('position');
+        positions.setXYZ(0, start.point.x, start.point.y, start.point.z);
+        positions.setXYZ(1, end.x, end.y, end.z); positions.needsUpdate = true;
+        this.linkPreviewGeometry.computeBoundingSphere();
+        const length = Math.hypot(end.x - start.point.x, end.y - start.point.y, end.z - start.point.z);
+        this.linkPreviewMaterial.color.set(hit && hit.uid !== start.uid && length <= 5 && length >= 0.05 ? 0x6fe39a : 0xc02020);
+        this.linkPreview.visible = true;
+      }
+      return;
+    }
     if (!snap.held || !this.heldParts.length) {
       this.placement = null;
       this.heldGroup.visible = false;
@@ -479,6 +502,7 @@ export class EditorView {
   private pickPart(): { uid: number; hit: THREE.Intersection } | null {
     this.raycaster.setFromCamera(this.mouse, this.camera);
     const objs = [...this.partObjs.values()].map((e) => e.obj);
+    if (!this.session.isLinkPlacement()) objs.push(this.links.root);
     const hits = this.raycaster.intersectObjects(objs, true);
     for (const h of hits) {
       let o: THREE.Object3D | null = h.object;
@@ -529,7 +553,7 @@ export class EditorView {
     for (const m of this.nodeMarkers) m.mesh.removeFromParent();
     this.nodeMarkers = [];
     const snap = this.session.getSnapshot();
-    if (!snap.held) return;
+    if (!snap.held || this.session.isLinkPlacement()) return;
     const add = (n: WorldAttachNode, parent: THREE.Object3D, key: string) => {
       const mesh = new THREE.Mesh(this.markerGeo, this.markerMat);
       mesh.renderOrder = 10;
@@ -674,6 +698,12 @@ export class EditorView {
 
   private click() {
     const snap = this.session.getSnapshot();
+    if (this.session.isLinkPlacement()) {
+      const hit = this.surfaceHit();
+      if (hit) this.session.placeLinkHit(hit);
+      else this.session.toast('Click a part surface to anchor the link', 'warn');
+      return;
+    }
     if (snap.held) {
       this.updatePlacement();
       if (this.placement) this.session.place(this.placement);
@@ -813,6 +843,8 @@ export class EditorView {
     window.removeEventListener('keyup', this.onKeyUp);
     this.hangar.dispose();
     this.envRT.dispose();
+    this.links.dispose();
+    this.linkPreviewGeometry.dispose(); this.linkPreviewMaterial.dispose();
     this.markerGeo.dispose();
     this.markerMat.dispose();
     this.markerMatHi.dispose();

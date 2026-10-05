@@ -10,7 +10,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuff
 renderer.setPixelRatio(devicePixelRatio);
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
-const map = new MapView(bodies, ephem, document.body, universe);
+const map = new MapView(bodies, ephem, document.body, undefined, universe);
 let focusId = params.get('focus') ?? 'sun';
 map.distance = +(params.get('dist') ?? 6e11);
 map.attachControls(renderer.domElement, () => (bodies.get(focusId)!.radius * 1.5));
@@ -26,7 +26,7 @@ renderer.domElement.addEventListener('dblclick', e => {
 });
 const loop = () => {
   t += +(params.get('rate') ?? 0);
-  map.update({ t, focus: ephem.getBodyState(focusId, t).position, viewport: { width: innerWidth, height: innerHeight } });
+  map.update({ t, focusId, focus: ephem.getBodyState(focusId, t).position, viewport: { width: innerWidth, height: innerHeight } });
   renderer.render(map.scene, map.camera);
   requestAnimationFrame(loop);
 };

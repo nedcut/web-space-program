@@ -1,3 +1,4 @@
+import { validCraftLinks } from '../../sim/vessel/links';
 import type { CraftDef } from '../../sim/vessel/types';
 import { requirePart, type PartCatalog } from './geometry';
 const resourceIds = new Set(['liquidFuel', 'oxidizer', 'monopropellant', 'xenon', 'solidFuel', 'electricCharge', 'ablator', 'regolith']);
@@ -27,6 +28,7 @@ export function deserializeCraft(str: string, catalog?: PartCatalog): CraftDef {
   }
   const craft = value as unknown as CraftDef;
   if (craft.parts.length && craft.parts.filter(p => p.parent === undefined).length !== 1) throw new Error('Craft must have one root');
+  if (!validCraftLinks(craft.parts)) throw new Error('Invalid part link');
   const byUid = new Map(craft.parts.map(p => [p.uid, p]));
   const occupied = new Set<string>();
   for (const p of craft.parts) {
@@ -36,7 +38,11 @@ export function deserializeCraft(str: string, catalog?: PartCatalog): CraftDef {
       if (!byUid.has(parent) || seen.has(parent)) throw new Error('Invalid parent tree');
       seen.add(parent); parent = byUid.get(parent)!.parent;
     }
-    if (catalog) requirePart(catalog, p.partId);
+    if (catalog) {
+      const def = requirePart(catalog, p.partId);
+      if (p.link && (!def.modules.some(m => m.type === 'strut' || m.type === 'fuelLine')
+        || byUid.get(p.link.sourceUid)?.link || byUid.get(p.link.targetUid)?.link)) throw new Error('Unsupported link endpoints');
+    }
     if (p.parent === undefined) {
       if (p.attachNode !== undefined || p.parentNode !== undefined) throw new Error('Root cannot have attachment metadata');
       continue;

@@ -237,7 +237,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
 
   // Contact impulses.
   solveContacts(v, cp.contacts, loads, h, cp.impacts);
-  const cuts = overloadedJoints(v, loads, h, omegaBefore);
+  const cuts = overloadedJoints(v, loads, h, omegaBefore, result);
   const crashCuts = crashJointCuts(v, shocks);
   L = angularMomentum(v);
 

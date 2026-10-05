@@ -9,7 +9,7 @@ import { deleteCraft, listCrafts, saveCraft } from '../game/saves';
 import type { CraftDef, PartInstance, ResourceId } from '../sim/vessel/types';
 import { qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../util/quat';
 import { sub, v3, type Vec3 } from '../util/vec3';
-import { CraftEditor, craftStats, getStageList, type CraftStats, type Stage } from './core';
+import { CraftEditor, craftStats, getStageList, type CraftStats, type Stage, type LinkHit } from './core';
 import { STOCK_CRAFTS } from './stockCrafts';
 import { computeStageStats, type StageStats } from './ui/dv';
 
@@ -54,6 +54,7 @@ export interface SessionView {
   totalDvVac: number;
   totalDvAsl: number;
   held: HeldState | null;
+  linkStart?: { partId: string; hit: LinkHit };
   symmetry: SymmetryCount;
   /** Radial (around the craft's long axis) or mirror (across the craft's YZ plane; count 1 = off, 2 = on). */
   symmetryMode: SymmetryMode;
@@ -146,7 +147,7 @@ export class EditorSession {
     this.version++;
     this.snap = {
       craft, name: this.name, stages, stageStats, stats, totalDvVac, totalDvAsl,
-      held: this.held, symmetry: this.symmetry, symmetryMode: this.symmetryMode, craftType: craft.type,
+      held: this.held, linkStart: this.editor.linkStart, symmetry: this.symmetry, symmetryMode: this.symmetryMode, craftType: craft.type,
       showCoM: this.showCoM, showCoT: this.showCoT, showCoL: this.showCoL,
       canUndo: this.editor.canUndo || this.held?.kind === 'new', canRedo: this.editor.canRedo,
       toasts: this.toasts, hoverUid: this.hoverUid, highlightUids: this.highlightUids, version: this.version,
@@ -158,7 +159,7 @@ export class EditorSession {
   private touch() {
     this.version++;
     this.snap = {
-      ...this.snap, name: this.name, held: this.held, symmetry: this.symmetry, symmetryMode: this.symmetryMode,
+      ...this.snap, name: this.name, held: this.held, linkStart: this.editor.linkStart, symmetry: this.symmetry, symmetryMode: this.symmetryMode,
       showCoM: this.showCoM, showCoT: this.showCoT, showCoL: this.showCoL,
       canUndo: this.editor.canUndo || this.held?.kind === 'new', canRedo: this.editor.canRedo,
       toasts: this.toasts, hoverUid: this.hoverUid, highlightUids: this.highlightUids, version: this.version,
@@ -168,6 +169,7 @@ export class EditorSession {
 
   /** Keep local hold state consistent with the core (undo/redo can create or remove a held assembly). */
   private syncHeld() {
+    if (this.editor.linkStart) this.held = { kind: 'new', partId: this.editor.linkStart.partId, rotation: qIdentity() };
     const coreHeld = !!this.editor.held;
     if (coreHeld && this.held?.kind !== 'assembly') this.held = { kind: 'assembly', rotation: qIdentity() };
     if (!coreHeld && this.held?.kind === 'assembly') this.held = null;
@@ -296,12 +298,36 @@ export class EditorSession {
     const g = game.get();
     if (!partUnlocked(partId, g.mode, g.resumeWorld?.progression ?? newProgression())) return this.toast('Research this part first', 'warn');
     if (this.held?.kind === 'assembly') this.cancelHeld();
+    this.editor.cancelLink();
     this.held = { kind: 'new', partId, rotation: qIdentity() };
     this.touch();
   }
 
+  isLinkPlacement(): boolean {
+    return this.held?.kind === 'new' && !!CATALOG.get(this.held.partId)?.modules.some(m => m.type === 'strut' || m.type === 'fuelLine');
+  }
+  placeLinkHit(hit: LinkHit): boolean {
+    const held = this.held;
+    if (held?.kind !== 'new' || !this.isLinkPlacement()) return false;
+    const started = !!this.editor.linkStart;
+    const ok = this.guard(() => {
+      this.applySymmetry();
+      if (started) this.editor.completeLink(hit); else this.editor.beginLink(held.partId, hit);
+      return true;
+    });
+    if (ok && started) {
+      this.held = null; this.touch();
+      if (typeof document !== 'undefined') document.dispatchEvent(new Event('wsp:part-attach'));
+    } else if (ok) this.toast(held.partId === 'fuel-line' ? 'Choose the receiving part · maximum 5 m' : 'Choose the second anchor · maximum 5 m');
+    return !!ok;
+  }
+
   pickUp(uid: number) {
     if (this.held) return;
+    const part = this.editor.craft.parts.find(p => p.uid === uid);
+    if (part?.link) {
+      this.deletePart(uid); this.pickNew(part.partId); return;
+    }
     // Core marks the change; syncHeld() converts it into an 'assembly' hold.
     this.guard(() => this.editor.detachSubtree(uid));
   }
@@ -310,6 +336,7 @@ export class EditorSession {
   cancelHeld() {
     if (!this.held) return;
     if (this.held.kind === 'new') {
+      this.editor.cancelLink();
       this.held = null;
       this.touch();
       return;
@@ -324,6 +351,7 @@ export class EditorSession {
   deleteHeld() {
     if (!this.held) return;
     if (this.held.kind === 'new') {
+      this.editor.cancelLink();
       this.held = null;
       this.touch();
       return;
@@ -371,7 +399,7 @@ export class EditorSession {
 
   place(p: Placement): boolean {
     const h = this.held;
-    if (!h) return false;
+    if (!h || this.isLinkPlacement()) return false;
     const ok = this.guard(() => {
       if (h.kind === 'new') {
         if (p.kind === 'root') this.editor.addRoot(h.partId);
@@ -451,7 +479,11 @@ export class EditorSession {
   }
 
   undo() {
+    if (this.editor.linkStart) {
+      this.held = null; this.editor.undo(); this.touch(); return;
+    }
     if (this.held?.kind === 'new') {
+      this.editor.cancelLink();
       this.held = null;
       this.touch();
       return;

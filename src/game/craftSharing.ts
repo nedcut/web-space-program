@@ -1,3 +1,4 @@
+import { validCraftLinks } from '../sim/vessel/links';
 import type { CraftDef, PartDef } from '../sim/vessel/types';
 
 export const MAX_CRAFT_BYTES = 2_000_000;
@@ -20,6 +21,7 @@ export function validateCraft(input: unknown, catalog: ReadonlyMap<string, PartD
     if (ids.has(p.uid)) errors.push(`Duplicate part uid ${p.uid}.`);
     ids.add(p.uid);
     if (!catalog.has(p.partId)) unknownParts.add(p.partId);
+    if (p.link && !catalog.get(p.partId)?.modules.some(m => m.type === 'strut' || m.type === 'fuelLine')) errors.push('Unsupported linked part.');
     if (!record(p.position) || !['x', 'y', 'z'].every(k => finite(p.position && (p.position as Record<string, unknown>)[k]))) errors.push(`Invalid position on ${p.uid}.`);
     if (!record(p.rotation) || !['x', 'y', 'z', 'w'].every(k => finite(p.rotation && (p.rotation as Record<string, unknown>)[k]))) errors.push(`Invalid rotation on ${p.uid}.`);
     else {
@@ -31,6 +33,7 @@ export function validateCraft(input: unknown, catalog: ReadonlyMap<string, PartD
     for (const k of ['attachNode', 'parentNode']) if (p[k] !== undefined && (typeof p[k] !== 'string' || String(p[k]).length > 100)) errors.push(`Invalid ${k}.`);
     if (p.resources !== undefined && (!record(p.resources) || Object.values(p.resources).some(v => !finite(v) || Number(v) < 0))) errors.push('Invalid resource quantities.');
   }
+  if (!errors.length && !validCraftLinks(input.parts as CraftDef['parts'])) errors.push('Invalid part link.');
   if (roots !== 1) errors.push('Craft must have exactly one root.');
   for (const [id, parent] of parents) {
     if (!ids.has(parent)) errors.push(`Missing parent ${parent}.`);

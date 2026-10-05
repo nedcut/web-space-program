@@ -1,3 +1,4 @@
+import { LinkView } from './LinkView';
 import { PartHeat } from '../fx/PartHeat';
 import { batchStaticParts, disposeStaticBatch } from './staticBatch';
 import * as THREE from 'three';
@@ -31,6 +32,7 @@ export class VesselView {
   private lastTopology?: VesselState['cache'];
   private batch?: THREE.Group;
   private stressOverlay = false;
+  private links = new LinkView();
 
   setStressOverlay(enabled: boolean) {
     if (this.stressOverlay === enabled) return;
@@ -46,6 +48,7 @@ export class VesselView {
 
   constructor(private vessel: VesselState) {
     this.root.add(this.inner, this.impostor);
+    this.inner.add(this.links.root);
     this.impostor.visible = false;
     this.rebuild();
   }
@@ -141,6 +144,7 @@ export class VesselView {
     this.impostor.visible = distant;
     if (distant) return;
     this.inner.position.set(-v.com.x, -v.com.y, -v.com.z);
+    this.links.update(v.parts);
     for (const p of v.parts) {
       const pv = this.parts.get(p.uid);
       if (!pv) continue;
@@ -199,6 +203,7 @@ export class VesselView {
   }
 
   dispose() {
+    this.links.dispose();
     if (this.batch) disposeStaticBatch(this.batch);
     this.impostor.geometry.dispose(); this.impostor.material.dispose();
     for (const pv of this.parts.values()) {

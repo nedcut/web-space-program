@@ -1,3 +1,4 @@
+import { activeLinks } from './links';
 import { seatCapacity, SUITED_MASS } from '../crew/crew';
 import type { ResourceDef, ResourceId } from './types';
 import type { PartState, VesselState } from './runtime';
@@ -8,7 +9,8 @@ import type { PartState, VesselState } from './runtime';
  *  - 'stack' (liquidFuel, oxidizer): flows through attach-node connections (not surface attachments),
  *    never through decouplers. Tanks are drained in priority groups: highest decouple stage first
  *    (the part that gets jettisoned soonest), then farthest from the root. Tanks in the same priority
- *    group drain proportionally (so they empty together, like symmetric tanks).
+ *    group drain proportionally (so they empty together, like symmetric tanks). Directed fuel lines
+ *    bridge donor -> receiver stacks explicitly, draining upstream donors before downstream stacks.
  *  - 'all' (monoprop, EC, xenon): drawn proportionally from every part in the vessel.
  *  - 'none' (solidFuel, ablator): only from the consuming part itself.
  *
@@ -57,35 +59,69 @@ export function stackNeighbours(v: VesselState, p: PartState): PartState[] {
 export function buildFeedGroups(v: VesselState, consumerUid: number): number[][] {
   const start = v.cache.byUid.get(consumerUid);
   if (!start) return [];
-  const seen = new Set<number>([start.uid]);
   const queue: PartState[] = [start];
   // Surface-mounted engines and fuel cells can feed from their host stack; other radial
   // attachments still do not bridge separate stacks or bypass a decoupler.
   if (start.attachNode === 'srf' && start.parent !== null && start.def.modules.some(m => m.type === 'engine' || m.type === 'fuelCell')) {
     const host = v.cache.byUid.get(start.parent);
-    if (host && !isDecoupler(host)) { seen.add(host.uid); queue.push(host); }
+    if (host && !isDecoupler(host)) queue.push(host);
   }
   const found: PartState[] = [];
-  while (queue.length) {
-    const p = queue.shift()!;
-    found.push(p);
-    if (p !== start && isDecoupler(p)) continue; // decouplers block crossfeed
-    for (const n of stackNeighbours(v, p)) {
-      if (seen.has(n.uid) || isDecoupler(n)) continue;
-      seen.add(n.uid);
-      queue.push(n);
+  const component = new Map<number, number>();
+  const members: PartState[][] = [];
+  // Discover ordinary stacks first; hoses explicitly bridge them without opening decouplers.
+  const expand = (seed: PartState[], id: number) => {
+    const local: PartState[] = [];
+    for (let i = 0; i < seed.length; i++) {
+      const p = seed[i];
+      if (component.has(p.uid)) continue;
+      component.set(p.uid, id); local.push(p); found.push(p);
+      if (p !== start && isDecoupler(p)) continue;
+      for (const n of stackNeighbours(v, p)) if (!component.has(n.uid) && !isDecoupler(n)) seed.push(n);
+    }
+    members.push(local);
+  };
+  expand(queue, 0);
+  const hoses = activeLinks(v, 'fuelLine');
+  const edges = new Map<number, Set<number>>(); // donor component -> receiving components
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const hose of hoses) {
+      const link = hose.link!;
+      const receiver = component.get(link.targetUid);
+      const donor = v.cache.byUid.get(link.sourceUid)!;
+      if (receiver === undefined || isDecoupler(donor) || isDecoupler(v.cache.byUid.get(link.targetUid)!)) continue;
+      if (!component.has(donor.uid)) { expand([donor], members.length); changed = true; }
+      const source = component.get(donor.uid)!;
+      if (source !== receiver) {
+        if (!edges.has(source)) edges.set(source, new Set());
+        edges.get(source)!.add(receiver);
+      }
     }
   }
-  const key = (p: PartState) => [v.cache.decoupleStage.get(p.uid) ?? -1, v.cache.depth.get(p.uid) ?? 0] as const;
+  // Longest directed distance to the consumer makes every upstream asparagus stack drain first.
+  // A visiting guard bounds cyclic plumbing deterministically (cycles cannot manufacture resources).
+  const priorities = new Map<number, number>();
+  const rank = (id: number, visiting = new Set<number>()): number => {
+    if (visiting.has(id)) return 0;
+    if (priorities.has(id)) return priorities.get(id)!;
+    visiting.add(id);
+    const value = Math.max(0, ...[...(edges.get(id) ?? [])].map(n => rank(n, visiting) + 1));
+    visiting.delete(id); priorities.set(id, value); return value;
+  };
+  for (let i = 0; i < members.length; i++) rank(i);
+  const key = (p: PartState) => [priorities.get(component.get(p.uid)!) ?? 0,
+    v.cache.decoupleStage.get(p.uid) ?? -1, v.cache.depth.get(p.uid) ?? 0] as const;
   found.sort((a, b) => {
     const ka = key(a), kb = key(b);
-    return kb[0] - ka[0] || kb[1] - ka[1] || a.uid - b.uid;
+    return kb[0] - ka[0] || kb[1] - ka[1] || kb[2] - ka[2] || a.uid - b.uid;
   });
   const groups: number[][] = [];
-  let lastKey: readonly [number, number] | null = null;
+  let lastKey: readonly number[] | null = null;
   for (const p of found) {
     const k = key(p);
-    if (!lastKey || k[0] !== lastKey[0] || k[1] !== lastKey[1]) groups.push([]);
+    if (!lastKey || k.some((n, i) => n !== lastKey![i])) groups.push([]);
     groups[groups.length - 1].push(p.uid);
     lastKey = k;
   }

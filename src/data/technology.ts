@@ -22,7 +22,7 @@ for (const [node, ids] of Object.entries({
   'propulsion-1': ['eng-dewdrop', 'srb-candle', 'eng-radial-spray', 'eng-mistral'],
   'propulsion-2': ['eng-boreal', 'eng-needle', 'srb-reed', 'eng-radial-rill'],
   'propulsion-3': ['eng-hearth', 'eng-monsoon', 'srb-furnace', 'tank-4-short', 'tank-4-mid', 'tank-4-long'],
-  'structures-0': ['beam-1', 'beam-2', 'panel-1', 'panel-2', 'strut-cubic', 'mount-radial', 'ladder-1', 'light-task'],
+  'structures-0': ['fuel-line', 'beam-1', 'beam-2', 'panel-1', 'panel-2', 'strut-cubic', 'mount-radial', 'ladder-1', 'light-task'],
   'structures-1': ['truss-octagonal', 'bay-service-1', 'bay-cargo-1', 'adapt-0-2', 'ladder-2', 'light-area', 'chute-brake', 'rover-chassis'],
   'structures-2': ['bay-service-2', 'bay-cargo-2', 'adapt-1-3', 'fairing-3', 'chute-heavy', 'chute-radial-heavy', 'rover-wheel-0', 'rover-wheel-1', 'radiator-1'],
   'structures-3': ['adapt-3-4', 'dec-4', 'shield-4', 'nose-4', 'fairing-4', 'interstage-4', 'leg-colossus', 'radiator-2'],

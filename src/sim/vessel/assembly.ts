@@ -1,3 +1,4 @@
+import { validCraftLinks } from './links';
 import type { Vec3 } from '../../util/vec3';
 import { add, cross, length, scale, sub, v3 } from '../../util/vec3';
 import type { Quat } from '../../util/quat';
@@ -41,15 +42,22 @@ const emptyCache = (): VesselCache => ({
 
 /** Build a runtime vessel from an editor craft. Parts start full unless the instance overrides resources. */
 export function buildVessel(craft: CraftDef, partCatalog: Map<string, PartDef>, opts: BuildOptions = {}): VesselState {
+  if (craft.parts.some(p => p.link) && !validCraftLinks(craft.parts)) throw new Error('buildVessel: invalid part link');
   const defs = opts.resourceDefs ?? DEFAULT_RESOURCE_DEFS;
   const parts: PartState[] = craft.parts.map((pi) => {
     const def = partCatalog.get(pi.partId);
     if (!def) throw new Error(`buildVessel: unknown part '${pi.partId}'`);
+    if (pi.link && (!def.modules.some(m => m.type === 'strut' || m.type === 'fuelLine')
+      || [pi.link.sourceUid, pi.link.targetUid].some(uid => {
+        const host = craft.parts.find(p => p.uid === uid)!;
+        return host.link || !partCatalog.get(host.partId)?.allowSurfaceAttachChildren;
+      }))) throw new Error('buildVessel: unsupported link endpoints');
     const maxResources = { ...def.resources };
     const resources: Partial<Record<ResourceId, number>> = { ...def.resources, ...(pi.resources ?? {}) };
     let maxTemp = def.maxTemp;
     const p: PartState = {
       uid: pi.uid,
+      link: pi.link ? structuredClone(pi.link) : undefined,
       partId: pi.partId,
       def,
       position: { ...pi.position },
@@ -151,6 +159,10 @@ export function rebuildTopology(v: VesselState): void {
     p.children.sort((a, b) => a - b);
     if (p.parent === null) delete p.structuralFatigue;
   }
+  for (const p of v.parts) if (p.link && (!c.byUid.has(p.link.sourceUid) || !c.byUid.has(p.link.targetUid))) {
+    p.link.broken = true;
+    delete p.linkFatigue;
+  }
   v.cache = c;
   // Depths (BFS from root).
   const root = c.byUid.get(v.rootUid);
@@ -239,6 +251,7 @@ export function cloneVessel(v: VesselState): VesselState {
     eva: v.eva ? { ...v.eva } : undefined,
     parts: v.parts.map((p) => ({
       ...p,
+      link: p.link ? structuredClone(p.link) : undefined,
       position: { ...p.position },
       rotation: { ...p.rotation },
       children: [...p.children],
