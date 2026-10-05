@@ -42,7 +42,7 @@ export function craftStats(craft: CraftDef, catalog: PartCatalog, densities: Res
     const m = partMass(part, catalog, densities);
     mass += m; com = add(com, scale(part.position, m));
     for (const module of def.modules) {
-      if (module.type === 'engine') { thrust += module.maxThrustVac; cot = add(cot, scale(part.position, module.maxThrustVac)); }
+      if (module.type === 'engine') { const f = module.maxThrustVac * Math.max(0, Math.min(1, part.tweaks?.thrustLimit ?? 1)); thrust += f; cot = add(cot, scale(part.position, f)); }
       if (module.type === 'liftingSurface') {
         const w = liftWeight(part, module, craft.type);
         lift += w; col = add(col, scale(part.position, w));

@@ -19,6 +19,8 @@ import { gatherContacts, nearSurface, penetrationCorrection, solveContacts, upda
 import { stepThermal } from './heating';
 import { computeSas } from './sas';
 import { addResource, drawResource } from './resources';
+import { applyVesselCommands } from './actions';
+import { isExtended } from './tweaks';
 
 /** Fixed physics step, s. */
 export const PHYSICS_DT = 1 / 50;
@@ -113,6 +115,7 @@ function requiredSubsteps(v: VesselState, env: Environment, t: number, dt: numbe
 export function stepVessel(v: VesselState, input: ControlInput, env: Environment, t: number, dt = PHYSICS_DT, opts: StepOptions = {}): StepResult {
   const result: StepResult = { newVessels: [], events: [] };
   if (v.destroyed || v.parts.length === 0) return result;
+  if (input.commands?.length) result.newVessels.push(...applyVesselCommands(v, input.commands, result.events));
   if (input.gear !== undefined) setGear(v, input.gear);
   updateWheelDeploy(v, dt);
   updateSteering(v, input.yaw);
@@ -201,7 +204,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   const machNow = air.sample.speedOfSound > 0 ? length(airVelocityBody) / air.sample.speedOfSound : 0;
   const eng = stepEngines(v, Math.max(0, Math.min(1, input.throttle)), c, air.sample.pressure, h, result.events, { density: air.sample.density, mach: machNow }, loads);
   const rcs = stepRcs(v, input.rcs, c, translate, air.sample.pressure, h, loads);
-  const wheels = stepReactionWheels(v, c, h, loads);
+  const wheels = stepReactionWheels(v, c, h, loads, { pilot, sas: sasCmd });
 
   // Electrical: command module consumption & solar generation.
   const sun = env.sun(v.position, tMid);
@@ -209,7 +212,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   for (const p of v.parts)
     for (const m of p.def.modules) {
       if (m.type === 'command' && (m as CommandModule).ecPerSecond > 0) drawResource(v, p.uid, 'electricCharge', (m as CommandModule).ecPerSecond * h * (p.electronicsDegraded ? 2 : 1));
-      else if (m.type === 'solarPanel') {
+      else if (m.type === 'solarPanel' && isExtended(p)) {
         const sp = m as SolarPanelModule;
         const nrm = qRotate(p.rotation, { x: 0, y: 0, z: 1 });
         const cosA = sp.tracking ? 1 : Math.max(0, nrm.x * sunBody.x + nrm.y * sunBody.y + nrm.z * sunBody.z);

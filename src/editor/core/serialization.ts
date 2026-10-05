@@ -1,4 +1,6 @@
 import { validCraftLinks } from '../../sim/vessel/links';
+import { validGroupActions } from '../../sim/vessel/actions';
+import { validTweaks } from '../../sim/vessel/tweaks';
 import type { CraftDef } from '../../sim/vessel/types';
 import { requirePart, type PartCatalog } from './geometry';
 const resourceIds = new Set(['liquidFuel', 'oxidizer', 'monopropellant', 'xenon', 'solidFuel', 'electricCharge', 'ablator', 'regolith']);
@@ -24,6 +26,8 @@ export function deserializeCraft(str: string, catalog?: PartCatalog): CraftDef {
       || (p.symmetryGroup !== undefined && !integer(p.symmetryGroup))
       || (p.attachNode !== undefined && typeof p.attachNode !== 'string') || (p.parentNode !== undefined && typeof p.parentNode !== 'string')) throw new Error('Invalid part instance');
     if (p.resources !== undefined && (!record(p.resources) || Object.entries(p.resources).some(([id, amount]) => !resourceIds.has(id) || !finite(amount) || amount < 0))) throw new Error('Invalid resources');
+    if (p.tweaks !== undefined && !validTweaks(p.tweaks)) throw new Error('Invalid part settings');
+    if (p.actions !== undefined && !validGroupActions(p.actions)) throw new Error('Invalid action groups');
     ids.add(p.uid);
   }
   const craft = value as unknown as CraftDef;

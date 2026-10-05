@@ -1,7 +1,7 @@
 import { World, PHYSICS_DT } from '../src/game/world';
 import { Universe } from '../src/game/universe';
 import { PART_CATALOG } from '../src/data/parts';
-import { neutralInput, buildVessel } from '../src/sim/vessel';
+import { neutralInput, buildVessel, MAX_COMMANDS } from '../src/sim/vessel';
 import { RESOURCES } from '../src/data/resources';
 import type { ControlInput } from '../src/sim/vessel/runtime';
 import type { CraftDef } from '../src/sim/vessel/types';
@@ -86,7 +86,8 @@ export class Room {
         if (m.seq <= p.seq) return;
         p.seq = m.seq;
         // Preserve one-shot commands when several packets arrive before the next fixed step.
-        p.input = { ...m.input, stage: p.input.stage || m.input.stage, evaJump: p.input.evaJump || m.input.evaJump, gear: m.input.gear ?? p.input.gear };
+        p.input = { ...m.input, stage: p.input.stage || m.input.stage, evaJump: p.input.evaJump || m.input.evaJump, gear: m.input.gear ?? p.input.gear,
+          commands: p.input.commands || m.input.commands ? [...(p.input.commands ?? []), ...(m.input.commands ?? [])].slice(0, MAX_COMMANDS) : undefined };
         p.inputTick = this.tickNumber;
         return;
       case 'warp': p.warp = m.rate; return;
@@ -175,7 +176,7 @@ export class Room {
     if (this.rate === 1 && this.state().requestedRate > 4 && this.world.warp.index === 0)
       for (const p of this.players.values()) p.warp = 1;
     for (const p of this.players.values()) {
-      p.input = { ...p.input, stage: false, evaJump: false, gear: undefined };
+      p.input = { ...p.input, stage: false, evaJump: false, gear: undefined, commands: undefined };
       if (p.vesselId && !this.world.vessels.has(p.vesselId)) this.release(p);
     }
     this.processQueue();

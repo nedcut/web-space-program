@@ -58,6 +58,8 @@ export function buildVessel(craft: CraftDef, partCatalog: Map<string, PartDef>, 
     const p: PartState = {
       uid: pi.uid,
       link: pi.link ? structuredClone(pi.link) : undefined,
+      ...(pi.tweaks ? { tweaks: structuredClone(pi.tweaks) } : {}),
+      ...(pi.actions ? { actions: structuredClone(pi.actions) } : {}),
       partId: pi.partId,
       def,
       position: { ...pi.position },
@@ -89,6 +91,13 @@ export function buildVessel(craft: CraftDef, partCatalog: Map<string, PartDef>, 
       else if (m.type === 'heatShield') maxTemp = Math.max(maxTemp, m.maxTemp);
     });
     p.maxTemp = maxTemp;
+    // Launch deploy state chosen in the editor overrides the launch-site defaults.
+    const extended = pi.tweaks?.extended;
+    if (extended !== undefined) {
+      if (p.leg) p.leg.deployed = extended;
+      if (p.wheel && (def.modules[p.wheel.moduleIndex] as WheelModule).retractable) { p.wheel.deployed = extended; p.wheel.deploy = extended ? 1 : 0; }
+      if (p.bayOpen !== undefined) p.bayOpen = extended;
+    }
     p.mass = partMass(p, defs);
     return p;
   });
@@ -252,6 +261,8 @@ export function cloneVessel(v: VesselState): VesselState {
     parts: v.parts.map((p) => ({
       ...p,
       link: p.link ? structuredClone(p.link) : undefined,
+      tweaks: p.tweaks ? structuredClone(p.tweaks) : undefined,
+      actions: p.actions ? structuredClone(p.actions) : undefined,
       position: { ...p.position },
       rotation: { ...p.rotation },
       children: [...p.children],

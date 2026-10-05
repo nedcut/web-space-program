@@ -116,7 +116,7 @@ export function localEstimate(craft: CraftDef, catalog: Map<string, PartDef>, ma
         const pool = feed(uid);
         const ok = Object.entries(e.propellants).every(([k, ratio]) => !ratio || density(k as ResourceId) === 0
           || pool.some((u) => (res.get(u)![k as ResourceId] ?? 0) > 1e-9));
-        if (ok) burning.push({ uid, e, mdot: e.maxThrustVac / (e.ispVac * G0), pool });
+        if (ok) burning.push({ uid, e, mdot: e.maxThrustVac * Math.max(0, Math.min(1, parts.get(uid)!.tweaks?.thrustLimit ?? 1)) / (e.ispVac * G0), pool });
       }
       if (!burning.length) break;
       let fVac = 0, fAsl = 0, mdot = 0;

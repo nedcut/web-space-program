@@ -6,6 +6,7 @@ import type { AtmosphereSample } from '../atmosphere/api';
 import type { LiftingSurfaceModule, ParachuteModule } from './types';
 import type { PartState, VesselEvent, VesselState } from './runtime';
 import { faceAreas, faceIndex } from './shapes';
+import { deflectionScale } from './tweaks';
 
 /**
  * Aerodynamics: per-part, occlusion-aware drag with Mach-dependent coefficients, lifting surfaces with
@@ -113,7 +114,7 @@ export function controlDeflection(v: VesselState, p: PartState, mod: LiftingSurf
   const rxn = cross(sub(p.position, v.com), n);
   const l = length(rxn);
   if (l < 1e-6) return 0;
-  return mod.deflection * Math.max(-1, Math.min(1, dot(scale(rxn, 1 / l), control)));
+  return mod.deflection * deflectionScale(p) * Math.max(-1, Math.min(1, dot(scale(rxn, 1 / l), control)));
 }
 
 export function computeAeroForces(v: VesselState, ctx: AeroContext, loads?: PartLoad[]): AeroResult {
@@ -192,7 +193,7 @@ export function controlSurfaceAuthority(v: VesselState, air: AtmosphereSample, s
       const l = length(rxn);
       if (l < 1e-6) continue;
       const u = scale(rxn, 1 / l);
-      const k = q * m.area * m.ctrlFraction * m.liftSlope * lm * Math.min(m.deflection, STALL_ANGLE) * l;
+      const k = q * m.area * m.ctrlFraction * m.liftSlope * lm * Math.min(m.deflection * Math.abs(deflectionScale(p)), STALL_ANGLE) * l;
       out.x += k * u.x * u.x;
       out.y += k * u.y * u.y;
       out.z += k * u.z * u.z;
@@ -217,7 +218,7 @@ export function updateParachutes(v: VesselState, ctx: ChuteContext, dt: number, 
     const overload = ctx.dynamicPressure > 1.5 * m.maxQ;
     const prev = c.phase;
     if (c.phase === 'armed') {
-      if (ctx.air.pressure >= m.minPressure && !overload) {
+      if (ctx.air.pressure >= (p.tweaks?.chuteMinPressure ?? m.minPressure) && !overload) {
         c.phase = 'semi';
         c.progress = 0;
       }
@@ -230,7 +231,7 @@ export function updateParachutes(v: VesselState, ctx: ChuteContext, dt: number, 
         const e = smoothstep(0, 1, c.progress);
         if (c.phase === 'semi') {
           c.cda = m.semiCdA * e;
-          if (ctx.altitudeAGL <= m.deployAltitude) {
+          if (ctx.altitudeAGL <= (p.tweaks?.chuteDeployAltitude ?? m.deployAltitude)) {
             c.phase = 'full';
             c.progress = 0;
           }
