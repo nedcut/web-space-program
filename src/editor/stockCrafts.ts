@@ -565,12 +565,30 @@ function buildScaleMoonLander(preset: 'real' | 'challenging', catalog: PartCatal
   return b.done();
 }
 
+/** Destination-deployed sample-return hardware; use RCS pulses for microgravity contact. */
+export function buildPebblecatcher(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Pebblecatcher', 'Robotic sample return: collector, shield, parachute, RCS and four landing legs. Deployed near Bennu; pulse RCS gently.');
+  const core = b.root('probe-cairn');
+  b.stack(core, 'chute-main', 'top');
+  const mono = b.stack(core, 'mono-bagel');
+  const tank = b.stack(mono, 'tank-1-mid');
+  b.stack(tank, 'shield-1');
+  b.radial(core, 'sensor-sample', 1, 0, 90);
+  b.radial(core, 'antenna-horizon', 1, 0, 270);
+  b.radial(tank, 'eng-radial-spray', 2, 0, 90);
+  b.radial(tank, 'leg-stilt', 4, -0.6, 45);
+  b.radial(mono, 'rcs-nudge', 4, 0, 45);
+  b.radial(core, 'solar-fold', 2, 0, 0);
+  return b.done();
+}
+
 export const STOCK_CRAFTS: StockCraft[] = ([
   { scale: 'standard', id: 'stock-kestrel', name: 'Kestrel Sounding Rocket', blurb: 'Suborbital test hop · 1 stage + capsule', build: () => buildSoundingRocket() },
   { scale: 'standard', id: 'stock-meridian', name: 'Meridian Orbiter', blurb: 'Standard scale · two stages to low orbit and back', build: () => buildOrbiter() },
   { scale: 'standard', id: 'stock-selene', name: 'Selene Lunar Lander', blurb: 'Three stages · land on the Moon and return', build: () => buildMoonLander() },
   { scale: 'standard', id: 'stock-swift', name: 'Swift Jet', blurb: 'Runway takeoff · turbofan trainer aircraft', build: () => buildSwift() },
   { scale: 'standard', id: 'stock-ringrunner', name: 'Ringrunner Saturn Probe', blurb: 'Standard scale · three stages to Saturn', build: () => buildRingrunner() },
+  { scale: 'standard', id: 'stock-pebblecatcher', name: 'Pebblecatcher', blurb: 'Bennu sample-return probe · gentle RCS touchdown', launchBody: 'bennu', needsResearch: true, build: () => buildPebblecatcher() },
   { scale: 'standard', id: 'stock-tender', name: 'Wren Tender', blurb: 'Docking practice tug · try ?scenario=rendezvous', build: () => buildTender() },
   ...([
     ['hearthlight', 'Hearthlight Station', 'Docking hub · four-seat orbital outpost', buildStationCore, 'earth'],

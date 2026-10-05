@@ -10,6 +10,7 @@ export const scienceParts: PartDef[] = [
   ['sensor-seismic', 'Tremor Seismic Sensor', 'seismic', 18, 650],
   ['sensor-magnetic', 'Flux Magnetometer Boom', 'magnetic', 22, 900],
   ['sensor-gravity', 'Contour Gravity Gradiometer', 'gravity', 35, 1400],
+  ['sensor-sample', 'Pebble Sample Collector', 'surfaceSample', 12, 1200],
   ['sensor-exposure', 'Patina Material Exposure Bay', 'exposure', 65, 1900],
 ].map(([id, name, experiment, mass, cost]) => ({
   id: String(id), name: String(name), manufacturer: MANUFACTURERS.brightfield,

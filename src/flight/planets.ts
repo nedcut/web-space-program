@@ -1,3 +1,4 @@
+import { CometEffects } from '../render/planet/CometEffects';
 import * as THREE from 'three';
 import type { Universe } from '../game/universe';
 import { length, sub, type Vec3 } from '../util/vec3';
@@ -40,6 +41,9 @@ export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualit
   const quality = getQuality(qualityId);
   const scale = SCALE_PRESETS[universe.preset];
   const renderers = new Map<string, PlanetRenderer>();
+  const comets = new Map([...universe.bodies.values()].filter(b => b.kind === 'comet').map(b => {
+    const fx = new CometEffects(); scene.add(fx.root); return [b.id, fx] as const;
+  }));
   let lastT = 0;
   let lastOrigin: Vec3 = { x: 0, y: 0, z: 0 };
 
@@ -66,6 +70,8 @@ export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualit
 
   return {
     update(u) {
+      for (const [id, fx] of comets) fx.update(universe.ephem.getBodyState(id, u.t).position, u.sunPos,
+        u.origin, universe.body(id).radius, 149597870700 * scale.s, u.t);
       lastT = u.t;
       lastOrigin = u.origin;
       for (const b of universe.bodies.values()) {
@@ -108,6 +114,7 @@ export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualit
       return occluders(point, sunPos).tint;
     },
     dispose() {
+      for (const fx of comets.values()) fx.dispose();
       for (const pr of renderers.values()) {
         pr.root.removeFromParent();
         pr.dispose();

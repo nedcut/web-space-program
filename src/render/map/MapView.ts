@@ -1,3 +1,6 @@
+import { createTerrain } from '../../sim/terrain';
+import { CometEffects } from '../planet/CometEffects';
+import { AsteroidFieldView, type FieldSource } from './AsteroidFieldView';
 import type { Network } from '../../sim/comms/network';
 import { concentrationAt } from '../../sim/resources/deposits';
 import * as THREE from 'three';
@@ -137,6 +140,9 @@ export function sampleConic(o: Orbit, soi: number, t0: number, t1: number | null
 }
 
 export class MapView {
+  private field?: AsteroidFieldView;
+  private comets = new Map<string, CometEffects>();
+  private au = 149597870700;
   readonly scene = new THREE.Scene();
   private linkColor = new THREE.Color();
   private commsLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, depthTest: false }));
@@ -276,6 +282,7 @@ export class MapView {
   setTarget(t: MapTarget | null) {
     if (this.target?.id === t?.id && this.target?.kind === t?.kind) return;
     this.target = t;
+    this.field?.select(t?.kind === 'body' ? t.id : null);
     if (this.highlightedBody) {
       const { vis, color, width } = this.highlightedBody;
       if (vis.orbitLine) {
@@ -314,7 +321,9 @@ export class MapView {
     this.scene.updateMatrixWorld(true);
     const hits = ray.intersectObjects(candidates.map((c) => c.object), false);
     const hit = candidates.find((c) => c.object === hits[0]?.object);
-    return hit ? { kind: hit.kind, id: hit.id } : null;
+    if (hit) return { kind: hit.kind, id: hit.id };
+    const asteroid = this.field?.pick(x, y, this.camera);
+    return asteroid ? { kind: 'body' as const, id: asteroid } : null;
   }
 
   private removeLine(line: Line2) {
@@ -370,7 +379,10 @@ export class MapView {
     bodies: Map<string, Body>,
     private ephem: Ephemeris,
     labelHost: HTMLElement,
+    field?: FieldSource,
   ) {
+    this.au = (bodies.get('earth')?.orbit?.a ?? 149597870700);
+    if (field) this.field = new AsteroidFieldView(field, bodies.get('sun')!.gm, this.au / 149597870700, this.scene);
     this.scene.background = new THREE.Color(0x02030a);
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.08));
     this.scene.add(this.sunLight);
@@ -379,11 +391,21 @@ export class MapView {
     labelHost.appendChild(this.labels);
 
     for (const b of bodies.values()) {
+      if (b.kind === 'comet') { const fx = new CometEffects(); this.comets.set(b.id, fx); this.scene.add(fx.root); }
       const isStar = b.kind === 'star';
       const mat = isStar
         ? new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.92, 0.75).multiplyScalar(3) })
         : new THREE.MeshStandardMaterial({ color: colorOf(b), roughness: 0.9 });
       const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), mat);
+      if (b.surface.preset === 'irregular') {
+        const terrain = createTerrain(b), points = sphere.geometry.getAttribute('position'), p = new THREE.Vector3();
+        for (let i = 0; i < points.count; i++) {
+          p.fromBufferAttribute(points, i).normalize();
+          p.multiplyScalar(1 + terrain.heightAt(p.x, p.y, p.z) / b.radius);
+          points.setXYZ(i, p.x, p.y, p.z);
+        }
+        sphere.geometry.computeVertexNormals(); sphere.geometry.computeBoundingSphere();
+      }
       sphere.scale.setScalar(b.radius);
       this.scene.add(sphere);
       const css = `#${colorOf(b).getHexString()}`;
@@ -485,6 +507,8 @@ export class MapView {
   update(u: MapUpdate) {
     this.lastUpdate = u;
     const { t, focus } = u;
+    this.field?.update(t, focus);
+    for (const [id, fx] of this.comets) fx.update(this.ephem.getBodyState(id, t).position, this.ephem.getBodyState('sun', t).position, focus, this.bodies.get(id)!.body.radius, this.au, t, true);
     if (!this.commsLines.parent) { this.scene.add(this.commsLines); this.commsLines.renderOrder = 5; }
     this.commsLines.visible = !!u.comms;
     if (u.comms) {
@@ -538,7 +562,7 @@ export class MapView {
       this.place(vis.sphere, pos, focus);
       const rotation = this.ephem.bodyRotation(vis.body.id, t);
       vis.sphere.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
-      vis.sphere.rotateX(Math.PI / 2);
+      if (vis.body.surface.preset !== 'irregular') vis.sphere.rotateX(Math.PI / 2);
       this.place(vis.icon, pos, focus);
       if (vis.orbitLine && vis.body.parent) this.place(vis.orbitLine, this.ephem.getBodyState(vis.body.parent, t).position, focus);
       // Hide icons/labels for bodies whose apparent size is large, or whose orbit is tiny on screen (declutter).

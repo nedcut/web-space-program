@@ -1,3 +1,4 @@
+import { irregularPreset } from './presets/irregular';
 import type { BodyDef } from '../bodies/types';
 import type { RGB, Terrain } from './api';
 import { makeContext, type PresetContext, type PresetResult } from './presets/common';
@@ -16,6 +17,7 @@ export interface CreateTerrainOptions {
 }
 
 const PRESETS: Record<string, (ctx: PresetContext) => PresetResult> = {
+  irregular: irregularPreset,
   earth: earthPreset,
   lunar: lunarPreset,
   mercury: mercuryPreset,

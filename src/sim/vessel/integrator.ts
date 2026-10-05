@@ -2,7 +2,7 @@ import type { PartLoad } from './loads';
 import { breakJoints, crashJointCuts, crashShocks, overloadedJoints } from './structure';
 import { advanceISRU } from './isru';
 import type { Vec3 } from '../../util/vec3';
-import { add, length, scale, v3 } from '../../util/vec3';
+import { add, sub, length, scale, v3 } from '../../util/vec3';
 import type { Quat } from '../../util/quat';
 import { qConj, qMul, qNormalize, qRotate } from '../../util/quat';
 import type { CommandModule, LandingLegModule, SolarPanelModule, WheelModule } from './types';
@@ -127,7 +127,27 @@ export function stepVessel(v: VesselState, input: ControlInput, env: Environment
       ? { ...input, target: { position: add(input.target.position, scale(input.target.velocity, tMid - t)), velocity: input.target.velocity } }
       : input;
     const before = result.newVessels.length;
-    substep(v, inp, env, t + s * h, h, opts, result);
+    if (env.integrateRelative && env.referenceBody) {
+      const anchor = { ...v.position };
+      const ref = (time: number) => env.referenceBody!(anchor, time);
+      const start = ref(t + s * h), end = ref(t + (s + 1) * h), mid = ref(tMid);
+      const absolute = (p: Vec3, time: number) => add(p, ref(time).position);
+      const localEnv: Environment = {
+        gravity: (p, time) => env.gravity(absolute(p, time), time),
+        air: (p, time) => { const a = env.air(absolute(p, time), time); return { ...a, windVelocity: sub(a.windVelocity, ref(time).velocity) }; },
+        ground: (p, time) => { const g = env.ground(absolute(p, time), time); return g ? { ...g,
+          surfacePoint: sub(g.surfacePoint, ref(time).position), surfaceVelocity: sub(g.surfaceVelocity, ref(time).velocity) } : null; },
+        sun: (p, time) => env.sun(absolute(p, time), time),
+        regolithConcentration: (p, time) => env.regolithConcentration?.(absolute(p, time), time) ?? 0,
+        referenceBody: () => ({ position: v3(), velocity: v3() }),
+      };
+      v.position = sub(v.position, start.position); v.velocity = sub(v.velocity, start.velocity);
+      const localInput = inp.target ? { ...inp, target: { position: sub(inp.target.position, mid.position), velocity: sub(inp.target.velocity, mid.velocity) } } : inp;
+      substep(v, localInput, localEnv, t + s * h, h, opts, result);
+      for (const state of [v, ...result.newVessels.slice(before)]) {
+        state.position = add(state.position, end.position); state.velocity = add(state.velocity, end.velocity);
+      }
+    } else substep(v, inp, env, t + s * h, h, opts, result);
     for (const nv of result.newVessels.slice(before)) {
       (result.newVesselTimeOffsets ??= {})[nv.id] = (s + 1) * h;
     }

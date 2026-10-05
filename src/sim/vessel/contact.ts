@@ -168,6 +168,14 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
           const x = Math.min(d, m.travel);
           const vn = dot(sub(pointVel(rW), gs.surfaceVelocity), gs.normal);
           if (-vn > p.def.crashTolerance) impact(p.uid, -vn);
+          // In microgravity a millimetre of stored spring energy can exceed escape speed.
+          // Treat a deployed foot as a dissipative unilateral contact (no adhesion or bounce).
+          if (gravityMag < 0.01) {
+            p.leg.compression = x; p.leg.inContact = true; out.landed = true;
+            out.contacts.push({ partUid: p.uid, r: rW, n: gs.normal, surfaceVelocity: gs.surfaceVelocity,
+              kind: 'rigid', depth: d, legImpulse: 0, jn: 0, jt: v3() });
+            continue;
+          }
           const F = Math.max(0, m.spring * x - m.damper * vn);
           const Fv = scale(gs.normal, F);
           record(p.uid, rW, Fv);

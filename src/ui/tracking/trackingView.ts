@@ -28,7 +28,7 @@ export class TrackingView {
     const canvas = this.pipeline.renderer.domElement;
     Object.assign(canvas.style, { width: '100%', height: '100%', display: 'block' });
     host.appendChild(canvas);
-    this.map = new MapView(world.universe.bodies, world.universe.ephem, host);
+    this.map = new MapView(world.universe.bodies, world.universe.ephem, host, world.universe);
     this.focus = { kind: 'body', id: world.universe.sunId };
     this.setFocus(this.focus);
     this.detach = this.map.attachControls(canvas, () => this.focus.kind === 'body' ? world.universe.body(this.focus.id).radius * 1.2 : 10);
