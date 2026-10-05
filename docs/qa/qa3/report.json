@@ -1,0 +1,181 @@
+{
+  "checks": [
+    {
+      "name": "Menu, all settings tabs and photo/stress bindings",
+      "status": "pass"
+    },
+    {
+      "name": "All ten scenario briefings",
+      "status": "pass"
+    },
+    {
+      "name": "New program, hub and photo capture",
+      "status": "pass",
+      "detail": {
+        "width": 683,
+        "height": 384
+      }
+    },
+    {
+      "name": "IndexedDB legacy migration, stock scale badges, library actions",
+      "status": "pass"
+    },
+    {
+      "name": "Share code round trip through editor preview/import",
+      "status": "pass",
+      "detail": {
+        "parts": 16,
+        "codeBytes": 909
+      }
+    },
+    {
+      "name": "Launch VFX, stress overlay and pause/photo clock",
+      "status": "pass",
+      "detail": {
+        "ut": 964051215.2999854,
+        "altitude": 251.1977763642774,
+        "thrust": 197388.94519564157,
+        "parts": 16,
+        "events": [
+          {
+            "detail": "Stage 4",
+            "time": 2.499997615814209,
+            "kind": "stage",
+            "body": "earth"
+          },
+          {
+            "time": 6.279994010925293,
+            "kind": "launch",
+            "body": "earth"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Flight report, charts, share summary and achievements screen",
+      "status": "pass"
+    },
+    {
+      "name": "Named save, Continue slots and export",
+      "status": "pass"
+    },
+    {
+      "name": "Ring Skimmer mission completion and photo keeps debrief paused",
+      "status": "pass",
+      "detail": {
+        "result": {
+          "score": 99685,
+          "medal": "gold",
+          "elapsed": 94.41990995407104,
+          "dv": 0,
+          "landingSpeed": null,
+          "precision": 0.1726947296410799,
+          "scienceBonus": false,
+          "success": true
+        },
+        "records": 1
+      }
+    },
+    {
+      "name": "Real atmospheric reentry, hot hardware and scenario flight record",
+      "status": "pass",
+      "detail": {
+        "entry": {
+          "maximum": 1106.0829138064503,
+          "steps": 404,
+          "parts": 6
+        },
+        "landing": {
+          "result": {
+            "score": 97679,
+            "medal": "bronze",
+            "elapsed": 430.29958963394165,
+            "dv": 0,
+            "landingSpeed": 7.705677977227409,
+            "precision": 0,
+            "scienceBonus": false,
+            "success": true
+          },
+          "events": [
+            "launch",
+            "stage",
+            "stage",
+            "separation",
+            "splashdown",
+            "launch",
+            "stage",
+            "stage",
+            "separation",
+            "loss"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Tutorial world, achievements and return navigation",
+      "status": "pass",
+      "detail": {
+        "recorded": true,
+        "moon": 964051200
+      }
+    },
+    {
+      "name": "Titan sea splashdown, buoyancy, biome and achievement",
+      "status": "pass",
+      "detail": {
+        "situation": "splashed",
+        "speed": 0.05269310923183628,
+        "parts": 19,
+        "destroyed": false,
+        "biome": "Hydrocarbon Seas",
+        "achievement": 964330323.6777039,
+        "events": [
+          "launch",
+          "splashdown"
+        ]
+      }
+    },
+    {
+      "name": "No console errors or framebuffer warnings",
+      "status": "pass"
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio",
+    "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio"
+  ]
+}
