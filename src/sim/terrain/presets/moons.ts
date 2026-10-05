@@ -141,11 +141,18 @@ export function europaPreset(ctx: PresetContext): PresetResult {
   let chaosM = 0;
   const height = (x: number, y: number, z: number): number => {
     let h = 0.06 * fbm(nBase, x * 3, y * 3, z * 3, baseOct);
-    const wx = 0.004 * nWarp.noise(x * 25, y * 25, z * 25);
+    // Low-frequency vector warp bends each fault differently; scalloped tidal arcs avoid straight strings.
+    const wx = 0.025 * nWarp.noise(x * 5, y * 5, z * 5);
+    const wy = 0.025 * nWarp.noise(x * 5 + 9, y * 5 - 3, z * 5);
+    const wz = 0.025 * nWarp.noise(x * 5, y * 5 + 7, z * 5 - 5);
     band = 0;
     let ridge = 0;
     for (const l of lineae) {
-      const off = Math.abs(x * l.nx + y * l.ny + z * l.nz + wx);
+      const plane = (x + wx) * l.nx + (y + wy) * l.ny + (z + wz) * l.nz;
+      if (Math.abs(plane) > l.w * 6 + 0.012) continue;
+      const arc = x * (l.my * l.nz - l.mz * l.ny) + y * (l.mz * l.nx - l.mx * l.nz) + z * (l.mx * l.ny - l.my * l.nx);
+      const scallop = 0.009 * Math.sin(arc * 18 + l.mx * 12) + 0.003 * Math.sin(arc * 39 + l.mz * 8);
+      const off = Math.abs(plane + scallop);
       if (off > l.w * 6) continue;
       const along = x * l.mx + y * l.my + z * l.mz;
       if (along < l.cosHalf) continue;

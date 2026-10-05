@@ -23,6 +23,8 @@ export interface PlanetUniforms {
   uMultiScatter: THREE.IUniform<number>;
   /** Integer multiplier on aerial-perspective steps (thick atmospheres need more). */
   uStepScale: THREE.IUniform<number>;
+  uPlanetshineDir: THREE.IUniform<THREE.Vector3>;
+  uPlanetshineColor: THREE.IUniform<THREE.Vector3>;
   uSunDir: THREE.IUniform<THREE.Vector3>;
   uSunColor: THREE.IUniform<THREE.Vector3>;
   uTransLUT: THREE.IUniform<THREE.Texture | null>;
@@ -67,6 +69,8 @@ export function createPlanetUniforms(radius: number, atmo: AtmosphereParams | nu
     uAmbient: { value: atmo?.ambient ?? 0 },
     uMultiScatter: { value: atmo?.multiScatter ?? 0 },
     uStepScale: { value: atmo && atmo.multiScatter > 2 ? 3 : 1 },
+    uPlanetshineDir: { value: v([1, 0, 0]) },
+    uPlanetshineColor: { value: v() },
     uSunDir: { value: new THREE.Vector3(1, 0, 0) },
     uSunColor: { value: new THREE.Vector3(10, 10, 10) },
     uTransLUT: { value: lut ?? dummy() },

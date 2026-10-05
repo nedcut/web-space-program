@@ -26,6 +26,8 @@ uniform float uHm;
 uniform float uAmbient;
 uniform float uMultiScatter;
 uniform int uStepScale;
+uniform vec3 uPlanetshineDir;
+uniform vec3 uPlanetshineColor;
 uniform vec3 uSunDir;      // unit, render space, from planet towards the sun
 uniform vec3 uSunColor;    // HDR solar irradiance (linear RGB)
 uniform sampler2D uTransLUT;
@@ -73,6 +75,7 @@ void integrateScattering(vec3 rel0, vec3 rd, float t0, float t1, int steps, out 
   inscatter = vec3(0.0);
   transmittance = vec3(1.0);
   if (uHasAtmo < 0.5 || t1 <= t0) return;
+  steps = min(steps, 64);
   float cosT = dot(rd, uSunDir);
   float pR = phaseRayleigh(cosT);
   vec3 pM = phaseMie(cosT);

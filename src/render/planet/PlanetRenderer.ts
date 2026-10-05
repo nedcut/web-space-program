@@ -22,6 +22,9 @@ import {
 import { Quadtree } from './quadtree';
 import { TerrainWorkerPool } from './workerPool';
 import { buildRingProfile } from './textures';
+import { RingParticles } from './RingParticles';
+import { createPlanetEffect } from './effects';
+import { reflectedIrradiance, type PlanetLightSource } from './planetshine';
 import { terrainCutout } from './cutout';
 
 export interface PlanetRendererOptions {
@@ -58,6 +61,8 @@ export interface PlanetUpdateParams {
 
 export type PlanetKind = 'star' | 'gas' | 'solid';
 
+const lightSources = new Map<PlanetRenderer, PlanetLightSource>();
+
 const AU = 149597870700;
 
 /**
@@ -84,6 +89,9 @@ export class PlanetRenderer {
   private clouds: THREE.Mesh | null = null;
   private cloudRadius = 0;
   private rings: THREE.Mesh | null = null;
+  private ringParticles: RingParticles | null = null;
+  private ringTexture: THREE.DataTexture | null = null;
+  private effects: THREE.Mesh[] = [];
   private sunMesh: THREE.Mesh | null = null;
   private materials: THREE.Material[] = [];
   private lut: THREE.DataTexture | null = null;
@@ -118,6 +126,10 @@ export class PlanetRenderer {
     if (this.atmosphere) this.lut = buildTransmittanceLUT(this.atmosphere);
     this.uniforms = createPlanetUniforms(body.radius, this.atmosphere, this.lut);
     registerPlanetUniforms(body.id, this.uniforms);
+    // Optically thick Titan needs the same integration budget on its disc and limb to avoid a seam.
+    if (body.id === 'titan' && this.quality.planetDetails.volumeSteps > 0) {
+      this.uniforms.uStepScale.value = Math.ceil(64 / this.quality.atmosphere.aerialSteps);
+    }
 
     if (this.kind === 'star') this.buildSun();
     else if (this.kind === 'gas') this.buildGasGiant();
@@ -125,6 +137,23 @@ export class PlanetRenderer {
 
     if (this.atmosphere) this.buildSky();
     if (body.rings && this.kind !== 'star') this.buildRings();
+    if (this.quality.planetDetails.volumeSteps > 0) {
+      const id = body.id;
+      const kind = this.kind === 'star' ? 'corona' : id;
+      if (kind === 'enceladus' || kind === 'io' || kind === 'titan' || kind === 'earth' || kind === 'corona') {
+        const extent = kind === 'enceladus' ? 1.8 : kind === 'io' ? 1.22 : kind === 'corona' ? 1.65
+          : kind === 'titan' ? 1 + (this.atmosphere!.atmosphereRadius / body.radius - 1) * 0.75 : 1.045;
+        const effect = createPlanetEffect(this.uniforms, this.quality, kind, extent);
+        this.effects.push(effect);
+        this.materials.push(effect.material as THREE.Material);
+        this.root.add(effect);
+      }
+    }
+    if (body.id === 'earth' && this.quality.planetDetails.surfaceEmission) {
+      for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.EARTH_DETAILS = 1;
+    }
+    lightSources.set(this, { position: { x: 0, y: 0, z: 0 }, radius: body.radius,
+      albedo: body.surface?.colors?.[1] ?? [0.4, 0.4, 0.4], sunDirection: { x: 1, y: 0, z: 0 }, irradiance: 0 });
   }
 
   // ------------------------------------------------------------------ construction
@@ -274,6 +303,7 @@ export class PlanetRenderer {
     const inner = rd.innerRadius * (1 - pad);
     const outer = rd.outerRadius * (1 + pad);
     const tex = buildRingProfile(profile, env[0] * (1 - pad), env[1] * (1 + pad), rd.opacity ?? 0.8);
+    this.ringTexture = tex;
     const geo = new THREE.RingGeometry(inner, outer, this.quality.ringSegments, 4);
     const mat = createRingMaterial(this.uniforms, this.quality, tex, inner, outer);
     // Faint dusty rings mostly scatter light; they barely occlude what is behind them.
@@ -288,6 +318,11 @@ export class PlanetRenderer {
     this.uniforms.uRingInner.value = inner;
     this.uniforms.uRingOuter.value = outer;
     this.uniforms.uRingProfile.value = tex;
+    if (this.quality.planetDetails.ringCells > 0) {
+      this.ringParticles = new RingParticles(this.uniforms, this.quality, tex.image.data as Uint8Array, inner, outer);
+      this.root.add(this.ringParticles.group);
+      mat.uniforms.uParticleRange.value = this.ringParticles.range;
+    }
   }
 
   // ------------------------------------------------------------------ per frame
@@ -329,6 +364,23 @@ export class PlanetRenderer {
     const auScaled = AU * this.scale.s;
     const E = this.kind === 'star' ? 0 : this.sunIlluminance * Math.pow(auScaled / Math.max(sd, auScaled * 0.2), 0.3);
     u.uSunColor.value.set(E, E * 0.985, E * 0.96);
+    const source = lightSources.get(this)!;
+    Object.assign(source.position, p.bodyPosition);
+    Object.assign(source.sunDirection, { x: sx / sd, y: sy / sd, z: sz / sd });
+    source.irradiance = E;
+    u.uPlanetshineColor.value.setScalar(0);
+    // Nearby parent renderers already exist in flight. Keep solar positions in float64 here.
+    for (const [renderer, parent] of lightSources) {
+      if (renderer.body.id !== this.body.parent || renderer.kind === 'star' || renderer.root.parent !== this.root.parent) continue;
+      const dx = parent.position.x - p.bodyPosition.x, dy = parent.position.y - p.bodyPosition.y, dz = parent.position.z - p.bodyPosition.z;
+      const distance = Math.hypot(dx, dy, dz);
+      if (distance <= parent.radius) continue;
+      const phase = -(dx * parent.sunDirection.x + dy * parent.sunDirection.y + dz * parent.sunDirection.z) / distance;
+      const strength = reflectedIrradiance(parent.radius, distance, phase) * parent.irradiance;
+      u.uPlanetshineDir.value.set(dx / distance, dy / distance, dz / distance);
+      u.uPlanetshineColor.value.set(parent.albedo[0] * strength, parent.albedo[1] * strength, parent.albedo[2] * strength);
+      break;
+    }
     if (this.sky) {
       const mat = this.sky.material as THREE.ShaderMaterial;
       // Angular radius of the sun as seen from this body (≈ R_sun / d).
@@ -355,7 +407,11 @@ export class PlanetRenderer {
 
     if (this.sunMesh) {
       placeWhole(this.sunMesh, R);
-      (this.sunMesh.material as THREE.ShaderMaterial).uniforms.uTime.value = time;
+      const sm = this.sunMesh.material as THREE.ShaderMaterial;
+      sm.uniforms.uTime.value = time;
+      // Resolve photosphere detail when approaching the Sun; retain bright HDR radiance at a distance.
+      const close = 1 - THREE.MathUtils.smoothstep(camDist / R, 6, 30);
+      sm.uniforms.uIntensity.value = THREE.MathUtils.lerp(this.sunRadiance, 1.7, close);
     }
     if (this.sky) placeWhole(this.sky, Ra * 1.002);
     if (this.clouds) {
@@ -364,6 +420,13 @@ export class PlanetRenderer {
       cm.uniforms.uCamCCloud.value = (camDist - this.cloudRadius) * (camDist + this.cloudRadius);
     }
     if (this.rings) placeWhole(this.rings, 1);
+    this.ringParticles?.update(camBF, u.uPlanetCenter.value, this.rotQ);
+    // The nearest geometry is now metres away even though the planet's surface is thousands of km away.
+    if (this.ringParticles?.group.visible && cam.near > 0.1) {
+      cam.near = 0.1;
+      cam.updateProjectionMatrix();
+    }
+    for (const effect of this.effects) placeWhole(effect, R * effect.userData.extent);
 
     if (this.kind === 'gas') {
       placeWhole(this.farSphere!, R);
@@ -395,7 +458,9 @@ export class PlanetRenderer {
     }
 
     const qt = this.quadtree;
-    const farThresholdPx = Math.max(140, this.quality.bakedTextureWidth / 5);
+    // Flat, colorful moons need texture resolution, not geometric refinement: retain the bake longer.
+    const colorDominated = this.body.id === 'io' || this.body.id === 'europa';
+    const farThresholdPx = Math.max(140, this.quality.bakedTextureWidth / (colorDominated ? 2 : 5));
     const wantNear = !!qt && projR > farThresholdPx;
     if (qt && wantNear) {
       this.tmpM4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
@@ -489,6 +554,9 @@ export class PlanetRenderer {
 
   dispose(): void {
     unregisterPlanetUniforms(this.body.id, this.uniforms);
+    lightSources.delete(this);
+    this.ringParticles?.dispose();
+    this.ringTexture?.dispose();
     this.quadtree?.dispose();
     this.root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).geometry.dispose();

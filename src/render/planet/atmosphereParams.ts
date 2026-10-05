@@ -33,6 +33,7 @@ export function computeAtmosphereParams(body: BodyDef, scale: ScaleConfig = SCAL
   const a = body.atmosphere;
   if (!a) return null;
   const R = body.radius;
+  let visualHeight = a.height;
   const g = body.gm / (R * R);
   const atmoFactor = Math.pow(scale.s, scale.atmosphereExponent);
   const hThermo = (R_GAS * a.surfaceTemperature) / (a.molarMass * Math.max(g, 0.01));
@@ -69,6 +70,8 @@ export function computeAtmosphereParams(body: BodyDef, scale: ScaleConfig = SCAL
     Hm = Hr * 1.0;
     ambient = 0.9;
   } else if (preset === 'titan' || id === 'titan') {
+    // Keep the visible haze compact at compressed planet scales. The simulation atmosphere is unchanged.
+    visualHeight = Math.min(a.height, R * 0.26);
     // Thick photochemical haze, absorbs blue strongly.
     const haze = mie * 1.6;
     betaMe = [haze, haze * 1.05, haze * 1.15];
@@ -101,10 +104,10 @@ export function computeAtmosphereParams(body: BodyDef, scale: ScaleConfig = SCAL
     Hm = Hr * 0.5;
   }
   Hr = Math.max(Hr, 1);
-  Hm = Math.max(Math.min(Hm, a.height / 4), 1);
+  Hm = Math.max(Math.min(Hm, visualHeight / 4), 1);
   return {
     planetRadius: R,
-    atmosphereRadius: R + a.height,
+    atmosphereRadius: R + visualHeight,
     rayleighScaleHeight: Hr,
     mieScaleHeight: Hm,
     betaRayleigh: betaR,

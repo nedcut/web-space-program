@@ -46,7 +46,7 @@ bodySel.value = params.get('body') ?? 'earth';
 ui.quality.value = qualityId;
 for (const k of ['lat', 'lon', 'head', 'pitch', 'hour', 'dec', 'exp'] as const) {
   const v = params.get(k);
-  if (v !== null) ui[k].value = v;
+  if (v !== null) { ui[k].step = 'any'; ui[k].value = v; } // Preserve metre-scale ring-plane latitudes from URLs.
 }
 
 let body!: BodyDef;
