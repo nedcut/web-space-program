@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { PART_CATALOG } from '../src/data/parts';
 import { decodeCraft, encodeCraft, validateCraft } from '../src/game/craftSharing';
 import { CRAFTS_KEY, migrateCrafts, type CraftRepository, type LibraryCraft } from '../src/game/saves';
-import { exportSaveSlot, importSaveSlot, listSaveSlots, writeSaveSlot, type SaveSlot } from '../src/game/saveSlots';
+import { removeSaveSlot, exportSaveSlot, importSaveSlot, listSaveSlots, writeSaveSlot, type SaveSlot } from '../src/game/saveSlots';
 import type { CraftDef } from '../src/sim/vessel/types';
 import { game } from '../src/game/store';
 import { loadWorldFromStorage, saveNamedWorld, saveWorldToStorage, serializeWorld } from '../src/game/persistence';
@@ -105,6 +105,23 @@ describe('save slots', () => {
 
 
 describe('program save integration', () => {
+  it('migrates both legacy channels once without resurrecting deleted slots', () => {
+    const world = new World(new Universe('standard'), PART_CATALOG, 456);
+    const raw = JSON.stringify({ savedAt: 1, data: serializeWorld(world) });
+    const store = storage({ 'wsp.world.v1.autosave': raw, 'wsp.world.v1.quicksave': raw });
+    const previous = game.get().saveId; vi.stubGlobal('localStorage', store);
+    try {
+      game.set({ saveId: 'fresh-program' }); saveWorldToStorage('autosave', world);
+      expect(listSaveSlots(store).filter(s => s.programId === 'legacy-program')).toHaveLength(2);
+      for (const slot of listSaveSlots(store)) removeSaveSlot(slot.id, store);
+      for (const saveId of [null, 'legacy-program', 'fresh-program']) {
+        game.set({ saveId }); expect(loadWorldFromStorage('autosave')).toBeNull(); expect(loadWorldFromStorage('quicksave')).toBeNull();
+      }
+      saveWorldToStorage('autosave', world);
+      expect(listSaveSlots(store)).toHaveLength(1);
+    } finally { game.set({ saveId: previous }); vi.unstubAllGlobals(); }
+  });
+
   it('migrates legacy saves and scopes quickload to the selected program', () => {
     const world = new World(new Universe('standard'), PART_CATALOG, 321);
     const oldData = serializeWorld(world);
@@ -118,12 +135,17 @@ describe('program save integration', () => {
       expect(loadWorldFromStorage('quicksave')).toBeNull();
       saveWorldToStorage('quicksave', world);
       game.set({ saveId: 'other-program' });
+      expect(loadWorldFromStorage('quicksave')).toBeNull();
+      expect(loadWorldFromStorage('autosave')).toBeNull();
       saveWorldToStorage('autosave', world);
       expect(loadWorldFromStorage('quicksave')).toBeNull();
       game.set({ saveId: 'new-program' });
       expect(loadWorldFromStorage('quicksave')?.data.ut).toBe(321);
       saveNamedWorld('autosave', world);
       expect(listSaveSlots(store).find(x => x.id === 'new-program:manual:autosave')?.kind).toBe('manual');
+      for (const slot of listSaveSlots(store)) if (slot.programId === 'new-program') removeSaveSlot(slot.id, store);
+      expect(loadWorldFromStorage('autosave')).toBeNull();
+      expect(loadWorldFromStorage('quicksave')).toBeNull();
     } finally { game.set({ saveId: previous }); vi.unstubAllGlobals(); }
   });
 });

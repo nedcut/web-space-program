@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { game, DEFAULT_START_UT } from '../game/store';
 import { SCALE_PRESETS, type ScalePresetId } from '../sim/bodies/scale';
 import { MenuBackdrop } from './MenuBackdrop';
-import { deleteSave, hasSave } from '../game/persistence';
+import { hasSave } from '../game/persistence';
 
 const SCALE_INFO: Record<ScalePresetId, { label: string; blurb: string }> = {
   standard: { label: 'Standard', blurb: '1/10 scale. Forgiving and fun — orbit needs about 3.4 km/s.' },
@@ -78,8 +78,7 @@ export function MainMenu() {
                 className="btn primary"
                 onClick={() => {
                   const world = new World(new Universe(scale), PART_CATALOG, DEFAULT_START_UT, mode);
-                  // A quicksave from the previous program must not be quickloadable into the new one.
-                  deleteSave('quicksave');
+                  // Program-scoped lookups isolate old quicksaves; retain them for legacy migration.
                   game.set({ saveId: `${mode}-${Date.now()}` });
                   saveProgram(world);
                   game.set({ mode, scalePreset: scale, craft: null, launchPending: false, ut: DEFAULT_START_UT, scene: 'spaceCenter' });

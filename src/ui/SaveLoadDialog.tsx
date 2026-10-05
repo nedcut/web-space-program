@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { game, loadLastCraft } from '../game/store';
 import { loadWorldFromStorage } from '../game/persistence';
-import { exportSaveSlot, importSaveSlot, listSaveSlots, removeSaveSlot, writeSaveSlot, type SaveSlot } from '../game/saveSlots';
+import { SLOTS_KEY, exportSaveSlot, importSaveSlot, listSaveSlots, removeSaveSlot, writeSaveSlot, type SaveSlot } from '../game/saveSlots';
 import { downloadFile } from '../game/craftSharing';
 import { formatDate } from './format';
 export function SaveLoadDialog({ onClose }: { onClose(): void }) {
@@ -10,7 +10,7 @@ export function SaveLoadDialog({ onClose }: { onClose(): void }) {
   let slots: SaveSlot[] = [];
   try {
     slots = listSaveSlots();
-    if (!slots.length) for (const id of ['autosave', 'quicksave']) {
+    if (localStorage.getItem(SLOTS_KEY) === null) for (const id of ['autosave', 'quicksave']) {
       const old = loadWorldFromStorage(id);
       if (old) slots.push({ id: `legacy:${id}`, programId: 'legacy-program', name: `Legacy ${id}`, kind: id === 'autosave' ? 'auto' : 'manual', ...old });
     }

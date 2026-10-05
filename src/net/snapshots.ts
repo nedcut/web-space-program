@@ -60,6 +60,8 @@ export function replaceWorld(world: World, saved: SavedWorld) {
   world.crewSeed = next.crewSeed;
   world.flags = next.flags;
   world.discoveries = next.discoveries;
+  world.flightlog = next.flightlog;
+  world.latestReportId = next.latestReportId;
   world.mode = next.mode;
   world.progression = next.progression;
   world.commsSettings = next.commsSettings;
