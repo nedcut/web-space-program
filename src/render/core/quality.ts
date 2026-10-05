@@ -35,6 +35,7 @@ export interface QualitySettings {
     /** Triplanar close-up detail texturing. */
     detail: boolean;
   };
+  scatter: { radius: number; maxAltitude: number; vegetation: boolean; cellsPerFrame: number; budgetMs: number };
   atmosphere: {
     /** Ray-march steps for sky pixels. */
     viewSteps: number;
@@ -53,6 +54,7 @@ export interface QualitySettings {
 export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
   low: {
     id: 'low',
+    scatter: { radius: 0, maxAltitude: 0, vegetation: false, cellsPerFrame: 0, budgetMs: 0 },
     maxPixelRatio: 1,
     renderScale: 0.85,
     msaaSamples: 0,
@@ -69,6 +71,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
   },
   medium: {
     id: 'medium',
+    scatter: { radius: 256, maxAltitude: 3000, vegetation: false, cellsPerFrame: 3, budgetMs: 1.5 },
     maxPixelRatio: 1.5,
     renderScale: 1,
     msaaSamples: 0,
@@ -85,6 +88,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
   },
   high: {
     id: 'high',
+    scatter: { radius: 1024, maxAltitude: 3000, vegetation: true, cellsPerFrame: 4, budgetMs: 2 },
     maxPixelRatio: 2,
     renderScale: 1,
     msaaSamples: 4,
