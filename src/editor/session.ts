@@ -10,6 +10,7 @@ import type { CraftDef, PartInstance, ResourceId } from '../sim/vessel/types';
 import { qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../util/quat';
 import { sub, v3, type Vec3 } from '../util/vec3';
 import { CraftEditor, craftStats, getStageList, type CraftStats, type Stage } from './core';
+import { STOCK_CRAFTS } from './stockCrafts';
 import { computeStageStats, type StageStats } from './ui/dv';
 
 export const CATALOG = PART_CATALOG;
@@ -81,6 +82,7 @@ export class EditorSession {
   private snap!: SessionView;
   private name: string;
   private launchWarnedAt = -Infinity;
+  private scaleNotices = new Set<string>();
   private held: HeldState | null = null;
   private symmetry: SymmetryCount = 1;
   private symmetryMode: SymmetryMode = 'radial';
@@ -259,6 +261,12 @@ export class EditorSession {
     const g = game.get();
     const problem = launchProblem(craft, CATALOG, g.mode, g.resumeWorld?.progression ?? newProgression());
     if (problem) return this.toast(problem, 'bad');
+    const stock = STOCK_CRAFTS.find(s => s.id === craft.stockId);
+    const noticeKey = `${stock?.id}:${g.scalePreset}`;
+    if (stock && stock.scale !== g.scalePreset && !this.scaleNotices.has(noticeKey)) {
+      this.scaleNotices.add(noticeKey);
+      return this.toast(`${stock.name} is designed for ${stock.scale} scale; this program uses ${g.scalePreset}. Its mission fuel budget may differ. Press Launch again to fly anyway.`, 'warn');
+    }
     // Friendly pre-flight check for rockets: warn once when the first powered stage can't lift off.
     if (craft.type !== 'SPH' && performance.now() - this.launchWarnedAt > 8000) {
       const stats = [...this.snap.stageStats.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);

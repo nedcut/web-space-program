@@ -3,7 +3,7 @@ import { expect, it } from 'vitest';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
 import { PART_CATALOG } from '../src/data/parts';
-import { buildRealOrbiter } from '../src/editor/stockCrafts';
+import { buildRealOrbiter, buildChallengingOrbiter } from '../src/editor/stockCrafts';
 import { DEFAULT_START_UT } from '../src/game/store';
 import { ascentGuidance, coastUntil, executeNode, planCircularization, runAutopilot } from '../src/game/autopilot';
 import { period } from '../src/sim/orbit';
@@ -11,7 +11,7 @@ import { period } from '../src/sim/orbit';
 it.each(['challenging', 'real'] as const)('%s orbital mission', (preset) => {
   const world = new World(new Universe(preset), PART_CATALOG, DEFAULT_START_UT);
   requireIntactFlight(world);
-  world.launch(buildRealOrbiter());
+  world.launch(preset === 'real' ? buildRealOrbiter() : buildChallengingOrbiter());
   const vessel = world.active!;
   const target = preset === 'real' ? 220000 : 140000;
   const ascent = ascentGuidance(world, { targetApoapsis: target, minStage: 2 });
@@ -19,8 +19,8 @@ it.each(['challenging', 'real'] as const)('%s orbital mission', (preset) => {
   const circularize = executeNode(world, planCircularization(world, 'apoapsis'), { minStage: 2 });
   expect(runAutopilot(world, circularize, { maxTime: 10000 }), circularize.error).toBe(true);
   const orbit = world.orbitSummary(vessel);
-  console.log(`${preset}: T+${(world.ut - DEFAULT_START_UT).toFixed(0)}s, ` +
-    `${(orbit.pe / 1000).toFixed(2)} × ${(orbit.ap / 1000).toFixed(2)} km, ${vessel.state.mass.toFixed(0)} kg`);
+  process.stdout.write(`${preset}: T+${(world.ut - DEFAULT_START_UT).toFixed(0)}s, ` +
+    `${(orbit.pe / 1000).toFixed(2)} × ${(orbit.ap / 1000).toFixed(2)} km, ${vessel.state.mass.toFixed(0)} kg\n`);
   expect(orbit.pe).toBeGreaterThan(world.universe.body('earth').atmosphere!.height);
   expect(orbit.ap).toBeLessThan(target * 3);
   const parts = vessel.state.parts.length;

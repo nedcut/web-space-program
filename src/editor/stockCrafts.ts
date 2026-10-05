@@ -1,3 +1,4 @@
+import type { ScalePresetId } from '../sim/bodies/scale';
 import { PART_CATALOG } from '../data/parts';
 import type { CraftDef, PartDef } from '../sim/vessel/types';
 import { qFromAxisAngle, qRotate, type Quat } from '../util/quat';
@@ -13,6 +14,8 @@ export interface StockCraft {
   id: string;
   name: string;
   blurb: string;
+  /** Universe preset this design is sized for. */
+  scale: ScalePresetId;
   /** Destination hardware is deployed there; Earth launchers are complete stacks. */
   launchBody?: string;
   needsResearch?: boolean;
@@ -433,9 +436,65 @@ export function buildRelayLauncher(catalog: PartCatalog = PART_CATALOG): CraftDe
   return b.done();
 }
 
+/** Heavy Earth delivery stack: solids assist eight isolated liquid strap-ons; the core follows. */
+function realDelivery(b: Builder, upperEngine: number) {
+  const middleSep = b.stack(upperEngine, 'dec-2');
+  const middleAdapter = b.stack(middleSep, 'adapt-2-3');
+  const wider = b.stack(middleAdapter, 'adapt-3-4');
+  const middle = b.stack(wider, 'tank-4-long');
+  const middleEngine = b.stack(middle, 'eng-monsoon');
+  const boosterSep = b.stack(middleEngine, 'dec-4');
+  const booster = b.stack(boosterSep, 'tank-4-long');
+  const booster2 = b.stack(booster, 'tank-4-long');
+  b.stack(booster2, 'eng-monsoon');
+  const latch = b.radial(booster2, 'dec-radial', 8, 0);
+  const strap = b.outward(latch, 'tank-4-long');
+  b.stack(strap, 'nose-4', 'top');
+  const strapBottom = b.stack(strap, 'tank-4-long');
+  const strapEngine = b.stack(strapBottom, 'eng-monsoon');
+  b.outward(strapBottom, 'srb-thunderclap');
+  for (const p of b.ed.craft.parts) if (p.partId === 'srb-thunderclap') p.stage = b.part(strapEngine).stage;
+}
+
+/** Real Saturn flyby explorer: isotope power and a nuclear cruise stage above chemical launch stages. */
+export function buildRealRingrunner(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Ringrunner Real Saturn Probe',
+    'Real scale: chemical Earth launcher and isotope-powered nuclear Saturn flyby probe. Plan without circular capture, aim 120,000 km above Saturn and use late cruise trims.');
+  const probe = b.root('probe-cairn');
+  b.stack(probe, 'nose-1', 'top');
+  const battery = b.stack(probe, 'battery-bank-2');
+  const wheel = b.stack(battery, 'wheel-reaction-2');
+  b.radial(probe, 'antenna-horizon', 1, 0, 0);
+  b.radial(battery, 'generator-isotope', 2, 0, 90);
+  const cruise = b.stack(wheel, 'tank-2-long');
+  const cruise2 = b.stack(cruise, 'tank-2-long');
+  const cruise3 = b.stack(cruise2, 'tank-2-long');
+  const cruise4 = b.stack(cruise3, 'tank-2-long');
+  const cruise5 = b.stack(cruise4, 'tank-2-long');
+  for (const uid of [cruise, cruise2, cruise3, cruise4, cruise5]) b.resources.set(uid, { ...b.def('tank-2-long').resources, oxidizer: 0 });
+  const narrow = b.stack(cruise5, 'adapt-1-2', 'bottom', 'bottom');
+  const nuclear = b.stack(narrow, 'eng-hearth', 'top', 'top');
+  const sep = b.stack(nuclear, 'dec-1');
+  const wide = b.stack(sep, 'adapt-1-2');
+  const transfer = b.stack(wide, 'tank-2-long');
+  const transfer2 = b.stack(transfer, 'tank-2-long');
+  const departure = b.stack(transfer2, 'eng-foehn');
+  realDelivery(b, departure);
+  return b.done();
+}
+
 /** Three chemical stages sized for the 7.8 km/s real Earth parking orbit. */
 export function buildRealOrbiter(catalog: PartCatalog = PART_CATALOG): CraftDef {
-  const b = new Builder(catalog, 'Meridian Real Orbiter', 'Real / Challenging scale: three-stage chemical launcher with an ablative return capsule.');
+  return buildScaleOrbiter('real', catalog);
+}
+
+export function buildChallengingOrbiter(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  return buildScaleOrbiter('challenging', catalog);
+}
+
+function buildScaleOrbiter(preset: 'real' | 'challenging', catalog: PartCatalog): CraftDef {
+  const real = preset === 'real';
+  const b = new Builder(catalog, `Meridian ${real ? 'Real' : 'Challenging'} Orbiter`, `${preset} scale: three-stage chemical launcher with an ablative return capsule.`);
   const pod = b.root('pod-lantern-1');
   b.stack(pod, 'chute-main', 'top');
   const shield = b.stack(pod, 'shield-1');
@@ -445,19 +504,28 @@ export function buildRealOrbiter(catalog: PartCatalog = PART_CATALOG): CraftDef 
   const engine = b.stack(upper, 'eng-zephyr');
   const sep = b.stack(engine, 'dec-1');
   const adapter = b.stack(sep, 'adapt-1-2');
-  const middle = b.stack(adapter, 'tank-2-long');
+  const middle = b.stack(adapter, real ? 'tank-2-long' : 'tank-2-mid');
   const sustainer = b.stack(middle, 'eng-harmattan');
   const sep2 = b.stack(sustainer, 'dec-2');
   const wide = b.stack(sep2, 'adapt-2-3');
-  const booster = b.stack(wide, 'tank-3-long');
-  const booster2 = b.stack(booster, 'tank-3-long');
+  const booster = b.stack(wide, real ? 'tank-3-long' : 'tank-3-mid');
+  const booster2 = real ? b.stack(booster, 'tank-3-long') : booster;
   b.stack(booster2, 'eng-tempest');
   return b.done();
 }
 
 /** Direct-ascent lunar expedition: independent descent and return propulsion. */
 export function buildRealMoonLander(catalog: PartCatalog = PART_CATALOG): CraftDef {
-  const b = new Builder(catalog, 'Selene Real Expedition', 'Real scale: heavy five-metre chemical Moon launcher. Separate lunar descent and ascent/return stages.');
+  return buildScaleMoonLander('real', catalog);
+}
+
+export function buildChallengingMoonLander(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  return buildScaleMoonLander('challenging', catalog);
+}
+
+function buildScaleMoonLander(preset: 'real' | 'challenging', catalog: PartCatalog): CraftDef {
+  const real = preset === 'real';
+  const b = new Builder(catalog, `Selene ${real ? 'Real' : 'Challenging'} Expedition`, `${preset} scale: separate lunar descent and ascent/return stages on a chemical Earth launcher.`);
   const pod = b.root('pod-lantern-1');
   b.stack(pod, 'chute-main', 'top');
   const shield = b.stack(pod, 'shield-1');
@@ -474,36 +542,36 @@ export function buildRealMoonLander(catalog: PartCatalog = PART_CATALOG): CraftD
   const descentEngine = b.stack(descent, 'eng-foehn');
   b.radial(descentEngine, 'leg-strider', 4, -1.7, 45);
   const transferSep = b.stack(descentEngine, 'dec-2');
-  const transfer = b.stack(transferSep, 'tank-2-short');
+  const transfer = b.stack(transferSep, real ? 'tank-2-short' : 'tank-2-long');
   const transferEngine = b.stack(transfer, 'eng-foehn');
+  if (!real) {
+    // A dedicated three-metre delivery stack with solid assists leaves the transfer tank for the Moon.
+    const sep = b.stack(transferEngine, 'dec-2');
+    const wide = b.stack(sep, 'adapt-2-3');
+    const middle = b.stack(wide, 'tank-3-long');
+    const engine = b.stack(middle, 'eng-tempest');
+    const boosterSep = b.stack(engine, 'dec-3');
+    const booster = b.stack(boosterSep, 'tank-3-long');
+    const bottom = b.stack(booster, 'tank-3-long');
+    const boosterEngine = b.stack(bottom, 'eng-tempest');
+    b.radial(bottom, 'srb-thunderclap', 4, 0, 45);
+    for (const p of b.ed.craft.parts) if (p.partId === 'srb-thunderclap') p.stage = b.part(boosterEngine).stage;
+    return b.done();
+  }
   const transferSide = b.radial(transfer, 'tank-2-mid', 4, 0);
   const transferSideBottom = b.stack(transferSide, 'tank-2-short');
   b.stack(transferSideBottom, 'eng-foehn');
-  const middleSep = b.stack(transferEngine, 'dec-2');
-  const wide = b.stack(middleSep, 'adapt-2-3');
-  const wider = b.stack(wide, 'adapt-3-4');
-  const middle = b.stack(wider, 'tank-4-long');
-  const middleEngine = b.stack(middle, 'eng-monsoon');
-  const boosterSep = b.stack(middleEngine, 'dec-4');
-  const booster = b.stack(boosterSep, 'tank-4-long');
-  const booster2 = b.stack(booster, 'tank-4-long');
-  b.stack(booster2, 'eng-monsoon');
-  // Eight parallel, independently fed strap-on stages; ignite the central core after separation.
-  const latch = b.radial(booster2, 'dec-radial', 8, 0);
-  const strap = b.outward(latch, 'tank-4-long');
-  b.stack(strap, 'nose-4', 'top');
-  const strapBottom = b.stack(strap, 'tank-4-long');
-  b.stack(strapBottom, 'eng-monsoon');
+  realDelivery(b, transferEngine);
   return b.done();
 }
 
-export const STOCK_CRAFTS: StockCraft[] = [
-  { id: 'stock-kestrel', name: 'Kestrel Sounding Rocket', blurb: 'Suborbital test hop · 1 stage + capsule', build: () => buildSoundingRocket() },
-  { id: 'stock-meridian', name: 'Meridian Orbiter', blurb: 'Standard scale · two stages to low orbit and back', build: () => buildOrbiter() },
-  { id: 'stock-selene', name: 'Selene Lunar Lander', blurb: 'Three stages · land on the Moon and return', build: () => buildMoonLander() },
-  { id: 'stock-swift', name: 'Swift Jet', blurb: 'Runway takeoff · turbofan trainer aircraft', build: () => buildSwift() },
-  { id: 'stock-ringrunner', name: 'Ringrunner Saturn Probe', blurb: 'Standard scale · three stages to Saturn', build: () => buildRingrunner() },
-  { id: 'stock-tender', name: 'Wren Tender', blurb: 'Docking practice tug · try ?scenario=rendezvous', build: () => buildTender() },
+export const STOCK_CRAFTS: StockCraft[] = ([
+  { scale: 'standard', id: 'stock-kestrel', name: 'Kestrel Sounding Rocket', blurb: 'Suborbital test hop · 1 stage + capsule', build: () => buildSoundingRocket() },
+  { scale: 'standard', id: 'stock-meridian', name: 'Meridian Orbiter', blurb: 'Standard scale · two stages to low orbit and back', build: () => buildOrbiter() },
+  { scale: 'standard', id: 'stock-selene', name: 'Selene Lunar Lander', blurb: 'Three stages · land on the Moon and return', build: () => buildMoonLander() },
+  { scale: 'standard', id: 'stock-swift', name: 'Swift Jet', blurb: 'Runway takeoff · turbofan trainer aircraft', build: () => buildSwift() },
+  { scale: 'standard', id: 'stock-ringrunner', name: 'Ringrunner Saturn Probe', blurb: 'Standard scale · three stages to Saturn', build: () => buildRingrunner() },
+  { scale: 'standard', id: 'stock-tender', name: 'Wren Tender', blurb: 'Docking practice tug · try ?scenario=rendezvous', build: () => buildTender() },
   ...([
     ['hearthlight', 'Hearthlight Station', 'Docking hub · four-seat orbital outpost', buildStationCore, 'earth'],
     ['homeward', 'Homeward Crew Ferry', 'Dock, exchange crew and return under parachutes', buildCrewFerry, 'earth'],
@@ -521,8 +589,14 @@ export const STOCK_CRAFTS: StockCraft[] = [
     ['alembic', 'Alembic Laboratory', 'Dockable two-seat orbital science module', buildScienceLab, 'earth'],
   ] satisfies [string, string, string, () => CraftDef, string | undefined][]).map(([id, name, blurb, build, launchBody]) => ({
     id: `stock-${id}`, name, blurb: `${blurb} · research required`,
-    build, launchBody, needsResearch: true,
+    scale: 'standard' as const, build, launchBody, needsResearch: true,
   })),
-  { id: 'stock-meridian-real', name: 'Meridian Real Orbiter', blurb: 'Real / Challenging scale · orbital launcher and return capsule', build: () => buildRealOrbiter() },
-  { id: 'stock-selene-real', name: 'Selene Real Expedition', blurb: 'Real scale · five-metre Moon landing and return expedition', build: () => buildRealMoonLander() },
-];
+  { scale: 'challenging', id: 'stock-meridian-challenging', name: 'Meridian Challenging Orbiter', blurb: 'Challenging scale · orbital launcher and return capsule', build: () => buildChallengingOrbiter() },
+  { scale: 'challenging', id: 'stock-selene-challenging', name: 'Selene Challenging Expedition', blurb: 'Challenging scale · Moon landing and return expedition', build: () => buildChallengingMoonLander() },
+  { scale: 'real', id: 'stock-ringrunner-real', name: 'Ringrunner Real Saturn Probe', blurb: 'Real scale · isotope-powered nuclear Saturn flyby', build: () => buildRealRingrunner() },
+  { scale: 'real', id: 'stock-meridian-real', name: 'Meridian Real Orbiter', blurb: 'Real scale · orbital launcher and return capsule', build: () => buildRealOrbiter() },
+  { scale: 'real', id: 'stock-selene-real', name: 'Selene Real Expedition', blurb: 'Real scale · five-metre Moon landing and return expedition', build: () => buildRealMoonLander() },
+] satisfies StockCraft[]).map(stock => ({
+  ...stock,
+  build: () => ({ ...stock.build(), stockId: stock.id }),
+}));

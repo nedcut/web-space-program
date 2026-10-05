@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
 import { PART_CATALOG } from '../src/data/parts';
-import { buildRealMoonLander } from '../src/editor/stockCrafts';
+import { buildRealMoonLander, buildChallengingMoonLander } from '../src/editor/stockCrafts';
 import { DEFAULT_START_UT } from '../src/game/store';
 import {
   ascentGuidance,
@@ -30,10 +30,10 @@ import { neutralInput } from '../src/sim/vessel';
  * entirely through the World API and the src/game/autopilot building blocks.
  * Set MOON_DEBUG=1 for a per-0.5 s trace of the landing.
  */
-describe('Moon mission (stock Selene Real Expedition)', () => {
-  it('lands on the Moon, ascends and returns safely to Earth', () => {
-    const world = new World(new Universe('real'), PART_CATALOG, DEFAULT_START_UT);
-    world.launch(buildRealMoonLander());
+describe('Moon missions (stock Selene scale variants)', () => {
+  it.each(['real', 'challenging'] as const)('%s: lands on the Moon, ascends and returns safely to Earth', (preset) => {
+    const world = new World(new Universe(preset), PART_CATALOG, DEFAULT_START_UT);
+    world.launch(preset === 'real' ? buildRealMoonLander() : buildChallengingMoonLander());
     const wv = world.active!;
     const moonR = world.universe.body('moon').radius;
     const earthAtmo = world.universe.body('earth').atmosphere!.height;
@@ -72,7 +72,7 @@ describe('Moon mission (stock Selene Real Expedition)', () => {
 
     try {
       // 1. Ascent to a ~220 km parking orbit (booster + transfer stage; never drop the transfer stage here).
-      expect(run(ascentGuidance(world, { targetApoapsis: 220000, minStage: 6 }), 900)).toBe(true);
+      expect(run(ascentGuidance(world, { targetApoapsis: preset === 'real' ? 220000 : 160000, minStage: 6 }), 900)).toBe(true);
       summary('ascent');
       expect(run(executeNode(world, planCircularization(world, 'apoapsis'), { minStage: 6 }), 1200)).toBe(true);
       summary('circularize');
@@ -99,13 +99,19 @@ describe('Moon mission (stock Selene Real Expedition)', () => {
       expect(trim).not.toBeNull();
       expect(run(executeNode(world, trim!.node, { minStage: 4, matchEnergy: false }), 1e6)).toBe(true);
       summary('late MCC');
+      // Resolve finite-burn residuals near the SOI; a few cm/s still move real lunar periapsis by kilometres.
+      const finalTrim = planCourseCorrection(world, 'moon', 30000, world.ut + (trim!.encounterTime - world.ut) * 0.8);
+      expect(finalTrim).not.toBeNull();
+      expect(run(executeNode(world, finalTrim!.node, { minStage: 4, matchEnergy: false }), 1e6)).toBe(true);
+      summary('final MCC');
       // 4. Coast into the Moon's SOI.
-      coastUntil(world, trim!.encounterTime + 600, { stopOnSoi: true });
+      coastUntil(world, finalTrim!.encounterTime + 600, { stopOnSoi: true });
       summary('coast');
       expect(wv.body).toBe('moon');
 
       // 5. Capture into a low lunar orbit (transfer stage, lander as backup).
-      expect(run(executeNode(world, planCircularization(world, 'periapsis'), { minStage: 4 }), 1e6)).toBe(true);
+      const capture = planCircularization(world, 'periapsis');
+      expect(run(executeNode(world, capture, { minStage: 4 }), capture.time - world.ut + 3000)).toBe(true);
       summary('capture');
       expect(world.orbitSummary(wv).ap).toBeLessThan(200000);
       expect(world.orbitSummary(wv).pe).toBeGreaterThan(5000);

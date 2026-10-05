@@ -13,6 +13,7 @@ function vector(value: unknown, quaternion = false): boolean {
 export function deserializeCraft(str: string, catalog?: PartCatalog): CraftDef {
   const value: unknown = JSON.parse(str);
   if (!record(value) || value.version !== 1 || typeof value.name !== 'string' || !['VAB', 'SPH'].includes(value.type as string)
+    || (value.stockId !== undefined && typeof value.stockId !== 'string')
     || (value.description !== undefined && typeof value.description !== 'string') || !Array.isArray(value.parts)) throw new Error('Invalid craft header');
   if (value.editorStageCount !== undefined && !integer(value.editorStageCount)) throw new Error('Invalid stage count');
   const ids = new Set<number>();

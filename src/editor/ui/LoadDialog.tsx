@@ -27,6 +27,7 @@ function summary(craft: CraftDef) {
 
 export function LoadDialog({ session, onClose }: { session: EditorSession; onClose(): void }) {
   const [rev, setRev] = useState(0);
+  const scale = useGame(s => s.scalePreset);
   const mode = useGame((s) => s.mode);
   const progression = useGame((s) => s.resumeWorld?.progression) ?? newProgression();
   const lockedCount = (c: CraftDef) => new Set(c.parts.map((p) => p.partId).filter((id) => !partUnlocked(id, mode, progression))).size;
@@ -69,6 +70,7 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
             <button key={s.id} className="vab-stock" onClick={() => load(s.craft)}>
               <div className="vab-stock-icon"><Icon name="launch" size={26} /></div>
               <div className="vab-stock-name">{s.name}</div>
+              <span className={`vab-stock-scale ${s.scale === scale ? 'current' : ''}`}>{s.scale} scale{s.scale === scale ? ' · current' : ''}</span>
               <div className="vab-stock-blurb">{s.blurb}</div>
               <div className="vab-stock-info mono">{s.info}</div>
               {lockedCount(s.craft) > 0 && <div className="vab-stock-locked">Needs research · {lockedCount(s.craft)} locked part type{lockedCount(s.craft) > 1 ? 's' : ''}</div>}
