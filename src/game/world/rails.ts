@@ -1,4 +1,5 @@
 import { advancePrecise, preciseState, syncPrecise } from './preciseRails';
+import { advancePackedHazards } from './hazards';
 import { period, predictTrajectory, propagate, stateToElements } from '../../sim/orbit';
 import { advanceISRU, isruMachinery } from '../../sim/vessel/isru';
 import { qConj, qMul, qNormalize, qRotate } from '../../util/quat';
@@ -111,6 +112,7 @@ export function advanceRails(this: World, internals: WorldInternals, target: num
   if (this.preciseGravity) { advancePrecise(this, internals, target); return; }
   const startUt = this.ut;
   const act = this.active;
+  const exposureThrough = new Map<string, number>();
   const order = [...this.vessels.values()].sort((a, b) => (a === act ? -1 : b === act ? 1 : 0));
   for (const wv of order) {
     if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') continue;
@@ -118,6 +120,11 @@ export function advanceRails(this: World, internals: WorldInternals, target: num
     let guard = 0;
     while (wv.mode === 'rails' && wv.railsEvent && wv.railsEvent.time <= target && guard++ < 32) {
       const ev = wv.railsEvent;
+      const exposureEnd = isActive && (ev.reason === 'atmosphere' || ev.reason === 'impact')
+        ? Math.max(startUt, ev.time - 1) : ev.time;
+      advancePackedHazards(this, internals, wv, exposureThrough.get(wv.state.id) ?? startUt, exposureEnd);
+      exposureThrough.set(wv.state.id, exposureEnd);
+      if (wv.state.destroyed) break;
       const s = propagate(wv.orbit!, ev.time);
       if (ev.reason === 'soiEnter' || ev.reason === 'soiExit') {
         const oldB = this.universe.ephem.getBodyState(wv.body, ev.time);
@@ -161,6 +168,9 @@ export function advanceRails(this: World, internals: WorldInternals, target: num
   }
   for (const wv of this.vessels.values()) {
     if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, target - this.ut);
+  }
+  for (const wv of [...this.vessels.values()]) if (wv.mode !== 'physics') {
+    advancePackedHazards(this, internals, wv, exposureThrough.get(wv.state.id) ?? startUt, target);
   }
   this.ut = target;
   for (const wv of this.vessels.values()) { internals.syncPacked(wv, this.ut); this.recordFlight(wv); }

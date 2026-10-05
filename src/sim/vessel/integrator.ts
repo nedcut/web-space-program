@@ -1,3 +1,4 @@
+import { stepHazards } from '../hazards/vessel';
 import type { PartLoad } from './loads';
 import { breakJoints, crashJointCuts, crashShocks, overloadedJoints } from './structure';
 import { advanceISRU } from './isru';
@@ -137,6 +138,8 @@ export function stepVessel(v: VesselState, input: ControlInput, env: Environment
         air: (p, time) => { const a = env.air(absolute(p, time), time); return { ...a, windVelocity: sub(a.windVelocity, ref(time).velocity) }; },
         ground: (p, time) => { const g = env.ground(absolute(p, time), time); return g ? { ...g,
           surfacePoint: sub(g.surfacePoint, ref(time).position), surfaceVelocity: sub(g.surfaceVelocity, ref(time).velocity) } : null; },
+        hazardTimeScale: env.hazardTimeScale,
+        radiation: (p, time) => env.radiation?.(absolute(p, time), time) ?? 0,
         sun: (p, time) => env.sun(absolute(p, time), time),
         regolithConcentration: (p, time) => env.regolithConcentration?.(absolute(p, time), time) ?? 0,
         referenceBody: () => ({ position: v3(), velocity: v3() }),
@@ -205,13 +208,13 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   const sunBody = qRotate(qInv, sun.dir);
   for (const p of v.parts)
     for (const m of p.def.modules) {
-      if (m.type === 'command' && (m as CommandModule).ecPerSecond > 0) drawResource(v, p.uid, 'electricCharge', (m as CommandModule).ecPerSecond * h);
+      if (m.type === 'command' && (m as CommandModule).ecPerSecond > 0) drawResource(v, p.uid, 'electricCharge', (m as CommandModule).ecPerSecond * h * (p.electronicsDegraded ? 2 : 1));
       else if (m.type === 'solarPanel') {
         const sp = m as SolarPanelModule;
         const nrm = qRotate(p.rotation, { x: 0, y: 0, z: 1 });
         const cosA = sp.tracking ? 1 : Math.max(0, nrm.x * sunBody.x + nrm.y * sunBody.y + nrm.z * sunBody.z);
         const flux = sun.distance > 0 && isFinite(sun.distance) ? (AU / sun.distance) ** 2 : 0;
-        addResource(v, 'electricCharge', sp.chargeRate * flux * cosA * h);
+        addResource(v, 'electricCharge', sp.chargeRate * flux * cosA * h * (sun.exposure ?? 1));
       }
     }
 
@@ -247,9 +250,10 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   v.position = add(add(v.position, scale(v.velocity, h / 2)), penetrationCorrection(cp.contacts));
 
   // Thermal.
+  const hazardFailures = stepHazards(v, { air: air.sample, radiation: env.radiation?.(v.position, tMid) ?? 0, timeScale: env.hazardTimeScale ?? 1 }, h, result.events);
   const overheated = opts.disableHeating
     ? []
-    : stepThermal(v, { air: air.sample, airVelocityBody, sunDirBody: sunBody, sunDistance: sun.distance }, h);
+    : stepThermal(v, { air: air.sample, airVelocityBody, sunDirBody: sunBody, sunDistance: sun.exposure === 0 ? Infinity : sun.distance }, h);
 
   // Telemetry & situation.
   const pa = scale(Fworld, 1 / m);
@@ -273,7 +277,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   breakJoints(v, [...cuts, ...crashCuts.keys()], result, crashCuts);
 
   // Destruction (crash / overheat), including parts detached by another failure this step.
-  const kill: [number, 'crash' | 'overheat'][] = [...cp.impacts.map((u) => [u, 'crash'] as [number, 'crash']), ...overheated.map((u) => [u, 'overheat'] as [number, 'overheat'])];
+  const kill: [number, 'crash' | 'overheat' | 'pressure'][] = [...hazardFailures, ...cp.impacts.map((u) => [u, 'crash'] as [number, 'crash']), ...overheated.map((u) => [u, 'overheat'] as [number, 'overheat'])];
   for (const [uid, reason] of kill) {
     const owner = [v, ...result.newVessels].find(piece => piece.cache.byUid.has(uid));
     if (!owner) continue;

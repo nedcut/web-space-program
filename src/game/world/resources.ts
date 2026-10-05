@@ -17,7 +17,7 @@ export function localConcentration(this: World, _internals: WorldInternals, wv =
 
 /** A bound orbit, above terrain/atmosphere, within 10 degrees of polar relative to the body's pole. */
 export function surveyBody(this: World, _internals: WorldInternals, wv = this.active): boolean {
-  if (!wv || !wv.state.parts.some(p => p.def.modules.some(m => m.type === 'surveyScanner'))) return false;
+  if (!wv || !wv.state.parts.some(p => !p.electronicsFailed && p.def.modules.some(m => m.type === 'surveyScanner'))) return false;
   const b = this.universe.body(wv.body), s = this.relativeState(wv);
   if (!b.solidSurface || wv.state.situation !== 'flying') return false;
   const h = normalize(cross(s.position, s.velocity));

@@ -22,7 +22,7 @@ try {
     game.set({resumeWorld:serializeWorld(w),scene:'flight',launchPending:false});
   });
   await page.waitForFunction(()=>window.__flight?.world?.active);
-  await page.evaluate(()=>{window.__flight.mapMode=true;window.__flight.map.distance=9e7;});
+  await page.evaluate(()=>{window.__flight.toggleMap();window.__flight.map.distance=9e7;});
   await page.waitForFunction(()=>window.__flight.world.numericalPrediction?.complete,{},{timeout:30000});
   const result=await page.evaluate(()=>{
     const c=window.__flight,p=c.world.numericalPrediction;
@@ -34,4 +34,4 @@ try {
   await page.screenshot({path:'docs/screenshots/nbody-map.png'});
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({result,errors}));
-} finally {await browser.close();}
+} catch(error) { console.log(JSON.stringify({errors, state:await page.evaluate(()=>({text:document.body.innerText.slice(-1600),map:window.__flight?.mapMode,ready:window.__flight?.sceneReady,ut:window.__flight?.world.ut,prediction:window.__flight?.world.numericalPrediction && {time:window.__flight.world.numericalPrediction.time,attempts:window.__flight.world.numericalPrediction.attempts,complete:window.__flight.world.numericalPrediction.complete}}))})); throw error; } finally {await browser.close();}

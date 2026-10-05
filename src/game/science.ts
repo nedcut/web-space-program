@@ -14,7 +14,7 @@ export function scienceContext(w: World, vessel: WorldVessel): ScienceContext {
 }
 export function instruments(w: World, v: WorldVessel) {
   const c = scienceContext(w, v);
-  return v.state.parts.flatMap(p => {
+  return v.state.parts.filter(p => !p.electronicsFailed).flatMap(p => {
     const ids = p.def.modules.flatMap(m => m.type === 'science' ? [m.experiment] : m.type === 'command' && (p.crew?.length ?? 0) > 0 ? ['crewReport'] : []);
     if (v.state.eva) ids.push('surfaceSample');
     return ids.flatMap(id => {
@@ -34,7 +34,7 @@ export function runExperiment(w: World, uid: number, experiment: string): Scienc
   const context = scienceContext(w, v), subject = subjectKey(e, context);
   const p = w.progression;
   const entry = p.archive[subject] ??= { ...context, biome: e.biomes.includes(context.situation) ? context.biome : 'Global', experiment, runs: 0, science: 0 };
-  const value = scienceValue(e.base, bodyMultiplier(w.universe.body(v.body)), entry.runs);
+  const value = scienceValue(e.base, bodyMultiplier(w.universe.body(v.body)), entry.runs) * (v.state.cache.byUid.get(uid)?.electronicsDegraded ? 0.5 : 1);
   if (value < 0.01) { w.message('This subject has been fully studied', 'warn'); return null; }
   entry.runs++;
   const data: ScienceData = { ...context, id: p.nextDataId++, subject, experiment, value, credited: 0 };

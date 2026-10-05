@@ -1,3 +1,5 @@
+import { advancePackedHazards } from './hazards';
+import { patchState } from '../../sim/orbit/numericalPrediction';
 import { adaptiveStep, integrateAdaptive } from '../../sim/orbit/adaptive';
 import { stateToElements } from '../../sim/orbit';
 import { advanceISRU, isruMachinery } from '../../sim/vessel/isru';
@@ -71,7 +73,19 @@ export function advancePrecise(world: World, internals: WorldInternals, target: 
     const next = Math.min(...trials.map(x => x.result.nextStep),h*5);
     if (trials.every(x => x.result.accepted)) {
       world.ut += h;
-      for (const {v,result} of trials) { v.precise!.state=result.state; v.precise!.time=world.ut; commit(world,v); }
+      for (const {v,result} of trials) {
+        const p=v.precise!, frame=p.frame;
+        const segment={orbit:v.orbit!,startTime:p.time,endTime:world.ut,endReason:'horizon' as const,
+          samples:[{...p.state,time:p.time},{...result.state,time:world.ut}]};
+        advancePackedHazards(world,internals,v,p.time,world.ut,t=>{
+          const local=patchState(segment,t),ref=world.universe.ephem.getBodyState(frame,t);
+          return {position:add(ref.position,local.position),velocity:add(ref.velocity,local.velocity)};
+        });
+        if (!world.vessels.has(v.state.id)) continue;
+        p.state=result.state; p.time=world.ut; commit(world,v);
+      }
+      // Hazard fragments join the next accepted fleet step instead of remaining at an old UT.
+      for (const v of world.vessels.values()) if (v.mode==='physics') internals.pack(v);
     }
     h = next;
     if (performance.now() >= deadline) break;
@@ -84,7 +98,8 @@ export function advancePrecise(world: World, internals: WorldInternals, target: 
   for (const v of world.vessels.values()) {
     if (v.mode === 'landedRails' || v.mode === 'prelaunch') {
       advanceISRU(v.state,isruMachinery(v.state).length ? world.localConcentration(v) : 0,world.ut-start);
-      internals.syncFixed(v,world.ut);
+      advancePackedHazards(world,internals,v,start,world.ut);
+      if (world.vessels.has(v.state.id)) internals.syncFixed(v,world.ut);
     }
     world.recordFlight(v);
   }

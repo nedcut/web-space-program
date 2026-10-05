@@ -42,6 +42,7 @@ than importing `World`. `LaunchSite` already follows that structural-input patte
 - `sim/terrain`: shared seeded terrain/noise/craters and body presets; `sim/atmosphere`: atmospheric sampling.
 - `sim/vessel`: assembly/topology, staging, mass/inertia, resource crossfeed/power, engines/RCS, SAS,
   aero/heating, wheels/contact, rigid integration, docking, EVA and analytic ISRU.
+- `sim/hazards`: pressure ratings/overload, equipment heat soak, dipole-like radiation dose and Sun occlusion; `game/world/hazards.ts` integrates packed exposure and roster dose.
 - `sim/comms/network.ts`: range/occlusion/relay routing; `sim/science`: biomes, experiments and progression;
   `sim/resources/deposits.ts`: deterministic concentrations; `sim/crew/crew.ts`: roster/seats/control authority.
 

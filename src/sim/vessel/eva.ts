@@ -2,7 +2,8 @@ import { add, sub, scale, length, normalize, dot, v3 } from '../../util/vec3';
 import { qNormalize, qRotate, qFromTo, qMul } from '../../util/quat';
 import type { ControlInput, VesselState, StepResult } from './runtime';
 import type { Environment } from './env';
-import { recomputeMassProperties } from './assembly';
+import { stepHazards } from '../hazards/vessel';
+import { removePart, recomputeMassProperties } from './assembly';
 
 export const EVA_HEIGHT = 0.9;
 export const EVA_EXHAUST_SPEED = 600;
@@ -12,6 +13,13 @@ const MAX_SLOPE = Math.cos(Math.PI / 4);
 /** Character contact and finite-propellant jetpack. Uses the dominant-body frame to avoid heliocentric drift. */
 export function stepEva(v: VesselState, input: ControlInput, env: Environment, t: number, dt: number): StepResult {
   const result: StepResult = { newVessels: [], events: [] };
+  const failures = stepHazards(v, { air: env.air(v.position, t).sample,
+    radiation: env.radiation?.(v.position, t) ?? 0, timeScale: env.hazardTimeScale ?? 1 }, dt, result.events);
+  for (const [uid, reason] of failures) {
+    result.events.push({ type: 'partDestroyed', vesselId: v.id, partUid: uid, reason });
+    result.newVessels.push(...removePart(v, uid));
+  }
+  if (v.destroyed) return result;
   const eva = v.eva!;
   const ref0 = env.referenceBody?.(v.position, t) ?? { position: v3(), velocity: v3() };
   const ref1 = env.referenceBody?.(v.position, t + dt) ?? ref0;

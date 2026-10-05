@@ -24,7 +24,8 @@ export type ClientMessage = Envelope & (
 );
 export type PartDelta = Pick<PartState, 'uid' | 'resources' | 'mass' | 'temperature' | 'skinTemperature' | 'activated' | 'engine' | 'chute' | 'leg' | 'wheel' | 'bayOpen' | 'drillDeployed' | 'drillDeploy' | 'converterRunning' | 'converterRecipe' | 'processTemperature' | 'dockDisarmed' | 'structuralFatigue' | 'linkFatigue' | 'link'>;
 export type DynamicState = Pick<VesselState, 'position' | 'velocity' | 'orientation' | 'angularVelocity' | 'mass' | 'com' | 'inertia' | 'invInertia' | 'nextStage' | 'situation' | 'sas' | 'telemetry' | 'eva' | 'destroyed'> & { parts: PartDelta[] };
-export type VesselDelta = { id: string; body: string } & (
+export type HazardDelta = Pick<PartState, 'uid' | 'radiationDose' | 'ambientTemperature' | 'pressureExposure' | 'pressureWarned' | 'heatWarned' | 'electronicsDegraded' | 'electronicsFailed'> & { electricCharge?: number };
+export type VesselDelta = { id: string; body: string; hazards?: HazardDelta[]; crewDose?: { id: string; dose: number }[] } & (
   | { mode: 'rails'; orbit: NonNullable<WorldVessel['orbit']>; precise?: WorldVessel['precise'] }
   | { mode: 'landedRails'; fixed: NonNullable<WorldVessel['fixed']>; state?: DynamicState }
   | { mode: 'physics' | 'prelaunch'; state: DynamicState; fixed?: WorldVessel['fixed'] }

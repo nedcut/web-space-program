@@ -175,6 +175,13 @@ export interface PartState {
   /** Current total mass, kg (dry + resources). */
   mass: number;
   /** Internal (bulk) temperature, K. */
+  ambientTemperature?: number;
+  pressureExposure?: number;
+  pressureWarned?: boolean;
+  heatWarned?: boolean;
+  radiationDose?: number;
+  electronicsDegraded?: boolean;
+  electronicsFailed?: boolean;
   temperature: number;
   /** Skin temperature per face [+X,-X,+Y,-Y,+Z,-Z] (part frame), K. */
   skinTemperature: number[];
@@ -282,7 +289,8 @@ export type VesselEvent =
   | { type: 'engineIgnited'; vesselId: string; partUid: number }
   | { type: 'flameout'; vesselId: string; partUid: number }
   | { type: 'chute'; vesselId: string; partUid: number; phase: ChutePhase }
-  | { type: 'partDestroyed'; vesselId: string; partUid: number; reason: 'overheat' | 'crash' | 'impact' }
+  | { type: 'hazardWarning'; vesselId: string; message: string }
+  | { type: 'partDestroyed'; vesselId: string; partUid: number; reason: 'overheat' | 'crash' | 'impact' | 'pressure' }
   | { type: 'vesselDestroyed'; vesselId: string }
   | { type: 'docked'; vesselId: string; otherId: string }
   | { type: 'undocked'; vesselId: string; newVesselId: string };

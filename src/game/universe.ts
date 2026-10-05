@@ -1,4 +1,5 @@
 import { createGravityModel } from '../sim/orbit/nbody';
+import { hazardAtmosphere, radiationRate, sunExposure } from '../sim/hazards/environment';
 import { generateAsteroidField, asteroidState, asteroidDefinition } from '../sim/bodies/asteroidField';
 import { buildUniverse, SCALE_PRESETS } from '../sim/bodies/scale';
 import { BODY_DEFS } from '../data/bodies';
@@ -9,7 +10,6 @@ import { createUniverse, type ScalePresetId } from '../sim/bodies';
 import { createEphemeris, type Ephemeris } from '../sim/orbit/ephemeris';
 import { createTerrain, type Terrain } from '../sim/terrain';
 import { findDominantBody } from '../sim/orbit/soi';
-import { sampleAtmosphere } from '../sim/atmosphere';
 import type { Environment, GroundSample } from '../sim/vessel/env';
 import { add, cross, length, normalize, scale, sub, v3, type Vec3 } from '../util/vec3';
 
@@ -116,6 +116,17 @@ export class Universe {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     return {
+      hazardTimeScale: Math.sqrt(SCALE_PRESETS[self.preset].s),
+      radiation(pos, t) {
+        let dose = 0;
+        for (const id of ['earth', 'jupiter', 'saturn']) {
+          const b = self.body(id);
+          const rel = sub(pos, self.ephem.getBodyState(id, t).position);
+          if (length(rel) > b.radius * 30) continue;
+          dose += radiationRate(id, self.ephem.toBodyFixed(id, rel, t), b.radius);
+        }
+        return dose / Math.sqrt(SCALE_PRESETS[self.preset].s);
+      },
       integrateRelative: nbody || ['asteroid', 'comet'].includes(self.body(getDominant()).kind),
       regolithConcentration(pos, t) {
         const id = getDominant();
@@ -142,7 +153,7 @@ export class Universe {
         const bs = self.ephem.getBodyState(id, t);
         const rel = sub(pos, bs.position);
         const alt = length(rel) - b.radius;
-        const sample = sampleAtmosphere(b.atmosphere, alt, b.surfaceGravity);
+        const sample = hazardAtmosphere(b, alt);
         const wind = add(bs.velocity, self.ephem.surfaceVelocity(id, rel, t));
         return { sample, windVelocity: wind };
       },
@@ -188,7 +199,8 @@ export class Universe {
         const sp = self.ephem.getBodyState(self.sunId, t).position;
         const d = sub(sp, pos);
         const dist = length(d);
-        return { dir: scale(d, 1 / dist), distance: dist };
+        const blockers = [...self.bodies.values()].filter(b => b.id !== self.sunId).map(b => ({ radius: b.radius, position: self.ephem.getBodyState(b.id, t).position }));
+        return { dir: scale(d, 1 / dist), distance: dist, exposure: sunExposure(pos, sp, blockers) };
       },
       referenceBody(_pos, t) {
         const s = self.ephem.getBodyState(getDominant(), t);

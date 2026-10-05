@@ -1,3 +1,5 @@
+import { hazardParts } from './parts/hazards';
+import { pressureLimit } from '../sim/hazards/vessel';
 import type { PartDef,PartModule,ResourceId } from '../sim/vessel/types';
 import { ISRU_PARTS } from './isru';
 import { aero } from './parts/aero';
@@ -17,7 +19,7 @@ import { RESOURCES } from './resources';
 export { gearLayout,landingLegLayout,MANUFACTURERS,SIZE_RADIUS } from './parts/builders';
 
 
-export const PART_DEFS: PartDef[] = [...pods, ...tanks, ...engines, ...coupling, ...structural, ...aero, ...control, ...electrical, ...utility, ...aircraft, ...scienceParts, ...antennas, ...expansion, ...ISRU_PARTS];
+export const PART_DEFS: PartDef[] = [...pods, ...tanks, ...engines, ...coupling, ...structural, ...aero, ...control, ...electrical, ...utility, ...aircraft, ...scienceParts, ...antennas, ...expansion, ...ISRU_PARTS, ...hazardParts].map(p => ({ ...p, maxPressure: pressureLimit(p) }));
 
 
 export const PART_CATALOG: Map<string, PartDef> = new Map(PART_DEFS.map((p) => [p.id, p]));
