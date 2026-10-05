@@ -49,7 +49,8 @@ Dev shortcuts:
 | ] | switch to nearby vessel (e.g. dropped stage) |
 | F5 / F9 | quicksave / quickload |
 | , . / | time warp down / up / stop |
-| V | camera mode (auto / chase / free) |
+| V (pad: R3) | camera mode (auto / free / orbital / chase / locked); the CAM chip on the top bar shows and cycles it |
+| Arrows, + / − (pad: RB + right stick) | orbit / zoom the camera |
 | G / B (hold) | landing gear toggle / wheel brakes |
 | C | lights on / off |
 | Backspace | abort (cut throttle, fire the Abort group) |
@@ -68,6 +69,36 @@ immediately. The **Actions** button switches to action-group mode: pick a group 
 highlights them); hovering a part shows a tooltip. In flight, the panel shows temperature, structural load, contents and
 engine state, offers part actions, and adjusts flight-safe settings. Stock crewed rockets come with an Abort sequence.
 Everything goes through the authoritative command path, so it works in LAN multiplayer.
+## Flight feel pass (op/feel, 2026-10-05)
+What changed after "pretty good, but feels unfinished":
+- **No more fixed-step judder.** Rendering now interpolates every vessel between the two latest 50 Hz physics
+  steps (and draws the planet, launch site, flags and navball at the same in-between time). Measured frame-to-frame
+  unevenness: 60 Hz display 1.21 → 0.0004, 144 Hz 2.91 → 0.0004 (`tests/render-interpolation.test.ts`); the
+  simulation stays bit-identical.
+- **Camera with weight.** Orbit/zoom ease towards targets (70 ms / 140 ms, gentle fling), framing and zoom limits
+  follow vessel size (staging and vessel switches re-frame smoothly), never dips below terrain or sea, and has five
+  labelled modes (Auto, Free, Orbital, Chase, Locked) that keep the view when switching. Small launch rumble /
+  max-q buffet and a staging kick, all off with Settings → Accessibility → Reduce motion.
+- **Controls.** Keyboard attitude keys ramp (tap ≈ ¼ deflection, full in 0.2 s), sticks stay direct; R3 / RB + right
+  stick for the camera. SAS was measured on three stock craft and already settles without overshoot (see below).
+- **HUD.** Prioritised cautions above the message stack (NO CONTROL, OVERHEAT, HIGH G, TERRAIN / SINK RATE, GEAR UP,
+  STAGE FUEL / FLAMEOUT, LOW POWER) with anti-flicker hold; orbit rows hide on the ground and Mach / dynamic pressure
+  hide in vacuum; heading box on the navball; STAGE n flash. Fixed: the navball radial-in/out markers were swapped
+  relative to SAS RAD+/RAD−.
+- **Time warp.** Rails warp ramps up (1×→1000× reaches 90 % in ~1 s) instead of jumping; ⇥ next to the warp rate
+  warps to the next maneuver, apoapsis, periapsis or SOI change and stops just before it (physics warp in air).
+- **Moment to moment.** Loading screen fades out, then a vessel name / situation banner; optional 3-2-1 launch
+  countdown (Settings → Gameplay); short, dismissible first-orbit hints (gravity turn → coast → circularise → orbit,
+  once per browser profile); map view opens with a zoom-out and both directions dip briefly through black.
+
+Measured (headless, `tests/sas-feel.test.ts`, vacuum, wheels only): Sounding rocket 45° step 5.5 s, Orbiter 30° 19.4 s,
+Moon lander 15° 41 s, overshoot ≤ 1.0° in every case; an Orbiter tumble of 0.18 rad/s is stopped in 20 s and then holds
+with 0.000° drift. Large stacks turn slowly in vacuum because their only torque is the command pod's reaction wheel —
+a part-balance question, not a controller one. Gravity turn sanity (`Orbiter`, prograde SAS after a 10–15° kick at
+60 m/s): AoA stays below 0.5° through max-q; with SAS off the finned stack weathervanes into prograde. Landed legs show
+a ~3 mm 50 Hz contact chatter (invisible, and hidden further by interpolation); quickload still rebuilds the scene.
+Browser smoke test for this layer: `PORT=5204 node scripts/feel-browser.mjs` (banner, countdown, camera chip and modes,
+warp-to; 7 checks, no page errors).
 
 ## Status
 Milestone 1 (build → launch → orbit → Moon) is complete and verified. Beyond it: docking, aircraft, EVA, interplanetary, science/career, comms, mining, multiplayer prototype. Feature notes per area follow below the table.

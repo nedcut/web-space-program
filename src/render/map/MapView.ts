@@ -984,6 +984,11 @@ export class MapView {
     };
   }
 
+  /** Start the eased camera distance from `d` (e.g. a zoom-out transition when the map opens). */
+  animateFrom(d: number) {
+    if (d > 0 && Number.isFinite(d)) this.renderedDistance = d;
+  }
+
   setVisible(visible: boolean) {
     this.labels.style.display = visible ? 'block' : 'none';
     if (!visible) { this.hoverBody = null; this.tooltip.style.display = 'none'; }

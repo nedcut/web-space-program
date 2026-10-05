@@ -194,6 +194,22 @@ export class Navball {
     ctx.moveTo(c, c - 4 * k);
     ctx.lineTo(c, c - 14 * k);
     ctx.stroke();
+    // Heading box (compass heading of the nose), readable at a glance like the ball's tick marks.
+    const heading = ((Math.atan2(dot(frame.forward, frame.east), dot(frame.forward, frame.north)) * 180) / Math.PI + 360) % 360;
+    const label = `${Math.round(heading) % 360}`.padStart(3, '0') + '°';
+    ctx.font = `bold ${13 * k}px ui-monospace, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const w = ctx.measureText(label).width + 12 * k;
+    ctx.fillStyle = 'rgba(4, 12, 22, 0.78)';
+    ctx.strokeStyle = 'rgba(121, 215, 238, 0.7)';
+    ctx.lineWidth = 1.5 * k;
+    ctx.beginPath();
+    ctx.roundRect(c - w / 2, 4 * k, w, 18 * k, 4 * k);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#e8f0f6';
+    ctx.fillText(label, c, 13.5 * k);
   }
 
   dispose() {

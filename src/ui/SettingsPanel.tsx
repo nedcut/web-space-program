@@ -90,6 +90,8 @@ export function SettingsPanel({ onClose, world }: { onClose: () => void; world?:
           <label className="setting-row"><span>Restrict disconnected probes</span><Toggle checked={settings.commsRestrictControl ?? true} onChange={e => updateSettings({ commsRestrictControl: e.target.checked })} /></label>
           {check('commsOverlay', 'Show comms links in map view')}
           {check('showFps', 'Show FPS / draw calls / triangles')}
+          {check('launchCountdown', 'Launch countdown (3-2-1 before clamp release)')}
+          {check('flightHints', 'First-orbit flight hints')}
         </>}
         {tab === 'Accessibility' && <>{range('uiScale', 'UI scale', 0.8, 1.3, 0.05)}{check('highContrast', 'High-contrast HUD')}{check('reduceMotion', 'Reduce motion (camera effects / flicker)')}{check('colourBlind', 'Colour-blind-friendly navball markers')}</>}
       </div>

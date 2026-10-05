@@ -24,6 +24,8 @@ import { SettingsPanel } from '../ui/MainMenu';
 import type { CraftDef } from '../sim/vessel/types';
 import { isTyping, matches } from '../input/bindings';
 import { hasSave, saveNamedWorld } from '../game/persistence';
+import { ArrivalBanner } from './hud/FeelHud';
+import { situationBanner, type SituationBannerText } from './situation';
 
 export default function FlightScene() {
   const photo = usePhotoMode();
@@ -42,6 +44,9 @@ export default function FlightScene() {
   lostRef.current = lost;
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  /** Loading screen stays mounted briefly after ready so it can fade instead of popping. */
+  const [loaderMounted, setLoaderMounted] = useState(true);
+  const [banner, setBanner] = useState<SituationBannerText | null>(null);
   const [help, setHelp] = useState(false);
   const helpRef = useRef(false);
   helpRef.current = help;
@@ -82,6 +87,10 @@ export default function FlightScene() {
     };
     const resume = () => audio?.resume();
     let readyTimer = 0;
+    let bannerTimer = 0;
+    let loaderTimer = 0;
+    setLoaderMounted(true);
+    setBanner(null);
 
     // Construction is heavy and synchronous: defer it a couple of frames so the loading screen paints first.
     const start = () => {
@@ -155,6 +164,9 @@ export default function FlightScene() {
         if (!cc.network && !cc.sceneReady) return;
         window.clearInterval(readyTimer);
         setReady(true);
+        setBanner(situationBanner(cc.world));
+        bannerTimer = window.setTimeout(() => setBanner(null), 4300);
+        loaderTimer = window.setTimeout(() => setLoaderMounted(false), 550);
         if (!cc.network && !getTutorial() && !getScenarioRun() && !helpSeen()) setHelp(true);
       }, 200);
     };
@@ -167,6 +179,8 @@ export default function FlightScene() {
       cancelAnimationFrame(raf);
       window.clearTimeout(timer);
       window.clearInterval(readyTimer);
+      window.clearTimeout(bannerTimer);
+      window.clearTimeout(loaderTimer);
       window.removeEventListener('beforeunload', beforeUnload);
       window.removeEventListener('pointerdown', resume);
       window.removeEventListener('keydown', resume);
@@ -328,6 +342,10 @@ export default function FlightScene() {
             onToggleDocking: () => ctrl.current?.toggleDockingMode(),
             onUndock: (uid) => ctrl.current?.undock(uid),
             onHelp: () => setHelp((h) => !h),
+            onCameraMode: () => ctrl.current?.cycleCameraMode(),
+            onWarpTo: (id) => ctrl.current?.warpTo(id),
+            onCancelWarpTo: () => ctrl.current && ctrl.current.warpDriver.cancel(ctrl.current.world, 'Warp-to cancelled'),
+            onDismissHint: () => ctrl.current?.hints.dismiss(),
           }}
         />
       )}
@@ -376,8 +394,9 @@ export default function FlightScene() {
           )}
         </div>
       )}
-      {!ready && (
-        <div className="loading-screen">
+      {ready && banner && !photo.active && !help && <ArrivalBanner banner={banner} />}
+      {(!ready || loaderMounted) && (
+        <div className="loading-screen" style={ready ? { opacity: 0, pointerEvents: 'none' } : undefined}>
           <div style={{ textAlign: 'center' }}>
             <div className="label">Preparing flight</div>
             <div style={{ fontSize: 20, fontWeight: 300, letterSpacing: '0.2em', marginTop: 8 }}>{tele ? 'GENERATING TERRAIN' : 'LOADING'}</div>

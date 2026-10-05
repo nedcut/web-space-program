@@ -33,12 +33,10 @@ export function navball(this: FlightController, internals: FlightControllerInter
   if (length(vel) > (targetMode ? 0.005 : 0.5)) {
     const pro = normalize(vel);
     markers.push({ kind: 'prograde', dir: pro }, { kind: 'retrograde', dir: negate(pro) });
-    const h = cross(rs.position, rs.velocity);
-    if (length(h) > 0) {
-      const n = normalize(h);
-      const radOut = normalize(cross(normalize(rs.velocity), n));
-      markers.push({ kind: 'normal', dir: n }, { kind: 'antinormal', dir: negate(n) });
-      markers.push({ kind: 'radialOut', dir: negate(radOut) }, { kind: 'radialIn', dir: radOut });
+    const frame = orbitMarkerFrame(rs.position, rs.velocity);
+    if (frame) {
+      markers.push({ kind: 'normal', dir: frame.normal }, { kind: 'antinormal', dir: negate(frame.normal) });
+      markers.push({ kind: 'radialOut', dir: frame.radialOut }, { kind: 'radialIn', dir: negate(frame.radialOut) });
     }
   }
   const md = internals.maneuverDirection();
@@ -54,4 +52,14 @@ export function maneuverDirection(this: FlightController, _internals: FlightCont
   const rs = this.world.relativeState(wv);
   const dv = maneuverToInertialDv(rs, node);
   return length(dv) > 0 ? normalize(dv) : null;
+}
+
+
+/** Orbit normal and radial-out marker directions; matches the SAS normal / radial-out targets. */
+export function orbitMarkerFrame(r: Vec3, v: Vec3): { normal: Vec3; radialOut: Vec3 } | null {
+  const h = cross(r, v);
+  if (!(length(h) > 0)) return null;
+  const normal = normalize(h);
+  // v × h points away from the body (same construction as SAS 'radialOut').
+  return { normal, radialOut: normalize(cross(normalize(v), normal)) };
 }

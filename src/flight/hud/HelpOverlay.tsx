@@ -36,11 +36,13 @@ const FLIGHT_KEYS: [Action[] | string, string][] = [
   [['stressOverlay'], 'Structural stress overlay'],
   [['photoMode'], 'Photo mode (single player)'],
   [['warpDown', 'warpUp', 'warpStop'], 'Time warp slower / faster / stop'],
-  [['toggleCamMode'], 'Camera mode (auto / chase / free)'],
+  [['toggleCamMode'], 'Camera mode (auto / free / orbital / chase / locked)'],
+  [['cameraLeft', 'cameraRight', 'cameraUp', 'cameraDown', 'cameraZoomIn', 'cameraZoomOut'], 'Orbit / zoom camera from the keyboard'],
   [['focusNext'], 'Switch to a nearby vessel'],
   [['eva'], 'EVA: send an astronaut outside'],
   [['quicksave', 'quickload'], 'Quicksave / quickload'],
   ['Mouse drag · wheel', 'Orbit camera · zoom'],
+  ['Pad: RB + right stick · R3', 'Gamepad camera orbit · camera mode'],
   [['menu'], 'Pause menu (recover, revert, settings)'],
 ];
 

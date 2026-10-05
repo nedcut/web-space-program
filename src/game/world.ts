@@ -33,6 +33,7 @@ import * as progression from './world/progression';
 import * as rails from './world/rails';
 import * as readouts from './world/readouts';
 import * as resources from './world/resources';
+import { RenderHistory } from './world/renderInterpolation';
 
 export const PHYSICS_DT = 1 / 50;
 /** Distance from the active vessel inside which other vessels are simulated with full physics. */
@@ -184,6 +185,10 @@ export class World {
   targetPortUid: number | null = null;
   /** Real-time accumulator for fixed physics steps. */
   private acc = 0;
+  /** Pre-step vessel poses for render interpolation (read-only with respect to the simulation). */
+  readonly renderHistory = new RenderHistory();
+  /** Fraction of the next physics step already accumulated (0..1): render interpolation factor. */
+  get renderAlpha(): number { return Math.max(0, Math.min(1, this.acc / PHYSICS_DT)); }
   private msgId = 0;
   private stageRequested = false;
   private evaJumpRequested = false;
@@ -477,6 +482,7 @@ export class World {
     }
 
     if (this.warp.mode === 'rails' && rate > 1) {
+      this.renderHistory.invalidate();
       for (const wv of this.vessels.values()) this.pack(wv);
       let target = this.ut + realDt * rate;
       // Stop warp at the next maneuver node (minus a margin). Active-vessel events (SOI change, atmosphere,
@@ -506,6 +512,7 @@ export class World {
           velocity: target.velocity,
         };
       }
+      this.renderHistory.capture(this.ut, this.vessels.values());
       // A stage request is latched until a physics step actually consumes it (frames can have zero steps).
       this.physicsStep({ ...input, evaJump: this.evaJumpRequested, stage: this.stageRequested, target, commands: this.pendingCommands.length ? this.pendingCommands : undefined });
       this.stageRequested = false;
