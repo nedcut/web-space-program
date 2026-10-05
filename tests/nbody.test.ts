@@ -69,6 +69,27 @@ describe('precise gravity',()=>{
     expect(length(sub(world.relativeState(v).position,expected.state.position))).toBeLessThan(.05);
     expect(length(sub(world.relativeState(v).velocity,expected.state.velocity))).toBeLessThan(.01);
   });
+  it('retains a completed map path while its replacement computes',()=>{
+    const {world}=worldOrbit();world.setPreciseGravity(true);
+    let path=world.mapTrajectory();
+    for(let i=0;i<1000 && !world.numericalPrediction?.complete;i++) path=world.mapTrajectory();
+    expect(world.numericalPrediction?.complete).toBe(true);
+    world.advanceRailsTo(world.ut+3);
+    const replacement=world.mapTrajectory();
+    if (!world.numericalPrediction?.complete) expect(replacement).toBe(path);
+    for(let i=0;i<1000 && !world.numericalPrediction?.complete;i++) {
+      world.ut+=.1; // Slow frames must not repeatedly reset an unfinished coast prediction.
+      world.mapTrajectory();
+    }
+    expect(world.numericalPrediction?.complete).toBe(true);
+  });
+  it('applies merged radiation hazards during accepted numerical rails steps',()=>{
+    const {world,v}=worldOrbit(637100*1.6);world.setPreciseGravity(true);
+    world.advanceRailsTo(30);
+    expect(world.ut).toBeGreaterThan(0);
+    expect(v.state.parts.some(p=>(p.radiationDose ?? 0)>0)).toBe(true);
+    expect(world.crew.some(c=>(c.radiationDose ?? 0)>0)).toBe(true);
+  });
   it('uses sibling as well as parent gravity, with indirect acceleration in the integration frame',()=>{
     const {model,earth,moon,ephem}=circularPair(),p=v3(2e7,4e6,0),m=ephem.getBodyState('moon',0).position;
     const expected=add(scale(p,-earth.gm/length(p)**3),sub(scale(sub(m,p),moon.gm/length(sub(m,p))**3),scale(m,moon.gm/length(m)**3)));
@@ -78,7 +99,8 @@ describe('precise gravity',()=>{
     expect(a.integrateRelative).toBe(true);
     expect(a.gravity(absolute,0)).toEqual(u.gravityModel.acceleration('earth',sub(absolute,b.position),0));
   });
-  it.each([3,4])('keeps Earth–Moon L%d nearby for 50 periods and conserves the CR3BP Jacobi constant',index=>{
+  it.each([4,5])('keeps Earth–Moon L%d nearby for 50 periods and conserves the CR3BP Jacobi constant',pointNumber=>{
+    const index=pointNumber-1;
     const c=circularPair(),point=c.points(0)[index];
     let state={position:add(point.position,v3(c.radius*1e-5,0,c.radius*1e-5)),velocity:point.velocity};
     const initial=c.jacobi(state,0);let t=0,maxDistance=0,maxJacobi=0;
@@ -121,7 +143,8 @@ describe('precise gravity',()=>{
     expect(result.complete).toBe(true);expect(length(sub(result.state.position,reference.position))).toBeLessThan(.05);
     expect(length(sub(result.state.velocity,reference.velocity))).toBeLessThan(1e-6);
   });
-  it.each([3,4])('keeps the full-catalog standard-scale L%d placement near the moving marker for ten lunar periods',index=>{
+  it.each([4,5])('keeps the full-catalog standard-scale L%d placement near the moving marker for ten lunar periods',pointNumber=>{
+    const index=pointNumber-1;
     const u=new Universe('standard'),m=u.gravityModel,r=u.body('moon').orbit!.a;
     const period=2*Math.PI*Math.sqrt(r**3/(u.body('earth').gm+u.body('moon').gm));
     const point=(t:number)=>lagrangePoints(u.body('earth').gm,u.body('moon').gm,u.ephem.getBodyState('earth',t),u.ephem.getBodyState('moon',t))[index];

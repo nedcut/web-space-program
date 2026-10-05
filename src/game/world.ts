@@ -733,7 +733,7 @@ export class World {
     this.nodes = this.nodes.filter((n) => n.time > this.ut - 600);
   }
 
-  private numericalCache: { key: string; time: number; prediction: NumericalPrediction } | null = null;
+  private numericalCache: { key: string; time: number; prediction: NumericalPrediction; display?: NumericalPrediction } | null = null;
   get numericalPrediction() { return this.numericalCache?.prediction; }
   /** Rendering only. Planners deliberately retain trajectory()'s fast patched conics. */
   mapTrajectory(): TrajectoryPatch[] {
@@ -751,12 +751,16 @@ export class World {
       }
       const orbitalPeriod = period(after);
       const horizon = this.ut+Math.min(3e9,lastNode-this.ut+(isFinite(orbitalPeriod) ? orbitalPeriod*1.02 : 3e7));
-      this.numericalCache = {key,time:this.ut,prediction:new NumericalPrediction(this.universe.bodies,this.universe.ephem,
+      const display = this.numericalCache?.key === key ? this.numericalCache.display : undefined;
+      this.numericalCache = {key,time:this.ut,display,prediction:new NumericalPrediction(this.universe.bodies,this.universe.ephem,
         v.body,this.relativeState(v),this.ut,Math.max(this.ut+1,horizon),this.nodes,
         b=>Math.max(b.atmosphere?.height ?? 0,b.solidSurface ? this.universe.terrain(b.id).maxHeight : 0))};
     }
     const deadline = performance.now()+4;
-    return this.numericalCache.prediction.advance(128,()=>performance.now()>=deadline);
+    const cache = this.numericalCache;
+    cache.prediction.advance(128,()=>performance.now()>=deadline);
+    if (cache.prediction.complete || cache.prediction.truncated) cache.display = cache.prediction;
+    return (cache.display ?? cache.prediction).patches;
   }
   mapGravityMarkers() {
     const u = this.universe;
@@ -768,12 +772,12 @@ export class World {
       });
     }
     if (this.preciseGravity && this.numericalCache) {
-      const prediction = this.numericalCache.prediction;
+      const prediction = this.numericalCache.display ?? this.numericalCache.prediction;
       for (const e of prediction.encounters) markers.push({body:e.frame,position:e.position,
         label:`${u.body(e.body).name} closest: ${(e.distance/1000).toFixed(0)} km`,color:'#ffb35c'});
       const patch=prediction.patches.at(-1), point=patch?.samples?.at(-1);
       if (patch && point) markers.push({body:patch.orbit.body,position:point.position,
-        label:prediction.truncated ? 'Precise path: computation limit' : prediction.complete ? 'Precise path' : 'Precise path: computing…',color:'#6fe39a'});
+        label:prediction !== this.numericalCache.prediction ? 'Precise path: updating…' : prediction.truncated ? 'Precise path: computation limit' : prediction.complete ? 'Precise path' : 'Precise path: computing…',color:'#6fe39a'});
     }
     return markers;
   }
