@@ -13,6 +13,9 @@ export interface StockCraft {
   id: string;
   name: string;
   blurb: string;
+  /** Destination hardware is deployed there; Earth launchers are complete stacks. */
+  launchBody?: string;
+  needsResearch?: boolean;
   build(): CraftDef;
 }
 
@@ -20,8 +23,10 @@ type Sym = 1 | 2 | 3 | 4 | 6 | 8 | 'mirror';
 
 class Builder {
   readonly ed: CraftEditor;
-  constructor(readonly catalog: PartCatalog, name: string, description: string, type: CraftDef['type'] = 'VAB') {
-    this.ed = new CraftEditor(catalog, { name, description, type, parts: [], version: 1 });
+  readonly resources = new Map<number, CraftDef["parts"][number]["resources"]>();
+  readonly stages = new Map<string, number>();
+  constructor(readonly catalog: PartCatalog, name: string, description: string, type: CraftDef['type'] = 'VAB', seed?: CraftDef) {
+    this.ed = new CraftEditor(catalog, seed ?? { name, description, type, parts: [], version: 1 });
   }
   part(uid: number) {
     return this.ed.craft.parts.find((x) => x.uid === uid)!;
@@ -71,7 +76,12 @@ class Builder {
     return this.ed.surfaceAttachAtHit(id, parent, point, normal, t.rotation).uid;
   }
   done(): CraftDef {
-    return this.ed.craft;
+    const craft = this.ed.craft;
+    for (const p of craft.parts) {
+      if (this.resources.has(p.uid)) p.resources = this.resources.get(p.uid);
+      if (this.stages.has(p.partId)) p.stage = this.stages.get(p.partId);
+    }
+    return craft;
   }
 }
 
@@ -200,6 +210,229 @@ export function buildTender(catalog: PartCatalog = PART_CATALOG): CraftDef {
   return b.done();
 }
 
+/** Complete two-stage delivery stack; keep payload propulsion behind its own separation ring. */
+function delivery(b: Builder, payloadEngine: number, heavy = false): void {
+  const dec = b.stack(payloadEngine, 'dec-1');
+  const adapter = b.stack(dec, 'adapt-1-2');
+  const upper = b.stack(adapter, 'tank-2-mid');
+  const engine = b.stack(upper, 'eng-foehn');
+  const sep = b.stack(engine, 'dec-2');
+  if (heavy) {
+    const wide = b.stack(sep, 'adapt-2-3');
+    const base = b.stack(wide, 'adapt-3-4');
+    const tank = b.stack(base, 'tank-4-long');
+    b.stack(tank, 'eng-monsoon');
+    b.radial(tank, 'fin-pivot', 4, -4.2, 45);
+  } else {
+    const tank = b.stack(sep, 'tank-2-long');
+    b.stack(tank, 'eng-chinook');
+    b.radial(tank, 'fin-pivot', 4, -2.6, 45);
+  }
+}
+
+function station(lab: boolean, catalog: PartCatalog): CraftDef {
+  const b = new Builder(catalog, lab ? 'Alembic Laboratory' : 'Hearthlight Station',
+    'Standard-scale station delivery stack. Separate the launcher, then use the docking nose and RCS to assemble your outpost. Advanced research required.');
+  const core = b.root('probe-cairn');
+  b.stack(core, 'dock-1', 'top');
+  const cap = b.stack(core, 'adapt-1-2');
+  const habitat = b.stack(cap, lab ? 'lab-crucible' : 'cabin-wayfarer');
+  b.radial(habitat, 'solar-grand-1', 2, 0, 90);
+  b.radial(habitat, 'rcs-nudge', 4, 1, 45);
+  b.radial(habitat, 'rcs-nudge', 4, -1, 45);
+  b.radial(habitat, 'antenna-relay', 1, 0, 0);
+  const battery = b.stack(habitat, 'battery-bank-2');
+  const narrow = b.stack(battery, 'adapt-1-2', 'bottom', 'bottom');
+  const mono = b.stack(narrow, 'mono-bagel', 'top', 'top');
+  const tank = b.stack(mono, 'tank-1-short');
+  const engine = b.stack(tank, 'eng-doldrum');
+  delivery(b, engine, true);
+  return b.done();
+}
+
+export const buildStationCore = (catalog: PartCatalog = PART_CATALOG) => station(false, catalog);
+export const buildScienceLab = (catalog: PartCatalog = PART_CATALOG) => station(true, catalog);
+
+export function buildCrewFerry(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Homeward Crew Ferry', 'Three-seat orbital taxi with docking collar, RCS and shielded parachute return. Separate the service stage before reentry. Research required.');
+  const pod = b.root('pod-harbor-3');
+  b.stack(pod, 'dock-2', 'top');
+  b.radial(pod, 'chute-radial-heavy', 2, 0.4, 90);
+  const shield = b.stack(pod, 'shield-2');
+  const dec = b.stack(shield, 'dec-2');
+  const tank = b.stack(dec, 'tank-2-short');
+  b.radial(tank, 'solar-fold', 2, 0, 90);
+  b.radial(tank, 'rcs-nudge', 4, 0.5, 45);
+  b.radial(tank, 'mono-pip', 4, -0.3, 45);
+  const narrow = b.stack(tank, 'adapt-1-2', 'bottom', 'bottom');
+  const engine = b.stack(narrow, 'eng-zephyr', 'top', 'top');
+  delivery(b, engine, true);
+  return b.done();
+}
+
+function rover(b: Builder): number {
+  const chassis = b.root('rover-chassis');
+  b.stack(chassis, 'probe-cairn', 'top');
+  // Craft +Y points forward and -Z down, just as in the spaceplane hangar.
+  for (const y of [-0.65, 0.65]) b.surface(chassis, 'rover-wheel-0', v3(0.75, y, -0.175), v3(0, 0, -1), 'mirror');
+  b.radial(chassis, 'generator-isotope', 2, 0, 90);
+  b.radial(chassis, 'scanner-assay', 1, 0, 0);
+  b.radial(chassis, 'antenna-thread', 1, 0.6, 0);
+  const mono = b.stack(chassis, 'mono-bagel');
+  b.stack(mono, 'eng-dewdrop');
+  return chassis;
+}
+
+export function buildMoonRover(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Moonmoth Rover', 'Deploy on the Moon with +Y forward and wheels down. W/S drive, A/D steer, B brakes; monopropellant hop thruster. Research required.', 'SPH');
+  rover(b);
+  return b.done();
+}
+
+export function buildRoverLander(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Moonmoth Delivery Lander', 'Lunar descent carrier. Land on four legs, separate the rover, then use attitude control to settle its wheels down before driving. Research required.');
+  const chassis = rover(b);
+  // Carrier is attached to the rover side so its main descent axis remains vertical.
+  const latch = b.radial(chassis, 'dec-radial', 1, 0, 180);
+  const tank = b.outward(latch, 'tank-1-mid');
+  b.stack(tank, 'probe-cairn', 'top');
+  b.stack(tank, 'eng-doldrum');
+  b.radial(tank, 'leg-strider', 4, -0.5, 45);
+  // Ignite descent propulsion first, release rover second, rover hop thruster last.
+  for (const p of b.ed.craft.parts) {
+    if (p.partId === 'eng-doldrum') b.stages.set(p.partId, 2);
+    if (p.partId === 'dec-radial') b.stages.set(p.partId, 1);
+    if (p.partId === 'eng-dewdrop') b.stages.set(p.partId, 0);
+  }
+  return b.done();
+}
+
+export function buildMiningLander(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Bedrock Prospector', 'Moon surface refinery: deploy twin drills and start the Foundry after landing. Empty hopper and partial propellant tanks reserve production space. Research required.');
+  const core = b.root('probe-cairn');
+  b.stack(core, 'chute-main', 'top');
+  const battery = b.stack(core, 'battery-bank-2');
+  const processor = b.stack(battery, 'converter-foundry');
+  const tank = b.stack(processor, 'tank-1-long');
+  b.resources.set(tank, Object.fromEntries(Object.entries(b.def('tank-1-long').resources).map(([k,v]) => [k, v! * 0.6])));
+  b.stack(tank, 'eng-doldrum');
+  b.radial(tank, 'leg-colossus', 4, -1, 45);
+  b.radial(tank, 'drill-burrow', 2, -0.6, 90);
+  const hopper = b.radial(tank, 'regolith-hopper', 2, 0.5, 0);
+  for (const p of b.ed.craft.parts.filter(p => p.symmetryGroup === b.part(hopper).symmetryGroup)) b.resources.set(p.uid, { regolith: 0 });
+  b.radial(battery, 'solar-grand-2', 2, 0, 90);
+  b.radial(core, 'scanner-assay', 1, 0, 0);
+  return b.done();
+}
+
+export function buildNuclearTransfer(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Longreach Transfer Ship', 'Assemble in orbit: four-seat cabin, docking nose and a nuclear drive. Liquid-fuel-only reservoirs; low thrust, long burns. Research required.');
+  const core = b.root('probe-cairn');
+  b.stack(core, 'dock-1', 'top');
+  const adapter = b.stack(core, 'adapt-1-2');
+  const cabin = b.stack(adapter, 'cabin-wayfarer');
+  const tank = b.stack(cabin, 'tank-2-long');
+  b.resources.set(tank, { ...b.def('tank-2-long').resources, oxidizer: 0 });
+  b.radial(cabin, 'solar-grand-1', 2, 0, 90);
+  b.radial(tank, 'radiator-1', 2, 0, 0);
+  b.radial(cabin, 'rcs-nudge', 4, 0.7, 45);
+  b.radial(cabin, 'mono-pip', 4, -0.7, 45);
+  const narrow = b.stack(tank, 'adapt-1-2', 'bottom', 'bottom');
+  b.stack(narrow, 'eng-hearth', 'top', 'top');
+  return b.done();
+}
+
+export function buildSSTO(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Daybreak Spaceplane', 'Reusable single-stage runway demonstrator. Start jets, rotate at 80 m/s; stage aerospike for the climb, then shut jets down above their ceiling. Research required.', 'SPH');
+  const cockpit = b.root('cockpit-skylark');
+  const tank = b.stack(cockpit, 'tank-1-long');
+  const engine = b.stack(tank, 'eng-needle');
+  b.radial(tank, 'jet-shrike', 'mirror', -1.1, 90);
+  b.radial(tank, 'intake-snout', 'mirror', 1.3, 90);
+  const wing = b.radial(tank, 'wing-broadleaf', 'mirror', -0.45, 90, qFromAxisAngle(v3(0,0,1), 3 * Math.PI / 180));
+  b.radial(engine, 'tail-hawk', 'mirror', -0.2, 90);
+  b.radial(engine, 'tail-hawk', 1, 0, 0);
+  b.radial(cockpit, 'gear-trundle', 1, -0.45, 180);
+  const w = b.part(wing);
+  b.surface(wing, 'gear-bogie', v3(w.position.x - 1.5, w.position.y - 0.65, w.position.z - 0.12), v3(0,0,-1), 'mirror');
+  for (const p of b.ed.craft.parts) if (p.partId === 'jet-shrike') b.stages.set(p.partId, 1);
+  b.stages.set('eng-needle', 0);
+  return b.done();
+}
+
+export function buildAtmosphericLander(titan: boolean, catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, titan ? 'Hazewalker Titan Probe' : 'Emberleaf Mars Lander',
+    titan ? 'Titan entry probe: keep the broad shield into the flow, arm Orchard chutes after aerobraking and extend the legs. Isotope-powered instruments work through the haze. Research required.'
+      : 'Mars approach lander: broad shield, twin heavy parachutes and four restartable descent engines. Chutes slow the thin-air descent; finish with rocket thrust. Research required.');
+  const core = b.root('probe-cairn');
+  b.stack(core, 'chute-heavy', 'top');
+  const tank = b.stack(core, 'tank-1-short');
+  b.radial(tank, 'chute-radial-heavy', 2, 0.1, 90);
+  b.radial(tank, 'generator-isotope', 2, 0.1, 0);
+  b.radial(tank, 'leg-strider', 4, -0.2, 45);
+  b.radial(tank, 'eng-radial-spray', 4, 0, 45);
+  b.radial(core, 'sensor-thermal', 1, 0, 0);
+  b.radial(core, 'antenna-relay', 1, 0, 180);
+  const adapter = b.stack(tank, 'adapt-1-2');
+  b.stack(adapter, 'shield-2');
+  return b.done();
+}
+export const buildHazewalker = (catalog: PartCatalog = PART_CATALOG) => buildAtmosphericLander(true, catalog);
+
+export function buildPlumeSampler(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Frostwhisker Plume Sampler', 'Enceladus flyby or landing probe: isotope power, exposure sampler and a small restartable engine. Approach the south-polar plume from Saturn orbit. Research required.');
+  const core = b.root('probe-cairn');
+  b.radial(core, 'sensor-exposure', 1, 0, 180);
+  b.stack(core, 'nose-1', 'top');
+  const tank = b.stack(core, 'tank-1-mid');
+  b.stack(tank, 'eng-doldrum');
+  b.radial(tank, 'leg-stilt', 4, -0.6, 45);
+  b.radial(tank, 'generator-isotope', 2, 0, 90);
+  b.radial(core, 'antenna-horizon', 1, 0, 0);
+  return b.done();
+}
+
+export function buildRingTour(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const craft = buildRingrunner(catalog);
+  const b = new Builder(catalog, 'Gossamer Ring Observatory', 'Saturn delivery rocket with an isotope-powered science probe and Horizon relay. Stay above the rings during the tour. Research required.', 'VAB', craft);
+  const core = craft.parts.find(p => p.partId === 'probe-cairn')!.uid;
+  b.radial(core, 'antenna-horizon', 1, 0, 0);
+  b.radial(core, 'generator-isotope', 2, 0, 90);
+  b.radial(core, 'sensor-thermal', 1, 0, 180);
+  const result = b.done();
+  result.name = 'Gossamer Ring Observatory';
+  result.description = 'Three-stage Saturn ring-tour and deep-space relay. Isotope-powered probe; standard universe. Research required.';
+  return result;
+}
+
+export function buildHeavyLifter(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Atlaswake Heavy Lifter', 'Five metre cargo launcher with a guided restartable upper stage. Replace the nose with your payload. Standard scale; research required.');
+  const core = b.root('probe-cairn');
+  b.stack(core, 'nose-1', 'top');
+  const adapter = b.stack(core, 'adapt-1-2');
+  const tank = b.stack(adapter, 'tank-2-mid');
+  const engine = b.stack(tank, 'eng-foehn');
+  const dec = b.stack(engine, 'dec-2');
+  const wide = b.stack(dec, 'adapt-2-3');
+  const base = b.stack(wide, 'adapt-3-4');
+  const booster = b.stack(base, 'tank-4-long');
+  b.stack(booster, 'eng-monsoon');
+  b.radial(booster, 'fin-pivot', 4, -4.2, 45);
+  return b.done();
+}
+
+export function buildRelayLauncher(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Beaconseed Relay Launcher', 'Guided relay deployment stack: raise apoapsis, circularize with the payload motor and leave the Lattice array above the horizon. Research required.');
+  const core = b.root('probe-cairn');
+  b.stack(core, 'nose-1', 'top');
+  const tank = b.stack(core, 'tank-1-mid');
+  b.radial(tank, 'antenna-relay', 2, 0.5, 90);
+  b.radial(tank, 'solar-fold', 2, -0.2, 0);
+  const engine = b.stack(tank, 'eng-doldrum');
+  delivery(b, engine);
+  return b.done();
+}
+
 export const STOCK_CRAFTS: StockCraft[] = [
   { id: 'stock-kestrel', name: 'Kestrel Sounding Rocket', blurb: 'Suborbital test hop · 1 stage + capsule', build: () => buildSoundingRocket() },
   { id: 'stock-meridian', name: 'Meridian Orbiter', blurb: 'Two stages to low orbit and back', build: () => buildOrbiter() },
@@ -207,4 +440,23 @@ export const STOCK_CRAFTS: StockCraft[] = [
   { id: 'stock-swift', name: 'Swift Jet', blurb: 'Runway takeoff · turbofan trainer aircraft', build: () => buildSwift() },
   { id: 'stock-ringrunner', name: 'Ringrunner Saturn Probe', blurb: 'Three stages · explore the rings of Saturn', build: () => buildRingrunner() },
   { id: 'stock-tender', name: 'Wren Tender', blurb: 'Docking practice tug · try ?scenario=rendezvous', build: () => buildTender() },
+  ...([
+    ['hearthlight', 'Hearthlight Station', 'Docking hub · four-seat orbital outpost', buildStationCore, 'earth'],
+    ['homeward', 'Homeward Crew Ferry', 'Dock, exchange crew and return under parachutes', buildCrewFerry, 'earth'],
+    ['moonmoth', 'Moonmoth Rover', 'Moon surface vehicle · powered wheels', buildMoonRover, undefined],
+    ['moonmoth-lander', 'Moonmoth Delivery Lander', 'Lunar descent carrier · detachable rover', buildRoverLander, 'moon'],
+    ['bedrock', 'Bedrock Prospector', 'Lunar mining lander · drill and refine', buildMiningLander, 'moon'],
+    ['longreach', 'Longreach Transfer Ship', 'Orbital assembly · nuclear interplanetary drive', buildNuclearTransfer, undefined],
+    ['daybreak', 'Daybreak Spaceplane', 'Runway · jets then aerospike · single stage', buildSSTO, undefined],
+    ['emberleaf', 'Emberleaf Mars Lander', 'Mars approach · shield, chutes and powered descent', () => buildAtmosphericLander(false), 'mars'],
+    ['hazewalker', 'Hazewalker Titan Probe', 'Titan approach · drift gently through the haze', buildHazewalker, 'titan'],
+    ['frostwhisker', 'Frostwhisker Plume Sampler', 'Enceladus approach · polar plume science', buildPlumeSampler, 'enceladus'],
+    ['gossamer', 'Gossamer Ring Observatory', 'Saturn ring tour · deep-space relay', buildRingTour, 'earth'],
+    ['atlaswake', 'Atlaswake Heavy Lifter', 'Five metre cargo launcher · standard scale', buildHeavyLifter, 'earth'],
+    ['beaconseed', 'Beaconseed Relay Launcher', 'Deploy a communications relay above Earth', buildRelayLauncher, 'earth'],
+    ['alembic', 'Alembic Laboratory', 'Dockable two-seat orbital science module', buildScienceLab, 'earth'],
+  ] satisfies [string, string, string, () => CraftDef, string | undefined][]).map(([id, name, blurb, build, launchBody]) => ({
+    id: `stock-${id}`, name, blurb: `${blurb} · research required`,
+    build, launchBody, needsResearch: true,
+  })),
 ];
