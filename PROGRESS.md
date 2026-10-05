@@ -299,6 +299,9 @@ Final validation on `cx/realscale`: `npx tsc --noEmit` passed; `npx vitest run -
 - Shared-machine validation: the first full suite completed 748 tests and timed out only the existing Real Moon case at 265 s, after its intact Earth splashdown. Its wall-clock allowance was raised to 360 s with all assertions unchanged; the final merge retains main’s independently increased 600 s budget.
 - Limits: the procedural Copernicus vicinity is labeled a survey target rather than mapped crater geometry. Render-only ring chunks and plume sampling do not impart forces or damage. Full Titan/return/rendezvous/Grand Tour player playthroughs and medal balancing remain external validation; mission setups and deterministic goal tests pass without changing craft/part balance.
 
+- Final validation after merging main `e07f035`: `npm run lint`, `npx tsc --noEmit`, `npx vitest run --maxWorkers=2` (**57 files / 771 tests passed, 162.84 s**) and `npm run build` all pass. The scenario suite includes 51 tests. Build retains the existing large-chunk advisory.
+- Integration retained main’s interface/flight audio, named save slots, photography, surface liquids and discoveries. Mission save isolation also guards Save as; photography hides mission overlays and returning from it preserves a completed run’s pause. Grand Tour starts 30 km above Titan’s atmospheric cutoff; the Earth-return corridor reaches approximately 19 km Standard Earth periapsis and its stock dual chutes earn achievable touchdown medals.
+
 ## Offline sharing, save slots, and photography (cx/sharing)
 
 - Editor: Copy share code (versioned JSON, deflate when supported, base64url), .craft.json export, preview-first import from codes/files/drop/URL fragments. Validation lists unknown catalogue parts and rejects invalid topology/transforms or oversized inputs.
@@ -333,5 +336,3 @@ Final validation on `cx/realscale`: `npx tsc --noEmit` passed; `npx vitest run -
 - Merged main's audio upgrade, preserving interface audio and silencing flight effects during photo mode. Preserved both branches' progress and decisions.
 - Final main merge incorporated `05a58d9` (procedural audio); only append-only DECISIONS/PROGRESS entries conflicted, and both branches’ entries were retained. Surface implementation files merged without conflicts.
 - Post-merge checks: lint, TypeScript and build pass; all 37 focused audio/surface/terrain/contact/persistence tests pass. Kept the empty Spacepedia discovery snapshot stable for React external-store subscriptions.
-
-- Integration retained main’s interface/flight audio, named save slots, photography, surface liquids and discoveries. Mission save isolation also guards Save as; photography hides mission overlays and returning from it preserves a completed run’s pause. Grand Tour starts 30 km above Titan’s atmospheric cutoff; the Earth-return corridor reaches an 18 km Standard Earth periapsis and its stock dual chutes earn achievable touchdown medals.
