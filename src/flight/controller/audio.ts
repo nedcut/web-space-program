@@ -9,7 +9,7 @@ const cameraHistory = new WeakMap<FlightController, { distance: number; time: nu
 
 export function updateAudio(this: FlightController, internals: FlightControllerInternals, wv: WorldVessel | null): void {
   if (!internals.audio) return;
-  if (!wv) { internals.audio.silenceFlight(); return; }
+  if (!wv || this.paused) { internals.audio.silenceFlight(); cameraHistory.delete(this); return; }
   const st = wv.state;
   let vac = 0, fuel = 0, capacity = 0, temperature = 0, wheelSpeed = 0;
   const byType = new Map<EngineType, { thrust: number; count: number; size: number }>();

@@ -72,7 +72,7 @@ export function SpaceCenter() {
           <button className="btn small" onClick={() => { const name = window.prompt('Save slot name', 'Program save'); if (name?.trim()) { try { saveNamedWorld(name, openProgram()); setNotice('Program saved.'); } catch (e) { setNotice((e as Error).message); } } }}>Save as…</button>
           <button className="btn small" onClick={() => game.set({ scene: 'menu' })}>Main menu</button>
           <button className="btn" onClick={() => void import('./Spacepedia').then(m => m.openPedia('spaceCenter'))}>Spacepedia</button>
-          <button className="btn small" onClick={() => photoMode.open()}>Photo mode (P)</button>
+          <button className="btn small" onClick={() => photoMode.open()}>Photo mode</button>
           <button className="btn small" onClick={() => setSettings((v) => !v)}>Settings</button>
         </div>
         {settings && <SettingsPanel onClose={() => setSettings(false)} />}

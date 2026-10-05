@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { photoMode } from '../../game/photoMode';
 import { downloadFile } from '../../game/craftSharing';
-import { isTyping } from '../../input/bindings';
+import { isTyping, matches } from '../../input/bindings';
 import type { RenderPipeline } from './renderer';
 
 /** Scene-local camera state; never changes the physical sun or simulation clock. */
@@ -20,9 +20,9 @@ export class PhotoCamera {
     const canvas = pipeline.renderer.domElement;
     const keydown = (e: KeyboardEvent) => {
       if (isTyping(e.target)) return;
-      if (e.code === 'KeyP' && !e.repeat) { e.preventDefault(); e.stopImmediatePropagation(); if (this.active) photoMode.close(); else photoMode.open(); return; }
+      if (matches('photoMode', e) && !e.repeat) { e.preventDefault(); e.stopImmediatePropagation(); if (this.active) photoMode.close(); else photoMode.open(); return; }
       if (!this.active) return;
-      if (e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); photoMode.close(); return; }
+      if (matches('menu', e)) { e.preventDefault(); e.stopImmediatePropagation(); photoMode.close(); return; }
       if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'ShiftLeft', 'ShiftRight'].includes(e.code)) { this.keys.add(e.code); e.preventDefault(); }
       e.stopImmediatePropagation();
     };

@@ -35,6 +35,9 @@ describe('action bindings', () => {
     const storage = memory(); storage.setItem(BINDINGS_KEY, JSON.stringify({ stage: ['KeyP'], map: 7, brakes: [null], extra: ['KeyO'] }));
     expect(loadBindings(storage).stage).toEqual(['KeyP']);
     expect(loadBindings(storage).map).toEqual(['KeyM']);
+    expect(loadBindings(storage).photoMode).toEqual(['KeyP']);
+    expect(loadBindings(storage).stressOverlay).toEqual(['F4']);
+    expect(conflicts(loadBindings(storage)).some(c => c.actions.includes('photoMode') && c.actions.includes('stage'))).toBe(true);
     expect(loadBindings(storage).brakes).toEqual(['KeyB']);
     storage.setItem(BINDINGS_KEY, '{'); expect(loadBindings(storage)).toEqual(defaultBindings());
     expect(loadBindings({ getItem: () => { throw new Error('blocked'); } })).toEqual(defaultBindings());

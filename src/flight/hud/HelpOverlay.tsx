@@ -29,6 +29,8 @@ const FLIGHT_KEYS: [Action[] | string, string][] = [
   [['toggleGear', 'brakes'], 'Landing gear / wheel brakes'],
   [['map'], 'Map view + maneuver planner'],
   [['flightData'], 'Detailed flight data panel'],
+  [['stressOverlay'], 'Structural stress overlay'],
+  [['photoMode'], 'Photo mode (single player)'],
   [['warpDown', 'warpUp', 'warpStop'], 'Time warp slower / faster / stop'],
   [['toggleCamMode'], 'Camera mode (auto / chase / free)'],
   [['focusNext'], 'Switch to a nearby vessel'],
