@@ -170,10 +170,11 @@ export default function FlightScene() {
   }, [mountKey]);
 
   const awaitingTelemetry = tele === null;
+  const scenarioFinished = !!getScenarioRun()?.result;
   useEffect(() => {
-    if (ctrl.current) ctrl.current.paused = paused || photo.active;
+    if (ctrl.current) ctrl.current.paused = paused || photo.active || scenarioFinished;
     if (paused || photo.active) audioRef.current?.silenceFlight();
-  }, [paused, awaitingTelemetry, photo.active]);
+  }, [paused, awaitingTelemetry, photo.active, scenarioFinished]);
 
   // Input reads settings each frame; planet quality, clouds and scattering rebuild from a snapshot.
   useEffect(() => {
