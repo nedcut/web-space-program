@@ -151,3 +151,101 @@ To complete GPU validation on the owner's laptop, select Low and enable the FPS/
 - `src/ui/SettingsPanel.tsx`
 - `src/util/snapshotEqual.ts`
 - `tests/performance.test.ts`
+
+
+## Transfer planning workers — 2026-10-04 (`cx/planner`)
+
+The synchronous algorithms are unchanged and remain the before case; the after case sends the same
+snapshot through `requestPlan` to the production `planner.worker-*.js` bundle. Moon and Saturn
+transfer results are also checked for exact numeric equivalence in `tests/planning.test.ts`.
+
+**Measurement scope:** Node v24.14.1 on the shared Linux/WSL Ryzen 5 5600X host. A small
+`worker_threads` transport shim executes the actual built Web Worker entry point (`self.postMessage`
+and `self.onmessage`), exercising its request/response protocol and client termination. This measures
+main-thread event-loop responsiveness, **not browser frame time or FPS**. Other agents were active.
+The separate browser measurement below uses the collaborative browser reached through the host's
+Tailscale address after loopback/environment-port/WSL-address navigation failed.
+
+Each scenario warms the synchronous planner once, then alternates three synchronous/worker trials.
+The table reports medians. “Call” measures synchronous work before returning (before: the entire
+search; after: worker creation and message dispatch). “Max timer gap” is each trial's largest gap
+between 4 ms main-thread heartbeat callbacks; it includes host scheduling and GC. A 20 ms settling
+window captures the delayed callback after a synchronous search. Worker elapsed time includes fresh
+worker startup, module initialization, calculation, row yields, serialization and result delivery.
+
+Parking orbits are inclined 0.5 rad around Earth at UT 2030-07-20 12:00, 120 km altitude at Standard
+and 220 km at Real. Saturn grids use the UI's 36×36 cells, one synodic departure period and
+0.65–1.35 times the Hohmann flight duration. Every Moon case found a transfer; every worker grid
+streamed 36 rows. Before cases serviced zero heartbeats during calculation; after cases serviced
+61–1,204. Raw samples: [planning.json](performance/planning.json).
+
+| Case | Before call ms | After call ms | Before max timer gap ms | After max timer gap ms | After elapsed ms |
+|---|---:|---:|---:|---:|---:|
+| Standard / Moon transfer | 2686.13 | 0.97 | 2686.60 | 13.26 | 2676.32 |
+| Standard / Saturn 36×36 grid | 35.63 | 0.71 | 36.10 | 14.08 | 344.61 |
+| Real / Moon transfer | 4480.91 | 1.25 | 4480.94 | 20.89 | 4526.75 |
+| Real / Saturn 36×36 grid | 17.76 | 0.65 | 17.81 | 10.52 | 349.92 |
+
+The worker removes the multi-second Moon calculation from the main thread. Small grids cost more
+elapsed time because each request starts a fresh worker and yields between rows; the main thread
+remains available and Cancel immediately terminates refinement work. No speedup in total planning
+time is claimed. Worker construction is lazy and each worker is terminated on completion, error or
+cancellation. The production worker is about 72 kB uncompressed, with no React/three.js dependencies.
+
+Reproduce the recorded event-loop measurement:
+
+```sh
+npm run build
+npx tsx scripts/bench/planning-node.ts
+```
+
+### Browser main-thread call measurements
+
+The actual module Web Worker also ran in the T3 collaborative browser: Electron 44.4.2 / Chrome
+152.0.7977.130 on macOS, reporting 12 logical cores (CPU model not collected). These are separate
+measurements from the Linux backend above; absolute times must not be compared across those hosts.
+The idle HTML harness loads Vite development modules over the host's Tailscale address. We warmed
+each synchronous case once, then alternated three before/after samples. The same orbits and 36×36
+UI grids were used. Main-thread call duration, measured directly with `performance.now()`, includes
+the entire synchronous search before and worker construction/postMessage after. Snapshot preparation
+and UI drawing are outside this measurement.
+
+| Case | Before main-thread call ms | After main-thread call ms | After elapsed ms |
+|---|---:|---:|---:|
+| Standard / Moon transfer | 643.00 | 0.10 | 971.60 |
+| Standard / Saturn 36×36 grid | 7.40 | 0.10 | 386.20 |
+| Real / Moon transfer | 1021.20 | 0.10 | 1332.50 |
+| Real / Saturn 36×36 grid | 7.10 | 0.10 | 495.50 |
+
+Raw samples and browser identification: [planning-browser.json](performance/planning-browser.json).
+The embedded preview throttled timers to roughly one second and did not service a six-frame rAF
+probe within 15 seconds. Its Long Tasks observer returned no entries even for the synchronous stalls.
+Consequently its raw timer/Long Task fields are **not valid frame or long-task measurements**; only
+the direct call timings above are reported. The measured small Saturn grid itself took about 7 ms,
+not one second on this browser. Fresh worker startup and row scheduling increase its elapsed time;
+this change provides cancellation and progressive display rather than faster overall grid calculation.
+
+Reproduce in an idle same-origin page:
+
+```sh
+npx vite --host 0.0.0.0 --port 5196 --strictPort
+# Open http://<reachable-host>:5196/scripts/bench/planning.html
+```
+
+```js
+const { benchmarkPlanning } = await import('/scripts/bench/planning.ts');
+await benchmarkPlanning('standard', 'moon', false);
+await benchmarkPlanning('standard', 'moon', true);
+// Also use 'real' and 'saturn'; warm once, then alternate three samples.
+```
+
+For UI checks, import `/scripts/bench/planning-ui.tsx` and call `mountPlanningUi()` in the same harness.
+It mounts the actual ManeuverPanel and TransferWindow against a real-scale parking-orbit World without
+requiring a WebGL scene. In the collaborative browser, Cancel during Moon encounter refinement
+terminated its worker and retained the existing 42 m/s node. Cancelling the Saturn plot on the tenth
+row left exactly nine painted departure columns and retained the same node. This verifies progressive
+canvas updates and actionable cancellation independently of the unavailable frame-rate measurement.
+A subsequent uncancelled Moon request installed a verified 3,127 m/s transfer with a fresh World node ID.
+
+The no-Worker Node fallback preserves the async API and numerical results but can still block during
+transfer refinement; only pre-start and porkchop-row boundaries yield in that path.
