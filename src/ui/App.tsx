@@ -9,6 +9,7 @@ import { SpaceCenter } from './SpaceCenter';
 import { ErrorBoundary } from './ErrorBoundary';
 
 // Heavy 3D scenes are code-split so the menu loads instantly.
+const Spacepedia = lazy(() => import('./Spacepedia'));
 const EditorScene = lazy(() => import('../editor/EditorScene'));
 const TrackingStation = lazy(() => import('./tracking/TrackingStation'));
 const Research = lazy(() => import('./Research'));
@@ -27,6 +28,7 @@ export function App() {
     <div className="fullscreen" style={{ width: `${100 / settings.uiScale}%`, height: `${100 / settings.uiScale}%`, transform: `scale(${settings.uiScale})`, transformOrigin: 'top left' }}>
       <ErrorBoundary>
       <Suspense fallback={<Loading />}>
+        {scene === 'pedia' && <Spacepedia />}
         {scene === 'training' && <Training />}
         {scene === 'menu' && <MainMenu />}
         {scene === 'spaceCenter' && <SpaceCenter />}

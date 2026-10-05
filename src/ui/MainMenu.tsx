@@ -42,6 +42,7 @@ export function MainMenu() {
             <button className="btn" onClick={continueGame} disabled={!hasSave('autosave') && !hasSave('quicksave')}>Continue</button>
             <button className="btn" onClick={() => setPanel('multiplayer')}>Multiplayer (experimental)</button>
             <button className="btn" onClick={() => game.set({ scene: 'training' })}>Training</button>
+            <button className="btn" onClick={() => void import('./Spacepedia').then(m => m.openPedia('menu'))}>Spacepedia</button>
             <button className="btn" onClick={() => setPanel('settings')}>Settings</button>
           </div>
         )}

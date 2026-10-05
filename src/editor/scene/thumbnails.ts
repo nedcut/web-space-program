@@ -135,3 +135,52 @@ function pump() {
     idleTimer = setTimeout(() => !queue.length && teardown(), 4000);
   }
 }
+
+/** Live encyclopedia thumbnail, using the same mesh, framing and lighting as catalogue thumbnails. */
+export function mountPartTurntable(canvas: HTMLCanvasElement, def: PartDef, reducedMotion: () => boolean) {
+  const r = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  r.setPixelRatio(1);
+  r.toneMapping = THREE.ACESFilmicToneMapping;
+  r.toneMappingExposure = 1.15;
+  const s = new THREE.Scene();
+  const pmrem = new THREE.PMREMGenerator(r);
+  const environment = pmrem.fromScene(new RoomEnvironment(), 0.04);
+  pmrem.dispose();
+  s.environment = environment.texture;
+  s.environmentIntensity = 0.9;
+  const key = new THREE.DirectionalLight(0xffffff, 2.2);
+  key.position.set(3, 5, 4);
+  s.add(key);
+  const rim = new THREE.DirectionalLight(0x9fd8ff, 1.2);
+  rim.position.set(-4, 2, -3);
+  s.add(rim);
+  const obj = createPartMesh(def);
+  const box = new THREE.Box3().setFromObject(obj);
+  const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 0.05);
+  obj.position.sub(box.getCenter(new THREE.Vector3()));
+  const holder = new THREE.Group();
+  holder.add(obj);
+  s.add(holder);
+  const dist = radius / Math.sin(Math.PI / 12);
+  const c = new THREE.PerspectiveCamera(30, 1, dist / 50, dist * 4);
+  c.position.copy(new THREE.Vector3(1, 0.55, 1.5).normalize().multiplyScalar(dist));
+  c.lookAt(0, 0, 0);
+  let raf = 0, last = 0, visible = true;
+  const visibility = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; });
+  visibility.observe(canvas);
+  const resize = new ResizeObserver(() => {
+    r.setSize(canvas.clientWidth, canvas.clientHeight, false);
+    c.aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
+    c.updateProjectionMatrix();
+  });
+  resize.observe(canvas);
+  const frame = (now: number) => {
+    if (!visible || now - last < 1000 / 30) { raf = requestAnimationFrame(frame); return; }
+    if (last && !reducedMotion()) holder.rotation.y += Math.min((now - last) / 1000, 0.1) * 0.25;
+    last = now;
+    r.render(s, c);
+    raf = requestAnimationFrame(frame);
+  };
+  raf = requestAnimationFrame(frame);
+  return () => { cancelAnimationFrame(raf); resize.disconnect(); visibility.disconnect(); environment.dispose(); r.dispose(); r.forceContextLoss(); };
+}
