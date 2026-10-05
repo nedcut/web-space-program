@@ -116,6 +116,14 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         <span className="label">Show FPS</span>
         <input type="checkbox" checked={settings.showFps} onChange={(e) => updateSettings({ showFps: e.target.checked })} />
       </label>
+      <label className="label">Communications network
+        <select aria-label="Communications network" value={settings.commsEnabled === null ? 'default' : String(settings.commsEnabled)} onChange={e => updateSettings({ commsEnabled: e.target.value === 'default' ? null : e.target.value === 'true' })}>
+          <option value="default">Program setting (new: Science/Career on, Sandbox off)</option><option value="true">On</option><option value="false">Off</option>
+        </select>
+      </label>
+      <label className="label">Restrict disconnected probes
+        <input type="checkbox" checked={settings.commsRestrictControl ?? true} onChange={e => updateSettings({ commsRestrictControl: e.target.checked })} />
+      </label>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button className="btn" onClick={onClose}>Done</button>
       </div>

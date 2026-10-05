@@ -1,6 +1,6 @@
 import { MapView, type ExtraOrbit } from '../../render/map/MapView';
 import { RenderPipeline, getQuality } from '../../render/core';
-import { game } from '../../game/store';
+import { game, applyCommsSettings } from '../../game/store';
 import type { World } from '../../game/world';
 import { RAILS_WARP } from '../../game/timewarp';
 import { neutralInput } from '../../sim/vessel';
@@ -68,6 +68,7 @@ export class TrackingView {
     const dt = Math.min((now - this.last) / 1000, 0.25);
     this.last = now;
     const world = this.world;
+    applyCommsSettings(world);
     if (world.active) world.tick(dt, neutralInput());
     else world.advanceRailsTo(world.ut + dt * RAILS_WARP[world.warp.index]);
     if (this.focus.kind === 'vessel' && !world.vessels.has(this.focus.id)) this.setFocus({ kind: 'body', id: world.universe.sunId });
@@ -85,7 +86,7 @@ export class TrackingView {
     const focus = this.focus.kind === 'vessel'
       ? world.vessels.get(this.focus.id)!.state.position
       : world.universe.ephem.getBodyState(this.focus.id, world.ut).position;
-    this.map.update({ t: world.ut, focus, viewport: { width: this.width, height: this.height } });
+    this.map.update({ t: world.ut, focus, comms: world.commsSettings.enabled && game.get().settings.commsOverlay ? world.comms : undefined, viewport: { width: this.width, height: this.height } });
     this.pipeline.renderer.setRenderTarget(null);
     this.pipeline.renderer.render(this.map.scene, this.map.camera);
     if (now - this.lastUi > 250) { this.refresh(); this.lastUi = now; }

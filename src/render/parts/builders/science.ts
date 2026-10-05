@@ -20,5 +20,12 @@ export function buildInstrument(def: PartDef): THREE.Object3D {
     detail.position.set(0, size.y * (i / Math.max(1, rings - 1) - 0.5) * 0.7, size.z * 0.42);
     root.add(detail);
   }
+  if (def.id === 'antenna-arc' || def.id === 'antenna-horizon') {
+    const dish = new THREE.Mesh(new THREE.SphereGeometry(size.x * 0.46, 24, 12, 0, Math.PI * 2, 0, Math.PI / 3), M.greyPanel());
+    dish.rotation.x = Math.PI / 2;
+    dish.scale.y = 0.25;
+    dish.position.z = size.z * 0.42;
+    root.add(dish);
+  }
   return root;
 }

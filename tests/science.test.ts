@@ -67,7 +67,7 @@ describe('science lifecycle', () => {
     expect(subjectKey(e, { ...c, situation: 'landed' })).not.toBe(subjectKey(e, { ...c, situation: 'landed', biome: 'Grasslands' }));
   });
   it('stores data, prevents duplicate runs/transmit credit, recovers the remaining value and diminishes later runs', () => {
-    const w = world('science'); w.launch(craft());
+    const w = world('science'); w.commsSettings.enabled = false; w.launch(craft());
     expect(w.scienceContext()?.biome).toBe('Launch Complex');
     const d = w.runExperiment(2, 'temperature')!;
     expect(d.value).toBe(8);
@@ -189,7 +189,7 @@ describe('contracts, events and persistence', () => {
     w.vessels.clear(); w.activeId = null; w.advanceRailsTo(w.ut + 2); expect(c.status).toBe('failed');
   });
   it('round-trips finances, tech, archive, pending data, contracts and milestones; migrates old saves to sandbox', () => {
-    const w = world(); w.launch(craft()); w.runExperiment(2, 'temperature'); w.transmitScience();
+    const w = world(); w.commsSettings.enabled = false; w.launch(craft()); w.runExperiment(2, 'temperature'); w.transmitScience();
     w.acceptContract(w.progression.contracts[0].id); w.progression.science += 20; w.unlockTech('energy-0');
     w.progression.milestones.push('first-moon');
     const save = JSON.parse(JSON.stringify(serializeWorld(w)));

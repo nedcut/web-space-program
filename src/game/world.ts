@@ -1,6 +1,8 @@
+import { defaultCommsSettings, remoteControlAllowed, NO_SIGNAL, type CommsSettings, type Network } from '../sim/comms/network';
+import { worldNetwork } from './comms';
 import { newProgression, generateContracts, acceptContract, failContract, type GameMode, type ProgressEvent } from '../sim/science/progression';
 import { unlockTech, launchProblem, launchCost } from '../data/technology';
-import { scienceContext, instruments, runExperiment, transmitScience, recoverScience, progressionEvent, evaluateProgression } from './science';
+import { scienceContext, instruments, runExperiment, transmitScience, recoverScience, progressionEvent, evaluateProgression, advanceTransmissions } from './science';
 import { generateAstronaut, crewIds, hasControl, seatCapacity, type Astronaut, type PlantedFlag } from '../sim/crew/crew';
 import { EVA_PART } from '../data/eva';
 import { stepEva } from '../sim/vessel/eva';
@@ -50,6 +52,19 @@ export interface WorldMessage {
 const bodyQuat = (u: Universe, id: string, t: number) => u.ephem.bodyRotation(id, t);
 
 export class World {
+  commsSettings: CommsSettings;
+  /** Persisted vessel IDs; data credit itself remains on parts through splits/docking. */
+  transmitting: string[] = [];
+  private networkCache: { ut: number; key: string; value: Network } | null = null;
+  /** At most 4 Hz in simulation time, with immediate topology invalidation. */
+  get comms(): Network {
+    const key = [...this.vessels.values()].map(v => `${v.state.id}:${v.state.destroyed}:${v.state.parts.map(p => p.uid + ':' + p.partId).join(',')}`).join('|');
+    if (!this.networkCache || this.networkCache.key !== key || Math.abs(this.ut - this.networkCache.ut) >= 0.25) {
+      this.networkCache = { ut: this.ut, key, value: worldNetwork(this) };
+    }
+    return this.networkCache.value;
+  }
+  connection(v = this.active?.state) { return v ? this.comms.connections.get(v.id) ?? NO_SIGNAL : NO_SIGNAL; }
   progression = newProgression();
   readonly universe: Universe;
   readonly vessels = new Map<string, WorldVessel>();
@@ -78,6 +93,7 @@ export class World {
   onEvent: ((e: VesselEvent) => void) | null = null;
 
   constructor(universe: Universe, catalog: Map<string, PartDef>, ut: number, public mode: GameMode = 'sandbox') {
+    this.commsSettings = defaultCommsSettings(mode);
     this.universe = universe;
     this.catalog = new Map(catalog);
     this.catalog.set(EVA_PART.id, EVA_PART);
@@ -266,7 +282,13 @@ export class World {
     return ids.flatMap(id => this.crew.find(c => c.id === id) ?? []);
   }
 
-  canControl(v = this.active?.state): boolean { return !!v && hasControl(v); }
+  canControl(v = this.active?.state): boolean {
+    if (!v || !hasControl(v)) return false;
+    const crewed = crewIds(v).length > 0;
+    // Avoid solving a network for local control or a disabled difficulty setting.
+    if (remoteControlAllowed(this.commsSettings, crewed, false)) return true;
+    return this.connection(v).connected;
+  }
 
   /** Hatch is on the pod's +Z face. Public for HUD/rendezvous tools. */
   hatchPosition(v: VesselState, pod: PartState): Vec3 {
@@ -641,9 +663,13 @@ export class World {
     this.warp = next;
   }
 
+  private disconnectedInput(v?: VesselState): ControlInput {
+    return neutralInput({ sas: v && hasControl(v) ? v.sas.mode : 'off' });
+  }
+
   /** Advance the simulation by `realDt` seconds of wall time with the given control input for the active vessel. */
   tick(realDt: number, input: ControlInput) {
-    if (!this.canControl()) { input = neutralInput(); this.stageRequested = false; this.evaJumpRequested = false; }
+    if (!this.canControl()) { input = this.disconnectedInput(this.active?.state); this.stageRequested = false; this.evaJumpRequested = false; }
     realDt = Math.min(realDt, 0.25);
     const now = performance.now();
     this.messages = this.messages.filter((m) => m.expires > now);
@@ -763,6 +789,7 @@ export class World {
     }
     this.ut = target;
     for (const wv of this.vessels.values()) this.syncPacked(wv, this.ut);
+    advanceTransmissions(this);
     evaluateProgression(this);
   }
 
@@ -816,7 +843,8 @@ export class World {
       // Update dominant body (SOI transitions in physics).
       wv.body = this.universe.dominantBody(wv.state.position, t);
       const env = this.universe.createEnvironment(() => wv.body);
-      const ctrl = isActive && this.canControl(wv.state) ? input : neutralInput({ sas: 'off' });
+      // A disconnected probe keeps its last SAS mode, but cannot command thrust or stage.
+      const ctrl = isActive ? (this.canControl(wv.state) ? input : this.disconnectedInput(wv.state)) : neutralInput({ sas: 'off' });
       const res = wv.state.eva ? stepEva(wv.state, ctrl, env, t, PHYSICS_DT) : stepVessel(wv.state, ctrl, env, t, PHYSICS_DT);
       for (const nv of res.newVessels) {
         recomputeMassProperties(nv, false);
@@ -844,6 +872,7 @@ export class World {
     this.stepDockingAll();
     this.ut = t + PHYSICS_DT;
     this.applyPassedNodes();
+    advanceTransmissions(this);
     evaluateProgression(this);
   }
 

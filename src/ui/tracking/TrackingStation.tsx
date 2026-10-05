@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { game } from '../../game/store';
+import { game, updateSettings, useGame } from '../../game/store';
 import { World, type WorldVessel } from '../../game/world';
 import { Universe } from '../../game/universe';
 import { deserializeWorld, serializeWorld, saveWorldToStorage } from '../../game/persistence';
@@ -25,6 +25,7 @@ export default function TrackingStation() {
     }
     return new World(new Universe(s.scalePreset), PART_CATALOG, s.ut, s.mode);
   });
+  const overlay = useGame(s => s.settings.commsOverlay);
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<TrackingView | null>(null);
   const [, refresh] = useState(0);
@@ -72,6 +73,7 @@ export default function TrackingStation() {
       <header className="panel tracking-header">
         <div><div className="label">Web Space Program</div><h2>Tracking Station</h2></div>
         <div className="tracking-clock"><div className="mono">{formatDate(world.ut)}</div><label className="label">Time warp <select aria-label="Time warp" value={world.warp.index} onChange={(e) => { world.warp = { mode: 'rails', index: Number(e.target.value) }; update(); }}>{RAILS_WARP.map((r, i) => <option key={r} value={i}>{r.toLocaleString()}×</option>)}</select></label><span className="mono"> {warpRate(world.warp).toLocaleString()}×</span></div>
+        <label className="label"><input type="checkbox" checked={overlay} onChange={e => updateSettings({ commsOverlay: e.target.checked })} /> Signal links · red weak / green strong</label>
         <button className="btn small" onClick={() => exit('spaceCenter')}>Back to Space Center</button>
       </header>
       <aside className="panel tracking-fleet"><div className="label">Vessels · {world.vessels.size}</div>

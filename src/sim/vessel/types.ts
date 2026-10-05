@@ -229,7 +229,7 @@ export type PartModule =
   | { type: 'light' }
   | { type: 'battery' }
   | { type: 'science'; experiment: string }
-  | { type: 'antenna'; transmission: number };
+  | { type: 'antenna'; transmission: number; range: number; relay: boolean };
 
 export interface PartDef {
   id: string;

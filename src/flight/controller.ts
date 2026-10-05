@@ -1,3 +1,4 @@
+import { applyCommsSettings, game } from '../game/store';
 import type { GameMode } from '../sim/science/progression';
 import { FlagView } from '../render/vessel/FlagView';
 import * as THREE from 'three';
@@ -331,11 +332,13 @@ export class FlightController {
   }
 
   toggleSas() {
+    if (!this.world.canControl()) return;
     this.sasOn = !this.sasOn;
     if (this.sasOn && this.sas === 'off') this.sas = 'stabilityAssist';
   }
 
   setSasMode(mode: string) {
+    if (!this.world.canControl()) return;
     this.sasOn = true;
     this.sas = mode as SasMode;
   }
@@ -372,11 +375,13 @@ export class FlightController {
   }
 
   stage() {
+    if (!this.world.canControl()) return;
     this.stagePending = true;
   }
 
   /** G: raise / lower landing gear and legs. */
   toggleGear() {
+    if (!this.world.canControl()) return;
     const wv = this.world.active;
     if (!wv) return;
     const cur = gearState(wv.state);
@@ -404,7 +409,14 @@ export class FlightController {
     this.elapsed += dt;
     this.fps = this.fps * 0.95 + (dt > 0 ? 1 / dt : 0) * 0.05;
     this.input.evaMode = !!this.world.active?.state.eva;
+    applyCommsSettings(this.world);
     this.input.update(dt);
+    if (!this.world.canControl()) {
+      this.input.state.throttle = 0;
+      this.stagePending = false;
+      this.gearPending = undefined;
+      if (this.assist) this.cancelAssist('Assist stopped: no signal or command authority');
+    }
     const s = this.input.state;
     const wv = this.world.active;
     const maneuverDir = this.maneuverDirection();
@@ -500,6 +512,7 @@ export class FlightController {
       this.map.update({
         t,
         focus: origin,
+        comms: this.world.commsSettings.enabled && game.get().settings.commsOverlay ? this.world.comms : undefined,
         vessel: { position: origin, patches: this.world.trajectory(), nodes: this.world.nodes },
         viewport: { width: this.host.clientWidth, height: this.host.clientHeight },
       });

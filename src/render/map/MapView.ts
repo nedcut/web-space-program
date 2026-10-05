@@ -1,3 +1,4 @@
+import type { Network } from '../../sim/comms/network';
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
@@ -16,6 +17,7 @@ import { sub, type Vec3 } from '../../util/vec3';
  * and line vertices are stored relative to their parent body, so float32 is only used for local offsets.
  */
 export interface MapUpdate {
+  comms?: Network;
   t: number;
   /** Heliocentric position of the focused object (float64). */
   focus: Vec3;
@@ -132,6 +134,7 @@ export function sampleConic(o: Orbit, soi: number, t0: number, t1: number | null
 
 export class MapView {
   readonly scene = new THREE.Scene();
+  private commsLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, depthTest: false }));
   readonly camera = new THREE.PerspectiveCamera(50, 1, 1, 1e15);
   /** Spherical camera coords around focus. */
   yaw = 0.6;
@@ -366,6 +369,24 @@ export class MapView {
 
   update(u: MapUpdate) {
     const { t, focus } = u;
+    if (!this.commsLines.parent) { this.scene.add(this.commsLines); this.commsLines.renderOrder = 5; }
+    this.commsLines.visible = !!u.comms;
+    if (u.comms) {
+      const nodes = new Map(u.comms.nodes.map(n => [n.id, n]));
+      const positions: number[] = [], colors: number[] = [];
+      for (const link of u.comms.links) {
+        const color = new THREE.Color().setHSL(link.strength * 0.33, 0.85, 0.55);
+        for (const id of [link.a, link.b]) {
+          // Subtract floating origin in float64 before converting into GPU attributes.
+          const p = sub(nodes.get(id)!.position, focus);
+          positions.push(p.x, p.y, p.z); colors.push(color.r, color.g, color.b);
+        }
+      }
+      this.commsLines.geometry.dispose();
+      this.commsLines.geometry = new THREE.BufferGeometry();
+      this.commsLines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      this.commsLines.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    }
     for (const m of this.materials) m.resolution.set(u.viewport.width, u.viewport.height);
     this.camera.aspect = u.viewport.width / u.viewport.height;
 

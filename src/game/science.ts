@@ -55,6 +55,13 @@ export function transmitScience(w: World): number {
   if (!v || !w.canControl(v.state)) return 0;
   const fraction = Math.max(0, ...v.state.parts.flatMap(p => p.def.modules.map(m => m.type === 'antenna' ? m.transmission : 0)));
   if (!fraction) { w.message('Fit a telemetry antenna to transmit data', 'warn'); return 0; }
+  if (w.commsSettings.enabled) {
+    if (!w.connection(v.state).connected) { w.message('No signal — transmission unavailable', 'warn'); return 0; }
+    if (!w.transmitting.includes(v.state.id)) w.transmitting.push(v.state.id);
+    transmissionTimes.set(w, w.ut);
+    w.message('Transmission started · rate scales with signal');
+    return 0;
+  }
   const total = v.state.parts.flatMap(p => p.scienceData ?? []).reduce((n, d) => n + credit(w, d, fraction), 0);
   w.message(`Transmission complete · +${total.toFixed(1)} science`);
   return total;
@@ -95,4 +102,31 @@ export function evaluateProgression(w: World) {
     const orbit = w.orbitOf(v), body = w.universe.body(v.body);
     if (orbit.e < 1 && orbit.a * (1 - orbit.e) > body.radius + Math.max(body.atmosphere?.height ?? 0, w.universe.terrain(v.body).maxHeight)) w.onReachedOrbit(v);
   }
+}
+
+// One science point per simulated second at full signal; quality determines total credit,
+// not speed. Interrupted transmissions retain partial credit and resume on reconnection.
+const transmissionTimes = new WeakMap<World, number>();
+export function advanceTransmissions(w: World) {
+  const previous = transmissionTimes.get(w) ?? w.ut;
+  transmissionTimes.set(w, w.ut);
+  const dt = Math.max(0, w.ut - previous);
+  w.transmitting = w.transmitting.filter(id => {
+    const v = w.vessels.get(id);
+    if (!v) return false;
+    const fraction = Math.max(0, ...v.state.parts.flatMap(p => p.def.modules.map(m => m.type === 'antenna' ? m.transmission : 0)));
+    if (!fraction) return true; // Antenna loss pauses the job; replacement/docking may restore it.
+    const connection = w.commsSettings.enabled ? w.connection(v.state) : { strength: 1 };
+    // Cap catch-up to the graph sampling window: never assume a link persisted across a rails jump.
+    let budget = Math.min(dt, 0.25) * connection.strength;
+    let remaining = 0;
+    for (const d of v.state.parts.flatMap(p => p.scienceData ?? [])) {
+      const due = Math.max(0, d.value * fraction - d.credited);
+      const amount = Math.min(due, budget);
+      if (d.value > 0) credit(w, d, (d.credited + amount) / d.value);
+      budget -= amount; remaining += due - amount;
+    }
+    if (remaining <= 1e-8) { w.message(`Transmission complete · ${v.state.name}`); return false; }
+    return true;
+  });
 }

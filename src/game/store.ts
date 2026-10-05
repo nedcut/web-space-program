@@ -12,6 +12,10 @@ export interface Settings {
   masterVolume: number;
   invertPitch: boolean;
   showFps: boolean;
+  /** null follows the current program's saved setting / mode default. */
+  commsEnabled: boolean | null;
+  commsRestrictControl: boolean | null;
+  commsOverlay: boolean;
 }
 
 export interface GameState {
@@ -33,7 +37,7 @@ export interface GameState {
 const SETTINGS_KEY = 'wsp.settings.v1';
 
 function loadSettings(): Settings {
-  const defaults: Settings = { quality: 'medium', masterVolume: 0.8, invertPitch: false, showFps: false };
+  const defaults: Settings = { quality: 'medium', masterVolume: 0.8, invertPitch: false, showFps: false, commsEnabled: null, commsRestrictControl: null, commsOverlay: true };
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SETTINGS_KEY) : null;
     return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
@@ -97,4 +101,11 @@ export function updateSettings(patch: Partial<Settings>) {
 
 export function useGame<R>(selector: (s: GameState) => R): R {
   return useSyncExternalStore(game.subscribe, () => selector(game.get()));
+}
+
+/** UI preferences override a world's saved difficulty only when explicitly selected. */
+export function applyCommsSettings(world: import('./world').World) {
+  const settings = game.get().settings;
+  if (settings.commsEnabled !== null) world.commsSettings.enabled = settings.commsEnabled;
+  if (settings.commsRestrictControl !== null) world.commsSettings.restrictControl = settings.commsRestrictControl;
 }
