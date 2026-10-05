@@ -1,0 +1,12 @@
+{
+  "checks": [
+    "No pre-gesture context; first real gesture creates one running context",
+    "All settings tabs, arrow-key navigation, native switches, reduced motion and dialog close",
+    "Menu → new program → hub → editor; palette has no horizontal overflow",
+    "All document/tracking screens render within the laptop viewport",
+    "Flight HUD preserves SAS and throttle tutorial hooks",
+    "Zero page errors and zero AudioContext autoplay warnings"
+  ],
+  "errors": [],
+  "autoplayWarnings": []
+}

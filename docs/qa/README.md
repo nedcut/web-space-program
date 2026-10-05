@@ -89,3 +89,7 @@ Machine-readable `*-report.json` files record final assertions and console diagn
 - Destination hardware was placed through public scenario APIs; complete Earth-to-Titan/Mars/Enceladus missions were not flown in this pass. Long flight segments use accelerated simulation rather than real-time waiting.
 - The existing interplanetary encounter search remains synchronous and can pause rendering while a selected porkchop cell is verified.
 - Landed-rails fuel-cell/RTG generation was resolved during main integration: power and machinery now share tank/deployment boundary events. Regression tests compare long catch-up against 50 Hz stepping, check physics/rails agreement, balanced fuel exhaustion, crossfeed isolation, and full-battery shutoff. Solar illumination and command-module electrical loads remain physics-only.
+
+## UI polish follow-up
+
+The pre-gesture audio and Low Titan sea leftovers from qa3 are addressed on `cx/uipolish`. See [the UI review](../screenshots/ui-polish/README.md) for all 72 before/after screenshots, reproduction scripts, browser interaction evidence and the merged 875-test result.

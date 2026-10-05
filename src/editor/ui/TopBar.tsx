@@ -1,3 +1,4 @@
+import { Panel, Button } from '../../ui/components';
 import { useState } from 'react';
 import { encodeCraft, downloadFile, craftFilename } from '../../game/craftSharing';
 import { useGame } from '../../game/store';
@@ -18,10 +19,10 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
   const cost = launchCost(view.craft, PART_CATALOG);
   const s = view.stats;
   return (
-    <div className="vab-topbar panel">
+    <Panel className="vab-topbar panel">
       <div className="vab-brand vab-mode" role="group" aria-label="Building mode">
-        <button className={`vab-brand-mark ${view.craftType === 'VAB' ? 'on' : ''}`} title="Vehicle Assembly: build vertically, launch from the pad" onClick={() => session.setCraftType('VAB')}>VAB</button>
-        <button className={`vab-brand-mark ${view.craftType === 'SPH' ? 'on' : ''}`} title="Spaceplane Hangar: build horizontally, launch from the runway" onClick={() => session.setCraftType('SPH')}>SPH</button>
+        <Button className={`vab-brand-mark ${view.craftType === 'VAB' ? 'on' : ''}`} title="Vehicle Assembly: build vertically, launch from the pad" onClick={() => session.setCraftType('VAB')}>VAB</Button>
+        <Button className={`vab-brand-mark ${view.craftType === 'SPH' ? 'on' : ''}`} title="Spaceplane Hangar: build horizontally, launch from the runway" onClick={() => session.setCraftType('SPH')}>SPH</Button>
       </div>
       <input
         className="vab-name"
@@ -33,22 +34,22 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
         title="Craft name"
       />
       <div className="vab-group vab-sharing">
-        <button className="btn small" disabled={!view.craft.parts.length} onClick={() => void copy()}>Copy share code</button>
-        <button className="btn small" onClick={() => downloadFile(craftFilename(view.name), JSON.stringify(session.currentCraft()))}>Export</button>
-        <button className="btn small" onClick={onImport}>Import</button>
+        <Button className="btn small" disabled={!view.craft.parts.length} onClick={() => void copy()}>Copy share code</Button>
+        <Button className="btn small" onClick={() => downloadFile(craftFilename(view.name), JSON.stringify(session.currentCraft()))}>Export</Button>
+        <Button className="btn small" onClick={onImport}>Import</Button>
       </div>
-      {(share || shareError) && <div className="panel" style={{ position: 'absolute', top: 70, left: '25%', width: '50%', padding: 12, zIndex: 50 }}><p>{shareError || 'Share code copied. Paste it into Import vehicle.'}</p><textarea aria-label="Generated share code" readOnly value={share} onFocus={e => e.target.select()} style={{ width: '100%' }} /><button className="btn small" onClick={() => { setShare(''); setShareError(''); }}>Close</button></div>}
+      {(share || shareError) && <Panel className="panel" style={{ position: 'absolute', top: 70, left: '25%', width: '50%', padding: 12, zIndex: 50 }}><p>{shareError || 'Share code copied. Paste it into Import vehicle.'}</p><textarea aria-label="Generated share code" readOnly value={share} onFocus={e => e.target.select()} style={{ width: '100%' }} /><Button className="btn small" onClick={() => { setShare(''); setShareError(''); }}>Close</Button></Panel>}
       <div className="vab-group">
-        <button className="vab-ibtn" title="New craft" onClick={onNew}><Icon name="new" /></button>
-        <button className="vab-ibtn" title="Load craft" onClick={onLoad}><Icon name="load" /></button>
-        <button className="vab-ibtn" title="Save craft (Ctrl+S)" onClick={() => session.save()}><Icon name="save" /></button>
-      </div>
-      <div className="vab-group">
-        <button className="vab-ibtn" title="Undo (Ctrl+Z)" disabled={!view.canUndo} onClick={() => session.undo()}><Icon name="undo" /></button>
-        <button className="vab-ibtn" title="Redo (Ctrl+Y)" disabled={!view.canRedo} onClick={() => session.redo()}><Icon name="redo" /></button>
+        <Button className="vab-ibtn" title="New craft" onClick={onNew}><Icon name="new" /></Button>
+        <Button className="vab-ibtn" title="Load craft" onClick={onLoad}><Icon name="load" /></Button>
+        <Button className="vab-ibtn" title="Save craft (Ctrl+S)" onClick={() => session.save()}><Icon name="save" /></Button>
       </div>
       <div className="vab-group">
-        <button
+        <Button className="vab-ibtn" title="Undo (Ctrl+Z)" disabled={!view.canUndo} onClick={() => session.undo()}><Icon name="undo" /></Button>
+        <Button className="vab-ibtn" title="Redo (Ctrl+Y)" disabled={!view.canRedo} onClick={() => session.redo()}><Icon name="redo" /></Button>
+      </div>
+      <div className="vab-group">
+        <Button
           className={`vab-ibtn sym ${view.symmetry > 1 ? 'on' : ''}`}
           title={view.symmetryMode === 'mirror' ? 'Mirror symmetry on/off (X) · R: switch to radial' : 'Radial symmetry (X / Shift+X) · R: switch to mirror'}
           onClick={() => session.cycleSymmetry()}
@@ -56,13 +57,13 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
         >
           {view.symmetryMode === 'mirror' ? <MirrorGlyph on={view.symmetry > 1} /> : <SymGlyph n={view.symmetry} />}
           <span className="mono">{view.symmetryMode === 'mirror' ? (view.symmetry > 1 ? 'mir' : '×1') : `×${view.symmetry}`}</span>
-        </button>
-        <button className="vab-ibtn" title={`Symmetry mode: ${view.symmetryMode} (R)`} onClick={() => session.toggleSymmetryMode()}>
+        </Button>
+        <Button className="vab-ibtn" title={`Symmetry mode: ${view.symmetryMode} (R)`} onClick={() => session.toggleSymmetryMode()}>
           <span className="mono" style={{ fontSize: 11 }}>{view.symmetryMode === 'mirror' ? 'M' : 'R'}</span>
-        </button>
-        <button className={`vab-ibtn ${view.showCoM ? 'on com' : ''}`} title="Show centre of mass" onClick={() => session.toggleCoM()}><Icon name="com" /></button>
-        <button className={`vab-ibtn ${view.showCoT ? 'on cot' : ''}`} title="Show centre of thrust" onClick={() => session.toggleCoT()}><Icon name="cot" /></button>
-        <button className={`vab-ibtn ${view.showCoL ? 'on col' : ''}`} title="Show centre of lift" onClick={() => session.toggleCoL()}><LiftGlyph /></button>
+        </Button>
+        <Button className={`vab-ibtn ${view.showCoM ? 'on com' : ''}`} title="Show centre of mass" onClick={() => session.toggleCoM()}><Icon name="com" /></Button>
+        <Button className={`vab-ibtn ${view.showCoT ? 'on cot' : ''}`} title="Show centre of thrust" onClick={() => session.toggleCoT()}><Icon name="cot" /></Button>
+        <Button className={`vab-ibtn ${view.showCoL ? 'on col' : ''}`} title="Show centre of lift" onClick={() => session.toggleCoL()}><LiftGlyph /></Button>
       </div>
       <div className="vab-stats mono">
         <Stat label="Mass" value={fmtKg(s.totalMass)} />
@@ -71,11 +72,11 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
         <Stat label="Δv" value={fmtDv(view.totalDvVac)} accent />
       </div>
       <div style={{ flex: 1 }} />
-      <button className="btn primary vab-launch" title={mode === 'career' ? `${cost.toLocaleString()} cr launch cost · ${funds.toLocaleString()} cr available` : undefined} onClick={() => session.launch()}>
+      <Button className="btn primary vab-launch" title={mode === 'career' ? `${cost.toLocaleString()} cr launch cost · ${funds.toLocaleString()} cr available` : undefined} onClick={() => session.launch()}>
         <Icon name="launch" size={17} /> Launch{mode === 'career' && <span className="vab-launch-cost">{cost.toLocaleString()} cr</span>}
-      </button>
-      <button className="vab-ibtn" title="Exit to Space Center" onClick={() => session.exit()}><Icon name="exit" /></button>
-    </div>
+      </Button>
+      <Button className="vab-ibtn" title="Exit to Space Center" onClick={() => session.exit()}><Icon name="exit" /></Button>
+    </Panel>
   );
 }
 

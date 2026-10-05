@@ -1,0 +1,19 @@
+.ui-icon { display: inline-block; flex: none; vertical-align: middle; }
+.ui-card { padding: var(--space-6); }
+.ui-badge { display: inline-flex; align-items: center; gap: var(--space-2); padding: 4px 9px; border: 1px solid var(--panel-border); border-radius: var(--radius-sm); font: 11px var(--mono); letter-spacing: .05em; color: var(--accent); background: var(--accent-soft); }
+.ui-empty { min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-8); text-align: center; }
+.ui-empty h2 { font-size: var(--type-lg); font-weight: 500; margin: 20px 0 4px; }
+.ui-empty p { max-width: 440px; margin: 8px 0; color: var(--text-dim); line-height: 1.7; font-size: var(--type-sm); }
+.ui-empty-orbit { width: 68px; height: 28px; border: 1px solid var(--accent-border); border-radius: 50%; transform: rotate(-25deg); position: relative; }
+.ui-empty-orbit::before { content: ''; position: absolute; width: 20px; height: 20px; border: 1px solid var(--accent); border-radius: 50%; top: 3px; left: 22px; background: var(--accent-soft); }
+.ui-toggle { appearance: none; width: 36px; height: 20px; border-radius: 20px; border: 1px solid var(--border-strong); background: var(--bg); cursor: pointer; position: relative; flex-shrink: 0; transition: background var(--duration-ui); }
+.ui-toggle::after { content: ''; position: absolute; width: 12px; height: 12px; top: 3px; left: 3px; border-radius: 50%; background: var(--text-dim); transition: transform var(--duration-ui); }
+.ui-toggle:checked { background: var(--accent-soft); border-color: var(--accent); }
+.ui-toggle:checked::after { background: var(--accent); transform: translateX(16px); }
+.ui-slider { width: 170px; vertical-align: middle; cursor: pointer; }
+.ui-tooltip { position: relative; display: inline-flex; }
+.ui-tooltip:is(:hover, :focus-within)::after { content: attr(data-tooltip); position: absolute; z-index: 100; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); padding: 8px 12px; border: 1px solid var(--panel-border); border-radius: var(--radius-sm); background: var(--panel-solid); box-shadow: var(--shadow-panel); color: var(--text); font: 12px/1.5 var(--sans); width: max-content; max-width: 260px; pointer-events: none; }
+.ui-modal { color: var(--text); width: min(700px, calc(100% - 40px)); max-height: calc(100% - 40px); padding: var(--space-6); box-shadow: var(--shadow-modal); }
+.ui-modal::backdrop { background: #020812b8; backdrop-filter: blur(6px); }
+.ui-modal-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); }
+.ui-modal-heading h2 { margin: 0; font-size: 22px; font-weight: 500; }

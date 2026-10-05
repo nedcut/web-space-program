@@ -1,3 +1,4 @@
+import { Button, Panel, EmptyState, Badge } from './components';
 import { useEffect, useRef, useState } from 'react';
 import { game } from '../game/store';
 import { openProgram } from '../game/program';
@@ -37,9 +38,9 @@ function Chart({ record, title, y, x = 0, unit }: { record: FlightRecord; title:
 export function FlightReport({ record }: { record: FlightRecord }) {
   const [share, setShare] = useState(false);
   const stats = [['Maximum altitude', `${Math.round(record.stats.maxAltitude).toLocaleString()} m`], ['Maximum speed', `${Math.round(record.stats.maxSpeed).toLocaleString()} m/s`], ['Maximum g-load', `${record.stats.maxG.toFixed(2)} g`], ['Δv spent', `${Math.round(record.stats.dvSpent).toLocaleString()} m/s`], ['Distance travelled', `${Math.round(record.stats.distance).toLocaleString()} m`], ['Bodies visited', record.bodies.join(', ')]];
-  return <article className="flight-report"><div className="report-heading"><div><div className="label">{record.outcome ?? 'Flight in progress'} · {Math.round((record.end ?? record.last?.ut ?? record.start) - record.start).toLocaleString()} seconds</div><h2>{record.name}</h2></div><button className="btn" onClick={() => setShare(!share)}>Share summary</button></div>
+  return <article className="flight-report"><div className="report-heading"><div><div className="label">{record.outcome ?? 'Flight in progress'} · {Math.round((record.end ?? record.last?.ut ?? record.start) - record.start).toLocaleString()} seconds</div><h2>{record.name}</h2></div><Button className="btn" onClick={() => setShare(!share)}>Share summary</Button></div>
     {share && <label>Copy this flight summary<textarea readOnly value={summaryText(record)} onFocus={e => e.currentTarget.select()} /></label>}
-    <dl className="report-stats">{stats.map(([name, value]) => <div className="panel" key={name}><dt>{name}</dt><dd>{value}</dd></div>)}</dl>
+    <dl className="report-stats">{stats.map(([name, value]) => <Panel className="panel" key={name}><dt>{name}</dt><dd>{value}</dd></Panel>)}</dl>
     <div className="report-charts"><Chart record={record} title="Altitude vs time" y={1} unit="m" /><Chart record={record} title="Surface velocity vs time" y={2} unit="m/s" /><Chart record={record} title="Ascent profile · altitude vs downrange" y={1} x={13} unit="m" /><Chart record={record} title="G-load vs time" y={9} unit="g" /></div>
     <h3>Event timeline</h3><ol className="report-events">{record.events.map((e, i) => <li key={i}><span className="mono">T+{e.time.toFixed(1)} s</span><strong>{eventLabel(e.kind)}</strong><span>{e.body}{e.detail && ` · ${e.detail}`}{e.speed !== undefined && ` · ${e.speed.toFixed(2)} m/s`}{e.biome && ` · ${e.biome}`}</span></li>)}</ol>
     <p className="label">Live charts retain the latest 1,024 samples; completed reports retain up to 128 of those samples. Event history retains the latest 256 events. Peak statistics cover the whole flight. Distance and downrange integrate sampled surface-relative speed.</p>
@@ -47,14 +48,14 @@ export function FlightReport({ record }: { record: FlightRecord }) {
 }
 export function AchievementsPanel() {
   const profile = loadAchievements();
-  return <div><h2>Achievements · {Object.keys(profile.unlocked).length} / {ACHIEVEMENTS.length}</h2><div className="achievement-grid">{ACHIEVEMENTS.map(a => <div className={`panel achievement ${profile.unlocked[a.id] !== undefined ? 'earned' : ''}`} key={a.id}><div className="label">{profile.unlocked[a.id] !== undefined ? '✓ Earned' : '○ Awaiting flight'}</div><h3>{a.name}</h3><p>{a.description}</p></div>)}</div></div>;
+  return <div><h2>Achievements · {Object.keys(profile.unlocked).length} / {ACHIEVEMENTS.length}</h2><div className="achievement-grid">{ACHIEVEMENTS.map(a => <div className={`panel achievement ${profile.unlocked[a.id] !== undefined ? 'earned' : ''}`} key={a.id}><Badge>{profile.unlocked[a.id] !== undefined ? '✓ Earned' : '○ Awaiting flight'}</Badge><h3>{a.name}</h3><p>{a.description}</p></div>)}</div></div>;
 }
 export default function FlightLog() {
   const [world] = useState(openProgram);
   const [tab, setTab] = useState<'history' | 'achievements'>('history');
   const [selected, setSelected] = useState(() => world.latestReportId ?? world.flightlog.records.at(-1)?.id);
   const record = world.flightlog.records.find(r => r.id === selected);
-  return <div className="fullscreen flight-log"><header><div><div className="label">Mission archive</div><h1>Flight log</h1></div><button className="btn" onClick={() => game.set({ scene: 'spaceCenter' })}>Space Center</button></header><nav><button className="btn" onClick={() => setTab('history')}>Flights · {world.flightlog.records.length}</button><button className="btn" onClick={() => setTab('achievements')}>Achievements</button></nav>
-    {tab === 'achievements' ? <AchievementsPanel /> : <div className="flight-log-layout"><aside className="panel">{[...world.flightlog.records].reverse().map(r => <button className={`btn ${selected === r.id ? 'primary' : ''}`} key={r.id} onClick={() => setSelected(r.id)}>{r.name}<small>{r.outcome ?? 'In progress'} · {r.bodies.join(', ')}</small></button>)}{!world.flightlog.records.length && <p>No flights recorded yet. Launch a vessel to begin your archive.</p>}</aside>{record ? <FlightReport key={record.id} record={record} /> : <p>Your flights, charts and milestones will appear here.</p>}</div>}
+  return <div className="fullscreen flight-log"><header><div><div className="label">Mission archive</div><h1>Flight log</h1></div><Button className="btn" onClick={() => game.set({ scene: 'spaceCenter' })}>Space Center</Button></header><nav><Button className={`btn ${tab === 'history' ? 'primary' : ''}`} aria-pressed={tab === 'history'} onClick={() => setTab('history')}>Flights · {world.flightlog.records.length}</Button><Button className={`btn ${tab === 'achievements' ? 'primary' : ''}`} aria-pressed={tab === 'achievements'} onClick={() => setTab('achievements')}>Achievements</Button></nav>
+    {tab === 'achievements' ? <AchievementsPanel /> : <div className="flight-log-layout"><aside className="panel">{[...world.flightlog.records].reverse().map(r => <Button className={`btn ${selected === r.id ? 'primary' : ''}`} key={r.id} onClick={() => setSelected(r.id)}>{r.name}<small>{r.outcome ?? 'In progress'} · {r.bodies.join(', ')}</small></Button>)}{!world.flightlog.records.length && <p>No flights recorded yet. Launch a vessel to begin your archive.</p>}</aside>{record ? <FlightReport key={record.id} record={record} /> : <EmptyState title="Your next story starts on the pad">Your flights, charts and milestones will appear here.</EmptyState>}</div>}
   </div>;
 }

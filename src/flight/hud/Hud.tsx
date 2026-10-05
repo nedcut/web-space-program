@@ -1,3 +1,5 @@
+import { Icon } from '../../ui/components/Icon';
+import { Button, Panel, Tooltip } from '../../ui/components';
 import { isTyping, matches } from '../../input/bindings';
 import { snapshotEqual } from '../../util/snapshotEqual';
 import { FlightDataPanel } from './FlightDataPanel';
@@ -155,7 +157,7 @@ export function NavballView({ getFrame }: { getFrame: () => { frame: NavballFram
       nb.dispose();
     };
   }, [getFrame, size]);
-  return <div ref={host} />;
+  return <div ref={host} className="hud-navball" />;
 }
 
 const Readout = memo(function Readout({ label, value, color }: { label: string; value: ReactNode; color?: string }) {
@@ -226,7 +228,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
   const crewOpen = showCrewChip && (open.has('crew') || !!t.eva);
   const targetOpen = open.has('target') || !!t.target;
   const chip = (id: DockId, label: string, title: string, extra?: ReactNode) => (
-    <button
+    <Button
       key={id}
       data-tutorial={id}
       className={`btn small hud-chip ${open.has(id) ? 'on' : ''}`}
@@ -236,34 +238,34 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
     >
       {label}
       {extra}
-    </button>
+    </Button>
   );
   return (
     <div className="overlay" style={{ width: `${100 / settings.hudScale}%`, height: `${100 / settings.hudScale}%`, transform: `scale(${settings.hudScale})`, transformOrigin: 'top left' }}>
       {/* Top bar: time, warp, altitude */}
-      <div className="panel" style={{ position: 'absolute', top: 10, left: 10, padding: '8px 12px', display: 'flex', gap: 10, alignItems: 'center' }}>
-        <button className="btn small" onClick={cb.onMenu} title="Pause menu (Esc)">☰</button>
+      <Panel className="panel" style={{ position: 'absolute', top: 10, left: 10, padding: '8px 12px', display: 'flex', gap: 10, alignItems: 'center' }}>
+        <Button className="btn small" onClick={cb.onMenu} title="Pause menu (Esc)">☰</Button>
         <div className="mono hud-date" style={{ fontSize: 12, color: 'var(--text-dim)' }}>{formatDate(t.ut)}</div>
-        <button className="btn small" onClick={() => cb.onWarp(-1)} title="Slower time warp ( , )">◀</button>
+        <Button className="btn small" onClick={() => cb.onWarp(-1)} title="Slower time warp ( , )">◀</Button>
         <div className="mono" style={{ minWidth: 64, textAlign: 'center', color: t.physicsWarp ? 'var(--warn)' : 'var(--accent)' }} title="Time warp">
           {t.warpLabel}
         </div>
-        <button className="btn small" onClick={() => cb.onWarp(1)} title="Faster time warp ( . )">▶</button>
-        <button className={`btn small ${t.mapMode ? 'primary' : ''}`} data-tutorial="map" onClick={cb.onMap} title="Map view (M)">MAP</button>
+        <Button className="btn small" onClick={() => cb.onWarp(1)} title="Faster time warp ( . )">▶</Button>
+        <Button className={`btn small ${t.mapMode ? 'primary' : ''}`} data-tutorial="map" onClick={cb.onMap} title="Map view (M)">MAP</Button>
         <span className="mono" style={{ fontSize: 11, color: precision ? 'var(--accent)' : 'var(--text-dim)' }}>{precision ? 'PRECISION' : 'NORMAL'}</span>
         {gamepadConnected && <span className="mono" style={{ fontSize: 11 }}>PAD{stageProgress ? ` · STAGE ${(stageProgress * 100).toFixed(0)}%` : ''}</span>}
-        {cb.onHelp && <button className="btn small" onClick={cb.onHelp} title="Controls help (F1)">?</button>}
-      </div>
+        {cb.onHelp && <Button className="btn small" onClick={cb.onHelp} title="Controls help (F1)">?</Button>}
+      </Panel>
 
-      <div className="panel" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '8px 18px', textAlign: 'center' }}>
+      <Panel className="panel" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '8px 18px', textAlign: 'center' }}>
         <div className="label">{t.bodyName} · altitude</div>
         <div className="mono" style={{ fontSize: 26 }}>{distance(t.altitudeAsl)}</div>
         {t.altitudeTerrain < 5000 && <div className="mono" style={{ fontSize: 12, color: 'var(--text-dim)' }}>radar {distance(t.altitudeTerrain)}</div>}
-      </div>
+      </Panel>
 
       {/* Right column: orbit info + resources (stacked so they never overlap) */}
       <div className="hud-right">
-        <div className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <Panel className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <Readout label="Apoapsis" value={dash ? '—' : distance(t.apoapsis)} />
           <Readout label="T-Ap" value={dash ? '—' : formatDuration(t.timeToAp)} />
           <Readout label="Periapsis" value={dash ? '—' : distance(t.periapsis)} color={!dash && t.periapsis < 0 ? 'var(--bad)' : undefined} />
@@ -273,15 +275,15 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
           <Readout label="G-force" value={t.gForce.toFixed(2)} color={t.gForce > 6 ? 'var(--bad)' : undefined} />
           <Readout label="Mach" value={t.mach.toFixed(2)} />
           <Readout label="Dyn. press." value={`${(t.dynamicPressure / 1000).toFixed(1)} kPa`} />
-        </div>
+        </Panel>
         <ResourceReadouts resources={t.resources} />
 
       {/* Staging stack: fills the remaining column height, so it can never overlap the panels above */}
       <div className="hud-stages">
         {!t.eva && !t.noControl && t.stages.length > 0 && (
-          <button className="btn small" onClick={cb.onStage} title="Activate the next stage (Space)" style={{ width: 180, flexShrink: 0 }}>
+          <Button className="btn small" onClick={cb.onStage} title="Activate the next stage (Space)" style={{ width: 180, flexShrink: 0 }}>
             Stage · Space
-          </button>
+          </Button>
         )}
         <StageReadouts stages={t.stages} stage={t.stage} imperial={settings.units === 'imperial'} />
       </div>
@@ -289,23 +291,23 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
 
       {/* Bottom-centre: navball + speed + SAS */}
       <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
-        {!t.eva && <div className="panel" style={{ padding: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, width: 130 }}>
-          <button className={`btn small ${t.sasOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} data-tutorial="sas" onClick={cb.onToggleSas} title="Stability assist (T)">SAS</button>
+        {!t.eva && <Panel className="panel" style={{ padding: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, width: 130 }}>
+          <Button className={`btn small ${t.sasOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} data-tutorial="sas" onClick={cb.onToggleSas} title="Stability assist (T)">SAS</Button>
           {SAS_MODES.map((m) => (
-            <button key={m.id} className={`btn small ${t.sasOn && t.sasMode === m.id ? 'primary' : ''}`} onClick={() => cb.onSasMode(m.id)} style={{ padding: '4px 2px', fontSize: 10 }}>
+            <Button key={m.id} className={`btn small ${t.sasOn && t.sasMode === m.id ? 'primary' : ''}`} onClick={() => cb.onSasMode(m.id)} style={{ padding: '4px 2px', fontSize: 10 }}>
               {m.label}
-            </button>
+            </Button>
           ))}
-          <button className={`btn small ${t.rcsOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} onClick={cb.onToggleRcs} title="Reaction control thrusters (R)">RCS</button>
+          <Button className={`btn small ${t.rcsOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} onClick={cb.onToggleRcs} title="Reaction control thrusters (R)">RCS</Button>
           {t.gear !== null && (
-            <button
+            <Button
               className={`btn small ${t.gear === 'down' ? 'primary' : ''}`}
               style={{ padding: '4px 2px', fontSize: 10, color: t.gear === 'moving' ? 'var(--warn)' : undefined }}
               title="Landing gear (G)"
               onClick={() => cb.onToggleGear?.()}
             >
               GEAR {t.gear === 'down' ? '▼' : t.gear === 'up' ? '▲' : '…'}
-            </button>
+            </Button>
           )}
           {t.brakes !== null && (
             <span className={`btn small ${t.brakes ? 'primary' : ''}`} style={{ padding: '4px 2px', fontSize: 10, textAlign: 'center', color: t.brakes ? 'var(--bad)' : undefined }} title="Wheel brakes (hold B)">
@@ -317,12 +319,12 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
               AIR {(Math.min(t.intakeAir, 9.99) * 100).toFixed(0)}%
             </span>
           )}
-        </div>}
+        </Panel>}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <button className="panel btn" onClick={cb.onSpeedMode} title="Click to switch surface / orbit / target speed" style={{ padding: '4px 14px', marginBottom: 6, textAlign: 'center' }}>
+          <Button className="panel btn" onClick={cb.onSpeedMode} title="Click to switch surface / orbit / target speed" style={{ padding: '4px 14px', marginBottom: 6, textAlign: 'center' }}>
             <div className="label">{t.speedMode === 'surface' && t.dynamicPressure > 50 ? 'airspeed' : t.speedMode}</div>
             <div className="mono" style={{ fontSize: 18 }}>{speed(t.speed)}</div>
-          </button>
+          </Button>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
             {!t.eva && <span data-tutorial="throttle"><ThrottleGauge value={t.throttle} /></span>}
             {navball}
@@ -354,9 +356,9 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
       {/* Messages */}
       <div style={{ position: 'absolute', top: 100, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', pointerEvents: 'none' }}>
         {t.messages.map((m) => (
-          <div key={m.id} className="panel" style={{ padding: '6px 14px', color: m.level === 'bad' ? 'var(--bad)' : m.level === 'warn' ? 'var(--warn)' : 'var(--text)' }}>
+          <Panel key={m.id} className="panel" style={{ padding: '6px 14px', color: m.level === 'bad' ? 'var(--bad)' : m.level === 'warn' ? 'var(--warn)' : 'var(--text)' }}>
             {m.text}
-          </div>
+          </Panel>
         ))}
       </div>
     </div>
@@ -365,16 +367,16 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
 
 function ThrottleGauge({ value }: { value: number }) {
   return (
-    <div className="panel" style={{ width: 22, height: 180, padding: 3, display: 'flex', flexDirection: 'column-reverse' }}>
+    <Panel className="panel" style={{ width: 22, height: 180, padding: 3, display: 'flex', flexDirection: 'column-reverse' }}>
       <div style={{ height: `${value * 100}%`, background: 'linear-gradient(0deg, #ff8a3c, #ffd166)', borderRadius: 4, transition: 'height 0.08s' }} />
-    </div>
+    </Panel>
   );
 }
 
 const ResourceReadouts = memo(function ResourceReadouts({ resources }: { resources: Telemetry['resources'] }) {
   return <>
         {resources.length > 0 && (
-          <div className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <Panel className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {resources.map((r) => (
               <div key={r.id}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
@@ -386,7 +388,7 @@ const ResourceReadouts = memo(function ResourceReadouts({ resources }: { resourc
                 </div>
               </div>
             ))}
-          </div>
+          </Panel>
         )}
   </>;
 }, (a, b) => snapshotEqual(a.resources, b.resources));
@@ -395,19 +397,19 @@ const StageReadouts = memo(function StageReadouts({ stages, stage, imperial }: {
   const speed = (v: number) => imperial ? `${(v * 2.236936).toFixed(1)} mph` : formatSpeed(v);
   return <>
         {stages.map((s) => (
-          <div key={s.index} className="panel" style={{ padding: 8, width: 180, flexShrink: 0, borderColor: s.index === stage ? 'var(--accent)' : s.parts.some((p) => p.active) ? 'var(--accent-2)' : undefined }}>
+          <Panel key={s.index} className="panel" style={{ padding: 8, width: 180, flexShrink: 0, borderColor: s.index === stage ? 'var(--accent)' : s.parts.some((p) => p.active) ? 'var(--accent-2)' : undefined }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span className="label" style={{ color: s.index === stage ? 'var(--accent)' : undefined }} title={s.index === stage ? 'Fires on the next Space press' : undefined}>{s.parts.some((p) => p.active) ? 'Active' : `${s.index === stage ? '▸ ' : ''}Stage ${s.index}`}</span>
               <span className="mono" style={{ fontSize: 11, color: 'var(--accent-2)' }}>{speed(s.deltaV)}</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
               {s.parts.map((p) => (
-                <span key={p.uid} title={p.name} style={{ fontSize: 16, opacity: p.active ? 1 : 0.6 }}>
-                  {p.icon === 'engine' ? '🔥' : p.icon === 'decoupler' ? '⫘' : p.icon === 'chute' ? '☂' : '◆'}
-                </span>
+                <Tooltip key={p.uid} text={p.name}><span className="hud-stage-part" aria-label={p.name} style={{ fontSize: 16, opacity: p.active ? 1 : 0.6 }}>
+                  <Icon name={p.icon === 'engine' ? 'engine' : p.icon === 'decoupler' ? 'decoupler' : p.icon === 'chute' ? 'chute' : 'clamp'} size={20} />
+                </span></Tooltip>
               ))}
             </div>
-          </div>
+          </Panel>
         ))}
   </>;
 }, (a, b) => a.stage === b.stage && a.imperial === b.imperial && snapshotEqual(a.stages, b.stages));
