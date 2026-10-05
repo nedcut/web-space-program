@@ -1,3 +1,4 @@
+import { flightData, flightPredictions } from '../game/flightData';
 import type { GameMode } from '../sim/science/progression';
 import { FlagView } from '../render/vessel/FlagView';
 import * as THREE from 'three';
@@ -92,6 +93,7 @@ export class FlightController {
   private disposers: (() => void)[] = [];
   private telemetryListeners = new Set<(t: Telemetry) => void>();
   private telemetryTimer = 0;
+  private predictions: ReturnType<typeof flightPredictions> = { impact: null, crossings: [] };
   private elapsed = 0;
   onExit: (() => void) | null = null;
 
@@ -204,6 +206,7 @@ export class FlightController {
       down = false;
       if (!this.mapMode || Math.hypot(e.clientX - sx, e.clientY - sy) > 5) return;
       const r = el.getBoundingClientRect();
+      if (this.map.pickManeuver(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)) return;
       const hit = this.map.pick(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       if (hit && hit.id !== this.world.activeId) this.setTarget(hit.id);
     };
@@ -501,6 +504,10 @@ export class FlightController {
         t,
         focus: origin,
         vessel: { position: origin, patches: this.world.trajectory(), nodes: this.world.nodes },
+        markers: [
+          ...this.predictions.crossings.map(c => ({ body: wv.body, position: c.position, label: `${c.kind} T−${formatDuration(c.time - t)}`, color: '#d066ff' })),
+          ...(this.predictions.impact ? [{ body: wv.body, position: this.predictions.impact.position, label: `Impact T−${formatDuration(this.predictions.impact.time - t)}`, color: '#ff6b6b' }] : []),
+        ],
         viewport: { width: this.host.clientWidth, height: this.host.clientHeight },
       });
       this.pipeline.renderer.setRenderTarget(null);
@@ -810,8 +817,10 @@ export class FlightController {
       s.deltaV = d?.dv ?? 0;
     });
 
+    this.predictions = flightPredictions(w, wv);
     const warp = w.warp;
     return {
+      flightData: flightData(w, wv, dvs, this.predictions),
       crew: w.crewFor(st),
       noControl: !w.canControl(st),
       eva: st.eva ? { fuel: st.parts[0].resources.monopropellant ?? 0, canBoard: !!w.boardingTarget(), landed: st.situation === 'landed' } : null,

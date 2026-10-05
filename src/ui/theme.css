@@ -61,3 +61,18 @@ button { font: inherit; color: inherit; }
 input[type='range'] { accent-color: var(--accent); }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: rgba(140, 180, 255, 0.2); border-radius: 4px; }
+
+.flight-data { position: absolute; top: 66px; right: 252px; width: 340px; padding: 10px; max-height: calc(100vh - 330px); overflow-y: auto; font-size: 11px; }
+.flight-data-title { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.flight-data-title > span { flex: 1; }
+.flight-data details { border-top: 1px solid var(--panel-border); padding: 8px 0; }
+.flight-data summary { cursor: pointer; margin-bottom: 7px; }
+.flight-data-row { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; }
+.flight-data-row > span:first-child, .flight-data-note { color: var(--text-dim); }
+.flight-data-row .mono { text-align: right; }
+.flight-data-config { display: grid; gap: 5px; padding-bottom: 8px; }
+.flight-data-note { font-size: 10px; line-height: 1.5; }
+.transfer-modal { position: absolute; inset: 0; display: grid; place-items: center; background: #02030acc; z-index: 40; pointer-events: auto; }
+.transfer-plot { width: min(700px, calc(100vw - 30px)); padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.transfer-plot canvas { width: 100%; aspect-ratio: 1.8; cursor: crosshair; }
+@media (max-width: 900px) { .flight-data { right: 10px; top: 66px; max-height: calc(100vh - 330px); z-index: 20; } }

@@ -4,6 +4,8 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
+  // Keep optimizer artifacts local when worktrees share installed dependencies.
+  cacheDir: '.vite-cache',
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   plugins: [
     react(),

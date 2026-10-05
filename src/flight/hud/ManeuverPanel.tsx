@@ -1,3 +1,4 @@
+import { TransferWindow } from './TransferWindow';
 import { useEffect, useRef, useState } from 'react';
 import type { World } from '../../game/world';
 import { timeToApoapsis, timeToPeriapsis, burnTimeEstimate, periapsisRadius, apoapsisRadius } from '../../sim/orbit';
@@ -12,6 +13,7 @@ import { planTransferToBody, planCircularization } from '../../game/autopilot';
 export function ManeuverPanel({ world }: { world: World }) {
   const [, force] = useState(0);
   const [planMsg, setPlanMsg] = useState('');
+  const [transferTarget, setTransferTarget] = useState<string | null>(null);
   const holdRef = useRef<{ axis: 'prograde' | 'normal' | 'radial' | 'time'; dir: number; t0: number } | null>(null);
 
   useEffect(() => {
@@ -124,7 +126,10 @@ export function ManeuverPanel({ world }: { world: World }) {
     </div>
   );
 
+  const siblingTarget = siblings.find(b => b.id === world.targetId);
   return (
+    <>
+    {transferTarget && <TransferWindow world={world} target={transferTarget} onClose={() => setTransferTarget(null)} onPlanned={setPlanMsg} />}
     <div className="panel" style={{ position: 'absolute', left: 10, top: 70, width: 270, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div className="label">Maneuver planner</div>
       <div style={{ display: 'flex', gap: 6 }}>
@@ -149,6 +154,7 @@ export function ManeuverPanel({ world }: { world: World }) {
           ))}
         </select>
       )}
+      {siblingTarget && <button className="btn small" onClick={() => setTransferTarget(siblingTarget.id)}>Transfer window</button>}
       {planMsg && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{planMsg}</div>}
       {node && summary && (
         <>
@@ -176,5 +182,6 @@ export function ManeuverPanel({ world }: { world: World }) {
         </>
       )}
     </div>
+    </>
   );
 }

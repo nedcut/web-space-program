@@ -1,6 +1,8 @@
+import { FlightDataPanel } from './FlightDataPanel';
+import type { FlightData } from '../../game/flightData';
 import { CrewPanel } from './CrewPanel';
 import type { Astronaut } from '../../sim/crew/crew';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { formatDistance, formatSpeed, formatDuration, formatDate } from '../../ui/format';
 import { Navball, type NavballFrame, type NavballMarker } from './navball';
 import { DockingIndicator, TargetPanel } from './TargetPanel';
@@ -45,6 +47,7 @@ export interface TargetTelemetry {
 
 /** Snapshot of telemetry pushed to the HUD ~10–20 times per second (not every frame). */
 export interface Telemetry {
+  flightData: FlightData;
   crew: Astronaut[];
   noControl: boolean;
   eva: { fuel: number; canBoard: boolean; landed: boolean } | null;
@@ -157,6 +160,7 @@ function Readout({ label, value, color }: { label: string; value: ReactNode; col
 }
 
 export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navball: ReactNode }) {
+  const [showData, setShowData] = useState(false);
   return (
     <div className="overlay">
       {/* Top bar: time, warp, altitude */}
@@ -169,6 +173,7 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
         </div>
         <button className="btn small" onClick={() => cb.onWarp(1)}>▶</button>
         <button className="btn small" onClick={cb.onMap}>MAP</button>
+        <button className={`btn small ${showData ? 'primary' : ''}`} onClick={() => setShowData(!showData)}>Flight data</button>
       </div>
 
       <div className="panel" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '8px 18px', textAlign: 'center' }}>
@@ -176,6 +181,8 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
         <div className="mono" style={{ fontSize: 26 }}>{formatDistance(t.altitudeAsl)}</div>
         {t.altitudeTerrain < 5000 && <div className="mono" style={{ fontSize: 12, color: 'var(--text-dim)' }}>radar {formatDistance(t.altitudeTerrain)}</div>}
       </div>
+
+      {showData && <FlightDataPanel data={t.flightData} onClose={() => setShowData(false)} />}
 
       {/* Orbit info */}
       <div className="panel" style={{ position: 'absolute', top: 10, right: 10, padding: 12, width: 230, display: 'flex', flexDirection: 'column', gap: 4 }}>
