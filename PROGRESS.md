@@ -1,19 +1,24 @@
 # Progress Report
 
-_Last updated: 2026-10-04_
+_Last updated: 2026-10-05_
 
 ## Start here (for Ned)
 **Run it:** `npm install && npm run dev`, open http://localhost:5173. Pick **New Game → Sandbox → Standard** for the easiest start;
 the first flight shows a controls cheat sheet (F1 brings it back). **Training** on the main menu has 8 guided lessons.
 
-**What exists:** the real solar system (Sun, 8 planets, Pluto, Ceres, 40 moons — Saturn and its 19 moons get special
-treatment: rings you can fly through, the polar hexagon, Enceladus plumes, Titan's haze); ~160 original parts and 22 stock
-crafts; rockets, planes, rovers, stations, docking, EVA, mining, comms relays; Sandbox / Science / Career modes; three scale
-presets (Standard 1/10, Challenging, Real — all verified by automated missions); an experimental LAN multiplayer prototype
-(see MULTIPLAYER.md); Spacepedia encyclopedia; rebindable controls + gamepad.
+**What exists:** the real solar system (Sun, 8 planets, Pluto, Ceres, 40+ moons, plus asteroids/comets like Vesta, Bennu,
+67P and Halley). Saturn and its moons get special treatment: rings you can fly through, the polar hexagon, Enceladus plumes,
+Titan's haze and methane seas you can splash into. ~170 original parts and ~25 stock crafts; rockets, planes, rovers,
+stations, docking, struts/fuel lines, EVA, mining, comms relays. Physics: rigid-body vessels with structural stress and
+breakup, re-entry heating, environmental hazards (Venus pressure/heat, Jupiter radiation, eclipses), optional precise
+n-body gravity with Lagrange points (Settings, off by default). Modes: Sandbox / Science / Career, 10 scored Missions
+(4 at Saturn), 8 Training lessons, flight log with reports and achievements, Spacepedia, photo mode, craft share codes,
+save slots, rebindable controls + gamepad. Three scale presets (Standard 1/10, Challenging, Real). Experimental LAN
+multiplayer (see MULTIPLAYER.md).
 
-**Verified by automated tests (~675):** reaching orbit at all three scales, Moon landing + return (standard and real scale),
-Earth → Saturn orbit, Titan landing, real-scale re-entry, jet takeoff, docking, EVA, save/load determinism.
+**Verified by automated tests (~914):** orbit at all three scales, Moon landing + return (standard and real scale),
+Earth → Saturn orbit, real-scale Saturn departure, Titan landing, real-scale re-entry, jet takeoff, docking, EVA,
+structural limits on every stock mission, n-body L4 stability, save/load determinism.
 
 **Please check on your laptop (I could only test with a slow software renderer):** frame rate on each graphics preset
 (Settings → Graphics; there's an adaptive-resolution option), loading time, and the overall feel of flying. Then tell me
