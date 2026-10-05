@@ -1,5 +1,6 @@
 import { PhotoCamera } from '../../render/core/PhotoCamera';
 import * as THREE from 'three';
+import { game } from '../../game/store';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RenderPipeline, getQuality, type QualityId } from '../../render/core';
 import { Starfield } from '../../render/sky/Starfield';
@@ -219,9 +220,11 @@ export class HubScene {
 
   private frame = (now: number) => {
     this.raf = requestAnimationFrame(this.frame);
-    const dt = Math.min(0.1, (now - this.last) / 1000);
+    const frameMs = now - this.last;
+    const dt = Math.min(0.1, frameMs / 1000);
     this.last = now;
     if (!this.photo.active) this.elapsed += dt;
+    this.pipeline.updateAdaptive(frameMs, game.get().settings.adaptiveQuality && !this.photo.active);
     this.render(dt);
   };
 
