@@ -1,3 +1,4 @@
+import { MultiplayerSetup } from '../net/MultiplayerPanel';
 import type { GameMode } from '../sim/science/progression';
 import { World } from '../game/world';
 import { Universe } from '../game/universe';
@@ -22,7 +23,7 @@ const SCALE_INFO: Record<ScalePresetId, { label: string; blurb: string }> = {
 };
 
 export function MainMenu() {
-  const [panel, setPanel] = useState<'root' | 'new' | 'settings'>('root');
+  const [panel, setPanel] = useState<'root' | 'new' | 'settings' | 'multiplayer'>('root');
   const [mode, setMode] = useState<GameMode>('sandbox');
   const [scale, setScale] = useState<ScalePresetId>('standard');
 
@@ -37,6 +38,7 @@ export function MainMenu() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: 260 }}>
             <button className="btn primary" onClick={() => setPanel('new')}>New Game</button>
             <button className="btn" onClick={continueGame} disabled={!hasSave('autosave') && !hasSave('quicksave')}>Continue</button>
+            <button className="btn" onClick={() => setPanel('multiplayer')}>Multiplayer (experimental)</button>
             <button className="btn" onClick={() => setPanel('settings')}>Settings</button>
           </div>
         )}
@@ -83,6 +85,7 @@ export function MainMenu() {
           </div>
         )}
 
+        {panel === 'multiplayer' && <MultiplayerSetup onBack={() => setPanel('root')} />}
         {panel === 'settings' && <SettingsPanel onClose={() => setPanel('root')} />}
       </div>
       <div style={{ position: 'absolute', bottom: 16, right: 20 }} className="label">v0.1 · pre-alpha</div>

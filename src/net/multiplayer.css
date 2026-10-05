@@ -1,0 +1,14 @@
+.multiplayer-setup { padding: 24px; width: min(440px, 90vw); display: grid; gap: 12px; }
+.multiplayer-setup p, .mp-help { font-size: 12px; color: var(--text-dim); }
+.multiplayer-setup label { display: grid; gap: 5px; }
+.multiplayer-panel { position: absolute; top: 100px; left: 185px; z-index: 20; padding: 12px; width: min(345px, 85vw); max-height: calc(100vh - 260px); overflow: auto; display: grid; gap: 8px; font-size: 12px; background: rgba(7, 16, 28, .94); }
+.multiplayer-panel input, .multiplayer-panel select, .multiplayer-setup input { min-width: 0; background: #111e2c; color: var(--text); border: 1px solid #40546a; border-radius: 4px; padding: 6px; }
+.mp-row { display: flex; align-items: center; gap: 6px; }
+.mp-row > input, .mp-row > select { flex: 1; }
+.mp-players { margin: 0; padding-left: 16px; }
+.mp-fleet { max-height: 110px; overflow: auto; margin: 8px 0; }
+.mp-chat { max-height: 110px; overflow: auto; overflow-wrap: anywhere; color: var(--text-dim); }
+.mp-import { display: grid; gap: 4px; margin-top: 8px; }
+.mp-error { color: var(--bad); margin: 0; }
+
+@media (max-width: 800px) { .multiplayer-panel { left: auto; right: 8px; width: 280px; } }

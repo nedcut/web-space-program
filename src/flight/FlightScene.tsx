@@ -1,3 +1,4 @@
+import { MultiplayerPanel } from '../net/MultiplayerPanel';
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -11,6 +12,8 @@ import { AssistPanel } from './hud/AssistPanel';
 export default function FlightScene() {
   const host = useRef<HTMLDivElement>(null);
   const ctrl = useRef<FlightController | null>(null);
+  const multiplayer = game.get().multiplayer;
+  const [networkReady, setNetworkReady] = useState(false);
   const [tele, setTele] = useState<Telemetry | null>(null);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
@@ -25,7 +28,7 @@ export default function FlightScene() {
     const g = game.get();
     const saved = g.resumeWorld;
     const craft = g.launchPending ? g.craft : null;
-    if (!craft && !(saved && saved.activeId)) {
+    if (!g.multiplayer && !craft && !(saved && saved.activeId)) {
       game.set({ scene: g.craft ? 'editor' : 'spaceCenter' });
       return;
     }
@@ -37,13 +40,13 @@ export default function FlightScene() {
     window.addEventListener('keydown', resume, { once: true });
     let c: FlightController;
     try {
-      c = new FlightController(host.current!, craft, g.scalePreset, g.ut, g.settings.quality, audio, saved, g.mode);
+      c = new FlightController(host.current!, craft, g.scalePreset, g.ut, g.settings.quality, audio, saved, g.mode, g.multiplayer);
     } catch (e) {
       audio.dispose();
       setError((e as Error).message);
       return;
     }
-    if (!c.world.active) {
+    if (!g.multiplayer && !c.world.active) {
       c.dispose();
       audio.dispose();
       game.set({ scene: 'spaceCenter' });
@@ -67,11 +70,11 @@ export default function FlightScene() {
       setMountKey((k) => k + 1);
     };
     ctrl.current = c;
+    setNetworkReady(!!c.network);
     const unsub = c.subscribe(setTele);
     // Leaving the page mid-flight: autosave and ask for confirmation (Ctrl+W / Ctrl+R are throttle-adjacent).
     const beforeUnload = (e: BeforeUnloadEvent) => {
-      c.quicksave('autosave');
-      e.preventDefault();
+      if (!c.network) { c.quicksave('autosave'); e.preventDefault(); }
     };
     window.addEventListener('beforeunload', beforeUnload);
     (window as unknown as { __flight?: FlightController }).__flight = c;
@@ -112,7 +115,7 @@ export default function FlightScene() {
         <div className="panel" style={{ padding: 24, maxWidth: 420 }}>
           <div className="label" style={{ color: 'var(--bad)' }}>Could not start flight</div>
           <p style={{ color: 'var(--text-dim)' }}>{error}</p>
-          <button className="btn" onClick={() => game.set({ scene: 'spaceCenter', launchPending: false })}>Back to Space Center</button>
+          <button className="btn" onClick={() => game.set({ scene: multiplayer ? 'menu' : 'spaceCenter', multiplayer: null, launchPending: false })}>Back to Space Center</button>
         </div>
       </div>
     );
@@ -127,12 +130,12 @@ export default function FlightScene() {
           cb={{
             onEva: (id) => ctrl.current?.goEva(id),
             onBoard: () => ctrl.current?.boardEva(),
-            onPlantFlag: () => { if (!ctrl.current?.paused) ctrl.current?.world.plantFlag(); },
+            onPlantFlag: () => ctrl.current?.plantFlag(),
             onStage: () => ctrl.current?.stage(),
             onToggleSas: () => ctrl.current?.toggleSas(),
             onSasMode: (m) => ctrl.current?.setSasMode(m),
             onToggleRcs: () => ctrl.current && (ctrl.current.rcsOn = !ctrl.current.rcsOn),
-            onWarp: (d) => ctrl.current?.world.changeWarp(d),
+            onWarp: (d) => ctrl.current?.changeWarp(d),
             onMap: () => ctrl.current?.toggleMap(),
             onMenu: () => setPaused(true),
             onSpeedMode: () => ctrl.current?.cycleSpeedMode(),
@@ -143,17 +146,27 @@ export default function FlightScene() {
           }}
         />
       )}
-      {tele && ctrl.current && !tele.mapMode && <SciencePanel world={ctrl.current.world} paused={paused} />}
-      {tele && ctrl.current && !tele.mapMode && !tele.eva && !tele.noControl && (
+      {!multiplayer && tele && ctrl.current && !tele.mapMode && <SciencePanel world={ctrl.current.world} paused={paused} />}
+      {!multiplayer && tele && ctrl.current && !tele.mapMode && !tele.eva && !tele.noControl && (
         <AssistPanel active={tele.assist} onStart={(id) => ctrl.current?.startAssist(id)} onCancel={() => ctrl.current?.cancelAssist()} />
       )}
-      {tele?.mapMode && ctrl.current && <ManeuverPanel world={ctrl.current.world} />}
+      {!multiplayer && tele?.mapMode && ctrl.current && <ManeuverPanel world={ctrl.current.world} />}
       {tele && game.get().settings.showFps && ctrl.current && (
         <div className="mono" style={{ position: 'absolute', left: 10, bottom: 10, fontSize: 11, color: 'var(--text-dim)' }}>
           {ctrl.current.fps.toFixed(0)} fps · {ctrl.current.world.vessels.size} vessels
         </div>
       )}
-      {paused && (
+      {networkReady && ctrl.current?.network && <MultiplayerPanel client={ctrl.current.network} />}
+      {paused && multiplayer && (
+        <div className="fullscreen" style={{ display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,.5)', zIndex: 40 }}>
+          <div className="panel" style={{ padding: 24 }}>
+            <p>Flight controls suspended. The shared clock continues.</p>
+            <button className="btn" onClick={() => setPaused(false)}>Resume controls</button>
+            <button className="btn" onClick={() => game.set({ multiplayer: null, scene: 'menu' })}>Disconnect</button>
+          </div>
+        </div>
+      )}
+      {paused && !multiplayer && (
         <div className="fullscreen" style={{ display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.4)' }}>
           <div className="panel" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 260 }}>
             <div className="label" style={{ textAlign: 'center', color: lost ? 'var(--bad)' : undefined }}>{lost ? 'Vessel lost' : 'Paused'}</div>
