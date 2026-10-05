@@ -35,6 +35,9 @@ export default function TrackingStation() {
   useEffect(() => {
     const renderer = new TrackingView(host.current!, world, update, setFocus);
     view.current = renderer;
+    // Start on the player's fleet rather than a whole-solar-system view.
+    const first = (world.activeId && world.vessels.get(world.activeId)) || world.vessels.values().next().value;
+    if (first) renderer.setFocus({ kind: 'vessel', id: first.state.id });
     return () => {
       renderer.dispose();
       view.current = null;
