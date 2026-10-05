@@ -1,4 +1,5 @@
 import { SignalPanel } from './hud/SignalPanel';
+import { MultiplayerPanel } from '../net/MultiplayerPanel';
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -16,6 +17,8 @@ import { hasSave } from '../game/persistence';
 export default function FlightScene() {
   const host = useRef<HTMLDivElement>(null);
   const ctrl = useRef<FlightController | null>(null);
+  const multiplayer = game.get().multiplayer;
+  const [networkReady, setNetworkReady] = useState(false);
   const audioRef = useRef<GameAudio | null>(null);
   const [tele, setTele] = useState<Telemetry | null>(null);
   const [paused, setPaused] = useState(false);
@@ -43,7 +46,7 @@ export default function FlightScene() {
     const g = game.get();
     const saved = g.resumeWorld;
     const craft = g.launchPending ? g.craft : null;
-    if (!craft && !(saved && saved.activeId)) {
+    if (!g.multiplayer && !craft && !(saved && saved.activeId)) {
       game.set({ scene: g.craft ? 'editor' : 'spaceCenter' });
       return;
     }
@@ -57,8 +60,7 @@ export default function FlightScene() {
     let unsub: (() => void) | null = null;
     let disposed = false;
     const beforeUnload = (e: BeforeUnloadEvent) => {
-      c?.quicksave('autosave');
-      e.preventDefault();
+      if (c && !c.network) { c.quicksave('autosave'); e.preventDefault(); }
     };
     const resume = () => audio?.resume();
     let readyTimer = 0;
@@ -72,14 +74,14 @@ export default function FlightScene() {
       window.addEventListener('pointerdown', resume, { once: true });
       window.addEventListener('keydown', resume, { once: true });
       try {
-        c = new FlightController(host.current!, craft, g.scalePreset, g.ut, game.get().settings.quality, audio, saved, g.mode);
+        c = new FlightController(host.current!, craft, g.scalePreset, g.ut, game.get().settings.quality, audio, saved, g.mode, g.multiplayer);
       } catch (e) {
         audio.dispose();
         audio = null;
         setError((e as Error).message);
         return;
       }
-      if (!c.world.active) {
+      if (!g.multiplayer && !c.world.active) {
         c.dispose();
         audio.dispose();
         c = null;
@@ -106,6 +108,7 @@ export default function FlightScene() {
         setPaused((p) => !p);
       };
       cc.onQuickload = () => {
+        if (cc.network) return;
         const data = FlightController.loadSlot('quicksave');
         if (!data) return cc.world.message('No quicksave yet (F5 to save)', 'warn');
         game.set({ resumeWorld: data, mode: data.mode ?? 'sandbox', scalePreset: data.preset, launchPending: false });
@@ -113,15 +116,16 @@ export default function FlightScene() {
         setMountKey((k) => k + 1);
       };
       ctrl.current = cc;
+      setNetworkReady(!!cc.network);
       unsub = cc.subscribe(setTele);
       // Leaving the page mid-flight: autosave and ask for confirmation (Ctrl+W / Ctrl+R are throttle-adjacent).
       window.addEventListener('beforeunload', beforeUnload);
       (window as unknown as { __flight?: FlightController }).__flight = cc;
       readyTimer = window.setInterval(() => {
-        if (!cc.sceneReady) return;
+        if (!cc.network && !cc.sceneReady) return;
         window.clearInterval(readyTimer);
         setReady(true);
-        if (!helpSeen()) setHelp(true);
+        if (!cc.network && !helpSeen()) setHelp(true);
       }, 200);
     };
     let timer = 0;
@@ -160,7 +164,7 @@ export default function FlightScene() {
     if (quality.current === settings.quality) return;
     quality.current = settings.quality;
     const c = ctrl.current;
-    if (!c || !c.world.active) return;
+    if (!c || c.network || !c.world.active) return;
     game.set({ resumeWorld: c.snapshot(), ut: c.world.ut, launchPending: false });
     setMountKey((k) => k + 1);
   }, [settings.quality]);
@@ -229,7 +233,7 @@ export default function FlightScene() {
         <div className="panel" style={{ padding: 24, maxWidth: 420 }}>
           <div className="label" style={{ color: 'var(--bad)' }}>Could not start flight</div>
           <p style={{ color: 'var(--text-dim)' }}>{error}</p>
-          <button className="btn" onClick={() => game.set({ scene: 'spaceCenter', launchPending: false })}>Back to Space Center</button>
+          <button className="btn" onClick={() => game.set({ scene: multiplayer ? 'menu' : 'spaceCenter', multiplayer: null, launchPending: false })}>{multiplayer ? 'Back to menu' : 'Back to Space Center'}</button>
         </div>
       </div>
     );
@@ -246,7 +250,7 @@ export default function FlightScene() {
         <Hud
           t={tele}
           navball={<NavballView getFrame={navball} />}
-          dock={{
+          dock={multiplayer ? undefined : {
             assist: !tele.eva && !tele.noControl ? <AssistPanel active={tele.assist} onStart={(id) => ctrl.current?.startAssist(id)} onCancel={() => ctrl.current?.cancelAssist()} /> : undefined,
             assistActive: !!tele.assist,
             signal: <SignalPanel world={c.world} />,
@@ -256,12 +260,12 @@ export default function FlightScene() {
           cb={{
             onEva: (id) => ctrl.current?.goEva(id),
             onBoard: () => ctrl.current?.boardEva(),
-            onPlantFlag: () => { if (!ctrl.current?.paused) ctrl.current?.world.plantFlag(); },
+            onPlantFlag: () => ctrl.current?.plantFlag(),
             onStage: () => ctrl.current?.stage(),
             onToggleSas: () => ctrl.current?.toggleSas(),
             onSasMode: (m) => ctrl.current?.setSasMode(m),
             onToggleRcs: () => ctrl.current && (ctrl.current.rcsOn = !ctrl.current.rcsOn),
-            onWarp: (d) => ctrl.current?.world.changeWarp(d),
+            onWarp: (d) => ctrl.current?.changeWarp(d),
             onMap: () => ctrl.current?.toggleMap(),
             onMenu: () => setPaused(true),
             onSpeedMode: () => ctrl.current?.cycleSpeedMode(),
@@ -279,7 +283,18 @@ export default function FlightScene() {
         </div>
       )}
       {help && ready && <HelpOverlay eva={!!tele?.eva} onClose={closeHelp} />}
-      {paused && (
+      {networkReady && c?.network && <MultiplayerPanel client={c.network} />}
+      {paused && multiplayer && (
+        <div className="modal-backdrop">
+          <div className="panel" style={{ padding: 24, display: 'grid', gap: 10 }}>
+            <p>Flight controls suspended. The shared clock continues.</p>
+            <button className="btn" onClick={() => setPaused(false)}>Resume controls</button>
+            <button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls (F1)</button>
+            <button className="btn" onClick={() => game.set({ multiplayer: null, scene: 'menu' })}>Disconnect</button>
+          </div>
+        </div>
+      )}
+      {paused && !multiplayer && (
         <div className="modal-backdrop">
           {showSettings ? (
             <SettingsPanel onClose={() => setShowSettings(false)} />

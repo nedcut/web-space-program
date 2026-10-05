@@ -1,3 +1,4 @@
+import type { MultiplayerConfig } from '../net/client';
 import type { GameMode } from '../sim/science/progression';
 import { useSyncExternalStore } from 'react';
 import type { ScalePresetId } from '../sim/bodies/scale';
@@ -19,6 +20,8 @@ export interface Settings {
 }
 
 export interface GameState {
+  /** Opt-in LAN mode; null keeps single-player behavior. Never persisted. */
+  multiplayer: MultiplayerConfig | null;
   scene: Scene;
   mode: GameMode;
   saveId: string | null;
@@ -82,6 +85,7 @@ function initialScene(): Scene {
 
 export const game = createStore<GameState>({
   scene: initialScene(),
+  multiplayer: null,
   mode: 'sandbox',
   saveId: null,
   scalePreset: 'standard',
