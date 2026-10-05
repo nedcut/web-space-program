@@ -318,9 +318,13 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
           // The optically thick methane haze is dominated by diffuse light. A bounded
           // analytic sky reflection avoids an under-resolved six-step reflected-ray march.
           float day = smoothstep(-0.25, 0.2, dot(up, L));
-          vec3 haze = vec3(0.18, 0.105, 0.035) * day;
+          vec3 haze = vec3(0.34, 0.205, 0.085) * day;
+          // Low omits volumetric detail. Integrate the broad, overcast sky lobe
+          // analytically instead of multiplying all diffuse light by a 2% Fresnel
+          // term. Keep solar elevation in the term so night remains dark.
+          float diffuseReflection = 0.22 + 0.12 * (1.0 - NdV);
           float glint = pow(NdH, 800.0) * NdL * 0.12;
-          vec3 hydro = uDeep * (0.15 + day) + haze * (F + glint);
+          vec3 hydro = uDeep * (0.15 + day) + haze * (diffuseReflection + F + glint);
           hydro = mix(hydro, haze * 0.55, 1.0-exp(-dist/16000.0));
           gl_FragColor = vec4(hydro, 1.0);
           return;
