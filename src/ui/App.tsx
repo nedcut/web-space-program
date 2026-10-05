@@ -15,13 +15,12 @@ const FlightScene = lazy(() => import('../flight/FlightScene'));
 export function App() {
   const settings = useGame(s => s.settings);
   useEffect(() => {
-    document.documentElement.style.setProperty('--ui-scale', '1');
     document.documentElement.dataset.highContrast = String(settings.highContrast);
     document.documentElement.dataset.reduceMotion = String(settings.reduceMotion);
-  }, [settings.uiScale, settings.highContrast, settings.reduceMotion]);
+  }, [settings.highContrast, settings.reduceMotion]);
   const scene = useGame((s) => s.scene);
   return (
-    <div className="fullscreen" style={{ width: `${100 / settings.uiScale}%`, height: `${100 / settings.uiScale}%`, transform: `scale(${settings.uiScale})`, transformOrigin: 'top left' }}> 
+    <div className="fullscreen" style={{ width: `${100 / settings.uiScale}%`, height: `${100 / settings.uiScale}%`, transform: `scale(${settings.uiScale})`, transformOrigin: 'top left' }}>
       <ErrorBoundary>
       <Suspense fallback={<Loading />}>
         {scene === 'menu' && <MainMenu />}

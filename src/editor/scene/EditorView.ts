@@ -712,11 +712,9 @@ export class EditorView {
     this.altDown = e.altKey;
     const s = this.session;
     const held = s.getSnapshot().held;
-    const ctrl = e.ctrlKey || e.metaKey;
     if (matches('editorRedo', e)) { e.preventDefault(); s.redo(); return; }
     if (matches('editorUndo', e)) { e.preventDefault(); s.undo(); return; }
     if (matches('editorSave', e)) { e.preventDefault(); s.save(); return; }
-    if (ctrl) return;
     if (matches('editorCancel', e)) { s.cancelHeld(); return; }
     if (matches('editorDelete', e)) {
       e.preventDefault();

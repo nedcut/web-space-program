@@ -23,6 +23,8 @@ export interface PlanetLayer {
   sunVisibility?(point: Vec3, sunPos: Vec3): number;
   /** Per-channel sun transmittance (for tinting the sun light at sunset). */
   sunTint?(point: Vec3, sunPos: Vec3): [number, number, number];
+  /** True when the body's renderer has no pending terrain work (or it isn't rendered at all). */
+  isIdle?(id: string): boolean;
   dispose(): void;
 }
 
@@ -95,6 +97,9 @@ export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualit
           viewportHeight: u.viewportHeight,
         });
       }
+    },
+    isIdle(id) {
+      return renderers.get(id)?.idle ?? true;
     },
     sunVisibility(point, sunPos) {
       void lastOrigin;

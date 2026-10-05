@@ -72,12 +72,14 @@ export class GameAudio {
   private disposed = false;
   private musicVolume = 1;
   private sfxVolume = 1;
+  private effectsMix = 1;
   private unsubscribeSettings?: () => void;
   private applySettings = () => {
     const s = game.get().settings;
     this.setMasterVolume(s.masterVolume);
     this.musicVolume = unit(s.musicVolume);
     this.sfxVolume = unit(s.sfxVolume);
+    if (this.effects) this.target(this.effects.gain, this.effectsMix * this.sfxVolume);
     if (this.musicGain) this.target(this.musicGain.gain, this.musicLevel());
   };
   private musicLevel() { return (this.musicMode === 'off' ? 0 : this.musicMode === 'menu' ? 0.12 : 0.085) * this.musicVolume; }
@@ -148,7 +150,8 @@ export class GameAudio {
     if (!ctx || this.disposed || !this.effects || !this.effectsFilter) return;
     const air = atmosphere(state.ambientPressure);
     const distance = 1 / Math.sqrt(1 + positive(state.cameraDistance) / 100);
-    this.target(this.effects.gain, (state.timeWarp > 1 ? 0 : state.inMapView ? 0.18 : 1) * this.sfxVolume);
+    this.effectsMix = state.timeWarp > 1 ? 0 : state.inMapView ? 0.18 : 1;
+    this.target(this.effects.gain, this.effectsMix * this.sfxVolume);
     this.target(this.effectsFilter.frequency, state.inMapView ? 650 : 18000);
     for (const [type, voice] of this.voices) {
       // thrustFraction is already a share of TOTAL vessel thrust; count must not multiply it.

@@ -26,6 +26,7 @@ export class FlightInput {
   private padIndex: number | null = null;
   private mouse = { x: 0, y: 0 };
   precision = false;
+  get precisionActive() { return this.precision || this.down('precisionHold'); }
   gamepadConnected = false;
   stageProgress = 0;
   invertPitch = false;
@@ -63,7 +64,7 @@ export class FlightInput {
   }
   private onDown = (e: KeyboardEvent) => {
     if (isTyping(e.target)) { this.held.clear(); return; }
-    if (!this.enabled) { this.held.clear(); if (!e.repeat && matches('menu', e)) { e.preventDefault(); this.emit('menu'); } return; }
+    if (!this.enabled) { this.held.clear(); if (!e.repeat) for (const a of ['menu', 'quickload'] as const) if (matches(a, e)) { e.preventDefault(); this.emit(a); } return; }
     if (e.metaKey) return;
     const actions = (Object.keys(getBindings()) as Action[]).filter(a => !a.startsWith('editor') && matches(a, e));
     if (actions.length) e.preventDefault();
@@ -75,7 +76,7 @@ export class FlightInput {
     if (!this.evaMode && actions.includes('throttleCut')) this.state.throttle = 0;
   };
   private onUp = (e: KeyboardEvent) => { this.held.delete(e.code); };
-  private resetPad() { this.buttons.clear(); this.stageHeld = this.stageProgress = 0; this.stageConfirmed = false; this.padIndex = null; }
+  private resetPad() { this.buttons.clear(); this.stageHeld = this.stageProgress = 0; this.stageConfirmed = false; this.padIndex = null; this.gamepadConnected = false; }
   update(dt: number) {
     const settings = game.get().settings;
     if (!this.enabled || !this.target.document.hasFocus() || isTyping(this.target.document.activeElement)) {
@@ -111,7 +112,7 @@ export class FlightInput {
       if (this.evaMode && !connected && now.has(1) && !this.buttons.has(1)) this.emit('board');
       this.buttons = now;
     } else this.resetPad();
-    const fine = this.precision || this.held.has('AltLeft') || this.held.has('AltRight') ? 0.35 : 1;
+    const fine = this.precisionActive ? 0.35 : 1;
     const axis = (pos: Action, neg: Action) => Number(this.down(pos)) - Number(this.down(neg));
     const clamp = (v: number) => Math.max(-1, Math.min(1, v));
     const targets = this.evaMode ? {

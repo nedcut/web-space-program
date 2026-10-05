@@ -16,13 +16,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     const previous = document.activeElement as HTMLElement | null;
     dialog.current?.focus();
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Tab') {
-        const elements = [...dialog.current!.querySelectorAll<HTMLElement>('button, input, select')].filter(el => !el.hasAttribute('disabled'));
-        const first = elements[0], last = elements.at(-1);
-        if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { e.preventDefault(); last?.focus(); }
-        else if (!e.shiftKey && (document.activeElement === last || document.activeElement === dialog.current)) { e.preventDefault(); first?.focus(); }
-        return;
-      }
       if (capture) {
         e.stopImmediatePropagation();
         e.preventDefault();
@@ -31,6 +24,12 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         if (e.repeat) return;
         saveBindings({ ...getBindings(), [capture]: [keyChord(e)] });
         setCapture(null);
+      } else if (e.key === 'Tab') {
+        const elements = [...dialog.current!.querySelectorAll<HTMLElement>('button, input, select')].filter(el => !el.hasAttribute('disabled'));
+        const first = elements[0], last = elements.at(-1);
+        if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && (document.activeElement === last || document.activeElement === dialog.current)) { e.preventDefault(); first?.focus(); }
+        return;
       } else if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); close.current(); }
     };
     const release = (e: KeyboardEvent) => {
@@ -57,7 +56,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           <div className="setting-row"><span>Quality preset</span><div className="seg">{(['low', 'medium', 'high'] as const).map(q => <button key={q} className={settings.quality === q ? 'on' : ''} onClick={() => { const p = QUALITY_PRESETS[q]; updateSettings({ quality: q, shadows: p.shadowMapSize > 0, bloom: p.bloom.enabled, clouds: p.clouds, scatter: true, renderScale: p.renderScale }); }}>{q}</button>)}</div></div>
           {check('shadows', 'Shadows')}{check('bloom', 'Bloom')}{check('clouds', 'Clouds')}{check('scatter', 'Atmospheric scattering')}
           {range('renderScale', 'Render scale', 0.5, 1.5, 0.05)}{check('showFps', 'Show FPS')}
-          <p className="settings-note">Graphics changes apply when you next enter a scene. In flight, bloom, shadows and render scale update immediately.</p>
+          <p className="settings-note">Graphics changes apply immediately in flight. Other scenes use the new settings when you enter them.</p>
         </>}
         {tab === 'Audio' && <>{range('masterVolume', 'Master volume', 0, 1, 0.05)}{range('musicVolume', 'Music volume', 0, 1, 0.05)}{range('sfxVolume', 'Effects volume', 0, 1, 0.05)}</>}
         {tab === 'Controls' && <>
@@ -65,7 +64,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           {range('inputSmoothing', 'Input smoothing', 0, 0.5, 0.01, ' s')}{check('gamepadEnabled', 'Enable standard gamepad')}
           {range('deadZone', 'Gamepad dead zone', 0, 0.5, 0.01)}{range('sensitivity', 'Analog sensitivity', 0.25, 2, 0.05)}
           <p className="settings-note">Gamepad: left stick pitch/yaw, right stick horizontal roll; hold LB for translation (left stick X/Z, right stick Y). Triggers change throttle; EVA uses sticks to walk/jetpack and triggers up/down. Hold A 0.75 s to stage/hop; B brakes/board, X SAS, Y RCS, Back map, Start pause, D-pad up/down/left warp. Left stick click runs on EVA.</p>
-          <p className="settings-note">Caps Lock toggles precision mode. To rebind, select a control then press a key (Escape cancels). Editor shortcuts accept Ctrl or Command.</p>
+          <p className="settings-note">Precision mode scales control input to 35%. To rebind, select a control then press a key (Escape cancels). Editor shortcuts accept Ctrl or Command.</p>
           {bindings.throttleDown.some(k => k.startsWith('Control')) && <div role="status" className="settings-warning">Ctrl+W can close your browser tab while pitching and lowering throttle. <button className="btn small" onClick={() => saveBindings({ ...bindings, throttleDown: ['Minus'], evaDown: ['Minus'] })}>Use Minus for throttle/EVA down</button></div>}
           {warnings.length > 0 && <details className="settings-warning"><summary>{warnings.length} shared bindings / conflicts</summary>{warnings.map(w => <p key={`${w.key}-${w.actions.join()}`}>{w.key}: {w.actions.map(actionLabel).join(', ')}</p>)}<p>EVA up/run intentionally share Shift.</p></details>}
           <button className="btn" onClick={() => saveBindings(defaultBindings())}>Reset default bindings</button>

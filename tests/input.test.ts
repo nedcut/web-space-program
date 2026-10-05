@@ -1,5 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { BINDINGS_KEY, conflicts, defaultBindings, getBindings, loadBindings, saveBindings } from '../src/input/bindings';
+import { FlightInput } from '../src/flight/input';
+import { game } from '../src/game/store';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BINDINGS_KEY, conflicts, defaultBindings, getBindings, loadBindings, saveBindings, matches, isTyping } from '../src/input/bindings';
 import { deadZone, mapGamepad } from '../src/input/gamepad';
 
 const memory = () => {
@@ -18,6 +20,8 @@ describe('action bindings', () => {
     const a = defaultBindings(); a.map = ['Space'];
     expect(conflicts(a)).toContainEqual({ key: 'Space', actions: ['stage', 'map'] });
     expect(conflicts(a).some(c => c.actions.includes('editorReset'))).toBe(false);
+    a.board = ['Space'];
+    expect(conflicts(a)).toContainEqual({ key: 'Space', actions: ['stage', 'map', 'board'] });
   });
   it('persists chords, alternate keys, and explicitly unbound actions', () => {
     const storage = memory();
@@ -60,5 +64,94 @@ describe('standard gamepad mapping', () => {
   });
   it('handles incomplete axes and buttons safely', () => {
     expect(mapGamepad(pad([]), 0.15, 1)).toMatchObject({ pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, throttle: 0 });
+  });
+});
+
+
+describe('keyboard matching', () => {
+  const key = (code: string, modifiers = {}) => ({ code, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...modifiers }) as KeyboardEvent;
+  it('matches modifier chords on Ctrl and Command without firing a plain shortcut', () => {
+    expect(matches('editorUndo', key('KeyZ', { ctrlKey: true }))).toBe(true);
+    expect(matches('editorUndo', key('KeyZ', { metaKey: true }))).toBe(true);
+    expect(matches('editorUndo', key('KeyZ', { ctrlKey: true, shiftKey: true }))).toBe(false);
+    expect(matches('editorRedo', key('KeyZ', { ctrlKey: true, shiftKey: true }))).toBe(true);
+    expect(matches('editorPitchUp', key('KeyW', { ctrlKey: true }))).toBe(false);
+    expect(matches('throttleDown', key('ControlLeft', { ctrlKey: true }))).toBe(true);
+    saveBindings({ ...defaultBindings(), editorFrame: ['Alt+KeyP'] }, memory());
+    expect(matches('editorFrame', key('KeyP', { altKey: true }))).toBe(true);
+  });
+  it('blocks editable fields and the settings modal', () => {
+    class ElementDouble { constructor(private editable: boolean) {} closest() { return this.editable ? this : null; } }
+    vi.stubGlobal('HTMLElement', ElementDouble);
+    try {
+      expect(isTyping(new ElementDouble(true) as unknown as EventTarget)).toBe(true);
+      expect(isTyping(new ElementDouble(false) as unknown as EventTarget)).toBe(false);
+      expect(isTyping(null)).toBe(false);
+    } finally { vi.unstubAllGlobals(); }
+  });
+});
+
+
+describe('flight gamepad actions', () => {
+  const harness = () => {
+    let current = { ...pad([]), index: 0, connected: true, mapping: 'standard' };
+    const target = Object.assign(new EventTarget(), {
+      document: { hasFocus: () => true, activeElement: null },
+      navigator: { getGamepads: () => [current] },
+    });
+    const input = new FlightInput(target as unknown as Window);
+    const actions: string[] = [];
+    input.onAction(a => actions.push(a));
+    const buttons = (pressed: Record<number, number>) => { current = { ...current, ...pad([], pressed) }; };
+    return { input, actions, target, buttons, disconnect: () => { current.connected = false; } };
+  };
+  it('requires a sustained hold, emits once, and latches held buttons on reconnect', () => {
+    const h = harness();
+    try {
+      h.input.update(0.1);
+      h.buttons({ 0: 1 });
+      h.input.update(0.5);
+      expect(h.actions).toEqual([]);
+      expect(h.input.stageProgress).toBeCloseTo(2 / 3);
+      h.input.update(0.3); h.input.update(1);
+      expect(h.actions).toEqual(['stage']);
+      h.buttons({}); h.input.update(0.1);
+      h.buttons({ 0: 1 }); h.input.update(0.8);
+      expect(h.actions).toEqual(['stage', 'stage']);
+      h.target.dispatchEvent(new Event('blur'));
+      h.input.update(1);
+      expect(h.actions).toEqual(['stage', 'stage']);
+      h.disconnect(); h.input.update(1);
+      expect(h.input.gamepadConnected).toBe(false);
+      expect(h.input.stageProgress).toBe(0);
+    } finally { h.input.dispose(); }
+  });
+  it('maps EVA boarding and run, and pauses/resumes on Start without staging', () => {
+    const h = harness();
+    try {
+      h.input.evaMode = true; h.input.update(0.1);
+      h.buttons({ 1: 1, 10: 1 }); h.input.update(0.1);
+      expect(h.actions).toEqual(['board']); expect(h.input.running).toBe(true);
+      h.buttons({ 9: 1 }); h.input.update(0.1);
+      expect(h.actions.at(-1)).toBe('menu');
+      h.input.enabled = false; h.input.update(0.1);
+      expect(h.actions.filter(a => a === 'menu')).toHaveLength(1);
+      h.buttons({}); h.input.update(0.1);
+      h.buttons({ 9: 1, 0: 1 }); h.input.update(1);
+      expect(h.actions.filter(a => a === 'menu')).toHaveLength(2);
+      expect(h.actions).not.toContain('stage');
+      expect(h.input.running).toBe(false);
+    } finally { h.input.dispose(); }
+  });
+  it('uses rebound continuous keys and clears them while paused', () => {
+    const h = harness(); const settings = game.get().settings;
+    try {
+      game.set({ settings: { ...settings, gamepadEnabled: false, inputSmoothing: 0 } });
+      saveBindings({ ...defaultBindings(), pitchUp: ['KeyP'] }, memory());
+      h.target.dispatchEvent(Object.assign(new Event('keydown'), { code: 'KeyP', ctrlKey: false, shiftKey: false, metaKey: false, altKey: false, repeat: false }));
+      h.input.update(0.1); expect(h.input.state.pitch).toBe(-1);
+      h.input.precision = true; h.input.update(0.1); expect(h.input.state.pitch).toBe(-0.35);
+      h.input.enabled = false; h.input.update(0.1); expect(h.input.state.pitch).toBe(0);
+    } finally { h.input.dispose(); game.set({ settings }); }
   });
 });

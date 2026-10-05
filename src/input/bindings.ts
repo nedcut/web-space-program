@@ -4,7 +4,7 @@ export const DEFAULT_BINDINGS = {
   translateRight: ['KeyL'], translateLeft: ['KeyJ'], translateForward: ['KeyI'], translateBack: ['KeyK'], translateUp: ['KeyH'], translateDown: ['KeyN'],
   throttleUp: ['ShiftLeft', 'ShiftRight'], throttleDown: ['ControlLeft', 'ControlRight'], throttleFull: ['KeyZ'], throttleCut: ['KeyX'],
   stage: ['Space'], toggleSas: ['KeyT'], toggleRcs: ['KeyR'], map: ['KeyM'], warpUp: ['Period'], warpDown: ['Comma'], warpStop: ['Slash'],
-  menu: ['Escape'], focusNext: ['BracketRight'], toggleCamMode: ['KeyV'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyU'], board: ['Enter'], plantFlag: ['KeyF'], toggleGear: ['KeyG'], brakes: ['KeyB'], precision: ['CapsLock'],
+  menu: ['Escape'], help: ['F1'], focusNext: ['BracketRight'], toggleCamMode: ['KeyV'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyU'], board: ['Enter'], plantFlag: ['KeyF'], toggleGear: ['KeyG'], brakes: ['KeyB'], precision: ['CapsLock'], precisionHold: ['AltLeft', 'AltRight'],
   evaRight: ['KeyD', 'KeyE'], evaLeft: ['KeyA', 'KeyQ'], evaForward: ['KeyW'], evaBack: ['KeyS'], evaUp: ['ShiftLeft', 'ShiftRight'], evaDown: ['ControlLeft', 'ControlRight'], evaRun: ['ShiftLeft', 'ShiftRight'],
   editorUndo: ['Ctrl+KeyZ'], editorRedo: ['Ctrl+Shift+KeyZ', 'Ctrl+KeyY'], editorSave: ['Ctrl+KeyS'], editorCancel: ['Escape'], editorDelete: ['Delete', 'Backspace'], editorSymmetry: ['KeyX'], editorSymmetryMode: ['KeyR'], editorFrame: ['KeyF'], editorReset: ['Space'],
   editorPitchUp: ['KeyW'], editorPitchDown: ['KeyS'], editorRollLeft: ['KeyA'], editorRollRight: ['KeyD'], editorYawLeft: ['KeyQ'], editorYawRight: ['KeyE'],
@@ -41,14 +41,22 @@ export function keyChord(e: Pick<KeyboardEvent, 'code' | 'ctrlKey' | 'metaKey' |
 }
 export function matches(action: Action, e: KeyboardEvent): boolean {
   const chord = keyChord(e);
-  return current[action].some(k => k === chord || (!k.includes('+') && k === e.code && !e.metaKey && (!action.startsWith('editor') || !e.ctrlKey)));
+  return current[action].some(k => k === chord || (!k.includes('+') && k === e.code && !e.metaKey && !e.ctrlKey));
 }
 export function context(action: Action) { return action.startsWith('editor') ? 'editor' : action.startsWith('eva') || action === 'board' || action === 'plantFlag' ? 'eva' : 'flight'; }
+const SHARED_ACTIONS = new Set<Action>(['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'help', 'focusNext', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'toggleGear', 'precision', 'precisionHold']);
 export function conflicts(bindings: Bindings): { key: string; actions: Action[] }[] {
   const groups = new Map<string, Action[]>();
-  for (const a of Object.keys(bindings) as Action[]) for (const k of bindings[a]) {
-    const id = `${context(a)}:${k}`; groups.set(id, [...(groups.get(id) ?? []), a]);
+  for (const a of Object.keys(bindings) as Action[]) for (const k of new Set(bindings[a])) {
+    for (const scope of SHARED_ACTIONS.has(a) ? ['flight', 'eva'] : [context(a)]) {
+      const id = `${scope}:${k}`; groups.set(id, [...(groups.get(id) ?? []), a]);
+    }
   }
-  return [...groups].filter(([, actions]) => actions.length > 1).map(([key, actions]) => ({ key: key.slice(key.indexOf(':') + 1), actions }));
+  const found = new Map<string, { key: string; actions: Action[] }>();
+  for (const [id, actions] of groups) if (actions.length > 1) {
+    const key = id.slice(id.indexOf(':') + 1);
+    found.set(`${key}:${actions.join(',')}`, { key, actions });
+  }
+  return [...found.values()];
 }
 export function actionLabel(a: Action) { return a.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()); }
