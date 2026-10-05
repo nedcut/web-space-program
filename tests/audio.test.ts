@@ -1,6 +1,6 @@
 import { game } from '../src/game/store';
 import { describe, expect, it, vi } from 'vitest';
-import { GameAudio, engineLoudness, windGain, transonicBuffeting, type AudioState } from '../src/audio';
+import { GameAudio, engineLoudness, windGain, transonicBuffeting, distanceGain, dopplerPitch, selectTheme, crossfadeSchedule, type AudioState } from '../src/audio';
 
 const state: AudioState = {
   engines: [{ type: 'kerolox', thrustFraction: 1, count: 2 }],
@@ -18,7 +18,7 @@ describe('GameAudio without Web Audio', () => {
       audio.update(state);
       audio.update({ ...state, ambientPressure: 0, inMapView: true, timeWarp: 100 });
       audio.staging(); audio.decouple(); audio.explosion(10); audio.chuteDeploy();
-      audio.legDeploy(); audio.uiClick(); audio.uiHover(); audio.warning(); audio.touchdown(5);
+      audio.docking(); audio.partAttach(); audio.silenceFlight(); audio.legDeploy(); audio.uiClick(); audio.uiHover(); audio.warning(); audio.touchdown(5);
       audio.setMusic('menu'); audio.setMusic('space'); audio.setMusic('off');
     };
     expect(exercise).not.toThrow();
@@ -73,12 +73,14 @@ describe('audio amplitude helpers', () => {
 class Param {
   value = 0;
   targets: number[] = [];
+  cancelScheduledValues() {}
   setTargetAtTime(value: number) { this.value = value; this.targets.push(value); }
   setValueAtTime(value: number) { this.value = value; }
   linearRampToValueAtTime(value: number) { this.value = value; }
   exponentialRampToValueAtTime(value: number) { this.value = value; }
 }
 class NodeDouble {
+  playbackRate = new Param();
   gain = new Param(); frequency = new Param(); detune = new Param(); Q = new Param();
   threshold = new Param(); knee = new Param(); ratio = new Param();
   type = ''; loop = false; buffer: unknown;
@@ -105,6 +107,7 @@ class ContextDouble {
     const data = Array.from({ length: channels }, () => new Float32Array(length));
     return { getChannelData: (channel: number) => data[channel] };
   }
+  async suspend() { this.state = 'suspended'; }
   async resume() { this.state = 'running'; }
   async close() { this.state = 'closed'; }
 }
@@ -180,5 +183,92 @@ describe('Web Audio lifecycle', () => {
       const audio = new GameAudio();
       expect(() => { audio.resume(); audio.update(state); audio.setMusic('menu'); audio.dispose(); }).not.toThrow();
     } finally { vi.unstubAllGlobals(); }
+  });
+});
+
+
+describe('spatial mix and location themes', () => {
+  it('attenuates with distance and sanitizes invalid input', () => {
+    expect(distanceGain(0)).toBe(1);
+    expect(distanceGain(100)).toBeCloseTo(1 / Math.sqrt(2));
+    expect(distanceGain(10000)).toBeLessThan(distanceGain(100));
+    for (const v of [-10, NaN, Infinity]) expect(distanceGain(v)).toBe(1);
+  });
+  it('shifts approaching/receding sources, with no acoustic doppler in vacuum', () => {
+    expect(dopplerPitch(-100, 101325)).toBeGreaterThan(1);
+    expect(dopplerPitch(100, 101325)).toBeLessThan(1);
+    expect(dopplerPitch(100, 0)).toBe(1);
+    for (const v of [-1e9, 1e9, NaN, Infinity]) {
+      expect(dopplerPitch(v, 101325)).toBeGreaterThanOrEqual(0.7);
+      expect(dopplerPitch(v, 101325)).toBeLessThanOrEqual(1.4);
+    }
+  });
+  it('chooses Saturn for its menu portrait and distinct local themes with danger priority', () => {
+    expect(selectTheme({ scene: 'menu' })).toBe('saturn');
+    expect(selectTheme({ scene: 'spaceCenter' })).toBe('spaceCenter');
+    expect(selectTheme({ bodyId: 'enceladus', parentId: 'saturn' })).toBe('saturn');
+    expect(selectTheme({ bodyId: 'titan', parentId: 'saturn' })).toBe('titan');
+    for (const [bodyId, theme] of [['earth', 'earthOrbit'], ['moon', 'moon'], ['sun', 'cruise'], ['saturn', 'saturn'], ['titan', 'titan']] as const) {
+      expect(selectTheme({ scene: 'flight', bodyId })).toBe(theme);
+      expect(selectTheme({ scene: 'flight', bodyId, landing: true })).toBe('tense');
+      expect(selectTheme({ bodyId, reentryHeat: 0.8 })).toBe('tense');
+    }
+  });
+  it('schedules interruptible, bounded fades at finite increasing times', () => {
+    expect(crossfadeSchedule(10, 3, 0.35, 1)).toEqual([{ time: 10, gain: 0.35 }, { time: 13, gain: 1 }]);
+    const points = crossfadeSchedule(NaN, -1, Infinity, 5);
+    expect(points).toEqual([{ time: 0, gain: 0 }, { time: 0.02, gain: 1 }]);
+  });
+});
+
+
+describe('bounded upgraded audio', () => {
+  it('runs every engine, mechanical layer and adaptive theme without per-frame node allocation', async () => {
+    vi.stubGlobal('AudioContext', ContextDouble);
+    const audio = new GameAudio();
+    try {
+      audio.resume(); await Promise.resolve(); await Promise.resolve();
+      const ctx = ContextDouble.latest;
+      const upgraded: AudioState = { ...state, vesselId: 'vessel', rcsActive: 0,
+        engines: ['jet', 'afterburner', 'nuclear', 'aerospike', 'ion', 'monoprop', 'solid'].map(type => ({ type: type as AudioState['engines'][number]['type'], count: 4, size: 2, thrustFraction: 0.14 })),
+        wheelSpeed: 12, chuteOpen: true, jetting: true, drilling: true,
+        mechanicalState: '1:false', situation: { bodyId: 'saturn' }, cameraRadialVelocity: 100 };
+      audio.update(upgraded);
+      const baseline = ctx.nodes.length;
+      for (let i = 0; i < 300; i++) audio.update(upgraded);
+      expect(ctx.nodes.length).toBe(baseline);
+      expect(ctx.nodes.some(n => n.playbackRate.targets.some(v => v < 1))).toBe(true);
+      audio.update({ ...upgraded, mechanicalState: '1:true', walking: true,
+        fuelFraction: 0.01, temperatureFraction: 0.95, gForce: 8, terrainDanger: true, noSignal: true });
+      expect(ctx.nodes.length).toBeGreaterThan(baseline);
+      for (let i = 0; i < 500; i++) { audio.uiClick(); audio.setMusic(i % 2 ? 'titan' : 'saturn'); }
+      const nodesWithSound = ctx.nodes.length;
+      expect(nodesWithSound).toBeLessThanOrEqual(234);
+      // End transient sources like a browser would, then confirm capacity is reusable.
+      for (const node of [...ctx.nodes]) node.onended?.();
+      audio.uiClick();
+      expect(ctx.nodes.length).toBeGreaterThan(nodesWithSound);
+    } finally { audio.dispose(); vi.unstubAllGlobals(); }
+  });
+  it('suspends while hidden and prevents synthesis until visible again', async () => {
+    const listeners = new Map<string, () => void>();
+    const documentDouble = { hidden: false, addEventListener: (name: string, fn: () => void) => listeners.set(name, fn), removeEventListener: (name: string) => listeners.delete(name) };
+    vi.stubGlobal('document', documentDouble); vi.stubGlobal('AudioContext', ContextDouble);
+    const audio = new GameAudio();
+    try {
+      audio.resume(); await Promise.resolve(); await Promise.resolve();
+      const ctx = ContextDouble.latest;
+      audio.setMusic('saturn');
+      const initial = ctx.nodes.length;
+      documentDouble.hidden = true; listeners.get('visibilitychange')!();
+      expect(ctx.state).toBe('suspended');
+      audio.update(state); audio.uiClick(); audio.resume();
+      expect(ctx.nodes.length).toBe(initial);
+      documentDouble.hidden = false; listeners.get('visibilitychange')!();
+      await Promise.resolve(); await Promise.resolve();
+      expect(ctx.state).toBe('running');
+      audio.uiClick(); expect(ctx.nodes.length).toBeGreaterThan(initial);
+      audio.dispose(); expect(listeners.size).toBe(0);
+    } finally { audio.dispose(); vi.unstubAllGlobals(); }
   });
 });
