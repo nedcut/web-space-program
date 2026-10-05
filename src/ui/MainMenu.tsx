@@ -1,3 +1,4 @@
+import { SaveLoadDialog } from './SaveLoadDialog';
 import { MultiplayerSetup } from '../net/MultiplayerPanel';
 import { SettingsPanel } from './SettingsPanel';
 export { SettingsPanel } from './SettingsPanel';
@@ -7,16 +8,10 @@ import { Universe } from '../game/universe';
 import { PART_CATALOG } from '../data/parts';
 import { saveProgram } from '../game/program';
 import { useState } from 'react';
-import { game, DEFAULT_START_UT, loadLastCraft } from '../game/store';
+import { game, DEFAULT_START_UT } from '../game/store';
 import { SCALE_PRESETS, type ScalePresetId } from '../sim/bodies/scale';
 import { MenuBackdrop } from './MenuBackdrop';
-import { deleteSave, hasSave, loadWorldFromStorage } from '../game/persistence';
-
-function continueGame() {
-  const save = loadWorldFromStorage('autosave') ?? loadWorldFromStorage('quicksave');
-  if (!save) return game.set({ scene: 'spaceCenter' });
-  game.set({ resumeWorld: save.data, mode: save.data.mode ?? 'sandbox', scalePreset: save.data.preset, ut: save.data.ut, launchPending: false, craft: game.get().craft ?? loadLastCraft(), scene: 'spaceCenter' });
-}
+import { deleteSave, hasSave } from '../game/persistence';
 
 const SCALE_INFO: Record<ScalePresetId, { label: string; blurb: string }> = {
   standard: { label: 'Standard', blurb: '1/10 scale. Forgiving and fun — orbit needs about 3.4 km/s.' },
@@ -25,7 +20,7 @@ const SCALE_INFO: Record<ScalePresetId, { label: string; blurb: string }> = {
 };
 
 export function MainMenu() {
-  const [panel, setPanel] = useState<'root' | 'new' | 'settings' | 'multiplayer'>('root');
+  const [panel, setPanel] = useState<'root' | 'new' | 'settings' | 'multiplayer' | 'load'>('root');
   const [mode, setMode] = useState<GameMode>('sandbox');
   const [scale, setScale] = useState<ScalePresetId>('standard');
 
@@ -39,7 +34,7 @@ export function MainMenu() {
         {panel === 'root' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: 260 }}>
             <button className="btn primary" onClick={() => setPanel('new')}>New Game</button>
-            <button className="btn" onClick={continueGame} disabled={!hasSave('autosave') && !hasSave('quicksave')}>Continue</button>
+            <button className="btn" onClick={() => setPanel('load')}>Continue</button>
             <button className="btn" onClick={() => setPanel('multiplayer')}>Multiplayer (experimental)</button>
             <button className="btn" onClick={() => game.set({ scene: 'training' })}>Training</button>
             <button className="btn" onClick={() => void import('./Spacepedia').then(m => m.openPedia('menu'))}>Spacepedia</button>
@@ -74,7 +69,7 @@ export function MainMenu() {
               ))}
             </div>
             {hasSave('autosave') && (
-              <p style={{ fontSize: 12, color: 'var(--warn)', margin: '14px 0 0' }}>Starting a new program replaces your current saved program.</p>
+              <p style={{ fontSize: 12, color: 'var(--warn)', margin: '14px 0 0' }}>Previous programs remain available in Continue.</p>
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
               <button className="btn ghost" onClick={() => setPanel('root')}>Back</button>
@@ -84,8 +79,9 @@ export function MainMenu() {
                   const world = new World(new Universe(scale), PART_CATALOG, DEFAULT_START_UT, mode);
                   // A quicksave from the previous program must not be quickloadable into the new one.
                   deleteSave('quicksave');
+                  game.set({ saveId: `${mode}-${Date.now()}` });
                   saveProgram(world);
-                  game.set({ mode, scalePreset: scale, saveId: `${mode}-${Date.now()}`, craft: null, launchPending: false, ut: DEFAULT_START_UT, scene: 'spaceCenter' });
+                  game.set({ mode, scalePreset: scale, craft: null, launchPending: false, ut: DEFAULT_START_UT, scene: 'spaceCenter' });
                 }}
               >
                 Start
@@ -94,6 +90,7 @@ export function MainMenu() {
           </div>
         )}
 
+        {panel === 'load' && <SaveLoadDialog onClose={() => setPanel('root')} />}
         {panel === 'multiplayer' && <MultiplayerSetup onBack={() => setPanel('root')} />}
         {panel === 'settings' && <SettingsPanel onClose={() => setPanel('root')} />}
       </div>

@@ -53,7 +53,7 @@ than importing `World`. `LaunchSite` already follows that structural-input patte
   hooks; `progression.ts` and `readouts.ts` adapt science/program operations and orbital/surface readouts.
   Stable `internals.ts` contexts expose only the private operations/state these helpers need; World remains
   the sole state owner. `game/science.ts`, `comms.ts`, `flightData.ts`, `interplanetary.ts` and `autopilot.ts`
-  adapt pure sim functions. Persistence/program/saves own world snapshots and saved craft respectively.
+  adapt pure sim functions. Persistence/program/saveSlots own world snapshots and program save slots; saves owns the IndexedDB craft library and legacy migration. craftSharing validates offline craft imports; photoMode coordinates scene-local photo cameras and the optional depth blur pass.
 - `flight/controller.ts` owns scene setup, input, fixed-step driving, rendering and disposal.
   `flight/controller/{telemetry,navball,scenarios,assist,audio}.ts` contain the respective drivers with a stable
   private context. `flight/assist.ts`, `camera.ts`, `input.ts`, `planets.ts` and `hud/` provide focused adapters.
