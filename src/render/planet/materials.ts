@@ -44,6 +44,7 @@ export interface TerrainMaterialOptions {
   detailStrength: number;
   /** Optional ground cutouts (launch pad / flame trench) where terrain fragments are discarded. */
   cutout?: TerrainCutoutUniforms;
+  duneRipples?: boolean;
 }
 
 export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: TerrainMaterialOptions): THREE.ShaderMaterial {
@@ -58,6 +59,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       uAirless: { value: o.airless },
       uAmbientFloor: { value: 0.0015 },
       uDetailStrength: { value: o.detailStrength },
+      uDuneRipples: { value: o.duneRipples ? 1 : 0 },
     },
     vertexShader: /* glsl */ `
       ${GLSL_LOGDEPTH_VERT_PARS}
@@ -85,6 +87,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       uniform vec3 uRockColor;
       uniform float uRockBlend;
       uniform float uDetailStrength;
+      uniform float uDuneRipples;
       varying vec3 vWorldPos;
       varying vec3 vNormalBF;
       varying vec3 vColor;
@@ -132,6 +135,10 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           if (f3 > 0.0) { vec4 s = triSample(vDetail.zxy, w.zxy, 1024.0); vec4 s2 = triSample(vDetail, w, 256.0); hd += ((s.a - 0.5) * 0.7 + (s2.a - 0.5) * 0.5) * f3; g += triGrad(vDetail, w, 256.0) * f3 * 0.35; }
           if (f2 > 0.0) { vec4 s = triSample(vDetail.yzx, w.yzx, 32.0); hd += (s.r - 0.5) * f2 * 0.6; g += triGrad(vDetail, w, 32.0) * f2 * 0.6; }
           if (f1 > 0.0) { vec4 s = triSample(vDetail, w, 4.0); hd += (s.r - 0.5) * f1 * 0.5; g += triGrad(vDetail, w, 4.0) * f1; }
+          float microFade = 1.0 - smoothstep(15.0, 100.0, dist);
+          if (microFade > 0.0) g += triGrad(vDetail, w, 0.5) * microFade * 0.35;
+          // Shallow wind ripples, projected into the tangent plane below; no collision relief.
+          g += vec3(cos(vDetail.x * 6.2831853 + sin(vDetail.y * 0.09817477)) * 0.12, 0.0, 0.0) * uDuneRipples * f1;
           albedo *= 1.0 + hd * 0.55 * uDetailStrength;
           rockT = clamp(rockT + hd * 0.4 * uRockBlend, 0.0, 1.0);
           vec3 gt = g - dot(g, nBF) * nBF;
@@ -140,6 +147,56 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         #endif
         albedo = mix(albedo, uRockColor * (0.85 + 0.3 * albedo / max(max(albedo.r, albedo.g), 0.05)), rockT);
         vec3 col = shadeSurface(albedo, N, V, rel);
+        col = applyAerialPerspective(col, -V, dist, AERIAL_STEPS * uStepScale);
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  });
+}
+
+/** Instanced cell-local assets, using the same solar lighting and aerial perspective as terrain. */
+export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, centers: THREE.DataTexture, color: number[], plant: boolean, radius: number): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    defines: defines(q),
+    uniforms: { ...u, uCenters: { value: centers }, uColor: { value: new THREE.Vector3(...color) }, uAirless: { value: plant ? 0 : 0.65 }, uAmbientFloor: { value: 0.0015 }, uRange: { value: radius } },
+    side: plant ? THREE.DoubleSide : THREE.FrontSide,
+    vertexShader: /* glsl */ `
+      ${GLSL_LOGDEPTH_VERT_PARS}
+      uniform sampler2D uCenters;
+      attribute float aCell;
+      attribute vec3 color;
+      varying vec3 vTint;
+      varying vec3 vWorldPos;
+      varying vec3 vNormal;
+      void main() {
+        vTint = color;
+        vec3 centre = texture2D(uCenters, vec2((aCell + 0.5) / 2048.0, 0.5)).xyz;
+        vec4 local = instanceMatrix * vec4(position, 1.0);
+        vec4 wp = modelMatrix * vec4(local.xyz + centre, 1.0);
+        vWorldPos = wp.xyz;
+        vNormal = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+        ${GLSL_LOGDEPTH_VERT}
+      }`,
+    fragmentShader: /* glsl */ `
+      ${GLSL_LOGDEPTH_FRAG_PARS}
+      ${baseHeader()}
+      ${GLSL_SHADE}
+      uniform vec3 uColor;
+      varying vec3 vTint;
+      uniform float uRange;
+      varying vec3 vWorldPos;
+      varying vec3 vNormal;
+      void main() {
+        ${GLSL_LOGDEPTH_FRAG}
+        vec3 delta = cameraPosition - vWorldPos;
+        float dist = length(delta);
+        // Screen-door fade avoids sorting thousands of small silhouettes.
+        float fade = 1.0 - smoothstep(uRange * 0.65, uRange, dist);
+        float grain = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453);
+        if (grain > fade) discard;
+        vec3 V = delta / max(dist, 0.001);
+        vec3 N = normalize(vNormal) * (gl_FrontFacing ? 1.0 : -1.0);
+        vec3 col = shadeSurface(uColor * vTint, N, V, vWorldPos - uPlanetCenter);
         col = applyAerialPerspective(col, -V, dist, AERIAL_STEPS * uStepScale);
         gl_FragColor = vec4(col, 1.0);
       }`,
