@@ -122,3 +122,6 @@ export type { PortInfo, PortAlignment, DockingCandidate, DockingEvent } from './
 
 export { stepEva, EVA_HEIGHT, EVA_THRUST, EVA_EXHAUST_SPEED } from './eva';
 export { advanceISRU } from './isru';
+
+export { evaluateJointLoads, jointStrength, breakJoints } from './structure';
+export type { PartLoad, JointLoad } from './loads';

@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { describe, expect, it } from 'vitest';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
@@ -11,6 +12,7 @@ import { planInterplanetaryTransfer, planCourseCorrectionToBody } from '../src/g
 describe('Ringrunner Saturn mission', () => {
   it('launches from Earth, flies to Saturn and captures into a bound orbit', () => {
     const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+    requireIntactFlight(world);
     const wv = world.launch(buildRingrunner()), t0 = world.ut;
     const log: string[] = [];
     const run = (ap: Autopilot, maxTime: number, phase: string) => {

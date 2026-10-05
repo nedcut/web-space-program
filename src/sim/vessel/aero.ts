@@ -1,3 +1,4 @@
+import type { PartLoad } from './loads';
 import type { Vec3 } from '../../util/vec3';
 import { add, cross, dot, length, scale, sub, v3 } from '../../util/vec3';
 import { qConj, qRotate } from '../../util/quat';
@@ -115,7 +116,7 @@ export function controlDeflection(v: VesselState, p: PartState, mod: LiftingSurf
   return mod.deflection * Math.max(-1, Math.min(1, dot(scale(rxn, 1 / l), control)));
 }
 
-export function computeAeroForces(v: VesselState, ctx: AeroContext): AeroResult {
+export function computeAeroForces(v: VesselState, ctx: AeroContext, loads?: PartLoad[]): AeroResult {
   const rho = ctx.air.density;
   const speed = length(ctx.airVelocityBody);
   const a = ctx.air.speedOfSound > 0 ? ctx.air.speedOfSound : 340;
@@ -170,6 +171,7 @@ export function computeAeroForces(v: VesselState, ctx: AeroContext): AeroResult 
     if (p.chute && p.chute.cda > 0) fPart = add(fPart, scale(vp, -0.5 * rho * sp * p.chute.cda));
 
     const fb = qRotate(p.rotation, fPart);
+    loads?.push({ partUid: p.uid, point: p.position, force: fb });
     force = add(force, fb);
     torque = add(torque, cross(sub(p.position, v.com), fb));
   }

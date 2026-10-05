@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { describe, it, expect } from 'vitest';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
@@ -31,6 +32,7 @@ import { neutralInput } from '../src/sim/vessel';
 describe('Moon mission (stock Selene Lunar Lander)', () => {
   it('launches, transfers, captures and lands on the Moon, then heads home', () => {
     const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+    requireIntactFlight(world);
     world.launch(buildMoonLander());
     const wv = world.active!;
     const moonR = world.universe.body('moon').radius;

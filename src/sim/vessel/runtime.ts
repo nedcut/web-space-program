@@ -137,6 +137,8 @@ export interface WheelState {
 }
 
 export interface PartState {
+  /** Short overload exposure, seconds; absent when fully recovered. */
+  structuralFatigue?: number;
   bayOpen?: boolean;
   drillDeployed?: boolean;
   drillDeploy?: number;
@@ -220,6 +222,8 @@ export interface VesselTelemetry {
 
 /** Derived topology data. Never serialise; rebuild with `rebuildTopology`. */
 export interface VesselCache {
+  /** Derived flight stress readout; not serialized. */
+  jointLoads?: Map<number, import('./loads').JointLoad>;
   byUid: Map<number, PartState>;
   /** Tree depth from root. */
   depth: Map<number, number>;
@@ -268,6 +272,7 @@ export interface VesselState {
 
 export type VesselEvent =
   | { type: 'anomalyDiscovered'; vesselId: string; body: string; landmarkId: string }
+  | { type: 'structuralFailure'; vesselId: string; partUid: number; parentUid: number; newVesselId: string; loadFraction: number }
   | { type: 'stage'; vesselId: string; stage: number }
   | { type: 'decouple'; vesselId: string; partUid: number; newVesselId: string }
   | { type: 'engineIgnited'; vesselId: string; partUid: number }
@@ -281,5 +286,7 @@ export type VesselEvent =
 export interface StepResult {
   /** Vessels created during the step (debris, decoupled stages). */
   newVessels: VesselState[];
+  /** Birth time relative to step start; absent means staging at step start. */
+  newVesselTimeOffsets?: Record<string, number>;
   events: VesselEvent[];
 }

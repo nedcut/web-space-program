@@ -1,3 +1,5 @@
+import type { PartLoad } from './loads';
+import { breakJoints, crashJointCuts, crashShocks, overloadedJoints } from './structure';
 import { advanceISRU } from './isru';
 import type { Vec3 } from '../../util/vec3';
 import { add, length, scale, v3 } from '../../util/vec3';
@@ -124,7 +126,11 @@ export function stepVessel(v: VesselState, input: ControlInput, env: Environment
     const inp = input.target
       ? { ...input, target: { position: add(input.target.position, scale(input.target.velocity, tMid - t)), velocity: input.target.velocity } }
       : input;
+    const before = result.newVessels.length;
     substep(v, inp, env, t + s * h, h, opts, result);
+    for (const nv of result.newVessels.slice(before)) {
+      (result.newVesselTimeOffsets ??= {})[nv.id] = (s + 1) * h;
+    }
   }
   return result;
 }
@@ -146,6 +152,8 @@ function updateSteering(v: VesselState, yaw: number): void {
 
 function substep(v: VesselState, input: ControlInput, env: Environment, t: number, h: number, opts: StepOptions, result: StepResult): void {
   const tMid = t + h / 2;
+  const loads: PartLoad[] = [];
+  const omegaBefore = v.angularVelocity;
   // Drift (half).
   v.position = add(v.position, scale(v.velocity, h / 2));
   const g = env.gravity(v.position, tMid);
@@ -155,7 +163,8 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   const airVelocityBody = qRotate(qInv, add(v.velocity, scale(air.windVelocity, -1)));
 
   // Contacts & buoyancy (positions at the midpoint, pre-kick velocities).
-  const cp = gatherContacts(v, env, tMid, h, length(g), { brakes: !!input.brakes, throttle: input.wheelThrottle ?? 0 });
+  const cp = gatherContacts(v, env, tMid, h, length(g), { brakes: !!input.brakes, throttle: input.wheelThrottle ?? 0 }, loads);
+  const shocks = crashShocks(v, cp);
 
   // Controls.
   const pilot = { x: clamp1(input.pitch), y: clamp1(input.roll), z: -clamp1(input.yaw) };
@@ -167,9 +176,9 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   // Actuators (consume resources).
   produceIntakeAir(v, airVelocityBody, air.sample.density, h);
   const machNow = air.sample.speedOfSound > 0 ? length(airVelocityBody) / air.sample.speedOfSound : 0;
-  const eng = stepEngines(v, Math.max(0, Math.min(1, input.throttle)), c, air.sample.pressure, h, result.events, { density: air.sample.density, mach: machNow });
-  const rcs = stepRcs(v, input.rcs, c, translate, air.sample.pressure, h);
-  const wheels = stepReactionWheels(v, c, h);
+  const eng = stepEngines(v, Math.max(0, Math.min(1, input.throttle)), c, air.sample.pressure, h, result.events, { density: air.sample.density, mach: machNow }, loads);
+  const rcs = stepRcs(v, input.rcs, c, translate, air.sample.pressure, h, loads);
+  const wheels = stepReactionWheels(v, c, h, loads);
 
   // Electrical: command module consumption & solar generation.
   const sun = env.sun(v.position, tMid);
@@ -190,7 +199,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
     ? env.regolithConcentration?.(v.position, tMid) ?? 0 : 0, h);
 
   // Aerodynamics & parachutes.
-  const aero = computeAeroForces(v, { air: air.sample, airVelocityBody, control: c });
+  const aero = computeAeroForces(v, { air: air.sample, airVelocityBody, control: c }, loads);
   updateParachutes(v, { air: air.sample, dynamicPressure: aero.dynamicPressure, altitudeAGL: cp.altitudeAGL }, h, result.events);
 
   // Sum forces.
@@ -206,7 +215,9 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   v.angularVelocity = omegaFromL(v, q, L);
 
   // Contact impulses.
-  solveContacts(v, cp.contacts);
+  solveContacts(v, cp.contacts, loads, h, cp.impacts);
+  const cuts = overloadedJoints(v, loads, h, omegaBefore);
+  const crashCuts = crashJointCuts(v, shocks);
   L = angularMomentum(v);
 
   // Rotate & drift (half).
@@ -237,18 +248,19 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
     }
   v.situation = cp.landed ? 'landed' : cp.splashed ? 'splashed' : 'flying';
 
-  // Destruction (crash / overheat).
+  // Break attachments after integration, preserving the solved rigid-body velocity field.
+  breakJoints(v, [...cuts, ...crashCuts.keys()], result, crashCuts);
+
+  // Destruction (crash / overheat), including parts detached by another failure this step.
   const kill: [number, 'crash' | 'overheat'][] = [...cp.impacts.map((u) => [u, 'crash'] as [number, 'crash']), ...overheated.map((u) => [u, 'overheat'] as [number, 'overheat'])];
   for (const [uid, reason] of kill) {
-    if (!v.cache.byUid.has(uid)) continue;
-    result.events.push({ type: 'partDestroyed', vesselId: v.id, partUid: uid, reason });
-    result.newVessels.push(...removePart(v, uid));
-    if (v.destroyed) {
-      result.events.push({ type: 'vesselDestroyed', vesselId: v.id });
-      return;
-    }
+    const owner = [v, ...result.newVessels].find(piece => piece.cache.byUid.has(uid));
+    if (!owner) continue;
+    result.events.push({ type: 'partDestroyed', vesselId: owner.id, partUid: uid, reason });
+    result.newVessels.push(...removePart(owner, uid));
+    if (owner.destroyed) result.events.push({ type: 'vesselDestroyed', vesselId: owner.id });
   }
 
   // Resources changed => mass properties (shifts COM state consistently).
-  recomputeMassProperties(v, true);
+  if (!v.destroyed) recomputeMassProperties(v, true);
 }
