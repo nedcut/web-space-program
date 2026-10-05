@@ -18,8 +18,8 @@ export function vesselDeltas(world: World): VesselDelta[] {
     const state = structuredClone({
       position: s.position, velocity: s.velocity, orientation: s.orientation, angularVelocity: s.angularVelocity,
       mass: s.mass, com: s.com, inertia: s.inertia, invInertia: s.invInertia, nextStage: s.nextStage, situation: s.situation,
-      sas: s.sas, telemetry: s.telemetry, eva: s.eva, destroyed: s.destroyed,
-      parts: s.parts.map(p => ({ uid: p.uid, resources: p.resources, mass: p.mass, temperature: p.temperature,
+      sas: s.sas, telemetry: s.telemetry, eva: s.eva, destroyed: s.destroyed, groupState: s.groupState,
+      parts: s.parts.map(p => ({ uid: p.uid, tweaks: p.tweaks, resources: p.resources, mass: p.mass, temperature: p.temperature,
         skinTemperature: p.skinTemperature, activated: p.activated, engine: p.engine, chute: p.chute, leg: p.leg, wheel: p.wheel,
         bayOpen: p.bayOpen, drillDeployed: p.drillDeployed, drillDeploy: p.drillDeploy, converterRunning: p.converterRunning,
         converterRecipe: p.converterRecipe, processTemperature: p.processTemperature, dockDisarmed: p.dockDisarmed, link: p.link, linkFatigue: p.linkFatigue, structuralFatigue: p.structuralFatigue })),
@@ -56,12 +56,14 @@ export function applyDeltas(world: World, ut: number, deltas: VesselDelta[]) {
     if ('state' in d && d.state) {
       const { parts, ...state } = structuredClone(d.state);
       Object.assign(v.state, state);
+      if (state.groupState === undefined) delete v.state.groupState;
       let linksChanged = false;
       for (const p of parts) {
         const part = v.state.cache.byUid.get(p.uid);
         if (part) {
-          linksChanged ||= JSON.stringify(part.link) !== JSON.stringify(p.link);
+          linksChanged ||= JSON.stringify(part.link) !== JSON.stringify(p.link) || JSON.stringify(part.tweaks?.crossfeed) !== JSON.stringify(p.tweaks?.crossfeed);
           Object.assign(part, p);
+          if (p.tweaks === undefined) delete part.tweaks;
           if (p.linkFatigue === undefined) delete part.linkFatigue;
           if (p.link === undefined) delete part.link;
           // JSON omits undefined fields: an absent fatigue value means the joint recovered.

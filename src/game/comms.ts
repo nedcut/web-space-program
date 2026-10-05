@@ -3,6 +3,7 @@ import { LAUNCH_SITE, latLonToUnit } from '../sim/terrain';
 import { add, scale } from '../util/vec3';
 import { qRotate } from '../util/quat';
 import type { World } from './world';
+import { isExtended } from '../sim/vessel/tweaks';
 
 /** Degrees, body-fixed. Ratings are metres in the playable universe, across scale presets. */
 export const GROUND_STATIONS = [
@@ -31,7 +32,7 @@ export function worldNetwork(w: World): Network {
   });
   for (const { state: v } of w.vessels.values()) {
     if (v.destroyed) continue;
-    const antennas = v.parts.flatMap(p => p.def.modules.filter(m => m.type === 'antenna'));
+    const antennas = v.parts.filter(isExtended).flatMap(p => p.def.modules.filter(m => m.type === 'antenna'));
     nodes.push({ id: v.id, name: v.name, position: { ...v.position }, range: Math.max(0, ...antennas.map(a => a.range)), relay: antennas.some(a => a.relay) });
   }
   return solveNetwork(nodes, [...u.bodies.values()].map(b => ({ radius: b.radius, position: u.ephem.getBodyState(b.id, w.ut).position })));

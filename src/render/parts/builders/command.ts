@@ -3,6 +3,8 @@ import type { PartDef } from '../../../sim/vessel/types';
 import { M } from '../materials';
 import { around, box, cyl, grp, lathe, mk, pipe, rod, sphere, torus, type Profile } from '../geom';
 import { cylDims, str } from './common';
+import { decals } from '../decals';
+import { Markings } from './markings';
 
 const PI = Math.PI;
 
@@ -16,14 +18,56 @@ function patch(rOf: (y: number) => number, y0: number, y1: number, phiC: number,
   return lathe(p, { segments: seg, phiStart: phiC - phiW / 2, phiLength: phiW, tile: 0.25 });
 }
 
-/** Window: frame + glass on a conical surface. */
+/** Four thin strips outlining a rectangle on a surface of revolution (raised bezel / hatch seam). */
+function outline(rOf: (y: number) => number, y0: number, y1: number, phiC: number, phiW: number, w: number, off: number): THREE.BufferGeometry[] {
+  const rm = rOf((y0 + y1) / 2);
+  const wa = w / rm;
+  return [
+    patch(rOf, y0 - w, y0, phiC, phiW + wa * 2, off, 1, 8),
+    patch(rOf, y1, y1 + w, phiC, phiW + wa * 2, off, 1, 8),
+    patch(rOf, y0, y1, phiC - phiW / 2 - wa / 2, wa, off, 3, 1),
+    patch(rOf, y0, y1, phiC + phiW / 2 + wa / 2, wa, off, 3, 1),
+  ];
+}
+
+/** Window: recessed glass, a dark gasket plate and a raised machined bezel. */
 function windowOn(rOf: (y: number) => number, y0: number, y1: number, phiC: number, phiW: number, frameW: number): THREE.Mesh[] {
   const fy = frameW;
   const fphi = frameW / rOf((y0 + y1) / 2);
   return [
-    mk(patch(rOf, y0 - fy, y1 + fy, phiC, phiW + fphi * 2, 0.006), M.gunmetal(), 'windowFrame'),
-    mk(patch(rOf, y0, y1, phiC, phiW, 0.011), M.glass(), 'window'),
+    mk(patch(rOf, y0 - fy, y1 + fy, phiC, phiW + fphi * 2, 0.005), M.darkMetal(), 'windowFrame'),
+    mk(patch(rOf, y0, y1, phiC, phiW, 0.008), M.glass(), 'window'),
+    mk(outline(rOf, y0, y1, phiC, phiW, fy * 0.55, 0.014), M.gunmetal(), 'windowBezel'),
   ];
+}
+
+/** Crew hatch: panel, seam outline, hinge blocks, grab handle and rescue markings. */
+function hatchOn(root: THREE.Object3D, D: Markings, rOf: (y: number) => number, y0: number, y1: number, phiC: number, phiW: number, panel: THREE.Material) {
+  root.add(mk(patch(rOf, y0, y1, phiC, phiW, 0.006, 6), panel, 'hatch'));
+  root.add(mk(outline(rOf, y0, y1, phiC, phiW, 0.018, 0.009), M.gunmetal(), 'hatchSeam'));
+  const parts: THREE.BufferGeometry[] = [];
+  for (const t of [0.22, 0.78]) {
+    const y = y0 + (y1 - y0) * t;
+    const a = phiC - phiW / 2 - 0.03;
+    const r = rOf(y) + 0.02;
+    const b = box(0.05, 0.08, 0.035);
+    b.rotateY(a);
+    b.translate(r * Math.sin(a), y, r * Math.cos(a));
+    parts.push(b);
+  }
+  root.add(mk(parts, M.gunmetal(), 'hatchHinges'));
+  const yh = y0 + (y1 - y0) * 0.45;
+  const ah = phiC + phiW * 0.3;
+  const pts: [number, number, number][] = [];
+  for (const [dy, out] of [[-0.07, 0.006], [-0.06, 0.035], [0.06, 0.035], [0.07, 0.006]] as const) {
+    const r = rOf(yh + dy) + out;
+    pts.push([r * Math.sin(ah), yh + dy, r * Math.cos(ah)]);
+  }
+  root.add(mk(pipe(pts, 0.008, 6, 16), M.accent('yellow'), 'hatchHandle'));
+  const rr = (y: number) => rOf(y) + 0.006;
+  const rescue = decals.text('RESCUE', { color: '#f2f1ec', plate: '#b3261e', weight: 800 });
+  D.lathe(rr, rescue, { y: y1 - 0.06, phi: phiC, height: 0.045 });
+  D.lathe(rr, decals.symbol('arrow'), { y: yh, phi: ah + 0.12, height: 0.07 });
 }
 
 export function buildPod(def: PartDef): THREE.Object3D {
@@ -80,8 +124,14 @@ function buildLantern(def: PartDef): THREE.Object3D {
   root.add(mk(torus(rTop - 0.005, 0.01, 6, 40).translate(0, yShoulder + 0.12, 0), M.gunmetal()));
   // big forward window (+Z) and hatch with porthole (+X)
   for (const m of windowOn(cone, yB + 0.95, yB + 1.15, 0, 0.75, 0.025)) root.add(m);
-  root.add(mk(patch(cone, yB + 0.3, yB + 1.0, PI / 2, 0.95, 0.005, 6), M.darkMetal(), 'hatch'));
+  const D = new Markings(def);
+  hatchOn(root, D, cone, yB + 0.3, yB + 1.0, PI / 2, 0.95, M.darkMetal());
   for (const m of windowOn(cone, yB + 0.75, yB + 0.9, PI / 2, 0.35, 0.02)) root.add(m);
+  const rr = (y: number) => cone(y) + 0.004;
+  D.lathe(rr, decals.insignia(), { y: yB + 0.75, phi: -PI / 2, height: 0.3 });
+  D.lathe(rr, D.badgeDark, { y: yB + 0.42, phi: -PI / 2, height: 0.075 });
+  D.lathe(rr, decals.text('LANTERN I', { color: '#eceae4', stencil: true }), { y: yB + 1.08, phi: -PI * 0.75, height: 0.06 });
+  D.lathe(rr, decals.symbol('warn'), { y: yShoulder - 0.15, phi: PI * 0.15, height: 0.06 });
   // hand rails beside hatch
   const rails: THREE.BufferGeometry[] = [];
   for (const side of [-1, 1]) {
@@ -106,6 +156,7 @@ function buildLantern(def: PartDef): THREE.Object3D {
     ports.push(g);
   }
   root.add(mk(ports, M.soot(), 'rcsPorts'));
+  D.addTo(root);
   return root;
 }
 
@@ -161,8 +212,15 @@ function buildHarbor(def: PartDef): THREE.Object3D {
   root.add(mk(around(latches, 8, 0), M.gunmetal()));
   // windows: two rendezvous windows, hatch window
   for (const a of [-0.32, 0.32]) for (const m of windowOn(cone, yB + 1.45, yB + 1.7, a, 0.28, 0.03)) root.add(m);
-  root.add(mk(patch(cone, yB + 0.55, yB + 1.3, PI / 2, 0.75, 0.01, 6), M.satinWhite(), 'hatch'));
+  const D = new Markings(def);
+  hatchOn(root, D, cone, yB + 0.55, yB + 1.3, PI / 2, 0.75, M.satinWhite());
   for (const m of windowOn(cone, yB + 0.95, yB + 1.15, PI / 2, 0.18, 0.025)) root.add(m);
+  const rr = (y: number) => cone(y) + 0.012;
+  D.lathe(rr, decals.insignia(), { y: yB + 1.15, phi: -PI / 2, height: 0.5 });
+  D.lathe(rr, D.badge, { y: yB + 0.62, phi: -PI / 2, height: 0.11 });
+  D.lathe(rr, decals.text('HARBOR III', { color: '#1d3f78', weight: 800 }), { y: yB + 1.62, phi: PI, height: 0.09 });
+  D.lathe(rr, D.plate, { y: yB + 0.5, phi: PI * 0.8, height: 0.07 });
+  for (const a of [PI * 0.25, PI * 1.25]) D.lathe(rr, decals.text('NO STEP', { color: '#24272c', stencil: true }), { y: yB + 1.85, phi: a, height: 0.04 });
   // RCS clusters
   const rcs: THREE.BufferGeometry[] = [];
   const noz: THREE.BufferGeometry[] = [];
@@ -185,6 +243,7 @@ function buildHarbor(def: PartDef): THREE.Object3D {
   umb.translate(0, yB + 0.5, cone(yB + 0.5) + 0.02);
   umb.rotateY(PI);
   root.add(mk(umb, M.gunmetal(), 'umbilical'));
+  D.addTo(root);
   return root;
 }
 
@@ -220,6 +279,14 @@ export function buildProbeCore(def: PartDef): THREE.Object3D {
   tape.translate(0, 0, oct - 0.002);
   root.add(mk(around(tape, 8, 0, PI / 8), M.silverFoil(), 'tapes'));
 
+  // maker's mark on a foil face
+  {
+    const D = new Markings(def);
+    const lg = D.logo;
+    const s = Math.min(bodyH * 0.55, faceW * 0.8);
+    D.plane(lg, s, (g) => g.translate(0, style === 'cairn' ? -bodyH * 0.15 : 0, ap + 0.003).rotateY(style === 'cairn' ? (7 * PI) / 4 : -PI / 2));
+    D.addTo(root);
+  }
   if (style === 'cairn') {
     // radiator panels on alternate faces
     const rad = box(faceW * 0.8, bodyH * 0.82, 0.012, 0.25);

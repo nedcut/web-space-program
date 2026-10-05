@@ -2,7 +2,8 @@ import { FlightFx, isBurstEvent } from '../render/fx/FlightFx';
 
 import { PhotoCamera } from '../render/core/PhotoCamera';
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { SkyEnvironment } from '../render/core/skyEnv';
+import { setPartDetail } from '../render/parts';
 import type { GameAudio } from '../audio';
 import { PART_CATALOG } from '../data/parts';
 import type { Autopilot } from '../game/autopilot';
@@ -10,7 +11,7 @@ import { flightPredictions } from '../game/flightData';
 import { deserializeWorld, loadWorldFromStorage, saveWorldToStorage, serializeWorld, type SavedWorld } from '../game/persistence';
 import { applyCommsSettings, game } from '../game/store';
 import { Universe } from '../game/universe';
-import { World, type WorldVessel } from '../game/world';
+import { PHYSICS_DT, World, type WorldVessel } from '../game/world';
 import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
 import { RenderPipeline, getQuality, type QualityId } from '../render/core';
 import type { ExtraOrbit } from '../render/map/MapView';
@@ -25,23 +26,27 @@ import { sampleAtmosphere } from '../sim/atmosphere';
 import type { ScalePresetId } from '../sim/bodies/scale';
 import type { Orbit } from '../sim/orbit/api';
 import type { GameMode } from '../sim/science/progression';
-import { gearState, neutralInput, type PortInfo } from '../sim/vessel';
+import { gearState, groupBindings, lightOn, neutralInput, type PortInfo } from '../sim/vessel';
+import type { ActionGroupId, PartActionId } from '../sim/vessel/types';
+import type { FlightTweaks, SasMode, VesselCommand } from '../sim/vessel/runtime';
+import { pickPartAlongRay, partWorldPosition } from './partPick';
 import { stagnationHeatFlux } from '../sim/vessel/heating';
-import type { SasMode } from '../sim/vessel/runtime';
 import type { CraftDef } from '../sim/vessel/types';
 import { getTutorial } from '../tutorial/runtime';
 import { formatDistance, formatDuration } from '../ui/format';
 import { frameProfiler as prof } from '../util/frameProfiler';
 import { snapshotEqual } from '../util/snapshotEqual';
-import { length, normalize, sub, type Vec3 } from '../util/vec3';
+import { cross, length, normalize, sub, type Vec3 } from '../util/vec3';
 import { type AssistId } from './assist';
-import { FlightCamera } from './camera';
+import { CAMERA_MODE_INFO, FlightCamera } from './camera';
 import * as assist from './controller/assist';
 import * as audio from './controller/audio';
 import type { FlightControllerInternals } from './controller/internals';
 import * as navball from './controller/navball';
 import * as scenarios from './controller/scenarios';
 import * as telemetry from './controller/telemetry';
+import { WarpDriver, type WarpTargetId } from './controller/warp';
+import { HintTracker } from './hints';
 import type { DockingTelemetry, Telemetry } from './hud/Hud';
 import type { NavballFrame, NavballMarker } from './hud/navball';
 import { FlightInput } from './input';
@@ -92,6 +97,12 @@ export class FlightController {
   assist: Autopilot | null = null;
   private assistWarped = false;
   sas: SasMode = 'off';
+  /** Warp-to targets and the rails warp ramp. */
+  readonly warpDriver = new WarpDriver();
+  /** First-orbit coaching hints (remembered per browser profile). */
+  readonly hints = new HintTracker();
+  /** Stage events on the active vessel (the HUD flashes when this changes). */
+  stagedCount = 0;
   sasOn = false;
   rcsOn = false;
   speedMode: Telemetry['speedMode'] = 'surface';
@@ -103,9 +114,17 @@ export class FlightController {
   private stagePending = false;
   /** Gear command from G (applied once, then left to the vessel state). */
   private gearPending: boolean | undefined = undefined;
+  /** One-shot part actions / action groups / flight settings for the next input sent to the authority. */
+  private pendingCommands: VesselCommand[] = [];
+  private brakesWere = false;
+  /** Right-click / long-press part picks (the HUD opens an inspector panel). */
+  private partPickListeners = new Set<(uid: number) => void>();
+  private readonly raycaster = new THREE.Raycaster();
   private views = new Map<string, VesselView>();
   private stars: Starfield;
   private glare: SunGlare;
+  private skyEnv!: SkyEnvironment;
+  private readonly envUp = new THREE.Vector3();
   private sunLight = new THREE.DirectionalLight(0xffffff, 3.2);
   private ambient = new THREE.HemisphereLight(0x8899bb, 0x221a10, 0.12);
   private planets: PlanetLayer;
@@ -185,6 +204,7 @@ export class FlightController {
     });
 
     const q = getQuality(quality);
+    setPartDetail(q.partDetail);
     this.stars = new Starfield({ count: q.stars.count, milkyWay: q.stars.milkyWay, seed: 7 });
     this.scene.add(this.stars.group);
     this.glare = new SunGlare();
@@ -200,10 +220,9 @@ export class FlightController {
     this.sunLight.shadow.normalBias = 0.02;
 
     // Image-based fill light so sunlit-from-behind vessels aren't pitch black. Scaled by air density each frame.
-    const pmrem = new THREE.PMREMGenerator(this.pipeline.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = 0.35;
-    pmrem.dispose();
+    // Procedural sky/planetshine environment, re-baked as altitude, attitude and sun change.
+    this.skyEnv = new SkyEnvironment(this.pipeline.renderer);
+    this.scene.environmentIntensity = 1;
 
     this.planets = createPlanetLayer(this.scene, universe, quality);
     this.site = new LaunchSite(universe, { vegetationDensity: q.siteVegetation });
@@ -219,33 +238,44 @@ export class FlightController {
     this.disposers.push(this.cam.attach(canvas, () => !this.mapMode && !this.paused));
     this.disposers.push(this.map.attachControls(canvas, () => this.mapMinDistance(), () => this.mapMode && !this.paused));
     this.disposers.push(this.attachMapPicking(canvas));
+    this.disposers.push(this.attachPartPicking(canvas));
     this.disposers.push(
       this.input.onAction((a) => {
         if (this.photo.active) return;
         // While paused (pause menu, vessel lost) only the menu toggle and quickload are live.
         if (this.paused && a !== 'menu' && a !== 'quickload') return;
         switch (a) {
-          case 'stage': this.stagePending = true; break;
+          case 'stage': this.requestStage(); break;
           case 'eva': this.goEva(); break;
           case 'board': this.boardEva(); break;
           case 'plantFlag': this.plantFlag(); break;
           case 'toggleSas': this.toggleSas(); break;
-          case 'toggleRcs': this.rcsOn = !this.rcsOn; break;
+          case 'toggleRcs': this.toggleRcs(); break;
+          case 'toggleLights': this.toggleLights(); break;
+          case 'abort': this.abort(); break;
           case 'stressOverlay': this.stressOverlay = !this.stressOverlay; this.world.message(this.stressOverlay ? 'Stress overlay: green = low, yellow = near limit, red = overloaded' : 'Stress overlay off'); break;
           case 'toggleGear': this.toggleGear(); break;
           case 'map': this.toggleMap(); break;
           case 'warpUp': this.changeWarp(1); break;
           case 'warpDown': this.changeWarp(-1); break;
-          case 'warpStop': if (this.network) this.network.send({ v: 1, type: 'warp', rate: 1 }); else this.world.warp = { mode: 'rails', index: 0 }; break;
+          case 'warpStop': this.warpDriver.cancel(this.world); if (this.network) this.network.send({ v: 1, type: 'warp', rate: 1 }); else this.world.warp = { mode: 'rails', index: 0 }; break;
           case 'menu': this.onExit?.(); break;
           case 'focusNext': if (!this.network?.ownId && this.world.focusNextNearby()) this.world.message(`Switched to ${this.world.active!.state.name}`); break;
           case 'quicksave': this.quicksave(); break;
+          case 'actionGroup1': case 'actionGroup2': case 'actionGroup3': case 'actionGroup4': case 'actionGroup5':
+          case 'actionGroup6': case 'actionGroup7': case 'actionGroup8': case 'actionGroup9': case 'actionGroup10':
+            this.fireGroup(`custom${a.slice(11)}` as ActionGroupId, undefined, true); break;
           case 'quickload': if (!this.network) this.onQuickload?.(); break;
-          case 'toggleCamMode': this.cam.mode = this.cam.mode === 'auto' ? (this.world.active?.state.eva ? 'free' : 'chase') : this.cam.mode === 'chase' ? 'free' : 'auto'; break;
+          case 'toggleCamMode': this.cycleCameraMode(); break;
         }
       }),
     );
     this.world.onEvent = (e) => {
+      if (e.type === 'stage' && e.vesselId === this.world.activeId) this.stagedCount++;
+      if (e.vesselId === this.world.activeId && !game.get().settings.reduceMotion) {
+        if (e.type === 'stage') this.cam.addKick(0.35);
+        else if (e.type === 'decouple' || e.type === 'structuralFailure') this.cam.addKick(0.6);
+      }
       if (isBurstEvent(e)) {
         const vessel = this.world.vessels.get(e.vesselId) ?? this.world.active;
         if (vessel) {
@@ -367,6 +397,118 @@ export class FlightController {
     if (!this.world.canControl()) return;
     this.sasOn = !this.sasOn;
     if (this.sasOn && this.sas === 'off') this.sas = 'stabilityAssist';
+    if (this.hasBindings('sas')) this.fireGroup('sas', this.sasOn);
+  }
+
+  toggleRcs() {
+    if (!this.world.canControl()) return;
+    this.rcsOn = !this.rcsOn;
+    if (this.hasBindings('rcs')) this.fireGroup('rcs', this.rcsOn);
+  }
+
+  // ---------- Part actions, action groups and flight settings (authoritative command path) ----------
+
+  /** Queue commands for the active vessel; the World (or multiplayer room) applies them on its next physics step. */
+  command(...commands: VesselCommand[]) {
+    if (!this.world.canControl() || !this.world.active || this.world.active.state.eva) return;
+    this.pendingCommands.push(...commands);
+  }
+  partAction(uid: number, action: PartActionId, experiment?: string) { this.command({ kind: 'part', uid, action, ...(experiment ? { experiment } : {}) }); }
+  setTweaks(uid: number, tweaks: FlightTweaks, symmetric = true) { this.command({ kind: 'tweak', uid, tweaks, symmetric }); }
+  private hasBindings(group: ActionGroupId) {
+    const v = this.world.active?.state;
+    return !!v && groupBindings(v, group).length > 0;
+  }
+  /** Fire an action group; `announce` shows a message (number keys). */
+  fireGroup(group: ActionGroupId, state?: boolean, announce = false) {
+    if (!this.world.canControl() || !this.world.active || this.world.active.state.eva) return;
+    if (announce) {
+      const n = groupBindings(this.world.active.state, group).length;
+      this.world.message(n ? `Action group ${group.slice(6)}` : `Action group ${group.slice(6)} is empty — assign actions in the editor`, n ? 'info' : 'warn', 2);
+    }
+    this.command({ kind: 'group', group, ...(state === undefined ? {} : { state }) });
+  }
+  toggleLights() {
+    const v = this.world.active?.state;
+    if (!v) return;
+    const lamps = v.parts.filter(p => p.def.modules.some(m => m.type === 'light'));
+    if (!lamps.length && !this.hasBindings('lights')) return;
+    const on = !lamps.some(lightOn);
+    this.fireGroup('lights', on);
+    if (lamps.length) this.world.message(on ? 'Lights on' : 'Lights off', 'info', 2);
+  }
+  /** Abort: cut the throttle, stop assist programs and fire the Abort group. */
+  abort() {
+    if (!this.world.canControl() || !this.world.active || this.world.active.state.eva) return;
+    this.input.state.throttle = 0;
+    if (this.assist) this.cancelAssist('Assist cancelled by abort');
+    this.fireGroup('abort');
+    this.world.message(this.hasBindings('abort') ? 'ABORT' : 'Abort: throttle cut (no Abort actions assigned)', 'bad', 3);
+  }
+  onPartPick(fn: (uid: number) => void) { this.partPickListeners.add(fn); return () => { this.partPickListeners.delete(fn); }; }
+
+  private renderOrigin(): Vec3 | null {
+    const wv = this.world.active;
+    return wv ? this.network?.pose(wv.state.id)?.position ?? wv.state.position : null;
+  }
+  /** Active-vessel part under a viewport point (CSS px relative to the canvas). */
+  pickPart(x: number, y: number): number | null {
+    const wv = this.world.active, origin = this.renderOrigin();
+    if (!wv || !origin || this.mapMode) return null;
+    const el = this.pipeline.renderer.domElement;
+    this.raycaster.setFromCamera(new THREE.Vector2((x / el.clientWidth) * 2 - 1, -(y / el.clientHeight) * 2 + 1), this.cam.camera);
+    const pose = this.network?.pose(wv.state.id);
+    const s = wv.state;
+    const r = this.raycaster.ray;
+    const hit = pickPartAlongRay(s.parts, s.com, sub(pose?.position ?? s.position, origin), pose?.orientation ?? s.orientation,
+      { x: r.origin.x, y: r.origin.y, z: r.origin.z }, { x: r.direction.x, y: r.direction.y, z: r.direction.z });
+    return hit?.uid ?? null;
+  }
+  /** Screen position (CSS px within the canvas) of an active-vessel part, or null when hidden/behind the camera. */
+  partScreenPosition(uid: number): { x: number; y: number } | null {
+    const wv = this.world.active, origin = this.renderOrigin();
+    const p = wv?.state.cache.byUid.get(uid);
+    if (!wv || !p || !origin || this.mapMode) return null;
+    const pose = this.network?.pose(wv.state.id);
+    const w = partWorldPosition(p, wv.state.com, sub(pose?.position ?? wv.state.position, origin), pose?.orientation ?? wv.state.orientation);
+    const v = new THREE.Vector3(w.x, w.y, w.z).project(this.cam.camera);
+    if (v.z > 1 || v.z < -1) return null;
+    const el = this.pipeline.renderer.domElement;
+    return { x: ((v.x + 1) / 2) * el.clientWidth, y: ((1 - v.y) / 2) * el.clientHeight };
+  }
+  /** Right-click (without dragging the camera) or a touch long-press picks a part. */
+  private attachPartPicking(el: HTMLElement) {
+    let start: { x: number; y: number; button: number; touch: boolean } | null = null;
+    let timer = 0;
+    const emit = (cx: number, cy: number) => {
+      const r = el.getBoundingClientRect();
+      const uid = this.pickPart(cx - r.left, cy - r.top);
+      if (uid !== null) this.partPickListeners.forEach(fn => fn(uid));
+    };
+    const down = (e: PointerEvent) => {
+      if (this.paused || this.photo.active) return;
+      start = { x: e.clientX, y: e.clientY, button: e.button, touch: e.pointerType === 'touch' };
+      window.clearTimeout(timer);
+      if (start.touch) timer = window.setTimeout(() => { if (start) { emit(start.x, start.y); start = null; } }, 550);
+    };
+    const move = (e: PointerEvent) => { if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 6) { start = null; window.clearTimeout(timer); } };
+    const up = (e: PointerEvent) => {
+      window.clearTimeout(timer);
+      if (start && !start.touch && start.button === 2 && e.button === 2) emit(e.clientX, e.clientY);
+      start = null;
+    };
+    const menu = (e: Event) => e.preventDefault();
+    el.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    el.addEventListener('contextmenu', menu);
+    return () => {
+      window.clearTimeout(timer);
+      el.removeEventListener('pointerdown', down);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      el.removeEventListener('contextmenu', menu);
+    };
   }
 
   setSasMode(mode: string) {
@@ -378,10 +520,36 @@ export class FlightController {
   toggleMap() {
     this.mapMode = !this.mapMode;
     this.map.setVisible(this.mapMode);
+    this.flashFade();
     if (this.mapMode) {
       const wv = this.world.active;
-      if (wv) this.map.distance = this.world.universe.body(wv.body).radius * 4;
+      if (wv) {
+        const r = this.world.universe.body(wv.body).radius;
+        this.map.distance = r * 4;
+        // Pull back from just above the vessel's body so the switch reads as zooming out, not a cut.
+        if (!game.get().settings.reduceMotion) this.map.animateFrom(r * 1.6);
+      }
     }
+  }
+
+  private fadeEl: HTMLDivElement | null = null;
+  /** Brief dip to black that fades out over ~0.35 s (instant under Reduce motion: transitions are off). */
+  private flashFade() {
+    if (game.get().settings.reduceMotion) return;
+    let el = this.fadeEl;
+    if (!el) {
+      el = this.fadeEl = document.createElement('div');
+      Object.assign(el.style, { position: 'absolute', inset: '0', background: '#02060d', pointerEvents: 'none', opacity: '0' });
+      el.classList.add('photo-hide');
+      this.host.appendChild(el);
+    }
+    const node = el;
+    node.style.transition = 'none';
+    node.style.opacity = '0.85';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      node.style.transition = 'opacity 0.35s ease-out';
+      node.style.opacity = '0';
+    }));
   }
 
   goEva(astronautId?: string) {
@@ -393,7 +561,6 @@ export class FlightController {
       this.input.state.throttle = 0;
       this.sasOn = false;
       this.cam.mode = 'auto';
-      this.cam.distance = 6;
     }
   }
 
@@ -404,7 +571,6 @@ export class FlightController {
       this.cancelAssist();
       this.stagePending = false;
       this.input.state.throttle = 0;
-      this.cam.distance = Math.max(10, this.world.active!.state.cache.boundingRadius * 3);
     }
   }
 
@@ -415,13 +581,61 @@ export class FlightController {
   }
 
   changeWarp(delta: number) {
+    if (this.warpDriver.target) this.warpDriver.cancel(this.world, 'Warp-to cancelled');
     if (this.network) this.network.changeWarp(delta);
     else this.world.changeWarp(delta);
   }
 
+  cycleCameraMode() {
+    const mode = this.cam.cycleMode(!!this.world.active?.state.eva);
+    this.world.message(`Camera: ${CAMERA_MODE_INFO[mode].label} — ${CAMERA_MODE_INFO[mode].hint}`, 'info', 2.5);
+  }
+
+  /** Warp to the next maneuver node / apoapsis / periapsis / SOI change. */
+  warpTo(id: WarpTargetId) {
+    if (this.network || this.paused) return;
+    if (this.assist) return this.world.message('Assist is controlling time warp', 'warn');
+    const err = this.warpDriver.start(this.world, id);
+    if (err) this.world.message(err, 'warn');
+    else this.world.message(`Warping to ${this.warpDriver.target!.label}`, 'info', 2);
+  }
+
   stage() {
     if (!this.world.canControl()) return;
+    this.requestStage();
+  }
+
+  /** Seconds left on the launch countdown (null when none is running). */
+  countdown: number | null = null;
+
+  /** Stage now, or start the optional launch countdown when the first stage would release the clamps. */
+  private requestStage() {
+    const wv = this.world.active;
+    if (this.countdown !== null) {
+      // Stage again during the count: go now.
+      this.countdown = null;
+      this.stagePending = true;
+      return;
+    }
+    if (game.get().settings.launchCountdown && wv?.mode === 'prelaunch' && !wv.state.eva && !this.network && !getTutorial() && this.world.canControl()) {
+      this.countdown = 3;
+      this.audio?.uiClick();
+      this.world.message('Launch countdown — Space again to go now', 'info', 3);
+      return;
+    }
     this.stagePending = true;
+  }
+
+  private tickCountdown(dt: number) {
+    if (this.countdown === null || this.paused) return;
+    const wv = this.world.active;
+    if (!wv || wv.mode !== 'prelaunch' || !this.world.canControl()) { this.countdown = null; return; }
+    const before = Math.ceil(this.countdown);
+    this.countdown -= dt;
+    if (this.countdown <= 0) {
+      this.countdown = null;
+      this.stagePending = true;
+    } else if (Math.ceil(this.countdown) !== before) this.audio?.uiClick();
   }
 
   /** G: raise / lower landing gear and legs. */
@@ -430,8 +644,9 @@ export class FlightController {
     const wv = this.world.active;
     if (!wv) return;
     const cur = gearState(wv.state);
-    if (cur === undefined) return;
-    this.gearPending = !cur;
+    if (cur === undefined && !this.hasBindings('gear')) return;
+    if (cur !== undefined) this.gearPending = !cur;
+    if (this.hasBindings('gear')) this.fireGroup('gear', !(cur ?? wv.state.groupState?.gear ?? false));
     this.world.message(this.gearPending ? 'Gear down' : 'Gear up');
   }
 
@@ -489,14 +704,20 @@ export class FlightController {
     this.input.mouseEnabled = !this.mapMode;
     applyCommsSettings(this.world);
     this.input.update(dt);
+    this.tickCountdown(dt);
     if (!this.world.canControl()) {
       this.input.state.throttle = 0;
       this.stagePending = false;
       this.gearPending = undefined;
+      this.pendingCommands = [];
       if (this.assist) this.cancelAssist('Assist stopped: no signal or command authority');
     }
     const s = this.input.state;
     const wv = this.world.active;
+    if (s.brakes !== this.brakesWere) {
+      this.brakesWere = s.brakes;
+      if (!this.paused && this.hasBindings('brakes')) this.fireGroup('brakes', s.brakes);
+    }
     const maneuverDir = this.maneuverDirection();
     if (!this.world.targetId) {
       // Target gone (docked, destroyed, cleared): leave target-relative modes.
@@ -525,16 +746,22 @@ export class FlightController {
       sasReference: this.speedMode === 'surface' ? 'surface' : this.speedMode === 'target' && targetState ? 'target' : 'orbit',
       target: targetState ?? undefined,
       maneuverDirection: maneuverDir ?? undefined,
+      commands: this.pendingCommands.length && !wv?.state.eva ? this.pendingCommands : undefined,
     });
     if (!this.paused) {
       this.stagePending = false;
       this.gearPending = undefined;
+      this.pendingCommands = [];
     }
     const input = assist.driveAssist.call(this, this.systems, wv, ctrl, dt);
     prof.add('input', t0);
     t0 = prof.now();
     if (this.network) this.network.update(dt, this.paused ? neutralInput() : input);
-    else if (!this.paused) this.world.tick(dt, input);
+    else if (!this.paused) {
+      if (this.assist) this.warpDriver.target = null;
+      else this.warpDriver.drive(this.world, dt);
+      this.world.tick(this.warpDriver.rampDt(this.world, dt), input);
+    }
     prof.add('sim', t0);
     if (!this.network && wv && !this.world.active && !this.activeLost) {
       this.activeLost = true;
@@ -600,10 +827,22 @@ export class FlightController {
   private maneuverDirection(): Vec3 | null { return navball.maneuverDirection.call(this, this.systems); }
 
   private render(wv: WorldVessel, dt: number, submit = true) {
+    // Draw between the last two fixed physics steps so motion advances evenly at any display rate. The map
+    // stays on exact state (its caches are keyed by simulation time); multiplayer has its own pose smoothing.
+    if (this.mapMode || this.network) return this.renderAt(wv, dt, this.world.ut, submit);
+    const w = this.world;
+    const { renderUt, restore } = w.renderHistory.apply(w.ut, PHYSICS_DT, w.renderAlpha, w.vessels.values(), w.universe.ephem);
+    try {
+      this.renderAt(wv, dt, renderUt, submit);
+    } finally {
+      restore();
+    }
+  }
+
+  private renderAt(wv: WorldVessel, dt: number, t: number, submit: boolean) {
     const photoDt = dt;
     if (this.photo.active) dt = 0;
     const u = this.world.universe;
-    const t = this.world.ut;
     const origin = this.network?.pose(wv.state.id)?.position ?? wv.state.position;
     const bodyState = u.ephem.getBodyState(wv.body, t);
     const sunPos = u.ephem.getBodyState(u.sunId, t).position;
@@ -644,7 +883,7 @@ export class FlightController {
     }
     for (const [id, view] of this.views) if (!seen.has(id)) { view.dispose(); this.views.delete(id); }
 
-    this.flags.update(this.world);
+    this.flags.update({ active: this.world.active, flags: this.world.flags, universe: this.world.universe, ut: t });
     prof.add('vessels', t0);
     t0 = prof.now();
 
@@ -659,10 +898,8 @@ export class FlightController {
     this.reentryHeat = Math.min(1, Math.max(0, (Math.log10(Math.max(flux, 1)) - 4.0) / 1.5));
 
     // Camera
-    const up = normalize(sub(origin, bodyState.position));
-    const q = wv.state.orientation;
     if (this.photo.active) this.photo.update(photoDt);
-    else this.cam.update(new THREE.Vector3(up.x, up.y, up.z), new THREE.Quaternion(q.x, q.y, q.z, q.w), dt);
+    else this.updateCamera(wv, origin, bodyState, airVel, t, dt);
     const camera = this.cam.camera;
     this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors);
     if (!this.paused) this.effects.shake(camera, game.get().settings.reduceMotion);
@@ -713,7 +950,22 @@ export class FlightController {
     this.sunLight.intensity = 3.2 * eclipse;
     // Sky fill: brighter in thick air (scattered skylight), dim in space (planetshine + starlight).
     const airFrac = Math.min(1, air.density / 1.0);
-    this.scene.environmentIntensity = 0.12 + 0.5 * airFrac * eclipse;
+    const envBody = u.body(wv.body);
+    const envRel = sub(origin, bodyState.position);
+    const envDist = Math.max(envBody.radius, length(envRel));
+    this.scene.environment = this.skyEnv.update(
+      {
+        up: this.envUp.set(envRel.x, envRel.y, envRel.z).normalize(),
+        sun: sd,
+        air: airFrac,
+        daylight: eclipse,
+        ground: envBody.surface.colors[0] ?? [0.3, 0.3, 0.3],
+        skyTint: envBody.atmosphere?.tint,
+        bodyAngle: Math.asin(Math.min(1, envBody.radius / envDist)),
+      },
+      performance.now(),
+    );
+    this.scene.environmentIntensity = 0.85 + 0.35 * airFrac;
     this.stars.update(camera);
     this.glare.update(camera, sd, eclipse);
     prof.add('planets', t0);
@@ -741,6 +993,65 @@ export class FlightController {
       ],
       viewport: { width: this.host.clientWidth, height: this.host.clientHeight },
     });
+  }
+
+  private readonly camUp = new THREE.Vector3();
+  private readonly camQuat = new THREE.Quaternion();
+  private readonly camVel = new THREE.Vector3();
+  private readonly camNormal = new THREE.Vector3();
+  private readonly camProbe = { x: 0, y: 0, z: 0 };
+
+  /** Feed the orbit camera its reference frame, framing size, terrain clearance and rumble for this frame. */
+  private updateCamera(wv: WorldVessel, origin: Vec3, bodyState: { position: Vec3; velocity: Vec3 }, airVel: Vec3, t: number, dt: number) {
+    const u = this.world.universe;
+    const body = u.body(wv.body);
+    const st = wv.state;
+    const r = sub(origin, bodyState.position);
+    const alt = length(r) - body.radius;
+    const up = normalize(r);
+    const orbVel = sub(st.velocity, bodyState.velocity);
+    const n = cross(r, orbVel);
+    const nLen = length(n);
+    const atmo = body.atmosphere?.height ?? 0;
+    const h0 = atmo > 0 ? atmo : Math.max(5000, body.radius * 0.03);
+    const flying = st.situation === 'flying' && wv.mode !== 'prelaunch';
+    const spaceBlend = flying ? Math.max(0, Math.min(1, (alt - h0) / h0)) : 0;
+    const inAir = st.telemetry.dynamicPressure > 200 || alt < h0 * 0.5;
+    const vel = inAir ? airVel : orbVel;
+    const tel = st.telemetry;
+    const agl = Number.isFinite(tel.altitudeAGL) ? tel.altitudeAGL : alt;
+    const settings = game.get().settings;
+    let rumble = 0;
+    if (!settings.reduceMotion && !this.paused) {
+      const weight = Math.max(1, st.mass * body.surfaceGravity);
+      const launch = Math.min(1, tel.thrust / (weight * 1.5)) * Math.exp(-Math.max(0, agl) / 250);
+      const transonic = Math.exp(-(((tel.mach - 1) / 0.25) ** 2));
+      const buffet = Math.min(1, tel.dynamicPressure / 40000) * (0.35 + 0.65 * transonic);
+      rumble = Math.min(0.8, launch * 0.7 + buffet * 0.5);
+    }
+    const probe = this.camProbe;
+    this.cam.drive.yaw = this.input.camera.yaw;
+    this.cam.drive.pitch = this.input.camera.pitch;
+    this.cam.drive.zoom = this.input.camera.zoom;
+    const q = st.orientation;
+    this.cam.update({
+      up: this.camUp.set(up.x, up.y, up.z),
+      vesselQuat: this.camQuat.set(q.x, q.y, q.z, q.w),
+      velocity: this.camVel.set(vel.x, vel.y, vel.z),
+      orbitNormal: nLen > 1e-6 ? this.camNormal.set(n.x / nLen, n.y / nLen, n.z / nLen) : null,
+      spaceBlend,
+      vesselId: st.id,
+      radius: st.cache.boundingRadius,
+      // Terrain sampling only matters when the camera could reach the ground.
+      clearance: body.solidSurface && agl < this.cam.distance * 1.5 + 50
+        ? (p) => {
+            probe.x = origin.x + p.x; probe.y = origin.y + p.y; probe.z = origin.z + p.z;
+            return u.surfaceInfo(wv.body, probe, t).heightAboveTerrain;
+          }
+        : undefined,
+      rumble,
+      groundFraming: flying ? 0 : 1,
+    }, dt);
   }
 
   /** Fleet icons/conics, target highlight and closest-approach markers for the map view. */
@@ -794,7 +1105,18 @@ export class FlightController {
   private updateAudio(wv: WorldVessel | null) { return audio.updateAudio.call(this, this.systems, wv); }
 
   /** Navball frame for the active vessel (called by the HUD every animation frame). */
-  navball = (): { frame: NavballFrame; markers: NavballMarker[] } | null => { return navball.navball.call(this, this.systems); };
+  navball = (): { frame: NavballFrame; markers: NavballMarker[] } | null => {
+    // Same interpolated attitude as the 3D view, so the ball turns smoothly between physics steps.
+    const w = this.world;
+    const wv = w.active;
+    if (!wv || this.network || this.mapMode) return navball.navball.call(this, this.systems);
+    const { restore } = w.renderHistory.apply(w.ut, PHYSICS_DT, w.renderAlpha, [wv], w.universe.ephem);
+    try {
+      return navball.navball.call(this, this.systems);
+    } finally {
+      restore();
+    }
+  };
 
   private telemetry(wv: WorldVessel): Telemetry { return telemetry.telemetry.call(this, this.systems, wv); }
 
@@ -816,8 +1138,10 @@ export class FlightController {
     this.reentry.dispose();
     this.effects.dispose();
     this.flags.dispose();
-    this.scene.environment?.dispose();
+    this.skyEnv.dispose();
+    this.scene.environment = null;
     this.labelHost.remove();
+    this.fadeEl?.remove();
     this.pipeline.dispose();
     this.pipeline.renderer.forceContextLoss();
     this.pipeline.renderer.domElement.remove();

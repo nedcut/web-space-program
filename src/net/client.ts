@@ -80,7 +80,8 @@ export class Replica {
     this.acc += dt;
     while (this.acc + 1e-9 >= PHYSICS_DT && this.tick < this.serverTick + 15) {
       this.tick++;
-      const c = { ...input, stage: false, evaJump: input.evaJump && this.history.at(-1)?.input.evaJump !== true };
+      // Commands (part actions, groups, tweaks) are applied by the server only; prediction reconciles to them.
+      const c = { ...input, stage: false, commands: undefined, evaJump: input.evaJump && this.history.at(-1)?.input.evaJump !== true };
       this.history.push({ tick: this.tick, input: structuredClone(c) });
       this.world.predictVessel(id, c);
       this.acc -= PHYSICS_DT;
@@ -149,7 +150,7 @@ export class MultiplayerClient extends Replica {
     if (!this.connected) return;
     if (performance.now() - this.lastMessage > 5000) { this.error = 'Server stopped responding'; this.close(); return; }
     this.sendTime += dt;
-    if (this.ownId && (this.sendTime >= 1 / 30 || input.stage || input.evaJump || input.gear !== undefined)) {
+    if (this.ownId && (this.sendTime >= 1 / 30 || input.stage || input.evaJump || input.gear !== undefined || !!input.commands?.length)) {
       this.send({ v: 1, type: 'input', seq: this.seq++, vesselId: this.ownId, input });
       this.sendTime = 0;
     }

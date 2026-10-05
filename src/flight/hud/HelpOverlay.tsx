@@ -27,17 +27,23 @@ const FLIGHT_KEYS: [Action[] | string, string][] = [
   [['toggleRcs'], 'RCS thrusters on / off'],
   [['translateForward', 'translateBack', 'translateLeft', 'translateRight', 'translateUp', 'translateDown'], 'RCS translate'],
   [['toggleGear', 'brakes'], 'Landing gear / wheel brakes'],
+  [['toggleLights'], 'Lights on / off'],
+  [['abort'], 'Abort: cut throttle and fire the Abort group'],
+  ['1 – 0', 'Action groups 1 … 10 (assign in the editor)'],
+  ['Right-click a part (long-press on touch)', 'Part details, actions and settings'],
   [['map'], 'Map view + maneuver planner'],
   [['flightData'], 'Detailed flight data panel'],
   [['stressOverlay'], 'Structural stress overlay'],
   [['photoMode'], 'Photo mode (single player)'],
   [['perfOverlay'], 'Performance overlay (fps, CPU/GPU breakdown)'],
   [['warpDown', 'warpUp', 'warpStop'], 'Time warp slower / faster / stop'],
-  [['toggleCamMode'], 'Camera mode (auto / chase / free)'],
+  [['toggleCamMode'], 'Camera mode (auto / free / orbital / chase / locked)'],
+  [['cameraLeft', 'cameraRight', 'cameraUp', 'cameraDown', 'cameraZoomIn', 'cameraZoomOut'], 'Orbit / zoom camera from the keyboard'],
   [['focusNext'], 'Switch to a nearby vessel'],
   [['eva'], 'EVA: send an astronaut outside'],
   [['quicksave', 'quickload'], 'Quicksave / quickload'],
   ['Mouse drag · wheel', 'Orbit camera · zoom'],
+  ['Pad: RB + right stick · R3', 'Gamepad camera orbit · camera mode'],
   [['menu'], 'Pause menu (recover, revert, settings)'],
 ];
 
@@ -52,7 +58,10 @@ const EVA_KEYS: [Action[] | string, string][] = [
 /** First-flight controls cheat sheet (F1 or the "?" button). */
 export function HelpOverlay({ eva, onClose }: { eva: boolean; onClose(): void }) {
   const bindings = useSyncExternalStore(subscribeBindings, getBindings);
-  const keys = (actions: Action[] | string) => typeof actions === 'string' ? actions : actions.map(a => [...new Set(bindings[a].map(k => k.replace(/Key|Digit/g, '').replace(/(Shift|Control|Alt|Meta)(Left|Right)/g, '$1').replace('Control', 'Ctrl')))].join(' / ') || 'Unbound').join(' · ');
+  // Compact, human key names; only the primary binding per action keeps rows narrow.
+  const KEY_NAMES: Record<string, string> = { ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Equal: '+', Minus: '−', Backspace: '⌫', Escape: 'Esc', BracketRight: ']', BracketLeft: '[', Comma: ',', Period: '.', Slash: '/', Space: 'Space', Enter: 'Enter' };
+  const keyName = (k: string) => KEY_NAMES[k] ?? k.replace(/Key|Digit|Numpad/g, '').replace(/(Shift|Control|Alt|Meta)(Left|Right)/g, '$1').replace('Control', 'Ctrl');
+  const keys = (actions: Action[] | string) => typeof actions === 'string' ? actions : actions.map(a => (bindings[a][0] ? keyName(bindings[a][0]) : 'Unbound')).join(' ');
   return (
     <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="panel help-card" role="dialog" aria-label="Flight controls">

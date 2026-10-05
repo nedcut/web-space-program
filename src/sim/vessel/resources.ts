@@ -2,12 +2,13 @@ import { activeLinks } from './links';
 import { seatCapacity, SUITED_MASS } from '../crew/crew';
 import type { ResourceDef, ResourceId } from './types';
 import type { PartState, VesselState } from './runtime';
+import { crossfeedOpen } from './tweaks';
 
 /**
  * Resource flow.
  *
  *  - 'stack' (liquidFuel, oxidizer): flows through attach-node connections (not surface attachments),
- *    never through decouplers. Tanks are drained in priority groups: highest decouple stage first
+ *    never through decouplers unless their crossfeed tweak is on (docking ports pass unless it is off). Tanks are drained in priority groups: highest decouple stage first
  *    (the part that gets jettisoned soonest), then farthest from the root. Tanks in the same priority
  *    group drain proportionally (so they empty together, like symmetric tanks). Directed fuel lines
  *    bridge donor -> receiver stacks explicitly, draining upstream donors before downstream stacks.
@@ -36,6 +37,8 @@ const EPS_UNITS = 1e-9;
 export type DrawLedger = Map<number, number>;
 
 export const isDecoupler = (p: PartState): boolean => p.def.modules.some((m) => m.type === 'decoupler');
+/** Stack flow stops at decouplers (unless crossfeed is enabled) and at docking ports with crossfeed disabled. */
+export const blocksFlow = (p: PartState): boolean => !crossfeedOpen(p);
 
 /** Parts connected to `p` through attach nodes (both directions). */
 export function stackNeighbours(v: VesselState, p: PartState): PartState[] {
@@ -64,7 +67,7 @@ export function buildFeedGroups(v: VesselState, consumerUid: number): number[][]
   // attachments still do not bridge separate stacks or bypass a decoupler.
   if (start.attachNode === 'srf' && start.parent !== null && start.def.modules.some(m => m.type === 'engine' || m.type === 'fuelCell')) {
     const host = v.cache.byUid.get(start.parent);
-    if (host && !isDecoupler(host)) queue.push(host);
+    if (host && !blocksFlow(host)) queue.push(host);
   }
   const found: PartState[] = [];
   const component = new Map<number, number>();
@@ -76,8 +79,8 @@ export function buildFeedGroups(v: VesselState, consumerUid: number): number[][]
       const p = seed[i];
       if (component.has(p.uid)) continue;
       component.set(p.uid, id); local.push(p); found.push(p);
-      if (p !== start && isDecoupler(p)) continue;
-      for (const n of stackNeighbours(v, p)) if (!component.has(n.uid) && !isDecoupler(n)) seed.push(n);
+      if (p !== start && blocksFlow(p)) continue;
+      for (const n of stackNeighbours(v, p)) if (!component.has(n.uid) && !blocksFlow(n)) seed.push(n);
     }
     members.push(local);
   };

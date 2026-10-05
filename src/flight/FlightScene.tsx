@@ -5,6 +5,9 @@ import { photoMode, usePhotoMode } from '../game/photoMode';
 import { SignalPanel } from './hud/SignalPanel';
 import { MultiplayerPanel } from '../net/MultiplayerPanel';
 import { ResourcePanel } from './hud/ResourcePanel';
+import { FlightInspector } from './hud/PartInspector';
+import type { InspectorPanelProps } from '../ui/inspector/Inspector';
+import type { ActionGroupId } from '../sim/vessel/types';
 import { tutorialContext, getTutorial, endTutorial, startLesson } from '../tutorial/runtime';
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
@@ -25,6 +28,8 @@ import { useRenderProfile } from './hud/useRenderProfile';
 import { PerfOverlay } from './hud/PerfOverlay';
 import { textureCacheReady } from '../render/core/textureCache';
 import { frameProfiler } from '../util/frameProfiler';
+import { ArrivalBanner } from './hud/FeelHud';
+import { situationBanner, type SituationBannerText } from './situation';
 
 export default function FlightScene() {
   useRenderProfile();
@@ -44,10 +49,16 @@ export default function FlightScene() {
   lostRef.current = lost;
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  /** Loading screen stays mounted briefly after ready so it can fade instead of popping. */
+  const [loaderMounted, setLoaderMounted] = useState(true);
+  const [banner, setBanner] = useState<SituationBannerText | null>(null);
   const [help, setHelp] = useState(false);
   const helpRef = useRef(false);
   helpRef.current = help;
   const [showSettings, setShowSettings] = useState(false);
+  const [panels, setPanels] = useState<InspectorPanelProps[]>([]);
+  const panelsRef = useRef(panels);
+  panelsRef.current = panels;
   const settingsRef = useRef(false);
   settingsRef.current = showSettings;
   const settings = useGame((s) => s.settings);
@@ -81,6 +92,10 @@ export default function FlightScene() {
     };
     const resume = () => audio?.resume();
     let readyTimer = 0;
+    let bannerTimer = 0;
+    let loaderTimer = 0;
+    setLoaderMounted(true);
+    setBanner(null);
 
     // Construction is heavy and synchronous: defer it a couple of frames so the loading screen paints first.
     const start = () => {
@@ -122,6 +137,7 @@ export default function FlightScene() {
       cc.onExit = () => {
         if (getScenarioRun()?.result) return;
         if (helpRef.current) return closeHelp();
+        if (panelsRef.current.length && !pausedRef.current) return setPanels(p => p.slice(0, -1));
         if (settingsRef.current) return setShowSettings(false);
         if (lostRef.current) return setPaused(true);
         setPaused((p) => !p);
@@ -154,6 +170,9 @@ export default function FlightScene() {
         window.clearInterval(readyTimer);
         performance.mark('wsp:flight:ready');
         setReady(true);
+        setBanner(situationBanner(cc.world));
+        bannerTimer = window.setTimeout(() => setBanner(null), 4300);
+        loaderTimer = window.setTimeout(() => setLoaderMounted(false), 550);
         if (!cc.network && !getTutorial() && !getScenarioRun() && !helpSeen()) setHelp(true);
       }, 200);
     };
@@ -166,6 +185,8 @@ export default function FlightScene() {
       cancelAnimationFrame(raf);
       window.clearTimeout(timer);
       window.clearInterval(readyTimer);
+      window.clearTimeout(bannerTimer);
+      window.clearTimeout(loaderTimer);
       window.removeEventListener('beforeunload', beforeUnload);
       window.removeEventListener('pointerdown', resume);
       window.removeEventListener('keydown', resume);
@@ -308,7 +329,7 @@ export default function FlightScene() {
             assistActive: !!tele.assist,
             signal: c.world.commsSettings.enabled ? <SignalPanel world={c.world} /> : undefined,
             resources: (tele.mapMode || active?.state.parts.some(p => p.def.modules.some(m => ['drill', 'converter', 'surfaceScanner', 'surveyScanner'].includes(m.type))))
-              ? <ResourcePanel world={c.world} map={c.map} mapMode={tele.mapMode} paused={paused} /> : undefined,
+              ? <ResourcePanel world={c.world} map={c.map} mapMode={tele.mapMode} paused={paused} act={(uid, a) => ctrl.current?.partAction(uid, a)} /> : undefined,
             science: <SciencePanel world={c.world} paused={paused} />,
             maneuver: <ManeuverPanel world={c.world} />,
           }}
@@ -319,7 +340,10 @@ export default function FlightScene() {
             onStage: () => ctrl.current?.stage(),
             onToggleSas: () => ctrl.current?.toggleSas(),
             onSasMode: (m) => ctrl.current?.setSasMode(m),
-            onToggleRcs: () => ctrl.current && (ctrl.current.rcsOn = !ctrl.current.rcsOn),
+            onToggleRcs: () => ctrl.current?.toggleRcs(),
+            onActionGroup: (g) => ctrl.current?.fireGroup(g as ActionGroupId),
+            onAbort: () => ctrl.current?.abort(),
+            onToggleLights: () => ctrl.current?.toggleLights(),
             onWarp: (d) => ctrl.current?.changeWarp(d),
             onMap: () => ctrl.current?.toggleMap(),
             onMenu: () => setPaused(true),
@@ -329,9 +353,14 @@ export default function FlightScene() {
             onToggleDocking: () => ctrl.current?.toggleDockingMode(),
             onUndock: (uid) => ctrl.current?.undock(uid),
             onHelp: () => setHelp((h) => !h),
+            onCameraMode: () => ctrl.current?.cycleCameraMode(),
+            onWarpTo: (id) => ctrl.current?.warpTo(id),
+            onCancelWarpTo: () => ctrl.current && ctrl.current.warpDriver.cancel(ctrl.current.world, 'Warp-to cancelled'),
+            onDismissHint: () => ctrl.current?.hints.dismiss(),
           }}
         />
       )}
+      {c && ready && !photo.active && !paused && <FlightInspector controller={c} panels={panels} setPanels={setPanels} />}
       {settings.showFps && c && !photo.active && <PerformanceReadout controller={c} />}
       {settings.perfOverlay && c && !photo.active && <PerfOverlay controller={c} />}
       {help && ready && !photo.active && <HelpOverlay eva={!!tele?.eva} onClose={closeHelp} />}
@@ -377,8 +406,9 @@ export default function FlightScene() {
           )}
         </div>
       )}
-      {!ready && (
-        <div className="loading-screen">
+      {ready && banner && !photo.active && !help && <ArrivalBanner banner={banner} />}
+      {(!ready || loaderMounted) && (
+        <div className="loading-screen" style={ready ? { opacity: 0, pointerEvents: 'none' } : undefined}>
           <div style={{ textAlign: 'center' }}>
             <div className="label">Preparing flight</div>
             <div style={{ fontSize: 20, fontWeight: 300, letterSpacing: '0.2em', marginTop: 8 }}>{tele ? 'GENERATING TERRAIN' : 'LOADING'}</div>

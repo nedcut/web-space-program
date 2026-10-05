@@ -7,6 +7,8 @@ import { G0 } from './env';
 import { applyImpulse, cloneVessel, decouplerCutChildren, recomputeMassProperties, splitVessel } from './assembly';
 import { engineModule, igniteEngine, ispAtPressure, isSolidMotor, maxMassFlow, propellantNeed } from './engines';
 import { availableResource, drawPropellants, drawResource } from './resources';
+import { ejectionScale, thrustLimit } from './tweaks';
+import { runActionGroup } from './actions';
 import type { DrawLedger } from './resources';
 
 /** Distinct stage numbers not yet activated, in firing order (highest first). */
@@ -46,53 +48,64 @@ export function activateStage(v: VesselState, stage: number, events: VesselEvent
   events.push({ type: 'stage', vesselId: v.id, stage });
   const all: VesselState[] = [v];
   const created: VesselState[] = [];
-
-  for (const duid of decouplers) {
-    const owner = findOwner(all, duid);
-    if (!owner) continue;
-    const d = owner.cache.byUid.get(duid)!;
-    const mod = d.def.modules.find((m): m is DecouplerModule => m.type === 'decoupler')!;
-    const cut = decouplerCutChildren(owner, d);
-    if (cut.length === 0) continue;
-    const node = d.def.attachNodes.find((n) => n.id === mod.node);
-    const nodePos = node ? qRotate(d.rotation, node.position) : { x: 0, y: 0, z: 0 };
-    const point = { x: d.position.x + nodePos.x, y: d.position.y + nodePos.y, z: d.position.z + nodePos.z };
-    const nodeDirBody = node ? normalize(qRotate(d.rotation, node.direction)) : null;
-    const comBefore = owner.com;
-    const pieces = splitVessel(owner, cut);
-    for (const nv of pieces) {
-      let dirBody: Vec3;
-      if (!mod.radial && nodeDirBody) dirBody = cut.includes(duid) ? scale(nodeDirBody, -1) : nodeDirBody;
-      else {
-        const diff = sub(nv.com, owner.com);
-        dirBody = length(diff) > 1e-9 ? normalize(diff) : normalize(sub(nv.com, comBefore));
-      }
-      const J = scale(qRotate(owner.orientation, dirBody), mod.ejectionImpulse / pieces.length);
-      applyImpulse(nv, J, point);
-      applyImpulse(owner, scale(J, -1), point);
-      events.push({ type: 'decouple', vesselId: owner.id, partUid: duid, newVesselId: nv.id });
-      all.push(nv);
-      created.push(nv);
-    }
-  }
-  for (const fuid of fairings) {
-    const owner = findOwner(all, fuid);
-    if (!owner || fuid === owner.rootUid) continue;
-    const f = owner.cache.byUid.get(fuid)!;
-    const mod = f.def.modules.find((m) => m.type === 'fairing') as { type: 'fairing'; ejectionImpulse: number };
-    const point = { ...f.position };
-    const pieces = splitVessel(owner, [fuid]);
-    for (const nv of pieces) {
-      const diff = sub(nv.com, owner.com);
-      const dirBody = length(diff) > 1e-9 ? normalize(diff) : { x: 1, y: 0, z: 0 };
-      const J = scale(qRotate(owner.orientation, dirBody), mod.ejectionImpulse);
-      applyImpulse(nv, J, point);
-      applyImpulse(owner, scale(J, -1), point);
-      all.push(nv);
-      created.push(nv);
-    }
-  }
+  for (const duid of decouplers) fireDecoupler(all, duid, events, created);
+  for (const fuid of fairings) jettisonFairing(all, fuid, created);
+  runActionGroup(v, 'stage', events, all, created);
   return created;
+}
+
+/** Fire one decoupler (staging or a part action). `all` holds the vessel and pieces created so far. */
+export function fireDecoupler(all: VesselState[], duid: number, events: VesselEvent[], created: VesselState[]): void {
+  const owner = findOwner(all, duid);
+  if (!owner) return;
+  const d = owner.cache.byUid.get(duid)!;
+  const mod = d.def.modules.find((m): m is DecouplerModule => m.type === 'decoupler');
+  if (!mod) return;
+  d.activated = true;
+  const cut = decouplerCutChildren(owner, d);
+  if (cut.length === 0) return;
+  const node = d.def.attachNodes.find((n) => n.id === mod.node);
+  const nodePos = node ? qRotate(d.rotation, node.position) : { x: 0, y: 0, z: 0 };
+  const point = { x: d.position.x + nodePos.x, y: d.position.y + nodePos.y, z: d.position.z + nodePos.z };
+  const nodeDirBody = node ? normalize(qRotate(d.rotation, node.direction)) : null;
+  const comBefore = owner.com;
+  const impulse = mod.ejectionImpulse * ejectionScale(d);
+  const pieces = splitVessel(owner, cut);
+  for (const nv of pieces) {
+    let dirBody: Vec3;
+    if (!mod.radial && nodeDirBody) dirBody = cut.includes(duid) ? scale(nodeDirBody, -1) : nodeDirBody;
+    else {
+      const diff = sub(nv.com, owner.com);
+      dirBody = length(diff) > 1e-9 ? normalize(diff) : normalize(sub(nv.com, comBefore));
+    }
+    const J = scale(qRotate(owner.orientation, dirBody), impulse / pieces.length);
+    applyImpulse(nv, J, point);
+    applyImpulse(owner, scale(J, -1), point);
+    events.push({ type: 'decouple', vesselId: owner.id, partUid: duid, newVesselId: nv.id });
+    all.push(nv);
+    created.push(nv);
+  }
+}
+
+/** Jettison one fairing part (never the root). */
+export function jettisonFairing(all: VesselState[], fuid: number, created: VesselState[]): void {
+  const owner = findOwner(all, fuid);
+  if (!owner || fuid === owner.rootUid) return;
+  const f = owner.cache.byUid.get(fuid)!;
+  const mod = f.def.modules.find((m) => m.type === 'fairing') as { type: 'fairing'; ejectionImpulse: number } | undefined;
+  if (!mod) return;
+  f.activated = true;
+  const point = { ...f.position };
+  const pieces = splitVessel(owner, [fuid]);
+  for (const nv of pieces) {
+    const diff = sub(nv.com, owner.com);
+    const dirBody = length(diff) > 1e-9 ? normalize(diff) : { x: 1, y: 0, z: 0 };
+    const J = scale(qRotate(owner.orientation, dirBody), mod.ejectionImpulse);
+    applyImpulse(nv, J, point);
+    applyImpulse(owner, scale(J, -1), point);
+    all.push(nv);
+    created.push(nv);
+  }
 }
 
 /** Fire the next stage (highest unactivated stage number). */
@@ -155,7 +168,7 @@ function burnSimulation(sim: VesselState, stage: number, pressure: number, gravi
     let mdot = 0, fVac = 0, fAsl = 0, fP = 0;
     for (const p of active) {
       const m = engineModule(p)!;
-      const md = maxMassFlow(m);
+      const md = maxMassFlow(m) * thrustLimit(p);
       mdot += md;
       fVac += md * m.ispVac * G0;
       fAsl += md * ispAtPressure(m, 101325) * G0;
@@ -175,7 +188,7 @@ function burnSimulation(sim: VesselState, stage: number, pressure: number, gravi
       }
     if (!isFinite(tEvt) || mdot <= 0) break;
     const m0 = sim.mass;
-    for (const p of active) drawPropellants(sim, p.uid, propellantNeed(engineModule(p)!, sim.resourceDefs, maxMassFlow(engineModule(p)!) * tEvt));
+    for (const p of active) drawPropellants(sim, p.uid, propellantNeed(engineModule(p)!, sim.resourceDefs, maxMassFlow(engineModule(p)!) * thrustLimit(p) * tEvt));
     recomputeMassProperties(sim, false);
     const m1 = sim.mass;
     if (first) {

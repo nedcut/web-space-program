@@ -1,28 +1,18 @@
 import * as THREE from 'three';
-import * as T from './textures';
+import { decalMaterial, disposeDecals } from './decals';
+import { disposeTextures, repeated, texSet, type TexSet } from './textures';
 
 /**
- * Shared PBR material library for parts. Materials are created lazily and cached by key, so
- * every part instance shares the same material objects (and their procedural textures).
+ * Shared PBR material library for parts (see docs/ART.md for the families and palette).
+ * Materials are created lazily and cached by key, so every part instance shares the same material
+ * objects and procedural textures — and identical materials let VesselView merge static geometry.
  * Do not mutate returned materials; clone first if you need per-instance changes.
+ *
+ * Texture sets come from texgen/recipes.ts with a packed ORM map (R = AO, G = roughness,
+ * B = metalness): `roughness`/`metalness` scalars below multiply those channels.
  */
 
 const cache = new Map<string, THREE.Material>();
-const texClones = new Map<string, THREE.Texture>();
-
-/** Shared-image clone of a texture with a different repeat (cheap; same GPU source). */
-function rep(t: THREE.Texture | undefined, n: number, key: string): THREE.Texture | undefined {
-  if (!t) return undefined;
-  const k = `${key}@${n}`;
-  let c = texClones.get(k);
-  if (!c) {
-    c = t.clone();
-    c.repeat.set(n, n);
-    c.needsUpdate = true;
-    texClones.set(k, c);
-  }
-  return c;
-}
 
 function get<M extends THREE.Material>(key: string, make: () => M): M {
   let m = cache.get(key) as M | undefined;
@@ -37,132 +27,170 @@ function get<M extends THREE.Material>(key: string, make: () => M): M {
 export function disposeMaterials() {
   for (const m of cache.values()) m.dispose();
   cache.clear();
-  for (const t of texClones.values()) t.dispose();
-  texClones.clear();
-  T.disposeTextures();
+  disposeTextures();
+  disposeDecals();
 }
 
 /** Drop undefined entries (textures are absent when running headless). */
 function defined<T extends object>(p: T): T {
   return Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)) as T;
 }
+
+/** Material maps from a texture set (optionally repeated n times per tile). */
+function maps(t: TexSet, n = 1, normal = 1) {
+  return {
+    map: repeated(t.map, n),
+    normalMap: repeated(t.normalMap, n),
+    normalScale: t.normalMap ? new THREE.Vector2(normal, normal) : undefined,
+    roughnessMap: repeated(t.ormMap, n),
+    metalnessMap: repeated(t.ormMap, n),
+    aoMap: repeated(t.ormMap, n),
+  };
+}
 const std = (p: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial(defined(p));
 const phys = (p: THREE.MeshPhysicalMaterialParameters) => new THREE.MeshPhysicalMaterial(defined(p));
 
+/** Livery accent paints (one per manufacturer family; see livery.ts / docs/ART.md). */
+export const ACCENTS = {
+  red: 0xa3241f,
+  blue: 0x1f4f8f,
+  teal: 0x1c7a78,
+  orange: 0xd9601e,
+  yellow: 0xe0b021,
+  green: 0x2b8a5e,
+  navy: 0x1d3f78,
+  maroon: 0x8e2b3a,
+} as const;
+export type Accent = keyof typeof ACCENTS;
+
+/** Clear-coated paint over a texture set. */
+const paint = (key: string, set: string, color: number, o: { normal?: number; rough?: number; cc?: number; ccRough?: number; tile?: number } = {}) => {
+  const t = texSet(set);
+  return get(key, () =>
+    phys({ color, ...maps(t, o.tile ?? 1, o.normal ?? 0.8), roughness: o.rough ?? 1, metalness: t.ormMap ? 1 : 0.05, clearcoat: o.cc ?? 0.35, clearcoatRoughness: o.ccRough ?? 0.22 }),
+  );
+};
+/** Bare metal over a texture set. */
+const metal = (key: string, set: string, color: number, rough: number, o: { normal?: number; env?: number; tile?: number; metal?: number } = {}) => {
+  const t = texSet(set);
+  return get(key, () => std({ color, ...maps(t, o.tile ?? 1, o.normal ?? 0.5), roughness: rough, metalness: o.metal ?? 1, envMapIntensity: o.env }));
+};
+
 export const M = {
-  /** Gloss-white painted aluminium with stringers and welds. */
-  whitePanel: () => {
-    const t = T.panelTex();
-    return get('whitePanel', () => std({ color: 0xf1f0ec, map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(0.7, 0.7), roughnessMap: t.roughnessMap, roughness: 1, metalness: 0.05 }));
-  },
-  /** Charcoal painted panels (interstages, adapters). */
-  charcoalPanel: () => {
-    const t = T.panelTex();
-    return get('charcoalPanel', () => std({ color: 0x2c2f34, map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(0.8, 0.8), roughnessMap: t.roughnessMap, roughness: 1.1, metalness: 0.15 }));
-  },
+  // --- white thermal paint family -------------------------------------------------------------
+  /** Gloss-white painted aluminium with panel lines, rivets, welds and light grime. */
+  whitePanel: () => paint('whitePanel', 'panel', 0xf2f1ec, { normal: 0.9 }),
+  /** Charcoal painted panels (interstages, adapters, skirts). */
+  charcoalPanel: () => paint('charcoalPanel', 'panel', 0x2f3237, { normal: 0.9, cc: 0.25, ccRough: 0.35 }),
   /** Light-grey airframe panels (wings, fins). */
-  greyPanel: () => {
-    const t = T.panelTex();
-    return get('greyPanel', () => std({ color: 0xc9ccd0, map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(0.5, 0.5), roughnessMap: t.roughnessMap, roughness: 1, metalness: 0.1 }));
-  },
+  greyPanel: () => paint('greyPanel', 'panel', 0xc6c9ce, { normal: 0.7, cc: 0.3 }),
+  /** Smooth satin-white composite/paint. */
+  satinWhite: () => paint('satinWhite', 'smooth', 0xf3f2ee, { normal: 0.5, cc: 0.45, ccRough: 0.18 }),
+  blackPaint: () => paint('blackPaint', 'smooth', 0x18191c, { normal: 0.4, cc: 0.3, ccRough: 0.3 }),
+  /** Livery accent paints. */
+  accent: (which: Accent) => paint('accent-' + which, 'smooth', ACCENTS[which], { normal: 0.4, cc: 0.6, ccRough: 0.12, rough: 1.1 }),
+
+  // --- insulation -------------------------------------------------------------------------------
+  /** Spray-on orange foam (albedo carries the colour). */
   orangeFoam: () => {
-    const t = T.foamTex();
-    return get('orangeFoam', () => std({ color: 0xd8742c, map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(0.9, 0.9), roughnessMap: t.roughnessMap, roughness: 1, metalness: 0 }));
+    const t = texSet('foam');
+    return get('orangeFoam', () => std({ color: 0xffffff, ...maps(t, 1, 1), roughness: 1, metalness: 0 }));
   },
-  steel: () => {
-    const t = T.brushedTex();
-    return get('steel', () => std({ color: 0xdfe2e6, map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(0.5, 0.5), roughnessMap: t.roughnessMap, roughness: 1, metalness: 0.92, envMapIntensity: 1.4 }));
-  },
-  aluminium: () => {
-    const t = T.brushedTex();
-    return get('aluminium', () => std({ color: 0xb7bcc4, roughnessMap: t.roughnessMap, roughness: 1.4, metalness: 1 }));
-  },
-  darkMetal: () => get('darkMetal', () => std({ color: 0x33363b, roughness: 0.45, metalness: 0.85 })),
-  gunmetal: () => {
-    const t = T.brushedTex();
-    return get('gunmetal', () => std({ color: 0x4a4e55, roughnessMap: t.roughnessMap, roughness: 1.6, metalness: 0.9 }));
-  },
-  blackPaint: () => get('blackPaint', () => std({ color: 0x17181a, roughness: 0.55, metalness: 0.1 })),
-  satinWhite: () => {
-    const t = T.smoothTex();
-    return get('satinWhite', () => std({ color: 0xf3f2ee, map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(0.4, 0.4), roughnessMap: t.roughnessMap, roughness: 1, metalness: 0.02 }));
-  },
-  copperTubes: () => {
-    const t = T.tubeTex();
-    return get('copperTubes', () => std({ color: 0xffffff, map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(1, 1), roughnessMap: t.roughnessMap, roughness: 1, metalness: 1 }));
-  },
-  steelTubes: () => {
-    const t = T.tubeTex();
-    return get('steelTubes', () => std({ color: 0xb8bcc6, normalMap: t.normalMap, roughnessMap: t.roughnessMap, roughness: 1, metalness: 1 }));
-  },
-  nozzleExt: () => {
-    const t = T.nozzleExtTex();
-    return get('nozzleExt', () => std({ color: 0xffffff, map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(0.6, 0.6), roughnessMap: t.roughnessMap, roughness: 1, metalness: 1 }));
-  },
-  bellInterior: () =>
-    get('bellInterior', () => std({ color: 0x1b1714, roughness: 0.75, metalness: 0.5, side: THREE.BackSide })),
-  innerLining: () => get('innerLining', () => std({ color: 0x55585e, roughness: 0.9, metalness: 0.1, side: THREE.BackSide })),
-  soot: () => get('soot', () => std({ color: 0x0d0c0b, roughness: 0.95, metalness: 0.2 })),
+  /** Gold multi-layer insulation foil (anisotropic crinkle). */
   goldFoil: () => {
-    const t = T.foilTex();
-    return get('goldFoil', () => std({ color: 0xe8b450, map: rep(t.map, 2, 'foilM'), normalMap: rep(t.normalMap, 2, 'foilN'), normalScale: new THREE.Vector2(0.55, 0.55), roughnessMap: rep(t.roughnessMap, 2, 'foilR'), roughness: 1, metalness: 1 }));
+    const t = texSet('foil');
+    return get('goldFoil', () => phys({ color: 0xe6b04a, ...maps(t, 1, 1), roughness: 1, metalness: 1, anisotropy: 0.45 }));
   },
   silverFoil: () => {
-    const t = T.foilTex();
-    return get('silverFoil', () => std({ color: 0xdadde2, map: rep(t.map, 2, 'foilM'), normalMap: rep(t.normalMap, 2, 'foilN'), normalScale: new THREE.Vector2(0.55, 0.55), roughnessMap: rep(t.roughnessMap, 2, 'foilR'), roughness: 1, metalness: 1 }));
+    const t = texSet('foil');
+    return get('silverFoil', () => phys({ color: 0xd8dbe0, ...maps(t, 1, 1), roughness: 1, metalness: 1, anisotropy: 0.45 }));
   },
+  /** Quilted beta-cloth blanket. */
   quilt: () => {
-    const t = T.quiltTex();
-    return get('quilt', () => std({ color: 0xeceae4, map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(1, 1), roughnessMap: t.roughnessMap, roughness: 1, metalness: 0.05 }));
+    const t = texSet('quilt');
+    return get('quilt', () => std({ color: 0xeceae4, ...maps(t, 1, 1), roughness: 1, metalness: 0 }));
   },
-  shingle: () => {
-    const t = T.shingleTex();
-    return get('shingle', () => std({ color: 0x2a2c30, map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(1, 1), roughnessMap: t.roughnessMap, roughness: 1, metalness: 0.6 }));
+
+  // --- metals -----------------------------------------------------------------------------------
+  steel: () => metal('steel', 'brushed', 0xdfe2e6, 1, { env: 1.3 }),
+  aluminium: () => metal('aluminium', 'brushed', 0xb9bec6, 1.5, { normal: 0.3 }),
+  titanium: () => metal('titanium', 'brushed', 0x9ea5af, 1.35, { normal: 0.4 }),
+  gunmetal: () => metal('gunmetal', 'metal', 0x4b5058, 1.15, { normal: 0.4 }),
+  darkMetal: () => metal('darkMetal', 'metal', 0x34373c, 1.4, { normal: 0.4, metal: 0.45 }),
+  chrome: () => metal('chrome', 'metal', 0xeef0f3, 0.3, { normal: 0.15 }),
+  /** Coloured anodised aluminium (docking hardware, fittings). */
+  anodised: (which: Accent) => metal('anodised-' + which, 'metal', ACCENTS[which], 1.1, { normal: 0.3 }),
+  redOxide: () => metal('redOxide', 'metal', 0x8c3a22, 1.6, { normal: 0.3 }),
+  /** Heat-stained, sooty engine-bay metal. */
+  scorched: () => metal('scorched', 'scorch', 0xffffff, 1, { normal: 0.6 }),
+  /** Anti-slip tread plate (ladders, decks). */
+  deckPlate: () => metal('deckPlate', 'treadPlate', 0x9aa0a8, 1, { normal: 0.8, tile: 1 }),
+
+  // --- engines ----------------------------------------------------------------------------------
+  copperTubes: () => {
+    const t = texSet('tubes');
+    return get('copperTubes', () => std({ color: 0xffffff, ...maps(t, 1, 1), roughness: 1, metalness: 1 }));
   },
-  heatTiles: () => {
-    const t = T.tileTex();
-    return get('heatTiles', () => std({ color: 0xffffff, map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(1, 1), roughnessMap: t.roughnessMap, roughness: 1, metalness: 0 }));
+  steelTubes: () => {
+    const t = texSet('tubes');
+    return get('steelTubes', () => std({ color: 0xb8bcc6, normalMap: t.normalMap, aoMap: t.ormMap, roughnessMap: t.ormMap, roughness: 1, metalness: 1 }));
   },
-  ablator: () => get('ablator', () => std({ color: 0x3b2a20, roughness: 0.9, metalness: 0 })),
+  nozzleExt: () => {
+    const t = texSet('nozzleExt');
+    return get('nozzleExt', () => std({ color: 0xffffff, ...maps(t, 1, 0.6), roughness: 1, metalness: 1 }));
+  },
+  bellInterior: () => get('bellInterior', () => std({ color: 0x1b1714, roughness: 0.75, metalness: 0.5, side: THREE.BackSide })),
+  innerLining: () => get('innerLining', () => std({ color: 0x55585e, roughness: 0.9, metalness: 0.1, side: THREE.BackSide })),
+  soot: () => {
+    const t = texSet('scorch');
+    return get('soot', () => std({ color: 0x3a3634, ...maps(t, 1, 0.5), roughness: 1.4, metalness: 0.4 }));
+  },
   thermalGlow: () => get('thermalGlow', () => std({ color: 0x48231b, emissive: 0xff4b12, emissiveIntensity: 0.7, roughness: 0.6 })),
-  glass: () =>
-    get('glass', () => phys({ color: 0x0b1622, roughness: 0.04, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.6, emissive: 0x0a1a24, emissiveIntensity: 0.4 })),
-  solarCells: () => {
-    const t = T.solarTex();
-    return get('solarCells', () => phys({ color: 0xffffff, map: t.map, normalMap: t.normalMap, roughnessMap: t.roughnessMap, roughness: 1, metalness: 0.35, clearcoat: 0.7, clearcoatRoughness: 0.08 }));
+
+  // --- thermal protection -----------------------------------------------------------------------
+  shingle: () => metal('shingle', 'shingle', 0x2a2c30, 1, { normal: 1 }),
+  heatTiles: () => {
+    const t = texSet('tiles');
+    return get('heatTiles', () => std({ color: 0xffffff, ...maps(t, 1, 1), roughness: 1, metalness: 0 }));
   },
-  hazard: () => {
-    const t = T.hazardTex();
-    return get('hazard', () => std({ color: 0xffffff, map: t.map, roughnessMap: t.roughnessMap, roughness: 1, metalness: 0.1 }));
+  ablator: () => {
+    const t = texSet('ablator');
+    return get('ablator', () => std({ color: 0xffffff, ...maps(t, 1, 1), roughness: 1, metalness: 0 }));
+  },
+
+  // --- glass, composites, cells -------------------------------------------------------------------
+  glass: () =>
+    get('glass', () => phys({ color: 0x0b1622, roughness: 0.04, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.8, emissive: 0x0a1a24, emissiveIntensity: 0.35 })),
+  solarCells: () => {
+    const t = texSet('solar');
+    return get('solarCells', () => phys({ color: 0xffffff, ...maps(t, 1, 1), roughness: 1, metalness: 1, clearcoat: 0.8, clearcoatRoughness: 0.06 }));
   },
   carbon: () => {
-    const t = T.carbonTex();
-    return get('carbon', () => phys({ color: 0xffffff, map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(0.4, 0.4), roughness: 0.4, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.1 }));
+    const t = texSet('carbon');
+    return get('carbon', () => phys({ color: 0xffffff, ...maps(t, 1, 0.5), roughness: 1, metalness: 1, clearcoat: 1, clearcoatRoughness: 0.08 }));
   },
-  rubber: () => get('rubber', () => std({ color: 0x141414, roughness: 0.92, metalness: 0 })),
-  chrome: () => get('chrome', () => std({ color: 0xeef0f3, roughness: 0.1, metalness: 1 })),
-  titanium: () => {
-    const t = T.brushedTex();
-    return get('titanium', () => std({ color: 0x9fa6b0, normalMap: t.normalMap, normalScale: new THREE.Vector2(0.4, 0.4), roughnessMap: t.roughnessMap, roughness: 1.3, metalness: 1 }));
+  hazard: () => {
+    const t = texSet('hazard');
+    return get('hazard', () => std({ color: 0xffffff, map: t.map, roughnessMap: t.ormMap, metalnessMap: t.ormMap, roughness: 1, metalness: t.ormMap ? 1 : 0.1 }));
   },
-  redOxide: () => get('redOxide', () => std({ color: 0x8c3a22, roughness: 0.6, metalness: 0.35 })),
+  rubber: () => get('rubber', () => std({ color: 0x151515, roughness: 0.9, metalness: 0 })),
+  /** Treaded tyre rubber. */
+  tyre: () => {
+    const t = texSet('tread');
+    return get('tyre', () => std({ color: 0x1c1c1d, ...maps(t, 1, 1), roughness: 1, metalness: 0 }));
+  },
   louvre: () => {
-    const t = T.louvreTex();
-    return get('louvre', () => std({ color: 0xe8eaee, map: t.map, normalMap: t.normalMap, roughness: 0.35, metalness: 0.7 }));
+    const t = texSet('louvre');
+    return get('louvre', () => std({ color: 0xe8eaee, ...maps(t, 1, 1), roughness: 1, metalness: 1 }));
   },
   canopy: (scheme: 'orange' | 'red' | 'white') => {
-    const t = T.canopyTex(scheme);
+    const t = texSet(`canopy-${scheme}`);
     return get('canopy-' + scheme, () => std({ color: 0xffffff, map: t.map, roughness: 0.85, metalness: 0, side: THREE.DoubleSide }));
   },
   lamp: () => get('lamp', () => std({ color: 0xfff6dd, emissive: 0xfff1cf, emissiveIntensity: 2.5, roughness: 0.2 })),
   ionGrid: () => {
-    const t = T.ionGridTex();
+    const t = texSet('ionGrid');
     return get('ionGrid', () => std({ color: 0xffffff, map: t.map, emissive: 0xffffff, emissiveMap: t.emissiveMap, emissiveIntensity: 1.2, roughness: 0.4, metalness: 0.8 }));
-  },
-  /** Accent paints, one per manufacturer livery. */
-  accent: (which: 'red' | 'blue' | 'teal' | 'orange' | 'yellow' | 'green') => {
-    const colors = { red: 0xa3241f, blue: 0x1f4f8f, teal: 0x1c7a78, orange: 0xd9601e, yellow: 0xe0b021, green: 0x2b8a3e } as const;
-    return get('accent-' + which, () => std({ color: colors[which], roughness: 0.4, metalness: 0.1 }));
   },
   statusLed: (which: 'green' | 'teal' | 'red') => {
     const c = { green: 0x38ff6a, teal: 0x3ff4e0, red: 0xff3a2a }[which];
@@ -170,4 +198,6 @@ export const M = {
   },
   cable: () => get('cable', () => std({ color: 0x1e1f22, roughness: 0.7, metalness: 0.1 })),
   line: () => get('chuteLine', () => new THREE.LineBasicMaterial({ color: 0xd8d4c8, transparent: true, opacity: 0.8 })),
+  /** Shared decal atlas material (see decals.ts). */
+  decal: () => decalMaterial(),
 };

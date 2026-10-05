@@ -1,4 +1,6 @@
-import type { CraftDef, PartInstance } from '../../sim/vessel/types';
+import type { ActionGroupId, CraftDef, PartActionId, PartInstance, PartTweaks, ResourceId } from '../../sim/vessel/types';
+import { tweakDescriptors } from '../../sim/vessel/tweaks';
+import { partActions } from '../../sim/vessel/actions';
 import { add, sub, v3, length, normalize, type Vec3 } from '../../util/vec3';
 import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../../util/quat';
 import { alignNodes, freeAttachNodes, mirrorPosition, mirrorRotation, requirePart, surfaceContact, surfacePlacement, transformAssembly, worldNode, type HeldAssembly, type PartCatalog, type SnapCandidate } from './geometry';
@@ -64,12 +66,19 @@ export class CraftEditor {
   get canRedo(): boolean { return this.future.length > 0; }
   onChange(listener: ChangeListener): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private emit(): void { for (const listener of this.listeners) listener(copy(this.state)); }
-  private update<T>(fn: () => T): T {
+  private coalesce: { key: string; at: number } | null = null;
+  /** `coalesceKey`: consecutive edits with the same key within a moment share one undo step (slider drags). */
+  private update<T>(fn: () => T, coalesceKey?: string): T {
     const before = copy(this.state);
     let result: T;
     try { result = fn(); } catch (error) { this.state = before; throw error; }
-    this.past.push(before);
-    if (this.past.length > this.historyLimit) this.past.shift();
+    const now = Date.now();
+    const merge = !!coalesceKey && this.coalesce?.key === coalesceKey && now - this.coalesce.at < 1500 && this.past.length > 0;
+    this.coalesce = coalesceKey ? { key: coalesceKey, at: now } : null;
+    if (!merge) {
+      this.past.push(before);
+      if (this.past.length > this.historyLimit) this.past.shift();
+    }
     this.future = []; this.emit();
     return copy(result);
   }
@@ -341,6 +350,62 @@ export class CraftEditor {
     if (type !== 'VAB' && type !== 'SPH') throw new Error('Unsupported craft type');
     if (this.state.craft.type === type) return;
     this.update(() => { this.state.craft.type = type; });
+  }
+  /** A part and, when `symmetric`, its symmetry counterparts of the same type. */
+  private counterparts(uid: number, symmetric: boolean): PartInstance[] {
+    const p = this.part(uid);
+    return symmetric && p.symmetryGroup !== undefined ? this.state.craft.parts.filter(q => q.symmetryGroup === p.symmetryGroup && q.partId === p.partId) : [p];
+  }
+  /** Merge player settings; `undefined` clears a key. Keys the part does not offer are rejected. */
+  setPartTweaks(uid: number, tweaks: PartTweaks, symmetric = true): void {
+    this.update(() => {
+      for (const p of this.counterparts(uid, symmetric)) {
+        const offered = new Set(tweakDescriptors(requirePart(this.catalog, p.partId)).map(d => d.key));
+        const next: PartTweaks = { ...p.tweaks };
+        for (const [k, v] of Object.entries(tweaks) as [keyof PartTweaks, unknown][]) {
+          if (!offered.has(k)) throw new Error(`This part has no ${k} setting`);
+          if (v === undefined) delete next[k]; else (next as Record<string, unknown>)[k] = copy(v);
+        }
+        if (Object.keys(next).length) p.tweaks = next; else delete p.tweaks;
+      }
+    }, `tweak:${uid}:${Object.keys(tweaks).join()}`);
+  }
+  /** Set resource amounts (clamped to capacity; full amounts are stored as the default). */
+  setPartResources(uid: number, resources: Partial<Record<ResourceId, number>>, symmetric = true): void {
+    this.update(() => {
+      for (const p of this.counterparts(uid, symmetric)) {
+        const capacity = requirePart(this.catalog, p.partId).resources;
+        const next: Partial<Record<ResourceId, number>> = { ...p.resources };
+        for (const [id, amount] of Object.entries(resources) as [ResourceId, number][]) {
+          const max = capacity[id];
+          if (max === undefined || !Number.isFinite(amount)) throw new Error('This part cannot hold that resource');
+          const v = Math.max(0, Math.min(max, amount));
+          if (v >= max - 1e-9) delete next[id]; else next[id] = v;
+        }
+        if (Object.keys(next).length) p.resources = next; else delete p.resources;
+      }
+    }, `res:${uid}:${Object.keys(resources).join()}`);
+  }
+  /** Replace the actions a part contributes to an action group. */
+  setPartActions(uid: number, group: ActionGroupId, actions: PartActionId[], symmetric = true): void {
+    this.update(() => {
+      for (const p of this.counterparts(uid, symmetric)) {
+        const offered = partActions(requirePart(this.catalog, p.partId));
+        const list = [...new Set(actions)].filter(a => offered.includes(a));
+        const next = { ...p.actions };
+        if (list.length) next[group] = list; else delete next[group];
+        if (Object.keys(next).length) p.actions = next; else delete p.actions;
+      }
+    });
+  }
+  /** Remove every binding of an action group. */
+  clearGroup(group: ActionGroupId): void {
+    this.update(() => {
+      for (const p of this.state.craft.parts) if (p.actions?.[group]) {
+        delete p.actions[group];
+        if (!Object.keys(p.actions).length) delete p.actions;
+      }
+    });
   }
   autoStage(): void { this.update(() => { this.state.craft = autoStage(this.state.craft, this.catalog); }); }
   moveToStage(uid: number, stageIndex: number): void { this.update(() => { this.state.craft = moveToStage(this.state.craft, uid, stageIndex); }); }

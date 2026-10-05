@@ -1,5 +1,5 @@
 import { tutorialContext, getTutorial } from '../tutorial/runtime';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { game } from '../game/store';
 import { EditorView } from './scene/EditorView';
 import { EditorSession } from './session';
@@ -9,6 +9,8 @@ import { LoadDialog } from './ui/LoadDialog';
 import { Palette } from './ui/Palette';
 import { StagingPanel } from './ui/StagingPanel';
 import { TopBar } from './ui/TopBar';
+import { ActionGroupsPanel } from './ui/ActionGroupsPanel';
+import { EditorInspector, HoverTooltip } from './ui/PartInspector';
 import './ui/editor.css';
 
 declare global {
@@ -25,6 +27,7 @@ export default function EditorScene() {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const [showLoad, setShowLoad] = useState(false);
+  const getView = useCallback(() => viewRef.current, []);
   const [importSource, setImportSource] = useState<{ initial?: string; file?: File } | null>(() => { const code = new URLSearchParams(location.hash.slice(1)).get('craft'); return code ? { initial: code } : null; });
 
   useEffect(() => {
@@ -61,15 +64,23 @@ export default function EditorScene() {
           session.newCraft();
         }}
       />
-      <Palette session={session} view={view} />
+      {view.mode === 'actions' ? <ActionGroupsPanel session={session} view={view} /> : <Palette session={session} view={view} />}
       <StagingPanel session={session} view={view} />
+      <EditorInspector session={session} view={view} getView={getView} />
+      <HoverTooltip view={view} getView={getView} />
       <div className="vab-toasts">
         {view.toasts.map((t) => (
           <div key={t.id} className={`vab-toast panel ${t.tone}`}>{t.text}</div>
         ))}
       </div>
       <div className="vab-hints panel">
-        {held ? (
+        {view.mode === 'actions' ? (
+          <>
+            <Hint k="Click">choose part actions</Hint>
+            <Hint k="Drag / RMB">orbit</Hint>
+            <Hint k="Esc">close panel</Hint>
+          </>
+        ) : held ? (
           <>
             <Hint k="W S · A D · Q E">rotate</Hint>
             <Hint k="Shift">fine</Hint>
@@ -83,6 +94,7 @@ export default function EditorScene() {
         ) : (
           <>
             <Hint k="Click">pick up part</Hint>
+            <Hint k="Right-click">part details</Hint>
             <Hint k="Drag / RMB">orbit</Hint>
             <Hint k="Wheel">zoom</Hint>
             <Hint k="MMB / Shift+Wheel">pan</Hint>

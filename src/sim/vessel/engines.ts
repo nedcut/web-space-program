@@ -6,6 +6,7 @@ import type { AirBreathingSpec, EngineModule, IntakeModule, RcsModule, ReactionW
 import type { PartState, VesselEvent, VesselState } from './runtime';
 import { ATM, G0 } from './env';
 import { availableResource, drawPropellants, drawResource, totalResource } from './resources';
+import { gimbalScale, rcsEnabled, rcsMask, thrustLimit, wheelMode } from './tweaks';
 
 /**
  * Engines (main propulsion), RCS and reaction wheels.
@@ -156,17 +157,18 @@ function perpBasis(d: Vec3): [Vec3, Vec3] {
  */
 export function gimbalDirection(v: VesselState, p: PartState, m: EngineModule, control: Vec3): { dir: Vec3; a: number; b: number } {
   const d = normalize(qRotate(p.rotation, m.thrustDirection));
-  if (m.gimbalRange <= 0) return { dir: d, a: 0, b: 0 };
+  const range = m.gimbalRange * gimbalScale(p);
+  if (range <= 0) return { dir: d, a: 0, b: 0 };
   const r = sub(p.position, v.com);
   const L = length(r);
   if (L < 1e-3) return { dir: d, a: 0, b: 0 };
   const [ea, eb] = perpBasis(d);
-  let da = (m.gimbalRange * dot(cross(r, ea), control)) / L;
-  let db = (m.gimbalRange * dot(cross(r, eb), control)) / L;
+  let da = (range * dot(cross(r, ea), control)) / L;
+  let db = (range * dot(cross(r, eb), control)) / L;
   const mag = Math.hypot(da, db);
-  if (mag > m.gimbalRange) {
-    da *= m.gimbalRange / mag;
-    db *= m.gimbalRange / mag;
+  if (mag > range) {
+    da *= range / mag;
+    db *= range / mag;
   }
   const dir = normalize(add(d, add(scale(ea, Math.tan(da)), scale(eb, Math.tan(db)))));
   return { dir, a: da, b: db };
@@ -223,7 +225,7 @@ export function stepEngines(
     // reaches zero (thrust and propellant drain lingering for tens of seconds, blocking rails warp).
     if (target === 0 && st.throttle < SPOOL_CUTOFF) st.throttle = 0;
     if (m.airBreathing) {
-      const mdot = jetThrust(m, air.mach, air.density, st.throttle) / (m.ispVac * G0);
+      const mdot = jetThrust(m, air.mach, air.density, st.throttle) * thrustLimit(p) / (m.ispVac * G0);
       jetFlow.set(p.uid, mdot);
       airNeed += mdot * m.airBreathing.airRatio * dt;
     }
@@ -252,7 +254,7 @@ export function stepEngines(
       mdot = starved ? 0 : (jetFlow.get(p.uid) ?? 0) * airFrac;
     } else {
       isp = ispAtPressure(m, pressure);
-      mdot = maxMassFlow(m) * st.throttle;
+      mdot = maxMassFlow(m) * st.throttle * thrustLimit(p);
     }
     st.isp = isp;
     if (mdot <= 1e-12) {
@@ -287,14 +289,15 @@ export function gimbalAuthority(v: VesselState): Vec3 {
   for (const p of v.parts) {
     const st = p.engine;
     const m = engineModule(p);
-    if (!st || !m || !st.ignited || m.gimbalRange <= 0 || st.thrust <= 0) continue;
+    const range = m ? m.gimbalRange * gimbalScale(p) : 0;
+    if (!st || !m || !st.ignited || range <= 0 || st.thrust <= 0) continue;
     const d = normalize(qRotate(p.rotation, m.thrustDirection));
     const r = sub(p.position, v.com);
     const L = length(r);
     if (L < 1e-3) continue;
     const [ea, eb] = perpBasis(d);
     const ja = cross(r, ea), jb = cross(r, eb);
-    const k = (st.thrust * m.gimbalRange) / L;
+    const k = (st.thrust * range) / L;
     out.x += k * (ja.x * ja.x + jb.x * jb.x);
     out.y += k * (ja.y * ja.y + jb.y * jb.y);
     out.z += k * (ja.z * ja.z + jb.z * jb.z);
@@ -310,11 +313,17 @@ interface NozzleEval {
   thrustVac: number;
   ispVac: number;
   ispAsl: number;
+  /** Rotation-axis enable mask (torque command axes). */
+  rot: [number, number, number];
 }
 
-function evalRcs(v: VesselState, control: Vec3, translate: Vec3): NozzleEval[] {
+function evalRcs(v: VesselState, controlIn: Vec3, translateIn: Vec3): NozzleEval[] {
   const out: NozzleEval[] = [];
   for (const p of v.parts) {
+    if (!rcsEnabled(p)) continue;
+    const mask = rcsMask(p);
+    const control = { x: controlIn.x * mask.rot[0], y: controlIn.y * mask.rot[1], z: controlIn.z * mask.rot[2] };
+    const translate = { x: translateIn.x * mask.tr[0], y: translateIn.y * mask.tr[1], z: translateIn.z * mask.tr[2] };
     for (const mod of p.def.modules) {
       if (mod.type !== 'rcs') continue;
       const m = mod as RcsModule;
@@ -327,7 +336,7 @@ function evalRcs(v: VesselState, control: Vec3, translate: Vec3): NozzleEval[] {
         const aT = Math.max(0, dot(fdir, translate));
         const aR = tl > 1e-6 ? Math.max(0, dot(scale(tq, 1 / tl), control)) : 0;
         const act = Math.min(1, aT + aR);
-        out.push({ partUid: p.uid, r, fdir, act, thrustVac: m.thrustPerNozzle, ispVac: m.ispVac, ispAsl: m.ispAsl });
+        out.push({ partUid: p.uid, r, fdir, act, thrustVac: m.thrustPerNozzle, ispVac: m.ispVac, ispAsl: m.ispAsl, rot: mask.rot });
       }
     }
   }
@@ -369,37 +378,45 @@ export function rcsAuthority(v: VesselState): Vec3 {
     const tl = length(tq);
     if (tl < 1e-6) continue;
     const u = scale(tq, 1 / tl);
-    out.x += n.thrustVac * Math.max(0, u.x) * tq.x;
-    out.y += n.thrustVac * Math.max(0, u.y) * tq.y;
-    out.z += n.thrustVac * Math.max(0, u.z) * tq.z;
+    out.x += n.rot[0] * n.thrustVac * Math.max(0, u.x) * tq.x;
+    out.y += n.rot[1] * n.thrustVac * Math.max(0, u.y) * tq.y;
+    out.z += n.rot[2] * n.thrustVac * Math.max(0, u.z) * tq.z;
   }
   return out;
 }
 
-/** Reaction wheel torque (body) for a command; draws EC. */
-export function stepReactionWheels(v: VesselState, control: Vec3, dt: number, loads?: PartLoad[]): ActuatorOutput {
-  let maxTorque = 0;
-  let ecRate = 0;
+/** Command seen by one reaction wheel for its mode; `split` separates pilot and SAS contributions. */
+function wheelCommand(p: PartState, control: Vec3, split?: { pilot: Vec3; sas: Vec3 }): Vec3 {
+  const mode = wheelMode(p);
+  const raw = mode === 'off' ? v3() : mode === 'normal' || !split ? control : mode === 'sasOnly' ? split.sas : split.pilot;
+  return { x: clamp(raw.x, -1, 1), y: clamp(raw.y, -1, 1), z: clamp(raw.z, -1, 1) };
+}
+
+/** Reaction wheel torque (body) for a command; draws EC. Per-part modes (tweaks) choose pilot and/or SAS input. */
+export function stepReactionWheels(v: VesselState, control: Vec3, dt: number, loads?: PartLoad[], split?: { pilot: Vec3; sas: Vec3 }): ActuatorOutput {
+  const zero = { forceBody: v3(), torqueBody: v3() };
+  let torque = v3();
+  let need = 0;
+  const applied: { p: PartState; t: Vec3 }[] = [];
   for (const p of v.parts)
     for (const m of p.def.modules)
       if (m.type === 'reactionWheel') {
-        maxTorque += (m as ReactionWheelModule).torque;
-        ecRate += (m as ReactionWheelModule).ecRate;
+        const c = wheelCommand(p, control, split);
+        const usage = Math.max(Math.abs(c.x), Math.abs(c.y), Math.abs(c.z));
+        if (usage <= 0) continue;
+        const t = scale(c, (m as ReactionWheelModule).torque);
+        torque = add(torque, t);
+        need += (m as ReactionWheelModule).ecRate * usage * dt;
+        applied.push({ p, t });
       }
-  const zero = { forceBody: v3(), torqueBody: v3() };
-  if (maxTorque <= 0) return zero;
-  const c = { x: clamp(control.x, -1, 1), y: clamp(control.y, -1, 1), z: clamp(control.z, -1, 1) };
-  const usage = Math.max(Math.abs(c.x), Math.abs(c.y), Math.abs(c.z));
-  if (usage <= 0) return zero;
-  const need = ecRate * usage * dt;
+  if (!applied.length) return zero;
   let f = 1;
   if (need > 0) {
     const src = v.parts.find((p) => (p.maxResources.electricCharge ?? 0) > 0);
     f = src ? drawResource(v, src.uid, 'electricCharge', need) / need : 0;
   }
-  if (loads) for (const p of v.parts) for (const m of p.def.modules)
-    if (m.type === 'reactionWheel') loads.push({ partUid: p.uid, point: p.position, force: v3(), torque: scale(c, m.torque * f) });
-  return { forceBody: v3(), torqueBody: scale(c, maxTorque * f) };
+  if (loads) for (const a of applied) loads.push({ partUid: a.p.uid, point: a.p.position, force: v3(), torque: scale(a.t, f) });
+  return { forceBody: v3(), torqueBody: scale(torque, f) };
 }
 
 /** Reaction wheel torque per unit command on each axis (N*m). Zero without electric charge. */
@@ -407,6 +424,8 @@ export function wheelAuthority(v: VesselState): Vec3 {
   let t = 0;
   let ec = 0;
   for (const p of v.parts) for (const m of p.def.modules) if (m.type === 'reactionWheel') {
+    // SAS gain scheduling: wheels that ignore SAS contribute no authority.
+    if (wheelMode(p) === 'off' || wheelMode(p) === 'pilotOnly') continue;
     t += (m as ReactionWheelModule).torque;
     ec += (m as ReactionWheelModule).ecRate;
   }

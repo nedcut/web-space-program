@@ -65,11 +65,14 @@ export interface QualitySettings {
   };
   /** User toggle: atmospheric scattering (sky shells / aerial perspective). */
   atmosphereScattering?: boolean;
+  /** Part mesh LOD: 'low' halves tessellation and drops decals (see render/parts). */
+  partDetail: 'high' | 'low';
 }
 
 export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
   low: {
     id: 'low',
+    partDetail: 'low',
     scatter: { radius: 0, maxAltitude: 0, vegetation: false, cellsPerFrame: 0, budgetMs: 0 },
     maxPixelRatio: 1,
     renderScale: 0.5,
@@ -89,6 +92,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
   },
   medium: {
     id: 'medium',
+    partDetail: 'high',
     scatter: { radius: 256, maxAltitude: 3000, vegetation: false, cellsPerFrame: 3, budgetMs: 1.5 },
     // Device-pixel ratio is capped at 1: HiDPI laptops would otherwise shade 2.25–4× the pixels.
     maxPixelRatio: 1,
@@ -109,6 +113,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
   },
   high: {
     id: 'high',
+    partDetail: 'high',
     scatter: { radius: 1024, maxAltitude: 3000, vegetation: true, cellsPerFrame: 4, budgetMs: 2 },
     maxPixelRatio: 2,
     renderScale: 1,

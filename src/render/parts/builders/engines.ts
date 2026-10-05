@@ -3,6 +3,8 @@ import type { PartDef } from '../../../sim/vessel/types';
 import { M } from '../materials';
 import { around, bellRadius, box, cyl, grp, lathe, mk, pipe, rod, sphere, torus, type Profile } from '../geom';
 import { cylDims, num, str } from './common';
+import { decals } from '../decals';
+import { Markings } from './markings';
 
 const PI = Math.PI;
 
@@ -222,16 +224,18 @@ export function buildEngine(def: PartDef): THREE.Object3D {
 
   // static thrust structure between plate and gimbal
   const fixed: THREE.BufferGeometry[] = [];
+  let skirtSpan: [number, number] | null = null;
   if (style === 'lifter' || style === 'compact') {
     // short shroud skirt with an underside annulus
     const ySk = style === 'compact' ? yG - h * 0.02 : yPlateBottom - h * 0.07;
     root.add(
       mk(
         lathe([[r * 0.45, ySk], [r * 0.9, ySk], [r * 0.9, ySk], [r * 0.99, yPlateBottom]], { segments: 48, tile: 0.8 }),
-        M.charcoalPanel(),
+        M.scorched(),
         'skirt',
       ),
     );
+    skirtSpan = [ySk, yPlateBottom];
     fixed.push(...truss(r * 0.5, ySk, re * 0.16, yG + 0.01, 4, 0.012 + 0.012 * r));
   } else if (style === 'vacuum' || style === 'hydrolox') {
     fixed.push(...truss(r * 0.82, yPlateBottom, Math.max(rt, rc * 0.6), yG + 0.01, 4, 0.01 + 0.01 * r));
@@ -344,7 +348,27 @@ export function buildEngine(def: PartDef): THREE.Object3D {
   }
   gim.add(mk(act, M.darkMetal(), 'actuators'));
   gim.add(mk(actChrome, M.chrome()));
+  engineMarkings(def, root, r, yT, plateT, skirtSpan);
   return root;
+}
+
+/** Maker's mark and data plate on the mount ring (and on the boat-tail skirt when present). */
+function engineMarkings(def: PartDef, root: THREE.Object3D, r: number, yT: number, plateT: number, skirt: [number, number] | null) {
+  const D = new Markings(def);
+  const hRim = plateT - 0.014;
+  if (hRim > 0.02) {
+    const pl = D.plateDark;
+    D.cyl(r, pl, { y: yT - plateT / 2, phi: PI * 0.25, height: Markings.fit(pl, hRim * 0.85, r * 0.8) });
+    D.cyl(r, decals.logo(D.livery.id, '#e9e7e1'), { y: yT - plateT / 2, phi: -PI * 0.25, height: hRim * 0.85 });
+  }
+  if (skirt) {
+    const [y0, y1] = skirt;
+    const rOf = (y: number) => r * 0.9 + ((r * 0.99 - r * 0.9) * (y - y0)) / (y1 - y0);
+    const b = D.badgeDark;
+    const hb = Markings.fit(b, (y1 - y0) * 0.45, r * 1.1);
+    for (const a of [0, PI]) D.lathe(rOf, b, { y: (y0 + y1) / 2, phi: a + PI / 2, height: hb });
+  }
+  D.addTo(root);
 }
 
 function buildCluster(def: PartDef, root: THREE.Group, r: number, h: number, re: number, n: number): THREE.Object3D {
@@ -356,7 +380,7 @@ function buildCluster(def: PartDef, root: THREE.Group, r: number, h: number, re:
   root.add(
     mk(
       lathe([[r * 0.3, ySk], [r * 0.9, ySk], [r * 0.9, ySk], [r * 0.99, yT - plateT]], { segments: 64, tile: 1 }),
-      M.charcoalPanel(),
+      M.scorched(),
       'skirt',
     ),
   );
@@ -368,6 +392,7 @@ function buildCluster(def: PartDef, root: THREE.Group, r: number, h: number, re:
     beams.push(b);
   }
   root.add(mk(beams, M.gunmetal(), 'thrustBeams'));
+  engineMarkings(def, root, r, yT, plateT, [ySk, yT - plateT]);
   const d = r - re - 0.1;
   const yG = ySk - 0.12;
   const rc = re * 0.4;
@@ -455,7 +480,7 @@ export function buildSrb(def: PartDef): THREE.Object3D {
         ],
         { segments: seg, tile: 0.8 },
       ),
-      M.charcoalPanel(),
+      M.scorched(),
       'aftSkirt',
     ),
   );
@@ -502,6 +527,22 @@ export function buildSrb(def: PartDef): THREE.Object3D {
     }
   }
   root.add(mk(motors, M.darkMetal(), 'sepMotors'));
+  // markings: maker's badge up the casing, insignia, data plate and ordnance warnings
+  const D = new Markings(def);
+  const span = yFwdBot - yAftTop - bandH * 2;
+  const rd = rb;
+  const b = D.badge;
+  const hb = Markings.fit(b, 0.1 + 0.12 * r, span * 0.5);
+  D.cyl(rd, b, { y: yAftTop + span * 0.45, phi: -PI / 2, height: hb, vertical: true });
+  D.cyl(rd, D.plate, { y: yAftTop + 0.12 + 0.03 * r, phi: PI * 0.75, height: 0.045 + 0.03 * r });
+  if (span > 1) D.cyl(rd, decals.insignia(), { y: yFwdBot - bandH * 2 - 0.25 * r, phi: PI * 0.25, height: 0.15 + 0.2 * r });
+  const warn = decals.text('LIVE MOTOR', { color: '#f2f1ec', plate: '#b3261e', stencil: true });
+  const warnSym = decals.symbol('warn');
+  for (const a of [PI * 0.25, PI * 1.25]) {
+    D.cyl(rd, warn, { y: yAftTop + 0.1 + 0.05 * r, phi: a, height: 0.035 + 0.025 * r });
+    D.cyl(rd, warnSym, { y: yAftTop + 0.22 + 0.11 * r, phi: a, height: 0.06 + 0.03 * r });
+  }
+  D.addTo(root);
   return root;
 }
 

@@ -14,10 +14,10 @@ import { hasControl, type Astronaut, type PlantedFlag } from '../sim/crew/crew';
 import { maneuverToInertialDv, period, predictTrajectory, propagate, stateToElements, trajectoryClosestApproach, type TrajectoryApproach } from '../sim/orbit';
 import type { ManeuverNode, Orbit, StateVector, TrajectoryPatch } from '../sim/orbit/api';
 import { newProgression, type GameMode, type ProgressEvent } from '../sim/science/progression';
-import { activateNextStage, neutralInput, portInfo, recomputeMassProperties, setGear, stepVessel } from '../sim/vessel';
+import { activateNextStage, applyVesselCommands, expandCommands, MAX_COMMANDS, neutralInput, portInfo, recomputeMassProperties, setGear, stepVessel, WORLD_ACTIONS } from '../sim/vessel';
 import { stepEva } from '../sim/vessel/eva';
 import { advanceISRU, isruMachinery } from '../sim/vessel/isru';
-import type { ControlInput, PartState, VesselEvent, VesselState } from '../sim/vessel/runtime';
+import type { ControlInput, PartState, VesselCommand, VesselEvent, VesselState } from '../sim/vessel/runtime';
 import type { CraftDef, PartDef } from '../sim/vessel/types';
 import type { Quat } from '../util/quat';
 import { add, length, scale, sub, type Vec3 } from '../util/vec3';
@@ -33,6 +33,7 @@ import * as progression from './world/progression';
 import * as rails from './world/rails';
 import * as readouts from './world/readouts';
 import * as resources from './world/resources';
+import { RenderHistory } from './world/renderInterpolation';
 
 export const PHYSICS_DT = 1 / 50;
 /** Distance from the active vessel inside which other vessels are simulated with full physics. */
@@ -184,9 +185,15 @@ export class World {
   targetPortUid: number | null = null;
   /** Real-time accumulator for fixed physics steps. */
   private acc = 0;
+  /** Pre-step vessel poses for render interpolation (read-only with respect to the simulation). */
+  readonly renderHistory = new RenderHistory();
+  /** Fraction of the next physics step already accumulated (0..1): render interpolation factor. */
+  get renderAlpha(): number { return Math.max(0, Math.min(1, this.acc / PHYSICS_DT)); }
   private msgId = 0;
   private stageRequested = false;
   private evaJumpRequested = false;
+  /** One-shot player commands latched until a physics step consumes them (like staging). */
+  private pendingCommands: VesselCommand[] = [];
   private nodeId = 1;
   private trajectoryCache: { time: number; key: string; patches: TrajectoryPatch[] } | null = null;
   private approachCache: { time: number; key: string; value: TrajectoryApproach | null } | null = null;
@@ -290,6 +297,7 @@ export class World {
     this.activeId = id;
     this.stageRequested = false;
     this.evaJumpRequested = false;
+    this.pendingCommands = [];
     this.nodes = [];
     this.trajectoryCache = null;
     if (wv.mode === 'rails' || wv.mode === 'landedRails') this.unpack(wv);
@@ -456,7 +464,7 @@ export class World {
   /** Advance the simulation by `realDt` seconds of wall time with the given control input for the active vessel. */
   tick(realDt: number, input: ControlInput) {
     this.discoverLandmarks();
-    if (!this.canControl()) { input = this.disconnectedInput(this.active?.state); this.stageRequested = false; this.evaJumpRequested = false; }
+    if (!this.canControl()) { input = this.disconnectedInput(this.active?.state); this.stageRequested = false; this.evaJumpRequested = false; this.pendingCommands = []; }
     realDt = Math.min(realDt, 0.25);
     const now = performance.now();
     this.messages = this.messages.filter((m) => m.expires > now);
@@ -466,13 +474,15 @@ export class World {
 
     if (input.evaJump) this.evaJumpRequested = true;
     if (input.stage) this.stageRequested = true;
-    if (this.stageRequested && this.warp.mode === 'rails' && rate > 1) {
+    if (input.commands?.length) this.pendingCommands = [...this.pendingCommands, ...input.commands].slice(0, MAX_COMMANDS);
+    if ((this.stageRequested || this.pendingCommands.length) && this.warp.mode === 'rails' && rate > 1) {
       // Staging during rails warp: drop out of warp; the request is consumed by the next physics step.
       this.warp = { mode: 'rails', index: 0 };
       return;
     }
 
     if (this.warp.mode === 'rails' && rate > 1) {
+      this.renderHistory.invalidate();
       for (const wv of this.vessels.values()) this.pack(wv);
       let target = this.ut + realDt * rate;
       // Stop warp at the next maneuver node (minus a margin). Active-vessel events (SOI change, atmosphere,
@@ -502,10 +512,12 @@ export class World {
           velocity: target.velocity,
         };
       }
+      this.renderHistory.capture(this.ut, this.vessels.values());
       // A stage request is latched until a physics step actually consumes it (frames can have zero steps).
-      this.physicsStep({ ...input, evaJump: this.evaJumpRequested, stage: this.stageRequested, target });
+      this.physicsStep({ ...input, evaJump: this.evaJumpRequested, stage: this.stageRequested, target, commands: this.pendingCommands.length ? this.pendingCommands : undefined });
       this.stageRequested = false;
       this.evaJumpRequested = false;
+      this.pendingCommands = [];
       this.acc -= PHYSICS_DT;
       steps++;
     }
@@ -567,7 +579,7 @@ export class World {
     }
     this.warp = { mode: rate > 1 ? 'physics' : 'rails', index: rate > 1 ? rate - 1 : 0 };
     for (let i = 0; i < rate; i++) {
-      const controls = new Map([...inputs].map(([id, c]) => [id, i ? { ...c, stage: false, evaJump: false } : c]));
+      const controls = new Map([...inputs].map(([id, c]) => [id, i ? { ...c, stage: false, evaJump: false, commands: undefined } : c]));
       this.physicsStep(neutralInput(), controls);
     }
     return rate;
@@ -581,7 +593,7 @@ export class World {
       else {
         if (v.mode !== 'physics') this.unpack(v);
         const env = this.universe.createEnvironment(() => v.body, this.preciseGravity);
-        const c = this.canControl(v.state) ? { ...input, stage: false } : neutralInput();
+        const c = this.canControl(v.state) ? { ...input, stage: false, commands: undefined } : neutralInput();
         if (v.state.eva) stepEva(v.state, c, env, this.ut, PHYSICS_DT);
         else stepVessel(v.state, c, env, this.ut, PHYSICS_DT);
       }
@@ -596,7 +608,15 @@ export class World {
     for (const wv of [...this.vessels.values()]) {
       if (wv.state.destroyed) continue;
       const isActive = inputs ? inputs.has(wv.state.id) : wv === active;
-      const vesselInput = isActive && !this.canControl(wv.state) ? this.disconnectedInput(wv.state) : inputs?.get(wv.state.id) ?? input;
+      let vesselInput = isActive && !this.canControl(wv.state) ? this.disconnectedInput(wv.state) : inputs?.get(wv.state.id) ?? input;
+      if (isActive && vesselInput.commands?.length) {
+        if (wv.state.eva || wv.state.destroyed) vesselInput = { ...vesselInput, commands: undefined };
+        else {
+          const rest = this.applyWorldCommands(wv, vesselInput.commands);
+          if (!this.vessels.has(wv.state.id)) continue;
+          vesselInput = { ...vesselInput, commands: rest.length ? rest : undefined };
+        }
+      }
       if (inputs && isActive && (wv.mode === 'rails' || wv.mode === 'landedRails')) this.unpack(wv);
       const nearby = inputs ? [...inputs.keys()].some(id => {
         const v = this.vessels.get(id);
@@ -627,6 +647,14 @@ export class World {
       }
       if (wv.mode === 'prelaunch') {
         if (isActive && vesselInput.gear !== undefined) setGear(wv.state, vesselInput.gear);
+        if (isActive && vesselInput.commands?.length) {
+          // Pad commands (lamps, deploys, engine tests). Hardware dropped on the pad falls free under physics.
+          const events: VesselEvent[] = [];
+          const pieces = applyVesselCommands(wv.state, vesselInput.commands, events);
+          for (const nv of pieces) { recomputeMassProperties(nv, false); this.vessels.set(nv.id, { state: nv, mode: 'physics', body: wv.body }); }
+          for (const e of events) this.handleEvent(e);
+          for (const nv of pieces) { const child = this.vessels.get(nv.id); if (child) this.inheritFlight(wv, child); }
+        }
         if (isActive && vesselInput.stage) {
           this.syncFixed(wv, t);
           wv.mode = 'physics';
@@ -675,6 +703,31 @@ export class World {
     advanceTransmissions(this);
     evaluateProgression(this);
     this.onSimulationStep?.(PHYSICS_DT, propulsiveDv);
+  }
+
+  /**
+   * Expand action groups and run the actions that need World context (science, undocking) for `wv`, as if it were
+   * the active vessel (multiplayer runs every controller's commands). Returns the remaining sim-level commands.
+   */
+  private applyWorldCommands(wv: WorldVessel, commands: readonly VesselCommand[]): VesselCommand[] {
+    const expanded = expandCommands(wv.state, commands);
+    const rest: VesselCommand[] = [];
+    const focus = this.activeId;
+    for (const c of expanded) {
+      if (c.kind !== 'part' || !WORLD_ACTIONS.has(c.action)) { rest.push(c); continue; }
+      const part = wv.state.cache.byUid.get(c.uid);
+      if (!part) continue;
+      this.activeId = wv.state.id;
+      try {
+        if (c.action === 'science.transmit') this.transmitScience();
+        else if (c.action === 'undock' && part.docked) this.undockActive(c.uid);
+        else if (c.action === 'science.run') {
+          const instrument = this.scienceInstruments(wv).find(i => i.uid === c.uid && (c.experiment ? i.experiment === c.experiment : i.available && !i.recorded));
+          if (instrument) this.runExperiment(instrument.uid, instrument.experiment);
+        }
+      } finally { this.activeId = focus && this.vessels.has(focus) ? focus : null; }
+    }
+    return rest;
   }
 
   private handleEvent(e: VesselEvent) {

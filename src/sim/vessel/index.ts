@@ -125,3 +125,41 @@ export { advanceISRU } from './isru';
 
 export { evaluateJointLoads, jointStrength, breakJoints } from './structure';
 export type { PartLoad, JointLoad } from './loads';
+
+export {
+  ACTION_GROUP_IDS,
+  PART_ACTION_IDS,
+  WORLD_ACTIONS,
+  TOGGLE_ACTIONS,
+  GROUP_LABELS,
+  ACTION_LABELS,
+  MAX_COMMANDS,
+  partActions,
+  actionState,
+  actionAvailable,
+  groupBindings,
+  validGroupActions,
+  validCommands,
+  expandCommands,
+  applyPartAction,
+  applyVesselCommands,
+  runActionGroup,
+  deployable,
+} from './actions';
+export {
+  thrustLimit,
+  gimbalScale,
+  deflectionScale,
+  ejectionScale,
+  crossfeedOpen,
+  isExtended,
+  lightOn,
+  rcsEnabled,
+  wheelMode,
+  tweakDescriptors,
+  validTweaks,
+  mergeTweaks,
+  applyFlightTweaks,
+  LIGHT_COLORS,
+} from './tweaks';
+export type { TweakDescriptor, TweakKey } from './tweaks';

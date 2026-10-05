@@ -1,0 +1,143 @@
+import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
+import { CAMERA_MODES, FlightCamera, framingDistance, zoomLimits, type CameraFrame } from '../src/flight/camera';
+import { PART_CATALOG } from '../src/data/parts';
+import { buildOrbiter } from '../src/editor/stockCrafts';
+import { DEFAULT_START_UT } from '../src/game/store';
+import { Universe } from '../src/game/universe';
+import { PHYSICS_DT, World } from '../src/game/world';
+import { neutralInput } from '../src/sim/vessel';
+import { cross, normalize, sub } from '../src/util/vec3';
+
+const frame = (over: Partial<CameraFrame> = {}): CameraFrame => ({
+  up: new THREE.Vector3(0, 0, 1),
+  vesselQuat: new THREE.Quaternion(),
+  velocity: new THREE.Vector3(100, 0, 0),
+  orbitNormal: new THREE.Vector3(0, 1, 0),
+  spaceBlend: 0,
+  vesselId: 'a',
+  radius: 5,
+  ...over,
+});
+
+describe('flight camera feel', () => {
+  it('frames the vessel on load and derives zoom limits from its size', () => {
+    const cam = new FlightCamera();
+    cam.update(frame({ radius: 8 }), 1 / 60);
+    expect(cam.distance).toBeCloseTo(framingDistance(8), 6);
+    expect(cam.minDistance).toBe(zoomLimits(8).min);
+    const tiny = new FlightCamera();
+    tiny.update(frame({ radius: 0.6 }), 1 / 60);
+    expect(tiny.distance).toBeGreaterThanOrEqual(tiny.minDistance);
+    expect(tiny.minDistance).toBeLessThan(2);
+  });
+
+  it('eases zoom without overshoot and settles within half a second', () => {
+    const cam = new FlightCamera();
+    cam.update(frame(), 1 / 60);
+    const start = cam.distance;
+    cam.zoomTo(start * 4);
+    let t95 = Infinity;
+    let maxD = 0;
+    for (let i = 1; i <= 120; i++) {
+      cam.update(frame(), 1 / 60);
+      maxD = Math.max(maxD, cam.distance);
+      if (t95 === Infinity && Math.log(cam.distance / start) >= 0.95 * Math.log(4)) t95 = i / 60;
+    }
+    console.log(`zoom ×4: 95% in ${(t95 * 1000).toFixed(0)} ms, overshoot ${((maxD / (start * 4) - 1) * 100).toFixed(2)}%`);
+    expect(maxD).toBeLessThanOrEqual(start * 4 * (1 + 1e-9));
+    expect(t95).toBeLessThan(0.5);
+  });
+
+  it('follows the vessel size when staging shrinks it', () => {
+    const cam = new FlightCamera();
+    cam.update(frame({ radius: 10 }), 1 / 60);
+    const before = cam.distance;
+    for (let i = 0; i < 120; i++) cam.update(frame({ radius: 5 }), 1 / 60);
+    expect(cam.distance).toBeCloseTo(before / 2, 0);
+  });
+
+  it('eases to frame a newly focused vessel', () => {
+    const cam = new FlightCamera();
+    cam.update(frame({ radius: 10 }), 1 / 60);
+    cam.update(frame({ vesselId: 'eva', radius: 1 }), 1 / 60);
+    expect(cam.distance).toBeGreaterThan(framingDistance(1) * 2);
+    for (let i = 0; i < 180; i++) cam.update(frame({ vesselId: 'eva', radius: 1 }), 1 / 60);
+    expect(cam.distance).toBeCloseTo(framingDistance(1), 1);
+  });
+
+  it('keeps the view direction when switching between every mode', () => {
+    const cam = new FlightCamera();
+    const f = frame({ vesselQuat: new THREE.Quaternion().setFromEuler(new THREE.Euler(0.4, 1.1, -0.3)), spaceBlend: 0.5 });
+    for (let i = 0; i < 30; i++) cam.update(f, 1 / 60);
+    for (const m of [...CAMERA_MODES, 'auto' as const]) {
+      const before = cam.camera.position.clone();
+      cam.mode = m;
+      cam.update(f, 1 / 60);
+      const moved = cam.camera.position.distanceTo(before) / cam.distance;
+      expect(moved, `switch to ${m}`).toBeLessThan(0.02);
+    }
+  });
+
+  it('never puts the camera below the terrain', () => {
+    const cam = new FlightCamera();
+    // Vessel 2 m above flat ground (scene z = height).
+    const clearance = (p: THREE.Vector3) => p.z + 2;
+    cam.pitch = -1.4;
+    let lowest = Infinity;
+    for (let i = 0; i < 240; i++) {
+      cam.update(frame({ clearance }), 1 / 60);
+      lowest = Math.min(lowest, clearance(cam.camera.position));
+    }
+    expect(lowest).toBeGreaterThan(0.5);
+  });
+
+  it('chase mode settles behind the direction of travel', () => {
+    const cam = new FlightCamera();
+    cam.mode = 'chase';
+    cam.pitch = 0;
+    const f = frame({ velocity: new THREE.Vector3(0, 200, 0) });
+    for (let i = 0; i < 240; i++) cam.update(f, 1 / 60);
+    const dir = cam.camera.position.clone().normalize();
+    expect(dir.dot(new THREE.Vector3(0, -1, 0))).toBeGreaterThan(0.95);
+  });
+
+  it('keeps camera motion smooth during an interpolated climb at 144 Hz', () => {
+    const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+    const wv = world.launch(buildOrbiter());
+    const input = (stage = false) => neutralInput({ throttle: 1, sas: 'stabilityAssist', stage });
+    world.tick(PHYSICS_DT, input(true));
+    for (let i = 0; i < 300; i++) world.tick(PHYSICS_DT, input());
+    const run = (interpolate: boolean) => {
+      const w = world; // continue the same climb; compare consecutive windows
+      const cam = new FlightCamera();
+      const path: THREE.Vector3[] = [];
+      for (let i = 0; i < 288; i++) {
+        // Real displays jitter a little around their nominal refresh interval.
+        const dt = (1 / 144) * (1 + 0.08 * Math.sin(i * 1.7));
+        w.tick(dt, input());
+        const { renderUt, restore } = interpolate ? w.renderHistory.apply(w.ut, PHYSICS_DT, w.renderAlpha, w.vessels.values(), w.universe.ephem) : { renderUt: w.ut, restore: () => {} };
+        const body = w.universe.ephem.getBodyState(wv.body, renderUt);
+        const r = sub(wv.state.position, body.position);
+        const up = normalize(r);
+        const n = normalize(cross(r, sub(wv.state.velocity, body.velocity)));
+        const q = wv.state.orientation;
+        cam.update(frame({ up: new THREE.Vector3(up.x, up.y, up.z), orbitNormal: new THREE.Vector3(n.x, n.y, n.z), vesselQuat: new THREE.Quaternion(q.x, q.y, q.z, q.w), radius: wv.state.cache.boundingRadius }), dt);
+        // Camera position in the planet frame: vessel (rendered) + camera offset.
+        path.push(new THREE.Vector3(r.x, r.y, r.z).add(cam.camera.position));
+        restore();
+      }
+      const d: number[] = [];
+      for (let i = 1; i < path.length; i++) d.push(path[i].distanceTo(path[i - 1]));
+      const mean = d.reduce((a, b) => a + b, 0) / d.length;
+      let worst = 0;
+      for (let i = 1; i < d.length; i++) worst = Math.max(worst, Math.abs(d[i] - d[i - 1]));
+      return worst / mean;
+    };
+    const raw = run(false);
+    const smooth = run(true);
+    console.log(`camera judder at 144 Hz with ±8% frame jitter: raw ${raw.toFixed(3)} -> interpolated ${smooth.toFixed(3)}`);
+    expect(smooth).toBeLessThan(0.2);
+    expect(smooth).toBeLessThan(raw / 10);
+  }, 60000);
+});

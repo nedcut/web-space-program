@@ -210,7 +210,9 @@ function tyre(radius: number, width: number): THREE.BufferGeometry {
   const ri = radius * 0.6;
   const w = width / 2;
   const p: Profile = [[ri, -w * 0.9], [radius * 0.9, -w], [radius, -w * 0.45], [radius, w * 0.45], [radius * 0.9, w], [ri, w * 0.9]];
-  const g = lathe(p, { segments: 32, creaseAngle: PI });
+  let arc = 0;
+  for (let i = 1; i < p.length; i++) arc += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+  const g = lathe(p, { segments: 40, creaseAngle: PI, tile: arc, uRepeat: Math.max(4, Math.round(radius * 18)) });
   g.rotateZ(PI / 2); // axle along X
   return g;
 }
@@ -256,7 +258,7 @@ export function buildGear(def: PartDef): THREE.Object3D {
   if (steerable) steer.add(mk(torus(r0 * 1.4, 0.015, 6, 20).rotateX(-PI / 2).translate(0, 0, -radius * 0.95), M.accent('yellow')));
   const wheel = grp('gearWheel');
   steer.add(wheel);
-  wheel.add(mk(tyre(radius, tw), M.rubber(), 'tyre'));
+  wheel.add(mk(tyre(radius, tw), M.tyre(), 'tyre'));
   const hub = cylinder(radius * 0.6, radius * 0.6, tw * 0.85, { segments: 24 }).rotateZ(PI / 2);
   wheel.add(mk(hub, M.aluminium(), 'hub'));
   // Hub bolts make the spin readable.

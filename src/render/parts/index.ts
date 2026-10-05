@@ -26,11 +26,12 @@ import {
 } from './builders/structure';
 import { buildDockingPort, buildHeatShield, buildLandingLeg, buildLight, buildParachute, buildRcsQuad, buildReactionWheel } from './builders/utility';
 import { disposeMaterials, M } from './materials';
-import type { DeployData } from './geom';
+import { withDetail, type DeployData } from './geom';
 import { optimizePartTemplate } from './optimize';
 
 export { createPlume, type Plume, type PlumeParams, type PlumeOptions } from './plume';
 export { disposeMaterials } from './materials';
+export { partTexturesReady } from './textures';
 export { setGearPose } from './builders/aircraft';
 
 /**
@@ -107,20 +108,29 @@ function fallback(def: PartDef): THREE.Object3D {
 
 const templates = new Map<string, THREE.Object3D>();
 
+/** Part mesh level of detail: 'high' (default) or 'low' (half tessellation, no decals). */
+export type PartDetail = 'high' | 'low';
+let defaultDetail: PartDetail = 'high';
+/** Default detail for subsequently built part meshes (driven by the quality preset). */
+export function setPartDetail(d: PartDetail) {
+  defaultDetail = d;
+}
+
 /**
  * Build (or clone from cache) the mesh for a part. Clones share geometry and materials, so they
  * are cheap; do not dispose their geometries individually — call disposePartMeshCache().
  */
-export function buildPartMesh(def: PartDef): THREE.Object3D {
-  let t = templates.get(def.id);
+export function buildPartMesh(def: PartDef, detail: PartDetail = defaultDetail): THREE.Object3D {
+  const key = detail === 'high' ? def.id : `${def.id}:low`;
+  let t = templates.get(key);
   if (!t) {
     const builder = MESH_BUILDERS[def.mesh] ?? fallback;
-    t = builder(def);
+    t = withDetail(detail === 'high' ? 1 : 0.5, () => builder(def));
     optimizePartTemplate(t);
     t.name = def.id;
     t.userData.partId = def.id;
     setPartDeploy(t, 0);
-    templates.set(def.id, t);
+    templates.set(key, t);
   }
   return t.clone(true);
 }
@@ -151,6 +161,28 @@ export function setPartDeploy(root: THREE.Object3D, t: number) {
     if (d.rot0 && d.rot1) o.rotation.fromArray(lerp3(d.rot0, d.rot1, k));
     if (d.scale0 && d.scale1) o.scale.fromArray(lerp3(d.scale0, d.scale1, k));
     if (d.visibleAbove !== undefined) o.visible = k > d.visibleAbove;
+  });
+}
+
+/**
+ * Lamp lens appearance (on/off, colour). The lens gets its own material clone on first use so colours stay per part;
+ * editor tint bookkeeping (userData.baseMat) follows the clone.
+ */
+export function setLightAppearance(root: THREE.Object3D, on: boolean, color = '#fff1cf') {
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || o.name !== 'lightLens') return;
+    let mat = o.userData.lampMat as THREE.MeshStandardMaterial | undefined;
+    if (!mat) {
+      const prev = (o.userData.baseMat ?? mesh.material) as THREE.MeshStandardMaterial;
+      mat = prev.clone();
+      o.userData.lampMat = mat;
+      if (mesh.material === prev) mesh.material = mat;
+      if (o.userData.baseMat !== undefined) o.userData.baseMat = mat;
+    } else if (o.userData.baseMat === undefined && mesh.material !== mat) mesh.material = mat;
+    mat.emissive.set(color);
+    mat.emissiveIntensity = on ? 2.5 : 0;
+    mat.color.set(on ? color : '#8a8f96');
   });
 }
 
