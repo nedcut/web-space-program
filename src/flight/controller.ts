@@ -1,3 +1,4 @@
+import { PhotoCamera } from '../render/core/PhotoCamera';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { GameAudio } from '../audio';
@@ -80,6 +81,8 @@ export class FlightController {
   readonly map: MapView;
   mapMode = false;
   paused = false;
+  readonly photo: PhotoCamera;
+  private photoWasPaused = false;
   assist: Autopilot | null = null;
   private assistWarped = false;
   sas: SasMode = 'off';
@@ -159,6 +162,11 @@ export class FlightController {
     const canvas = this.pipeline.renderer.domElement;
     Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block' });
     host.appendChild(canvas);
+    this.photo = new PhotoCamera(this.pipeline, this.scene, this.cam.camera, () => new THREE.Vector3(), active => {
+      if (active) { if (this.network || !this.world.active) return false; this.photoWasPaused = this.paused; this.paused = true; this.mapMode = false; this.map.setVisible(false); }
+      else this.paused = this.photoWasPaused;
+      return true;
+    });
 
     const q = getQuality(quality);
     this.stars = new Starfield({ count: q.stars.count, milkyWay: q.stars.milkyWay, seed: 7 });
@@ -184,6 +192,7 @@ export class FlightController {
 
     const labelHost = (this.labelHost = document.createElement('div'));
     Object.assign(labelHost.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
+    labelHost.classList.add('photo-hide');
     host.appendChild(labelHost);
     this.map = new MapView(universe.bodies, universe.ephem, labelHost);
     this.map.setVisible(false);
@@ -193,6 +202,7 @@ export class FlightController {
     this.disposers.push(this.attachMapPicking(canvas));
     this.disposers.push(
       this.input.onAction((a) => {
+        if (this.photo.active) return;
         // While paused (pause menu, vessel lost) only the menu toggle and quickload are live.
         if (this.paused && a !== 'menu' && a !== 'quickload') return;
         switch (a) {
@@ -417,7 +427,7 @@ export class FlightController {
     const frameMs = now - this.last;
     const dt = Math.min(0.1, frameMs / 1000);
     this.last = now;
-    this.elapsed += dt;
+    if (!this.photo.active) this.elapsed += dt;
     this.fps = this.fps * 0.95 + (dt > 0 ? 1 / dt : 0) * 0.05;
     if (this.network && this.lastOwnedVessel !== this.network.ownId) {
       this.lastOwnedVessel = this.network.ownId;
@@ -427,7 +437,7 @@ export class FlightController {
     }
     const settings = game.get().settings;
     this.input.enabled = !this.paused;
-    this.cam.camera.fov = settings.cameraFov;
+    if (!this.photo.active) this.cam.camera.fov = settings.cameraFov;
     const graphicsKey = JSON.stringify([settings.quality, settings.shadows, settings.bloom, settings.renderScale]);
     if (graphicsKey !== this.graphicsKey) {
       this.graphicsKey = graphicsKey;
@@ -520,6 +530,8 @@ export class FlightController {
   private maneuverDirection(): Vec3 | null { return navball.maneuverDirection.call(this, this.systems); }
 
   private render(wv: WorldVessel, dt: number) {
+    const photoDt = dt;
+    if (this.photo.active) dt = 0;
     const u = this.world.universe;
     const t = this.world.ut;
     const origin = this.network?.pose(wv.state.id)?.position ?? wv.state.position;
@@ -585,7 +597,8 @@ export class FlightController {
     // Camera
     const up = normalize(sub(origin, bodyState.position));
     const q = wv.state.orientation;
-    this.cam.update(new THREE.Vector3(up.x, up.y, up.z), new THREE.Quaternion(q.x, q.y, q.z, q.w), dt);
+    if (this.photo.active) this.photo.update(photoDt);
+    else this.cam.update(new THREE.Vector3(up.x, up.y, up.z), new THREE.Quaternion(q.x, q.y, q.z, q.w), dt);
     const camera = this.cam.camera;
     if (this.network) {
       const live = new Set<string>();
@@ -697,6 +710,7 @@ export class FlightController {
   private groundTelemetry(wv: WorldVessel): Pick<Telemetry, 'gear' | 'brakes' | 'intakeAir'> { return telemetry.groundTelemetry.call(this, this.systems, wv); }
 
   dispose() {
+    this.photo.dispose();
     this.network?.close();
     cancelAnimationFrame(this.raf);
     this.disposers.forEach((d) => d());
