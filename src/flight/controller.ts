@@ -1,3 +1,4 @@
+import { FlightFx } from '../render/fx/FlightFx';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { GameAudio } from '../audio';
@@ -101,6 +102,8 @@ export class FlightController {
   private planets: PlanetLayer;
   private site: LaunchSite;
   private flags = new FlagView();
+  private effects: FlightFx;
+  private readonly effectPosition = new THREE.Vector3();
   private reentry = new ReentryFx();
   private reentryHeat = 0;
   private labelHost: HTMLDivElement;
@@ -165,7 +168,8 @@ export class FlightController {
     this.glare = new SunGlare();
     this.scene.add(this.glare.mesh);
     this.scene.add(this.sunLight, this.sunLight.target, this.ambient);
-    this.scene.add(this.reentry.object, this.flags.root);
+    this.effects = new FlightFx(quality);
+    this.scene.add(this.effects.root, this.reentry.object, this.flags.root);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(2048, 2048);
     this.sunLight.shadow.bias = -0.0004;
@@ -215,6 +219,13 @@ export class FlightController {
       }),
     );
     this.world.onEvent = (e) => {
+      if (e.type === 'partDestroyed' || e.type === 'decouple') {
+        const vessel = this.world.vessels.get(e.vesselId) ?? this.world.active;
+        if (vessel) {
+          if (!this.views.get(e.vesselId)?.partPosition(e.partUid, this.effectPosition)) this.effectPosition.copy(vessel.state.position);
+          this.effects.burst(this.effectPosition, e.type === 'decouple', vessel.state.velocity);
+        }
+      }
       if (!this.audio) return;
       if (e.type === 'stage') this.audio.staging();
       if (e.type === 'decouple') this.audio.decouple();
@@ -429,6 +440,7 @@ export class FlightController {
       this.graphicsKey = graphicsKey;
       const quality = getQuality(settings.quality);
       this.pipeline.setQuality(quality);
+      this.effects.setQuality(settings.quality);
       const size = quality.shadowMapSize || 512;
       if (this.sunLight.shadow.mapSize.x !== size) {
         this.sunLight.shadow.mapSize.set(size, size);
@@ -573,7 +585,7 @@ export class FlightController {
     const flux = stagnationHeatFlux(air.density, airSpeed, Math.max(0.3, wv.state.cache.boundingRadius * 0.4));
     if (airSpeed > 1) {
       const d = normalize(airVel);
-      this.reentry.update(flux, new THREE.Vector3(d.x, d.y, d.z), wv.state.cache.boundingRadius, this.elapsed);
+      this.reentry.update(flux, new THREE.Vector3(d.x, d.y, d.z), wv.state.cache.boundingRadius, this.elapsed, wv.state, wv.body);
     } else this.reentry.update(0, new THREE.Vector3(0, 1, 0), 1, this.elapsed);
     this.reentryHeat = Math.min(1, Math.max(0, (Math.log10(Math.max(flux, 1)) - 4.0) / 1.5));
 
@@ -582,6 +594,8 @@ export class FlightController {
     const q = wv.state.orientation;
     this.cam.update(new THREE.Vector3(up.x, up.y, up.z), new THREE.Quaternion(q.x, q.y, q.z, q.w), dt);
     const camera = this.cam.camera;
+    this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height);
+    this.effects.shake(camera, game.get().settings.reduceMotion);
     if (this.network) {
       const live = new Set<string>();
       for (const p of this.network.room.players) {
@@ -703,6 +717,7 @@ export class FlightController {
     this.stars.dispose();
     this.glare.dispose();
     this.reentry.dispose();
+    this.effects.dispose();
     this.flags.dispose();
     this.scene.environment?.dispose();
     this.labelHost.remove();

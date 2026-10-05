@@ -1,3 +1,4 @@
+import type { VesselState } from '../../sim/vessel/runtime';
 import { game } from '../../game/store';
 import * as THREE from 'three';
 
@@ -48,7 +49,8 @@ const frag = /* glsl */ `
     float wake = (1.0 - smoothstep(-1.0, 0.2, y)) * uWake;
     float rim = pow(1.0 - abs(dot(vNormalV, vViewDir)), 1.5);
     float n = noise(vPos * 3.0 + vec3(0.0, uTime * 9.0, 0.0)) * 0.6 + noise(vPos * 7.0 - vec3(0.0, uTime * 15.0, 0.0)) * 0.4;
-    float a = (front * (0.35 + rim) + wake * n * 0.8) * uIntensity;
+    float streak = pow(max(0.0, sin(atan(vPos.z,vPos.x)*23.0 + n*2.0)), 14.0);
+    float a = (wake * streak * 1.6 + front * (0.35 + rim) + wake * n * 0.8) * uIntensity;
     vec3 col = mix(uColorCool, uColorHot, clamp(front + n * 0.3, 0.0, 1.0));
     gl_FragColor = vec4(col * a * 3.0, a);
   }
@@ -56,6 +58,12 @@ const frag = /* glsl */ `
 
 export class ReentryFx {
   readonly object = new THREE.Group();
+  private readonly axis = new THREE.Vector3(0, 1, 0);
+  private readonly point = new THREE.Vector3();
+  private readonly localAir = new THREE.Vector3();
+  private readonly partRotation = new THREE.Quaternion();
+  private readonly frontCenter = new THREE.Vector3();
+  private readonly rotation = new THREE.Quaternion();
   private mesh: THREE.Mesh;
   private mat: THREE.ShaderMaterial;
 
@@ -68,7 +76,7 @@ export class ReentryFx {
     }
     profile.reverse();
     profile.push(new THREE.Vector2(0.7, -0.2), new THREE.Vector2(0.25, -0.8), new THREE.Vector2(0.0, -1.0));
-    const geo = new THREE.LatheGeometry(profile, 48);
+    const geo = new THREE.LatheGeometry(profile, game.get().settings.quality === 'low' ? 16 : game.get().settings.quality === 'medium' ? 24 : 48);
     this.mat = new THREE.ShaderMaterial({
       vertexShader: vert,
       fragmentShader: frag,
@@ -96,18 +104,40 @@ export class ReentryFx {
    * @param airDirInto unit vector (render space) pointing into the oncoming air, i.e. along air-relative velocity
    * @param radius vessel bounding radius, m
    */
-  update(heatFlux: number, airDirInto: THREE.Vector3, radius: number, time: number) {
+  update(heatFlux: number, airDirInto: THREE.Vector3, radius: number, time: number, vessel?: VesselState, body = 'earth') {
     const k = THREE.MathUtils.clamp((Math.log10(Math.max(heatFlux, 1)) - 4.0) / 1.5, 0, 1);
     this.object.visible = k > 0.01;
     if (!this.object.visible) return;
     this.mat.uniforms.uIntensity.value = k * k;
     this.mat.uniforms.uTime.value = game.get().settings.reduceMotion ? 0 : time;
-    const r = radius * 1.15;
+    this.frontCenter.set(0,0,0);
+    let leading = radius * .75;
+    let crossRadius = Math.max(.5, radius * .45);
+    if (vessel) {
+      this.rotation.set(vessel.orientation.x, vessel.orientation.y, vessel.orientation.z, vessel.orientation.w);
+      leading = -Infinity;
+      for (const p of vessel.parts) {
+        this.point.set(p.position.x-vessel.com.x,p.position.y-vessel.com.y,p.position.z-vessel.com.z).applyQuaternion(this.rotation);
+        const shape = p.def.shape;
+        const pr = shape.kind === 'box' ? Math.max(shape.size.x,shape.size.z)*.5 : Math.max(shape.radiusTop,shape.radiusBottom);
+        this.partRotation.set(p.rotation.x,p.rotation.y,p.rotation.z,p.rotation.w).premultiply(this.rotation).invert();
+        this.localAir.copy(airDirInto).applyQuaternion(this.partRotation);
+        const extent = shape.kind === 'box' ? (Math.abs(this.localAir.x)*shape.size.x + Math.abs(this.localAir.y)*shape.size.y + Math.abs(this.localAir.z)*shape.size.z)*.5 : Math.abs(this.localAir.y)*shape.height*.5 + Math.hypot(this.localAir.x,this.localAir.z)*pr;
+        const center = this.point.dot(airDirInto);
+        const front = center + extent;
+        if (front > leading) { leading = front; crossRadius = pr; this.frontCenter.copy(this.point).addScaledVector(airDirInto,-center); }
+      }
+    }
+    const hot = this.mat.uniforms.uColorHot.value as THREE.Color;
+    const cool = this.mat.uniforms.uColorCool.value as THREE.Color;
+    hot.setRGB(1, body === 'titan' ? .7 : .55, body === 'mars' ? .6 : .25);
+    cool.setRGB(body === 'mars' ? .45 : 1, .25, body === 'titan' ? .08 : .7);
+    const r = crossRadius * 1.15;
     const sy = r * (1.4 + 2.5 * k);
     this.object.scale.set(r, sy, r);
-    this.object.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), airDirInto);
+    this.object.quaternion.setFromUnitVectors(this.axis, airDirInto);
     // Place the envelope so its front cap (local y = +1) sits just ahead of the vessel and the wake trails behind.
-    this.object.position.copy(airDirInto).multiplyScalar(r * 0.75 - sy);
+    this.object.position.copy(airDirInto).multiplyScalar(leading + r * .15 - sy).add(this.frontCenter);
   }
 
   dispose() {
