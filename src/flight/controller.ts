@@ -901,10 +901,11 @@ export class FlightController {
     // Sky fill: brighter in thick air (scattered skylight), dim in space (planetshine + starlight).
     const airFrac = Math.min(1, air.density / 1.0);
     const envBody = u.body(wv.body);
-    const envDist = Math.max(envBody.radius, length(sub(origin, bodyState.position)));
+    const envRel = sub(origin, bodyState.position);
+    const envDist = Math.max(envBody.radius, length(envRel));
     this.scene.environment = this.skyEnv.update(
       {
-        up: this.envUp.set(up.x, up.y, up.z),
+        up: this.envUp.set(envRel.x, envRel.y, envRel.z).normalize(),
         sun: sd,
         air: airFrac,
         daylight: eclipse,

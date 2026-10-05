@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { RECIPES, type Channel, type TexData } from './texgen/recipes';
+import { RECIPES, generate, type Channel, type TexData } from './texgen/recipes';
 
 /**
  * Procedural part texture library (main thread).
@@ -123,13 +123,11 @@ function workers(): Worker[] | null {
 /** Main-thread generation, one recipe per idle slice. */
 function generateHere(key: string) {
   setTimeout(() => {
-    void import('./texgen/recipes').then(({ generate }) => {
-      const data: TexData = generate(key);
-      const buffers: Partial<Record<Channel, ArrayBuffer>> = {};
-      for (const [ch, img] of Object.entries(data)) buffers[ch as Channel] = img.data.buffer as ArrayBuffer;
-      apply(key, RECIPES[key].size, buffers);
-      done(key);
-    });
+    const data: TexData = generate(key);
+    const buffers: Partial<Record<Channel, ArrayBuffer>> = {};
+    for (const [ch, img] of Object.entries(data)) buffers[ch as Channel] = img.data.buffer as ArrayBuffer;
+    apply(key, RECIPES[key].size, buffers);
+    done(key);
   }, 0);
 }
 
