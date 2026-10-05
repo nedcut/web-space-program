@@ -41,7 +41,9 @@
 .vab-stat { display: flex; flex-direction: column; gap: 1px; font-size: 14px; white-space: nowrap; }
 .vab-stat .label { font-size: 9.5px; }
 .vab-stat .accent { color: var(--accent); font-weight: 600; }
-.vab-launch { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 20px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: 13px; }
+.vab-launch { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 18px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+.vab-launch-cost { font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; opacity: 0.85; text-transform: none; }
+.vab-topbar > .vab-ibtn:last-child { flex-shrink: 0; }
 
 /* ---------------------------------------------------------------- palette */
 .vab-palette {
@@ -193,7 +195,13 @@
 .vab-saved-name { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vab-saved-info { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
 
-@media (max-width: 1180px) {
-  .vab-stats .vab-stat:nth-child(3) { display: none; }
-  .vab-name { width: 160px; }
+@media (max-width: 1440px) {
+  .vab-name { width: 180px; }
+  .vab-stats { gap: 12px; margin-left: 2px; padding-left: 10px; }
+  .vab-topbar { gap: 8px; }
 }
+@media (max-width: 1300px) {
+  .vab-stats .vab-stat:nth-child(3) { display: none; }
+  .vab-name { width: 150px; }
+}
+.vab-stock-locked { font-size: 10.5px; color: var(--warn); margin-top: 4px; }
