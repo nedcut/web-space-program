@@ -100,6 +100,15 @@ describe('resource machinery', () => {
     expect(totalResource(wv.state, 'regolith')).toBeGreaterThan(0);
     amounts(v).forEach((n, i) => expect(n).toBeCloseTo(amounts(wv.state)[i], 8));
   });
+  it('reads the current location after leaving a packed surface position', () => {
+    const w = new World(u, PART_CATALOG, 0), wv = w.launch(craft());
+    const b = u.body(wv.body), bs = u.ephem.getBodyState(b.id, 0);
+    // Unpacking may retain the old fixed transform for subsequent contact handling.
+    wv.mode = 'physics';
+    const direction = v3(0, 0, 1);
+    wv.state.position = add(bs.position, qRotate(u.ephem.bodyRotation(b.id, 0), scale(direction, b.radius)));
+    expect(w.localConcentration(wv)).toBeCloseTo(concentrationAt(b, direction), 8);
+  });
   it('persists deployment, operation, recipe, core heat and surveys, migrates older saves', () => {
     const w = new World(u, PART_CATALOG, 0); const wv = w.launch(craft());
     wv.state.parts[1].drillDeployed = true; wv.state.parts[2].converterRunning = true;

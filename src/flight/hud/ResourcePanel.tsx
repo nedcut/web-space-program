@@ -4,8 +4,7 @@ import type { MapView } from '../../render/map/MapView';
 import { totalResource } from '../../sim/vessel/resources';
 
 export function ResourcePanel({ world, map, mapMode, paused }: { world: World; map: MapView; mapMode: boolean; paused: boolean }) {
-  const [open, setOpen] = useState(false);
-  const [overlay, setOverlay] = useState(false);
+  const overlay = map.resourceOverlayEnabled;
   const [, refresh] = useState(0);
   const wv = world.active;
   if (!wv) return null;
@@ -13,11 +12,11 @@ export function ResourcePanel({ world, map, mapMode, paused }: { world: World; m
   const parts = v.parts.filter(p => p.def.modules.some(m => ['drill', 'converter', 'surfaceScanner', 'surveyScanner'].includes(m.type)));
   if (!parts.length && !mapMode) return null;
   const disabled = paused || !world.canControl(v);
-  return <div className="panel" style={{ position: 'absolute', right: 10, top: 310, width: 260, padding: 10, pointerEvents: 'auto', maxHeight: 270, overflowY: 'auto' }}>
-    <button className="btn small" onClick={() => setOpen(!open)}>Surface resources {open ? '▴' : '▾'}</button>
-    {(open || mapMode) && <>
+  return <div className="panel" style={{ padding: 10, pointerEvents: 'auto', maxHeight: 320, overflowY: 'auto', flexShrink: 0 }}>
+    <div className="label">Surface resources</div>
+    <>
       {mapMode && <><button className="btn small" onClick={() => {
-        const enabled = !overlay; setOverlay(enabled); map.setResourceOverlay(enabled ? world.surveyedBodies : []);
+        map.setResourceOverlay(world.surveyedBodies, !overlay); refresh(n => n + 1);
       }}>{overlay ? 'Hide' : 'Show'} regolith overlay</button><div style={{ fontSize: 11 }}>Surveyed bodies only · blue 0% → gold 100%</div></>}
       <div style={{ fontSize: 12, margin: '8px 0' }}>Regolith: {totalResource(v, 'regolith').toFixed(1)} L</div>
       {parts.map(p => <div key={p.uid} style={{ fontSize: 12, marginTop: 8 }}>
@@ -37,6 +36,6 @@ export function ResourcePanel({ world, map, mapMode, paused }: { world: World; m
           refresh(n => n + 1);
         }}>{world.surveyedBodies.includes(wv.body) ? 'Body surveyed' : 'Survey resource field'}</button></div>}
       </div>)}
-    </>}
+    </>
   </div>;
 }

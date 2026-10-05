@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react';
+import { useGame } from '../../game/store';
+import { partUnlocked } from '../../data/technology';
+import { newProgression } from '../../sim/science/progression';
 import type { CraftDef } from '../../sim/vessel/types';
 import { craftStats } from '../core';
 import { CATALOG, DENSITIES, type EditorSession } from '../session';
@@ -20,6 +23,9 @@ function summary(craft: CraftDef) {
 
 export function LoadDialog({ session, onClose }: { session: EditorSession; onClose(): void }) {
   const [rev, setRev] = useState(0);
+  const mode = useGame((s) => s.mode);
+  const progression = useGame((s) => s.resumeWorld?.progression) ?? newProgression();
+  const lockedCount = (c: CraftDef) => new Set(c.parts.map((p) => p.partId).filter((id) => !partUnlocked(id, mode, progression))).size;
   const stock = useMemo(() => STOCK_CRAFTS.map((s) => {
     const craft = s.build();
     return { ...s, craft, info: summary(craft) };
@@ -50,6 +56,7 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
               <div className="vab-stock-name">{s.name}</div>
               <div className="vab-stock-blurb">{s.blurb}</div>
               <div className="vab-stock-info mono">{s.info}</div>
+              {lockedCount(s.craft) > 0 && <div className="vab-stock-locked">Needs research · {lockedCount(s.craft)} locked part type{lockedCount(s.craft) > 1 ? 's' : ''}</div>}
             </button>
           ))}
         </div>

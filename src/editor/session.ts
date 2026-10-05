@@ -78,6 +78,7 @@ export class EditorSession {
   private listeners = new Set<() => void>();
   private snap!: SessionView;
   private name: string;
+  private launchWarnedAt = -Infinity;
   private held: HeldState | null = null;
   private symmetry: SymmetryCount = 1;
   private symmetryMode: SymmetryMode = 'radial';
@@ -175,7 +176,7 @@ export class EditorSession {
     setTimeout(() => {
       this.toasts = this.toasts.filter((t) => t.id !== id);
       this.touch();
-    }, 3200);
+    }, Math.max(3200, text.length * 55));
   }
 
   private guard<T>(fn: () => T): T | undefined {
@@ -256,6 +257,16 @@ export class EditorSession {
     const g = game.get();
     const problem = launchProblem(craft, CATALOG, g.mode, g.resumeWorld?.progression ?? newProgression());
     if (problem) return this.toast(problem, 'bad');
+    // Friendly pre-flight check for rockets: warn once when the first powered stage can't lift off.
+    if (craft.type !== 'SPH' && performance.now() - this.launchWarnedAt > 8000) {
+      const stats = [...this.snap.stageStats.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);
+      const first = stats.find((s) => s.twrAsl > 0 || s.dvVac > 0);
+      const msg = !first ? 'No engines found: this craft will not leave the pad.' : first.twrAsl < 1 ? `First stage thrust-to-weight is ${first.twrAsl.toFixed(2)} (needs > 1 to lift off).` : '';
+      if (msg) {
+        this.launchWarnedAt = performance.now();
+        return this.toast(`${msg} Press Launch again to fly anyway.`, 'warn');
+      }
+    }
     game.set({ craft, scene: 'flight', launchPending: true });
   }
 

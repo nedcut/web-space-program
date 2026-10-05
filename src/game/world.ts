@@ -56,7 +56,8 @@ export class World {
 
   localConcentration(wv = this.active): number {
     if (!wv) return 0;
-    const direction = wv.fixed?.pos ?? qRotate(qConj(bodyQuat(this.universe, wv.body, this.ut)), this.relativeState(wv).position);
+    const fixed = wv.mode === 'landedRails' || wv.mode === 'prelaunch' ? wv.fixed : undefined;
+    const direction = fixed?.pos ?? qRotate(qConj(bodyQuat(this.universe, wv.body, this.ut)), this.relativeState(wv).position);
     return concentrationAt(this.universe.body(wv.body), direction);
   }
 
@@ -824,7 +825,7 @@ export class World {
           if (b.atmosphere && alt < b.atmosphere.height && wv.state.situation === 'flying') this.vessels.delete(wv.state.id);
           else {
             this.pack(wv);
-            if (wv.mode === 'landedRails') advanceISRU(wv.state, this.localConcentration(wv), PHYSICS_DT);
+            if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') advanceISRU(wv.state, this.localConcentration(wv), PHYSICS_DT);
           }
           continue;
         }

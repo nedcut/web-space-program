@@ -138,6 +138,7 @@ export class MapView {
   yaw = 0.6;
   pitch = 0.5;
   distance = 2e7;
+  resourceOverlayEnabled = false;
   private resourceTextures = new Map<string, THREE.DataTexture>();
   private resourceBodies = new Set<string>();
   private bodies = new Map<string, BodyVisual>();
@@ -158,8 +159,9 @@ export class MapView {
   private approachLabel: HTMLDivElement;
 
   /** Cached body-fixed field texture; callers supply only surveyed bodies. */
-  setResourceOverlay(surveyedBodies: readonly string[]) {
-    this.resourceBodies = new Set(surveyedBodies);
+  setResourceOverlay(surveyedBodies: readonly string[], enabled = true) {
+    this.resourceOverlayEnabled = enabled;
+    this.resourceBodies = new Set(enabled ? surveyedBodies : []);
     for (const [id, vis] of this.bodies) {
       if (!vis.body.solidSurface) continue;
       const mat = vis.sphere.material as THREE.MeshStandardMaterial;
