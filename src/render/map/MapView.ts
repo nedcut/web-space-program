@@ -724,6 +724,8 @@ export class MapView {
   }
 
   dispose() {
+    for (const fx of this.comets.values()) fx.dispose();
+    this.comets.clear();
     for (const texture of this.resourceTextures.values()) texture.dispose();
     this.resourceTextures.clear();
     this.labels.remove();

@@ -88,8 +88,12 @@ describe('small bodies', () => {
     expect(generateAsteroidField()).toHaveLength(208);
     const { world } = setupSmallBodyApproach();
     const u = world.universe, id = u.asteroidField[0].id;
+    const vessel = world.active!;
+    vessel.orbit = world.orbitOf(vessel); vessel.mode = 'rails';
+    expect(vessel.railsEvent).toBeUndefined();
     expect(u.bodies.has(id)).toBe(false);
     expect(world.setTarget(id)).toBe(true);
+    expect(vessel.railsEvent).toBeDefined();
     expect(u.bodies.has(id)).toBe(true);
     expect(u.ephem.getBodyState(id, 0).position.x).toBeCloseTo(u.asteroidState(id, 0).position.x, 2);
     const id2 = u.asteroidField[1].id, p = u.asteroidState(id2, 0).position;

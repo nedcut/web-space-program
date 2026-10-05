@@ -8,15 +8,23 @@ export class CometEffects {
   private coma: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   private ion: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>;
   private dust: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>;
+  private fade: THREE.DataTexture;
   private jets = new THREE.Group();
   constructor() {
+    const bytes = new Uint8Array(64 * 4);
+    for (let i = 0; i < 64; i++) {
+      bytes.set([255, 255, 255, Math.round(255 * (1 - i / 63) ** 2)], i * 4);
+    }
+    this.fade = new THREE.DataTexture(bytes, 1, 64);
+    this.fade.magFilter = THREE.LinearFilter; this.fade.needsUpdate = true;
     const material = (color: number) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     this.coma = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), material(0x65cab2));
     const tail = (color: number) => {
-      const geometry = new THREE.CylinderGeometry(1, 0.035, 1, 16, 1, true);
+      const geometry = new THREE.CylinderGeometry(1, 0, 1, 16, 1, true);
       geometry.translate(0, 0.5, 0);
-      return new THREE.Mesh(geometry, material(color));
+      const mat = material(color); mat.map = this.fade;
+      return new THREE.Mesh(geometry, mat);
     };
     this.ion = tail(0x5f91ff); this.dust = tail(0xdfc395);
     this.root.add(this.coma, this.ion, this.dust, this.jets);
@@ -49,6 +57,7 @@ export class CometEffects {
   }
   dispose() {
     this.root.removeFromParent();
+    this.fade.dispose();
     this.root.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); o.material.dispose(); } });
   }
 }
