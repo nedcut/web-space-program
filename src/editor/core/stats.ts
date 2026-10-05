@@ -60,7 +60,7 @@ export interface CraftWarning { code: 'no-command' | 'no-fuel' | 'no-parachute' 
 export function validateCraft(craft: CraftDef, catalog: PartCatalog): CraftWarning[] {
   const warnings: CraftWarning[] = [];
   const defs = craft.parts.map(p => requirePart(catalog, p.partId));
-  if (!defs.some(d => d.modules.some(m => m.type === 'command'))) warnings.push({ code: 'no-command', message: 'Craft has no command part.', partUids: [] });
+  if (!defs.some(d => d.modules.some(m => m.type === 'command' && m.controllable !== false))) warnings.push({ code: 'no-command', message: 'Craft has no command part.', partUids: [] });
   if (!defs.some(d => d.modules.some(m => m.type === 'parachute'))) warnings.push({ code: 'no-parachute', message: 'Craft has no parachutes.', partUids: [] });
   const byUid = new Map(craft.parts.map(p => [p.uid, p]));
   for (const part of craft.parts) {

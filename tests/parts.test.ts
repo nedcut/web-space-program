@@ -20,7 +20,7 @@ describe('part catalogue', () => {
     const ids = PART_DEFS.map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(PART_CATALOG.size).toBe(ids.length);
-    expect(PART_DEFS.length).toBeGreaterThanOrEqual(45);
+    expect(PART_DEFS.length).toBeGreaterThanOrEqual(150);
   });
 
   it('has unique names and original text', () => {
@@ -90,7 +90,10 @@ describe('part catalogue', () => {
         continue;
       }
       expect(e.ispVac).toBeGreaterThan(e.ispAsl);
-      if (e.plume !== 'ion') {
+      if (p.id === 'eng-hearth') {
+        expect(e.ispVac).toBe(850);
+        expect(e.propellants).toEqual({ liquidFuel: 1 });
+      } else if (e.plume !== 'ion') {
         expect(e.ispVac).toBeGreaterThan(200);
         expect(e.ispVac).toBeLessThan(470);
       }
@@ -103,8 +106,8 @@ describe('part catalogue', () => {
     expect(twr).toBeGreaterThan(20);
   });
 
-  it('size classes 0..3 are all covered by tanks, decouplers and engines', () => {
-    for (const size of [0, 1, 2, 3]) {
+  it('size classes 0..4 are all covered by tanks, decouplers and engines', () => {
+    for (const size of [0, 1, 2, 3, 4]) {
       for (const cat of ['fuelTank', 'coupling', 'engine'] as const) {
         const ok = PART_DEFS.some((p) => p.category === cat && p.attachNodes.some((n) => n.size === size && n.id !== 'srf'));
         expect(ok, `${cat} size ${size}`).toBe(true);

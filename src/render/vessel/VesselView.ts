@@ -111,6 +111,7 @@ export class VesselView {
       return;
     }
     let target = -1;
+    if (p.bayOpen !== undefined) target = p.bayOpen ? 1 : 0;
     if (p.leg) target = p.leg.deployed ? 1 : 0;
     if (p.chute) target = p.chute.phase === 'full' ? 1 : p.chute.phase === 'semi' ? 0.35 : 0;
     if (target >= 0 && Math.abs(pv.deploy - target) > 1e-3) {

@@ -105,6 +105,7 @@ function PartTooltip({ def, y }: { def: PartDef; y: number }) {
   const chute = def.modules.find((m) => m.type === 'parachute');
   const wing = def.modules.find((m) => m.type === 'liftingSurface');
   const wheel = def.modules.find((m) => m.type === 'reactionWheel');
+  const source = def.modules.find(m => m.type === 'generator' || m.type === 'fuelCell');
   const solar = def.modules.find((m) => m.type === 'solarPanel');
   const rows: [string, string][] = [];
   const wet = wetMass(def);
@@ -119,6 +120,8 @@ function PartTooltip({ def, y }: { def: PartDef; y: number }) {
     rows.push(['Throttle', engine.throttleable ? `${Math.round(engine.minThrottle * 100)}–100%` : 'Fixed (solid)']);
   }
   if (cmd && cmd.type === 'command') rows.push(['Crew', cmd.crew ? `${cmd.crew} seat${cmd.crew > 1 ? 's' : ''}` : 'Uncrewed probe']);
+  if (cmd?.controllable === false) rows.push(['Control', 'Requires cockpit or probe']);
+  if (source?.type === 'generator' || source?.type === 'fuelCell') rows.push(['Power', `${source.chargeRate} EC/s${source.type === 'fuelCell' ? ' · fuel + oxidizer' : ' · constant'}`]);
   if (wheel && wheel.type === 'reactionWheel') rows.push(['Torque', `${(wheel.torque / 1000).toFixed(1)} kN·m`]);
   if (dec && dec.type === 'decoupler') rows.push(['Ejection', `${dec.ejectionImpulse} N·s${dec.radial ? ' (radial)' : ''}`]);
   if (chute && chute.type === 'parachute') rows.push(['Drag area', `${chute.deployedCdA} m²`]);
