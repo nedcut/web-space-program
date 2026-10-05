@@ -163,7 +163,7 @@ export interface TextOpts {
 export const decals = {
   /** Manufacturer mark; `mono` draws it single-colour (e.g. '#f2f2ee' on dark paint). */
   logo(id: LiveryId, mono?: string): Region {
-    const S = 192;
+    const S = 128;
     return alloc(`logo:${id}:${mono ?? ''}`, S, S, (c, x, y) => {
       drawLogo(c, id, x, y, S, mono);
       wear(c, x, y, S, S, 0.5, id.length * 97 + 3);
@@ -209,18 +209,18 @@ export const decals = {
     let hsh = 0;
     for (const ch of def.id) hsh = (Math.imul(hsh, 31) + ch.charCodeAt(0)) >>> 0;
     const serial = `${L.code}-${String(1000 + (hsh % 9000))}`;
-    const px1 = 34;
-    const px2 = 26;
-    const w = Math.max(measure(name, px1, 800), measure(serial, px2, 600)) + 28;
-    const h = 84;
+    const px1 = 28;
+    const px2 = 21;
+    const w = Math.max(measure(name, px1, 800), measure(serial, px2, 600)) + 24;
+    const h = 68;
     const ink = dark ? '#e8e6e0' : '#25282d';
     return alloc(`plate:${def.id}:${dark}`, w, h, (c, x, y) => {
       c.fillStyle = L.accent;
-      c.fillRect(x + 2, y + 6, 8, h - 12);
+      c.fillRect(x + 2, y + 5, 7, h - 10);
       c.font = `800 ${px1}px ${FONT}`;
-      stencilText(c, name, x + 20, y + 38, px1, ink, false, 0.05);
+      stencilText(c, name, x + 17, y + 31, px1, ink, false, 0.05);
       c.font = `600 ${px2}px ${FONT}`;
-      stencilText(c, serial, x + 20, y + 72, px2, ink, false, 0.08);
+      stencilText(c, serial, x + 17, y + 59, px2, ink, false, 0.08);
       wear(c, x, y, w, h, 0.4, hsh);
     }, w / h);
   },
