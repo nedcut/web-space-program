@@ -5,7 +5,7 @@ import type { ScalePresetId } from '../sim/bodies/scale';
 import type { CraftDef } from '../sim/vessel/types';
 import type { SavedWorld } from './persistence';
 
-export type Scene = 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking' | 'research' | 'missions';
+export type Scene = 'training' | 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking' | 'research' | 'missions';
 export type QualityPreset = 'low' | 'medium' | 'high';
 
 export interface Settings {
@@ -23,6 +23,8 @@ export interface GameState {
   /** Opt-in LAN mode; null keeps single-player behavior. Never persisted. */
   multiplayer: MultiplayerConfig | null;
   scene: Scene;
+  /** Practice scenes must not overwrite the saved editor craft. */
+  trainingActive: boolean;
   mode: GameMode;
   saveId: string | null;
   scalePreset: ScalePresetId;
@@ -76,7 +78,7 @@ export const DEFAULT_START_UT = (Date.UTC(2030, 6, 20, 12) - Date.UTC(2000, 0, 1
 function initialScene(): Scene {
   try {
     const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('scene') : null;
-    if (q && ['menu', 'spaceCenter', 'editor', 'flight', 'tracking', 'research', 'missions'].includes(q)) return q as Scene;
+    if (q && ['training', 'menu', 'spaceCenter', 'editor', 'flight', 'tracking', 'research', 'missions'].includes(q)) return q as Scene;
   } catch {
     /* no location */
   }
@@ -86,6 +88,7 @@ function initialScene(): Scene {
 export const game = createStore<GameState>({
   scene: initialScene(),
   multiplayer: null,
+  trainingActive: false,
   mode: 'sandbox',
   saveId: null,
   scalePreset: 'standard',
@@ -121,6 +124,7 @@ export function applyCommsSettings(world: import('./world').World) {
 const CRAFT_KEY = 'wsp.craft.v1';
 let lastCraft: CraftDef | null = game.get().craft;
 game.subscribe(() => {
+  if (game.get().trainingActive) return;
   const craft = game.get().craft;
   if (craft === lastCraft) return;
   lastCraft = craft;

@@ -1,0 +1,16 @@
+.training-screen { padding: 40px max(24px, 8vw); overflow-y: auto; background: radial-gradient(ellipse at top right, #163347, #080e18 70%); }
+.training-screen > p { color: var(--text-dim); }
+.training-lessons { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; max-width: 1000px; margin: 24px 0; }
+.training-lesson { display: flex; gap: 16px; padding: 18px; text-align: left; color: var(--text); cursor: pointer; }
+.training-lesson:hover, .training-lesson:focus-visible { border-color: var(--accent); }
+.training-lesson > span { color: var(--accent); font-size: 22px; }
+.training-lesson p { color: var(--text-dim); margin: 6px 0 0; font-size: 13px; }
+.tutorial-panel { position: absolute; z-index: 15; right: 290px; top: 74px; width: 340px; max-width: calc(100vw - 24px); max-height: calc(100vh - 100px); overflow: auto; padding: 16px; pointer-events: auto; }
+.tutorial-panel p { line-height: 1.5; font-size: 14px; margin: 12px 0; }
+.tutorial-progress { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+.tutorial-status { font-size: 12px; color: var(--accent); margin-bottom: 12px; }
+.tutorial-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.tutorial-pulse { animation: tutorial-pulse 1.6s ease-in-out infinite; }
+@keyframes tutorial-pulse { 50% { box-shadow: 0 0 0 3px #5cc8ff, 0 0 18px #5cc8ff80; } }
+@media (prefers-reduced-motion: reduce) { .tutorial-pulse { animation: none; outline: 2px solid var(--accent); } }
+@media (max-width: 900px) { .tutorial-panel { right: 12px; top: 74px; width: 280px; } }

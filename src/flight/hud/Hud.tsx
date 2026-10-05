@@ -209,6 +209,7 @@ export function Hud({ t, cb, navball, dock }: { t: Telemetry; cb: HudCallbacks; 
   const chip = (id: DockId, label: string, title: string, extra?: ReactNode) => (
     <button
       key={id}
+      data-tutorial={id}
       className={`btn small hud-chip ${open.has(id) ? 'on' : ''}`}
       title={title}
       aria-pressed={open.has(id)}
@@ -229,7 +230,7 @@ export function Hud({ t, cb, navball, dock }: { t: Telemetry; cb: HudCallbacks; 
           {t.warpLabel}
         </div>
         <button className="btn small" onClick={() => cb.onWarp(1)} title="Faster time warp ( . )">▶</button>
-        <button className={`btn small ${t.mapMode ? 'primary' : ''}`} onClick={cb.onMap} title="Map view (M)">MAP</button>
+        <button className={`btn small ${t.mapMode ? 'primary' : ''}`} data-tutorial="map" onClick={cb.onMap} title="Map view (M)">MAP</button>
         {cb.onHelp && <button className="btn small" onClick={cb.onHelp} title="Controls help (F1)">?</button>}
       </div>
 
@@ -296,7 +297,7 @@ export function Hud({ t, cb, navball, dock }: { t: Telemetry; cb: HudCallbacks; 
       {/* Bottom-centre: navball + speed + SAS */}
       <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
         {!t.eva && <div className="panel" style={{ padding: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, width: 130 }}>
-          <button className={`btn small ${t.sasOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} onClick={cb.onToggleSas} title="Stability assist (T)">SAS</button>
+          <button className={`btn small ${t.sasOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} data-tutorial="sas" onClick={cb.onToggleSas} title="Stability assist (T)">SAS</button>
           {SAS_MODES.map((m) => (
             <button key={m.id} className={`btn small ${t.sasOn && t.sasMode === m.id ? 'primary' : ''}`} onClick={() => cb.onSasMode(m.id)} style={{ padding: '4px 2px', fontSize: 10 }}>
               {m.label}
@@ -330,7 +331,7 @@ export function Hud({ t, cb, navball, dock }: { t: Telemetry; cb: HudCallbacks; 
             <div className="mono" style={{ fontSize: 18 }}>{formatSpeed(t.speed)}</div>
           </button>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-            {!t.eva && <ThrottleGauge value={t.throttle} />}
+            {!t.eva && <span data-tutorial="throttle"><ThrottleGauge value={t.throttle} /></span>}
             {navball}
           </div>
         </div>

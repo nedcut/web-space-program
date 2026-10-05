@@ -1,5 +1,6 @@
 import { applyCommsSettings, game } from '../game/store';
 import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
+import { getTutorial } from '../tutorial/runtime';
 import type { GameMode } from '../sim/science/progression';
 import { FlagView } from '../render/vessel/FlagView';
 import * as THREE from 'three';
@@ -280,7 +281,7 @@ export class FlightController {
   private activeLost = false;
 
   quicksave(slot = 'quicksave') {
-    if (this.network) return;
+    if (this.network || getTutorial()) return;
     try {
       saveWorldToStorage(slot, this.world);
       if (slot === 'quicksave') this.world.message('Quicksaved (F9 to load)');

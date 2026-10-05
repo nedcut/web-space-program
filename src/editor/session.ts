@@ -1,3 +1,4 @@
+import { getTutorial, endTutorial } from '../tutorial/runtime';
 import { partUnlocked, launchProblem } from '../data/technology';
 import { newProgression } from '../sim/science/progression';
 import { PART_CATALOG } from '../data/parts';
@@ -271,6 +272,7 @@ export class EditorSession {
   }
 
   exit() {
+    if (getTutorial()) return endTutorial();
     if (this.held) this.cancelHeld();
     const craft = this.currentCraft();
     game.set({ craft: craft.parts.length ? craft : null, scene: 'spaceCenter' });

@@ -1,6 +1,7 @@
 import { SignalPanel } from './hud/SignalPanel';
 import { MultiplayerPanel } from '../net/MultiplayerPanel';
 import { ResourcePanel } from './hud/ResourcePanel';
+import { tutorialContext, getTutorial, endTutorial, startLesson } from '../tutorial/runtime';
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -61,6 +62,7 @@ export default function FlightScene() {
     let unsub: (() => void) | null = null;
     let disposed = false;
     const beforeUnload = (e: BeforeUnloadEvent) => {
+      if (getTutorial()) return;
       if (c && !c.network) { c.quicksave('autosave'); e.preventDefault(); }
     };
     const resume = () => audio?.resume();
@@ -99,7 +101,7 @@ export default function FlightScene() {
       };
       game.set({ launchPending: false });
       const scenario = new URLSearchParams(location.search).get('scenario');
-      if (scenario && mountKey === 0) cc.devScenario(scenario);
+      if (scenario && mountKey === 0 && !getTutorial()) cc.devScenario(scenario);
       cc.input.invertPitch = game.get().settings.invertPitch;
       // Esc: close the help overlay first; never un-pause the "vessel lost" screen (there is nothing to fly).
       cc.onExit = () => {
@@ -109,7 +111,7 @@ export default function FlightScene() {
         setPaused((p) => !p);
       };
       cc.onQuickload = () => {
-        if (cc.network) return;
+        if (cc.network || getTutorial()) return;
         const data = FlightController.loadSlot('quicksave');
         if (!data) return cc.world.message('No quicksave yet (F5 to save)', 'warn');
         game.set({ resumeWorld: data, mode: data.mode ?? 'sandbox', scalePreset: data.preset, launchPending: false });
@@ -118,6 +120,8 @@ export default function FlightScene() {
       };
       ctrl.current = cc;
       setNetworkReady(!!cc.network);
+      tutorialContext.flight = cc;
+      tutorialContext.world = cc.world;
       unsub = cc.subscribe(setTele);
       // Leaving the page mid-flight: autosave and ask for confirmation (Ctrl+W / Ctrl+R are throttle-adjacent).
       window.addEventListener('beforeunload', beforeUnload);
@@ -126,7 +130,7 @@ export default function FlightScene() {
         if (!cc.network && !cc.sceneReady) return;
         window.clearInterval(readyTimer);
         setReady(true);
-        if (!cc.network && !helpSeen()) setHelp(true);
+        if (!cc.network && !getTutorial() && !helpSeen()) setHelp(true);
       }, 200);
     };
     let timer = 0;
@@ -146,6 +150,7 @@ export default function FlightScene() {
       audio?.dispose();
       if (audioRef.current === audio) audioRef.current = null;
       ctrl.current = null;
+      if (tutorialContext.flight === c) { delete tutorialContext.flight; delete tutorialContext.world; }
       setTele(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,6 +196,7 @@ export default function FlightScene() {
 
   /** Leave flight: keep the universe (vessels stay where they are) and autosave. */
   const exitTo = (scene: 'spaceCenter' | 'editor') => {
+    if (getTutorial()) return endTutorial();
     const c = ctrl.current;
     if (c) {
       c.quicksave('autosave');
@@ -213,12 +219,15 @@ export default function FlightScene() {
   };
   /** Revert: throw away this flight and return to the editor with the universe as it was before launch. */
   const revert = () => {
+    if (getTutorial()) return endTutorial();
     game.set({ resumeWorld: initial.current, mode: initial.current?.mode ?? game.get().mode, ut: initial.current?.ut ?? game.get().ut, launchPending: false, craft: launched.current ?? game.get().craft });
     saveProgram(openProgram());
     game.set({ scene: 'editor' });
   };
   /** Revert to launch: restore the pre-launch universe and put the same craft back on the pad. */
   const revertToLaunch = () => {
+    const tutorial = getTutorial();
+    if (tutorial) return startLesson(tutorial.lesson.id);
     if (!launched.current) return;
     game.set({ resumeWorld: initial.current, mode: initial.current?.mode ?? game.get().mode, ut: initial.current?.ut ?? game.get().ut, craft: launched.current, launchPending: true });
     saveProgram(openProgram());
@@ -234,7 +243,7 @@ export default function FlightScene() {
         <div className="panel" style={{ padding: 24, maxWidth: 420 }}>
           <div className="label" style={{ color: 'var(--bad)' }}>Could not start flight</div>
           <p style={{ color: 'var(--text-dim)' }}>{error}</p>
-          <button className="btn" onClick={() => game.set({ scene: multiplayer ? 'menu' : 'spaceCenter', multiplayer: null, launchPending: false })}>{multiplayer ? 'Back to menu' : 'Back to Space Center'}</button>
+          <button className="btn" onClick={() => getTutorial() ? endTutorial() : game.set({ scene: multiplayer ? 'menu' : 'spaceCenter', multiplayer: null, launchPending: false })}>{multiplayer ? 'Back to menu' : 'Back to Space Center'}</button>
         </div>
       </div>
     );
@@ -305,18 +314,19 @@ export default function FlightScene() {
             <div className="panel" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 280 }}>
               <div className="label" style={{ textAlign: 'center', color: lost ? 'var(--bad)' : undefined }}>{lost ? 'Vessel lost' : 'Paused'}</div>
               {!lost && <button className="btn primary" onClick={() => setPaused(false)}>Resume <span className="kbd" style={{ marginLeft: 6 }}>Esc</span></button>}
-              {lost && hasSave('quicksave') && <button className="btn primary" onClick={() => ctrl.current?.onQuickload?.()}>Load quicksave</button>}
+              {getTutorial() && <button className="btn" onClick={() => startLesson(getTutorial()!.lesson.id)}>Restart lesson</button>}
+              {lost && !getTutorial() && hasSave('quicksave') && <button className="btn primary" onClick={() => ctrl.current?.onQuickload?.()}>Load quicksave</button>}
               {canRecover && (
                 <button className="btn" onClick={recover}>Recover vessel</button>
               )}
               {launched.current && <button className="btn" onClick={revertToLaunch}>Revert to launch</button>}
               {launched.current && <button className="btn" onClick={revert}>Revert to editor</button>}
-              {!lost && <button className="btn" onClick={() => ctrl.current?.quicksave()}>Quicksave <span className="kbd" style={{ marginLeft: 6 }}>F5</span></button>}
-              {!lost && hasSave('quicksave') && <button className="btn" onClick={() => ctrl.current?.onQuickload?.()}>Quickload <span className="kbd" style={{ marginLeft: 6 }}>F9</span></button>}
+              {!lost && !getTutorial() && <button className="btn" onClick={() => ctrl.current?.quicksave()}>Quicksave <span className="kbd" style={{ marginLeft: 6 }}>F5</span></button>}
+              {!lost && !getTutorial() && hasSave('quicksave') && <button className="btn" onClick={() => ctrl.current?.onQuickload?.()}>Quickload <span className="kbd" style={{ marginLeft: 6 }}>F9</span></button>}
               <button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls <span className="kbd" style={{ marginLeft: 6 }}>F1</span></button>
               <button className="btn" onClick={() => setShowSettings(true)}>Settings</button>
-              <button className="btn" onClick={() => exitTo('spaceCenter')}>Space Center</button>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>Progress is autosaved when you leave flight.</div>
+              <button className="btn" onClick={() => exitTo('spaceCenter')}>{getTutorial() ? 'Back to lessons' : 'Space Center'}</button>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>{getTutorial() ? 'Practice is separate from your saved program.' : 'Progress is autosaved when you leave flight.'}</div>
             </div>
           )}
         </div>
