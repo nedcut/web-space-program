@@ -635,7 +635,10 @@ export class MapView {
       const closed = p.orbit.e < 1 && (p.endReason === 'horizon' || p.endTime - p.startTime > 2 * Math.PI * Math.sqrt(p.orbit.a ** 3 / p.orbit.mu));
       const pts = p.samples ? p.samples.map(s => s.position) : sampleConic(p.orbit, soi, p.startTime, closed ? null : p.endTime, 384);
       if (pts.length === 1) pts.push(pts[0]);
-      const line = this.makeLine(pts, PATCH_COLORS[i % PATCH_COLORS.length], i === 0 ? 2.4 : 1.8);
+      // Localize numerical vertices in Float64 before conversion to GPU Float32 buffers.
+      const anchor = p.samples ? pts[0] : undefined;
+      const line = this.makeLine(anchor ? pts.map(point => sub(point, anchor)) : pts, PATCH_COLORS[i % PATCH_COLORS.length], i === 0 ? 2.4 : 1.8);
+      line.userData.numericAnchor = anchor;
       line.material.dashed = i > 0;
       line.material.dashSize = 14; line.material.gapSize = 8;
       const total = line.geometry.getAttribute('instanceDistanceEnd');
@@ -836,7 +839,8 @@ export class MapView {
       this.updateVesselLines(u.vessel.patches, this.bodies);
       for (const line of this.vesselLines) {
         const id = line.userData.body as string;
-        this.place(line, this.ephem.getBodyState(id, t).position, focus);
+        const bodyPosition = this.ephem.getBodyState(id, t).position;
+        this.place(line, line.userData.numericAnchor ? add(bodyPosition, line.userData.numericAnchor) : bodyPosition, focus);
       }
       // Maneuver node markers: position at node time on whichever patch contains it.
       for (const n of u.vessel.nodes) {

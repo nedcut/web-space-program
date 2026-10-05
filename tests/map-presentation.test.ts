@@ -20,6 +20,19 @@ function host() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('map presentation', () => {
+  it('localizes numerical solar vertices before conversion to Float32',()=>{
+    vi.stubGlobal('document', { createElement: host });
+    const bodies=createUniverse('standard'),ephem=createEphemeris(bodies),map=new MapView(bodies,ephem,host() as unknown as HTMLElement);
+    const position={x:1e12,y:2e11,z:0},velocity={x:1,y:0,z:0};
+    map.update({t:0,focusId:'vessel:probe',referenceBody:'sun',focus:position,viewport:{width:1280,height:800},vessel:{position,nodes:[],patches:[{
+      orbit:{body:'sun',mu:bodies.get('sun')!.gm,a:1e12,e:0,i:0,lan:0,argPe:0,m0:0,epoch:0},startTime:0,endTime:1,endReason:'horizon',
+      samples:[{position,velocity,time:0},{position:{...position,x:position.x+.25},velocity,time:1}],
+    }]}});
+    const line=map.scene.children.find(o=>o.userData.numericAnchor) as THREE.Mesh;
+    expect(line.geometry.getAttribute('instanceStart').getX(0)).toBe(0);
+    expect(line.geometry.getAttribute('instanceEnd').getX(0)).toBe(.25);
+    map.dispose();
+  });
   it('rejects overlapping labels and retains separated labels', () => {
     const accepted = [{ x: 20, y: 20, width: 80, height: 18 }];
     expect(placeLabel({ x: 80, y: 24, width: 50, height: 18 }, accepted, 1)).toBe(false);
