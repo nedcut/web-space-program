@@ -10,7 +10,7 @@ import { flightPredictions } from '../game/flightData';
 import { deserializeWorld, loadWorldFromStorage, saveWorldToStorage, serializeWorld, type SavedWorld } from '../game/persistence';
 import { applyCommsSettings, game } from '../game/store';
 import { Universe } from '../game/universe';
-import { World, type WorldVessel } from '../game/world';
+import { PHYSICS_DT, World, type WorldVessel } from '../game/world';
 import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
 import { RenderPipeline, getQuality, type QualityId } from '../render/core';
 import type { ExtraOrbit } from '../render/map/MapView';
@@ -543,10 +543,22 @@ export class FlightController {
   private maneuverDirection(): Vec3 | null { return navball.maneuverDirection.call(this, this.systems); }
 
   private render(wv: WorldVessel, dt: number) {
+    // Draw between the last two fixed physics steps so motion advances evenly at any display rate. The map
+    // stays on exact state (its caches are keyed by simulation time); multiplayer has its own pose smoothing.
+    if (this.mapMode || this.network) return this.renderAt(wv, dt, this.world.ut);
+    const w = this.world;
+    const { renderUt, restore } = w.renderHistory.apply(w.ut, PHYSICS_DT, w.renderAlpha, w.vessels.values(), w.universe.ephem);
+    try {
+      this.renderAt(wv, dt, renderUt);
+    } finally {
+      restore();
+    }
+  }
+
+  private renderAt(wv: WorldVessel, dt: number, t: number) {
     const photoDt = dt;
     if (this.photo.active) dt = 0;
     const u = this.world.universe;
-    const t = this.world.ut;
     const origin = this.network?.pose(wv.state.id)?.position ?? wv.state.position;
     const bodyState = u.ephem.getBodyState(wv.body, t);
     const sunPos = u.ephem.getBodyState(u.sunId, t).position;
@@ -598,7 +610,7 @@ export class FlightController {
     }
     for (const [id, view] of this.views) if (!seen.has(id)) { view.dispose(); this.views.delete(id); }
 
-    this.flags.update(this.world);
+    this.flags.update({ active: this.world.active, flags: this.world.flags, universe: this.world.universe, ut: t });
 
     // Re-entry plasma on the active vessel.
     const airVel = this.world.surfaceVelocity(wv);
