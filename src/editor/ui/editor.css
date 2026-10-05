@@ -188,6 +188,8 @@
 .vab-stock:hover { border-color: var(--accent); background: rgba(92, 200, 255, 0.08); }
 .vab-stock-icon { color: var(--accent); margin-bottom: 4px; }
 .vab-stock-name { font-weight: 600; font-size: 14px; }
+.vab-stock-scale { align-self: flex-start; padding: 2px 7px; border: 1px solid var(--text-dim); border-radius: 4px; font-size: 11px; text-transform: capitalize; color: var(--text-dim); }
+.vab-stock-scale.current { color: var(--accent); border-color: var(--accent); }
 .vab-stock-blurb { font-size: 12px; color: var(--text-dim); }
 .vab-stock-info { font-size: 10.5px; color: var(--accent-2); margin-top: 6px; }
 .vab-saved { display: flex; flex-direction: column; gap: 6px; }

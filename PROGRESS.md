@@ -246,11 +246,23 @@ Challenging and Real now have catalog-built stock launchers and automated flight
 | Challenging (`s=0.32`) | 2,038.723 km | 99.466 km | 9.82022 m/s² | 614,400 |
 | Real (`s=1`) | 6,371.008 km | 140.000 km | 9.82022 m/s² | 6,000,000 |
 
-- **Stock hardware:** Meridian Real Orbiter: 17 parts, 219.69 t, 10,873.7 m/s vacuum stage Δv, launch ASL TWR 1.361, 84,332 credits. Selene Real Expedition: 84 parts, 4,115.43 t, 20,179.5 m/s vacuum stage Δv, launch ASL TWR 1.097, 1,359,597 credits. Selene uses eight five-metre strap-on boosters, staged chemical propulsion, an independent lunar descent stage with a reaction ring/batteries/legs, and an ascent/return stage. Both appear in the library with explicit scale blurbs. Editor ASL Δv and TWR now use the selected universe's Earth pressure/gravity, including the fallback estimator.
+Stock hardware after the `cx/realbal` quality pass (catalog parts unchanged; vacuum Δv sums the simulated staging sequence):
+
+| Design | Preset | Parts | Launch mass | Vacuum Δv | Launch ASL TWR | Cost |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Meridian Orbiter | Challenging | 16 | 75.21 t | 8,135.1 m/s | 3.975 | 42,925 cr |
+| Selene Expedition | Challenging | 35 | 670.38 t | 15,106.3 m/s | 1.733 | 157,177 cr |
+| Meridian Orbiter | Real | 17 | 219.69 t | 10,873.7 m/s | 1.361 | 84,332 cr |
+| Selene Expedition | Real | 92 | 4,791.47 t | 20,379.2 m/s | 1.302 | 1,393,197 cr |
+| Ringrunner Saturn Probe | Real | 76 | 4,781.84 t | 20,090.1 m/s | 1.305 | 1,440,344 cr |
+
+- **Stock hardware:** Selene Real adds eight Thunderclap solid assists to its independently fed liquid strap-ons; solids and strap-ons ignite together and separate together, preserving the dormant core's fuel reserve. Its liftoff TWR rises from 1.097 to 1.302, with an explicit ≥1.2 regression; all complete stock launchers again meet the common >1.15 check. Dedicated `stock-meridian-challenging` and `stock-selene-challenging` use smaller delivery stacks at `s=0.32`, with orbital and lunar flight coverage. Selene variants retain independent descent and ascent/return stages. `stock-ringrunner-real` carries five liquid-fuel-only nuclear cruise reservoirs, isotope generators and a Horizon reflector; it is sized for a Saturn **flyby**, aiming 120,000 km above Saturn with circular capture disabled. A real-scale SSTO was skipped: the existing chemical/airbreathing spaceplane has no demonstrated real-Earth orbital fuel margin.
+- **Editor scale guidance:** Every stock entry has a `scale` preset badge in Load, highlighting the current program scale. Library craft keep their `stockId` through renaming, edits and save/load. A mismatched launch shows one notice per design/current-scale pair in the editor session; the next Launch proceeds. Unknown/custom craft receive no stock attribution. ASL Δv and TWR continue to use the selected universe's Earth pressure/gravity, including the fallback estimator.
+
 - **Ascent/landing:** Larger presets need sustained orbital insertion; the old ballistic-hop guidance could reach target apoapsis yet fall into the atmosphere during the long circularization burn. Radial acceleration feedback includes centrifugal support and limits climb while horizontal speed builds. It also fixes lunar ascent. Landing prediction now runs at 2 Hz with interval clearance rather than 50 Hz; tall craft stop higher and use slower terminal feedback, and throttle below an engine's minimum is pulsed at 4 Hz. The Standard mission remains covered by its existing end-to-end test.
 - **Atmosphere/heating:** Pressure, temperature and composition already follow the compressed physical profile correctly. Sutton–Graves heating retains its density/nose-radius dependence and cubic velocity term. Capsule hull limits are now 1,600 K; separate shields retain 3,400/3,600 K limits. A tapered capsule exposed a tiny parachute rim to full stagnation heating on lunar return: the thermal model now includes an aligned heat shield's finite near wake, protecting wholly enclosed downstream parts while retaining 3% residual convective flux. Outboard and nose-first parts still burn. Radiation, conduction, ablation and aerodynamic drag are unchanged.
 - **Terrain/rendering:** Relief remains `s^0.8`; the physical 3 km launch plateau and runway fit at every scale and sample 10 m elevation. Existing float64 origin subtraction, chunk-local float32 vertices, adaptive terrain levels and logarithmic depth need no scale-specific renderer patch. New tests check real-Earth adjacent terrain boundaries within 1 mm and actual vessel object-matrix centimetre motion across ±1 km origin shifts within 0.1 mm. Save loading now rebuilds bounding radius/mass properties immediately (previously radius stayed zero until physics stepped). Inspected real-size pad/runway captures at port 5187: [pad](docs/screenshots/real-pad.png), [runway](docs/screenshots/real-runway.png). These are 1280×800 SwiftShader captures at Low quality, after terrain readiness, with no visible near-surface cracks; they are not hardware-GPU performance measurements.
-- **Warp/prediction:** Rails clearance fractions cap their reference radius at 637.1 km, allowing 10,000× in real LEO while retaining atmosphere/terrain/SOI event stops. The existing conic predictor's adaptive dynamical-time/boundary steps and isolated-orbit fast path handle the real lunar transfer and weeks-long launch-window wait within its 500,000-step budget. Interplanetary horizons and parking altitudes already derive from ephemerides/body parameters; no real-scale Saturn expedition is claimed by this change.
+- **Warp/prediction:** Rails clearance fractions cap their reference radius at 637.1 km, allowing 10,000× in real LEO while retaining atmosphere/terrain/SOI event stops. The existing conic predictor's adaptive dynamical-time/boundary steps and isolated-orbit fast path handle the real lunar transfer and weeks-long launch-window wait within its 500,000-step budget. Interplanetary horizons and parking altitudes already derive from ephemerides/body parameters; Ringrunner Real now has actual Earth ascent/parking plus a refined Earth → Sun → Saturn planner encounter and a remaining-fuel budget check. Full nuclear departure/cruise exceeded the three-minute allowance on the shared machine, so Saturn arrival/capture is not claimed; the test explicitly reserves 500 m/s for course trims.
 - **Comms/science/career:** Antenna ratings remain physical metres. Earth stations now rate 8 Tm; the Horizon reflector pairs at 2 Tm, enough for far-side real Saturn (more distant missions need relay infrastructure). Science situations already derive from atmospheric height and body radius; values/reputation stay unchanged. Starting funds, newly generated contract advances/rewards/penalties and cash milestones scale by `(s/0.1)²` (1 / 10.24 / 100). Existing saved balances and offers survive unchanged. Full career progression remains future balancing work.
 - **Reproduction:** `npx vite --port 5187 --strictPort`, then `node scripts/shot.mjs 'http://localhost:5187/?flight=stock-meridian-real&scale=real' docs/screenshots/real-pad.png`. `?scale=standard|challenging|real` also selects the universe for existing flight shortcuts; orbit/rendezvous/reentry dev scenarios now derive heights and speeds from it. `MOON_DEBUG=1 npx vitest run tests/world-moon-real.test.ts --maxWorkers=2` adds terminal-descent traces.
 
@@ -258,24 +270,30 @@ Mission logs (time since launch; Δv is integrated thrust acceleration, rounded)
 
 | Mission / phase | T+ | Result | Phase Δv |
 | --- | ---: | --- | ---: |
-| Meridian / Challenging orbit | 741 s | 164.82 × 165.68 km; 23,954 kg | — |
+| Meridian / Challenging orbit | 638 s | 154.94 × 155.15 km; 5,175 kg | — |
 | Meridian / Real orbit | 957 s | 221.39 × 222.01 km; 4,260 kg | — |
-| Selene Real / ascent | 686 s | 209 km altitude | 10,029 m/s |
-| Parking circularization | 967 s | 228.4 × 253.4 km | 251 m/s |
-| Trans-lunar injection | 1,986,777 s | Earth apoapsis 385,288 km | 3,134 m/s |
-| Early / late course trims | 1,988,582 / 2,224,127 s | Lunar SOI encounter | 4 / 4 m/s |
-| Lunar capture | 2,391,974 s | 7.4 × 10.6 km | 817 m/s |
-| Lunar touchdown | 2,392,288 s | 1.19 m/s, upright cosine 0.999, slope 2.2°, all 21 lander parts intact | 1,857 m/s |
-| Lunar ascent / circularization | 2,403,611 s | 31.6 × 33.0 km | 1,846 + 52 m/s |
-| Trans-Earth injection | 2,406,654 s | Earth-return trajectory | 819 m/s |
-| Earth SOI entry | 2,472,445 s | Earth periapsis 40.2 km | — |
-| Earth splashdown | 2,853,465 s | Capsule, shield and fully deployed chute survive; 1,482 kg | — |
+| Selene Real / ascent | 614 s | 201.6 km altitude | 9,593 m/s |
+| Parking circularization | 1,040 s | 250.0 × 275.2 km | 268 m/s |
+| Trans-lunar injection | 1,980,406 s | Earth apoapsis 385,003 km | 3,131 m/s |
+| Early / late / final course trims | 1,982,210 / 2,220,996 / 2,302,974 s | Lunar SOI encounter; final trim resolves finite-burn periapsis drift | 4 / 3 / <1 m/s |
+| Lunar capture | 2,390,310 s | 11.0 × 26.3 km | 815 m/s |
+| Lunar touchdown | 2,391,093 s | 1.59 m/s, upright cosine 1.000, slope 0.5°, all 21 lander parts intact | 1,775 m/s |
+| Lunar ascent / circularization | 2,402,420 s | 31.7 × 33.1 km | 1,852 + 52 m/s |
+| Trans-Earth injection | 2,406,084 s | Earth-return trajectory | 807 m/s |
+| Earth SOI entry | 2,474,028 s | Earth periapsis 45.8 km | — |
+| Earth touchdown | 2,892,281 s | Capsule, shield and fully deployed chute survive; 1,482 kg | — |
 
-The Moon lander remained landed through three hours of surface warp, moving 0.11 m. The spent return-stage separator burns away on Earth entry; the crew capsule, heat shield and chute survive. Both Meridian orbital tests also coast two full periods intact, with periapsis drift below 20 m across heliocentric packing/unpacking. The real Moon mission uses rails for idle phases and has a 180-second test budget; Moon plus three LEO reentry cases passed together in 126.56 seconds during focused verification.
+Ringrunner Real planning log: Earth parking 205.58 × 234.24 km; remaining vacuum Δv 9,744.0 m/s versus a refined 7,759.5 m/s departure, leaving 1,984.5 m/s (the test requires at least 500 m/s). The selected launch window is 12.8 days after parking, with a 1,580.4-day nominal flight. This is a planned encounter, not a flown Saturn arrival.
+
+Challenging Selene logs: parking 191.4 × 203.1 km at T+871 s; TLI 1,757 m/s; capture 35.1 × 37.6 km at T+1,561,772 s; landing at T+1,562,789 s with 1.53 m/s touchdown, upright cosine 1.000 and 3.3° slope. It moved 0.66 m during three hours of surface warp, ascended into 42.1 × 42.6 km orbit, and splashed down on Earth at T+1,805,261 s with its capsule/shield/deployed chute intact (1,535 kg).
+
+The Moon lander remained landed through three hours of surface warp, moving 0.26 m in the revised Real mission. The spent return-stage separator burns away on Earth entry; the crew capsule, heat shield and chute survive. Both Meridian orbital tests also coast two full periods intact, with periapsis drift below 20 m across heliocentric packing/unpacking. The shared Moon mission test covers both Real and Challenging launch, transfer, capture, landing, surface warp, ascent and Earth recovery, using rails for idle phases and a 300-second budget per mission to allow concurrent worktree CPU contention. A final approach trim handles centimetres-per-second finite-burn residuals after the stronger ascent; capture has a bounded burn window.
 
 LEO reentry coverage starts at 220 km apoapsis / 35 km periapsis. The shielded capsule reaches about 7.46 km/s air-relative speed, a peak skin temperature of 1,589 K, and splashes down under its chute with about 143.8/150 ablator remaining. The same unshielded capsule burns up; an unshielded empty tank also fails from overheating before impact. A separate thermal regression checks an 11 km/s shield wake, outboard exposure and reversed orientation.
 
 Final validation on `cx/realscale`: `npx tsc --noEmit` passed; `npx vitest run --maxWorkers=2` passed **48 files / 642 tests in 92.43 s**, including the original Standard orbit/Moon/Saturn/runway missions and the new larger-preset missions, thermal, save-cache and renderer precision regressions. Temporary mission snapshots and debug scripts were removed.
+
+Quality-pass validation on `cx/realbal` before the final main merge: `npm run lint`, `npx tsc --noEmit`, `npx vitest run --maxWorkers=2` (**56 files / 701 tests in 439.67 s** on the shared machine), `npm run build`, and `git diff --check` passed. Both scale-variant Moon return missions and the new real Saturn orbit/planning test pass. T3 preview navigation failed on both direct URL and environment-port attempts, so the new library badges have no browser screenshot evidence; launch-notice persistence and staging are covered headlessly.
 
 ## Main integration into code health (2026-10-04, cx/health)
 

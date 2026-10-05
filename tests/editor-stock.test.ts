@@ -30,11 +30,10 @@ describe('stock crafts', () => {
       }
       const launchBody = s.launchBody ?? (craft.type === 'VAB' && !s.needsResearch && s.id !== 'stock-tender' ? 'earth' : undefined);
       if (launchBody) {
-        const body = new Universe('standard').body(launchBody);
+        const body = new Universe(s.scale).body(launchBody);
         const pressure = sampleAtmosphere(body.atmosphere, 0, body.surfaceGravity).pressure;
         const first = computeStageDeltaV(buildVessel(craft, PART_CATALOG), pressure, body.surfaceGravity)[0];
-        // Real-scale heavy lifters fly lower liftoff TWR, like their real counterparts (verified in world-realscale tests).
-        expect(first.twrStart, `${launchBody} liftoff TWR`).toBeGreaterThan(s.id.endsWith('-real') ? 1.05 : 1.15);
+        expect(first.twrStart, `${launchBody} liftoff TWR`).toBeGreaterThan(1.15);
       }
     });
   }

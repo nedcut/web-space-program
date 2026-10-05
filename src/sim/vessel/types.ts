@@ -296,6 +296,8 @@ export interface PartInstance {
 
 export interface CraftDef {
   name: string;
+  /** Original library design; retained when a player renames, edits or saves it. */
+  stockId?: string;
   description?: string;
   type: 'VAB' | 'SPH';
   parts: PartInstance[];
