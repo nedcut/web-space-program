@@ -14,9 +14,15 @@ export function stepDockingAll(this: World, internals: WorldInternals): void {
   const events = stepDocking(phys, PHYSICS_DT, (a, b) => (a.id === this.activeId ? a : b.id === this.activeId ? b : a.mass >= b.mass ? a : b));
   for (const e of events) {
     const removed = this.vessels.get(e.removed.id);
-    if (removed) { this.logFlightEvent(removed, 'docking', e.keep.id); const r = this.flightlog.records.find(r => r.vesselId === e.removed.id && !r.outcome); if (r) { r.end = this.ut; r.outcome = 'merged';
+    if (removed) {
+      const r = this.flightlog.records.find(r => r.vesselId === e.removed.id && !r.outcome);
       const keepRecord = this.flightlog.records.find(k => k.vesselId === e.keep.id && !k.outcome);
-      if (keepRecord) { keepRecord.bodies = [...new Set([...keepRecord.bodies, ...r.bodies])]; keepRecord.landedBodies = [...new Set([...keepRecord.landedBodies, ...r.landedBodies])]; } } }
+      if (r && keepRecord) {
+        keepRecord.bodies = [...new Set([...keepRecord.bodies, ...r.bodies])];
+        keepRecord.landedBodies = [...new Set([...keepRecord.landedBodies, ...r.landedBodies])];
+      }
+      this.closeFlightRecord(removed, 'merged');
+    }
     this.vessels.delete(e.removed.id);
     if (this.activeId === e.removed.id) this.activeId = e.keep.id;
     if (this.targetId === e.removed.id || this.targetId === e.keep.id) this.setTarget(null);

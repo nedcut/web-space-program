@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { appendEvent, EVENT_CAP, finishRecord, newRecorder, observe, SAMPLE_CAP, orderedSamples, sampleInterval, startRecord, summaryText, type Observation } from '../src/game/flightlog/recorder';
+import { crossesRingPlane, appendEvent, ARCHIVE_SAMPLE_CAP, HISTORY_CAP, trimHistory, EVENT_CAP, finishRecord, newRecorder, observe, SAMPLE_CAP, orderedSamples, sampleInterval, startRecord, summaryText, type Observation } from '../src/game/flightlog/recorder';
 import { ACHIEVEMENTS, awardAchievements } from '../src/game/flightlog/achievements';
 import { loadAchievements, saveAchievements } from '../src/game/flightlog/storage';
 import { World } from '../src/game/world';
@@ -27,6 +27,19 @@ describe('flight recorder', () => {
     expect(sampleInterval(observation(0, { q: 0, thrustAcceleration: 0, altitude: 1e5, stableOrbit: true }))).toBe(30);
     expect(sampleInterval(observation(0, { prelaunch: true }))).toBe(5);
   });
+  it('compacts finished reports and bounds the archive without evicting live flights', () => {
+    const state = newRecorder();
+    const live = startRecord(state, 'live', 'Live', 0);
+    for (let i = 0; i < HISTORY_CAP + 5; i++) {
+      const r = startRecord(state, `v${i}`, 'Archive', 0);
+      for (let j = 0; j < 300; j++) observe(r, observation(j));
+      finishRecord(r, 300, 'recovered'); trimHistory(state);
+      expect(r.samples).toHaveLength(ARCHIVE_SAMPLE_CAP);
+      expect(r.samples[0][0]).toBe(0); expect(r.samples.at(-1)![0]).toBe(299);
+    }
+    expect(state.records.filter(r => r.outcome)).toHaveLength(HISTORY_CAP);
+    expect(state.records).toContain(live);
+  });
   it('detects flight, stable orbit, transitions, and touchdown exactly once', () => {
     const r = startRecord(newRecorder(), 'v', 'Voyager', 0);
     observe(r, observation(0, { flying: false, prelaunch: true }));
@@ -42,6 +55,29 @@ describe('flight recorder', () => {
     expect(summaryText(r)).toContain('Bodies visited: earth, moon');
     expect(summaryText(r)).toContain('0.50 m/s');
   });
+  it('detects ring-plane crossings and requires a return to the encounter parent for an assist', () => {
+    expect(crossesRingPlane({ x: 15, y: 0, z: -4 }, { x: 15, y: 0, z: 4 }, 10, 20)).toBe(true);
+    expect(crossesRingPlane({ x: 5, y: 0, z: -4 }, { x: 5, y: 0, z: 4 }, 10, 20)).toBe(false);
+    const r = startRecord(newRecorder(), 'flyby', 'Flyby', 0);
+    observe(r, observation(0, { body: 'sun', inertialSpeed: 1000, thrustAcceleration: 0 }));
+    observe(r, observation(1, { body: 'earth', inertialSpeed: 500, thrustAcceleration: 0 }));
+    observe(r, observation(2, { body: 'moon', inertialSpeed: 1500, thrustAcceleration: 0 }));
+    expect(r.events.some(e => e.kind === 'assist')).toBe(false);
+    const assist = startRecord(newRecorder(), 'assist', 'Assist', 0);
+    observe(assist, observation(0, { body: 'sun', inertialSpeed: 1000, thrustAcceleration: 0 }));
+    observe(assist, observation(1, { body: 'earth', inertialSpeed: 500, thrustAcceleration: 0 }));
+    observe(assist, observation(2, { body: 'sun', inertialSpeed: 1200, thrustAcceleration: 0 }));
+    expect(assist.events.some(e => e.kind === 'assist')).toBe(true);
+  });
+  it('continues sampling prelaunch and unattended vessels outside the physics bubble', () => {
+    const w = new World(new Universe('standard'), PART_CATALOG, 1000);
+    const pad = w.launch(buildOrbiter());
+    for (let i = 0; i < 260; i++) w.tick(0.02, neutralInput());
+    expect(w.flightlog.records[0].samples.length).toBeGreaterThan(1);
+    const other = w.spawnVessel(buildOrbiter(), { position: add(pad.state.position, { x: 1e7, y: 0, z: 0 }), velocity: pad.state.velocity, orientation: pad.state.orientation });
+    w.tick(0.02, neutralInput());
+    expect(w.flightlog.records.some(r => r.vesselId === other.state.id)).toBe(true);
+  });
   it('roundtrips live and archived records, without mutating snapshots', () => {
     const w = new World(new Universe('standard'), PART_CATALOG, 1000);
     w.launch(buildOrbiter());
@@ -55,6 +91,15 @@ describe('flight recorder', () => {
     const recovered = new World(new Universe('standard'), PART_CATALOG, 1000);
     recovered.launch(buildOrbiter()); expect(recovered.recoverActive()).toBe(true);
     expect(deserializeWorld(serializeWorld(recovered), PART_CATALOG).flightlog.records[0].outcome).toBe('recovered');
+  });
+  it('does not integrate stale engine telemetry while packed during time warp', () => {
+    const w = new World(new Universe('standard'), PART_CATALOG, 1000);
+    const v = w.launch(buildOrbiter());
+    v.state.telemetry.thrust = v.state.mass * 2;
+    v.mode = 'landedRails';
+    w.recordFlight(v, w.ut + 10000, true);
+    expect(w.flightlog.records[0].stats.dvSpent).toBe(0);
+    expect(w.flightlog.records[0].last!.thrustAcceleration).toBe(0);
   });
   it('observes actual World states for orbit, SOI and recovery', () => {
     const w = new World(new Universe('standard'), PART_CATALOG, 1000);
@@ -94,6 +139,8 @@ describe('achievements', () => {
     vi.stubGlobal('localStorage', { getItem: (k: string) => memory.get(k) ?? null, setItem: (k: string, v: string) => memory.set(k, v) });
     const profile = { unlocked: { orbit: 1000 }, flags: ['earth', 'moon'] };
     saveAchievements(profile); expect(loadAchievements()).toEqual(profile);
+    saveAchievements({ unlocked: { dock: 2000 }, flags: ['titan'] });
+    expect(loadAchievements()).toEqual({ unlocked: { orbit: 1000, dock: 2000 }, flags: ['earth', 'moon', 'titan'] });
     memory.set('wsp.achievements.v1', '{broken'); expect(loadAchievements()).toEqual({ unlocked: {}, flags: [] });
   });
 });

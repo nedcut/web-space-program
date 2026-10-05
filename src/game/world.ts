@@ -108,6 +108,10 @@ export class World {
     const r = recordFor(this.flightlog, v.state.id) ?? startRecord(this.flightlog, v.state.id, v.state.name, this.ut);
     appendEvent(r, this.ut, kind, v.body, { detail }); this.checkAchievements(r);
   }
+  closeFlightRecord(v: WorldVessel, outcome: NonNullable<FlightRecord['outcome']>, ut = this.ut) {
+    const r = recordFor(this.flightlog, v.state.id);
+    if (r) { finishRecord(r, ut, outcome); this.checkAchievements(r); trimHistory(this.flightlog); }
+  }
   finishFlight(v: WorldVessel, outcome: 'recovered' | 'lost', ut = this.ut) {
     this.recordFlight(v, ut, true);
     const r = recordFor(this.flightlog, v.state.id);
@@ -217,7 +221,7 @@ export class World {
 
   boardingTarget(): { vessel: WorldVessel; pod: PartState } | null { return crew.boardingTarget.call(this, this.systems); }
 
-  boardEva(): boolean { const v = this.active; const ok = crew.boardEva.call(this, this.systems); if (ok && v) { this.logFlightEvent(v, 'boarding'); const r = recordFor(this.flightlog, v.state.id); if (r) { r.end = this.ut; r.outcome = 'boarded'; } } return ok; }
+  boardEva(): boolean { const v = this.active; const ok = crew.boardEva.call(this, this.systems); if (ok && v) this.closeFlightRecord(v, 'boarded'); return ok; }
 
   plantFlag(): PlantedFlag | null { const flag = crew.plantFlag.call(this, this.systems); if (flag && this.active) { if (!this.achievementProfile.flags.includes(flag.body)) this.achievementProfile.flags.push(flag.body); this.logFlightEvent(this.active, 'flag'); saveAchievements(this.achievementProfile); } return flag; }
 
@@ -562,6 +566,7 @@ export class World {
           else {
             this.pack(wv);
             if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, PHYSICS_DT);
+            this.recordFlight(wv, t + PHYSICS_DT);
           }
           continue;
         }
@@ -578,6 +583,7 @@ export class World {
           advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, PHYSICS_DT);
           // States are expressed at the end of the step (t + dt), like physics-stepped vessels.
           this.syncFixed(wv, t + PHYSICS_DT);
+          this.recordFlight(wv, t + PHYSICS_DT);
           continue;
         }
       }

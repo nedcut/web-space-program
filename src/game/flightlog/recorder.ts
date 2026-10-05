@@ -8,6 +8,7 @@ export type EventKind = 'launch' | 'stage' | 'separation' | 'soi' | 'orbit' | 'l
 export interface FlightEvent { time: number; kind: EventKind; body: string; detail?: string; speed?: number; biome?: string }
 export interface Observation {
   clearance?: number;
+  inertialSpeed?: number;
   ut: number; body: string; altitude: number; speed: number; vertical: number; horizontal: number;
   ap: number; pe: number; mach: number; q: number; g: number; temperature: number; mass: number; dv: number;
   thrustAcceleration: number; flying: boolean; prelaunch: boolean; stableOrbit: boolean; parts: number;
@@ -22,7 +23,8 @@ export interface FlightRecord {
   integrationUt?: number;
   touchdownSpeed?: number;
   downrange?: number;
-  encounter?: { body: string; speed: number; dv: number };
+  encounter?: { body: string; parent: string; speed: number; dv: number };
+  ringPosition?: { body: string; x: number; y: number; z: number };
 }
 export interface RecorderState { records: FlightRecord[]; sequence: number }
 export function newRecorder(): RecorderState { return { records: [], sequence: 0 }; }
@@ -65,8 +67,8 @@ export function observe(r: FlightRecord, o: Observation, force = false, integrat
   if (!r.bodies.includes(o.body)) r.bodies.push(o.body);
   if (p && p.body !== o.body) {
     appendEvent(r, o.ut, 'soi', o.body, { detail: `${p.body} → ${o.body}` });
-    if (r.encounter?.body === p.body && o.speed > r.encounter.speed + 100 && r.stats.dvSpent - r.encounter.dv < 10) appendEvent(r, o.ut, 'assist', p.body, { detail: 'Unpowered flyby gained >100 m/s in the parent frame' });
-    r.encounter = { body: o.body, speed: p.speed, dv: r.stats.dvSpent };
+    if (r.encounter?.body === p.body && r.encounter.parent === o.body && (o.inertialSpeed ?? o.speed) > r.encounter.speed + 100 && r.stats.dvSpent - r.encounter.dv < 10) appendEvent(r, o.ut, 'assist', p.body, { detail: 'Unpowered flyby gained >100 m/s in the parent frame' });
+    r.encounter = { body: o.body, parent: p.body, speed: p.inertialSpeed ?? p.speed, dv: r.stats.dvSpent };
   }
   if (!r.launched && !o.prelaunch && o.flying && (o.clearance ?? o.altitude) > 5) {
     r.launched = true; appendEvent(r, o.ut, 'launch', o.body);
@@ -85,15 +87,22 @@ export function observe(r: FlightRecord, o: Observation, force = false, integrat
     if (r.samples.length < SAMPLE_CAP) r.samples.push(sample);
     else { const head = r.sampleHead ?? 0; r.samples[head] = sample; r.sampleHead = (head + 1) % SAMPLE_CAP; }
   }
-  r.last = { ...o };
+  r.last = { ...o, ap: Number.isFinite(o.ap) ? o.ap : 0, pe: Number.isFinite(o.pe) ? o.pe : 0 };
 }
-export function finishRecord(r: FlightRecord, ut: number, outcome: 'recovered' | 'lost') {
+export function finishRecord(r: FlightRecord, ut: number, outcome: NonNullable<FlightRecord['outcome']>) {
   if (r.outcome) return;
-  appendEvent(r, ut, outcome === 'recovered' ? 'recovery' : 'loss', r.last?.body ?? r.bodies.at(-1) ?? 'earth');
+  appendEvent(r, ut, outcome === 'recovered' ? 'recovery' : outcome === 'lost' ? 'loss' : outcome === 'boarded' ? 'boarding' : 'docking', r.last?.body ?? r.bodies.at(-1) ?? 'earth');
   r.end = ut; r.outcome = outcome;
   const samples = orderedSamples(r);
   r.samples = samples.length <= ARCHIVE_SAMPLE_CAP ? [...samples] : Array.from({ length: ARCHIVE_SAMPLE_CAP }, (_, i) => samples[Math.round(i * (samples.length - 1) / (ARCHIVE_SAMPLE_CAP - 1))]);
   r.sampleHead = 0;
+}
+/** Test a sampled body-fixed segment against a ring annulus. */
+export function crossesRingPlane(from: { x: number; y: number; z: number }, to: { x: number; y: number; z: number }, inner: number, outer: number) {
+  if (from.z * to.z > 0 || from.z === to.z) return false;
+  const t = from.z / (from.z - to.z);
+  const radius = Math.hypot(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
+  return radius >= inner && radius <= outer;
 }
 export function summaryText(r: FlightRecord) {
   return `${r.name} · ${r.outcome ?? 'In progress'}\nDuration: ${Math.round((r.end ?? r.last?.ut ?? r.start) - r.start)} s\nMaximum altitude: ${Math.round(r.stats.maxAltitude)} m · Speed: ${Math.round(r.stats.maxSpeed)} m/s · G-load: ${r.stats.maxG.toFixed(2)} g\nΔv spent: ${Math.round(r.stats.dvSpent)} m/s · Distance travelled: ${Math.round(r.stats.distance)} m\nBodies visited: ${r.bodies.join(', ')}\n${r.events.map(e => `T+${e.time.toFixed(1)} ${e.kind} · ${e.body}${e.speed !== undefined ? ` · ${e.speed.toFixed(2)} m/s` : ''}${e.biome ? ` · ${e.biome}` : ''}${e.detail ? ` · ${e.detail}` : ''}`).join('\n')}`;
