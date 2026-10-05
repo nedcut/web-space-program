@@ -1,3 +1,4 @@
+import { Panel, Button } from '../../ui/components';
 import { useState } from 'react';
 import type { EditorSession, SessionView } from '../session';
 import { CATALOG } from '../session';
@@ -43,19 +44,19 @@ export function StagingPanel({ session, view }: { session: EditorSession; view: 
   };
 
   return (
-    <div className="vab-staging panel">
+    <Panel className="vab-staging panel">
       <div className="vab-staging-head">
         <div className="label">Staging</div>
         <div style={{ display: 'flex', gap: 4 }}>
-          <button className="btn small ghost" title="Add an empty stage at the top" onClick={() => session.insertStage(view.stages.length)}>
+          <Button className="btn small ghost" title="Add an empty stage at the top" onClick={() => session.insertStage(view.stages.length)}>
             <Icon name="plus" size={15} />
-          </button>
-          <button className="btn small ghost" title="Remove empty stages" onClick={() => session.removeEmptyStages()}>
+          </Button>
+          <Button className="btn small ghost" title="Remove empty stages" onClick={() => session.removeEmptyStages()}>
             <Icon name="trash" size={15} />
-          </button>
-          <button className="btn small ghost" title="Reset to automatic staging" onClick={() => session.autoStage()}>
+          </Button>
+          <Button className="btn small ghost" title="Reset to automatic staging" onClick={() => session.autoStage()}>
             <Icon name="wand" size={15} />
-          </button>
+          </Button>
         </div>
       </div>
       <div className="vab-stage-list">
@@ -132,6 +133,6 @@ export function StagingPanel({ session, view }: { session: EditorSession; view: 
       <div className="vab-staging-foot mono">
         <div><span className="label">Total Δv</span><b>{fmtDv(view.totalDvVac)}</b><small>vac</small></div>
       </div>
-    </div>
+    </Panel>
   );
 }

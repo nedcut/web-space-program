@@ -63,8 +63,8 @@ export function App() {
 
 function Loading() {
   return (
-    <div className="fullscreen" style={{ display: 'grid', placeItems: 'center' }}>
-      <div className="label">Loading…</div>
+    <div className="loading-screen" role="status">
+      <div><div className="label">Preparing your next frontier</div><p>Loading…</p><div className="loading-bar"><div /></div></div>
     </div>
   );
 }

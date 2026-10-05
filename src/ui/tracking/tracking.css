@@ -19,5 +19,5 @@
 .tracking-info dd { margin: 0; text-align: right; }
 .tracking-help { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); padding: 10px 16px; font-size: 11px; color: var(--text-dim); text-align: center; }
 .tracking-modal { position: absolute; inset: 0; background: #0009; display: grid; place-items: center; }
-.tracking-modal > section { padding: 24px; max-width: 440px; background: var(--panel-solid); }
+.tracking-modal > section { padding:var(--space-6); max-width: 440px; background: var(--panel-solid); }
 @media (max-width: 900px) { .tracking-fleet { width: 220px; } .tracking-right { width: 230px; } .tracking-header { gap: 8px; padding: 12px; } .tracking-header h2 { font-size: 16px; } }

@@ -1,0 +1,53 @@
+/* Shared composition for document screens; feature sheets own their inner layouts. */
+:root :is(.program-screen, .pedia, .flight-log, .training-screen, .scenario-library) {
+  background: var(--screen-bg); padding: var(--screen-padding); color: var(--text);
+}
+.program-header, .pedia > header, .flight-log > header {
+  padding-bottom: var(--space-5); margin-bottom: var(--space-5); border-bottom: 1px solid var(--panel-border);
+}
+.program-header h1, .pedia h1, .flight-log h1, .training-screen h1, .scenario-library h1 {
+  font-size: var(--type-title); font-weight: 500; letter-spacing: -.025em; line-height: 1.2; margin: 8px 0 12px;
+}
+.training-screen > .label, .scenario-library header > .label, .program-header .label, .pedia header .label, .flight-log header .label { color: var(--accent); }
+.menu-composition { display: flex; flex-direction: column; justify-content: center; padding: 32px 8vw; overflow-y: auto; background: linear-gradient(90deg, #050d17d9, #050d1740 48%, transparent 70%); }
+.menu-kicker { color: var(--accent); display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.menu-title { font-size: clamp(38px, 4.4vw, 74px); font-weight: 300; line-height: 1.1; letter-spacing: .12em; margin: 0; }
+.menu-title span { display: block; color: var(--accent); }
+.menu-caption { color: var(--text-dim); font-size: 14px; margin: 18px 0 30px; letter-spacing: .025em; }
+.menu-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 390px; max-width: 100%; }
+.menu-actions .btn { text-align: left; min-height: 44px; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+.menu-actions .btn:first-child { grid-column: 1 / -1; min-height: 52px; font-size: 15px; }
+.menu-actions .btn:nth-child(3) { grid-column: 1 / -1; grid-row: 5; }
+.menu-actions .ui-icon { opacity: .8; }
+.menu-actions .menu-go { margin-left: auto; }
+.menu-new { padding: 24px; width: min(440px, 100%); }
+.hub-composition { padding: 32px 4vw; display: flex; flex-direction: column; overflow: auto; background: linear-gradient(180deg, #04101a88, transparent 30%, transparent 50%, #040c16df); }
+.hub-header { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; }
+.hub-header .label { color: var(--accent); }
+.hub-header h2 { font-weight: 400; letter-spacing: .12em; margin: 8px 0 0; }
+.hub-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 12px; }
+.hub-tile.btn { padding: 18px; min-height: 132px; text-align: left; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; background: var(--panel); letter-spacing: 0; }
+.hub-tile .ui-icon { color: var(--accent); margin-bottom: 4px; }
+.hub-tile strong { font-size: 16px; font-weight: 600; }
+.hub-tile small { font-size: 12px; color: var(--text-dim); line-height: 1.45; }
+.hub-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.hub-actions .btn { padding: 8px 12px; font-size: 12px; }
+.hud-navball { border: 1px solid var(--border-strong); border-radius: 50%; padding: 4px; background: linear-gradient(145deg, #3b566a, #0b1522 45%); box-shadow: 0 0 0 3px #07111dcc, 0 8px 24px #0008; }
+.hud-navball canvas { display: block; border-radius: 50%; }
+.hud-stage-part { display: inline-flex; padding: 3px; border-radius: 4px; background: var(--surface-soft); color: var(--accent); }
+.pause-card { max-height: calc(100% - 32px); overflow: auto; box-shadow: var(--shadow-modal); }
+@media (max-height: 800px) {
+  .menu-kicker { margin-bottom: 16px; }
+  .menu-caption { margin: 12px 0 22px; }
+  .menu-composition:has(.menu-new) .menu-caption, .menu-composition:has(.menu-new) .menu-kicker { display: none; }
+  .menu-composition:has(.menu-new) .menu-title { font-size: 28px; margin-bottom: 16px; }
+  .menu-composition:has(.menu-new) .menu-title span { display: inline; margin-left: 12px; }
+  .program-screen:has(.research-layout) { display: flex; flex-direction: column; overflow: hidden; }
+  .program-screen:has(.research-layout) .program-header { margin-bottom: 12px; padding-bottom: 8px; }
+  .program-screen:has(.research-layout) .program-header p { margin: 4px 0; }
+  .research-layout { min-height: 0; flex: 1; }
+  .research-layout .research-scroll { min-height: 0; }
+  .research-detail { max-height: 100%; overflow: auto; }
+  .program-note { font-size: 12px; margin-bottom: 0; }
+}
+@media (max-width: 800px) { .menu-actions { width: 340px; } .hub-header { flex-wrap: wrap; } .hub-tiles { margin-top: 40px; } }

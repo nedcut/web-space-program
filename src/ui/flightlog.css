@@ -1,8 +1,8 @@
-.flight-log { overflow: auto; padding: 24px 4vw; background: radial-gradient(ellipse at 85% 10%, #233446, #090e18 65%); }
+.flight-log { overflow: auto; padding: 24px 4vw; background:var(--screen-bg); }
 .flight-log header, .report-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .flight-log h1, .flight-report h2 { font-weight: 300; margin: 8px 0 18px; }
 .flight-log nav { display: flex; gap: 8px; margin-bottom: 24px; }
-.flight-log-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 24px; }
+.flight-log-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap:var(--space-6); }
 .flight-log aside { padding: 12px; align-self: start; display: flex; flex-direction: column; gap: 8px; max-height: 70vh; overflow: auto; }
 .flight-log aside .btn { text-align: left; flex-shrink: 0; }
 .flight-log small { display: block; color: var(--text-dim); margin-top: 8px; }
@@ -13,5 +13,5 @@
 .report-events { list-style: none; padding: 0; } .report-events li { display: flex; flex-wrap: wrap; gap: 16px; padding: 12px; border-bottom: 1px solid var(--panel-border); } .report-events .mono { color: var(--accent); min-width: 100px; }
 .flight-report textarea { width: 100%; min-height: 180px; user-select: text; background: var(--panel-solid); color: var(--text); padding: 12px; border: 1px solid var(--panel-border); }
 .achievement-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; } .achievement { padding: 18px; color: var(--text-dim); } .achievement.earned { color: var(--text); border-color: var(--good); } .achievement h3 { margin: 10px 0; } .achievement p { font-size: 13px; line-height: 1.6; }
-.report-modal { width: min(1100px, 94vw); max-height: 90vh; overflow: auto; padding: 24px; background: var(--panel-solid); }
+.report-modal { width: min(1100px, 94vw); max-height: 90vh; overflow: auto; padding:var(--space-6); background: var(--panel-solid); }
 @media (max-width: 800px) { .flight-log-layout { grid-template-columns: 1fr; } .flight-log aside { max-height: 200px; } .report-stats { grid-template-columns: repeat(2, minmax(0,1fr)); } .report-charts { grid-template-columns: 1fr; } }
