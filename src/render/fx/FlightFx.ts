@@ -27,6 +27,8 @@ export class FlightFx {
   private credit = 0;
   private flash = 0;
   private clock = 0;
+  private lastUt: number | undefined;
+  private readonly lastOrigin = new THREE.Vector3();
   private seed = 193;
   constructor(private quality: QualityId) {
     this.pool = new ParticlePool(FX_BUDGET[quality].count); this.root.add(this.pool.object, this.light);
@@ -46,8 +48,13 @@ export class FlightFx {
     }
     this.flashPosition.copy(position); this.flashVelocity.set(inheritedVelocity?.x ?? 0,inheritedVelocity?.y ?? 0,inheritedVelocity?.z ?? 0); this.flash = structural ? .15 : 1;
   }
-  update(v: VesselState, origin: Vec3, bodyPosition: Vec3, bodyVelocity: Vec3, body: string, altitude: number, density: number, heat: number, airVelocity: Vec3, dt: number, pixelScale: number) {
-    const step = Math.min(.1,Math.max(0,dt)); this.clock += step;
+  update(v: VesselState, origin: Vec3, bodyPosition: Vec3, bodyVelocity: Vec3, body: string, altitude: number, density: number, heat: number, airVelocity: Vec3, dt: number, pixelScale: number, simulationTime: number, palette: readonly [number, number, number][]) {
+    const elapsed = this.lastUt === undefined ? Math.max(0,dt) : Math.max(0,simulationTime-this.lastUt);
+    const teleported = this.lastUt !== undefined && this.lastOrigin.distanceToSquared(origin)>1e12;
+    this.lastUt = simulationTime; this.lastOrigin.copy(origin);
+    // Rails/teleports must not stretch old trails across interplanetary distances.
+    if(elapsed>1 || teleported) { this.pool.clear(); this.flash=0; }
+    const step = Math.min(1,elapsed); this.clock += step;
     this.up.copy(v.position).sub(bodyPosition).normalize();
     this.rotation.set(v.orientation.x,v.orientation.y,v.orientation.z,v.orientation.w);
     this.surfaceVelocity.copy(v.velocity).sub(airVelocity);
@@ -57,7 +64,9 @@ export class FlightFx {
     this.bitangent.crossVectors(this.up,this.tangent);
     this.credit = Math.min(3,this.credit+step*FX_BUDGET[this.quality].rate);
     const count = Math.floor(this.credit); this.credit -= count;
-    dust.setHex(body==='earth' ? 0x857660 : body==='mars' ? 0xa86643 : body==='titan' ? 0x9c8053 : 0x96928a);
+    const color = palette[1] ?? palette[0];
+    if(body==='earth' || !color) dust.setRGB(.23,.19,.13);
+    else dust.setRGB(color[0],color[1],color[2]);
     let emitters = 0;
     let contact = false;
     for (const p of v.parts) {
@@ -107,7 +116,9 @@ export class FlightFx {
     }
     this.flash *= Math.exp(-step*8);
     this.flashPosition.addScaledVector(this.flashVelocity,step);
-    this.light.position.copy(this.flashPosition).sub(origin); this.light.intensity=this.flash*1500;
+    this.light.visible = this.flash>.001;
+    if(this.light.visible) this.light.position.copy(this.flashPosition).sub(origin);
+    this.light.intensity=this.flash*1500;
     this.pool.update(origin,this.clock,pixelScale);
     this.pool.ground(v.position,this.up,altitude);
   }

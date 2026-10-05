@@ -3,6 +3,9 @@ import * as THREE from 'three';
 import { blackbody, PartHeat } from '../src/render/fx/PartHeat';
 import { ParticlePool } from '../src/render/fx/ParticlePool';
 import { FlightFx, FX_BUDGET } from '../src/render/fx/FlightFx';
+import { buildVessel } from '../src/sim/vessel';
+import { buildMoonLander } from '../src/editor/stockCrafts';
+import { PART_CATALOG } from '../src/data/parts';
 import type { PartState } from '../src/sim/vessel/runtime';
 
 describe('flight visual effects', () => {
@@ -44,6 +47,19 @@ describe('flight visual effects', () => {
     expect(positions.getY(0)+pool.object.position.y).toBe(-50);
     for(let i=0;i<20;i++) pool.emit(origin,new THREE.Vector3(),1,10,1,1,new THREE.Color());
     expect(positions.count).toBe(4); pool.dispose();
+  });
+  it('freezes particles with simulation time, clears rails jumps and honors Reduce Motion', () => {
+    const fx=new FlightFx('low'), v=buildVessel(buildMoonLander(),PART_CATALOG);
+    const zero=new THREE.Vector3(), center=new THREE.Vector3(0,-1000,0);
+    const update=(ut: number) => fx.update(v,v.position,center,zero,'moon',100,0,0,zero,.1,500,ut,[[.3,.3,.3]]);
+    update(0); fx.burst(v.position); update(.1);
+    const time=fx.pool.object.material.uniforms.time.value;
+    update(.1); expect(fx.pool.object.material.uniforms.time.value).toBe(time);
+    const camera=new THREE.PerspectiveCamera(); fx.shake(camera,true);
+    expect(camera.position.length()).toBe(0);
+    fx.shake(camera,false); expect(camera.position.length()).toBeGreaterThan(0);
+    update(100); expect(fx.pool.object.visible).toBe(false);
+    fx.dispose();
   });
   it('changes quality with a bounded pool', () => {
     const fx=new FlightFx('high'); fx.setQuality('low');

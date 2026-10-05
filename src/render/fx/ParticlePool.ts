@@ -88,6 +88,10 @@ export class ParticlePool {
     this.object.material.uniforms.time.value = time;
     this.object.material.uniforms.pixelScale.value = pixelScale;
   }
+  clear() {
+    this.params.fill(0); this.object.geometry.attributes.params.needsUpdate = true;
+    this.object.visible = false; this.initialized = false; this.cursor = 0;
+  }
   /** Cheap terrain soft particles; no second scene/depth pass on laptop presets. */
   ground(position: Vec3, normal: THREE.Vector3, altitude: number) {
     this.object.material.uniforms.groundNormal.value.copy(normal);

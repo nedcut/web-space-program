@@ -568,7 +568,7 @@ export class FlightController {
       view.setVessel(v.state);
       const debris = v !== wv && !v.state.parts.some(p => p.def.modules.some(m => m.type === 'command'));
       const distant = debris && length(sub(v.state.position, origin)) > 2000;
-      view.update(origin, this.elapsed, air.pressure, dt, distant);
+      view.update(origin, this.elapsed, air.pressure, this.paused ? 0 : dt, distant);
       const pose = this.network?.pose(v.state.id);
       if (pose) {
         view.root.position.set(pose.position.x - origin.x, pose.position.y - origin.y, pose.position.z - origin.z);
@@ -594,7 +594,7 @@ export class FlightController {
     const q = wv.state.orientation;
     this.cam.update(new THREE.Vector3(up.x, up.y, up.z), new THREE.Quaternion(q.x, q.y, q.z, q.w), dt);
     const camera = this.cam.camera;
-    this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height);
+    this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors);
     this.effects.shake(camera, game.get().settings.reduceMotion);
     if (this.network) {
       const live = new Set<string>();
