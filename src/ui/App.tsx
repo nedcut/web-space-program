@@ -1,5 +1,7 @@
 import { ScenarioPanel } from '../scenarios/ScenarioPanel';
 import { useScenarioRun } from '../scenarios/runtime';
+
+import { useInterfaceAudio } from '../audio/ui';
 import { Training } from '../tutorial/Training';
 import { TutorialPanel } from '../tutorial/TutorialPanel';
 import { useTutorial } from '../tutorial/runtime';
@@ -20,6 +22,7 @@ const Missions = lazy(() => import('./Missions'));
 const FlightScene = lazy(() => import('../flight/FlightScene'));
 
 export function App() {
+  useInterfaceAudio();
   const tutorial = useTutorial();
   const scenario = useScenarioRun();
   const settings = useGame(s => s.settings);
