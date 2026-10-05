@@ -1,3 +1,4 @@
+import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { EVA_PART } from '../data/eva';
 import { defaultCommsSettings, NO_SIGNAL, type CommsSettings, type Network } from '../sim/comms/network';
 import { hasControl, type Astronaut, type PlantedFlag } from '../sim/crew/crew';
@@ -121,6 +122,7 @@ export class World {
   constructor(universe: Universe, catalog: Map<string, PartDef>, ut: number, public mode: GameMode = 'sandbox') {
     this.commsSettings = defaultCommsSettings(mode);
     this.universe = universe;
+    this.progression = newProgression(careerScaleMultiplier(universe.preset));
     this.catalog = new Map(catalog);
     this.catalog.set(EVA_PART.id, EVA_PART);
     this.ut = ut;

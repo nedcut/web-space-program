@@ -22,7 +22,7 @@ export const pods: PartDef[] = [
     allowSurfaceAttachChildren: true,
     shape: cyl(0.3, 0.625, 1.6),
     dragCoefficient: { axial: 0.9, side: 1.0 },
-    maxTemp: 2400,
+    maxTemp: 1600,
     crashTolerance: 14,
     modules: [
       { type: 'command', crew: 1, sasLevel: 1, ecPerSecond: 0.03 },
@@ -45,7 +45,7 @@ export const pods: PartDef[] = [
     allowSurfaceAttachChildren: true,
     shape: cyl(0.65, 1.25, 2.4),
     dragCoefficient: { axial: 0.95, side: 1.0 },
-    maxTemp: 2400,
+    maxTemp: 1600,
     crashTolerance: 14,
     modules: [
       { type: 'command', crew: 3, sasLevel: 2, ecPerSecond: 0.08 },

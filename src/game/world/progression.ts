@@ -1,3 +1,4 @@
+import { careerScaleMultiplier } from '../../sim/bodies/scale';
 import { unlockTech as unlockTechModel } from '../../data/technology';
 import { acceptContract as acceptContractModel, failContract, generateContracts, type ProgressEvent } from '../../sim/science/progression';
 import { instruments, progressionEvent, runExperiment as runExperimentModel, scienceContext as scienceContextModel, transmitScience as transmitScienceModel } from '../science';
@@ -7,7 +8,7 @@ import type { World, WorldVessel } from '../world';
 export function refreshContracts(this: World) {
   if (this.mode !== 'career' || this.progression.contracts.some(c => c.status === 'offered')) return;
   const p = this.progression;
-  p.contracts.push(...generateContracts(p.contractSeed, p.contractBatch++, p.milestones.includes('first-moon')));
+  p.contracts.push(...generateContracts(p.contractSeed, p.contractBatch++, p.milestones.includes('first-moon'), careerScaleMultiplier(this.universe.preset)));
 }
 
 
