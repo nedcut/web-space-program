@@ -229,8 +229,9 @@ export class FlightController {
       if (e.type === 'stage') this.audio.staging();
       if (e.type === 'decouple') this.audio.decouple();
       if (e.type === 'partDestroyed') this.audio.explosion(1);
-      if (e.type === 'chute') this.audio.chuteDeploy();
-      if (e.type === 'docked' || e.type === 'undocked') this.audio.decouple();
+      if (e.type === 'chute' && (e.phase === 'semi' || e.phase === 'full')) this.audio.chuteDeploy();
+      if (e.type === 'docked') this.audio.docking();
+      if (e.type === 'undocked') this.audio.decouple();
     };
 
     const ro = new ResizeObserver(() => this.resize());

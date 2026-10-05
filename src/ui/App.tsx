@@ -1,5 +1,6 @@
 import { PhotoPanel } from './PhotoPanel';
 import { usePhotoMode } from '../game/photoMode';
+import { useInterfaceAudio } from '../audio/ui';
 import { Training } from '../tutorial/Training';
 import { TutorialPanel } from '../tutorial/TutorialPanel';
 import { useTutorial } from '../tutorial/runtime';
@@ -20,6 +21,7 @@ const FlightScene = lazy(() => import('../flight/FlightScene'));
 
 export function App() {
   const photo = usePhotoMode();
+  useInterfaceAudio();
   const tutorial = useTutorial();
   const settings = useGame(s => s.settings);
   useEffect(() => {
