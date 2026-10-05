@@ -168,7 +168,7 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
           {t.warpLabel}
         </div>
         <button className="btn small" onClick={() => cb.onWarp(1)}>▶</button>
-        <button className="btn small" onClick={cb.onMap}>MAP</button>
+        <button className="btn small" data-tutorial="map" onClick={cb.onMap}>MAP</button>
       </div>
 
       <div className="panel" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '8px 18px', textAlign: 'center' }}>
@@ -227,7 +227,7 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
       {/* Bottom-centre: navball + speed + SAS */}
       <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
         {!t.eva && <div className="panel" style={{ padding: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, width: 130 }}>
-          <button className={`btn small ${t.sasOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} onClick={cb.onToggleSas}>SAS</button>
+          <button className={`btn small ${t.sasOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} data-tutorial="sas" onClick={cb.onToggleSas}>SAS</button>
           {SAS_MODES.map((m) => (
             <button key={m.id} className={`btn small ${t.sasOn && t.sasMode === m.id ? 'primary' : ''}`} onClick={() => cb.onSasMode(m.id)} style={{ padding: '4px 2px', fontSize: 10 }}>
               {m.label}
@@ -261,7 +261,7 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
             <div className="mono" style={{ fontSize: 18 }}>{formatSpeed(t.speed)}</div>
           </button>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-            {!t.eva && <ThrottleGauge value={t.throttle} />}
+            {!t.eva && <span data-tutorial="throttle"><ThrottleGauge value={t.throttle} /></span>}
             {navball}
           </div>
         </div>

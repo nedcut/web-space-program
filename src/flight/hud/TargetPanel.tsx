@@ -7,7 +7,7 @@ export function TargetPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
   const [open, setOpen] = useState(false);
   const tg = t.target;
   return (
-    <div className="panel" style={{ position: 'absolute', left: 10, bottom: 34, width: 250, padding: 10, display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'auto' }}>
+    <div data-tutorial="target" className="panel" style={{ position: 'absolute', left: 10, bottom: 34, width: 250, padding: 10, display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'auto' }}>
       <div className="label" style={{ color: tg ? '#ff4fb8' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={tg?.name}>
         {tg ? `Target · ${tg.name}` : 'No target'}
       </div>
@@ -57,7 +57,7 @@ export function TargetPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
         </>
       )}
       <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
-        <button className={`btn small ${t.dockingMode ? 'primary' : ''}`} style={{ flex: 1 }} onClick={cb.onToggleDocking}>Docking mode</button>
+        <button className={`btn small ${t.dockingMode ? 'primary' : ''}`} style={{ flex: 1 }} data-tutorial="docking" onClick={cb.onToggleDocking}>Docking mode</button>
         {t.dockedPorts.map((p, i) => (
           <button key={p.uid} className="btn small danger" title={`Undock at ${p.name}`} onClick={() => cb.onUndock(p.uid)}>
             Undock{t.dockedPorts.length > 1 ? ` ${i + 1}` : ''}

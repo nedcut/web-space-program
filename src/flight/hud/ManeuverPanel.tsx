@@ -125,7 +125,7 @@ export function ManeuverPanel({ world }: { world: World }) {
   );
 
   return (
-    <div className="panel" style={{ position: 'absolute', left: 10, top: 70, width: 270, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div data-tutorial="maneuver" className="panel" style={{ position: 'absolute', left: 10, top: 70, width: 270, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div className="label">Maneuver planner</div>
       <div style={{ display: 'flex', gap: 6 }}>
         <button className="btn small" onClick={() => add('ap')} disabled={orbit.e >= 1}>Node @ Ap</button>

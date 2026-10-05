@@ -1,3 +1,4 @@
+import { tutorialContext } from '../tutorial/runtime';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { game } from '../game/store';
 import { EditorView } from './scene/EditorView';
@@ -27,6 +28,7 @@ export default function EditorScene() {
   useEffect(() => {
     const v = new EditorView(host.current!, session);
     viewRef.current = v;
+    tutorialContext.editor = session;
     const loadStock = (id: string) => {
       const s = STOCK_CRAFTS.find((x) => x.id === id || x.id === `stock-${id}`);
       if (s) session.load(s.build(), false);
@@ -36,6 +38,7 @@ export default function EditorScene() {
     if (q && !game.get().craft) loadStock(q);
     return () => {
       v.dispose();
+      if (tutorialContext.editor === session) delete tutorialContext.editor;
       viewRef.current = null;
       if (window.__editor?.session === session) delete window.__editor;
     };

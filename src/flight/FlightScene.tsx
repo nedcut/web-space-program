@@ -1,3 +1,4 @@
+import { tutorialContext, getTutorial, endTutorial } from '../tutorial/runtime';
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -57,19 +58,23 @@ export default function FlightScene() {
     };
     game.set({ launchPending: false });
     const scenario = new URLSearchParams(location.search).get('scenario');
-    if (scenario && mountKey === 0) c.devScenario(scenario);
+    if (scenario && mountKey === 0 && !getTutorial()) c.devScenario(scenario);
     c.input.invertPitch = g.settings.invertPitch;
     c.onExit = () => setPaused((p) => !p);
     c.onQuickload = () => {
+      if (getTutorial()) return;
       const data = FlightController.loadSlot('quicksave');
       if (!data) return c.world.message('No quicksave yet (F5 to save)', 'warn');
       game.set({ resumeWorld: data, mode: data.mode ?? 'sandbox', scalePreset: data.preset, launchPending: false });
       setMountKey((k) => k + 1);
     };
     ctrl.current = c;
+    tutorialContext.flight = c;
+    tutorialContext.world = c.world;
     const unsub = c.subscribe(setTele);
     // Leaving the page mid-flight: autosave and ask for confirmation (Ctrl+W / Ctrl+R are throttle-adjacent).
     const beforeUnload = (e: BeforeUnloadEvent) => {
+      if (getTutorial()) return;
       c.quicksave('autosave');
       e.preventDefault();
     };
@@ -81,6 +86,7 @@ export default function FlightScene() {
       c.dispose();
       audio.dispose();
       ctrl.current = null;
+      if (tutorialContext.flight === c) { delete tutorialContext.flight; delete tutorialContext.world; }
     };
   }, [mountKey]);
 
@@ -92,6 +98,7 @@ export default function FlightScene() {
 
   /** Leave flight: keep the universe (vessels stay where they are) and autosave. */
   const exitTo = (scene: 'spaceCenter' | 'editor') => {
+    if (getTutorial()) return endTutorial();
     const c = ctrl.current;
     if (c) {
       c.quicksave('autosave');
@@ -101,6 +108,7 @@ export default function FlightScene() {
   };
   /** Revert: throw away this flight and return to the editor with the universe as it was before launch. */
   const revert = () => {
+    if (getTutorial()) return endTutorial();
     game.set({ resumeWorld: initial.current, mode: initial.current?.mode ?? game.get().mode, ut: initial.current?.ut ?? game.get().ut, launchPending: false });
     saveProgram(openProgram());
     game.set({ scene: 'editor' });

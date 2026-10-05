@@ -4,7 +4,7 @@ import type { ScalePresetId } from '../sim/bodies/scale';
 import type { CraftDef } from '../sim/vessel/types';
 import type { SavedWorld } from './persistence';
 
-export type Scene = 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking' | 'research' | 'missions';
+export type Scene = 'training' | 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking' | 'research' | 'missions';
 export type QualityPreset = 'low' | 'medium' | 'high';
 
 export interface Settings {
@@ -67,7 +67,7 @@ export const DEFAULT_START_UT = (Date.UTC(2030, 6, 20, 12) - Date.UTC(2000, 0, 1
 function initialScene(): Scene {
   try {
     const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('scene') : null;
-    if (q && ['menu', 'spaceCenter', 'editor', 'flight', 'tracking', 'research', 'missions'].includes(q)) return q as Scene;
+    if (q && ['training', 'menu', 'spaceCenter', 'editor', 'flight', 'tracking', 'research', 'missions'].includes(q)) return q as Scene;
   } catch {
     /* no location */
   }
