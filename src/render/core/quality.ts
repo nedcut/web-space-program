@@ -50,6 +50,16 @@ export interface QualitySettings {
   ringSegments: number;
   stars: { count: number; milkyWay: boolean };
   clouds: boolean;
+  planetDetails: {
+    /** Local ring-grid radius in cells (0 disables resolved chunks). */
+    ringCells: number;
+    ringChunksPerCell: number;
+    /** Bounded-volume sample counts (0 disables extra shells/plumes). */
+    volumeSteps: number;
+    plumeSteps: number;
+    gasOctaves: number;
+    surfaceEmission: boolean;
+  };
   /** User toggle: atmospheric scattering (sky shells / aerial perspective). */
   atmosphereScattering?: boolean;
 }
@@ -71,6 +81,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     ringSegments: 128,
     stars: { count: 4000, milkyWay: true },
     clouds: false,
+    planetDetails: { ringCells: 0, ringChunksPerCell: 0, volumeSteps: 0, plumeSteps: 0, gasOctaves: 2, surfaceEmission: false },
   },
   medium: {
     id: 'medium',
@@ -88,6 +99,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     ringSegments: 256,
     stars: { count: 9000, milkyWay: true },
     clouds: true,
+    planetDetails: { ringCells: 5, ringChunksPerCell: 32, volumeSteps: 20, plumeSteps: 32, gasOctaves: 4, surfaceEmission: true },
   },
   high: {
     id: 'high',
@@ -105,6 +117,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     ringSegments: 512,
     stars: { count: 16000, milkyWay: true },
     clouds: true,
+    planetDetails: { ringCells: 8, ringChunksPerCell: 32, volumeSteps: 32, plumeSteps: 48, gasOctaves: 5, surfaceEmission: true },
   },
 };
 

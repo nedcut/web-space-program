@@ -8,6 +8,21 @@ import { GLSL_CUTOUT, type TerrainCutoutUniforms } from './cutout';
 
 /** Surface lighting shared by terrain / far sphere: Lambert ↔ Lommel–Seeliger (airless regolith). */
 const GLSL_SHADE = /* glsl */ `
+#ifdef EARTH_DETAILS
+${GLSL_NOISE}
+#endif
+vec3 earthEmission(vec3 n, float height, float sunAltitude) {
+  #ifdef EARTH_DETAILS
+    if (height <= 2.0 || abs(n.z) > 0.92) return vec3(0.0);
+    float night = 1.0 - smoothstep(-0.18, 0.02, sunAltitude);
+    float coast = exp(-height / (uPlanetRadius * 0.0012));
+    float population = smoothstep(-0.1, 0.45, fbm3(n * 18.0 + 7.1, 3));
+    float towns = smoothstep(0.60, 0.87, snoise(n * 750.0)) + 0.22 * smoothstep(0.4, 0.75, snoise(n * 240.0));
+    return vec3(1.0, 0.53, 0.16) * night * coast * population * towns * 1.3;
+  #else
+    return vec3(0.0);
+  #endif
+}
 uniform float uAirless;
 uniform float uAmbientFloor;
 vec3 shadeSurface(vec3 albedo, vec3 N, vec3 V, vec3 rel) {
@@ -21,7 +36,8 @@ vec3 shadeSurface(vec3 albedo, vec3 N, vec3 V, vec3 rel) {
   vec3 sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(geo)) * ringShadow(rel);
   vec3 direct = uSunColor * sunT * f;
   vec3 amb = skyAmbient(rel, N) / ATMO_PI;
-  return albedo * (direct + amb + uAmbientFloor);
+  vec3 planetshine = uPlanetshineColor * max(dot(N, uPlanetshineDir), 0.0) / ATMO_PI;
+  return albedo * (direct + amb + planetshine + uAmbientFloor);
 }
 `;
 
@@ -30,7 +46,7 @@ function baseHeader(): string {
 }
 
 function defines(q: QualitySettings): Record<string, string | number> {
-  return { AERIAL_STEPS: q.atmosphere.aerialSteps, VIEW_STEPS: q.atmosphere.viewSteps };
+  return { AERIAL_STEPS: q.atmosphere.aerialSteps, VIEW_STEPS: q.atmosphere.viewSteps, DETAIL_OCTAVES: q.planetDetails.gasOctaves };
 }
 
 // ---------------------------------------------------------------- Terrain
@@ -147,6 +163,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         #endif
         albedo = mix(albedo, uRockColor * (0.85 + 0.3 * albedo / max(max(albedo.r, albedo.g), 0.05)), rockT);
         vec3 col = shadeSurface(albedo, N, V, rel);
+        col += earthEmission(normalize(transpose(uBodyRot) * rel), length(rel) - uPlanetRadius, dot(up, uSunDir));
         col = applyAerialPerspective(col, -V, dist, AERIAL_STEPS * uStepScale);
         gl_FragColor = vec4(col, 1.0);
       }`,
@@ -414,6 +431,7 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
           col += uSunColor * sunT * (a2 / (ATMO_PI * d * d)) * F * max(dot(up, uSunDir), 0.0) / (4.0 * NdV);
         } else {
           col = shadeSurface(albedo, N, V, rel);
+          col += earthEmission(n, h, dot(normalize(rel), uSunDir));
         }
         col = applyAerialPerspective(col, -V, dist, AERIAL_STEPS * uStepScale);
         gl_FragColor = vec4(col, 1.0);
@@ -481,13 +499,15 @@ export function createGasGiantMaterial(u: PlanetUniforms, q: QualitySettings, s:
         float lon = atan(n.y, n.x);
         float t = uTime;
         // Differential rotation: alternating jets shift longitudes per band.
-        float jet = sin(lat * uBandFreq * 0.5) * 0.02 * t;
+        float jet = sin(lat * uBandFreq * 0.5) * 0.00012 * mod(t, 100000.0);
         float cl = cos(lat);
         vec3 pr = vec3(cl * cos(lon + jet), cl * sin(lon + jet), n.z);
         // Turbulent domain warp, stretched along latitude lines.
         vec3 q = pr * vec3(3.0, 3.0, 9.0);
-        vec2 warp = vec2(fbm3(q + vec3(0.0, 0.0, t * 0.002), 5), fbm3(q * 1.7 + vec3(5.2, 1.3, -t * 0.003), 5));
-        float latW = lat + uTurb * (warp.x * 0.06 + warp.y * 0.025);
+        vec2 warp = vec2(fbm3(q + vec3(0.0, 0.0, mod(t * 0.00002, 100.0)), DETAIL_OCTAVES), fbm3(q * 1.7 + vec3(5.2, 1.3, -mod(t * 0.00003, 100.0)), DETAIL_OCTAVES));
+        float eddy = snoise(pr * vec3(18.0, 18.0, 9.0) + warp.x * 2.0);
+        float curl = sin(lon * 19.0 + warp.y * 8.0 + lat * 32.0);
+        float latW = lat + uTurb * (warp.x * 0.085 + warp.y * 0.034 + eddy * curl * 0.016);
         // Band structure: irregular 1D profile in latitude (noise of several octaves, not a pure sine),
         // so belts and zones have varied widths and brightness like real cloud bands.
         float lb = latW * uBandFreq / 6.2832;
@@ -495,8 +515,8 @@ export function createGasGiantMaterial(u: PlanetUniforms, q: QualitySettings, s:
         float b = 0.42 + 0.8 * prof;
         b = mix(0.55, b, uContrast);
         // Fine turbulent streaks (weak, mostly along latitude).
-        float fine = fbm3(vec3(pr.xy * 5.0, latW * 22.0), 4);
-        b = clamp(b + fine * 0.08 * uTurb, 0.0, 1.0);
+        float fine = fbm3(vec3(pr.xy * 5.0, latW * 48.0), DETAIL_OCTAVES);
+        b = clamp(b + fine * 0.14 * uTurb, 0.0, 1.0);
         vec3 albedo = bandColor(b, lat);
         float polar = smoothstep(0.9, 1.35, abs(lat));
         if (uStyle < 0.5) {
@@ -509,23 +529,29 @@ export function createGasGiantMaterial(u: PlanetUniforms, q: QualitySettings, s:
           if (r < 2.2) {
             float ang = (1.0 - smoothstep(0.0, 1.6, r)) * 5.0;
             vec2 sw = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * d;
-            float swirl = fbm3(vec3(sw * 2.5, 3.0), 4);
+            float swirl = fbm3(vec3(sw * 2.5, 3.0), DETAIL_OCTAVES);
+            float edge = r + snoise(vec3(sw * 4.0, 7.0)) * 0.085;
             vec3 red = uC3 * (0.9 + 0.3 * swirl);
-            albedo = mix(albedo, red, (1.0 - smoothstep(0.75, 1.05, r)));
-            albedo = mix(albedo, uC2 * 1.05, smoothstep(0.9, 1.05, r) * (1.0 - smoothstep(1.05, 1.5, r)) * 0.6);
+            albedo = mix(albedo, red, 1.0 - smoothstep(0.72, 1.12, edge));
+            float rim = smoothstep(0.85, 1.03, edge) * (1.0 - smoothstep(1.03, 1.42, edge));
+            albedo = mix(albedo, uC2, rim * (0.20 + 0.18 * swirl));
           }
           float ov = snoise(vec3(pr.xy * 18.0, lat * 30.0));
-          albedo = mix(albedo, uC2 * 1.1, smoothstep(0.75, 0.85, ov) * smoothstep(0.5, 0.2, abs(lat + 0.6)) * 0.7);
+          albedo = mix(albedo, uC2 * 1.1, smoothstep(0.75, 0.85, ov) * (1.0 - smoothstep(0.2, 0.5, abs(lat + 0.6))) * 0.7);
           albedo = mix(albedo, uC0 * 0.9, polar * 0.6);
         } else if (uStyle < 1.5) {
           // Saturn: subtle bands, north-polar hexagon.
           if (lat > 1.2) {
             float a = atan(n.y, n.x) + t * 0.0003;
             float hexR = cos(ATMO_PI / 6.0) / cos(mod(a, ATMO_PI / 3.0) - ATMO_PI / 6.0);
-            float rr = (ATMO_PI * 0.5 - lat) / (ATMO_PI * 0.5 - 1.29);
-            float edge = smoothstep(0.06, 0.0, abs(rr - hexR));
-            albedo = mix(albedo, uC0 * 1.2, 0.5 * step(rr, hexR));
-            albedo = mix(albedo, uC2, edge * 0.5);
+            float rr = (ATMO_PI * 0.5 - lat) / (ATMO_PI * 0.5 - 1.29) + snoise(n * 48.0) * 0.035;
+            float edge = 1.0 - smoothstep(0.025, 0.14, abs(rr - hexR));
+            albedo = mix(albedo, uC0 * 1.2, 0.5 * (1.0 - smoothstep(hexR - 0.035, hexR + 0.035, rr)));
+            albedo = mix(albedo, vec3(0.39, 0.49, 0.45), edge * (0.24 + 0.10 * snoise(n * 75.0)));
+            float eye = 1.0 - smoothstep(0.07, 0.22, rr);
+            albedo = mix(albedo, vec3(0.075, 0.13, 0.14), eye * 0.8);
+            float vortex = snoise(vec3(n.xy * 110.0, rr * 14.0 + sin(a * 8.0)));
+            albedo *= 1.0 + vortex * 0.10 * (1.0 - smoothstep(0.2, 0.8, rr));
           }
           albedo = mix(albedo, mix(uC0, vec3(0.35, 0.42, 0.5), 0.5), polar * 0.5);
         } else if (uStyle < 2.5) {
@@ -536,9 +562,11 @@ export function createGasGiantMaterial(u: PlanetUniforms, q: QualitySettings, s:
           float dl = mod(lon + jet + 2.0 + t * 0.001 + ATMO_PI, 2.0 * ATMO_PI) - ATMO_PI;
           vec2 d = vec2(dl * cos(-0.35) / 0.25, (lat + 0.35) / 0.1);
           float r = length(d);
-          albedo = mix(albedo, uC0 * 0.6, 1.0 - smoothstep(0.7, 1.0, r));
-          float streak = fbm3(vec3(pr.xy * 4.0, lat * 60.0), 4);
-          albedo = mix(albedo, vec3(0.9), smoothstep(0.35, 0.6, streak) * 0.55 * smoothstep(1.3, 0.9, r));
+          float storm = r + snoise(vec3(d * 4.0, 1.0)) * 0.09;
+          albedo = mix(albedo, uC0 * (0.45 + 0.12 * snoise(vec3(d * 8.0, 4.0))), 1.0 - smoothstep(0.60, 1.05, storm));
+          albedo = mix(albedo, vec3(0.63, 0.77, 0.88), exp(-pow((storm - 1.08) * 9.0, 2.0)) * 0.12 * smoothstep(-0.3, 0.8, d.y));
+          float streak = fbm3(vec3(pr.xy * 4.0, lat * 60.0), DETAIL_OCTAVES);
+          albedo = mix(albedo, vec3(0.9), smoothstep(0.35, 0.6, streak) * 0.55 * (1.0 - smoothstep(0.9, 1.3, r)));
         }
         // Project onto the exact sphere: tessellated triangles sag below R (km at planetary scale),
         // which would alias altitude-dependent atmosphere terms along the mesh.
@@ -550,10 +578,12 @@ export function createGasGiantMaterial(u: PlanetUniforms, q: QualitySettings, s:
         float mu0 = max(dot(N, uSunDir), 0.0);
         float mu = max(dot(N, V), 0.0);
         // Minnaert limb darkening (k≈0.85) for cloud decks.
-        float minn = pow(mu0, 0.85) * pow(max(mu, 0.02), -0.15);
+        float minn = pow(mu0, 0.8) * pow(max(mu, 0.02), 0.18);
+        // Upper methane haze softens ice-giant markings towards the limb.
+        if (uStyle > 1.5) albedo = mix(albedo, mix(uC1, uC2, 0.55), 0.22 + 0.35 * pow(1.0 - mu, 2.0));
         vec3 sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(1.0)) * ringShadow(rel);
         vec3 col = albedo * uSunColor * sunT * minn / ATMO_PI;
-        col += albedo * skyAmbient(rel, N) / ATMO_PI * 0.5;
+        col += albedo * (skyAmbient(rel, N) * 0.5 + uPlanetshineColor * max(dot(N, uPlanetshineDir), 0.0)) / ATMO_PI;
         col = applyAerialPerspective(col, -V, dist, AERIAL_STEPS * uStepScale);
         gl_FragColor = vec4(col, 1.0);
       }`,
@@ -657,16 +687,15 @@ export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloud
       float cloudDensity(vec3 pBF, float lod) {
         float lat = asin(clamp(pBF.z, -1.0, 1.0));
         float alat = abs(lat);
-        vec3 p = pBF;
+        float drift = mod(uTime * 0.000015, 6.2831853);
+        vec3 p = vec3(cos(drift) * pBF.x - sin(drift) * pBF.y, sin(drift) * pBF.x + cos(drift) * pBF.y, pBF.z);
         // Mid-latitude cyclones (counter-rotating per hemisphere) and a tropical storm.
         vec3 jit = vec3(fbm3(pBF * 3.0 + 1.7, 3), fbm3(pBF * 3.0 - 4.1, 3), fbm3(pBF * 3.0 + 8.3, 3)) * 0.04;
-        p = swirl(p + jit, normalize(vec3(0.45, -0.55, 0.70)), 0.16, 2.6);
-        p = swirl(p, normalize(vec3(-0.6, 0.35, 0.72)), 0.13, 2.2);
-        p = swirl(p, normalize(vec3(0.2, 0.75, -0.63)), 0.15, -2.6);
-        p = swirl(p, normalize(vec3(-0.35, -0.7, -0.62)), 0.12, -2.2);
+        p = swirl(p + jit, normalize(vec3(0.45, -0.55, 0.70)), 0.22, 1.3);
+        p = swirl(p, normalize(vec3(0.2, 0.75, -0.63)), 0.18, -1.5);
         p = swirl(p, normalize(vec3(0.85, 0.45, 0.27)), 0.05, 4.0);
         // Large weather systems
-        float cov = fbm3(p * 2.0 + 13.0, 4) * 0.5 + 0.5;
+        float cov = fbm3(p * 3.1 + vec3(13.0, 8.0, -4.0), 4) * 0.5 + 0.5;
         // Warped mid-scale structure, sheared along latitude (jet streams)
         vec3 q = p * 4.5;
         vec3 w = vec3(fbm3(q, 3), fbm3(q + 5.2, 3), fbm3(q - 3.7, 3));
@@ -675,12 +704,23 @@ export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloud
         float det = fbm3(qs, oct) * 0.5 + 0.5;
         // Latitudinal structure: ITCZ, subtropical clear belts, storm tracks, polar cloudiness.
         float zone = 0.14 * exp(-pow(lat / 0.1, 2.0)) - 0.2 * exp(-pow((alat - 0.4) / 0.13, 2.0)) + 0.14 * exp(-pow((alat - 0.95) / 0.22, 2.0));
-        float c = cov * 0.65 + det * 0.55 + zone;
+        float c = cov * 0.74 + det * 0.60 + zone;
         float thr = 1.12 - uCoverage;
         float d = smoothstep(thr, thr + 0.16, c);
         // Fine cumulus breakup near edges
         float fine = fbm3(p * 80.0, int(clamp(6.0 - lod, 2.0, 5.0))) * 0.5 + 0.5;
         d *= smoothstep(0.15, 0.55, fine + d * 0.6);
+        // One organized tropical cyclone among irregular fronts; its eye and spiral arms are local.
+        vec3 center = normalize(vec3(0.82, -0.46, 0.34));
+        vec3 east = normalize(cross(vec3(0.0, 0.0, 1.0), center));
+        vec3 north = cross(center, east);
+        vec2 st = vec2(dot(pBF, east), dot(pBF, north));
+        float radius = length(st);
+        float front = smoothstep(0.8, 0.95, dot(pBF, center));
+        float arms = 0.5 + 0.5 * sin(atan(st.y, st.x) * 3.0 - radius * 130.0 + fbm3(pBF * 70.0, 3) * 1.8);
+        float cyclone = exp(-radius * radius / 0.008) * smoothstep(0.012, 0.026, radius) * (0.55 + arms * 0.45);
+        d = mix(d, max(d, cyclone), front);
+        d *= 1.0 - front * (1.0 - smoothstep(0.008, 0.018, radius));
         return d;
       }
 
@@ -736,6 +776,8 @@ export function createRingMaterial(u: PlanetUniforms, q: QualitySettings, profil
       uInner: { value: inner },
       uOuter: { value: outer },
       uOcclusion: { value: 1 },
+      uParticleRange: { value: 0 },
+      uRingDetail: { value: getDetailTexture() },
     },
     vertexShader: /* glsl */ `
       ${GLSL_LOGDEPTH_VERT_PARS}
@@ -754,6 +796,8 @@ export function createRingMaterial(u: PlanetUniforms, q: QualitySettings, profil
       uniform sampler2D uProfile;
       uniform float uInner, uOuter;
       uniform float uOcclusion;
+      uniform float uParticleRange;
+      uniform sampler2D uRingDetail;
       varying vec3 vWorldPos;
       varying vec2 vLocal;
       void main() {
@@ -773,6 +817,13 @@ export function createRingMaterial(u: PlanetUniforms, q: QualitySettings, profil
         // Opacity grows at grazing view angles (longer slant path).
         float tau = -log(max(1.0 - tau0, 0.001));
         float alpha = 1.0 - exp(-tau / max(muV, 0.03));
+        // Hand the local ring sheet to resolved chunks with a smooth radial/vertical overlap.
+        float local = (1.0 - smoothstep(uParticleRange * 0.2, max(1.0, uParticleRange * 0.75), length(toCam)))
+                    * (1.0 - smoothstep(50.0, 220.0, abs(dot(uCamRel, n))));
+        alpha *= 1.0 - local * 0.96;
+        float nearField = 1.0 - smoothstep(1500.0, 18000.0, length(toCam));
+        float grains = texture2D(uRingDetail, vLocal / 2048.0).r;
+        alpha *= mix(1.0, smoothstep(0.18, 0.72, grains), nearField * 0.65);
         // Planet shadow on the rings (soft edge, penumbra scaled by distance).
         float along = dot(rel, uSunDir);
         vec3 perp = rel - along * uSunDir;
@@ -780,7 +831,7 @@ export function createRingMaterial(u: PlanetUniforms, q: QualitySettings, profil
         bool litSide = sign(dot(V, n)) == sign(muS);
         float cosPhase = dot(-V, uSunDir); // 1 when looking towards the sun (forward scattering)
         float illum;
-        vec3 albedo = prof.rgb * prof.rgb;
+        vec3 albedo = prof.rgb; // ring profile already stores linear albedo
         if (litSide) {
           // Reflected light, mild backscatter brightening (opposition surge).
           illum = abs(muS) * (0.8 + 0.4 * pow(max(-cosPhase, 0.0), 4.0));
@@ -792,7 +843,11 @@ export function createRingMaterial(u: PlanetUniforms, q: QualitySettings, profil
         }
         vec3 col = albedo * uSunColor * illum * sh / ATMO_PI;
         // Planetshine faintly lights the night side of the rings.
-        col += albedo * uSunColor * 0.0015;
+        float planetPhase = 0.5 + 0.5 * dot(normalize(rel), uSunDir);
+        float planetSolidAngle = pow(uPlanetRadius / length(rel), 2.0);
+        col += albedo * uSunColor * vec3(1.0, 0.86, 0.65) * planetSolidAngle * planetPhase * 0.055;
+        // The forward lobe remains visible on both sides for unresolved ice/dust in thinner rings.
+        col += albedo * uSunColor * sh * pow(max(cosPhase, 0.0), 16.0) * exp(-tau * 2.0) * 0.14;
         gl_FragColor = vec4(col * alpha, alpha * uOcclusion);
       }`,
     side: THREE.DoubleSide,
@@ -845,8 +900,12 @@ export function createSunMaterial(colors: [number, number, number][], intensity:
         // Quadratic limb darkening (visible-band coefficients).
         float ld = 1.0 - 0.47 * (1.0 - mu) - 0.23 * (1.0 - mu) * (1.0 - mu);
         vec3 p = normalize(vObj);
-        float gran = 0.9 + 0.1 * snoise(p * 80.0 + uTime * 0.02) + 0.05 * snoise(p * 300.0 - uTime * 0.05);
-        float spots = smoothstep(0.72, 0.8, snoise(p * 6.0 + 11.0)) * smoothstep(0.6, 0.2, abs(p.z));
+        float footprint = max(length(dFdx(p)), length(dFdy(p)));
+        float cells = snoise(p * 240.0 + mod(uTime * 0.008, 100.0));
+        float intergranular = smoothstep(-0.35, 0.35, cells);
+        float gran = 0.65 + 0.35 * mix(0.55, intergranular, 1.0 - smoothstep(0.003, 0.012, footprint));
+        gran += 0.06 * snoise(p * 65.0);
+        float spots = smoothstep(0.72, 0.8, snoise(p * 6.0 + 11.0)) * (1.0 - smoothstep(0.2, 0.6, abs(p.z)));
         vec3 c = mix(uLimb, uCore, pow(mu, 0.5)) * ld * gran * (1.0 - spots * 0.6);
         gl_FragColor = vec4(c * uIntensity, 1.0);
       }`,

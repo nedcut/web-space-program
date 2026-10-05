@@ -91,7 +91,9 @@ export class SunGlare {
     const fovRad = THREE.MathUtils.degToRad(camera.fov);
     u.uSize.value = Math.max((angularRadius / (fovRad * 0.5)) * 1.0, 0.004);
     u.uTint.value.set(tint[0], tint[1], tint[2]);
-    u.uIntensity.value = visibility * edgeFade * strength;
+    // At large angular sizes the resolved photosphere/corona supplies the light; glare must not wash it out.
+    const resolvedSun = 1 - THREE.MathUtils.smoothstep(angularRadius, 0.025, 0.20);
+    u.uIntensity.value = visibility * edgeFade * strength * resolvedSun;
   }
 
   dispose(): void {
