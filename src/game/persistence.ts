@@ -151,16 +151,12 @@ export function saveWorldToStorage(slot: string, world: World, displayName?: str
 
 export function loadWorldFromStorage(slot: string): { savedAt: number; data: SavedWorld } | null {
   try {
-    const programId = game.get().saveId;
-    if (programId) {
-      const all = listSaveSlots();
-      const saved = all.find(x => x.programId === programId && (slot === 'autosave' ? x.kind === 'auto' : x.id === `${programId}:${slot}`));
-      if (saved) return { savedAt: saved.savedAt, data: saved.data };
-      // Only an unmigrated legacy program may read the compatibility keys. A new
-      // or deleted program must never fall back to another program's last save.
-      if (programId !== 'legacy-program' || localStorage.getItem(SLOTS_KEY) !== null) return null;
-    }
-    if (localStorage.getItem(SLOTS_KEY) !== null) return null;
+    const programId = game.get().saveId ?? 'legacy-program';
+    const saved = listSaveSlots().find(x => x.programId === programId && (slot === 'autosave' ? x.kind === 'auto' : x.id === `${programId}:${slot}`));
+    if (saved) return { savedAt: saved.savedAt, data: saved.data };
+    // Only an unmigrated legacy program may read the compatibility keys. A new
+    // or deleted program must never fall back to another program's last save.
+    if (programId !== 'legacy-program' || localStorage.getItem(SLOTS_KEY) !== null) return null;
     const raw = localStorage.getItem(KEY_PREFIX + slot);
     return raw ? JSON.parse(raw) : null;
   } catch {

@@ -105,6 +105,14 @@ describe('save slots', () => {
 
 
 describe('program save integration', () => {
+  it('keeps quicksave/load working for legacy and dev flights without a program ID', () => {
+    const world = new World(new Universe('standard'), PART_CATALOG, 789);
+    const store = storage(), previous = game.get().saveId; vi.stubGlobal('localStorage', store);
+    try {
+      game.set({ saveId: null }); saveWorldToStorage('quicksave', world);
+      expect(loadWorldFromStorage('quicksave')?.data.ut).toBe(789);
+    } finally { game.set({ saveId: previous }); vi.unstubAllGlobals(); }
+  });
   it('migrates both legacy channels once without resurrecting deleted slots', () => {
     const world = new World(new Universe('standard'), PART_CATALOG, 456);
     const raw = JSON.stringify({ savedAt: 1, data: serializeWorld(world) });

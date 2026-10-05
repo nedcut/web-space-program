@@ -1,6 +1,6 @@
 import { apoapsisRadius, periapsisRadius } from '../../sim/orbit';
 import type { World, WorldVessel } from '../world';
-import { length, dot, normalize } from '../../util/vec3';
+import { length, dot, normalize, scale } from '../../util/vec3';
 import { qConj, qRotate } from '../../util/quat';
 import { cachedStageDeltaV } from '../stageDeltaVCache';
 import { scienceContext } from '../science';
@@ -43,7 +43,14 @@ export function recordVessel(w: World, v: WorldVessel, ut = w.ut, force = false)
   const dv = Math.max(0, r.deltaVEstimate.value - (r.stats.dvSpent - r.deltaVEstimate.spent));
   const ringPass = !!b.rings && (Math.abs(fixed.z) < Math.max(100, speed * 0.25) && planar >= b.rings.innerRadius && planar <= b.rings.outerRadius || !!r.ringPosition && r.ringPosition.body === v.body && crossesRingPlane(r.ringPosition, fixed, b.rings.innerRadius, b.rings.outerRadius));
   r.ringPosition = { body: v.body, ...fixed };
-  observe(r, { inertialSpeed: length(relative.velocity), clearance: Number.isFinite(s.telemetry.altitudeAGL) ? s.telemetry.altitudeAGL : radius - b.radius, ut, body: v.body, altitude: radius - b.radius, speed, vertical, horizontal: Math.sqrt(Math.max(0, speed * speed - vertical * vertical)), ap: o.ap, pe: o.pe, mach: telemetry.mach, q: telemetry.dynamicPressure, g: telemetry.gForce, temperature, mass: s.mass,
+  let clearance = Number.isFinite(s.telemetry.altitudeAGL) ? s.telemetry.altitudeAGL : radius - b.radius;
+  // Contact altitude is measured at the COM. Tall craft can briefly settle onto the pad
+  // after clamp release; count launch only once the bottom of the hull has cleared it.
+  if (!r.launched && clearance < s.cache.boundingRadius + 5) {
+    const down = qRotate(qConj(s.orientation), scale(normalize(relative.position), -1));
+    clearance -= w.restOffset(s, down);
+  }
+  observe(r, { inertialSpeed: length(relative.velocity), clearance, ut, body: v.body, altitude: radius - b.radius, speed, vertical, horizontal: Math.sqrt(Math.max(0, speed * speed - vertical * vertical)), ap: o.ap, pe: o.pe, mach: telemetry.mach, q: telemetry.dynamicPressure, g: telemetry.gForce, temperature, mass: s.mass,
     dv,
     thrustAcceleration: telemetry.thrust / Math.max(1, s.mass),
     flying: s.situation === 'flying', prelaunch: v.mode === 'prelaunch', stableOrbit: s.situation === 'flying' && orbit.e < 1 && o.pe > Math.max(b.atmosphere?.height ?? 0, w.universe.terrain(b.id).maxHeight), parts: s.parts.length,
