@@ -9,7 +9,7 @@ import type { Quat } from '../../util/quat';
  * Parts are authored with their origin at their geometric centre.
  */
 
-export type ResourceId = 'liquidFuel' | 'oxidizer' | 'monopropellant' | 'xenon' | 'solidFuel' | 'electricCharge' | 'ablator' | 'intakeAir';
+export type ResourceId = 'liquidFuel' | 'oxidizer' | 'monopropellant' | 'xenon' | 'solidFuel' | 'electricCharge' | 'ablator' | 'intakeAir' | 'regolith';
 
 export interface ResourceDef {
   id: ResourceId;
@@ -214,6 +214,10 @@ export interface DockingPortModule {
 }
 
 export type PartModule =
+  | { type: 'drill'; rate: number; ecRate: number; heat: number }
+  | { type: 'converter'; rate: number; ecRate: number; heat: number }
+  | { type: 'surveyScanner' }
+  | { type: 'surfaceScanner' }
   | EngineModule
   | DockingPortModule
   | RcsModule

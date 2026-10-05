@@ -29,6 +29,7 @@ interface SavedVessel {
 export interface SavedWorld {
   commsSettings?: import('../sim/comms/network').CommsSettings;
   transmitting?: string[];
+  surveyedBodies?: string[];
   mode?: GameMode;
   progression?: Progression;
   crew?: Astronaut[];
@@ -69,6 +70,7 @@ export function serializeWorld(world: World): SavedWorld {
   return {
     commsSettings: { ...world.commsSettings },
     transmitting: [...world.transmitting],
+    surveyedBodies: [...world.surveyedBodies],
     mode: world.mode,
     progression: structuredClone(world.progression),
     crew: structuredClone(world.crew),
@@ -90,6 +92,7 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
   const world = new World(universe ?? new Universe(data.preset), catalog, data.ut, data.mode ?? 'sandbox');
   world.commsSettings = { ...world.commsSettings, ...data.commsSettings };
   world.transmitting = [...(data.transmitting ?? [])];
+  world.surveyedBodies = [...(data.surveyedBodies ?? [])];
   world.progression = structuredClone(data.progression ?? newProgression());
   if (world.mode === 'career' && !world.progression.contracts.length) world.refreshContracts();
   world.crew = structuredClone(data.crew ?? []);

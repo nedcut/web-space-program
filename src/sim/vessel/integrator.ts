@@ -1,3 +1,4 @@
+import { advanceISRU } from './isru';
 import type { Vec3 } from '../../util/vec3';
 import { add, length, scale, v3 } from '../../util/vec3';
 import type { Quat } from '../../util/quat';
@@ -186,6 +187,8 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
     }
 
   stepPowerSources(v, h);
+  advanceISRU(v, v.situation === 'landed' && v.parts.some(p => p.drillDeployed)
+    ? env.regolithConcentration?.(v.position, tMid) ?? 0 : 0, h);
 
   // Aerodynamics & parachutes.
   const aero = computeAeroForces(v, { air: air.sample, airVelocityBody, control: c });

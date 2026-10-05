@@ -15,6 +15,7 @@ import type { PartState, VesselState } from './runtime';
  * Mirrors src/data/resources.ts (sim may not import data; pass `resourceDefs` to override).
  */
 export const DEFAULT_RESOURCE_DEFS: Record<ResourceId, ResourceDef> = {
+  regolith: { id: 'regolith', name: 'Regolith', density: 2.5, flow: 'all' },
   liquidFuel: { id: 'liquidFuel', name: 'Kerolox Fuel', density: 0.81, flow: 'stack' },
   oxidizer: { id: 'oxidizer', name: 'Liquid Oxygen', density: 1.14, flow: 'stack' },
   monopropellant: { id: 'monopropellant', name: 'Hydrazine Monoprop', density: 1.0, flow: 'all' },

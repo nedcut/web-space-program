@@ -1,5 +1,6 @@
 import { SignalPanel } from './hud/SignalPanel';
 import { MultiplayerPanel } from '../net/MultiplayerPanel';
+import { ResourcePanel } from './hud/ResourcePanel';
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -254,6 +255,8 @@ export default function FlightScene() {
             assist: !tele.eva && !tele.noControl ? <AssistPanel active={tele.assist} onStart={(id) => ctrl.current?.startAssist(id)} onCancel={() => ctrl.current?.cancelAssist()} /> : undefined,
             assistActive: !!tele.assist,
             signal: <SignalPanel world={c.world} />,
+            resources: (tele.mapMode || active?.state.parts.some(p => p.def.modules.some(m => ['drill', 'converter', 'surfaceScanner', 'surveyScanner'].includes(m.type))))
+              ? <ResourcePanel world={c.world} map={c.map} mapMode={tele.mapMode} paused={paused} /> : undefined,
             science: <SciencePanel world={c.world} paused={paused} />,
             maneuver: <ManeuverPanel world={c.world} />,
           }}

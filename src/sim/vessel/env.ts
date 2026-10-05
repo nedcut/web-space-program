@@ -32,6 +32,7 @@ export interface AirSample {
  * depend on the body/orbit/terrain/atmosphere implementations. All queries take inertial positions.
  */
 export interface Environment {
+  regolithConcentration?(pos: Vec3, t: number): number;
   /** Gravitational acceleration at an inertial position (m/s^2). */
   gravity(posInertial: Vec3, t: number): Vec3;
   /** Atmosphere sample + air velocity (body rotation co-rotation) at a position. */

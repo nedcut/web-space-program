@@ -1,4 +1,5 @@
 import type { Network } from '../../sim/comms/network';
+import { concentrationAt } from '../../sim/resources/deposits';
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
@@ -140,6 +141,9 @@ export class MapView {
   yaw = 0.6;
   pitch = 0.5;
   distance = 2e7;
+  resourceOverlayEnabled = false;
+  private resourceTextures = new Map<string, THREE.DataTexture>();
+  private resourceBodies = new Set<string>();
   private bodies = new Map<string, BodyVisual>();
   private vesselLines: Line2[] = [];
   private vesselIcon: THREE.Sprite;
@@ -156,6 +160,37 @@ export class MapView {
   private approach: MapApproach | null = null;
   private approachIcons: THREE.Sprite[];
   private approachLabel: HTMLDivElement;
+
+  /** Cached body-fixed field texture; callers supply only surveyed bodies. */
+  setResourceOverlay(surveyedBodies: readonly string[], enabled = true) {
+    this.resourceOverlayEnabled = enabled;
+    this.resourceBodies = new Set(enabled ? surveyedBodies : []);
+    for (const [id, vis] of this.bodies) {
+      if (!vis.body.solidSurface) continue;
+      const mat = vis.sphere.material as THREE.MeshStandardMaterial;
+      const show = this.resourceBodies.has(id);
+      if (show && !this.resourceTextures.has(id)) {
+        const width = 256, height = 128, bytes = new Uint8Array(width * height * 4);
+        for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+          // SphereGeometry's UV convention, rotated from Y-up to body-fixed Z-up.
+          const phi = (x + 0.5) / width * Math.PI * 2;
+          const theta = (1 - (y + 0.5) / height) * Math.PI;
+          const c = concentrationAt(vis.body, { x: -Math.cos(phi) * Math.sin(theta), y: -Math.sin(phi) * Math.sin(theta), z: Math.cos(theta) });
+          const i = (y * width + x) * 4;
+          bytes[i] = Math.round(30 + c * 225); bytes[i + 1] = Math.round(65 + c * 155);
+          bytes[i + 2] = Math.round(200 - c * 170); bytes[i + 3] = 255;
+        }
+        const texture = new THREE.DataTexture(bytes, width, height);
+        texture.colorSpace = THREE.SRGBColorSpace; texture.magFilter = THREE.LinearFilter;
+        texture.minFilter = THREE.LinearFilter; texture.wrapS = THREE.RepeatWrapping; texture.needsUpdate = true;
+        this.resourceTextures.set(id, texture);
+      }
+      mat.map = show ? this.resourceTextures.get(id)! : null;
+      mat.color.copy(show ? new THREE.Color(1, 1, 1) : colorOf(vis.body));
+      mat.emissive.setHex(show ? 0xffffff : 0); mat.emissiveMap = mat.map; mat.emissiveIntensity = show ? 0.7 : 0;
+      mat.needsUpdate = true;
+    }
+  }
 
   /** Highlight the navigation target (its orbit and icon); null clears. */
   setTarget(t: MapTarget | null) {
@@ -409,6 +444,9 @@ export class MapView {
     for (const vis of this.bodies.values()) {
       const pos = this.ephem.getBodyState(vis.body.id, t).position;
       this.place(vis.sphere, pos, focus);
+      const rotation = this.ephem.bodyRotation(vis.body.id, t);
+      vis.sphere.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+      vis.sphere.rotateX(Math.PI / 2);
       this.place(vis.icon, pos, focus);
       if (vis.orbitLine && vis.body.parent) this.place(vis.orbitLine, this.ephem.getBodyState(vis.body.parent, t).position, focus);
       // Hide icons/labels for bodies whose apparent size is large, or whose orbit is tiny on screen (declutter).
@@ -522,6 +560,8 @@ export class MapView {
   }
 
   dispose() {
+    for (const texture of this.resourceTextures.values()) texture.dispose();
+    this.resourceTextures.clear();
     this.labels.remove();
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;

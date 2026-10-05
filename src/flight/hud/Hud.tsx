@@ -161,7 +161,7 @@ function Readout({ label, value, color }: { label: string; value: ReactNode; col
 }
 
 /** Left-column dock sections that can be toggled from the chip bar. */
-type DockId = 'assist' | 'crew' | 'science' | 'target';
+type DockId = 'assist' | 'crew' | 'science' | 'resources' | 'target';
 const DOCK_KEY = 'wsp.hud.dock.v1';
 
 function loadDock(): Set<DockId> {
@@ -180,6 +180,7 @@ export interface HudDockSlots {
   assistActive?: boolean;
   science?: ReactNode;
   signal?: ReactNode;
+  resources?: ReactNode;
   /** Map-mode maneuver planner (rendered at the top of the dock in map view). */
   maneuver?: ReactNode;
 }
@@ -343,12 +344,14 @@ export function Hud({ t, cb, navball, dock }: { t: Telemetry; cb: HudCallbacks; 
           {showAssistChip && chip('assist', 'Assist', 'Flight assist (autopilot programs)', dock?.assistActive ? <span className="hud-dot" /> : null)}
           {showCrewChip && chip('crew', t.eva ? 'EVA' : `Crew ${t.crew.length}`, 'Crew and EVA', t.noControl ? <span className="hud-dot warn" /> : null)}
           {showScienceChip && chip('science', 'Science', 'Science instruments and data')}
+          {dock?.resources && chip('resources', 'Resources', 'Surface machinery and resource surveys')}
           {chip('target', 'Target', 'Navigation target and docking', t.target ? <span className="hud-dot target" /> : null)}
         </div>
         {showAssistChip && (open.has('assist') || dock?.assistActive) && dock?.assist}
         {t.dockingMode && !t.mapMode && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
         {crewOpen && <CrewPanel t={t} cb={cb} />}
         {showScienceChip && open.has('science') && dock?.science}
+        {open.has('resources') && dock?.resources}
         {targetOpen && <TargetPanel t={t} cb={cb} />}
       </div>
 

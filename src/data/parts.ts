@@ -1,3 +1,4 @@
+import { ISRU_PARTS } from './isru';
 import type { AttachNode, PartDef, PartModule, ResourceId } from '../sim/vessel/types';
 import { KEROLOX_FUEL_FRACTION, KEROLOX_OX_FRACTION, RESOURCES } from './resources';
 
@@ -1553,7 +1554,7 @@ const expansion: PartDef[] = [
   { ...hardware('rover-chassis', 'Trailhead Rover Chassis', 'structural', 220, 1200, box(1.5,2,0.35), 'framework', [], { style: 'chassis' }, 1), resources: { electricCharge: 800 } },
 ];
 
-export const PART_DEFS: PartDef[] = [...pods, ...tanks, ...engines, ...coupling, ...structural, ...aero, ...control, ...electrical, ...utility, ...aircraft, ...scienceParts, ...antennas, ...expansion];
+export const PART_DEFS: PartDef[] = [...pods, ...tanks, ...engines, ...coupling, ...structural, ...aero, ...control, ...electrical, ...utility, ...aircraft, ...scienceParts, ...antennas, ...expansion, ...ISRU_PARTS];
 
 export const PART_CATALOG: Map<string, PartDef> = new Map(PART_DEFS.map((p) => [p.id, p]));
 

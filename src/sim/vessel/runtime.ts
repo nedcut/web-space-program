@@ -138,6 +138,12 @@ export interface WheelState {
 
 export interface PartState {
   bayOpen?: boolean;
+  drillDeployed?: boolean;
+  drillDeploy?: number;
+  converterRunning?: boolean;
+  converterRecipe?: 'kerolox' | 'monopropellant';
+  /** Isolated machinery core with integral radiator; K. */
+  processTemperature?: number;
   scienceData?: ScienceData[];
   /** Surface expedition provenance follows hardware through staging and docking. */
   visitedBodies?: string[];
