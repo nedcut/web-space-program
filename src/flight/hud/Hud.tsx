@@ -1,9 +1,10 @@
+import { snapshotEqual } from '../../util/snapshotEqual';
 import { FlightDataPanel } from './FlightDataPanel';
 import type { FlightData } from '../../game/flightData';
 import { useGame } from '../../game/store';
 import { CrewPanel } from './CrewPanel';
 import type { Astronaut } from '../../sim/crew/crew';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { formatDistance, formatSpeed, formatDuration, formatDate } from '../../ui/format';
 import { Navball, type NavballFrame, type NavballMarker } from './navball';
 import { DockingIndicator, TargetPanel } from './TargetPanel';
@@ -156,14 +157,14 @@ export function NavballView({ getFrame }: { getFrame: () => { frame: NavballFram
   return <div ref={host} />;
 }
 
-function Readout({ label, value, color }: { label: string; value: ReactNode; color?: string }) {
+const Readout = memo(function Readout({ label, value, color }: { label: string; value: ReactNode; color?: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14 }}>
       <span className="label">{label}</span>
       <span className="mono" style={{ color }}>{value}</span>
     </div>
   );
-}
+});
 
 /** Left-column dock sections that can be toggled from the chip bar. */
 type DockId = 'assist' | 'crew' | 'science' | 'resources' | 'target' | 'data';
@@ -263,21 +264,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
           <Readout label="Mach" value={t.mach.toFixed(2)} />
           <Readout label="Dyn. press." value={`${(t.dynamicPressure / 1000).toFixed(1)} kPa`} />
         </div>
-        {t.resources.length > 0 && (
-          <div className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {t.resources.map((r) => (
-              <div key={r.id}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                  <span className="label">{r.name}</span>
-                  <span className="mono">{r.amount.toFixed(0)}/{r.max.toFixed(0)}</span>
-                </div>
-                <div style={{ height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 3 }}>
-                  <div style={{ width: `${(100 * r.amount) / Math.max(r.max, 1e-9)}%`, height: '100%', background: r.color, borderRadius: 3 }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <ResourceReadouts resources={t.resources} />
       </div>
 
       {/* Staging stack */}
@@ -287,21 +274,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
             Stage · Space
           </button>
         )}
-        {t.stages.map((s) => (
-          <div key={s.index} className="panel" style={{ padding: 8, width: 180, flexShrink: 0, borderColor: s.index === t.stage ? 'var(--accent)' : s.parts.some((p) => p.active) ? 'var(--accent-2)' : undefined }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span className="label" style={{ color: s.index === t.stage ? 'var(--accent)' : undefined }} title={s.index === t.stage ? 'Fires on the next Space press' : undefined}>{s.parts.some((p) => p.active) ? 'Active' : `${s.index === t.stage ? '▸ ' : ''}Stage ${s.index}`}</span>
-              <span className="mono" style={{ fontSize: 11, color: 'var(--accent-2)' }}>{speed(s.deltaV)}</span>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-              {s.parts.map((p) => (
-                <span key={p.uid} title={p.name} style={{ fontSize: 16, opacity: p.active ? 1 : 0.6 }}>
-                  {p.icon === 'engine' ? '🔥' : p.icon === 'decoupler' ? '⫘' : p.icon === 'chute' ? '☂' : '◆'}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
+        <StageReadouts stages={t.stages} stage={t.stage} imperial={settings.units === 'imperial'} />
       </div>
 
       {/* Bottom-centre: navball + speed + SAS */}
@@ -387,3 +360,44 @@ function ThrottleGauge({ value }: { value: number }) {
     </div>
   );
 }
+
+const ResourceReadouts = memo(function ResourceReadouts({ resources }: { resources: Telemetry['resources'] }) {
+  return <>
+        {resources.length > 0 && (
+          <div className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {resources.map((r) => (
+              <div key={r.id}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                  <span className="label">{r.name}</span>
+                  <span className="mono">{r.amount.toFixed(0)}/{r.max.toFixed(0)}</span>
+                </div>
+                <div style={{ height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 3 }}>
+                  <div style={{ width: `${(100 * r.amount) / Math.max(r.max, 1e-9)}%`, height: '100%', background: r.color, borderRadius: 3 }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+  </>;
+}, (a, b) => snapshotEqual(a.resources, b.resources));
+
+const StageReadouts = memo(function StageReadouts({ stages, stage, imperial }: { stages: HudStage[]; stage: number; imperial: boolean }) {
+  const speed = (v: number) => imperial ? `${(v * 2.236936).toFixed(1)} mph` : formatSpeed(v);
+  return <>
+        {stages.map((s) => (
+          <div key={s.index} className="panel" style={{ padding: 8, width: 180, flexShrink: 0, borderColor: s.index === stage ? 'var(--accent)' : s.parts.some((p) => p.active) ? 'var(--accent-2)' : undefined }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span className="label" style={{ color: s.index === stage ? 'var(--accent)' : undefined }} title={s.index === stage ? 'Fires on the next Space press' : undefined}>{s.parts.some((p) => p.active) ? 'Active' : `${s.index === stage ? '▸ ' : ''}Stage ${s.index}`}</span>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--accent-2)' }}>{speed(s.deltaV)}</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+              {s.parts.map((p) => (
+                <span key={p.uid} title={p.name} style={{ fontSize: 16, opacity: p.active ? 1 : 0.6 }}>
+                  {p.icon === 'engine' ? '🔥' : p.icon === 'decoupler' ? '⫘' : p.icon === 'chute' ? '☂' : '◆'}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+  </>;
+}, (a, b) => a.stage === b.stage && a.imperial === b.imperial && snapshotEqual(a.stages, b.stages));

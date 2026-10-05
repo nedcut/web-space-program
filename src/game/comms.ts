@@ -11,13 +11,22 @@ export const GROUND_STATIONS = [
   { id: 'ground-dawn', name: 'Dawn Reach Station', lat: 12, lon: 165, range: 2e12 },
 ];
 
+const stationSites = new WeakMap<World['universe'], { direction: ReturnType<typeof latLonToUnit>; altitude: number }[]>();
+
 /** Adapter only: the graph solver has no World, ephemeris, DOM or renderer dependencies. */
 export function worldNetwork(w: World): Network {
   const u = w.universe, earth = u.body('earth'), center = u.ephem.getBodyState('earth', w.ut).position;
   const rotation = u.ephem.bodyRotation('earth', w.ut);
-  const nodes: CommsNode[] = GROUND_STATIONS.map(s => {
-    const d = latLonToUnit(s.lat, s.lon);
-    const altitude = Math.max(0, u.terrain('earth').heightAt(d.x, d.y, d.z)) + 30;
+  let sites = stationSites.get(u);
+  if (!sites) {
+    sites = GROUND_STATIONS.map(s => {
+      const direction = latLonToUnit(s.lat, s.lon);
+      return { direction, altitude: Math.max(0, u.terrain('earth').heightAt(direction.x, direction.y, direction.z)) + 30 };
+    });
+    stationSites.set(u, sites);
+  }
+  const nodes: CommsNode[] = GROUND_STATIONS.map((s, i) => {
+    const { direction: d, altitude } = sites[i];
     return { ...s, position: add(center, qRotate(rotation, scale(d, earth.radius + altitude))), relay: true, ground: true };
   });
   for (const { state: v } of w.vessels.values()) {

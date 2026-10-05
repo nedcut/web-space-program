@@ -86,10 +86,15 @@ export function localInertia(def: PartDef, mass: number): Mat3 {
   return [(mass * (y * y + z * z)) / 12, 0, 0, 0, (mass * (x * x + z * z)) / 12, 0, 0, 0, (mass * (x * x + y * y)) / 12];
 }
 
-/** Contact sample points on the part's hull, part frame. */
+const hullCache = new WeakMap<PartDef, Vec3[]>();
+
+/** Contact sample points on the immutable part definition's hull. Treat returned points as read-only. */
 export function hullPoints(def: PartDef): Vec3[] {
+  const cached = hullCache.get(def);
+  if (cached) return cached;
   const s = def.shape;
   const pts: Vec3[] = [];
+  hullCache.set(def, pts);
   if (s.kind === 'cylinder') {
     const n = 8;
     for (let i = 0; i < n; i++) {

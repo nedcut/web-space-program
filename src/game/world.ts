@@ -1,6 +1,6 @@
 import { defaultCommsSettings, remoteControlAllowed, NO_SIGNAL, type CommsSettings, type Network } from '../sim/comms/network';
 import { worldNetwork } from './comms';
-import { advanceISRU } from '../sim/vessel/isru';
+import { advanceISRU, isruMachinery } from '../sim/vessel/isru';
 import { concentrationAt } from '../sim/resources/deposits';
 import { newProgression, generateContracts, acceptContract, failContract, type GameMode, type ProgressEvent } from '../sim/science/progression';
 import { unlockTech, launchProblem, launchCost } from '../data/technology';
@@ -820,7 +820,7 @@ export class World {
       }
     }
     for (const wv of this.vessels.values()) {
-      if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') advanceISRU(wv.state, this.localConcentration(wv), target - this.ut);
+      if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, target - this.ut);
     }
     this.ut = target;
     for (const wv of this.vessels.values()) this.syncPacked(wv, this.ut);
@@ -927,7 +927,7 @@ export class World {
           if (b.atmosphere && alt < b.atmosphere.height && wv.state.situation === 'flying') this.vessels.delete(wv.state.id);
           else {
             this.pack(wv);
-            if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') advanceISRU(wv.state, this.localConcentration(wv), PHYSICS_DT);
+            if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, PHYSICS_DT);
           }
           continue;
         }
@@ -940,7 +940,7 @@ export class World {
           wv.fixed = undefined;
           this.message('Liftoff!');
         } else {
-          advanceISRU(wv.state, this.localConcentration(wv), PHYSICS_DT);
+          advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, PHYSICS_DT);
           // States are expressed at the end of the step (t + dt), like physics-stepped vessels.
           this.syncFixed(wv, t + PHYSICS_DT);
           continue;

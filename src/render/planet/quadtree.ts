@@ -75,6 +75,7 @@ export class Quadtree {
   private meshCount = 0;
   readonly selected: ChunkNode[] = [];
   private prevSelected = new Set<ChunkNode>();
+  private nextSelected = new Set<ChunkNode>();
   stats = { selected: 0, meshes: 0, inflight: 0, queued: 0, builtTotal: 0, lastBuildMs: 0 };
 
   constructor(opts: QuadtreeOptions) {
@@ -261,7 +262,9 @@ export class Quadtree {
    */
   place(bodyRenderX: number, bodyRenderY: number, bodyRenderZ: number, rot: THREE.Quaternion, rotM: THREE.Matrix3): void {
     const e = rotM.elements; // column-major
-    const now = new Set<ChunkNode>(this.selected);
+    const now = this.nextSelected;
+    now.clear();
+    for (const n of this.selected) now.add(n);
     for (const n of this.prevSelected) {
       if (!now.has(n)) {
         if (n.mesh) n.mesh.visible = false;
@@ -273,17 +276,21 @@ export class Quadtree {
       const px = bodyRenderX + e[0] * x + e[3] * y + e[6] * z;
       const py = bodyRenderY + e[1] * x + e[4] * y + e[7] * z;
       const pz = bodyRenderZ + e[2] * x + e[5] * y + e[8] * z;
-      for (const m of [n.mesh, n.oceanMesh]) {
-        if (!m) continue;
-        m.visible = true;
-        m.position.set(px, py, pz);
-        m.quaternion.copy(rot);
-        m.updateMatrix();
-      }
+      if (n.mesh) this.placeMesh(n.mesh, px, py, pz, rot);
+      if (n.oceanMesh) this.placeMesh(n.oceanMesh, px, py, pz, rot);
     }
+    this.nextSelected = this.prevSelected;
     this.prevSelected = now;
     this.stats.selected = this.selected.length;
     this.stats.meshes = this.meshCount;
+  }
+
+  private placeMesh(m: THREE.Mesh, x: number, y: number, z: number, rot: THREE.Quaternion): void {
+    m.visible = true;
+    if (m.position.x === x && m.position.y === y && m.position.z === z && m.quaternion.equals(rot)) return;
+    m.position.set(x, y, z);
+    m.quaternion.copy(rot);
+    m.updateMatrix();
   }
 
   hideAll(): void {

@@ -293,11 +293,7 @@ export default function FlightScene() {
           }}
         />
       )}
-      {tele && settings.showFps && c && (
-        <div className="mono" style={{ position: 'absolute', right: 250, top: 14, fontSize: 11, color: 'var(--text-dim)', pointerEvents: 'none' }}>
-          {c.fps.toFixed(0)} fps · {c.world.vessels.size} vessels
-        </div>
-      )}
+      {settings.showFps && c && <PerformanceReadout controller={c} />}
       {help && ready && <HelpOverlay eva={!!tele?.eva} onClose={closeHelp} />}
       {networkReady && c?.network && <MultiplayerPanel client={c.network} />}
       {paused && multiplayer && (
@@ -346,4 +342,12 @@ export default function FlightScene() {
       )}
     </div>
   );
+}
+
+function PerformanceReadout({ controller: c }: { controller: FlightController }) {
+  const [, refresh] = useState(0);
+  useEffect(() => { const id = window.setInterval(() => refresh(n => n + 1), 500); return () => window.clearInterval(id); }, []);
+  return <div className="mono" style={{ position: 'absolute', bottom: 8, right: 12, color: '#9fb9c8', fontSize: 11, pointerEvents: 'none' }}>
+    {c.fps.toFixed(0)} fps · {c.pipeline.stats.calls} calls · {c.pipeline.stats.triangles.toLocaleString()} tris · {(c.pipeline.effectiveRenderScale * 100).toFixed(0)}% scale · {c.world.vessels.size} vessels
+  </div>;
 }

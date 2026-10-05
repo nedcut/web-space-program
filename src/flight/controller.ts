@@ -1,3 +1,5 @@
+import { snapshotEqual } from '../util/snapshotEqual';
+import { cachedStageDeltaV } from '../game/stageDeltaVCache';
 import { applyCommsSettings, game } from '../game/store';
 import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
 import { getTutorial } from '../tutorial/runtime';
@@ -19,7 +21,7 @@ import { PART_CATALOG } from '../data/parts';
 import { RESOURCES } from '../data/resources';
 import type { CraftDef } from '../sim/vessel/types';
 import type { SasMode } from '../sim/vessel/runtime';
-import { neutralInput, computeStageDeltaV, freePorts, dockedPorts, gearState, type StageDeltaV, type PortInfo } from '../sim/vessel';
+import { neutralInput, freePorts, dockedPorts, gearState, type StageDeltaV, type PortInfo } from '../sim/vessel';
 import type { Orbit } from '../sim/orbit/api';
 import type { ExtraOrbit } from '../render/map/MapView';
 import { placeInCircularOrbit, spawnRendezvousTarget } from '../game/scenarios';
@@ -99,6 +101,8 @@ export class FlightController {
   private disposers: (() => void)[] = [];
   private telemetryListeners = new Set<(t: Telemetry) => void>();
   private telemetryTimer = 0;
+  private lastTelemetry?: Telemetry;
+  private lastHudInput = '';
   private predictions: ReturnType<typeof flightPredictions> = { impact: null, crossings: [] };
   private elapsed = 0;
   onExit: (() => void) | null = null;
@@ -450,7 +454,8 @@ export class FlightController {
   private graphicsKey = '';
   private frame = (now: number) => {
     this.raf = requestAnimationFrame(this.frame);
-    const dt = Math.min(0.1, (now - this.last) / 1000);
+    const frameMs = now - this.last;
+    const dt = Math.min(0.1, frameMs / 1000);
     this.last = now;
     this.elapsed += dt;
     this.fps = this.fps * 0.95 + (dt > 0 ? 1 / dt : 0) * 0.05;
@@ -466,8 +471,16 @@ export class FlightController {
     const graphicsKey = JSON.stringify([settings.quality, settings.shadows, settings.bloom, settings.renderScale]);
     if (graphicsKey !== this.graphicsKey) {
       this.graphicsKey = graphicsKey;
-      this.pipeline.setQuality(getQuality(settings.quality));
+      const quality = getQuality(settings.quality);
+      this.pipeline.setQuality(quality);
+      const size = quality.shadowMapSize || 512;
+      if (this.sunLight.shadow.mapSize.x !== size) {
+        this.sunLight.shadow.mapSize.set(size, size);
+        this.sunLight.shadow.map?.dispose();
+        this.sunLight.shadow.map = null;
+      }
     }
+    this.pipeline.updateAdaptive(frameMs, settings.adaptiveQuality);
     if (!this.paused && settings.autoSaveInterval > 0) {
       this.autosaveTimer += dt;
       if (this.autosaveTimer >= settings.autoSaveInterval) { this.autosaveTimer = 0; this.quicksave('autosave'); }
@@ -556,7 +569,12 @@ export class FlightController {
     if (this.telemetryTimer > 0.1 && wv) {
       this.telemetryTimer = 0;
       const t = this.telemetry(wv);
-      this.telemetryListeners.forEach((l) => l(t));
+      const hudInput = `${this.input.precisionActive}:${this.input.stageProgress}:${this.input.gamepadConnected}`;
+      if (hudInput !== this.lastHudInput || !snapshotEqual(t, this.lastTelemetry)) {
+        this.lastHudInput = hudInput;
+        this.lastTelemetry = t;
+        this.telemetryListeners.forEach((l) => l(t));
+      }
     }
   };
 
@@ -608,7 +626,9 @@ export class FlightController {
         this.scene.add(view.root);
       }
       view.setVessel(v.state);
-      view.update(origin, this.elapsed, air.pressure, dt);
+      const debris = v !== wv && !v.state.parts.some(p => p.def.modules.some(m => m.type === 'command'));
+      const distant = debris && length(sub(v.state.position, origin)) > 2000;
+      view.update(origin, this.elapsed, air.pressure, dt, distant);
       const pose = this.network?.pose(v.state.id);
       if (pose) {
         view.root.position.set(pose.position.x - origin.x, pose.position.y - origin.y, pose.position.z - origin.z);
@@ -664,8 +684,10 @@ export class FlightController {
     this.sunLight.position.copy(sd).multiplyScalar(r * 4);
     this.sunLight.target.position.set(0, 0, 0);
     const sc = this.sunLight.shadow.camera as THREE.OrthographicCamera;
-    sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 0.1; sc.far = r * 8;
-    sc.updateProjectionMatrix();
+    if (sc.right !== r) {
+      sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 0.1; sc.far = r * 8;
+      sc.updateProjectionMatrix();
+    }
 
     if (wv.body === 'earth') this.site.update(origin, t);
     else this.site.hide();
@@ -908,7 +930,7 @@ export class FlightController {
     const pressure = st.telemetry.staticPressure;
     let dvs: StageDeltaV[] = [];
     try {
-      dvs = computeStageDeltaV(st, pressure, b.surfaceGravity);
+      dvs = cachedStageDeltaV(st, pressure, b.surfaceGravity);
     } catch {
       dvs = [];
     }

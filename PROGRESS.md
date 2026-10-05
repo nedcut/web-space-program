@@ -172,3 +172,10 @@ See DECISIONS.md for choices made autonomously.
 - Editor: top bar no longer clips the Launch/exit buttons at ≤1366 px; Launch warns once for TWR < 1 / no engines; load dialog flags stock craft needing research; Kestrel uses starter parts so new Science/Career programs can fly a stock rocket.
 - Hub tiles readable over the bright sky; recovery summary on the hub; New Game warns it replaces the program and clears the old quicksave; Continue restores the last editor craft; Tracking Station starts focused on the fleet.
 - Known remaining: AudioContext autoplay warnings when entering flight without a prior gesture (dev URLs only); synchronous transfer search briefly freezes the UI; tech-tree page relies on page scroll at 768 px height.
+
+## Laptop performance pass (2026-10-04)
+
+- Added reproducible Node benchmarks covering World physics/rails, trajectory prediction, every catalogue terrain preset, chunk generation, Δv, comms, real controller telemetry/navball, ISRU and science. Raw measurements and the landed CPU profile are in `docs/performance`; methods, before/after tables and all changed files are in `docs/PERFORMANCE.md`.
+- Retained measured Δv, station-location, hull-point and absent-machinery caches; removed duplicate ground sampling. Memoized HUD panels, pooled map sprites/buffers, reused planet transforms and quadtree selections, and bounded unnecessary shadow/scatter work. Static vessel leaves are merged/instanced; distant non-command debris uses a point. Low uses half resolution and no bloom; adaptive render scale is optional. FPS readout now includes full composer/shadow draw calls and triangles.
+- Ten baseline/final 100-step traces are bit-identical. Typecheck passed; full suite passed 45 files / 632 tests. Multi-time ephemeris caching and in-place mass accumulation were reverted after unfavorable measurements.
+- Remaining external validation: actual pad/orbit renderer counts, visual review and integrated-GPU frame times. T3 preview navigation failed repeatedly despite the local dev server responding. Headless Selene visible meshes fell 236→195 with unchanged triangles; those are not GPU draw-call counts.

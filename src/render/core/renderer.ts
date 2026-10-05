@@ -1,3 +1,4 @@
+import { AdaptiveQuality } from './adaptiveQuality';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -28,6 +29,8 @@ export class RenderPipeline {
   private bloomPass?: UnrealBloomPass;
   private fxaaPass?: FXAAPass;
   private quality: QualitySettings;
+  private adaptive = new AdaptiveQuality();
+  readonly stats = { calls: 0, triangles: 0, points: 0 };
   private width = 1;
   private height = 1;
 
@@ -43,6 +46,7 @@ export class RenderPipeline {
       preserveDrawingBuffer: false,
     });
     const r = this.renderer;
+    r.info.autoReset = false;
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = toneMappingConst(opts.toneMapping ?? 'aces');
     r.toneMappingExposure = opts.exposure ?? 1;
@@ -65,12 +69,15 @@ export class RenderPipeline {
 
   get pixelRatio(): number {
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-    return Math.min(dpr, this.quality.maxPixelRatio) * this.quality.renderScale;
+    return Math.min(dpr, this.quality.maxPixelRatio) * this.quality.renderScale * this.adaptive.scale;
   }
 
   private buildComposer(): void {
     const q = this.quality;
-    this.composer?.dispose();
+    if (this.composer) {
+      for (const pass of this.composer.passes) pass.dispose();
+      this.composer.dispose();
+    }
     const rt = new THREE.WebGLRenderTarget(this.width, this.height, {
       type: THREE.HalfFloatType,
       samples: q.msaaSamples,
@@ -118,13 +125,22 @@ export class RenderPipeline {
     return this.height * this.pixelRatio;
   }
 
+  updateAdaptive(frameMs: number, enabled: boolean): void {
+    if (this.adaptive.update(frameMs, enabled)) this.setSize(this.width, this.height);
+  }
+
+  get effectiveRenderScale(): number { return this.quality.renderScale * this.adaptive.scale; }
+
   render(scene: THREE.Scene, camera: THREE.Camera): void {
     this.renderPass.scene = scene;
     this.renderPass.camera = camera;
+    this.renderer.info.reset();
     this.composer.render();
+    Object.assign(this.stats, { calls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles, points: this.renderer.info.render.points });
   }
 
   dispose(): void {
+    for (const pass of this.composer.passes) pass.dispose();
     this.composer.dispose();
     this.renderer.dispose();
   }

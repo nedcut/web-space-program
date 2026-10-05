@@ -1,0 +1,1640 @@
+{
+  "perf-after": [
+    {
+      "node": "v24.14.1",
+      "cpu": "AMD Ryzen 5 5600X 6-Core Processor",
+      "samples": 9,
+      "warmups": 5
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/pad",
+      "medianUs": 5.732,
+      "p95Us": 19.101
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/atmosphere",
+      "medianUs": 75.179,
+      "p95Us": 96.536
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/vacuum",
+      "medianUs": 58.057,
+      "p95Us": 87.281
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/landed",
+      "medianUs": 1046.718,
+      "p95Us": 1132.713
+    },
+    {
+      "name": "tick/stock-selene/28parts/pad",
+      "medianUs": 2.55,
+      "p95Us": 2.58
+    },
+    {
+      "name": "tick/stock-selene/28parts/atmosphere",
+      "medianUs": 101.769,
+      "p95Us": 126.679
+    },
+    {
+      "name": "tick/stock-selene/28parts/vacuum",
+      "medianUs": 86.83,
+      "p95Us": 124.484
+    },
+    {
+      "name": "tick/stock-selene/28parts/landed",
+      "medianUs": 2869.61,
+      "p95Us": 3066.225
+    },
+    {
+      "name": "rails/1e6",
+      "medianUs": 16.493,
+      "p95Us": 23.863
+    },
+    {
+      "name": "trajectory/map",
+      "medianUs": 15.107,
+      "p95Us": 25.555
+    },
+    {
+      "name": "deltaV/stock-kestrel",
+      "medianUs": 45.475,
+      "p95Us": 66.908
+    },
+    {
+      "name": "deltaV/stock-selene",
+      "medianUs": 177.071,
+      "p95Us": 277.293
+    },
+    {
+      "name": "heightAt/star",
+      "medianUs": 0.032,
+      "p95Us": 0.056
+    },
+    {
+      "name": "heightAt/mercury",
+      "medianUs": 3.272,
+      "p95Us": 4.246
+    },
+    {
+      "name": "heightAt/venus",
+      "medianUs": 2.368,
+      "p95Us": 2.896
+    },
+    {
+      "name": "heightAt/earth",
+      "medianUs": 2.457,
+      "p95Us": 3.489
+    },
+    {
+      "name": "heightAt/mars",
+      "medianUs": 4.239,
+      "p95Us": 4.422
+    },
+    {
+      "name": "heightAt/gasGiant",
+      "medianUs": 0.033,
+      "p95Us": 0.057
+    },
+    {
+      "name": "heightAt/iceGiant",
+      "medianUs": 0.034,
+      "p95Us": 0.063
+    },
+    {
+      "name": "heightAt/icy",
+      "medianUs": 4.067,
+      "p95Us": 4.272
+    },
+    {
+      "name": "heightAt/rocky",
+      "medianUs": 2.319,
+      "p95Us": 2.924
+    },
+    {
+      "name": "heightAt/lunar",
+      "medianUs": 3.639,
+      "p95Us": 3.836
+    },
+    {
+      "name": "heightAt/io",
+      "medianUs": 2.146,
+      "p95Us": 3.359
+    },
+    {
+      "name": "heightAt/europa",
+      "medianUs": 1.61,
+      "p95Us": 1.642
+    },
+    {
+      "name": "heightAt/enceladus",
+      "medianUs": 2.663,
+      "p95Us": 3.108
+    },
+    {
+      "name": "heightAt/titan",
+      "medianUs": 1.666,
+      "p95Us": 2.238
+    },
+    {
+      "name": "chunk/earth/24",
+      "medianUs": 2046.384,
+      "p95Us": 2916.341
+    },
+    {
+      "name": "chunk/moon/24",
+      "medianUs": 1861.032,
+      "p95Us": 1954.279
+    },
+    {
+      "name": "comms/rebuild/20vessels",
+      "medianUs": 19.36,
+      "p95Us": 33.636
+    },
+    {
+      "name": "science/context",
+      "medianUs": 7.381,
+      "p95Us": 11.69
+    },
+    {
+      "name": "science/progression",
+      "medianUs": 1.077,
+      "p95Us": 2.72
+    },
+    {
+      "name": "isru/absent",
+      "medianUs": 0.043,
+      "p95Us": 0.074
+    },
+    {
+      "name": "isru/active",
+      "medianUs": 4.577,
+      "p95Us": 8.688
+    },
+    {
+      "name": "telemetry/stock-kestrel",
+      "medianUs": 40.814,
+      "p95Us": 43.037
+    },
+    {
+      "name": "navball/stock-kestrel",
+      "medianUs": 0.501,
+      "p95Us": 0.979
+    },
+    {
+      "name": "telemetry/stock-selene",
+      "medianUs": 47.98,
+      "p95Us": 55.941
+    },
+    {
+      "name": "navball/stock-selene",
+      "medianUs": 0.314,
+      "p95Us": 0.93
+    }
+  ],
+  "perf-baseline": [
+    {
+      "node": "v24.14.1",
+      "cpu": "AMD Ryzen 5 5600X 6-Core Processor",
+      "samples": 9,
+      "warmups": 2
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/pad",
+      "medianUs": 28.53,
+      "p95Us": 39.944
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/atmosphere",
+      "medianUs": 151.613,
+      "p95Us": 236.427
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/vacuum",
+      "medianUs": 107.809,
+      "p95Us": 120.587
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/landed",
+      "medianUs": 1053.902,
+      "p95Us": 1180.067
+    },
+    {
+      "name": "tick/stock-selene/28parts/pad",
+      "medianUs": 5.518,
+      "p95Us": 8.819
+    },
+    {
+      "name": "tick/stock-selene/28parts/atmosphere",
+      "medianUs": 160.928,
+      "p95Us": 374.88
+    },
+    {
+      "name": "tick/stock-selene/28parts/vacuum",
+      "medianUs": 123.126,
+      "p95Us": 175.277
+    },
+    {
+      "name": "tick/stock-selene/28parts/landed",
+      "medianUs": 3023.398,
+      "p95Us": 3197.632
+    },
+    {
+      "name": "rails/1e6",
+      "medianUs": 15.197,
+      "p95Us": 20.958
+    },
+    {
+      "name": "trajectory/map",
+      "medianUs": 17.135,
+      "p95Us": 26.156
+    },
+    {
+      "name": "deltaV/stock-kestrel",
+      "medianUs": 44.439,
+      "p95Us": 120.368
+    },
+    {
+      "name": "deltaV/stock-selene",
+      "medianUs": 177.829,
+      "p95Us": 229.284
+    },
+    {
+      "name": "heightAt/star",
+      "medianUs": 0.038,
+      "p95Us": 0.097
+    },
+    {
+      "name": "heightAt/mercury",
+      "medianUs": 3.268,
+      "p95Us": 3.549
+    },
+    {
+      "name": "heightAt/venus",
+      "medianUs": 2.524,
+      "p95Us": 3.148
+    },
+    {
+      "name": "heightAt/earth",
+      "medianUs": 2.473,
+      "p95Us": 3.652
+    },
+    {
+      "name": "heightAt/mars",
+      "medianUs": 4.357,
+      "p95Us": 4.608
+    },
+    {
+      "name": "heightAt/gasGiant",
+      "medianUs": 0.033,
+      "p95Us": 0.058
+    },
+    {
+      "name": "heightAt/iceGiant",
+      "medianUs": 0.033,
+      "p95Us": 0.034
+    },
+    {
+      "name": "heightAt/icy",
+      "medianUs": 3.152,
+      "p95Us": 3.466
+    },
+    {
+      "name": "heightAt/rocky",
+      "medianUs": 2.805,
+      "p95Us": 2.87
+    },
+    {
+      "name": "heightAt/lunar",
+      "medianUs": 3.566,
+      "p95Us": 4.011
+    },
+    {
+      "name": "heightAt/io",
+      "medianUs": 2.183,
+      "p95Us": 2.203
+    },
+    {
+      "name": "heightAt/europa",
+      "medianUs": 1.654,
+      "p95Us": 2.057
+    },
+    {
+      "name": "heightAt/enceladus",
+      "medianUs": 2.683,
+      "p95Us": 3.045
+    },
+    {
+      "name": "heightAt/titan",
+      "medianUs": 1.712,
+      "p95Us": 1.995
+    },
+    {
+      "name": "chunk/earth/24",
+      "medianUs": 2102.058,
+      "p95Us": 2161.592
+    },
+    {
+      "name": "chunk/moon/24",
+      "medianUs": 1865.857,
+      "p95Us": 1919.962
+    },
+    {
+      "name": "comms/rebuild/20vessels",
+      "medianUs": 31.813,
+      "p95Us": 40.771
+    },
+    {
+      "name": "science/context",
+      "medianUs": 9.353,
+      "p95Us": 13.566
+    },
+    {
+      "name": "science/progression",
+      "medianUs": 1.482,
+      "p95Us": 3.367
+    },
+    {
+      "name": "isru/absent",
+      "medianUs": 0.587,
+      "p95Us": 0.635
+    },
+    {
+      "name": "isru/active",
+      "medianUs": 5.497,
+      "p95Us": 9.385
+    },
+    {
+      "name": "telemetry/stock-kestrel",
+      "medianUs": 110.303,
+      "p95Us": 138.426
+    },
+    {
+      "name": "navball/stock-kestrel",
+      "medianUs": 0.547,
+      "p95Us": 0.791
+    },
+    {
+      "name": "telemetry/stock-selene",
+      "medianUs": 233.628,
+      "p95Us": 291.629
+    },
+    {
+      "name": "navball/stock-selene",
+      "medianUs": 0.43,
+      "p95Us": 1.763
+    }
+  ],
+  "perf-before": [
+    {
+      "node": "v24.14.1",
+      "cpu": "AMD Ryzen 5 5600X 6-Core Processor",
+      "samples": 9,
+      "warmups": 5
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/pad",
+      "medianUs": 9.29,
+      "p95Us": 11.347
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/atmosphere",
+      "medianUs": 82.141,
+      "p95Us": 97.035
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/vacuum",
+      "medianUs": 59.947,
+      "p95Us": 86.493
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/landed",
+      "medianUs": 1080.811,
+      "p95Us": 1156.506
+    },
+    {
+      "name": "tick/stock-selene/28parts/pad",
+      "medianUs": 3.655,
+      "p95Us": 8.217
+    },
+    {
+      "name": "tick/stock-selene/28parts/atmosphere",
+      "medianUs": 110.29,
+      "p95Us": 133.632
+    },
+    {
+      "name": "tick/stock-selene/28parts/vacuum",
+      "medianUs": 87.596,
+      "p95Us": 92.706
+    },
+    {
+      "name": "tick/stock-selene/28parts/landed",
+      "medianUs": 3054.93,
+      "p95Us": 3453.364
+    },
+    {
+      "name": "rails/1e6",
+      "medianUs": 21.483,
+      "p95Us": 27.243
+    },
+    {
+      "name": "trajectory/map",
+      "medianUs": 23.394,
+      "p95Us": 28.126
+    },
+    {
+      "name": "deltaV/stock-kestrel",
+      "medianUs": 50.314,
+      "p95Us": 62.975
+    },
+    {
+      "name": "deltaV/stock-selene",
+      "medianUs": 180.27,
+      "p95Us": 268.965
+    },
+    {
+      "name": "heightAt/star",
+      "medianUs": 0.032,
+      "p95Us": 0.057
+    },
+    {
+      "name": "heightAt/mercury",
+      "medianUs": 3.432,
+      "p95Us": 3.783
+    },
+    {
+      "name": "heightAt/venus",
+      "medianUs": 2.338,
+      "p95Us": 2.916
+    },
+    {
+      "name": "heightAt/earth",
+      "medianUs": 2.719,
+      "p95Us": 3.004
+    },
+    {
+      "name": "heightAt/mars",
+      "medianUs": 4.05,
+      "p95Us": 4.648
+    },
+    {
+      "name": "heightAt/gasGiant",
+      "medianUs": 0.037,
+      "p95Us": 0.047
+    },
+    {
+      "name": "heightAt/iceGiant",
+      "medianUs": 0.034,
+      "p95Us": 0.066
+    },
+    {
+      "name": "heightAt/icy",
+      "medianUs": 3.17,
+      "p95Us": 3.285
+    },
+    {
+      "name": "heightAt/rocky",
+      "medianUs": 2.873,
+      "p95Us": 3.401
+    },
+    {
+      "name": "heightAt/lunar",
+      "medianUs": 3.593,
+      "p95Us": 4.506
+    },
+    {
+      "name": "heightAt/io",
+      "medianUs": 2.704,
+      "p95Us": 2.986
+    },
+    {
+      "name": "heightAt/europa",
+      "medianUs": 1.999,
+      "p95Us": 2.386
+    },
+    {
+      "name": "heightAt/enceladus",
+      "medianUs": 2.947,
+      "p95Us": 3.803
+    },
+    {
+      "name": "heightAt/titan",
+      "medianUs": 1.708,
+      "p95Us": 2.149
+    },
+    {
+      "name": "chunk/earth/24",
+      "medianUs": 2124.442,
+      "p95Us": 2949.345
+    },
+    {
+      "name": "chunk/moon/24",
+      "medianUs": 1879.408,
+      "p95Us": 2275.806
+    },
+    {
+      "name": "comms/rebuild/20vessels",
+      "medianUs": 37.497,
+      "p95Us": 61.047
+    },
+    {
+      "name": "science/context",
+      "medianUs": 7.431,
+      "p95Us": 9.908
+    },
+    {
+      "name": "science/progression",
+      "medianUs": 1.092,
+      "p95Us": 2.196
+    },
+    {
+      "name": "isru/absent",
+      "medianUs": 0.594,
+      "p95Us": 1.026
+    },
+    {
+      "name": "isru/active",
+      "medianUs": 4.726,
+      "p95Us": 9.569
+    },
+    {
+      "name": "telemetry/stock-kestrel",
+      "medianUs": 85.657,
+      "p95Us": 93.771
+    },
+    {
+      "name": "navball/stock-kestrel",
+      "medianUs": 0.518,
+      "p95Us": 0.987
+    },
+    {
+      "name": "telemetry/stock-selene",
+      "medianUs": 254.728,
+      "p95Us": 312.627
+    },
+    {
+      "name": "navball/stock-selene",
+      "medianUs": 0.342,
+      "p95Us": 0.794
+    }
+  ],
+  "perf-ephem-fourtimes": [
+    {
+      "node": "v24.14.1",
+      "cpu": "AMD Ryzen 5 5600X 6-Core Processor",
+      "samples": 9,
+      "warmups": 2
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/pad",
+      "medianUs": 23.246,
+      "p95Us": 197.67
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/atmosphere",
+      "medianUs": 270.588,
+      "p95Us": 530.627
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/vacuum",
+      "medianUs": 151.445,
+      "p95Us": 955.367
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/landed",
+      "medianUs": 2107.432,
+      "p95Us": 3433.882
+    },
+    {
+      "name": "tick/stock-selene/28parts/pad",
+      "medianUs": 7.59,
+      "p95Us": 43.353
+    },
+    {
+      "name": "tick/stock-selene/28parts/atmosphere",
+      "medianUs": 337.733,
+      "p95Us": 686.44
+    },
+    {
+      "name": "tick/stock-selene/28parts/vacuum",
+      "medianUs": 354.239,
+      "p95Us": 752.355
+    },
+    {
+      "name": "tick/stock-selene/28parts/landed",
+      "medianUs": 5884.741,
+      "p95Us": 7531.801
+    }
+  ],
+  "perf-ephem-original": [
+    {
+      "node": "v24.14.1",
+      "cpu": "AMD Ryzen 5 5600X 6-Core Processor",
+      "samples": 9,
+      "warmups": 2
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/pad",
+      "medianUs": 28.621,
+      "p95Us": 87.32
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/atmosphere",
+      "medianUs": 265.464,
+      "p95Us": 600.276
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/vacuum",
+      "medianUs": 157.823,
+      "p95Us": 193.234
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/landed",
+      "medianUs": 2136.025,
+      "p95Us": 2808.67
+    },
+    {
+      "name": "tick/stock-selene/28parts/pad",
+      "medianUs": 7.291,
+      "p95Us": 14.136
+    },
+    {
+      "name": "tick/stock-selene/28parts/atmosphere",
+      "medianUs": 286.544,
+      "p95Us": 597.58
+    },
+    {
+      "name": "tick/stock-selene/28parts/vacuum",
+      "medianUs": 231.684,
+      "p95Us": 429.09
+    },
+    {
+      "name": "tick/stock-selene/28parts/landed",
+      "medianUs": 5749.952,
+      "p95Us": 7490.912
+    }
+  ],
+  "perf-kernels-after": [
+    {
+      "name": "hullPoints/28parts",
+      "medianUs": 0.34465319999999905,
+      "p95Us": 0.3467732999999981
+    },
+    {
+      "name": "massProperties/28parts",
+      "medianUs": 5.569390999999996,
+      "p95Us": 5.84842900000001
+    },
+    {
+      "name": "ground/earth/pad",
+      "medianUs": 5.3250679999999875,
+      "p95Us": 6.717063999999993
+    }
+  ],
+  "perf-kernels-before": [
+    {
+      "name": "hullPoints/28parts",
+      "medianUs": 6.229115200000001,
+      "p95Us": 9.067274399999997
+    },
+    {
+      "name": "massProperties/28parts",
+      "medianUs": 4.604736000000003,
+      "p95Us": 8.674571000000014
+    },
+    {
+      "name": "ground/earth/pad",
+      "medianUs": 6.636433999999781,
+      "p95Us": 7.879717000000028
+    }
+  ],
+  "perf-kernels-final": [
+    {
+      "name": "hullPoints/28parts",
+      "medianUs": 0.33910560000000206,
+      "p95Us": 0.35538669999999967
+    },
+    {
+      "name": "massProperties/28parts",
+      "medianUs": 5.912901999999975,
+      "p95Us": 6.143992000000026
+    },
+    {
+      "name": "ground/earth/pad",
+      "medianUs": 5.30630100000002,
+      "p95Us": 7.153257999999995
+    }
+  ],
+  "perf-landed-repeat": [
+    {
+      "node": "v24.14.1",
+      "cpu": "AMD Ryzen 5 5600X 6-Core Processor",
+      "samples": 9,
+      "warmups": 2
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/landed",
+      "medianUs": 1106.397,
+      "p95Us": 1542.584
+    },
+    {
+      "name": "tick/stock-selene/28parts/landed",
+      "medianUs": 3022.626,
+      "p95Us": 3072.851
+    }
+  ],
+  "perf-paired-after": [
+    {
+      "node": "v24.14.1",
+      "cpu": "AMD Ryzen 5 5600X 6-Core Processor",
+      "samples": 9,
+      "warmups": 2
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/pad",
+      "medianUs": 16.832,
+      "p95Us": 41.361
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/atmosphere",
+      "medianUs": 261.648,
+      "p95Us": 657.722
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/vacuum",
+      "medianUs": 166.429,
+      "p95Us": 327.536
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/landed",
+      "medianUs": 2157.446,
+      "p95Us": 3493.297
+    },
+    {
+      "name": "tick/stock-selene/28parts/pad",
+      "medianUs": 6.559,
+      "p95Us": 7.736
+    },
+    {
+      "name": "tick/stock-selene/28parts/atmosphere",
+      "medianUs": 313.942,
+      "p95Us": 895.967
+    },
+    {
+      "name": "tick/stock-selene/28parts/vacuum",
+      "medianUs": 195.426,
+      "p95Us": 691.813
+    },
+    {
+      "name": "tick/stock-selene/28parts/landed",
+      "medianUs": 5508.342,
+      "p95Us": 7300.496
+    },
+    {
+      "name": "rails/1e6",
+      "medianUs": 34.128,
+      "p95Us": 323.833
+    },
+    {
+      "name": "trajectory/map",
+      "medianUs": 30.543,
+      "p95Us": 42.589
+    },
+    {
+      "name": "deltaV/stock-kestrel",
+      "medianUs": 85.438,
+      "p95Us": 127.618
+    },
+    {
+      "name": "deltaV/stock-selene",
+      "medianUs": 353.518,
+      "p95Us": 405.448
+    },
+    {
+      "name": "heightAt/star",
+      "medianUs": 0.064,
+      "p95Us": 0.226
+    },
+    {
+      "name": "heightAt/mercury",
+      "medianUs": 4.895,
+      "p95Us": 7.345
+    },
+    {
+      "name": "heightAt/venus",
+      "medianUs": 3.991,
+      "p95Us": 5.799
+    },
+    {
+      "name": "heightAt/earth",
+      "medianUs": 3.726,
+      "p95Us": 10.027
+    },
+    {
+      "name": "heightAt/mars",
+      "medianUs": 6.177,
+      "p95Us": 6.809
+    },
+    {
+      "name": "heightAt/gasGiant",
+      "medianUs": 0.034,
+      "p95Us": 0.044
+    },
+    {
+      "name": "heightAt/iceGiant",
+      "medianUs": 0.036,
+      "p95Us": 0.06
+    },
+    {
+      "name": "heightAt/icy",
+      "medianUs": 4.853,
+      "p95Us": 6.813
+    },
+    {
+      "name": "heightAt/rocky",
+      "medianUs": 3.528,
+      "p95Us": 5.927
+    },
+    {
+      "name": "heightAt/lunar",
+      "medianUs": 5.342,
+      "p95Us": 6.361
+    },
+    {
+      "name": "heightAt/io",
+      "medianUs": 3.275,
+      "p95Us": 9.22
+    },
+    {
+      "name": "heightAt/europa",
+      "medianUs": 2.176,
+      "p95Us": 5.554
+    },
+    {
+      "name": "heightAt/enceladus",
+      "medianUs": 4.139,
+      "p95Us": 12.78
+    },
+    {
+      "name": "heightAt/titan",
+      "medianUs": 2.673,
+      "p95Us": 3.138
+    },
+    {
+      "name": "chunk/earth/24",
+      "medianUs": 3755.741,
+      "p95Us": 5777.256
+    },
+    {
+      "name": "chunk/moon/24",
+      "medianUs": 3636.701,
+      "p95Us": 5959.144
+    },
+    {
+      "name": "comms/rebuild/20vessels",
+      "medianUs": 55.656,
+      "p95Us": 122.166
+    },
+    {
+      "name": "science/context",
+      "medianUs": 18.036,
+      "p95Us": 43.418
+    },
+    {
+      "name": "science/progression",
+      "medianUs": 3.724,
+      "p95Us": 36.769
+    },
+    {
+      "name": "isru/absent",
+      "medianUs": 0.088,
+      "p95Us": 0.116
+    },
+    {
+      "name": "isru/active",
+      "medianUs": 9.793,
+      "p95Us": 58.475
+    },
+    {
+      "name": "telemetry/stock-kestrel",
+      "medianUs": 86.088,
+      "p95Us": 240.33
+    },
+    {
+      "name": "navball/stock-kestrel",
+      "medianUs": 2.581,
+      "p95Us": 9.646
+    },
+    {
+      "name": "telemetry/stock-selene",
+      "medianUs": 77.756,
+      "p95Us": 122.153
+    },
+    {
+      "name": "navball/stock-selene",
+      "medianUs": 0.728,
+      "p95Us": 1.261
+    }
+  ],
+  "perf-paired-before": [
+    {
+      "node": "v24.14.1",
+      "cpu": "AMD Ryzen 5 5600X 6-Core Processor",
+      "samples": 9,
+      "warmups": 2
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/pad",
+      "medianUs": 19.98,
+      "p95Us": 43.731
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/atmosphere",
+      "medianUs": 187.952,
+      "p95Us": 532.604
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/vacuum",
+      "medianUs": 114.544,
+      "p95Us": 336.319
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/landed",
+      "medianUs": 1340.916,
+      "p95Us": 4039.1
+    },
+    {
+      "name": "tick/stock-selene/28parts/pad",
+      "medianUs": 7.716,
+      "p95Us": 10.604
+    },
+    {
+      "name": "tick/stock-selene/28parts/atmosphere",
+      "medianUs": 281.547,
+      "p95Us": 487.646
+    },
+    {
+      "name": "tick/stock-selene/28parts/vacuum",
+      "medianUs": 238.432,
+      "p95Us": 681.943
+    },
+    {
+      "name": "tick/stock-selene/28parts/landed",
+      "medianUs": 3822.154,
+      "p95Us": 5658.821
+    },
+    {
+      "name": "rails/1e6",
+      "medianUs": 23.746,
+      "p95Us": 224.665
+    },
+    {
+      "name": "trajectory/map",
+      "medianUs": 38.336,
+      "p95Us": 77.168
+    },
+    {
+      "name": "deltaV/stock-kestrel",
+      "medianUs": 78.302,
+      "p95Us": 105.949
+    },
+    {
+      "name": "deltaV/stock-selene",
+      "medianUs": 282.002,
+      "p95Us": 437.708
+    },
+    {
+      "name": "heightAt/star",
+      "medianUs": 0.258,
+      "p95Us": 0.288
+    },
+    {
+      "name": "heightAt/mercury",
+      "medianUs": 4.92,
+      "p95Us": 6.189
+    },
+    {
+      "name": "heightAt/venus",
+      "medianUs": 4.276,
+      "p95Us": 11.001
+    },
+    {
+      "name": "heightAt/earth",
+      "medianUs": 3.902,
+      "p95Us": 4.281
+    },
+    {
+      "name": "heightAt/mars",
+      "medianUs": 6.245,
+      "p95Us": 6.728
+    },
+    {
+      "name": "heightAt/gasGiant",
+      "medianUs": 0.059,
+      "p95Us": 0.078
+    },
+    {
+      "name": "heightAt/iceGiant",
+      "medianUs": 0.059,
+      "p95Us": 0.074
+    },
+    {
+      "name": "heightAt/icy",
+      "medianUs": 3.795,
+      "p95Us": 5.272
+    },
+    {
+      "name": "heightAt/rocky",
+      "medianUs": 3.456,
+      "p95Us": 4.023
+    },
+    {
+      "name": "heightAt/lunar",
+      "medianUs": 5.177,
+      "p95Us": 6.977
+    },
+    {
+      "name": "heightAt/io",
+      "medianUs": 2.679,
+      "p95Us": 3.998
+    },
+    {
+      "name": "heightAt/europa",
+      "medianUs": 1.852,
+      "p95Us": 2.855
+    },
+    {
+      "name": "heightAt/enceladus",
+      "medianUs": 3.524,
+      "p95Us": 3.711
+    },
+    {
+      "name": "heightAt/titan",
+      "medianUs": 2.047,
+      "p95Us": 4.267
+    },
+    {
+      "name": "chunk/earth/24",
+      "medianUs": 4734.935,
+      "p95Us": 5420.336
+    },
+    {
+      "name": "chunk/moon/24",
+      "medianUs": 3553.907,
+      "p95Us": 6791.63
+    },
+    {
+      "name": "comms/rebuild/20vessels",
+      "medianUs": 63.951,
+      "p95Us": 262.57
+    },
+    {
+      "name": "science/context",
+      "medianUs": 17.964,
+      "p95Us": 28.149
+    },
+    {
+      "name": "science/progression",
+      "medianUs": 2.616,
+      "p95Us": 5.413
+    },
+    {
+      "name": "isru/absent",
+      "medianUs": 2.594,
+      "p95Us": 5.972
+    },
+    {
+      "name": "isru/active",
+      "medianUs": 11.308,
+      "p95Us": 29.271
+    },
+    {
+      "name": "telemetry/stock-kestrel",
+      "medianUs": 265.382,
+      "p95Us": 556.398
+    },
+    {
+      "name": "navball/stock-kestrel",
+      "medianUs": 0.959,
+      "p95Us": 2.598
+    },
+    {
+      "name": "telemetry/stock-selene",
+      "medianUs": 471.236,
+      "p95Us": 765.083
+    },
+    {
+      "name": "navball/stock-selene",
+      "medianUs": 0.623,
+      "p95Us": 1.243
+    }
+  ],
+  "perf-render-after": [
+    {
+      "name": "vessel/stock-kestrel",
+      "meshes": 52,
+      "triangles": 19724,
+      "updateUs": 1.2204050999999994
+    },
+    {
+      "name": "vessel/stock-selene",
+      "meshes": 195,
+      "triangles": 62400,
+      "updateUs": 3.2954800999999976
+    },
+    {
+      "name": "map/update",
+      "medianUs": 27.29045199999996,
+      "p95Us": 56.57751799999994,
+      "newObjectsInFinalFrame": 0
+    },
+    {
+      "name": "quadtree/place/512",
+      "medianUs": 21.888615999999956,
+      "p95Us": 39.48629400000004
+    },
+    {
+      "name": "quadtree/place/512/moving",
+      "medianUs": 46.58851400000003,
+      "p95Us": 73.25336799999991
+    }
+  ],
+  "perf-render-baseline": [
+    {
+      "name": "vessel/stock-kestrel",
+      "meshes": 59,
+      "triangles": 19724,
+      "updateUs": 3.3216672000000016
+    },
+    {
+      "name": "vessel/stock-selene",
+      "meshes": 236,
+      "triangles": 62400,
+      "updateUs": 6.151304800000003
+    },
+    {
+      "name": "map/update",
+      "medianUs": 81.66657600000008,
+      "p95Us": 191.35881999999992,
+      "newObjectsInFinalFrame": 3
+    }
+  ],
+  "perf-render-repeat-baseline": [
+    {
+      "name": "vessel/stock-kestrel",
+      "meshes": 52,
+      "triangles": 19724,
+      "updateUs": 1.2193854999999985
+    },
+    {
+      "name": "vessel/stock-selene",
+      "meshes": 195,
+      "triangles": 62400,
+      "updateUs": 3.528832399999999
+    },
+    {
+      "name": "map/update",
+      "medianUs": 41.0400259999999,
+      "p95Us": 78.84460200000001,
+      "newObjectsInFinalFrame": 3
+    },
+    {
+      "name": "quadtree/place/512",
+      "medianUs": 45.534388000000035,
+      "p95Us": 68.15057999999999
+    },
+    {
+      "name": "quadtree/place/512/moving",
+      "medianUs": 46.447671999999784,
+      "p95Us": 56.03639599999997
+    }
+  ],
+  "perf-step1": [
+    {
+      "node": "v24.14.1",
+      "cpu": "AMD Ryzen 5 5600X 6-Core Processor",
+      "samples": 9,
+      "warmups": 2
+    },
+    {
+      "name": "telemetry/stock-kestrel",
+      "medianUs": 127.978,
+      "p95Us": 225.192
+    },
+    {
+      "name": "telemetry/stock-selene",
+      "medianUs": 105.721,
+      "p95Us": 137.93
+    }
+  ],
+  "perf-step2": [
+    {
+      "node": "v24.14.1",
+      "cpu": "AMD Ryzen 5 5600X 6-Core Processor",
+      "samples": 9,
+      "warmups": 2
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/pad",
+      "medianUs": 14.245,
+      "p95Us": 54.437
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/atmosphere",
+      "medianUs": 139.87,
+      "p95Us": 321.706
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/vacuum",
+      "medianUs": 84.801,
+      "p95Us": 89.034
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/landed",
+      "medianUs": 1044.833,
+      "p95Us": 1120.453
+    },
+    {
+      "name": "tick/stock-selene/28parts/pad",
+      "medianUs": 6.022,
+      "p95Us": 21.146
+    },
+    {
+      "name": "tick/stock-selene/28parts/atmosphere",
+      "medianUs": 146.774,
+      "p95Us": 194.22
+    },
+    {
+      "name": "tick/stock-selene/28parts/vacuum",
+      "medianUs": 110.752,
+      "p95Us": 179.158
+    },
+    {
+      "name": "tick/stock-selene/28parts/landed",
+      "medianUs": 2826.395,
+      "p95Us": 3063.258
+    },
+    {
+      "name": "rails/1e6",
+      "medianUs": 19.53,
+      "p95Us": 33.394
+    },
+    {
+      "name": "trajectory/map",
+      "medianUs": 16.347,
+      "p95Us": 33.109
+    },
+    {
+      "name": "deltaV/stock-kestrel",
+      "medianUs": 43.469,
+      "p95Us": 56.797
+    },
+    {
+      "name": "deltaV/stock-selene",
+      "medianUs": 179.298,
+      "p95Us": 211.04
+    },
+    {
+      "name": "heightAt/star",
+      "medianUs": 0.038,
+      "p95Us": 0.11
+    },
+    {
+      "name": "heightAt/mercury",
+      "medianUs": 3.285,
+      "p95Us": 3.743
+    },
+    {
+      "name": "heightAt/venus",
+      "medianUs": 2.469,
+      "p95Us": 2.795
+    },
+    {
+      "name": "heightAt/earth",
+      "medianUs": 2.442,
+      "p95Us": 2.679
+    },
+    {
+      "name": "heightAt/mars",
+      "medianUs": 4.298,
+      "p95Us": 4.59
+    },
+    {
+      "name": "heightAt/gasGiant",
+      "medianUs": 0.033,
+      "p95Us": 0.303
+    },
+    {
+      "name": "heightAt/iceGiant",
+      "medianUs": 0.033,
+      "p95Us": 0.045
+    },
+    {
+      "name": "heightAt/icy",
+      "medianUs": 3.165,
+      "p95Us": 3.533
+    },
+    {
+      "name": "heightAt/rocky",
+      "medianUs": 2.338,
+      "p95Us": 2.349
+    },
+    {
+      "name": "heightAt/lunar",
+      "medianUs": 3.52,
+      "p95Us": 3.881
+    },
+    {
+      "name": "heightAt/io",
+      "medianUs": 2.201,
+      "p95Us": 2.864
+    },
+    {
+      "name": "heightAt/europa",
+      "medianUs": 1.641,
+      "p95Us": 2.392
+    },
+    {
+      "name": "heightAt/enceladus",
+      "medianUs": 2.689,
+      "p95Us": 3.331
+    },
+    {
+      "name": "heightAt/titan",
+      "medianUs": 1.701,
+      "p95Us": 1.932
+    },
+    {
+      "name": "chunk/earth/24",
+      "medianUs": 2093.775,
+      "p95Us": 2215.603
+    },
+    {
+      "name": "chunk/moon/24",
+      "medianUs": 1875.26,
+      "p95Us": 2053.798
+    },
+    {
+      "name": "comms/rebuild/20vessels",
+      "medianUs": 27.853,
+      "p95Us": 40.87
+    },
+    {
+      "name": "science/context",
+      "medianUs": 8.573,
+      "p95Us": 9.702
+    },
+    {
+      "name": "science/progression",
+      "medianUs": 1.902,
+      "p95Us": 5.79
+    },
+    {
+      "name": "isru/absent",
+      "medianUs": 0.569,
+      "p95Us": 1.013
+    },
+    {
+      "name": "isru/active",
+      "medianUs": 4.959,
+      "p95Us": 9.666
+    },
+    {
+      "name": "telemetry/stock-kestrel",
+      "medianUs": 48.014,
+      "p95Us": 83.353
+    },
+    {
+      "name": "navball/stock-kestrel",
+      "medianUs": 2.096,
+      "p95Us": 2.593
+    },
+    {
+      "name": "telemetry/stock-selene",
+      "medianUs": 48.861,
+      "p95Us": 56.713
+    },
+    {
+      "name": "navball/stock-selene",
+      "medianUs": 0.355,
+      "p95Us": 0.816
+    }
+  ],
+  "perf-step3": [
+    {
+      "node": "v24.14.1",
+      "cpu": "AMD Ryzen 5 5600X 6-Core Processor",
+      "samples": 9,
+      "warmups": 2
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/pad",
+      "medianUs": 27.839,
+      "p95Us": 301.053
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/atmosphere",
+      "medianUs": 383.528,
+      "p95Us": 953.474
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/vacuum",
+      "medianUs": 326.889,
+      "p95Us": 810.196
+    },
+    {
+      "name": "tick/stock-kestrel/9parts/landed",
+      "medianUs": 2740.102,
+      "p95Us": 3225.98
+    },
+    {
+      "name": "tick/stock-selene/28parts/pad",
+      "medianUs": 7.636,
+      "p95Us": 208.184
+    },
+    {
+      "name": "tick/stock-selene/28parts/atmosphere",
+      "medianUs": 377.938,
+      "p95Us": 1119.996
+    },
+    {
+      "name": "tick/stock-selene/28parts/vacuum",
+      "medianUs": 259.893,
+      "p95Us": 406.935
+    },
+    {
+      "name": "tick/stock-selene/28parts/landed",
+      "medianUs": 6286.894,
+      "p95Us": 8989.75
+    },
+    {
+      "name": "rails/1e6",
+      "medianUs": 43.713,
+      "p95Us": 172.706
+    },
+    {
+      "name": "trajectory/map",
+      "medianUs": 39.778,
+      "p95Us": 337.222
+    },
+    {
+      "name": "deltaV/stock-kestrel",
+      "medianUs": 114.013,
+      "p95Us": 209.102
+    },
+    {
+      "name": "deltaV/stock-selene",
+      "medianUs": 381.319,
+      "p95Us": 495.046
+    },
+    {
+      "name": "heightAt/star",
+      "medianUs": 0.068,
+      "p95Us": 0.302
+    },
+    {
+      "name": "heightAt/mercury",
+      "medianUs": 5.376,
+      "p95Us": 9.343
+    },
+    {
+      "name": "heightAt/venus",
+      "medianUs": 4.855,
+      "p95Us": 9.268
+    },
+    {
+      "name": "heightAt/earth",
+      "medianUs": 7.833,
+      "p95Us": 20.528
+    },
+    {
+      "name": "heightAt/mars",
+      "medianUs": 6.855,
+      "p95Us": 19.436
+    },
+    {
+      "name": "heightAt/gasGiant",
+      "medianUs": 0.059,
+      "p95Us": 0.1
+    },
+    {
+      "name": "heightAt/iceGiant",
+      "medianUs": 0.06,
+      "p95Us": 0.09
+    },
+    {
+      "name": "heightAt/icy",
+      "medianUs": 4.82,
+      "p95Us": 12.256
+    },
+    {
+      "name": "heightAt/rocky",
+      "medianUs": 6.817,
+      "p95Us": 11.428
+    },
+    {
+      "name": "heightAt/lunar",
+      "medianUs": 5.372,
+      "p95Us": 6.072
+    },
+    {
+      "name": "heightAt/io",
+      "medianUs": 3.635,
+      "p95Us": 8.992
+    },
+    {
+      "name": "heightAt/europa",
+      "medianUs": 2.813,
+      "p95Us": 3.853
+    },
+    {
+      "name": "heightAt/enceladus",
+      "medianUs": 4.088,
+      "p95Us": 8.106
+    },
+    {
+      "name": "heightAt/titan",
+      "medianUs": 2.944,
+      "p95Us": 6.869
+    },
+    {
+      "name": "chunk/earth/24",
+      "medianUs": 4037.358,
+      "p95Us": 4254.638
+    },
+    {
+      "name": "chunk/moon/24",
+      "medianUs": 3604.728,
+      "p95Us": 5167.44
+    },
+    {
+      "name": "comms/rebuild/20vessels",
+      "medianUs": 51.726,
+      "p95Us": 87.205
+    },
+    {
+      "name": "science/context",
+      "medianUs": 18.987,
+      "p95Us": 65.806
+    },
+    {
+      "name": "science/progression",
+      "medianUs": 3.495,
+      "p95Us": 170.243
+    },
+    {
+      "name": "isru/absent",
+      "medianUs": 0.095,
+      "p95Us": 0.113
+    },
+    {
+      "name": "isru/active",
+      "medianUs": 11.406,
+      "p95Us": 49.304
+    },
+    {
+      "name": "telemetry/stock-kestrel",
+      "medianUs": 97.668,
+      "p95Us": 130.845
+    },
+    {
+      "name": "navball/stock-kestrel",
+      "medianUs": 0.967,
+      "p95Us": 7.18
+    },
+    {
+      "name": "telemetry/stock-selene",
+      "medianUs": 152.12,
+      "p95Us": 227.283
+    },
+    {
+      "name": "navball/stock-selene",
+      "medianUs": 1.016,
+      "p95Us": 5.797
+    }
+  ],
+  "trace-before": [
+    "stock-kestrel/pad 58d4a60827d64d8830999eb9895ef830320836f76070a0456af23f9c7e864281",
+    "stock-kestrel/atmosphere 77b1c2762fcf09104fdbf41695022e20663be4356bbf516591db0f3c7b640918",
+    "stock-kestrel/vacuum dcdf619b65b86e0fa88bba42961d923e97610745138c8f9690525430de3c6153",
+    "stock-kestrel/landed 2d2bff48b2e6c7863959adf719e759bf64ce621b899e7c0985d5c477eb3bfc42",
+    "stock-kestrel/rails c663f741027feaeabf324a6355d1b06eb46e30f709310515a0eadc6771c1339e",
+    "stock-selene/pad 0a1c8790ea867e72edac27ba562e860e94adc1820ef8f3e349bdd0066c5d551b",
+    "stock-selene/atmosphere cdad7439e049516a828ff79136c59607a2c1d5fe1668645c167d2472a2bde810",
+    "stock-selene/vacuum 1a76ec9dcfd11fa692c02818b50c91ab46c7ab7d80341570c10b7e9a5eeee0c4",
+    "stock-selene/landed 3bcdf28898ac69e8002136d943cd26980ff50da054086b4d60efebf894d9a3fb",
+    "stock-selene/rails e9a4f21778e122ffdfecb8ce8dfb8ecd38cc9ad00d8d8a84b973a6738283ca45"
+  ],
+  "trace-after": [
+    "stock-kestrel/pad 58d4a60827d64d8830999eb9895ef830320836f76070a0456af23f9c7e864281",
+    "stock-kestrel/atmosphere 77b1c2762fcf09104fdbf41695022e20663be4356bbf516591db0f3c7b640918",
+    "stock-kestrel/vacuum dcdf619b65b86e0fa88bba42961d923e97610745138c8f9690525430de3c6153",
+    "stock-kestrel/landed 2d2bff48b2e6c7863959adf719e759bf64ce621b899e7c0985d5c477eb3bfc42",
+    "stock-kestrel/rails c663f741027feaeabf324a6355d1b06eb46e30f709310515a0eadc6771c1339e",
+    "stock-selene/pad 0a1c8790ea867e72edac27ba562e860e94adc1820ef8f3e349bdd0066c5d551b",
+    "stock-selene/atmosphere cdad7439e049516a828ff79136c59607a2c1d5fe1668645c167d2472a2bde810",
+    "stock-selene/vacuum 1a76ec9dcfd11fa692c02818b50c91ab46c7ab7d80341570c10b7e9a5eeee0c4",
+    "stock-selene/landed 3bcdf28898ac69e8002136d943cd26980ff50da054086b4d60efebf894d9a3fb",
+    "stock-selene/rails e9a4f21778e122ffdfecb8ce8dfb8ecd38cc9ad00d8d8a84b973a6738283ca45"
+  ]
+}
