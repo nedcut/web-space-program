@@ -121,6 +121,8 @@ export function useGame<R>(selector: (s: GameState) => R): R {
 
 /** UI preferences override a world's saved difficulty only when explicitly selected. */
 export function applyCommsSettings(world: import('./world').World) {
+  // Room rules belong to the server; practice lessons use their deterministic sandbox rules.
+  if (game.get().multiplayer || game.get().trainingActive) return;
   const settings = game.get().settings;
   if (settings.commsEnabled !== null) world.commsSettings.enabled = settings.commsEnabled;
   if (settings.commsRestrictControl !== null) world.commsSettings.restrictControl = settings.commsRestrictControl;

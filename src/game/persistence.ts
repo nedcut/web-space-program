@@ -2,7 +2,7 @@ import { newProgression, type GameMode, type Progression } from '../sim/science/
 import type { Astronaut, PlantedFlag } from '../sim/crew/crew';
 import type { VesselState } from '../sim/vessel/runtime';
 import type { PartDef } from '../sim/vessel/types';
-import { rebuildTopology } from '../sim/vessel';
+import { rebuildTopology, recomputeMassProperties } from '../sim/vessel';
 import type { ManeuverNode, Orbit } from '../sim/orbit/api';
 import type { Quat } from '../util/quat';
 import type { Vec3 } from '../util/vec3';
@@ -107,11 +107,12 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
     const state = { ...sv.state, parts, resourceDefs: RESOURCES, cache: undefined } as unknown as VesselState;
     rebuildTopology(state);
     if (!data.crew) world.assignCrew(state);
+    recomputeMassProperties(state, false);
     const wv: WorldVessel = { state, mode: sv.mode, body: sv.body, orbit: sv.orbit, fixed: sv.fixed };
     world.vessels.set(state.id, wv);
   }
   world.activeId = data.activeId && world.vessels.has(data.activeId) ? data.activeId : null;
-  world.nodes = data.nodes ?? [];
+  world.nodes = structuredClone(data.nodes ?? []);
   world.setTarget(data.targetId ?? null, data.targetPortUid ?? null);
   world.restoreAfterLoad();
   return world;

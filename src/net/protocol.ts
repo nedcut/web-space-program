@@ -21,11 +21,11 @@ export type ClientMessage = Envelope & (
   | { type: 'chat'; text: string }
   | { type: 'action'; action: 'eva' | 'board' | 'flag' | 'undock'; uid?: number; astronautId?: string }
 );
-export type PartDelta = Pick<PartState, 'uid' | 'resources' | 'mass' | 'temperature' | 'skinTemperature' | 'activated' | 'engine' | 'chute' | 'leg' | 'wheel'>;
+export type PartDelta = Pick<PartState, 'uid' | 'resources' | 'mass' | 'temperature' | 'skinTemperature' | 'activated' | 'engine' | 'chute' | 'leg' | 'wheel' | 'bayOpen' | 'drillDeployed' | 'drillDeploy' | 'converterRunning' | 'converterRecipe' | 'processTemperature' | 'dockDisarmed'>;
 export type DynamicState = Pick<VesselState, 'position' | 'velocity' | 'orientation' | 'angularVelocity' | 'mass' | 'com' | 'inertia' | 'invInertia' | 'nextStage' | 'situation' | 'sas' | 'telemetry' | 'eva' | 'destroyed'> & { parts: PartDelta[] };
 export type VesselDelta = { id: string; body: string } & (
   | { mode: 'rails'; orbit: NonNullable<WorldVessel['orbit']> }
-  | { mode: 'landedRails'; fixed: NonNullable<WorldVessel['fixed']> }
+  | { mode: 'landedRails'; fixed: NonNullable<WorldVessel['fixed']>; state?: DynamicState }
   | { mode: 'physics' | 'prelaunch'; state: DynamicState; fixed?: WorldVessel['fixed'] }
 );
 export type NetEvent = VesselEvent | { type: 'flag'; flag: PlantedFlag } | { type: 'chat'; playerId: string; name: string; text: string } | { type: 'join' | 'leave'; playerId: string; name: string };

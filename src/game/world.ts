@@ -10,7 +10,7 @@ import { EVA_PART } from '../data/eva';
 import { stepEva } from '../sim/vessel/eva';
 import type { CraftDef, PartDef } from '../sim/vessel/types';
 import type { ControlInput, VesselState, PartState, VesselEvent } from '../sim/vessel/runtime';
-import { buildVessel, stepVessel, activateNextStage, neutralInput, recomputeMassProperties, stepDocking, undock, dockedPorts, portInfo } from '../sim/vessel';
+import { buildVessel, stepVessel, activateNextStage, neutralInput, recomputeMassProperties, setGear, stepDocking, undock, dockedPorts, portInfo } from '../sim/vessel';
 import type { Orbit, ManeuverNode, TrajectoryPatch, StateVector } from '../sim/orbit/api';
 import { stateToElements, propagate, predictTrajectory, periapsisRadius, apoapsisRadius, timeToPeriapsis, timeToApoapsis, period, maneuverToInertialDv, trajectoryClosestApproach, type TrajectoryApproach } from '../sim/orbit';
 import { latLonToUnit, LAUNCH_SITE, RUNWAY, siteLocalToUnit } from '../sim/terrain';
@@ -499,11 +499,14 @@ export class World {
 
   /** After deserialization: recompute derived rails data and resync body-fixed vessels to the current time. */
   restoreAfterLoad() {
+    this.nodeId = Math.max(0, ...this.nodes.map(n => n.id)) + 1;
     for (const wv of this.vessels.values()) {
       if (wv.mode === 'rails' && wv.orbit) this.predictRailsEvent(wv);
       if ((wv.mode === 'landedRails' || wv.mode === 'prelaunch') && wv.fixed) this.syncFixed(wv, this.ut);
     }
     this.trajectoryCache = null;
+    this.approachCache = null;
+    this.networkCache = null;
   }
 
   private predictRailsEvent(wv: WorldVessel) {
@@ -907,7 +910,7 @@ export class World {
     for (const wv of [...this.vessels.values()]) {
       if (wv.state.destroyed) continue;
       const isActive = inputs ? inputs.has(wv.state.id) : wv === active;
-      const vesselInput = inputs?.get(wv.state.id) ?? input;
+      const vesselInput = isActive && !this.canControl(wv.state) ? this.disconnectedInput(wv.state) : inputs?.get(wv.state.id) ?? input;
       if (inputs && isActive && (wv.mode === 'rails' || wv.mode === 'landedRails')) this.unpack(wv);
       const nearby = inputs ? [...inputs.keys()].some(id => {
         const v = this.vessels.get(id);
@@ -934,6 +937,7 @@ export class World {
         if (wv.mode === 'rails' || wv.mode === 'landedRails') this.unpack(wv);
       }
       if (wv.mode === 'prelaunch') {
+        if (isActive && vesselInput.gear !== undefined) setGear(wv.state, vesselInput.gear);
         if (isActive && vesselInput.stage) {
           this.syncFixed(wv, t);
           wv.mode = 'physics';
@@ -951,7 +955,7 @@ export class World {
       wv.body = this.universe.dominantBody(wv.state.position, t);
       const env = this.universe.createEnvironment(() => wv.body);
       // A disconnected probe holds its attitude with SAS, but cannot command thrust or stage.
-      const ctrl = isActive ? (this.canControl(wv.state) ? vesselInput : this.disconnectedInput(wv.state)) : neutralInput({ sas: 'off' });
+      const ctrl = isActive ? vesselInput : neutralInput({ sas: 'off' });
       const res = wv.state.eva ? stepEva(wv.state, ctrl, env, t, PHYSICS_DT) : stepVessel(wv.state, ctrl, env, t, PHYSICS_DT);
       for (const nv of res.newVessels) {
         recomputeMassProperties(nv, false);

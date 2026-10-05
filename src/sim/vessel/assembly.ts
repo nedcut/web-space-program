@@ -249,6 +249,7 @@ export function cloneVessel(v: VesselState): VesselState {
       chute: p.chute ? { ...p.chute } : undefined,
       leg: p.leg ? { ...p.leg } : undefined,
       wheel: p.wheel ? { ...p.wheel } : undefined,
+      docked: p.docked ? { ...p.docked } : undefined,
     })),
     position: { ...v.position },
     velocity: { ...v.velocity },
@@ -262,6 +263,7 @@ export function cloneVessel(v: VesselState): VesselState {
     cache: emptyCache(),
   };
   rebuildTopology(c);
+  c.cache.boundingRadius = v.cache.boundingRadius;
   return c;
 }
 
