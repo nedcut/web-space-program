@@ -1,3 +1,4 @@
+import { game } from '../game/store';
 import * as THREE from 'three';
 
 /**
@@ -76,12 +77,13 @@ export class FlightCamera {
     const down = (e: PointerEvent) => {
       if (!enabled()) return;
       if (e.button !== 2 && e.button !== 0) return;
+      if (game.get().settings.mouseFlight && e.button === 0) return;
       this.dragging = true;
       this.lx = e.clientX;
       this.ly = e.clientY;
     };
     const move = (e: PointerEvent) => {
-      if (!this.dragging) return;
+      if (!this.dragging || !enabled()) { this.dragging = false; return; }
       this.yaw += (e.clientX - this.lx) * 0.005;
       this.pitch = Math.max(-1.5, Math.min(1.5, this.pitch + (e.clientY - this.ly) * 0.005));
       this.lx = e.clientX;

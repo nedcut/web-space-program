@@ -1,3 +1,4 @@
+import { SettingsPanel } from '../ui/SettingsPanel';
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -12,6 +13,7 @@ export default function FlightScene() {
   const host = useRef<HTMLDivElement>(null);
   const ctrl = useRef<FlightController | null>(null);
   const [tele, setTele] = useState<Telemetry | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   pausedRef.current = paused;
@@ -58,7 +60,7 @@ export default function FlightScene() {
     game.set({ launchPending: false });
     const scenario = new URLSearchParams(location.search).get('scenario');
     if (scenario && mountKey === 0) c.devScenario(scenario);
-    c.input.invertPitch = g.settings.invertPitch;
+
     c.onExit = () => setPaused((p) => !p);
     c.onQuickload = () => {
       const data = FlightController.loadSlot('quicksave');
@@ -122,6 +124,9 @@ export default function FlightScene() {
     <div className="fullscreen" ref={host}>
       {tele && ctrl.current && (
         <Hud
+          precision={ctrl.current.input.precision}
+          stageProgress={ctrl.current.input.stageProgress}
+          gamepadConnected={ctrl.current.input.gamepadConnected}
           t={tele}
           navball={<NavballView getFrame={navball} />}
           cb={{
@@ -153,6 +158,7 @@ export default function FlightScene() {
           {ctrl.current.fps.toFixed(0)} fps · {ctrl.current.world.vessels.size} vessels
         </div>
       )}
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
       {paused && (
         <div className="fullscreen" style={{ display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.4)' }}>
           <div className="panel" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 260 }}>
@@ -162,6 +168,7 @@ export default function FlightScene() {
             {ctrl.current?.world.active && ctrl.current.world.active.body === 'earth' && (ctrl.current.world.active.mode === 'prelaunch' || ctrl.current.world.active.state.situation !== 'flying') && (
               <button className="btn" onClick={() => { ctrl.current?.world.recoverActive(); exitTo('spaceCenter'); }}>Recover vessel</button>
             )}
+            <button className="btn" onClick={() => setSettingsOpen(true)}>Settings</button>
             <button className="btn" onClick={revert}>Revert to editor</button>
             <button className="btn" onClick={() => ctrl.current?.quicksave()}>Quicksave (F5)</button>
             <button className="btn" onClick={() => exitTo('spaceCenter')}>Space Center</button>

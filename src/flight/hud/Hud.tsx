@@ -1,3 +1,4 @@
+import { useGame } from '../../game/store';
 import { CrewPanel } from './CrewPanel';
 import type { Astronaut } from '../../sim/crew/crew';
 import { useEffect, useRef, type ReactNode } from 'react';
@@ -128,9 +129,10 @@ const SAS_MODES: { id: string; label: string }[] = [
 ];
 
 export function NavballView({ getFrame }: { getFrame: () => { frame: NavballFrame; markers: NavballMarker[] } | null }) {
+  const size = useGame(s => s.settings.navballSize);
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const nb = new Navball(200);
+    const nb = new Navball(size);
     host.current!.appendChild(nb.element);
     let raf = 0;
     const loop = () => {
@@ -143,7 +145,7 @@ export function NavballView({ getFrame }: { getFrame: () => { frame: NavballFram
       cancelAnimationFrame(raf);
       nb.dispose();
     };
-  }, [getFrame]);
+  }, [getFrame, size]);
   return <div ref={host} />;
 }
 
@@ -156,9 +158,12 @@ function Readout({ label, value, color }: { label: string; value: ReactNode; col
   );
 }
 
-export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navball: ReactNode }) {
+export function Hud({ t, cb, navball, precision, stageProgress, gamepadConnected }: { t: Telemetry; cb: HudCallbacks; navball: ReactNode; precision?: boolean; stageProgress?: number; gamepadConnected?: boolean }) {
+  const settings = useGame(s => s.settings);
+  const distance = (m: number) => settings.units === 'imperial' ? (!Number.isFinite(m) ? '—' : Math.abs(m) < 1609.344 ? `${(m / 0.3048).toFixed(0)} ft` : `${(m / 1609.344).toFixed(2)} mi`) : formatDistance(m);
+  const speed = (v: number) => settings.units === 'imperial' ? `${(v * 2.236936).toFixed(1)} mph` : formatSpeed(v);
   return (
-    <div className="overlay">
+    <div className="overlay" style={{ width: `${100 / settings.hudScale}%`, height: `${100 / settings.hudScale}%`, transform: `scale(${settings.hudScale})`, transformOrigin: 'top left' }}>
       {/* Top bar: time, warp, altitude */}
       <div className="panel" style={{ position: 'absolute', top: 10, left: 10, padding: '8px 12px', display: 'flex', gap: 10, alignItems: 'center' }}>
         <button className="btn small" onClick={cb.onMenu}>☰</button>
@@ -169,22 +174,24 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
         </div>
         <button className="btn small" onClick={() => cb.onWarp(1)}>▶</button>
         <button className="btn small" onClick={cb.onMap}>MAP</button>
+        <span className="mono" style={{ fontSize: 11, color: precision ? 'var(--accent)' : 'var(--text-dim)' }}>{precision ? 'PRECISION' : 'NORMAL'}</span>
+        {gamepadConnected && <span className="mono" style={{ fontSize: 11 }}>PAD{stageProgress ? ` · STAGE ${(stageProgress * 100).toFixed(0)}%` : ''}</span>}
       </div>
 
       <div className="panel" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '8px 18px', textAlign: 'center' }}>
         <div className="label">{t.bodyName} · altitude</div>
-        <div className="mono" style={{ fontSize: 26 }}>{formatDistance(t.altitudeAsl)}</div>
-        {t.altitudeTerrain < 5000 && <div className="mono" style={{ fontSize: 12, color: 'var(--text-dim)' }}>radar {formatDistance(t.altitudeTerrain)}</div>}
+        <div className="mono" style={{ fontSize: 26 }}>{distance(t.altitudeAsl)}</div>
+        {t.altitudeTerrain < 5000 && <div className="mono" style={{ fontSize: 12, color: 'var(--text-dim)' }}>radar {distance(t.altitudeTerrain)}</div>}
       </div>
 
       {/* Orbit info */}
       <div className="panel" style={{ position: 'absolute', top: 10, right: 10, padding: 12, width: 230, display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <Readout label="Apoapsis" value={formatDistance(t.apoapsis)} />
+        <Readout label="Apoapsis" value={distance(t.apoapsis)} />
         <Readout label="T-Ap" value={formatDuration(t.timeToAp)} />
-        <Readout label="Periapsis" value={formatDistance(t.periapsis)} color={t.periapsis < 0 ? 'var(--bad)' : undefined} />
+        <Readout label="Periapsis" value={distance(t.periapsis)} color={t.periapsis < 0 ? 'var(--bad)' : undefined} />
         <Readout label="T-Pe" value={formatDuration(t.timeToPe)} />
         <div style={{ height: 6 }} />
-        <Readout label="Vert. speed" value={formatSpeed(t.verticalSpeed)} />
+        <Readout label="Vert. speed" value={speed(t.verticalSpeed)} />
         <Readout label="G-force" value={t.gForce.toFixed(2)} color={t.gForce > 6 ? 'var(--bad)' : undefined} />
         <Readout label="Mach" value={t.mach.toFixed(2)} />
         <Readout label="Dyn. press." value={`${(t.dynamicPressure / 1000).toFixed(1)} kPa`} />
@@ -211,7 +218,7 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
           <div key={s.index} className="panel" style={{ padding: 8, width: 180, borderColor: s.index === t.stage ? 'var(--accent)' : undefined }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span className="label">Stage {s.index}</span>
-              <span className="mono" style={{ fontSize: 11, color: 'var(--accent-2)' }}>{s.deltaV.toFixed(0)} m/s</span>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--accent-2)' }}>{speed(s.deltaV)}</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
               {s.parts.map((p) => (
@@ -258,7 +265,7 @@ export function Hud({ t, cb, navball }: { t: Telemetry; cb: HudCallbacks; navbal
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <button className="panel btn" onClick={cb.onSpeedMode} style={{ padding: '4px 14px', marginBottom: 6, textAlign: 'center' }}>
             <div className="label">{t.speedMode === 'surface' && t.dynamicPressure > 50 ? 'airspeed' : t.speedMode}</div>
-            <div className="mono" style={{ fontSize: 18 }}>{formatSpeed(t.speed)}</div>
+            <div className="mono" style={{ fontSize: 18 }}>{speed(t.speed)}</div>
           </button>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
             {!t.eva && <ThrottleGauge value={t.throttle} />}

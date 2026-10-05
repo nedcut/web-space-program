@@ -1,0 +1,82 @@
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { updateSettings, useGame, type Settings } from '../game/store';
+import { actionLabel, conflicts, defaultBindings, getBindings, keyChord, saveBindings, subscribeBindings, type Action } from '../input/bindings';
+import { QUALITY_PRESETS } from '../render/core/quality';
+
+const TABS = ['Graphics', 'Audio', 'Controls', 'Gameplay', 'Accessibility'] as const;
+export function SettingsPanel({ onClose }: { onClose: () => void }) {
+  const settings = useGame(s => s.settings);
+  const bindings = useSyncExternalStore(subscribeBindings, getBindings);
+  const [tab, setTab] = useState<typeof TABS[number]>('Graphics');
+  const [capture, setCapture] = useState<Action | null>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+  const dialog = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialog.current?.focus();
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        const elements = [...dialog.current!.querySelectorAll<HTMLElement>('button, input, select')].filter(el => !el.hasAttribute('disabled'));
+        const first = elements[0], last = elements.at(-1);
+        if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && (document.activeElement === last || document.activeElement === dialog.current)) { e.preventDefault(); first?.focus(); }
+        return;
+      }
+      if (capture) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        if (/^(Control|Shift|Alt|Meta)/.test(e.code)) return;
+        if (e.code === 'Escape') { setCapture(null); return; }
+        if (e.repeat) return;
+        saveBindings({ ...getBindings(), [capture]: [keyChord(e)] });
+        setCapture(null);
+      } else if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); close.current(); }
+    };
+    const release = (e: KeyboardEvent) => {
+      if (capture && /^(Control|Shift|Alt|Meta)/.test(e.code)) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        saveBindings({ ...getBindings(), [capture]: [e.code] }); setCapture(null);
+      }
+    };
+    window.addEventListener('keyup', release, true);
+    window.addEventListener('keydown', handler, true);
+    return () => { window.removeEventListener('keydown', handler, true); window.removeEventListener('keyup', release, true); previous?.focus(); };
+  }, [capture]);
+  const range = (key: keyof Settings, label: string, min: number, max: number, step: number, suffix = '') => (
+    <label className="setting-row" key={key}><span>{label}</span><span><input aria-label={label} type="range" min={min} max={max} step={step} value={Number(settings[key])} onChange={e => updateSettings({ [key]: +e.target.value })} /> <output>{Number(settings[key]).toFixed(step < 1 ? 2 : 0)}{suffix}</output></span></label>
+  );
+  const check = (key: keyof Settings, label: string) => <label className="setting-row" key={key}><span>{label}</span><input type="checkbox" checked={Boolean(settings[key])} onChange={e => updateSettings({ [key]: e.target.checked })} /></label>;
+  const warnings = conflicts(bindings);
+  return <div className="settings-backdrop" data-settings-modal>
+    <div ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="settings-title" className="panel settings-dialog">
+      <div className="setting-row"><h2 id="settings-title">Settings</h2><button className="btn" onClick={onClose}>Done</button></div>
+      <div role="tablist" aria-label="Settings categories" className="seg settings-tabs">{TABS.map(t => <button role="tab" aria-selected={tab === t} aria-controls="settings-content" key={t} className={tab === t ? 'on' : ''} onClick={() => { setCapture(null); setTab(t); }}>{t}</button>)}</div>
+      <div role="tabpanel" id="settings-content" aria-label={tab} className="settings-content">
+        {tab === 'Graphics' && <>
+          <div className="setting-row"><span>Quality preset</span><div className="seg">{(['low', 'medium', 'high'] as const).map(q => <button key={q} className={settings.quality === q ? 'on' : ''} onClick={() => { const p = QUALITY_PRESETS[q]; updateSettings({ quality: q, shadows: p.shadowMapSize > 0, bloom: p.bloom.enabled, clouds: p.clouds, scatter: true, renderScale: p.renderScale }); }}>{q}</button>)}</div></div>
+          {check('shadows', 'Shadows')}{check('bloom', 'Bloom')}{check('clouds', 'Clouds')}{check('scatter', 'Atmospheric scattering')}
+          {range('renderScale', 'Render scale', 0.5, 1.5, 0.05)}{check('showFps', 'Show FPS')}
+          <p className="settings-note">Graphics changes apply when you next enter a scene. In flight, bloom, shadows and render scale update immediately.</p>
+        </>}
+        {tab === 'Audio' && <>{range('masterVolume', 'Master volume', 0, 1, 0.05)}{range('musicVolume', 'Music volume', 0, 1, 0.05)}{range('sfxVolume', 'Effects volume', 0, 1, 0.05)}</>}
+        {tab === 'Controls' && <>
+          {check('invertPitch', 'Invert pitch')}{check('mouseFlight', 'Mouse flight assist (left drag)')}
+          {range('inputSmoothing', 'Input smoothing', 0, 0.5, 0.01, ' s')}{check('gamepadEnabled', 'Enable standard gamepad')}
+          {range('deadZone', 'Gamepad dead zone', 0, 0.5, 0.01)}{range('sensitivity', 'Analog sensitivity', 0.25, 2, 0.05)}
+          <p className="settings-note">Gamepad: left stick pitch/yaw, right stick horizontal roll; hold LB for translation (left stick X/Z, right stick Y). Triggers change throttle; EVA uses sticks to walk/jetpack and triggers up/down. Hold A 0.75 s to stage/hop; B brakes/board, X SAS, Y RCS, Back map, Start pause, D-pad up/down/left warp. Left stick click runs on EVA.</p>
+          <p className="settings-note">Caps Lock toggles precision mode. To rebind, select a control then press a key (Escape cancels). Editor shortcuts accept Ctrl or Command.</p>
+          {bindings.throttleDown.some(k => k.startsWith('Control')) && <div role="status" className="settings-warning">Ctrl+W can close your browser tab while pitching and lowering throttle. <button className="btn small" onClick={() => saveBindings({ ...bindings, throttleDown: ['Minus'], evaDown: ['Minus'] })}>Use Minus for throttle/EVA down</button></div>}
+          {warnings.length > 0 && <details className="settings-warning"><summary>{warnings.length} shared bindings / conflicts</summary>{warnings.map(w => <p key={`${w.key}-${w.actions.join()}`}>{w.key}: {w.actions.map(actionLabel).join(', ')}</p>)}<p>EVA up/run intentionally share Shift.</p></details>}
+          <button className="btn" onClick={() => saveBindings(defaultBindings())}>Reset default bindings</button>
+          {(['flight', 'eva', 'editor'] as const).map(group => <div key={group}><h3>{group === 'flight' ? 'Flight / aircraft / map' : group === 'eva' ? 'EVA' : 'Editor'}</h3>{(Object.keys(bindings) as Action[]).filter(a => group === 'editor' ? a.startsWith('editor') : group === 'eva' ? a.startsWith('eva') || a === 'board' || a === 'plantFlag' : !a.startsWith('editor') && !a.startsWith('eva') && a !== 'board' && a !== 'plantFlag').map(a => <div className="setting-row" key={a}><span>{actionLabel(a)}</span><button className={`btn small ${capture === a ? 'primary' : ''}`} onClick={() => setCapture(a)}>{capture === a ? 'Press a key…' : bindings[a].join(' / ') || 'Unbound'}</button></div>)}</div>)}
+        </>}
+        {tab === 'Gameplay' && <>
+          <label className="setting-row">HUD units<select value={settings.units} onChange={e => updateSettings({ units: e.target.value as Settings['units'] })}><option value="metric">Metric</option><option value="imperial">Imperial</option></select></label>
+          {range('navballSize', 'Navball size', 140, 280, 10, ' px')}{range('hudScale', 'HUD scale', 0.75, 1.3, 0.05)}{range('cameraFov', 'Camera field of view', 40, 100, 1, '°')}{range('autoSaveInterval', 'Auto-save interval (0 = off)', 0, 300, 15, ' s')}
+        </>}
+        {tab === 'Accessibility' && <>{range('uiScale', 'UI scale', 0.8, 1.3, 0.05)}{check('highContrast', 'High-contrast HUD')}{check('reduceMotion', 'Reduce motion (camera effects / flicker)')}{check('colourBlind', 'Colour-blind-friendly navball markers')}</>}
+      </div>
+    </div>
+  </div>;
+}

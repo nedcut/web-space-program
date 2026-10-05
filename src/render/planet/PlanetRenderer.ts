@@ -117,13 +117,14 @@ export class PlanetRenderer {
     this.atmosphere = this.kind === 'star' ? null : computeAtmosphereParams(body, this.scale);
     if (this.atmosphere) this.lut = buildTransmittanceLUT(this.atmosphere);
     this.uniforms = createPlanetUniforms(body.radius, this.atmosphere, this.lut);
+    if (opts.quality.scatter === false) this.uniforms.uHasAtmo.value = 0;
     registerPlanetUniforms(body.id, this.uniforms);
 
     if (this.kind === 'star') this.buildSun();
     else if (this.kind === 'gas') this.buildGasGiant();
     else this.buildSolid(opts);
 
-    if (this.atmosphere) this.buildSky();
+    if (this.atmosphere && opts.quality.scatter !== false) this.buildSky();
     if (body.rings && this.kind !== 'star') this.buildRings();
   }
 

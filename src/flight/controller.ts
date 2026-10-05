@@ -1,3 +1,4 @@
+import { game } from '../game/store';
 import type { GameMode } from '../sim/science/progression';
 import { FlagView } from '../render/vessel/FlagView';
 import * as THREE from 'three';
@@ -148,11 +149,12 @@ export class FlightController {
     this.map = new MapView(universe.bodies, universe.ephem, labelHost);
     this.map.setVisible(false);
 
-    this.disposers.push(this.cam.attach(canvas, () => !this.mapMode));
-    this.disposers.push(this.map.attachControls(canvas, () => this.mapMinDistance(), () => this.mapMode));
+    this.disposers.push(this.cam.attach(canvas, () => !this.mapMode && !this.paused));
+    this.disposers.push(this.map.attachControls(canvas, () => this.mapMinDistance(), () => this.mapMode && !this.paused));
     this.disposers.push(this.attachMapPicking(canvas));
     this.disposers.push(
       this.input.onAction((a) => {
+        if (this.paused && a !== 'menu') return;
         switch (a) {
           case 'stage': this.stagePending = true; break;
           case 'eva': this.goEva(); break;
@@ -397,12 +399,26 @@ export class FlightController {
     this.cam.setAspect(w / h);
   }
 
+  private autosaveTimer = 0;
+  private graphicsKey = '';
   private frame = (now: number) => {
     this.raf = requestAnimationFrame(this.frame);
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     this.elapsed += dt;
     this.fps = this.fps * 0.95 + (dt > 0 ? 1 / dt : 0) * 0.05;
+    const settings = game.get().settings;
+    this.input.enabled = !this.paused;
+    this.cam.camera.fov = settings.cameraFov;
+    const graphicsKey = JSON.stringify([settings.quality, settings.shadows, settings.bloom, settings.renderScale]);
+    if (graphicsKey !== this.graphicsKey) {
+      this.graphicsKey = graphicsKey;
+      this.pipeline.setQuality(getQuality(settings.quality));
+    }
+    if (!this.paused && settings.autoSaveInterval > 0) {
+      this.autosaveTimer += dt;
+      if (this.autosaveTimer >= settings.autoSaveInterval) { this.autosaveTimer = 0; this.quicksave('autosave'); }
+    } else if (!settings.autoSaveInterval) this.autosaveTimer = 0;
     this.input.evaMode = !!this.world.active?.state.eva;
     this.input.update(dt);
     const s = this.input.state;
