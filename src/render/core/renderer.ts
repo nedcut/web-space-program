@@ -31,8 +31,10 @@ export class RenderPipeline {
   private quality: QualitySettings;
   private adaptive = new AdaptiveQuality();
   readonly stats = { calls: 0, triangles: 0, points: 0 };
-  private width = 1;
-  private height = 1;
+  // Low/adaptive resolution can round a 1px bootstrap canvas down to zero. Scene constructors
+  // run PMREM baking before their first resize, so the initial default framebuffer must be valid.
+  private width = 64;
+  private height = 64;
 
   constructor(opts: RenderPipelineOptions) {
     this.quality = opts.quality;
@@ -69,7 +71,7 @@ export class RenderPipeline {
 
   get pixelRatio(): number {
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-    return Math.min(dpr, this.quality.maxPixelRatio) * this.quality.renderScale * this.adaptive.scale;
+    return Math.max(1 / Math.min(this.width, this.height), Math.min(dpr, this.quality.maxPixelRatio) * this.quality.renderScale * this.adaptive.scale);
   }
 
   private buildComposer(): void {
