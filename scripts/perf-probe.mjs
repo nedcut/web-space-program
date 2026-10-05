@@ -28,7 +28,7 @@ const browser = await chromium.launch({ channel: 'chromium', args: ['--use-angle
 const results = { quality, seconds, size: `${vw}x${vh}`, craft, cases: {} };
 
 async function newPage() {
-  const context = await browser.newContext({ viewport: { width: vw, height: vh }, serviceWorkers: 'block' });
+  const context = await browser.newContext({ viewport: { width: vw, height: vh }, deviceScaleFactor: +(args.dpr ?? 1), serviceWorkers: 'block' });
   await context.addInitScript((s) => {
     localStorage.setItem('wsp.settings.v1', JSON.stringify(s));
     localStorage.setItem('wsp.help.seen.v1', '1');

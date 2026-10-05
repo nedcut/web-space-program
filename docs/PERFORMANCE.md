@@ -249,3 +249,160 @@ A subsequent uncancelled Moon request installed a verified 3,127 m/s transfer wi
 
 The no-Worker Node fallback preserves the async API and numerical results but can still block during
 transfer refinement; only pre-start and porkchop-row boundaries yield in that path.
+
+
+# Laptop performance pass 2 — 2026-10-05 (`op/perf2`)
+
+The owner reported that the game "still feels slow" on a real laptop. No hardware GPU is available to this
+pass, so it measures what headless Chromium (SwiftShader) can measure reliably — main-thread CPU per section,
+allocation, draw calls, triangles, shader programs and runtime compiles, pixels shaded and loading phases — and
+leaves GPU frame time to the new in-game overlay. SwiftShader frame times are **not** laptop frame times and are
+not used for any claim below.
+
+## Revisions and method
+
+| Label | Revision | Notes |
+|---|---|---|
+| base | `90de7092` + profiler/probe hooks only | Instrumentation adds a few `performance.now()` calls; no behavioural change. |
+| pre | `abeb7eff` | All changes in this pass, before merging `main`. Isolates this pass. |
+| final | merge of `main` `18633d73` | Includes the parallel art pass (worker textures, physical materials), flight feel (render interpolation) and part action windows. |
+
+Host: shared Ryzen 5 5600X / WSL2, Node 24, Playwright Chromium with `--use-angle=swiftshader`; other agents were
+running, so timings are noisy (interleaved repeats are shown where a claim depends on them). Reproduce:
+
+```sh
+npm run build && npx vite preview --port 5201 --strictPort &
+node scripts/perf-probe.mjs --cases startup,pad,orbit,map,saturn --nogpu --cpu --heap --size 640x360   # CPU / allocation
+node scripts/perf-probe.mjs --cases session --size 640x360                                             # runtime shader compiles
+node scripts/perf-probe.mjs --cases pad,orbit,map,saturn --size 1280x720 --dpr 1.5                     # draws / programs / pixels
+node scripts/perf-probe.mjs --cases pad --loadcpu /tmp/load.cpuprofile                                # loading profile
+node scripts/perf-probe.mjs --cases pad --shaders                                                      # per-program link stalls
+```
+
+`--nogpu` replaces the composer/map submission with a no-op so the remaining main-thread work runs at its natural
+60 Hz; `--cpu` adds a CDP CPU profile (per-function and per-bundle self time), `--heap` a sampling heap profile
+including collected objects, `--gpu` a gl.finish()-bracketed per-pass/per-group proxy (SwiftShader only — useful
+for spotting a pathological pass, not for ranking). Raw JSON: [performance/perf2](performance/perf2).
+
+## What the evidence said
+
+1. **Pixels, not JavaScript, are the laptop bottleneck.** With GPU submission removed, the whole flight frame
+   (simulation, planets/quadtree, vessels, FX, HUD, navball, audio, telemetry) costs 1.2–2.6 ms of main thread
+   on this desktop; three.js scene submission adds 2–3 ms (≈4–8 ms total on a laptop CPU). GC averaged
+   0.12–0.27 ms/frame from ~220–400 kB/frame of short-lived allocation, mostly ephemeris/vector temporaries.
+   Medium, however, rendered at up to 1.5× device pixels: on a 1.5× laptop panel that is 2.25× the pixels of
+   1080p through the HDR scene, per-pixel atmosphere ray-march (16 view / 6 aerial steps), bloom chain, tonemap
+   and FXAA — the likely cause of "slow" on an integrated GPU.
+2. **Shader compiles caused the big hitches.** A scripted session (ignite, open map, close map, stage, pause,
+   resume) linked **24 programs after loading**: 8 on the first map open and 14 on the first decouple. On
+   Windows/ANGLE each link of these shaders typically costs tens to hundreds of milliseconds, i.e. a visible
+   freeze. Two root causes:
+   - The decouple/explosion flash toggled a `PointLight`'s visibility. The light count is part of every
+     three.js program key, so all lit materials (terrain, ocean, parts, plumes, particles) recompiled.
+   - three r186 silently replaces `PCFSoftShadowMap` with `PCFShadowMap` at the first shadow render, so any
+     program compiled before that (including a warm-up) used a stale key.
+3. **Draw calls came from part hierarchies.** Ring Skimmer drew 407 calls per frame (Gossamer's folding solar
+   arrays alone: 141 — six draws per multi-material panel box); one of each catalogue part totals 1,556 draws.
+   The Kestrel pad frame drew 191 calls / 635 k triangles, 226 k of them launch-site vegetation that also went
+   through the shadow pass because each species was a single instanced mesh spanning the 6 km plateau.
+4. **Loading was dominated by synchronous work:** shader linking (first frame), procedural canvas textures
+   (launch site ~0.4 s; part textures ~1.9 s on this desktop before the art pass moved them to workers),
+   PMREM baking and the main menu eagerly loading three.js + compiling the Saturn backdrop at startup.
+
+## Changes
+
+| Change | Where |
+|---|---|
+| Medium caps device-pixel ratio at 1 (High keeps 2); editor uses the preset cap | `render/core/quality.ts`, `editor/scene/EditorView.ts` |
+| Adaptive render scale on by default; 1 s windows of missed vsync intervals + GPU timer queries; ignores CPU-bound slowness; cooldown doubles after oscillation; also in the Space Center | `render/core/adaptiveQuality.ts`, `renderer.ts`, `ui/hub/HubScene.ts` |
+| First-run GPU tiering (unmasked WebGL renderer): weak iGPUs/software/mobile → Low, others → Medium; one-time re-tune for existing players (`graphicsProfile`) with a notice | `util/gpuTier.ts`, `render/core/quality.ts`, `main.tsx` |
+| Low: atmosphere 8/3 steps (was 10/4), 35 % launch-site vegetation | `quality.ts`, `render/site/LaunchSite.ts` |
+| Shader warm-up: flight + map scenes compiled with `compileAsync` behind the loading screen (first frame updates without drawing) | `flight/controller.ts` |
+| Flash light resident at zero intensity; `PCFShadowMap` set explicitly; `checkShaderErrors` off in production | `render/fx/FlightFx.ts`, `render/core/renderer.ts` |
+| Part templates: regroup repeated materials in multi-material meshes; merge unnamed same-material sibling leaves in their parent frame (animation, names, userData preserved; test covers every part stowed/deployed) | `render/parts/optimize.ts` |
+| Vegetation bucketed in 1.4 km cells (frustum + shadow culling) | `render/site/LaunchSite.ts` |
+| Launch-site canvases reused hub→flight and cached in IndexedDB (PNG, keyed by args + code hash; bit-identical) | `render/core/textureCache.ts`, `render/site/textures.ts` |
+| Menu loads three.js/Saturn on idle; Space Center/editor prefetch the next scene; editor renders on change only | `ui/MenuBackdrop.tsx`, `ui/App.tsx`, `EditorView.ts` |
+| Navball skips identical frames; maneuver panel re-renders at 10 Hz unless a jog is held | `flight/hud/navball.ts`, `ManeuverPanel.tsx` |
+| Performance overlay (F8 or Settings → Graphics): fps, 4 s frame graph, p50/p95/p99, hitches, CPU per section, GPU ms, draws, programs, resolution, copyable report | `util/frameProfiler.ts`, `flight/hud/PerfOverlay.tsx` |
+| Fixed (merge): Low part templates were cached under the High key, so Low rebuilt every part mesh | `render/parts/index.ts` |
+
+## Before / after
+
+**Runtime shader programs linked after loading** (scripted session; deterministic counts):
+
+| Step | base | pre | final |
+|---|---:|---:|---:|
+| Ignite + lift-off | 2 | 0 | 0 |
+| First map open | 8 | 1 | 1 |
+| First stage (decouple flash) | 14 | 1 | 2 |
+| **Total** | **24** | **2** | **3** |
+
+Programs compiled during loading rose accordingly (pad: 52 → 75 pre / 79 final), off the frame path and in
+parallel where `KHR_parallel_shader_compile` exists (Chrome on Windows/macOS).
+
+**Pixels shaded per frame at Medium** (3D scene and every post pass scale with this):
+
+| Display (CSS px × DPR) | base | after | Change |
+|---|---:|---:|---:|
+| 1920×1080 × 1.0 | 2.07 MP | 2.07 MP | 0 |
+| 1920×1080 × 1.25 | 3.24 MP | 2.07 MP | −36 % |
+| 1920×1080 × 1.5 (typical 14–15″ Windows laptop) | 4.67 MP | 2.07 MP | −56 % |
+| 1440×900 × 2 (MacBook Air) | 2.92 MP | 1.30 MP | −56 % |
+
+The probe at 1280×720 CSS, DPR 1.5 confirms the canvas: 1920×1080 → 1280×720.
+
+**Draw calls / triangles** (1280×720, Medium):
+
+| Case | base | pre | final (incl. art pass) |
+|---|---:|---:|---:|
+| Kestrel on the pad | 191 calls / 635 k tris | 187 / 477 k | 197 / 482 k |
+| Kestrel in orbit | 160 / 157 k | 166 / 208 k | 201 / 366 k |
+| Ring Skimmer (Gossamer at Saturn) | 407 / 183 k | 255 / 183 k | 259 / 188 k |
+| One of each catalogue part | 1,556 draws | 1,138 | — |
+
+Orbit triangles/draws in *final* grew with the merged art pass's higher-detail parts, not this pass.
+
+**three.js submission CPU at Saturn** (CDP self time of the three.js bundle, interleaved repeats, same host):
+base 3.27 ms/frame → pre 2.59 / 2.70 ms (−18 %); `render` section 3.71 → 3.08 / 3.15 ms.
+
+**Main thread without GPU submission** (`--nogpu`, ms/frame avg; all three are within run-to-run noise — this
+pass did not target sim/planet CPU, which was already small):
+
+| Case | base | pre | final |
+|---|---:|---:|---:|
+| Pad | 1.34 | 1.18 | 1.77 |
+| Orbit | 1.30 | 1.16 | 2.06 |
+| Map | 2.17 | 1.70 | 2.60 |
+| Saturn | 1.36 | 1.21 | 1.92 |
+
+The *final* increase follows the merged features (resource/staging HUD modules, render interpolation) and host
+load; GC stayed at 0.12–0.27 ms/frame.
+
+**Loading** (headless, cold profile each run): menu interactive 600–670 ms → 136–368 ms because three.js and
+the Saturn backdrop now load on idle (first-request menu payload 432 → 236–274 kB). Flight "ready" in
+SwiftShader (~20 s, terrain + software shading) is not representative; the constructor phase is 2.0–2.8 s → 0.7–1.5 s
+in *final* (mostly the art pass replacing the RoomEnvironment PMREM and moving part textures to workers).
+Warm loads skip launch-site canvas drawing; restored canvases hash identically to freshly drawn ones (29/29 canvas textures before the merge; 8/8 launch-site textures after it, where a warm flight constructor took 228 ms).
+
+## Not changed / limits
+
+- No laptop GPU frame time is claimed. Use the overlay (below).
+- Bloom stays as is: at 2 MP its ~16 M texture taps are estimated at ≈0.2 ms on an Iris Xe class GPU; a
+  quarter-resolution chain would visibly soften Medium for little gain.
+- The navball keeps its own WebGL context (drawn only when it changes).
+- Ephemeris/vector allocation (the largest allocator) lives in the deterministic sim; GC cost did not justify
+  touching it. All ten determinism traces are bit-identical to `main`.
+- Programs compiled for scenes that appear later (other planets' renderers, EVA, new effects) can still compile on
+  first use; the overlay's program count makes such hitches visible.
+
+## What to measure on the laptop
+
+1. Start the game once (Settings → Graphics will show the auto-picked preset; a Space Center notice explains it).
+2. In flight press **F8**. Let it settle for 5 s in each of: Kestrel on the pad, `?flight=stock-kestrel&scenario=orbit`,
+   the map (M), and the Ring Skimmer mission. Press **Copy report** and paste the text.
+3. Key numbers: frame p99 (target < 25 ms), hitches > 25 ms, GPU ms (if shown; target < 14 ms at 60 Hz), CPU ms,
+   draws, resolution (%) — if adaptive keeps dropping the resolution, the GPU is the limit; if CPU ms is high with
+   GPU ms low, report the largest CPU sections.
+4. Repeat once with Low, and once with Medium and adaptive off, to compare.
+5. Note the first stage separation and the first map open: they should no longer freeze.

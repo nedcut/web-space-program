@@ -1,0 +1,228 @@
+{
+ "quality": "medium",
+ "seconds": 4,
+ "size": "1280x720",
+ "craft": "stock-kestrel",
+ "cases": {
+  "pad": {
+   "summary": {
+    "frames": 1,
+    "fps": 0,
+    "frameMs": {
+     "avg": 0,
+     "p50": 0,
+     "p95": 0,
+     "p99": 0,
+     "max": 0
+    },
+    "cpuMs": {
+     "avg": 6888.600000023842,
+     "p95": 6888.600000023842,
+     "max": 6888.600000023842
+    },
+    "sections": {
+     "input": 0.10000002384185791,
+     "sim": 0.8999999761581421,
+     "vessels": 0.10000002384185791,
+     "fx": 0,
+     "planets": 1.5,
+     "map": 0,
+     "render": 6885.5,
+     "telemetry": 0.3999999761581421,
+     "audio": 0,
+     "navball": 0,
+     "hud": 0
+    },
+    "hitches25": 0,
+    "hitches50": 0
+   },
+   "stats": {
+    "calls": 191,
+    "triangles": 634605,
+    "points": 9000,
+    "programs": 52,
+    "textures": 51,
+    "geometries": 108
+   },
+   "scale": 1,
+   "canvas": [
+    1920,
+    1080
+   ],
+   "frames": 1,
+   "metrics": {
+    "scriptMsPerFrame": 6890.864,
+    "taskMsPerFrame": 6892.665,
+    "layoutMsPerFrame": 0,
+    "styleMsPerFrame": 0,
+    "heapMB": 13.189184
+   },
+   "readyMs": 21772
+  },
+  "orbit": {
+   "summary": {
+    "frames": 7,
+    "fps": 1.512668599520988,
+    "frameMs": {
+     "avg": 661.0833333333334,
+     "p50": 766.6000000000004,
+     "p95": 883.3000000000011,
+     "p99": 883.3000000000011,
+     "max": 883.3000000000011
+    },
+    "cpuMs": {
+     "avg": 7.685714312962124,
+     "p95": 10.100000023841858,
+     "max": 10.100000023841858
+    },
+    "sections": {
+     "input": 0.10000002384185791,
+     "sim": 1.4714285475867135,
+     "vessels": 0.11428572450365339,
+     "fx": 0.07142855439867292,
+     "planets": 1.3142857210976737,
+     "map": 0,
+     "render": 3.757142867360796,
+     "telemetry": 0.24285713263920375,
+     "audio": 0,
+     "navball": 0.15714287757873535,
+     "hud": 0.44285716329302105
+    },
+    "hitches25": 5,
+    "hitches50": 5
+   },
+   "stats": {
+    "calls": 160,
+    "triangles": 157480,
+    "points": 9000,
+    "programs": 42,
+    "textures": 43,
+    "geometries": 108
+   },
+   "scale": 1,
+   "canvas": [
+    1920,
+    1080
+   ],
+   "frames": 7,
+   "metrics": {
+    "scriptMsPerFrame": 7.155428571428572,
+    "taskMsPerFrame": 9.529714285714286,
+    "layoutMsPerFrame": 0.07828571428571428,
+    "styleMsPerFrame": 0.01942857142857143,
+    "heapMB": 19.145428
+   },
+   "readyMs": 10974
+  },
+  "map": {
+   "summary": {
+    "frames": 16,
+    "fps": 4.000213344711718,
+    "frameMs": {
+     "avg": 249.98666666666662,
+     "p50": 216.70000000000073,
+     "p95": 966.7000000000007,
+     "p99": 966.7000000000007,
+     "max": 966.7000000000007
+    },
+    "cpuMs": {
+     "avg": 65.3749999627471,
+     "p95": 968.3999998569489,
+     "max": 968.3999998569489
+    },
+    "sections": {
+     "input": 0.07500000298023224,
+     "sim": 1.6687500104308128,
+     "vessels": 0,
+     "fx": 0,
+     "planets": 0,
+     "map": 1.9499999955296516,
+     "render": 60.73124999552965,
+     "telemetry": 0.14375001192092896,
+     "audio": 0.1874999925494194,
+     "navball": 0.17499998956918716,
+     "hud": 0.44374996423721313
+    },
+    "hitches25": 14,
+    "hitches50": 13
+   },
+   "stats": {
+    "calls": 30,
+    "triangles": 55494,
+    "points": 208,
+    "programs": 48,
+    "textures": 45,
+    "geometries": 91
+   },
+   "scale": 1,
+   "canvas": [
+    1920,
+    1080
+   ],
+   "frames": 16,
+   "metrics": {
+    "scriptMsPerFrame": 65.39125,
+    "taskMsPerFrame": 66.95931250000001,
+    "layoutMsPerFrame": 0.240625,
+    "styleMsPerFrame": 0.088375,
+    "heapMB": 25.623716
+   },
+   "readyMs": 12643
+  },
+  "saturn": {
+   "summary": {
+    "frames": 4,
+    "fps": 1.0909487617731555,
+    "frameMs": {
+     "avg": 916.6333333333332,
+     "p50": 933.2999999999993,
+     "p95": 950,
+     "p99": 950,
+     "max": 950
+    },
+    "cpuMs": {
+     "avg": 9.25,
+     "p95": 12.599999904632568,
+     "max": 12.599999904632568
+    },
+    "sections": {
+     "input": 0.15000000596046448,
+     "sim": 2.2000000178813934,
+     "vessels": 0.9749999642372131,
+     "fx": 0.1250000298023224,
+     "planets": 0.4249999523162842,
+     "map": 0,
+     "render": 4.550000011920929,
+     "telemetry": 0.20000001788139343,
+     "audio": 0.04999998211860657,
+     "navball": 0.15000003576278687,
+     "hud": 0.2749999761581421
+    },
+    "hitches25": 3,
+    "hitches50": 3
+   },
+   "stats": {
+    "calls": 407,
+    "triangles": 182679,
+    "points": 9000,
+    "programs": 43,
+    "textures": 50,
+    "geometries": 82
+   },
+   "scale": 1,
+   "canvas": [
+    1920,
+    1080
+   ],
+   "frames": 4,
+   "metrics": {
+    "scriptMsPerFrame": 10.057500000000001,
+    "taskMsPerFrame": 11.726,
+    "layoutMsPerFrame": 0.1525,
+    "styleMsPerFrame": 0,
+    "heapMB": 15.910752
+   },
+   "readyMs": 10172
+  }
+ }
+}

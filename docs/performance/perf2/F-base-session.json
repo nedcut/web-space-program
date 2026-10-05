@@ -1,0 +1,36 @@
+{
+ "quality": "medium",
+ "seconds": 8,
+ "size": "640x360",
+ "craft": "stock-kestrel",
+ "cases": {
+  "session:idle": {
+   "worst": 633.3000000000029,
+   "links": 0
+  },
+  "session:ignite+liftoff": {
+   "worst": 1683.199999999997,
+   "links": 2
+  },
+  "session:map open": {
+   "worst": 683.2999999999993,
+   "links": 8
+  },
+  "session:map close": {
+   "worst": 733.3000000000029,
+   "links": 0
+  },
+  "session:stage": {
+   "worst": 800,
+   "links": 14
+  },
+  "session:pause menu": {
+   "worst": 1250,
+   "links": 0
+  },
+  "session:resume": {
+   "worst": 833.2000000000044,
+   "links": 0
+  }
+ }
+}

@@ -64,7 +64,9 @@ than importing `World`. `LaunchSite` already follows that structural-input patte
 - `data/parts.ts` preserves the public catalog API. `data/parts/` contains category arrays and shared builders;
   the facade concatenates them in the original order, including expansion and the separate `data/isru.ts`.
   IDs, generated definitions and catalog order must remain stable across refactors.
-- `render/core`: pipeline, adaptive resolution, camera helpers and quality; `render/planet`: renderer,
+- `render/core`: pipeline (GPU timer queries), adaptive resolution, camera helpers, quality presets with first-run GPU
+  tiering (`util/gpuTier.ts`), and `textureCache.ts` (IndexedDB PNG cache for procedural canvas textures, keyed by a
+  hash of the drawing code); `render/planet`: renderer,
   atmosphere/effects, cube-sphere quadtree, worker-built chunks, textures and rings. `planet/scatter/` streams
   deterministic render-only decoration. `render/site`: launch complex/aerial/textures; `render/sky`: stars and
   sun glare; `render/map`: conics/markers/gizmos; `render/vessel`: vessel meshes, flags and re-entry effects;
@@ -153,3 +155,17 @@ substep engine/RCS impulse-per-mass cost. This observer never changes the underl
 ## Optional precise gravity
 
 `World.preciseGravity` is an optional per-save setting, off by default. `sim/orbit/nbody.ts` supplies cached all-source differential gravity in translating dominant-body frames; `adaptive.ts` implements controlled RK45. `game/world/preciseRails.ts` commits fleet-wide accepted steps under a frame budget and reduces warp instead of skipping time. `numericalPrediction.ts` incrementally produces Float64 sampled patches with impulsive nodes and distance minima; MapView draws these as polylines. `World.trajectory()` deliberately stays patched-conic for planners; `mapTrajectory()` selects the numerical path. `lagrange.ts` supplies instantaneous pair markers. Massive-body ephemerides remain Keplerian. See `docs/physics/PRECISE_GRAVITY.md` for numerical limits and verification.
+
+## Frame budget and performance tooling
+
+`util/frameProfiler.ts` is an allocation-free per-section timer (input, sim, vessels, FX, planets, map, render submit,
+telemetry, audio, navball, HUD). The flight controller, navball loop and `useRenderProfile` (FlightScene/maneuver
+panel) feed it only while enabled. Settings → Graphics or F8 shows `flight/hud/PerfOverlay.tsx` (frame graph,
+percentiles, CPU/GPU breakdown, draws/programs, copyable report). `scripts/perf-probe.mjs` drives the same hooks
+headlessly (see `docs/PERFORMANCE.md`).
+
+Shader programs are part of the frame budget: the flight controller compiles the flight and map scenes with
+`compileAsync` behind the loading screen (first frame updates without drawing). Anything that changes a three.js
+program key at runtime — light count/visibility, shadow type, defines, `needsUpdate` on materials — recompiles every
+affected material and stalls the frame (hundreds of ms on ANGLE/D3D). Keep lights resident (zero intensity) instead
+of toggling visibility, and create runtime materials from existing variants.

@@ -1,0 +1,1050 @@
+{
+ "quality": "medium",
+ "seconds": 10,
+ "size": "640x360",
+ "craft": "stock-kestrel",
+ "cases": {
+  "startup0": {
+   "menuMs": 365,
+   "flightMs": 20891,
+   "menuKB": 235.8984375
+  },
+  "startup1": {
+   "menuMs": 138,
+   "flightMs": 20117,
+   "menuKB": 429.884765625
+  },
+  "pad": {
+   "summary": {
+    "frames": 240,
+    "fps": 59.26072248697496,
+    "frameMs": {
+     "avg": 16.87458333333334,
+     "p50": 16.69999999999709,
+     "p95": 16.799999999999272,
+     "p99": 33.19999999999709,
+     "max": 33.39999999999782
+    },
+    "cpuMs": {
+     "avg": 1.7716666663686433,
+     "p95": 2.899999976158142,
+     "max": 4.5
+    },
+    "sections": {
+     "input": 0.11583333412806193,
+     "sim": 0.335416671137015,
+     "vessels": 0.07833332518736522,
+     "fx": 0.10333333164453506,
+     "planets": 0.6458333373069763,
+     "map": 0,
+     "render": 0.013750001788139343,
+     "telemetry": 0.12458333224058152,
+     "audio": 0.0358333354194959,
+     "navball": 0.2183333327372869,
+     "hud": 0.07291666517655054
+    },
+    "hitches25": 3,
+    "hitches50": 0
+   },
+   "stats": {
+    "calls": 0,
+    "triangles": 0,
+    "points": 0,
+    "programs": 79,
+    "textures": 64,
+    "geometries": 127
+   },
+   "scale": 1,
+   "canvas": [
+    640,
+    360
+   ],
+   "frames": 470,
+   "metrics": {
+    "scriptMsPerFrame": 2.132223404255319,
+    "taskMsPerFrame": 3.1429106382978724,
+    "layoutMsPerFrame": 0.010693617021276596,
+    "styleMsPerFrame": 0.0003170212765957447,
+    "heapMB": 39.030976
+   },
+   "cpuByChunk": {
+    "(idle)": 18.746,
+    "(program)": 0.892,
+    "universe": 0.455,
+    "PlanetRenderer": 0.327,
+    "FlightScene": 0.261,
+    "BufferGeometryUtils": 0.237,
+    "(garbage collector)": 0.231,
+    "native": 0.184,
+    "index": 0.106,
+    "vec3": 0.073,
+    "planets": 0.071,
+    "world": 0.071,
+    "staging": 0.04,
+    "resources": 0.016
+   },
+   "cpuTop": [
+    [
+     "(garbage collector) :0",
+     0.231
+    ],
+    [
+     "l PlanetRenderer-CphcVhLe.js:1492",
+     0.126
+    ],
+    [
+     "C universe-h6a-2Uyv.js:1",
+     0.073
+    ],
+    [
+     "Ge universe-h6a-2Uyv.js:1",
+     0.073
+    ],
+    [
+     "place PlanetRenderer-CphcVhLe.js:1492",
+     0.065
+    ],
+    [
+     "w universe-h6a-2Uyv.js:1",
+     0.06
+    ],
+    [
+     "update planets-9GcVHQWu.js:51",
+     0.059
+    ],
+    [
+     "update PlanetRenderer-CphcVhLe.js:1638",
+     0.056
+    ],
+    [
+     "postMessage :0",
+     0.051
+    ],
+    [
+     "Ue universe-h6a-2Uyv.js:1",
+     0.049
+    ],
+    [
+     "frame FlightScene-jrFZ7pvW.js:113",
+     0.035
+    ],
+    [
+     "update FlightScene-jrFZ7pvW.js:113",
+     0.035
+    ],
+    [
+     "noise universe-h6a-2Uyv.js:1",
+     0.034
+    ],
+    [
+     "renderAt FlightScene-jrFZ7pvW.js:113",
+     0.032
+    ],
+    [
+     "je universe-h6a-2Uyv.js:1",
+     0.031
+    ],
+    [
+     "a vec3-DydKxEGt.js:1",
+     0.031
+    ],
+    [
+     "compose BufferGeometryUtils-iVgvszjN.js:1",
+     0.029
+    ],
+    [
+     "(anon) universe-h6a-2Uyv.js:1",
+     0.029
+    ],
+    [
+     "(anon) FlightScene-jrFZ7pvW.js:113",
+     0.027
+    ],
+    [
+     "getQueryParameter :0",
+     0.024
+    ],
+    [
+     "clear :0",
+     0.022
+    ],
+    [
+     "setFromRotationMatrix BufferGeometryUtils-iVgvszjN.js:1",
+     0.021
+    ],
+    [
+     "c vec3-DydKxEGt.js:1",
+     0.02
+    ],
+    [
+     "Jr FlightScene-jrFZ7pvW.js:113",
+     0.019
+    ],
+    [
+     "yt PlanetRenderer-CphcVhLe.js:1492",
+     0.018
+    ]
+   ],
+   "alloc": {
+    "kbPerFrame": 288.51623171542553,
+    "top": [
+     [
+      "w universe-h6a-2Uyv.js:1",
+      64.15
+     ],
+     [
+      "Ge universe-h6a-2Uyv.js:1",
+      23.97
+     ],
+     [
+      "(anon) universe-h6a-2Uyv.js:1",
+      16.51
+     ],
+     [
+      "a vec3-DydKxEGt.js:1",
+      16.27
+     ],
+     [
+      "Ue universe-h6a-2Uyv.js:1",
+      14.86
+     ],
+     [
+      "l PlanetRenderer-CphcVhLe.js:1492",
+      13.66
+     ],
+     [
+      "place PlanetRenderer-CphcVhLe.js:1492",
+      12.57
+     ],
+     [
+      "next :0",
+      9.16
+     ],
+     [
+      "delete :0",
+      7.53
+     ],
+     [
+      "set :0",
+      7.15
+     ],
+     [
+      "update planets-9GcVHQWu.js:51",
+      6.66
+     ],
+     [
+      "N universe-h6a-2Uyv.js:1",
+      5.85
+     ],
+     [
+      "update PlanetRenderer-CphcVhLe.js:1638",
+      5.21
+     ],
+     [
+      "Jr FlightScene-jrFZ7pvW.js:113",
+      3.66
+     ],
+     [
+      "add :0",
+      2.63
+     ],
+     [
+      "update FlightScene-jrFZ7pvW.js:113",
+      2.3
+     ],
+     [
+      "(anon) CometEffects-DclfF14Q.js:1",
+      2.1
+     ],
+     [
+      "C universe-h6a-2Uyv.js:1",
+      2.01
+     ],
+     [
+      "noise universe-h6a-2Uyv.js:1",
+      1.95
+     ],
+     [
+      "e BufferGeometryUtils-iVgvszjN.js:1",
+      1.6
+     ]
+    ]
+   },
+   "readyMs": 19674
+  },
+  "orbit": {
+   "summary": {
+    "frames": 240,
+    "fps": 56.91924581999288,
+    "frameMs": {
+     "avg": 17.56875,
+     "p50": 16.69999999999709,
+     "p95": 33.299999999995634,
+     "p99": 33.30000000000291,
+     "max": 33.400000000001455
+    },
+    "cpuMs": {
+     "avg": 2.055833331743876,
+     "p95": 3.5999999046325684,
+     "max": 6.100000023841858
+    },
+    "sections": {
+     "input": 0.12124999562899272,
+     "sim": 0.6575000012914339,
+     "vessels": 0.07875000089406967,
+     "fx": 0.11749999622503916,
+     "planets": 0.5074999998013179,
+     "map": 0,
+     "render": 0.01333333154519399,
+     "telemetry": 0.12958333194255828,
+     "audio": 0.028333335121472677,
+     "navball": 0.2712500035762787,
+     "hud": 0.09291666795810063
+    },
+    "hitches25": 13,
+    "hitches50": 0
+   },
+   "stats": {
+    "calls": 0,
+    "triangles": 0,
+    "points": 0,
+    "programs": 78,
+    "textures": 71,
+    "geometries": 147
+   },
+   "scale": 1,
+   "canvas": [
+    640,
+    360
+   ],
+   "frames": 492,
+   "metrics": {
+    "scriptMsPerFrame": 2.2612113821138213,
+    "taskMsPerFrame": 3.423882113821138,
+    "layoutMsPerFrame": 0.04054268292682927,
+    "styleMsPerFrame": 0.007959349593495936,
+    "heapMB": 56.955768
+   },
+   "cpuByChunk": {
+    "(idle)": 17.661,
+    "(program)": 0.987,
+    "universe": 0.608,
+    "FlightScene": 0.318,
+    "(garbage collector)": 0.244,
+    "BufferGeometryUtils": 0.194,
+    "world": 0.177,
+    "PlanetRenderer": 0.157,
+    "native": 0.14,
+    "index": 0.112,
+    "planets": 0.081,
+    "vec3": 0.075,
+    "resources": 0.073,
+    "staging": 0.05
+   },
+   "cpuTop": [
+    [
+     "w universe-h6a-2Uyv.js:1",
+     0.256
+    ],
+    [
+     "(garbage collector) :0",
+     0.244
+    ],
+    [
+     "We universe-h6a-2Uyv.js:1",
+     0.14
+    ],
+    [
+     "t resources-B5P8uNQB.js:1",
+     0.071
+    ],
+    [
+     "update planets-9GcVHQWu.js:51",
+     0.059
+    ],
+    [
+     "l PlanetRenderer-CphcVhLe.js:1492",
+     0.056
+    ],
+    [
+     "frame FlightScene-jrFZ7pvW.js:113",
+     0.056
+    ],
+    [
+     "Ue universe-h6a-2Uyv.js:1",
+     0.056
+    ],
+    [
+     "update FlightScene-jrFZ7pvW.js:113",
+     0.045
+    ],
+    [
+     "a vec3-DydKxEGt.js:1",
+     0.042
+    ],
+    [
+     "je universe-h6a-2Uyv.js:1",
+     0.041
+    ],
+    [
+     "(anon) FlightScene-jrFZ7pvW.js:113",
+     0.038
+    ],
+    [
+     "place PlanetRenderer-CphcVhLe.js:1492",
+     0.03
+    ],
+    [
+     "update PlanetRenderer-CphcVhLe.js:1638",
+     0.03
+    ],
+    [
+     "(anon) universe-h6a-2Uyv.js:1",
+     0.028
+    ],
+    [
+     "clear :0",
+     0.027
+    ],
+    [
+     "renderAt FlightScene-jrFZ7pvW.js:113",
+     0.025
+    ],
+    [
+     "fn world-BqO8S-oi.js:1",
+     0.023
+    ],
+    [
+     "bt world-BqO8S-oi.js:1",
+     0.022
+    ],
+    [
+     "compose BufferGeometryUtils-iVgvszjN.js:1",
+     0.019
+    ],
+    [
+     "Jr FlightScene-jrFZ7pvW.js:113",
+     0.016
+    ],
+    [
+     "updateMatrixWorld BufferGeometryUtils-iVgvszjN.js:1",
+     0.016
+    ],
+    [
+     "physicsStep world-BqO8S-oi.js:2",
+     0.015
+    ],
+    [
+     "Jt world-BqO8S-oi.js:1",
+     0.014
+    ],
+    [
+     "render FlightScene-jrFZ7pvW.js:113",
+     0.013
+    ]
+   ],
+   "alloc": {
+    "kbPerFrame": 359.7197662601626,
+    "top": [
+     [
+      "w universe-h6a-2Uyv.js:1",
+      92.54
+     ],
+     [
+      "We universe-h6a-2Uyv.js:1",
+      45.14
+     ],
+     [
+      "a vec3-DydKxEGt.js:1",
+      25.8
+     ],
+     [
+      "(anon) universe-h6a-2Uyv.js:1",
+      14.12
+     ],
+     [
+      "Ue universe-h6a-2Uyv.js:1",
+      11.68
+     ],
+     [
+      "set :0",
+      11.57
+     ],
+     [
+      "delete :0",
+      11.49
+     ],
+     [
+      "l PlanetRenderer-CphcVhLe.js:1492",
+      9.16
+     ],
+     [
+      "place PlanetRenderer-CphcVhLe.js:1492",
+      8.62
+     ],
+     [
+      "next :0",
+      8.38
+     ],
+     [
+      "bt world-BqO8S-oi.js:1",
+      7.65
+     ],
+     [
+      "update planets-9GcVHQWu.js:51",
+      6.55
+     ],
+     [
+      "Jr FlightScene-jrFZ7pvW.js:113",
+      4.51
+     ],
+     [
+      "map :0",
+      3.46
+     ],
+     [
+      "$e universe-h6a-2Uyv.js:1",
+      3.03
+     ],
+     [
+      "N universe-h6a-2Uyv.js:1",
+      2.96
+     ],
+     [
+      "update PlanetRenderer-CphcVhLe.js:1638",
+      2.53
+     ],
+     [
+      "(anon) staging-CDJv_PDV.js:1",
+      2.31
+     ],
+     [
+      "Jt world-BqO8S-oi.js:1",
+      2.23
+     ],
+     [
+      "(anon) CometEffects-DclfF14Q.js:1",
+      2.19
+     ]
+    ]
+   },
+   "readyMs": 23888
+  },
+  "map": {
+   "summary": {
+    "frames": 240,
+    "fps": 56.91924581999294,
+    "frameMs": {
+     "avg": 17.568749999999984,
+     "p50": 16.700000000000728,
+     "p95": 16.80000000000291,
+     "p99": 33.400000000001455,
+     "max": 50
+    },
+    "cpuMs": {
+     "avg": 2.6004166613022486,
+     "p95": 4.299999952316284,
+     "max": 13.600000023841858
+    },
+    "sections": {
+     "input": 0.11291666676600774,
+     "sim": 0.5387499983112017,
+     "vessels": 0,
+     "fx": 0,
+     "planets": 0,
+     "map": 1.177500002582868,
+     "render": 0.0029166663686434426,
+     "telemetry": 0.08791666676600775,
+     "audio": 0.16541666388511658,
+     "navball": 0.2554166629910469,
+     "hud": 0.24499999980131784
+    },
+    "hitches25": 11,
+    "hitches50": 0
+   },
+   "stats": {
+    "calls": 30,
+    "triangles": 55494,
+    "points": 208,
+    "programs": 75,
+    "textures": 74,
+    "geometries": 132
+   },
+   "scale": 1,
+   "canvas": [
+    640,
+    360
+   ],
+   "frames": 513,
+   "metrics": {
+    "scriptMsPerFrame": 2.957810916179337,
+    "taskMsPerFrame": 4.147432748538011,
+    "layoutMsPerFrame": 0.1225925925925926,
+    "styleMsPerFrame": 0.07709941520467836,
+    "heapMB": 55.18834
+   },
+   "cpuByChunk": {
+    "(idle)": 15.914,
+    "(program)": 1.052,
+    "universe": 0.846,
+    "FlightScene": 0.387,
+    "MapView": 0.34,
+    "index": 0.262,
+    "BufferGeometryUtils": 0.243,
+    "(garbage collector)": 0.229,
+    "native": 0.176,
+    "world": 0.166,
+    "vec3": 0.079,
+    "staging": 0.067,
+    "CometEffects": 0.019,
+    "PlanetRenderer": 0.016
+   },
+   "cpuTop": [
+    [
+     "update MapView-LvaxFCdT.js:440",
+     0.256
+    ],
+    [
+     "We universe-h6a-2Uyv.js:1",
+     0.243
+    ],
+    [
+     "(garbage collector) :0",
+     0.229
+    ],
+    [
+     "w universe-h6a-2Uyv.js:1",
+     0.19
+    ],
+    [
+     "je universe-h6a-2Uyv.js:1",
+     0.086
+    ],
+    [
+     "updateMapScene FlightScene-jrFZ7pvW.js:113",
+     0.075
+    ],
+    [
+     "Ue universe-h6a-2Uyv.js:1",
+     0.073
+    ],
+    [
+     "update FlightScene-jrFZ7pvW.js:113",
+     0.062
+    ],
+    [
+     "frame FlightScene-jrFZ7pvW.js:113",
+     0.057
+    ],
+    [
+     "wt universe-h6a-2Uyv.js:1",
+     0.057
+    ],
+    [
+     "update index-CzEdbADQ.js:10",
+     0.05
+    ],
+    [
+     "setTargetAtTime :0",
+     0.049
+    ],
+    [
+     "(anon) universe-h6a-2Uyv.js:1",
+     0.047
+    ],
+    [
+     "asteroidState universe-h6a-2Uyv.js:1",
+     0.045
+    ],
+    [
+     "a vec3-DydKxEGt.js:1",
+     0.033
+    ],
+    [
+     "(anon) FlightScene-jrFZ7pvW.js:113",
+     0.032
+    ],
+    [
+     "setFromRotationMatrix BufferGeometryUtils-iVgvszjN.js:1",
+     0.031
+    ],
+    [
+     "bt world-BqO8S-oi.js:1",
+     0.029
+    ],
+    [
+     "fn world-BqO8S-oi.js:1",
+     0.027
+    ],
+    [
+     "ns index-CzEdbADQ.js:9",
+     0.026
+    ],
+    [
+     "requestAnimationFrame :0",
+     0.022
+    ],
+    [
+     "T universe-h6a-2Uyv.js:1",
+     0.021
+    ],
+    [
+     "clear :0",
+     0.021
+    ],
+    [
+     "set BufferGeometryUtils-iVgvszjN.js:1",
+     0.018
+    ],
+    [
+     "Jr FlightScene-jrFZ7pvW.js:113",
+     0.018
+    ]
+   ],
+   "alloc": {
+    "kbPerFrame": 380.2050514741715,
+    "top": [
+     [
+      "We universe-h6a-2Uyv.js:1",
+      81.41
+     ],
+     [
+      "w universe-h6a-2Uyv.js:1",
+      55.55
+     ],
+     [
+      "(anon) MapView-LvaxFCdT.js:1",
+      30.16
+     ],
+     [
+      "Ue universe-h6a-2Uyv.js:1",
+      19.34
+     ],
+     [
+      "a vec3-DydKxEGt.js:1",
+      16.44
+     ],
+     [
+      "(anon) universe-h6a-2Uyv.js:1",
+      14.9
+     ],
+     [
+      "update MapView-LvaxFCdT.js:440",
+      13.99
+     ],
+     [
+      "bt world-BqO8S-oi.js:1",
+      8.62
+     ],
+     [
+      "set :0",
+      8.02
+     ],
+     [
+      "asteroidState universe-h6a-2Uyv.js:1",
+      7.74
+     ],
+     [
+      "next :0",
+      7.28
+     ],
+     [
+      "delete :0",
+      6.76
+     ],
+     [
+      "update index-CzEdbADQ.js:10",
+      4.5
+     ],
+     [
+      "Jr FlightScene-jrFZ7pvW.js:113",
+      4.21
+     ],
+     [
+      "je universe-h6a-2Uyv.js:1",
+      3.65
+     ],
+     [
+      "map :0",
+      3.43
+     ],
+     [
+      "T universe-h6a-2Uyv.js:1",
+      3.24
+     ],
+     [
+      "$e universe-h6a-2Uyv.js:1",
+      2.97
+     ],
+     [
+      "t vec3-DydKxEGt.js:1",
+      2.61
+     ],
+     [
+      "Jt world-BqO8S-oi.js:1",
+      2.43
+     ]
+    ]
+   },
+   "readyMs": 21139
+  },
+  "saturn": {
+   "summary": {
+    "frames": 240,
+    "fps": 58.06638923836251,
+    "frameMs": {
+     "avg": 17.22166666666667,
+     "p50": 16.700000000000728,
+     "p95": 16.799999999999272,
+     "p99": 33.400000000001455,
+     "max": 33.400000000001455
+    },
+    "cpuMs": {
+     "avg": 1.9204166625936827,
+     "p95": 3.5000001192092896,
+     "max": 10.900000095367432
+    },
+    "sections": {
+     "input": 0.12499999850988389,
+     "sim": 0.6991666664679845,
+     "vessels": 0.10374999692042669,
+     "fx": 0.06333333700895309,
+     "planets": 0.3700000007947286,
+     "map": 0,
+     "render": 0.020833334326744078,
+     "telemetry": 0.10541666646798452,
+     "audio": 0.0449999988079071,
+     "navball": 0.24166666269302367,
+     "hud": 0.1154166653752327
+    },
+    "hitches25": 8,
+    "hitches50": 0
+   },
+   "stats": {
+    "calls": 0,
+    "triangles": 0,
+    "points": 0,
+    "programs": 78,
+    "textures": 59,
+    "geometries": 87
+   },
+   "scale": 1,
+   "canvas": [
+    640,
+    360
+   ],
+   "frames": 551,
+   "metrics": {
+    "scriptMsPerFrame": 2.4333484573502724,
+    "taskMsPerFrame": 3.506259528130671,
+    "layoutMsPerFrame": 0.04409255898366606,
+    "styleMsPerFrame": 0.008034482758620691,
+    "heapMB": 72.985428
+   },
+   "cpuByChunk": {
+    "(idle)": 15.316,
+    "(program)": 0.89,
+    "universe": 0.547,
+    "FlightScene": 0.347,
+    "(garbage collector)": 0.266,
+    "world": 0.222,
+    "BufferGeometryUtils": 0.206,
+    "index": 0.164,
+    "native": 0.155,
+    "staging": 0.112,
+    "PlanetRenderer": 0.1,
+    "planets": 0.093,
+    "resources": 0.064,
+    "vec3": 0.058
+   },
+   "cpuTop": [
+    [
+     "(garbage collector) :0",
+     0.266
+    ],
+    [
+     "w universe-h6a-2Uyv.js:1",
+     0.215
+    ],
+    [
+     "We universe-h6a-2Uyv.js:1",
+     0.134
+    ],
+    [
+     "update planets-9GcVHQWu.js:51",
+     0.08
+    ],
+    [
+     "frame FlightScene-jrFZ7pvW.js:113",
+     0.063
+    ],
+    [
+     "t resources-B5P8uNQB.js:1",
+     0.062
+    ],
+    [
+     "je universe-h6a-2Uyv.js:1",
+     0.062
+    ],
+    [
+     "update PlanetRenderer-CphcVhLe.js:1638",
+     0.052
+    ],
+    [
+     "Ue universe-h6a-2Uyv.js:1",
+     0.046
+    ],
+    [
+     "update FlightScene-jrFZ7pvW.js:113",
+     0.043
+    ],
+    [
+     "bt world-BqO8S-oi.js:1",
+     0.039
+    ],
+    [
+     "Tt BufferGeometryUtils-iVgvszjN.js:4220",
+     0.037
+    ],
+    [
+     "(anon) FlightScene-jrFZ7pvW.js:113",
+     0.036
+    ],
+    [
+     "a vec3-DydKxEGt.js:1",
+     0.032
+    ],
+    [
+     "clear :0",
+     0.03
+    ],
+    [
+     "fn world-BqO8S-oi.js:1",
+     0.03
+    ],
+    [
+     "Jr FlightScene-jrFZ7pvW.js:113",
+     0.029
+    ],
+    [
+     "(anon) world-BqO8S-oi.js:1",
+     0.029
+    ],
+    [
+     "(anon) universe-h6a-2Uyv.js:1",
+     0.022
+    ],
+    [
+     "$e universe-h6a-2Uyv.js:1",
+     0.02
+    ],
+    [
+     "k PlanetRenderer-CphcVhLe.js:1638",
+     0.019
+    ],
+    [
+     "E staging-CDJv_PDV.js:1",
+     0.019
+    ],
+    [
+     "U staging-CDJv_PDV.js:1",
+     0.018
+    ],
+    [
+     "render FlightScene-jrFZ7pvW.js:113",
+     0.018
+    ],
+    [
+     "getQueryParameter :0",
+     0.018
+    ]
+   ],
+   "alloc": {
+    "kbPerFrame": 395.4636031079855,
+    "top": [
+     [
+      "w universe-h6a-2Uyv.js:1",
+      93.25
+     ],
+     [
+      "We universe-h6a-2Uyv.js:1",
+      43.27
+     ],
+     [
+      "a vec3-DydKxEGt.js:1",
+      25.54
+     ],
+     [
+      "bt world-BqO8S-oi.js:1",
+      13.8
+     ],
+     [
+      "set :0",
+      13.18
+     ],
+     [
+      "delete :0",
+      10.99
+     ],
+     [
+      "Ue universe-h6a-2Uyv.js:1",
+      10.98
+     ],
+     [
+      "(anon) universe-h6a-2Uyv.js:1",
+      10.62
+     ],
+     [
+      "next :0",
+      9.29
+     ],
+     [
+      "U staging-CDJv_PDV.js:1",
+      8.64
+     ],
+     [
+      "update planets-9GcVHQWu.js:51",
+      8.59
+     ],
+     [
+      "map :0",
+      7.57
+     ],
+     [
+      "Jr FlightScene-jrFZ7pvW.js:113",
+      7.31
+     ],
+     [
+      "E staging-CDJv_PDV.js:1",
+      6.59
+     ],
+     [
+      "update PlanetRenderer-CphcVhLe.js:1638",
+      6.25
+     ],
+     [
+      "(anon) world-BqO8S-oi.js:1",
+      4.55
+     ],
+     [
+      "(anon) staging-CDJv_PDV.js:1",
+      4.28
+     ],
+     [
+      "fn world-BqO8S-oi.js:1",
+      3.51
+     ],
+     [
+      "ne staging-CDJv_PDV.js:1",
+      3.11
+     ],
+     [
+      "Jt world-BqO8S-oi.js:1",
+      3.1
+     ]
+    ]
+   },
+   "readyMs": 10877
+  }
+ }
+}

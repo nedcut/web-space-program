@@ -20,9 +20,17 @@ multiplayer (see MULTIPLAYER.md).
 Earth → Saturn orbit, real-scale Saturn departure, Titan landing, real-scale re-entry, jet takeoff, docking, EVA,
 structural limits on every stock mission, n-body L4 stability, save/load determinism.
 
-**Please check on your laptop (I could only test with a slow software renderer):** frame rate on each graphics preset
-(Settings → Graphics; there's an adaptive-resolution option), loading time, and the overall feel of flying. Then tell me
-what feels wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
+**Please check on your laptop (I could only test with a slow software renderer):** in flight press **F8** for the
+performance overlay (fps, frame-time graph, CPU/GPU breakdown) and use **Copy report** on the pad, in orbit, in the
+map and in the Ring Skimmer mission — `docs/PERFORMANCE.md` ("What to measure on the laptop") lists what to send.
+Graphics are auto-tuned once per device (weak GPUs start on Low; adaptive resolution is on). Then tell me what feels
+wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
+
+## Laptop performance pass 2 (2026-10-05, op/perf2)
+
+- **Diagnosis (headless evidence):** main-thread work is small (≈1.2–2.6 ms/frame plus 2–3 ms of three.js submission on a desktop CPU); the laptop costs were pixels (Medium rendered at up to 1.5× device pixels) and shader compiles at runtime (24 programs linked after loading in a scripted flight: 8 on the first map open, 14 on the first decouple — a flash light toggling the scene's light count, plus three's PCFSoft→PCF swap invalidating keys).
+- **Fixes:** Medium caps DPR at 1 (−56 % pixels on 1.5× and 2× panels); adaptive resolution on by default and GPU-timer aware; weak GPUs auto-start on Low; Low trims atmosphere steps and site vegetation. Flight and map shaders compile behind the loading screen and the flash light stays resident → 3 runtime links in the same session. Part templates merge draws (Ring Skimmer 407 → 255 calls, three.js submission −18 %); vegetation culls per cell; site textures cached across scenes and sessions; menu loads 3D on idle (interactive 600 → 140–370 ms headless); editor renders only on change.
+- **New tools:** F8 performance overlay with copyable report; `scripts/perf-probe.mjs` (CPU/alloc/draws/programs/loading/session). Details, tables and limits: `docs/PERFORMANCE.md`. Laptop GPU frame time is still unmeasured.
 
 ## Art pass: parts, plumes, hangar (2026-10-05, op/artpass)
 
