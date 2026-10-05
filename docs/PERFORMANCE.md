@@ -207,7 +207,8 @@ measurements from the Linux backend above; absolute times must not be compared a
 The idle HTML harness loads Vite development modules over the host's Tailscale address. We warmed
 each synchronous case once, then alternated three before/after samples. The same orbits and 36×36
 UI grids were used. Main-thread call duration, measured directly with `performance.now()`, includes
-the entire synchronous search before and worker construction/postMessage after. It excludes UI drawing.
+the entire synchronous search before and worker construction/postMessage after. Snapshot preparation
+and UI drawing are outside this measurement.
 
 | Case | Before main-thread call ms | After main-thread call ms | After elapsed ms |
 |---|---:|---:|---:|

@@ -319,3 +319,8 @@ Final validation on `cx/realscale`: `npx tsc --noEmit` passed; `npx vitest run -
 - Required full `npx vitest run --maxWorkers=2`: 54 files / 705 tests pass, with the existing real Moon mission exceeding its 180-second timeout (248 seconds). Isolated retry likewise times out at 250 seconds; both logs reach Earth splashdown. This matches the merged audio branch's documented contention timeout. No physics or existing timeout settings were changed.
 - Collaborative browser checks: share-code generation, editor toolbar fitting 1280 px, hub/flight photo entry/exit and flight UT freeze, compiled depth blur, PNG output at 1920×1200 and 3840×2400. Snapshot automation failed, so no screenshot evidence or visual-quality claim. Port 5196 belongs to the planner worktree; this worktree's review server uses 5199.
 - Merged main's audio upgrade, preserving interface audio and silencing flight effects during photo mode. Preserved both branches' progress and decisions.
+
+### Planner final integration validation
+
+- Merged main through `981e915`, including sharing/photo mode and the existing Real Moon test's shared-host timeout adjustment (`0c82a16`, 180 → 600 seconds). Retained both sides of appended DECISIONS/PROGRESS conflicts; source merged without conflicts. The planner branch makes no additional timeout or physics-assertion changes.
+- Final post-merge `npm run lint`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` pass. Required `npx vitest run --maxWorkers=2` passes **56 files / 724 tests in 300.21 seconds**, including all 11 planner tests and the complete Real Moon mission. Build retains the existing large-chunk advisory. The planning worker's 72.19 kB bundle hash is unchanged by the main merges.
