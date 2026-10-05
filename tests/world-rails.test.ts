@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { describe, it, expect } from 'vitest';
 import { Universe } from '../src/game/universe';
 import { World, type WorldVessel } from '../src/game/world';
@@ -25,6 +26,7 @@ describe('rails time warp', () => {
   it('stops above the highest terrain when an SOI change and an impact fall in the same warp frame', () => {
     const u = new Universe('standard');
     const world = new World(u, PART_CATALOG, DEFAULT_START_UT);
+    requireIntactFlight(world);
     const moon = u.body('moon');
     // Just outside the Moon's SOI (Earth side), falling straight at the Moon at 300 m/s.
     const m = u.ephem.getRelativeState('moon', world.ut);
@@ -50,6 +52,7 @@ describe('rails time warp', () => {
   it('finds SOI encounters that happen more than one prediction horizon after packing', () => {
     const u = new Universe('standard');
     const world = new World(u, PART_CATALOG, DEFAULT_START_UT);
+    requireIntactFlight(world);
     const earth = u.body('earth');
     const moon = u.body('moon');
     // Circular orbit in the Moon's plane, half an SOI inside its orbit, starting on the far side: the slow
@@ -70,6 +73,7 @@ describe('rails time warp', () => {
   it('non-active vessels on rails keep up-to-date positions during physics ticks', () => {
     const u = new Universe('standard');
     const world = new World(u, PART_CATALOG, DEFAULT_START_UT);
+    requireIntactFlight(world);
     const earth = u.body('earth');
     const r = earth.radius + 200_000;
     const v = Math.sqrt(earth.gm / r);

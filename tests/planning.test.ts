@@ -1,3 +1,4 @@
+import { requireIntactFlight } from './helpers/structural';
 import { afterEach, expect, it, vi } from 'vitest';
 import { World } from '../src/game/world';
 import { Universe } from '../src/game/universe';
@@ -15,6 +16,7 @@ import { add, v3 } from '../src/util/vec3';
 
 function parked() {
   const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+  requireIntactFlight(world);
   const vessel = world.launch(buildRingrunner()), b = world.universe.body('earth');
   const r = b.radius + 120000, bs = world.universe.ephem.getBodyState('earth', world.ut);
   const pos = v3(r, 0, 0), vel = v3(0, Math.sqrt(b.gm / r) * Math.cos(0.5), Math.sqrt(b.gm / r) * Math.sin(0.5));
