@@ -318,6 +318,9 @@ export default function FlightScene() {
             onToggleDocking: () => ctrl.current?.toggleDockingMode(),
             onUndock: (uid) => ctrl.current?.undock(uid),
             onHelp: () => setHelp((h) => !h),
+            onCameraMode: () => ctrl.current?.cycleCameraMode(),
+            onWarpTo: (id) => ctrl.current?.warpTo(id),
+            onCancelWarpTo: () => ctrl.current && ctrl.current.warpDriver.cancel(ctrl.current.world, 'Warp-to cancelled'),
           }}
         />
       )}

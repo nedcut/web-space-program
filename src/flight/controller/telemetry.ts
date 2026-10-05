@@ -9,6 +9,10 @@ import { dot, length, negate, sub, v3 } from '../../util/vec3';
 import type { FlightController } from '../controller';
 import type { DockingTelemetry, HudStage, Telemetry } from '../hud/Hud';
 import type { FlightControllerInternals } from './internals';
+import { AlertTracker } from '../alerts';
+import { warpTargets } from './warp';
+
+const alertTrackers = new WeakMap<FlightController, AlertTracker>();
 const RESOURCE_COLORS: Record<string, string> = {
   liquidFuel: '#ffb35c',
   oxidizer: '#5cc8ff',
@@ -160,11 +164,47 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   });
 
   internals.predictions = flightPredictions(w, wv);
+  const ground = internals.groundTelemetry(wv);
+  let heat = 0;
+  let hottest: string | undefined;
+  let ignited = false;
+  let flameout = false;
+  for (const p of st.parts) {
+    let f = p.temperature / p.maxTemp;
+    for (const t of p.skinTemperature) f = Math.max(f, t / p.maxTemp);
+    if (f > heat) { heat = f; hottest = p.def.name; }
+    if (p.engine?.ignited) { ignited = true; if (p.engine.flamedOut) flameout = true; }
+  }
+  const ec = totals.get('electricCharge');
+  const vs = w.verticalSpeed(wv);
+  const surfaceSpeed = length(w.surfaceVelocity(wv));
+  let tracker = alertTrackers.get(this);
+  if (!tracker) alertTrackers.set(this, (tracker = new AlertTracker()));
+  const flying = st.situation === 'flying' && wv.mode !== 'prelaunch';
+  const noControl = !w.canControl(st) || (!!this.network && this.network.ownId !== st.id);
+  const alerts = tracker.update({
+    noControl,
+    eva: !!st.eva,
+    flying,
+    heatFraction: heat,
+    hottestPart: hottest,
+    gForce: st.telemetry.gForce,
+    agl: info.heightAboveTerrain,
+    verticalSpeed: vs,
+    horizontalSpeed: Math.sqrt(Math.max(0, surfaceSpeed * surfaceSpeed - vs * vs)),
+    chutes: st.parts.some((p) => p.chute?.phase === 'semi' || p.chute?.phase === 'full'),
+    gear: ground.gear,
+    thrusting: ignited && this.input.state.throttle > 0,
+    stageBurnTime: ignited ? (dvs.find((d) => d.stage === st.nextStage + 1)?.burnTime ?? Number.NaN) : Number.NaN,
+    flameout: flameout && this.input.state.throttle > 0,
+    power: ec && ec.max > 0 ? ec.amount / ec.max : Number.NaN,
+  }, performance.now() / 1000);
+  const warpTo = this.warpDriver.target;
   const warp = w.warp;
   return {
     flightData: flightData(w, wv, dvs, internals.predictions),
     crew: w.crewFor(st),
-    noControl: !w.canControl(st) || (!!this.network && this.network.ownId !== st.id),
+    noControl,
     eva: st.eva ? { fuel: st.parts[0].resources.monopropellant ?? 0, canBoard: !!w.boardingTarget(), landed: st.situation === 'landed' } : null,
     ut: w.ut,
     bodyName: b.name,
@@ -172,7 +212,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     altitudeTerrain: info.heightAboveTerrain,
     speedMode: this.speedMode,
     speed,
-    verticalSpeed: w.verticalSpeed(wv),
+    verticalSpeed: vs,
     apoapsis: orb.ap,
     periapsis: orb.pe,
     timeToAp: orb.timeToAp,
@@ -187,7 +227,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     sasOn: this.sasOn,
     sasMode: this.sas,
     rcsOn: this.rcsOn,
-    ...internals.groundTelemetry(wv),
+    ...ground,
     stage: st.nextStage,
     stages,
     resources: [...totals.entries()]
@@ -202,6 +242,13 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     dockingMode: this.dockingMode,
     docking: this.dockingMode ? internals.dockingTelemetry() : null,
     dockedPorts: dockedPorts(st).map((p) => ({ uid: p.uid, name: p.def.name })),
+    feel: {
+      alerts,
+      cameraMode: this.cam.mode,
+      stagedCount: this.stagedCount,
+      warpTargets: this.network || this.assist ? [] : warpTargets(w).map((o) => ({ id: o.id, label: o.label, in: o.time - w.ut })),
+      warpTo: warpTo ? { label: warpTo.label, remaining: Math.max(0, warpTo.time - w.ut) } : null,
+    },
   };
 }
 

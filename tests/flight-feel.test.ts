@@ -1,0 +1,110 @@
+import { describe, expect, it } from 'vitest';
+import { AlertTracker, alertConditions, type AlertInput } from '../src/flight/alerts';
+import { WarpDriver, warpTargets } from '../src/flight/controller/warp';
+import { PART_CATALOG } from '../src/data/parts';
+import { buildOrbiter } from '../src/editor/stockCrafts';
+import { DEFAULT_START_UT } from '../src/game/store';
+import { Universe } from '../src/game/universe';
+import { World } from '../src/game/world';
+import { spawnRelative } from '../src/scenarios/catalog';
+import { neutralInput } from '../src/sim/vessel';
+import { v3 } from '../src/util/vec3';
+
+const calm: AlertInput = {
+  noControl: false, eva: false, flying: true, heatFraction: 0.3, gForce: 1.2, agl: 20000, verticalSpeed: 50, horizontalSpeed: 400,
+  chutes: false, gear: null, thrusting: true, stageBurnTime: 60, flameout: false, power: 0.8,
+};
+
+describe('flight cautions', () => {
+  it('is quiet in normal flight', () => {
+    expect(alertConditions(calm)).toEqual([]);
+  });
+
+  it('flags the important dangers with the right severity', () => {
+    const ids = (i: Partial<AlertInput>) => alertConditions({ ...calm, ...i }).map((a) => `${a.id}:${a.level}`);
+    expect(ids({ heatFraction: 0.8 })).toEqual(['heat:warn']);
+    expect(ids({ heatFraction: 0.95 })).toEqual(['heat:bad']);
+    expect(ids({ gForce: 7 })).toEqual(['g:warn']);
+    expect(ids({ gForce: 11 })).toEqual(['g:bad']);
+    expect(ids({ agl: 400, verticalSpeed: -100 })).toEqual(['terrain:bad']);
+    expect(ids({ agl: 1500, verticalSpeed: -150 })).toEqual(['terrain:warn']);
+    expect(ids({ stageBurnTime: 6 })).toEqual(['fuel:warn']);
+    expect(ids({ flameout: true })).toEqual(['fuel:bad']);
+    expect(ids({ noControl: true })).toEqual(['control:bad']);
+    expect(ids({ power: 0 })).toEqual(['power:bad']);
+    expect(ids({ gear: 'up', agl: 150, verticalSpeed: -5, horizontalSpeed: 2 })).toEqual(['gear:warn']);
+  });
+
+  it('does not nag under parachutes, on the ground or in EVA', () => {
+    expect(alertConditions({ ...calm, agl: 100, verticalSpeed: -7, chutes: true, gear: 'down' })).toEqual([]);
+    expect(alertConditions({ ...calm, flying: false, agl: 0, verticalSpeed: -20 })).toEqual([]);
+    expect(alertConditions({ ...calm, eva: true, noControl: true, power: 0 })).toEqual([]);
+  });
+
+  it('holds alerts briefly so threshold chatter does not flicker, and orders warnings first', () => {
+    const t = new AlertTracker();
+    expect(t.update({ ...calm, gForce: 6.1, heatFraction: 0.95 }, 0).map((a) => a.id)).toEqual(['heat', 'g']);
+    expect(t.update({ ...calm, gForce: 5.9 }, 0.5).map((a) => a.id)).toEqual(['heat', 'g']);
+    expect(t.update(calm, 2)).toEqual([]);
+  });
+});
+
+function orbiting() {
+  const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+  const b = world.universe.body('earth');
+  const r = b.radius + 150000;
+  // Slightly elliptical so apoapsis/periapsis are distinct targets.
+  const wv = spawnRelative(world, buildOrbiter(), 'earth', v3(r, 0, 0), v3(Math.sqrt(b.gm / r) * 0.04, Math.sqrt(b.gm / r) * 1.03, 0));
+  return { world, wv };
+}
+
+describe('time warp feel', () => {
+  it('ramps up the rails rate instead of jumping, and slows down instantly', () => {
+    const { world } = orbiting();
+    const drv = new WarpDriver();
+    world.warp = { mode: 'rails', index: 5 }; // 1000×
+    const dt = 1 / 60;
+    const rates: number[] = [];
+    for (let i = 0; i < 90; i++) {
+      const before = world.ut;
+      world.tick(drv.rampDt(world, dt), neutralInput());
+      rates.push((world.ut - before) / dt);
+    }
+    for (let i = 1; i < rates.length; i++) expect(rates[i]).toBeGreaterThanOrEqual(rates[i - 1] * 0.999);
+    const t90 = rates.findIndex((r) => r > 900) * dt;
+    console.log(`1× → 1000× ramp: 10% at ${(rates.findIndex((r) => r > 100) * dt).toFixed(2)} s, 90% at ${t90.toFixed(2)} s`);
+    expect(rates[0]).toBeLessThan(150);
+    expect(t90).toBeLessThan(1.2);
+    world.warp = { mode: 'rails', index: 2 };
+    const before = world.ut;
+    world.tick(drv.rampDt(world, dt), neutralInput());
+    expect((world.ut - before) / dt).toBeCloseTo(10, 3);
+  }, 60000);
+
+  it('warps to apoapsis and stops just before it', () => {
+    const { world, wv } = orbiting();
+    const opts = warpTargets(world);
+    expect(opts.map((o) => o.id)).toEqual(expect.arrayContaining(['ap', 'pe']));
+    const drv = new WarpDriver();
+    expect(drv.start(world, 'ap')).toBeNull();
+    const target = drv.target!.time;
+    let frames = 0;
+    let maxRate = 0;
+    while (drv.target && frames < 20000) {
+      drv.drive(world, 1 / 60);
+      const before = world.ut;
+      world.tick(drv.rampDt(world, 1 / 60), neutralInput());
+      maxRate = Math.max(maxRate, (world.ut - before) * 60);
+      frames++;
+    }
+    const o = world.orbitSummary(wv);
+    console.log(`warp-to apoapsis: ${frames} frames (${(frames / 60).toFixed(1)} s real), peak ${maxRate.toFixed(0)}×, stopped ${(target - world.ut).toFixed(2)} s before the lead point, T-Ap ${o.timeToAp.toFixed(1)} s`);
+    expect(drv.target).toBeNull();
+    expect(world.warp.index).toBe(0);
+    expect(world.ut).toBeLessThanOrEqual(target + 1e-6);
+    expect(target - world.ut).toBeLessThan(1);
+    expect(o.timeToAp).toBeGreaterThan(10);
+    expect(o.timeToAp).toBeLessThan(20);
+    expect(frames / 60).toBeLessThan(20);
+  }, 60000);
+});

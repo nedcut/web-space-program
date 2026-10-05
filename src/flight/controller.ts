@@ -41,6 +41,7 @@ import type { FlightControllerInternals } from './controller/internals';
 import * as navball from './controller/navball';
 import * as scenarios from './controller/scenarios';
 import * as telemetry from './controller/telemetry';
+import { WarpDriver, type WarpTargetId } from './controller/warp';
 import type { DockingTelemetry, Telemetry } from './hud/Hud';
 import type { NavballFrame, NavballMarker } from './hud/navball';
 import { FlightInput } from './input';
@@ -88,6 +89,10 @@ export class FlightController {
   assist: Autopilot | null = null;
   private assistWarped = false;
   sas: SasMode = 'off';
+  /** Warp-to targets and the rails warp ramp. */
+  readonly warpDriver = new WarpDriver();
+  /** Stage events on the active vessel (the HUD flashes when this changes). */
+  stagedCount = 0;
   sasOn = false;
   rcsOn = false;
   speedMode: Telemetry['speedMode'] = 'surface';
@@ -222,16 +227,17 @@ export class FlightController {
           case 'map': this.toggleMap(); break;
           case 'warpUp': this.changeWarp(1); break;
           case 'warpDown': this.changeWarp(-1); break;
-          case 'warpStop': if (this.network) this.network.send({ v: 1, type: 'warp', rate: 1 }); else this.world.warp = { mode: 'rails', index: 0 }; break;
+          case 'warpStop': this.warpDriver.cancel(this.world); if (this.network) this.network.send({ v: 1, type: 'warp', rate: 1 }); else this.world.warp = { mode: 'rails', index: 0 }; break;
           case 'menu': this.onExit?.(); break;
           case 'focusNext': if (!this.network?.ownId && this.world.focusNextNearby()) this.world.message(`Switched to ${this.world.active!.state.name}`); break;
           case 'quicksave': this.quicksave(); break;
           case 'quickload': if (!this.network) this.onQuickload?.(); break;
-          case 'toggleCamMode': this.world.message(`Camera: ${CAMERA_MODE_INFO[this.cam.cycleMode(!!this.world.active?.state.eva)].label} — ${CAMERA_MODE_INFO[this.cam.mode].hint}`, 'info', 2.5); break;
+          case 'toggleCamMode': this.cycleCameraMode(); break;
         }
       }),
     );
     this.world.onEvent = (e) => {
+      if (e.type === 'stage' && e.vesselId === this.world.activeId) this.stagedCount++;
       if (e.vesselId === this.world.activeId && !game.get().settings.reduceMotion) {
         if (e.type === 'stage') this.cam.addKick(0.35);
         else if (e.type === 'decouple' || e.type === 'structuralFailure') this.cam.addKick(0.6);
@@ -402,8 +408,23 @@ export class FlightController {
   }
 
   changeWarp(delta: number) {
+    if (this.warpDriver.target) this.warpDriver.cancel(this.world, 'Warp-to cancelled');
     if (this.network) this.network.changeWarp(delta);
     else this.world.changeWarp(delta);
+  }
+
+  cycleCameraMode() {
+    const mode = this.cam.cycleMode(!!this.world.active?.state.eva);
+    this.world.message(`Camera: ${CAMERA_MODE_INFO[mode].label} — ${CAMERA_MODE_INFO[mode].hint}`, 'info', 2.5);
+  }
+
+  /** Warp to the next maneuver node / apoapsis / periapsis / SOI change. */
+  warpTo(id: WarpTargetId) {
+    if (this.network || this.paused) return;
+    if (this.assist) return this.world.message('Assist is controlling time warp', 'warn');
+    const err = this.warpDriver.start(this.world, id);
+    if (err) this.world.message(err, 'warn');
+    else this.world.message(`Warping to ${this.warpDriver.target!.label}`, 'info', 2);
   }
 
   stage() {
@@ -517,7 +538,11 @@ export class FlightController {
     }
     const input = assist.driveAssist.call(this, this.systems, wv, ctrl, dt);
     if (this.network) this.network.update(dt, this.paused ? neutralInput() : input);
-    else if (!this.paused) this.world.tick(dt, input);
+    else if (!this.paused) {
+      if (this.assist) this.warpDriver.target = null;
+      else this.warpDriver.drive(this.world, dt);
+      this.world.tick(this.warpDriver.rampDt(this.world, dt), input);
+    }
     if (!this.network && wv && !this.world.active && !this.activeLost) {
       this.activeLost = true;
       this.onActiveLost?.();

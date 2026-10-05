@@ -11,6 +11,8 @@ import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { formatDistance, formatSpeed, formatDuration, formatDate } from '../../ui/format';
 import { Navball, type NavballFrame, type NavballMarker } from './navball';
 import { DockingIndicator, TargetPanel } from './TargetPanel';
+import { AlertStack, CameraModeChip, StageFlash, WarpToControl, type FeelTelemetry } from './FeelHud';
+import type { WarpTargetId } from '../controller/warp';
 
 /** Docking alignment readout: target port relative to the active port's frame (x right, y up, z along axis). */
 export interface DockingTelemetry {
@@ -97,6 +99,8 @@ export interface Telemetry {
   docking: DockingTelemetry | null;
   /** Docking ports of the active vessel that join two halves (undock candidates). */
   dockedPorts: { uid: number; name: string }[];
+  /** Prioritised cautions/warnings, camera mode, stage counter (HUD flash) and warp-to state. */
+  feel: FeelTelemetry;
 }
 
 export interface HudStage {
@@ -124,6 +128,11 @@ export interface HudCallbacks {
   onUndock(portUid?: number): void;
   /** Open the controls help overlay. */
   onHelp?(): void;
+  /** Cycle camera mode (V). */
+  onCameraMode?(): void;
+  /** Warp to an event / cancel warp-to. */
+  onWarpTo?(id: WarpTargetId): void;
+  onCancelWarpTo?(): void;
 }
 
 const SAS_MODES: { id: string; label: string }[] = [
@@ -251,8 +260,10 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
           {t.warpLabel}
         </div>
         <Button className="btn small" onClick={() => cb.onWarp(1)} title="Faster time warp ( . )">▶</Button>
+        <WarpToControl feel={t.feel} onWarpTo={cb.onWarpTo} onCancel={cb.onCancelWarpTo} />
         <Button className={`btn small ${t.mapMode ? 'primary' : ''}`} data-tutorial="map" onClick={cb.onMap} title="Map view (M)">MAP</Button>
-        <span className="mono" style={{ fontSize: 11, color: precision ? 'var(--accent)' : 'var(--text-dim)' }}>{precision ? 'PRECISION' : 'NORMAL'}</span>
+        {precision && <span className="mono" style={{ fontSize: 11, color: 'var(--accent)' }} title="Fine control: attitude input scaled down (Caps Lock / hold Alt)">FINE</span>}
+        {!t.mapMode && <CameraModeChip mode={t.feel.cameraMode} onCycle={cb.onCameraMode} />}
         {gamepadConnected && <span className="mono" style={{ fontSize: 11 }}>PAD{stageProgress ? ` · STAGE ${(stageProgress * 100).toFixed(0)}%` : ''}</span>}
         {cb.onHelp && <Button className="btn small" onClick={cb.onHelp} title="Controls help (F1)">?</Button>}
       </Panel>
@@ -266,15 +277,20 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
       {/* Right column: orbit info + resources (stacked so they never overlap) */}
       <div className="hud-right">
         <Panel className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <Readout label="Apoapsis" value={dash ? '—' : distance(t.apoapsis)} />
-          <Readout label="T-Ap" value={dash ? '—' : formatDuration(t.timeToAp)} />
-          <Readout label="Periapsis" value={dash ? '—' : distance(t.periapsis)} color={!dash && t.periapsis < 0 ? 'var(--bad)' : undefined} />
-          <Readout label="T-Pe" value={dash ? '—' : formatDuration(t.timeToPe)} />
-          <div style={{ height: 6 }} />
+          {/* Only what matters for the current situation: orbit data once off the ground, air data in air. */}
+          {!dash && <>
+            <Readout label="Apoapsis" value={distance(t.apoapsis)} />
+            <Readout label="T-Ap" value={formatDuration(t.timeToAp)} />
+            <Readout label="Periapsis" value={distance(t.periapsis)} color={t.periapsis < 0 ? 'var(--bad)' : undefined} />
+            <Readout label="T-Pe" value={formatDuration(t.timeToPe)} />
+            <div style={{ height: 6 }} />
+          </>}
           <Readout label="Vert. speed" value={speed(t.verticalSpeed)} />
-          <Readout label="G-force" value={t.gForce.toFixed(2)} color={t.gForce > 6 ? 'var(--bad)' : undefined} />
-          <Readout label="Mach" value={t.mach.toFixed(2)} />
-          <Readout label="Dyn. press." value={`${(t.dynamicPressure / 1000).toFixed(1)} kPa`} />
+          <Readout label="G-force" value={t.gForce.toFixed(2)} color={t.gForce > 9 ? 'var(--bad)' : t.gForce > 6 ? 'var(--warn)' : undefined} />
+          {t.dynamicPressure > 1 && <>
+            <Readout label="Mach" value={t.mach.toFixed(2)} />
+            <Readout label="Dyn. press." value={`${(t.dynamicPressure / 1000).toFixed(1)} kPa`} />
+          </>}
         </Panel>
         <ResourceReadouts resources={t.resources} />
 
@@ -332,6 +348,8 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
         </div>
       </div>
 
+      <StageFlash count={t.feel.stagedCount} stage={t.stage} />
+
       {/* Left dock: compact toggles; panels expand underneath and scroll if space runs out. */}
       <div className="hud-dock">
         {dock?.signal}
@@ -355,6 +373,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
 
       {/* Messages */}
       <div style={{ position: 'absolute', top: 100, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', pointerEvents: 'none' }}>
+        <AlertStack alerts={t.feel.alerts} />
         {t.messages.map((m) => (
           <Panel key={m.id} className="panel" style={{ padding: '6px 14px', color: m.level === 'bad' ? 'var(--bad)' : m.level === 'warn' ? 'var(--warn)' : 'var(--text)' }}>
             {m.text}
