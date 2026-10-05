@@ -96,7 +96,7 @@ export const LESSONS: Lesson[] = [
     step('land', 'Keep vertical speed low near the ground. Cut the engine once the lander is safely down.', c => c.world?.active?.body === 'moon' && landed(c)),
   ] },
   { id: 'docking', title: 'Rendezvous & docking', description: 'Target, closest approach and RCS port alignment.', scene: 'flight', craft: buildTender, setup: w => { placeInCircularOrbit(w, w.active!, 'earth', 90000); spawnRendezvousTarget(w, buildTender(), 100); w.setTarget(null); }, steps: [
-    step('target', 'Choose Wren Tender Target in the target selector. Matching orbits brings you close; matching velocity keeps you close.', c => c.world?.targetKind() === 'vessel', '[data-tutorial="target"]'),
+    step('target', 'Open the Target panel, then choose Wren Tender Target in its selector. Matching orbits brings you close; matching velocity keeps you close.', c => c.world?.targetKind() === 'vessel', '[data-tutorial="target"]'),
     step('approach', 'Open the map with M and inspect closest approach. Our practice target starts 100 m ahead; approach slowly rather than accelerating straight at it.', c => !!c.flight?.mapMode && !!c.world?.closestApproach()),
     step('mode', 'Return from the map. Enable docking mode and RCS (R). I/K, J/L and H/N translate; the docking indicator shows port alignment.', c => !!c.flight?.dockingMode && !!c.flight.rcsOn, '[data-tutorial="docking"]'),
     step('dock', 'Align the ports, cancel sideways velocity and close below 0.5 m/s. The collars capture automatically when their faces meet.', c => !!c.world?.active?.state.parts.some(p => !!p.docked)),

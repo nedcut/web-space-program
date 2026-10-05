@@ -34,7 +34,7 @@ export function startLesson(id: string) {
   if (craft && lesson.scene === 'flight') { world.launch(craft); lesson.setup?.(world); }
   delete tutorialContext.world; delete tutorialContext.flight; delete tutorialContext.editor;
   run = { lesson, index: 0, ready: false, skipped: false, finished: false, epoch: ++epoch };
-  game.set({ scene: lesson.scene, craft, mode: 'sandbox', scalePreset: 'standard', ut: DEFAULT_START_UT, resumeWorld: craft && lesson.scene === 'flight' ? serializeWorld(world) : null, launchPending: false });
+  game.set({ trainingActive: true, notice: null, saveId: null, scene: lesson.scene, craft, mode: 'sandbox', scalePreset: 'standard', ut: DEFAULT_START_UT, resumeWorld: craft && lesson.scene === 'flight' ? serializeWorld(world) : null, launchPending: false });
   emit();
 }
 /** Called once per animation frame; React only receives changes in tutorial status. */
@@ -53,7 +53,8 @@ export function advanceTutorial(skip = false) {
 }
 export function endTutorial() {
   run = null;
-  if (prior) game.set({ ...prior, scene: 'training' });
+  delete tutorialContext.world; delete tutorialContext.flight; delete tutorialContext.editor;
+  if (prior) game.set({ ...prior, settings: game.get().settings, scene: 'training' });
   prior = null;
   emit();
 }

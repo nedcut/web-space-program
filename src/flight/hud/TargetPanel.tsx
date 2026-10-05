@@ -7,7 +7,7 @@ export function TargetPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
   const [open, setOpen] = useState(false);
   const tg = t.target;
   return (
-    <div data-tutorial="target" className="panel" style={{ position: 'absolute', left: 10, bottom: 34, width: 250, padding: 10, display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'auto' }}>
+    <div data-tutorial="target" className="panel" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'auto', flexShrink: 0 }}>
       <div className="label" style={{ color: tg ? '#ff4fb8' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={tg?.name}>
         {tg ? `Target · ${tg.name}` : 'No target'}
       </div>
@@ -91,7 +91,7 @@ function dial(v: number, range = 25): number {
 export function DockingIndicator({ d, hasTarget }: { d: DockingTelemetry | null; hasTarget: boolean }) {
   const S = 180;
   const R = S / 2 - 10;
-  const box: CSSProperties = { position: 'absolute', left: 10, top: 110, width: 210, padding: 10, pointerEvents: 'none' };
+  const box: CSSProperties = { padding: 10, pointerEvents: 'none', flexShrink: 0 };
   if (!d) {
     return (
       <div className="panel" style={box}>

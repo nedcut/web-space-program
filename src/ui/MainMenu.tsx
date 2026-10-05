@@ -4,15 +4,15 @@ import { Universe } from '../game/universe';
 import { PART_CATALOG } from '../data/parts';
 import { saveProgram } from '../game/program';
 import { useState } from 'react';
-import { game, updateSettings, useGame, DEFAULT_START_UT, type QualityPreset } from '../game/store';
+import { game, updateSettings, useGame, DEFAULT_START_UT, loadLastCraft, type QualityPreset } from '../game/store';
 import { SCALE_PRESETS, type ScalePresetId } from '../sim/bodies/scale';
 import { MenuBackdrop } from './MenuBackdrop';
-import { hasSave, loadWorldFromStorage } from '../game/persistence';
+import { deleteSave, hasSave, loadWorldFromStorage } from '../game/persistence';
 
 function continueGame() {
   const save = loadWorldFromStorage('autosave') ?? loadWorldFromStorage('quicksave');
   if (!save) return game.set({ scene: 'spaceCenter' });
-  game.set({ resumeWorld: save.data, mode: save.data.mode ?? 'sandbox', scalePreset: save.data.preset, ut: save.data.ut, launchPending: false, scene: 'spaceCenter' });
+  game.set({ resumeWorld: save.data, mode: save.data.mode ?? 'sandbox', scalePreset: save.data.preset, ut: save.data.ut, launchPending: false, craft: game.get().craft ?? loadLastCraft(), scene: 'spaceCenter' });
 }
 
 const SCALE_INFO: Record<ScalePresetId, { label: string; blurb: string }> = {
@@ -68,12 +68,17 @@ export function MainMenu() {
                 </label>
               ))}
             </div>
+            {hasSave('autosave') && (
+              <p style={{ fontSize: 12, color: 'var(--warn)', margin: '14px 0 0' }}>Starting a new program replaces your current saved program.</p>
+            )}
             <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
               <button className="btn ghost" onClick={() => setPanel('root')}>Back</button>
               <button
                 className="btn primary"
                 onClick={() => {
                   const world = new World(new Universe(scale), PART_CATALOG, DEFAULT_START_UT, mode);
+                  // A quicksave from the previous program must not be quickloadable into the new one.
+                  deleteSave('quicksave');
                   saveProgram(world);
                   game.set({ mode, scalePreset: scale, saveId: `${mode}-${Date.now()}`, craft: null, launchPending: false, ut: DEFAULT_START_UT, scene: 'spaceCenter' });
                 }}

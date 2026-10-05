@@ -6,8 +6,8 @@ import { PART_CATALOG } from '../src/data/parts';
 import { DEFAULT_START_UT, game } from '../src/game/store';
 import { EditorSession } from '../src/editor/session';
 import { buildSoundingRocket } from '../src/editor/stockCrafts';
-import { neutralInput } from '../src/sim/vessel';
-import { placeInCircularOrbit } from '../src/game/scenarios';
+import { neutralInput, freePorts, mergeVessels } from '../src/sim/vessel';
+import { placeInCircularOrbit, placeOnSurface } from '../src/game/scenarios';
 import { serializeWorld, deserializeWorld } from '../src/game/persistence';
 import { COMPLETION_KEY, startLesson, getTutorial, endTutorial, tickTutorial, advanceTutorial, readCompletions, saveCompletion } from '../src/tutorial/runtime';
 
@@ -110,6 +110,44 @@ describe('training definitions and deterministic scenarios', () => {
     expect(moon.active!.state.parts.some(p => p.engine?.ignited)).toBe(true);
     expect(moon.active!.state.parts.some(p => p.partId === 'eng-chinook')).toBe(false);
   });
+  it('observes lunar descent, terrain clearance, landing and docking state', () => {
+    const world = setup('moon-landing');
+    expect(predicate('moon-landing', 'radar', { world })).toBe(false);
+    expect(predicate('moon-landing', 'land', { world })).toBe(false);
+    world.active!.state.parts.find(p => p.leg)!.leg!.deployed = true;
+    expect(predicate('moon-landing', 'legs', { world })).toBe(true);
+    placeInCircularOrbit(world, world.active!, 'moon', 1000);
+    expect(predicate('moon-landing', 'radar', { world })).toBe(true);
+    const up = world.relativeState(world.active!).position;
+    const r = Math.hypot(up.x, up.y, up.z);
+    world.active!.state.velocity.x -= 20 * up.x / r;
+    world.active!.state.velocity.y -= 20 * up.y / r;
+    world.active!.state.velocity.z -= 20 * up.z / r;
+    expect(predicate('moon-landing', 'descent', { world })).toBe(true);
+    expect(predicate('moon-landing', 'burn', { world })).toBe(false);
+    world.active!.state.telemetry.thrust = 100;
+    expect(predicate('moon-landing', 'burn', { world })).toBe(true);
+    placeOnSurface(world, world.active!, 'moon');
+    expect(predicate('moon-landing', 'land', { world })).toBe(true);
+    const dock = setup('docking');
+    expect(predicate('docking', 'dock', { world: dock })).toBe(false);
+    // A real simulated docking operation joins the practice target to the active craft.
+    const target = [...dock.vessels.values()].find(v => v !== dock.active)!;
+    const a = freePorts(dock.active!.state)[0].part;
+    const b = freePorts(target.state)[0].part;
+    mergeVessels(dock.active!.state, target.state, a.uid, b.uid);
+    expect(predicate('docking', 'dock', { world: dock })).toBe(true);
+  });
+  it('observes aircraft acceleration, flight and stopped touchdown', () => {
+    const world = setup('plane');
+    expect(predicate('plane', 'runway', { world })).toBe(false);
+    expect(predicate('plane', 'rotate', { world })).toBe(false);
+    placeInCircularOrbit(world, world.active!, 'earth', 1000);
+    expect(predicate('plane', 'runway', { world })).toBe(true);
+    expect(predicate('plane', 'rotate', { world })).toBe(true);
+    placeOnSurface(world, world.active!, 'earth');
+    expect(predicate('plane', 'return', { world })).toBe(true);
+  });
   it('starts EVA on terrain with a crewed cabin and supports going outside and boarding', () => {
     const world = setup('eva');
     expect(world.active!.body).toBe('moon');
@@ -118,6 +156,11 @@ describe('training definitions and deterministic scenarios', () => {
     expect(world.goEva()).not.toBeNull();
     expect(predicate('eva', 'eva', { world })).toBe(true);
     expect(predicate('eva', 'board', { world })).toBe(false);
+    world.active!.state.parts[0].resources.monopropellant = 4;
+    expect(predicate('eva', 'jetpack', { world })).toBe(true);
+    world.active!.state.situation = 'landed';
+    world.plantFlag();
+    expect(predicate('eva', 'flag', { world })).toBe(true);
     expect(world.boardEva()).toBe(true);
     expect(predicate('eva', 'board', { world })).toBe(true);
   });
@@ -125,7 +168,7 @@ describe('training definitions and deterministic scenarios', () => {
 describe('training progression and storage', () => {
   function storage() {
     const data = new Map<string, string>();
-    vi.stubGlobal('localStorage', { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => data.set(key, value) });
+    vi.stubGlobal('localStorage', { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => data.set(key, value), removeItem: (key: string) => data.delete(key) });
     return data;
   }
   it('latches a goal, blocks premature Next, restarts, and restores the original program', () => {
@@ -149,6 +192,18 @@ describe('training progression and storage', () => {
     expect(game.get().mode).toBe(original.mode);
     expect(game.get().scene).toBe('training');
     editor.dispose();
+  });
+  it('keeps the remembered editor craft intact and retains settings changed during practice', () => {
+    const data = storage();
+    data.set('wsp.craft.v1', 'previous saved craft');
+    startLesson('plane');
+    expect(game.get().trainingActive).toBe(true);
+    expect(data.get('wsp.craft.v1')).toBe('previous saved craft');
+    game.set({ settings: { ...game.get().settings, masterVolume: 0.25 } });
+    endTutorial();
+    expect(game.get().trainingActive).toBe(false);
+    expect(data.get('wsp.craft.v1')).toBe('previous saved craft');
+    expect(game.get().settings.masterVolume).toBe(0.25);
   });
   it('only awards a checkmark after all goals; skipped steps never award completion', () => {
     storage();
