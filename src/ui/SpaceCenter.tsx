@@ -1,6 +1,6 @@
 import { photoMode } from '../game/photoMode';
 import { openProgram } from '../game/program';
-import { saveWorldToStorage } from '../game/persistence';
+import { saveNamedWorld } from '../game/persistence';
 import { launchProblem } from '../data/technology';
 import { PART_CATALOG } from '../data/parts';
 import { newProgression } from '../sim/science/progression';
@@ -68,7 +68,7 @@ export function SpaceCenter() {
           ))}
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-          <button className="btn small" onClick={() => { const name = window.prompt('Save slot name', 'Program save'); if (name?.trim()) { try { saveWorldToStorage(name.trim().slice(0, 200), openProgram()); setNotice('Program saved.'); } catch (e) { setNotice((e as Error).message); } } }}>Save as…</button>
+          <button className="btn small" onClick={() => { const name = window.prompt('Save slot name', 'Program save'); if (name?.trim()) { try { saveNamedWorld(name, openProgram()); setNotice('Program saved.'); } catch (e) { setNotice((e as Error).message); } } }}>Save as…</button>
           <button className="btn small" onClick={() => game.set({ scene: 'menu' })}>Main menu</button>
           <button className="btn" onClick={() => void import('./Spacepedia').then(m => m.openPedia('spaceCenter'))}>Spacepedia</button>
           <button className="btn small" onClick={() => photoMode.open()}>Photo mode (P)</button>

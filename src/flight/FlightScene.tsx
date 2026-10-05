@@ -16,7 +16,7 @@ import { HelpOverlay, helpSeen, markHelpSeen } from './hud/HelpOverlay';
 import { SettingsPanel } from '../ui/MainMenu';
 import type { CraftDef } from '../sim/vessel/types';
 import { isTyping, matches } from '../input/bindings';
-import { hasSave } from '../game/persistence';
+import { hasSave, saveNamedWorld } from '../game/persistence';
 
 export default function FlightScene() {
   const photo = usePhotoMode();
@@ -324,7 +324,7 @@ export default function FlightScene() {
               )}
               {launched.current && <button className="btn" onClick={revertToLaunch}>Revert to launch</button>}
               {launched.current && <button className="btn" onClick={revert}>Revert to editor</button>}
-              {!lost && !getTutorial() && <button className="btn" onClick={() => { const name = window.prompt('Save slot name', 'Mission save'); if (name?.trim()) ctrl.current?.quicksave(name.trim().slice(0, 200)); }}>Save as…</button>}
+              {!lost && !getTutorial() && <button className="btn" onClick={() => { const name = window.prompt('Save slot name', 'Mission save'); if (name?.trim() && ctrl.current) { try { saveNamedWorld(name, ctrl.current.world); ctrl.current.world.message('Mission saved.'); } catch (e) { ctrl.current.world.message((e as Error).message, 'bad'); } } }}>Save as…</button>}
               {!lost && !getTutorial() && <button className="btn" onClick={() => ctrl.current?.quicksave()}>Quicksave <span className="kbd" style={{ marginLeft: 6 }}>F5</span></button>}
               {!lost && !getTutorial() && hasSave('quicksave') && <button className="btn" onClick={() => ctrl.current?.onQuickload?.()}>Quickload <span className="kbd" style={{ marginLeft: 6 }}>F9</span></button>}
               <button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls <span className="kbd" style={{ marginLeft: 6 }}>F1</span></button>

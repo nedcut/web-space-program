@@ -27,6 +27,7 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
         className="vab-name"
         value={view.name}
         spellCheck={false}
+        maxLength={200}
         onChange={(e) => session.setName(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
         title="Craft name"

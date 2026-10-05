@@ -123,7 +123,7 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
 
 const KEY_PREFIX = 'wsp.world.v1.';
 
-export function saveWorldToStorage(slot: string, world: World) {
+export function saveWorldToStorage(slot: string, world: World, displayName?: string) {
   // Preserve pre-slot programs before replacing the legacy compatibility keys.
   if (!listSaveSlots().length) for (const legacyName of ['autosave', 'quicksave']) {
     const raw = localStorage.getItem(KEY_PREFIX + legacyName);
@@ -136,7 +136,7 @@ export function saveWorldToStorage(slot: string, world: World) {
   }
   const data = serializeWorld(world), savedAt = Date.now();
   const programId = game.get().saveId ?? 'legacy-program';
-  writeSaveSlot({ id: slot === 'autosave' ? localId() : `${programId}:${slot}`, programId, name: slot === 'autosave' ? 'Autosave' : slot === 'quicksave' ? 'Quicksave' : slot, kind: slot === 'autosave' ? 'auto' : 'manual', savedAt, data });
+  writeSaveSlot({ id: slot === 'autosave' ? localId() : `${programId}:${slot}`, programId, name: displayName ?? (slot === 'autosave' ? 'Autosave' : slot === 'quicksave' ? 'Quicksave' : slot), kind: slot === 'autosave' ? 'auto' : 'manual', savedAt, data });
   localStorage.setItem(KEY_PREFIX + slot, JSON.stringify({ savedAt, data }));
 }
 
@@ -166,4 +166,12 @@ export function deleteSave(slot: string) {
   } catch {
     /* storage unavailable */
   }
+}
+
+
+/** Manual names cannot collide with the reserved autosave/quicksave channels. */
+export function saveNamedWorld(name: string, world: World) {
+  name = name.trim().slice(0, 200);
+  if (!name) throw new Error('A save slot needs a name.');
+  saveWorldToStorage(`manual:${name}`, world, name);
 }

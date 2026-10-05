@@ -16,7 +16,7 @@ export function listSaveSlots(storage: SlotStorage = localStorage): SaveSlot[] {
 export function writeSaveSlot(slot: SaveSlot, storage: SlotStorage = localStorage): void {
   const all = listSaveSlots(storage).filter(x => x.id !== slot.id);
   all.push(slot);
-  const autos = all.filter(x => x.programId === slot.programId && x.kind === 'auto').sort((a, b) => b.savedAt - a.savedAt || (a.id === slot.id ? -1 : b.id === slot.id ? 1 : 0));
+  const autos = all.filter(x => x.programId === slot.programId && x.kind === 'auto').sort((a, b) => b.savedAt - a.savedAt || all.indexOf(b) - all.indexOf(a));
   const discarded = new Set(autos.slice(3).map(x => x.id));
   storage.setItem(SLOTS_KEY, JSON.stringify(all.filter(x => !discarded.has(x.id))));
 }

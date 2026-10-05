@@ -5,7 +5,7 @@ import { CRAFTS_KEY, migrateCrafts, type CraftRepository, type LibraryCraft } fr
 import { exportSaveSlot, importSaveSlot, listSaveSlots, writeSaveSlot, type SaveSlot } from '../src/game/saveSlots';
 import type { CraftDef } from '../src/sim/vessel/types';
 import { game } from '../src/game/store';
-import { loadWorldFromStorage, saveWorldToStorage, serializeWorld } from '../src/game/persistence';
+import { loadWorldFromStorage, saveNamedWorld, saveWorldToStorage, serializeWorld } from '../src/game/persistence';
 import { World } from '../src/game/world';
 import { Universe } from '../src/game/universe';
 const craft: CraftDef = { version: 1, type: 'VAB', name: 'Orbiter 🚀', parts: [{ uid: 0, partId: PART_CATALOG.keys().next().value!, position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0, w: 1 } }] };
@@ -91,7 +91,7 @@ describe('save slots', () => {
   });
   it('retains the newest insertion when timestamps tie, and replaces named slots', () => {
     const store = storage(); for (let n = 1; n <= 5; n++) writeSaveSlot(slot(String(n), 'A', 'auto', 1), store);
-    expect(listSaveSlots(store).filter(x => x.kind === 'auto')).toHaveLength(3); expect(listSaveSlots(store).some(x => x.id === '5')).toBe(true);
+    expect(listSaveSlots(store).filter(x => x.kind === 'auto')).toHaveLength(3); expect(listSaveSlots(store).map(x => x.id).sort()).toEqual(['3', '4', '5']);
     writeSaveSlot(slot('named', 'A', 'manual', 6), store); writeSaveSlot({ ...slot('named', 'A', 'manual', 7), name: 'Updated' }, store);
     expect(listSaveSlots(store).filter(x => x.id === 'named')).toHaveLength(1);
   });
@@ -122,6 +122,8 @@ describe('program save integration', () => {
       expect(loadWorldFromStorage('quicksave')).toBeNull();
       game.set({ saveId: 'new-program' });
       expect(loadWorldFromStorage('quicksave')?.data.ut).toBe(321);
+      saveNamedWorld('autosave', world);
+      expect(listSaveSlots(store).find(x => x.id === 'new-program:manual:autosave')?.kind).toBe('manual');
     } finally { game.set({ saveId: previous }); vi.unstubAllGlobals(); }
   });
 });
