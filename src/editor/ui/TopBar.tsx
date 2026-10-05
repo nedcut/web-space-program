@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { encodeCraft, downloadFile, craftFilename } from '../../game/craftSharing';
 import { useGame } from '../../game/store';
 import { launchCost } from '../../data/technology';
 import { PART_CATALOG } from '../../data/parts';
@@ -5,7 +7,12 @@ import type { EditorSession, SessionView } from '../session';
 import { Icon } from './icons';
 import { fmtDv, fmtKg } from './partInfo';
 
-export function TopBar({ session, view, onLoad, onNew }: { session: EditorSession; view: SessionView; onLoad(): void; onNew(): void }) {
+export function TopBar({ session, view, onLoad, onNew, onImport }: { session: EditorSession; view: SessionView; onLoad(): void; onNew(): void; onImport(): void }) {
+  const [share, setShare] = useState('');
+  const [shareError, setShareError] = useState('');
+  async function copy() {
+    try { const code = await encodeCraft(session.currentCraft()); setShare(code); setShareError(''); try { await navigator.clipboard.writeText(code); } catch { setShareError('Select the code below and copy it.'); } } catch (e) { setShareError((e as Error).message); }
+  }
   const mode = useGame(s => s.mode);
   const funds = useGame(s => s.resumeWorld?.progression?.funds ?? 60000);
   const cost = launchCost(view.craft, PART_CATALOG);
@@ -20,10 +27,17 @@ export function TopBar({ session, view, onLoad, onNew }: { session: EditorSessio
         className="vab-name"
         value={view.name}
         spellCheck={false}
+        maxLength={200}
         onChange={(e) => session.setName(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
         title="Craft name"
       />
+      <div className="vab-group vab-sharing">
+        <button className="btn small" disabled={!view.craft.parts.length} onClick={() => void copy()}>Copy share code</button>
+        <button className="btn small" onClick={() => downloadFile(craftFilename(view.name), JSON.stringify(session.currentCraft()))}>Export</button>
+        <button className="btn small" onClick={onImport}>Import</button>
+      </div>
+      {(share || shareError) && <div className="panel" style={{ position: 'absolute', top: 70, left: '25%', width: '50%', padding: 12, zIndex: 50 }}><p>{shareError || 'Share code copied. Paste it into Import vehicle.'}</p><textarea aria-label="Generated share code" readOnly value={share} onFocus={e => e.target.select()} style={{ width: '100%' }} /><button className="btn small" onClick={() => { setShare(''); setShareError(''); }}>Close</button></div>}
       <div className="vab-group">
         <button className="vab-ibtn" title="New craft" onClick={onNew}><Icon name="new" /></button>
         <button className="vab-ibtn" title="Load craft" onClick={onLoad}><Icon name="load" /></button>

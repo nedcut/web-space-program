@@ -1,3 +1,4 @@
+import { photoMode, usePhotoMode } from '../game/photoMode';
 import { SignalPanel } from './hud/SignalPanel';
 import { MultiplayerPanel } from '../net/MultiplayerPanel';
 import { ResourcePanel } from './hud/ResourcePanel';
@@ -16,9 +17,10 @@ import { HelpOverlay, helpSeen, markHelpSeen } from './hud/HelpOverlay';
 import { SettingsPanel } from '../ui/MainMenu';
 import type { CraftDef } from '../sim/vessel/types';
 import { isTyping, matches } from '../input/bindings';
-import { hasSave } from '../game/persistence';
+import { hasSave, saveNamedWorld } from '../game/persistence';
 
 export default function FlightScene() {
+  const photo = usePhotoMode();
   const host = useRef<HTMLDivElement>(null);
   const ctrl = useRef<FlightController | null>(null);
   const multiplayer = game.get().multiplayer;
@@ -158,9 +160,9 @@ export default function FlightScene() {
 
   const awaitingTelemetry = tele === null;
   useEffect(() => {
-    if (ctrl.current) ctrl.current.paused = paused;
-    if (paused) audioRef.current?.silenceFlight();
-  }, [paused, awaitingTelemetry]);
+    if (ctrl.current) ctrl.current.paused = paused || photo.active;
+    if (paused || photo.active) audioRef.current?.silenceFlight();
+  }, [paused, awaitingTelemetry, photo.active]);
 
   // Input reads settings each frame; planet quality, clouds and scattering rebuild from a snapshot.
   useEffect(() => {
@@ -258,7 +260,7 @@ export default function FlightScene() {
     <div className="fullscreen">
       {/* The controller appends its canvas here; React overlays are later siblings so they stay on top. */}
       <div className="fullscreen" ref={host} />
-      {tele && c && (
+      {tele && c && !photo.active && (
         <Hud
           shortcutsEnabled={ready && !paused && !help && !showSettings}
           precision={c.input.precisionActive}
@@ -295,8 +297,8 @@ export default function FlightScene() {
           }}
         />
       )}
-      {settings.showFps && c && <PerformanceReadout controller={c} />}
-      {help && ready && <HelpOverlay eva={!!tele?.eva} onClose={closeHelp} />}
+      {settings.showFps && c && !photo.active && <PerformanceReadout controller={c} />}
+      {help && ready && !photo.active && <HelpOverlay eva={!!tele?.eva} onClose={closeHelp} />}
       {networkReady && c?.network && <MultiplayerPanel client={c.network} />}
       {paused && multiplayer && (
         <div className="modal-backdrop">
@@ -308,13 +310,14 @@ export default function FlightScene() {
           </div>
         </div>
       )}
-      {paused && !multiplayer && (
+      {paused && !multiplayer && !photo.active && (
         <div className="modal-backdrop">
           {showSettings ? (
             <SettingsPanel onClose={() => setShowSettings(false)} />
           ) : (
             <div className="panel" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 280 }}>
               <div className="label" style={{ textAlign: 'center', color: lost ? 'var(--bad)' : undefined }}>{lost ? 'Vessel lost' : 'Paused'}</div>
+              {!lost && <button className="btn" onClick={() => photoMode.open()}>Photo mode (P)</button>}
               {!lost && <button className="btn primary" onClick={() => setPaused(false)}>Resume <span className="kbd" style={{ marginLeft: 6 }}>Esc</span></button>}
               {getTutorial() && <button className="btn" onClick={() => startLesson(getTutorial()!.lesson.id)}>Restart lesson</button>}
               {lost && !getTutorial() && hasSave('quicksave') && <button className="btn primary" onClick={() => ctrl.current?.onQuickload?.()}>Load quicksave</button>}
@@ -323,6 +326,7 @@ export default function FlightScene() {
               )}
               {launched.current && <button className="btn" onClick={revertToLaunch}>Revert to launch</button>}
               {launched.current && <button className="btn" onClick={revert}>Revert to editor</button>}
+              {!lost && !getTutorial() && <button className="btn" onClick={() => { const name = window.prompt('Save slot name', 'Mission save'); if (name?.trim() && ctrl.current) { try { saveNamedWorld(name, ctrl.current.world); ctrl.current.world.message('Mission saved.'); } catch (e) { ctrl.current.world.message((e as Error).message, 'bad'); } } }}>Save as…</button>}
               {!lost && !getTutorial() && <button className="btn" onClick={() => ctrl.current?.quicksave()}>Quicksave <span className="kbd" style={{ marginLeft: 6 }}>F5</span></button>}
               {!lost && !getTutorial() && hasSave('quicksave') && <button className="btn" onClick={() => ctrl.current?.onQuickload?.()}>Quickload <span className="kbd" style={{ marginLeft: 6 }}>F9</span></button>}
               <button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls <span className="kbd" style={{ marginLeft: 6 }}>F1</span></button>

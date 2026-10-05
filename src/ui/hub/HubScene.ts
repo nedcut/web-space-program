@@ -1,3 +1,4 @@
+import { PhotoCamera } from '../../render/core/PhotoCamera';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RenderPipeline, getQuality, type QualityId } from '../../render/core';
@@ -69,6 +70,7 @@ export function findGoldenHour(u: Universe, site: LaunchSite, t0: number, elev =
  * them; clicking calls `onPick`.
  */
 export class HubScene {
+  private photo: PhotoCamera;
   private universe: Universe;
   private pipeline: RenderPipeline;
   private scene = new THREE.Scene();
@@ -101,6 +103,7 @@ export class HubScene {
     const canvas = this.pipeline.renderer.domElement;
     Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block' });
     host.appendChild(canvas);
+    this.photo = new PhotoCamera(this.pipeline, this.scene, this.camera, () => this.vessel?.view.root.position.clone() ?? this.site.root.position.clone(), () => true, 2000);
 
     this.stars = new Starfield({ count: q.stars.count, milkyWay: q.stars.milkyWay, seed: 7 });
     this.scene.add(this.stars.group, this.glare.mesh);
@@ -156,7 +159,7 @@ export class HubScene {
       this.pointer = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     };
     const onClick = (e: MouseEvent) => {
-      if (this.isUi(e.target) || !this.hovered) return;
+      if (this.photo.active || this.isUi(e.target) || !this.hovered) return;
       this.opts.onPick?.(this.hovered);
     };
     window.addEventListener('pointermove', onMove);
@@ -218,7 +221,7 @@ export class HubScene {
     this.raf = requestAnimationFrame(this.frame);
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
-    this.elapsed += dt;
+    if (!this.photo.active) this.elapsed += dt;
     this.render(dt);
   };
 
@@ -244,14 +247,16 @@ export class HubScene {
       local.set(Math.cos(a) * d, h, Math.sin(a) * d);
       target.set(tx, ty, tz);
     }
+    if (!this.photo.active) {
     this.camera.position.copy(local).applyQuaternion(frame).add(this.site.root.position);
     this.camera.up.set(0, 1, 0).applyQuaternion(frame);
     this.camera.lookAt(target.applyQuaternion(frame).add(this.site.root.position));
+    } else this.photo.update(dt);
     this.camera.near = 1;
     this.camera.updateProjectionMatrix();
     this.camera.updateMatrixWorld();
 
-    if (this.vessel) this.vessel.view.update(origin, this.elapsed, 101325, dt);
+    if (this.vessel) this.vessel.view.update(origin, this.elapsed, 101325, this.photo.active ? 0 : dt);
 
     // Sun light with a shadow frustum covering the pad area.
     const sd = new THREE.Vector3(sunPos.x - origin.x, sunPos.y - origin.y, sunPos.z - origin.z).normalize();
@@ -283,7 +288,7 @@ export class HubScene {
 
     // Hover picking.
     let hit: SiteObjectId | null = null;
-    if (this.pointer) {
+    if (this.pointer && !this.photo.active) {
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const hits = this.raycaster.intersectObjects(this.site.pickables, false);
       hit = (hits[0]?.object.userData.siteId as SiteObjectId | undefined) ?? null;
@@ -299,6 +304,7 @@ export class HubScene {
   }
 
   dispose() {
+    this.photo.dispose();
     cancelAnimationFrame(this.raf);
     this.disposers.forEach((d) => d());
     document.body.style.cursor = '';

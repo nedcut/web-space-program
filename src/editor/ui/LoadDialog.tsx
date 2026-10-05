@@ -1,4 +1,7 @@
-import { useMemo, useState } from 'react';
+import { localId } from '../../util/localId';
+import { listLibrary, saveLibraryItem, craftRepository, type LibraryCraft } from '../../game/saves';
+import { CraftThumbnail } from './CraftThumbnail';
+import { useEffect, useMemo, useState } from 'react';
 import { game, useGame } from '../../game/store';
 import { Universe } from '../../game/universe';
 import { partUnlocked } from '../../data/technology';
@@ -32,8 +35,19 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
     const craft = s.build();
     return { ...s, craft, info: summary(craft) };
   }), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const saved = useMemo(() => session.listSaved().map((c) => ({ craft: c, info: summary(c) })), [rev, session]);
+  const [saved, setSaved] = useState<LibraryCraft[]>([]);
+  const [query, setQuery] = useState('');
+  const [folder, setFolder] = useState('');
+  const [error, setError] = useState('');
+  useEffect(() => { let live = true; void listLibrary().then(items => { if (live) setSaved(items); }).catch(e => { if (live) setError((e as Error).message); }); return () => { live = false; }; }, [rev]);
+  const refresh = (action: Promise<unknown>) => void action.then(() => setRev(r => r + 1)).catch(e => setError((e as Error).message));
+  function edit(item: LibraryCraft, field: 'name' | 'folder' | 'tags') {
+    const value = window.prompt(`Vehicle ${field}`, field === 'name' ? item.craft.name : field === 'folder' ? item.folder : item.tags.join(', '));
+    if (value === null || (field === 'name' && !value.trim())) return;
+    if (field === 'name' && saved.some(x => x.id !== item.id && x.craft.name === value.trim())) { setError('That vehicle name is already used.'); return; }
+    refresh(saveLibraryItem({ ...item, updatedAt: Date.now(), craft: field === 'name' ? { ...item.craft, name: value.trim().slice(0, 200) } : item.craft, folder: field === 'folder' ? value.trim() : item.folder, tags: field === 'tags' ? [...new Set(value.split(',').map(t => t.trim()).filter(Boolean))] : item.tags }));
+  }
+  const visible = saved.filter(item => (!folder || item.folder === folder) && `${item.craft.name} ${item.folder} ${item.tags.join(' ')}`.toLowerCase().includes(query.toLowerCase()));
 
   const load = (c: CraftDef) => {
     session.load(c);
@@ -64,27 +78,22 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
           ))}
         </div>
         <div className="vab-modal-section label">Saved vehicles</div>
+        <div style={{ display: 'flex', gap: 8 }}><input aria-label="Search craft library" placeholder="Search names, folders, tags" value={query} onChange={e => setQuery(e.target.value)} /><select aria-label="Craft folder" value={folder} onChange={e => setFolder(e.target.value)}><option value="">All folders</option>{[...new Set(saved.map(x => x.folder).filter(Boolean))].sort().map(f => <option key={f}>{f}</option>)}</select></div>
+        {error && <p role="alert">{error}</p>}
         <div className="vab-saved">
-          {saved.map(({ craft, info }) => (
-            <div key={craft.name} className="vab-saved-row">
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="vab-saved-name">{craft.name}</div>
-                <div className="vab-saved-info mono">{info}</div>
-              </div>
-              <button className="btn small" onClick={() => load(craft)}>Load</button>
-              <button
-                className="btn small danger"
-                title="Delete"
-                onClick={() => {
-                  session.deleteSaved(craft.name);
-                  setRev((r) => r + 1);
-                }}
-              >
-                <Icon name="trash" size={14} />
-              </button>
+          {visible.map(item => (
+            <div key={item.id} className="vab-saved-row" style={{ flexWrap: 'wrap' }}>
+              <CraftThumbnail craft={item.craft} />
+              <div style={{ flex: 1, minWidth: 150 }}><div className="vab-saved-name">{item.craft.name}</div><div className="vab-saved-info mono">{summary(item.craft)}</div><small>{item.folder || 'Unfiled'} · {item.tags.join(', ')}</small></div>
+              <button className="btn small" onClick={() => load(item.craft)}>Load</button>
+              <button className="btn small" onClick={() => edit(item, 'name')}>Rename</button>
+              <button className="btn small" onClick={() => edit(item, 'folder')}>Folder</button>
+              <button className="btn small" onClick={() => edit(item, 'tags')}>Tags</button>
+              <button className="btn small" onClick={() => { let name = `${item.craft.name} copy`; let n = 2; while (saved.some(x => x.craft.name === name)) name = `${item.craft.name} copy ${n++}`; refresh(saveLibraryItem({ ...item, id: localId(), craft: { ...item.craft, name }, updatedAt: Date.now() })); }}>Duplicate</button>
+              <button className="btn small danger" title="Delete" onClick={() => refresh(craftRepository.remove(item.id))}><Icon name="trash" size={14} /></button>
             </div>
           ))}
-          {!saved.length && <div className="vab-empty">No saved vehicles yet. Use Save (Ctrl+S) to keep your designs.</div>}
+          {!visible.length && <div className="vab-empty">No matching vehicles. Use Save (Ctrl+S) to keep your designs.</div>}
         </div>
       </div>
     </div>

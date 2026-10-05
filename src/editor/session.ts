@@ -233,22 +233,22 @@ export class EditorSession {
     return { ...this.editor.craft, name: this.name.trim() || 'Untitled Craft' };
   }
 
-  save() {
+  async save() {
     const craft = this.currentCraft();
     if (!craft.parts.length) return this.toast('Nothing to save yet', 'warn');
     try {
-      saveCraft(craft);
+      await saveCraft(craft);
       this.toast(`Saved "${craft.name}"`, 'good');
     } catch {
       this.toast('Could not save (storage unavailable)', 'bad');
     }
   }
 
-  listSaved(): CraftDef[] {
+  listSaved(): Promise<CraftDef[]> {
     return listCrafts();
   }
-  deleteSaved(name: string) {
-    deleteCraft(name);
+  async deleteSaved(name: string) {
+    await deleteCraft(name);
     this.touch();
   }
 

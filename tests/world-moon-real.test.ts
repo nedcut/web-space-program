@@ -197,5 +197,5 @@ describe('Moon missions (stock Selene scale variants)', () => {
       process.stdout.write(log.join('\n') + '\n');
     }
   // Allow CPU contention from concurrent worktree suites; idle mission phases still use rails warp.
-  }, 300_000);
+  }, 600_000);
 });

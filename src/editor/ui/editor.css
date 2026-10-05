@@ -207,3 +207,6 @@
   .vab-name { width: 150px; }
 }
 .vab-stock-locked { font-size: 10.5px; color: var(--warn); margin-top: 4px; }
+
+/* Sharing actions stay below the primary toolbar so launch controls remain visible. */
+.vab-sharing { position: absolute; top: 64px; left: 330px; background: rgba(10, 15, 26, 0.9); }
