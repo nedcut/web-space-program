@@ -26,10 +26,11 @@ import {
 } from './builders/structure';
 import { buildDockingPort, buildHeatShield, buildLandingLeg, buildLight, buildParachute, buildRcsQuad, buildReactionWheel } from './builders/utility';
 import { disposeMaterials, M } from './materials';
-import type { DeployData } from './geom';
+import { withDetail, type DeployData } from './geom';
 
 export { createPlume, type Plume, type PlumeParams, type PlumeOptions } from './plume';
 export { disposeMaterials } from './materials';
+export { partTexturesReady } from './textures';
 export { setGearPose } from './builders/aircraft';
 
 /**
@@ -106,15 +107,24 @@ function fallback(def: PartDef): THREE.Object3D {
 
 const templates = new Map<string, THREE.Object3D>();
 
+/** Part mesh level of detail: 'high' (default) or 'low' (half tessellation, no decals). */
+export type PartDetail = 'high' | 'low';
+let defaultDetail: PartDetail = 'high';
+/** Default detail for subsequently built part meshes (driven by the quality preset). */
+export function setPartDetail(d: PartDetail) {
+  defaultDetail = d;
+}
+
 /**
  * Build (or clone from cache) the mesh for a part. Clones share geometry and materials, so they
  * are cheap; do not dispose their geometries individually — call disposePartMeshCache().
  */
-export function buildPartMesh(def: PartDef): THREE.Object3D {
-  let t = templates.get(def.id);
+export function buildPartMesh(def: PartDef, detail: PartDetail = defaultDetail): THREE.Object3D {
+  const key = detail === 'high' ? def.id : `${def.id}:low`;
+  let t = templates.get(key);
   if (!t) {
     const builder = MESH_BUILDERS[def.mesh] ?? fallback;
-    t = builder(def);
+    t = withDetail(detail === 'high' ? 1 : 0.5, () => builder(def));
     t.name = def.id;
     t.userData.partId = def.id;
     setPartDeploy(t, 0);

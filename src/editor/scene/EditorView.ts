@@ -1,7 +1,6 @@
 import { LinkView } from '../../render/vessel/LinkView';
 import { isTyping, matches } from '../../input/bindings';
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { game } from '../../game/store';
 import type { PartInstance } from '../../sim/vessel/types';
 import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../../util/quat';
@@ -9,6 +8,7 @@ import { add, sub, v3, type Vec3 } from '../../util/vec3';
 import { alignNodes, freeAttachNodes, mirrorPosition, mirrorRotation, type WorldAttachNode } from '../core';
 import { CATALOG, type EditorSession, type Placement, type SessionView } from '../session';
 import { surfaceTransform } from '../surface';
+import { createStudioEnvironment } from '../../render/core/studioEnv';
 import { buildHangar, HANGAR, type Hangar } from './hangar';
 import { createPartMesh } from './partMesh';
 import { setLightAppearance } from '../../render/parts';
@@ -16,6 +16,8 @@ import { setLightAppearance } from '../../render/parts';
 const DEG = Math.PI / 180;
 const SNAP_PX = 64;
 const UP = v3(0, 1, 0);
+/** Key light offset from its target (the craft centre); the shadow frustum follows the craft. */
+const KEY_OFFSET = { x: 25, y: 36, z: 5 } as const;
 
 const toV = (v: Vec3, out = new THREE.Vector3()) => out.set(v.x, v.y, v.z);
 const toQ = (q: Quat, out = new THREE.Quaternion()) => out.set(q.x, q.y, q.z, q.w);
@@ -128,7 +130,7 @@ export class EditorView {
     const dpr = window.devicePixelRatio || 1;
     this.renderer.setPixelRatio(Math.min(dpr, quality === 'high' ? 2 : quality === 'medium' ? 1.5 : 1) * game.get().settings.renderScale);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = game.get().settings.shadows;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -136,38 +138,40 @@ export class EditorView {
     this.renderer.domElement.style.touchAction = 'none';
     container.appendChild(this.renderer.domElement);
 
-    // Lighting: image-based ambient + soft key light + cool fill.
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
-    pmrem.dispose();
+    // Lighting: baked studio IBL (softbox reflections on parts, glossy floor) + a three-point rig.
+    // One shadow caster (the key); fill, rim and hemisphere are unshadowed.
+    this.envRT = createStudioEnvironment(this.renderer, { variant: 'hangar' });
     this.scene.environment = this.envRT.texture;
-    this.scene.environmentIntensity = 0.5;
-    this.scene.background = new THREE.Color(0x0d1117);
-    this.scene.fog = new THREE.Fog(0x161b22, 70, 170);
-    const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x3a3630, 0.4);
+    this.scene.environmentIntensity = 0.7;
+    this.scene.background = new THREE.Color(0x0b1018);
+    this.scene.fog = new THREE.Fog(0x111823, 75, 180);
+    const hemi = new THREE.HemisphereLight(0xbcd0ec, 0x23262c, 0.35);
     this.scene.add(hemi);
-    this.key = new THREE.DirectionalLight(0xfff1dc, 2.7);
-    this.key.position.set(14, 40, 18);
+    // Key: warm, high and ~50 deg to the right of the default camera, so the shadow falls visibly across the floor.
+    this.key = new THREE.DirectionalLight(0xfff3e6, 2.6);
+    this.key.position.set(KEY_OFFSET.x, KEY_OFFSET.y, KEY_OFFSET.z);
     this.key.castShadow = game.get().settings.shadows;
     const sm = quality === 'high' ? 2048 : 1024;
     this.key.shadow.mapSize.set(sm, sm);
-    this.key.shadow.bias = -0.0004;
+    this.key.shadow.bias = -0.0003;
     this.key.shadow.normalBias = 0.03;
-    this.key.shadow.radius = 4;
+    this.key.shadow.radius = quality === 'low' ? 2 : 5;
     const sc = this.key.shadow.camera;
-    sc.left = -22; sc.right = 22; sc.top = 30; sc.bottom = -22; sc.near = 5; sc.far = 110;
+    sc.left = -24; sc.right = 24; sc.top = 28; sc.bottom = -20; sc.near = 5; sc.far = 110;
     this.scene.add(this.key, this.key.target);
-    const fill = new THREE.DirectionalLight(0x9fc4ff, 0.6);
-    fill.position.set(-20, 15, -10);
+    // Cool fill from the front-left keeps the shadow side readable.
+    const fill = new THREE.DirectionalLight(0xa8c8ff, 0.75);
+    fill.position.set(-16, 12, 26);
     this.scene.add(fill);
-    // Daylight spilling through the parted doors.
-    const door = new THREE.SpotLight(0xd8ecff, 900, 90, 0.35, 0.8, 1.6);
-    door.position.set(0, 22, -HANGAR.halfZ - 2);
-    door.target.position.set(0, 0, 0);
-    this.scene.add(door, door.target);
+    // Soft warm rim from high behind-left separates silhouettes from the dark hall. High enough that its glint on
+    // the glossy floor stays out of the usual camera angles; desaturated so it doesn't tint the floor.
+    const rim = new THREE.DirectionalLight(0xffe6cc, 1.25);
+    rim.position.set(-16, 26, -24);
+    this.scene.add(rim);
 
     this.hangar = buildHangar(this.renderer);
     this.scene.add(this.hangar.group);
+    this.hangar.bakeReflections(this.scene);
     this.scene.add(this.craftGroup);
     this.craftGroup.add(this.heldGroup, this.ghostGroup, this.nodeGroup, this.links.root, this.linkPreview);
     this.linkPreview.visible = false;
@@ -296,6 +300,10 @@ export class EditorView {
     if (!snap.held) this.shiftZ = this.horizontal && s.partCount ? (s.bounds.min.y + s.bounds.max.y) / 2 : 0;
     this.craftGroup.position.z = this.shiftZ;
     this.craftGroup.updateMatrixWorld(true);
+    // Soft contact shadow sized to the craft's floor footprint (craft Y runs along world Z in the SPH).
+    const b = s.bounds;
+    if (s.partCount) this.hangar.setFootprint((b.max.x - b.min.x) / 2, this.horizontal ? (b.max.y - b.min.y) / 2 : (b.max.z - b.min.z) / 2, this.lift + low);
+    else this.hangar.setFootprint(0, 0, 0);
 
     // CoM / CoT / CoL
     toV(s.centreOfMass, this.com.position);
@@ -853,7 +861,7 @@ export class EditorView {
     this.camera.lookAt(target);
     // Shadow frustum follows the craft.
     this.key.target.position.set(0, this.lift + 4, 0);
-    this.key.position.set(14, this.lift + 44, 18);
+    this.key.position.set(KEY_OFFSET.x, this.lift + 4 + KEY_OFFSET.y, KEY_OFFSET.z);
 
     const t0 = performance.now();
     // Raycasts only when something that affects them changed (mouse, camera, craft, held state, Alt).

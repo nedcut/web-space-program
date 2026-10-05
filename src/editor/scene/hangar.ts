@@ -2,14 +2,28 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
- * Procedural vehicle-assembly hall. Everything is generated: canvas textures for the floor and wall cladding,
- * merged box geometry for the steel frame, emissive panels for lighting. A handful of draw calls total.
+ * Procedural vehicle-assembly hall. Everything is generated: canvas textures for the polished epoxy floor (colour +
+ * roughness, with baked contact AO), tidy wall cladding, merged box geometry for the steel frame and emissive strips
+ * that read as the light sources. Palette follows the UI: navy/slate surfaces, cyan accents, warm-white lamps.
+ * A couple of dozen draw calls total, no extra render passes.
  */
 
 export const HANGAR = { halfX: 36, halfZ: 34, height: 56 } as const;
 
+/** Assembly platform (turntable) radius and height. */
+const PLATFORM_R = 6.5;
+const PLATFORM_H = 0.18;
+
 export interface Hangar {
   group: THREE.Group;
+  /** Size the soft contact shadow under the craft (world metres, centred on the platform). `lift`: craft bottom height. */
+  setFootprint(rx: number, rz: number, lift: number): void;
+  /**
+   * Bake the lit hall (without the floor) into a box-projected reflection probe used by the polished floor and
+   * platform. Call once after the scene's lights are set up and before the craft is added. One PMREM bake, no
+   * per-frame cost beyond a few ALU ops in the floor shader.
+   */
+  bakeReflections(scene: THREE.Scene): void;
   dispose(): void;
 }
 
@@ -26,95 +40,113 @@ function rng(seed: number) {
   return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
 }
 
-function floorTexture(maxAniso: number): THREE.Texture {
-  const S = 2048;
-  const { c, g } = canvas(S, S);
-  const r = rng(7);
-  const W = HANGAR.halfX * 2; // metres across
-  const px = S / W;
-  // Base: warm grey polished concrete with mottling.
-  g.fillStyle = '#5d6168';
-  g.fillRect(0, 0, S, S);
-  for (let i = 0; i < 2600; i++) {
-    const x = r() * S, y = r() * S, rad = 6 + r() * 60;
-    const l = 82 + r() * 26;
-    g.fillStyle = `rgba(${l},${l + 3},${l + 8},${0.035 + r() * 0.05})`;
-    g.beginPath(); g.arc(x, y, rad, 0, Math.PI * 2); g.fill();
-  }
-  for (let i = 0; i < 9000; i++) {
-    const l = r() < 0.5 ? 40 : 140;
-    g.fillStyle = `rgba(${l},${l},${l},${0.08 + r() * 0.1})`;
-    g.fillRect(r() * S, r() * S, 1 + r() * 2, 1 + r() * 2);
-  }
-  // Slab joints every 4 m, fine grid every metre.
-  g.strokeStyle = 'rgba(255,255,255,0.035)';
-  g.lineWidth = 1;
-  for (let m = 0; m <= W; m += 1) {
-    g.beginPath(); g.moveTo(m * px, 0); g.lineTo(m * px, S); g.stroke();
-    g.beginPath(); g.moveTo(0, m * px); g.lineTo(S, m * px); g.stroke();
-  }
-  g.strokeStyle = 'rgba(20,22,26,0.55)';
-  g.lineWidth = 2.5;
-  for (let m = 0; m <= W; m += 4) {
-    g.beginPath(); g.moveTo(m * px, 0); g.lineTo(m * px, S); g.stroke();
-    g.beginPath(); g.moveTo(0, m * px); g.lineTo(S, m * px); g.stroke();
-  }
+const FLOOR_W = HANGAR.halfX * 2;
+
+/** Painted markings shared by the colour and roughness maps (paint is a touch rougher than the epoxy). */
+function paintMarkings(g: CanvasRenderingContext2D, S: number, paint: (c: string) => string) {
+  const px = S / FLOOR_W;
   const cx = S / 2, cy = S / 2;
-  // Central assembly pad: darker disc, hazard ring, cross-hairs, radial ticks.
   const pad = 9 * px;
-  const grad = g.createRadialGradient(cx, cy, pad * 0.2, cx, cy, pad);
-  grad.addColorStop(0, '#3b3f46');
-  grad.addColorStop(1, '#43474e');
-  g.fillStyle = grad;
-  g.beginPath(); g.arc(cx, cy, pad, 0, Math.PI * 2); g.fill();
-  // Hazard ring
-  const inner = pad, outer = pad + 0.6 * px;
-  const n = 72;
+  // Hazard ring around the assembly pad.
+  const inner = pad, outer = pad + 0.4 * px;
+  const n = 96;
   for (let i = 0; i < n; i++) {
     const a0 = (i / n) * Math.PI * 2, a1 = ((i + 0.5) / n) * Math.PI * 2;
-    g.fillStyle = '#e0b230';
+    g.fillStyle = paint('#d9a930');
     g.beginPath();
     g.arc(cx, cy, outer, a0, a1);
     g.arc(cx, cy, inner, a1, a0, true);
     g.closePath(); g.fill();
-    g.fillStyle = '#1b1c1f';
-    g.beginPath();
-    g.arc(cx, cy, outer, a1, a0 + (Math.PI * 2) / n);
-    g.arc(cx, cy, inner, a0 + (Math.PI * 2) / n, a1, true);
-    g.closePath(); g.fill();
   }
-  g.strokeStyle = 'rgba(92,200,255,0.55)';
-  g.lineWidth = 3;
-  g.beginPath(); g.arc(cx, cy, pad * 0.55, 0, Math.PI * 2); g.stroke();
-  g.strokeStyle = 'rgba(230,237,247,0.45)';
-  g.lineWidth = 2;
-  for (let i = 0; i < 36; i++) {
-    const a = (i / 36) * Math.PI * 2;
-    const l0 = pad * (i % 9 === 0 ? 0.62 : 0.8), l1 = pad * 0.95;
+  // Cyan guide rings and radial ticks.
+  g.strokeStyle = paint('rgba(92,200,255,0.75)');
+  g.lineWidth = 0.08 * px;
+  g.beginPath(); g.arc(cx, cy, pad - 0.45 * px, 0, Math.PI * 2); g.stroke();
+  g.strokeStyle = paint('rgba(220,232,245,0.55)');
+  g.lineWidth = 0.06 * px;
+  for (let i = 0; i < 72; i++) {
+    const a = (i / 72) * Math.PI * 2;
+    const l0 = pad - (i % 9 === 0 ? 1.6 : i % 3 === 0 ? 1.1 : 0.85) * px, l1 = pad - 0.6 * px;
     g.beginPath(); g.moveTo(cx + Math.cos(a) * l0, cy + Math.sin(a) * l0); g.lineTo(cx + Math.cos(a) * l1, cy + Math.sin(a) * l1); g.stroke();
   }
-  g.beginPath(); g.moveTo(cx - pad * 0.3, cy); g.lineTo(cx + pad * 0.3, cy); g.moveTo(cx, cy - pad * 0.3); g.lineTo(cx, cy + pad * 0.3); g.stroke();
-  // Painted lanes toward the doors (-Z = top of the texture) and walkway borders.
-  g.fillStyle = 'rgba(224,178,48,0.85)';
+  // Dashed amber lanes toward the doors (-Z = top of the texture) and white walkway borders.
+  g.fillStyle = paint('rgba(217,169,48,0.9)');
   const lane = 15 * px;
   for (const sx of [-1, 1]) {
-    for (let y = 0; y < cy - outer - 1 * px; y += 1.6 * px) g.fillRect(cx + sx * lane - 0.12 * px, y, 0.24 * px, 0.9 * px);
+    for (let y = 1.5 * px; y < cy - outer - 1 * px; y += 1.6 * px) g.fillRect(cx + sx * lane - 0.1 * px, y, 0.2 * px, 0.9 * px);
   }
-  g.fillStyle = 'rgba(230,237,247,0.6)';
-  for (const sx of [-1, 1]) g.fillRect(cx + sx * (W / 2 - 6) * px - 0.1 * px, 0, 0.2 * px, S);
-  // Stencilled bay marker
+  g.fillStyle = paint('rgba(225,233,243,0.6)');
+  for (const sx of [-1, 1]) g.fillRect(cx + sx * (FLOOR_W / 2 - 6) * px - 0.08 * px, 0, 0.16 * px, S);
+  // Stencilled bay marker in front of the pad.
   g.save();
-  g.translate(cx, cy + pad + 4.2 * px);
-  g.fillStyle = 'rgba(230,237,247,0.5)';
-  g.font = `700 ${Math.round(1.6 * px)}px Inter, system-ui, sans-serif`;
+  g.translate(cx, cy + pad + 3.2 * px);
+  g.fillStyle = paint('rgba(225,233,243,0.5)');
+  g.font = `700 ${Math.round(1.3 * px)}px Inter, system-ui, sans-serif`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText('ASSEMBLY BAY 1', 0, 0);
+  g.fillStyle = paint('rgba(92,200,255,0.7)');
+  g.fillRect(-3 * px, 1.05 * px, 6 * px, 0.14 * px);
   g.restore();
-  // Tyre / scuff marks
-  for (let i = 0; i < 40; i++) {
-    g.strokeStyle = `rgba(20,20,22,${0.05 + r() * 0.07})`;
-    g.lineWidth = 2 + r() * 8;
+}
+
+function floorTexture(maxAniso: number): THREE.Texture {
+  const S = 2048;
+  const { c, g } = canvas(S, S);
+  const r = rng(7);
+  const px = S / FLOOR_W;
+  // Base: dark slate epoxy with soft cloudy mottling and fine aggregate speckle.
+  g.fillStyle = '#3f4651';
+  g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 1800; i++) {
+    const x = r() * S, y = r() * S, rad = 20 + r() * 90;
+    const l = r() < 0.5 ? 58 : 92;
+    g.fillStyle = `rgba(${l},${l + 4},${l + 10},${0.03 + r() * 0.04})`;
+    g.beginPath(); g.arc(x, y, rad, 0, Math.PI * 2); g.fill();
+  }
+  for (let i = 0; i < 14000; i++) {
+    const l = r() < 0.5 ? 46 : 130;
+    g.fillStyle = `rgba(${l},${l + 2},${l + 6},${0.06 + r() * 0.08})`;
+    g.fillRect(r() * S, r() * S, 1 + r() * 1.5, 1 + r() * 1.5);
+  }
+  // Slab joints every 6 m (cut lines).
+  g.strokeStyle = 'rgba(18,22,28,0.4)';
+  g.lineWidth = 1.5;
+  for (let m = 0; m <= FLOOR_W; m += 6) {
+    g.beginPath(); g.moveTo(m * px, 0); g.lineTo(m * px, S); g.stroke();
+    g.beginPath(); g.moveTo(0, m * px); g.lineTo(S, m * px); g.stroke();
+  }
+  // Ambient occlusion toward the walls.
+  const edge = 3 * px;
+  for (const [x0, y0, x1, y1, rx, ry, rw, rh] of [
+    [0, 0, edge, 0, 0, 0, edge, S], [S, 0, S - edge, 0, S - edge, 0, edge, S],
+    [0, 0, 0, edge, 0, 0, S, edge], [0, S, 0, S - edge, 0, S - edge, S, edge],
+  ] as const) {
+    const gr = g.createLinearGradient(x0, y0, x1, y1);
+    gr.addColorStop(0, 'rgba(10,12,16,0.55)');
+    gr.addColorStop(1, 'rgba(10,12,16,0)');
+    g.fillStyle = gr;
+    g.fillRect(rx, ry, rw, rh);
+  }
+  const cx = S / 2, cy = S / 2;
+  // Central assembly pad: darker, finer-finish disc.
+  const pad = 9 * px;
+  const grad = g.createRadialGradient(cx, cy, pad * 0.3, cx, cy, pad);
+  grad.addColorStop(0, '#2f353e');
+  grad.addColorStop(1, '#363d47');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(cx, cy, pad, 0, Math.PI * 2); g.fill();
+  // Baked AO ring around the platform foot.
+  const ao = g.createRadialGradient(cx, cy, PLATFORM_R * px, cx, cy, (PLATFORM_R + 1.4) * px);
+  ao.addColorStop(0, 'rgba(6,8,12,0.6)');
+  ao.addColorStop(1, 'rgba(6,8,12,0)');
+  g.fillStyle = ao;
+  g.beginPath(); g.arc(cx, cy, (PLATFORM_R + 1.4) * px, 0, Math.PI * 2); g.fill();
+  paintMarkings(g, S, (col) => col);
+  // Faint tyre / scuff marks.
+  for (let i = 0; i < 24; i++) {
+    g.strokeStyle = `rgba(16,18,22,${0.04 + r() * 0.05})`;
+    g.lineWidth = 3 + r() * 6;
     g.beginPath();
     const x = r() * S, y = r() * S;
     g.moveTo(x, y);
@@ -127,28 +159,88 @@ function floorTexture(maxAniso: number): THREE.Texture {
   return t;
 }
 
-function claddingTexture(maxAniso: number): THREE.Texture {
-  const { c, g } = canvas(256, 512);
-  g.fillStyle = '#7d858f';
-  g.fillRect(0, 0, 256, 512);
-  // Vertical ribs of trapezoidal cladding.
-  for (let x = 0; x < 256; x += 32) {
-    const grd = g.createLinearGradient(x, 0, x + 32, 0);
-    grd.addColorStop(0, '#6c737c');
-    grd.addColorStop(0.2, '#9aa2ac');
-    grd.addColorStop(0.35, '#848c96');
-    grd.addColorStop(0.8, '#727a83');
-    grd.addColorStop(1, '#5f666e');
-    g.fillStyle = grd;
-    g.fillRect(x, 0, 32, 512);
+/** Roughness (green channel): polished epoxy ~0.28 with buffing swirls, rougher paint, scuffs and joints. */
+function floorRoughness(maxAniso: number): THREE.Texture {
+  const S = 1024;
+  const { c, g } = canvas(S, S);
+  const r = rng(19);
+  const v = (x: number) => Math.round(THREE.MathUtils.clamp(x, 0, 1) * 255);
+  const grey = (x: number, a = 1) => `rgba(${v(x)},${v(x)},${v(x)},${a})`;
+  g.fillStyle = grey(0.16);
+  g.fillRect(0, 0, S, S);
+  // Low-frequency patches (some areas more worn).
+  for (let i = 0; i < 700; i++) {
+    g.fillStyle = grey(r() < 0.6 ? 0.42 : 0.14, 0.04 + r() * 0.06);
+    g.beginPath(); g.ellipse(r() * S, r() * S, 10 + r() * 50, 6 + r() * 30, r() * Math.PI, 0, Math.PI * 2); g.fill();
   }
-  // Horizontal sheet seams + grime.
-  g.fillStyle = 'rgba(30,32,36,0.45)';
-  g.fillRect(0, 0, 256, 3);
+  // Soften the patches into a cloudy wear pattern.
+  g.filter = 'blur(10px)';
+  g.drawImage(c, 0, 0);
+  g.filter = 'none';
+  // Circular buffing swirls.
+  g.lineWidth = 2;
+  for (let i = 0; i < 320; i++) {
+    g.strokeStyle = grey(r() < 0.5 ? 0.45 : 0.18, 0.12);
+    const rad = 8 + r() * 26;
+    g.beginPath(); g.arc(r() * S, r() * S, rad, r() * 6, r() * 6 + 2 + r() * 3); g.stroke();
+  }
+  const px = S / FLOOR_W;
+  g.strokeStyle = grey(0.5);
+  g.lineWidth = 1;
+  for (let m = 0; m <= FLOOR_W; m += 6) {
+    g.beginPath(); g.moveTo(m * px, 0); g.lineTo(m * px, S); g.stroke();
+    g.beginPath(); g.moveTo(0, m * px); g.lineTo(S, m * px); g.stroke();
+  }
+  // The assembly pad is freshly polished.
+  g.fillStyle = grey(0.1, 0.8);
+  g.beginPath(); g.arc(S / 2, S / 2, 9 * px, 0, Math.PI * 2); g.fill();
+  paintMarkings(g, S, () => grey(0.6));
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = maxAniso;
+  return t;
+}
+
+/** One 4 m x 4 m tile of tidy composite wall panels: two 2 m panels, bevelled seams, fastener rows. */
+function claddingTexture(maxAniso: number): THREE.Texture {
+  const S = 512;
+  const { c, g } = canvas(S, S);
   const r = rng(3);
-  for (let i = 0; i < 300; i++) {
-    g.fillStyle = `rgba(40,40,44,${r() * 0.05})`;
-    g.fillRect(r() * 256, r() * 512, 2 + r() * 20, 10 + r() * 80);
+  g.fillStyle = '#3d4858';
+  g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 2; i++) {
+    const x = i * 256;
+    const grd = g.createLinearGradient(0, 0, 0, S);
+    grd.addColorStop(0, i ? '#435064' : '#46536a');
+    grd.addColorStop(1, i ? '#3a4556' : '#3c4859');
+    g.fillStyle = grd;
+    g.fillRect(x + 4, 4, 248, S - 8);
+    // Fine brushed streaks.
+    for (let k = 0; k < 60; k++) {
+      g.fillStyle = `rgba(255,255,255,${r() * 0.025})`;
+      g.fillRect(x + 6 + r() * 244, 6, 1, S - 12);
+    }
+    // Bevel: light top/left, dark bottom/right.
+    g.fillStyle = 'rgba(255,255,255,0.08)';
+    g.fillRect(x + 4, 4, 248, 2);
+    g.fillRect(x + 4, 4, 2, S - 8);
+    g.fillStyle = 'rgba(0,0,0,0.25)';
+    g.fillRect(x + 4, S - 6, 248, 2);
+    g.fillRect(x + 250, 4, 2, S - 8);
+    // Fastener rows.
+    g.fillStyle = 'rgba(20,24,30,0.55)';
+    for (let y = 24; y < S; y += 61) { g.fillRect(x + 12, y, 3, 3); g.fillRect(x + 241, y, 3, 3); }
+  }
+  // Seams.
+  g.fillStyle = '#1b2029';
+  g.fillRect(0, 0, S, 4);
+  g.fillRect(0, S - 4, S, 4);
+  g.fillRect(0, 0, 4, S);
+  g.fillRect(252, 0, 8, S);
+  g.fillRect(S - 4, 0, 4, S);
+  // Light weathering.
+  for (let i = 0; i < 80; i++) {
+    g.fillStyle = `rgba(20,24,30,${r() * 0.05})`;
+    g.fillRect(r() * S, r() * S, 2 + r() * 10, 20 + r() * 80);
   }
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -159,21 +251,23 @@ function claddingTexture(maxAniso: number): THREE.Texture {
 
 function doorTexture(): THREE.Texture {
   const { c, g } = canvas(512, 1024);
-  g.fillStyle = '#9aa3ad';
+  g.fillStyle = '#5d6878';
   g.fillRect(0, 0, 512, 1024);
   // Horizontal ribbing
   for (let y = 0; y < 1024; y += 16) {
-    g.fillStyle = y % 32 === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)';
+    g.fillStyle = y % 32 === 0 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.12)';
     g.fillRect(0, y, 512, 8);
   }
   // Panel frames
-  g.strokeStyle = 'rgba(40,44,50,0.8)';
+  g.strokeStyle = 'rgba(24,28,36,0.85)';
   g.lineWidth = 8;
   g.strokeRect(4, 4, 504, 1016);
   for (let y = 128; y < 1024; y += 128) { g.beginPath(); g.moveTo(0, y); g.lineTo(512, y); g.stroke(); }
-  // Hazard band at the bottom
+  // Cyan position stripe and hazard band at the bottom
+  g.fillStyle = 'rgba(92,200,255,0.55)';
+  g.fillRect(0, 500, 512, 6);
   for (let x = -64; x < 512; x += 48) {
-    g.fillStyle = '#e0b230';
+    g.fillStyle = '#d9a930';
     g.beginPath(); g.moveTo(x, 1024); g.lineTo(x + 24, 1024); g.lineTo(x + 64, 976); g.lineTo(x + 40, 976); g.closePath(); g.fill();
   }
   g.fillStyle = 'rgba(20,20,22,0.85)';
@@ -198,6 +292,57 @@ function signTexture(text: string, sub: string): THREE.Texture {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+/** Turntable deck: brushed concentric rings, segment seams and fasteners (top-cap UVs are planar). */
+function platformTexture(maxAniso: number): THREE.Texture {
+  const S = 1024;
+  const { c, g } = canvas(S, S);
+  const r = rng(23);
+  const cx = S / 2, R = S / 2;
+  g.fillStyle = '#4a5462';
+  g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 900; i++) {
+    const rad = r() * R;
+    const l = 60 + r() * 50;
+    g.strokeStyle = `rgba(${l},${l + 8},${l + 18},${0.08 + r() * 0.12})`;
+    g.lineWidth = 1;
+    g.beginPath(); g.arc(cx, cx, rad, 0, Math.PI * 2); g.stroke();
+  }
+  // Inner disc (darker), outer bevel band.
+  g.fillStyle = 'rgba(16,20,26,0.35)';
+  g.beginPath(); g.arc(cx, cx, R * 0.45, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = 'rgba(12,15,20,0.7)';
+  g.lineWidth = 3;
+  for (const f of [0.45, 0.93]) { g.beginPath(); g.arc(cx, cx, R * f, 0, Math.PI * 2); g.stroke(); }
+  // Segment seams between the rings.
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    g.beginPath(); g.moveTo(cx + Math.cos(a) * R * 0.45, cx + Math.sin(a) * R * 0.45); g.lineTo(cx + Math.cos(a) * R * 0.93, cx + Math.sin(a) * R * 0.93); g.stroke();
+  }
+  g.fillStyle = 'rgba(200,210,224,0.35)';
+  for (let i = 0; i < 48; i++) {
+    const a = ((i + 0.5) / 48) * Math.PI * 2;
+    g.beginPath(); g.arc(cx + Math.cos(a) * R * 0.965, cx + Math.sin(a) * R * 0.965, 2.5, 0, Math.PI * 2); g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = maxAniso;
+  return t;
+}
+
+/** Soft radial falloff (white centre, transparent edge) for the contact shadow. */
+function blobTexture(): THREE.Texture {
+  const S = 128;
+  const { c, g } = canvas(S, S);
+  const gr = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  for (let i = 0; i <= 8; i++) {
+    const t = i / 8;
+    gr.addColorStop(t, `rgba(255,255,255,${((1 - t) ** 2 * (1 + 2 * t)).toFixed(3)})`);
+  }
+  g.fillStyle = gr;
+  g.fillRect(0, 0, S, S);
+  return new THREE.CanvasTexture(c);
 }
 
 /** Axis-aligned box geometry centred at (x,y,z). */
@@ -230,6 +375,49 @@ function strut(a: THREE.Vector3, b: THREE.Vector3, s: number): THREE.BufferGeome
   return g;
 }
 
+/** Merge geometries into one mesh and dispose the inputs. */
+function merged(geos: THREE.BufferGeometry[], mat: THREE.Material, track: <T extends { dispose(): void }>(x: T) => T): THREE.Mesh {
+  const mesh = new THREE.Mesh(track(mergeGeometries(geos)), mat);
+  geos.forEach((g) => g.dispose());
+  return mesh;
+}
+
+/** Probe position for the floor reflections (just above the floor, at the hall centre). */
+const PROBE = new THREE.Vector3(0, 2, 0);
+
+/**
+ * Patch a standard material so its env-map lookups are box-projected onto the hall's walls (parallax-corrected
+ * cube-map reflections): a cheap stand-in for a planar mirror on a polished floor.
+ */
+function boxProjected(mat: THREE.MeshStandardMaterial) {
+  const { halfX: HX, halfZ: HZ, height: H } = HANGAR;
+  const uniforms = {
+    uBoxMin: { value: new THREE.Vector3(-HX, 0, -HZ) },
+    uBoxMax: { value: new THREE.Vector3(HX, H, HZ) },
+    uBoxCenter: { value: PROBE.clone() },
+  };
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBoxWorldPos;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvBoxWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBoxWorldPos;\nuniform vec3 uBoxMin;\nuniform vec3 uBoxMax;\nuniform vec3 uBoxCenter;')
+      .replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
+        'reflectVec = transformDirectionByInverseViewMatrix( reflectVec, viewMatrix );',
+        `reflectVec = transformDirectionByInverseViewMatrix( reflectVec, viewMatrix );
+        {
+          vec3 tA = ( uBoxMax - vBoxWorldPos ) / reflectVec;
+          vec3 tB = ( uBoxMin - vBoxWorldPos ) / reflectVec;
+          vec3 tF = max( tA, tB );
+          float tHit = min( min( tF.x, tF.y ), tF.z );
+          reflectVec = normalize( vBoxWorldPos + reflectVec * tHit - uBoxCenter );
+        }`,
+      ));
+  };
+  mat.customProgramCacheKey = () => 'hangar-box-projected';
+}
+
 export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   const group = new THREE.Group();
   group.name = 'hangar';
@@ -238,43 +426,86 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   const { halfX: HX, halfZ: HZ, height: H } = HANGAR;
 
-  // ---------------------------------------------------------------- floor
-  const floorMat = track(new THREE.MeshStandardMaterial({ map: track(floorTexture(aniso)), roughness: 0.42, metalness: 0.0 }));
-  const floor = new THREE.Mesh(track(new THREE.PlaneGeometry(HX * 2, HX * 2)), floorMat);
+  // ---------------------------------------------------------------- shared materials
+  const steelMat = track(new THREE.MeshStandardMaterial({ color: 0x2b3442, roughness: 0.48, metalness: 0.75 }));
+  const trimMat = track(new THREE.MeshStandardMaterial({ color: 0x1a212b, roughness: 0.6, metalness: 0.4 }));
+  const accentMat = track(new THREE.MeshStandardMaterial({ color: 0x1f6a96, roughness: 0.42, metalness: 0.55 }));
+  const lampMat = track(new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff3e2).multiplyScalar(3.2) }));
+  const cyanMat = track(new THREE.MeshBasicMaterial({ color: new THREE.Color(0x5cc8ff).multiplyScalar(1.6) }));
+
+  // ---------------------------------------------------------------- floor: polished epoxy
+  const floorMat = track(new THREE.MeshStandardMaterial({
+    map: track(floorTexture(aniso)),
+    roughnessMap: track(floorRoughness(aniso)),
+    roughness: 1,
+    metalness: 0,
+    envMapIntensity: 1,
+  }));
+  boxProjected(floorMat);
+  const floor = new THREE.Mesh(track(new THREE.PlaneGeometry(FLOOR_W, FLOOR_W)), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   floor.name = 'floor';
   group.add(floor);
 
+  // ---------------------------------------------------------------- assembly platform (low turntable)
+  const platMat = track(new THREE.MeshStandardMaterial({ map: track(platformTexture(aniso)), roughness: 0.4, metalness: 0.3 }));
+  boxProjected(platMat);
+  // Side, top cap, bottom cap: the textured deck only on top.
+  const plat = new THREE.Mesh(track(new THREE.CylinderGeometry(PLATFORM_R, PLATFORM_R + 0.12, PLATFORM_H, 96, 1)), [trimMat, platMat, trimMat]);
+  plat.position.y = PLATFORM_H / 2;
+  plat.receiveShadow = true;
+  group.add(plat);
+  const ringGeos = [
+    new THREE.RingGeometry(PLATFORM_R - 0.32, PLATFORM_R - 0.22, 128, 1),
+    new THREE.RingGeometry(PLATFORM_R * 0.45 - 0.04, PLATFORM_R * 0.45 + 0.04, 96, 1),
+  ];
+  const rings = merged(ringGeos, cyanMat, track);
+  rings.rotation.x = -Math.PI / 2;
+  rings.position.y = PLATFORM_H + 0.004;
+  group.add(rings);
+
+  // Soft contact shadow under the craft (multiplied over platform + floor).
+  const blobMat = track(new THREE.MeshBasicMaterial({
+    map: track(blobTexture()), color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, fog: false,
+  }));
+  blobMat.alphaMap = blobMat.map;
+  blobMat.map = null;
+  const blob = new THREE.Mesh(track(new THREE.PlaneGeometry(1, 1)), blobMat);
+  blob.rotation.x = -Math.PI / 2;
+  blob.position.y = PLATFORM_H + 0.01;
+  blob.renderOrder = 1;
+  blob.visible = false;
+  group.add(blob);
+
   // ---------------------------------------------------------------- walls
   const clad = track(claddingTexture(aniso));
-  const wallMat = track(new THREE.MeshStandardMaterial({ map: clad, roughness: 0.62, metalness: 0.35, color: 0xa4adb8 }));
-  const addWall = (w: number, h: number, pos: THREE.Vector3, rotY: number, repX: number) => {
-    const t = clad.clone();
-    t.repeat.set(repX, h / 14);
+  const wallMat = track(new THREE.MeshStandardMaterial({ map: clad, roughness: 0.58, metalness: 0.3 }));
+  const addWall = (w: number, h: number, pos: THREE.Vector3, rotY: number) => {
+    const t = track(clad.clone());
+    t.repeat.set(w / 4, h / 4);
     t.needsUpdate = true;
-    track(t);
-    const m = wallMat.clone();
+    const m = track(wallMat.clone());
     m.map = t;
-    track(m);
     const mesh = new THREE.Mesh(track(new THREE.PlaneGeometry(w, h)), m);
     mesh.position.copy(pos);
     mesh.rotation.y = rotY;
     mesh.receiveShadow = true;
     group.add(mesh);
   };
-  addWall(HZ * 2, H, new THREE.Vector3(-HX, H / 2, 0), Math.PI / 2, HZ / 4);
-  addWall(HZ * 2, H, new THREE.Vector3(HX, H / 2, 0), -Math.PI / 2, HZ / 4);
-  addWall(HX * 2, H, new THREE.Vector3(0, H / 2, HZ), Math.PI, HX / 4);
+  addWall(HZ * 2, H, new THREE.Vector3(-HX, H / 2, 0), Math.PI / 2);
+  addWall(HZ * 2, H, new THREE.Vector3(HX, H / 2, 0), -Math.PI / 2);
+  addWall(HX * 2, H, new THREE.Vector3(0, H / 2, HZ), Math.PI);
   // Back wall (-Z) with the door opening: two side sections + lintel.
   const doorW = 34, doorH = 46;
   const sideW = HX - doorW / 2;
-  addWall(sideW, H, new THREE.Vector3(-HX + sideW / 2, H / 2, -HZ), 0, sideW / 4);
-  addWall(sideW, H, new THREE.Vector3(HX - sideW / 2, H / 2, -HZ), 0, sideW / 4);
-  addWall(doorW, H - doorH, new THREE.Vector3(0, doorH + (H - doorH) / 2, -HZ), 0, doorW / 4);
+  addWall(sideW, H, new THREE.Vector3(-HX + sideW / 2, H / 2, -HZ), 0);
+  addWall(sideW, H, new THREE.Vector3(HX - sideW / 2, H / 2, -HZ), 0);
+  addWall(doorW, H - doorH, new THREE.Vector3(0, doorH + (H - doorH) / 2, -HZ), 0);
 
   // Ceiling
-  const ceilMat = track(new THREE.MeshStandardMaterial({ color: 0x2a2f37, roughness: 0.9, metalness: 0.2 }));
+  const ceilMat = track(new THREE.MeshStandardMaterial({ color: 0x161c25, roughness: 0.9, metalness: 0.2 }));
   const ceil = new THREE.Mesh(track(new THREE.PlaneGeometry(HX * 2, HZ * 2)), ceilMat);
   ceil.rotation.x = Math.PI / 2;
   ceil.position.y = H;
@@ -292,23 +523,21 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
     const z = -HZ + 0.6 + (i % 3) * 0.7;
     doorGeos.push(boxAt(pw - 0.1, doorH, 0.4, x, doorH / 2, z));
   }
-  const doors = new THREE.Mesh(track(mergeGeometries(doorGeos)), doorMat);
-  doors.castShadow = false;
+  const doors = merged(doorGeos, doorMat, track);
   doors.receiveShadow = true;
   group.add(doors);
-  doorGeos.forEach((g) => g.dispose());
   // Daylight slot between the doors
   const dayMat = track(new THREE.MeshBasicMaterial({ color: new THREE.Color(0xcfe6ff).multiplyScalar(2.2) }));
   const slot = new THREE.Mesh(track(new THREE.PlaneGeometry(1.8, doorH)), dayMat);
   slot.position.set(0, doorH / 2, -HZ - 0.3);
   group.add(slot);
-  // Door rail / header beam
-  const steelMat = track(new THREE.MeshStandardMaterial({ color: 0x3a4250, roughness: 0.45, metalness: 0.85 }));
-  const accentMat = track(new THREE.MeshStandardMaterial({ color: 0x1f5f8a, roughness: 0.5, metalness: 0.6 }));
 
   // ---------------------------------------------------------------- steel frame (merged)
   const frame: THREE.BufferGeometry[] = [];
   const accent: THREE.BufferGeometry[] = [];
+  const trim: THREE.BufferGeometry[] = [];
+  const lamps: THREE.BufferGeometry[] = [];
+  const cyan: THREE.BufferGeometry[] = [];
   const colSpacing = 8.5;
   for (let z = -HZ + 4; z <= HZ - 2; z += colSpacing) {
     frame.push(...iBeam(H, 0.9, -HX + 0.5, z, 0));
@@ -325,6 +554,16 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
     frame.push(boxAt(0.6, 0.8, HZ * 2, HX - 1.0, y, 0));
     frame.push(boxAt(HX * 2, 0.8, 0.6, 0, y, HZ - 1.0));
   }
+  // Wainscot: dark base band around the hall, capped with a cyan light line.
+  const baseH = 3.2;
+  trim.push(boxAt(0.3, baseH, HZ * 2, -HX + 0.15, baseH / 2, 0));
+  trim.push(boxAt(0.3, baseH, HZ * 2, HX - 0.15, baseH / 2, 0));
+  trim.push(boxAt(HX * 2, baseH, 0.3, 0, baseH / 2, HZ - 0.15));
+  for (const sx of [-1, 1]) trim.push(boxAt(sideW - 1.6, baseH, 0.3, sx * (HX - sideW / 2 + 0.8), baseH / 2, -HZ + 0.15));
+  cyan.push(boxAt(0.05, 0.07, HZ * 2, -HX + 0.32, baseH + 0.04, 0));
+  cyan.push(boxAt(0.05, 0.07, HZ * 2, HX - 0.32, baseH + 0.04, 0));
+  cyan.push(boxAt(HX * 2, 0.07, 0.05, 0, baseH + 0.04, HZ - 0.32));
+  for (const sx of [-1, 1]) cyan.push(boxAt(sideW - 1.6, 0.07, 0.05, sx * (HX - sideW / 2 + 0.8), baseH + 0.04, -HZ + 0.32));
   // Roof trusses spanning X
   for (let z = -HZ + 4; z <= HZ - 2; z += colSpacing) {
     const top = H - 0.6, bot = H - 4.5;
@@ -340,12 +579,14 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   // Longitudinal purlins
   for (let x = -HX + 6; x <= HX - 6; x += 9) frame.push(boxAt(0.35, 0.35, HZ * 2, x, H - 0.6, 0));
 
-  // Catwalks along both side walls at two levels, with railings.
+  // Catwalks along both side walls at two levels, with railings and a cyan edge light.
   const grate: THREE.BufferGeometry[] = [];
   for (const y of [12, 26]) {
     for (const sx of [-1, 1]) {
       const x = sx * (HX - 2.6);
       grate.push(boxAt(3.4, 0.18, HZ * 2 - 4, x, y, 0));
+      trim.push(boxAt(0.08, 0.4, HZ * 2 - 4, sx * (HX - 4.32), y - 0.1, 0));
+      cyan.push(boxAt(0.03, 0.05, HZ * 2 - 4, sx * (HX - 4.37), y - 0.22, 0));
       const rx = sx * (HX - 4.25);
       accent.push(boxAt(0.12, 0.12, HZ * 2 - 4, rx, y + 1.1, 0));
       accent.push(boxAt(0.08, 0.08, HZ * 2 - 4, rx, y + 0.6, 0));
@@ -364,27 +605,46 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   frame.push(boxAt(0.8, 0.6, HZ * 2, -HX + 1.6, 43, 0));
   frame.push(boxAt(0.8, 0.6, HZ * 2, HX - 1.6, 43, 0));
 
-  const frameMesh = new THREE.Mesh(track(mergeGeometries(frame)), steelMat);
+  // ---------------------------------------------------------------- light fixtures
+  // Linear LED high-bay runs along Z under the trusses: dark housing + emissive diffuser, between each truss pair.
+  const lampY = H - 5.2;
+  for (let z = -HZ + 4; z + colSpacing <= HZ - 2; z += colSpacing) {
+    for (let x = -HX + 8; x <= HX - 8; x += 8) {
+      const len = colSpacing - 2.2, zc = z + colSpacing / 2;
+      trim.push(boxAt(0.9, 0.3, len + 0.2, x, lampY + 0.2, zc));
+      lamps.push(boxAt(0.7, 0.06, len, x, lampY + 0.02, zc));
+      frame.push(boxAt(0.05, 0.6, 0.05, x, lampY + 0.6, zc - len / 3), boxAt(0.05, 0.6, 0.05, x, lampY + 0.6, zc + len / 3));
+    }
+  }
+  // Clerestory glazing high on the side walls: cool daylight panes between the columns, with mullions.
+  const glass: THREE.BufferGeometry[] = [];
+  const gy0 = 46.5, gy1 = 52.5;
+  for (const sx of [-1, 1]) {
+    const x = sx * (HX - 0.04);
+    for (let z = -HZ + 4; z + colSpacing <= HZ - 2; z += colSpacing) {
+      const len = colSpacing - 1.4, zc = z + colSpacing / 2;
+      glass.push(boxAt(0.02, gy1 - gy0, len, x, (gy0 + gy1) / 2, zc));
+      for (const f of [-1 / 6, 1 / 6, 0.5, -0.5]) trim.push(boxAt(0.25, gy1 - gy0, 0.12, sx * (HX - 0.1), (gy0 + gy1) / 2, zc + f * len));
+      trim.push(boxAt(0.25, 0.14, len, sx * (HX - 0.1), (gy0 + gy1) / 2, zc));
+    }
+    trim.push(boxAt(0.5, 0.3, HZ * 2, sx * (HX - 0.2), gy0 - 0.15, 0), boxAt(0.5, 0.3, HZ * 2, sx * (HX - 0.2), gy1 + 0.15, 0));
+  }
+  const glassMat = track(new THREE.MeshBasicMaterial({ color: new THREE.Color(0x9cc4ec).multiplyScalar(1.15) }));
+  group.add(merged(glass, glassMat, track));
+  // Wall-washer strips above each catwalk.
+  for (const sx of [-1, 1]) for (const y of [12, 26]) lamps.push(boxAt(0.1, 0.15, HZ * 2 - 6, sx * (HX - 0.3), y + 3.2, 0));
+
+  const frameMesh = merged(frame, steelMat, track);
   frameMesh.receiveShadow = true;
   group.add(frameMesh);
-  const accentMesh = new THREE.Mesh(track(mergeGeometries(accent)), accentMat);
-  group.add(accentMesh);
-  const grateMat = track(new THREE.MeshStandardMaterial({ color: 0x4a515b, roughness: 0.7, metalness: 0.6 }));
-  group.add(new THREE.Mesh(track(mergeGeometries(grate)), grateMat));
-  frame.forEach((g) => g.dispose());
-  accent.forEach((g) => g.dispose());
-  grate.forEach((g) => g.dispose());
-
-  // ---------------------------------------------------------------- light fixtures (emissive)
-  const lampMat = track(new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff4e0).multiplyScalar(3) }));
-  const lamps: THREE.BufferGeometry[] = [];
-  for (let z = -HZ + 4; z <= HZ - 2; z += colSpacing) {
-    for (let x = -HX + 7; x <= HX - 7; x += 7) lamps.push(boxAt(2.6, 0.12, 0.7, x, H - 4.9, z));
-  }
-  // Wall-washer strips above each catwalk
-  for (const sx of [-1, 1]) for (const y of [12, 26]) lamps.push(boxAt(0.1, 0.15, HZ * 2 - 6, sx * (HX - 0.3), y + 3.2, 0));
-  group.add(new THREE.Mesh(track(mergeGeometries(lamps)), lampMat));
-  lamps.forEach((g) => g.dispose());
+  group.add(merged(accent, accentMat, track));
+  const trimMesh = merged(trim, trimMat, track);
+  trimMesh.receiveShadow = true;
+  group.add(trimMesh);
+  const grateMat = track(new THREE.MeshStandardMaterial({ color: 0x353e4b, roughness: 0.7, metalness: 0.6 }));
+  group.add(merged(grate, grateMat, track));
+  group.add(merged(lamps, lampMat, track));
+  group.add(merged(cyan, cyanMat, track));
 
   // ---------------------------------------------------------------- signage
   const sign = new THREE.Mesh(
@@ -399,9 +659,9 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   sign2.scale.setScalar(0.7);
   group.add(sign2);
 
-  // ---------------------------------------------------------------- props: tool carts, crates, stands
-  const propMat = track(new THREE.MeshStandardMaterial({ color: 0x2b6f9e, roughness: 0.55, metalness: 0.3 }));
-  const crateMat = track(new THREE.MeshStandardMaterial({ color: 0x8a7a5c, roughness: 0.85, metalness: 0.0 }));
+  // ---------------------------------------------------------------- props: tool carts, crates
+  const propMat = track(new THREE.MeshStandardMaterial({ color: 0x2b6f9e, roughness: 0.5, metalness: 0.3 }));
+  const crateMat = track(new THREE.MeshStandardMaterial({ color: 0x5a6472, roughness: 0.75, metalness: 0.15 }));
   const props: THREE.BufferGeometry[] = [];
   const crates: THREE.BufferGeometry[] = [];
   const r = rng(11);
@@ -415,17 +675,39 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
     crates.push(boxAt(s, s, s, x, s / 2, z, r() * 0.6));
     if (r() < 0.4) crates.push(boxAt(s * 0.8, s * 0.8, s * 0.8, x, s + s * 0.4, z, r()));
   }
-  const propMesh = new THREE.Mesh(track(mergeGeometries(props)), propMat);
+  const propMesh = merged(props, propMat, track);
   propMesh.castShadow = propMesh.receiveShadow = true;
   group.add(propMesh);
-  const crateMesh = new THREE.Mesh(track(mergeGeometries(crates)), crateMat);
+  const crateMesh = merged(crates, crateMat, track);
   crateMesh.castShadow = crateMesh.receiveShadow = true;
   group.add(crateMesh);
-  props.forEach((g) => g.dispose());
-  crates.forEach((g) => g.dispose());
 
   return {
     group,
+    setFootprint(rx, rz, lift) {
+      const ok = rx > 0 && rz > 0 && Number.isFinite(lift);
+      blob.visible = ok;
+      if (!ok) return;
+      // Higher crafts cast a wider, fainter occlusion; grounded ones a tight, darker one.
+      const h = Math.max(0, lift - PLATFORM_H);
+      const spread = 1.0 + h * 0.35;
+      const max = (PLATFORM_R + 0.6) * 2;
+      blob.scale.set(Math.min(max, rx * 2.2 + spread * 2), Math.min(max, rz * 2.2 + spread * 2), 1);
+      blobMat.opacity = THREE.MathUtils.clamp(0.4 - h * 0.03, 0.15, 0.4);
+    },
+    bakeReflections(scene) {
+      const hidden = [floor, plat, rings, blob];
+      const vis = hidden.map((o) => o.visible);
+      hidden.forEach((o) => (o.visible = false));
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      const rt = track(pmrem.fromScene(scene, 0, 0.1, 250, { size: 256, position: PROBE }));
+      pmrem.dispose();
+      hidden.forEach((o, i) => (o.visible = vis[i]));
+      for (const m of [floorMat, platMat]) {
+        m.envMap = rt.texture;
+        m.needsUpdate = true;
+      }
+    },
     dispose() {
       disposables.forEach((d) => d.dispose());
     },

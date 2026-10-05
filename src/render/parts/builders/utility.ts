@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { PartDef } from '../../../sim/vessel/types';
 import { landingLegLayout } from '../../../data/parts';
 import { M } from '../materials';
-import { around, box, cyl, cylinder, grp, lathe, mk, rod, setDeployData, sphere, torus, type Profile } from '../geom';
+import { around, box, cyl, cylinder, grp, lathe, mk, pipe, rod, setDeployData, sphere, torus, type Profile } from '../geom';
 import { boxDims, cylDims, num, srfMount, str } from './common';
 
 const PI = Math.PI;
@@ -161,6 +161,10 @@ export function buildLandingLeg(def: PartDef): THREE.Object3D {
   upper.add(mk([torus(0.04 * s, 0.008 * s, 6, 16).translate(0, sleeveLen, 0), sphere(0.045 * s, 12, 8)], M.gunmetal()));
   // damper reservoir along the sleeve
   upper.add(mk(cyl(0.018 * s, 0.018 * s, sleeveLen * 0.6, 10, sleeveLen * 0.45).translate(0, 0, 0.05 * s), M.accent('blue')));
+  // hydraulic hose from the reservoir to the gland, hazard collar at the gland, clamp bands
+  upper.add(mk(pipe([[0, sleeveLen * 0.16, 0.05 * s], [0.03 * s, sleeveLen * 0.05, 0.05 * s], [0.04 * s, sleeveLen * 0.3, 0.02 * s], [0.035 * s, sleeveLen * 0.92, 0.01 * s], [0.012 * s, sleeveLen * 0.97, 0.03 * s]], 0.006 * s, 6, 28), M.cable(), 'hose'));
+  upper.add(mk(lathe([[0.0425 * s, sleeveLen * 0.82], [0.0435 * s, sleeveLen * 0.83], [0.0435 * s, sleeveLen * 0.95], [0.0425 * s, sleeveLen * 0.96]], { segments: 16, tile: 0.25 }), M.hazard(), 'glandBand'));
+  upper.add(mk([0.25, 0.55].map((t) => torus(0.0195 * s, 0.004 * s, 4, 12).translate(0, sleeveLen * t, 0.05 * s)), M.chrome()));
 
   const lower = grp('legLower');
   upper.add(lower);
@@ -184,6 +188,13 @@ export function buildLandingLeg(def: PartDef): THREE.Object3D {
     { segments: 24 },
   );
   foot.add(mk(pad, M.gunmetal(), 'pad'));
+  // stiffening ribs on the pad's upper surface
+  const ribs: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * PI * 2;
+    ribs.push(rod([Math.sin(a) * L.padRadius * 0.28, -L.padDrop + L.padHeight * 0.62, Math.cos(a) * L.padRadius * 0.28], [Math.sin(a) * L.padRadius * 0.8, -L.padDrop + L.padHeight * 0.4, Math.cos(a) * L.padRadius * 0.8], 0.006 * s, 4));
+  }
+  foot.add(mk(ribs, M.gunmetal(), 'padRibs'));
   foot.add(mk(cyl(L.padRadius * 0.95, L.padRadius * 0.95, 0.008 * s, 24, -L.padDrop - L.padHeight / 2 + 0.004 * s), M.rubber()));
   setDeployData(upper, { rot0: [0, 0, 0], rot1: [L.deployAngle, 0, 0] });
   setDeployData(foot, { rot0: [0, 0, 0], rot1: [-L.deployAngle, 0, 0] });
@@ -326,7 +337,7 @@ export function buildDockingPort(def: PartDef): THREE.Object3D {
   root.add(
     mk(lathe([[r * 0.95, y0 + fl], [r * 0.95, y0 + fl + 0.004], [rTop * 0.98, y1 - ringH - 0.01], [rTop * 0.9, y1 - ringH]], { segments: seg, tile: 0.6 }), M.satinWhite(), 'collar'),
   );
-  root.add(mk(lathe([[rTop * 0.9, y1 - ringH], [rRing, y1 - ringH], [rRing, y1 - 0.006], [rRing * 0.98, y1]], { segments: seg }), M.gunmetal(), 'matingRing'));
+  root.add(mk(lathe([[rTop * 0.9, y1 - ringH], [rRing, y1 - ringH], [rRing, y1 - 0.006], [rRing * 0.98, y1]], { segments: seg }), M.anodised('blue'), 'matingRing'));
   // Mating face (annulus, normal up), crew tunnel and hatch.
   root.add(mk(lathe([[rRing * 0.98, y1], [rTunnel * 1.08, y1], [rTunnel, y1 - 0.01]], { segments: seg }), M.darkMetal(), 'matingFace'));
   root.add(mk(lathe([[rTunnel, y0 + fl], [rTunnel, y1 - 0.01]], { segments: seg }), M.innerLining(), 'tunnel'));

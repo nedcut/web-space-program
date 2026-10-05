@@ -2,7 +2,8 @@ import { FlightFx, isBurstEvent } from '../render/fx/FlightFx';
 
 import { PhotoCamera } from '../render/core/PhotoCamera';
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { SkyEnvironment } from '../render/core/skyEnv';
+import { setPartDetail } from '../render/parts';
 import type { GameAudio } from '../audio';
 import { PART_CATALOG } from '../data/parts';
 import type { Autopilot } from '../game/autopilot';
@@ -118,6 +119,8 @@ export class FlightController {
   private views = new Map<string, VesselView>();
   private stars: Starfield;
   private glare: SunGlare;
+  private skyEnv!: SkyEnvironment;
+  private readonly envUp = new THREE.Vector3();
   private sunLight = new THREE.DirectionalLight(0xffffff, 3.2);
   private ambient = new THREE.HemisphereLight(0x8899bb, 0x221a10, 0.12);
   private planets: PlanetLayer;
@@ -189,6 +192,7 @@ export class FlightController {
     });
 
     const q = getQuality(quality);
+    setPartDetail(q.partDetail);
     this.stars = new Starfield({ count: q.stars.count, milkyWay: q.stars.milkyWay, seed: 7 });
     this.scene.add(this.stars.group);
     this.glare = new SunGlare();
@@ -202,10 +206,9 @@ export class FlightController {
     this.sunLight.shadow.normalBias = 0.02;
 
     // Image-based fill light so sunlit-from-behind vessels aren't pitch black. Scaled by air density each frame.
-    const pmrem = new THREE.PMREMGenerator(this.pipeline.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = 0.35;
-    pmrem.dispose();
+    // Procedural sky/planetshine environment, re-baked as altitude, attitude and sun change.
+    this.skyEnv = new SkyEnvironment(this.pipeline.renderer);
+    this.scene.environmentIntensity = 1;
 
     this.planets = createPlanetLayer(this.scene, universe, quality);
     this.site = new LaunchSite(universe);
@@ -897,7 +900,22 @@ export class FlightController {
     this.sunLight.intensity = 3.2 * eclipse;
     // Sky fill: brighter in thick air (scattered skylight), dim in space (planetshine + starlight).
     const airFrac = Math.min(1, air.density / 1.0);
-    this.scene.environmentIntensity = 0.12 + 0.5 * airFrac * eclipse;
+    const envBody = u.body(wv.body);
+    const envRel = sub(origin, bodyState.position);
+    const envDist = Math.max(envBody.radius, length(envRel));
+    this.scene.environment = this.skyEnv.update(
+      {
+        up: this.envUp.set(envRel.x, envRel.y, envRel.z).normalize(),
+        sun: sd,
+        air: airFrac,
+        daylight: eclipse,
+        ground: envBody.surface.colors[0] ?? [0.3, 0.3, 0.3],
+        skyTint: envBody.atmosphere?.tint,
+        bodyAngle: Math.asin(Math.min(1, envBody.radius / envDist)),
+      },
+      performance.now(),
+    );
+    this.scene.environmentIntensity = 0.85 + 0.35 * airFrac;
     this.stars.update(camera);
     this.glare.update(camera, sd, eclipse);
     this.pipeline.render(this.scene, camera);
@@ -1046,7 +1064,8 @@ export class FlightController {
     this.reentry.dispose();
     this.effects.dispose();
     this.flags.dispose();
-    this.scene.environment?.dispose();
+    this.skyEnv.dispose();
+    this.scene.environment = null;
     this.labelHost.remove();
     this.fadeEl?.remove();
     this.pipeline.dispose();
