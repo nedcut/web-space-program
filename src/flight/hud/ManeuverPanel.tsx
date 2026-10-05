@@ -1,10 +1,12 @@
+import { usePlanner } from './usePlanner';
+import { applyPlanningResult } from '../../game/planning/apply';
 import { TransferWindow } from './TransferWindow';
 import { useEffect, useRef, useState } from 'react';
 import type { World } from '../../game/world';
 import { timeToApoapsis, timeToPeriapsis, burnTimeEstimate, periapsisRadius, apoapsisRadius } from '../../sim/orbit';
 import { formatDistance, formatDuration } from '../../ui/format';
 import { computeStageDeltaV } from '../../sim/vessel';
-import { planTransferToBody, planCircularization } from '../../game/autopilot';
+import { planCircularization } from '../../game/autopilot';
 
 /**
  * Maneuver planner shown in map view. Nodes are placed by time (Ap / Pe / custom offset) and shaped with
@@ -12,6 +14,7 @@ import { planTransferToBody, planCircularization } from '../../game/autopilot';
  */
 export function ManeuverPanel({ world }: { world: World }) {
   const [, force] = useState(0);
+  const planner = usePlanner(world);
   const [planMsg, setPlanMsg] = useState('');
   const [transferTarget, setTransferTarget] = useState<string | null>(null);
   const holdRef = useRef<{ axis: 'prograde' | 'normal' | 'radial' | 'time'; dir: number; t0: number } | null>(null);
@@ -65,18 +68,15 @@ export function ManeuverPanel({ world }: { world: World }) {
   const targets = [...siblings, ...body.children.map((id) => world.universe.body(id)), ...(body.parent && body.parent !== world.universe.sunId ? [world.universe.body(body.parent)] : [])]
     .filter((b) => b.kind !== 'star')
     .sort((a, b) => (a.orbit?.a ?? 0) - (b.orbit?.a ?? 0));
-  const planTransfer = (id: string) => {
-    // The search is synchronous (up to a few seconds): show feedback first, then compute on the next tick.
-    setPlanMsg(`Planning transfer to ${world.universe.body(id).name}…`);
-    setTimeout(() => {
-      world.nodes = [];
-      try {
-        const plan = planTransferToBody(world, id);
-        setPlanMsg(plan ? `Transfer planned: ${plan.dv.toFixed(0)} m/s, burn in ${formatDuration(plan.node.time - world.ut)}. Warp ahead with “.”, then use Assist → Execute next node.` : 'No transfer window found');
-      } catch (e) {
-        setPlanMsg((e as Error).message);
-      }
-    }, 50);
+  const planTransfer = async (id: string) => {
+    setPlanMsg('');
+    try {
+      const { result: plan, snapshot } = await planner.run('transfer', { target: id });
+      if (plan) applyPlanningResult(world, snapshot, plan);
+      setPlanMsg(plan ? `Transfer planned: ${plan.dv.toFixed(0)} m/s, burn in ${formatDuration(plan.node.time - world.ut)}. Warp ahead with “.”, then use Assist → Execute next node.` : 'No transfer window found');
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') setPlanMsg((e as Error).message);
+    }
   };
   const planCirc = (at: 'apoapsis' | 'periapsis') => {
     world.nodes = [];
@@ -147,6 +147,7 @@ export function ManeuverPanel({ world }: { world: World }) {
       {targets.length > 0 && (
         <select
           className="btn small"
+          disabled={!!planner.progress || !!transferTarget}
           value=""
           onChange={(e) => e.target.value && planTransfer(e.target.value)}
           style={{ background: 'var(--panel-solid)', color: 'var(--text)' }}
@@ -157,10 +158,15 @@ export function ManeuverPanel({ world }: { world: World }) {
           ))}
         </select>
       )}
-      {siblings.length > 0 && <select className="btn small" aria-label="Transfer window destination" value="" onChange={e => { if (e.target.value) setTransferTarget(e.target.value); }} style={{ background: 'var(--panel-solid)', color: 'var(--text)' }}>
+      {siblings.length > 0 && <select className="btn small" aria-label="Transfer window destination" disabled={!!planner.progress} value="" onChange={e => { if (e.target.value) setTransferTarget(e.target.value); }} style={{ background: 'var(--panel-solid)', color: 'var(--text)' }}>
         <option value="">Explore transfer windows…</option>
         {siblings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
       </select>}
+      {planner.progress && <div role="status" style={{ fontSize: 12 }}>
+        Planning… {planner.progress.phase} ({Math.round(planner.progress.fraction * 100)}%)
+        <progress aria-label="Transfer planning progress" value={planner.progress.fraction} max={1} />
+        <button className="btn small" onClick={() => { planner.cancel(); setPlanMsg('Planning cancelled'); }}>Cancel</button>
+      </div>}
       {planMsg && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{planMsg}</div>}
       {node && summary && (
         <>
