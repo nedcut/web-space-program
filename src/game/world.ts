@@ -666,6 +666,7 @@ export class World {
     }
     this.onEvent?.(e);
     if (e.vesselId !== this.activeId) return;
+    if (e.type === 'linkBroken') this.message('Structural brace broke!', 'bad', 4);
     if (e.type === 'structuralFailure') this.message('Structural failure — attachment broke!', 'bad', 4);
     if (e.type === 'flameout') this.message('Flameout!', 'warn', 2);
     if (e.type === 'docked' || e.type === 'undocked') this.approachCache = null;

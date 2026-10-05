@@ -213,7 +213,12 @@ export interface DockingPortModule {
   node: string;
 }
 
+export type LinkModule =
+  | { type: 'strut'; maxLength: number; stiffness: number; strength: number }
+  | { type: 'fuelLine'; maxLength: number };
+
 export type PartModule =
+  | LinkModule
   | { type: 'drill'; rate: number; ecRate: number; heat: number }
   | { type: 'converter'; rate: number; ecRate: number; heat: number }
   | { type: 'surveyScanner' }
@@ -275,8 +280,23 @@ export interface PartDef {
   meshParams?: Record<string, number | string | boolean>;
 }
 
+/** Endpoints are in each host part's LOCAL frame; invariant under docking/rerooting.
+ * Additive versioned extension of craft/save/protocol v1. Absent on legacy decorative struts. */
+export interface PartLink {
+  version: 1;
+  sourceUid: number;
+  sourcePos: Vec3;
+  sourceNormal: Vec3;
+  targetUid: number;
+  targetPos: Vec3;
+  targetNormal: Vec3;
+  /** Runtime separation/overload latch; never reconnects automatically. */
+  broken?: boolean;
+}
+
 /** A part placed in a craft (editor output / save format). */
 export interface PartInstance {
+  link?: PartLink;
   /** Unique within the craft. */
   uid: number;
   partId: string;

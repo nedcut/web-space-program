@@ -2,7 +2,7 @@ import { serializeWorld, deserializeWorld, type SavedWorld } from '../game/persi
 import type { World } from '../game/world';
 import type { VesselDelta } from './protocol';
 import { isruMachinery } from '../sim/vessel/isru';
-import { recomputeMassProperties } from '../sim/vessel';
+import { recomputeMassProperties, rebuildTopology } from '../sim/vessel';
 
 export function vesselDeltas(world: World): VesselDelta[] {
   return [...world.vessels.values()].map(v => {
@@ -17,7 +17,7 @@ export function vesselDeltas(world: World): VesselDelta[] {
       parts: s.parts.map(p => ({ uid: p.uid, resources: p.resources, mass: p.mass, temperature: p.temperature,
         skinTemperature: p.skinTemperature, activated: p.activated, engine: p.engine, chute: p.chute, leg: p.leg, wheel: p.wheel,
         bayOpen: p.bayOpen, drillDeployed: p.drillDeployed, drillDeploy: p.drillDeploy, converterRunning: p.converterRunning,
-        converterRecipe: p.converterRecipe, processTemperature: p.processTemperature, dockDisarmed: p.dockDisarmed, structuralFatigue: p.structuralFatigue })),
+        converterRecipe: p.converterRecipe, processTemperature: p.processTemperature, dockDisarmed: p.dockDisarmed, link: p.link, linkFatigue: p.linkFatigue, structuralFatigue: p.structuralFatigue })),
     });
     if (v.mode === 'landedRails' && v.fixed) return { ...base, mode: 'landedRails', fixed: structuredClone(v.fixed), state };
     return { ...base, mode: v.mode === 'prelaunch' ? 'prelaunch' : 'physics', fixed: structuredClone(v.fixed), state };
@@ -37,14 +37,19 @@ export function applyDeltas(world: World, ut: number, deltas: VesselDelta[]) {
     if ('state' in d && d.state) {
       const { parts, ...state } = structuredClone(d.state);
       Object.assign(v.state, state);
+      let linksChanged = false;
       for (const p of parts) {
         const part = v.state.cache.byUid.get(p.uid);
         if (part) {
+          linksChanged ||= JSON.stringify(part.link) !== JSON.stringify(p.link);
           Object.assign(part, p);
+          if (p.linkFatigue === undefined) delete part.linkFatigue;
+          if (p.link === undefined) delete part.link;
           // JSON omits undefined fields: an absent fatigue value means the joint recovered.
           if (p.structuralFatigue === undefined) delete part.structuralFatigue;
         }
       }
+      if (linksChanged) rebuildTopology(v.state);
       recomputeMassProperties(v.state, false);
     }
   }
@@ -71,5 +76,5 @@ export function replaceWorld(world: World, saved: SavedWorld) {
   if (!world.setTarget(world.targetId, world.targetPortUid)) world.setTarget(null);
   world.restoreAfterLoad();
 }
-export const topologyKey = (world: World) => JSON.stringify([...world.vessels.values()].map(v => [v.state.id, v.state.parts.map(p => [p.uid, p.parent, p.crew, p.docked])]));
+export const topologyKey = (world: World) => JSON.stringify([...world.vessels.values()].map(v => [v.state.id, v.state.parts.map(p => [p.uid, p.parent, p.crew, p.docked, p.link])]));
 export { serializeWorld };

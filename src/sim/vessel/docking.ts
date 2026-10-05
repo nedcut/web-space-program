@@ -259,9 +259,13 @@ export function mergeVessels(keep: VesselState, other: VesselState, keepPortUid:
   const qKi = qConj(qK);
   const qRel = qNormalize(qMul(qKi, qO));
   let maxUid = 0;
-  for (const p of keep.parts) maxUid = Math.max(maxUid, p.uid);
+  // Reserve dangling broken endpoint IDs too, so new hardware cannot impersonate a lost anchor.
+  for (const p of keep.parts) maxUid = Math.max(maxUid, p.uid, p.link?.sourceUid ?? 0, p.link?.targetUid ?? 0);
   const remap = new Map<number, number>();
   [...other.parts].sort((x, y) => x.uid - y.uid).forEach((p, i) => remap.set(p.uid, maxUid + 1 + i));
+  for (const p of other.parts) if (p.link) for (const uid of [p.link.sourceUid, p.link.targetUid]) {
+    if (!remap.has(uid)) remap.set(uid, maxUid + 1 + remap.size);
+  }
   const oldParent = new Map<number, number | null>();
   const oldAttach = new Map<number, { attachNode?: string; parentNode?: string }>();
   for (const p of other.parts) {
@@ -288,6 +292,10 @@ export function mergeVessels(keep: VesselState, other: VesselState, keepPortUid:
   po.parentNode = a.mod.node;
   po.docked = { vesselId: other.id, vesselName: other.name };
   for (const p of other.parts) {
+    if (p.link) {
+      p.link.sourceUid = remap.get(p.link.sourceUid) ?? p.link.sourceUid;
+      p.link.targetUid = remap.get(p.link.targetUid) ?? p.link.targetUid;
+    }
     p.uid = remap.get(p.uid)!;
     if (p !== po && p.parent !== null) p.parent = remap.get(p.parent)!;
   }

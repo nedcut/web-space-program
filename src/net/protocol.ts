@@ -1,3 +1,4 @@
+import { validCraftLinks } from '../sim/vessel/links';
 import type { SavedWorld } from '../game/persistence';
 import type { WorldVessel } from '../game/world';
 import type { ControlInput, PartState, VesselEvent, VesselState } from '../sim/vessel/runtime';
@@ -21,7 +22,7 @@ export type ClientMessage = Envelope & (
   | { type: 'chat'; text: string }
   | { type: 'action'; action: 'eva' | 'board' | 'flag' | 'undock'; uid?: number; astronautId?: string }
 );
-export type PartDelta = Pick<PartState, 'uid' | 'resources' | 'mass' | 'temperature' | 'skinTemperature' | 'activated' | 'engine' | 'chute' | 'leg' | 'wheel' | 'bayOpen' | 'drillDeployed' | 'drillDeploy' | 'converterRunning' | 'converterRecipe' | 'processTemperature' | 'dockDisarmed' | 'structuralFatigue'>;
+export type PartDelta = Pick<PartState, 'uid' | 'resources' | 'mass' | 'temperature' | 'skinTemperature' | 'activated' | 'engine' | 'chute' | 'leg' | 'wheel' | 'bayOpen' | 'drillDeployed' | 'drillDeploy' | 'converterRunning' | 'converterRecipe' | 'processTemperature' | 'dockDisarmed' | 'structuralFatigue' | 'linkFatigue' | 'link'>;
 export type DynamicState = Pick<VesselState, 'position' | 'velocity' | 'orientation' | 'angularVelocity' | 'mass' | 'com' | 'inertia' | 'invInertia' | 'nextStage' | 'situation' | 'sas' | 'telemetry' | 'eva' | 'destroyed'> & { parts: PartDelta[] };
 export type VesselDelta = { id: string; body: string } & (
   | { mode: 'rails'; orbit: NonNullable<WorldVessel['orbit']> }
@@ -93,7 +94,7 @@ export function validCraft(x: unknown): x is CraftDef {
       parent = parts.find(p => p.uid === parent)!.parent;
     }
   }
-  return true;
+  return validCraftLinks(parts);
 }
 export function decodeClient(raw: string): ClientMessage {
   const m = parse(raw);

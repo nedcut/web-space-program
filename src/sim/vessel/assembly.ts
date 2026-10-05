@@ -50,6 +50,7 @@ export function buildVessel(craft: CraftDef, partCatalog: Map<string, PartDef>, 
     let maxTemp = def.maxTemp;
     const p: PartState = {
       uid: pi.uid,
+      link: pi.link ? structuredClone(pi.link) : undefined,
       partId: pi.partId,
       def,
       position: { ...pi.position },
@@ -151,6 +152,10 @@ export function rebuildTopology(v: VesselState): void {
     p.children.sort((a, b) => a - b);
     if (p.parent === null) delete p.structuralFatigue;
   }
+  for (const p of v.parts) if (p.link && (!c.byUid.has(p.link.sourceUid) || !c.byUid.has(p.link.targetUid))) {
+    p.link.broken = true;
+    delete p.linkFatigue;
+  }
   v.cache = c;
   // Depths (BFS from root).
   const root = c.byUid.get(v.rootUid);
@@ -239,6 +244,7 @@ export function cloneVessel(v: VesselState): VesselState {
     eva: v.eva ? { ...v.eva } : undefined,
     parts: v.parts.map((p) => ({
       ...p,
+      link: p.link ? structuredClone(p.link) : undefined,
       position: { ...p.position },
       rotation: { ...p.rotation },
       children: [...p.children],

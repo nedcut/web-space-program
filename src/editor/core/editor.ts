@@ -1,14 +1,19 @@
 import type { CraftDef, PartInstance } from '../../sim/vessel/types';
-import { add, sub, v3, type Vec3 } from '../../util/vec3';
+import { add, sub, v3, length, normalize, type Vec3 } from '../../util/vec3';
 import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../../util/quat';
 import { alignNodes, freeAttachNodes, mirrorPosition, mirrorRotation, requirePart, surfaceContact, surfacePlacement, transformAssembly, worldNode, type HeldAssembly, type PartCatalog, type SnapCandidate } from './geometry';
 import { autoStage, getStageList, insertStage, moveToStage, removeEmptyStages, type Stage } from './staging';
 import { deserializeCraft, serializeCraft } from './serialization';
 
 export type Symmetry = { mode: 'radial'; count: 1 | 2 | 3 | 4 | 6 | 8 } | { mode: 'mirror'; count?: 2 };
-export interface EditorSnapshot { craft: CraftDef; held?: HeldAssembly }
+export interface LinkHit { uid: number; point: Vec3; normal: Vec3 }
+export interface EditorSnapshot { craft: CraftDef; held?: HeldAssembly; linkStart?: { partId: string; hit: LinkHit } }
 export type ChangeListener = (snapshot: EditorSnapshot) => void;
 const copy = <T>(value: T): T => structuredClone(value);
+function assertLinkHit(hit: LinkHit): void {
+  if (![hit.point.x, hit.point.y, hit.point.z, hit.normal.x, hit.normal.y, hit.normal.z].every(Number.isFinite)
+    || Math.abs(length(hit.normal) - 1) > 1e-5) throw new Error('Invalid surface point');
+}
 function descendants(parts: PartInstance[], uid: number): Set<number> {
   const result = new Set([uid]);
   let changed = true;
@@ -54,6 +59,7 @@ export class CraftEditor {
   }
   get craft(): CraftDef { return copy(this.state.craft); }
   get held(): HeldAssembly | undefined { return copy(this.state.held); }
+  get linkStart() { return copy(this.state.linkStart); }
   get canUndo(): boolean { return this.past.length > 0; }
   get canRedo(): boolean { return this.future.length > 0; }
   onChange(listener: ChangeListener): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -187,18 +193,73 @@ export class CraftEditor {
       return this.addSymmetric(part, parent);
     });
   }
+  beginLink(partId: string, hit: LinkHit): void {
+    this.update(() => {
+      assertLinkHit(hit);
+      const def = requirePart(this.catalog, partId), host = this.part(hit.uid);
+      if (!def.modules.some(m => m.type === 'strut' || m.type === 'fuelLine') || this.state.held
+        || !requirePart(this.catalog, host.partId).allowSurfaceAttachChildren) throw new Error('Invalid link source');
+      this.state.linkStart = { partId, hit: copy(hit) };
+    });
+  }
+  cancelLink(): void { if (this.state.linkStart) this.update(() => { delete this.state.linkStart; }); }
+  /** Finish all symmetry copies in one transaction; both hits are in craft coordinates. */
+  completeLink(hit: LinkHit): PartInstance {
+    return this.update(() => {
+      assertLinkHit(hit);
+      const start = this.state.linkStart;
+      if (!start) throw new Error('Choose the first endpoint');
+      const source = this.part(start.hit.uid), target = this.part(hit.uid);
+      const def = requirePart(this.catalog, start.partId);
+      const spec = def.modules.find(m => m.type === 'strut' || m.type === 'fuelLine')!;
+      const distance = length(sub(hit.point, start.hit.point));
+      if (source.uid === target.uid || !requirePart(this.catalog, target.partId).allowSurfaceAttachChildren) throw new Error('Choose a different part surface');
+      if (distance < 0.05 || distance > spec.maxLength) throw new Error(`Link length must be 0.05–${spec.maxLength} m`);
+      const uid = this.nextUid();
+      const mount = { ...this.newPart(start.partId), ...surfacePlacement(def, start.hit.point, start.hit.normal, qIdentity()),
+        parent: source.uid, attachNode: 'srf', parentNode: 'srf' };
+      this.addSymmetric(mount, source);
+      const copies = this.state.craft.parts.filter(p => p.uid >= uid);
+      for (let i = 0; i < copies.length; i++) {
+        const p = copies[i], host = this.part(p.parent!);
+        const mirrored = i > 0 && this.symmetry.mode === 'mirror';
+        let transformPoint: (v: Vec3) => Vec3, transformNormal: (v: Vec3) => Vec3;
+        if (mirrored) {
+          transformPoint = mirrorPosition; transformNormal = mirrorPosition;
+        } else {
+          const delta = qMul(p.rotation, qConj(mount.rotation));
+          transformPoint = v => add(p.position, qRotate(delta, sub(v, mount.position)));
+          transformNormal = v => qRotate(delta, v);
+        }
+        const targetCenter = transformPoint(target.position);
+        const counterpart = this.state.craft.parts.find(t => t.partId === target.partId && length(sub(t.position, targetCenter)) < 1e-4);
+        if (!counterpart || counterpart.uid === host.uid) throw new Error('Symmetry needs corresponding target parts');
+        const localPoint = (v: Vec3, t: PartInstance) => qRotate(qConj(t.rotation), sub(v, t.position));
+        p.link = { version: 1, sourceUid: host.uid, sourcePos: localPoint(transformPoint(start.hit.point), host),
+          sourceNormal: normalize(qRotate(qConj(host.rotation), transformNormal(start.hit.normal))),
+          targetUid: counterpart.uid, targetPos: localPoint(transformPoint(hit.point), counterpart),
+          targetNormal: normalize(qRotate(qConj(counterpart.rotation), transformNormal(hit.normal))) };
+      }
+      delete this.state.linkStart;
+      return this.part(uid);
+    });
+  }
   detachSubtree(uid: number): HeldAssembly {
     return this.update(() => {
       if (this.state.held) throw new Error('An assembly is already held');
       this.part(uid);
       const ids = descendants(this.state.craft.parts, uid);
-      const parts = copy(this.state.craft.parts.filter(p => ids.has(p.uid)));
+      const linked = new Set(this.state.craft.parts.filter(p => p.link && (ids.has(p.link.sourceUid) || ids.has(p.link.targetUid))).map(p => p.uid));
+      const parts = copy(this.state.craft.parts.filter(p => ids.has(p.uid) && !linked.has(p.uid)));
+      // A link mount picked directly becomes ordinary held hardware; endpoints are chosen anew.
+      for (const p of parts) if (p.link) delete p.link;
       const root = parts.find(p => p.uid === uid)!;
       delete root.parent; delete root.attachNode; delete root.parentNode;
       // Break groups that straddle the detached boundary, retaining wholly detached groups.
       const outsideGroups = new Set(this.state.craft.parts.filter(p => !ids.has(p.uid)).map(p => p.symmetryGroup));
       for (const p of parts) if (outsideGroups.has(p.symmetryGroup)) delete p.symmetryGroup;
-      this.state.craft.parts = this.state.craft.parts.filter(p => !ids.has(p.uid));
+      this.state.craft.parts = this.state.craft.parts.filter(p => !ids.has(p.uid) && !linked.has(p.uid));
+      delete this.state.linkStart;
       this.state.held = { rootUid: uid, parts };
       return this.state.held;
     });
@@ -263,11 +324,14 @@ export class CraftEditor {
       const target = this.part(uid);
       const roots = this.state.craft.parts.filter(p => p.uid === uid || (target.symmetryGroup !== undefined && p.symmetryGroup === target.symmetryGroup));
       const ids = new Set(roots.flatMap(p => [...descendants(this.state.craft.parts, p.uid)]));
-      this.state.craft.parts = this.state.craft.parts.filter(p => !ids.has(p.uid));
+      this.state.craft.parts = this.state.craft.parts.filter(p => !ids.has(p.uid)
+        && !(p.link && (ids.has(p.link.sourceUid) || ids.has(p.link.targetUid))));
+      delete this.state.linkStart;
     });
   }
   reRoot(uid: number): void {
     this.update(() => {
+      if (this.part(uid).link) throw new Error('A link cannot be the craft root');
       const origin = this.part(uid).position;
       this.state.craft.parts = rootAt(this.state.craft.parts, uid).map(p => ({ ...p, position: sub(p.position, origin) }));
     });
