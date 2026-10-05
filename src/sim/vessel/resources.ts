@@ -76,7 +76,7 @@ export function buildFeedGroups(v: VesselState, consumerUid: number): number[][]
       const p = seed[i];
       if (component.has(p.uid)) continue;
       component.set(p.uid, id); local.push(p); found.push(p);
-      if (isDecoupler(p)) continue;
+      if (p !== start && isDecoupler(p)) continue;
       for (const n of stackNeighbours(v, p)) if (!component.has(n.uid) && !isDecoupler(n)) seed.push(n);
     }
     members.push(local);

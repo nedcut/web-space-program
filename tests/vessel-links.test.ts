@@ -161,9 +161,19 @@ describe('link persistence and protocol', () => {
       (l: PartLink) => { l.version = 2 as 1; },
     ]) {
       const craft = plumbing(); mutate(craft.parts[5].link!);
+      expect(() => buildVessel(craft, PART_CATALOG)).toThrow();
       expect(() => deserializeCraft(JSON.stringify(craft), PART_CATALOG)).toThrow();
       expect(validateCraft(craft, PART_CATALOG).craft).toBeNull(); expect(validCraft(craft)).toBe(false);
     }
+  });
+
+  it('isolates live links from staging projections and rejects unsupported linked parts', () => {
+    const v = buildVessel(plumbing(), PART_CATALOG), clone = cloneVessel(v);
+    splitVessel(clone, [4]);
+    expect(clone.parts.some(p => p.uid === 5)).toBe(false);
+    expect(v.cache.byUid.get(6)!.link!.broken).toBeUndefined();
+    const craft = plumbing(); craft.parts[5].partId = 'tank-1-short';
+    expect(() => buildVessel(craft, PART_CATALOG)).toThrow('unsupported link');
   });
 
   it('remaps both endpoint UIDs on docking and preserves local anchor positions under rotation and rerooting', () => {

@@ -68,7 +68,22 @@ describe('editor two-point links', () => {
     spans.forEach(span => expect(span).toBeCloseTo(spans[0], 8));
   });
 
-  it('preserves anchors when rerooted and removes symmetric links together', () => {
+  it('deletes symmetry copies together and rolls back unsupported endpoint copies', () => {
+    const ed = new CraftEditor(PART_CATALOG); ed.addRoot('tank-1-mid'); ed.setSymmetry({ mode: 'mirror' });
+    ed.surfaceAttach('tank-1-mid',1,v3(.625,0,0),v3(1,0,0));
+    const part = ed.craft.parts[1];
+    ed.beginLink('strut',{uid: part.uid, point:add(part.position,v3(0,.2,0)),normal:v3(1,0,0)});
+    const brace = ed.completeLink({uid:1,point:v3(.625,.8,0),normal:v3(1,0,0)});
+    expect(ed.craft.parts.filter(p => p.link)).toHaveLength(2);
+    ed.deletePart(brace.uid); expect(ed.craft.parts.filter(p => p.link)).toHaveLength(0);
+    ed.undo(); expect(ed.craft.parts.filter(p => p.link)).toHaveLength(2);
+    const asym = editor(); asym.setSymmetry({mode:'radial',count:4}); asym.beginLink('strut',source);
+    const before = asym.craft;
+    expect(() => asym.completeLink(endpoint(asym))).toThrow('corresponding target');
+    expect(asym.craft).toEqual(before);
+  });
+
+  it('preserves anchors when rerooted', () => {
     const ed = editor(); ed.beginLink('strut',source); ed.completeLink(endpoint(ed));
     const before = ed.craft, origin = before.parts[1].position;
     const a = linkEndpoints(before.parts[2].link!,new Map(before.parts.map(p => [p.uid,p])))!;

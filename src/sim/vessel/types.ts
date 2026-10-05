@@ -214,6 +214,7 @@ export interface DockingPortModule {
 }
 
 export type LinkModule =
+  /** Axial rigidity EA in N (spring stiffness = EA/span); strength in N. */
   | { type: 'strut'; maxLength: number; stiffness: number; strength: number }
   | { type: 'fuelLine'; maxLength: number };
 
