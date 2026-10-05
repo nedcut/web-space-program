@@ -1,3 +1,4 @@
+import { PartHeat } from '../fx/PartHeat';
 import { batchStaticParts, disposeStaticBatch } from './staticBatch';
 import * as THREE from 'three';
 import type { VesselState, PartState } from '../../sim/vessel/runtime';
@@ -7,6 +8,7 @@ import { qRotate } from '../../util/quat';
 import type { Vec3 } from '../../util/vec3';
 
 interface PartVisual {
+  heat: PartHeat;
   uid: number;
   object: THREE.Object3D;
   plumes: Plume[];
@@ -21,6 +23,7 @@ interface PartVisual {
  */
 export class VesselView {
   readonly root = new THREE.Group();
+  private readonly origin = new THREE.Vector3();
   private inner = new THREE.Group();
   private parts = new Map<number, PartVisual>();
   private lastTopology?: VesselState['cache'];
@@ -41,6 +44,14 @@ export class VesselView {
     return this.vessel.id;
   }
 
+  /** Last rendered part location remains available when the sim has already removed it. */
+  partPosition(uid: number, out: THREE.Vector3): boolean {
+    const part = this.parts.get(uid);
+    if (!part) return false;
+    part.object.getWorldPosition(out).add(this.origin);
+    return true;
+  }
+
   setVessel(v: VesselState) {
     this.vessel = v;
   }
@@ -52,6 +63,7 @@ export class VesselView {
     const alive = new Set(this.vessel.parts.map((p) => p.uid));
     for (const [uid, pv] of this.parts) {
       if (!alive.has(uid) || this.vessel.cache.byUid.get(uid)?.partId !== pv.partId) {
+        pv.heat.dispose();
         this.inner.remove(pv.object);
         pv.plumes.forEach((pl) => pl.dispose());
         this.parts.delete(uid);
@@ -66,6 +78,7 @@ export class VesselView {
           o.receiveShadow = true;
         }
       });
+      const heat = new PartHeat(obj);
       const plumes: Plume[] = [];
       const eng = p.def.modules.find((m): m is EngineModule => m.type === 'engine');
       if (eng) {
@@ -76,7 +89,7 @@ export class VesselView {
         }
       }
       this.inner.add(obj);
-      this.parts.set(p.uid, { uid: p.uid, partId: p.partId, object: obj, plumes, deploy: 0, static: false });
+      this.parts.set(p.uid, { heat, uid: p.uid, partId: p.partId, object: obj, plumes, deploy: 0, static: false });
     }
     const staticObjects: THREE.Object3D[] = [];
     const staticKinds = new Set(['tank', 'adapter', 'girder', 'strut', 'noseCone', 'battery', 'reactionWheel', 'probeCore', 'heatShield', 'monoSphere', 'monoTorus', 'xenonTank', 'framework', 'habitat', 'rcsQuad', 'rcsPorts', 'instrument', 'decoupler', 'separator', 'radialDecoupler']);
@@ -97,6 +110,7 @@ export class VesselView {
 
   update(origin: Vec3, time: number, ambientPressure: number, dt: number, distant = false) {
     const v = this.vessel;
+    this.origin.copy(origin);
     if (v.cache !== this.lastTopology) {
       if (this.geometryKey !== this.layoutKey()) this.rebuild();
       this.lastTopology = v.cache;
@@ -109,7 +123,9 @@ export class VesselView {
     this.inner.position.set(-v.com.x, -v.com.y, -v.com.z);
     for (const p of v.parts) {
       const pv = this.parts.get(p.uid);
-      if (!pv || pv.static) continue;
+      if (!pv) continue;
+      pv.heat.update(p, dt);
+      if (pv.static) continue;
       pv.object.position.set(p.position.x, p.position.y, p.position.z);
       pv.object.quaternion.set(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
       this.animatePart(p, pv, time, ambientPressure, dt);
@@ -161,7 +177,7 @@ export class VesselView {
   dispose() {
     if (this.batch) disposeStaticBatch(this.batch);
     this.impostor.geometry.dispose(); this.impostor.material.dispose();
-    for (const pv of this.parts.values()) pv.plumes.forEach((pl) => pl.dispose());
+    for (const pv of this.parts.values()) { pv.heat.dispose(); pv.plumes.forEach((pl) => pl.dispose()); }
     this.root.removeFromParent();
   }
 }
