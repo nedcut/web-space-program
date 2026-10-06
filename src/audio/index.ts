@@ -217,6 +217,15 @@ export class GameAudio {
       tensionSource.connect(pulse).connect(this.tension).connect(this.musicGain);
       this.sources.add(tensionSource); this.sources.add(rhythm);
       tensionSource.start(); rhythm.start();
+      // The compressor has a finite attack; a soft safety ceiling catches exceptional pile-ups.
+      const ceiling = this.track(ctx.createWaveShaper());
+      const curve = new Float32Array(2048);
+      for (let i = 0; i < curve.length; i++) {
+        const x = i * 2 / (curve.length - 1) - 1, a = Math.abs(x);
+        curve[i] = Math.sign(x) * (a <= 0.85 ? a : 0.85 + 0.1 * Math.tanh((a - 0.85) / 0.1));
+      }
+      ceiling.curve = curve;
+      limiter.disconnect(); limiter.connect(ceiling).connect(ctx.destination);
       this.applySettings();
       if (typeof document !== 'undefined') {
         document.addEventListener('visibilitychange', this.visibility);
@@ -345,9 +354,9 @@ export class GameAudio {
     this.tone(95, 0.18, 0.22, 'triangle', 35);
   }
   decouple(): void { this.burst(0.12, 0.2, 900, 'bandpass'); this.tone(160, 0.12, 0.15, 'triangle', 60); }
-  explosion(size: number, distance = 0): void {
+  explosion(size: number, distance = 0, pressure = 101325, throughHull = true): void {
     const scale = Math.sqrt(unit(positive(size) / 10));
-    const attenuation = distanceGain(distance);
+    const attenuation = distanceGain(distance) * ((throughHull ? 0.12 : 0) + (throughHull ? 0.88 : 1) * atmosphere(pressure));
     this.burst(0.4 + scale * 1.4, (0.15 + scale * 0.6) * attenuation, 1400, 'lowpass', 'brown');
     this.burst(0.18, (0.1 + scale * 0.2) * attenuation, 3000, 'lowpass');
     this.tone(65, 0.5 + scale, (0.1 + scale * 0.25) * attenuation, 'sine', 22);
@@ -388,6 +397,15 @@ export class GameAudio {
     if (!this.musicGain || mode === this.musicMode) return;
     const theme = mode === 'space' ? 'cruise' : mode === 'menu' ? 'saturn' : mode;
     this.musicMode = mode;
+    // Retire outgoing pads after the crossfade, rather than consuming voices for their full 22 s tail.
+    for (const source of this.musicSources) {
+      const gain = this.transientNodes.get(source)?.[1] as GainNode | undefined;
+      if (!gain) continue;
+      const now = this.context.currentTime;
+      gain.gain.cancelAndHoldAtTime(now);
+      gain.gain.linearRampToValueAtTime(0, now + 3);
+      try { source.stop(now + 3.05); } catch { /* Already ended. */ }
+    }
     if (this.musicTimer !== undefined) clearInterval(this.musicTimer);
     this.musicTimer = undefined;
     for (const [name, bus] of this.themeBuses) {
@@ -569,11 +587,11 @@ export class GameAudio {
     const running = state.timeWarp <= 1 && ctx.state === 'running';
     const mix = running ? distance : 0;
     const wheel = positive(state.wheelSpeed ?? 0);
-    const amplitudes = { wheels: Math.sqrt(wheel / (wheel + 25)) * 0.13,
-      chute: state.chuteOpen ? windGain(state.dynamicPressure) * 0.16 : 0,
-      jetpack: state.jetting ? 0.07 : 0, drill: state.drilling ? 0.12 : 0 };
     for (const [name, layer] of this.mechanics) {
-      this.target(layer.gain.gain, amplitudes[name as keyof typeof amplitudes] * mix);
+      const amplitude = name === 'wheels' ? Math.sqrt(wheel / (wheel + 25)) * 0.13
+        : name === 'chute' ? (state.chuteOpen ? windGain(state.dynamicPressure) * 0.16 : 0)
+        : name === 'jetpack' ? (state.jetting ? 0.07 : 0) : state.drilling ? 0.12 : 0;
+      this.target(layer.gain.gain, amplitude * mix);
       if (name === 'wheels') this.target(layer.filter.frequency, 80 + Math.min(1800, wheel * 18));
     }
     if (this.previousVessel !== state.vesselId) {
@@ -583,6 +601,16 @@ export class GameAudio {
       this.warningTimes.clear();
       this.previousControls = undefined;
     }
+    const previous = this.previousControls;
+    if (previous) {
+      if (previous.sas !== state.sas) this.controlCue(!!state.sas);
+      if (previous.rcs !== state.rcs) this.controlCue(!!state.rcs);
+      if (previous.warp !== state.timeWarp) this.controlCue(state.timeWarp > previous.warp);
+      if ((state.nodeCount ?? 0) > previous.nodes) this.tone(880, 0.17, 0.06, 'sine', 1100, 0, true);
+      if ((state.completedMissions ?? 0) > previous.missions) this.missionComplete();
+      previous.sas = state.sas; previous.rcs = state.rcs; previous.warp = state.timeWarp;
+      previous.nodes = state.nodeCount ?? 0; previous.missions = state.completedMissions ?? 0;
+    } else this.previousControls = { sas: state.sas, rcs: state.rcs, warp: state.timeWarp, nodes: state.nodeCount ?? 0, missions: state.completedMissions ?? 0 };
     if (!running) return;
     if (state.mechanicalState !== undefined && this.previousMechanical !== undefined && state.mechanicalState !== this.previousMechanical) {
       const old = new Map(this.previousMechanical.split(',').map(entry => entry.split(':')) as [string, string][]);
@@ -597,16 +625,6 @@ export class GameAudio {
       if (state.splashed) this.burst(0.9, 0.08 + unit(this.previousSpeed / 30) * 0.2, 1200, 'bandpass', 'pink');
     }
     this.previousSpeed = Math.abs(state.verticalSpeed ?? state.airspeed);
-    const previous = this.previousControls;
-    if (previous) {
-      if (previous.sas !== state.sas) this.controlCue(!!state.sas);
-      if (previous.rcs !== state.rcs) this.controlCue(!!state.rcs);
-      if (previous.warp !== state.timeWarp) this.controlCue(state.timeWarp > previous.warp);
-      if ((state.nodeCount ?? 0) > previous.nodes) this.tone(880, 0.17, 0.06, 'sine', 1100, 0, true);
-      if ((state.completedMissions ?? 0) > previous.missions) this.missionComplete();
-      previous.sas = state.sas; previous.rcs = state.rcs; previous.warp = state.timeWarp;
-      previous.nodes = state.nodeCount ?? 0; previous.missions = state.completedMissions ?? 0;
-    } else this.previousControls = { sas: state.sas, rcs: state.rcs, warp: state.timeWarp, nodes: state.nodeCount ?? 0, missions: state.completedMissions ?? 0 };
     if ((state.structuralStress ?? 0) > 0.55 && ctx.currentTime >= this.nextCreak) {
       this.burst(0.45, 0.06 * unit(state.structuralStress!), 420, 'bandpass', 'crackle');
       this.tone(130, 0.35, 0.035, 'triangle', 85);
@@ -618,18 +636,20 @@ export class GameAudio {
       this.burst(0.09, 0.035 * distance, 350, 'lowpass', 'brown');
       this.nextStep = ctx.currentTime + 0.48;
     }
-    const warnings = [
-      ['fuel', state.fuelFraction !== undefined && state.fuelFraction < 0.1, 440],
-      ['heat', (state.temperatureFraction ?? 0) > 0.85, 880],
-      ['stress', (state.structuralStress ?? 0) > 0.85, 590],
-      ['g', (state.gForce ?? 0) > 6, 740], ['terrain', state.terrainDanger, 330], ['signal', state.noSignal, 520],
-    ] as const;
-    for (const [name, active, pitch] of warnings) {
-      if (!active || ctx.currentTime < (this.warningTimes.get(name) ?? 0)) continue;
-      this.tone(pitch, 0.14, 0.07, 'sine', pitch, 0, true);
-      this.tone(name === 'terrain' ? pitch * 2 : pitch, 0.14, 0.07, 'sine', pitch, 0.23, true);
-      this.warningTimes.set(name, ctx.currentTime + (name === 'terrain' ? 2 : 8));
-    }
+    this.alarm('fuel', state.fuelFraction !== undefined && state.fuelFraction < 0.1, 440);
+    this.alarm('heat', (state.temperatureFraction ?? 0) > 0.85, 880);
+    this.alarm('stress', (state.structuralStress ?? 0) > 0.85, 590);
+    this.alarm('g', (state.gForce ?? 0) > 6, 740);
+    this.alarm('terrain', !!state.terrainDanger, 330);
+    this.alarm('signal', !!state.noSignal, 520);
+  }
+
+  private alarm(name: string, active: boolean, pitch: number): void {
+    const now = this.context!.currentTime;
+    if (!active || now < (this.warningTimes.get(name) ?? 0)) return;
+    this.tone(pitch, 0.14, 0.07, 'sine', pitch, 0, true);
+    this.tone(name === 'terrain' ? pitch * 2 : pitch, 0.14, 0.07, 'sine', pitch, 0.23, true);
+    this.warningTimes.set(name, now + (name === 'terrain' ? 2 : 8));
   }
 
   private pad(): void {

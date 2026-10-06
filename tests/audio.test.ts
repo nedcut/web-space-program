@@ -74,6 +74,7 @@ class Param {
   value = 0;
   targets: number[] = [];
   cancelScheduledValues() {}
+  cancelAndHoldAtTime() {}
   setTargetAtTime(value: number) { this.value = value; this.targets.push(value); }
   setValueAtTime(value: number) { this.value = value; }
   linearRampToValueAtTime(value: number) { this.value = value; }
@@ -98,6 +99,7 @@ class ContextDouble {
   destination = new NodeDouble(); nodes: NodeDouble[] = [];
   constructor() { ContextDouble.latest = this; }
   private node() { const node = new NodeDouble(); this.nodes.push(node); return node; }
+  createWaveShaper() { return this.node(); }
   createStereoPanner() { return this.node(); }
   createGain() { return this.node(); }
   createDynamicsCompressor() { return this.node(); }
@@ -369,4 +371,18 @@ describe('sound polish regressions', () => {
       expect(impact).toHaveBeenCalledTimes(1);
     } finally { audio.dispose(); vi.unstubAllGlobals(); }
   });
+});
+
+it('plays warp and maneuver cues while physics sounds are suppressed on rails', async () => {
+  vi.stubGlobal('AudioContext', ContextDouble);
+  const audio = new GameAudio();
+  try {
+    audio.resume(); await Promise.resolve();
+    const cue = vi.spyOn(audio, 'controlCue');
+    audio.update({ ...state, vesselId: 'craft', timeWarp: 1 });
+    audio.update({ ...state, vesselId: 'craft', timeWarp: 100, nodeCount: 1 });
+    expect(cue).toHaveBeenCalledWith(true);
+    audio.update({ ...state, vesselId: 'craft', timeWarp: 1, nodeCount: 1 });
+    expect(cue).toHaveBeenLastCalledWith(false);
+  } finally { audio.dispose(); vi.unstubAllGlobals(); }
 });

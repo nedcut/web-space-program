@@ -1,3 +1,4 @@
+import type { MusicSituation } from '../../audio/situation';
 import { flightRumble } from '../../audio/design';
 import { type WorldVessel } from '../../game/world';
 import { type AudioState, type EngineType } from '../../audio';
@@ -5,8 +6,11 @@ import { length } from '../../util/vec3';
 import type { FlightController } from '../controller';
 import type { FlightControllerInternals } from './internals';
 
+const FUEL_RESOURCES = ['liquidFuel', 'oxidizer', 'solidFuel', 'xenon', 'monopropellant'] as const;
+const WARP_RATES = [1, 5, 10, 50, 100, 1000, 10000, 100000, 1000000];
+
 // Camera displacement is sampled against real wall time, never the accelerated simulation clock.
-const cameraHistory = new WeakMap<FlightController, { distance: number; time: number; vessel: string; engines: AudioState['engines']; neighbors: { x: number; y: number; z: number; thrust: number }[]; fairings: number }>();
+const cameraHistory = new WeakMap<FlightController, { distance: number; time: number; vessel: string; engines: AudioState['engines']; neighbors: { x: number; y: number; z: number; thrust: number }[]; fairings: number; mechanics: Map<number, boolean>; sample: AudioState & { situation: MusicSituation } }>();
 
 export function updateAudio(this: FlightController, internals: FlightControllerInternals, wv: WorldVessel | null): void {
   if (!internals.audio) return;
@@ -17,21 +21,28 @@ export function updateAudio(this: FlightController, internals: FlightControllerI
   let history = cameraHistory.get(this);
   if (history && history.vessel === st.id && now - history.time < 0.05) return;
   if (!history || history.vessel !== st.id) {
-    history = { distance: this.cam.distance, time: now, vessel: st.id, fairings: -1,
+    history = { distance: this.cam.distance, time: now, vessel: st.id, fairings: -1, mechanics: new Map(),
+      sample: { engines: [], ambientPressure: 0, airspeed: 0, mach: 0, dynamicPressure: 0, rcsActive: 0,
+        reentryHeat: 0, inMapView: false, timeWarp: 1, cameraDistance: 0, situation: { scene: 'flight' } },
       engines: (['kerolox', 'hydrolox', 'solid', 'methalox', 'ion', 'monoprop', 'jet', 'afterburner', 'nuclear', 'aerospike'] as EngineType[]).map(type => ({ type, thrustFraction: 0, count: 0, size: 0 })),
       neighbors: Array.from({ length: 4 }, () => ({ x: 0, y: 0, z: 0, thrust: 0 })) };
     cameraHistory.set(this, history);
   }
   for (const e of history.engines) { e.thrustFraction = 0; e.count = 0; e.size = 0; }
-  let fairings = 0;
+  let fairings = 0, mechanismChanged = false;
   let vac = 0, fuel = 0, capacity = 0, temperature = 0, wheelSpeed = 0;
 
   for (const p of st.parts) {
     temperature = Math.max(temperature, p.temperature / p.maxTemp);
     for (const t of p.skinTemperature) temperature = Math.max(temperature, t / p.maxTemp);
-    for (const resource of ['liquidFuel', 'oxidizer', 'solidFuel', 'xenon', 'monopropellant'] as const) {
+    for (const resource of FUEL_RESOURCES) {
       fuel += p.resources[resource] ?? 0;
       capacity += p.maxResources[resource] ?? 0;
+    }
+    const deployed = p.leg?.deployed ?? p.wheel?.deployed ?? p.bayOpen ?? p.drillDeployed;
+    if (deployed !== undefined) {
+      if (history.mechanics.has(p.uid) && history.mechanics.get(p.uid) !== deployed) mechanismChanged = true;
+      history.mechanics.set(p.uid, deployed);
     }
     if (p.wheel?.inContact) wheelSpeed = Math.max(wheelSpeed, Math.abs(p.wheel.rollSpeed));
     if (p.def.modules.some(m => m.type === 'fairing')) fairings++;
@@ -47,6 +58,8 @@ export function updateAudio(this: FlightController, internals: FlightControllerI
 
     }
   }
+  if (mechanismChanged) internals.audio.legDeploy();
+  for (const uid of history.mechanics.keys()) if (!st.cache.byUid.has(uid)) history.mechanics.delete(uid);
   const tm = st.telemetry;
   const radial = now > history.time ? (this.cam.distance - history.distance) / (now - history.time) : 0;
   history.distance = this.cam.distance; history.time = now;
@@ -90,39 +103,41 @@ export function updateAudio(this: FlightController, internals: FlightControllerI
     && st.parts.some(p => (p.resources.electricCharge ?? 0) > 0 || p.def.modules.some(m =>
       m.type === 'generator' || (m.type === 'fuelCell' && fuel > 0)))
     && st.parts.some(p => (p.maxResources.regolith ?? 0) > (p.resources.regolith ?? 0) || p.converterRunning);
-  internals.audio.update({
-    vesselId: st.id,
-    engines: history.engines,
-    neighbors: history.neighbors,
-    structuralStress: stress,
-    verticalSpeed,
-    splashed: st.situation === 'splashed',
-    sas: this.sasOn, rcs: this.rcsOn, nodeCount: this.world.nodes.length,
-    completedMissions: this.world.progression.contracts.reduce((n, c) => n + (c.status === 'completed' ? 1 : 0), 0),
-    launchRumble: flightRumble(tm.thrust, st.mass * this.world.universe.body(wv.body).surfaceGravity, tm.altitudeAGL, tm.dynamicPressure, tm.mach),
-    ambientPressure: tm.staticPressure,
-    airspeed: length(this.world.surfaceVelocity(wv)),
-    mach: tm.mach,
-    dynamicPressure: tm.dynamicPressure,
-    rcsActive: this.rcsOn && (input.tx || input.ty || input.tz || input.pitch || input.yaw || input.roll) ? 1 : 0,
-    reentryHeat: internals.reentryHeat,
-    inMapView: this.mapMode,
-    timeWarp: this.world.warp.mode === 'rails' ? [1, 5, 10, 50, 100, 1000, 10000, 100000, 1000000][this.world.warp.index] : 1,
-    cameraDistance: this.cam.distance,
-    cameraRadialVelocity: radial,
-    situation: { scene: 'flight', bodyId: wv.body, parentId: this.world.universe.body(wv.body).parent, reentryHeat: internals.reentryHeat, landing },
-    wheelSpeed,
-    chuteOpen: st.parts.some(p => p.chute?.phase === 'semi' || p.chute?.phase === 'full'),
-    walking: st.eva?.walking,
-    jetting: st.eva?.jetting,
-    drilling,
-    mechanicalState: st.parts.filter(p => p.leg || p.wheel || p.bayOpen !== undefined || p.drillDeployed !== undefined)
-      .map(p => `${p.uid}:${p.leg?.deployed ?? p.wheel?.deployed ?? p.bayOpen ?? p.drillDeployed}`).join(','),
-    landed: st.situation !== 'flying',
-    fuelFraction: capacity > 0 ? fuel / capacity : undefined,
-    temperatureFraction: temperature,
-    gForce: tm.gForce,
-    terrainDanger,
-    noSignal: this.world.commsSettings.enabled && !this.world.connection(st).connected,
-  });
+  const sample = history.sample;
+  sample.vesselId = st.id;
+  sample.engines = history.engines;
+  sample.neighbors = history.neighbors;
+  sample.structuralStress = stress;
+  sample.verticalSpeed = verticalSpeed;
+  sample.splashed = st.situation === 'splashed';
+  sample.sas = this.sasOn; sample.rcs = this.rcsOn; sample.nodeCount = this.world.nodes.length;
+  sample.completedMissions = 0;
+  for (const contract of this.world.progression.contracts) if (contract.status === 'completed') sample.completedMissions++;
+  sample.launchRumble = flightRumble(tm.thrust, st.mass * this.world.universe.body(wv.body).surfaceGravity, tm.altitudeAGL, tm.dynamicPressure, tm.mach);
+  sample.ambientPressure = tm.staticPressure;
+  sample.airspeed = length(this.world.surfaceVelocity(wv));
+  sample.mach = tm.mach;
+  sample.dynamicPressure = tm.dynamicPressure;
+  sample.rcsActive = this.rcsOn && (input.tx || input.ty || input.tz || input.pitch || input.yaw || input.roll) ? 1 : 0;
+  sample.reentryHeat = internals.reentryHeat;
+  sample.inMapView = this.mapMode;
+  sample.timeWarp = this.world.warp.mode === 'rails' ? WARP_RATES[this.world.warp.index] : 1;
+  sample.cameraDistance = this.cam.distance;
+  sample.cameraRadialVelocity = radial;
+  sample.situation.bodyId = wv.body;
+  sample.situation.parentId = this.world.universe.body(wv.body).parent;
+  sample.situation.reentryHeat = internals.reentryHeat;
+  sample.situation.landing = landing;
+  sample.wheelSpeed = wheelSpeed;
+  sample.chuteOpen = st.parts.some(p => p.chute?.phase === 'semi' || p.chute?.phase === 'full');
+  sample.walking = st.eva?.walking;
+  sample.jetting = st.eva?.jetting;
+  sample.drilling = drilling;
+  sample.landed = st.situation !== 'flying';
+  sample.fuelFraction = capacity > 0 ? fuel / capacity : undefined;
+  sample.temperatureFraction = temperature;
+  sample.gForce = tm.gForce;
+  sample.terrainDanger = terrainDanger;
+  sample.noSignal = this.world.commsSettings.enabled && !this.world.connection(st).connected;
+  internals.audio.update(sample);
 }

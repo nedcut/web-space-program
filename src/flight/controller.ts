@@ -313,12 +313,12 @@ export class FlightController {
         source.state.position.z - active.state.position.z - this.cam.camera.position.z) : this.cam.distance;
       if (e.type === 'flameout' && e.vesselId === this.world.activeId) this.audio.flameout();
       if (e.type === 'stage' && e.vesselId === this.world.activeId) this.audio.staging();
-      if (e.type === 'decouple') this.audio.decouple();
-      if (e.type === 'structuralFailure') this.audio.explosion(0.3, eventDistance);
-      if (e.type === 'partDestroyed') this.audio.explosion(1, eventDistance);
-      if (e.type === 'chute' && (e.phase === 'semi' || e.phase === 'full')) this.audio.chuteDeploy();
-      if (e.type === 'docked') this.audio.docking();
-      if (e.type === 'undocked') this.audio.decouple();
+      if (e.type === 'decouple' && e.vesselId === this.world.activeId) this.audio.decouple();
+      if (e.type === 'structuralFailure') this.audio.explosion(0.3, eventDistance, active?.state.telemetry.staticPressure ?? 0, e.vesselId === this.world.activeId);
+      if (e.type === 'partDestroyed') this.audio.explosion(1, eventDistance, active?.state.telemetry.staticPressure ?? 0, e.vesselId === this.world.activeId);
+      if (e.vesselId === this.world.activeId && e.type === 'chute' && (e.phase === 'semi' || e.phase === 'full')) this.audio.chuteDeploy();
+      if (e.type === 'docked' && (e.vesselId === this.world.activeId || e.otherId === this.world.activeId)) this.audio.docking();
+      if (e.type === 'undocked' && e.vesselId === this.world.activeId) this.audio.decouple();
     };
 
     const ro = new ResizeObserver(() => this.resize());
