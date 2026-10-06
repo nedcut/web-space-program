@@ -7,6 +7,8 @@ import { AppIcon } from './glyphs';
 import type { HudCallbacks, Telemetry } from './Hud';
 
 const CLOCK_KEY = 'wsp.hud.clock.v1';
+/** Locale formatting is slow; the warp level titles never change. */
+const RAILS_LABELS = RAILS_WARP.map((r) => r.toLocaleString());
 
 /** Mission clock: T+ [d] hh:mm:ss. */
 export function formatMet(sec: number): string {
@@ -42,7 +44,7 @@ export function TimeControl({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
             const blocked = !physics && idx > t.warpLimit;
             return (
               <button key={idx} type="button" className={`tc-level ${lit ? 'lit' : ''} ${blocked ? 'blocked' : ''}`} aria-label={`Warp ${physics ? PHYSICS_WARP[idx] : RAILS_WARP[idx]}×`}
-                title={`${physics ? PHYSICS_WARP[idx] : RAILS_WARP[idx].toLocaleString()}×${blocked ? ' — not available at this altitude / while thrusting' : ''}`}
+                title={`${physics ? PHYSICS_WARP[idx] : RAILS_LABELS[idx]}×${blocked ? ' — not available at this altitude / while thrusting' : ''}`}
                 onClick={() => cb.onWarp((t.warpIndex >= idx ? idx - 1 : idx) - t.warpIndex)} />
             );
           })}

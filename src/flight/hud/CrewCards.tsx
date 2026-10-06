@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { memo, useSyncExternalStore } from 'react';
 import { bindingLabel, getBindings, subscribeBindings } from '../../input/bindings';
 import { CAMERA_MODE_INFO } from '../camera';
 import { Portrait } from './CrewPanel';
@@ -8,10 +8,22 @@ import type { HudCallbacks, Telemetry } from './Hud';
 const MAX_CARDS = 4;
 
 /** Bottom-right: crew portrait cards (EVA per astronaut, interior view placeholder) with MAP and camera buttons. */
-export function CrewCards({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
+export interface CrewCardsProps {
+  crew: Telemetry['crew'];
+  eva: Telemetry['eva'];
+  mapMode: boolean;
+  noControl: boolean;
+  cameraMode: Telemetry['feel']['cameraMode'];
+  /** Must be referentially stable (Hud passes a forwarding object) for the memo to hold. */
+  cb: HudCallbacks;
+}
+
+/** Re-renders only when crew, EVA state, map/camera mode or control authority change (not at telemetry rate). */
+export const CrewCards = memo(function CrewCards({ crew, eva, mapMode, noControl, cameraMode, cb }: CrewCardsProps) {
+  const t = { crew, eva, mapMode, noControl };
   const bindings = useSyncExternalStore(subscribeBindings, getBindings);
   const key = (a: Parameters<typeof bindingLabel>[0]) => bindingLabel(a, bindings);
-  const cam = CAMERA_MODE_INFO[t.feel.cameraMode];
+  const cam = CAMERA_MODE_INFO[cameraMode];
   const shown = t.crew.slice(0, MAX_CARDS);
   return (
     <div className="crew-dock">
@@ -59,4 +71,4 @@ export function CrewCards({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
       {!t.eva && t.noControl && !t.mapMode && <div className="crew-nocontrol panel">No control · {t.crew.length ? 'crew cannot fly this vessel' : 'an astronaut or probe core is required'}</div>}
     </div>
   );
-}
+});

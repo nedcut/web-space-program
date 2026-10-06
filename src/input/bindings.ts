@@ -109,8 +109,18 @@ export function conflicts(bindings: Bindings): { key: string; actions: Action[] 
 export function actionLabel(a: Action) { return a.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).replace(/(\D)(\d+)$/, '$1 $2'); }
 
 /** Human-readable names shared by tutorial prose, help and shortcut hints. */
+/** Labels by key list: the HUD asks for dozens of labels per telemetry update (titles, action groups). */
+const labelCache = new Map<string, string>();
 export function bindingLabel(action: Action, bindings = current): string {
-  return [...new Set(bindings[action].map(k => k.replace(/Key|Digit/g, '').replace(/(Shift|Control|Alt|Meta)(Left|Right)/g, '$1').replace('Control', 'Ctrl')))].join(' / ') || 'Unbound';
+  const keys = bindings[action];
+  const id = keys.join('\n');
+  let label = labelCache.get(id);
+  if (label === undefined) {
+    label = [...new Set(keys.map(k => k.replace(/Key|Digit/g, '').replace(/(Shift|Control|Alt|Meta)(Left|Right)/g, '$1').replace('Control', 'Ctrl')))].join(' / ') || 'Unbound';
+    if (labelCache.size > 512) labelCache.clear();
+    labelCache.set(id, label);
+  }
+  return label;
 }
 export function bindingText(text: string, bindings = current): string {
   return text.replace(/\{(\w+)\}/g, (token, action: string) => action in DEFAULT_BINDINGS ? bindingLabel(action as Action, bindings) : token);

@@ -231,6 +231,14 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
   const [picked, setPicked] = useState<{ uids: number[]; key: number } | null>(null);
   const cbRef = useRef(cb);
   cbRef.current = cb;
+  // Referentially stable callbacks for memoised children: forwards to the latest props (optional entries stay
+  // undefined when the scene does not provide them, e.g. no settings in multiplayer).
+  const cbKeys = Object.keys(cb).filter((k) => cb[k as keyof HudCallbacks]).sort().join();
+  const stableCb = useMemo(() => {
+    const out: Record<string, unknown> = {};
+    for (const k of cbKeys.split(',')) if (k) out[k] = (...a: unknown[]) => (cbRef.current[k as keyof HudCallbacks] as ((...x: unknown[]) => void) | undefined)?.(...a);
+    return out as unknown as HudCallbacks;
+  }, [cbKeys]);
   const toggleApp = apps.toggle;
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -313,7 +321,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
         <div className="app-stack">
           {docked.map(a => <AppWindow key={a.id} app={a} scale={settings.hudScale} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} />)}
         </div>
-        <CrewCards t={t} cb={cb} />
+        <CrewCards crew={t.crew} eva={t.eva} mapMode={t.mapMode} noControl={t.noControl} cameraMode={t.feel.cameraMode} cb={stableCb} />
       </div>
       {floating.map(a => <AppWindow key={a.id} app={a} pos={apps.state.pos[a.id]} scale={settings.hudScale} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} />)}
 

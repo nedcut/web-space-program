@@ -37,7 +37,7 @@ import { getTutorial } from '../tutorial/runtime';
 import { formatDistance, formatDuration, formatSpeed } from '../ui/format';
 import { frameProfiler as prof } from '../util/frameProfiler';
 import { detachRenderer, noteDfgLut, releaseSharedTextures } from '../render/releaseRenderer';
-import { snapshotEqual } from '../util/snapshotEqual';
+import { shareUnchanged, snapshotEqual } from '../util/snapshotEqual';
 import { bindingLabel } from '../input/bindings';
 import { cross, dot, length, normalize, sub, type Vec3 } from '../util/vec3';
 import { type AssistId } from './assist';
@@ -794,7 +794,7 @@ export class FlightController {
     this.telemetryTimer += dt;
     if (this.telemetryTimer > 0.1 && wv) {
       this.telemetryTimer = 0;
-      const t = this.telemetry(wv);
+      const t = shareUnchanged(this.telemetry(wv), this.lastTelemetry);
       const hudInput = `${this.input.precisionActive}:${this.input.stageProgress}:${this.input.gamepadConnected}`;
       if (hudInput !== this.lastHudInput || !snapshotEqual(t, this.lastTelemetry)) {
         this.lastHudInput = hudInput;
