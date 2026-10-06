@@ -29,9 +29,9 @@ export interface Hint {
 }
 
 const TEXT: Record<HintId, string> = {
-  turn: 'Gravity turn: tap {yawRight} to tip the nose about 10° east (heading 90°), then press PRO so SAS follows the prograde marker as the rocket arcs over.',
-  coast: 'Apoapsis is above the atmosphere. Cut the throttle ({throttleCut}) and coast up — the ⇥ button next to time warp can take you straight to apoapsis.',
-  circularize: 'Approaching apoapsis: hold PRO and burn ({throttleFull}) until the periapsis climbs above the atmosphere.',
+  turn: 'Gravity turn: tap {yawRight} to tip the nose about 10° east (heading 90°), then pick the Prograde SAS mode (left of the navball) so SAS follows the prograde marker as the rocket arcs over.',
+  coast: 'Apoapsis is above the atmosphere. Cut the throttle ({throttleCut}) and coast up — the ⇥ button next to time warp (top-left) can take you straight to apoapsis.',
+  circularize: 'Approaching apoapsis: hold Prograde in SAS and burn ({throttleFull}) until the periapsis climbs above the atmosphere.',
   orbit: 'You are in orbit! Open the map ({map}) to plan your next maneuver — the Moon is a short hop away.',
 };
 
