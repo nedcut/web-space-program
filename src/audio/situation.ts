@@ -1,5 +1,5 @@
 /** Pure mixing/scheduling helpers; safe in headless simulation tests. */
-export type MusicTheme = 'menu' | 'spaceCenter' | 'earthOrbit' | 'moon' | 'cruise' | 'saturn' | 'titan' | 'tense';
+export type MusicTheme = 'menu' | 'editor' | 'spaceCenter' | 'earthOrbit' | 'moon' | 'cruise' | 'saturn' | 'titan' | 'tense';
 export interface MusicSituation { scene?: string; bodyId?: string; parentId?: string; reentryHeat?: number; landing?: boolean }
 const finite = (v: number) => Number.isFinite(v) ? v : 0;
 export function distanceGain(distance: number): number {
@@ -11,6 +11,7 @@ export function dopplerPitch(radialVelocity: number, pressure: number): number {
   return Math.max(0.7, Math.min(1.4, 343 / (343 + Math.max(-240, Math.min(240, finite(radialVelocity))))));
 }
 export function selectTheme(s: MusicSituation): MusicTheme {
+  if (s.scene === 'editor') return 'editor';
   if (s.scene === 'menu') return 'saturn';
   if (s.scene && s.scene !== 'flight' && s.scene !== 'tracking') return 'spaceCenter';
   if ((s.reentryHeat ?? 0) > 0.2 || s.landing) return 'tense';
@@ -27,6 +28,7 @@ export function crossfadeSchedule(now: number, duration: number, from: number, t
   return [{ time: start, gain: clamp(from) }, { time: start + Math.max(0.02, finite(duration)), gain: clamp(to) }];
 }
 export const THEMES: Record<MusicTheme, { root: number; chords: number[][]; interval: number; duration: number; shimmer: boolean }> = {
+  editor: { root: 110, chords: [[0, 7, 16], [5, 12, 19], [2, 9, 14]], interval: 9, duration: 16, shimmer: false },
   menu: { root: 146.832, chords: [[0, 7, 14], [2, 9, 16]], interval: 6, duration: 12, shimmer: false },
   spaceCenter: { root: 130.813, chords: [[0, 4, 7], [5, 9, 12], [7, 11, 14]], interval: 6, duration: 11, shimmer: false },
   earthOrbit: { root: 97.999, chords: [[0, 7, 14], [4, 11, 16]], interval: 8, duration: 15, shimmer: true },

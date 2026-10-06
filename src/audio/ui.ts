@@ -13,6 +13,7 @@ export function useInterfaceAudio(): void {
   useEffect(() => {
     const audio = getGameAudio();
     if (scene !== 'flight') {
+      audio.setPaused(false);
       audio.silenceFlight();
       audio.setMusic(selectTheme({ scene, bodyId: game.get().resumeWorld?.vessels.find(v => v.state.id === game.get().resumeWorld?.activeId)?.body }));
     }

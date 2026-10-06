@@ -86,7 +86,9 @@ describe('precise gravity',()=>{
   });
   it('applies merged radiation hazards during accepted numerical rails steps',()=>{
     const {world,v}=worldOrbit(637100*1.6);world.setPreciseGravity(true);
-    world.advanceRailsTo(30);
+    // Numerical rails may spend the first 8 ms frame rejecting/refining the initial step.
+    // Exercise accepted steps, not the wall-clock speed of a cold CI worker.
+    for (let frame = 0; frame < 16 && world.ut === 0; frame++) world.advanceRailsTo(30);
     expect(world.ut).toBeGreaterThan(0);
     expect(v.state.parts.some(p=>(p.radiationDose ?? 0)>0)).toBe(true);
     expect(world.crew.some(c=>(c.radiationDose ?? 0)>0)).toBe(true);

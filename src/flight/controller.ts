@@ -1,4 +1,5 @@
 import { CondensationFx } from '../render/fx/CondensationFx';
+import { flightRumble } from '../audio/design';
 import { FlightFx, isBurstEvent } from '../render/fx/FlightFx';
 
 import { PhotoCamera } from '../render/core/PhotoCamera';
@@ -314,13 +315,20 @@ export class FlightController {
         }
       }
       if (!this.audio) return;
-      if (e.type === 'stage') this.audio.staging();
-      if (e.type === 'decouple') this.audio.decouple();
-      if (e.type === 'structuralFailure') this.audio.explosion(0.3);
-      if (e.type === 'partDestroyed') this.audio.explosion(1);
-      if (e.type === 'chute' && (e.phase === 'semi' || e.phase === 'full')) this.audio.chuteDeploy();
-      if (e.type === 'docked') this.audio.docking();
-      if (e.type === 'undocked') this.audio.decouple();
+      const source = this.world.vessels.get(e.vesselId);
+      const active = this.world.active;
+      const eventDistance = source && active ? Math.hypot(
+        source.state.position.x - active.state.position.x - this.cam.camera.position.x,
+        source.state.position.y - active.state.position.y - this.cam.camera.position.y,
+        source.state.position.z - active.state.position.z - this.cam.camera.position.z) : this.cam.distance;
+      if (e.type === 'flameout' && e.vesselId === this.world.activeId) this.audio.flameout();
+      if (e.type === 'stage' && e.vesselId === this.world.activeId) this.audio.staging();
+      if (e.type === 'decouple' && e.vesselId === this.world.activeId) this.audio.decouple();
+      if (e.type === 'structuralFailure') this.audio.explosion(0.3, eventDistance, active?.state.telemetry.staticPressure ?? 0, e.vesselId === this.world.activeId);
+      if (e.type === 'partDestroyed') this.audio.explosion(1, eventDistance, active?.state.telemetry.staticPressure ?? 0, e.vesselId === this.world.activeId);
+      if (e.vesselId === this.world.activeId && e.type === 'chute' && (e.phase === 'semi' || e.phase === 'full')) this.audio.chuteDeploy();
+      if (e.type === 'docked' && (e.vesselId === this.world.activeId || e.otherId === this.world.activeId)) this.audio.docking();
+      if (e.type === 'undocked' && e.vesselId === this.world.activeId) this.audio.decouple();
     };
 
     const ro = new ResizeObserver(() => this.resize());
@@ -1073,11 +1081,7 @@ export class FlightController {
     const settings = game.get().settings;
     let rumble = 0;
     if (!settings.reduceMotion && !this.paused) {
-      const weight = Math.max(1, st.mass * body.surfaceGravity);
-      const launch = Math.min(1, tel.thrust / (weight * 1.5)) * Math.exp(-Math.max(0, agl) / 250);
-      const transonic = Math.exp(-(((tel.mach - 1) / 0.25) ** 2));
-      const buffet = Math.min(1, tel.dynamicPressure / 40000) * (0.35 + 0.65 * transonic);
-      rumble = Math.min(0.8, launch * 0.7 + buffet * 0.5);
+      rumble = flightRumble(tel.thrust, st.mass * body.surfaceGravity, agl, tel.dynamicPressure, tel.mach);
     }
     const probe = this.camProbe;
     this.cam.drive.yaw = this.input.camera.yaw;
