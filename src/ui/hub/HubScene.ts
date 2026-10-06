@@ -286,7 +286,7 @@ export class HubScene {
     this.ambient.groundColor.setRGB(0.2, 0.15, 0.1);
     this.ambient.intensity = 0.05 + 0.15 * day;
     this.scene.environmentIntensity = 0.06 + 0.3 * day;
-    this.stars.update(this.camera);
+    this.stars.update(this.camera, this.pipeline.pixelRatio);
     this.glare.update(this.camera, sd, eclipse, tint);
 
     // Hover picking.

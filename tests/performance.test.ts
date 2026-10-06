@@ -24,18 +24,27 @@ it('stage cache matches uncached calculations exactly through drain, pressure, c
 
 describe('adaptive scale', () => {
   const run = (q: AdaptiveQuality, ms: number, seconds: number, gpu?: number) => { for (let t = 0; t < seconds * 1000; t += ms) q.update(ms, true, gpu); };
-  it('drops after two over-budget windows, never below 0.5, and resets when disabled', () => {
+  // A quarter of the frames miss vsync: over budget, but not severely.
+  const marginal = (q: AdaptiveQuality, seconds: number) => { for (let t = 0, i = 0; t < seconds * 1000; i++) { const ms = i % 4 === 3 ? 40 : 16.7; q.update(ms, true); t += ms; } };
+  it('drops after two marginal windows or one severe window, never below 0.5, and resets when disabled', () => {
     const q = new AdaptiveQuality();
     run(q, 16.7, 3);
     expect(q.scale).toBe(1);
+    marginal(q, 1.05);
+    expect(q.scale).toBe(1); // one marginal window is not enough
+    marginal(q, 1.05);
+    expect(q.scale).toBe(0.9);
     run(q, 33.4, 1.05);
-    expect(q.scale).toBe(1); // one bad window is not enough
-    run(q, 33.4, 1.05);
-    expect(q.scale).toBe(0.85); // every frame missed: larger step
+    expect(q.scale).toBe(0.75); // every frame missed: immediate, larger step
     run(q, 33.4, 30);
     expect(q.scale).toBe(0.5);
     expect(q.update(16, false)).toBe(true);
     expect(q.scale).toBe(1);
+  });
+  it('jumps to the resolution predicted by GPU time', () => {
+    const q = new AdaptiveQuality();
+    run(q, 33.4, 1.05, 33); // GPU needs ~2x the budget: pixels ∝ scale², capped step
+    expect(q.scale).toBe(0.65);
   });
   it('ignores isolated hitches, suspended frames and CPU-bound slowness', () => {
     const q = new AdaptiveQuality();
@@ -49,13 +58,13 @@ describe('adaptive scale', () => {
   });
   it('recovers with headroom after a cooldown and backs off after oscillation', () => {
     const q = new AdaptiveQuality();
-    run(q, 33.4, 2.2);
+    run(q, 33.4, 1.05);
     expect(q.scale).toBe(0.85);
     run(q, 16.7, 3);
     expect(q.scale).toBe(0.85); // 4 s cooldown
     run(q, 16.7, 2.5);
     expect(q.scale).toBe(0.95);
-    run(q, 33.4, 3); // the increase failed immediately
+    for (let i = 0; i < 90 && q.scale === 0.95; i++) q.update(33.4, true); // the increase failed immediately
     expect(q.scale).toBe(0.8);
     run(q, 16.7, 6);
     expect(q.scale).toBe(0.8); // cooldown doubled to 8 s

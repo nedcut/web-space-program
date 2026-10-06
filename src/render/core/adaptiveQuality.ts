@@ -3,8 +3,10 @@
  * one-second windows of frame intervals and, when the browser exposes GPU timer queries, GPU time.
  *
  * - Over budget (≥20% of frames miss the display interval, or GPU time ≥90% of it) for two windows
- *   → scale down 0.1 (0.15 when most frames miss).
- * - Headroom (≤2% missed frames and, if known, GPU time ≤60% of the interval) → scale up 0.1 after a
+ *   (one when severe) → scale down; with GPU timings straight to the scale predicted to fit 80% of
+ *   the budget (pixels ∝ scale²), otherwise 0.1 (0.15 when most frames miss).
+ * - Headroom (≤2% missed frames and, if known, GPU time ≤60% of the interval) → scale up (0.1, or
+ *   towards the predicted 70%-budget scale) after a
  *   cooldown that doubles whenever an increase is undone within a few seconds (no oscillation).
  * - When GPU timing shows the GPU is idle, slow frames are CPU-bound and resolution is left alone.
  * - Frames over 250 ms (loading, tab switch, debugger) are ignored.
@@ -49,9 +51,15 @@ export class AdaptiveQuality {
 
     if (over) {
       this.goodMs = 0;
-      if (++this.bad >= 2) {
+      // Severe overload acts after one window; marginal overload needs two in a row.
+      const severe = slowFrac > 0.5 || (Number.isFinite(gpu) && gpu > this.targetMs * 1.3);
+      if (++this.bad >= (severe ? 1 : 2)) {
         this.bad = 0;
-        const next = Math.max(this.min, +(this.scale - (slowFrac > 0.5 ? 0.15 : 0.1)).toFixed(2));
+        // GPU time scales with pixel count (scale²): jump straight to the predicted scale for ~80% of the
+        // budget when timings are available, otherwise take fixed steps.
+        const predicted = Number.isFinite(gpu) && gpu > 0 ? this.scale * Math.sqrt((this.targetMs * 0.8) / gpu) : NaN;
+        const step = Number.isFinite(predicted) ? Math.min(0.35, Math.max(0.1, this.scale - predicted)) : slowFrac > 0.5 ? 0.15 : 0.1;
+        const next = Math.max(this.min, +(this.scale - step).toFixed(2));
         if (next < this.scale) {
           // An increase that had to be undone quickly: wait longer before trying again.
           if (this.sinceUpMs < 6000) this.cooldownMs = Math.min(60000, this.cooldownMs * 2);
@@ -62,7 +70,10 @@ export class AdaptiveQuality {
       this.bad = 0;
       this.goodMs += windowMs;
       if (this.scale < 1 && this.goodMs >= this.cooldownMs) {
-        this.scale = Math.min(1, +(this.scale + 0.1).toFixed(2));
+        // With GPU timings, climb towards the scale predicted to use ~70% of the budget (≤ +0.2 per step).
+        const predicted = Number.isFinite(gpu) && gpu > 0 ? this.scale * Math.sqrt((this.targetMs * 0.7) / gpu) : NaN;
+        const step = Number.isFinite(predicted) ? Math.min(0.2, Math.max(0.05, predicted - this.scale)) : 0.1;
+        this.scale = Math.min(1, +(this.scale + step).toFixed(2));
         this.goodMs = 0;
         this.sinceUpMs = 0;
       }

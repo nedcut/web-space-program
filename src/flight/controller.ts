@@ -975,7 +975,7 @@ export class FlightController {
       performance.now(),
     );
     this.scene.environmentIntensity = 0.85 + 0.35 * airFrac;
-    this.stars.update(camera);
+    this.stars.update(camera, this.pipeline.pixelRatio);
     this.glare.update(camera, sd, eclipse);
     prof.add('planets', t0);
     t0 = prof.now();

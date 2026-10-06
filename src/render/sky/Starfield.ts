@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mulberry32 } from '../../sim/terrain/noise';
 import { GLSL_NOISE } from '../core/glsl';
+import { ProceduralCubeMap } from '../core/proceduralCube';
 import { blackbodyLinear, GALACTIC_CENTER, GALACTIC_NORTH, LMC, SMC } from './astro';
 
 export interface StarfieldOptions {
@@ -23,6 +24,8 @@ export class Starfield {
   private milky: THREE.Mesh | null = null;
   private starMat: THREE.ShaderMaterial;
   private milkyMat: THREE.ShaderMaterial | null = null;
+  private milkyMap: ProceduralCubeMap | null = null;
+  private bakeRenderer: THREE.WebGLRenderer | null = null;
 
   constructor(opts: StarfieldOptions) {
     const rnd = mulberry32(opts.seed ?? 20260703);
@@ -110,12 +113,50 @@ export class Starfield {
     this.group.add(this.stars);
 
     if (opts.milkyWay) {
-      this.milkyMat = new THREE.ShaderMaterial({
+      // The band is ~16 simplex octaves per pixel: bake it once into a cube map (it cost 4.5 ms per frame
+      // at Retina resolution on an RTX 3060 Ti when evaluated per pixel, even in daylight).
+      this.milkyMap = new ProceduralCubeMap(opts.count >= 9000 ? 1024 : 512, /* glsl */ `
+          ${GLSL_NOISE}
+          uniform vec3 uGN, uGC, uLMC, uSMC;
+          vec4 bake(vec3 d) {
+            float sb = dot(d, uGN);
+            float b = asin(clamp(sb, -1.0, 1.0));
+            vec3 gy = normalize(cross(uGN, uGC));
+            float l = atan(dot(d, gy), dot(d, uGC));
+            // Band thickness bulges toward the galactic centre.
+            float core = exp(-((l / 0.6) * (l / 0.6)));
+            float width = 0.11 + 0.12 * core;
+            float band = exp(-((b / width) * (b / width)));
+            float n = fbm3(d * 6.0, 6) * 0.5 + 0.5;
+            float n2 = fbm3(d * 18.0 + 3.0, 5) * 0.5 + 0.5;
+            // Mottled star clouds (affordable now that the band is baked).
+            float n3 = fbm3(d * 55.0 - 7.0, 5) * 0.5 + 0.5;
+            float glow = band * (0.35 + 0.9 * n) * (0.6 + 1.1 * core) * (0.7 + 0.6 * n3);
+            glow += exp(-((b / 0.04) * (b / 0.04))) * n2 * 0.4 * (0.4 + core);
+            // Dust lanes (Great Rift): dark filaments near the plane.
+            float dust = smoothstep(0.45, 0.75, fbm3(d * 9.0 + 11.0, 7) * 0.5 + 0.5) * exp(-(((b + 0.02) / 0.06) * ((b + 0.02) / 0.06)));
+            glow *= 1.0 - 0.85 * dust;
+            glow += exp(-((acos(clamp(dot(d, uGC), -1.0, 1.0)) / 0.18) * (acos(clamp(dot(d, uGC), -1.0, 1.0)) / 0.18))) * 0.8;
+            vec3 col = mix(vec3(0.62, 0.7, 1.0), vec3(1.0, 0.88, 0.7), core * 0.7 + 0.15);
+            // Magellanic clouds
+            float lmc = exp(-((acos(clamp(dot(d, uLMC), -1.0, 1.0)) / 0.06) * (acos(clamp(dot(d, uLMC), -1.0, 1.0)) / 0.06))) * (0.5 + n2);
+            float smc = exp(-((acos(clamp(dot(d, uSMC), -1.0, 1.0)) / 0.04) * (acos(clamp(dot(d, uSMC), -1.0, 1.0)) / 0.04))) * (0.5 + n2);
+            vec3 c = col * glow + vec3(0.8, 0.85, 1.0) * (lmc * 0.45 + smc * 0.3);
+            // Stored as sqrt(c / 4) in RGBA8: plenty of precision in the faint end.
+            return vec4(sqrt(clamp(c / 4.0, 0.0, 1.0)), 1.0);
+          }
+          `, {
         uniforms: {
           uGN: { value: new THREE.Vector3(...GALACTIC_NORTH) },
           uGC: { value: new THREE.Vector3(...GALACTIC_CENTER) },
           uLMC: { value: new THREE.Vector3(...LMC) },
           uSMC: { value: new THREE.Vector3(...SMC) },
+        },
+      });
+      this.milkyMat = new THREE.ShaderMaterial({
+        uniforms: {
+          uMilky: { value: this.milkyMap.texture },
+          uReady: { value: 0 },
           uIntensity: { value: 0.035 * (opts.brightness ?? 1) },
         },
         vertexShader: /* glsl */ `
@@ -127,33 +168,13 @@ export class Starfield {
             gl_Position.z = gl_Position.w * 0.99999;
           }`,
         fragmentShader: /* glsl */ `
-          ${GLSL_NOISE}
-          uniform vec3 uGN, uGC, uLMC, uSMC;
+          uniform samplerCube uMilky;
+          uniform float uReady;
           uniform float uIntensity;
           varying vec3 vDir;
           void main() {
-            vec3 d = normalize(vDir);
-            float sb = dot(d, uGN);
-            float b = asin(clamp(sb, -1.0, 1.0));
-            vec3 gy = normalize(cross(uGN, uGC));
-            float l = atan(dot(d, gy), dot(d, uGC));
-            // Band thickness bulges toward the galactic centre.
-            float core = exp(-((l / 0.6) * (l / 0.6)));
-            float width = 0.11 + 0.12 * core;
-            float band = exp(-((b / width) * (b / width)));
-            float n = fbm3(d * 6.0, 6) * 0.5 + 0.5;
-            float n2 = fbm3(d * 18.0 + 3.0, 5) * 0.5 + 0.5;
-            float glow = band * (0.35 + 0.9 * n) * (0.6 + 1.1 * core);
-            glow += exp(-((b / 0.04) * (b / 0.04))) * n2 * 0.4 * (0.4 + core);
-            // Dust lanes (Great Rift): dark filaments near the plane.
-            float dust = smoothstep(0.45, 0.75, fbm3(d * 9.0 + 11.0, 5) * 0.5 + 0.5) * exp(-(((b + 0.02) / 0.06) * ((b + 0.02) / 0.06)));
-            glow *= 1.0 - 0.85 * dust;
-            glow += exp(-((acos(clamp(dot(d, uGC), -1.0, 1.0)) / 0.18) * (acos(clamp(dot(d, uGC), -1.0, 1.0)) / 0.18))) * 0.8;
-            vec3 col = mix(vec3(0.62, 0.7, 1.0), vec3(1.0, 0.88, 0.7), core * 0.7 + 0.15);
-            // Magellanic clouds
-            float lmc = exp(-((acos(clamp(dot(d, uLMC), -1.0, 1.0)) / 0.06) * (acos(clamp(dot(d, uLMC), -1.0, 1.0)) / 0.06))) * (0.5 + n2);
-            float smc = exp(-((acos(clamp(dot(d, uSMC), -1.0, 1.0)) / 0.04) * (acos(clamp(dot(d, uSMC), -1.0, 1.0)) / 0.04))) * (0.5 + n2);
-            vec3 c = col * glow + vec3(0.8, 0.85, 1.0) * (lmc * 0.45 + smc * 0.3);
+            vec3 s = uReady > 0.5 ? texture(uMilky, vDir).rgb : vec3(0.0);
+            vec3 c = s * s * 4.0;
             // Faint zodiacal/airglow floor so space is not pure black.
             c += vec3(0.02, 0.022, 0.03) * 0.15;
             gl_FragColor = vec4(c * uIntensity, 1.0);
@@ -165,6 +186,8 @@ export class Starfield {
       this.milky = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), this.milkyMat);
       this.milky.frustumCulled = false;
       this.milky.renderOrder = -1001;
+      // Bake strips in update() with the renderer that draws the sky (no nested renders).
+      this.milky.onBeforeRender = (renderer) => { if (!this.milkyMap?.done) this.bakeRenderer = renderer; };
       this.group.add(this.milky);
     }
   }
@@ -179,6 +202,10 @@ export class Starfield {
     // Geometry is rendered as directions (w = 0) so its position does not matter; keep transforms identity.
     this.starMat.uniforms.uPixelRatio.value = pixelRatio;
     void camera;
+    if (this.milkyMap && this.bakeRenderer && !this.milkyMap.done) {
+      for (let i = 0; i < 2 && !this.milkyMap.done; i++) this.milkyMap.step(this.bakeRenderer);
+      if (this.milkyMap.done) { this.milkyMat!.uniforms.uReady.value = 1; this.bakeRenderer = null; }
+    }
   }
 
   dispose(): void {
@@ -186,5 +213,6 @@ export class Starfield {
     this.starMat.dispose();
     this.milky?.geometry.dispose();
     this.milkyMat?.dispose();
+    this.milkyMap?.dispose();
   }
 }

@@ -6,6 +6,8 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
+import { classifyGpu } from '../../util/gpuTier';
 import type { QualitySettings } from './quality';
 
 export type ToneMappingId = 'aces' | 'agx' | 'neutral';
@@ -29,6 +31,9 @@ export class RenderPipeline {
   private renderPass!: RenderPass;
   private bloomPass?: UnrealBloomPass;
   private fxaaPass?: FXAAPass;
+  private smaaPass?: SMAAPass;
+  /** Unmasked WebGL renderer string, when the browser exposes it. */
+  readonly gpuName: string | null;
   photoEffects!: PhotoEffectsPass;
   private quality: QualitySettings;
   private adaptive = new AdaptiveQuality();
@@ -65,6 +70,10 @@ export class RenderPipeline {
     // Shader info-log queries force a synchronous compile wait; production builds skip them.
     r.debug.checkShaderErrors = !!import.meta.env?.DEV;
     this.gpuTimer = GpuTimer.create(r.getContext());
+    this.gpuName = rendererName(r.getContext());
+    // Adaptive resolution starts where this class of GPU usually lands, then converges from measurements.
+    const tier = classifyGpu(this.gpuName);
+    this.adaptive.scale = tier === 'strong' ? 1 : tier === 'mid' ? 0.75 : 0.6;
     this.buildComposer();
   }
 
@@ -116,9 +125,13 @@ export class RenderPipeline {
     }
     composer.addPass(new OutputPass());
     this.fxaaPass = undefined;
-    if (q.fxaa) {
+    this.smaaPass = undefined;
+    if (q.aa === 'fxaa') {
       this.fxaaPass = new FXAAPass();
       composer.addPass(this.fxaaPass);
+    } else if (q.aa === 'smaa') {
+      this.smaaPass = new SMAAPass();
+      composer.addPass(this.smaaPass);
     }
     this.photoEffects = new PhotoEffectsPass();
     composer.addPass(this.photoEffects);
@@ -141,6 +154,7 @@ export class RenderPipeline {
     this.composer.setPixelRatio(pr);
     this.composer.setSize(this.width, this.height);
     this.fxaaPass?.setSize(this.width * pr, this.height * pr);
+    this.smaaPass?.setSize(this.width * pr, this.height * pr);
   }
 
   /** Viewport height in device pixels (used for screen-space LOD error). */
@@ -202,6 +216,15 @@ export class RenderPipeline {
     for (const pass of this.composer.passes) pass.dispose();
     this.composer.dispose();
     this.renderer.dispose();
+  }
+}
+
+function rendererName(gl: WebGLRenderingContext | WebGL2RenderingContext): string | null {
+  try {
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER) ?? '') || null;
+  } catch {
+    return null;
   }
 }
 
