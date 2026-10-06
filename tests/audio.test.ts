@@ -82,6 +82,7 @@ class Param {
 class NodeDouble {
   playbackRate = new Param();
   gain = new Param(); frequency = new Param(); detune = new Param(); Q = new Param();
+  pan = new Param(); attack = new Param(); release = new Param();
   threshold = new Param(); knee = new Param(); ratio = new Param();
   type = ''; loop = false; buffer: unknown;
   onended: (() => void) | null = null;
@@ -97,6 +98,7 @@ class ContextDouble {
   destination = new NodeDouble(); nodes: NodeDouble[] = [];
   constructor() { ContextDouble.latest = this; }
   private node() { const node = new NodeDouble(); this.nodes.push(node); return node; }
+  createStereoPanner() { return this.node(); }
   createGain() { return this.node(); }
   createDynamicsCompressor() { return this.node(); }
   createBiquadFilter() { return this.node(); }
@@ -288,6 +290,83 @@ describe('bounded upgraded audio', () => {
       expect(ctx.state).toBe('running');
       audio.uiClick(); expect(ctx.nodes.length).toBeGreaterThan(initial);
       audio.dispose(); expect(listeners.size).toBe(0);
+    } finally { audio.dispose(); vi.unstubAllGlobals(); }
+  });
+});
+
+describe('sound polish regressions', () => {
+  it('keeps UI independent of effects and reserves capacity for alarms', async () => {
+    vi.stubGlobal('AudioContext', ContextDouble);
+    const original = game.get().settings;
+    const audio = new GameAudio();
+    try {
+      audio.resume(); await Promise.resolve();
+      const ctx = ContextDouble.latest;
+      game.set({ settings: { ...original, sfxVolume: 0, uiVolume: 0.3 } });
+      expect(ctx.nodes[2].gain.value).toBe(0);
+      expect(ctx.nodes[7].gain.value).toBeCloseTo(0.3);
+      for (let i = 0; i < 200; i++) audio.explosion(10);
+      const count = audio.diagnostics().nodes;
+      expect(count).toBeLessThanOrEqual(210);
+      audio.controlCue();
+      expect(audio.diagnostics().nodes).toBe(count + 2);
+      for (let i = 0; i < 100; i++) audio.controlCue();
+      expect(audio.diagnostics().nodes).toBeLessThanOrEqual(234);
+    } finally { audio.dispose(); game.set({ settings: original }); vi.unstubAllGlobals(); }
+  });
+
+  it('pausing suspends music and effects even after visibility changes or gestures', async () => {
+    vi.useFakeTimers(); vi.stubGlobal('AudioContext', ContextDouble);
+    const listeners = new Map<string, () => void>();
+    const doc = { hidden: false, addEventListener: (n: string, f: () => void) => listeners.set(n, f), removeEventListener: (n: string) => listeners.delete(n) };
+    vi.stubGlobal('document', doc);
+    const audio = new GameAudio();
+    try {
+      audio.resume(); await Promise.resolve(); audio.setMusic('earthOrbit');
+      audio.setPaused(true);
+      const count = audio.diagnostics().nodes;
+      doc.hidden = true; listeners.get('visibilitychange')!();
+      doc.hidden = false; listeners.get('visibilitychange')!();
+      audio.resume(); audio.uiClick(); audio.update(state); vi.advanceTimersByTime(30000);
+      expect(ContextDouble.latest.state).toBe('suspended');
+      expect(audio.diagnostics().nodes).toBe(count);
+      expect(vi.getTimerCount()).toBe(0);
+      audio.setPaused(false); await Promise.resolve();
+      expect(ContextDouble.latest.state).toBe('running');
+    } finally { audio.dispose(); vi.unstubAllGlobals(); vi.useRealTimers(); }
+  });
+
+  it('reclaims every transient across repeated scene transitions and fully disposes the pool', async () => {
+    vi.stubGlobal('AudioContext', ContextDouble);
+    const audio = new GameAudio();
+    try {
+      audio.resume(); await Promise.resolve();
+      const baseline = audio.diagnostics();
+      for (let scene = 0; scene < 30; scene++) {
+        audio.update({ ...state, vesselId: `v${scene}` });
+        audio.flameout(); audio.fairing(); audio.explosion(10); audio.missionComplete();
+        audio.silenceFlight();
+        for (const node of ContextDouble.latest.nodes) node.onended?.();
+        expect(audio.diagnostics().nodes).toBe(baseline.nodes);
+        expect(audio.diagnostics().sources).toBe(baseline.sources);
+        expect(audio.diagnostics().transients).toBe(0);
+      }
+      audio.dispose();
+      expect(audio.diagnostics()).toMatchObject({ nodes: 0, sources: 0, transients: 0, music: 0 });
+    } finally { audio.dispose(); vi.unstubAllGlobals(); }
+  });
+
+  it('uses pre-contact descent speed for impacts and suppresses false transitions on vessel switch', async () => {
+    vi.stubGlobal('AudioContext', ContextDouble);
+    const audio = new GameAudio();
+    try {
+      audio.resume(); await Promise.resolve();
+      const impact = vi.spyOn(audio, 'touchdown');
+      audio.update({ ...state, vesselId: 'a', landed: false, verticalSpeed: -18 });
+      audio.update({ ...state, vesselId: 'a', landed: true, verticalSpeed: 0 });
+      expect(impact).toHaveBeenCalledWith(18);
+      audio.update({ ...state, vesselId: 'b', landed: true });
+      expect(impact).toHaveBeenCalledTimes(1);
     } finally { audio.dispose(); vi.unstubAllGlobals(); }
   });
 });
