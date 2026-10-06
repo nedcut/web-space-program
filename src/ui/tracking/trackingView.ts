@@ -1,4 +1,5 @@
-import { MapView, type ExtraOrbit } from '../../render/map/MapView';
+import { MapView, type ExtraOrbit, type MapPick, type MapPoint } from '../../render/map/MapView';
+import { formatDistance } from '../../util/format';
 import { RenderPipeline, getQuality } from '../../render/core';
 import { game, applyCommsSettings } from '../../game/store';
 import type { World } from '../../game/world';
@@ -23,7 +24,7 @@ export class TrackingView {
   private height = 1;
 
   constructor(private host: HTMLElement, readonly world: World, private refresh: () => void,
-    private focused: (focus: TrackingFocus) => void) {
+    private focused: (focus: TrackingFocus) => void, private menu: (pick: MapPick | null, at?: MapPoint) => void = () => {}) {
     this.pipeline = new RenderPipeline({ quality: getQuality(game.get().settings.quality) });
     const canvas = this.pipeline.renderer.domElement;
     Object.assign(canvas.style, { width: '100%', height: '100%', display: 'block' });
@@ -31,8 +32,14 @@ export class TrackingView {
     this.map = new MapView(world.universe.bodies, world.universe.ephem, host, getQuality(game.get().settings.quality), world.universe);
     this.focus = { kind: 'body', id: world.universe.sunId };
     this.setFocus(this.focus);
-    this.detach = this.map.attachControls(canvas, () => this.focus.kind === 'body' ? world.universe.body(this.focus.id).radius * 1.2 : 10);
-    canvas.addEventListener('dblclick', this.doubleClick);
+    this.detach = this.map.attachControls(canvas, () => this.focus.kind === 'body' ? world.universe.body(this.focus.id).radius * 1.2 : 1500);
+    // Same gestures as the flight map: double-click focuses, click / right-click opens the object menu.
+    this.map.handlers = {
+      focus: (pick) => { this.menu(null); this.setFocus(pick); },
+      objectMenu: (pick, at) => this.menu(pick, at),
+      emptyClick: () => this.menu(null),
+      describe: (pick) => this.describe(pick),
+    };
     this.resize = new ResizeObserver(() => {
       this.width = Math.max(1, host.clientWidth);
       this.height = Math.max(1, host.clientHeight);
@@ -60,11 +67,19 @@ export class TrackingView {
     this.focused(focus);
   }
 
-  private doubleClick = (event: MouseEvent) => {
-    const rect = this.host.getBoundingClientRect();
-    const hit = this.map.pick((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2);
-    if (hit) this.setFocus(hit);
-  };
+  private describe(pick: MapPick): string | null {
+    if (pick.kind !== 'vessel') return null;
+    const v = this.world.vessels.get(pick.id);
+    if (!v) return null;
+    const lines = [v.state.name, `${this.world.universe.body(v.body).name} · ${v.mode === 'prelaunch' ? 'prelaunch' : v.state.situation}`];
+    try {
+      if (v.state.situation === 'flying' && v.mode !== 'prelaunch') {
+        const o = this.world.orbitSummary(v);
+        lines.push(`Ap ${o.orbit.e < 1 ? formatDistance(o.ap) : 'escape'} · Pe ${formatDistance(o.pe)}`);
+      }
+    } catch { /* degenerate orbit */ }
+    return lines.join('\n');
+  }
 
   private animate = (now: number) => {
     const dt = Math.min((now - this.last) / 1000, 0.25);
@@ -99,7 +114,6 @@ export class TrackingView {
     cancelAnimationFrame(this.frame);
     this.resize.disconnect();
     this.detach();
-    this.pipeline.renderer.domElement.removeEventListener('dblclick', this.doubleClick);
     this.map.dispose();
     this.pipeline.dispose();
     this.pipeline.renderer.domElement.remove();

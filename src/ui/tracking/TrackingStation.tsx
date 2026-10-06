@@ -10,6 +10,8 @@ import { RAILS_WARP, warpRate } from '../../game/timewarp';
 import type { Body } from '../../sim/bodies/types';
 import { formatDate, formatDistance, formatDuration } from '../format';
 import { TrackingView, type TrackingFocus } from './trackingView';
+import { MapContextMenu } from '../map/MapContextMenu';
+import { mapContextActions, type MapActionId, type MapObject } from '../map/mapActions';
 import './tracking.css';
 
 const distance = (n: number) => Number.isFinite(n) ? formatDistance(n) : '∞';
@@ -33,9 +35,10 @@ export default function TrackingStation() {
   const [, refresh] = useState(0);
   const [focus, setFocus] = useState<TrackingFocus>({ kind: 'body', id: world.universe.sunId });
   const [terminate, setTerminate] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ obj: MapObject; x: number; y: number } | null>(null);
   const update = () => refresh((n) => n + 1);
   useEffect(() => {
-    const renderer = new TrackingView(host.current!, world, update, setFocus);
+    const renderer = new TrackingView(host.current!, world, update, setFocus, (pick, at) => setMenu(pick && at ? { obj: pick, x: at.x, y: at.y } : null));
     view.current = renderer;
     // Start on the player's fleet rather than a whole-solar-system view.
     const first = (world.activeId && world.vessels.get(world.activeId)) || world.vessels.values().next().value;
@@ -60,6 +63,13 @@ export default function TrackingStation() {
     if (world.activeId === id) { world.activeId = null; world.nodes = []; }
     if (focus.kind === 'vessel' && focus.id === id) view.current?.setFocus({ kind: 'body', id: world.universe.sunId });
     update();
+  };
+  const fly = (id: string) => { if (world.activeId !== id) world.nodes = []; world.activeId = id; exit('flight'); };
+  const menuName = (o: MapObject) => o.kind === 'vessel' ? world.vessels.get(o.id)?.state.name ?? o.id : world.universe.bodies.get(o.id)?.name ?? o.id;
+  const runMenu = (id: MapActionId, obj: MapObject) => {
+    setMenu(null);
+    if (id === 'switch') fly(obj.id);
+    else view.current?.setFocus(obj);
   };
   const groups = new Map<string, WorldVessel[]>();
   for (const v of world.vessels.values()) {
@@ -92,7 +102,7 @@ export default function TrackingStation() {
           const o = v.state.situation === 'flying' && v.mode !== 'prelaunch' ? world.orbitSummary(v) : null;
           return <article className="tracking-vessel" key={v.state.id}><strong>{v.state.name}</strong><div className="tracking-muted">{world.universe.body(v.body).name} · {v.mode === 'prelaunch' ? 'Prelaunch' : v.state.situation}</div><div className="mono tracking-apsides">Ap {o ? distance(o.ap) : '—'} / Pe {o ? distance(o.pe) : '—'}</div><div className="tracking-actions">
             <Button className="btn small" onClick={() => view.current?.setFocus({ kind: 'vessel', id: v.state.id })}>Focus</Button>
-            <Button className="btn small" onClick={() => { if (world.activeId !== v.state.id) world.nodes = []; world.activeId = v.state.id; exit('flight'); }}>Fly</Button>
+            <Button className="btn small" onClick={() => fly(v.state.id)}>Fly</Button>
             {v.body === 'earth' && (v.mode === 'prelaunch' || v.state.situation === 'landed' || v.state.situation === 'splashed') && <Button className="btn small" onClick={() => { if (world.recoverVessel(v.state.id)) { if (focus.kind === 'vessel' && focus.id === v.state.id) view.current?.setFocus({ kind: 'body', id: 'earth' }); update(); exit('flightlog'); } }}>Recover</Button>}
             <Button className="btn small danger" onClick={() => setTerminate(v.state.id)}>Terminate</Button>
           </div></article>;
@@ -103,7 +113,10 @@ export default function TrackingStation() {
           {Object.entries({ Radius: distance(body.radius), 'Surface gravity': `${body.surfaceGravity.toFixed(2)} m/s²`, 'Sphere of influence': distance(body.soi), 'Atmosphere height': body.atmosphere ? distance(body.atmosphere.height) : 'None', 'Surface pressure': `${((body.atmosphere?.surfacePressure ?? 0) / 1000).toFixed(2)} kPa`, 'Orbital period': body.orbitalPeriod ? formatDuration(body.orbitalPeriod) : '—', Rotation: `${formatDuration(Math.abs(body.rotationPeriod))}${body.rotationPeriod < 0 ? ' (retrograde)' : ''}`, Moons: body.children.filter((id) => world.universe.body(id).kind === 'moon').length }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
         </dl></section>
       </aside>
-      <footer className="panel tracking-help">Drag to orbit · Scroll to zoom · Double-click an icon to focus<br />Warp is limited by the active vessel’s altitude and encounter safety.</footer>
+      {menu && <MapContextMenu x={menu.x} y={menu.y} title={menuName(menu.obj)} subtitle={menu.obj.kind === 'vessel' ? 'Vessel' : undefined}
+        actions={mapContextActions(menu.obj, { canSwitch: true, name: menuName }).map(a => a.id === 'switch' ? { ...a, label: 'Fly' } : a)}
+        onAction={id => runMenu(id, menu.obj)} onClose={() => setMenu(null)} />}
+      <footer className="panel tracking-help">Drag to orbit · Scroll to zoom · Double-click to focus · Click or right-click for actions<br />Warp is limited by the active vessel’s altitude and encounter safety.</footer>
       {terminate && <Modal title="Terminate vessel?" onClose={() => setTerminate(null)}><p>{world.vessels.get(terminate)?.state.name} will be permanently removed from this world.</p><div className="tracking-actions"><Button className="btn" onClick={() => setTerminate(null)}>Cancel</Button><Button className="btn danger" onClick={() => { remove(terminate); setTerminate(null); }}>Confirm termination</Button></div></Modal>}
     </div>
   </div>;

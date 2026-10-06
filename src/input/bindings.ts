@@ -5,6 +5,7 @@ export const DEFAULT_BINDINGS = {
   throttleUp: ['ShiftLeft', 'ShiftRight'], throttleDown: ['ControlLeft', 'ControlRight'], throttleFull: ['KeyZ'], throttleCut: ['KeyX'],
   stage: ['Space'], toggleSas: ['KeyT'], toggleRcs: ['KeyR'], map: ['KeyM'], warpUp: ['Period'], warpDown: ['Comma'], warpStop: ['Slash'],
   menu: ['Escape'], help: ['F1'], perfOverlay: ['F8'], flightData: ['F3'], stressOverlay: ['F4'], photoMode: ['KeyP'], focusNext: ['BracketRight'], toggleCamMode: ['KeyV'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyU'], board: ['Enter'], plantFlag: ['KeyF'], toggleGear: ['KeyG'], brakes: ['KeyB'], toggleLights: ['KeyC'], abort: ['Backspace'],
+  mapFocusNext: ['Tab'], mapFocusHome: ['Home', 'Backquote'],
   actionGroup1: ['Digit1'], actionGroup2: ['Digit2'], actionGroup3: ['Digit3'], actionGroup4: ['Digit4'], actionGroup5: ['Digit5'],
   actionGroup6: ['Digit6'], actionGroup7: ['Digit7'], actionGroup8: ['Digit8'], actionGroup9: ['Digit9'], actionGroup10: ['Digit0'], precision: ['CapsLock'], precisionHold: ['AltLeft', 'AltRight'],
   cameraLeft: ['ArrowLeft'], cameraRight: ['ArrowRight'], cameraUp: ['ArrowUp'], cameraDown: ['ArrowDown'], cameraZoomIn: ['Equal', 'NumpadAdd'], cameraZoomOut: ['Minus', 'NumpadSubtract'],

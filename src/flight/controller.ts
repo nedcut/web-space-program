@@ -7,7 +7,7 @@ import { setPartDetail } from '../render/parts';
 import type { GameAudio } from '../audio';
 import { PART_CATALOG } from '../data/parts';
 import type { Autopilot } from '../game/autopilot';
-import { flightPredictions } from '../game/flightData';
+import { flightPredictions, targetOrbitState } from '../game/flightData';
 import { deserializeWorld, loadWorldFromStorage, saveWorldToStorage, serializeWorld, type SavedWorld } from '../game/persistence';
 import { applyCommsSettings, game } from '../game/store';
 import { Universe } from '../game/universe';
@@ -16,6 +16,7 @@ import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
 import { RenderPipeline, getQuality, type QualityId } from '../render/core';
 import type { ExtraOrbit } from '../render/map/MapView';
 import { MapView } from '../render/map/MapView';
+import { FlightMap } from './map/FlightMap';
 import { LaunchSite } from '../render/site/LaunchSite';
 import { Starfield } from '../render/sky/Starfield';
 import { SunGlare } from '../render/sky/SunGlare';
@@ -33,10 +34,10 @@ import { pickPartAlongRay, partWorldPosition } from './partPick';
 import { stagnationHeatFlux } from '../sim/vessel/heating';
 import type { CraftDef } from '../sim/vessel/types';
 import { getTutorial } from '../tutorial/runtime';
-import { formatDistance, formatDuration } from '../ui/format';
+import { formatDistance, formatDuration, formatSpeed } from '../ui/format';
 import { frameProfiler as prof } from '../util/frameProfiler';
 import { snapshotEqual } from '../util/snapshotEqual';
-import { cross, length, normalize, sub, type Vec3 } from '../util/vec3';
+import { cross, dot, length, normalize, sub, type Vec3 } from '../util/vec3';
 import { type AssistId } from './assist';
 import { CAMERA_MODE_INFO, FlightCamera } from './camera';
 import * as assist from './controller/assist';
@@ -90,6 +91,8 @@ export class FlightController {
   readonly scene = new THREE.Scene();
   readonly cam = new FlightCamera();
   readonly map: MapView;
+  /** Map focus, menus and maneuver-node commands. */
+  readonly mapUi: FlightMap;
   mapMode = false;
   paused = false;
   readonly photo: PhotoCamera;
@@ -234,10 +237,13 @@ export class FlightController {
     host.appendChild(labelHost);
     this.map = new MapView(universe.bodies, universe.ephem, labelHost, q, universe);
     this.map.setVisible(false);
+    this.mapUi = new FlightMap(this);
+    // The navball cluster owns the bottom centre in flight; show the focus path under the top readout.
+    this.map.placeBreadcrumb({ top: '84px', bottom: 'auto' });
+    this.disposers.push(() => this.mapUi.dispose());
 
     this.disposers.push(this.cam.attach(canvas, () => !this.mapMode && !this.paused));
-    this.disposers.push(this.map.attachControls(canvas, () => this.mapMinDistance(), () => this.mapMode && !this.paused));
-    this.disposers.push(this.attachMapPicking(canvas));
+    this.disposers.push(this.map.attachControls(canvas, () => this.mapUi.minDistance(), () => this.mapMode && !this.paused));
     this.disposers.push(this.attachPartPicking(canvas));
     this.disposers.push(
       this.input.onAction((a) => {
@@ -301,33 +307,6 @@ export class FlightController {
     performance.measure('wsp:flight:construct', 'wsp:flight:construct:start');
   }
 
-  /** Click (not drag) on a map icon selects it as the navigation target. */
-  private attachMapPicking(el: HTMLElement) {
-    let sx = 0;
-    let sy = 0;
-    let down = false;
-    const pd = (e: PointerEvent) => {
-      down = true;
-      sx = e.clientX;
-      sy = e.clientY;
-    };
-    const pu = (e: PointerEvent) => {
-      if (!down) return;
-      down = false;
-      if (!this.mapMode || Math.hypot(e.clientX - sx, e.clientY - sy) > 5) return;
-      const r = el.getBoundingClientRect();
-      if (this.map.pickManeuver(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)) return;
-      const hit = this.map.pick(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-      if (hit && hit.id !== this.world.activeId) this.setTarget(hit.id);
-    };
-    el.addEventListener('pointerdown', pd);
-    el.addEventListener('pointerup', pu);
-    return () => {
-      el.removeEventListener('pointerdown', pd);
-      el.removeEventListener('pointerup', pu);
-    };
-  }
-
   /** Set (or clear) the navigation target, optionally a specific docking port on a target vessel. */
   setTarget(id: string | null, portUid: number | null = null) {
     if (id === null) {
@@ -356,11 +335,6 @@ export class FlightController {
   undock(portUid?: number) {
     if (this.network) return this.network.action('undock', { uid: portUid });
     if (!this.world.undockActive(portUid)) this.world.message('Nothing to undock', 'warn');
-  }
-
-  private mapMinDistance() {
-    const wv = this.world.active;
-    return wv ? this.world.universe.body(wv.body).radius * 1.05 : 1e5;
   }
 
   onQuickload: (() => void) | null = null;
@@ -520,6 +494,7 @@ export class FlightController {
   toggleMap() {
     this.mapMode = !this.mapMode;
     this.map.setVisible(this.mapMode);
+    this.mapUi.reset();
     this.flashFade();
     if (this.mapMode) {
       const wv = this.world.active;
@@ -812,7 +787,9 @@ export class FlightController {
       if (!this.mapMode) this.map.distance = this.world.universe.body(wv.body).radius * 4;
       this.updateMapScene(wv);
       r.setRenderTarget(null);
+      this.map.setWarmup(true);
       const map = r.compileAsync(this.map.scene, this.map.camera);
+      this.map.setWarmup(false);
       r.setRenderTarget(this.pipeline.composer.readBuffer);
       const flight = r.compileAsync(this.scene, this.cam.camera);
       r.setRenderTarget(null);
@@ -979,20 +956,37 @@ export class FlightController {
     const t = this.world.ut;
     const origin = this.network?.pose(wv.state.id)?.position ?? wv.state.position;
     this.updateMapTargets(wv);
+    const focus = this.mapUi.focusFrame(wv, origin);
+    const patches = this.world.mapTrajectory();
+    const relInc = this.predictions.crossings.length ? this.relativeInclination(wv) : NaN;
+    const incText = Number.isFinite(relInc) ? `\nRelative inclination ${relInc.toFixed(2)}°` : '';
+    const impactOnPath = patches.some(p => p.endReason === 'impact' && p.orbit.body === wv.body && !p.samples);
     this.map.update({
       t,
-      focus: origin,
-      focusId: `vessel:${wv.state.id}`,
-      referenceBody: wv.body,
+      focus: focus.position,
+      focusId: focus.focusId,
+      referenceBody: focus.referenceBody,
       comms: this.world.commsSettings.enabled && game.get().settings.commsOverlay ? this.world.comms : undefined,
-      vessel: { position: origin, patches: this.world.mapTrajectory(), nodes: this.world.nodes },
+      vessel: { id: wv.state.id, position: origin, patches, nodes: this.world.nodes },
       markers: [
         ...this.world.mapGravityMarkers(),
-        ...(this.world.preciseGravity ? [] : this.predictions.crossings).map(c => ({ body: wv.body, position: c.position, label: `${c.kind} T−${formatDuration(c.time - t)}`, color: '#d066ff' })),
-        ...(!this.world.preciseGravity && this.predictions.impact ? [{ body: wv.body, position: this.predictions.impact.position, label: `Impact T−${formatDuration(this.predictions.impact.time - t)}`, color: '#ff6b6b' }] : []),
+        ...(this.world.preciseGravity ? [] : this.predictions.crossings).map(c => ({ key: c.kind, body: wv.body, position: c.position, label: c.kind, color: '#d066ff',
+          detail: `${c.kind === 'AN' ? 'Ascending' : 'Descending'} node (target plane)${incText}\nT−${formatDuration(c.time - t)}` })),
+        ...(!this.world.preciseGravity && this.predictions.impact && !impactOnPath ? [{ key: 'impact', body: wv.body, position: this.predictions.impact.position, label: 'Impact', color: '#ff6b6b',
+          detail: `Impact (terrain)\nT−${formatDuration(this.predictions.impact.time - t)}\n${formatSpeed(this.predictions.impact.speed)}` }] : []),
       ],
       viewport: { width: this.host.clientWidth, height: this.host.clientHeight },
     });
+  }
+
+  /** Angle between the active orbit plane and the target's (degrees; NaN without a same-SOI target). */
+  private relativeInclination(wv: WorldVessel): number {
+    const target = targetOrbitState(this.world, wv);
+    if (!target) return NaN;
+    const own = this.world.relativeState(wv);
+    const a = cross(own.position, own.velocity), b = cross(target.position, target.velocity);
+    const la = length(a), lb = length(b);
+    return la > 0 && lb > 0 ? Math.acos(Math.max(-1, Math.min(1, dot(a, b) / (la * lb)))) * 180 / Math.PI : NaN;
   }
 
   private readonly camUp = new THREE.Vector3();
@@ -1087,7 +1081,8 @@ export class FlightController {
             body: ca.body,
             positionA: ca.positionA,
             positionB: ca.positionB,
-            label: `Closest approach ${formatDistance(ca.distance)} · in ${formatDuration(Math.max(0, ca.time - w.ut))} · ${ca.relativeSpeed.toFixed(1)} m/s`,
+            label: `Closest ${formatDistance(ca.distance)}`,
+            detail: `Closest approach to ${w.targetName()}\nSeparation ${formatDistance(ca.distance)}\nRelative speed ${ca.relativeSpeed.toFixed(1)} m/s\nT−${formatDuration(Math.max(0, ca.time - w.ut))}`,
           }
         : null,
     );

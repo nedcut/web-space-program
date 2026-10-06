@@ -47,7 +47,7 @@ export function warpTargets(world: World): WarpTargetOption[] {
 }
 
 export class WarpDriver {
-  target: { id: WarpTargetId; label: string; time: number; vessel: string } | null = null;
+  target: { id: WarpTargetId | 'custom'; label: string; time: number; vessel: string } | null = null;
   private effective = 1;
 
   start(world: World, id: WarpTargetId): string | null {
@@ -55,6 +55,16 @@ export class WarpDriver {
     if (!t || !world.active) return `Nothing to warp to`;
     if (world.active.state.telemetry.thrust > 0) return 'Cut throttle before warping';
     this.target = { ...t, vessel: world.active.state.id };
+    return null;
+  }
+
+  /** Warp to an arbitrary future UT (map "warp to node / closest approach / SOI"); `time` already includes any lead. */
+  startAt(world: World, label: string, time: number): string | null {
+    const wv = world.active;
+    if (!wv || wv.mode === 'prelaunch' || wv.state.situation !== 'flying' || wv.state.eva) return 'Nothing to warp to';
+    if (wv.state.telemetry.thrust > 0) return 'Cut throttle before warping';
+    if (!Number.isFinite(time) || time <= world.ut + 2) return `Already at ${label.toLowerCase()}`;
+    this.target = { id: 'custom', label, time, vessel: wv.state.id };
     return null;
   }
 

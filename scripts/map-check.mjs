@@ -30,6 +30,7 @@ const result = await page.evaluate(async () => {
   map.setExtraOrbits([{ id: 'probe', position: { x: earth.x+1e6,y:earth.y,z:earth.z }, orbit }]);
   map.setTarget({ kind: 'vessel', id: 'probe' });
   map.setApproach({ body: 'earth', positionA: { x: 0,y: 1e6,z: 0 },positionB: { x: 0,y: 1.1e6,z: 0 },label: 'Approach' });
+  map.handlers = { placeNode() {}, nodesChanged() {} };
   map.update(input); renderer.render(map.scene,map.camera);
   const lines = map.scene.children.filter(o => o.type === 'Line2'), geometries = lines.map(o => o.geometry);
   map.update(input);
@@ -48,6 +49,8 @@ const result = await page.evaluate(async () => {
   const x = (picked.x*.5+.5)*1280, y = (-picked.y*.5+.5)*800;
   canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX:x,clientY:y,button:0,bubbles:true }));
   window.dispatchEvent(new PointerEvent('pointermove', { clientX:x+30,clientY:y+10,bubbles:true }));
+  // Handles are rate controls: Δv flows on frames while the handle is held out.
+  for (let i = 0; i < 3; i++) { await new Promise(r => setTimeout(r, 60)); map.update(input); }
   window.dispatchEvent(new PointerEvent('pointerup'));
   if (node.prograde === 10) throw new Error('Maneuver dragging did not change delta-v');
   map.setResourceOverlay(['earth']); map.update(input); renderer.render(map.scene,map.camera);

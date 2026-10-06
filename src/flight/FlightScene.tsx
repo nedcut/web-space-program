@@ -18,6 +18,7 @@ import { Hud, NavballView, type Telemetry } from './hud/Hud';
 import type { GameAudio } from '../audio';
 import { getGameAudio } from '../audio/ui';
 import { ManeuverPanel } from './hud/ManeuverPanel';
+import { MapOverlay } from './map/MapOverlay';
 import { AssistPanel } from './hud/AssistPanel';
 import { HelpOverlay, helpSeen, markHelpSeen } from './hud/HelpOverlay';
 import { SettingsPanel } from '../ui/MainMenu';
@@ -331,7 +332,7 @@ export default function FlightScene() {
             resources: (tele.mapMode || active?.state.parts.some(p => p.def.modules.some(m => ['drill', 'converter', 'surfaceScanner', 'surveyScanner'].includes(m.type))))
               ? <ResourcePanel world={c.world} map={c.map} mapMode={tele.mapMode} paused={paused} act={(uid, a) => ctrl.current?.partAction(uid, a)} /> : undefined,
             science: <SciencePanel world={c.world} paused={paused} />,
-            maneuver: <ManeuverPanel world={c.world} />,
+            maneuver: <ManeuverPanel world={c.world} map={c.mapUi} />,
           }}
           cb={{
             onEva: (id) => ctrl.current?.goEva(id),
@@ -360,6 +361,7 @@ export default function FlightScene() {
           }}
         />
       )}
+      {c && tele?.mapMode && ready && !photo.active && !paused && !multiplayer && <MapOverlay controller={c} />}
       {c && ready && !photo.active && !paused && <FlightInspector controller={c} panels={panels} setPanels={setPanels} />}
       {settings.showFps && c && !photo.active && <PerformanceReadout controller={c} />}
       {settings.perfOverlay && c && !photo.active && <PerfOverlay controller={c} />}

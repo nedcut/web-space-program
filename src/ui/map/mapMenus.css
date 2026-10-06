@@ -1,0 +1,33 @@
+/* Map popups: context menu, info card, maneuver node menu and the map orbit readout. */
+.map-menu, .map-info, .map-node-menu {
+  position: absolute;
+  z-index: 30;
+  font-size: 12px;
+  pointer-events: auto;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+.map-menu { min-width: 190px; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.map-menu-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 4px 8px 6px; border-bottom: 1px solid var(--panel-border); margin-bottom: 4px; }
+.map-menu-head span { color: var(--text-dim); font-size: 11px; }
+.map-menu-item { all: unset; cursor: pointer; padding: 6px 8px; border-radius: 4px; color: var(--text); }
+.map-menu-item:hover, .map-menu-item:focus-visible { background: rgba(92, 200, 255, 0.16); }
+.map-info { top: 70px; right: 300px; width: 260px; padding: 8px 10px; }
+.map-info dl { margin: 0; display: grid; gap: 3px; }
+.map-info dl div { display: flex; justify-content: space-between; gap: 12px; }
+.map-info dt { color: var(--text-dim); }
+.map-info dd { margin: 0; text-align: right; }
+
+.map-node-menu { width: 280px; padding: 8px 10px 10px; display: grid; gap: 6px; }
+.map-node-menu .row { display: grid; grid-template-columns: 78px 26px 1fr 26px; gap: 4px; align-items: center; }
+.map-node-menu input { width: 100%; box-sizing: border-box; background: var(--panel-solid, #0b1726); color: var(--text); border: 1px solid var(--panel-border); border-radius: 4px; padding: 3px 6px; font: inherit; font-family: var(--mono, ui-monospace, monospace); text-align: right; }
+.map-node-menu .btn.small { padding: 3px 6px; }
+.map-node-menu .summary { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding-top: 4px; border-top: 1px solid var(--panel-border); }
+.map-node-menu .summary span:nth-child(odd) { color: var(--text-dim); }
+.map-node-menu .actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.map-node-menu .actions .btn { flex: 1 1 auto; }
+.map-node-menu label.fine { display: flex; align-items: center; gap: 6px; color: var(--text-dim); }
+
+.map-orbit-info { position: absolute; left: 12px; bottom: 12px; z-index: 5; padding: 8px 12px; font-size: 12px; display: grid; grid-template-columns: auto 1fr auto; gap: 2px 12px; pointer-events: none; width: 270px; box-sizing: border-box; }
+.map-orbit-info .title { grid-column: 1 / -1; color: var(--text-dim); letter-spacing: 0.08em; font-size: 10px; text-transform: uppercase; margin-bottom: 2px; }
+.map-orbit-info .k { color: var(--text-dim); }
+.map-orbit-info .hint { grid-column: 1 / -1; color: var(--text-dim); font-size: 10.5px; margin-top: 4px; line-height: 1.45; }
