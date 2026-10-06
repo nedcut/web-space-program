@@ -138,21 +138,21 @@ export class Starfield {
             vec3 gy = normalize(cross(uGN, uGC));
             float l = atan(dot(d, gy), dot(d, uGC));
             // Band thickness bulges toward the galactic centre.
-            float core = exp(-pow(l / 0.6, 2.0));
+            float core = exp(-((l / 0.6) * (l / 0.6)));
             float width = 0.11 + 0.12 * core;
-            float band = exp(-pow(b / width, 2.0));
+            float band = exp(-((b / width) * (b / width)));
             float n = fbm3(d * 6.0, 6) * 0.5 + 0.5;
             float n2 = fbm3(d * 18.0 + 3.0, 5) * 0.5 + 0.5;
             float glow = band * (0.35 + 0.9 * n) * (0.6 + 1.1 * core);
-            glow += exp(-pow(b / 0.04, 2.0)) * n2 * 0.4 * (0.4 + core);
+            glow += exp(-((b / 0.04) * (b / 0.04))) * n2 * 0.4 * (0.4 + core);
             // Dust lanes (Great Rift): dark filaments near the plane.
-            float dust = smoothstep(0.45, 0.75, fbm3(d * 9.0 + 11.0, 5) * 0.5 + 0.5) * exp(-pow((b + 0.02) / 0.06, 2.0));
+            float dust = smoothstep(0.45, 0.75, fbm3(d * 9.0 + 11.0, 5) * 0.5 + 0.5) * exp(-(((b + 0.02) / 0.06) * ((b + 0.02) / 0.06)));
             glow *= 1.0 - 0.85 * dust;
-            glow += exp(-pow(acos(clamp(dot(d, uGC), -1.0, 1.0)) / 0.18, 2.0)) * 0.8;
+            glow += exp(-((acos(clamp(dot(d, uGC), -1.0, 1.0)) / 0.18) * (acos(clamp(dot(d, uGC), -1.0, 1.0)) / 0.18))) * 0.8;
             vec3 col = mix(vec3(0.62, 0.7, 1.0), vec3(1.0, 0.88, 0.7), core * 0.7 + 0.15);
             // Magellanic clouds
-            float lmc = exp(-pow(acos(clamp(dot(d, uLMC), -1.0, 1.0)) / 0.06, 2.0)) * (0.5 + n2);
-            float smc = exp(-pow(acos(clamp(dot(d, uSMC), -1.0, 1.0)) / 0.04, 2.0)) * (0.5 + n2);
+            float lmc = exp(-((acos(clamp(dot(d, uLMC), -1.0, 1.0)) / 0.06) * (acos(clamp(dot(d, uLMC), -1.0, 1.0)) / 0.06))) * (0.5 + n2);
+            float smc = exp(-((acos(clamp(dot(d, uSMC), -1.0, 1.0)) / 0.04) * (acos(clamp(dot(d, uSMC), -1.0, 1.0)) / 0.04))) * (0.5 + n2);
             vec3 c = col * glow + vec3(0.8, 0.85, 1.0) * (lmc * 0.45 + smc * 0.3);
             // Faint zodiacal/airglow floor so space is not pure black.
             c += vec3(0.02, 0.022, 0.03) * 0.15;

@@ -30,9 +30,11 @@ export class SunGlare {
         uniform vec3 uTint;
         uniform float uSize;
         varying vec2 vNdc;
+        // Soft disc: 1 inside r·soft, 0 beyond r. (smoothstep with edge0 >= edge1 is undefined in GLSL;
+        // Apple's Metal backend extrapolates it, which flooded the screen with the green ghost.)
         float ghost(vec2 p, vec2 c, float r, float soft) {
           float d = length((p - c) * vec2(uAspect, 1.0));
-          return smoothstep(r, r * soft, d);
+          return 1.0 - smoothstep(r * soft, r, d);
         }
         void main() {
           vec2 p = vNdc;
@@ -54,9 +56,9 @@ export class SunGlare {
           c += vec3(0.4, 1.0, 0.6) * ghost(p, uSun + axis * 0.55, 0.035, 0.4) * 0.05;
           c += vec3(0.7, 0.5, 1.0) * ghost(p, uSun + axis * 2.2, 0.18, 0.9) * 0.02;
           // Halo ring
-          float ring = exp(-pow((length((p - uSun - axis) * vec2(uAspect, 1.0)) - 0.45) * 25.0, 2.0));
+          float ring = exp(-(((length((p - uSun - axis) * vec2(uAspect, 1.0)) - 0.45) * 25.0) * ((length((p - uSun - axis) * vec2(uAspect, 1.0)) - 0.45) * 25.0)));
           c += vec3(0.5, 0.6, 1.0) * ring * 0.015;
-          gl_FragColor = vec4(c * uIntensity, 1.0);
+          gl_FragColor = vec4(clamp(c * uIntensity, 0.0, 64.0), 1.0);
         }`,
       depthTest: false,
       depthWrite: false,

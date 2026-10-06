@@ -63,6 +63,22 @@ export function createPlanetEffect(u: PlanetUniforms, q: QualitySettings, kind: 
         vec2 ground = hit(ro, rd, 1.001);
         if (ground.x > 0.0) end = min(end, ground.x);
         if (end <= start) discard;
+        #ifdef EARTH
+          // The aurora lives in the polar ovals (|z| ≳ 0.9) on the night side. Both z and the sun
+          // projection are linear along the ray, so their extremes are at the segment ends: reject
+          // the (usual) rays that never reach the ovals before marching 20–32 noisy steps.
+          float za = ro.z + rd.z * start, zb = ro.z + rd.z * end;
+          if (max(abs(za), abs(zb)) < 0.86) discard;
+          if (min(dot(ro + rd * start, sun), dot(ro + rd * end, sun)) > 0.17) discard;
+          // Clip to the hemisphere slab the ray reaches when it touches only one oval.
+          if (abs(rd.z) > 1e-5) {
+            float tn = (0.86 - ro.z) / rd.z, ts = (-0.86 - ro.z) / rd.z;
+            bool north = max(za, zb) >= 0.86, south = min(za, zb) <= -0.86;
+            if (north && !south) { if (rd.z > 0.0) start = max(start, tn); else end = min(end, tn); }
+            else if (south && !north) { if (rd.z < 0.0) start = max(start, ts); else end = min(end, ts); }
+          }
+          if (end <= start) discard;
+        #endif
         // Use the front of the volume for depth tests, rather than the back-face proxy sphere.
         vec4 clip = projectionMatrix * viewMatrix * vec4(cameraPosition + rdWorld * start * uPlanetRadius, 1.0);
         #ifdef USE_LOGARITHMIC_DEPTH_BUFFER
@@ -104,8 +120,8 @@ export function createPlanetEffect(u: PlanetUniforms, q: QualitySettings, kind: 
               vec3 n = p / r;
               float lon = atan(n.y, n.x);
               float wave = 0.012 * sin(lon * 11.0 + uTime * 0.015) + 0.006 * sin(lon * 29.0);
-              float oval = exp(-pow((abs(n.z) - 0.947 - wave) / 0.012, 2.0));
-              float curtains = pow(0.5 + 0.5 * snoise(vec3(n.xy * 180.0, uTime * 0.01)), 2.0);
+              float oval = exp(-(((abs(n.z) - 0.947 - wave) / 0.012) * ((abs(n.z) - 0.947 - wave) / 0.012)));
+              float curtains = ((0.5 + 0.5 * snoise(vec3(n.xy * 180.0, uTime * 0.01))) * (0.5 + 0.5 * snoise(vec3(n.xy * 180.0, uTime * 0.01))));
               float h = (r - 1.0) / (uExtent - 1.0);
               float night = 1.0 - smoothstep(-0.2, 0.15, dot(n, sun));
               color += mix(vec3(0.05, 0.8, 0.29), vec3(0.32, 0.04, 0.28), h) * oval * curtains * night
@@ -113,7 +129,7 @@ export function createPlanetEffect(u: PlanetUniforms, q: QualitySettings, kind: 
             #elif defined(CORONA)
               float h = r - 1.0;
               vec3 n = p / r;
-              float streamers = 0.6 + 0.4 * pow(0.5 + 0.5 * snoise(n * 13.0), 2.0);
+              float streamers = 0.6 + 0.4 * ((0.5 + 0.5 * snoise(n * 13.0)) * (0.5 + 0.5 * snoise(n * 13.0)));
               color += vec3(1.0, 0.60, 0.24) * exp(-h * 12.0) * streamers * stepSize * 0.6;
             #endif
           }
