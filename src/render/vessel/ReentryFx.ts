@@ -46,13 +46,13 @@ const frag = /* glsl */ `
     // y in [-1, 1]: +1 = stagnation side (front), -1 = wake tip.
     float y = vPos.y;
     float front = smoothstep(-0.2, 1.0, y);
-    float wake = (1.0 - smoothstep(-1.0, 0.2, y)) * uWake;
-    float rim = pow(max(1.0 - abs(dot(vNormalV, vViewDir)), 0.0), 1.5);
+    float wake = (1.0 - smoothstep(.1, .55, y)) * smoothstep(-1.0,-.45,y) * uWake;
+    float rim = pow(max(1.0 - abs(dot(normalize(vNormalV), normalize(vViewDir))), 0.0), 1.5);
     float n = noise(vPos * 3.0 + vec3(0.0, uTime * 9.0, 0.0)) * 0.6 + noise(vPos * 7.0 - vec3(0.0, uTime * 15.0, 0.0)) * 0.4;
     float streak = pow(max(0.0, sin(atan(vPos.z,vPos.x)*23.0 + n*2.0)), 14.0);
-    float a = (wake * streak * 1.6 + front * (0.35 + rim) + wake * n * 0.8) * uIntensity;
+    float a = (wake * streak * (.3 + n) + front * (.12 + rim*.7) + wake * n * .15) * uIntensity;
     vec3 col = mix(uColorCool, uColorHot, clamp(front + n * 0.3, 0.0, 1.0));
-    gl_FragColor = vec4(col * a * 3.0, a);
+    gl_FragColor = vec4(col * a * 4.0, 1.0);
   }
 `;
 
@@ -69,13 +69,11 @@ export class ReentryFx {
 
   constructor() {
     // Capsule-like envelope: hemisphere front + long cone wake, unit radius, built along +Y in [-1, 1].
-    const profile: THREE.Vector2[] = [];
+    const profile: THREE.Vector2[] = [new THREE.Vector2(0,-1), new THREE.Vector2(.4,-.65), new THREE.Vector2(1.1,.15)];
     for (let i = 0; i <= 16; i++) {
-      const a = (i / 16) * (Math.PI / 2);
+      const a = (1 - i / 16) * (Math.PI / 2);
       profile.push(new THREE.Vector2(Math.sin(a), 0.4 + Math.cos(a) * 0.6));
     }
-    profile.reverse();
-    profile.push(new THREE.Vector2(0.7, -0.2), new THREE.Vector2(0.25, -0.8), new THREE.Vector2(0.0, -1.0));
     const geo = new THREE.LatheGeometry(profile, game.get().settings.quality === 'low' ? 16 : game.get().settings.quality === 'medium' ? 24 : 48);
     this.mat = new THREE.ShaderMaterial({
       vertexShader: vert,

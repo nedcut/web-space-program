@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { VesselEvent, VesselState } from '../../sim/vessel/runtime';
 import type { Vec3 } from '../../util/vec3';
 import type { QualityId } from '../core/quality';
+import { rcsEnabled, rcsMask } from '../../sim/vessel/tweaks';
 import { ParticlePool } from './ParticlePool';
 
 type BurstEvent = Extract<VesselEvent, { type: 'partDestroyed' | 'decouple' | 'structuralFailure' }>;
@@ -11,6 +12,7 @@ export function isBurstEvent(event: VesselEvent): event is BurstEvent {
 
 export const FX_BUDGET = { low: { count: 128, rate: 12 }, medium: { count: 512, rate: 40 }, high: { count: 1024, rate: 80 } } as const;
 const smoke = new THREE.Color(.38,.36,.32), steam = new THREE.Color(.8,.82,.85), fire = new THREE.Color(8,2,.15);
+const blue = new THREE.Color(.3,.45,1), warm = new THREE.Color(1,.36,.08);
 const spark = new THREE.Color(10,4,.6), dust = new THREE.Color();
 /** One bounded pool for the active flight. Simulation events remain authoritative. */
 export class FlightFx {
@@ -34,6 +36,13 @@ export class FlightFx {
   private readonly rotation = new THREE.Quaternion();
   private readonly flashVelocity = new THREE.Vector3();
   private readonly flashPosition = new THREE.Vector3();
+  private readonly gravity = new THREE.Vector3();
+  private readonly engineLightPosition = new THREE.Vector3();
+  private readonly engineLightColor = new THREE.Color();
+  private density = 0;
+  private situation: VesselState['situation'] | undefined;
+  private lastStep = 0;
+  private readonly torque = new THREE.Vector3();
   private credit = 0;
   private flash = 0;
   private clock = 0;
@@ -52,31 +61,56 @@ export class FlightFx {
   burst(position: Vec3, structural = false, inheritedVelocity?: Vec3) {
     const count = Math.floor(FX_BUDGET[this.quality].rate * (structural ? .3 : 1));
     for(let i=0;i<count;i++) {
-      this.velocity.set(this.random()-.5,this.random()-.5,this.random()-.5).multiplyScalar(structural ? 9 : 28);
+      this.velocity.set(this.random()-.5,this.random()-.5,this.random()-.5).multiplyScalar(structural ? 5 : i%3===2 ? 32 : 9);
       if(inheritedVelocity) this.velocity.add(inheritedVelocity);
-      this.pool.emit(position,this.velocity,this.clock,i%3===0 ? 5 : 1.6,i%3===0 ? 3 : i%3===1 ? 5 : .3,i%3===0 ? 1.8 : 0,i%3===0 ? smoke : i%3===1 ? fire : spark);
+      // Separation is a cold gas puff, not a small fuel explosion. No lingering smoke in vacuum.
+      const cloud = structural || i%3===0;
+      if(cloud && this.density<.01 && !structural) continue;
+      this.pool.emit(position,this.velocity,this.clock,structural?.45:cloud?5:i%3===1?1.2:2,
+        structural?.7:cloud?3:i%3===1?4:.18,cloud?1.1:0,structural?steam:cloud?smoke:i%3===1?fire:spark,
+        cloud?undefined:this.gravity);
     }
     this.flashPosition.copy(position); this.flashVelocity.set(inheritedVelocity?.x ?? 0,inheritedVelocity?.y ?? 0,inheritedVelocity?.z ?? 0); this.flash = structural ? .15 : 1;
   }
-  update(v: VesselState, origin: Vec3, bodyPosition: Vec3, bodyVelocity: Vec3, body: string, altitude: number, density: number, heat: number, airVelocity: Vec3, dt: number, pixelScale: number, simulationTime: number, palette: readonly [number, number, number][]) {
+  deployment(position: Vec3, inheritedVelocity: Vec3) {
+    for(let i=0;i<Math.min(12,FX_BUDGET[this.quality].rate);i++) {
+      this.velocity.copy(inheritedVelocity).addScaledVector(this.up,2)
+        .addScaledVector(this.tangent,(this.random()-.5)*3).addScaledVector(this.bitangent,(this.random()-.5)*3);
+      this.pool.emit(position,this.velocity,this.clock,.6,.6,1,steam);
+    }
+  }
+  update(v: VesselState, origin: Vec3, bodyPosition: Vec3, bodyVelocity: Vec3, body: string, altitude: number, density: number, heat: number, airVelocity: Vec3, dt: number, pixelScale: number, simulationTime: number, palette: readonly [number, number, number][], gravity = body==='moon'?1.62:9.81) {
     const elapsed = this.lastUt === undefined ? Math.max(0,dt) : Math.max(0,simulationTime-this.lastUt);
     const teleported = this.lastUt !== undefined && this.lastOrigin.distanceToSquared(origin)>1e12;
     this.lastUt = simulationTime; this.lastOrigin.copy(origin);
     // Rails/teleports must not stretch old trails across interplanetary distances.
     if(elapsed>1 || teleported) { this.pool.clear(); this.flash=0; }
-    const step = Math.min(1,elapsed); this.clock += step;
+    const step = Math.min(1,elapsed); this.lastStep=step; this.clock += step;
+    this.density = density;
     this.up.copy(v.position).sub(bodyPosition).normalize();
+    this.gravity.copy(this.up).multiplyScalar(-gravity);
     this.rotation.set(v.orientation.x,v.orientation.y,v.orientation.z,v.orientation.w);
     this.surfaceVelocity.copy(v.velocity).sub(airVelocity);
     // On a stationary surface this includes body rotation as well as orbital translation.
     if (!Number.isFinite(this.surfaceVelocity.x)) this.surfaceVelocity.copy(bodyVelocity);
     this.tangent.set(Math.abs(this.up.y)>.9 ? 1 : 0, Math.abs(this.up.y)>.9 ? 0 : 1,0).cross(this.up).normalize();
     this.bitangent.crossVectors(this.up,this.tangent);
+    if(!teleported && elapsed<=1 && v.situation==='splashed' && this.situation==='flying') {
+      for(let i=0;i<FX_BUDGET[this.quality].rate;i++) {
+        const angle=this.random()*Math.PI*2;
+        this.velocity.copy(this.surfaceVelocity).addScaledVector(this.up,3+this.random()*7)
+          .addScaledVector(this.tangent,Math.cos(angle)*8).addScaledVector(this.bitangent,Math.sin(angle)*8);
+        this.pool.emit(v.position,this.velocity,this.clock,1.3,1,.6,steam,this.gravity);
+      }
+    }
+    this.situation=v.situation;
     this.credit = Math.min(3,this.credit+step*FX_BUDGET[this.quality].rate);
     const count = Math.floor(this.credit); this.credit -= count;
     const color = palette[1] ?? palette[0];
     if(body==='earth' || !color) dust.setRGB(.23,.19,.13);
     else dust.setRGB(color[0],color[1],color[2]);
+    let lightWeight = 0;
+    this.engineLightPosition.set(0,0,0); this.engineLightColor.setRGB(0,0,0);
     let emitters = 0;
     let contact = false;
     for (const p of v.parts) {
@@ -89,24 +123,37 @@ export class FlightFx {
       emitters++;
       const jet = !!engine.airBreathing, solid = engine.plume==='solid';
       const contrail = jet && altitude>7000 && density>.015;
-      if (density<.01 && altitude>40) continue;
-      if (!solid && !contrail && altitude>6000) continue;
       this.engineRotation.set(p.rotation.x,p.rotation.y,p.rotation.z,p.rotation.w);
       this.exhaust.set(0,-1,0).applyQuaternion(this.engineRotation).applyQuaternion(this.rotation);
       const height = p.def.shape.kind==='box' ? p.def.shape.size.y : p.def.shape.height;
       this.nozzle.set(0,-height*.5,0).applyQuaternion(this.engineRotation);
       this.nozzle.x+=p.position.x-v.com.x; this.nozzle.y+=p.position.y-v.com.y; this.nozzle.z+=p.position.z-v.com.z;
       this.nozzle.applyQuaternion(this.rotation).add(v.position);
+      const throttle = Math.min(1, Math.max(0,p.engine.throttle));
+      const lightPower = (engine.plume==='ion'?2:engine.plume==='hydrolox'?45:180) * throttle * Math.min(4,Math.sqrt(p.engine.thrust/100000));
+      this.point.copy(this.nozzle).sub(origin).addScaledVector(this.exhaust,1.5);
+      this.engineLightPosition.addScaledVector(this.point,lightPower);
+      const tint = engine.plume==='hydrolox'||engine.plume==='ion'?blue:warm;
+      this.engineLightColor.r+=tint.r*lightPower; this.engineLightColor.g+=tint.g*lightPower; this.engineLightColor.b+=tint.b*lightPower;
+      lightWeight+=lightPower;
+      const downward = -this.exhaust.dot(this.up);
+      const nozzleAltitude = altitude + this.point.copy(this.nozzle).sub(v.position).dot(this.up);
+      const reachesGround = downward>.25 && nozzleAltitude<35*downward && nozzleAltitude>-2;
+      const strength = throttle * Math.max(0,1-nozzleAltitude/35);
       for(let i=0;i<count;i++) {
-        this.point.copy(this.nozzle);
-        this.velocity.copy(this.surfaceVelocity).addScaledVector(this.exhaust,12).addScaledVector(this.up,2);
-        this.velocity.x+=(this.random()-.5)*6; this.velocity.z+=(this.random()-.5)*6;
-        this.pool.emit(this.point,this.velocity,this.clock,contrail?18:solid?14:8,solid?2:1.3,.65,contrail?steam:smoke);
-        if(altitude<40) {
-          this.point.copy(v.position).addScaledVector(this.up,-Math.max(1,altitude-1));
-          this.velocity.copy(this.surfaceVelocity).addScaledVector(this.up,2);
-          this.velocity.addScaledVector(this.tangent,(this.random()-.5)*18).addScaledVector(this.bitangent,(this.random()-.5)*18);
-          this.pool.emit(this.point,this.velocity,this.clock,6,4,.8,density>.1?steam:dust);
+        // Combustion smoke belongs to an atmosphere. Clean fuels condense into pale vapour.
+        if(density>.01 && (solid || contrail || altitude<6000) && this.random()<throttle) {
+          this.point.copy(this.nozzle).addScaledVector(this.exhaust,solid?8:4);
+          this.velocity.copy(this.surfaceVelocity).addScaledVector(this.exhaust,solid?9:5).addScaledVector(this.up,2);
+          this.velocity.addScaledVector(this.tangent,(this.random()-.5)*3).addScaledVector(this.bitangent,(this.random()-.5)*3);
+          this.pool.emit(this.point,this.velocity,this.clock,contrail?18:solid?12:6,solid?3:1.8,.7,solid||engine.plume==='hydrolox'||contrail?steam:smoke);
+        }
+        if(reachesGround && this.random()<strength) {
+          const angle=this.random()*Math.PI*2, speed=(density>.01?9:22)*( .4+.6*strength);
+          this.point.copy(this.nozzle).addScaledVector(this.exhaust,Math.max(0,nozzleAltitude)/downward).addScaledVector(this.up,.4);
+          this.velocity.copy(this.surfaceVelocity).addScaledVector(this.up,density>.01?2.5:1.3);
+          this.velocity.addScaledVector(this.tangent,Math.cos(angle)*speed).addScaledVector(this.bitangent,Math.sin(angle)*speed);
+          this.pool.emit(this.point,this.velocity,this.clock,density>.01?7:1.6,density>.01?3.5:1.2,density>.01?.85:.35,density>.1?steam:dust,density>.01?undefined:this.gravity);
         }
       }
     }
@@ -128,9 +175,45 @@ export class FlightFx {
     this.flashPosition.addScaledVector(this.flashVelocity,step);
     const lit = this.flash>.001;
     if(lit) this.light.position.copy(this.flashPosition).sub(origin);
-    this.light.intensity=lit ? this.flash*1500 : 0;
+    if(lit) { this.light.color.copy(warm); this.light.intensity=this.flash*1500; }
+    else {
+      if(lightWeight>0) {
+        this.light.position.copy(this.engineLightPosition).divideScalar(lightWeight);
+        this.light.color.copy(this.engineLightColor).multiplyScalar(1/lightWeight);
+      }
+      this.light.intensity=Math.min(900,lightWeight);
+    }
     this.pool.update(origin,this.clock,pixelScale);
     this.pool.ground(v.position,this.up,altitude);
+  }
+  /** Render-only nozzle selection mirrors the sim mixer; never consumes propellant. */
+  rcs(v: VesselState, enabled: boolean, translation: {tx:number;ty:number;tz:number}) {
+    if(!enabled || this.lastStep<=0 || !v.parts.some(p=>(p.resources.monopropellant ?? 0)>0)) return;
+    let emitted=0;
+    const control=v.telemetry.control;
+    for(const p of v.parts) {
+      if(!rcsEnabled(p)) continue;
+      for(const mod of p.def.modules) {
+        if(mod.type!=='rcs') continue;
+        const mask=rcsMask(p);
+        this.engineRotation.set(p.rotation.x,p.rotation.y,p.rotation.z,p.rotation.w);
+        for(const nz of mod.nozzles) {
+          this.nozzle.copy(nz.position).applyQuaternion(this.engineRotation);
+          this.nozzle.x+=p.position.x-v.com.x; this.nozzle.y+=p.position.y-v.com.y; this.nozzle.z+=p.position.z-v.com.z;
+          this.exhaust.copy(nz.direction).applyQuaternion(this.engineRotation).normalize();
+          this.torque.crossVectors(this.nozzle,this.exhaust).negate().normalize();
+          const rotation=Math.max(0,this.torque.x*control.pitch*mask.rot[0]+this.torque.y*control.yaw*mask.rot[1]+this.torque.z*control.roll*mask.rot[2]);
+          const translate=Math.max(0,-this.exhaust.x*translation.tx*mask.tr[0]-this.exhaust.y*translation.ty*mask.tr[1]-this.exhaust.z*translation.tz*mask.tr[2]);
+          const act=Math.min(1,rotation+translate);
+          if(this.random()>=this.lastStep*24*act || emitted>=16) continue;
+          emitted++;
+          this.nozzle.applyQuaternion(this.rotation).add(v.position);
+          this.exhaust.applyQuaternion(this.rotation);
+          this.velocity.copy(v.velocity).addScaledVector(this.exhaust,5);
+          this.pool.emit(this.nozzle,this.velocity,this.clock,.18,.22,3,steam);
+        }
+      }
+    }
   }
   shake(camera: THREE.Camera, reduceMotion: boolean) {
     if(reduceMotion || this.flash<.01) return;

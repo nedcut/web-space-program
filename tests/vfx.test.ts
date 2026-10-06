@@ -4,7 +4,7 @@ import { blackbody, PartHeat } from '../src/render/fx/PartHeat';
 import { ParticlePool } from '../src/render/fx/ParticlePool';
 import { FlightFx, FX_BUDGET } from '../src/render/fx/FlightFx';
 import { buildVessel } from '../src/sim/vessel';
-import { buildMoonLander } from '../src/editor/stockCrafts';
+import { buildMoonLander, buildTender } from '../src/editor/stockCrafts';
 import { PART_CATALOG } from '../src/data/parts';
 import type { PartState } from '../src/sim/vessel/runtime';
 
@@ -42,7 +42,7 @@ describe('flight visual effects', () => {
     pool.emit(initial,new THREE.Vector3(),0,10,1,1,new THREE.Color());
     const origin=initial.clone().add(new THREE.Vector3(20000,50,0));
     pool.update(origin,1,500);
-    const positions=pool.object.geometry.attributes.position;
+    const positions=pool.object.geometry.attributes.spawnPosition;
     expect(positions.getX(0)+pool.object.position.x).toBe(-20000);
     expect(positions.getY(0)+pool.object.position.y).toBe(-50);
     for(let i=0;i<20;i++) pool.emit(origin,new THREE.Vector3(),1,10,1,1,new THREE.Color());
@@ -65,4 +65,50 @@ describe('flight visual effects', () => {
     const fx=new FlightFx('high'); fx.setQuality('low');
     expect(fx.pool.capacity).toBe(FX_BUDGET.low.count); expect(fx.root.children.length).toBe(2); fx.dispose();
   });
+});
+
+it('does not generate combustion smoke in vacuum and only sprays dust toward terrain', () => {
+  const fx=new FlightFx('low'), v=buildVessel(buildMoonLander(),PART_CATALOG);
+  const zero=new THREE.Vector3(), center=new THREE.Vector3(0,-1000,0);
+  for(const p of v.parts) if(p.engine) {p.engine.thrust=100000; p.engine.throttle=1;}
+  const update=(alt:number,ut:number)=>fx.update(v,v.position,center,zero,'moon',alt,0,0,zero,.1,500,ut,[[.3,.3,.3]]);
+  update(100,0); update(100,.2);
+  expect(fx.pool.object.visible).toBe(false);
+  // Upright lander: exhaust impinges on the terrain.
+  for(let i=1;i<=20;i++) update(10,.2+i*.1);
+  expect(fx.pool.object.visible).toBe(true);
+  fx.pool.clear();
+  v.orientation={x:1,y:0,z:0,w:0};
+  for(let i=1;i<=20;i++) update(10,2.2+i*.1);
+  expect(fx.pool.object.visible).toBe(false);
+  const light=fx.root.children.find(o=>o instanceof THREE.PointLight) as THREE.PointLight;
+  expect(light.visible).toBe(true); expect(light.intensity).toBeGreaterThan(0);
+  fx.dispose();
+});
+
+it('retires expired instances and carries ballistic acceleration in local float32 attributes', () => {
+  const pool=new ParticlePool(8), zero=new THREE.Vector3();
+  pool.emit({x:1.5e11,y:0,z:0},zero,0,1,2,.2,new THREE.Color(),{x:0,y:-1.62,z:0});
+  pool.update({x:1.5e11,y:0,z:0},.5,1000);
+  expect(pool.object.geometry.instanceCount).toBe(8);
+  expect(pool.object.geometry.attributes.acceleration.getY(0)).toBeCloseTo(-1.62);
+  expect(pool.object.visible).toBe(true);
+  pool.update({x:1.5e11,y:0,z:0},2,1000);
+  expect(pool.object.visible).toBe(false);
+  pool.dispose();
+});
+
+
+it('gates RCS puffs on enabled controls and available monopropellant', () => {
+  const fx=new FlightFx('low'), v=buildVessel(buildTender(),PART_CATALOG);
+  const zero=new THREE.Vector3(), center=new THREE.Vector3(0,-1000,0);
+  const input={tx:1,ty:1,tz:1};
+  fx.update(v,v.position,center,zero,'moon',100,0,0,zero,.1,500,0,[[.3,.3,.3]]);
+  fx.rcs(v,false,input); expect(fx.pool.object.visible).toBe(false);
+  for(let i=0;i<20;i++) fx.rcs(v,true,input);
+  expect(fx.pool.object.visible).toBe(true);
+  fx.pool.clear();
+  for(const p of v.parts) p.resources.monopropellant=0;
+  fx.rcs(v,true,input); expect(fx.pool.object.visible).toBe(false);
+  fx.dispose();
 });

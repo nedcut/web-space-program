@@ -1,3 +1,4 @@
+import { CondensationFx } from '../render/fx/CondensationFx';
 import { FlightFx, isBurstEvent } from '../render/fx/FlightFx';
 
 import { PhotoCamera } from '../render/core/PhotoCamera';
@@ -140,6 +141,7 @@ export class FlightController {
   private site: LaunchSite;
   private flags = new FlagView();
   private effects: FlightFx;
+  private readonly condensation = new CondensationFx();
   private readonly effectPosition = new THREE.Vector3();
   private reentry = new ReentryFx();
   private reentryHeat = 0;
@@ -221,6 +223,7 @@ export class FlightController {
     this.scene.add(this.glare.mesh);
     this.scene.add(this.sunLight, this.sunLight.target, this.ambient);
     this.effects = new FlightFx(quality);
+    this.scene.add(this.condensation.object);
     this.scene.add(this.effects.root, this.reentry.object, this.flags.root);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(q.shadowMapSize || 512, q.shadowMapSize || 512);
@@ -301,6 +304,13 @@ export class FlightController {
         if (vessel) {
           if (!this.views.get(e.vesselId)?.partPosition(e.partUid, this.effectPosition)) this.effectPosition.copy(vessel.state.position);
           this.effects.burst(this.effectPosition, e.type !== 'partDestroyed', vessel.state.velocity);
+        }
+      }
+      if(e.type==='chute' && e.phase==='semi') {
+        const vessel=this.world.vessels.get(e.vesselId);
+        if(vessel) {
+          if(!this.views.get(e.vesselId)?.partPosition(e.partUid,this.effectPosition)) this.effectPosition.copy(vessel.state.position);
+          this.effects.deployment(this.effectPosition,vessel.state.velocity);
         }
       }
       if (!this.audio) return;
@@ -909,13 +919,17 @@ export class FlightController {
       const d = normalize(airVel);
       this.reentry.update(flux, new THREE.Vector3(d.x, d.y, d.z), wv.state.cache.boundingRadius, this.elapsed, wv.state, wv.body);
     } else this.reentry.update(0, new THREE.Vector3(0, 1, 0), 1, this.elapsed);
+    // No weather/humidity simulation exists: dense Earth air is a conservative visual proxy.
+    this.effectPosition.set(airVel.x,airVel.y,airVel.z).normalize();
+    this.condensation.update(airSpeed/Math.max(1,air.speedOfSound),wv.body==='earth'?Math.min(1,air.density/.8):0,Math.min(4,wv.state.cache.boundingRadius*.3),this.effectPosition);
     this.reentryHeat = Math.min(1, Math.max(0, (Math.log10(Math.max(flux, 1)) - 4.0) / 1.5));
 
     // Camera
     if (this.photo.active) this.photo.update(photoDt);
     else this.updateCamera(wv, origin, bodyState, airVel, t, dt);
     const camera = this.cam.camera;
-    this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors);
+    this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors, u.body(wv.body).surfaceGravity);
+    this.effects.rcs(wv.state,this.rcsOn,this.input.state);
     if (!this.paused) this.effects.shake(camera, game.get().settings.reduceMotion);
     prof.add('fx', t0);
     if (this.network) {
@@ -1179,6 +1193,7 @@ export class FlightController {
     this.glare.dispose();
     this.reentry.dispose();
     this.effects.dispose();
+    this.condensation.dispose();
     this.flags.dispose();
     this.skyEnv.dispose();
     this.scene.environment = null;
