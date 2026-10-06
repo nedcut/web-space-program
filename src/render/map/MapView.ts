@@ -50,6 +50,8 @@ export interface MapMarkerInput {
   key?: string;
   /** Hover / pinned detail (defaults to the label). */
   detail?: string;
+  /** UT of the event the marker stands for (enables "warp here"). */
+  time?: number;
 }
 
 export interface MapUpdate {
@@ -87,6 +89,8 @@ export interface MapApproach {
   label: string;
   /** Hover / pinned detail (defaults to the label). */
   detail?: string;
+  /** UT of closest approach. */
+  time?: number;
 }
 
 /** A body or vessel under the cursor. */
@@ -110,6 +114,10 @@ export interface MapHandlers {
   emptyClick?(): void;
   /** Extra tooltip lines for a hovered body/vessel (distance, relative speed…). */
   describe?(pick: MapPick): string | null;
+  /** Right click on an orbit marker (Ap, Pe, encounter, closest approach…). */
+  markerMenu?(marker: { key: string; label: string; time?: number; pinned: boolean }, at: MapPoint): void;
+  /** Right click on the active trajectory at `time`. */
+  orbitMenu?(time: number, at: MapPoint): void;
 }
 
 type Hover =
@@ -173,7 +181,7 @@ interface BodyVisual {
 /** A marker drawn this frame (pooled). */
 interface ShownMarker {
   key: string; body: string; position: Vec3; caption: string; color: string; priority: number;
-  orbit?: OrbitMarker; detail?: string; dotOnly?: boolean;
+  orbit?: OrbitMarker; detail?: string; dotOnly?: boolean; time?: number;
 }
 interface MarkerElement { root: HTMLDivElement; dot: HTMLDivElement; text: HTMLDivElement; box: LabelBox; content: string; color: string }
 
@@ -893,6 +901,7 @@ export class MapView {
     this.updateGizmo(u, dt);
     this.updateMarkers(u);
     if (this.pointer.inside && !this.drag && now - this.lastHoverAt > 100) this.setHover(this.computeHover(this.pointer.x, this.pointer.y));
+    else if (this.drag?.kind === 'handle' && now - this.lastHoverAt > 80) this.setHover({ kind: 'handle', index: this.drag.index, nodeId: this.drag.nodeId });
     this.updateGhost(u);
   }
 
@@ -1037,7 +1046,8 @@ export class MapView {
         const p = this.toScreen(this.scratch, u, this.scratchPoint);
         line.x[k] = p.x; line.y[k] = p.y; line.t[k] = time;
       }
-      return closestOnPolyline(line, x, y);
+      // ~6 px of preference across the window keeps the node on its current revolution where the orbit overlaps.
+      return closestOnPolyline(line, x, y, { time: node.time, weight: 6 / (hi - lo) });
     };
     const coarse = sample(lo, hi, 480);
     if (!coarse) return;
@@ -1052,10 +1062,10 @@ export class MapView {
   private bodyName = (id: string) => this.bodies.get(id)?.body.name ?? id;
   private bodyRadius = { radius: (id: string) => this.bodies.get(id)?.body.radius ?? 0 };
 
-  private pushMarker(key: string, body: string, position: Vec3, caption: string, color: string, priority: number, orbit?: OrbitMarker, detail?: string, dotOnly = false) {
+  private pushMarker(key: string, body: string, position: Vec3, caption: string, color: string, priority: number, orbit?: OrbitMarker, detail?: string, dotOnly = false, time?: number) {
     const m = this.shown[this.shownCount] ??= { key: '', body: '', position, caption: '', color: '', priority: 0 };
     m.key = key; m.body = body; m.position = position; m.caption = caption; m.color = color; m.priority = priority;
-    m.orbit = orbit; m.detail = detail; m.dotOnly = dotOnly;
+    m.orbit = orbit; m.detail = detail; m.dotOnly = dotOnly; m.time = time ?? orbit?.time;
     this.shownCount++;
   }
 
@@ -1092,12 +1102,12 @@ export class MapView {
     const markers = u.markers ?? EMPTY_MARKERS;
     for (let i = 0; i < markers.length; i++) {
       const m = markers[i];
-      this.pushMarker(m.key ?? `ext:${i}`, m.body, m.position, m.label, m.color, 1, undefined, m.detail);
+      this.pushMarker(m.key ?? `ext:${i}`, m.body, m.position, m.label, m.color, 1, undefined, m.detail, false, m.time);
     }
     const a = this.approach && this.bodies.has(this.approach.body) ? this.approach : null;
     if (a) {
-      this.pushMarker('ca', a.body, a.positionA, a.label, TARGET_CSS, 2, undefined, a.detail);
-      this.pushMarker('ca:target', a.body, a.positionB, '', TARGET_CSS, 0, undefined, a.detail, true);
+      this.pushMarker('ca', a.body, a.positionA, a.label, TARGET_CSS, 2, undefined, a.detail, false, a.time);
+      this.pushMarker('ca:target', a.body, a.positionB, '', TARGET_CSS, 0, undefined, a.detail, true, a.time);
     }
     this.approachLine.visible = !!a;
     if (a) {
@@ -1166,7 +1176,9 @@ export class MapView {
         const node = u.vessel?.nodes.find(n => n.id === h.nodeId), g = this.gizmo[h.index];
         if (!node) return null;
         const name = { prograde: ['Prograde', 'Retrograde'], normal: ['Normal', 'Anti-normal'], radial: ['Radial out', 'Radial in'] }[g.axis][g.sign > 0 ? 0 : 1];
-        return `${name} ${(node[g.axis] * g.sign).toFixed(1)} m/s\nDrag outward to add Δv · wheel for ${this.fineTune ? '0.01' : '0.1'} m/s steps`;
+        const total = `Δv ${Math.hypot(node.prograde, node.normal, node.radial).toFixed(1)} m/s`;
+        if (this.drag?.kind === 'handle') return `${name} ${(node[g.axis] * g.sign).toFixed(1)} m/s · ${total}${this.fineTune ? ' · fine' : ''}`;
+        return `${name} ${(node[g.axis] * g.sign).toFixed(1)} m/s · ${total}\nDrag outward to add Δv, back to remove · wheel for ${this.fineTune ? '0.01' : '0.1'} m/s steps`;
       }
       case 'node': {
         const node = u.vessel?.nodes.find(n => n.id === h.id);
@@ -1200,7 +1212,8 @@ export class MapView {
     this.lastHoverAt = performance.now();
     const body = h.kind === 'object' && h.pick.kind === 'body' ? this.bodies.get(h.pick.id) ?? null : null;
     this.hoverBody = body;
-    const text = this.drag || this.quiet ? null : this.tooltipText(h);
+    // While a handle is held its live value stays visible; other drags hide the tooltip.
+    const text = this.quiet || (this.drag && this.drag.kind !== 'handle') ? null : this.tooltipText(h);
     this.tooltip.style.display = text ? 'block' : 'none';
     if (text) {
       if (this.tooltip.textContent !== text) this.tooltip.textContent = text;
@@ -1306,6 +1319,13 @@ export class MapView {
         } else if (h.kind === 'orbit' && d.button === 0) {
           const now = performance.now();
           if (now - this.lastPlaced > 450) { this.lastPlaced = now; this.handlers.placeNode?.(h.time); }
+        } else if (h.kind === 'marker' && d.button === 2 && this.handlers.markerMenu) {
+          const m = this.shown.slice(0, this.shownCount).find(x => x.key === h.key);
+          this.quiet = { x: p.x, y: p.y };
+          if (m) this.handlers.markerMenu({ key: m.key, label: m.orbit ? (m.orbit.kind === 'ap' ? 'Apoapsis' : m.orbit.kind === 'pe' ? 'Periapsis' : markerCaption(m.orbit, this.bodyName)) : m.key.startsWith('ca') ? 'Closest approach' : m.caption, time: m.time, pinned: this.pinned.has(m.key) }, { x: p.x, y: p.y });
+        } else if (h.kind === 'orbit' && d.button === 2 && this.handlers.orbitMenu) {
+          this.quiet = { x: p.x, y: p.y };
+          this.handlers.orbitMenu(h.time, { x: p.x, y: p.y });
         } else if (h.kind === 'node' && d.button === 2) {
           this.selectedNodeId = h.id;
           this.quiet = { x: p.x, y: p.y };
@@ -1361,6 +1381,9 @@ export class MapView {
   setWarmup(on: boolean) {
     for (const o of this.warmObjects) o.visible = on;
   }
+
+  /** Pin or unpin an orbit marker's detail label. */
+  togglePin(key: string) { if (!this.pinned.delete(key)) this.pinned.add(key); }
 
   /** Override the focus breadcrumb's placement (CSS), e.g. to keep it clear of a host HUD. */
   placeBreadcrumb(style: Partial<Record<'top' | 'bottom' | 'left' | 'transform', string>>) { Object.assign(this.breadcrumb.style, style); }

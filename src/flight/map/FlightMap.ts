@@ -1,7 +1,8 @@
 import type { FlightController } from '../controller';
 import type { WorldVessel } from '../../game/world';
 import type { MapPick, MapPoint } from '../../render/map/MapView';
-import { focusCycle, mapContextActions, nextFocus, sameObject, type MapAction, type MapActionId, type MapObject } from '../../ui/map/mapActions';
+import { focusCycle, mapContextActions, nextFocus, pathPointActions, sameObject, type MapAction, type MapActionId, type MapObject, type MapPathPoint } from '../../ui/map/mapActions';
+import { formatDuration } from '../../util/format';
 import { isTyping, matches } from '../../input/bindings';
 import { formatDistance, formatSpeed } from '../../util/format';
 import { length, sub, type Vec3 } from '../../util/vec3';
@@ -10,8 +11,8 @@ import { nodeSummary, patchAtNode } from './nodeInfo';
 export interface MapMenus {
   /** Node whose menu is open. */
   node: number | null;
-  /** Right-click / click context menu. */
-  context: { obj: MapObject; x: number; y: number } | null;
+  /** Right-click / click context menu for an object or a point on the predicted path. */
+  context: { obj?: MapObject; point?: MapPathPoint; x: number; y: number } | null;
   /** Info card. */
   info: MapObject | null;
 }
@@ -44,6 +45,8 @@ export class FlightMap {
       focus: (pick) => { this.setFocus(pick); this.closeMenus(); },
       emptyClick: () => this.closeMenus(),
       describe: (pick) => this.describe(pick),
+      markerMenu: (m, at) => this.openPoint({ label: m.label, time: m.time, key: m.key, pinned: m.pinned }, at),
+      orbitMenu: (time, at) => this.openPoint({ label: `T−${formatDuration(time - this.world.ut)}`, time, orbit: true }, at),
     };
     window.addEventListener('keydown', this.keydown);
   }
@@ -131,6 +134,24 @@ export class FlightMap {
 
   private openContext(obj: MapObject, at: MapPoint) {
     this.menus = { node: null, info: null, context: { obj, x: at.x, y: at.y } };
+    this.emit();
+  }
+
+  private openPoint(point: MapPathPoint, at: MapPoint) {
+    this.menus = { node: null, info: null, context: { point, x: at.x, y: at.y } };
+    this.emit();
+  }
+
+  pointActions(point: MapPathPoint): MapAction[] {
+    const c = this.c;
+    return pathPointActions(point, { now: this.world.ut, canWarp: !c.network && !c.assist, canPlan: !!this.world.active && this.world.active.mode !== 'prelaunch' });
+  }
+
+  runPoint(id: MapActionId, point: MapPathPoint) {
+    this.menus = { ...this.menus, context: null };
+    if (id === 'addNode' && point.time !== undefined) this.placeNode(point.time);
+    else if (id === 'warpPoint' && point.time !== undefined) this.warp(point.orbit ? 'Selected point' : point.label, point.time - (point.orbit ? 0 : 10));
+    else if ((id === 'pin' || id === 'unpin') && point.key) this.c.map.togglePin(point.key);
     this.emit();
   }
 

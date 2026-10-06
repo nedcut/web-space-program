@@ -38,7 +38,7 @@ export function nextFocus(list: readonly MapObject[], current: MapObject | null,
   return list[(i + dir + list.length) % list.length];
 }
 
-export type MapActionId = 'focus' | 'target' | 'untarget' | 'warpApproach' | 'warpSoi' | 'switch' | 'info';
+export type MapActionId = 'focus' | 'target' | 'untarget' | 'warpApproach' | 'warpSoi' | 'switch' | 'info' | 'addNode' | 'warpPoint' | 'pin' | 'unpin';
 export interface MapAction { id: MapActionId; label: string }
 
 export interface MapActionContext {
@@ -71,5 +71,18 @@ export function mapContextActions(obj: MapObject, c: MapActionContext): MapActio
   }
   if (c.canSwitch && obj.kind === 'vessel' && !isActive) out.push({ id: 'switch', label: 'Switch to vessel' });
   out.push({ id: 'info', label: 'Info' });
+  return out;
+}
+
+/** A point on the predicted path: a marker (Ap, Pe, encounter…) or a spot on the orbit line. */
+export interface MapPathPoint { label: string; time?: number; key?: string; pinned?: boolean; orbit?: boolean }
+
+/** Actions for a right-clicked path point: add a node (orbit line), warp there, pin/unpin (markers). */
+export function pathPointActions(p: MapPathPoint, c: { now: number; canWarp: boolean; canPlan: boolean }): MapAction[] {
+  const out: MapAction[] = [];
+  const future = p.time !== undefined && Number.isFinite(p.time) && p.time > c.now + 5;
+  if (p.orbit && c.canPlan && future) out.push({ id: 'addNode', label: 'Add maneuver node here' });
+  if (c.canWarp && future) out.push({ id: 'warpPoint', label: p.orbit ? 'Warp here' : `Warp to ${p.label}` });
+  if (p.key) out.push(p.pinned ? { id: 'unpin', label: 'Unpin label' } : { id: 'pin', label: 'Pin label' });
   return out;
 }

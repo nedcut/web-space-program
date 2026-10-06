@@ -76,16 +76,21 @@ export function screenPolyline(capacity: number): ScreenPolyline {
   return { x: new Float64Array(capacity), y: new Float64Array(capacity), t: new Float64Array(capacity), n: 0 };
 }
 
-/** Closest point on a screen polyline to (cx, cy): the interpolated time and the pixel distance. */
-export function closestOnPolyline(line: ScreenPolyline, cx: number, cy: number): { time: number; distance: number } | null {
-  let best: { time: number; distance: number } | null = null;
+/**
+ * Closest point on a screen polyline to (cx, cy): the interpolated time and the pixel distance. `prefer` adds
+ * `weight` px per second away from `time` to the score, so where the line overlaps itself (a full revolution
+ * ends where it starts) a dragged node stays on the revolution it is already on.
+ */
+export function closestOnPolyline(line: ScreenPolyline, cx: number, cy: number, prefer?: { time: number; weight: number }): { time: number; distance: number } | null {
+  let best: { time: number; distance: number } | null = null, bestScore = Infinity;
   for (let i = 0; i + 1 < line.n; i++) {
     const ax = line.x[i], ay = line.y[i], bx = line.x[i + 1], by = line.y[i + 1];
     if (Number.isNaN(ax) || Number.isNaN(bx)) continue;
     const vx = bx - ax, vy = by - ay, len2 = vx * vx + vy * vy;
     const u = len2 > 0 ? Math.max(0, Math.min(1, ((cx - ax) * vx + (cy - ay) * vy) / len2)) : 0;
-    const d = Math.hypot(ax + vx * u - cx, ay + vy * u - cy);
-    if (!best || d < best.distance) best = { time: line.t[i] + (line.t[i + 1] - line.t[i]) * u, distance: d };
+    const d = Math.hypot(ax + vx * u - cx, ay + vy * u - cy), time = line.t[i] + (line.t[i + 1] - line.t[i]) * u;
+    const score = d + (prefer ? prefer.weight * Math.abs(time - prefer.time) : 0);
+    if (score < bestScore) { bestScore = score; best = { time, distance: d }; }
   }
   return best;
 }

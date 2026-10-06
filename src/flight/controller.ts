@@ -970,9 +970,9 @@ export class FlightController {
       vessel: { id: wv.state.id, position: origin, patches, nodes: this.world.nodes },
       markers: [
         ...this.world.mapGravityMarkers(),
-        ...(this.world.preciseGravity ? [] : this.predictions.crossings).map(c => ({ key: c.kind, body: wv.body, position: c.position, label: c.kind, color: '#d066ff',
+        ...(this.world.preciseGravity ? [] : this.predictions.crossings).map(c => ({ key: c.kind, body: wv.body, position: c.position, label: c.kind, color: '#d066ff', time: c.time,
           detail: `${c.kind === 'AN' ? 'Ascending' : 'Descending'} node (target plane)${incText}\nT−${formatDuration(c.time - t)}` })),
-        ...(!this.world.preciseGravity && this.predictions.impact && !impactOnPath ? [{ key: 'impact', body: wv.body, position: this.predictions.impact.position, label: 'Impact', color: '#ff6b6b',
+        ...(!this.world.preciseGravity && this.predictions.impact && !impactOnPath ? [{ key: 'impact', body: wv.body, position: this.predictions.impact.position, label: 'Impact', color: '#ff6b6b', time: this.predictions.impact.time,
           detail: `Impact (terrain)\nT−${formatDuration(this.predictions.impact.time - t)}\n${formatSpeed(this.predictions.impact.speed)}` }] : []),
       ],
       viewport: { width: this.host.clientWidth, height: this.host.clientHeight },
@@ -1082,6 +1082,7 @@ export class FlightController {
             positionA: ca.positionA,
             positionB: ca.positionB,
             label: `Closest ${formatDistance(ca.distance)}`,
+            time: ca.time,
             detail: `Closest approach to ${w.targetName()}\nSeparation ${formatDistance(ca.distance)}\nRelative speed ${ca.relativeSpeed.toFixed(1)} m/s\nT−${formatDuration(Math.max(0, ca.time - w.ut))}`,
           }
         : null,

@@ -30,9 +30,12 @@ export function MapOverlay({ controller: c }: { controller: FlightController }) 
   return <>
     <OrbitReadout controller={c} />
     {node && <NodeMenu controller={c} node={node} />}
-    {context && <MapContextMenu x={context.x} y={context.y} title={ui.name(context.obj)}
+    {context?.obj && <MapContextMenu x={context.x} y={context.y} title={ui.name(context.obj)}
       subtitle={context.obj.kind === 'vessel' ? (context.obj.id === c.world.activeId ? 'Active vessel' : 'Vessel') : BODY_KIND[c.world.universe.body(context.obj.id).kind]}
-      actions={ui.actions(context.obj)} onAction={id => ui.run(id, context.obj)} onClose={() => ui.closeMenus()} />}
+      actions={ui.actions(context.obj)} onAction={id => ui.run(id, context.obj!)} onClose={() => ui.closeMenus()} />}
+    {context?.point && <MapContextMenu x={context.x} y={context.y} title={context.point.label}
+      subtitle={context.point.time !== undefined ? `T−${formatDuration(context.point.time - c.world.ut)}` : undefined}
+      actions={ui.pointActions(context.point)} onAction={id => ui.runPoint(id, context.point!)} onClose={() => ui.closeMenus()} />}
     {info && <InfoCard controller={c} obj={info} />}
   </>;
 }

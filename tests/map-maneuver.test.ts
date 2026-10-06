@@ -76,6 +76,12 @@ describe('node time from the cursor', () => {
     // Segments touching a vertex behind the camera are skipped.
     const c = closestOnPolyline(line, 50, 100)!;
     expect(c.time).toBeCloseTo(20);
+    // A closed loop: both ends sit on the same pixel; the preferred time decides the revolution.
+    const loop = screenPolyline(4);
+    [[0, 0, 0], [100, 0, 50], [0, 0, 100]].forEach(([x, y, t], i) => { loop.x[i] = x; loop.y[i] = y; loop.t[i] = t; });
+    loop.n = 3;
+    expect(closestOnPolyline(loop, 1, 0, { time: 90, weight: 0.06 })!.time).toBeGreaterThan(95);
+    expect(closestOnPolyline(loop, 1, 0, { time: 10, weight: 0.06 })!.time).toBeLessThan(5);
     line.n = 0;
     expect(closestOnPolyline(line, 0, 0)).toBeNull();
   });
@@ -191,5 +197,16 @@ describe('map view maneuver picking', () => {
     expect(map.nodeScreenPosition(7)!.x).toBeCloseTo(x, 0);
     map.dispose();
     expect(placed).toEqual([]);
+  });
+});
+
+describe('path point actions', () => {
+  it('adds nodes only on the orbit line and warps only to future points', async () => {
+    const { pathPointActions } = await import('../src/ui/map/mapActions');
+    const ids = (p: Parameters<typeof pathPointActions>[0], warp = true) => pathPointActions(p, { now: 100, canWarp: warp, canPlan: true }).map(a => a.id);
+    expect(ids({ label: 'T−5m', time: 400, orbit: true })).toEqual(['addNode', 'warpPoint']);
+    expect(ids({ label: 'Apoapsis', time: 400, key: 'ap:0' })).toEqual(['warpPoint', 'pin']);
+    expect(ids({ label: 'Apoapsis', time: 102, key: 'ap:0', pinned: true })).toEqual(['unpin']);
+    expect(ids({ label: 'AN', time: 400, key: 'AN' }, false)).toEqual(['pin']);
   });
 });
