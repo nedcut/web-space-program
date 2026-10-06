@@ -44,6 +44,12 @@ export interface Environment {
   air(posInertial: Vec3, t: number): AirSample;
   /** Ground under the position (terrain or ocean surface), or null if there is no surface (gas giant / far away). */
   ground(posInertial: Vec3, t: number): GroundSample | null;
+  /**
+   * OPTIONAL fast path: true only when there is no surface or the point is certainly more than `margin` metres
+   * above it (terrain or liquid). One height sample instead of `ground`'s three; contact uses it to skip points
+   * whose penetration depth would be negative anyway.
+   */
+  clearOfGround?(posInertial: Vec3, t: number, margin: number): boolean;
   /** Sun direction (unit, from position toward the Sun) & distance (m) for solar power and heating. */
   sun(posInertial: Vec3, t: number): { dir: Vec3; distance: number; exposure?: number };
   /**

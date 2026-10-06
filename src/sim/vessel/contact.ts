@@ -110,6 +110,9 @@ export interface ContactPass {
   altitudeAGL: number;
 }
 
+/** Hull/leg points this far (m) above the local surface skip the full ground sample (far above rounding error). */
+const CLEAR_MARGIN = 0.05;
+
 /** Is the vessel close enough to the surface that contact must be evaluated? */
 export function nearSurface(v: VesselState, env: Environment, t: number, h: number): { ground: GroundSample | null; agl: number; near: boolean } {
   const g = env.ground(v.position, t);
@@ -143,6 +146,9 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
     for (const hp of hullPoints(p.def)) {
       const rW = toWorldOffset(add(p.position, qRotate(p.rotation, hp)));
       const pw = add(v.position, rW);
+      // Depth is the radial height below the surface projected on the outward normal: a point clearly above the
+      // surface cannot penetrate, so skip the full ground sample (and its finite-difference normal).
+      if (env.clearOfGround?.(pw, t, CLEAR_MARGIN)) continue;
       const gs = env.ground(pw, t);
       if (!gs) continue;
       const depth = dot(sub(gs.surfacePoint, pw), gs.normal);
@@ -161,7 +167,7 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
       const m = p.def.modules[p.leg.moduleIndex] as LandingLegModule;
       const rW = toWorldOffset(add(p.position, qRotate(p.rotation, m.footPosition)));
       const pw = add(v.position, rW);
-      const gs = env.ground(pw, t);
+      const gs = env.clearOfGround?.(pw, t, CLEAR_MARGIN) ? null : env.ground(pw, t);
       if (gs && !gs.isWater) {
         const d = dot(sub(gs.surfacePoint, pw), gs.normal);
         if (d > 0) {

@@ -10,6 +10,7 @@ import { createUniverse, type ScalePresetId } from '../sim/bodies';
 import { createEphemeris, type Ephemeris } from '../sim/orbit/ephemeris';
 import { createTerrain, type Terrain } from '../sim/terrain';
 import { findDominantBody } from '../sim/orbit/soi';
+import { heliocentricRanges, mayBeWithin } from '../sim/orbit/bounds';
 import type { Environment, GroundSample } from '../sim/vessel/env';
 import { add, cross, length, normalize, scale, sub, v3, type Vec3 } from '../util/vec3';
 
@@ -119,8 +120,10 @@ export class Universe {
       hazardTimeScale: Math.sqrt(SCALE_PRESETS[self.preset].s),
       radiation(pos, t) {
         let dose = 0;
+        const ranges = heliocentricRanges(self.bodies), r = length(pos);
         for (const id of ['earth', 'jupiter', 'saturn']) {
           const b = self.body(id);
+          if (!mayBeWithin(ranges.get(id)!, r, b.radius * 30)) continue;
           const rel = sub(pos, self.ephem.getBodyState(id, t).position);
           if (length(rel) > b.radius * 30) continue;
           dose += radiationRate(id, self.ephem.toBodyFixed(id, rel, t), b.radius);
@@ -195,11 +198,32 @@ export class Universe {
         };
         return sample;
       },
+      clearOfGround(pos, t, margin) {
+        // Mirrors ground(): same dominant body, body-fixed direction and surface height, without the normal.
+        const id = getDominant();
+        const b = self.body(id);
+        if (!b.solidSurface) return true;
+        const terr = self.terrain(id);
+        const rel = sub(pos, self.ephem.getBodyState(id, t).position);
+        const alt = length(rel) - b.radius;
+        if (alt > terr.maxHeight + 5000) return true;
+        const fixed = normalize(self.ephem.toBodyFixed(id, rel, t));
+        const raw = terr.heightAt(fixed.x, fixed.y, fixed.z);
+        const h = terr.ocean ? Math.max(terr.liquid?.level ?? 0, raw) : raw;
+        return alt - h > margin;
+      },
       sun(pos, t) {
         const sp = self.ephem.getBodyState(self.sunId, t).position;
         const d = sub(sp, pos);
         const dist = length(d);
-        const blockers = [...self.bodies.values()].filter(b => b.id !== self.sunId).map(b => ({ radius: b.radius, position: self.ephem.getBodyState(b.id, t).position }));
+        // Every point of the vessel→Sun segment lies within `dist` of the Sun: bodies that always stay farther
+        // cannot occlude it, so their ephemerides are not evaluated (the boolean exposure is unchanged).
+        const ranges = heliocentricRanges(self.bodies), r = length(sub(pos, sp));
+        const blockers: { radius: number; position: Vec3 }[] = [];
+        for (const b of self.bodies.values()) {
+          if (b.id === self.sunId || !mayBeWithin(ranges.get(b.id)!, r, b.radius, true)) continue;
+          blockers.push({ radius: b.radius, position: self.ephem.getBodyState(b.id, t).position });
+        }
         return { dir: scale(d, 1 / dist), distance: dist, exposure: sunExposure(pos, sp, blockers) };
       },
       referenceBody(_pos, t) {

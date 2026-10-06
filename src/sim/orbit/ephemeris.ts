@@ -48,6 +48,17 @@ export function createEphemeris(bodies: Map<string, Body>): Ephemeris {
   }
   // Body elements are immutable for the lifetime of an ephemeris.
   for (const b of bodies.values()) { equator(b.id); planes.set(b.id, referencePlane(b)); }
+  // Conic per body, built once (elements are immutable) instead of spread on every evaluation.
+  const orbits = new Map<string, Orbit>();
+  function orbitOf(b: Body): Orbit {
+    let orbit = orbits.get(b.id);
+    if (!orbit) {
+      const o = b.orbit!;
+      orbit = { ...o, body: b.parent!, mu: body(b.parent!).gm + b.gm, m0: o.meanAnomalyAtEpoch };
+      orbits.set(b.id, orbit);
+    }
+    return orbit;
+  }
   let lastT = NaN;
   const absolute = new Map<string, StateVector>(), relative = new Map<string, StateVector>(), rotations = new Map<string, Quat>();
   const visiting = new Set<string>();
@@ -60,8 +71,7 @@ export function createEphemeris(bodies: Map<string, Body>): Ephemeris {
     const b = body(id);
     let state: StateVector = { position: v3(), velocity: v3() };
     if (b.parent && b.orbit) {
-      const o = b.orbit;
-      const orbit: Orbit = { ...o, body: b.parent, mu: body(b.parent).gm + b.gm, m0: o.meanAnomalyAtEpoch };
+      const orbit = orbitOf(b);
       const raw = propagate(orbit, t), q = planes.get(id) ?? referencePlane(b);
       state = { position: qRotate(q, raw.position), velocity: qRotate(q, raw.velocity) };
     }
