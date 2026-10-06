@@ -1,0 +1,325 @@
+{
+  "liftoff": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "buffer": [
+      2940,
+      1840
+    ],
+    "full": 7.954486436987456,
+    "cost": {
+      "condensation": 0,
+      "particles": 0.059392,
+      "plasma": 0,
+      "plumes": 0.049151999999999994
+    },
+    "draws": [
+      {
+        "family": "condensation",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "particles",
+        "samples": 119,
+        "median": 0.059392
+      },
+      {
+        "family": "plasma",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 119,
+        "median": 0.048128
+      },
+      {
+        "family": "plumes",
+        "samples": 119,
+        "median": 0.001024
+      }
+    ],
+    "errors": []
+  },
+  "maxq": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "buffer": [
+      2940,
+      1840
+    ],
+    "full": 7.218961461002265,
+    "cost": {
+      "condensation": 0.004096,
+      "particles": 0.04096,
+      "plasma": 0,
+      "plumes": 0.109568
+    },
+    "draws": [
+      {
+        "family": "condensation",
+        "samples": 119,
+        "median": 0.004096
+      },
+      {
+        "family": "particles",
+        "samples": 119,
+        "median": 0.04096
+      },
+      {
+        "family": "plasma",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 119,
+        "median": 0.106496
+      },
+      {
+        "family": "plumes",
+        "samples": 119,
+        "median": 0.003072
+      }
+    ],
+    "errors": []
+  },
+  "vacuum": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "buffer": [
+      2940,
+      1840
+    ],
+    "full": 4.276929517954084,
+    "cost": {
+      "condensation": 0,
+      "particles": 0,
+      "plasma": 0,
+      "plumes": 0.214016
+    },
+    "draws": [
+      {
+        "family": "condensation",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "particles",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plasma",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 119,
+        "median": 0.206848
+      },
+      {
+        "family": "plumes",
+        "samples": 119,
+        "median": 0.007168
+      }
+    ],
+    "errors": []
+  },
+  "moon": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "buffer": [
+      2940,
+      1840
+    ],
+    "full": 4.920179854982299,
+    "cost": {
+      "condensation": 0,
+      "particles": 0.009216,
+      "plasma": 0,
+      "plumes": 0.228352
+    },
+    "draws": [
+      {
+        "family": "condensation",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "particles",
+        "samples": 119,
+        "median": 0.009216
+      },
+      {
+        "family": "plasma",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 119,
+        "median": 0.221184
+      },
+      {
+        "family": "plumes",
+        "samples": 119,
+        "median": 0.007168
+      }
+    ],
+    "errors": []
+  },
+  "reentry": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "buffer": [
+      2940,
+      1840
+    ],
+    "full": 6.997610751298028,
+    "cost": {
+      "condensation": 0,
+      "particles": 0,
+      "plasma": 0.011264
+    },
+    "draws": [
+      {
+        "family": "condensation",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "particles",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plasma",
+        "samples": 119,
+        "median": 0.011264
+      }
+    ],
+    "errors": []
+  },
+  "explosion": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "buffer": [
+      2940,
+      1840
+    ],
+    "full": 7.5590998904023134,
+    "cost": {
+      "condensation": 0,
+      "particles": 0.022528,
+      "plasma": 0,
+      "plumes": 0
+    },
+    "draws": [
+      {
+        "family": "condensation",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "particles",
+        "samples": 119,
+        "median": 0.022528
+      },
+      {
+        "family": "plasma",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 0,
+        "median": 0
+      }
+    ],
+    "errors": []
+  },
+  "live": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "buffer": [
+      2940,
+      1840
+    ],
+    "full": 4.041474739310792,
+    "cost": {
+      "condensation": 0,
+      "particles": 0.006144,
+      "plasma": 0,
+      "plumes": 0.059392
+    },
+    "draws": [
+      {
+        "family": "condensation",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "particles",
+        "samples": 119,
+        "median": 0.006144
+      },
+      {
+        "family": "plasma",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 0,
+        "median": 0
+      },
+      {
+        "family": "plumes",
+        "samples": 119,
+        "median": 0.057344
+      },
+      {
+        "family": "plumes",
+        "samples": 119,
+        "median": 0.002048
+      }
+    ],
+    "errors": []
+  }
+}
