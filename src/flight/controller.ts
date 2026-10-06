@@ -42,8 +42,9 @@ import { detachRenderer, noteDfgLut, releaseSharedTextures } from '../render/rel
 import { shareUnchanged, snapshotEqual } from '../util/snapshotEqual';
 import { bindingLabel } from '../input/bindings';
 import { cross, dot, length, normalize, sub, type Vec3 } from '../util/vec3';
+import { qRotate } from '../util/quat';
 import { type AssistId } from './assist';
-import { CAMERA_MODE_INFO, FlightCamera } from './camera';
+import { CAMERA_MODE_INFO, FlightCamera, PivotSmoother } from './camera';
 import * as assist from './controller/assist';
 import * as audio from './controller/audio';
 import type { FlightControllerInternals } from './controller/internals';
@@ -1058,6 +1059,8 @@ export class FlightController {
   private readonly camVel = new THREE.Vector3();
   private readonly camNormal = new THREE.Vector3();
   private readonly camProbe = { x: 0, y: 0, z: 0 };
+  private readonly camPivot = new THREE.Vector3();
+  private readonly pivotSmoother = new PivotSmoother();
 
   /** Feed the orbit camera its reference frame, framing size, terrain clearance and rumble for this frame. */
   private updateCamera(wv: WorldVessel, origin: Vec3, bodyState: { position: Vec3; velocity: Vec3 }, airVel: Vec3, t: number, dt: number) {
@@ -1088,7 +1091,11 @@ export class FlightController {
     this.cam.drive.pitch = this.input.camera.pitch;
     this.cam.drive.zoom = this.input.camera.zoom;
     const q = st.orientation;
+    // Staging/docking move the COM (the scene origin) inside the vessel: ease the orbit point across instead of jumping.
+    const po = this.pivotSmoother.update(st.id, st.com, dt);
+    const pw = qRotate(q, po);
     this.cam.update({
+      pivot: this.camPivot.set(pw.x, pw.y, pw.z),
       up: this.camUp.set(up.x, up.y, up.z),
       vesselQuat: this.camQuat.set(q.x, q.y, q.z, q.w),
       velocity: this.camVel.set(vel.x, vel.y, vel.z),

@@ -49,6 +49,45 @@ export interface CameraFrame {
   rumble?: number;
   /** 1 on the ground: aim slightly below the vessel so it sits above the HUD's navball cluster. */
   groundFraming?: number;
+  /** Orbit/aim point relative to the scene origin (the vessel COM), e.g. from {@link PivotSmoother}. */
+  pivot?: THREE.Vector3;
+}
+
+/**
+ * Keeps the camera's orbit point continuous when the centre of mass jumps inside the vessel (staging, docking,
+ * a dropped part): the jump is fed in as an offset in the vessel's build frame — "where the old COM was on the
+ * vessel" — which then settles back onto the new COM along a critically damped curve (no snap, no overshoot).
+ */
+export class PivotSmoother {
+  /** Settle time constant, s (≈ 95 % settled after 4.7 τ). */
+  static readonly TAU = 0.3;
+  private id: string | undefined;
+  private com = { x: 0, y: 0, z: 0 };
+  /** Offset of the pivot from the COM (build frame) and its rate. */
+  readonly offset = { x: 0, y: 0, z: 0 };
+  private rate = { x: 0, y: 0, z: 0 };
+
+  /** Advance with the active vessel's id and build-frame COM; returns the build-frame offset. */
+  update(id: string, com: { x: number; y: number; z: number }, dt: number) {
+    const o = this.offset, r = this.rate;
+    if (id !== this.id) {
+      this.id = id;
+      o.x = o.y = o.z = r.x = r.y = r.z = 0;
+    } else {
+      o.x += this.com.x - com.x; o.y += this.com.y - com.y; o.z += this.com.z - com.z;
+    }
+    this.com.x = com.x; this.com.y = com.y; this.com.z = com.z;
+    const w = 1 / PivotSmoother.TAU;
+    // Exact step of the critically damped oscillator x'' = −2ωx' − ω²x.
+    const e = Math.exp(-w * dt);
+    for (const k of ['x', 'y', 'z'] as const) {
+      const x = o[k], v = r[k];
+      o[k] = (x + (v + w * x) * dt) * e;
+      r[k] = (v - (v + w * x) * w * dt) * e;
+      if (Math.abs(o[k]) < 1e-6 && Math.abs(r[k]) < 1e-6) o[k] = r[k] = 0;
+    }
+    return o;
+  }
 }
 
 /** Ease time constants (s). Short enough to feel direct, long enough to hide mouse/wheel quantisation. */
@@ -244,7 +283,7 @@ export class FlightCamera {
     this.terrainPush = 0;
     if (f.clearance) {
       const minClear = Math.max(0.6, this.cDist * 0.01);
-      const h = f.clearance(offset);
+      const h = f.clearance(f.pivot ? offset.clone().add(f.pivot) : offset);
       if (Number.isFinite(h) && h < minClear) {
         this.terrainPush = minClear - h;
         offset.addScaledVector(f.up, this.terrainPush);
@@ -259,9 +298,11 @@ export class FlightCamera {
     const liftTarget = Math.max(0, Math.min(1, f.groundFraming ?? 0));
     this.lift = this.lift < 0 ? liftTarget : this.lift + (liftTarget - this.lift) * ease(dt, 1.2);
     const aimDown = this.lift * Math.min(this.radius * 0.45, this.cDist * 0.15);
+    const px = f.pivot?.x ?? 0, py = f.pivot?.y ?? 0, pz = f.pivot?.z ?? 0;
     this.camera.position.copy(offset);
+    this.camera.position.x += px; this.camera.position.y += py; this.camera.position.z += pz;
     this.camera.up.copy(this.smoothedUp);
-    this.camera.lookAt(-f.up.x * aimDown, -f.up.y * aimDown, -f.up.z * aimDown);
+    this.camera.lookAt(px - f.up.x * aimDown, py - f.up.y * aimDown, pz - f.up.z * aimDown);
 
     // Rumble and kicks: small smooth rotations of the view (not translations, which read as the vessel moving).
     this.kick *= Math.exp(-dt / 0.22);
