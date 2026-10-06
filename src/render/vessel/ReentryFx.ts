@@ -49,8 +49,10 @@ const frag = /* glsl */ `
     float wake = (1.0 - smoothstep(.1, .55, y)) * smoothstep(-1.0,-.45,y) * uWake;
     float rim = pow(max(1.0 - abs(dot(normalize(vNormalV), normalize(vViewDir))), 0.0), 1.5);
     float n = noise(vPos * 3.0 + vec3(0.0, uTime * 9.0, 0.0)) * 0.6 + noise(vPos * 7.0 - vec3(0.0, uTime * 15.0, 0.0)) * 0.4;
-    float streak = pow(max(0.0, sin(atan(vPos.z,vPos.x)*23.0 + n*2.0)), 14.0);
-    float a = (wake * streak * (.3 + n) + front * (.12 + rim*.7) + wake * n * .15) * uIntensity;
+    float streak = smoothstep(-.25,.85,sin(atan(vPos.z,vPos.x)*11.0 + n*6.0 + y*9.0 - uTime*7.0));
+    float a = (wake * streak * (.08 + n*.32) + front * (.12 + rim*.65)) * uIntensity;
+    // Fade the proxy silhouette and the far wake so it reads as a sheath of gas, not a solid cone.
+    a *= smoothstep(0.0,.5,abs(dot(normalize(vNormalV),normalize(vViewDir)))) * smoothstep(-.85,.2,y);
     vec3 col = mix(uColorCool, uColorHot, clamp(front + n * 0.3, 0.0, 1.0));
     gl_FragColor = vec4(col * a * 4.0, 1.0);
   }
@@ -74,7 +76,7 @@ export class ReentryFx {
       const a = (1 - i / 16) * (Math.PI / 2);
       profile.push(new THREE.Vector2(Math.sin(a), 0.4 + Math.cos(a) * 0.6));
     }
-    const geo = new THREE.LatheGeometry(profile, game.get().settings.quality === 'low' ? 16 : game.get().settings.quality === 'medium' ? 24 : 48);
+    const geo = new THREE.LatheGeometry(profile, game.get().settings.quality === 'low' ? 16 : game.get().settings.quality === 'medium' ? 48 : 64);
     this.mat = new THREE.ShaderMaterial({
       vertexShader: vert,
       fragmentShader: frag,
@@ -129,7 +131,7 @@ export class ReentryFx {
     const hot = this.mat.uniforms.uColorHot.value as THREE.Color;
     const cool = this.mat.uniforms.uColorCool.value as THREE.Color;
     hot.setRGB(1, body === 'titan' ? .7 : .55, body === 'mars' ? .6 : .25);
-    cool.setRGB(body === 'mars' ? .45 : 1, .25, body === 'titan' ? .08 : .7);
+    cool.setRGB(body === 'mars' ? .65 : 1, .12, body === 'titan' ? .025 : .12);
     const r = crossRadius * 1.15;
     const sy = r * (1.4 + 2.5 * k);
     this.object.scale.set(r, sy, r);
