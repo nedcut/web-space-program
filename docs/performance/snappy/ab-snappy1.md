@@ -1,0 +1,8 @@
+| Scenario | fps before → after | p50 before → after | p99 before → after | hitch before → after | gpu before → after | calls before → after | cpu before → after | sim before → after | render before → after | planets before → after | telemetry before → after | hud before → after | script before → after | work before → after | lt before → after | gc before → after | gcMax before → after | heap before → after | layout before → after | react before → after |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| map | 54.92 → 56.18 | 16.7 → 16.7 | 25.1 → 25.1 | 63 → 52.5 | 0.47 → 0.34 | 32 → 32 | 1.75 → 1.62 | 0.21 → 0.18 | 0.44 → 0.45 | 0 → 0 | 0.04 → 0.04 | 0.14 → 0.12 | 1.76 → 1.64 | 13.07 → 11.66 | 9 → 5.72 | 1.79 → 2.07 | 2.22 → 2.05 | 48.43 → 59.8 | 113.81 → 32.52 | 374.55 → 377.87 |
+| orbit | 45.68 → 52.67 | 16.7 → 16.7 | 33.4 → 33.4 | 171 → 80 | 5.93 → 4.17 | 533 → 441.5 | 4.31 → 3.47 | 0.2 → 0.18 | 3.26 → 2.56 | 0.44 → 0.33 | 0.06 → 0.06 | 0.08 → 0.07 | 4.43 → 3.54 | 20.69 → 19.63 | 0 → 0 | 1.09 → 1.11 | 1.21 → 1.44 | 59.36 → 61.96 | 4.63 → 5.27 | 357.21 → 362.04 |
+| pad | 47.58 → 56.29 | 16.7 → 16.7 | 33.4 → 33.4 | 120.5 → 36.5 | 6.91 → 4.45 | 888 → 621 | 5.28 → 3.88 | 0.11 → 0.1 | 3.98 → 2.87 | 0.82 → 0.55 | 0.05 → 0.04 | 0.07 → 0.06 | 5.39 → 3.93 | 26.57 → 23.4 | 0 → 0 | 1.3 → 1.27 | 1.55 → 1.7 | 57.64 → 48.93 | 9.14 → 9.06 | 329.82 → 336.12 |
+
+load:cold: menu 590 → 598 ms, controller 1418 → 1494.5 ms, ready 6749 → 5021.5 ms, load long tasks 1116 → 1155.5 ms (max 432 → 380)
+load:warm: menu 635 → 597.5 ms, controller 1084 → 1048.5 ms, ready 6300 → 4288 ms, load long tasks 706 → 706.5 ms (max 276 → 200)
