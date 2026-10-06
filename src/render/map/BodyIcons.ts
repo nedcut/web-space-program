@@ -19,8 +19,13 @@ export class BodyIcons {
         float r = length(vUv - .5);
         float d = abs(r - .30);
         float aa = fwidth(d);
-        float alpha = 1. - smoothstep(.045-aa,.045+aa,d);
-        gl_FragColor = vec4(vColor,alpha);
+        // Coloured ring over a dark halo and a faint disc: readable on dark space and over bright planets.
+        float ring = 1. - smoothstep(.05-aa,.05+aa,d);
+        float halo = (1. - smoothstep(.10-aa,.10+aa,d)) * .7;
+        float disc = (1. - smoothstep(.30-aa,.30+aa,r)) * .22;
+        float alpha = ring + (1. - ring) * max(halo, disc);
+        vec3 color = mix(vec3(.01,.02,.04), vColor, ring / max(alpha, 1e-4));
+        gl_FragColor = vec4(color,alpha);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
