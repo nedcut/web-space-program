@@ -33,7 +33,7 @@ vec3 shadeSurface(vec3 albedo, vec3 N, vec3 V, vec3 rel) {
   float f = mix(mu0, ls, uAirless) / ATMO_PI;
   vec3 up = normalize(rel);
   float geo = smoothstep(-0.03, 0.03, dot(up, L));
-  vec3 sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(geo)) * ringShadow(rel);
+  vec3 sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(geo)) * ringShadow(rel) * cloudShadow(rel);
   vec3 direct = uSunColor * sunT * f;
   vec3 amb = skyAmbient(rel, N) / ATMO_PI;
   vec3 planetshine = uPlanetshineColor * max(dot(N, uPlanetshineDir), 0.0) / ATMO_PI;
@@ -41,12 +41,38 @@ vec3 shadeSurface(vec3 albedo, vec3 N, vec3 V, vec3 rel) {
 }
 `;
 
+/** Shadows of the baked cloud layer on surfaces (one blurred cube-map fetch along the sun ray). */
+const GLSL_CLOUD_SHADOW = /* glsl */ `
+#ifdef CLOUD_SHADOWS
+uniform samplerCube uCloudMap;
+uniform mat3 uCloudRot;
+uniform float uCloudShell;
+float cloudShadow(vec3 rel) {
+  if (uCloudShell <= 0.0) return 1.0;
+  float r = length(rel);
+  float mu = dot(rel, uSunDir) / r;
+  if (mu <= 0.0) return 1.0;
+  // Thin shell: flat-layer distance along the sun ray (no float32 |p|²−R² cancellation).
+  vec3 p = rel + uSunDir * (max(uCloudShell - r, 0.0) / max(mu, 0.08));
+  float d = texture(uCloudMap, uCloudRot * p, 1.0).r;
+  return 1.0 - 0.78 * smoothstep(0.05, 0.85, d);
+}
+#else
+float cloudShadow(vec3 rel) { return 1.0; }
+#endif
+`;
+
 function baseHeader(): string {
-  return GLSL_ATMOSPHERE + GLSL_RING_SHADOW;
+  return GLSL_ATMOSPHERE + GLSL_RING_SHADOW + GLSL_CLOUD_SHADOW;
 }
 
-function defines(q: QualitySettings): Record<string, string | number> {
-  return { AERIAL_STEPS: q.atmosphere.aerialSteps, VIEW_STEPS: q.atmosphere.viewSteps, DETAIL_OCTAVES: q.planetDetails.gasOctaves };
+/** Planets whose surface materials receive cloud shadows (decided before their materials are built). */
+const cloudShadowed = new WeakSet<PlanetUniforms>();
+export function enableCloudShadows(u: PlanetUniforms): void { cloudShadowed.add(u); }
+
+function defines(q: QualitySettings, u?: PlanetUniforms): Record<string, string | number> {
+  return { AERIAL_STEPS: q.atmosphere.aerialSteps, VIEW_STEPS: q.atmosphere.viewSteps, DETAIL_OCTAVES: q.planetDetails.gasOctaves,
+    ...(u && cloudShadowed.has(u) ? { CLOUD_SHADOWS: 1 } : {}) };
 }
 
 // ---------------------------------------------------------------- Terrain
@@ -65,7 +91,7 @@ export interface TerrainMaterialOptions {
 
 export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: TerrainMaterialOptions): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: { ...defines(q), ...(o.detail ? { USE_DETAIL: 1 } : {}), ...(o.cutout ? { USE_CUTOUT: 1 } : {}) },
+    defines: { ...defines(q, u), ...(o.detail ? { USE_DETAIL: 1 } : {}), ...(o.cutout ? { USE_CUTOUT: 1 } : {}) },
     uniforms: {
       ...u,
       ...(o.cutout ?? {}),
@@ -173,7 +199,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
 /** Instanced cell-local assets, using the same solar lighting and aerial perspective as terrain. */
 export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, centers: THREE.DataTexture, color: number[], plant: boolean, radius: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: defines(q),
+    defines: defines(q, u),
     uniforms: { ...u, uCenters: { value: centers }, uColor: { value: new THREE.Vector3(...color) }, uAirless: { value: plant ? 0 : 0.65 }, uAmbientFloor: { value: 0.0015 }, uRange: { value: radius } },
     side: plant ? THREE.DoubleSide : THREE.FrontSide,
     vertexShader: /* glsl */ `
@@ -227,7 +253,7 @@ export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, cen
 
 export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabed: [number, number, number], hydrocarbon = false): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: defines(q),
+    defines: defines(q, u),
     uniforms: {
       ...u,
       uDetailTex: { value: getDetailTexture() },
@@ -329,7 +355,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
           gl_FragColor = vec4(hydro, 1.0);
           return;
         }
-        vec3 sunT = sunTransmittance(rel) * ringShadow(rel);
+        vec3 sunT = sunTransmittance(rel) * ringShadow(rel) * cloudShadow(rel);
         float k = rough * 0.5;
         float G = (NdL / (NdL * (1.0 - k) + k)) * (NdV / (NdV * (1.0 - k) + k));
         vec3 spec = uSunColor * sunT * ggx(NdH, rough * rough) * G * F / (4.0 * NdV + 1e-4);
@@ -367,7 +393,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
 
 export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, opts: { airless: number; ocean: boolean; minH: number; maxH: number; texWidth: number; irregular?: boolean }): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: defines(q),
+    defines: defines(q, u),
     uniforms: {
       ...u,
       uMap: { value: null as THREE.Texture | null },
@@ -445,7 +471,7 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
           vec3 up = normalize(rel);
           float depthT = 1.0 - exp(-(-h) / 18.0);
           vec3 water = mix(vec3(0.01, 0.07, 0.075), vec3(0.002, 0.011, 0.03), depthT);
-          vec3 sunT = sunTransmittance(rel);
+          vec3 sunT = sunTransmittance(rel) * cloudShadow(rel);
           col = water * (uSunColor * sunT * max(dot(up, uSunDir), 0.0) / ATMO_PI + skyAmbient(rel, up) / ATMO_PI);
           vec3 H = normalize(uSunDir + V);
           float NdV = max(dot(up, V), 0.001);
@@ -589,7 +615,7 @@ export function createGasGiantMaterial(u: PlanetUniforms, q: QualitySettings, s:
           float r = length(d);
           float storm = r + snoise(vec3(d * 4.0, 1.0)) * 0.09;
           albedo = mix(albedo, uC0 * (0.45 + 0.12 * snoise(vec3(d * 8.0, 4.0))), 1.0 - smoothstep(0.60, 1.05, storm));
-          albedo = mix(albedo, vec3(0.63, 0.77, 0.88), exp(-pow((storm - 1.08) * 9.0, 2.0)) * 0.12 * smoothstep(-0.3, 0.8, d.y));
+          albedo = mix(albedo, vec3(0.63, 0.77, 0.88), exp(-(((storm - 1.08) * 9.0) * ((storm - 1.08) * 9.0))) * 0.12 * smoothstep(-0.3, 0.8, d.y));
           float streak = fbm3(vec3(pr.xy * 4.0, lat * 60.0), DETAIL_OCTAVES);
           albedo = mix(albedo, vec3(0.9), smoothstep(0.35, 0.6, streak) * 0.55 * (1.0 - smoothstep(0.9, 1.3, r)));
         }
@@ -605,7 +631,7 @@ export function createGasGiantMaterial(u: PlanetUniforms, q: QualitySettings, s:
         // Minnaert limb darkening (k≈0.85) for cloud decks.
         float minn = pow(mu0, 0.8) * pow(max(mu, 0.02), 0.18);
         // Upper methane haze softens ice-giant markings towards the limb.
-        if (uStyle > 1.5) albedo = mix(albedo, mix(uC1, uC2, 0.55), 0.22 + 0.35 * pow(1.0 - mu, 2.0));
+        if (uStyle > 1.5) albedo = mix(albedo, mix(uC1, uC2, 0.55), 0.22 + 0.35 * ((1.0 - mu) * (1.0 - mu)));
         vec3 sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(1.0)) * ringShadow(rel);
         vec3 col = albedo * uSunColor * sunT * minn / ATMO_PI;
         col += albedo * (skyAmbient(rel, N) * 0.5 + uPlanetshineColor * max(dot(N, uPlanetshineDir), 0.0)) / ATMO_PI;
@@ -675,12 +701,11 @@ export function createSkyMaterial(u: PlanetUniforms, q: QualitySettings): THREE.
 
 export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloudRadius: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: defines(q),
+    defines: { ...defines(q), CLOUD_DETAIL: q.id === 'high' ? 3 : q.id === 'medium' ? 2 : 1 },
     uniforms: {
       ...u,
       uCloudRadius: { value: cloudRadius },
       uCamCCloud: { value: 0 },
-      uCoverage: { value: 0.44 },
     },
     vertexShader: /* glsl */ `
       ${GLSL_LOGDEPTH_VERT_PARS}
@@ -696,86 +721,90 @@ export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloud
       ${baseHeader()}
       ${GLSL_NOISE}
       uniform mat3 uBodyRot;
+      uniform samplerCube uCloudMap;
+      uniform mat3 uCloudRot;
+      uniform float uCloudShell;
       uniform float uCloudRadius;
       uniform float uCamCCloud;
-      uniform float uCoverage;
       varying vec3 vWorldPos;
 
-      vec3 swirl(vec3 p, vec3 c, float radius, float strength) {
-        float d = length(p - c);
-        float a = strength * exp(-pow(d / radius, 2.0));
-        // Rodrigues rotation about axis c
-        float ca = cos(a), sa = sin(a);
-        return p * ca + cross(c, p) * sa + c * dot(c, p) * (1.0 - ca);
-      }
-
-      float cloudDensity(vec3 pBF, float lod) {
-        float lat = asin(clamp(pBF.z, -1.0, 1.0));
-        float alat = abs(lat);
-        float drift = mod(uTime * 0.000015, 6.2831853);
-        vec3 p = vec3(cos(drift) * pBF.x - sin(drift) * pBF.y, sin(drift) * pBF.x + cos(drift) * pBF.y, pBF.z);
-        // Mid-latitude cyclones (counter-rotating per hemisphere) and a tropical storm.
-        vec3 jit = vec3(fbm3(pBF * 3.0 + 1.7, 3), fbm3(pBF * 3.0 - 4.1, 3), fbm3(pBF * 3.0 + 8.3, 3)) * 0.04;
-        p = swirl(p + jit, normalize(vec3(0.45, -0.55, 0.70)), 0.22, 1.3);
-        p = swirl(p, normalize(vec3(0.2, 0.75, -0.63)), 0.18, -1.5);
-        p = swirl(p, normalize(vec3(0.85, 0.45, 0.27)), 0.05, 4.0);
-        // Large weather systems
-        float cov = fbm3(p * 3.1 + vec3(13.0, 8.0, -4.0), 4) * 0.5 + 0.5;
-        // Warped mid-scale structure, sheared along latitude (jet streams)
-        vec3 q = p * 4.5;
-        vec3 w = vec3(fbm3(q, 3), fbm3(q + 5.2, 3), fbm3(q - 3.7, 3));
-        vec3 qs = (p + w * 0.12) * vec3(9.0, 9.0, 22.0);
-        int oct = int(clamp(8.0 - lod, 3.0, 8.0));
-        float det = fbm3(qs, oct) * 0.5 + 0.5;
-        // Latitudinal structure: ITCZ, subtropical clear belts, storm tracks, polar cloudiness.
-        float zone = 0.14 * exp(-pow(lat / 0.1, 2.0)) - 0.2 * exp(-pow((alat - 0.4) / 0.13, 2.0)) + 0.14 * exp(-pow((alat - 0.95) / 0.22, 2.0));
-        float c = cov * 0.74 + det * 0.60 + zone;
-        float thr = 1.12 - uCoverage;
-        float d = smoothstep(thr, thr + 0.16, c);
-        // Fine cumulus breakup near edges
-        float fine = fbm3(p * 80.0, int(clamp(6.0 - lod, 2.0, 5.0))) * 0.5 + 0.5;
-        d *= smoothstep(0.15, 0.55, fine + d * 0.6);
-        // One organized tropical cyclone among irregular fronts; its eye and spiral arms are local.
-        vec3 center = normalize(vec3(0.82, -0.46, 0.34));
-        vec3 east = normalize(cross(vec3(0.0, 0.0, 1.0), center));
-        vec3 north = cross(center, east);
-        vec2 st = vec2(dot(pBF, east), dot(pBF, north));
-        float radius = length(st);
-        float front = smoothstep(0.8, 0.95, dot(pBF, center));
-        float arms = 0.5 + 0.5 * sin(atan(st.y, st.x) * 3.0 - radius * 130.0 + fbm3(pBF * 70.0, 3) * 1.8);
-        float cyclone = exp(-radius * radius / 0.008) * smoothstep(0.012, 0.026, radius) * (0.55 + arms * 0.45);
-        d = mix(d, max(d, cyclone), front);
-        d *= 1.0 - front * (1.0 - smoothstep(0.008, 0.018, radius));
-        return d;
+      /** Baked density plus distance-faded detail octaves that erode the soft (texel-sized) edges. */
+      float cloudAt(vec3 rel, float t, float bias) {
+        vec3 dir = uCloudRot * rel;
+        vec2 s = texture(uCloudMap, dir, bias).rg;
+        float d = s.r;
+        float near = 1.0 - smoothstep(40000.0, 900000.0, t);
+        vec3 p = normalize(dir) * (uCloudRadius / 6000.0);
+        if (near > 0.0 && d > 0.004) {
+          float n = snoise(p) * 0.55;
+          #if CLOUD_DETAIL >= 2
+            float near2 = 1.0 - smoothstep(8000.0, 160000.0, t);
+            if (near2 > 0.0) n += snoise(p * 3.1 + 7.0) * 0.3 * near2;
+          #endif
+          #if CLOUD_DETAIL >= 3
+            float near3 = 1.0 - smoothstep(2000.0, 30000.0, t);
+            if (near3 > 0.0) n += snoise(p * 9.7 - 3.0) * 0.15 * near3;
+          #endif
+          // Erode thin edges strongly, cores barely: crisp margins without moving big systems.
+          float e = near * (0.32 + 0.5 * n) * (1.0 - d);
+          d = clamp((d - e * 0.55) / (1.0 - e * 0.35), 0.0, 1.0);
+          d = mix(d, smoothstep(0.0, 0.7, d), near * 0.6);
+        }
+        // Fair-weather cumulus: cells drawn per pixel where the map allows them; far away they
+        // average into a faint veil instead of aliasing.
+        if (s.g > 0.01) {
+          // ~2 km cells; fade to their mean coverage once a cell shrinks below a few pixels.
+          vec3 pc = p * 3.0 + 11.0;
+          float footprint = length(fwidth(pc));
+          float cuNear = 1.0 - smoothstep(0.2, 0.7, footprint);
+          // Cells clump into ~20 km clusters and streets with clear gaps between them.
+          float cluster = smoothstep(-0.25, 0.45, snoise(p * vec3(0.22, 0.22, 0.5) + 3.0));
+          float cover = (0.03 + 0.42 * s.g * s.g) * (0.25 + 1.1 * cluster);
+          float cu = cover * 0.8;
+          if (cuNear > 0.0) {
+            float c = snoise(pc) * 0.6 + snoise(pc * 2.3 - 5.0) * 0.28 + snoise(pc * 5.3 + 2.0) * 0.12 * cuNear;
+            // c ≈ N(0, 0.35): threshold so that roughly 'cover' of the area is cloud.
+            float thr = 0.42 - cover * 0.9;
+            cu = mix(cu, smoothstep(thr, thr + 0.3, c) * (0.7 + 0.3 * smoothstep(thr + 0.15, thr + 0.6, c)), cuNear);
+          }
+          d = max(d, cu * smoothstep(0.0, 0.15, s.g));
+        }
+        return clamp(d, 0.0, 1.0);
       }
 
       void main() {
         ${GLSL_LOGDEPTH_FRAG}
+        if (uCloudShell <= 0.0) discard;
         vec3 rd = normalize(vWorldPos - cameraPosition);
         float b = dot(uCamRel, rd);
         vec2 tc = raySphereC(b, uCamCCloud);
         if (tc.y < 0.0) discard;
-        float t = uCamCCloud < 0.0 ? tc.y : tc.x;
+        bool below = uCamCCloud < 0.0;
+        float t = below ? tc.y : tc.x;
         if (t < 0.0) discard;
         vec2 tg = raySphereC(b, uCamCGround);
         if (tg.x > 0.0 && tg.x < t) discard;
         vec3 rel = uCamRel + rd * t;
-        vec3 pBF = transpose(uBodyRot) * (rel / uCloudRadius);
-        float lod = log2(max(t, 1.0) / 2000.0);
-        float d = cloudDensity(pBF, lod);
+        float d = cloudAt(rel, t, 0.0);
         if (d < 0.01) discard;
         vec3 up = normalize(rel);
         float muS = dot(up, uSunDir);
         vec3 sunT = sunTransmittance(rel) * ringShadow(rel);
-        // Fake self-shadowing: sample density towards the sun.
-        float dS = cloudDensity(normalize(pBF + transpose(uBodyRot) * uSunDir * 0.004), lod + 1.0);
-        float shadow = mix(1.0, 0.45, dS);
+        // Self-shadowing: blurred density a few tens of km towards the sun.
+        float dS = texture(uCloudMap, uCloudRot * (up + uSunDir * 0.006), 2.5).r;
+        float shadow = mix(1.0, 0.4, smoothstep(0.1, 0.9, dS));
         float cosT = dot(rd, uSunDir);
-        float phase = 0.6 + 0.6 * pow(max(cosT, 0.0), 8.0);
-        vec3 albedo = vec3(0.92);
-        vec3 col = albedo * uSunColor * sunT * shadow * phase * max(muS + 0.15, 0.0) / (ATMO_PI * 1.15);
-        col += albedo * skyAmbient(rel, up) / ATMO_PI * 1.2;
-        float a = clamp(d * 1.15, 0.0, 0.97);
+        // Henyey–Greenstein forward lobe: thin edges glow when looking towards the sun.
+        float g = 0.65;
+        float hg = (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * cosT, 1.5);
+        float phase = 0.62 + 0.09 * hg * (1.0 - 0.75 * d);
+        // Seen from below, thick cores are grey (light has scattered out on the way through).
+        float base = below ? mix(1.0, 0.38, smoothstep(0.25, 1.0, d)) : mix(1.0, 0.82, d * d);
+        vec3 albedo = vec3(0.93);
+        float lit = max(muS + 0.12, 0.0) / 1.12;
+        vec3 col = albedo * uSunColor * sunT * shadow * phase * lit * base / ATMO_PI;
+        col += albedo * skyAmbient(rel, up) / ATMO_PI * (below ? 1.0 : 1.25);
+        float a = clamp(d * 1.2, 0.0, 0.98);
         col = applyAerialPerspective(col, rd, t, AERIAL_STEPS * uStepScale);
         gl_FragColor = vec4(col * a, a);
       }`,
@@ -869,7 +898,7 @@ export function createRingMaterial(u: PlanetUniforms, q: QualitySettings, profil
         vec3 col = albedo * uSunColor * illum * sh / ATMO_PI;
         // Planetshine faintly lights the night side of the rings.
         float planetPhase = 0.5 + 0.5 * dot(normalize(rel), uSunDir);
-        float planetSolidAngle = pow(uPlanetRadius / length(rel), 2.0);
+        float planetSolidAngle = ((uPlanetRadius / length(rel)) * (uPlanetRadius / length(rel)));
         col += albedo * uSunColor * vec3(1.0, 0.86, 0.65) * planetSolidAngle * planetPhase * 0.055;
         // The forward lobe remains visible on both sides for unresolved ice/dust in thinner rings.
         col += albedo * uSunColor * sh * pow(max(cosPhase, 0.0), 16.0) * exp(-tau * 2.0) * 0.14;

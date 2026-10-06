@@ -36,6 +36,12 @@ export interface PlanetUniforms {
   uTime: THREE.IUniform<number>;
   /** Body rotation (body-fixed → render frame) for object-space effects. */
   uBodyRot: THREE.IUniform<THREE.Matrix3>;
+  /** Baked cloud cube map (body-fixed, drifting) — see cloudMap.ts; null when the body has no clouds. */
+  uCloudMap: THREE.IUniform<THREE.Texture | null>;
+  /** Render-frame planet-relative position → cloud-map lookup direction (drift + inverse body rotation). */
+  uCloudRot: THREE.IUniform<THREE.Matrix3>;
+  /** Cloud shell radius (m); 0 until the cloud map has been baked. */
+  uCloudShell: THREE.IUniform<number>;
 }
 
 let dummyTex: THREE.DataTexture | null = null;
@@ -81,6 +87,9 @@ export function createPlanetUniforms(radius: number, atmo: AtmosphereParams | nu
     uRingProfile: { value: dummy() },
     uTime: { value: 0 },
     uBodyRot: { value: new THREE.Matrix3() },
+    uCloudMap: { value: null },
+    uCloudRot: { value: new THREE.Matrix3() },
+    uCloudShell: { value: 0 },
   };
 }
 
