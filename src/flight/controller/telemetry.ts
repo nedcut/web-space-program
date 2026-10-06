@@ -283,6 +283,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     timeToAp: orb.timeToAp,
     timeToPe: orb.timeToPe,
     throttle: this.input.state.throttle,
+    trim: trimReadout(this.input.trim, this.sasOn),
     gForce: st.telemetry.gForce,
     mach: st.telemetry.airDensity > 0 ? st.telemetry.mach : 0,
     dynamicPressure: st.telemetry.dynamicPressure,
@@ -344,4 +345,10 @@ export function groundTelemetry(this: FlightController, _internals: FlightContro
   }
   const air = st.telemetry.intakeAirRatio;
   return { gear, brakes: wheels ? this.input.state.brakes : null, intakeAir: Number.isFinite(air) ? air : null };
+}
+
+/** Non-zero trim for the HUD (null when centred); `held` = suspended because SAS is on. */
+export function trimReadout(trim: { pitch: number; yaw: number; roll: number }, sasOn: boolean): { pitch: number; yaw: number; roll: number; held: boolean } | null {
+  if (!trim.pitch && !trim.yaw && !trim.roll) return null;
+  return { pitch: trim.pitch, yaw: trim.yaw, roll: trim.roll, held: sasOn };
 }

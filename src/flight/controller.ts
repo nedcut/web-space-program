@@ -292,6 +292,7 @@ export class FlightController {
             this.fireGroup(`custom${a.slice(11)}` as ActionGroupId, undefined, true); break;
           case 'quickload': if (!this.network) this.onQuickload?.(); break;
           case 'toggleCamMode': this.cycleCameraMode(); break;
+          case 'trimReset': this.world.message('Trim cleared', 'info', 1.5); break;
         }
       }),
     );
@@ -756,15 +757,17 @@ export class FlightController {
       if (this.sas === 'target' || this.sas === 'antiTarget') this.sas = 'stabilityAssist';
     }
     const targetState = this.world.targetState();
+    // Trim offsets the controls only while SAS is off: SAS would otherwise read it as the pilot steering.
+    const trim = this.sasOn || wv?.state.eva ? { pitch: 0, yaw: 0, roll: 0 } : this.input.trim;
     const drivingRover = wv?.state.situation === 'landed' && wv.state.parts.some(p => p.def.modules.some(m => m.type === 'wheel' && !!m.motorTorque));
     const ctrl = neutralInput({
       evaHeading: wv?.state.eva ? { x: this.cam.camera.quaternion.x, y: this.cam.camera.quaternion.y, z: this.cam.camera.quaternion.z, w: this.cam.camera.quaternion.w } : undefined,
       evaJump: !!wv?.state.eva && this.stagePending,
       evaRun: this.input.running,
-      pitch: drivingRover ? 0 : s.pitch,
+      pitch: drivingRover ? 0 : s.pitch + trim.pitch,
       wheelThrottle: drivingRover ? -s.pitch : 0,
-      yaw: s.yaw,
-      roll: s.roll,
+      yaw: s.yaw + trim.yaw,
+      roll: s.roll + trim.roll,
       translateX: s.tx,
       translateY: s.ty,
       translateZ: s.tz,

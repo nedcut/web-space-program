@@ -63,6 +63,7 @@ export function NavballCluster({ t, cb, navball, precision, speed }: { t: Teleme
             })}
           </div>
           {precision && <div className="nb-fine" title={`Precision controls (${bindingLabel('precision')})`}>FINE</div>}
+          {t.trim && <TrimReadout trim={t.trim} />}
         </div>
       )}
       <div className="nb-ball" style={{ width: wrap, height: wrap }}>
@@ -146,6 +147,16 @@ function BurnInfo({ burn }: { burn: NonNullable<Telemetry['maneuverBurn']> }) {
         <span className={`mono ${burn.timeToNode < 0 ? 'late' : ''}`}>T{burn.timeToNode < 0 ? '+' : '−'} {formatDuration(Math.abs(burn.timeToNode))}</span>
       </div>
       {Number.isFinite(startIn) && startIn > 0 && <div className="nb-burn-start">start burn in {formatDuration(startIn)}</div>}
+    </div>
+  );
+}
+
+/** Small trim readout under the SAS buttons: pitch / yaw / roll offsets, dimmed while SAS suspends trim. */
+function TrimReadout({ trim }: { trim: NonNullable<Telemetry['trim']> }) {
+  const f = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ' '}${Math.abs(v * 100).toFixed(0).padStart(2, '0')}`;
+  return (
+    <div className={`nb-trim ${trim.held ? 'held' : ''}`} title={`Trim (Alt + W/S/A/D/Q/E, ${bindingLabel('trimReset')} clears)${trim.held ? ' — suspended while SAS is on' : ''}`}>
+      <span>TRIM</span><span>P{f(trim.pitch)}</span><span>Y{f(trim.yaw)}</span><span>R{f(trim.roll)}</span>
     </div>
   );
 }
