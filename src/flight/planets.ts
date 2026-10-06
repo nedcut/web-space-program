@@ -78,6 +78,9 @@ export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualit
       // Bodies that cannot be within creation range (from their heliocentric distance bounds) are skipped
       // without evaluating their ephemeris: same decisions, a handful of Kepler solves per frame instead of ~60.
       const ranges = heliocentricRanges(universe.bodies), r = length(u.origin);
+      // Renderer construction (geometry, materials, LUTs) costs tens of ms: besides the Sun and the focused body,
+      // create at most one per frame so a scene load or SOI change does not build them all in one long task.
+      let created = 0;
       for (const b of universe.bodies.values()) {
         const extent = Math.max(b.radius + (b.atmosphere?.height ?? 0), b.rings?.outerRadius ?? 0);
         const has = renderers.has(b.id);
@@ -86,7 +89,7 @@ export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualit
         const bp = universe.ephem.getBodyState(b.id, u.t).position;
         const d = Math.max(1, length(sub(bp, u.origin)));
         const ang = extent / d;
-        if (!has && (keep || ang > CREATE_ANGLE)) make(b.id);
+        if (!has && (keep || (ang > CREATE_ANGLE && created === 0))) { make(b.id); if (!keep) created++; }
         else if (has && !keep && ang < DESTROY_ANGLE) {
           const pr = renderers.get(b.id)!;
           pr.root.removeFromParent();

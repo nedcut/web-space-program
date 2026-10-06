@@ -42,12 +42,20 @@ function blotches(g: CanvasRenderingContext2D, S: number, n: number, r: () => nu
   }
 }
 
+/**
+ * Fine grain: n small dark/light specks. Two constant fill colours with per-speck `globalAlpha` instead of a
+ * formatted rgba() string per speck: the same image (±1/255) at half the cost — Blink parses every new colour
+ * string, and the pad deck alone draws 60,000 specks on a cold load.
+ */
 function speckle(g: CanvasRenderingContext2D, S: number, n: number, r: () => number, a = 0.12) {
+  let current = -1;
   for (let i = 0; i < n; i++) {
     const l = r() < 0.5 ? 50 : 200;
-    g.fillStyle = `rgba(${l},${l},${l},${a * (0.4 + r())})`;
+    if (l !== current) { current = l; g.fillStyle = l === 50 ? '#323232' : '#c8c8c8'; }
+    g.globalAlpha = a * (0.4 + r());
     g.fillRect(r() * S, r() * S, 1 + r() * 1.5, 1 + r() * 1.5);
   }
+  g.globalAlpha = 1;
 }
 
 /** Weathered concrete slab, tile 8 m with a joint every 4 m. */
