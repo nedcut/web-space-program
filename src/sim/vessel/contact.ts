@@ -39,6 +39,15 @@ export const TYRE_MU_SLIDE = 0.7;
 export const TYRE_SLIDE_SPEED = 1.5;
 /** Rolling resistance coefficient of a free-rolling tyre. */
 export const ROLLING_RESISTANCE = 0.015;
+/**
+ * Rebound (extension) damping relative to the bump (compression) damping of leg and wheel shock absorbers. Real
+ * dampers are valved this way: a firm touchdown is absorbed instead of being handed back as a bounce.
+ */
+export const REBOUND_DAMPING = 3;
+/** Bump (compression) damping relative to the catalogue damper: absorbs touchdown energy before it is stored. */
+export const BUMP_DAMPING = 1.6;
+/** Damping coefficient for a suspension moving at normal speed `vn` (> 0 = extending). */
+export const suspensionDamping = (damper: number, vn: number) => (vn > 0 ? damper * REBOUND_DAMPING : damper * BUMP_DAMPING);
 /** Time to raise/lower retractable gear, s. */
 export const GEAR_DEPLOY_TIME = 3;
 
@@ -182,7 +191,7 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
               kind: 'rigid', depth: d, legImpulse: 0, jn: 0, jt: v3() });
             continue;
           }
-          const F = Math.max(0, m.spring * x - m.damper * vn);
+          const F = Math.max(0, m.spring * x - suspensionDamping(m.damper, vn) * vn);
           const Fv = scale(gs.normal, F);
           record(p.uid, rW, Fv);
           out.force = add(out.force, Fv);
@@ -215,7 +224,7 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
           const vrel = sub(pointVel(rW), gs.surfaceVelocity);
           const vn = dot(vrel, n);
           if (-vn > p.def.crashTolerance) impact(p.uid, -vn);
-          const F = Math.max(0, m.spring * x * cosA - m.damper * vn);
+          const F = Math.max(0, m.spring * x * cosA - suspensionDamping(m.damper, vn) * vn);
           const Fv = scale(n, F);
           record(p.uid, rW, Fv);
           out.force = add(out.force, Fv);
