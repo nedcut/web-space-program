@@ -128,6 +128,8 @@ describe('orbit markers', () => {
     expect(enc.other).toBe('moon');
     expect(enc.altitude).toBeCloseTo(5e6 * 0.5 - 1.737e6, -1);
     expect(markerDetail(enc, 0, id => id.toUpperCase())).toContain('MOON encounter');
+    expect(markerCaption(enc, id => id.toUpperCase())).toBe('MOON encounter · Pe 763.0 km');
+    expect(markerCaption({ ...enc, altitude: -5 }, id => id)).toBe('moon encounter · impact');
     expect(marks.some(m => m.kind === 'impact' && m.body === 'moon')).toBe(true);
   });
 });

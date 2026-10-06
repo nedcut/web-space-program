@@ -96,7 +96,9 @@ export class FlightMap {
     this.focus = obj;
     if (obj?.kind === 'body') {
       const b = w.universe.body(obj.id);
-      map.distance = Math.max(b.radius * (b.kind === 'star' ? 8 : 5), this.minDistance() * 1.5);
+      // A body the predicted path enters is framed by its SOI, so the flyby and its periapsis are in view.
+      const encountered = Number.isFinite(b.soi) && w.trajectory().some(p => p.orbit.body === b.id) && b.id !== active?.body;
+      map.distance = Math.max(b.radius * (b.kind === 'star' ? 8 : 5), this.minDistance() * 1.5, encountered ? b.soi * 1.8 : 0);
     } else {
       const v = obj ? w.vessels.get(obj.id) : active;
       if (v) map.distance = w.universe.body(v.body).radius * 4;

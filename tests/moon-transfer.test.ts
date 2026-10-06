@@ -73,6 +73,12 @@ describe('LEO → Moon transfer', () => {
         const pe1 = moonPe(world);
         expect(pe1).toBeDefined();
         expect(Math.abs(pe1! - pe0!)).toBeLessThan(maxDrift * 1000);
+        // Warping to the burn and coasting the last minute at 1× still leaves the same encounter.
+        world.advanceRailsTo(plan!.node.time - 60);
+        coast(world, 20);
+        const pe2 = moonPe(world);
+        expect(pe2).toBeDefined();
+        expect(Math.abs(pe2! - pe0!)).toBeLessThan(2 * maxDrift * 1000);
       }
     }
   }, 300000);

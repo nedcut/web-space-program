@@ -374,11 +374,15 @@ export class MapView {
   /**
    * Time at which a patch's central body is placed. Patches around the vessel's current body and its ancestors use
    * now; a patch inside an encountered body (a moon, a destination planet) is drawn around where that body will be
-   * at the encounter, so the arc continues from the encounter point instead of jumping to today's position.
+   * at the encounter, so the arc continues from the encounter point instead of jumping to today's position — unless
+   * that body is the camera focus, in which case its patches are drawn around it.
    */
   private patchFrameTime(u: MapUpdate, patch: TrajectoryPatch | undefined): number {
     const first = u.vessel?.patches[0]?.orbit.body;
     if (!patch || !first) return u.t;
+    // Focused on the encountered body itself: draw the flyby around the body as it is now (so the periapsis
+    // passes the sphere on screen), like a planner looking at the encounter from the target's point of view.
+    if (patch.orbit.body === u.focusId) return u.t;
     for (let id: string | undefined = first; id; id = this.bodies.get(id)?.body.parent) if (id === patch.orbit.body) return u.t;
     return Math.max(u.t, patch.startTime);
   }
@@ -1254,7 +1258,8 @@ export class MapView {
       let on = s.x > -20 && s.y > -20 && s.x < u.viewport.width + 20 && s.y < u.viewport.height + 20;
       // Apsides of an orbit that is only a few pixels across are noise piled on the body icon: hide them until
       // the orbit is large enough to tell apart (pinned markers stay).
-      if (on && (m.glyph === 'ap' || m.glyph === 'pe') && !this.pinned.has(m.key)) {
+      // The focused body's own flyby periapsis always shows (it is what an encounter is planned for).
+      if (on && (m.glyph === 'ap' || m.glyph === 'pe') && !this.pinned.has(m.key) && !(m.glyph === 'pe' && m.body === u.focusId && m.body !== patches[0]?.orbit.body)) {
         const sx = s.x, sy = s.y, c = this.toScreen(this.scenePosition(ZERO, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.markerCentre);
         on = !(Math.hypot(c.x - sx, c.y - sy) < 16);
         s.x = sx; s.y = sy;

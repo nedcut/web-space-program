@@ -96,9 +96,9 @@ export function orbitMarkers(patches: readonly TrajectoryPatch[], now: number, b
 
 const SHORT: Record<OrbitMarkerKind, string> = { ap: 'Ap', pe: 'Pe', encounter: '', escape: '', impact: 'Impact', atmosphere: 'Entry' };
 
-/** Short caption shown next to a marker (encounter captions name the body). */
+/** Short caption shown next to a marker (encounter captions name the body and the periapsis reached inside it). */
 export function markerCaption(m: OrbitMarker, name: (id: string) => string): string {
-  if (m.kind === 'encounter') return `${name(m.other!)} encounter`;
+  if (m.kind === 'encounter') return `${name(m.other!)} encounter${Number.isFinite(m.altitude) ? m.altitude < 0 ? ' · impact' : ` · Pe ${formatDistance(m.altitude)}` : ''}`;
   if (m.kind === 'escape') return `${name(m.other!)} escape`;
   return SHORT[m.kind];
 }

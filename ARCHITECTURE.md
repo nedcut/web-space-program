@@ -98,7 +98,8 @@ playable universe. Presets: `standard` (s=0.1, default), `challenging` (0.32), `
 - **Vessels**: two modes
   - *On rails*: Keplerian propagation in the current SOI (no thrust, outside atmosphere, not landed). Time warp up to 100000x.
   - *Physics*: rigid body integration at fixed dt = 1/50 s (substepping allowed), forces = gravity (dominant body;
-    optional n-body perturbation from all bodies), thrust, aero (drag, lift, Mach effects), contact.
+    optional n-body perturbation from all bodies), thrust, aero (drag, lift, Mach effects), contact. Integration runs in
+    the dominant body's translating frame (the patched-conic frame), so physics and rails agree.
 - **Vessel rigidity (improvement over KSP)**: a vessel is a single rigid body with mass/COM/inertia recomputed
   when resources drain or parts detach. No joint wobble, no "Kraken". Structural failure modelled by per-joint load
   checks (break if aero/inertial load exceeds joint strength) rather than spring joints.
