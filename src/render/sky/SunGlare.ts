@@ -51,13 +51,13 @@ export class SunGlare {
           vec3 c = uTint * (glow + rays + streak);
           // Ghosts along the sun–centre axis
           vec2 axis = -uSun;
-          c += vec3(0.25, 0.45, 1.0) * ghost(p, uSun + axis * 1.35, 0.06, 0.6) * 0.05;
-          c += vec3(1.0, 0.55, 0.25) * ghost(p, uSun + axis * 1.7, 0.11, 0.85) * 0.03;
-          c += vec3(0.4, 1.0, 0.6) * ghost(p, uSun + axis * 0.55, 0.035, 0.4) * 0.05;
-          c += vec3(0.7, 0.5, 1.0) * ghost(p, uSun + axis * 2.2, 0.18, 0.9) * 0.02;
+          // Subtle, near-neutral ghosts (saturated ones read as on-screen blobs, not optics).
+          c += vec3(0.55, 0.65, 1.0) * ghost(p, uSun + axis * 1.35, 0.06, 0.6) * 0.022;
+          c += vec3(1.0, 0.75, 0.55) * ghost(p, uSun + axis * 1.7, 0.11, 0.85) * 0.012;
+          c += vec3(0.75, 0.7, 1.0) * ghost(p, uSun + axis * 2.2, 0.18, 0.9) * 0.008;
           // Halo ring
           float ring = exp(-(((length((p - uSun - axis) * vec2(uAspect, 1.0)) - 0.45) * 25.0) * ((length((p - uSun - axis) * vec2(uAspect, 1.0)) - 0.45) * 25.0)));
-          c += vec3(0.5, 0.6, 1.0) * ring * 0.015;
+          c += vec3(0.6, 0.7, 1.0) * ring * 0.005;
           gl_FragColor = vec4(clamp(c * uIntensity, 0.0, 64.0), 1.0);
         }`,
       depthTest: false,

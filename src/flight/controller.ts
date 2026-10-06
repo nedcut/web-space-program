@@ -224,8 +224,10 @@ export class FlightController {
     this.sunLight.shadow.mapSize.set(q.shadowMapSize || 512, q.shadowMapSize || 512);
     // The pipeline was just built from these settings; do not rebuild it on the first frame.
     if (game.get().settings.quality === quality) this.graphicsKey = graphicsKeyOf(game.get().settings);
-    this.sunLight.shadow.bias = -0.0004;
+    this.sunLight.shadow.bias = -0.00002;
     this.sunLight.shadow.normalBias = 0.02;
+    // Soft PCF (Vogel disk); three r186 PCFShadowMap honours the radius.
+    this.sunLight.shadow.radius = 2.5;
 
     // Image-based fill light so sunlit-from-behind vessels aren't pitch black. Scaled by air density each frame.
     // Procedural sky/planetshine environment, re-baked as altitude, attitude and sun change.
@@ -944,8 +946,13 @@ export class FlightController {
     this.sunLight.target.position.set(0, 0, 0);
     const sc = this.sunLight.shadow.camera as THREE.OrthographicCamera;
     if (sc.right !== r) {
-      sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 0.1; sc.far = r * 8;
+      // Depth range reaches well past the vessel so long low-sun shadows on the ground are not clipped.
+      sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 0.1; sc.far = r * 4 + Math.max(r * 8, 1500);
       sc.updateProjectionMatrix();
+      // Biases scale with the shadow texel size (acne-free without peter-panning at any vessel size).
+      const texel = (2 * r) / this.sunLight.shadow.mapSize.x;
+      this.sunLight.shadow.normalBias = texel * 1.2;
+      this.sunLight.shadow.bias = -0.00002;
     }
 
     t0 = prof.now();
