@@ -1,0 +1,9 @@
+[
+ {"name":"renderScale 0.5","on":"(()=>{const p=__flight.pipeline;p.quality.renderScale=0.5;p.setSize(innerWidth,innerHeight)})()","off":"(()=>{const p=__flight.pipeline;p.quality.renderScale=1;p.setSize(innerWidth,innerHeight)})()"},
+ {"name":"renderScale 0.75","on":"(()=>{const p=__flight.pipeline;p.quality.renderScale=0.75;p.setSize(innerWidth,innerHeight)})()","off":"(()=>{const p=__flight.pipeline;p.quality.renderScale=1;p.setSize(innerWidth,innerHeight)})()"},
+ {"name":"no bloom","on":"__flight.pipeline.bloomPass.enabled=false","off":"__flight.pipeline.bloomPass.enabled=true"},
+ {"name":"no smaa","on":"__flight.pipeline.smaaPass.enabled=false","off":"__flight.pipeline.smaaPass.enabled=true"},
+ {"name":"direct (no composer)","on":"(()=>{const p=__flight.pipeline;p._cr=p.composer.render;p.composer.render=()=>{p.renderer.setRenderTarget(null);p.renderer.render(p.renderPass.scene,p.renderPass.camera)}})()","off":"(()=>{const p=__flight.pipeline;p.composer.render=p._cr})()"},
+ {"name":"no shadow update","on":"__flight.pipeline.renderer.shadowMap.autoUpdate=false","off":"__flight.pipeline.renderer.shadowMap.autoUpdate=true"},
+ {"name":"hide site","on":"__flight.site.root.visible=false","off":"__flight.site.root.visible=true"}
+]

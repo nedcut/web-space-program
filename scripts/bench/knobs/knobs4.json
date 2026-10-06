@@ -1,0 +1,7 @@
+[
+ {"name":"hide sky","on":"(()=>{const f=__flight;f._h=[];f.scene.traverse(o=>{const m=o.material;if(m&&m.uniforms&&m.uniforms.uSunAngularRadius){f._h.push(m);m.visible=false}})})()","off":"__flight._h.forEach(m=>m.visible=true)"},
+ {"name":"hide terrain","on":"(()=>{const f=__flight;f._h=[];f.scene.traverse(o=>{const m=o.material;if(m&&m.uniforms&&m.uniforms.uRockColor&&!f._h.includes(m)){f._h.push(m);m.visible=false}})})()","off":"__flight._h.forEach(m=>m.visible=true)"},
+ {"name":"hide site","on":"(()=>{const f=__flight;f._h=[];f.site.root.traverse(o=>{const m=o.material;if(m&&!f._h.includes(m)){f._h.push(m);m.visible=false}})})()","off":"__flight._h.forEach(m=>m.visible=true)"},
+ {"name":"hide all scene","on":"(()=>{const f=__flight;f._h=[];f.scene.traverse(o=>{const m=o.material;if(m&&!Array.isArray(m)&&!f._h.includes(m)){f._h.push(m);m.visible=false}})})()","off":"__flight._h.forEach(m=>m.visible=true)"},
+ {"name":"hide all + no post","on":"(()=>{const f=__flight,p=f.pipeline;f._h=[];f.scene.traverse(o=>{const m=o.material;if(m&&!Array.isArray(m)&&!f._h.includes(m)){f._h.push(m);m.visible=false}});p._cr=p.composer.render;p.composer.render=()=>{p.renderer.setRenderTarget(null);p.renderer.render(p.renderPass.scene,p.renderPass.camera)}})()","off":"(()=>{const f=__flight,p=f.pipeline;f._h.forEach(m=>m.visible=true);p.composer.render=p._cr})()"}
+]

@@ -2,8 +2,14 @@
 // reverted afterwards) measures rAF pacing, GPU timer ms, frameProfiler CPU ms and — from a trace — the busy time
 // of Chrome's GPU-process main thread (command decoding / ANGLE translation, invisible to GPU timer queries) and the
 // compositor. Used to find what actually limits a frame (pixels, passes, draw-call count, …).
-//   scripts/bench/gpu-knobs.sh --base http://localhost:5320 --url "/?flight=stock-kestrel" --knobs knobs.json [--dpr 2]
+// Runs under Windows Node next to playwright-core (copy to C:\wsp-tools\drv like gpu-bench.mjs):
+//   node.exe gpu-knobs.mjs --base http://localhost:5320 --url "/?flight=stock-kestrel" --knobs knobs.json [--dpr 2]
+//        [--setup "<js, result printed>"] [--settle ms] [--ms window]
 // knobs.json: [{ "name": "half res", "on": "<js>", "off": "<js>" }, …]; "base" (no-op) is always measured first and last.
+// scripts/bench/knobs/ holds the sets used in docs/PERFORMANCE.md ("snappy" pass): knobs1–4.json (resolution, post,
+// timer, LOD, material families), and --setup scripts families.js (readPixels-fenced cost per material family),
+// progchurn.js (program re-resolutions per material per frame), draws.js (draw calls by object), site.js;
+// evalpage.mjs runs speckle.js (canvas micro-benchmark) in a page. Pass a setup script with an empty set (none.json).
 import { chromium } from 'playwright-core';
 import { readFileSync } from 'node:fs';
 
@@ -23,7 +29,6 @@ const context = await browser.newContext({ viewport: { width: 1470, height: 920 
 await context.addInitScript((s) => { localStorage.setItem('wsp.settings.v1', JSON.stringify(s)); localStorage.setItem('wsp.help.seen.v1', '1'); }, settings);
 const page = await context.newPage();
 page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}`));
-const cdp = await context.newCDPSession(page);
 const browserCdp = await browser.newBrowserCDPSession();
 
 async function traceBusy(fn) {

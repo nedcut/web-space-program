@@ -1,0 +1,5 @@
+[
+ {"name":"LOD err x1.41","on":"(()=>{const f=__flight;f._pu=f.planets.update;f.planets.update=(u)=>f._pu({...u,viewportHeight:u.viewportHeight/1.414})})()","off":"(()=>{const f=__flight;f.planets.update=f._pu})()"},
+ {"name":"LOD err x2 (CSS px)","on":"(()=>{const f=__flight;f._pu=f.planets.update;f.planets.update=(u)=>f._pu({...u,viewportHeight:u.viewportHeight/2})})()","off":"(()=>{const f=__flight;f.planets.update=f._pu})()"},
+ {"name":"LOD x2 + scale .75","on":"(()=>{const f=__flight,p=f.pipeline;p.quality.renderScale=0.75;p.setSize(innerWidth,innerHeight);f._pu=f.planets.update;f.planets.update=(u)=>f._pu({...u,viewportHeight:1840/2})})()","off":"(()=>{const f=__flight,p=f.pipeline;p.quality.renderScale=1;p.setSize(innerWidth,innerHeight);f.planets.update=f._pu})()"}
+]
