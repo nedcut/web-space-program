@@ -117,11 +117,20 @@ export class Quadtree {
     const visit = (n: ChunkNode): void => {
       n.lastUsed = ctx.frame;
       // Geometry estimates
-      const top = R + (n.data ? n.data.maxHeight : this.opts.maxHeight);
+      // Under the sea the visible surface is the ocean, not the seabed: bounds must reach sea level, or
+      // chunks whose seabed is outside the frustum/horizon lose their (visible) water.
+      const seaTop = this.opts.ocean ? 0 : -Infinity;
+      const top = R + Math.max(n.data ? n.data.maxHeight : this.opts.maxHeight, seaTop);
       let ncx: number, ncy: number, ncz: number, bound: number;
       if (n.data) {
         [ncx, ncy, ncz] = n.data.center;
         bound = n.data.boundRadius;
+        const sink = this.opts.ocean ? -Math.min(0, n.data.maxHeight) : 0;
+        if (sink > 0) {
+          // Fully submerged chunk: move the sphere halfway up to the sea surface and grow it to cover both.
+          ncx += n.dir[0] * sink * 0.5; ncy += n.dir[1] * sink * 0.5; ncz += n.dir[2] * sink * 0.5;
+          bound += sink * 0.5;
+        }
       } else {
         const rr = R + (this.opts.minHeight + this.opts.maxHeight) * 0.5;
         ncx = n.dir[0] * rr; ncy = n.dir[1] * rr; ncz = n.dir[2] * rr;

@@ -62,6 +62,31 @@ float cloudShadow(vec3 rel) { return 1.0; }
 #endif
 `;
 
+
+/**
+ * Aerial perspective evaluated per vertex: in-scattering and transmittance vary smoothly along view
+ * rays, so interpolating them across terrain/ocean triangles is visually equivalent to the per-pixel
+ * march while costing per vertex instead of per (Retina) pixel.
+ */
+const GLSL_AERIAL_VERT = /* glsl */ `
+${GLSL_ATMOSPHERE}
+varying vec3 vAerialL;
+varying vec3 vAerialT;
+void computeAerial(vec3 worldPos) {
+  vec3 toCam = cameraPosition - worldPos;
+  float dist = length(toCam);
+  vec3 rd = -toCam / max(dist, 1e-3);
+  vAerialL = vec3(0.0);
+  vAerialT = vec3(1.0);
+  vec2 seg = cameraAtmoSegment(rd, dist);
+  if (uHasAtmo > 0.5 && seg.y > seg.x) integrateScattering(uCamRel, rd, seg.x, seg.y, AERIAL_STEPS * uStepScale, vAerialL, vAerialT);
+}
+`;
+const GLSL_AERIAL_FRAG = /* glsl */ `
+varying vec3 vAerialL;
+varying vec3 vAerialT;
+`;
+
 function baseHeader(): string {
   return GLSL_ATMOSPHERE + GLSL_RING_SHADOW + GLSL_CLOUD_SHADOW;
 }
@@ -111,12 +136,14 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       varying vec3 vNormalBF;
       varying vec3 vColor;
       varying vec3 vDetail;
+      ${GLSL_AERIAL_VERT}
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vWorldPos = wp.xyz;
         vNormalBF = normal;
         vColor = aColor * aColor; // stored gamma-2 encoded
         vDetail = aDetail;
+        computeAerial(wp.xyz);
         gl_Position = projectionMatrix * viewMatrix * wp;
         ${GLSL_LOGDEPTH_VERT}
       }`,
@@ -130,6 +157,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       uniform float uRockBlend;
       uniform float uDetailStrength;
       uniform float uDuneRipples;
+      ${GLSL_AERIAL_FRAG}
       varying vec3 vWorldPos;
       varying vec3 vNormalBF;
       varying vec3 vColor;
@@ -190,7 +218,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         albedo = mix(albedo, uRockColor * (0.85 + 0.3 * albedo / max(max(albedo.r, albedo.g), 0.05)), rockT);
         vec3 col = shadeSurface(albedo, N, V, rel);
         col += earthEmission(normalize(transpose(uBodyRot) * rel), length(rel) - uPlanetRadius, dot(up, uSunDir));
-        col = applyAerialPerspective(col, -V, dist, AERIAL_STEPS * uStepScale);
+        col = col * vAerialT + vAerialL;
         gl_FragColor = vec4(col, 1.0);
       }`,
   });
@@ -270,12 +298,29 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
       varying vec3 vUpBF;
       varying float vDepth;
       varying vec3 vDetail;
+      uniform mat3 uBodyRot;
+      varying vec3 vSkyRefl;
+      ${GLSL_AERIAL_VERT}
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vWorldPos = wp.xyz;
         vUpBF = normal;
         vDepth = aDepth;
         vDetail = aDetail;
+        computeAerial(wp.xyz);
+        // Sky seen in the (mean) reflected direction: smooth across the surface, so per vertex.
+        vSkyRefl = vec3(0.0);
+        if (uHasAtmo > 0.5) {
+          vec3 rel = wp.xyz - uPlanetCenter;
+          vec3 up = normalize(uBodyRot * normal);
+          vec3 V = normalize(cameraPosition - wp.xyz);
+          vec3 R = reflect(-V, up);
+          R = normalize(R + up * 0.17);
+          if (dot(R, up) < 0.03) R = normalize(R + up * (0.03 - dot(R, up)));
+          vec2 ta = raySphereC(dot(rel, R), dot(rel, rel) - uAtmoRadius * uAtmoRadius);
+          vec3 tr;
+          integrateScattering(rel, R, 0.0, max(ta.y, 0.0), 6, vSkyRefl, tr);
+        }
         gl_Position = projectionMatrix * viewMatrix * wp;
         ${GLSL_LOGDEPTH_VERT}
       }`,
@@ -288,6 +333,8 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
       uniform vec3 uSeabed;
       uniform vec3 uDeep;
       uniform vec3 uShallow;
+      ${GLSL_AERIAL_FRAG}
+      varying vec3 vSkyRefl;
       varying vec3 vWorldPos;
       varying vec3 vUpBF;
       varying float vDepth;
@@ -308,13 +355,23 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
 
       void main() {
         ${GLSL_LOGDEPTH_FRAG}
-        if (vDepth <= 0.0) discard;
+        vec3 upBF = normalize(vUpBF);
+        vec3 w = abs(upBF); w = w * w; w *= w; w /= (w.x + w.y + w.z);
+        // Flat coasts are tessellated coarsely (little geometric error), so the interpolated depth's zero
+        // crossing would follow triangle edges. Perturb it with world-space noise (≈600 m and 90 m) for an
+        // organic shoreline; only shallow water moves.
+        float shore = 0.0;
+        if (vDepth < 4.0) {
+          float n1 = texture2D(uDetailTex, vDetail.yz / 600.0).a * w.x + texture2D(uDetailTex, vDetail.zx / 600.0).a * w.y + texture2D(uDetailTex, vDetail.xy / 600.0).a * w.z;
+          float n2 = texture2D(uDetailTex, vDetail.yz / 90.0).r * w.x + texture2D(uDetailTex, vDetail.zx / 90.0).r * w.y + texture2D(uDetailTex, vDetail.xy / 90.0).r * w.z;
+          shore = (n1 - 0.5) * 3.0 + (n2 - 0.5) * 1.0;
+        }
+        float depth = vDepth + shore;
+        if (depth <= 0.0) discard;
         vec3 rel = vWorldPos - uPlanetCenter;
         vec3 toCam = cameraPosition - vWorldPos;
         float dist = length(toCam);
         vec3 V = toCam / dist;
-        vec3 upBF = normalize(vUpBF);
-        vec3 w = abs(upBF); w = pow(w, vec3(4.0)); w /= (w.x + w.y + w.z);
         float t = uTime;
         float fade1 = 1.0 - smoothstep(200.0, 2000.0, dist);
         float fade2 = 1.0 - smoothstep(2000.0, 30000.0, dist);
@@ -360,30 +417,19 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         float G = (NdL / (NdL * (1.0 - k) + k)) * (NdV / (NdV * (1.0 - k) + k));
         vec3 spec = uSunColor * sunT * ggx(NdH, rough * rough) * G * F / (4.0 * NdV + 1e-4);
         spec = min(spec, vec3(200.0));
-        // Sky reflection: march the reflected ray to the top of the atmosphere.
-        vec3 R = reflect(-V, N);
-        // Facet statistics: average reflected ray points higher into the (darker) sky.
-        R = normalize(R + up * (0.12 + (1.0 - fade1) * 0.1));
-        if (dot(R, up) < 0.03) R = normalize(R + up * (0.03 - dot(R, up)));
-        vec3 skyL = vec3(0.0);
-        if (uHasAtmo > 0.5) {
-          float b = dot(rel, R);
-          float c = dot(rel, rel) - uAtmoRadius * uAtmoRadius;
-          vec2 ta = raySphereC(b, c);
-          vec3 tr;
-          integrateScattering(rel, R, 0.0, max(ta.y, 0.0), 6, skyL, tr);
-        }
+        // Sky reflection along the facet-averaged reflected ray (marched per vertex).
+        vec3 skyL = vSkyRefl;
         // Water body colour: absorption with depth, lit by sun + sky.
-        float depthT = 1.0 - exp(-vDepth / 18.0);
+        float depthT = 1.0 - exp(-depth / 18.0);
         vec3 water = mix(uShallow, uDeep, depthT);
         vec3 lightIn = uSunColor * sunT * max(dot(up, L), 0.0) / ATMO_PI + skyAmbient(rel, up) / ATMO_PI;
         vec3 body = water * lightIn;
-        vec3 bed = uSeabed * lightIn * exp(-vDepth * vec3(0.45, 0.12, 0.06));
-        body = mix(bed, body, smoothstep(0.0, 6.0, vDepth));
+        vec3 bed = uSeabed * lightIn * exp(-depth * vec3(0.45, 0.12, 0.06));
+        body = mix(bed, body, smoothstep(0.0, 6.0, depth));
         vec3 col = mix(body, skyL, F) + spec;
         // foam at the very shoreline
-        col += lightIn * 0.4 * (1.0 - uHydrocarbon) * (1.0 - smoothstep(0.0, 0.6, vDepth)) * fade1;
-        col = applyAerialPerspective(col, -V, dist, AERIAL_STEPS * uStepScale);
+        col += lightIn * 0.4 * (1.0 - uHydrocarbon) * (1.0 - smoothstep(0.0, 0.6, depth)) * fade1;
+        col = col * vAerialT + vAerialL;
         gl_FragColor = vec4(col, 1.0);
       }`,
   });
