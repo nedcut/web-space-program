@@ -15,6 +15,8 @@ vec3 earthEmission(vec3 n, float height, float sunAltitude) {
   #ifdef EARTH_DETAILS
     if (height <= 2.0 || abs(n.z) > 0.92) return vec3(0.0);
     float night = 1.0 - smoothstep(-0.18, 0.02, sunAltitude);
+    // Daylight: the lights below are multiplied by zero; skip five simplex evaluations per land pixel.
+    if (night <= 0.0) return vec3(0.0);
     float coast = exp(-height / (uPlanetRadius * 0.0012));
     float population = smoothstep(-0.1, 0.45, fbm3(n * 18.0 + 7.1, 3));
     float towns = smoothstep(0.60, 0.87, snoise(n * 750.0)) + 0.22 * smoothstep(0.4, 0.75, snoise(n * 240.0));
@@ -724,7 +726,11 @@ export function createSkyMaterial(u: PlanetUniforms, q: QualitySettings): THREE.
         bool hitGround = tg.x > 0.0 && tg.x < t1;
         if (hitGround) t1 = tg.x;
         vec3 L, T;
-        integrateScattering(uCamRel, rd, t0, t1, min(VIEW_STEPS * uStepScale, 64), L, T);
+        // Rays that hit the ground sphere are covered by terrain, ocean or the far sphere, which apply their own
+        // aerial perspective; the shell only shows there through gaps (streaming, cutouts). Log-depth fragment
+        // writes defeat early-Z, so these hidden pixels would otherwise pay the full march: use a short one.
+        int steps = min(VIEW_STEPS * uStepScale, 64);
+        integrateScattering(uCamRel, rd, t0, t1, hitGround ? min(steps, 4) : steps, L, T);
         float meanT = dot(T, vec3(1.0 / 3.0));
         // Chromatic correction for the Sun disc behind the shell: blended result becomes T * sun.
         float cosA = dot(rd, uSunDir);
