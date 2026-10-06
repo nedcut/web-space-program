@@ -26,5 +26,7 @@ const mission = params.get('mission');
 if (mission) import('./scenarios/runtime').then(({ startScenario }) => startScenario(mission));
 
 createRoot(document.getElementById('root')!).render(<App />);
+// Benchmark/automation hook (scripts/bench/gpu-bench.mjs drives scene changes through the store).
+(window as unknown as { __game?: typeof game }).__game = game;
 // Decode procedurally generated textures saved by an earlier session (off the main thread).
 setTimeout(() => void preloadTextureCache(), 0);

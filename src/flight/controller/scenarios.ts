@@ -34,6 +34,8 @@ export function devScenario(this: FlightController, internals: FlightControllerI
   if (name === 'reentry') { alt = b.atmosphere!.height * 0.6; vel = add(scale(east, Math.sqrt(b.gm / (b.radius + alt)) * 0.98), scale(up, -150)); }
   if (name === 'orbit') { alt = Math.max(90000, b.atmosphere!.height + 80000); vel = scale(east, Math.sqrt(b.gm / (b.radius + alt))); }
   if (name === 'moon') { alt = 20000; vel = scale(east, Math.sqrt(b.gm / (b.radius + 20000))); }
+  // High circular orbit that permits every rails warp level (benchmarks: 100 000× and above).
+  if (name === 'highorbit') { alt = Math.max(1_500_000, b.radius * 2.5); vel = scale(east, Math.sqrt(b.gm / (b.radius + alt))); }
   wv.mode = 'physics';
   wv.fixed = undefined;
   wv.body = bodyId;
