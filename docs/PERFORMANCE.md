@@ -743,3 +743,105 @@ latitude/longitude; the separate stock-Meridian pad flight was also checked in W
 No console/shader errors occurred in the final sweep. The cloud layer is still a thin shell, so it
 reads as a sheet when very close; this work improves satellite-scale structure without adding
 volumetric marching to the GPU budget.
+
+# Render snappiness pass — 2026-10-06 (`op/snappy`)
+
+Goal (owner): "super snappy" on a Retina MacBook (M-series, DPR 2, Medium) without visible quality loss. All numbers:
+Windows Chrome 154 over CDP, RTX 3060 Ti, production builds, Medium, 1470×920 CSS px at **DPR 2 (2940×1840)**,
+adaptive resolution **off** unless stated. "Before" = `main` at the time of measuring, "after" = this branch merged
+with it; runs are interleaved A/B (`scripts/bench/gpu-ab.sh`) because the browser/GPU is shared with other agents.
+
+## What limited the frame
+
+- **The pad missed vsync with only 6.9 ms of GPU timer time** (47.6 fps, ~120 frames > 25 ms per 10 s). A knob
+  sweep (`scripts/bench/gpu-knobs.mjs`, which also traces Chrome's GPU-process main thread) showed: frame rate
+  tracks pixel count (renderScale 0.75 → 60 fps, 0 hitches), not bloom/SMAA/composer/shadows (each ≤ 1.5 fps);
+  the GPU-process main thread was 57 % busy and ~5 ms of it is fixed DPR-2 compositing even with an empty scene.
+  On this machine 60 fps at DPR 2 needs the timer at ≈ 4.5 ms. A readPixels-fenced throughput test put the whole
+  frame at 6.24 ms; on an M-series base GPU (≈ 4–5× less fill/ALU than a 3060 Ti) that is ~25–30 ms, so fill
+  cost is the lever that decides at which resolution adaptive settles on the owner's Mac.
+- **Per-pixel waste** (fenced, pad, ms of a 6.24 ms frame): terrain 1.66 — Earth night-light noise (5 simplex
+  evaluations per land pixel) ran in full daylight and was then multiplied by zero; sky shell 1.54 — the 16-step
+  march also ran for every pixel below the horizon, which terrain covers (log-depth `gl_FragDepth` writes disable
+  early-Z, so hidden pixels pay in full); site 1.23 (PBR + 4-step aerial perspective on ~70 % of the screen);
+  post chain 1.07 (SMAA 0.55, bloom 0.27).
+- **Draw calls**: 888 on the pad, 604 of them terrain chunks. LOD error was measured in device pixels, so DPR 2
+  roughly doubled chunk count, CPU submission and per-vertex aerial-perspective work.
+- **Program re-resolution**: shared part/site materials were drawn by both `InstancedMesh` (static part batches,
+  site light poles) and plain meshes, so three re-ran `getProgram` (`getParameters` + cache key) for each such
+  material twice per frame — 14 per frame on the pad, 717 ms of an 8.4 s profile under `setProgram`.
+  (`setValueM4`'s ~5 MB/s is inside three; GC was ~1 ms/s before and after, so it was not chased further.)
+- **Map**: labels positioned with `left/top` every frame — 59 layouts/s.
+- **Load**: one ~450 ms constructor task (site canvas textures: `speckle` alone 123 ms of string-built `rgba()`
+  fills), a ~435 ms first-update task (all planet renderers at once, 30 ms transmittance LUT), a ~200 ms
+  synchronous shader warm-up, then 170 + 80 ms first frames (texture uploads, uniform introspection).
+
+## Changes
+
+| Change | Where | Visual effect |
+|---|---|---|
+| Daylight early-out for Earth night lights | `planet/materials.ts` | none (output was × 0) |
+| Sky rays that hit the ground sphere march 4 steps instead of 16 (covered by terrain/ocean/far sphere) | `planet/materials.ts` | none on screen; gap fallback only |
+| Site aerial perspective 1 / 2 / 4 steps by distance (< 4 km / < 20 km / beyond) — per-segment integration is exact in a homogeneous medium | `site/aerial.ts` | none visible |
+| Terrain LOD tolerance × √(pixel ratio): DPR 1 unchanged, Retina ≤ 2.5 CSS px | `core/renderer.ts` (`lodViewportHeight`), flight/hub/preview | far silhouettes marginally coarser; not visible in A/B shots |
+| Instanced material variants (cached clone, shared textures and shader patches) | `core/materialVariants.ts`, `vessel/staticBatch.ts`, `site/LaunchSite.ts` | none |
+| Map labels/markers: `translate3d`, cached style writes (only on change) | `map/styleWriter.ts`, `map/MapView.ts` | none |
+| Sliced shader warm-up: one representative per program configuration, ≤ 8 ms per frame, rescans for late objects, then pre-pays uniform introspection and texture uploads | `core/compileInSlices.ts`, `flight/controller.ts` | loading screen keeps animating |
+| Speckle fills with two constant colours + `globalAlpha` (±1/255) | `site/textures.ts` | none |
+| Transmittance LUT memoised per atmosphere; ≤ 1 non-focus planet renderer created per frame | `planet/atmosphereParams.ts`, `flight/planets.ts` | none |
+| Adaptive resolution: mean-rate trigger (ProMotion/no timer), reductions judged as an episode and undone when they do not help | `core/adaptiveQuality.ts` | stays sharp when the limit is not pixels |
+| `RenderPipeline.detach()/dispose()` via `releaseRenderer` helpers (flight, hub, tracking, planet preview) | `core/renderer.ts`, `releaseRenderer.ts` | — |
+
+Rejected: vertex-computed log depth for the sky (early-Z) — breaks near-plane clipping of a shell around the
+camera; cheaper AA (FXAA) or quarter-res bloom at DPR 2 — 0.2–0.3 ms each for a visible change; BatchedMesh terrain
+— large change for CPU only, while this machine and the Mac are fill/GPU-side limited.
+
+## Per-pass GPU cost at DPR 2 (pad, readPixels-fenced, ms)
+
+Component costs are differences with that material family hidden (`scripts/bench/knobs/families.js`); "after
+shaders" is the build with the three shader changes only, "after" the full change set (adds the LOD tolerance).
+
+| Component | Before | After shaders | After |
+|---|---:|---:|---:|
+| Whole frame | 6.24 | 4.49 | 3.87 |
+| Terrain (incl. per-vertex aerial perspective) | 1.66 | 0.93 | — |
+| Sky shell | 1.54 | 0.83 | — |
+| Launch site | 1.23 | 1.13 | — |
+| Post chain with an empty scene (bloom, output, SMAA, copies) | 1.07 | 1.11 | — |
+| GPU timer in the running frame loop | 6.9 | 4.9 | 4.45 |
+
+Shadow map, environment lighting, plumes, scatter and parts are each ≤ 0.2 ms here.
+
+## Before / after (interleaved A/B, DPR 2, adaptive off)
+
+Pre-merge run ([ab-snappy1](performance/snappy/ab-snappy1.md), 2 runs per side, medians):
+
+| Scenario | fps | frames > 25 ms / 10 s | GPU ms | draws | CPU ms/frame | render ms | GC ms/s | layouts+styles /s |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| pad | 47.6 → 56.3 | 120.5 → 36.5 | 6.91 → 4.45 | 888 → 621 | 5.28 → 3.88 | 3.98 → 2.87 | 1.30 → 1.27 | 9.1 → 9.1 |
+| orbit | 45.7 → 52.7 | 171 → 80 | 5.93 → 4.17 | 533 → 442 | 4.31 → 3.47 | 3.26 → 2.56 | 1.09 → 1.11 | 4.6 → 5.3 |
+| map | 54.9 → 56.2 | 63 → 52.5 | 0.47 → 0.34 | 32 → 32 | 1.75 → 1.62 | 0.44 → 0.45 | 1.79 → 2.07 | 113.8 → 32.5 |
+
+(The map's base fps was below its usual 60 because another agent's game tab shared the GPU during this run.)
+
+FINAL_AB_PLACEHOLDER
+
+**Load** (fresh context, Kestrel): flight constructor 446 → 392 ms; the 435 ms first-update task → 348 ms; shader
+warm-up from one ~200 ms task to ≤ 8 ms slices (≈ 470 ms wall, behind the loading screen); first drawn frame
+167 → 94 ms and the 75 ms second frame gone (V8 profiles, unminified builds). Interleaved A/B (pre-merge): ready
+6.75 → 5.02 s cold, 6.30 → 4.29 s warm; largest load long task 432 → 380 ms cold, 276 → 200 ms warm.
+
+**Program churn**: getProgram re-resolutions per frame 14 → 0 on the pad, in orbit and on the Meridian pad.
+
+**Visuals**: [pad](screenshots/snappy/pad-before-after.jpg) / [orbit](screenshots/snappy/orbit-before-after.jpg)
+(left before, right after, DPR 2, same resolution) and 1:1 crops (`*-crop-before-after.jpg`) are indistinguishable.
+
+## Left / next
+
+- On this desktop the pad at fixed DPR 2 is ~56 fps: ~5 ms of compositing for a DPR-2-emulated canvas sits outside
+  the timer, so hitting 60 here needs ≈ 4.2 ms of GPU timer. Adaptive resolution covers it (0.9 is enough).
+- Remaining per-pixel cost is honest work: site PBR (1.1 ms on the pad), SMAA (0.6), sky (0.8 above the horizon).
+- CPU: ~620 draws on the pad, 4.4 µs each in three; merging terrain chunks (BatchedMesh / multi-draw) is the next
+  CPU lever if a CPU-bound device shows up.
+- Cold load: the remaining long tasks are WebGL context creation (~45 ms), uncached site textures (~120 ms, cached
+  after the first visit) and Earth's renderer build (~100 ms).
