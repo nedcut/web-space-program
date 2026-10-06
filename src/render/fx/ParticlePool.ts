@@ -54,7 +54,7 @@ export class ParticlePool {
           alpha = valid * pow(max(0.,1.-life),1.3) * min(1.,age*16.);
           // Fire cools from a hot core to orange embers; smoke remains non-emissive.
           tint = mix(color, color * vec3(1.,.16,.025), hot * smoothstep(.1,1.,life));
-          phase = params.x * 17.31;
+          phase = params.x * 17.31 + dot(velocity,vec3(.13,.17,.19)) + age*.3;
           vUv = uv;
           #include <logdepthbuf_vertex>
         }`,
@@ -73,10 +73,10 @@ export class ParticlePool {
           mat2 rot = mat2(cos(a),-sin(a),sin(a),cos(a));
           vec2 q = rot*p;
           float billow = sin(q.x*8.+sin(q.y*6.+phase))*sin(q.y*7.-phase);
-          float edge = pow(max(0.,1.-r + (1.-hot)*.12*billow),mix(1.8,3.,hot));
+          float edge = pow(max(0.,1.-r + .14*billow),mix(1.8,1.4,hot));
           float shade = .7 + .3*smoothstep(-.8,.8,p.y) + .12*billow;
           float softGround = smoothstep(-.1, max(.3,radius*.35), groundHeight + dot(p,groundSlope)*radius);
-          gl_FragColor = vec4(tint*mix(shade,1.,hot),alpha*edge*.55*softGround);
+          gl_FragColor = vec4(tint*mix(shade,.8+.2*billow,hot),alpha*edge*.55*softGround);
         }` });
     this.object = new THREE.Mesh(geometry, material);
     this.object.name = 'flight-particles';

@@ -61,13 +61,13 @@ export class FlightFx {
   burst(position: Vec3, structural = false, inheritedVelocity?: Vec3) {
     const count = Math.floor(FX_BUDGET[this.quality].rate * (structural ? .3 : 1));
     for(let i=0;i<count;i++) {
-      this.velocity.set(this.random()-.5,this.random()-.5,this.random()-.5).multiplyScalar(structural ? 5 : i%3===2 ? 32 : 9);
+      this.velocity.set(this.random()-.5,this.random()-.5,this.random()-.5).multiplyScalar(structural ? 5 : i%3===2 ? 32 : i%3===1 ? 18 : 9);
       if(inheritedVelocity) this.velocity.add(inheritedVelocity);
       // Separation is a cold gas puff, not a small fuel explosion. No lingering smoke in vacuum.
       const cloud = structural || i%3===0;
       if(cloud && this.density<.01 && !structural) continue;
       this.pool.emit(position,this.velocity,this.clock,structural?.45:cloud?5:i%3===1?1.2:2,
-        structural?.7:cloud?3:i%3===1?4:.18,cloud?1.1:0,structural?steam:cloud?smoke:i%3===1?fire:spark,
+        structural?.7:cloud?3:i%3===1?2.8:.18,cloud?1.1:0,structural?steam:cloud?smoke:i%3===1?fire:spark,
         cloud?undefined:this.gravity);
     }
     this.flashPosition.copy(position); this.flashVelocity.set(inheritedVelocity?.x ?? 0,inheritedVelocity?.y ?? 0,inheritedVelocity?.z ?? 0); this.flash = structural ? .15 : 1;
