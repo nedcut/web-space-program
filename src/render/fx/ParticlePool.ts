@@ -1,98 +1,124 @@
 import * as THREE from 'three';
 import type { Vec3 } from '../../util/vec3';
 
-/** Fixed storage; ballistic motion, expansion and fading run on the GPU. Positions are anchor-relative. */
+/** One draw, bounded storage. GPU ballistic motion and billowing; float64 anchor before upload. */
 export class ParticlePool {
-  readonly object: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
+  readonly object: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>;
   private readonly anchor = new THREE.Vector3();
   private initialized = false;
   private cursor = 0;
+  private expires = 0;
   private readonly positions: Float32Array;
   private readonly velocities: Float32Array;
   private readonly params: Float32Array;
   private readonly colors: Float32Array;
+  private readonly accelerations: Float32Array;
   constructor(readonly capacity: number) {
     this.positions = new Float32Array(capacity * 3);
     this.velocities = new Float32Array(capacity * 3);
     this.params = new Float32Array(capacity * 4);
     this.colors = new Float32Array(capacity * 3);
-    const geometry = new THREE.BufferGeometry();
-    for (const [name, array, size] of [['position', this.positions, 3], ['velocity', this.velocities, 3], ['params', this.params, 4], ['color', this.colors, 3]] as const) {
-      geometry.setAttribute(name, new THREE.BufferAttribute(array, size).setUsage(THREE.DynamicDrawUsage));
+    this.accelerations = new Float32Array(capacity * 3);
+    const quad = new THREE.PlaneGeometry(1, 1);
+    const geometry = new THREE.InstancedBufferGeometry();
+    geometry.index = quad.index;
+    geometry.setAttribute('position', quad.attributes.position);
+    geometry.setAttribute('uv', quad.attributes.uv);
+    geometry.instanceCount = capacity;
+    for (const [name, array, size] of [['spawnPosition', this.positions, 3], ['velocity', this.velocities, 3], ['params', this.params, 4], ['color', this.colors, 3], ['acceleration', this.accelerations, 3]] as const) {
+      geometry.setAttribute(name, new THREE.InstancedBufferAttribute(array, size).setUsage(THREE.DynamicDrawUsage));
     }
-    const material = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { time: { value: 0 }, pixelScale: { value: 500 }, groundNormal: { value: new THREE.Vector3(0,1,0) }, groundOffset: { value: -1e20 } },
+    const material = new THREE.ShaderMaterial({ transparent: true, depthWrite: false,
+      uniforms: { time: { value: 0 }, groundNormal: { value: new THREE.Vector3(0,1,0) }, groundOffset: { value: -1e20 } },
       vertexShader: `
         #include <common>
         #include <logdepthbuf_pars_vertex>
-        attribute vec3 velocity; attribute vec4 params; attribute vec3 color;
-        uniform float time; uniform float pixelScale;
-        uniform vec3 groundNormal; uniform float groundOffset;
+        attribute vec3 spawnPosition; attribute vec3 velocity; attribute vec3 acceleration;
+        attribute vec4 params; attribute vec3 color;
+        uniform float time; uniform vec3 groundNormal; uniform float groundOffset;
         varying float groundHeight; varying vec2 groundSlope; varying float radius;
-        varying vec3 tint; varying float alpha; varying float hot;
+        varying vec3 tint; varying float alpha; varying float hot; varying vec2 vUv;
+        varying float phase;
         void main() {
-          float age = time - params.x;
+          float age = max(0., time - params.x);
           float life = age / max(.001, params.y);
-          float valid = step(0.,age) * (1.-step(1.,life)) * step(.001,params.y);
-          hot = step(params.w,0.);
-          vec3 p = position + velocity * age;
+          float valid = step(params.x,time) * (1.-step(1.,life)) * step(.001,params.y);
+          hot = 1. - step(.001,params.w);
+          vec3 p = spawnPosition + velocity * age + .5 * acceleration * age * age;
           radius = params.z * (1. + max(0.,params.w)*age) * .5;
           groundHeight = dot(p,groundNormal) - groundOffset;
           groundSlope = (viewMatrix * vec4(groundNormal,0.)).xy;
           vec4 mv = modelViewMatrix * vec4(p,1.);
+          mv.xy += position.xy * radius * 2. * valid;
           gl_Position = projectionMatrix * mv;
-          gl_PointSize = valid * clamp(params.z * (1. + max(0.,params.w)*age) * pixelScale / max(1.,-mv.z), 1., 160.);
-          alpha = valid * pow(max(0.,1.-life),1.4) * min(1.,age*12.);
-          tint = color;
+          alpha = valid * pow(max(0.,1.-life),1.3) * min(1.,age*16.);
+          // Fire cools from a hot core to orange embers; smoke remains non-emissive.
+          tint = mix(color, color * vec3(1.,.16,.025), hot * smoothstep(.1,1.,life));
+          phase = params.x * 17.31 + dot(velocity,vec3(.13,.17,.19)) + age*.3;
+          vUv = uv;
           #include <logdepthbuf_vertex>
         }`,
       fragmentShader: `
         #include <common>
         #include <logdepthbuf_pars_fragment>
-        varying vec3 tint; varying float alpha; varying float hot;
-        varying float groundHeight; varying vec2 groundSlope; varying float radius;
+        varying vec3 tint; varying float alpha; varying float hot; varying vec2 vUv;
+        varying float groundHeight; varying vec2 groundSlope; varying float radius; varying float phase;
         void main() {
+          if(alpha < .001) discard;
           #include <logdepthbuf_fragment>
-          vec2 p = gl_PointCoord*2.-1.;
+          vec2 p = vUv*2.-1.;
           float r = dot(p,p); if(r>1.) discard;
-          float edge = pow(1.-r, mix(2.,4.,hot));
-          float cloud = .8 + .2*sin(p.x*15.+sin(p.y*13.));
-          // Analytic soft intersection against the local terrain tangent plane.
-          float softGround = smoothstep(-.1, max(.5,radius*.4), groundHeight + dot(vec2(p.x,-p.y),groundSlope)*radius);
-          gl_FragColor = vec4(tint,alpha*edge*cloud*.65*softGround);
+          // A handful of smooth lobes: no texture upload, ray march, or sparkling hash noise.
+          float a = phase + .3*sin(phase);
+          mat2 rot = mat2(cos(a),-sin(a),sin(a),cos(a));
+          vec2 q = rot*p;
+          float billow = sin(q.x*8.+sin(q.y*6.+phase))*sin(q.y*7.-phase);
+          float edge = pow(max(0.,1.-r + .14*billow),mix(1.8,1.4,hot));
+          float shade = .7 + .3*smoothstep(-.8,.8,p.y) + .12*billow;
+          float softGround = smoothstep(-.1, max(.3,radius*.35), groundHeight + dot(p,groundSlope)*radius);
+          gl_FragColor = vec4(tint*mix(shade,.8+.2*billow,hot),alpha*edge*.55*softGround);
         }` });
-    this.object = new THREE.Points(geometry, material);
+    this.object = new THREE.Mesh(geometry, material);
+    this.object.name = 'flight-particles';
     this.object.frustumCulled = false;
     this.object.visible = false;
+    this.object.renderOrder = 8;
   }
-  emit(position: Vec3, velocity: Vec3, time: number, life: number, size: number, growth: number, color: THREE.Color) {
+  emit(position: Vec3, velocity: Vec3, time: number, life: number, size: number, growth: number, color: THREE.Color, acceleration?: Vec3) {
     if (!this.initialized) { this.anchor.copy(position); this.initialized = true; }
+    this.expires = Math.max(this.expires,time+life);
     this.object.visible = true;
     const i = this.cursor++ % this.capacity, j = i * 3, k = i * 4;
     this.positions[j] = position.x - this.anchor.x; this.positions[j+1] = position.y - this.anchor.y; this.positions[j+2] = position.z - this.anchor.z;
     this.velocities[j] = velocity.x; this.velocities[j+1] = velocity.y; this.velocities[j+2] = velocity.z;
+    this.accelerations[j] = acceleration?.x ?? 0; this.accelerations[j+1] = acceleration?.y ?? 0; this.accelerations[j+2] = acceleration?.z ?? 0;
     this.params[k] = time; this.params[k+1] = life; this.params[k+2] = size; this.params[k+3] = growth;
     this.colors[j] = color.r; this.colors[j+1] = color.g; this.colors[j+2] = color.b;
-    this.object.geometry.attributes.position.needsUpdate = true;
-    this.object.geometry.attributes.velocity.needsUpdate = true;
-    this.object.geometry.attributes.params.needsUpdate = true;
-    this.object.geometry.attributes.color.needsUpdate = true;
+    for (const name of ['spawnPosition','velocity','params','color','acceleration']) {
+      const attr = this.object.geometry.attributes[name] as THREE.InstancedBufferAttribute;
+      attr.addUpdateRange(i*attr.itemSize,attr.itemSize); attr.needsUpdate = true;
+    }
   }
-  update(origin: Vec3, time: number, pixelScale: number) {
+  update(origin: Vec3, time: number, _pixelScale: number) {
     if (!this.initialized) return;
-    if (this.initialized && this.anchor.distanceToSquared(origin) > 1e8) {
+    this.object.visible = time < this.expires;
+    if (this.anchor.distanceToSquared(origin) > 1e8) {
       const x = this.anchor.x-origin.x, y = this.anchor.y-origin.y, z = this.anchor.z-origin.z;
       for (let i=0;i<this.capacity*3;i+=3) { this.positions[i]+=x; this.positions[i+1]+=y; this.positions[i+2]+=z; }
-      this.anchor.copy(origin); this.object.geometry.attributes.position.needsUpdate = true;
+      this.anchor.copy(origin);
+      const attr=this.object.geometry.attributes.spawnPosition as THREE.InstancedBufferAttribute;
+      attr.clearUpdateRanges(); attr.addUpdateRange(0,this.positions.length); attr.needsUpdate=true;
     }
     this.object.position.set(this.anchor.x-origin.x,this.anchor.y-origin.y,this.anchor.z-origin.z);
     this.object.material.uniforms.time.value = time;
-    this.object.material.uniforms.pixelScale.value = pixelScale;
   }
   clear() {
-    this.params.fill(0); this.object.geometry.attributes.params.needsUpdate = true;
-    this.object.visible = false; this.initialized = false; this.cursor = 0;
+    this.params.fill(0);
+    const attr=this.object.geometry.attributes.params as THREE.InstancedBufferAttribute;
+    attr.clearUpdateRanges(); attr.addUpdateRange(0,this.params.length); attr.needsUpdate=true;
+    this.object.visible = false; this.initialized = false; this.cursor = 0; this.expires=0;
   }
-  /** Cheap terrain soft particles; no second scene/depth pass on laptop presets. */
+  /** Terrain tangent soft intersection; deliberately avoids a second scene/depth pass. */
   ground(position: Vec3, normal: THREE.Vector3, altitude: number) {
     this.object.material.uniforms.groundNormal.value.copy(normal);
     this.object.material.uniforms.groundOffset.value = (position.x-this.anchor.x)*normal.x + (position.y-this.anchor.y)*normal.y + (position.z-this.anchor.z)*normal.z - altitude;

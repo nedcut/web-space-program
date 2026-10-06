@@ -213,6 +213,7 @@ export default function FlightScene() {
   const scenarioFinished = !!getScenarioRun()?.result;
   useEffect(() => {
     if (ctrl.current) ctrl.current.paused = paused || photo.active || scenarioFinished;
+    audioRef.current?.setPaused(paused || photo.active || scenarioFinished);
     if (paused || photo.active) audioRef.current?.silenceFlight();
   }, [paused, awaitingTelemetry, photo.active, scenarioFinished]);
 

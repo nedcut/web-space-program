@@ -1,3 +1,5 @@
+import { CondensationFx } from '../render/fx/CondensationFx';
+import { flightRumble } from '../audio/design';
 import { FlightFx, isBurstEvent } from '../render/fx/FlightFx';
 
 import { PhotoCamera } from '../render/core/PhotoCamera';
@@ -140,6 +142,7 @@ export class FlightController {
   private site: LaunchSite;
   private flags = new FlagView();
   private effects: FlightFx;
+  private readonly condensation = new CondensationFx();
   private readonly effectPosition = new THREE.Vector3();
   private reentry = new ReentryFx();
   private reentryHeat = 0;
@@ -221,6 +224,7 @@ export class FlightController {
     this.scene.add(this.glare.mesh);
     this.scene.add(this.sunLight, this.sunLight.target, this.ambient);
     this.effects = new FlightFx(quality);
+    this.scene.add(this.condensation.object);
     this.scene.add(this.effects.root, this.reentry.object, this.flags.root);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(q.shadowMapSize || 512, q.shadowMapSize || 512);
@@ -303,14 +307,28 @@ export class FlightController {
           this.effects.burst(this.effectPosition, e.type !== 'partDestroyed', vessel.state.velocity);
         }
       }
+      if(e.type==='chute' && e.phase==='semi') {
+        const vessel=this.world.vessels.get(e.vesselId);
+        if(vessel) {
+          if(!this.views.get(e.vesselId)?.partPosition(e.partUid,this.effectPosition)) this.effectPosition.copy(vessel.state.position);
+          this.effects.deployment(this.effectPosition,vessel.state.velocity);
+        }
+      }
       if (!this.audio) return;
-      if (e.type === 'stage') this.audio.staging();
-      if (e.type === 'decouple') this.audio.decouple();
-      if (e.type === 'structuralFailure') this.audio.explosion(0.3);
-      if (e.type === 'partDestroyed') this.audio.explosion(1);
-      if (e.type === 'chute' && (e.phase === 'semi' || e.phase === 'full')) this.audio.chuteDeploy();
-      if (e.type === 'docked') this.audio.docking();
-      if (e.type === 'undocked') this.audio.decouple();
+      const source = this.world.vessels.get(e.vesselId);
+      const active = this.world.active;
+      const eventDistance = source && active ? Math.hypot(
+        source.state.position.x - active.state.position.x - this.cam.camera.position.x,
+        source.state.position.y - active.state.position.y - this.cam.camera.position.y,
+        source.state.position.z - active.state.position.z - this.cam.camera.position.z) : this.cam.distance;
+      if (e.type === 'flameout' && e.vesselId === this.world.activeId) this.audio.flameout();
+      if (e.type === 'stage' && e.vesselId === this.world.activeId) this.audio.staging();
+      if (e.type === 'decouple' && e.vesselId === this.world.activeId) this.audio.decouple();
+      if (e.type === 'structuralFailure') this.audio.explosion(0.3, eventDistance, active?.state.telemetry.staticPressure ?? 0, e.vesselId === this.world.activeId);
+      if (e.type === 'partDestroyed') this.audio.explosion(1, eventDistance, active?.state.telemetry.staticPressure ?? 0, e.vesselId === this.world.activeId);
+      if (e.vesselId === this.world.activeId && e.type === 'chute' && (e.phase === 'semi' || e.phase === 'full')) this.audio.chuteDeploy();
+      if (e.type === 'docked' && (e.vesselId === this.world.activeId || e.otherId === this.world.activeId)) this.audio.docking();
+      if (e.type === 'undocked' && e.vesselId === this.world.activeId) this.audio.decouple();
     };
 
     const ro = new ResizeObserver(() => this.resize());
@@ -909,13 +927,17 @@ export class FlightController {
       const d = normalize(airVel);
       this.reentry.update(flux, new THREE.Vector3(d.x, d.y, d.z), wv.state.cache.boundingRadius, this.elapsed, wv.state, wv.body);
     } else this.reentry.update(0, new THREE.Vector3(0, 1, 0), 1, this.elapsed);
+    // No weather/humidity simulation exists: dense Earth air is a conservative visual proxy.
+    this.effectPosition.set(airVel.x,airVel.y,airVel.z).normalize();
+    this.condensation.update(airSpeed/Math.max(1,air.speedOfSound),wv.body==='earth'?Math.min(1,air.density/.8):0,Math.min(4,wv.state.cache.boundingRadius*.3),this.effectPosition);
     this.reentryHeat = Math.min(1, Math.max(0, (Math.log10(Math.max(flux, 1)) - 4.0) / 1.5));
 
     // Camera
     if (this.photo.active) this.photo.update(photoDt);
     else this.updateCamera(wv, origin, bodyState, airVel, t, dt);
     const camera = this.cam.camera;
-    this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors);
+    this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors, u.body(wv.body).surfaceGravity);
+    this.effects.rcs(wv.state,this.rcsOn,this.input.state);
     if (!this.paused) this.effects.shake(camera, game.get().settings.reduceMotion);
     prof.add('fx', t0);
     if (this.network) {
@@ -1059,11 +1081,7 @@ export class FlightController {
     const settings = game.get().settings;
     let rumble = 0;
     if (!settings.reduceMotion && !this.paused) {
-      const weight = Math.max(1, st.mass * body.surfaceGravity);
-      const launch = Math.min(1, tel.thrust / (weight * 1.5)) * Math.exp(-Math.max(0, agl) / 250);
-      const transonic = Math.exp(-(((tel.mach - 1) / 0.25) ** 2));
-      const buffet = Math.min(1, tel.dynamicPressure / 40000) * (0.35 + 0.65 * transonic);
-      rumble = Math.min(0.8, launch * 0.7 + buffet * 0.5);
+      rumble = flightRumble(tel.thrust, st.mass * body.surfaceGravity, agl, tel.dynamicPressure, tel.mach);
     }
     const probe = this.camProbe;
     this.cam.drive.yaw = this.input.camera.yaw;
@@ -1179,6 +1197,7 @@ export class FlightController {
     this.glare.dispose();
     this.reentry.dispose();
     this.effects.dispose();
+    this.condensation.dispose();
     this.flags.dispose();
     this.skyEnv.dispose();
     this.scene.environment = null;

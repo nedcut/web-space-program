@@ -65,7 +65,7 @@ export function SettingsPanel({ onClose, world }: { onClose: () => void; world?:
           <p className="settings-note">Adaptive render scale lowers the 3D resolution (to 50%) when frames run late and restores it when there is headroom. Low suits older integrated GPUs; Medium targets 60 fps on current laptop GPUs.</p>
           <p className="settings-note">Graphics changes apply immediately in flight. Other scenes use the new settings when you enter them.</p>
         </>}
-        {tab === 'Audio' && <>{range('masterVolume', 'Master volume', 0, 1, 0.05)}{range('musicVolume', 'Music volume', 0, 1, 0.05)}{range('sfxVolume', 'Effects volume', 0, 1, 0.05)}</>}
+        {tab === 'Audio' && <>{range('masterVolume', 'Master volume', 0, 1, 0.05)}{range('musicVolume', 'Music volume', 0, 1, 0.05)}{range('sfxVolume', 'Effects volume', 0, 1, 0.05)}{range('uiVolume', 'Interface & alarms volume', 0, 1, 0.05)}</>}
         {tab === 'Controls' && <>
           {check('invertPitch', 'Invert pitch')}{check('mouseFlight', 'Mouse flight assist (left drag)')}
           {range('inputSmoothing', 'Input smoothing', 0, 0.5, 0.01, ' s')}{check('gamepadEnabled', 'Enable standard gamepad')}
