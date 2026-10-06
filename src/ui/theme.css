@@ -76,32 +76,11 @@ button, input, select, textarea { font-size: 1em; }
 [data-high-contrast="true"] .overlay .panel { background: #05090f; border-color: #fff; }
 [data-reduce-motion="true"] *, [data-reduce-motion="true"] *::before, [data-reduce-motion="true"] *::after { animation: none !important; transition: none !important; }
 @media (max-width: 600px) { .settings-dialog { padding: 14px; } .setting-row { flex-wrap: wrap; } .settings-tabs button { padding: 8px; } }
-/* ---------------------------------------------------------------- flight HUD layout */
-.hud-right { position: absolute; top: 10px; right: 10px; bottom: 10px; width: 230px; display: flex; flex-direction: column; gap: 8px; pointer-events: none !important; }
-.hud-right > * { pointer-events: auto; flex-shrink: 0; }
-.hud-right > .hud-stages {
-  flex: 1 1 auto; flex-shrink: 1; min-height: 0; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 6px;
-  overflow-y: auto; pointer-events: none !important; scrollbar-width: thin;
-}
-.hud-stages > * { pointer-events: auto; flex-shrink: 0; }
-.hud-dock {
-  position: absolute; left: 10px; top: 64px; bottom: 10px; width: 260px; display: flex; flex-direction: column; gap: 8px;
-  overflow-y: auto; pointer-events: none !important; scrollbar-width: thin;
-}
-.hud-dock > * { pointer-events: auto; }
-.hud-chips { display: flex; flex-wrap: wrap; gap: 4px; flex-shrink: 0; align-self: flex-start; }
-.hud-chip { background: var(--panel); backdrop-filter: blur(10px); display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; font-size: 11px; letter-spacing: 0.02em; }
-.hud-chip.on { border-color: var(--accent); background: rgba(92, 200, 255, 0.22); }
-.hud-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: inline-block; }
-.hud-dot.warn { background: var(--warn); }
-.hud-dot.target { background: #ff4fb8; }
-@media (max-width: 1100px) {
-  .hud-date { display: none; }
-}
-
 /* ---------------------------------------------------------------- overlays */
 .modal-backdrop { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(2, 5, 10, 0.55); z-index: 20; }
 .help-card { width: min(760px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow-y: auto; padding: 22px 26px; }
+.help-layout { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin: 8px 0 0; padding: 8px 10px; border-left: 2px solid var(--accent-border); background: var(--surface-soft); border-radius: 0 6px 6px 0; }
+.help-layout b { color: var(--text); font-weight: 600; }
 .help-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 28px; margin: 14px 0; }
 .help-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-width: 0; font-size: 13px; border-bottom: 1px solid rgba(140, 180, 255, 0.08); padding: 4px 0; }
 .help-row kbd, .kbd {
@@ -131,8 +110,6 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); opacity: .8;
 .btn, .tech-node, .scenario-card, .training-lesson { transition: background var(--duration-ui) var(--ease-ui), border-color var(--duration-ui), box-shadow var(--duration-ui); }
 .btn:hover:not(:disabled), .scenario-card:hover, .training-lesson:hover { box-shadow: inset 0 0 0 1px var(--accent-border); }
 .panel .panel { box-shadow: none; }
-.hud-chip { border-radius: var(--radius-sm); min-height: 28px; }
-.hud-right .label { letter-spacing: .08em; font-size: 10px; }
 .settings-dialog { box-shadow: var(--shadow-modal); border-radius: var(--radius-lg); }
 .settings-dialog h2 { font-weight: 500; font-size: 24px; }
 .settings-tabs button { flex: 1; }
@@ -146,10 +123,3 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); opacity: .8;
 label.panel:has(.scale-radio:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 [tabindex="-1"]:focus-visible { outline: none; }
-
-/* Action-group strip (bottom-centre HUD). */
-.hud-groups { padding: 8px; display: flex; flex-direction: column; gap: 4px; width: 92px; }
-.hud-groups .btn { padding: 4px 2px; font-size: 10px; }
-.hud-abort { color: var(--bad); border-color: rgba(255, 146, 148, 0.45); background: rgba(255, 107, 107, 0.1); letter-spacing: 0.08em; font-weight: 650; }
-.hud-abort:hover, .hud-abort.on { background: rgba(255, 107, 107, 0.24); border-color: var(--bad); }
-.hud-group-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }

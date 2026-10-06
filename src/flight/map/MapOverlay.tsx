@@ -7,8 +7,7 @@ import { AXIS_COLORS } from '../../render/map/mapIcons';
 import { period } from '../../sim/orbit';
 import { formatDistance, formatDuration, formatSpeed } from '../../util/format';
 import { bindingLabel } from '../../input/bindings';
-import { cross, dot, length } from '../../util/vec3';
-import { qRotate } from '../../util/quat';
+import { bodyBreadcrumbs } from '../../render/map/presentation';
 import { nodeSummary } from './nodeInfo';
 import type { FlightMap } from './FlightMap';
 
@@ -28,7 +27,7 @@ export function MapOverlay({ controller: c }: { controller: FlightController }) 
   const { node: nodeId, context, info } = ui.menus;
   const node = nodeId !== null ? c.world.nodes.find(n => n.id === nodeId) : undefined;
   return <>
-    <OrbitReadout controller={c} />
+    <MapReadout controller={c} />
     {node && <NodeMenu controller={c} node={node} />}
     {context?.obj && <MapContextMenu x={context.x} y={context.y} title={ui.name(context.obj)}
       subtitle={context.obj.kind === 'vessel' ? (context.obj.id === c.world.activeId ? 'Active vessel' : 'Vessel') : BODY_KIND[c.world.universe.body(context.obj.id).kind]}
@@ -65,33 +64,30 @@ function InfoCard({ controller: c, obj }: { controller: FlightController; obj: M
   return <MapInfoCard title={v.state.name} onClose={close} rows={rows} />;
 }
 
-/** Equatorial inclination (degrees) of the active orbit. */
-function inclination(c: FlightController): number {
-  const w = c.world, wv = w.active!;
-  const s = w.relativeState(wv), h = cross(s.position, s.velocity), north = qRotate(w.universe.ephem.bodyRotation(wv.body, w.ut), { x: 0, y: 0, z: 1 });
-  const lh = length(h);
-  return lh > 0 ? Math.acos(Math.max(-1, Math.min(1, dot(h, north) / lh))) * 180 / Math.PI : 0;
-}
-
-function OrbitReadout({ controller: c }: { controller: FlightController }) {
-  const w = c.world, wv = w.active;
-  if (!wv || wv.mode === 'prelaunch' || wv.state.situation !== 'flying') return <div className="panel map-orbit-info"><span className="hint">{hints()}</span></div>;
-  let o: ReturnType<typeof w.orbitSummary>;
-  try { o = w.orbitSummary(wv); } catch { return null; }
-  const body = w.universe.body(wv.body);
-  const bound = o.orbit.e < 1;
-  const T = period(o.orbit);
-  return <div className="panel map-orbit-info" aria-label="Orbit">
-    <span className="title">Orbit · {body.name}{c.mapUi.focus ? ` · viewing ${c.mapUi.name(c.mapUi.focus)}` : ''}</span>
-    <span className="k">Ap</span><span className="mono">{bound ? formatDistance(o.ap) : 'escape'}</span><span className="mono">{bound ? `T−${formatDuration(o.timeToAp)}` : ''}</span>
-    <span className="k">Pe</span><span className="mono" style={{ color: o.pe < (body.atmosphere?.height ?? 0) ? 'var(--warn)' : undefined }}>{formatDistance(o.pe)}</span><span className="mono">{Number.isFinite(o.timeToPe) ? `T−${formatDuration(o.timeToPe)}` : ''}</span>
-    <span className="k">Inc</span><span className="mono">{inclination(c).toFixed(2)}°</span><span className="mono">{Number.isFinite(T) ? `Period ${formatDuration(T)}` : `e ${o.orbit.e.toFixed(3)}`}</span>
+/** Bottom-right map readout: focus path, orbit period/eccentricity and the map gestures (Ap/Pe/Inc are in the HUD strip). */
+function MapReadout({ controller: c }: { controller: FlightController }) {
+  const w = c.world, wv = w.active, ui = c.mapUi;
+  const f = ui.focus;
+  const focusBody = f?.kind === 'body' ? f.id : f?.kind === 'vessel' ? w.vessels.get(f.id)?.body : wv?.body;
+  const body = focusBody ? w.universe.bodies.get(focusBody) : undefined;
+  const path = body ? bodyBreadcrumbs(body, w.universe.bodies).map(b => b.name).join(' › ') : '';
+  let orbit: string | null = null;
+  try {
+    if (wv && wv.mode !== 'prelaunch' && wv.state.situation === 'flying') {
+      const o = w.orbitOf(wv), T = period(o);
+      orbit = `${Number.isFinite(T) ? `Period ${formatDuration(T)}` : 'Escape trajectory'} · e ${o.e.toFixed(3)}`;
+    }
+  } catch { /* degenerate orbit */ }
+  return <div className="panel map-readout" aria-label="Map focus">
+    <span className="title">{f ? `Viewing ${ui.name(f)}` : `Viewing ${wv?.state.name ?? 'vessel'}`}</span>
+    {path && <span className="path">{path}</span>}
+    {orbit && <span className="mono">{orbit}</span>}
     <span className="hint">{hints()}</span>
   </div>;
 }
 
 function hints() {
-  return `Click orbit: add node · Right-click object: menu · Double-click: focus · ${bindingLabel('mapFocusNext')}/Shift+${bindingLabel('mapFocusNext')}: cycle focus · ${bindingLabel('mapFocusHome')}: vessel`;
+  return `Click orbit: add node · Right-click: menu · Double-click: focus · ${bindingLabel('mapFocusNext')} / Shift+${bindingLabel('mapFocusNext')}: cycle focus · ${bindingLabel('mapFocusHome')}: back to vessel`;
 }
 
 const AXES: { axis: 'prograde' | 'normal' | 'radial'; label: string }[] = [

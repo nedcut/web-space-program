@@ -8,6 +8,7 @@ import { crossfeedOpen, isExtended, thrustLimit, tweakDescriptors } from '../../
 import type { PartState } from '../../sim/vessel/runtime';
 import type { PartActionId, PartTweaks, ResourceId } from '../../sim/vessel/types';
 import type { FlightController } from '../controller';
+import { game } from '../../game/store';
 
 const fmtKN = (n: number) => (n < 1000 ? `${n.toFixed(0)} N` : `${(n / 1000).toFixed(n < 1e5 ? 1 : 0)} kN`);
 const CHUTE_PHASE: Record<string, string> = { stowed: 'Stowed', armed: 'Armed — waiting for air', semi: 'Partly open', full: 'Fully open', cut: 'Cut away' };
@@ -39,7 +40,7 @@ export function FlightInspector({ controller: c, panels, setPanels }: { controll
   return <InspectorLayer panels={panels} anchor={anchor} content={content}
     onClose={uid => setPanels(p => p.filter(x => x.uid !== uid))}
     onPin={uid => setPanels(p => p.map(x => (x.uid === uid ? { ...x, pinned: !x.pinned } : x)))}
-    insets={{ top: 64, right: 250, bottom: 215, left: 12 }} />;
+    insets={{ top: 110, right: 350, bottom: game.get().settings.navballSize + 70, left: 240 }} />;
 }
 
 function FlightPartBody({ c, part: p, copies }: { c: FlightController; part: PartState; copies: number }) {

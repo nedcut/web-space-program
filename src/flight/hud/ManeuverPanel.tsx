@@ -56,6 +56,7 @@ export function ManeuverPanel({ world, map }: { world: World; map?: FlightMap })
   const add = (when: 'ap' | 'pe' | 'soon') => {
     const t = when === 'ap' ? timeToApoapsis(orbit, world.ut) : when === 'pe' ? timeToPeriapsis(orbit, world.ut) : 120;
     const n = world.addNode(world.ut + (isFinite(t) && t > 5 ? t : 120));
+    world.nodes = [...world.nodes].sort((a, b) => a.time - b.time);
     map?.selectNode(n.id);
   };
 

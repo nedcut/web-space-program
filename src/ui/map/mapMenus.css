@@ -27,7 +27,7 @@
 .map-node-menu .actions .btn { flex: 1 1 auto; }
 .map-node-menu label.fine { display: flex; align-items: center; gap: 6px; color: var(--text-dim); }
 
-.map-orbit-info { position: absolute; left: 12px; bottom: 12px; z-index: 5; padding: 8px 12px; font-size: 12px; display: grid; grid-template-columns: auto 1fr auto; gap: 2px 12px; pointer-events: none; width: 270px; box-sizing: border-box; }
-.map-orbit-info .title { grid-column: 1 / -1; color: var(--text-dim); letter-spacing: 0.08em; font-size: 10px; text-transform: uppercase; margin-bottom: 2px; }
-.map-orbit-info .k { color: var(--text-dim); }
-.map-orbit-info .hint { grid-column: 1 / -1; color: var(--text-dim); font-size: 10.5px; margin-top: 4px; line-height: 1.45; }
+.map-readout { position: absolute; right: 12px; bottom: 58px; z-index: 5; width: 250px; box-sizing: border-box; padding: 7px 11px; font-size: 11.5px; display: grid; gap: 2px; pointer-events: none; }
+.map-readout .title { color: var(--text-dim); letter-spacing: 0.08em; font-size: 10px; text-transform: uppercase; }
+.map-readout .path { color: var(--text); }
+.map-readout .hint { color: var(--text-dim); font-size: 10.5px; margin-top: 3px; line-height: 1.45; }

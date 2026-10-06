@@ -23,7 +23,7 @@ import { AssistPanel } from './hud/AssistPanel';
 import { HelpOverlay, helpSeen, markHelpSeen } from './hud/HelpOverlay';
 import { SettingsPanel } from '../ui/MainMenu';
 import type { CraftDef } from '../sim/vessel/types';
-import { isTyping, matches } from '../input/bindings';
+import { bindingLabel, isTyping, matches } from '../input/bindings';
 import { hasSave, saveNamedWorld } from '../game/persistence';
 import { useRenderProfile } from './hud/useRenderProfile';
 import { PerfOverlay } from './hud/PerfOverlay';
@@ -54,6 +54,10 @@ export default function FlightScene() {
   const [loaderMounted, setLoaderMounted] = useState(true);
   const [banner, setBanner] = useState<SituationBannerText | null>(null);
   const [help, setHelp] = useState(false);
+  /** F2: hide every HUD element except world-space labels. */
+  const [uiHidden, setUiHidden] = useState(false);
+  /** F3: the active flight's report (does not pause). */
+  const [results, setResults] = useState(false);
   const helpRef = useRef(false);
   helpRef.current = help;
   const [showSettings, setShowSettings] = useState(false);
@@ -229,24 +233,39 @@ export default function FlightScene() {
     setHelp(false);
   };
 
-  // F1 toggles the controls help (prevent the browser's own help page); F8 the performance overlay.
+  // Function keys follow the genre classic: F1 screenshot, F2 hide UI, F3 flight results; help moves to Shift+F1
+  // (and the toolbar "?"), F8 the performance overlay. Browser defaults (help page, search) are suppressed.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!isTyping(e.target) && !e.repeat && matches('perfOverlay', e)) {
+      if (isTyping(e.target) || e.repeat) return;
+      if (matches('perfOverlay', e)) {
         e.preventDefault();
         updateSettings({ perfOverlay: !game.get().settings.perfOverlay });
-        return;
+      } else if (matches('help', e)) {
+        e.preventDefault();
+        if (helpRef.current) closeHelp();
+        else setHelp(true);
+      } else if (matches('screenshot', e)) {
+        e.preventDefault();
+        void photoMode.screenshot()?.then(() => ctrl.current?.world.message('Screenshot saved', 'info', 2), (err: Error) => ctrl.current?.world.message(err.message, 'bad'));
+      } else if (matches('hideUi', e)) {
+        e.preventDefault();
+        setUiHidden(h => !h);
+      } else if (matches('flightResults', e)) {
+        e.preventDefault();
+        if (!ctrl.current?.network) setResults(r => !r);
       }
-      if (isTyping(e.target) || e.repeat || !matches('help', e)) return;
-      e.preventDefault();
-      if (helpRef.current) closeHelp();
-      else setHelp(true);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   const navball = useCallback(() => ctrl.current?.navball() ?? null, []);
+  const partScreen = useCallback((uid: number) => ctrl.current?.partScreenPosition(uid) ?? null, []);
+  useEffect(() => {
+    document.documentElement.dataset.uiHidden = String(uiHidden);
+    return () => { delete document.documentElement.dataset.uiHidden; };
+  }, [uiHidden]);
 
   /** Leave flight: keep the universe (vessels stay where they are) and autosave. */
   const exitTo = (scene: 'spaceCenter' | 'editor') => {
@@ -317,8 +336,9 @@ export default function FlightScene() {
     <div className="fullscreen">
       {/* The controller appends its canvas here; React overlays are later siblings so they stay on top. */}
       <div className="fullscreen" ref={host} />
-      {tele && c && !photo.active && (
+      {tele && c && !photo.active && !uiHidden && (
         <Hud
+          partScreen={partScreen}
           shortcutsEnabled={ready && !paused && !help && !showSettings}
           precision={c.input.precisionActive}
           stageProgress={c.input.stageProgress}
@@ -354,6 +374,9 @@ export default function FlightScene() {
             onToggleDocking: () => ctrl.current?.toggleDockingMode(),
             onUndock: (uid) => ctrl.current?.undock(uid),
             onHelp: () => setHelp((h) => !h),
+            onSettings: multiplayer ? undefined : () => { setPaused(true); setShowSettings(true); },
+            onStageLock: () => ctrl.current?.toggleStageLock(),
+            onSelectPart: (uid) => ctrl.current?.selectPart(uid),
             onCameraMode: () => ctrl.current?.cycleCameraMode(),
             onWarpTo: (id) => ctrl.current?.warpTo(id),
             onCancelWarpTo: () => ctrl.current && ctrl.current.warpDriver.cancel(ctrl.current.world, 'Warp-to cancelled'),
@@ -361,9 +384,9 @@ export default function FlightScene() {
           }}
         />
       )}
-      {c && tele?.mapMode && ready && !photo.active && !paused && !multiplayer && <MapOverlay controller={c} />}
-      {c && ready && !photo.active && !paused && <FlightInspector controller={c} panels={panels} setPanels={setPanels} />}
-      {settings.showFps && c && !photo.active && <PerformanceReadout controller={c} />}
+      {c && tele?.mapMode && ready && !photo.active && !paused && !multiplayer && !uiHidden && <MapOverlay controller={c} />}
+      {c && ready && !photo.active && !paused && !uiHidden && <FlightInspector controller={c} panels={panels} setPanels={setPanels} />}
+      {settings.showFps && c && !photo.active && !uiHidden && <PerformanceReadout controller={c} />}
       {settings.perfOverlay && c && !photo.active && <PerfOverlay controller={c} />}
       {help && ready && !photo.active && <HelpOverlay eva={!!tele?.eva} onClose={closeHelp} />}
       {networkReady && c?.network && <MultiplayerPanel client={c.network} />}
@@ -372,7 +395,7 @@ export default function FlightScene() {
           <Panel className="pause-card" style={{ padding: 24, display: 'grid', gap: 10 }}>
             <p>Flight controls suspended. The shared clock continues.</p>
             <Button className="btn" onClick={() => setPaused(false)}>Resume controls</Button>
-            <Button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls (F1)</Button>
+            <Button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls ({bindingLabel('help')})</Button>
             <Button className="btn" onClick={() => game.set({ multiplayer: null, scene: 'menu' })}>Disconnect</Button>
           </Panel>
         </div>
@@ -380,6 +403,14 @@ export default function FlightScene() {
       {report && lost && !photo.active && ctrl.current && (() => {
         const r = ctrl.current.world.flightlog.records.find(r => r.id === ctrl.current!.world.latestReportId);
         return r ? <div className="modal-backdrop"><Panel className="panel report-modal"><Button className="btn" onClick={() => setReport(false)}>Close report</Button><FlightReport record={r} /></Panel></div> : null;
+      })()}
+      {results && !report && !paused && !photo.active && ctrl.current && (() => {
+        const w = ctrl.current.world;
+        const r = w.flightlog.records.find(r => r.vesselId === w.activeId && !r.outcome) ?? w.flightlog.records.find(r => r.id === w.latestReportId);
+        return <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && setResults(false)}><Panel className="panel report-modal">
+          <Button className="btn" onClick={() => setResults(false)}>Close flight results <span className="kbd" style={{ marginLeft: 6 }}>{bindingLabel('flightResults')}</span></Button>
+          {r ? <FlightReport record={r} /> : <p style={{ color: 'var(--text-dim)' }}>No flight record yet.</p>}
+        </Panel></div>;
       })()}
       {paused && !multiplayer && !photo.active && !report && (
         <div className="modal-backdrop">
@@ -400,7 +431,7 @@ export default function FlightScene() {
               {!lost && !getTutorial() && !getScenarioRun() && <Button className="btn" onClick={() => { const name = window.prompt('Save slot name', 'Mission save'); if (name?.trim() && ctrl.current) { try { saveNamedWorld(name, ctrl.current.world); ctrl.current.world.message('Mission saved.'); } catch (e) { ctrl.current.world.message((e as Error).message, 'bad'); } } }}>Save as…</Button>}
               {!lost && !getTutorial() && !getScenarioRun() && <Button className="btn" onClick={() => ctrl.current?.quicksave()}>Quicksave <span className="kbd" style={{ marginLeft: 6 }}>F5</span></Button>}
               {!lost && !getTutorial() && !getScenarioRun() && hasSave('quicksave') && <Button className="btn" onClick={() => ctrl.current?.onQuickload?.()}>Quickload <span className="kbd" style={{ marginLeft: 6 }}>F9</span></Button>}
-              <Button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls <span className="kbd" style={{ marginLeft: 6 }}>F1</span></Button>
+              <Button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls <span className="kbd" style={{ marginLeft: 6 }}>{bindingLabel('help')}</span></Button>
               <Button className="btn" onClick={() => setShowSettings(true)}>Settings</Button>
               <Button className="btn" onClick={() => exitTo('spaceCenter')}>{getScenarioRun() ? 'Back to scenarios' : getTutorial() ? 'Back to lessons' : 'Space Center'}</Button>
               <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>{(getTutorial() || getScenarioRun()) ? 'Practice is separate from your saved program.' : 'Progress is autosaved when you leave flight.'}</div>
@@ -408,7 +439,7 @@ export default function FlightScene() {
           )}
         </div>
       )}
-      {ready && banner && !photo.active && !help && <ArrivalBanner banner={banner} />}
+      {ready && banner && !photo.active && !help && !uiHidden && <ArrivalBanner banner={banner} />}
       {(!ready || loaderMounted) && (
         <div className="loading-screen" style={ready ? { opacity: 0, pointerEvents: 'none' } : undefined}>
           <div style={{ textAlign: 'center' }}>

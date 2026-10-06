@@ -16,7 +16,7 @@ export class PhotoCamera {
   private savedExposure = 1;
   private disposers: (() => void)[] = [];
   constructor(private pipeline: RenderPipeline, private scene: THREE.Scene, private camera: THREE.PerspectiveCamera, private center: () => THREE.Vector3, private pause: (active: boolean) => boolean, private radius = 1000) {
-    this.disposers.push(photoMode.register({ enter: () => this.enter(), leave: () => this.leave(), capture: scale => this.capture(scale) }));
+    this.disposers.push(photoMode.register({ enter: () => this.enter(), leave: () => this.leave(), capture: scale => this.capture(scale), screenshot: () => this.screenshot() }));
     const canvas = pipeline.renderer.domElement;
     const keydown = (e: KeyboardEvent) => {
       if (isTyping(e.target)) return;
@@ -67,6 +67,12 @@ export class PhotoCamera {
   private async capture(scale: 1 | 2) {
     this.update(0);
     const canvas = this.pipeline.capture(this.scene, this.camera, scale);
+    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('PNG capture failed.')), 'image/png'));
+    downloadFile(`web-space-${Date.now()}.png`, blob);
+  }
+  /** F1: the current flight camera as it is (no photo-mode lens or effects), saved as a PNG. */
+  private async screenshot() {
+    const canvas = this.pipeline.capture(this.scene, this.camera, 1);
     const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('PNG capture failed.')), 'image/png'));
     downloadFile(`web-space-${Date.now()}.png`, blob);
   }

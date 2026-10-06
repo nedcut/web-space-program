@@ -14,7 +14,7 @@ const save = () => writeFile(new URL('browser-report.json', out), JSON.stringify
 const check = async (name, fn) => { console.log('START',name); try { const detail = await fn(); report.checks.push({ name, status: 'pass', detail }); console.log('PASS', name, JSON.stringify(detail ?? '')); } catch (e) { await page.screenshot({path:new URL('failure-'+report.checks.length+'.png',out).pathname,timeout:10000}).catch(()=>{}); console.log('PAGE',await page.locator('body').innerText({timeout:10000}).catch(()=>'')); report.checks.push({ name, status: 'fail', error: e.message }); console.log('FAIL', name, e.message); } await save(); };
 const shot = name => page.screenshot({ path: new URL(`${name}.png`, out).pathname, timeout: 90000 });
 const scene = async (name, patch = {}) => page.evaluate(async ({name, patch}) => { const {game} = await window.__qaImport('/src/game/store.ts'); game.set({ scene: name, ...patch }); }, {name, patch});
-const flightReady = async () => { await page.waitForFunction(() => window.__flight && document.querySelector('.hud-dock')); await page.locator('.loading-screen').waitFor({state:'hidden'}); };
+const flightReady = async () => { await page.waitForFunction(() => window.__flight && document.querySelector('.hud-left')); await page.locator('.loading-screen').waitFor({state:'hidden'}); };
 try {
   await page.addInitScript(() => { localStorage.setItem('wsp.settings.v1', JSON.stringify({quality:'low', shadows:false, bloom:false, clouds:false, scatter:false, renderScale:0.5, masterVolume:0, reduceMotion:true, autoSaveInterval:0})); localStorage.setItem('wsp.help.seen.v1','1'); });
   await page.goto('http://localhost:5192/');
@@ -59,14 +59,14 @@ try {
   await check('Editor launch → flight + all HUD panels fit 1366×768', async () => {
     await page.getByRole('button',{name:/^Launch/}).click(); await flightReady();
     await page.evaluate(() => { window.__flight.paused=true; });
-    for (const chip of await page.locator('.hud-chip').all()) if(await chip.getAttribute('aria-pressed') !== 'true') await chip.click();
-    const layout=await page.locator('.hud-dock').evaluate(e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,bottom:r.bottom,client:e.clientHeight,scroll:e.scrollHeight,viewport:innerHeight};});
+    for (const chip of await page.locator('.app-bar .app-btn[data-tutorial]').all()) if(await chip.getAttribute('aria-pressed') !== 'true') await chip.click();
+    const layout=await page.locator('.app-stack').evaluate(e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,bottom:r.bottom,client:e.clientHeight,scroll:e.scrollHeight,viewport:innerHeight};});
     expect(layout.bottom).toBeLessThanOrEqual(768); expect(layout.x).toBeGreaterThanOrEqual(0);
     await shot('flight-all-panels'); return layout;
   });
   await check('Rebound flight data shortcut', async () => {
     await page.evaluate(async()=>{ const {getBindings,saveBindings}=await window.__qaImport('/src/input/bindings.ts'); saveBindings({...getBindings(),flightData:['KeyP'],toggleGear:['KeyO'],eva:['KeyY']}); });
-    const chip=page.locator('[data-tutorial="data"]'); const before=await chip.getAttribute('aria-pressed');
+    const chip=page.locator('[data-tutorial="app-flightData"]'); const before=await chip.getAttribute('aria-pressed');
     await page.keyboard.press('p'); await expect(chip).toHaveAttribute('aria-pressed',before==='true'?'false':'true');
     await page.evaluate(async()=>{const {saveBindings,defaultBindings}=await window.__qaImport('/src/input/bindings.ts');saveBindings(defaultBindings());});
   });
@@ -87,7 +87,7 @@ try {
   });
   await check('Map, maneuver node and flight data', async()=>{
     await page.evaluate(()=>{const c=window.__flight;c.toggleMap();c.world.addNode(c.world.ut+180).prograde=50;});
-    await page.waitForTimeout(2500); if(await page.locator('[data-tutorial="data"]').getAttribute('aria-pressed')!=='true') await page.locator('[data-tutorial="data"]').click(); await shot('map-flight-data');
+    await page.waitForTimeout(2500); if(await page.locator('[data-tutorial="app-flightData"]').getAttribute('aria-pressed')!=='true') await page.locator('[data-tutorial="app-flightData"]').click(); await shot('map-flight-data');
     return await page.evaluate(()=>({map:window.__flight.mapMode,nodes:window.__flight.world.nodes}));
   });
   await check('Map node time and delta-v handle dragging with mouse flight enabled',async()=>{

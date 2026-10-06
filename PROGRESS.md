@@ -1,10 +1,10 @@
 # Progress Report
 
-_Last updated: 2026-10-05_
+_Last updated: 2026-10-06_
 
 ## Start here (for Ned)
 **Run it:** `npm install && npm run dev`, open http://localhost:5173. Pick **New Game → Sandbox → Standard** for the easiest start;
-the first flight shows a controls cheat sheet (F1 brings it back). **Training** on the main menu has 8 guided lessons.
+the first flight shows a controls cheat sheet (Shift+F1 or the toolbar "?" brings it back). **Training** on the main menu has 8 guided lessons.
 
 **What exists:** the real solar system (Sun, 8 planets, Pluto, Ceres, 40+ moons, plus asteroids/comets like Vesta, Bennu,
 67P and Halley). Saturn and its moons get special treatment: rings you can fly through, the polar hexagon, Enceladus plumes,
@@ -25,6 +25,46 @@ performance overlay (fps, frame-time graph, CPU/GPU breakdown) and use **Copy re
 map and in the Ring Skimmer mission — `docs/PERFORMANCE.md` ("What to measure on the laptop") lists what to send.
 Graphics are auto-tuned once per device (weak GPUs start on Low; adaptive resolution is on). Then tell me what feels
 wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
+
+## Map view and maneuver planning, the classic way (2026-10-06, op/mapksp)
+
+Owner feedback: the map and maneuver planning felt unfamiliar. The map now follows the genre classic's hand habits
+with our own visuals (details in DECISIONS.md):
+
+- **Plan a burn:** open the map (M), hover your orbit — a ghost node follows the cursor with time-to and altitude —
+  and click to place a node. Drag the coloured handles outward (green prograde/retrograde, magenta normal/anti-normal,
+  cyan radial out/in): the further you pull, the faster Δv flows; push back to remove, scroll over a handle for
+  0.1 m/s steps. Drag the node itself along the orbit to change its time. Click the node for its menu (exact Δv
+  fields, −/+ 1 orbit, Warp to, Fine tune, Zero, Delete; Delete key works too). Several nodes are allowed; the
+  planned path is orange/dashed with its own Ap/Pe and encounter markers. The navball burn readout follows the next node.
+- **Markers:** Ap/Pe on every orbit, AN/DN against the target, encounter (with periapsis at the body), escape,
+  impact, closest approach (both positions + separation, speed and time). Hover for details, click to pin,
+  right-click to warp there; right-click the orbit line to add a node or warp to that point.
+- **Focus and targets:** double-click a body, vessel or its orbit to focus; Tab / Shift+Tab cycle vessel → its body →
+  bodies on the trajectory → target → moons; Home or ` returns to the vessel. Click or right-click an object for
+  Focus / Set as target / Warp to closest approach or SOI change / Switch to vessel / Info. Hover shows distance and
+  relative speed. Right-drag (or left-drag) orbits the camera, the wheel zooms smoothly with per-focus limits.
+- The old planner (circularize, transfer to…, transfer-window porkchop, node list) is the collapsible
+  **Maneuver planner** button at the top-left in map view. The Tracking Station shares hover, double-click focus and
+  the click/right-click menu (Focus, Fly, Info).
+- Verified on the RTX 3060 Ti (Windows Chrome, 1600×900): placing, dragging, wheel trims, sliding, node menu,
+  Moon transfer markers, pinning, context menus, Tab/Home focus, Tracking Station menu.
+
+## Flight HUD in the classic layout (2026-10-06, op/hudksp)
+
+Owner feedback: the HUD was hard to learn coming from the genre classic. The flight HUD now follows its 1.12 placement
+and key conventions with our own visuals (details in DECISIONS.md):
+
+- **Where things are:** time warp + MET/UT clock top-left · altimeter (click: sea level/terrain) with status lamps top-centre ·
+  app toolbar top-right (Resources, Flight data, Science, Crew, Assist, Target, Comms, orbit strip, Settings, Help) ·
+  staging stack bottom-left (click an icon: highlight + part panel; lock with Alt+L) · navball cluster bottom-centre
+  (G meter, SAS/RCS, SAS mode glyphs, throttle arc, speed mode, burn readout when a node exists) · crew portraits with EVA,
+  MAP and camera bottom-right. Ap/Pe live in the orbit strip (always on in map view).
+- **Keys changed:** U lights (was C), O EVA (was U), C interior view notice, F1 screenshot, F2 hide UI, F3 flight results,
+  Shift+F1 help (was F1), Shift+F3 flight data (was F3), Alt+L stage lock, hold F momentary SAS, [ ] switch vessel.
+  Saved bindings that were still on the old defaults migrate automatically; customised keys are kept.
+- Verified on the RTX 3060 Ti (Windows Chrome) at 1366×768, 1600×900 and 1920×1080: pad, ascent, orbit with a node,
+  map view, EVA, rendezvous/target, F2 and help. Lint, TypeScript, tests and build pass (see commit log).
 
 ## Laptop performance pass 2 (2026-10-05, op/perf2)
 

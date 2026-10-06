@@ -20,7 +20,7 @@ const check = async (name, fn) => {
   await save();
 };
 const scene = (name, patch = {}) => page.evaluate(async ({ name, patch }) => { const { game } = await window.__qaImport('/src/game/store.ts'); game.set({ scene: name, ...patch }); }, { name, patch });
-const ready = async () => { await page.waitForFunction(() => window.__flight && document.querySelector('.hud-dock')); await page.locator('.loading-screen').waitFor({ state: 'hidden' }); };
+const ready = async () => { await page.waitForFunction(() => window.__flight && document.querySelector('.hud-left')); await page.locator('.loading-screen').waitFor({ state: 'hidden' }); };
 const enterMission = async id => { await scene('menu'); await page.evaluate(async id => { const { startScenario } = await window.__qaImport('/src/scenarios/runtime.ts'); startScenario(id); }, id); await ready(); };
 try {
   await page.addInitScript(() => {

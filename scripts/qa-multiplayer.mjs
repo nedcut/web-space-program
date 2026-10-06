@@ -31,9 +31,9 @@ try {
     await page.keyboard.press('z');await page.keyboard.press('Space');
     await page.waitForFunction(()=>window.__flight.world.active?.mode==='physics');
     await page.keyboard.press('x');await shot('multiplayer');
-    expect(await page.locator('[data-tutorial="assist"]').count()).toBe(0);
-    expect(await page.locator('[data-tutorial="science"]').count()).toBe(0);
-    expect(await page.locator('[data-tutorial="resources"]').count()).toBe(0);
+    expect(await page.locator('[data-tutorial="app-assist"]').count()).toBe(0);
+    expect(await page.locator('[data-tutorial="app-science"]').count()).toBe(0);
+    expect(await page.locator('[data-tutorial="app-comms"]').count()).toBe(0);
     await page.getByRole('button',{name:'Disconnect to menu',exact:true}).click();
     expect(await page.evaluate(()=>localStorage.getItem('wsp.world.v1.autosave'))).toBe('qa-single-player-sentinel');
     return authority;

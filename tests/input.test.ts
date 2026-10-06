@@ -43,6 +43,48 @@ describe('action bindings', () => {
     expect(loadBindings({ getItem: () => { throw new Error('blocked'); } })).toEqual(defaultBindings());
   });
 });
+describe('classic flight layout (bindings layout 2)', () => {
+  const key = (code: string, modifiers = {}) => ({ code, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...modifiers }) as KeyboardEvent;
+  it('uses the genre-standard defaults', () => {
+    const b = defaultBindings();
+    expect(b.toggleLights).toEqual(['KeyU']);
+    expect(b.eva).toEqual(['KeyO']);
+    expect(b.iva).toEqual(['KeyC']);
+    expect(b.screenshot).toEqual(['F1']);
+    expect(b.hideUi).toEqual(['F2']);
+    expect(b.flightResults).toEqual(['F3']);
+    expect(b.help).toEqual(['Shift+F1']);
+    expect(b.stageLock).toEqual(['Alt+KeyL']);
+    expect(b.sasHold).toEqual(['KeyF']);
+    expect(b.focusPrev).toEqual(['BracketLeft']);
+    expect(b.focusNext).toEqual(['BracketRight']);
+    // Only the documented, intentional EVA Shift sharing remains.
+    expect(conflicts(b).every(c => c.actions.every(a => a === 'evaUp' || a === 'evaRun'))).toBe(true);
+  });
+  it('moves untouched layout-1 defaults and keeps customised keys', () => {
+    const storage = memory();
+    storage.setItem(BINDINGS_KEY, JSON.stringify({ ...defaultBindings(), help: ['F1'], flightData: ['F3'], eva: ['KeyU'], toggleLights: ['KeyC'], stage: ['KeyP'] }));
+    const b = loadBindings(storage);
+    expect([b.help, b.flightData, b.eva, b.toggleLights, b.stage]).toEqual([['Shift+F1'], ['Shift+F3'], ['KeyO'], ['KeyU'], ['KeyP']]);
+  });
+  it('keeps an old default when the new key is already taken, and never migrates a layout-2 save', () => {
+    const storage = memory();
+    storage.setItem(BINDINGS_KEY, JSON.stringify({ ...defaultBindings(), eva: ['KeyU'], toggleLights: ['KeyC'], toggleGear: ['KeyO'] }));
+    const b = loadBindings(storage);
+    expect(b.eva).toEqual(['KeyU']);
+    expect(b.toggleLights).toEqual(['KeyC']);
+    saveBindings({ ...defaultBindings(), help: ['F1'] }, storage);
+    expect(loadBindings(storage).help).toEqual(['F1']);
+  });
+  it('fires a modifier chord without also firing the plain key, but keeps plain keys under a held modifier', () => {
+    expect(matches('help', key('F1', { shiftKey: true }))).toBe(true);
+    expect(matches('screenshot', key('F1', { shiftKey: true }))).toBe(false);
+    expect(matches('screenshot', key('F1'))).toBe(true);
+    expect(matches('stageLock', key('KeyL', { altKey: true }))).toBe(true);
+    expect(matches('translateRight', key('KeyL', { altKey: true }))).toBe(false);
+    expect(matches('stage', key('Space', { shiftKey: true }))).toBe(true);
+  });
+});
 const pad = (axes: number[], pressed: Record<number, number> = {}) => ({ axes, buttons: Array.from({ length: 17 }, (_, i) => ({ value: pressed[i] ?? 0, pressed: (pressed[i] ?? 0) > 0.5, touched: false })) });
 describe('standard gamepad mapping', () => {
   it('removes drift, rescales continuously and clamps sensitivity', () => {
@@ -160,6 +202,21 @@ describe('flight gamepad actions', () => {
       expect(h.actions).toEqual(['toggleGear', 'eva']); expect(h.input.state.brakes).toBe(true);
       h.input.evaMode = true; key('KeyC'); key('F8');
       expect(h.actions.slice(-2)).toEqual(['board', 'plantFlag']);
+    } finally { h.input.dispose(); game.set({ settings }); }
+  });
+  it('toggles SAS momentarily while F is held and ignores it on EVA', () => {
+    const h = harness(); const settings = game.get().settings;
+    const send = (type: string, code: string, repeat = false) => h.target.dispatchEvent(Object.assign(new Event(type), { code, ctrlKey: false, shiftKey: false, metaKey: false, altKey: false, repeat }));
+    try {
+      game.set({ settings: { ...settings, gamepadEnabled: false } });
+      send('keydown', 'KeyF'); send('keydown', 'KeyF', true); send('keyup', 'KeyF');
+      expect(h.actions).toEqual(['sasHold', 'sasHoldRelease']);
+      send('keydown', 'KeyF'); h.target.dispatchEvent(new Event('blur'));
+      expect(h.actions.slice(-2)).toEqual(['sasHold', 'sasHoldRelease']);
+      h.input.evaMode = true; send('keydown', 'KeyF'); send('keyup', 'KeyF');
+      expect(h.actions.slice(-1)).toEqual(['plantFlag']);
+      h.input.evaMode = false; send('keydown', 'KeyL'); send('keyup', 'KeyL');
+      expect(h.actions).not.toContain('stageLock');
     } finally { h.input.dispose(); game.set({ settings }); }
   });
   it('keeps map dragging out of optional mouse-flight attitude controls', () => {

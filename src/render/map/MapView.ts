@@ -881,7 +881,7 @@ export class MapView {
       while (body) { chain.unshift(body.name); body = body.parent ? this.bodies.get(body.parent)?.body : undefined; }
       this.breadcrumb.textContent = chain.join('  ›  ');
     }
-    this.breadcrumb.style.display = focusBody ? 'block' : 'none';
+    this.breadcrumb.style.display = focusBody && this.showBreadcrumb ? 'block' : 'none';
 
     this.updateExtras(u);
     for (const m of this.materials) m.resolution.set(u.viewport.width, u.viewport.height);
@@ -1385,8 +1385,8 @@ export class MapView {
   /** Pin or unpin an orbit marker's detail label. */
   togglePin(key: string) { if (!this.pinned.delete(key)) this.pinned.add(key); }
 
-  /** Override the focus breadcrumb's placement (CSS), e.g. to keep it clear of a host HUD. */
-  placeBreadcrumb(style: Partial<Record<'top' | 'bottom' | 'left' | 'transform', string>>) { Object.assign(this.breadcrumb.style, style); }
+  /** Show the built-in focus breadcrumb (hosts with their own focus readout turn it off). */
+  showBreadcrumb = true;
 
   /** Start the eased camera distance from `d` (e.g. a zoom-out transition when the map opens). */
   animateFrom(d: number) {

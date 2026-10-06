@@ -61,6 +61,8 @@ than importing `World`. `LaunchSite` already follows that structural-input patte
 - `flight/controller.ts` owns scene setup, input, fixed-step driving, rendering and disposal.
   `flight/controller/{telemetry,navball,scenarios,assist,audio}.ts` contain the respective drivers with a stable
   private context. `flight/assist.ts`, `camera.ts`, `input.ts`, `planets.ts` and `hud/` provide focused adapters.
+  `hud/Hud.tsx` composes the classic-layout HUD (`TopBar`, `AppLauncher`, `StagingStack`, `NavballCluster`, `CrewCards`,
+  styles in `hud/hud.css`); `controller/burn.ts` derives the navball burn readout (`Telemetry.maneuverBurn`) from `World.nodes`.
 - `data/parts.ts` preserves the public catalog API. `data/parts/` contains category arrays and shared builders;
   the facade concatenates them in the original order, including expansion and the separate `data/isru.ts`.
   IDs, generated definitions and catalog order must remain stable across refactors.
@@ -69,7 +71,7 @@ than importing `World`. `LaunchSite` already follows that structural-input patte
   hash of the drawing code); `render/planet`: renderer,
   atmosphere/effects, cube-sphere quadtree, worker-built chunks, textures and rings. `planet/scatter/` streams
   deterministic render-only decoration. `render/site`: launch complex/aerial/textures; `render/sky`: stars and
-  sun glare; `render/map`: conics/markers/gizmos; `render/vessel`: vessel meshes, flags and re-entry effects;
+  sun glare; `render/map`: conics/markers/gizmos (`MapView` plus pure `maneuverGizmo.ts`/`orbitMarkers.ts` math; gestures reach the host through `MapView.handlers`; `flight/map/FlightMap` owns flight map focus, menus and node commands, `ui/map` the shared context menu/actions used by the Tracking Station); `render/vessel`: vessel meshes, flags and re-entry effects;
   `render/parts/builders`: category geometry and expedition/ISRU hardware.
 - `net/protocol.ts` and `snapshots.ts` define transport, `net/client.ts` predicts/reconciles owned vessels;
   `server/{index,server,room}.ts` owns room lifetime, control ownership, launch queues and authoritative ticks.

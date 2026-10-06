@@ -20,7 +20,7 @@ try {
     Object.assign(v.state, { position: add(bs.position, pos), velocity: add(bs.velocity, vel), situation: 'flying' }); Object.assign(v, { mode: 'rails', fixed: undefined, orbit: stateToElements(b.gm, b.id, pos, vel, w.ut) });
     game.set({ scene: 'flight', resumeWorld: serializeWorld(w), craft, launchPending: false });
   });
-  await page.waitForFunction(() => window.__flight && document.querySelector('.hud-dock')); await page.locator('.loading-screen').waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => window.__flight && document.querySelector('.hud-left')); await page.locator('.loading-screen').waitFor({ state: 'hidden' });
   const outcome = await page.evaluate(async () => {
     const c = window.__flight; c.toggleMap(); c.paused = true;
     const { planningSnapshot, requestPlan } = await window.__qaImport('/src/game/planning/client.ts'), { applyPlanningResult } = await window.__qaImport('/src/game/planning/apply.ts');

@@ -37,6 +37,7 @@ import { getTutorial } from '../tutorial/runtime';
 import { formatDistance, formatDuration, formatSpeed } from '../ui/format';
 import { frameProfiler as prof } from '../util/frameProfiler';
 import { snapshotEqual } from '../util/snapshotEqual';
+import { bindingLabel } from '../input/bindings';
 import { cross, dot, length, normalize, sub, type Vec3 } from '../util/vec3';
 import { type AssistId } from './assist';
 import { CAMERA_MODE_INFO, FlightCamera } from './camera';
@@ -111,6 +112,10 @@ export class FlightController {
   speedMode: Telemetry['speedMode'] = 'surface';
   /** Docking mode: HUD shows the port alignment indicator for the targeted docking port. */
   dockingMode = false;
+  /** Stage lock (Alt+L): staging requests are refused so a stray Space cannot fire the next stage. */
+  stageLocked = false;
+  /** SAS was toggled by a momentary hold (F); releasing the key toggles it back. */
+  private sasHeld = false;
   private craft: CraftDef | null;
   /** Map conics of non-active vessels, refreshed at most once per second while in physics. */
   private mapOrbits = new Map<string, { orbit?: Orbit; at: number }>();
@@ -238,8 +243,8 @@ export class FlightController {
     this.map = new MapView(universe.bodies, universe.ephem, labelHost, q, universe);
     this.map.setVisible(false);
     this.mapUi = new FlightMap(this);
-    // The navball cluster owns the bottom centre in flight; show the focus path under the top readout.
-    this.map.placeBreadcrumb({ top: '84px', bottom: 'auto' });
+    // The navball cluster owns the bottom centre in flight; the map overlay shows the focus path instead.
+    this.map.showBreadcrumb = false;
     this.disposers.push(() => this.mapUi.dispose());
 
     this.disposers.push(this.cam.attach(canvas, () => !this.mapMode && !this.paused));
@@ -248,8 +253,9 @@ export class FlightController {
     this.disposers.push(
       this.input.onAction((a) => {
         if (this.photo.active) return;
-        // While paused (pause menu, vessel lost) only the menu toggle and quickload are live.
-        if (this.paused && a !== 'menu' && a !== 'quickload') return;
+        // While paused (pause menu, vessel lost) only the menu toggle and quickload are live; a momentary SAS
+        // toggle still restores itself when its key is released.
+        if (this.paused && a !== 'menu' && a !== 'quickload' && a !== 'sasHoldRelease') return;
         switch (a) {
           case 'stage': this.requestStage(); break;
           case 'eva': this.goEva(); break;
@@ -266,7 +272,11 @@ export class FlightController {
           case 'warpDown': this.changeWarp(-1); break;
           case 'warpStop': this.warpDriver.cancel(this.world); if (this.network) this.network.send({ v: 1, type: 'warp', rate: 1 }); else this.world.warp = { mode: 'rails', index: 0 }; break;
           case 'menu': this.onExit?.(); break;
-          case 'focusNext': if (!this.network?.ownId && this.world.focusNextNearby()) this.world.message(`Switched to ${this.world.active!.state.name}`); break;
+          case 'focusNext': case 'focusPrev': this.switchVessel(a === 'focusNext' ? 1 : -1); break;
+          case 'iva': this.world.message('Interior view is not available in this version', 'info', 2.5); break;
+          case 'stageLock': this.toggleStageLock(); break;
+          case 'sasHold': if (this.world.canControl()) { this.toggleSas(); this.sasHeld = true; } break;
+          case 'sasHoldRelease': if (this.sasHeld) { this.sasHeld = false; this.toggleSas(); } break;
           case 'quicksave': this.quicksave(); break;
           case 'actionGroup1': case 'actionGroup2': case 'actionGroup3': case 'actionGroup4': case 'actionGroup5':
           case 'actionGroup6': case 'actionGroup7': case 'actionGroup8': case 'actionGroup9': case 'actionGroup10':
@@ -583,9 +593,30 @@ export class FlightController {
   /** Seconds left on the launch countdown (null when none is running). */
   countdown: number | null = null;
 
+  /** Alt+L / HUD lock button: refuse staging until unlocked. */
+  toggleStageLock() {
+    this.stageLocked = !this.stageLocked;
+    this.world.message(this.stageLocked ? `Staging locked (${bindingLabel('stageLock')} to unlock)` : 'Staging unlocked', this.stageLocked ? 'warn' : 'info', 2.5);
+  }
+
+  /** [ / ]: switch to the previous / next vessel within physics range. */
+  switchVessel(direction: 1 | -1) {
+    if (this.network?.ownId) return;
+    if (this.world.focusNextNearby(direction)) this.world.message(`Switched to ${this.world.active!.state.name}`);
+  }
+
+  /** Open a part's inspector (as a right-click on it would): used by the staging stack icons. */
+  selectPart(uid: number) {
+    if (this.world.active?.state.cache.byUid.has(uid)) this.partPickListeners.forEach(fn => fn(uid));
+  }
+
   /** Stage now, or start the optional launch countdown when the first stage would release the clamps. */
   private requestStage() {
     const wv = this.world.active;
+    if (this.stageLocked) {
+      this.world.message(`Staging is locked · ${bindingLabel('stageLock')} to unlock`, 'warn', 2);
+      return;
+    }
     if (this.countdown !== null) {
       // Stage again during the count: go now.
       this.countdown = null;

@@ -31,9 +31,9 @@ try {
     await page.keyboard.press('z');await page.keyboard.press('Space');
     await page.waitForFunction(()=>window.__flight.world.active?.mode==='physics');
     await page.keyboard.press('x');await shot('multiplayer');
-    expect(await page.locator('[data-tutorial="assist"]').count()).toBe(0);
-    expect(await page.locator('[data-tutorial="science"]').count()).toBe(0);
-    expect(await page.locator('[data-tutorial="resources"]').count()).toBe(0);
+    expect(await page.locator('[data-tutorial="app-assist"]').count()).toBe(0);
+    expect(await page.locator('[data-tutorial="app-science"]').count()).toBe(0);
+    expect(await page.locator('[data-tutorial="app-comms"]').count()).toBe(0);
     await page.keyboard.press('p');
     expect(await page.getByText('Photo mode · simulation frozen').count()).toBe(0);
     expect(await page.evaluate(()=>window.__flight.photo.active)).toBe(false);

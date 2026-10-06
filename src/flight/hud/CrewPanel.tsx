@@ -3,7 +3,7 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import type { Astronaut } from '../../sim/crew/crew';
 import type { Telemetry, HudCallbacks } from './Hud';
 
-function Portrait({ person }: { person: Astronaut }) {
+export function Portrait({ person, size = 42 }: { person: Astronaut; size?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current!.getContext('2d')!;
@@ -20,7 +20,7 @@ function Portrait({ person }: { person: Astronaut }) {
     c.strokeStyle = '#ffe2a055'; c.lineWidth = 3; c.beginPath(); c.ellipse(32,29,20,21,0,0,Math.PI*2); c.stroke();
     c.fillStyle = '#ffffff66'; c.fillRect(17,16,4,13);
   }, [person.portrait]);
-  return <canvas ref={ref} width={64} height={64} style={{ width: 42, height: 42, borderRadius: 8 }} aria-label={`Portrait of ${person.name}`} />;
+  return <canvas ref={ref} width={64} height={64} style={{ width: size, height: size, borderRadius: 8 }} aria-label={`Portrait of ${person.name}`} />;
 }
 
 export function CrewPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {

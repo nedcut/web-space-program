@@ -1,19 +1,27 @@
-import { Icon } from '../../ui/components/Icon';
-import { Button, Panel, Tooltip } from '../../ui/components';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { bindingLabel, isTyping, matches } from '../../input/bindings';
-import { snapshotEqual } from '../../util/snapshotEqual';
 import { frameProfiler as prof } from '../../util/frameProfiler';
-import { FlightDataPanel } from './FlightDataPanel';
 import type { FlightData } from '../../game/flightData';
 import { useGame } from '../../game/store';
-import { CrewPanel } from './CrewPanel';
 import type { Astronaut } from '../../sim/crew/crew';
-import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
-import { formatDistance, formatSpeed, formatDuration, formatDate } from '../../ui/format';
+import { formatDistance, formatDuration, formatSpeed } from '../../ui/format';
+import { Panel } from '../../ui/components';
 import { Navball, type NavballFrame, type NavballMarker } from './navball';
 import { DockingIndicator, TargetPanel } from './TargetPanel';
-import { AlertStack, CameraModeChip, Countdown, FlightHint, StageFlash, WarpToControl, type FeelTelemetry } from './FeelHud';
+import { AlertStack, Countdown, FlightHint, StageFlash, type FeelTelemetry } from './FeelHud';
 import type { WarpTargetId } from '../controller/warp';
+import type { ManeuverBurnTelemetry } from '../controller/burn';
+import { FlightDataPanel } from './FlightDataPanel';
+import { CrewPanel } from './CrewPanel';
+import { NavballCluster } from './NavballCluster';
+import { StagingStack } from './StagingStack';
+import { Altimeter, TimeControl } from './TopBar';
+import { AppToolbar, AppWindow, useApps, type AppId, type HudApp, type ToolbarAction } from './AppLauncher';
+import { CrewCards } from './CrewCards';
+import type { StagePartGlyph } from './glyphs';
+import './hud.css';
+
+export type { ManeuverBurnTelemetry } from '../controller/burn';
 
 /** Docking alignment readout: target port relative to the active port's frame (x right, y up, z along axis). */
 export interface DockingTelemetry {
@@ -77,6 +85,10 @@ export interface Telemetry {
   warp: number;
   warpLabel: string;
   physicsWarp: boolean;
+  warpMode: 'rails' | 'physics';
+  warpIndex: number;
+  /** Highest rails warp level allowed right now (higher arrows are shown blocked). */
+  warpLimit: number;
   sasOn: boolean;
   sasMode: string;
   rcsOn: boolean;
@@ -106,11 +118,24 @@ export interface Telemetry {
   lights: boolean | null;
   /** Prioritised cautions/warnings, camera mode, stage counter (HUD flash) and warp-to state. */
   feel: FeelTelemetry;
+  /**
+   * Next maneuver node burn (null without a node): remaining Δv, estimated burn time and countdown, shown to the
+   * right of the navball. Derived from `World.nodes`, so any node editor (map gizmo, planners) feeds it for free.
+   */
+  maneuverBurn: ManeuverBurnTelemetry | null;
+  /** Mission elapsed time since liftoff, s (null before launch). */
+  met: number | null;
+  /** Orbit inclination against the body's equator, degrees. */
+  inclination: number;
+  /** Stage lock (Alt+L) engaged. */
+  stageLocked: boolean;
+  vesselName: string;
 }
+
 
 export interface HudStage {
   index: number;
-  parts: { uid: number; name: string; icon: 'engine' | 'decoupler' | 'chute' | 'other'; active: boolean; fuelFrac?: number }[];
+  parts: { uid: number; name: string; icon: StagePartGlyph; active: boolean; fuelFrac?: number; heatFrac?: number }[];
   deltaV: number;
 }
 
@@ -133,10 +158,16 @@ export interface HudCallbacks {
   onUndock(portUid?: number): void;
   /** Open the controls help overlay. */
   onHelp?(): void;
+  /** Open the settings dialog. */
+  onSettings?(): void;
   /** Fire a custom action group ('custom1'..'custom10'). */
   onActionGroup?(group: string): void;
   onAbort?(): void;
   onToggleLights?(): void;
+  /** Alt+L: lock / unlock staging. */
+  onStageLock?(): void;
+  /** Staging icon click: open the part's details panel. */
+  onSelectPart?(uid: number): void;
   /** Cycle camera mode (V). */
   onCameraMode?(): void;
   /** Warp to an event / cancel warp-to. */
@@ -144,19 +175,6 @@ export interface HudCallbacks {
   onCancelWarpTo?(): void;
   onDismissHint?(): void;
 }
-
-const SAS_MODES: { id: string; label: string }[] = [
-  { id: 'stabilityAssist', label: 'HOLD' },
-  { id: 'prograde', label: 'PRO' },
-  { id: 'retrograde', label: 'RETRO' },
-  { id: 'normal', label: 'NRM' },
-  { id: 'antinormal', label: 'A-NRM' },
-  { id: 'radialOut', label: 'RAD+' },
-  { id: 'radialIn', label: 'RAD−' },
-  { id: 'maneuver', label: 'MNV' },
-  { id: 'target', label: 'TGT' },
-  { id: 'antiTarget', label: 'A-TGT' },
-];
 
 export function NavballView({ getFrame }: { getFrame: () => { frame: NavballFrame; markers: NavballMarker[] } | null }) {
   const size = useGame(s => s.settings.navballSize);
@@ -181,28 +199,7 @@ export function NavballView({ getFrame }: { getFrame: () => { frame: NavballFram
   return <div ref={host} className="hud-navball" />;
 }
 
-const Readout = memo(function Readout({ label, value, color }: { label: string; value: ReactNode; color?: string }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14 }}>
-      <span className="label">{label}</span>
-      <span className="mono" style={{ color }}>{value}</span>
-    </div>
-  );
-});
-
-/** Left-column dock sections that can be toggled from the chip bar. */
-type DockId = 'assist' | 'crew' | 'science' | 'resources' | 'target' | 'data';
-const DOCK_KEY = 'wsp.hud.dock.v1';
-
-function loadDock(): Set<DockId> {
-  try {
-    const raw = localStorage.getItem(DOCK_KEY);
-    return new Set(raw ? (JSON.parse(raw) as DockId[]) : []);
-  } catch {
-    return new Set();
-  }
-}
-
+/** App windows supplied by the flight scene (they need the World / controller, not just telemetry). */
 export interface HudDockSlots {
   /** Flight-assist panel (null when assist is unavailable, e.g. EVA / no control). */
   assist?: ReactNode;
@@ -210,255 +207,184 @@ export interface HudDockSlots {
   assistActive?: boolean;
   science?: ReactNode;
   signal?: ReactNode;
+  /** Surface machinery / resource surveys (shown inside the Resources app). */
   resources?: ReactNode;
-  /** Map-mode maneuver planner (rendered at the top of the dock in map view). */
+  /** Map-mode maneuver planner (left column in map view; owned by the map view). */
   maneuver?: ReactNode;
 }
 
-export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadConnected, shortcutsEnabled = true }: { t: Telemetry; cb: HudCallbacks; navball: ReactNode; dock?: HudDockSlots; precision?: boolean; stageProgress?: number; gamepadConnected?: boolean; shortcutsEnabled?: boolean }) {
+const ORBIT_KEY = 'wsp.hud.orbitStrip.v1';
+
+export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadConnected, shortcutsEnabled = true, partScreen }: {
+  t: Telemetry; cb: HudCallbacks; navball: ReactNode; dock?: HudDockSlots; precision?: boolean; stageProgress?: number; gamepadConnected?: boolean; shortcutsEnabled?: boolean;
+  /** Screen position (CSS px) of an active-vessel part, for the staging-icon highlight. */
+  partScreen?: (uid: number) => { x: number; y: number } | null;
+}) {
   const settings = useGame(s => s.settings);
-  const distance = (m: number) => settings.units === 'imperial' ? (!Number.isFinite(m) ? '—' : Math.abs(m) < 1609.344 ? `${(m / 0.3048).toFixed(0)} ft` : `${(m / 1609.344).toFixed(2)} mi`) : formatDistance(m);
-  const speed = (v: number) => settings.units === 'imperial' ? `${(v * 2.236936).toFixed(1)} mph` : formatSpeed(v);
-  const [open, setOpen] = useState<Set<DockId>>(loadDock);
-  const toggle = (id: DockId) => {
-    setOpen((o) => {
-      const n = new Set(o);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      try {
-        localStorage.setItem(DOCK_KEY, JSON.stringify([...n]));
-      } catch {
-        /* storage unavailable */
-      }
-      return n;
-    });
-  };
+  const imperial = settings.units === 'imperial';
+  const distance = (m: number) => imperial ? (!Number.isFinite(m) ? '—' : Math.abs(m) < 1609.344 ? `${(m / 0.3048).toFixed(0)} ft` : `${(m / 1609.344).toFixed(2)} mi`) : formatDistance(m);
+  const speed = useCallback((v: number) => imperial ? `${(v * 2.236936).toFixed(1)} mph` : formatSpeed(v), [imperial]);
+  const apps = useApps();
+  const [orbitStrip, setOrbitStrip] = useState(() => { try { return sessionStorage.getItem(ORBIT_KEY) === '1'; } catch { return false; } });
+  const toggleOrbit = () => setOrbitStrip(v => { try { sessionStorage.setItem(ORBIT_KEY, v ? '0' : '1'); } catch { /* storage unavailable */ } return !v; });
+  const [hover, setHover] = useState<number[] | null>(null);
+  const [picked, setPicked] = useState<{ uids: number[]; key: number } | null>(null);
+  const cbRef = useRef(cb);
+  cbRef.current = cb;
+  const toggleApp = apps.toggle;
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (!shortcutsEnabled || e.repeat || isTyping(e.target) || !matches('flightData', e)) return;
       e.preventDefault();
-      toggle('data');
+      toggleApp('flightData');
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [shortcutsEnabled]);
-  const dash = t.onSurface;
-  const showAssistChip = !!dock?.assist && !t.mapMode;
-  const showCrewChip = !t.mapMode && !t.dockingMode;
-  const showScienceChip = !!dock?.science && !t.mapMode;
-  const crewOpen = showCrewChip && (open.has('crew') || !!t.eva);
-  const targetOpen = open.has('target') || !!t.target;
-  const chip = (id: DockId, label: string, title: string, extra?: ReactNode) => (
-    <Button
-      key={id}
-      data-tutorial={id}
-      className={`btn small hud-chip ${open.has(id) ? 'on' : ''}`}
-      title={title}
-      aria-pressed={open.has(id)}
-      onClick={() => toggle(id)}
-    >
-      {label}
-      {extra}
-    </Button>
-  );
+  }, [shortcutsEnabled, toggleApp]);
+  useEffect(() => {
+    if (!picked) return;
+    const id = window.setTimeout(() => setPicked(null), 2200);
+    return () => window.clearTimeout(id);
+  }, [picked]);
+  // Stable callbacks so the memoised staging stack only re-renders on stage data changes.
+  const stagingCb = useMemo(() => ({
+    onStage: () => cbRef.current.onStage(),
+    onStageLock: () => cbRef.current.onStageLock?.(),
+    onToggleDocking: () => cbRef.current.onToggleDocking(),
+    onSelectPart: (uid: number) => { setPicked({ uids: [uid], key: performance.now() }); cbRef.current.onSelectPart?.(uid); },
+    onHoverPart: (uids: number[] | null) => setHover(uids),
+  }), []);
+
+  const vessel = !t.eva && !t.noControl;
+  const hudApps: HudApp[] = [
+    { id: 'resources', title: 'Resources', icon: 'resources', width: 250, content: <>
+      <ResourceBars resources={t.resources} />
+      {dock?.resources}
+    </> },
+    { id: 'flightData', title: `Flight data (${bindingLabel('flightData')})`, icon: 'flightData', width: 290, content: <FlightDataPanel data={t.flightData} onClose={() => apps.close('flightData')} /> },
+    { id: 'science', title: 'Science', icon: 'science', content: dock?.science ?? null },
+    { id: 'crew', title: t.eva ? 'EVA' : `Crew (${t.crew.length})`, icon: 'crew', badge: t.noControl ? 'warn' : null, content: <CrewPanel t={t} cb={cb} /> },
+    { id: 'assist', title: 'Flight assist', icon: 'assist', badge: dock?.assistActive ? 'on' : null, content: dock?.assist ?? null },
+    { id: 'target', title: 'Target & docking', icon: 'target', badge: t.target ? 'target' : null, width: 260, content: <TargetPanel t={t} cb={cb} /> },
+    { id: 'comms', title: 'Communications', icon: 'comms', content: dock?.signal ?? null },
+  ];
+  const actions: ToolbarAction[] = [
+    { id: 'orbit', title: t.mapMode ? 'Orbit summary (always shown in map view)' : 'Orbit summary strip', icon: 'orbit', on: orbitStrip || t.mapMode, onClick: toggleOrbit },
+    ...(cb.onSettings ? [{ id: 'settings', title: 'Settings', icon: 'settings' as const, onClick: cb.onSettings }] : []),
+    ...(cb.onHelp ? [{ id: 'help', title: `Controls help (${bindingLabel('help')})`, icon: 'help' as const, onClick: cb.onHelp }] : []),
+  ];
+  const openApps = apps.state.open.map(id => hudApps.find(a => a.id === id)).filter((a): a is HudApp => !!a && a.content !== null);
+  const docked = openApps.filter(a => !apps.state.pos[a.id]);
+  const floating = openApps.filter(a => apps.state.pos[a.id]);
+  const showOrbit = (orbitStrip || t.mapMode) && !t.eva;
+  const highlight = picked?.uids ?? hover;
+  const canStage = !t.eva && !t.noControl && t.stages.length > 0;
+
   return (
-    <div className="overlay" style={{ width: `${100 / settings.hudScale}%`, height: `${100 / settings.hudScale}%`, transform: `scale(${settings.hudScale})`, transformOrigin: 'top left' }}>
-      {/* Top bar: time, warp, altitude */}
-      <Panel className="panel" style={{ position: 'absolute', top: 10, left: 10, padding: '8px 12px', display: 'flex', gap: 10, alignItems: 'center' }}>
-        <Button className="btn small" onClick={cb.onMenu} title="Pause menu (Esc)">☰</Button>
-        <div className="mono hud-date" style={{ fontSize: 12, color: 'var(--text-dim)' }}>{formatDate(t.ut)}</div>
-        <Button className="btn small" onClick={() => cb.onWarp(-1)} title="Slower time warp ( , )">◀</Button>
-        <div className="mono" style={{ minWidth: 64, textAlign: 'center', color: t.physicsWarp ? 'var(--warn)' : 'var(--accent)' }} title="Time warp">
-          {t.warpLabel}
-        </div>
-        <Button className="btn small" onClick={() => cb.onWarp(1)} title="Faster time warp ( . )">▶</Button>
-        <WarpToControl feel={t.feel} onWarpTo={cb.onWarpTo} onCancel={cb.onCancelWarpTo} />
-        <Button className={`btn small ${t.mapMode ? 'primary' : ''}`} data-tutorial="map" onClick={cb.onMap} title="Map view (M)">MAP</Button>
-        {precision && <span className="mono" style={{ fontSize: 11, color: 'var(--accent)' }} title="Fine control: attitude input scaled down (Caps Lock / hold Alt)">FINE</span>}
-        {!t.mapMode && <CameraModeChip mode={t.feel.cameraMode} onCycle={cb.onCameraMode} />}
-        {gamepadConnected && <span className="mono" style={{ fontSize: 11 }}>PAD{stageProgress ? ` · STAGE ${(stageProgress * 100).toFixed(0)}%` : ''}</span>}
-        {cb.onHelp && <Button className="btn small" onClick={cb.onHelp} title="Controls help (F1)">?</Button>}
-      </Panel>
-
-      <Panel className="panel" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '8px 18px', textAlign: 'center' }}>
-        <div className="label">{t.bodyName} · altitude</div>
-        <div className="mono" style={{ fontSize: 26 }}>{distance(t.altitudeAsl)}</div>
-        {t.altitudeTerrain < 5000 && <div className="mono" style={{ fontSize: 12, color: 'var(--text-dim)' }}>radar {distance(t.altitudeTerrain)}</div>}
-      </Panel>
-
-      {/* Right column: orbit info + resources (stacked so they never overlap) */}
-      <div className="hud-right">
-        <Panel className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {/* Only what matters for the current situation: orbit data once off the ground, air data in air. */}
-          {!dash && <>
-            <Readout label="Apoapsis" value={distance(t.apoapsis)} />
-            <Readout label="T-Ap" value={formatDuration(t.timeToAp)} />
-            <Readout label="Periapsis" value={distance(t.periapsis)} color={t.periapsis < 0 ? 'var(--bad)' : undefined} />
-            <Readout label="T-Pe" value={formatDuration(t.timeToPe)} />
-            <div style={{ height: 6 }} />
-          </>}
-          <Readout label="Vert. speed" value={speed(t.verticalSpeed)} />
-          <Readout label="G-force" value={t.gForce.toFixed(2)} color={t.gForce > 9 ? 'var(--bad)' : t.gForce > 6 ? 'var(--warn)' : undefined} />
-          {t.dynamicPressure > 1 && <>
-            <Readout label="Mach" value={t.mach.toFixed(2)} />
-            <Readout label="Dyn. press." value={`${(t.dynamicPressure / 1000).toFixed(1)} kPa`} />
-          </>}
-        </Panel>
-        <ResourceReadouts resources={t.resources} />
-
-      {/* Staging stack: fills the remaining column height, so it can never overlap the panels above */}
-      <div className="hud-stages">
-        {!t.eva && !t.noControl && t.stages.length > 0 && (
-          <Button className="btn small" onClick={cb.onStage} title="Activate the next stage (Space)" style={{ width: 180, flexShrink: 0 }}>
-            Stage · Space
-          </Button>
+    <div className="overlay hud" style={{ width: `${100 / settings.hudScale}%`, height: `${100 / settings.hudScale}%`, transform: `scale(${settings.hudScale})`, transformOrigin: 'top left' }}>
+      {/* Top-left: time warp and clocks; in map view the maneuver planner; docking indicator; staging at the bottom. */}
+      <div className="hud-left">
+        <TimeControl t={t} cb={cb} />
+        {gamepadConnected && <div className="hud-pad mono">GAMEPAD</div>}
+        {t.mapMode && dock?.maneuver}
+        {t.dockingMode && !t.mapMode && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
+        <div className="hud-left-fill" />
+        {!t.eva && t.stages.length > 0 && (
+          <StagingStack stages={t.stages} stage={t.stage} locked={t.stageLocked} imperial={imperial} canStage={canStage}
+            dockingMode={t.dockingMode} stageProgress={stageProgress} cb={stagingCb} />
         )}
-        <StageReadouts stages={t.stages} stage={t.stage} imperial={settings.units === 'imperial'} />
-      </div>
       </div>
 
-      {/* Bottom-centre: navball + speed + SAS */}
-      <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
-        {!t.eva && !t.noControl && <ActionGroupStrip t={t} cb={cb} />}
-        {!t.eva && <Panel className="panel" style={{ padding: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, width: 130 }}>
-          <Button className={`btn small ${t.sasOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} data-tutorial="sas" onClick={cb.onToggleSas} title="Stability assist (T)">SAS</Button>
-          {SAS_MODES.map((m) => (
-            <Button key={m.id} className={`btn small ${t.sasOn && t.sasMode === m.id ? 'primary' : ''}`} onClick={() => cb.onSasMode(m.id)} style={{ padding: '4px 2px', fontSize: 10 }}>
-              {m.label}
-            </Button>
+      {/* Top-centre: altimeter with status lamps, orbit strip, cautions and messages. */}
+      <div className="hud-top">
+        <Altimeter t={t} cb={cb} imperial={imperial} />
+        {showOrbit && <OrbitStrip t={t} distance={distance} />}
+        <div className="hud-messages">
+          <AlertStack alerts={t.feel.alerts} />
+          {t.messages.map((m) => (
+            <Panel key={m.id} className={`hud-msg ${m.level}`}>{m.text}</Panel>
           ))}
-          <Button className={`btn small ${t.rcsOn ? 'primary' : ''}`} style={{ gridColumn: 'span 2' }} onClick={cb.onToggleRcs} title="Reaction control thrusters (R)">RCS</Button>
-          {t.gear !== null && (
-            <Button
-              className={`btn small ${t.gear === 'down' ? 'primary' : ''}`}
-              style={{ padding: '4px 2px', fontSize: 10, color: t.gear === 'moving' ? 'var(--warn)' : undefined }}
-              title="Landing gear (G)"
-              onClick={() => cb.onToggleGear?.()}
-            >
-              GEAR {t.gear === 'down' ? '▼' : t.gear === 'up' ? '▲' : '…'}
-            </Button>
-          )}
-          {t.brakes !== null && (
-            <span className={`btn small ${t.brakes ? 'primary' : ''}`} style={{ padding: '4px 2px', fontSize: 10, textAlign: 'center', color: t.brakes ? 'var(--bad)' : undefined }} title="Wheel brakes (hold B)">
-              BRAKES
-            </span>
-          )}
-          {t.intakeAir !== null && (
-            <span className="mono" style={{ gridColumn: 'span 2', fontSize: 10, textAlign: 'center', color: t.intakeAir < 0.5 ? 'var(--bad)' : t.intakeAir < 1 ? 'var(--warn)' : 'var(--text-dim)' }} title="Intake air supply / jet demand">
-              AIR {(Math.min(t.intakeAir, 9.99) * 100).toFixed(0)}%
-            </span>
-          )}
-        </Panel>}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Button className="panel btn" onClick={cb.onSpeedMode} title="Click to switch surface / orbit / target speed" style={{ padding: '4px 14px', marginBottom: 6, textAlign: 'center' }}>
-            <div className="label">{t.speedMode === 'surface' && t.dynamicPressure > 50 ? 'airspeed' : t.speedMode}</div>
-            <div className="mono" style={{ fontSize: 18 }}>{speed(t.speed)}</div>
-          </Button>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-            {!t.eva && <span data-tutorial="throttle"><ThrottleGauge value={t.throttle} /></span>}
-            {navball}
-          </div>
         </div>
+      </div>
+
+      {/* Top-right: application toolbar, its docked windows; bottom-right: crew portraits, map and camera. */}
+      <div className="hud-right">
+        <AppToolbar apps={hudApps} open={apps.state.open} onToggle={apps.toggle} actions={actions} />
+        <div className="app-stack">
+          {docked.map(a => <AppWindow key={a.id} app={a} scale={settings.hudScale} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} />)}
+        </div>
+        <CrewCards t={t} cb={cb} />
+      </div>
+      {floating.map(a => <AppWindow key={a.id} app={a} pos={apps.state.pos[a.id]} scale={settings.hudScale} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} />)}
+
+      {/* Bottom-centre navball cluster. */}
+      <div className="hud-bottom">
+        <NavballCluster t={t} cb={vessel || t.eva ? cb : { ...cb, onSasMode: () => {}, onToggleSas: () => {}, onToggleRcs: () => {} }} navball={navball} precision={precision} speed={speed} />
       </div>
 
       <StageFlash count={t.feel.stagedCount} stage={t.stage} />
       <Countdown value={t.feel.countdown} />
       {!t.mapMode && <FlightHint hint={t.feel.hint} onDismiss={cb.onDismissHint} navballSize={settings.navballSize} />}
-
-      {/* Left dock: compact toggles; panels expand underneath and scroll if space runs out. */}
-      <div className="hud-dock">
-        {dock?.signal}
-        {t.mapMode && dock?.maneuver}
-        <div className="hud-chips">
-          {chip('data', 'Flight data', 'Detailed flight telemetry')}
-          {showAssistChip && chip('assist', 'Assist', 'Flight assist (autopilot programs)', dock?.assistActive ? <span className="hud-dot" /> : null)}
-          {showCrewChip && chip('crew', t.eva ? 'EVA' : `Crew ${t.crew.length}`, 'Crew and EVA', t.noControl ? <span className="hud-dot warn" /> : null)}
-          {showScienceChip && chip('science', 'Science', 'Science instruments and data')}
-          {dock?.resources && chip('resources', 'Resources', 'Surface machinery and resource surveys')}
-          {chip('target', 'Target', 'Navigation target and docking', t.target ? <span className="hud-dot target" /> : null)}
-        </div>
-        {showAssistChip && (open.has('assist') || dock?.assistActive) && dock?.assist}
-        {t.dockingMode && !t.mapMode && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
-        {crewOpen && <CrewPanel t={t} cb={cb} />}
-        {showScienceChip && open.has('science') && dock?.science}
-        {open.has('resources') && dock?.resources}
-        {targetOpen && <TargetPanel t={t} cb={cb} />}
-        {open.has('data') && <FlightDataPanel data={t.flightData} onClose={() => toggle('data')} />}
-      </div>
-
-      {/* Messages */}
-      <div style={{ position: 'absolute', top: 100, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', pointerEvents: 'none' }}>
-        <AlertStack alerts={t.feel.alerts} />
-        {t.messages.map((m) => (
-          <Panel key={m.id} className="panel" style={{ padding: '6px 14px', color: m.level === 'bad' ? 'var(--bad)' : m.level === 'warn' ? 'var(--warn)' : 'var(--text)' }}>
-            {m.text}
-          </Panel>
-        ))}
-      </div>
+      {highlight && partScreen && !t.mapMode && <PartHighlight uids={highlight} at={partScreen} scale={settings.hudScale} strong={!!picked} />}
     </div>
   );
 }
 
-/** Abort, lights and the custom action groups that have actions assigned. */
-function ActionGroupStrip({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
-  const abort = t.actionGroups.find(g => g.id === 'abort');
-  const custom = t.actionGroups.filter(g => g.id !== 'abort' && g.count > 0);
+/** Compact orbit readout: always on in map view, optional (toolbar) in flight. */
+function OrbitStrip({ t, distance }: { t: Telemetry; distance: (m: number) => string }) {
+  const dash = t.onSurface;
+  const cell = (label: string, value: string, color?: string) => (
+    <div className="orbit-cell"><span className="label">{label}</span><span className="mono" style={{ color }}>{dash ? '—' : value}</span></div>
+  );
   return (
-    <Panel className="panel hud-groups" aria-label="Action groups">
-      <Button className={`btn small hud-abort ${abort?.on ? 'on' : ''}`} title={`Abort (${abort?.key ?? 'Backspace'}): cut throttle and fire the Abort group${abort?.count ? ` · ${abort.count} actions` : ''}`} onClick={() => cb.onAbort?.()}>ABORT</Button>
-      {t.lights !== null && <Button className={`btn small ${t.lights ? 'primary' : ''}`} title={`Lights (${bindingLabel('toggleLights')})`} onClick={() => cb.onToggleLights?.()}>LIGHTS</Button>}
-      {custom.length > 0 && <div className="hud-group-keys">
-        {custom.map(g => <Button key={g.id} className={`btn small ${g.on ? 'primary' : ''}`} title={`${g.label} (${g.key}) · ${g.count} action${g.count === 1 ? '' : 's'}`} onClick={() => cb.onActionGroup?.(g.id)}>{g.id.slice(6)}</Button>)}
-      </div>}
-    </Panel>
+    <div className="orbit-strip panel" aria-label="Orbit summary">
+      {cell('Ap', distance(t.apoapsis))}
+      {cell('T-Ap', formatDuration(t.timeToAp))}
+      {cell('Pe', distance(t.periapsis), t.periapsis < 0 ? 'var(--bad)' : undefined)}
+      {cell('T-Pe', formatDuration(t.timeToPe))}
+      {cell('Inc', `${t.inclination.toFixed(1)}°`)}
+    </div>
   );
 }
 
-function ThrottleGauge({ value }: { value: number }) {
+function ResourceBars({ resources }: { resources: Telemetry['resources'] }) {
+  if (!resources.length) return <div className="app-empty">No resources aboard.</div>;
   return (
-    <Panel className="panel" style={{ width: 22, height: 180, padding: 3, display: 'flex', flexDirection: 'column-reverse' }}>
-      <div style={{ height: `${value * 100}%`, background: 'linear-gradient(0deg, #ff8a3c, #ffd166)', borderRadius: 4, transition: 'height 0.08s' }} />
-    </Panel>
+    <div className="res-bars">
+      {resources.map((r) => {
+        const f = r.amount / Math.max(r.max, 1e-9);
+        return (
+          <div key={r.id} className="res-row" title={`${r.name}: ${(f * 100).toFixed(1)}%`}>
+            <div className="res-head"><span>{r.name}</span><span className="mono">{r.amount.toFixed(r.amount < 10 ? 1 : 0)} / {r.max.toFixed(0)}</span></div>
+            <div className="res-track"><div style={{ width: `${f * 100}%`, background: r.color }} /></div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-const ResourceReadouts = memo(function ResourceReadouts({ resources }: { resources: Telemetry['resources'] }) {
-  return <>
-        {resources.length > 0 && (
-          <Panel className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {resources.map((r) => (
-              <div key={r.id}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                  <span className="label">{r.name}</span>
-                  <span className="mono">{r.amount.toFixed(0)}/{r.max.toFixed(0)}</span>
-                </div>
-                <div style={{ height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 3 }}>
-                  <div style={{ width: `${(100 * r.amount) / Math.max(r.max, 1e-9)}%`, height: '100%', background: r.color, borderRadius: 3 }} />
-                </div>
-              </div>
-            ))}
-          </Panel>
-        )}
-  </>;
-}, (a, b) => snapshotEqual(a.resources, b.resources));
+/** Screen-space rings around parts picked or hovered in the staging stack (no material changes in the 3D scene). */
+function PartHighlight({ uids, at, scale, strong }: { uids: number[]; at: (uid: number) => { x: number; y: number } | null; scale: number; strong: boolean }) {
+  const host = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => {
+      const el = host.current;
+      if (el) {
+        for (let i = 0; i < el.children.length; i++) {
+          const ring = el.children[i] as HTMLElement;
+          const p = at(uids[i]);
+          ring.style.display = p ? 'block' : 'none';
+          if (p) ring.style.transform = `translate(${p.x / scale}px, ${p.y / scale}px)`;
+        }
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [uids, at, scale]);
+  return <div ref={host} className={`part-hl ${strong ? 'strong' : ''}`} aria-hidden>{uids.map(u => <div key={u} className="part-hl-ring" />)}</div>;
+}
 
-const StageReadouts = memo(function StageReadouts({ stages, stage, imperial }: { stages: HudStage[]; stage: number; imperial: boolean }) {
-  const speed = (v: number) => imperial ? `${(v * 2.236936).toFixed(1)} mph` : formatSpeed(v);
-  return <>
-        {stages.map((s) => (
-          <Panel key={s.index} className="panel" style={{ padding: 8, width: 180, flexShrink: 0, borderColor: s.index === stage ? 'var(--accent)' : s.parts.some((p) => p.active) ? 'var(--accent-2)' : undefined }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span className="label" style={{ color: s.index === stage ? 'var(--accent)' : undefined }} title={s.index === stage ? 'Fires on the next Space press' : undefined}>{s.parts.some((p) => p.active) ? 'Active' : `${s.index === stage ? '▸ ' : ''}Stage ${s.index}`}</span>
-              <span className="mono" style={{ fontSize: 11, color: 'var(--accent-2)' }}>{speed(s.deltaV)}</span>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-              {s.parts.map((p) => (
-                <Tooltip key={p.uid} text={p.name}><span className="hud-stage-part" aria-label={p.name} style={{ fontSize: 16, opacity: p.active ? 1 : 0.6 }}>
-                  <Icon name={p.icon === 'engine' ? 'engine' : p.icon === 'decoupler' ? 'decoupler' : p.icon === 'chute' ? 'chute' : 'clamp'} size={20} />
-                </span></Tooltip>
-              ))}
-            </div>
-          </Panel>
-        ))}
-  </>;
-}, (a, b) => a.stage === b.stage && a.imperial === b.imperial && snapshotEqual(a.stages, b.stages));
+export type { AppId };

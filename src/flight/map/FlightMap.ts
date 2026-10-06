@@ -40,6 +40,7 @@ export class FlightMap {
   constructor(private c: FlightController) {
     c.map.handlers = {
       placeNode: (time) => this.placeNode(time),
+      nodesChanged: () => this.sortNodes(),
       nodeClicked: (id) => { this.menus = { ...this.menus, node: this.menus.node === id ? null : id, context: null }; this.emit(); },
       objectMenu: (pick, at) => this.openContext(pick, at),
       focus: (pick) => { this.setFocus(pick); this.closeMenus(); },
@@ -233,10 +234,20 @@ export class FlightMap {
 
   // ---------- Maneuver nodes ----------
 
+  /** Keep `world.nodes` in time order: readouts and executors treat `nodes[0]` as the next burn. */
+  private sortNodes() {
+    const nodes = this.world.nodes;
+    for (let i = 1; i < nodes.length; i++) if (nodes[i].time < nodes[i - 1].time) {
+      this.world.nodes = [...nodes].sort((a, b) => a.time - b.time);
+      return;
+    }
+  }
+
   private placeNode(time: number) {
     const w = this.world;
     if (!w.active || w.active.mode === 'prelaunch') return;
     const n = w.addNode(time);
+    this.sortNodes();
     this.c.map.selectedNodeId = n.id;
     this.menus = { ...this.menus, node: null, context: null };
     if (!this.hinted) {
@@ -273,6 +284,7 @@ export class FlightMap {
     if (time < w.ut + 5) return void w.message('Node would be in the past', 'warn', 2);
     node.time = time;
     w.nodes = [...w.nodes];
+    this.sortNodes();
   }
 
   warpToNode(id: number) {

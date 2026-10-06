@@ -305,7 +305,8 @@ export class World {
   }
 
   /** Cycle to the next vessel within physics range of the active one (debris, decoupled stages). */
-  focusNextNearby(): string | null {
+  /** Switch to the next (or previous, `direction` −1) vessel within physics range, in stable id order. */
+  focusNextNearby(direction: 1 | -1 = 1): string | null {
     const act = this.active;
     if (!act) return null;
     const ids = [...this.vessels.values()]
@@ -313,7 +314,7 @@ export class World {
       .map((v) => v.state.id)
       .sort();
     if (ids.length < 2) return null;
-    const next = ids[(ids.indexOf(act.state.id) + 1) % ids.length];
+    const next = ids[(ids.indexOf(act.state.id) + direction + ids.length) % ids.length];
     this.switchTo(next);
     return next;
   }

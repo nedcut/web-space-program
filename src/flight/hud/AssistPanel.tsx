@@ -8,7 +8,7 @@ const ASSIST_HINTS: Record<AssistId, string> = {
   circPe: 'Plans and burns a circularization at periapsis.',
 };
 
-/** Flight-assist programs (shown in the HUD's left dock). */
+/** Flight-assist programs (the Flight assist app in the HUD toolbar). */
 export function AssistPanel({ active, onStart, onCancel }: { active: { name: string; status: string } | null; onStart(id: AssistId): void; onCancel(): void }) {
   return (
     <div className="panel" style={{ padding: 8, flexShrink: 0 }}>
