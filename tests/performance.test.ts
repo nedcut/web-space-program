@@ -36,10 +36,22 @@ describe('adaptive scale', () => {
     expect(q.scale).toBe(0.9);
     run(q, 33.4, 1.05);
     expect(q.scale).toBe(0.75); // every frame missed: immediate, larger step
-    run(q, 33.4, 30);
+    // Pixel-bound: frame time falls with the pixel count but stays over budget down to the minimum.
+    for (let t = 0; t < 30000;) { const ms = 30 + 40 * q.scale * q.scale; q.update(ms, true); t += ms; }
     expect(q.scale).toBe(0.5);
     expect(q.update(16, false)).toBe(true);
     expect(q.scale).toBe(1);
+  });
+  it('restores the resolution when lowering it does not help (not pixel-bound) and pauses reductions', () => {
+    const q = new AdaptiveQuality();
+    run(q, 33.4, 4.5); // severe every window, but frame time ignores the scale (another tab, main thread)
+    expect(q.scale).toBe(1);
+    run(q, 33.4, 15);
+    expect(q.scale).toBe(1); // reductions paused
+    run(q, 33.4, 5);
+    expect(q.scale).toBeLessThan(1); // tried again after the 20 s pause
+    run(q, 33.4, 3);
+    expect(q.scale).toBe(1); // still useless: restored, next pause twice as long
   });
   it('treats slow frames with an idle main thread as GPU-bound even when timer queries read low', () => {
     const q = new AdaptiveQuality();

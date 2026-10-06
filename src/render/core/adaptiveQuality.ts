@@ -13,6 +13,11 @@
  *   towards the predicted 70%-budget scale) after a
  *   cooldown that doubles whenever an increase is undone within a few seconds (no oscillation).
  * - When GPU timing shows the GPU is idle, slow frames are CPU-bound and resolution is left alone.
+ * - Reductions are judged as an episode: once the scale is ≥0.25 below where the overload started and the mean
+ *   frame interval has not improved by ≥7% (the limit is not pixels — main thread, another tab, the compositor),
+ *   the starting scale is restored and reductions pause (20 s, doubling to ~3 min) instead of sinking to the
+ *   minimum for nothing. Single steps are not judged alone: with strict vsync a step can show no gain until the
+ *   frame fits the next interval.
  * - Frames over 250 ms (loading, tab switch, debugger) are ignored.
  */
 export class AdaptiveQuality {
@@ -33,6 +38,10 @@ export class AdaptiveQuality {
 
   private cpuSum = 0;
   private cpuN = 0;
+  /** Reduction episode under evaluation: scale and mean frame interval when it began, windows since the last step. */
+  private episode: { from: number; meanBefore: number; since: number } | null = null;
+  private downBlockedMs = 0;
+  private downBlockMs = 20000;
 
   /**
    * @param gpuMs GPU time of the frame's rendering from timer queries, when available.
@@ -42,11 +51,12 @@ export class AdaptiveQuality {
    */
   update(frameMs: number, enabled: boolean, gpuMs?: number, cpuMs?: number): boolean {
     const previous = this.scale;
-    if (!enabled) { this.scale = 1; this.resetWindow(); this.bad = 0; this.goodMs = 0; return previous !== this.scale; }
+    if (!enabled) { this.scale = 1; this.resetWindow(); this.bad = 0; this.goodMs = 0; this.episode = null; this.downBlockedMs = 0; return previous !== this.scale; }
     if (!Number.isFinite(frameMs) || frameMs <= 0 || frameMs >= 250) { this.resetWindow(); return false; }
     this.frames++;
     this.elapsed += frameMs;
     this.sinceUpMs += frameMs;
+    this.downBlockedMs = Math.max(0, this.downBlockedMs - frameMs);
     if (frameMs < this.windowMin) this.windowMin = frameMs;
     if (frameMs > this.targetMs * 1.5) this.slow++;
     if (gpuMs !== undefined && Number.isFinite(gpuMs) && gpuMs >= 0) { this.gpuSum += gpuMs; this.gpuN++; }
@@ -66,7 +76,25 @@ export class AdaptiveQuality {
     const windowMs = this.elapsed;
     this.resetWindow();
 
-    if (over) {
+    const ep = this.episode;
+    if (ep) {
+      ep.since++;
+      if (meanMs <= Math.max(ep.meanBefore * 0.93, this.targetMs * 1.05)) this.episode = null; // it helped
+      else if (ep.since >= 2 && ep.from - this.scale >= 0.25 - 1e-9) {
+        this.scale = ep.from;
+        this.episode = null;
+        this.downBlockedMs = this.downBlockMs;
+        this.downBlockMs = Math.min(160000, this.downBlockMs * 2);
+        this.bad = 0; this.goodMs = 0;
+        return previous !== this.scale;
+      }
+    }
+
+    // Paused after a useless episode, or holding a ≥0.25 reduction until it has been judged.
+    const holding = !!this.episode && this.episode.from - this.scale >= 0.25 - 1e-9;
+    if (over && (this.downBlockedMs > 0 || holding)) {
+      this.bad = 0; this.goodMs = 0;
+    } else if (over) {
       this.goodMs = 0;
       // Severe overload acts after one window; marginal overload needs two in a row.
       const severe = slowFrac > 0.5 || meanMs > this.targetMs * 1.5 || (Number.isFinite(gpu) && gpu > this.targetMs * 1.3);
@@ -80,6 +108,8 @@ export class AdaptiveQuality {
         if (next < this.scale) {
           // An increase that had to be undone quickly: wait longer before trying again.
           if (this.sinceUpMs < 6000) this.cooldownMs = Math.min(60000, this.cooldownMs * 2);
+          if (this.episode) this.episode.since = 0;
+          else this.episode = { from: this.scale, meanBefore: meanMs, since: 0 };
           this.scale = next;
         }
       }
