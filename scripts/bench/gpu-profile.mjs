@@ -42,8 +42,24 @@ try {
   if (args.setup) await page.evaluate(args.setup);
   let profStart = 0;
   if (from === 'ready') { await page.waitForTimeout(+(args.settle ?? 2000)); profStart = await page.evaluate(() => performance.now()); await cdp.send('Profiler.start'); }
+  if (args.heap) await cdp.send('HeapProfiler.startSampling', { samplingInterval: 2048, includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true });
   const perfOrigin = await page.evaluate(() => performance.timeOrigin);
   await page.waitForTimeout(after);
+  if (args.heap) {
+    const { profile: hp } = await cdp.send('HeapProfiler.stopSampling');
+    const self = new Map(); const incl = new Map(); let total = 0;
+    const walk = (n, stack) => {
+      const k = `${n.callFrame.functionName || '(anon)'} ${n.callFrame.url.split('/').pop().replace(/-[\w-]{8}\.js$/, '')}:${n.callFrame.lineNumber + 1}`;
+      total += n.selfSize; self.set(k, (self.get(k) ?? 0) + n.selfSize);
+      const st = stack.includes(k) ? stack : [...stack, k];
+      for (const x of st) incl.set(x, (incl.get(x) ?? 0) + n.selfSize);
+      for (const c of n.children) walk(c, st);
+    };
+    walk(hp.head, []);
+    const secs = after / 1000;
+    const fmt = (m) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, +(args.top ?? 35)).map(([k, b]) => `${(b / 1024 / secs).toFixed(1).padStart(9)} kB/s  ${k}`).join('\n');
+    console.log(`== allocation ${(total / 1024 / secs).toFixed(0)} kB/s; self:\n${fmt(self)}\n== allocation inclusive:\n${fmt(incl)}`);
+  }
   const { profile } = await cdp.send('Profiler.stop');
   const { lt, frames, marks } = await page.evaluate(() => ({ ...window.__prof, marks: [...performance.getEntriesByType('mark'), ...performance.getEntriesByType('measure')].filter((e) => e.name.startsWith('wsp:')).map((e) => [e.name, Math.round(e.startTime), Math.round(e.duration)]) }));
   if (args.out) writeFileSync(`C:\\wsp-tools\\bench\\${args.out}.cpuprofile`, JSON.stringify(profile));

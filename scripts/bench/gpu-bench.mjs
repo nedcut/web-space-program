@@ -147,6 +147,10 @@ async function stopTrace(cdp, pageUrl) {
     // Main-thread trace events by name (inclusive ms per second; nested events overlap their parents).
     mainTop: Object.fromEntries(Object.entries(mainEv).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, us]) => [k, r2(us / span)])),
     busyPct: Object.fromEntries(Object.entries(busyUs).map(([k, us]) => [k, r2((100 * us) / 1000 / span)])),
+    // Blink's main-thread "Commit" blocks until the compositor/GPU side takes the frame (vsync back-pressure):
+    // it is waiting, not work. Main-thread work = busy − Commit.
+    mainWorkPct: r2((100 * ((busyUs.CrRendererMain ?? 0) - (mainEv.Commit ?? 0))) / 1000 / span),
+    commitWaitPct: r2((100 * (mainEv.Commit ?? 0)) / 1000 / span),
     gc: { minorCount: gc.minor.length, minorMs: r2(sum(gc.minor)), majorCount: gc.major.length, majorMs: r2(sum(gc.major)), maxPauseMs: r2(Math.max(0, ...gc.minor, ...gc.major)), msPerSec: r2((sum(gc.minor) + sum(gc.major)) / (span / 1000)) },
   };
 }
@@ -205,7 +209,7 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
   log(`== ${name}: ${out.fps} fps p50/p95/p99 ${out.frameP50}/${out.frameP95}/${out.frameP99} ms (max ${out.frameMax}, >25ms ${out.hitches25}) cpu ${out.cpuMs} (p95 ${out.cpuP95}) script/frame ${out.scriptMsPerFrame} task/frame ${out.taskMsPerFrame}`);
   log(`   ${sec}`);
   log(`   longtasks/min ${out.longTasksPerMin} (${out.longTaskMsPerMin} ms/min, max ${out.longTaskMax}) heap ${out.heapMB} MB (${out.heapGrowthMBPerMin} MB/min) nodes ${out.domNodes} listeners ${out.listeners} layouts/s ${out.layoutsPerSec} styles/s ${out.styleRecalcsPerSec} react ${out.reactCommitsPerSec} commits/s ${out.reactRendersPerSec} renders/s`);
-  if (tr && !tr.error) log(`   trace: busy% ${JSON.stringify(tr.busyPct)} gc ${JSON.stringify(tr.gc)}`);
+  if (tr && !tr.error) log(`   trace: main work ${tr.mainWorkPct}% (+${tr.commitWaitPct}% commit wait) busy% ${JSON.stringify(tr.busyPct)} gc ${JSON.stringify(tr.gc)}`);
   if (inPage.gl) log(`   gl: ${JSON.stringify(inPage.gl)}`);
   if (Object.keys(inPage.workers).length) log(`   workers: ${JSON.stringify(inPage.workers)}`);
   return out;
@@ -378,12 +382,12 @@ writeFileSync(`${file}.json`, JSON.stringify(results, null, 1));
 const rows = Object.entries(results.cases).filter(([, c]) => c.fps !== undefined);
 const secCols = ['sim', 'vessels', 'planets', 'map', 'render', 'telemetry', 'hud', 'navball'];
 let md = `### ${label} — DPR ${dpr}${throttle > 1 ? `, CPU ${throttle}× throttled` : ''}, ${quality}, ${results.size} CSS px, ${results.date}\n\n`;
-md += `| Scenario | fps | p50 / p99 ms | >25 ms | CPU ms (p95) | ${secCols.join(' | ')} | script ms/f | long tasks/min (ms/min) | GC ms/s (max) | heap MB (MB/min) | DOM nodes | React commits/s (renders/s) | style+layout /s | worker busy % |\n`;
-md += `|---|---:|---:|---:|---:|${secCols.map(() => '---:').join('|')}|---:|---:|---:|---:|---:|---:|---:|---:|\n`;
+md += `| Scenario | fps | p50 / p99 ms | >25 ms | CPU ms (p95) | ${secCols.join(' | ')} | script ms/f | long tasks/min (ms/min) | main work % | GC ms/s (max) | heap MB (MB/min) | DOM nodes | React commits/s (renders/s) | style+layout /s | worker busy % |\n`;
+md += `|---|---:|---:|---:|---:|${secCols.map(() => '---:').join('|')}|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n`;
 for (const [k, c] of rows) {
   const s = c.sections ?? {};
   const t = c.trace && !c.trace.error ? c.trace : null;
-  md += `| ${k} | ${c.fps} | ${c.frameP50} / ${c.frameP99} | ${c.hitches25} | ${c.cpuMs ?? '–'} (${c.cpuP95 ?? '–'}) | ${secCols.map((x) => s[x] ?? '–').join(' | ')} | ${c.scriptMsPerFrame} | ${c.longTasksPerMin} (${c.longTaskMsPerMin}) | ${t ? `${t.gc.msPerSec} (${t.gc.maxPauseMs})` : '–'} | ${c.heapMB} (${c.heapGrowthMBPerMin}) | ${c.domNodes} | ${c.reactCommitsPerSec} (${c.reactRendersPerSec}) | ${r2(c.styleRecalcsPerSec + c.layoutsPerSec)} | ${t?.busyPct?.workers ?? 0} |\n`;
+  md += `| ${k} | ${c.fps} | ${c.frameP50} / ${c.frameP99} | ${c.hitches25} | ${c.cpuMs ?? '–'} (${c.cpuP95 ?? '–'}) | ${secCols.map((x) => s[x] ?? '–').join(' | ')} | ${c.scriptMsPerFrame} | ${c.longTasksPerMin} (${c.longTaskMsPerMin}) | ${t?.mainWorkPct ?? '–'} | ${t ? `${t.gc.msPerSec} (${t.gc.maxPauseMs})` : '–'} | ${c.heapMB} (${c.heapGrowthMBPerMin}) | ${c.domNodes} | ${c.reactCommitsPerSec} (${c.reactRendersPerSec}) | ${r2(c.styleRecalcsPerSec + c.layoutsPerSec)} | ${t?.busyPct?.workers ?? 0} |\n`;
 }
 for (const k of ['load:cold', 'load:warm']) {
   const c = results.cases[k]; if (!c) continue;

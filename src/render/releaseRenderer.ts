@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 
 /**
  * Full WebGLRenderer teardown for scene changes (flight, editor, Space Center, navball).
