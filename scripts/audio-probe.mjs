@@ -9,16 +9,18 @@ page.on('console', message => { if (message.type() === 'error') errors.push(mess
 try {
   await page.goto('http://localhost:5330/?flight=stock-meridian', { waitUntil: 'load' });
   await page.waitForTimeout(7000);
+  await page.bringToFront();
   await page.mouse.click(10, 10);
   const live = await page.evaluate(async () => {
-    const { getGameAudio } = await import('/src/audio/ui.ts');
-    const { game } = await import('/src/game/store.ts');
-    const audio = getGameAudio(); audio.resume();
+    // Use the application's own objects: Vite may have timestamped module URLs after HMR.
+    const game = window.__game;
+    const audio = window.__flight.audio; audio.resume();
+    await new Promise(resolve => setTimeout(resolve, 100));
     const counts = [];
     for (const scene of ['menu', 'editor', 'menu', 'editor', 'menu']) {
       game.set({ scene });
       await new Promise(resolve => setTimeout(resolve, 1200));
-      counts.push({ scene, ...audio.diagnostics() });
+      counts.push({ scene, ...audio.diagnostics(), contextState: audio.context?.state });
     }
     audio.setMusic('off'); audio.silenceFlight();
     await new Promise(resolve => setTimeout(resolve, 24000));
@@ -26,7 +28,8 @@ try {
     audio.setPaused(true);
     const paused = audio.diagnostics();
     audio.setPaused(false);
-    return { counts, settled, paused };
+    await new Promise(resolve => setTimeout(resolve, 100));
+    return { counts, settled, paused, hidden: document.hidden, contextState: audio.context?.state };
   });
   console.log('LIVE', JSON.stringify(live));
   const rendered = await page.evaluate(async () => {
@@ -48,7 +51,7 @@ try {
           return typeof value === 'function' ? value.bind(target) : value;
         } });
         window.AudioContext = function () { return proxy; };
-        const audio = new GameAudio(); audio.resume();
+        const audio = new GameAudio(); audio.resume(); audio.setMasterVolume(1);
         const state = { vesselId: 'probe', engines: [{ type: kind in { plasma: 1, explosion: 1, stress: 1, music: 1, overload: 1 } ? 'kerolox' : kind, thrustFraction: 1, count: 1 }],
           ambientPressure: 101325, airspeed: 340, mach: 1, dynamicPressure: 0, rcsActive: 0, reentryHeat: 0, inMapView: false, timeWarp: 1, cameraDistance: 15 };
         if (kind === 'plasma') { state.engines = []; state.dynamicPressure = 40000; state.reentryHeat = 1; }
@@ -72,5 +75,5 @@ try {
   });
   console.log('OFFLINE', JSON.stringify(rendered));
   console.log('ERRORS', JSON.stringify(errors));
-  if (errors.length || live.counts.some(c => c.nodes > 234) || live.settled.transients !== 0 || rendered.some(r => r.invalid || r.peak >= 1 || r.rms <= 0 || r.disposed.nodes !== 0)) process.exitCode = 1;
+  if (errors.length || live.hidden || !live.counts.some(c => c.music > 0) || live.counts.some(c => c.nodes > 234) || live.settled.transients !== 0 || rendered.some(r => r.invalid || r.peak >= 1 || r.rms <= 0 || r.disposed.nodes !== 0)) process.exitCode = 1;
 } finally { await page.close(); await browser.close(); }

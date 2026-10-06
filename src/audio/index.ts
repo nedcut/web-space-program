@@ -279,6 +279,7 @@ export class GameAudio {
       if (theme !== this.musicMode) { this.setMusic(theme); this.nextThemeChange = ctx.currentTime + 4; }
     }
     if (this.tension) this.target(this.tension.gain, this.musicMode === 'tense' ? 0.02 + 0.05 * Math.max(unit(state.reentryHeat), unit((state.gForce ?? 0) / 8), state.terrainDanger ? 1 : 0) : 0, 1);
+    if (this.previousVessel !== state.vesselId) this.previousMach = undefined;
     const air = atmosphere(state.ambientPressure);
     const colorAir = atmosphereColor(state.situation?.bodyId);
     let totalThrust = 0;
@@ -327,7 +328,7 @@ export class GameAudio {
     }
     if (this.buffet) this.target(this.buffet.gain.gain, aero * (0.16 + transonicBuffeting(state.mach) * 0.55) + unit(state.launchRumble ?? 0) * distance * 0.28);
     if (this.plasma) this.target(this.plasma.gain.gain, unit(state.reentryHeat) * air * distance * 0.3);
-    if (this.previousMach !== undefined && this.previousMach < 1 && state.mach >= 1 && air > 0.03 && ctx.currentTime >= this.nextBoom) {
+    if (state.timeWarp <= 1 && this.previousMach !== undefined && this.previousMach < 1 && state.mach >= 1 && air > 0.03 && ctx.currentTime >= this.nextBoom) {
       this.burst(0.65, 0.24 * air * distance, 90, 'lowpass', 'brown');
       this.nextBoom = ctx.currentTime + 8;
     }
