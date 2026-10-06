@@ -14,6 +14,7 @@ import { Universe } from '../game/universe';
 import { PHYSICS_DT, World, type WorldVessel } from '../game/world';
 import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
 import { RenderPipeline, getQuality, type QualityId } from '../render/core';
+import { compileInSlices } from '../render/core/compileInSlices';
 import type { ExtraOrbit } from '../render/map/MapView';
 import { MapView } from '../render/map/MapView';
 import { FlightMap } from './map/FlightMap';
@@ -826,9 +827,11 @@ export class FlightController {
       this.map.setWarmup(true);
       const map = r.compileAsync(this.map.scene, this.map.camera);
       this.map.setWarmup(false);
-      r.setRenderTarget(this.pipeline.composer.readBuffer);
-      const flight = r.compileAsync(this.scene, this.cam.camera);
-      r.setRenderTarget(null);
+      // The flight scene has ~90 programs: build them a few ms per frame so the loading screen keeps animating.
+      const flight = compileInSlices(r, [this.scene], this.cam.camera, this.scene, {
+        renderTarget: this.pipeline.composer.readBuffer,
+        cancelled: () => this.warmup !== 'compiling',
+      });
       Promise.all([map, flight]).then(finish, finish);
       // Never hold the loading screen on a driver that does not report completion.
       this.warmupTimer = window.setTimeout(finish, 15000);
@@ -1163,6 +1166,7 @@ export class FlightController {
   dispose() {
     this.pipeline.detach(this.scene, this.map.scene);
     window.clearTimeout(this.warmupTimer);
+    this.warmup = 'done'; // stops a sliced shader warm-up still in progress
     this.photo.dispose();
     this.network?.close();
     cancelAnimationFrame(this.raf);
