@@ -35,7 +35,7 @@ const FLIGHT_KEYS: [Action[] | string, string][] = [
   ['1 – 0', 'Action groups 1 … 10 (assign in the editor)'],
   ['Right-click a part (long-press on touch)', 'Part details, actions and settings'],
   [['map'], 'Map view + maneuver planner'],
-  [['mapFocusNext'], 'Map view: cycle focus'],
+  ['Tab', 'Map view: cycle focus'],
   [['warpDown', 'warpUp', 'warpStop'], 'Time warp slower / faster / stop'],
   [['toggleCamMode'], 'Camera mode (auto / free / orbital / chase / locked)'],
   [['cameraLeft', 'cameraRight', 'cameraUp', 'cameraDown', 'cameraZoomIn', 'cameraZoomOut'], 'Orbit / zoom camera from the keyboard'],

@@ -5,7 +5,7 @@ export const DEFAULT_BINDINGS = {
   throttleUp: ['ShiftLeft', 'ShiftRight'], throttleDown: ['ControlLeft', 'ControlRight'], throttleFull: ['KeyZ'], throttleCut: ['KeyX'],
   stage: ['Space'], toggleSas: ['KeyT'], toggleRcs: ['KeyR'], map: ['KeyM'], warpUp: ['Period'], warpDown: ['Comma'], warpStop: ['Slash'],
   menu: ['Escape'], help: ['Shift+F1'], screenshot: ['F1'], hideUi: ['F2'], flightResults: ['F3'], perfOverlay: ['F8'], flightData: ['Shift+F3'], stressOverlay: ['F4'], photoMode: ['KeyP'],
-  focusNext: ['BracketRight'], focusPrev: ['BracketLeft'], mapFocusNext: ['Tab'], toggleCamMode: ['KeyV'], iva: ['KeyC'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyO'], board: ['Enter'], plantFlag: ['KeyF'],
+  focusNext: ['BracketRight'], focusPrev: ['BracketLeft'], toggleCamMode: ['KeyV'], iva: ['KeyC'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyO'], board: ['Enter'], plantFlag: ['KeyF'],
   toggleGear: ['KeyG'], brakes: ['KeyB'], toggleLights: ['KeyU'], abort: ['Backspace'], stageLock: ['Alt+KeyL'], sasHold: ['KeyF'],
   actionGroup1: ['Digit1'], actionGroup2: ['Digit2'], actionGroup3: ['Digit3'], actionGroup4: ['Digit4'], actionGroup5: ['Digit5'],
   actionGroup6: ['Digit6'], actionGroup7: ['Digit7'], actionGroup8: ['Digit8'], actionGroup9: ['Digit9'], actionGroup10: ['Digit0'], precision: ['CapsLock'], precisionHold: ['AltLeft', 'AltRight'],

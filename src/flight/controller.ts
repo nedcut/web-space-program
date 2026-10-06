@@ -113,8 +113,6 @@ export class FlightController {
   stageLocked = false;
   /** SAS was toggled by a momentary hold (F); releasing the key toggles it back. */
   private sasHeld = false;
-  /** Map-view focus cycling (Tab). The map view installs the handler; without one Tab does nothing. */
-  onMapFocusCycle: ((direction: 1 | -1) => void) | null = null;
   private craft: CraftDef | null;
   /** Map conics of non-active vessels, refreshed at most once per second while in physics. */
   private mapOrbits = new Map<string, { orbit?: Orbit; at: number }>();
@@ -269,7 +267,6 @@ export class FlightController {
           case 'warpStop': this.warpDriver.cancel(this.world); if (this.network) this.network.send({ v: 1, type: 'warp', rate: 1 }); else this.world.warp = { mode: 'rails', index: 0 }; break;
           case 'menu': this.onExit?.(); break;
           case 'focusNext': case 'focusPrev': this.switchVessel(a === 'focusNext' ? 1 : -1); break;
-          case 'mapFocusNext': if (this.mapMode) this.onMapFocusCycle?.(1); break;
           case 'iva': this.world.message('Interior view is not available in this version', 'info', 2.5); break;
           case 'stageLock': this.toggleStageLock(); break;
           case 'sasHold': if (this.world.canControl()) { this.toggleSas(); this.sasHeld = true; } break;

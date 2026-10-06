@@ -14,7 +14,7 @@ const save = () => writeFile(new URL('scenario-report.json', out), JSON.stringif
 const check = async (name, fn) => { console.log('START',name); try { const detail = await fn(); report.checks.push({ name, status: 'pass', detail }); console.log('PASS', name, JSON.stringify(detail ?? '')); } catch (e) { await page.screenshot({path:new URL('failure-'+report.checks.length+'.png',out).pathname,timeout:10000}).catch(()=>{}); console.log('PAGE',await page.locator('body').innerText({timeout:10000}).catch(()=>'')); report.checks.push({ name, status: 'fail', error: e.message }); console.log('FAIL', name, e.message); } await save(); };
 const shot = name => page.screenshot({ path: new URL(`${name}.png`, out).pathname, timeout: 90000 });
 const scene = async (name, patch = {}) => page.evaluate(async ({name, patch}) => { const {game} = await window.__qaImport('/src/game/store.ts'); game.set({ scene: name, ...patch }); }, {name, patch});
-const flightReady = async () => { await page.waitForFunction(() => window.__flight && document.querySelector('.hud-dock')); await page.locator('.loading-screen').waitFor({state:'hidden'}); };
+const flightReady = async () => { await page.waitForFunction(() => window.__flight && document.querySelector('.hud-left')); await page.locator('.loading-screen').waitFor({state:'hidden'}); };
 try {
   await page.addInitScript(()=>{localStorage.setItem('wsp.settings.v1',JSON.stringify({quality:'low',shadows:false,bloom:false,clouds:false,scatter:false,renderScale:0.5,masterVolume:0,autoSaveInterval:0,reduceMotion:true}));localStorage.setItem('wsp.help.seen.v1','1');});
   await page.goto('http://localhost:5192/');

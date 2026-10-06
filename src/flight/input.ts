@@ -14,14 +14,14 @@ export interface FlightInputState {
 }
 
 export type ActionGroupKey = 'actionGroup1' | 'actionGroup2' | 'actionGroup3' | 'actionGroup4' | 'actionGroup5' | 'actionGroup6' | 'actionGroup7' | 'actionGroup8' | 'actionGroup9' | 'actionGroup10';
-export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'focusPrev' | 'mapFocusNext' | 'toggleCamMode' | 'iva' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag' | 'toggleGear' | 'stressOverlay' | 'toggleLights' | 'abort' | 'stageLock' | 'sasHold' | 'sasHoldRelease' | ActionGroupKey;
+export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'focusPrev' | 'toggleCamMode' | 'iva' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag' | 'toggleGear' | 'stressOverlay' | 'toggleLights' | 'abort' | 'stageLock' | 'sasHold' | 'sasHoldRelease' | ActionGroupKey;
 
 /** Keyboard attitude ramp (command units per second): full deflection in 0.2 s, release in ~0.08 s. */
 export const KEY_RAMP_RATE = 5;
 export const KEY_RELEASE_RATE = 12;
 
 export const ACTION_GROUP_KEYS: ActionGroupKey[] = ['actionGroup1', 'actionGroup2', 'actionGroup3', 'actionGroup4', 'actionGroup5', 'actionGroup6', 'actionGroup7', 'actionGroup8', 'actionGroup9', 'actionGroup10'];
-const FLIGHT_ACTIONS: FlightAction[] = ['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'focusNext', 'focusPrev', 'mapFocusNext', 'toggleCamMode', 'iva', 'quicksave', 'quickload', 'eva', 'board', 'plantFlag', 'toggleGear', 'stressOverlay', 'toggleLights', 'abort', 'stageLock', 'sasHold', ...ACTION_GROUP_KEYS];
+const FLIGHT_ACTIONS: FlightAction[] = ['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'focusNext', 'focusPrev', 'toggleCamMode', 'iva', 'quicksave', 'quickload', 'eva', 'board', 'plantFlag', 'toggleGear', 'stressOverlay', 'toggleLights', 'abort', 'stageLock', 'sasHold', ...ACTION_GROUP_KEYS];
 /** Vessel-only actions that a walking astronaut ignores. */
 const VESSEL_ONLY = new Set<FlightAction>(['abort', 'toggleLights', 'stageLock', 'sasHold', 'iva']);
 export class FlightInput {
