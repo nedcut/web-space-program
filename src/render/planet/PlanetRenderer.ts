@@ -105,7 +105,6 @@ export class PlanetRenderer {
   /** Renderer seen by the cloud mesh's onBeforeRender; used to bake the cloud map in update(). */
   private bakeRenderer: THREE.WebGLRenderer | null = null;
   private readonly cloudRotM = new THREE.Matrix3();
-  private readonly driftM = new THREE.Matrix3();
   private rings: THREE.Mesh | null = null;
   private ringParticles: RingParticles | null = null;
   private ringTexture: THREE.DataTexture | null = null;
@@ -307,7 +306,7 @@ export class PlanetRenderer {
     if (wantClouds && this.atmosphere) {
       const H = this.atmosphere.atmosphereRadius - R;
       this.cloudRadius = R + Math.min(H * 0.08, 6000);
-      this.cloudMap = new CloudMap(q.id === 'high' ? 1536 : q.id === 'medium' ? 1024 : 512);
+      this.cloudMap = new CloudMap(q.id === 'high' ? 1536 : q.id === 'medium' ? 1024 : 512, terrain!.heightAt);
       this.uniforms.uCloudMap.value = this.cloudMap.target.texture;
       const cgeo = new THREE.SphereGeometry(1, 96, 48);
       const cmat = createCloudMaterial(this.uniforms, q, this.cloudRadius);
@@ -468,11 +467,8 @@ export class PlanetRenderer {
       if (this.cloudMap && !this.cloudMap.done && this.bakeRenderer) {
         if (this.cloudMap.step(this.bakeRenderer)) { u.uCloudShell.value = this.cloudRadius; this.bakeRenderer = null; }
       }
-      // Lookup direction = drift(t) · bodyRot⁻¹ · (render-frame position relative to the planet).
-      const drift = (time * 0.000015) % (Math.PI * 2);
-      const c = Math.cos(drift), s = Math.sin(drift);
-      this.driftM.set(c, -s, 0, s, c, 0, 0, 0, 1);
-      u.uCloudRot.value.multiplyMatrices(this.driftM, this.cloudRotM.copy(this.rotM).transpose());
+      // Body-fixed weather keeps marine decks aligned with their coastlines.
+      u.uCloudRot.value.copy(this.cloudRotM.copy(this.rotM).transpose());
       placeWhole(this.clouds, this.cloudRadius * 1.01);
       const cm = this.clouds.material as THREE.ShaderMaterial;
       cm.uniforms.uCamCCloud.value = (camDist - this.cloudRadius) * (camDist + this.cloudRadius);

@@ -1,0 +1,12 @@
+{
+  "revision": "4237d99a",
+  "url": "http://localhost:5318/?flight=stock-meridian&scenario=orbit",
+  "quality": "medium",
+  "adaptive": false,
+  "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "canvas": [2940, 1840],
+  "full": 7.717432692111987,
+  "without": 5.3709926476487215,
+  "cloudMs": 2.3464400444632654,
+  "method": "Median of 120 frames of pipeline.gpuMs per phase; 1.5 seconds settling after hiding the cloud material. Cloud shadows stay active."
+}

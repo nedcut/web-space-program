@@ -774,48 +774,26 @@ export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloud
       uniform float uCamCCloud;
       varying vec3 vWorldPos;
 
-      /** Baked density plus distance-faded detail octaves that erode the soft (texel-sized) edges. */
+      /** Coverage is always the baked field. Detail cannot spawn clouds in clear sky. */
       float cloudAt(vec3 rel, float t, float bias) {
         vec3 dir = uCloudRot * rel;
-        vec2 s = texture(uCloudMap, dir, bias).rg;
-        float d = s.r;
-        float near = 1.0 - smoothstep(40000.0, 900000.0, t);
-        vec3 p = normalize(dir) * (uCloudRadius / 6000.0);
-        if (near > 0.0 && d > 0.004) {
-          float n = snoise(p) * 0.55;
-          #if CLOUD_DETAIL >= 2
-            float near2 = 1.0 - smoothstep(8000.0, 160000.0, t);
-            if (near2 > 0.0) n += snoise(p * 3.1 + 7.0) * 0.3 * near2;
-          #endif
-          #if CLOUD_DETAIL >= 3
-            float near3 = 1.0 - smoothstep(2000.0, 30000.0, t);
-            if (near3 > 0.0) n += snoise(p * 9.7 - 3.0) * 0.15 * near3;
-          #endif
-          // Erode thin edges strongly, cores barely: crisp margins without moving big systems.
-          float e = near * (0.32 + 0.5 * n) * (1.0 - d);
-          d = clamp((d - e * 0.55) / (1.0 - e * 0.35), 0.0, 1.0);
-          d = mix(d, smoothstep(0.0, 0.7, d), near * 0.6);
-        }
-        // Fair-weather cumulus: cells drawn per pixel where the map allows them; far away they
-        // average into a faint veil instead of aliasing.
-        if (s.g > 0.01) {
-          // ~2 km cells; fade to their mean coverage once a cell shrinks below a few pixels.
-          vec3 pc = p * 3.0 + 11.0;
-          float footprint = length(fwidth(pc));
-          float cuNear = 1.0 - smoothstep(0.2, 0.7, footprint);
-          // Cells clump into ~20 km clusters and streets with clear gaps between them.
-          float cluster = smoothstep(-0.25, 0.45, snoise(p * vec3(0.22, 0.22, 0.5) + 3.0));
-          float cover = (0.03 + 0.42 * s.g * s.g) * (0.25 + 1.1 * cluster);
-          float cu = cover * 0.8;
-          if (cuNear > 0.0) {
-            float c = snoise(pc) * 0.6 + snoise(pc * 2.3 - 5.0) * 0.28 + snoise(pc * 5.3 + 2.0) * 0.12 * cuNear;
-            // c ≈ N(0, 0.35): threshold so that roughly 'cover' of the area is cloud.
-            float thr = 0.42 - cover * 0.9;
-            cu = mix(cu, smoothstep(thr, thr + 0.3, c) * (0.7 + 0.3 * smoothstep(thr + 0.15, thr + 0.6, c)), cuNear);
-          }
-          d = max(d, cu * smoothstep(0.0, 0.15, s.g));
-        }
-        return clamp(d, 0.0, 1.0);
+        float d = texture(uCloudMap, dir, bias).r;
+        vec3 p = normalize(dir) * (uCloudRadius / 2000.0);
+        // Derivatives are evaluated outside branches; fade EACH octave before Nyquist.
+        float footprint = max(length(dFdx(p)), length(dFdy(p)));
+        float near = 1.0 - smoothstep(60000.0, 350000.0, t);
+        float f1 = near * (1.0 - smoothstep(0.12, 0.4, footprint));
+        float f2 = near * (1.0 - smoothstep(0.12, 0.4, footprint * 3.0));
+        float f3 = near * (1.0 - smoothstep(0.12, 0.4, footprint * 9.0));
+        float n = 0.0;
+        if (f1 > 0.0) n += snoise(p) * 0.24 * f1;
+        #if CLOUD_DETAIL >= 2
+          if (f2 > 0.0) n += snoise(p * 3.0 + 7.0) * 0.10 * f2;
+        #endif
+        #if CLOUD_DETAIL >= 3
+          if (f3 > 0.0) n += snoise(p * 9.0 - 3.0) * 0.035 * f3;
+        #endif
+        return clamp(d * (1.0 + n), 0.0, 1.0);
       }
 
       void main() {
@@ -830,6 +808,12 @@ export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloud
         if (t < 0.0) discard;
         vec2 tg = raySphereC(b, uCamCGround);
         if (tg.x > 0.0 && tg.x < t) discard;
+        // Depth belongs to the analytic cloud hit, not the back of the proxy sphere.
+        // This also works in the small gap between the true shell and its inflated mesh.
+        #ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+          float viewDepth = max(0.0, -t * (viewMatrix * vec4(rd, 0.0)).z);
+          gl_FragDepth = log2(1.0 + viewDepth) * logDepthBufFC * 0.5;
+        #endif
         vec3 rel = uCamRel + rd * t;
         float d = cloudAt(rel, t, 0.0);
         if (d < 0.01) discard;
@@ -838,7 +822,7 @@ export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloud
         vec3 sunT = sunTransmittance(rel) * ringShadow(rel);
         // Self-shadowing: blurred density a few tens of km towards the sun.
         float dS = texture(uCloudMap, uCloudRot * (up + uSunDir * 0.006), 2.5).r;
-        float shadow = mix(1.0, 0.4, smoothstep(0.1, 0.9, dS));
+        float shadow = mix(1.0, below ? 0.4 : 0.72, smoothstep(0.1, 0.9, dS));
         float cosT = dot(rd, uSunDir);
         // Henyey–Greenstein forward lobe: thin edges glow when looking towards the sun.
         float g = 0.65;
@@ -854,7 +838,8 @@ export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloud
         col = applyAerialPerspective(col, rd, t, AERIAL_STEPS * uStepScale);
         gl_FragColor = vec4(col * a, a);
       }`,
-    side: THREE.DoubleSide,
+    // One rasterized hit from both outside and inside the proxy sphere.
+    side: THREE.BackSide,
     transparent: true,
     depthWrite: false,
     blending: THREE.CustomBlending,
