@@ -11,6 +11,8 @@ describe('GPU tier heuristic', () => {
     ['ANGLE (Intel, Intel(R) Arc(TM) Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)', 'mid'],
     ['ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)', 'mid'],
     ['ANGLE (Apple, ANGLE Metal Renderer: Apple M2 Pro, Unspecified Version)', 'strong'],
+    ['ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)', 'strong'],
+    ['Apple GPU', 'mid'], // Safari masks the model
     ['ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)', 'mid'],
     ['ANGLE (AMD, AMD Radeon RX 6700 XT Direct3D11 vs_5_0 ps_5_0, D3D11)', 'strong'],
     ['ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Laptop GPU Direct3D11 vs_5_0 ps_5_0, D3D11)', 'strong'],

@@ -1,6 +1,7 @@
 import { acquireSurfaceBake } from './sharedBake';
 import { SurfaceFeatures } from './SurfaceFeatures';
 import * as THREE from 'three';
+import { CloudMap } from './cloudMap';
 import type { BodyDef } from '../../sim/bodies/types';
 import type { Terrain } from '../../sim/terrain/api';
 import { SCALE_PRESETS, type ScaleConfig } from '../../sim/bodies/scale';
@@ -17,6 +18,7 @@ import {
   createGasGiantMaterial,
   createSkyMaterial,
   createCloudMaterial,
+  enableCloudShadows,
   createRingMaterial,
   createSunMaterial,
   type GasGiantStyle,
@@ -99,6 +101,10 @@ export class PlanetRenderer {
   private sky: THREE.Mesh | null = null;
   private clouds: THREE.Mesh | null = null;
   private cloudRadius = 0;
+  private cloudMap: CloudMap | null = null;
+  /** Renderer seen by the cloud mesh's onBeforeRender; used to bake the cloud map in update(). */
+  private bakeRenderer: THREE.WebGLRenderer | null = null;
+  private readonly cloudRotM = new THREE.Matrix3();
   private rings: THREE.Mesh | null = null;
   private ringParticles: RingParticles | null = null;
   private ringTexture: THREE.DataTexture | null = null;
@@ -218,6 +224,8 @@ export class PlanetRenderer {
     const minH = terrain?.minHeight ?? 0;
     const maxH = terrain?.maxHeight ?? 0;
     const ocean = !!terrain?.ocean;
+    const wantClouds = !!terrain && !opts.farOnly && q.clouds && (preset === 'earth' || this.body.id === 'earth') && !!this.atmosphere;
+    if (wantClouds) enableCloudShadows(this.uniforms);
 
     // Far sphere (always available as fallback).
     const seg = q.sphereSegments;
@@ -295,9 +303,11 @@ export class PlanetRenderer {
       this.root.add(this.scatter.group);
     }
 
-    if (q.clouds && (preset === 'earth' || this.body.id === 'earth') && this.atmosphere) {
+    if (wantClouds && this.atmosphere) {
       const H = this.atmosphere.atmosphereRadius - R;
       this.cloudRadius = R + Math.min(H * 0.08, 6000);
+      this.cloudMap = new CloudMap(q.id === 'high' ? 1536 : q.id === 'medium' ? 1024 : 512, terrain!.heightAt);
+      this.uniforms.uCloudMap.value = this.cloudMap.target.texture;
       const cgeo = new THREE.SphereGeometry(1, 96, 48);
       const cmat = createCloudMaterial(this.uniforms, q, this.cloudRadius);
       this.materials.push(cmat);
@@ -306,6 +316,7 @@ export class PlanetRenderer {
       this.clouds.matrixAutoUpdate = false;
       this.clouds.frustumCulled = false;
       this.clouds.renderOrder = 2;
+      this.clouds.onBeforeRender = (renderer) => { if (!this.cloudMap?.done) this.bakeRenderer = renderer; };
       this.root.add(this.clouds);
     }
   }
@@ -453,6 +464,11 @@ export class PlanetRenderer {
     }
     if (this.sky) placeWhole(this.sky, Ra * 1.002);
     if (this.clouds) {
+      if (this.cloudMap && !this.cloudMap.done && this.bakeRenderer) {
+        if (this.cloudMap.step(this.bakeRenderer)) { u.uCloudShell.value = this.cloudRadius; this.bakeRenderer = null; }
+      }
+      // Body-fixed weather keeps marine decks aligned with their coastlines.
+      u.uCloudRot.value.copy(this.cloudRotM.copy(this.rotM).transpose());
       placeWhole(this.clouds, this.cloudRadius * 1.01);
       const cm = this.clouds.material as THREE.ShaderMaterial;
       cm.uniforms.uCamCCloud.value = (camDist - this.cloudRadius) * (camDist + this.cloudRadius);
@@ -598,6 +614,7 @@ export class PlanetRenderer {
     });
     for (const m of this.materials) m.dispose();
     this.lut?.dispose();
+    this.cloudMap?.dispose();
     this.surfaceBake?.release();
     this.root.removeFromParent();
   }

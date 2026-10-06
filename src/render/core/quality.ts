@@ -14,8 +14,8 @@ export interface QualitySettings {
   renderScale: number;
   /** MSAA samples on the HDR render target (WebGL2). 0 = off. */
   msaaSamples: number;
-  /** Post AA when MSAA is off. */
-  fxaa: boolean;
+  /** Post-process anti-aliasing after tone mapping (SMAA: better edges, FXAA: cheapest). */
+  aa: 'none' | 'fxaa' | 'smaa';
   bloom: { enabled: boolean; strength: number; radius: number; threshold: number };
   /** Shadow map size for vessel/part shadows (0 = shadows off). */
   shadowMapSize: number;
@@ -77,7 +77,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     maxPixelRatio: 1,
     renderScale: 0.5,
     msaaSamples: 0,
-    fxaa: true,
+    aa: 'fxaa',
     bloom: { enabled: false, strength: 0.3, radius: 0.4, threshold: 3.0 },
     shadowMapSize: 0,
     terrain: { chunkResolution: 24, maxScreenError: 6, minVertexSpacing: 6, buildBudgetMs: 3, workers: 2, maxInFlight: 6, cacheSize: 400, detail: false },
@@ -94,11 +94,12 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     id: 'medium',
     partDetail: 'high',
     scatter: { radius: 256, maxAltitude: 3000, vegetation: false, cellsPerFrame: 3, budgetMs: 1.5 },
-    // Device-pixel ratio is capped at 1: HiDPI laptops would otherwise shade 2.25–4× the pixels.
-    maxPixelRatio: 1,
+    // Full device resolution (Retina too); adaptive resolution trades pixels for frame time when the
+    // GPU is the bottleneck, down to half the device ratio. The DOM HUD stays crisp regardless.
+    maxPixelRatio: 2,
     renderScale: 1,
     msaaSamples: 0,
-    fxaa: true,
+    aa: 'smaa',
     bloom: { enabled: true, strength: 0.35, radius: 0.45, threshold: 2.5 },
     shadowMapSize: 1024,
     terrain: { chunkResolution: 32, maxScreenError: 3.5, minVertexSpacing: 3, buildBudgetMs: 4, workers: 3, maxInFlight: 10, cacheSize: 700, detail: true },
@@ -118,7 +119,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     maxPixelRatio: 2,
     renderScale: 1,
     msaaSamples: 4,
-    fxaa: false,
+    aa: 'smaa',
     bloom: { enabled: true, strength: 0.4, radius: 0.5, threshold: 2.2 },
     shadowMapSize: 2048,
     terrain: { chunkResolution: 32, maxScreenError: 2, minVertexSpacing: 1.5, buildBudgetMs: 6, workers: 4, maxInFlight: 16, cacheSize: 1200, detail: true },

@@ -33,7 +33,7 @@ vec3 shadeSurface(vec3 albedo, vec3 N, vec3 V, vec3 rel) {
   float f = mix(mu0, ls, uAirless) / ATMO_PI;
   vec3 up = normalize(rel);
   float geo = smoothstep(-0.03, 0.03, dot(up, L));
-  vec3 sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(geo)) * ringShadow(rel);
+  vec3 sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(geo)) * ringShadow(rel) * cloudShadow(rel);
   vec3 direct = uSunColor * sunT * f;
   vec3 amb = skyAmbient(rel, N) / ATMO_PI;
   vec3 planetshine = uPlanetshineColor * max(dot(N, uPlanetshineDir), 0.0) / ATMO_PI;
@@ -41,12 +41,63 @@ vec3 shadeSurface(vec3 albedo, vec3 N, vec3 V, vec3 rel) {
 }
 `;
 
+/** Shadows of the baked cloud layer on surfaces (one blurred cube-map fetch along the sun ray). */
+const GLSL_CLOUD_SHADOW = /* glsl */ `
+#ifdef CLOUD_SHADOWS
+uniform samplerCube uCloudMap;
+uniform mat3 uCloudRot;
+uniform float uCloudShell;
+float cloudShadow(vec3 rel) {
+  if (uCloudShell <= 0.0) return 1.0;
+  float r = length(rel);
+  float mu = dot(rel, uSunDir) / r;
+  if (mu <= 0.0) return 1.0;
+  // Thin shell: flat-layer distance along the sun ray (no float32 |p|²−R² cancellation).
+  vec3 p = rel + uSunDir * (max(uCloudShell - r, 0.0) / max(mu, 0.08));
+  float d = texture(uCloudMap, uCloudRot * p, 1.0).r;
+  return 1.0 - 0.78 * smoothstep(0.05, 0.85, d);
+}
+#else
+float cloudShadow(vec3 rel) { return 1.0; }
+#endif
+`;
+
+
+/**
+ * Aerial perspective evaluated per vertex: in-scattering and transmittance vary smoothly along view
+ * rays, so interpolating them across terrain/ocean triangles is visually equivalent to the per-pixel
+ * march while costing per vertex instead of per (Retina) pixel.
+ */
+const GLSL_AERIAL_VERT = /* glsl */ `
+${GLSL_ATMOSPHERE}
+varying vec3 vAerialL;
+varying vec3 vAerialT;
+void computeAerial(vec3 worldPos) {
+  vec3 toCam = cameraPosition - worldPos;
+  float dist = length(toCam);
+  vec3 rd = -toCam / max(dist, 1e-3);
+  vAerialL = vec3(0.0);
+  vAerialT = vec3(1.0);
+  vec2 seg = cameraAtmoSegment(rd, dist);
+  if (uHasAtmo > 0.5 && seg.y > seg.x) integrateScattering(uCamRel, rd, seg.x, seg.y, AERIAL_STEPS * uStepScale, vAerialL, vAerialT);
+}
+`;
+const GLSL_AERIAL_FRAG = /* glsl */ `
+varying vec3 vAerialL;
+varying vec3 vAerialT;
+`;
+
 function baseHeader(): string {
-  return GLSL_ATMOSPHERE + GLSL_RING_SHADOW;
+  return GLSL_ATMOSPHERE + GLSL_RING_SHADOW + GLSL_CLOUD_SHADOW;
 }
 
-function defines(q: QualitySettings): Record<string, string | number> {
-  return { AERIAL_STEPS: q.atmosphere.aerialSteps, VIEW_STEPS: q.atmosphere.viewSteps, DETAIL_OCTAVES: q.planetDetails.gasOctaves };
+/** Planets whose surface materials receive cloud shadows (decided before their materials are built). */
+const cloudShadowed = new WeakSet<PlanetUniforms>();
+export function enableCloudShadows(u: PlanetUniforms): void { cloudShadowed.add(u); }
+
+function defines(q: QualitySettings, u?: PlanetUniforms): Record<string, string | number> {
+  return { AERIAL_STEPS: q.atmosphere.aerialSteps, VIEW_STEPS: q.atmosphere.viewSteps, DETAIL_OCTAVES: q.planetDetails.gasOctaves,
+    ...(u && cloudShadowed.has(u) ? { CLOUD_SHADOWS: 1 } : {}) };
 }
 
 // ---------------------------------------------------------------- Terrain
@@ -65,7 +116,7 @@ export interface TerrainMaterialOptions {
 
 export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: TerrainMaterialOptions): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: { ...defines(q), ...(o.detail ? { USE_DETAIL: 1 } : {}), ...(o.cutout ? { USE_CUTOUT: 1 } : {}) },
+    defines: { ...defines(q, u), ...(o.detail ? { USE_DETAIL: 1 } : {}), ...(o.cutout ? { USE_CUTOUT: 1 } : {}) },
     uniforms: {
       ...u,
       ...(o.cutout ?? {}),
@@ -85,12 +136,14 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       varying vec3 vNormalBF;
       varying vec3 vColor;
       varying vec3 vDetail;
+      ${GLSL_AERIAL_VERT}
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vWorldPos = wp.xyz;
         vNormalBF = normal;
         vColor = aColor * aColor; // stored gamma-2 encoded
         vDetail = aDetail;
+        computeAerial(wp.xyz);
         gl_Position = projectionMatrix * viewMatrix * wp;
         ${GLSL_LOGDEPTH_VERT}
       }`,
@@ -104,6 +157,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       uniform float uRockBlend;
       uniform float uDetailStrength;
       uniform float uDuneRipples;
+      ${GLSL_AERIAL_FRAG}
       varying vec3 vWorldPos;
       varying vec3 vNormalBF;
       varying vec3 vColor;
@@ -164,7 +218,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         albedo = mix(albedo, uRockColor * (0.85 + 0.3 * albedo / max(max(albedo.r, albedo.g), 0.05)), rockT);
         vec3 col = shadeSurface(albedo, N, V, rel);
         col += earthEmission(normalize(transpose(uBodyRot) * rel), length(rel) - uPlanetRadius, dot(up, uSunDir));
-        col = applyAerialPerspective(col, -V, dist, AERIAL_STEPS * uStepScale);
+        col = col * vAerialT + vAerialL;
         gl_FragColor = vec4(col, 1.0);
       }`,
   });
@@ -173,7 +227,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
 /** Instanced cell-local assets, using the same solar lighting and aerial perspective as terrain. */
 export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, centers: THREE.DataTexture, color: number[], plant: boolean, radius: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: defines(q),
+    defines: defines(q, u),
     uniforms: { ...u, uCenters: { value: centers }, uColor: { value: new THREE.Vector3(...color) }, uAirless: { value: plant ? 0 : 0.65 }, uAmbientFloor: { value: 0.0015 }, uRange: { value: radius } },
     side: plant ? THREE.DoubleSide : THREE.FrontSide,
     vertexShader: /* glsl */ `
@@ -227,7 +281,7 @@ export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, cen
 
 export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabed: [number, number, number], hydrocarbon = false): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: defines(q),
+    defines: defines(q, u),
     uniforms: {
       ...u,
       uDetailTex: { value: getDetailTexture() },
@@ -244,12 +298,29 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
       varying vec3 vUpBF;
       varying float vDepth;
       varying vec3 vDetail;
+      uniform mat3 uBodyRot;
+      varying vec3 vSkyRefl;
+      ${GLSL_AERIAL_VERT}
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vWorldPos = wp.xyz;
         vUpBF = normal;
         vDepth = aDepth;
         vDetail = aDetail;
+        computeAerial(wp.xyz);
+        // Sky seen in the (mean) reflected direction: smooth across the surface, so per vertex.
+        vSkyRefl = vec3(0.0);
+        if (uHasAtmo > 0.5) {
+          vec3 rel = wp.xyz - uPlanetCenter;
+          vec3 up = normalize(uBodyRot * normal);
+          vec3 V = normalize(cameraPosition - wp.xyz);
+          vec3 R = reflect(-V, up);
+          R = normalize(R + up * 0.17);
+          if (dot(R, up) < 0.03) R = normalize(R + up * (0.03 - dot(R, up)));
+          vec2 ta = raySphereC(dot(rel, R), dot(rel, rel) - uAtmoRadius * uAtmoRadius);
+          vec3 tr;
+          integrateScattering(rel, R, 0.0, max(ta.y, 0.0), 6, vSkyRefl, tr);
+        }
         gl_Position = projectionMatrix * viewMatrix * wp;
         ${GLSL_LOGDEPTH_VERT}
       }`,
@@ -262,6 +333,8 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
       uniform vec3 uSeabed;
       uniform vec3 uDeep;
       uniform vec3 uShallow;
+      ${GLSL_AERIAL_FRAG}
+      varying vec3 vSkyRefl;
       varying vec3 vWorldPos;
       varying vec3 vUpBF;
       varying float vDepth;
@@ -282,13 +355,23 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
 
       void main() {
         ${GLSL_LOGDEPTH_FRAG}
-        if (vDepth <= 0.0) discard;
+        vec3 upBF = normalize(vUpBF);
+        vec3 w = abs(upBF); w = w * w; w *= w; w /= (w.x + w.y + w.z);
+        // Flat coasts are tessellated coarsely (little geometric error), so the interpolated depth's zero
+        // crossing would follow triangle edges. Perturb it with world-space noise (≈600 m and 90 m) for an
+        // organic shoreline; only shallow water moves.
+        float shore = 0.0;
+        if (vDepth < 4.0) {
+          float n1 = texture2D(uDetailTex, vDetail.yz / 600.0).a * w.x + texture2D(uDetailTex, vDetail.zx / 600.0).a * w.y + texture2D(uDetailTex, vDetail.xy / 600.0).a * w.z;
+          float n2 = texture2D(uDetailTex, vDetail.yz / 90.0).r * w.x + texture2D(uDetailTex, vDetail.zx / 90.0).r * w.y + texture2D(uDetailTex, vDetail.xy / 90.0).r * w.z;
+          shore = (n1 - 0.5) * 3.0 + (n2 - 0.5) * 1.0;
+        }
+        float depth = vDepth + shore;
+        if (depth <= 0.0) discard;
         vec3 rel = vWorldPos - uPlanetCenter;
         vec3 toCam = cameraPosition - vWorldPos;
         float dist = length(toCam);
         vec3 V = toCam / dist;
-        vec3 upBF = normalize(vUpBF);
-        vec3 w = abs(upBF); w = pow(w, vec3(4.0)); w /= (w.x + w.y + w.z);
         float t = uTime;
         float fade1 = 1.0 - smoothstep(200.0, 2000.0, dist);
         float fade2 = 1.0 - smoothstep(2000.0, 30000.0, dist);
@@ -329,35 +412,24 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
           gl_FragColor = vec4(hydro, 1.0);
           return;
         }
-        vec3 sunT = sunTransmittance(rel) * ringShadow(rel);
+        vec3 sunT = sunTransmittance(rel) * ringShadow(rel) * cloudShadow(rel);
         float k = rough * 0.5;
         float G = (NdL / (NdL * (1.0 - k) + k)) * (NdV / (NdV * (1.0 - k) + k));
         vec3 spec = uSunColor * sunT * ggx(NdH, rough * rough) * G * F / (4.0 * NdV + 1e-4);
         spec = min(spec, vec3(200.0));
-        // Sky reflection: march the reflected ray to the top of the atmosphere.
-        vec3 R = reflect(-V, N);
-        // Facet statistics: average reflected ray points higher into the (darker) sky.
-        R = normalize(R + up * (0.12 + (1.0 - fade1) * 0.1));
-        if (dot(R, up) < 0.03) R = normalize(R + up * (0.03 - dot(R, up)));
-        vec3 skyL = vec3(0.0);
-        if (uHasAtmo > 0.5) {
-          float b = dot(rel, R);
-          float c = dot(rel, rel) - uAtmoRadius * uAtmoRadius;
-          vec2 ta = raySphereC(b, c);
-          vec3 tr;
-          integrateScattering(rel, R, 0.0, max(ta.y, 0.0), 6, skyL, tr);
-        }
+        // Sky reflection along the facet-averaged reflected ray (marched per vertex).
+        vec3 skyL = vSkyRefl;
         // Water body colour: absorption with depth, lit by sun + sky.
-        float depthT = 1.0 - exp(-vDepth / 18.0);
+        float depthT = 1.0 - exp(-depth / 18.0);
         vec3 water = mix(uShallow, uDeep, depthT);
         vec3 lightIn = uSunColor * sunT * max(dot(up, L), 0.0) / ATMO_PI + skyAmbient(rel, up) / ATMO_PI;
         vec3 body = water * lightIn;
-        vec3 bed = uSeabed * lightIn * exp(-vDepth * vec3(0.45, 0.12, 0.06));
-        body = mix(bed, body, smoothstep(0.0, 6.0, vDepth));
+        vec3 bed = uSeabed * lightIn * exp(-depth * vec3(0.45, 0.12, 0.06));
+        body = mix(bed, body, smoothstep(0.0, 6.0, depth));
         vec3 col = mix(body, skyL, F) + spec;
         // foam at the very shoreline
-        col += lightIn * 0.4 * (1.0 - uHydrocarbon) * (1.0 - smoothstep(0.0, 0.6, vDepth)) * fade1;
-        col = applyAerialPerspective(col, -V, dist, AERIAL_STEPS * uStepScale);
+        col += lightIn * 0.4 * (1.0 - uHydrocarbon) * (1.0 - smoothstep(0.0, 0.6, depth)) * fade1;
+        col = col * vAerialT + vAerialL;
         gl_FragColor = vec4(col, 1.0);
       }`,
   });
@@ -367,7 +439,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
 
 export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, opts: { airless: number; ocean: boolean; minH: number; maxH: number; texWidth: number; irregular?: boolean }): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: defines(q),
+    defines: defines(q, u),
     uniforms: {
       ...u,
       uMap: { value: null as THREE.Texture | null },
@@ -445,7 +517,7 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
           vec3 up = normalize(rel);
           float depthT = 1.0 - exp(-(-h) / 18.0);
           vec3 water = mix(vec3(0.01, 0.07, 0.075), vec3(0.002, 0.011, 0.03), depthT);
-          vec3 sunT = sunTransmittance(rel);
+          vec3 sunT = sunTransmittance(rel) * cloudShadow(rel);
           col = water * (uSunColor * sunT * max(dot(up, uSunDir), 0.0) / ATMO_PI + skyAmbient(rel, up) / ATMO_PI);
           vec3 H = normalize(uSunDir + V);
           float NdV = max(dot(up, V), 0.001);
@@ -589,7 +661,7 @@ export function createGasGiantMaterial(u: PlanetUniforms, q: QualitySettings, s:
           float r = length(d);
           float storm = r + snoise(vec3(d * 4.0, 1.0)) * 0.09;
           albedo = mix(albedo, uC0 * (0.45 + 0.12 * snoise(vec3(d * 8.0, 4.0))), 1.0 - smoothstep(0.60, 1.05, storm));
-          albedo = mix(albedo, vec3(0.63, 0.77, 0.88), exp(-pow((storm - 1.08) * 9.0, 2.0)) * 0.12 * smoothstep(-0.3, 0.8, d.y));
+          albedo = mix(albedo, vec3(0.63, 0.77, 0.88), exp(-(((storm - 1.08) * 9.0) * ((storm - 1.08) * 9.0))) * 0.12 * smoothstep(-0.3, 0.8, d.y));
           float streak = fbm3(vec3(pr.xy * 4.0, lat * 60.0), DETAIL_OCTAVES);
           albedo = mix(albedo, vec3(0.9), smoothstep(0.35, 0.6, streak) * 0.55 * (1.0 - smoothstep(0.9, 1.3, r)));
         }
@@ -605,7 +677,7 @@ export function createGasGiantMaterial(u: PlanetUniforms, q: QualitySettings, s:
         // Minnaert limb darkening (k≈0.85) for cloud decks.
         float minn = pow(mu0, 0.8) * pow(max(mu, 0.02), 0.18);
         // Upper methane haze softens ice-giant markings towards the limb.
-        if (uStyle > 1.5) albedo = mix(albedo, mix(uC1, uC2, 0.55), 0.22 + 0.35 * pow(1.0 - mu, 2.0));
+        if (uStyle > 1.5) albedo = mix(albedo, mix(uC1, uC2, 0.55), 0.22 + 0.35 * ((1.0 - mu) * (1.0 - mu)));
         vec3 sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(1.0)) * ringShadow(rel);
         vec3 col = albedo * uSunColor * sunT * minn / ATMO_PI;
         col += albedo * (skyAmbient(rel, N) * 0.5 + uPlanetshineColor * max(dot(N, uPlanetshineDir), 0.0)) / ATMO_PI;
@@ -675,12 +747,11 @@ export function createSkyMaterial(u: PlanetUniforms, q: QualitySettings): THREE.
 
 export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloudRadius: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: defines(q),
+    defines: { ...defines(q), CLOUD_DETAIL: q.id === 'high' ? 3 : q.id === 'medium' ? 2 : 1 },
     uniforms: {
       ...u,
       uCloudRadius: { value: cloudRadius },
       uCamCCloud: { value: 0 },
-      uCoverage: { value: 0.44 },
     },
     vertexShader: /* glsl */ `
       ${GLSL_LOGDEPTH_VERT_PARS}
@@ -696,90 +767,79 @@ export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloud
       ${baseHeader()}
       ${GLSL_NOISE}
       uniform mat3 uBodyRot;
+      uniform samplerCube uCloudMap;
+      uniform mat3 uCloudRot;
+      uniform float uCloudShell;
       uniform float uCloudRadius;
       uniform float uCamCCloud;
-      uniform float uCoverage;
       varying vec3 vWorldPos;
 
-      vec3 swirl(vec3 p, vec3 c, float radius, float strength) {
-        float d = length(p - c);
-        float a = strength * exp(-pow(d / radius, 2.0));
-        // Rodrigues rotation about axis c
-        float ca = cos(a), sa = sin(a);
-        return p * ca + cross(c, p) * sa + c * dot(c, p) * (1.0 - ca);
-      }
-
-      float cloudDensity(vec3 pBF, float lod) {
-        float lat = asin(clamp(pBF.z, -1.0, 1.0));
-        float alat = abs(lat);
-        float drift = mod(uTime * 0.000015, 6.2831853);
-        vec3 p = vec3(cos(drift) * pBF.x - sin(drift) * pBF.y, sin(drift) * pBF.x + cos(drift) * pBF.y, pBF.z);
-        // Mid-latitude cyclones (counter-rotating per hemisphere) and a tropical storm.
-        vec3 jit = vec3(fbm3(pBF * 3.0 + 1.7, 3), fbm3(pBF * 3.0 - 4.1, 3), fbm3(pBF * 3.0 + 8.3, 3)) * 0.04;
-        p = swirl(p + jit, normalize(vec3(0.45, -0.55, 0.70)), 0.22, 1.3);
-        p = swirl(p, normalize(vec3(0.2, 0.75, -0.63)), 0.18, -1.5);
-        p = swirl(p, normalize(vec3(0.85, 0.45, 0.27)), 0.05, 4.0);
-        // Large weather systems
-        float cov = fbm3(p * 3.1 + vec3(13.0, 8.0, -4.0), 4) * 0.5 + 0.5;
-        // Warped mid-scale structure, sheared along latitude (jet streams)
-        vec3 q = p * 4.5;
-        vec3 w = vec3(fbm3(q, 3), fbm3(q + 5.2, 3), fbm3(q - 3.7, 3));
-        vec3 qs = (p + w * 0.12) * vec3(9.0, 9.0, 22.0);
-        int oct = int(clamp(8.0 - lod, 3.0, 8.0));
-        float det = fbm3(qs, oct) * 0.5 + 0.5;
-        // Latitudinal structure: ITCZ, subtropical clear belts, storm tracks, polar cloudiness.
-        float zone = 0.14 * exp(-pow(lat / 0.1, 2.0)) - 0.2 * exp(-pow((alat - 0.4) / 0.13, 2.0)) + 0.14 * exp(-pow((alat - 0.95) / 0.22, 2.0));
-        float c = cov * 0.74 + det * 0.60 + zone;
-        float thr = 1.12 - uCoverage;
-        float d = smoothstep(thr, thr + 0.16, c);
-        // Fine cumulus breakup near edges
-        float fine = fbm3(p * 80.0, int(clamp(6.0 - lod, 2.0, 5.0))) * 0.5 + 0.5;
-        d *= smoothstep(0.15, 0.55, fine + d * 0.6);
-        // One organized tropical cyclone among irregular fronts; its eye and spiral arms are local.
-        vec3 center = normalize(vec3(0.82, -0.46, 0.34));
-        vec3 east = normalize(cross(vec3(0.0, 0.0, 1.0), center));
-        vec3 north = cross(center, east);
-        vec2 st = vec2(dot(pBF, east), dot(pBF, north));
-        float radius = length(st);
-        float front = smoothstep(0.8, 0.95, dot(pBF, center));
-        float arms = 0.5 + 0.5 * sin(atan(st.y, st.x) * 3.0 - radius * 130.0 + fbm3(pBF * 70.0, 3) * 1.8);
-        float cyclone = exp(-radius * radius / 0.008) * smoothstep(0.012, 0.026, radius) * (0.55 + arms * 0.45);
-        d = mix(d, max(d, cyclone), front);
-        d *= 1.0 - front * (1.0 - smoothstep(0.008, 0.018, radius));
-        return d;
+      /** Coverage is always the baked field. Detail cannot spawn clouds in clear sky. */
+      float cloudAt(vec3 rel, float t, float bias) {
+        vec3 dir = uCloudRot * rel;
+        float d = texture(uCloudMap, dir, bias).r;
+        vec3 p = normalize(dir) * (uCloudRadius / 2000.0);
+        // Derivatives are evaluated outside branches; fade EACH octave before Nyquist.
+        float footprint = max(length(dFdx(p)), length(dFdy(p)));
+        float near = 1.0 - smoothstep(60000.0, 350000.0, t);
+        float f1 = near * (1.0 - smoothstep(0.12, 0.4, footprint));
+        float f2 = near * (1.0 - smoothstep(0.12, 0.4, footprint * 3.0));
+        float f3 = near * (1.0 - smoothstep(0.12, 0.4, footprint * 9.0));
+        float n = 0.0;
+        if (f1 > 0.0) n += snoise(p) * 0.24 * f1;
+        #if CLOUD_DETAIL >= 2
+          if (f2 > 0.0) n += snoise(p * 3.0 + 7.0) * 0.10 * f2;
+        #endif
+        #if CLOUD_DETAIL >= 3
+          if (f3 > 0.0) n += snoise(p * 9.0 - 3.0) * 0.035 * f3;
+        #endif
+        return clamp(d * (1.0 + n), 0.0, 1.0);
       }
 
       void main() {
         ${GLSL_LOGDEPTH_FRAG}
+        if (uCloudShell <= 0.0) discard;
         vec3 rd = normalize(vWorldPos - cameraPosition);
         float b = dot(uCamRel, rd);
         vec2 tc = raySphereC(b, uCamCCloud);
         if (tc.y < 0.0) discard;
-        float t = uCamCCloud < 0.0 ? tc.y : tc.x;
+        bool below = uCamCCloud < 0.0;
+        float t = below ? tc.y : tc.x;
         if (t < 0.0) discard;
         vec2 tg = raySphereC(b, uCamCGround);
         if (tg.x > 0.0 && tg.x < t) discard;
+        // Depth belongs to the analytic cloud hit, not the back of the proxy sphere.
+        // This also works in the small gap between the true shell and its inflated mesh.
+        #ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+          float viewDepth = max(0.0, -t * (viewMatrix * vec4(rd, 0.0)).z);
+          gl_FragDepth = log2(1.0 + viewDepth) * logDepthBufFC * 0.5;
+        #endif
         vec3 rel = uCamRel + rd * t;
-        vec3 pBF = transpose(uBodyRot) * (rel / uCloudRadius);
-        float lod = log2(max(t, 1.0) / 2000.0);
-        float d = cloudDensity(pBF, lod);
+        float d = cloudAt(rel, t, 0.0);
         if (d < 0.01) discard;
         vec3 up = normalize(rel);
         float muS = dot(up, uSunDir);
         vec3 sunT = sunTransmittance(rel) * ringShadow(rel);
-        // Fake self-shadowing: sample density towards the sun.
-        float dS = cloudDensity(normalize(pBF + transpose(uBodyRot) * uSunDir * 0.004), lod + 1.0);
-        float shadow = mix(1.0, 0.45, dS);
+        // Self-shadowing: blurred density a few tens of km towards the sun.
+        float dS = texture(uCloudMap, uCloudRot * (up + uSunDir * 0.006), 2.5).r;
+        float shadow = mix(1.0, below ? 0.4 : 0.72, smoothstep(0.1, 0.9, dS));
         float cosT = dot(rd, uSunDir);
-        float phase = 0.6 + 0.6 * pow(max(cosT, 0.0), 8.0);
-        vec3 albedo = vec3(0.92);
-        vec3 col = albedo * uSunColor * sunT * shadow * phase * max(muS + 0.15, 0.0) / (ATMO_PI * 1.15);
-        col += albedo * skyAmbient(rel, up) / ATMO_PI * 1.2;
-        float a = clamp(d * 1.15, 0.0, 0.97);
+        // Henyey–Greenstein forward lobe: thin edges glow when looking towards the sun.
+        float g = 0.65;
+        float hg = (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * cosT, 1.5);
+        float phase = 0.62 + 0.09 * hg * (1.0 - 0.75 * d);
+        // Seen from below, thick cores are grey (light has scattered out on the way through).
+        float base = below ? mix(1.0, 0.38, smoothstep(0.25, 1.0, d)) : mix(1.0, 0.82, d * d);
+        vec3 albedo = vec3(0.93);
+        float lit = max(muS + 0.12, 0.0) / 1.12;
+        vec3 col = albedo * uSunColor * sunT * shadow * phase * lit * base / ATMO_PI;
+        col += albedo * skyAmbient(rel, up) / ATMO_PI * (below ? 1.0 : 1.25);
+        float a = clamp(d * 1.2, 0.0, 0.98);
         col = applyAerialPerspective(col, rd, t, AERIAL_STEPS * uStepScale);
         gl_FragColor = vec4(col * a, a);
       }`,
-    side: THREE.DoubleSide,
+    // One rasterized hit from both outside and inside the proxy sphere.
+    side: THREE.BackSide,
     transparent: true,
     depthWrite: false,
     blending: THREE.CustomBlending,
@@ -869,7 +929,7 @@ export function createRingMaterial(u: PlanetUniforms, q: QualitySettings, profil
         vec3 col = albedo * uSunColor * illum * sh / ATMO_PI;
         // Planetshine faintly lights the night side of the rings.
         float planetPhase = 0.5 + 0.5 * dot(normalize(rel), uSunDir);
-        float planetSolidAngle = pow(uPlanetRadius / length(rel), 2.0);
+        float planetSolidAngle = ((uPlanetRadius / length(rel)) * (uPlanetRadius / length(rel)));
         col += albedo * uSunColor * vec3(1.0, 0.86, 0.65) * planetSolidAngle * planetPhase * 0.055;
         // The forward lobe remains visible on both sides for unresolved ice/dust in thinner rings.
         col += albedo * uSunColor * sh * pow(max(cosPhase, 0.0), 16.0) * exp(-tau * 2.0) * 0.14;

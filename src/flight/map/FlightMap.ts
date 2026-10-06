@@ -96,11 +96,27 @@ export class FlightMap {
     this.focus = obj;
     if (obj?.kind === 'body') {
       const b = w.universe.body(obj.id);
-      map.distance = Math.max(b.radius * (b.kind === 'star' ? 8 : 5), this.minDistance() * 1.5);
+      // A body the predicted path enters is framed by its SOI, so the flyby and its periapsis are in view.
+      const encountered = Number.isFinite(b.soi) && w.trajectory().some(p => p.orbit.body === b.id) && b.id !== active?.body;
+      map.distance = Math.max(b.radius * (b.kind === 'star' ? 8 : 5), this.minDistance() * 1.5, encountered ? b.soi * 1.8 : 0);
     } else {
       const v = obj ? w.vessels.get(obj.id) : active;
       if (v) map.distance = w.universe.body(v.body).radius * 4;
     }
+    this.emit();
+  }
+
+  /**
+   * Follow the active vessel and zoom out far enough to see a planned transfer to `targetId`: its whole orbit
+   * around the vessel's body (moon targets), so the encounter, the target's SOI and periapsis are on screen.
+   */
+  frameTransfer(targetId: string) {
+    const w = this.world, active = w.active, target = w.universe.bodies.get(targetId);
+    if (!active || !target?.orbit) return;
+    this.focus = null;
+    const local = target.parent === active.body;
+    const reach = local ? target.orbit.a * (1 + target.orbit.e) + target.soi : Math.max(w.universe.body(active.body).soi, target.radius * 5);
+    this.c.map.distance = Math.max(this.c.map.distance, reach * 2.6);
     this.emit();
   }
 

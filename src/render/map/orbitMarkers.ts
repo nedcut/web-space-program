@@ -24,6 +24,8 @@ export interface OrbitMarker {
   planned: boolean;
   /** Encountered/escaped body. */
   other?: string;
+  /** Index of the trajectory patch the marker sits on (its colour family). */
+  patch: number;
 }
 
 /** Whether a patch is drawn as its full conic (closed ellipse) rather than the arc it actually spans. */
@@ -39,7 +41,7 @@ export function firstPlannedPatch(patches: readonly TrajectoryPatch[]): number {
   return patches.length;
 }
 
-export interface MarkerBodies { radius(id: string): number }
+export interface MarkerBodies { radius(id: string): number; /** SOI radius (apsides beyond it are never reached). */ soi?(id: string): number }
 
 export function orbitMarkers(patches: readonly TrajectoryPatch[], now: number, bodies: MarkerBodies): OrbitMarker[] {
   const out: OrbitMarker[] = [];
@@ -58,7 +60,7 @@ export function orbitMarkers(patches: readonly TrajectoryPatch[], now: number, b
       }
       for (const [k, kind] of [[lo, 'pe'], [hi, 'ap']] as const) if (k >= 0) {
         const s = p.samples[k];
-        out.push({ key: `${kind}:${i}`, kind, body, position: s.position, time: s.time, altitude: length(s.position) - radius, planned: isPlanned });
+        out.push({ key: `${kind}:${i}`, kind, body, position: s.position, time: s.time, altitude: length(s.position) - radius, planned: isPlanned, patch: i });
       }
     } else if (from < p.endTime || patchDrawnClosed(p)) {
       const closed = patchDrawnClosed(p);
@@ -67,9 +69,11 @@ export function orbitMarkers(patches: readonly TrajectoryPatch[], now: number, b
         try { dt = kind === 'pe' ? timeToPeriapsis(p.orbit, from) : timeToApoapsis(p.orbit, from); } catch { continue; }
         if (!Number.isFinite(dt)) continue;
         const time = from + dt;
-        if (!closed && time > p.endTime) continue;
+        // An outbound hyperbola already past periapsis has no upcoming apsis on this patch.
+        if (!closed && (time > p.endTime || time < from - 1)) continue;
         const position = elementsToState(p.orbit, time).position;
-        out.push({ key: `${kind}:${i}`, kind, body, position, time, altitude: length(position) - radius, planned: isPlanned });
+        if (length(position) > (bodies.soi?.(body) ?? Infinity)) continue;
+        out.push({ key: `${kind}:${i}`, kind, body, position, time, altitude: length(position) - radius, planned: isPlanned, patch: i });
       }
     }
     if (p.endTime <= now) continue;
@@ -80,11 +84,11 @@ export function orbitMarkers(patches: readonly TrajectoryPatch[], now: number, b
       if (next && next.orbit.body === p.nextBody) {
         try { altitude = (next.samples ? Math.min(...next.samples.map(s => length(s.position))) : periapsisRadius(next.orbit)) - bodies.radius(p.nextBody); } catch { /* radial */ }
       }
-      out.push({ key: `encounter:${i}`, kind: 'encounter', body, position: end(), time: p.endTime, altitude, planned: isPlanned, other: p.nextBody });
+      out.push({ key: `encounter:${i}`, kind: 'encounter', body, position: end(), time: p.endTime, altitude, planned: isPlanned, other: p.nextBody, patch: i });
     } else if (p.endReason === 'soiExit') {
-      out.push({ key: `escape:${i}`, kind: 'escape', body, position: end(), time: p.endTime, altitude: NaN, planned: isPlanned, other: body });
+      out.push({ key: `escape:${i}`, kind: 'escape', body, position: end(), time: p.endTime, altitude: NaN, planned: isPlanned, other: body, patch: i });
     } else if (p.endReason === 'impact' || p.endReason === 'atmosphere') {
-      out.push({ key: `${p.endReason}:${i}`, kind: p.endReason, body, position: end(), time: p.endTime, altitude: 0, planned: isPlanned });
+      out.push({ key: `${p.endReason}:${i}`, kind: p.endReason, body, position: end(), time: p.endTime, altitude: 0, planned: isPlanned, patch: i });
     }
   }
   return out;
@@ -92,9 +96,9 @@ export function orbitMarkers(patches: readonly TrajectoryPatch[], now: number, b
 
 const SHORT: Record<OrbitMarkerKind, string> = { ap: 'Ap', pe: 'Pe', encounter: '', escape: '', impact: 'Impact', atmosphere: 'Entry' };
 
-/** Short caption shown next to a marker (encounter captions name the body). */
+/** Short caption shown next to a marker (encounter captions name the body and the periapsis reached inside it). */
 export function markerCaption(m: OrbitMarker, name: (id: string) => string): string {
-  if (m.kind === 'encounter') return `${name(m.other!)} encounter`;
+  if (m.kind === 'encounter') return `${name(m.other!)} encounter${Number.isFinite(m.altitude) ? m.altitude < 0 ? ' · impact' : ` · Pe ${formatDistance(m.altitude)}` : ''}`;
   if (m.kind === 'escape') return `${name(m.other!)} escape`;
   return SHORT[m.kind];
 }

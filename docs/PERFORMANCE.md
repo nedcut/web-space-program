@@ -558,8 +558,8 @@ V8 normally ages such code out.
 
 ## Findings for the graphics agent
 
-Measured on the same harness (DPR 2, Medium, 1470×920 CSS → canvas 1470×920 because Medium caps DPR at 1; map at
-2940×1840). Profiles: `scripts/bench/gpu-profile.sh` on an unminified build.
+Measured on the same harness before merging `main` (DPR 2, Medium, 1470×920 CSS → canvas 1470×920 because Medium
+then capped DPR at 1; map at 2940×1840). Profiles: `scripts/bench/gpu-profile.sh` on an unminified build.
 
 1. **three.js submission dominates main-thread CPU**: `render` 1.3–2.6 ms/frame and planets `update` 0.1–0.4 ms of a
    2–4 ms frame (pad 2.55 of 3.36 ms). Pad: 455 draw calls / 1.08 M triangles, orbit 349 / 0.71 M.
@@ -591,5 +591,155 @@ Measured on the same harness (DPR 2, Medium, 1470×920 CSS → canvas 1470×920 
    42 style recalcs/s; `MapView.update` ~0.6 ms/frame there.
 7. **Renderer teardown**: `RenderPipeline.dispose()` and `ui/planetPreview.ts` should use
    `src/render/releaseRenderer.ts` (or equivalent) so any future scene owner cannot reintroduce the retention above.
-8. Medium at Retina already renders 1470×920 (DPR capped at 1); the map renders at 2940×1840 but is cheap
-   (0.4 ms GPU, 29 draws).
+8. These runs predate the `op/gfx` merge: Medium then rendered 1470×920 at DPR 2 (DPR capped at 1). Since that merge
+   Medium renders at device resolution (2940×1840 on Retina, 4× the pixels) with SMAA, so the GPU side — and the
+   `Commit` back-pressure in item 4 — will weigh more on the MacBook than measured here; the CPU-side numbers in this
+   pass are resolution-independent. The map renders at 2940×1840 and is cheap (0.4 ms GPU, 29 draws). A smoke run of
+   the merged build at DPR 2 measured the Kestrel pad at **47 fps, 93 frames > 25 ms in 6 s, CPU 5.1 ms/frame** (vs
+   60 fps / 3.4 ms before the merge) while map, Saturn and the editor stayed at 60 fps — the device-resolution Medium
+   preset is now the dominant cost on the pad.
+9. After merging `main`, the simulation wins hold (Node, per 20 ms tick, main → merged): Selene landed 3.68 → 1.63 ms,
+   vacuum 0.60 → 0.36 ms, rails 1e6× 7.33 → 2.21 ms; determinism traces identical to `main`. The contact fast path is
+   forwarded through the relative-frame environment that `op/moonxfer` now uses for all unpacked vessels.
+
+# Flight graphics fidelity and GPU cost — 2026-10-06 (`op/gfx`)
+
+Measured on the real GPU (Windows Chrome 154, RTX 3060 Ti) with a 1470×920 CSS viewport at
+emulated DPR 2 (MacBook Retina), i.e. a 2940×1840 drawing buffer. GPU ms come from
+`EXT_disjoint_timer_query_webgl2` (`pipeline.gpuMs`). Per-component costs were measured
+with two methods. The first hides one material family and differences the timer reading.
+The second (`renderer bench`) renders 30 frames between two `readPixels` syncs. fps values
+are noisy: another agent's game tab shared the GPU, and DevTools DPR emulation adds
+compositor work. Read fps as a range and the GPU ms as the comparison.
+
+The driver lives outside the repo (`C:\wsp-tools\drv\gfx.mjs`, `js/bench.js`, `js/prof.js`).
+It sets `wsp.settings.v1` for the preset, emulates DPR, measures and screenshots through CDP.
+
+## Per-pass GPU cost at DPR 2, Medium (ms)
+
+| Pass / component | Pad before | Pad after | Low orbit before | Low orbit after |
+|---|---:|---:|---:|---:|
+| Whole frame (GPU timer) | 17.2 | 6.6–7.3 | 32.2 | 7.2–7.7 |
+| Clouds (Earth shell) | 2.3 | ≈0.3 | **16.7** | 2.5 |
+| Aurora volume (whole-screen march) | **5.6** | ≈0 | **6.6** | ≈0 |
+| Milky Way band | 4.5 | ≈0 (baked) | 2.5 | ≈0 |
+| Terrain (incl. aerial perspective) | 2.5 | 1.0–2.0 | 4.0 | 1.1 |
+| Ocean | — | ≈0.5 | 2.1 | 0.65 |
+| Sky shell | 1.5 | 1.5 | 2.0 | 1.6 |
+| Vessel parts (PBR) | ≈1.0 | ≈1.0 | ≈0.1 | ≈0.1 |
+| Shadow map | <0.2 | <0.2 | <0.1 | <0.1 |
+| Bloom | 0.4 | 0.2–0.3 | 0.4 | 0.24 |
+| AA | FXAA 0.3 | SMAA 0.4–0.6 | FXAA 0.3 | SMAA 0.5 |
+
+The "before" column is the old code forced to DPR 2. Medium previously ran at DPR 1: 5.7 ms
+on the pad and 8.7 ms in orbit, at a quarter of the pixels. Medium now spends about the same
+GPU time at four times the pixel count.
+
+## Presets at DPR 2 (RTX 3060 Ti)
+
+| Preset | Drawing buffer | Pad GPU ms / fps | Orbit GPU ms / fps |
+|---|---|---|---|
+| Low | 735×460 (unchanged: half of 1×) | 0.3 / 60 | 0.3 / 60 |
+| Medium, adaptive off | 2940×1840 | 6.6–7.3 / 34–46 | 7.7 / 38–45 |
+| Medium, adaptive on (default) | settles at 0.8 (DPR 1.6) | 4.8 / ~57 | — |
+| High | 2940×1840 + 4× MSAA | 13.1 / 33 | 11.8 / 37 |
+
+Before this pass, High at DPR 2 measured 27 ms / 22 fps on the pad.
+
+The emulated DPR 2 viewport costs this machine extra compositing that the timer queries do
+not see. Even with the scene materials hidden, the composer at full resolution ran at only
+about 45 fps. This is why adaptive resolution no longer trusts a low timer reading when the
+main thread is idle. On a Mac the native Retina compositor path differs, so check the F8
+overlay there.
+
+## Changes
+
+| Change | Files |
+|---|---|
+| Medium: DPR up to 2 + SMAA. High: MSAA 4× + SMAA. Low: FXAA, unchanged resolution | `render/core/quality.ts`, `renderer.ts` |
+| Adaptive: tier-based start, predicted-scale jumps, one-window reaction when severe, CPU-aware GPU-idle veto | `render/core/adaptiveQuality.ts`, `renderer.ts` |
+| GPU-baked procedural cube maps in strips (cloud field, Milky Way) | `render/core/proceduralCube.ts`, `planet/cloudMap.ts`, `sky/Starfield.ts` |
+| Cloud shading: detail erosion, cumulus cells, HG phase, grey bases, cloud shadows on surfaces | `planet/materials.ts`, `PlanetRenderer.ts`, `uniforms.ts` |
+| Aurora early rejection (polar slab / night side) | `planet/effects.ts` |
+| Per-vertex aerial perspective (terrain, ocean) and ocean sky reflection | `planet/materials.ts` |
+| Submerged-chunk culling bounds include sea level (ocean holes) | `planet/quadtree.ts` |
+| GLSL portability fixes + test (Mac green wash) | `sky/SunGlare.ts`, several shaders, `tests/glsl-portability.test.ts` |
+| Shadow range/bias/softness | `flight/controller.ts` |
+
+Before/after images (left: before at Medium's old DPR 1; right: after at DPR 2) are in
+`docs/screenshots/gfx/`. `sea-fixed.jpg` shows the descending-capsule view that used to show
+the ocean hole.
+
+**Note for the CPU/perf agent:** these are render-side only. `PlanetRenderer.update` now steps
+the cloud bake for its first ~24 frames (one strip each) and `Starfield.update` steps the
+Milky Way for its first ~6. Both are GPU work of a fraction of a millisecond each. Main-thread
+frame time is reported as `pipeline.cpuMs`.
+
+## Coherent cloud field — 2026-10-06 (`cx/clouds`)
+
+The previous cumulus shader thresholded several noise octaves into isolated bright cells over otherwise
+clear terrain and sea. Coverage now comes entirely from one baked R8 cube map: large fronts, six
+mid-latitude curls, an undulating ITCZ, subtropical gaps, and coastal stratocumulus decks. A 128×64
+terrain-derived land mask locates those decks west of this game's fictional continents. Removing the
+whole-field longitude drift keeps the decks over their ocean basins. This remains static procedural
+weather; it does not add a weather simulation or volumetric cloud march.
+
+Cube faces retain 512/1024/1536 resolution on Low/Medium/High (Low still disables clouds by default).
+They use trilinear mipmaps and 4× anisotropy, with no equirectangular seam or polar convergence.
+R8 replaces RG8: logical mip storage is approximately 2/8/18 MiB rather than 4/16/36 MiB, plus an
+8 KiB bake-only geography texture. Octaves are limited by resolution **and** attenuated by the bake's
+derivative footprint, including where a vortex compresses a front. Runtime detail only modulates
+existing cover, with each octave independently footprint-filtered and faded over 60–350 km viewing
+distance. It cannot generate bright dots in a clear area.
+
+Lighting retains the HG forward lobe, grey bases, aerial perspective, and shared cloud shadows on
+terrain/ocean/scatter. Cloud tops receive less self-shadowing. One back-face shell pass writes the
+analytic cloud intersection's logarithmic depth; this handles cameras above, below, and between the
+true cloud layer and the conservative proxy mesh without changing material variants.
+
+### Verification method
+
+Windows Chrome through CDP `127.0.0.1:9333`, hardware ANGLE/D3D11 NVIDIA GeForce RTX 3060 Ti;
+1470×920 CSS, DPR 2, 2940×1840 buffer, adaptive resolution off. Dev server is **5318** in the clouds
+worktree (owner approved this because cpuperf already owns 5317). Orbit uses stock Meridian at
+~150 km. The shell cost is a GPU-timer difference with only its material hidden; surface cloud
+shadows remain enabled in both measurements. Final measurements bracket the hidden run with two
+visible runs, discard 40 settling frames per phase, and take the median of 110 smoothed GPU samples.
+The baseline used 120-frame medians with a 1.5 s settling interval. Full-scene differences include
+normal host/GPU scheduling noise; these are not isolated shader microbenchmarks or laptop FPS claims.
+
+`node scripts/clouds-check.mjs <base-url> <shot.png> <query> [flight|preview]` reproduces screenshots,
+GPU timing, console errors, and cube coverage. On Windows it uses the owner's installed Playwright
+at `C:/wsp-tools/drv/package.json`; `WSP_PLAYWRIGHT_PACKAGE` can override that location. The preview
+now exposes its renderer/scene/planet for this dev-only check and polls the existing GPU timer.
+`mapviz2.mjs` with `scripts/clouds-views.json` captures the globe, pole, 20 km, shell crossing, grey
+undersides and pad sky from one warmed High-quality preview.
+
+Coverage is measured from all six GPU-baked faces with solid-angle weights
+`(1 + s² + t²)^(-3/2)`, not from a screenshot. High gives **65.19% at density > 0.1**;
+56.52% exceeds 0.2 and 39.46% exceeds 0.5. The softest wisps raise density > 0.01 coverage to
+80.03%; mean density is 0.376. This defines “coverage” explicitly rather than treating every
+nonzero transparent edge as an opaque cloud. Globe shell cost is about **0.23 ms** on High at
+1,200 km altitude, where runtime detail is fully faded. Readback reported WebGL error 0 and no
+browser/shader errors. Raw baseline and globe measurements are in `docs/performance/clouds-*.json`.
+
+Validation: `npm run lint`, `npx tsc --noEmit`, `npx vitest run --maxWorkers=3` (**89 files / 1,015 tests**,
+307.36 s), and `npm run build` pass. Final shader adjustments also pass the focused cloud geography
+and GLSL portability tests; final lint/type/build checks pass. Existing bundle-size and ineffective
+dynamic-import build advisories remain. `git merge main` reported already up to date.
+
+Final Medium orbit measurement: cloud shell **2.35 → 1.10 ms**, full scene **7.72 → 6.90–6.94 ms**.
+The final hidden-shell phase was 5.82 ms; the baseline hidden-shell phase was 5.37 ms. The difference
+between those controls illustrates the background variation, so the shell deltas are the useful
+comparison. The bake still runs once in strips and the steady-state shader still uses two cube
+lookups (density and self-shadow) plus distance/footprint-filtered detail. No new per-frame bake.
+
+Inspected screenshots: [before orbit](screenshots/clouds/before-orbit.png),
+[150 km orbit](screenshots/clouds/orbit.png), [1,200 km globe](screenshots/clouds/globe.png),
+[20 km](screenshots/clouds/20km.png), [pad sky](screenshots/clouds/pad-sky.png),
+[grey bases](screenshots/clouds/grey-base.png), [polar view](screenshots/clouds/polar.png),
+and [7 km shell crossing](screenshots/clouds/shell-crossing.png). Pad sky is at the exact launch-site
+latitude/longitude; the separate stock-Meridian pad flight was also checked in Windows Chrome.
+No console/shader errors occurred in the final sweep. The cloud layer is still a thin shell, so it
+reads as a sheet when very close; this work improves satellite-scale structure without adding
+volumetric marching to the GPU budget.

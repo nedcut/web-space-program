@@ -141,6 +141,7 @@ export function stepVessel(v: VesselState, input: ControlInput, env: Environment
         air: (p, time) => { const a = env.air(absolute(p, time), time); return { ...a, windVelocity: sub(a.windVelocity, ref(time).velocity) }; },
         ground: (p, time) => { const g = env.ground(absolute(p, time), time); return g ? { ...g,
           surfacePoint: sub(g.surfacePoint, ref(time).position), surfaceVelocity: sub(g.surfaceVelocity, ref(time).velocity) } : null; },
+        clearOfGround: env.clearOfGround && ((p, time, margin) => env.clearOfGround!(absolute(p, time), time, margin)),
         hazardTimeScale: env.hazardTimeScale,
         radiation: (p, time) => env.radiation?.(absolute(p, time), time) ?? 0,
         sun: (p, time) => env.sun(absolute(p, time), time),

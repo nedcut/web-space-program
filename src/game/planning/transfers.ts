@@ -89,11 +89,18 @@ export function planTransferToBody(world: PlanningWorld, targetId: string, opts:
   let t0: number;
   let pro0: number;
   let horizon: number;
+  /** Further departure guesses tried when the first one does not refine to an accurate encounter. */
+  let fallbacks: { t: number; pro: number }[] = [];
   if (target.parent === central.id) {
     // ---- Outbound to a moon: coarse analytic scan.
     const window = opts.window ?? (target.orbitalPeriod ?? 10 * T) * 1.05;
     const step = T / 120;
+    // Take the first departure window, not the best one in a whole lunar month: any departure whose
+    // Hohmann apoapsis falls well inside the target's SOI refines to the same encounter, and the global
+    // optimum is often days (Real: weeks) away for a marginal gain. The best window remains the fallback.
+    const good = target.soi * 0.9;
     let best = { miss: Infinity, t: earliest, pro: 0 };
+    let first: typeof best | null = null;
     for (let t = earliest; t < earliest + window; t += step) {
       const s = propagate(o, t);
       const r1 = length(s.position);
@@ -105,9 +112,16 @@ export function planTransferToBody(world: PlanningWorld, targetId: string, opts:
       const tApo = t + timeToApoapsis(o2, t);
       const miss = length(sub(propagate(o2, tApo).position, u.ephem.getRelativeState(targetId, tApo).position));
       if (miss < best.miss) best = { miss, t, pro: vNeed - v1 };
+      if (first) {
+        // Follow the first good window down to its local minimum, then stop.
+        if (miss < first.miss) first = { miss, t, pro: vNeed - v1 };
+        else if (miss > first.miss + target.soi * 0.1) break;
+      } else if (miss < good) first = { miss, t, pro: vNeed - v1 };
     }
-    t0 = best.t;
-    pro0 = best.pro;
+    const start = first ?? best;
+    t0 = start.t;
+    pro0 = start.pro;
+    if (start !== best) fallbacks = [best];
     const rT = length(u.ephem.getRelativeState(targetId, t0).position);
     const r1 = length(propagate(o, t0).position);
     horizon = 2.2 * Math.PI * Math.sqrt(((r1 + rT) / 2) ** 3 / o.mu);
@@ -159,22 +173,35 @@ export function planTransferToBody(world: PlanningWorld, targetId: string, opts:
     return 10 + Math.max(0, central.soi - apoapsisRadius(p0.orbit)) / central.soi;
   };
   const dims = target.parent === central.id ? 3 : 2;
-  let x = dims === 3 ? [0, pro0, 0] : [0, pro0];
-  const steps = dims === 3 ? [T / 30, Math.max(2, pro0 * 0.01), Math.max(2, pro0 * 0.01)] : [T / 30, Math.max(1, pro0 * 0.02)];
-  const x0 = x;
   const search = () => {
+    const x0 = dims === 3 ? [0, pro0, 0] : [0, pro0];
+    const steps = dims === 3 ? [T / 30, Math.max(2, pro0 * 0.01), Math.max(2, pro0 * 0.01)] : [T / 30, Math.max(1, pro0 * 0.02)];
     let res = nelderMead(cost, x0, steps, 400);
     for (let restart = 0; restart < 3; restart++) res = nelderMead(cost, res.x, steps.map((s) => s * 0.2), 400);
     const t = t0 + res.x[0];
     return { x: res.x, t, ev: evaluateEncounter(world, o, t, dvAt(t, res.x[1], res.x[2] ?? 0), targetId, horizon) };
   };
-  let found = search();
-  if (!found.ev?.hit) {
-    // Retry with every hit scored below every miss, so the simplex can cross a grazing SOI entry.
-    squash = true;
-    found = search();
+  const refine = () => {
+    squash = false;
+    let found = search();
+    if (!found.ev?.hit) {
+      // Retry with every hit scored below every miss, so the simplex can cross a grazing SOI entry.
+      squash = true;
+      found = search();
+    }
+    return found;
+  };
+  const error = (f: ReturnType<typeof search>) => f.ev?.hit ? Math.abs(f.ev.periapsis - peAlt) : Infinity;
+  const tolerance = Math.max(5000, target.radius * 0.05);
+  let found = refine();
+  for (const guess of fallbacks) {
+    if (error(found) <= tolerance) break;
+    report?.('Refining encounter', 0.75);
+    t0 = guess.t; pro0 = guess.pro;
+    const next = refine();
+    if (error(next) < error(found)) found = next;
   }
-  x = found.x;
+  const x = found.x;
   const t = found.t;
   const ev = found.ev;
   if (!ev || !ev.hit) return null;

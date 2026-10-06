@@ -3,8 +3,8 @@ import { applyPlanningResult } from '../../game/planning/apply';
 import { TransferWindow } from './TransferWindow';
 import { useEffect, useState } from 'react';
 import type { World } from '../../game/world';
-import { timeToApoapsis, timeToPeriapsis } from '../../sim/orbit';
-import { formatDuration } from '../../ui/format';
+import { period, timeToApoapsis, timeToPeriapsis } from '../../sim/orbit';
+import { formatDistance, formatDuration } from '../../ui/format';
 import { planCircularization } from '../../game/autopilot';
 import { useRenderProfile } from './useRenderProfile';
 import { getTutorial } from '../../tutorial/runtime';
@@ -69,8 +69,15 @@ export function ManeuverPanel({ world, map }: { world: World; map?: FlightMap })
     setPlanMsg('');
     try {
       const { result: plan, snapshot } = await planner.run('transfer', { target: id });
-      if (plan) applyPlanningResult(world, snapshot, plan);
-      setPlanMsg(plan ? `Transfer planned: ${plan.dv.toFixed(0)} m/s, burn in ${formatDuration(plan.node.time - world.ut)}. Click the node for warp and Δv details; Assist → Execute next node can fly it.` : 'No transfer window found');
+      if (!plan) { setPlanMsg('No transfer window found'); return; }
+      applyPlanningResult(world, snapshot, plan);
+      const target = world.universe.body(id), node = world.nodes[0];
+      if (map && node) { map.selectNode(node.id); map.frameTransfer(id); }
+      const wait = plan.node.time - world.ut, T = period(world.orbitOf(world.active!));
+      setPlanMsg(`${target.name} transfer: ${plan.dv.toFixed(0)} m/s, burn in ${formatDuration(wait)}`
+        + `${Number.isFinite(T) && wait > 2 * T ? ' (next window: the target must line up with your orbital plane)' : ''}. `
+        + `Encounter in ${formatDuration(plan.encounterTime - world.ut)}, periapsis ${formatDistance(plan.periapsisAltitude)}. `
+        + `Use Warp below to reach the burn; Assist → Execute next node can fly it.`);
     } catch (e) {
       if ((e as Error).name !== 'AbortError') setPlanMsg((e as Error).message);
     }

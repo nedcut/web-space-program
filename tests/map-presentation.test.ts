@@ -91,7 +91,7 @@ describe('map presentation', () => {
     expect(map.scene.children.filter(o => o.type === 'Line2').map(o => (o as THREE.Mesh).geometry)).toEqual(geometry);
     const point = new THREE.Vector3(...Object.values(ephem.getBodyState('saturn',0).position)).project(map.camera);
     expect(map.pick(point.x, point.y)).toEqual({ kind: 'body', id: 'saturn' });
-    expect(map.scene.children.filter(o => o.type === 'Sprite')).toHaveLength(10); // Sun, active, ghost node, six gizmo handles, fleet.
+    expect(map.scene.children.filter(o => o.type === 'Sprite')).toHaveLength(12); // Sun, active, ghost node, six gizmo handles, fleet, two encounter ghosts.
     map.setResourceOverlay(['moon']); map.setResourceOverlay([], false);
     map.setApproach({ body: 'earth', positionA: { x: 1e6, y: 0, z: 0 }, positionB: { x: 2e6, y: 0, z: 0 }, label: 'Approach' });
     map.update(input);

@@ -1,0 +1,22 @@
+{
+  "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "canvas": [
+    2940,
+    1840
+  ],
+  "full": 5.460004315483106,
+  "without": 5.239628316023124,
+  "restored": 5.485849977936784,
+  "cloudMs": 0.2332988306868211,
+  "coverage": {
+    "0.01": 0.8002564526039946,
+    "0.1": 0.6519448957359651,
+    "0.2": 0.5651984685062159,
+    "0.5": 0.39455971743774176
+  },
+  "meanDensity": 0.3757268999313736,
+  "faceSize": 1536,
+  "glError": 0,
+  "query": "body=earth&alt=1200000&lat=25&lon=-60&pitch=-90&hour=12&ui=0&quality=high",
+  "errors": []
+}

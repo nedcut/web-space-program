@@ -1,0 +1,32 @@
+[
+  {
+    "waitFor": "window.__preview?.ready",
+    "wait": 12000,
+    "shot": "clouds-final-globe"
+  },
+  {
+    "js": "document.getElementById('lat').value='80';document.getElementById('lon').value='130';document.getElementById('pitch').value='-90';document.getElementById('head').value='0';document.getElementById('hour').value='12';document.getElementById('alt').value=String(Math.log(1200000/2)/Math.log(window.__preview.planet.body.radius*8/2)*1000)",
+    "wait": 6000,
+    "shot": "clouds-polar"
+  },
+  {
+    "js": "document.getElementById('lat').value='28.5';document.getElementById('lon').value='-70';document.getElementById('pitch').value='-25';document.getElementById('head').value='0';document.getElementById('hour').value='12';document.getElementById('alt').value=String(Math.log(20000/2)/Math.log(window.__preview.planet.body.radius*8/2)*1000)",
+    "wait": 6000,
+    "shot": "clouds-20km"
+  },
+  {
+    "js": ";document.getElementById('alt').value=String(Math.log(7000/2)/Math.log(window.__preview.planet.body.radius*8/2)*1000)",
+    "wait": 6000,
+    "shot": "clouds-shell-crossing"
+  },
+  {
+    "js": "document.getElementById('lat').value='35';document.getElementById('lon').value='-65';document.getElementById('pitch').value='20';document.getElementById('head').value='90';document.getElementById('hour').value='10';document.getElementById('alt').value=String(Math.log(20/2)/Math.log(window.__preview.planet.body.radius*8/2)*1000)",
+    "wait": 6000,
+    "shot": "clouds-grey-base"
+  },
+  {
+    "js": "document.getElementById('lat').value='28.5';document.getElementById('lon').value='-80.6';document.getElementById('pitch').value='5';document.getElementById('head').value='0';document.getElementById('hour').value='15';document.getElementById('alt').value=String(Math.log(20/2)/Math.log(window.__preview.planet.body.radius*8/2)*1000)",
+    "wait": 6000,
+    "shot": "clouds-pad-sky"
+  }
+]

@@ -36,10 +36,19 @@ export function devScenario(this: FlightController, internals: FlightControllerI
   if (name === 'moon') { alt = 20000; vel = scale(east, Math.sqrt(b.gm / (b.radius + 20000))); }
   // High circular orbit that permits every rails warp level (benchmarks: 100 000× and above).
   if (name === 'highorbit') { alt = Math.max(1_500_000, b.radius * 2.5); vel = scale(east, Math.sqrt(b.gm / (b.radius + alt))); }
+  let surfaceDir = up;
+  if (name === 'sea') {
+    // Low over the sea ~40 km east of the launch site, co-rotating, lobbed upwards (splashdown/sea rendering checks).
+    const a = 40000 / b.radius;
+    surfaceDir = normalize(add(scale(up, Math.cos(a)), scale(east, Math.sin(a))));
+    alt = 400;
+    const omega = (2 * Math.PI) / b.rotationPeriod;
+    vel = add(scale(cross(pole, surfaceDir), omega * (b.radius + alt)), scale(surfaceDir, 70));
+  }
   wv.mode = 'physics';
   wv.fixed = undefined;
   wv.body = bodyId;
-  wv.state.position = add(bs.position, scale(up, b.radius + alt));
+  wv.state.position = add(bs.position, scale(surfaceDir, b.radius + alt));
   wv.state.velocity = add(bs.velocity, vel);
   wv.state.situation = 'flying';
   // Point retrograde-ish for re-entry, prograde otherwise.

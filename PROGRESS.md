@@ -26,6 +26,18 @@ map and in the Ring Skimmer mission — `docs/PERFORMANCE.md` ("What to measure 
 Graphics are auto-tuned once per device (weak GPUs start on Low; adaptive resolution is on). Then tell me what feels
 wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
 
+## Map readability on Retina (2026-10-06, op/mapviz2)
+You said the map lines were barely visible and a planned course looked like straight pixels. Checked on a real GPU at
+2× device pixel ratio: every trajectory line now has a thin dark outline (it reads over bright planets), and the active
+and planned paths get a soft glow. Widths stay fixed on screen (active orbit 3 px). Curves are sampled more densely
+where they bend, so there are no straight chords at periapsis or along flybys. Dashes are a fixed size on screen, and
+the glow continues through the gaps. The Moon's orbit stays visible when you zoom out to plan a transfer. Your planet's
+own path round the Sun is faint and fades towards the screen edges. The part of a course inside the Moon's SOI is drawn
+where the Moon will be at the encounter. That spot shows a ghost Moon icon and a faint SOI bubble. The node gizmo
+shrinks when the orbit is small on screen, and its handles hide when the orbit is only a few pixels across, so it no
+longer covers the transfer. Ap/Pe/encounter/escape/impact/AN-DN markers are sharp SVG glyphs in the colour of their
+trajectory. Their labels have outlines. Apsides of orbits too small to tell apart are hidden. The map also has a
+faint starfield.
 ## Performance: CPU, memory and loading on a real GPU (2026-10-06, op/cpuperf)
 - New real-GPU benchmark suite (`scripts/bench/gpu-bench.sh`, interleaved `gpu-ab.sh`, `gpu-profile.sh`, `gpu-leaks.sh`): 12 scenarios from pad to Saturn, editor and Tracking Station; frame pacing, CPU per section, long tasks, GC, heap/DOM/listeners, React commits, load timeline, 3-minute soak and a scene-cycle leak test. Results and method: `docs/PERFORMANCE.md` (pass 3).
 - Fixed a real memory leak: every flight/editor/Space Center/navball renderer (with its scene and WebGL context) stayed alive after leaving the scene (+1,167 DOM nodes and +560 listeners per menu→flight→editor cycle; 17 live renderers after 3 cycles → 2).
@@ -622,3 +634,31 @@ Final quality-pass validation after merging main through `981e915` (audio, craft
 - Final source `04b1817f`, including both main merges and the Float64 trajectory-localization fix: **`npx vitest run --maxWorkers=2` passes 76 files / 914 tests in 319.84 seconds**, exit 0, with no exclusions or relaxed existing assertions/timeouts. The run was detached after an interrupted foreground attempt so it could complete reliably.
 - Required `npm run lint`, `npx tsc --noEmit`, `npm run build` and `git diff --check` all pass. Browser verification, physical conservation/stability tests, original OFF trace and performance evidence are recorded above and in `docs/physics/PRECISE_GRAVITY.md`. The production build retains only the existing bundle-size advisory.
 - Main `8a4afdf4` is merged, including environmental hazards and the concurrent UI polish. Implementation stayed in `/home/nedcut/.t3/projects/wsp-wt/nbody`; no changes were made in the main checkout or other worktrees.
+
+## Flight graphics fidelity (2026-10-06, op/gfx)
+
+- **Green tint on Macs fixed (owner report).** The sun-glare ghosts used `smoothstep(r, r·soft, d)` (edge0 > edge1, undefined in GLSL). Apple's Metal backend extrapolates it, so a mint-green ghost covered the screen and the vessel. All reversed smoothsteps and `pow(x, 2.0)` squares of possibly negative values in the render shaders were replaced, and a static test now rejects both patterns. The fault was reproduced on the RTX 3060 Ti by emulating Metal's behaviour. Lens ghosts and the halo ring are also much subtler.
+- **Ocean holes fixed.** Seen from a descending capsule, a jagged brown hole showed where the sea should be. Quadtree culling used seabed bounds, so near chunks whose seabed lay outside the view also lost their water. The shallow shoreline now follows world-space noise instead of triangle edges. Adds the `?scenario=sea` dev placement over the ocean.
+- **Retina sharpness:** Medium renders at device resolution with SMAA and adaptive resolution, so the old half-resolution blur is gone (see the before/after crops in `docs/PERFORMANCE.md`). Apple M-series GPUs are classed mid or strong and start on Medium.
+- **Speed at DPR 2 (RTX 3060 Ti, GPU timer):** pad 17 → 7 ms and low orbit 32 → 7.7 ms on Medium. The gains come from GPU-baked cloud field and Milky Way cube maps, early rejection of the aurora volume, and per-vertex aerial perspective and ocean sky reflection.
+- **Looks:** the cloud field is band-limited with per-pixel detail. It adds fair-weather cumulus fields, forward-scattering silver linings, grey bases from below and cloud shadows on land and sea. The Milky Way is more detailed. Vessel shadows are soft, acne-free and no longer clipped in low sun.
+- Validation: lint, `tsc`, full Vitest (88 files / 1013 tests) and the build all pass. Determinism is untouched (no `src/sim` changes).
+
+## Coherent Earth clouds (2026-10-06, cx/clouds)
+
+- Replaced the scattered runtime cumulus dots with a single coherent weather bake: mid-latitude frontal curls, ITCZ, subtropical clear areas and terrain-aligned west-coast marine decks. Fine noise only textures existing cover; bake and runtime octaves are footprint-filtered. Global solid-angle-weighted coverage is 65.19% at density > 0.1.
+- Retained the mipmapped cube resolutions, switched RG8 to R8 (half the logical texture storage), and kept shared cloud shadows, silver linings and grey bases. A single shell pass now writes the actual ray-hit depth, including across the cloud-layer/proxy-mesh gap. The baked weather stays body-fixed to keep coastal decks over water.
+- Verified on Windows Chrome / RTX 3060 Ti at 2940×1840, adaptive off, using this worktree on owner-approved port 5318. Medium 150 km orbit cloud cost is **2.35 → 1.10 ms**; full scene is **7.72 → 6.90–6.94 ms**. High globe cloud cost is 0.23 ms. Readback and final screenshots show no WebGL/shader errors. Inspected pad sky, 20 km, 150 km, distant globe, polar, grey-base and shell-crossing views. Evidence and reproducible drivers are linked in docs/PERFORMANCE.md.
+- `npm run lint`, `npx tsc --noEmit`, `npx vitest run --maxWorkers=3` (89 files / 1,015 tests, 307.36 s), `npm run build`, and whitespace checks pass. Final shader edits additionally passed focused geography/GLSL checks and lint/type/build. `git merge main` reports already up to date. Changes are confined to the clouds worktree.
+
+## Moon transfers from LEO (2026-10-06, op/moonxfer)
+
+Owner report: zooming out to see the encounter was hard, other handles blocked the node, and "Plan transfer" kept changing every couple of seconds.
+
+- **Root cause of the jitter: physics frame.** At 1×, the vessel is unpacked into rigid-body physics. That integration was heliocentric with only Earth's gravity, so it lacked Earth's own solar acceleration (5.8 mm/s²). The orbit therefore drifted 0.115 m/s per 20 s. The map recomputes its prediction every 2 s, and the Moon periapsis moved 30 → 210 → 580 → 1,050 → 2,130 km over 20 s; the encounter was gone within minutes. Vessels now integrate in the dominant body's translating frame, the patched-conic frame. The same plan now holds at 30.0 km for every sample, through warp to the burn (Node test plus 8 in-browser samples over 14 s).
+- **Planner:** it used the best departure in a whole lunar month, so burns were up to 8 days away in Standard and 24 days in Real. It now refines the first good window, with the best window as a fallback. From a 28.5° pad orbit, waits are at most about half a lunar period because the Moon must cross your orbital plane. The message explains this and gives the Δv, the burn and encounter times, and the encounter periapsis. The map then zooms out to frame the Moon's orbit.
+- **Zoom:** the wheel and trackpad pinch always zoom. Previously, a scroll over a handle changed the burn by 0.1 m/s per event. Alt/Option+wheel over a handle now steps Δv. The zoom rate is normalised for delta modes, and pinch is boosted. Two trackpad swipes now zoom out ×121 (LEO to beyond the Moon's orbit).
+- **Gizmo:** the node centre always wins hit-testing. Handles sit at a constant 60 px, stretched when foreshortened and hidden when pointing at the camera, so none covers the centre. Previously they shrank to 24 px when zoomed out and normal handles could sit on the centre. Dragging the centre works with LEO only a few pixels wide.
+- **Encounter readouts:** the encounter caption reads "Moon encounter · Pe 30.0 km", and the node menu shows "Encounter Moon · Pe 30.0 km". Tab-focusing an encountered body frames its SOI and draws the flyby around it with its Pe marker.
+- Evidence (RTX 3060 Ti, DPR 2, 1470×920, `?flight=stock-selene&scenario=orbit`, driver `C:\wsp-tools\drv\moonxfer.mjs`): `C:\wsp-tools\shots\mx3-3-planned.png` (framed plan), `mx3-6-node-menu.png`, `mx3-7-focus-moon.png` (flyby around the Moon), `mx2-2-zoomed-out.png`, `mx2-5-drag-node.png` (centre drag at far zoom).
+- Tests: new `tests/moon-transfer.test.ts` covers the physics-vs-conic agreement and Moon plans from pad-inclined LEO. It checks 6 Standard and 3 Real epochs for encounter Pe within 5 km, wait under 0.55 lunar periods, and stability under 1× coasting and warp-to-node. `tests/map-maneuver.test.ts` adds zoom/stretch helpers and centre-wins picking at three view angles. The OFF-mode golden trace hash was regenerated for the intentional frame change. Lint, typecheck, full Vitest (90 files / 1,020 tests) and build pass; `git merge main` is up to date.

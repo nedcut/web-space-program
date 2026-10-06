@@ -249,11 +249,11 @@ const volumeFragment = (STEPS: number) => /* glsl */ `
     float n = vnoise(vec3(p.xz / R * 1.6, x / uRe * uNoiseFreq - uTime * uScroll) + uSeed);
     float tz = smoothstep(0.0, 0.3, v);
     float rnD = rn * (1.0 + uTurb * tz * (n - 0.5) * 1.6);
-    float axial = pow(1.0 - v, 1.5) * mix(exp(-v * 2.5), 1.0, uAtm);
+    float axial = pow(max(1.0 - v, 0.0), 1.5) * mix(exp(-v * 2.5), 1.0, uAtm);
     // envelope: filled gaussian blended with a brighter shear-layer ring (afterburning at the edge)
     float ringD = (rnD - 0.72) * 2.6;
     float shape = mix(exp(-rnD * rnD * uEnvK), exp(-ringD * ringD), uRing);
-    float env = shape * axial * smoothstep(1.42, 1.0, rn) * (uRe / R);
+    float env = shape * axial * (1.0 - smoothstep(1.0, 1.42, rn)) * (uRe / R);
     float T = exp(-v * uCoolRate) * (1.0 - 0.6 * clamp(rnD, 0.0, 1.0));
     vec3 ec = mix(ramp(T), uTail, smoothstep(0.2, 0.85, v) * uTailAmt);
     float soot = 0.0;
@@ -337,7 +337,7 @@ const volumeFragment = (STEPS: number) => /* glsl */ `
         float bd = length(pc.xz);
         float invS = 1.0 / max(sqrt(axy), 1e-4);
         float span = t1 - t0;
-        float wd = (0.06 + uDiaWidth * pow(tri, 0.8)) * rd0;
+        float wd = (0.06 + uDiaWidth * pow(max(tri, 0.0), 0.8)) * rd0;
         float knot = exp(-1.6 * bd * bd / (wd * wd)) * (0.3 + 0.7 * tri) * min(wd * 1.4 * invS, span);
         float df = (f - 0.5) / 0.045;
         float rD = uDiaWidth * 0.9 * rd0;
@@ -388,7 +388,8 @@ const hazeFragment = /* glsl */ `
   void main() {
     #include <logdepthbuf_fragment>
     float facing = abs(dot(normalize(vN), normalize(-vView)));
-    float a = facing * facing * facing * pow(1.0 - vV, 2.0) * smoothstep(0.0, 0.08, vV);
+    float tail = max(1.0 - vV, 0.0);
+    float a = facing * facing * facing * tail * tail * smoothstep(0.0, 0.08, vV);
     vec3 c = mix(uMid, uHot, 0.35) * (a * uHaze);
     gl_FragColor = vec4(c, 1.0);
     #include <tonemapping_fragment>

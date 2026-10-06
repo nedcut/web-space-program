@@ -1,0 +1,13 @@
+{
+  "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "canvas": [
+    2940,
+    1840
+  ],
+  "full": 6.898992180276157,
+  "without": 5.824950017699806,
+  "restored": 6.944032319861565,
+  "cloudMs": 1.0965622323690551,
+  "query": "flight=stock-meridian&scenario=orbit",
+  "errors": []
+}

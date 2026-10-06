@@ -89,7 +89,8 @@ function loadBody(id: string): void {
 let readyFrames = 0;
 let renderedFrames = 0;
 const SETTLE = params.get('settle') === '1';
-const state = { ready: false, stats: {} as Record<string, unknown> };
+// Dev-only handles for repeatable GPU timing and baked-field coverage checks.
+const state = { ready: false, stats: {} as Record<string, unknown>, pipeline, scene, camera, get planet() { return planet; } };
 (window as unknown as { __preview: typeof state }).__preview = state;
 
 bodySel.addEventListener('change', () => loadBody(bodySel.value));
@@ -137,6 +138,7 @@ function frame(): void {
   const now = performance.now();
   const dt = Math.min((now - lastT) / 1000, 0.1);
   lastT = now;
+  pipeline.updateAdaptive(dt * 1000, false);
   simTime += dt;
   if (ui.anim.checked) ui.hour.value = String((Number(ui.hour.value) + dt * 0.25) % 24);
 
