@@ -49,17 +49,17 @@ function instrument(s) {
   } catch { /* unsupported */ }
   // Minimal React DevTools hook: count commits and function/class components that rendered in each.
   const COMPOSITE = new Set([0, 1, 11, 14, 15]);
-  const walk = (next, prev) => {
+  const walk = (next) => {
     for (let c = next.child; c; c = c.sibling) {
       const p = c.alternate;
       if (COMPOSITE.has(c.tag) && (!p || p.memoizedProps !== c.memoizedProps || p.memoizedState !== c.memoizedState)) B.fibers++;
-      if (!p || c.child !== p.child) walk(c, p);
+      if (!p || c.child !== p.child) walk(c);
     }
   };
   window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
     supportsFiber: true, renderers: new Map(), inject() { return 1; }, checkDCE() {},
     onScheduleFiberRoot() {}, onCommitFiberUnmount() {}, onPostCommitFiberRoot() {}, setStrictMode() {},
-    onCommitFiberRoot(_id, root) { B.commits++; try { walk(root.current, root.current.alternate); } catch { /* ignore */ } },
+    onCommitFiberRoot(_id, root) { B.commits++; try { walk(root.current); } catch { /* ignore */ } },
   };
   // Worker traffic: messages each way, per worker script.
   const W = window.Worker;
@@ -239,7 +239,7 @@ async function stableMs(page, limit = 20000) {
 // ---------------------------------------------------------------------------------------------------------
 if (cases.includes('load')) {
   for (const run of ['cold', 'warm']) {
-    const { context, page, cdp } = await newPage();
+    const { context, page } = await newPage();
     try {
       const reps = run === 'cold' ? 1 : 2; // warm = second visit in the same context (HTTP + IndexedDB caches)
       for (let i = 0; i < reps; i++) {
@@ -294,7 +294,7 @@ if (cases.includes('editor')) {
   try {
     const t0 = Date.now();
     await page.goto(`${base}/?scene=editor&stock=stock-ringrunner-real`);
-    await page.waitForFunction(() => window.__editor?.view && window.__editor.session, null, { timeout: 60000 });
+    await page.waitForFunction(() => !!(window.__editor?.view && window.__editor.session), null, { timeout: 60000 });
     const readyMs = Date.now() - t0;
     const parts = await page.evaluate(() => window.__editor.session.craft?.parts?.length ?? window.__editor.session.parts?.length ?? null);
     await page.waitForTimeout(3000);
@@ -358,7 +358,7 @@ if (cases.includes('cycles')) {
       await setScene('flight', { launchPending: true, resumeWorld: null }); await flightReady(page); await page.waitForTimeout(1000);
       await page.evaluate(() => window.__flight.toggleMap()); await page.waitForTimeout(1000);
       await page.evaluate(() => window.__flight.toggleMap());
-      await setScene('editor'); await page.waitForFunction(() => window.__editor?.view, null, { timeout: 60000 }); await page.waitForTimeout(1000);
+      await setScene('editor'); await page.waitForFunction(() => !!window.__editor?.view, null, { timeout: 60000 }); await page.waitForTimeout(1000);
       await setScene('flight', { launchPending: true, resumeWorld: null }); await flightReady(page); await page.waitForTimeout(1000);
       await setScene('menu'); await sample(i);
     }

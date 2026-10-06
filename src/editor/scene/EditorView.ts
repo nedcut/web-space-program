@@ -1,6 +1,7 @@
 import { LinkView } from '../../render/vessel/LinkView';
 import { isTyping, matches } from '../../input/bindings';
 import * as THREE from 'three';
+import { detachRenderer, noteDfgLut, releaseRenderer } from '../../render/releaseRenderer';
 import { game } from '../../game/store';
 import { QUALITY_PRESETS } from '../../render/core/quality';
 import type { PartInstance } from '../../sim/vessel/types';
@@ -193,7 +194,7 @@ export class EditorView {
     el.addEventListener('pointerup', this.onPointerUp);
     el.addEventListener('pointerleave', this.onPointerLeave);
     el.addEventListener('wheel', this.onWheel, { passive: false });
-    el.addEventListener('contextmenu', (e) => e.preventDefault());
+    el.addEventListener('contextmenu', preventDefault);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
 
@@ -896,6 +897,8 @@ export class EditorView {
   timing = { update: 0, render: 0, calls: 0, tris: 0 };
 
   dispose() {
+    noteDfgLut(this.renderer, this.scene);
+    detachRenderer(this.scene);
     this.disposed = true;
     window.clearTimeout(this.longPress);
     cancelAnimationFrame(this.raf);
@@ -903,6 +906,14 @@ export class EditorView {
     this.ro.disconnect();
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
+    // three keeps disposed renderers reachable from shared materials; the canvas must not pin this view.
+    const el = this.renderer.domElement;
+    el.removeEventListener('pointerdown', this.onPointerDown);
+    el.removeEventListener('pointermove', this.onPointerMove);
+    el.removeEventListener('pointerup', this.onPointerUp);
+    el.removeEventListener('pointerleave', this.onPointerLeave);
+    el.removeEventListener('wheel', this.onWheel);
+    el.removeEventListener('contextmenu', preventDefault);
     this.hangar.dispose();
     this.envRT.dispose();
     this.links.dispose();
@@ -912,7 +923,9 @@ export class EditorView {
     this.markerMatHi.dispose();
     this.markerMatHeld.dispose();
     this.ghostMat.dispose();
-    this.renderer.dispose();
+    releaseRenderer(this.renderer);
     this.renderer.domElement.remove();
   }
 }
+
+const preventDefault = (e: Event) => e.preventDefault();

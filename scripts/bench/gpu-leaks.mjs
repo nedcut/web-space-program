@@ -20,23 +20,43 @@ const ready = () => page.waitForFunction(() => !!window.__flight && !document.qu
 const setScene = (s, extra = {}) => page.evaluate(([s, e]) => window.__game.set({ scene: s, ...e }), [s, extra]);
 try {
   await page.goto(`${base}/?flight=stock-kestrel`); await ready(); await page.waitForTimeout(1000);
-  for (let i = 0; i < N; i++) {
+  const cycle = async () => {
     await setScene('flight', { launchPending: true, resumeWorld: null }); await ready(); await page.waitForTimeout(800);
     await page.evaluate(() => window.__flight.toggleMap()); await page.waitForTimeout(800); await page.evaluate(() => window.__flight.toggleMap());
-    await setScene('editor'); await page.waitForFunction(() => window.__editor?.view, null, { timeout: 60000 }); await page.waitForTimeout(800);
+    await setScene('editor'); await page.waitForFunction(() => !!window.__editor?.view, null, { timeout: 60000 }); await page.waitForTimeout(800);
     await setScene('flight', { launchPending: true, resumeWorld: null }); await ready(); await page.waitForTimeout(800);
     await setScene('menu'); await page.waitForTimeout(800);
-  }
-  await page.waitForTimeout(1500);
+  };
   await cdp.send('HeapProfiler.enable');
-  await cdp.send('HeapProfiler.collectGarbage');
-  const chunks = [];
+  let chunks = [];
   cdp.on('HeapProfiler.addHeapSnapshotChunk', (e) => chunks.push(e.chunk));
-  await cdp.send('HeapProfiler.takeHeapSnapshot', { reportProgress: false, captureNumericValue: false });
-  const snap = JSON.parse(chunks.join(''));
+  const takeSnapshot = async () => {
+    await page.waitForTimeout(1500);
+    await cdp.send('HeapProfiler.collectGarbage'); await cdp.send('HeapProfiler.collectGarbage');
+    chunks = [];
+    await cdp.send('HeapProfiler.takeHeapSnapshot', { reportProgress: false, captureNumericValue: false });
+    return JSON.parse(chunks.join(''));
+  };
+  // Aggregate (count, self size) per node type+name.
+  const census = (sn) => {
+    const mm = sn.snapshot.meta; const f = mm.node_fields.length; const T = mm.node_fields.indexOf('type'), NM = mm.node_fields.indexOf('name'), SZ = mm.node_fields.indexOf('self_size');
+    const out = new Map();
+    for (let i = 0; i < sn.nodes.length; i += f) { const t = mm.node_types[0][sn.nodes[i + T]]; let n = sn.strings[sn.nodes[i + NM]]; if (t === 'string' || t === 'concatenated string' || t === 'sliced string') n = '(string)'; else if (t === 'code') n = '(code)'; const k = `${t}:${String(n).slice(0, 70)}`; const e = out.get(k) ?? [0, 0]; e[0]++; e[1] += sn.nodes[i + SZ]; out.set(k, e); }
+    return out;
+  };
+  let before = null;
+  if (args.diff) { for (let i = 0; i < +(args.warm ?? 2); i++) await cycle(); before = census(await takeSnapshot()); }
+  for (let i = 0; i < N; i++) await cycle();
+  const snap = await takeSnapshot();
+  if (before) {
+    const after = census(snap); const rows = [];
+    for (const [k, [c, sz]] of after) { const b = before.get(k) ?? [0, 0]; rows.push([k, c - b[0], sz - b[1]]); }
+    console.log(`heap census delta over ${N} cycles (top by bytes):`);
+    for (const [k, dc, ds] of rows.sort((a, b) => b[2] - a[2]).slice(0, 30)) console.log(`  ${(ds / 1024).toFixed(1).padStart(9)} kB  ${String(dc).padStart(7)}  ${k}`);
+  }
   const m = snap.snapshot.meta; const nf = m.node_fields.length; const ef = m.edge_fields.length;
   const nodeTypes = m.node_types[0]; const edgeTypes = m.edge_types[0];
-  const N_TYPE = m.node_fields.indexOf('type'), N_NAME = m.node_fields.indexOf('name'), N_EC = m.node_fields.indexOf('edge_count'), N_SIZE = m.node_fields.indexOf('self_size');
+  const N_TYPE = m.node_fields.indexOf('type'), N_NAME = m.node_fields.indexOf('name'), N_EC = m.node_fields.indexOf('edge_count');
   const E_TYPE = m.edge_fields.indexOf('type'), E_NAME = m.edge_fields.indexOf('name_or_index'), E_TO = m.edge_fields.indexOf('to_node');
   const nodes = snap.nodes, edges = snap.edges, strings = snap.strings; const count = nodes.length / nf;
   const firstEdge = new Uint32Array(count + 1); for (let i = 0, e = 0; i < count; i++) { firstEdge[i] = e; e += nodes[i * nf + N_EC] * ef; } firstEdge[count] = edges.length;
@@ -60,7 +80,7 @@ try {
     const out = []; let guard = 0;
     while (i !== 0 && parent[i] !== -1 && guard++ < 40) {
       const e = pedge[i]; const et = edgeTypes[edges[e + E_TYPE]]; const en = et === 'element' || et === 'hidden' ? `[${edges[e + E_NAME]}]` : strings[edges[e + E_NAME]];
-      out.push(`${name(parent[i])}.${en}`); i = parent[i];
+      out.push(`${name(parent[i]).slice(0, 50)}.${String(en).slice(0, 40)}`); i = parent[i];
     }
     return out.reverse().join(' → ');
   };
@@ -70,6 +90,6 @@ try {
     const reach = ids.filter((i) => parent[i] !== -1);
     console.log(`\n${w}: ${ids.length} (${reach.length} strongly reachable)`);
     const seen = new Set();
-    for (const i of reach) { const p = pathOf(i); const k = p.split(' → ').slice(-6).join(' → '); if (seen.has(k)) continue; seen.add(k); console.log(`  … ${p.split(' → ').slice(-14).join(' → ')}`); if (seen.size >= +(args.paths ?? 4)) break; }
+    for (const i of reach) { const p = pathOf(i); const k = p.split(' → ').slice(-6).join(' → '); if (seen.has(k)) continue; seen.add(k); console.log(`  … ${p.split(' → ').slice(-(+(args.depth ?? 10))).join(' → ')}`); if (seen.size >= +(args.paths ?? 4)) break; }
   }
 } finally { await context.close(); await browser.close().catch(() => {}); }

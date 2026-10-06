@@ -198,6 +198,9 @@ export default function FlightScene() {
       detachScenario?.();
       unsub?.();
       c?.dispose();
+      // Debug/automation handles must not keep a disposed controller (World, scene, GL context) alive.
+      const w = window as unknown as Record<string, unknown>;
+      if (c && w.__flight === c) delete w.__flight;
       audio?.silenceFlight();
       if (audioRef.current === audio) audioRef.current = null;
       ctrl.current = null;

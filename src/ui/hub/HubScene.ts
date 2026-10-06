@@ -1,5 +1,6 @@
 import { PhotoCamera } from '../../render/core/PhotoCamera';
 import * as THREE from 'three';
+import { detachRenderer, noteDfgLut, releaseSharedTextures } from '../../render/releaseRenderer';
 import { game } from '../../game/store';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RenderPipeline, getQuality, type QualityId } from '../../render/core';
@@ -307,6 +308,8 @@ export class HubScene {
   }
 
   dispose() {
+    noteDfgLut(this.pipeline.renderer, this.scene);
+    detachRenderer(this.scene);
     this.photo.dispose();
     cancelAnimationFrame(this.raf);
     this.disposers.forEach((d) => d());
@@ -315,6 +318,8 @@ export class HubScene {
     this.site.dispose();
     this.planets.dispose();
     this.pipeline.dispose();
+    releaseSharedTextures();
+    this.pipeline.renderer.forceContextLoss();
     this.pipeline.renderer.domElement.remove();
   }
 }

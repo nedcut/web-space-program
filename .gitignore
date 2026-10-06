@@ -8,3 +8,4 @@ playwright-report
 
 .vite-cache
 .tmp/
+dist-prof

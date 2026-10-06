@@ -36,6 +36,7 @@ import type { CraftDef } from '../sim/vessel/types';
 import { getTutorial } from '../tutorial/runtime';
 import { formatDistance, formatDuration, formatSpeed } from '../ui/format';
 import { frameProfiler as prof } from '../util/frameProfiler';
+import { detachRenderer, noteDfgLut, releaseSharedTextures } from '../render/releaseRenderer';
 import { snapshotEqual } from '../util/snapshotEqual';
 import { bindingLabel } from '../input/bindings';
 import { cross, dot, length, normalize, sub, type Vec3 } from '../util/vec3';
@@ -163,6 +164,7 @@ export class FlightController {
    * loading screen, so the first stage/map/explosion does not stall on a shader compile.
    */
   private warmup: 'pending' | 'compiling' | 'done' = 'pending';
+  private warmupTimer = 0;
   private startedAt = performance.now();
 
   /**
@@ -809,6 +811,7 @@ export class FlightController {
     const start = performance.now();
     const r = this.pipeline.renderer;
     const finish = () => {
+      window.clearTimeout(this.warmupTimer);
       if (this.warmup !== 'compiling') return;
       this.warmup = 'done';
       performance.measure('wsp:flight:shaderWarmup', { start });
@@ -827,7 +830,7 @@ export class FlightController {
       r.setRenderTarget(null);
       Promise.all([map, flight]).then(finish, finish);
       // Never hold the loading screen on a driver that does not report completion.
-      setTimeout(finish, 15000);
+      this.warmupTimer = window.setTimeout(finish, 15000);
     } catch {
       finish();
     }
@@ -1152,6 +1155,10 @@ export class FlightController {
   private groundTelemetry(wv: WorldVessel): Pick<Telemetry, 'gear' | 'brakes' | 'intakeAir'> { return telemetry.groundTelemetry.call(this, this.systems, wv); }
 
   dispose() {
+    noteDfgLut(this.pipeline.renderer, this.scene);
+    detachRenderer(this.scene);
+    detachRenderer(this.map.scene);
+    window.clearTimeout(this.warmupTimer);
     this.photo.dispose();
     this.network?.close();
     cancelAnimationFrame(this.raf);
@@ -1171,6 +1178,7 @@ export class FlightController {
     this.labelHost.remove();
     this.fadeEl?.remove();
     this.pipeline.dispose();
+    releaseSharedTextures();
     this.pipeline.renderer.forceContextLoss();
     this.pipeline.renderer.domElement.remove();
   }

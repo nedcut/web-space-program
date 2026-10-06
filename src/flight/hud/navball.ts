@@ -1,5 +1,6 @@
 import { game } from '../../game/store';
 import * as THREE from 'three';
+import { releaseRenderer } from '../../render/releaseRenderer';
 import type { Vec3 } from '../../util/vec3';
 import { dot } from '../../util/vec3';
 
@@ -241,7 +242,7 @@ export class Navball {
   }
 
   dispose() {
-    this.renderer.dispose();
+    releaseRenderer(this.renderer, this.scene);
     this.element.remove();
   }
 

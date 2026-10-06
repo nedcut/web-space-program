@@ -36,9 +36,12 @@ await cdp.send('Profiler.setSamplingInterval', { interval: +(args.interval ?? 25
 try {
   if (from === 'start') await cdp.send('Profiler.start');
   await page.goto(`${base}${url}`);
-  if (args.ready !== '0') await page.waitForFunction(() => (window.__flight && !document.querySelector('.loading-screen')) || (window.__editor?.view) || document.querySelector('.tracking-root, .menu-actions button'), null, { timeout: 120000, polling: 100 });
+  const waitFor = args.wait ?? (/flight=|mission=/.test(url) ? 'flight' : /editor/.test(url) ? 'editor' : 'any');
+  if (waitFor !== 'none') await page.waitForFunction((w) => w === 'flight' ? (window.__flight && !document.querySelector('.loading-screen'))
+    : w === 'editor' ? !!window.__editor?.view : !!document.querySelector('canvas, .menu-actions button'), waitFor, { timeout: 180000, polling: 100 });
   if (args.setup) await page.evaluate(args.setup);
-  if (from === 'ready') { await page.waitForTimeout(+(args.settle ?? 2000)); await cdp.send('Profiler.start'); }
+  let profStart = 0;
+  if (from === 'ready') { await page.waitForTimeout(+(args.settle ?? 2000)); profStart = await page.evaluate(() => performance.now()); await cdp.send('Profiler.start'); }
   const perfOrigin = await page.evaluate(() => performance.timeOrigin);
   await page.waitForTimeout(after);
   const { profile } = await cdp.send('Profiler.stop');
@@ -71,6 +74,8 @@ try {
   console.log(`marks: ${marks.map((m) => `${m[0]}@${m[1]}+${m[2]}`).join(' ')}`);
   console.log(`\n== self time (total ${((times[times.length - 1] - profile.startTime) / 1000).toFixed(0)} ms profiled)\n${top(all.self, +(args.top ?? 35))}`);
   console.log(`\n== inclusive\n${top(all.incl, +(args.top ?? 35))}`);
+  const inWin = ([, st]) => st >= profStart;
+  lt.splice(0, lt.length, ...lt.filter(inWin)); frames.splice(0, frames.length, ...frames.filter((f) => f[0] >= profStart));
   const windows = [...lt.map(([s, d]) => ['task', s, d]), ...frames.filter(([, d]) => d > longMs).map(([s, d]) => ['frame', s, d])].sort((a, b) => a[1] - b[1]);
   console.log(`\n== ${lt.length} long tasks, ${frames.filter(([, d]) => d > longMs).length} frames > ${longMs} ms (of ${frames.length})`);
   for (const [kind, s, d] of windows.slice(0, +(args.windows ?? 40))) {
