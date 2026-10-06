@@ -1,0 +1,107 @@
+{
+ "label": "after-cycles",
+ "base": "http://localhost:5315",
+ "dpr": 2,
+ "throttle": 1,
+ "quality": "medium",
+ "seconds": 10,
+ "size": "1470x920",
+ "date": "2026-10-06T21:05:45.156Z",
+ "cases": {
+  "cycles": {
+   "samples": [
+    {
+     "cycle": 0,
+     "heapMB": 11.82,
+     "nodes": 141,
+     "listeners": 196,
+     "documents": 1,
+     "canvases": null
+    },
+    {
+     "cycle": 1,
+     "heapMB": 23.95,
+     "nodes": 149,
+     "listeners": 202,
+     "documents": 1,
+     "canvases": 2
+    },
+    {
+     "cycle": 2,
+     "heapMB": 26.36,
+     "nodes": 200,
+     "listeners": 209,
+     "documents": 1,
+     "canvases": 2
+    },
+    {
+     "cycle": 3,
+     "heapMB": 28.82,
+     "nodes": 251,
+     "listeners": 216,
+     "documents": 1,
+     "canvases": 2
+    },
+    {
+     "cycle": 4,
+     "heapMB": 31.15,
+     "nodes": 302,
+     "listeners": 223,
+     "documents": 1,
+     "canvases": 2
+    },
+    {
+     "cycle": 5,
+     "heapMB": 33.12,
+     "nodes": 353,
+     "listeners": 230,
+     "documents": 1,
+     "canvases": 2
+    },
+    {
+     "cycle": 6,
+     "heapMB": 35.13,
+     "nodes": 404,
+     "listeners": 237,
+     "documents": 1,
+     "canvases": 2
+    },
+    {
+     "cycle": 7,
+     "heapMB": 37.04,
+     "nodes": 455,
+     "listeners": 244,
+     "documents": 1,
+     "canvases": 2
+    },
+    {
+     "cycle": 8,
+     "heapMB": 38.96,
+     "nodes": 506,
+     "listeners": 251,
+     "documents": 1,
+     "canvases": 2
+    },
+    {
+     "cycle": 9,
+     "heapMB": 40.99,
+     "nodes": 557,
+     "listeners": 258,
+     "documents": 1,
+     "canvases": 2
+    },
+    {
+     "cycle": 10,
+     "heapMB": 42.9,
+     "nodes": 608,
+     "listeners": 265,
+     "documents": 1,
+     "canvases": 2
+    }
+   ],
+   "heapPerCycleMB": 2.11,
+   "nodesPerCycle": 51,
+   "listenersPerCycle": 7
+  }
+ }
+}

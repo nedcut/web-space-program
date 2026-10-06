@@ -164,7 +164,13 @@ substep engine/RCS impulse-per-mass cost. This observer never changes the underl
 telemetry, audio, navball, HUD). The flight controller, navball loop and `useRenderProfile` (FlightScene/maneuver
 panel) feed it only while enabled. Settings → Graphics or F8 shows `flight/hud/PerfOverlay.tsx` (frame graph,
 percentiles, CPU/GPU breakdown, draws/programs, copyable report). `scripts/perf-probe.mjs` drives the same hooks
-headlessly (see `docs/PERFORMANCE.md`).
+headlessly; `scripts/bench/gpu-bench.sh` / `gpu-ab.sh` drive them on a real GPU over CDP (see `docs/PERFORMANCE.md`).
+
+Scene owners (flight controller, editor view, Space Center, navball) release WebGL renderers with
+`render/releaseRenderer.ts`: three r186 keeps every renderer reachable from shared materials/geometries/textures (part
+caches, the DFG LUT) unless its dispose listeners are detached. `sim/orbit/bounds.ts` gives each body's heliocentric
+distance range from its elements; SOI search, Sun occlusion, radiation and the planet layer use it to skip bodies that
+provably cannot matter without evaluating their ephemerides (results unchanged).
 
 Shader programs are part of the frame budget: the flight controller compiles the flight and map scenes with
 `compileAsync` behind the loading screen (first frame updates without drawing). Anything that changes a three.js

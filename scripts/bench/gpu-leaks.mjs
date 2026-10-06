@@ -12,21 +12,30 @@ const base = args.base ?? 'http://localhost:5317';
 const N = +(args.cycles ?? 3);
 const browser = await chromium.connectOverCDP('http://127.0.0.1:9333');
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
-await context.addInitScript(() => { localStorage.setItem('wsp.settings.v1', JSON.stringify({ quality: 'low', graphicsProfile: 99, autoSaveInterval: 0, masterVolume: 0 })); localStorage.setItem('wsp.help.seen.v1', '1'); });
+await context.addInitScript(() => {
+  localStorage.setItem('wsp.settings.v1', JSON.stringify({ quality: 'low', graphicsProfile: 99, autoSaveInterval: 0, masterVolume: 0 })); localStorage.setItem('wsp.help.seen.v1', '1');
+  // Same in-page cycle as gpu-bench.mjs (one identical evaluate per cycle).
+  const until = async (f, ms = 60000) => { const t0 = performance.now(); while (!f()) { if (performance.now() - t0 > ms) throw new Error('cycle timeout'); await new Promise((r) => setTimeout(r, 100)); } };
+  const flightUp = () => !!window.__flight && !document.querySelector('.loading-screen');
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  window.__benchCycle = async () => {
+    const g = window.__game;
+    g.set({ scene: 'flight', launchPending: true, resumeWorld: null }); await until(flightUp); await pause(800);
+    window.__flight.toggleMap(); await pause(800); window.__flight.toggleMap();
+    g.set({ scene: 'editor' }); await until(() => !!window.__editor?.view); await pause(800);
+    g.set({ scene: 'flight', launchPending: true, resumeWorld: null }); await until(flightUp); await pause(800);
+    g.set({ scene: 'menu' }); await pause(800);
+    return 0;
+  };
+});
 const page = await context.newPage();
 page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}`));
 const cdp = await context.newCDPSession(page);
 const ready = () => page.waitForFunction(() => !!window.__flight && !document.querySelector('.loading-screen'), null, { timeout: 120000, polling: 100 });
-const setScene = (s, extra = {}) => page.evaluate(([s, e]) => window.__game.set({ scene: s, ...e }), [s, extra]);
 try {
   await page.goto(`${base}/?flight=stock-kestrel`); await ready(); await page.waitForTimeout(1000);
-  const cycle = async () => {
-    await setScene('flight', { launchPending: true, resumeWorld: null }); await ready(); await page.waitForTimeout(800);
-    await page.evaluate(() => window.__flight.toggleMap()); await page.waitForTimeout(800); await page.evaluate(() => window.__flight.toggleMap());
-    await setScene('editor'); await page.waitForFunction(() => !!window.__editor?.view, null, { timeout: 60000 }); await page.waitForTimeout(800);
-    await setScene('flight', { launchPending: true, resumeWorld: null }); await ready(); await page.waitForTimeout(800);
-    await setScene('menu'); await page.waitForTimeout(800);
-  };
+  const cycle = () => page.evaluate(() => window.__benchCycle());
+
   await cdp.send('HeapProfiler.enable');
   let chunks = [];
   cdp.on('HeapProfiler.addHeapSnapshotChunk', (e) => chunks.push(e.chunk));
@@ -41,7 +50,7 @@ try {
   const census = (sn) => {
     const mm = sn.snapshot.meta; const f = mm.node_fields.length; const T = mm.node_fields.indexOf('type'), NM = mm.node_fields.indexOf('name'), SZ = mm.node_fields.indexOf('self_size');
     const out = new Map();
-    for (let i = 0; i < sn.nodes.length; i += f) { const t = mm.node_types[0][sn.nodes[i + T]]; let n = sn.strings[sn.nodes[i + NM]]; if (t === 'string' || t === 'concatenated string' || t === 'sliced string') n = '(string)'; else if (t === 'code') n = '(code)'; const k = `${t}:${String(n).slice(0, 70)}`; const e = out.get(k) ?? [0, 0]; e[0]++; e[1] += sn.nodes[i + SZ]; out.set(k, e); }
+    for (let i = 0; i < sn.nodes.length; i += f) { const t = mm.node_types[0][sn.nodes[i + T]]; let n = sn.strings[sn.nodes[i + NM]]; if (t === 'string' || t === 'concatenated string' || t === 'sliced string') n = '(string)'; else if (t === 'code') n = `(code) ${String(n).slice(0, 50)}`; const k = `${t}:${String(n).slice(0, 70)}`; const e = out.get(k) ?? [0, 0]; e[0]++; e[1] += sn.nodes[i + SZ]; out.set(k, e); }
     return out;
   };
   let before = null;

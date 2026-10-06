@@ -1,0 +1,79 @@
+{
+ "host": "AMD Ryzen 5 5600X, Node v24.14.1, scripts/bench/run.ts (tick, rails); paired runs, same session",
+ "before": {
+  "tick/stock-kestrel/9parts/pad": {
+   "medianUs": 81.278,
+   "p95Us": 208.027
+  },
+  "tick/stock-kestrel/9parts/atmosphere": {
+   "medianUs": 176.092,
+   "p95Us": 193.492
+  },
+  "tick/stock-kestrel/9parts/vacuum": {
+   "medianUs": 143.077,
+   "p95Us": 167.796
+  },
+  "tick/stock-kestrel/9parts/landed": {
+   "medianUs": 1130.829,
+   "p95Us": 1141.006
+  },
+  "tick/stock-selene/28parts/pad": {
+   "medianUs": 74.473,
+   "p95Us": 79.964
+  },
+  "tick/stock-selene/28parts/atmosphere": {
+   "medianUs": 208.711,
+   "p95Us": 214.238
+  },
+  "tick/stock-selene/28parts/vacuum": {
+   "medianUs": 174.992,
+   "p95Us": 181.443
+  },
+  "tick/stock-selene/28parts/landed": {
+   "medianUs": 3007.782,
+   "p95Us": 3054.171
+  },
+  "rails/1e6": {
+   "medianUs": 5119.349,
+   "p95Us": 5225.156
+  }
+ },
+ "after": {
+  "tick/stock-kestrel/9parts/pad": {
+   "medianUs": 29.012,
+   "p95Us": 40.97
+  },
+  "tick/stock-kestrel/9parts/atmosphere": {
+   "medianUs": 101.608,
+   "p95Us": 151.612
+  },
+  "tick/stock-kestrel/9parts/vacuum": {
+   "medianUs": 74.928,
+   "p95Us": 118.517
+  },
+  "tick/stock-kestrel/9parts/landed": {
+   "medianUs": 471.913,
+   "p95Us": 482.649
+  },
+  "tick/stock-selene/28parts/pad": {
+   "medianUs": 33.505,
+   "p95Us": 46.636
+  },
+  "tick/stock-selene/28parts/atmosphere": {
+   "medianUs": 128.016,
+   "p95Us": 133.755
+  },
+  "tick/stock-selene/28parts/vacuum": {
+   "medianUs": 99.329,
+   "p95Us": 108.398
+  },
+  "tick/stock-selene/28parts/landed": {
+   "medianUs": 1183.936,
+   "p95Us": 1299.651
+  },
+  "rails/1e6": {
+   "medianUs": 1333.429,
+   "p95Us": 1368.045
+  }
+ }
+}

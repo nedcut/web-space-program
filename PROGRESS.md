@@ -26,6 +26,12 @@ map and in the Ring Skimmer mission — `docs/PERFORMANCE.md` ("What to measure 
 Graphics are auto-tuned once per device (weak GPUs start on Low; adaptive resolution is on). Then tell me what feels
 wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
 
+## Performance: CPU, memory and loading on a real GPU (2026-10-06, op/cpuperf)
+- New real-GPU benchmark suite (`scripts/bench/gpu-bench.sh`, interleaved `gpu-ab.sh`, `gpu-profile.sh`, `gpu-leaks.sh`): 12 scenarios from pad to Saturn, editor and Tracking Station; frame pacing, CPU per section, long tasks, GC, heap/DOM/listeners, React commits, load timeline, 3-minute soak and a scene-cycle leak test. Results and method: `docs/PERFORMANCE.md` (pass 3).
+- Fixed a real memory leak: every flight/editor/Space Center/navball renderer (with its scene and WebGL context) stayed alive after leaving the scene (+1,167 DOM nodes and +560 listeners per menu→flight→editor cycle; 17 live renderers after 3 cycles → 2).
+- Simulation 40–74 % cheaper per tick with bit-identical results (rails 1e6× 5.1 → 1.3 ms, Selene landed on the Moon 3.0 → 1.2 ms, vacuum/atmosphere −40 %); in the browser GC time dropped 2–5× (ascent 14 → 5 ms/s, 100 000× warp 14 → 3 ms/s) and the ascent's 15 hitches per 10 s went to 0.
+- The remaining frame cost is render-side (three.js submission ~2.5 ms of a ~3.5 ms CPU frame, per-draw program re-resolution, GPU back-pressure, cold-load texture generation); handed to the graphics agent with numbers.
+
 ## Map view and maneuver planning, the classic way (2026-10-06, op/mapksp)
 
 Owner feedback: the map and maneuver planning felt unfamiliar. The map now follows the genre classic's hand habits

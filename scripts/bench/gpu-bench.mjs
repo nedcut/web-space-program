@@ -61,6 +61,20 @@ function instrument(s) {
     onScheduleFiberRoot() {}, onCommitFiberUnmount() {}, onPostCommitFiberRoot() {}, setStrictMode() {},
     onCommitFiberRoot(_id, root) { B.commits++; try { walk(root.current); } catch { /* ignore */ } },
   };
+  // One scene cycle driven inside the page (a single, identical evaluate per cycle: harness-compiled scripts do
+  // not accumulate in the heap): flight → map → editor → flight → menu.
+  const until = async (f, ms = 60000) => { const t0 = performance.now(); while (!f()) { if (performance.now() - t0 > ms) throw new Error('cycle timeout'); await new Promise((r) => setTimeout(r, 100)); } };
+  const flightUp = () => !!window.__flight && !document.querySelector('.loading-screen');
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  window.__benchCycle = async () => {
+    const g = window.__game;
+    g.set({ scene: 'flight', launchPending: true, resumeWorld: null }); await until(flightUp); await pause(1000);
+    window.__flight.toggleMap(); await pause(1000); window.__flight.toggleMap();
+    g.set({ scene: 'editor' }); await until(() => !!window.__editor?.view); await pause(1000);
+    g.set({ scene: 'flight', launchPending: true, resumeWorld: null }); await until(flightUp); await pause(1000);
+    g.set({ scene: 'menu' }); await pause(1000);
+    return document.querySelectorAll('canvas').length;
+  };
   // Worker traffic: messages each way, per worker script.
   const W = window.Worker;
   window.Worker = class extends W {
@@ -350,22 +364,14 @@ if (cases.includes('cycles')) {
     await page.goto(`${base}/?flight=stock-kestrel`); await flightReady(page); await page.waitForTimeout(1500);
     const setScene = (s, extra = {}) => page.evaluate(([s, e]) => window.__game.set({ scene: s, ...e }), [s, extra]);
     const samples = []; const N = +(args.cycles ?? 10);
-    const sample = async (i) => {
+    const sample = async (i, canvases) => {
       await page.waitForTimeout(1000);
       await cdp.send('HeapProfiler.collectGarbage'); await cdp.send('HeapProfiler.collectGarbage');
       const m = await metrics(cdp);
-      const extra = await page.evaluate(() => ({ canvases: document.querySelectorAll('canvas').length }));
-      samples.push({ cycle: i, heapMB: r2(m.JSHeapUsedSize / 1e6), nodes: m.Nodes, listeners: m.JSEventListeners, documents: m.Documents, ...extra });
+      samples.push({ cycle: i, heapMB: r2(m.JSHeapUsedSize / 1e6), nodes: m.Nodes, listeners: m.JSEventListeners, documents: m.Documents, canvases });
     };
-    await setScene('menu'); await sample(0);
-    for (let i = 1; i <= N; i++) {
-      await setScene('flight', { launchPending: true, resumeWorld: null }); await flightReady(page); await page.waitForTimeout(1000);
-      await page.evaluate(() => window.__flight.toggleMap()); await page.waitForTimeout(1000);
-      await page.evaluate(() => window.__flight.toggleMap());
-      await setScene('editor'); await page.waitForFunction(() => !!window.__editor?.view, null, { timeout: 60000 }); await page.waitForTimeout(1000);
-      await setScene('flight', { launchPending: true, resumeWorld: null }); await flightReady(page); await page.waitForTimeout(1000);
-      await setScene('menu'); await sample(i);
-    }
+    await setScene('menu'); await sample(0, null);
+    for (let i = 1; i <= N; i++) await sample(i, await page.evaluate(() => window.__benchCycle()));
     const first = samples[1] ?? samples[0]; const last = samples[samples.length - 1];
     results.cases.cycles = { samples, heapPerCycleMB: r2((last.heapMB - first.heapMB) / Math.max(1, samples.length - 2)), nodesPerCycle: r2((last.nodes - first.nodes) / Math.max(1, samples.length - 2)), listenersPerCycle: r2((last.listeners - first.listeners) / Math.max(1, samples.length - 2)) };
     log(`== cycles: ${samples.map((s) => `#${s.cycle} ${s.heapMB}MB n${s.nodes} l${s.listeners} c${s.canvases}`).join(' | ')}`);

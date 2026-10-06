@@ -406,3 +406,190 @@ Warm loads skip launch-site canvas drawing; restored canvases hash identically t
    GPU ms low, report the largest CPU sections.
 4. Repeat once with Low, and once with Medium and adaptive off, to compare.
 5. Note the first stage separation and the first map open: they should no longer freeze.
+
+
+# CPU / memory pass 3 — real GPU — 2026-10-06 (`op/cpuperf`)
+
+Scope: simulation, flight controller, HUD/React, worker scheduling, audio, memory/GC, startup. GPU/render findings
+are at the end ("Findings for the graphics agent"); render code was not changed except a new, render-agnostic
+`src/render/releaseRenderer.ts` used by the scene owners.
+
+## Benchmark suite (real GPU, repeatable)
+
+All numbers below come from **real Chrome on the RTX 3060 Ti desktop** (Windows Chrome over CDP, Ryzen 5 5600X),
+production builds, Medium quality, 1470×920 CSS px (a 14″ MacBook viewport), DPR 2 (Retina emulation) unless noted.
+
+| Script | What it measures |
+|---|---|
+| `scripts/bench/gpu-bench.sh` (`gpu-bench.mjs`) | Per scenario: rAF pacing (fps, p50/p95/p99, frames > 25/50 ms), in-game `frameProfiler` CPU sections, Long Tasks, CDP `Performance.getMetrics` (heap, DOM nodes, listeners, layout/style counts, script/task time), a trace per window (GC pauses, per-thread busy time incl. workers, main-thread work vs. compositor "Commit" wait), React commits and component renders (DevTools-hook), worker message counts, `renderer.info`; plus load timeline (menu interactive, controller, ready, time to stable fps, load long tasks; cold and warm), a 3-minute soak (orbit at 1000× toggling the map, heap after forced GC) and a 10× menu→flight→map→editor→flight scene-cycle leak test. Writes JSON + markdown. |
+| `scripts/bench/gpu-ab.sh` (+ `gpu-ab-report.mjs`) | Interleaved A/B: each case alternates the two builds so both see the same machine/GPU state (the browser and GPU are shared with other agents); medians → `docs/performance/cpuperf/ab-*.md`. |
+| `scripts/bench/gpu-profile.sh` | V8 CPU profile over a load or a scenario with per-long-frame / per-long-task attribution and optional sampling heap profile (allocation by function). Use an unminified build (`vite build --minify false --outDir dist-prof`). |
+| `scripts/bench/gpu-leaks.sh` | Scene cycles in-page, heap-snapshot census diff and shortest retaining paths of surviving `FlightController`/`EditorView`/`WebGLRenderer`/detached DOM. |
+
+Scenarios: main menu, pad (Kestrel), ascent (Meridian, full throttle, physics warp 4×), Earth orbit, rails warp
+1000× and 100 000× (new `?scenario=highorbit`, 1500 km Earth orbit so every warp level is allowed), map view,
+Moon terminal descent (`?mission=suicide-burn`), Saturn ring skimmer, editor with the 73-part Ringrunner Real
+(idle and orbiting the camera) and the Tracking Station. Automation hooks: `window.__game` (store) and the existing
+`window.__flight` / `__perf` / `__editor`.
+
+```sh
+npm run build && npx vite preview --port 5315 --strictPort --host 0.0.0.0 &
+scripts/bench/gpu-bench.sh --label after --dpr 2                     # full suite incl. soak + cycles (~25 min)
+scripts/bench/gpu-ab.sh dpr2 http://localhost:<before> http://localhost:5315 "pad,ascent,orbit" 2 --dpr 2
+```
+
+Limits: CDP CPU throttling (`--throttle`) proved unreliable on this CDP-connected Chrome (with DPR emulation, and
+later even at DPR 1, pages stalled for minutes with an idle main thread), so no throttled numbers are reported.
+Apple-silicon single-thread performance is at least that of the 5600X, so the CPU columns are a fair proxy for the
+owner's MacBook; its GPU at Retina resolution is the open risk (see graphics findings). Absolute fps on this desktop
+is GPU/vsync-bound at 60 and mostly unchanged by CPU work; CPU ms, GC, hitches and long tasks are what this pass moves.
+The first full baseline (`baseline-dpr2.md`) was taken while the machine was contended (pad 51 fps, 7.2 ms CPU);
+**the before/after claims below use the interleaved A/B runs only.**
+
+## Bottlenecks found
+
+1. **Scene-change memory leak (real, unbounded).** Every flight, editor, Space Center and navball renderer stayed
+   reachable forever: three r186 registers per-renderer `dispose` listeners on shared materials, geometries and
+   textures (part material/template caches, the module-level DFG LUT) and keeps per-renderer state in WeakMaps keyed by
+   them; `renderer.dispose()` removes neither. Through the canvas's DOM listeners each retained renderer pinned a whole
+   `EditorView` / scene. Also `window.__flight` and the 15 s shader-warm-up timer pinned the last `FlightController`
+   (World, scene, GL context). Baseline: **+1,167 DOM nodes, +560 listeners and +1.9 MB per cycle; 17 live
+   `WebGLRenderer`s after 3 cycles** (contexts accumulate towards Chrome's ~16 limit, after which the oldest is lost).
+2. **Simulation evaluated all 61 body ephemerides several times per physics step.** Sun-occlusion (`env.sun`, used by
+   hazards/solar power every step and every rails hazard sample), the SOI search (`findDominantBody`, every step) and
+   the radiation model computed every body's position at times that defeat the one-time ephemeris cache. Rails at
+   1e6× spent 58% of its time in `sun()`; at 100 000× the browser showed sim 0.93 ms/frame and **GC 14 ms/s**.
+3. **Ground contact sampled terrain three times per hull point** (height + finite-difference normal) even for points
+   metres above the ground: Selene landed on the Moon cost **3.0 ms per 20 ms physics step** in Node (4× that at
+   physics warp 4×); ascent near the pad 0.9 ms/frame of sim in the browser with GC 14 ms/s and 15 frames > 25 ms.
+4. **Per-frame planet bookkeeping** evaluated all 61 bodies at the render time each frame to decide which planet
+   renderers to create (0.3–0.5 ms/frame incl. allocation).
+5. **Startup:** `autoConfigureGraphics()` created a throwaway WebGL context (~30 ms main thread) on every boot because
+   the GPU probe was a default argument evaluated before the "already tuned" check. Everything else in loading is
+   render-side (see findings).
+6. **HUD/React:** 13–15 commits/s at telemetry rate, ~30 components per commit, 0.05–0.1 ms/frame in production —
+   small. Unchanged telemetry sub-objects were re-created every publish, so memoised parts never bailed out, and key
+   labels / warp-level titles were re-derived with regexes and `Intl` on every update.
+7. Not bottlenecks (measured, left alone): telemetry builder 0.04–0.2 ms/frame, audio 0.03–0.2 ms/frame, input
+   0.08 ms, workers ≤ 0.5 % busy outside terrain streaming, soak heap slope 0.8–0.9 MB/min levelling off at ~20 MB
+   (no growth in DOM nodes, listeners, geometries or textures over 3 minutes), Tracking Station ~1 ms/frame JS.
+
+## Changes
+
+| Change | Where | Exact? |
+|---|---|---|
+| `releaseRenderer` / `detachRenderer`: detach the renderer's own dispose listeners (the listener present on every object it drew) from everything reachable from its scene, dispose the shared DFG LUT, force context loss. Used by FlightController (flight + map scenes), EditorView, HubScene, Navball. EditorView removes its canvas listeners; the warm-up timer is cleared; `window.__flight` is dropped on unmount. | `render/releaseRenderer.ts`, `flight/controller.ts`, `flight/FlightScene.tsx`, `flight/hud/navball.ts`, `editor/scene/EditorView.ts`, `ui/hub/HubScene.ts` | n/a (tests) |
+| Heliocentric distance bounds per body from its elements (`sim/orbit/bounds.ts`); bodies that cannot reach the vessel (SOI), the vessel→Sun segment (occlusion) or 30 radii (radiation) are skipped without evaluating their ephemeris | `sim/orbit/bounds.ts`, `sim/orbit/soi.ts`, `game/universe.ts` | Yes — brute-force equivalence test over ~2,000 positions incl. shadows, two scales |
+| Optional `Environment.clearOfGround` (one height sample): hull/leg points > 5 cm above the local surface skip the 3-sample ground/normal evaluation (their penetration depth is negative anyway) | `sim/vessel/env.ts`, `sim/vessel/contact.ts`, `game/universe.ts` | Same decisions; 10 determinism traces bit-identical |
+| Ephemeris builds each body's conic once instead of spreading a new orbit object per evaluation | `sim/orbit/ephemeris.ts` | Yes |
+| Planet layer skips bodies that cannot be within renderer-creation range | `flight/planets.ts` | Same decisions |
+| GPU probe only when a re-tune is due | `main.tsx` | — |
+| Telemetry structural sharing (`shareUnchanged`), stable HUD callbacks, memoised crew cards, cached key labels and warp titles | `util/snapshotEqual.ts`, `flight/controller.ts`, `flight/hud/{Hud,CrewCards,TopBar}.tsx`, `input/bindings.ts` | — |
+
+Rejected after measuring: a 4-slot multi-time ephemeris cache (vacuum 360 → 430 µs/tick, as in pass 1); a WeakMap
+cache of the perifocal rotation per orbit (no gain once orbits are prebuilt). Code-splitting the menu further was not
+done: the entry chunk is 107 kB gz of which react-dom is ~60 %; scenarios/tutorial/settings/multiplayer code is ~40 kB
+raw and the menu becomes interactive in ~0.5–0.65 s on this machine.
+
+## Before / after
+
+**Simulation, Node** (`scripts/bench/run.ts`, paired runs in the same session, median µs per 20 ms World tick;
+[node-sim.json](performance/cpuperf/node-sim.json)):
+
+| Case | Before | After | Change |
+|---|---:|---:|---:|
+| Kestrel pad | 81.3 | 29.0 | −64 % |
+| Kestrel atmosphere | 176.1 | 101.6 | −42 % |
+| Kestrel vacuum | 143.1 | 74.9 | −48 % |
+| Kestrel landed (Moon) | 1,130.8 | 471.9 | −58 % |
+| Selene pad | 74.5 | 33.5 | −55 % |
+| Selene atmosphere | 208.7 | 128.0 | −39 % |
+| Selene vacuum | 175.0 | 99.3 | −43 % |
+| Selene landed (Moon) | 3,007.8 | 1,183.9 | −61 % |
+| Rails 1,000,000× | 5,119.3 | 1,333.4 | −74 % |
+
+All ten 100-step determinism traces (`scripts/bench/determinism.ts`) hash identically before and after.
+
+**Real GPU, interleaved A/B, DPR 2** (medians of 2 runs per side; CPU = frameProfiler main-thread ms/frame; GC from
+the trace; full table with more columns: [ab-dpr2.md](performance/cpuperf/ab-dpr2.md), DPR 1: [ab-dpr1.md](performance/cpuperf/ab-dpr1.md)):
+
+| Scenario | fps | p99 ms | frames > 25 ms / 10 s | CPU ms/frame | sim ms | render ms | main-thread work % | GC ms/s (max pause) | long tasks/min | heap MB | React renders/s |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| pad | 60 → 60 | 16.8 → 16.8 | 0 → 0 | 4.06 → 3.36 | 0.16 → 0.09 | 2.97 → 2.55 | 27.9 → 22.4 | 3.8 (2.3) → 1.3 (1.4) | 0 → 0 | 28 → 43 | 379 → 344 |
+| ascent (phys 4×) | 58.7 → 60 | 33.4 → 16.8 | 15.5 → 0 | 4.38 → 3.89 | 0.92 → 0.56 | 2.45 → 2.37 | 34.3 → 29.3 | 14.2 (2.6) → 5.2 (2.9) | 0 → 0 | 45 → 34 | 472 → 440 |
+| orbit | 59.6 → 58.5 | 16.8 → 25.1 | 2 → 15.5 | 3.13 → 3.18 | 0.25 → 0.16 | 2.22 → 2.41 | 21.2 → 20.9 | 4.5 (2.4) → 1.8 (1.5) | 5 → 5 | 51 → 56 | 407 → 369 |
+| rails 1000× | 60 → 60 | 16.8 → 16.8 | 0 → 0 | 2.08 → 1.98 | 0.24 → 0.18 | 1.25 → 1.30 | 15.1 → 14.1 | 2.6 (2.0) → 1.8 (2.2) | 0 → 0 | 39 → 44 | 417 → 384 |
+| rails 100 000× | 60 → 60 | 16.8 → 16.8 | 0 → 0 | 2.72 → 2.09 | 0.93 → 0.33 | 1.23 → 1.27 | 19.6 → 15.6 | 14.3 (3.1) → 2.8 (2.3) | 0 → 0 | 66 → 42 | 422 → 388 |
+| map | 60 → 60 | 16.8 → 16.8 | 0 → 0 | 1.53 → 1.50 | 0.23 → 0.18 | 0.36 → 0.38 | 13.0 → 12.5 | 2.7 → 2.1 | 0 → 0 | 39 → 32 | 402 → 384 |
+| Moon descent | 60 → 60 | 16.8 → 16.8 | 0 → 0 | 3.21 → 2.95 | 0.33 → 0.24 | 1.96 → 1.92 | 22.1 → 20.3 | 5.9 (2.4) → 3.0 (2.3) | 0 → 0 | 63 → 35 | 550 → 502 |
+| Saturn ring skimmer | 60 → 60 | 16.8 → 16.8 | 0 → 0 | 2.23 → 2.21 | 0.29 → 0.26 | 1.38 → 1.45 | 15.7 → 15.1 | 4.2 (1.9) → 2.9 (1.7) | 0 → 0 | 69 → 36 | 550 → 512 |
+| editor 73 parts, orbiting camera | 59.8 → 59.8 | 16.8 → 16.8 | 1 → 1 | (2.51 → 2.47 script) | – | – | 16.7 → 16.3 | 0.7 → 1.0 | 0 → 0 | 41 → 31 | 43 → 43 |
+| Tracking Station | 60 → 60 | 16.8 → 16.8 | 0 → 0 | (1.05 → 1.07 script) | – | – | 7.7 → 7.8 | 1.6 → 2.0 | 0 → 0 | 15 → 12 | 251 → 248 |
+| main menu | 60 → 60 | 16.8 → 16.8 | 0 → 0 | (0.11 script) | – | – | 1.4 | 0.03 → 0.07 | 0 → 0 | 12 → 12 | 0 |
+
+The orbit row's after-side hitches came from one of the two runs (the other had 1); its CPU, sim and GC columns
+improved like the rest, and the frames were GPU-side (see findings) — treat orbit pacing as unchanged within noise.
+"Main-thread work" is busy time minus Blink's `Commit` (which blocks on compositor/GPU back-pressure and accounted for
+50–75 % of every second in flight: the main thread mostly waits for the GPU side).
+
+**Loading** (A/B medians, DPR 2, fresh browser context): cold — menu interactive 589 → 628 ms (noise), controller
+1,641 → 1,604 ms, ready 5,891 → 5,054 ms, main-thread long tasks during load 1,130 → 1,086 ms (largest 440 ms, render
+side); warm (second visit) — ready 6,684 → 4,747 ms, long tasks 864 → 816 ms. The ready time includes terrain worker
+streaming and is noisy; the deterministic saving is the ~30 ms GPU probe per boot.
+
+**Memory over a 3-minute flight** (orbit at 1000×, map toggled every 15 s; heap after forced GC): 17.3 → 20.3 MB,
+slope 0.78 MB/min and flattening (0.9 before), DOM nodes 535 → 524, listeners 284 constant, geometries 110 → 155 and
+textures 56 → 58 after the first map open, then flat. No leak.
+
+**Scene cycles** (10 × menu→flight→map→editor→flight→menu, per cycle after forced GC):
+
+| | Before | After |
+|---|---:|---:|
+| DOM nodes | +1,167 | +3 (harness-driven cycles) / +51 (in-page driver; the heap snapshot shows no detached DOM — the counter also counts nodes referenced by performance-timeline entries, e.g. +68 `LayoutShiftAttribution`s over 4 cycles) |
+| Event listeners | +560 | 0 / +7 |
+| Live `WebGLRenderer`s after 3 cycles | 17 | 2 (thumbnail renderer + menu backdrop, both alive by design) |
+| Retained FlightController / EditorView after 3 cycles | 2 / 3 | 0 / 0 |
+| JS heap (`JSHeapUsedSize`) | +1.9 MB | +2.1 MB |
+
+The remaining heap growth is not application objects: a heap-snapshot census diff over 4 cycles shows +1.5 MB of
+which ~1.0 MB is V8 optimized machine code (`InstructionStream`), 0.25 MB bytecode/`TrustedByteArray`, and DevTools
+network buffers; no detached DOM, no surviving controllers/scenes/renderers. Worth re-checking in a long real session;
+V8 normally ages such code out.
+
+## Findings for the graphics agent
+
+Measured on the same harness (DPR 2, Medium, 1470×920 CSS → canvas 1470×920 because Medium caps DPR at 1; map at
+2940×1840). Profiles: `scripts/bench/gpu-profile.sh` on an unminified build.
+
+1. **three.js submission dominates main-thread CPU**: `render` 1.3–2.6 ms/frame and planets `update` 0.1–0.4 ms of a
+   2–4 ms frame (pad 2.55 of 3.36 ms). Pad: 455 draw calls / 1.08 M triangles, orbit 349 / 0.71 M.
+2. **Programs are re-resolved on every draw of the planet renderer**: `WebGLRenderer.setProgram → getProgram →
+   getParameters / getProgramCacheKey` runs each frame under `PlanetRenderer.render` (1.8 s of 10 s inclusive in
+   `setProgram` during load+flight; `getParameters` alone allocates **4.7 MB/s**, `getProgramCacheKeyParameters`
+   0.8 MB/s). three only does this when `needsProgramChange` is true for a material each draw — typically a material
+   drawn into targets with different tone-mapping/colour space (HDR target vs. canvas), a per-frame
+   `material.needsUpdate`, or changing `receiveShadow`/clipping/instancing state. Fixing it removes most of the
+   render-path allocation and a chunk of the 2.5 ms.
+3. **Uniform upload allocations**: `setValueM4` allocates **4.5 MB/s** (matrix uniforms passed as fresh arrays or
+   `elements` copies), `setValueV3f` 1.4 MB/s, `painterSortStable` 1.3 MB/s. Total page allocation on the pad was
+   ~33 MB/s before this pass, mostly in the render path; after the sim fixes the render path is the main GC source
+   (GC 1.3–3 ms/s, max pause ~1.5–3 ms).
+4. **Main thread waits on the GPU side**: Blink `Commit` occupies 50–75 % of each second in flight; orbit shows
+   bursts of 33 ms frames with only ~3 ms of main-thread JS and GPU timer 8.8 ms (pad 5.6 ms). Earlier warp-1000×
+   runs showed frames of 100–277 ms and long tasks up to 813 ms whose JS share was 15–55 ms (native GL waits).
+   Candidates: synchronous GL queries (`getError`, timer-query polling, `getParameter`), texture uploads
+   (`texSubImage2D` 61–69 ms in single frames right after load) and first-use program introspection (`WebGLUniforms`
+   51 ms in one frame).
+5. **Loading (cold, ~1.1 s of long tasks)**: FlightController construction is one 627 ms task, of which LaunchSite
+   procedural textures 260 ms (`speckle` 184, runway 46, road 33 — cached on warm loads) and `createBatches` 303 ms;
+   shader warm-up has a 218 ms synchronous part (`WebGLShader`, `replaceLightNums`) before `compileAsync`;
+   `buildTransmittanceLUT` 25–34 ms on the main thread (menu and flight); the menu's Saturn backdrop costs a 70 ms
+   context init (`getExtension`) and ~1.5 s of 75–83 ms frames with ~2–4 ms of JS while it streams in. Moving the
+   speckle/canvas generation and batching into a worker (OffscreenCanvas) would remove the largest cold-load stall.
+6. **Map view layout**: `MapView` positions labels with `style.left/top` every frame — 58 layouts/s and 62 style
+   recalcs/s in the map (baseline run); use `transform: translate(...)` (already used for markers). Tracking Station:
+   42 style recalcs/s; `MapView.update` ~0.6 ms/frame there.
+7. **Renderer teardown**: `RenderPipeline.dispose()` and `ui/planetPreview.ts` should use
+   `src/render/releaseRenderer.ts` (or equivalent) so any future scene owner cannot reintroduce the retention above.
+8. Medium at Retina already renders 1470×920 (DPR capped at 1); the map renders at 2940×1840 but is cheap
+   (0.4 ms GPU, 29 draws).
