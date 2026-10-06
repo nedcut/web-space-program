@@ -55,7 +55,15 @@ export interface WorldVessel {
   railsEvent?: { time: number; reason: TrajectoryPatch['endReason']; nextBody?: string };
   /** Landed/prelaunch: position + attitude fixed in the body's rotating frame. */
   fixed?: { pos: Vec3; orient: Quat };
+  /**
+   * Prelaunch only: the launch stage has fired and the hold-down clamps keep the vessel at `fixed` while its
+   * engines spool up (seconds held, thrust at the previous step). See {@link HOLD_DOWN_MAX}.
+   */
+  holdDown?: { time: number; thrust: number };
 }
+
+/** Longest the hold-down clamps keep a vessel whose engines have not reached liftoff thrust, s. */
+export const HOLD_DOWN_MAX = 3;
 
 export interface WorldMessage {
   id: number;
@@ -339,6 +347,8 @@ export class World {
     for (const wv of this.vessels.values()) {
       if (wv.mode === 'rails' && wv.orbit) this.predictRailsEvent(wv);
       if ((wv.mode === 'landedRails' || wv.mode === 'prelaunch') && wv.fixed) this.syncFixed(wv, this.ut);
+      // Saved mid hold-down (engines already lit on the pad): resume holding rather than freezing them.
+      if (wv.mode === 'prelaunch' && wv.state.parts.some(p => p.engine?.ignited)) wv.holdDown = { time: 0, thrust: 0 };
     }
     this.trajectoryCache = null;
     this.approachCache = null;
@@ -656,12 +666,11 @@ export class World {
           for (const e of events) this.handleEvent(e);
           for (const nv of pieces) { const child = this.vessels.get(nv.id); if (child) this.inheritFlight(wv, child); }
         }
-        if (isActive && vesselInput.stage) {
-          this.syncFixed(wv, t);
-          wv.mode = 'physics';
-          wv.fixed = undefined;
-          this.message('Liftoff!');
-        } else {
+        // Staging on the pad starts the hold-down: the vessel is simulated (engines ignite and spool) but pinned
+        // to the pad until `releaseHoldDown` lets go, so it never sags onto the pad or hops at release.
+        if (isActive && vesselInput.stage && !wv.holdDown) wv.holdDown = { time: 0, thrust: 0 };
+        if (wv.holdDown) this.syncFixed(wv, t);
+        else {
           advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, PHYSICS_DT);
           // States are expressed at the end of the step (t + dt), like physics-stepped vessels.
           advancePackedHazards(this, this.systems, wv, t, t + PHYSICS_DT);
@@ -670,7 +679,7 @@ export class World {
           continue;
         }
       }
-      if (wv.mode !== 'physics') continue;
+      if (wv.mode !== 'physics' && !(wv.mode === 'prelaunch' && wv.holdDown)) continue;
       // Update dominant body (SOI transitions in physics).
       wv.body = this.universe.dominantBody(wv.state.position, t);
       const env = this.universe.createEnvironment(() => wv.body, this.preciseGravity);
@@ -690,6 +699,7 @@ export class World {
       }
       for (const e of res.events) this.handleEvent(e);
       for (const nv of res.newVessels) { const child = this.vessels.get(nv.id); if (child) this.inheritFlight(wv, child); }
+      if (wv.mode === 'prelaunch' && !wv.state.destroyed) this.stepHoldDown(wv, ctrl, t + PHYSICS_DT);
       this.recordFlight(wv, t + PHYSICS_DT);
       if (wv.state.destroyed) {
         this.finishFlight(wv, 'lost', t + PHYSICS_DT);
@@ -753,16 +763,36 @@ export class World {
     }
   }
 
+  /**
+   * Hold-down clamps after a pad stage: keep the vessel pinned while its engines spool up and release it once
+   * thrust exceeds weight. A vessel that cannot lift off (throttle at zero, no thrust, thrust settled below its
+   * weight) is released onto the pad straight away or after {@link HOLD_DOWN_MAX} seconds at the latest.
+   */
+  private stepHoldDown(wv: WorldVessel, ctrl: ControlInput, t: number) {
+    const hold = wv.holdDown!;
+    hold.time += PHYSICS_DT;
+    const thrust = wv.state.telemetry.thrust;
+    const r = length(sub(wv.state.position, this.universe.ephem.getBodyState(wv.body, t).position));
+    const weight = wv.state.mass * this.universe.body(wv.body).gm / (r * r);
+    const burning = wv.state.parts.some(p => p.engine?.ignited);
+    const settled = hold.time > 0.3 && thrust <= hold.thrust * 1.002;
+    hold.thrust = thrust;
+    if (thrust >= weight || !burning || ctrl.throttle <= 0 && thrust <= 0 || settled || hold.time >= HOLD_DOWN_MAX - 1e-9) {
+      // Leave the vessel exactly where the clamps held it, moving with the pad.
+      this.syncFixed(wv, t);
+      wv.mode = 'physics';
+      wv.fixed = undefined;
+      wv.holdDown = undefined;
+      this.message(thrust >= weight ? 'Liftoff!' : 'Clamps released');
+    } else this.syncFixed(wv, t);
+  }
+
   /** Stage the active vessel immediately (used when clicking the stage button while warping etc.). */
   stageActive() {
     const wv = this.active;
     if (!wv || !this.canControl(wv.state) || wv.state.eva) return;
-    if (wv.mode === 'prelaunch') {
-      wv.mode = 'physics';
-      wv.fixed = undefined;
-      this.message('Liftoff!');
-    }
-    if (wv.mode !== 'physics') this.unpack(wv);
+    if (wv.mode === 'prelaunch') wv.holdDown ??= { time: 0, thrust: 0 };
+    else if (wv.mode !== 'physics') this.unpack(wv);
     const res = activateNextStage(wv.state);
     for (const nv of res.newVessels) this.vessels.set(nv.id, { state: nv, mode: 'physics', body: wv.body });
     for (const e of res.events) this.handleEvent(e);
