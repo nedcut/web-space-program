@@ -406,3 +406,76 @@ Warm loads skip launch-site canvas drawing; restored canvases hash identically t
    GPU ms low, report the largest CPU sections.
 4. Repeat once with Low, and once with Medium and adaptive off, to compare.
 5. Note the first stage separation and the first map open: they should no longer freeze.
+
+# Flight graphics fidelity and GPU cost — 2026-10-06 (`op/gfx`)
+
+Measured on the real GPU (Windows Chrome 154, RTX 3060 Ti) with a 1470×920 CSS viewport at
+emulated DPR 2 (MacBook Retina), i.e. a 2940×1840 drawing buffer. GPU ms come from
+`EXT_disjoint_timer_query_webgl2` (`pipeline.gpuMs`). Per-component costs were measured
+with two methods. The first hides one material family and differences the timer reading.
+The second (`renderer bench`) renders 30 frames between two `readPixels` syncs. fps values
+are noisy: another agent's game tab shared the GPU, and DevTools DPR emulation adds
+compositor work. Read fps as a range and the GPU ms as the comparison.
+
+The driver lives outside the repo (`C:\wsp-tools\drv\gfx.mjs`, `js/bench.js`, `js/prof.js`).
+It sets `wsp.settings.v1` for the preset, emulates DPR, measures and screenshots through CDP.
+
+## Per-pass GPU cost at DPR 2, Medium (ms)
+
+| Pass / component | Pad before | Pad after | Low orbit before | Low orbit after |
+|---|---:|---:|---:|---:|
+| Whole frame (GPU timer) | 17.2 | 6.6–7.3 | 32.2 | 7.2–7.7 |
+| Clouds (Earth shell) | 2.3 | ≈0.3 | **16.7** | 2.5 |
+| Aurora volume (whole-screen march) | **5.6** | ≈0 | **6.6** | ≈0 |
+| Milky Way band | 4.5 | ≈0 (baked) | 2.5 | ≈0 |
+| Terrain (incl. aerial perspective) | 2.5 | 1.0–2.0 | 4.0 | 1.1 |
+| Ocean | — | ≈0.5 | 2.1 | 0.65 |
+| Sky shell | 1.5 | 1.5 | 2.0 | 1.6 |
+| Vessel parts (PBR) | ≈1.0 | ≈1.0 | ≈0.1 | ≈0.1 |
+| Shadow map | <0.2 | <0.2 | <0.1 | <0.1 |
+| Bloom | 0.4 | 0.2–0.3 | 0.4 | 0.24 |
+| AA | FXAA 0.3 | SMAA 0.4–0.6 | FXAA 0.3 | SMAA 0.5 |
+
+The "before" column is the old code forced to DPR 2. Medium previously ran at DPR 1: 5.7 ms
+on the pad and 8.7 ms in orbit, at a quarter of the pixels. Medium now spends about the same
+GPU time at four times the pixel count.
+
+## Presets at DPR 2 (RTX 3060 Ti)
+
+| Preset | Drawing buffer | Pad GPU ms / fps | Orbit GPU ms / fps |
+|---|---|---|---|
+| Low | 735×460 (unchanged: half of 1×) | 0.3 / 60 | 0.3 / 60 |
+| Medium, adaptive off | 2940×1840 | 6.6–7.3 / 34–46 | 7.7 / 38–45 |
+| Medium, adaptive on (default) | settles at 0.8 (DPR 1.6) | 4.8 / ~57 | — |
+| High | 2940×1840 + 4× MSAA | 13.1 / 33 | 11.8 / 37 |
+
+Before this pass, High at DPR 2 measured 27 ms / 22 fps on the pad.
+
+The emulated DPR 2 viewport costs this machine extra compositing that the timer queries do
+not see. Even with the scene materials hidden, the composer at full resolution ran at only
+about 45 fps. This is why adaptive resolution no longer trusts a low timer reading when the
+main thread is idle. On a Mac the native Retina compositor path differs, so check the F8
+overlay there.
+
+## Changes
+
+| Change | Files |
+|---|---|
+| Medium: DPR up to 2 + SMAA. High: MSAA 4× + SMAA. Low: FXAA, unchanged resolution | `render/core/quality.ts`, `renderer.ts` |
+| Adaptive: tier-based start, predicted-scale jumps, one-window reaction when severe, CPU-aware GPU-idle veto | `render/core/adaptiveQuality.ts`, `renderer.ts` |
+| GPU-baked procedural cube maps in strips (cloud field, Milky Way) | `render/core/proceduralCube.ts`, `planet/cloudMap.ts`, `sky/Starfield.ts` |
+| Cloud shading: detail erosion, cumulus cells, HG phase, grey bases, cloud shadows on surfaces | `planet/materials.ts`, `PlanetRenderer.ts`, `uniforms.ts` |
+| Aurora early rejection (polar slab / night side) | `planet/effects.ts` |
+| Per-vertex aerial perspective (terrain, ocean) and ocean sky reflection | `planet/materials.ts` |
+| Submerged-chunk culling bounds include sea level (ocean holes) | `planet/quadtree.ts` |
+| GLSL portability fixes + test (Mac green wash) | `sky/SunGlare.ts`, several shaders, `tests/glsl-portability.test.ts` |
+| Shadow range/bias/softness | `flight/controller.ts` |
+
+Before/after images (left: before at Medium's old DPR 1; right: after at DPR 2) are in
+`docs/screenshots/gfx/`. `sea-fixed.jpg` shows the descending-capsule view that used to show
+the ocean hole.
+
+**Note for the CPU/perf agent:** these are render-side only. `PlanetRenderer.update` now steps
+the cloud bake for its first ~24 frames (one strip each) and `Starfield.update` steps the
+Milky Way for its first ~6. Both are GPU work of a fraction of a millisecond each. Main-thread
+frame time is reported as `pipeline.cpuMs`.
