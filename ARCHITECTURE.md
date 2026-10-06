@@ -61,6 +61,8 @@ than importing `World`. `LaunchSite` already follows that structural-input patte
 - `flight/controller.ts` owns scene setup, input, fixed-step driving, rendering and disposal.
   `flight/controller/{telemetry,navball,scenarios,assist,audio}.ts` contain the respective drivers with a stable
   private context. `flight/assist.ts`, `camera.ts`, `input.ts`, `planets.ts` and `hud/` provide focused adapters.
+  `hud/Hud.tsx` composes the classic-layout HUD (`TopBar`, `AppLauncher`, `StagingStack`, `NavballCluster`, `CrewCards`,
+  styles in `hud/hud.css`); `controller/burn.ts` derives the navball burn readout (`Telemetry.maneuverBurn`) from `World.nodes`.
 - `data/parts.ts` preserves the public catalog API. `data/parts/` contains category arrays and shared builders;
   the facade concatenates them in the original order, including expansion and the separate `data/isru.ts`.
   IDs, generated definitions and catalog order must remain stable across refactors.

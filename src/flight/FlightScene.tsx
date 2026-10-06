@@ -252,7 +252,7 @@ export default function FlightScene() {
         setUiHidden(h => !h);
       } else if (matches('flightResults', e)) {
         e.preventDefault();
-        setResults(r => !r);
+        if (!ctrl.current?.network) setResults(r => !r);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -373,7 +373,7 @@ export default function FlightScene() {
             onToggleDocking: () => ctrl.current?.toggleDockingMode(),
             onUndock: (uid) => ctrl.current?.undock(uid),
             onHelp: () => setHelp((h) => !h),
-            onSettings: () => { setPaused(true); setShowSettings(true); },
+            onSettings: multiplayer ? undefined : () => { setPaused(true); setShowSettings(true); },
             onStageLock: () => ctrl.current?.toggleStageLock(),
             onSelectPart: (uid) => ctrl.current?.selectPart(uid),
             onCameraMode: () => ctrl.current?.cycleCameraMode(),

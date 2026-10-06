@@ -4,7 +4,7 @@ _Last updated: 2026-10-05_
 
 ## Start here (for Ned)
 **Run it:** `npm install && npm run dev`, open http://localhost:5173. Pick **New Game → Sandbox → Standard** for the easiest start;
-the first flight shows a controls cheat sheet (F1 brings it back). **Training** on the main menu has 8 guided lessons.
+the first flight shows a controls cheat sheet (Shift+F1 or the toolbar "?" brings it back). **Training** on the main menu has 8 guided lessons.
 
 **What exists:** the real solar system (Sun, 8 planets, Pluto, Ceres, 40+ moons, plus asteroids/comets like Vesta, Bennu,
 67P and Halley). Saturn and its moons get special treatment: rings you can fly through, the polar hexagon, Enceladus plumes,
@@ -25,6 +25,22 @@ performance overlay (fps, frame-time graph, CPU/GPU breakdown) and use **Copy re
 map and in the Ring Skimmer mission — `docs/PERFORMANCE.md` ("What to measure on the laptop") lists what to send.
 Graphics are auto-tuned once per device (weak GPUs start on Low; adaptive resolution is on). Then tell me what feels
 wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
+
+## Flight HUD in the classic layout (2026-10-06, op/hudksp)
+
+Owner feedback: the HUD was hard to learn coming from the genre classic. The flight HUD now follows its 1.12 placement
+and key conventions with our own visuals (details in DECISIONS.md):
+
+- **Where things are:** time warp + MET/UT clock top-left · altimeter (click: sea level/terrain) with status lamps top-centre ·
+  app toolbar top-right (Resources, Flight data, Science, Crew, Assist, Target, Comms, orbit strip, Settings, Help) ·
+  staging stack bottom-left (click an icon: highlight + part panel; lock with Alt+L) · navball cluster bottom-centre
+  (G meter, SAS/RCS, SAS mode glyphs, throttle arc, speed mode, burn readout when a node exists) · crew portraits with EVA,
+  MAP and camera bottom-right. Ap/Pe live in the orbit strip (always on in map view).
+- **Keys changed:** U lights (was C), O EVA (was U), C interior view notice, F1 screenshot, F2 hide UI, F3 flight results,
+  Shift+F1 help (was F1), Shift+F3 flight data (was F3), Alt+L stage lock, hold F momentary SAS, [ ] switch vessel.
+  Saved bindings that were still on the old defaults migrate automatically; customised keys are kept.
+- Verified on the RTX 3060 Ti (Windows Chrome) at 1366×768, 1600×900 and 1920×1080: pad, ascent, orbit with a node,
+  map view, EVA, rendezvous/target, F2 and help. Lint, TypeScript, tests and build pass (see commit log).
 
 ## Laptop performance pass 2 (2026-10-05, op/perf2)
 
