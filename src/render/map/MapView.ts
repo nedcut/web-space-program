@@ -34,6 +34,7 @@ import {
 import { firstPlannedPatch, markerCaption, markerDetail, orbitMarkers, patchDrawnClosed, type OrbitMarker } from './orbitMarkers';
 import { AXIS_COLORS, PLANNED_COLOR, handleTexture, nodeTexture } from './mapIcons';
 import { GLYPH_PX, LABEL_SHADOW, cssHex, glyphForKey, markerGlyphSvg, type MarkerGlyph } from './markerGlyphs';
+import { setPosition, setStyle } from './styleWriter';
 
 /**
  * Map view ("tracking" view): conic orbit lines for bodies and vessels, body spheres + icons,
@@ -324,6 +325,8 @@ export class MapView {
   private shown: ShownMarker[] = [];
   private shownCount = 0;
   private markerEls: MarkerElement[] = [];
+  /** Per marker element: its caption won placement this frame. */
+  private captioned: boolean[] = [];
   private markerScreen: { key: string; x: number; y: number }[] = [];
   private markerScreenCount = 0;
   private pinned = new Set<string>();
@@ -668,7 +671,7 @@ export class MapView {
       // Body icons render in one instanced draw; sprite is retained as a position proxy.
       const label = document.createElement('div');
       label.textContent = b.name;
-      Object.assign(label.style, { position: 'absolute', font: '500 12.5px system-ui, sans-serif', color: '#d8e2ef', textShadow: LABEL_SHADOW, whiteSpace: 'nowrap', transform: 'translate(10px,-50%)', letterSpacing: '.02em' });
+      Object.assign(label.style, { position: 'absolute', left: '0', top: '0', font: '500 12.5px system-ui, sans-serif', color: '#d8e2ef', textShadow: LABEL_SHADOW, whiteSpace: 'nowrap', letterSpacing: '.02em' });
       this.labels.appendChild(label);
       sphere.visible = false;
       const vis: BodyVisual = { body: b, sphere, icon, label, familyColor: familyColor(b, bodies),
@@ -939,11 +942,11 @@ export class MapView {
       const box = vis.labelBox;
       box.x = (v.x*.5+.5)*w+Math.max(12, angular*h/(2*Math.tan(this.camera.fov*Math.PI/360))+8); box.y = (-v.y*.5+.5)*h-9;
       const show = visible && (resolved || vis.icon.visible) && onScreen && placeLabel(box, this.labelBoxes, labelCount);
-      vis.label.style.display = show ? 'block' : 'none';
+      setStyle(vis.label, 'display', show ? 'block' : 'none');
       if (show) {
         this.labelBoxes[labelCount++] = box;
-        vis.label.style.left = `${box.x-10}px`; vis.label.style.top = `${box.y+9}px`;
-        vis.label.style.color = this.hoverBody === vis ? '#fff1c9' : '#d8e2ef';
+        setPosition(vis.label, box.x, box.y + 9, ' translateY(-50%)');
+        setStyle(vis.label, 'color', this.hoverBody === vis ? '#fff1c9' : '#d8e2ef');
       }
     }
     this.labelCount = labelCount;
@@ -1264,11 +1267,10 @@ export class MapView {
         on = !(Math.hypot(c.x - sx, c.y - sy) < 16);
         s.x = sx; s.y = sy;
       }
-      el.root.style.display = on ? 'block' : 'none';
-      el.text.style.display = 'none';
+      setStyle(el.root, 'display', on ? 'block' : 'none');
       el.box.x = NaN;
       if (!on) continue;
-      el.root.style.transform = `translate(${s.x.toFixed(1)}px,${s.y.toFixed(1)}px)`;
+      setPosition(el.root, s.x, s.y);
       if (el.color !== m.color || el.glyph !== m.glyph) {
         el.color = m.color; el.glyph = m.glyph;
         el.dot.innerHTML = markerGlyphSvg(m.glyph, m.color); el.text.style.color = m.color;
@@ -1277,7 +1279,10 @@ export class MapView {
       const hit = this.markerScreen[this.markerScreenCount++] ??= { key: '', x: 0, y: 0 };
       hit.key = m.key; hit.x = s.x; hit.y = s.y;
     }
-    for (const el of this.markerEls.slice(this.shownCount)) el.root.style.display = 'none';
+    for (let i = this.shownCount; i < this.markerEls.length; i++) setStyle(this.markerEls[i].root, 'display', 'none');
+    // Captions: shown below only if they win placement this frame.
+    const captioned = this.captioned;
+    captioned.fill(false);
     let labelCount = this.labelCount;
     for (let pass = 3; pass >= 0; pass--) for (let i = 0; i < this.shownCount; i++) {
       const m = this.shown[i], el = this.markerEls[i], pinned = this.pinned.has(m.key);
@@ -1288,12 +1293,14 @@ export class MapView {
       const box = { x: el.box.x + GLYPH_PX / 2 + 3, y: el.box.y - 9, width: Math.max(...lines.map(l => l.length)) * 7 + 12, height: lines.length * 17 + (pinned ? 6 : 0) };
       if (!pinned && !placeLabel(box, this.labelBoxes, labelCount)) continue;
       this.labelBoxes[labelCount++] = box;
-      el.text.style.display = 'block';
+      captioned[i] = true;
       if (el.content !== content) { el.content = content; el.text.textContent = content; }
-      Object.assign(el.text.style, pinned
-        ? { background: '#0a1525dd', border: `1px solid ${m.color}55`, borderRadius: '6px', padding: '3px 7px' }
-        : { background: 'none', border: 'none', padding: '0' });
+      setStyle(el.text, 'background', pinned ? '#0a1525dd' : 'none');
+      setStyle(el.text, 'border', pinned ? `1px solid ${m.color}55` : 'none');
+      setStyle(el.text, 'borderRadius', pinned ? '6px' : '0');
+      setStyle(el.text, 'padding', pinned ? '3px 7px' : '0');
     }
+    for (let i = 0; i < this.markerEls.length; i++) setStyle(this.markerEls[i].text, 'display', i < this.shownCount && captioned[i] ? 'block' : 'none');
   }
 
   // ---------- Hover, tooltips and gestures ----------
