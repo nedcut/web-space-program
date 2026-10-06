@@ -162,10 +162,15 @@ export class RenderPipeline {
     return this.height * this.pixelRatio;
   }
 
+  /** Main-thread time from updateAdaptive (frame start) to the end of the last render submission. */
+  cpuMs = NaN;
+  private frameStart = NaN;
+
   updateAdaptive(frameMs: number, enabled: boolean): void {
     const gpu = this.gpuTimer?.poll();
     if (gpu !== undefined) this.gpuMs = Number.isFinite(this.gpuMs) ? this.gpuMs * 0.9 + gpu * 0.1 : gpu;
-    if (this.adaptive.update(frameMs, enabled, gpu)) this.setSize(this.width, this.height);
+    if (this.adaptive.update(frameMs, enabled, gpu, this.cpuMs)) this.setSize(this.width, this.height);
+    this.frameStart = performance.now();
   }
 
   get effectiveRenderScale(): number { return this.quality.renderScale * this.adaptive.scale; }
@@ -179,6 +184,7 @@ export class RenderPipeline {
     this.composer.render();
     this.gpuTimer?.end();
     this.captureStats();
+    if (Number.isFinite(this.frameStart)) this.cpuMs = performance.now() - this.frameStart;
   }
 
   /** Direct (non-composited) render used by the map view. */

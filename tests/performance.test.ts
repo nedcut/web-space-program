@@ -41,6 +41,11 @@ describe('adaptive scale', () => {
     expect(q.update(16, false)).toBe(true);
     expect(q.scale).toBe(1);
   });
+  it('treats slow frames with an idle main thread as GPU-bound even when timer queries read low', () => {
+    const q = new AdaptiveQuality();
+    for (let t = 0; t < 1100; t += 33.4) q.update(33.4, true, 6, 8); // compositing etc. not in the timer
+    expect(q.scale).toBeLessThan(1);
+  });
   it('jumps to the resolution predicted by GPU time', () => {
     const q = new AdaptiveQuality();
     run(q, 33.4, 1.05, 33); // GPU needs ~2x the budget: pixels ∝ scale², capped step
@@ -51,7 +56,7 @@ describe('adaptive scale', () => {
     for (let i = 0; i < 600; i++) q.update(i % 60 === 0 ? 40 : 16.7, true); // ~2% hitches
     q.update(10000, true);
     expect(q.scale).toBe(1);
-    run(q, 33.4, 5, 4); // GPU only busy 4 ms: resolution would not help
+    for (let t = 0; t < 5000; t += 33.4) q.update(33.4, true, 4, 25); // GPU 4 ms, main thread 25 ms: CPU-bound
     expect(q.scale).toBe(1);
     run(q, 16.7, 3, 16); // GPU saturated even though frames hit vsync
     expect(q.scale).toBeLessThan(1);

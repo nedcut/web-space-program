@@ -27,7 +27,16 @@ export class AdaptiveQuality {
   private cooldownMs = 4000;
   private sinceUpMs = Infinity;
 
-  update(frameMs: number, enabled: boolean, gpuMs?: number): boolean {
+  private cpuSum = 0;
+  private cpuN = 0;
+
+  /**
+   * @param gpuMs GPU time of the frame's rendering from timer queries, when available.
+   * @param cpuMs main-thread time spent on the frame, when known. Timer queries miss GPU work outside
+   *   the measured passes (browser compositing, other contexts), so "GPU idle" only implies a CPU-bound
+   *   frame when the main thread really is busy.
+   */
+  update(frameMs: number, enabled: boolean, gpuMs?: number, cpuMs?: number): boolean {
     const previous = this.scale;
     if (!enabled) { this.scale = 1; this.resetWindow(); this.bad = 0; this.goodMs = 0; return previous !== this.scale; }
     if (!Number.isFinite(frameMs) || frameMs <= 0 || frameMs >= 250) { this.resetWindow(); return false; }
@@ -37,15 +46,18 @@ export class AdaptiveQuality {
     if (frameMs < this.windowMin) this.windowMin = frameMs;
     if (frameMs > this.targetMs * 1.5) this.slow++;
     if (gpuMs !== undefined && Number.isFinite(gpuMs) && gpuMs >= 0) { this.gpuSum += gpuMs; this.gpuN++; }
+    if (cpuMs !== undefined && Number.isFinite(cpuMs) && cpuMs >= 0) { this.cpuSum += cpuMs; this.cpuN++; }
     if (this.elapsed < 1000) return false;
 
     // Track the display interval: drop to faster observed rates at once, relax ~0.2% per window.
     this.refreshMs = Math.min(1000 / 30, Math.max(1000 / 240, Math.min(this.refreshMs * 1.002, this.windowMin)));
     const slowFrac = this.slow / this.frames;
     const gpu = this.gpuN ? this.gpuSum / this.gpuN : NaN;
-    const gpuIdle = Number.isFinite(gpu) && gpu < this.targetMs * 0.6;
+    const cpu = this.cpuN ? this.cpuSum / this.cpuN : NaN;
+    const cpuBusy = !Number.isFinite(cpu) || cpu > this.targetMs * 0.7;
+    const gpuIdle = Number.isFinite(gpu) && gpu < this.targetMs * 0.6 && cpuBusy;
     const over = !gpuIdle && (slowFrac >= 0.2 || (Number.isFinite(gpu) && gpu >= this.targetMs * 0.9));
-    const headroom = slowFrac <= 0.02 && (!Number.isFinite(gpu) || gpuIdle);
+    const headroom = slowFrac <= 0.02 && (!Number.isFinite(gpu) || gpu < this.targetMs * 0.6);
     const windowMs = this.elapsed;
     this.resetWindow();
 
@@ -88,6 +100,6 @@ export class AdaptiveQuality {
   get targetMs(): number { return Math.max(this.refreshMs, 1000 / 60); }
 
   private resetWindow(): void {
-    this.elapsed = 0; this.frames = 0; this.slow = 0; this.gpuSum = 0; this.gpuN = 0; this.windowMin = Infinity;
+    this.elapsed = 0; this.frames = 0; this.slow = 0; this.gpuSum = 0; this.gpuN = 0; this.cpuSum = 0; this.cpuN = 0; this.windowMin = Infinity;
   }
 }
