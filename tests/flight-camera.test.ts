@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { CAMERA_MODES, FlightCamera, PivotSmoother, framingDistance, zoomLimits, type CameraFrame } from '../src/flight/camera';
+import { CAMERA_MODES, FlightCamera, PivotSmoother, TouchdownKick, framingDistance, zoomLimits, type CameraFrame } from '../src/flight/camera';
 import { PART_CATALOG } from '../src/data/parts';
 import { buildMoonLander, buildOrbiter } from '../src/editor/stockCrafts';
 import { placeInCircularOrbit } from '../src/game/scenarios';
@@ -211,4 +211,19 @@ describe('camera continuity across staging', () => {
     // The pod itself moves only with the orbit (~7.7 km/s / 120 Hz ≈ 64 m per frame), never with the COM jump.
     expect(smooth.worstPart).toBeLessThan(70);
   }, 60000);
+});
+
+describe('touchdown camera kick', () => {
+  it('stays still for a gentle landing and kicks for a hard one', () => {
+    const k = new TouchdownKick();
+    const land = (sink: number) => {
+      k.update('a', true, 0, 0.016);
+      k.update('a', false, -sink, 0.016);
+      return k.update('a', true, 0, 0.016);
+    };
+    expect(k.update('a', true, 0, 0.016)).toBe(0); // spawning on the ground is not a touchdown
+    expect(land(1.2)).toBe(0);
+    expect(land(5)).toBeGreaterThan(0.3);
+    expect(land(20)).toBe(1);
+  });
 });

@@ -11,7 +11,7 @@ import { PART_CATALOG } from '../data/parts';
 import type { Autopilot } from '../game/autopilot';
 import { flightPredictions, targetOrbitState } from '../game/flightData';
 import { deserializeWorld, loadWorldFromStorage, saveWorldToStorage, serializeWorld, type SavedWorld } from '../game/persistence';
-import { applyCommsSettings, game } from '../game/store';
+import { applyCommsSettings, cameraShakeScale, game } from '../game/store';
 import { Universe } from '../game/universe';
 import { PHYSICS_DT, World, type WorldVessel } from '../game/world';
 import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
@@ -44,7 +44,7 @@ import { bindingLabel } from '../input/bindings';
 import { cross, dot, length, normalize, sub, type Vec3 } from '../util/vec3';
 import { qRotate } from '../util/quat';
 import { type AssistId } from './assist';
-import { CAMERA_MODE_INFO, FlightCamera, PivotSmoother } from './camera';
+import { CAMERA_MODE_INFO, FlightCamera, PivotSmoother, TouchdownKick } from './camera';
 import * as assist from './controller/assist';
 import * as audio from './controller/audio';
 import type { FlightControllerInternals } from './controller/internals';
@@ -297,9 +297,10 @@ export class FlightController {
     );
     this.world.onEvent = (e) => {
       if (e.type === 'stage' && e.vesselId === this.world.activeId) this.stagedCount++;
-      if (e.vesselId === this.world.activeId && !game.get().settings.reduceMotion) {
-        if (e.type === 'stage') this.cam.addKick(0.35);
-        else if (e.type === 'decouple' || e.type === 'structuralFailure') this.cam.addKick(0.6);
+      const shake = cameraShakeScale(game.get().settings);
+      if (e.vesselId === this.world.activeId && shake > 0) {
+        if (e.type === 'stage') this.cam.addKick(0.35 * shake);
+        else if (e.type === 'decouple' || e.type === 'structuralFailure') this.cam.addKick(0.6 * shake);
       }
       if (isBurstEvent(e)) {
         const vessel = this.world.vessels.get(e.vesselId) ?? this.world.active;
@@ -939,7 +940,7 @@ export class FlightController {
     const camera = this.cam.camera;
     this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors, u.body(wv.body).surfaceGravity);
     this.effects.rcs(wv.state,this.rcsOn,this.input.state);
-    if (!this.paused) this.effects.shake(camera, game.get().settings.reduceMotion);
+    if (!this.paused) this.effects.shake(camera, cameraShakeScale(game.get().settings) === 0);
     prof.add('fx', t0);
     if (this.network) {
       const live = new Set<string>();
@@ -1061,6 +1062,7 @@ export class FlightController {
   private readonly camProbe = { x: 0, y: 0, z: 0 };
   private readonly camPivot = new THREE.Vector3();
   private readonly pivotSmoother = new PivotSmoother();
+  private readonly touchdown = new TouchdownKick();
 
   /** Feed the orbit camera its reference frame, framing size, terrain clearance and rumble for this frame. */
   private updateCamera(wv: WorldVessel, origin: Vec3, bodyState: { position: Vec3; velocity: Vec3 }, airVel: Vec3, t: number, dt: number) {
@@ -1083,8 +1085,12 @@ export class FlightController {
     const agl = Number.isFinite(tel.altitudeAGL) ? tel.altitudeAGL : alt;
     const settings = game.get().settings;
     let rumble = 0;
-    if (!settings.reduceMotion && !this.paused) {
-      rumble = flightRumble(tel.thrust, st.mass * body.surfaceGravity, agl, tel.dynamicPressure, tel.mach);
+    const shake = cameraShakeScale(settings);
+    if (shake > 0 && !this.paused) {
+      rumble = flightRumble(tel.thrust, st.mass * body.surfaceGravity, agl, tel.dynamicPressure, tel.mach) * shake;
+      // Touchdown kick, growing with the vertical speed at contact (a gentle 1.5 m/s landing stays still).
+      const touchdown = this.touchdown.update(st.id, st.situation !== 'flying', dot(airVel, up), dt);
+      if (touchdown > 0) this.cam.addKick(touchdown * shake);
     }
     const probe = this.camProbe;
     this.cam.drive.yaw = this.input.camera.yaw;

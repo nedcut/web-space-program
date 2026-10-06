@@ -416,3 +416,22 @@ export class FlightCamera {
     };
   }
 }
+
+/**
+ * Camera kick for a hard touchdown: remembers the descent rate while flying and, on the frame the vessel
+ * reaches the ground, returns a kick that grows from 0 at 1.5 m/s to the maximum at 9 m/s.
+ */
+export class TouchdownKick {
+  private id: string | undefined;
+  private grounded = true;
+  private sink = 0;
+  /** `verticalSpeed` is the surface-relative vertical speed (m/s, negative = descending). */
+  update(id: string, grounded: boolean, verticalSpeed: number, _dt: number): number {
+    if (id !== this.id) { this.id = id; this.grounded = grounded; this.sink = 0; return 0; }
+    let kick = 0;
+    if (!grounded) this.sink = Math.max(0, -verticalSpeed);
+    else if (!this.grounded) kick = Math.max(0, Math.min(1, (this.sink - 1.5) / 7.5));
+    this.grounded = grounded;
+    return kick;
+  }
+}
