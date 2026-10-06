@@ -14,14 +14,16 @@ export interface FlightInputState {
 }
 
 export type ActionGroupKey = 'actionGroup1' | 'actionGroup2' | 'actionGroup3' | 'actionGroup4' | 'actionGroup5' | 'actionGroup6' | 'actionGroup7' | 'actionGroup8' | 'actionGroup9' | 'actionGroup10';
-export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'toggleCamMode' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag' | 'toggleGear' | 'stressOverlay' | 'toggleLights' | 'abort' | ActionGroupKey;
+export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'focusPrev' | 'mapFocusNext' | 'toggleCamMode' | 'iva' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag' | 'toggleGear' | 'stressOverlay' | 'toggleLights' | 'abort' | 'stageLock' | 'sasHold' | 'sasHoldRelease' | ActionGroupKey;
 
 /** Keyboard attitude ramp (command units per second): full deflection in 0.2 s, release in ~0.08 s. */
 export const KEY_RAMP_RATE = 5;
 export const KEY_RELEASE_RATE = 12;
 
 export const ACTION_GROUP_KEYS: ActionGroupKey[] = ['actionGroup1', 'actionGroup2', 'actionGroup3', 'actionGroup4', 'actionGroup5', 'actionGroup6', 'actionGroup7', 'actionGroup8', 'actionGroup9', 'actionGroup10'];
-const FLIGHT_ACTIONS: FlightAction[] = ['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'focusNext', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'board', 'plantFlag', 'toggleGear', 'stressOverlay', 'toggleLights', 'abort', ...ACTION_GROUP_KEYS];
+const FLIGHT_ACTIONS: FlightAction[] = ['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'focusNext', 'focusPrev', 'mapFocusNext', 'toggleCamMode', 'iva', 'quicksave', 'quickload', 'eva', 'board', 'plantFlag', 'toggleGear', 'stressOverlay', 'toggleLights', 'abort', 'stageLock', 'sasHold', ...ACTION_GROUP_KEYS];
+/** Vessel-only actions that a walking astronaut ignores. */
+const VESSEL_ONLY = new Set<FlightAction>(['abort', 'toggleLights', 'stageLock', 'sasHold', 'iva']);
 export class FlightInput {
   readonly state: FlightInputState = { pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, throttle: 0, brakes: false };
   /** Camera orbit/zoom rates from arrow keys, +/- and RB + right stick (-1..1). */
@@ -34,6 +36,8 @@ export class FlightInput {
   private padIndex: number | null = null;
   private mouse = { x: 0, y: 0 };
   private keyRamp = { pitch: 0, yaw: 0, roll: 0 };
+  /** Physical key that started a momentary SAS toggle (F held); its release emits 'sasHoldRelease'. */
+  private sasHoldKey: string | null = null;
   precision = false;
   get precisionActive() { return this.precision || this.down('precisionHold'); }
   gamepadConnected = false;
@@ -56,7 +60,7 @@ export class FlightInput {
   }
   onAction(fn: (a: FlightAction) => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
   private emit(a: FlightAction) { this.listeners.forEach(l => l(a)); }
-  private onBlur = () => { this.held.clear(); this.mouse = { x: 0, y: 0 }; this.keyRamp = { pitch: 0, yaw: 0, roll: 0 }; this.resetPad(); };
+  private onBlur = () => { this.releaseSasHold(); this.held.clear(); this.mouse = { x: 0, y: 0 }; this.keyRamp = { pitch: 0, yaw: 0, roll: 0 }; this.resetPad(); };
   private onMouse = (e: PointerEvent) => {
     // Right-button drag remains the camera control; left-button drag is optional flight assist.
     if (this.mouseEnabled && game.get().settings.mouseFlight && e.buttons === 1 && e.target instanceof HTMLCanvasElement) {
@@ -80,11 +84,15 @@ export class FlightInput {
     this.held.add(e.code);
     if (e.repeat) return;
     if (actions.includes('precision')) this.precision = !this.precision;
-    for (const a of FLIGHT_ACTIONS) if (actions.includes(a) && (!(a === 'board' || a === 'plantFlag') || this.evaMode) && !(this.evaMode && (a === 'abort' || a === 'toggleLights' || a.startsWith('actionGroup')))) this.emit(a);
+    for (const a of FLIGHT_ACTIONS) if (actions.includes(a as Action) && (!(a === 'board' || a === 'plantFlag') || this.evaMode) && !(this.evaMode && (VESSEL_ONLY.has(a) || a.startsWith('actionGroup')))) {
+      if (a === 'sasHold') { if (this.sasHoldKey) continue; this.sasHoldKey = e.code; }
+      this.emit(a);
+    }
     if (!this.evaMode && actions.includes('throttleFull')) this.state.throttle = 1;
     if (!this.evaMode && actions.includes('throttleCut')) this.state.throttle = 0;
   };
-  private onUp = (e: KeyboardEvent) => { this.held.delete(e.code); };
+  private onUp = (e: KeyboardEvent) => { this.held.delete(e.code); if (e.code === this.sasHoldKey) this.releaseSasHold(); };
+  private releaseSasHold() { if (!this.sasHoldKey) return; this.sasHoldKey = null; this.emit('sasHoldRelease'); }
   private resetPad() { this.buttons.clear(); this.stageHeld = this.stageProgress = 0; this.stageConfirmed = false; this.padIndex = null; this.gamepadConnected = false; }
   update(dt: number) {
     const settings = game.get().settings;

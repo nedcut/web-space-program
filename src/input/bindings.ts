@@ -4,7 +4,9 @@ export const DEFAULT_BINDINGS = {
   translateRight: ['KeyL'], translateLeft: ['KeyJ'], translateForward: ['KeyI'], translateBack: ['KeyK'], translateUp: ['KeyH'], translateDown: ['KeyN'],
   throttleUp: ['ShiftLeft', 'ShiftRight'], throttleDown: ['ControlLeft', 'ControlRight'], throttleFull: ['KeyZ'], throttleCut: ['KeyX'],
   stage: ['Space'], toggleSas: ['KeyT'], toggleRcs: ['KeyR'], map: ['KeyM'], warpUp: ['Period'], warpDown: ['Comma'], warpStop: ['Slash'],
-  menu: ['Escape'], help: ['F1'], perfOverlay: ['F8'], flightData: ['F3'], stressOverlay: ['F4'], photoMode: ['KeyP'], focusNext: ['BracketRight'], toggleCamMode: ['KeyV'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyU'], board: ['Enter'], plantFlag: ['KeyF'], toggleGear: ['KeyG'], brakes: ['KeyB'], toggleLights: ['KeyC'], abort: ['Backspace'],
+  menu: ['Escape'], help: ['Shift+F1'], screenshot: ['F1'], hideUi: ['F2'], flightResults: ['F3'], perfOverlay: ['F8'], flightData: ['Shift+F3'], stressOverlay: ['F4'], photoMode: ['KeyP'],
+  focusNext: ['BracketRight'], focusPrev: ['BracketLeft'], mapFocusNext: ['Tab'], toggleCamMode: ['KeyV'], iva: ['KeyC'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyO'], board: ['Enter'], plantFlag: ['KeyF'],
+  toggleGear: ['KeyG'], brakes: ['KeyB'], toggleLights: ['KeyU'], abort: ['Backspace'], stageLock: ['Alt+KeyL'], sasHold: ['KeyF'],
   actionGroup1: ['Digit1'], actionGroup2: ['Digit2'], actionGroup3: ['Digit3'], actionGroup4: ['Digit4'], actionGroup5: ['Digit5'],
   actionGroup6: ['Digit6'], actionGroup7: ['Digit7'], actionGroup8: ['Digit8'], actionGroup9: ['Digit9'], actionGroup10: ['Digit0'], precision: ['CapsLock'], precisionHold: ['AltLeft', 'AltRight'],
   cameraLeft: ['ArrowLeft'], cameraRight: ['ArrowRight'], cameraUp: ['ArrowUp'], cameraDown: ['ArrowDown'], cameraZoomIn: ['Equal', 'NumpadAdd'], cameraZoomOut: ['Minus', 'NumpadSubtract'],
@@ -14,15 +16,45 @@ export const DEFAULT_BINDINGS = {
 } satisfies Record<string, string[]>;
 export type Action = keyof typeof DEFAULT_BINDINGS;
 export type Bindings = Record<Action, string[]>;
+const SHARED_ACTIONS = new Set<Action>(['cameraLeft', 'cameraRight', 'cameraUp', 'cameraDown', 'cameraZoomIn', 'cameraZoomOut', 'stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'help', 'perfOverlay', 'flightData', 'stressOverlay', 'photoMode', 'screenshot', 'hideUi', 'flightResults', 'focusNext', 'focusPrev', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'toggleGear', 'precision', 'precisionHold']);
 export const BINDINGS_KEY = 'wsp.bindings.v1';
+/**
+ * Layout revision of the default map. Layout 2 moved to the classic KSP 1.12 flight defaults: lights U, EVA O,
+ * IVA C, F1 screenshot, F2 hide UI, F3 flight results, help Shift+F1, flight data Shift+F3.
+ */
+export const BINDINGS_LAYOUT = 2;
+/** Defaults of earlier layouts: a saved binding still equal to its old default follows the new default. */
+const LAYOUT_1_DEFAULTS: Partial<Record<string, string[]>> = { help: ['F1'], flightData: ['F3'], eva: ['KeyU'], toggleLights: ['KeyC'] };
 export function defaultBindings(): Bindings { return Object.fromEntries(Object.entries(DEFAULT_BINDINGS).map(([a, keys]) => [a, [...keys]])) as Bindings; }
 export function loadBindings(storage?: Pick<Storage, 'getItem'>): Bindings {
   const result = defaultBindings();
   try {
     const data: unknown = JSON.parse((storage ?? globalThis.localStorage)?.getItem(BINDINGS_KEY) ?? '{}');
-    if (data && typeof data === 'object') for (const a of Object.keys(result) as Action[]) {
-      const keys = (data as Partial<Bindings>)[a];
-      if (Array.isArray(keys) && keys.every(k => typeof k === 'string' && k.length < 80)) result[a] = [...keys];
+    if (data && typeof data === 'object') {
+      const saved = data as Partial<Bindings> & { __layout?: unknown };
+      const layout = typeof saved.__layout === 'number' ? saved.__layout : 1;
+      const valid = (keys: unknown): keys is string[] => Array.isArray(keys) && keys.every(k => typeof k === 'string' && k.length < 80);
+      const same = (a: string[], b: string[]) => a.length === b.length && a.every((k, i) => k === b[i]);
+      // Saved keys of actions the player has explicitly customised (not merely stored defaults).
+      const migrating = new Set<Action>();
+      for (const a of Object.keys(result) as Action[]) {
+        const keys = saved[a];
+        if (!valid(keys)) continue;
+        const old = layout < 2 ? LAYOUT_1_DEFAULTS[a] : undefined;
+        if (old && same(keys, old)) migrating.add(a);
+        else result[a] = [...keys];
+      }
+      // An untouched old default moves to its new key unless the player already uses that key for something else.
+      // Reverting one action can free or block another, so settle until nothing changes (each reverts at most once).
+      for (let changed = true; changed;) {
+        changed = false;
+        for (const a of migrating) {
+          const old = LAYOUT_1_DEFAULTS[a]!;
+          if (same(result[a], old)) continue;
+          const clash = (Object.keys(result) as Action[]).some(o => o !== a && contextsOverlap(a, o) && result[o].some(k => result[a].includes(k)));
+          if (clash) { result[a] = [...old]; changed = true; }
+        }
+      }
     }
   } catch { /* Use defaults if storage is unavailable or corrupt. */ }
   return result;
@@ -33,7 +65,7 @@ export const getBindings = () => current;
 export const subscribeBindings = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 export function saveBindings(bindings: Bindings, storage?: Pick<Storage, 'setItem'>) {
   current = Object.fromEntries(Object.entries(bindings).map(([a, keys]) => [a, [...keys]])) as Bindings;
-  try { (storage ?? globalThis.localStorage)?.setItem(BINDINGS_KEY, JSON.stringify(current)); } catch { /* Session-only when storage is unavailable. */ }
+  try { (storage ?? globalThis.localStorage)?.setItem(BINDINGS_KEY, JSON.stringify({ ...current, __layout: BINDINGS_LAYOUT })); } catch { /* Session-only when storage is unavailable. */ }
   listeners.forEach(fn => fn());
 }
 export function isTyping(target: EventTarget | null): boolean {
@@ -42,12 +74,23 @@ export function isTyping(target: EventTarget | null): boolean {
 export function keyChord(e: Pick<KeyboardEvent, 'code' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey'>): string {
   return `${(e.ctrlKey || e.metaKey) && !/^(Control|Meta)/.test(e.code) ? 'Ctrl+' : ''}${e.altKey && !e.code.startsWith('Alt') ? 'Alt+' : ''}${e.shiftKey && !e.code.startsWith('Shift') ? 'Shift+' : ''}${e.code}`;
 }
+/** Chords (with modifiers) bound anywhere: such a chord never also fires the plain key's action. */
+let chordCache: { bindings: Bindings; chords: Set<string> } | null = null;
+function boundChords(): Set<string> {
+  if (chordCache?.bindings !== current) chordCache = { bindings: current, chords: new Set(Object.values(current).flat().filter(k => k.includes('+'))) };
+  return chordCache.chords;
+}
 export function matches(action: Action, e: KeyboardEvent): boolean {
   const chord = keyChord(e);
-  return current[action].some(k => k === chord || (!k.includes('+') && k === e.code && !e.metaKey && !e.ctrlKey));
+  // A plain binding still fires with Shift/Alt held (e.g. staging while holding throttle-up), unless that exact
+  // chord belongs to another action (Shift+F1 help must not also take an F1 screenshot).
+  return current[action].some(k => k === chord || (!k.includes('+') && k === e.code && !e.metaKey && !e.ctrlKey && !boundChords().has(chord)));
+}
+function contextsOverlap(a: Action, b: Action) {
+  const scopes = (x: Action) => SHARED_ACTIONS.has(x) ? ['flight', 'eva'] : [context(x)];
+  return scopes(a).some(s => scopes(b).includes(s));
 }
 export function context(action: Action) { return action.startsWith('editor') ? 'editor' : action.startsWith('eva') || action === 'board' || action === 'plantFlag' ? 'eva' : 'flight'; }
-const SHARED_ACTIONS = new Set<Action>(['cameraLeft', 'cameraRight', 'cameraUp', 'cameraDown', 'cameraZoomIn', 'cameraZoomOut', 'stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'help', 'perfOverlay', 'flightData', 'stressOverlay', 'photoMode', 'focusNext', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'toggleGear', 'precision', 'precisionHold']);
 export function conflicts(bindings: Bindings): { key: string; actions: Action[] }[] {
   const groups = new Map<string, Action[]>();
   for (const a of Object.keys(bindings) as Action[]) for (const k of new Set(bindings[a])) {
