@@ -18,4 +18,4 @@ for r in $(seq "$reps"); do
     done
   done
 done
-node "$here/gpu-ab-report.mjs" "$name" /mnt/c/wsp-tools/bench/ab "$here/../../docs/performance/cpuperf"
+node "$here/gpu-ab-report.mjs" "$name" /mnt/c/wsp-tools/bench/ab "${AB_OUT:-$here/../../docs/performance/cpuperf}"

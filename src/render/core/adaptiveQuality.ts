@@ -2,10 +2,14 @@
  * Adaptive render scale: a multiplier (0.5–1) on the user's render-scale ceiling, driven by
  * one-second windows of frame intervals and, when the browser exposes GPU timer queries, GPU time.
  *
- * - Over budget (≥20% of frames miss the display interval, or GPU time ≥90% of it) for two windows
+ * - Over budget (≥20% of frames miss the display interval, the mean rate is >12% below the target, or GPU
+ *   time ≥90% of the interval) for two windows
  *   (one when severe) → scale down; with GPU timings straight to the scale predicted to fit 80% of
  *   the budget (pixels ∝ scale²), otherwise 0.1 (0.15 when most frames miss).
- * - Headroom (≤2% missed frames and, if known, GPU time ≤60% of the interval) → scale up (0.1, or
+ * - The mean-rate test catches steady 45–55 fps on high-refresh (ProMotion) displays, where intervals quantise to
+ *   16.7/25 ms and few frames exceed 1.5× the target; Mac browsers may not expose GPU timer queries at all.
+ * - Headroom (≤2% missed frames, mean rate within 5% of the target and, if known, GPU time ≤60% of the interval)
+ *   → scale up (0.1, or
  *   towards the predicted 70%-budget scale) after a
  *   cooldown that doubles whenever an increase is undone within a few seconds (no oscillation).
  * - When GPU timing shows the GPU is idle, slow frames are CPU-bound and resolution is left alone.
@@ -56,15 +60,16 @@ export class AdaptiveQuality {
     const cpu = this.cpuN ? this.cpuSum / this.cpuN : NaN;
     const cpuBusy = !Number.isFinite(cpu) || cpu > this.targetMs * 0.7;
     const gpuIdle = Number.isFinite(gpu) && gpu < this.targetMs * 0.6 && cpuBusy;
-    const over = !gpuIdle && (slowFrac >= 0.2 || (Number.isFinite(gpu) && gpu >= this.targetMs * 0.9));
-    const headroom = slowFrac <= 0.02 && (!Number.isFinite(gpu) || gpu < this.targetMs * 0.6);
+    const meanMs = this.elapsed / this.frames;
+    const over = !gpuIdle && (slowFrac >= 0.2 || meanMs > this.targetMs * 1.12 || (Number.isFinite(gpu) && gpu >= this.targetMs * 0.9));
+    const headroom = slowFrac <= 0.02 && meanMs <= this.targetMs * 1.05 && (!Number.isFinite(gpu) || gpu < this.targetMs * 0.6);
     const windowMs = this.elapsed;
     this.resetWindow();
 
     if (over) {
       this.goodMs = 0;
       // Severe overload acts after one window; marginal overload needs two in a row.
-      const severe = slowFrac > 0.5 || (Number.isFinite(gpu) && gpu > this.targetMs * 1.3);
+      const severe = slowFrac > 0.5 || meanMs > this.targetMs * 1.5 || (Number.isFinite(gpu) && gpu > this.targetMs * 1.3);
       if (++this.bad >= (severe ? 1 : 2)) {
         this.bad = 0;
         // GPU time scales with pixel count (scale²): jump straight to the predicted scale for ~80% of the

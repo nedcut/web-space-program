@@ -61,6 +61,12 @@ describe('adaptive scale', () => {
     run(q, 16.7, 3, 16); // GPU saturated even though frames hit vsync
     expect(q.scale).toBeLessThan(1);
   });
+  it('drops on a steady sub-target rate even when few frames exceed 1.5x the interval (120 Hz display)', () => {
+    const q = new AdaptiveQuality();
+    // ~48 fps on a ProMotion display: intervals alternate 16.7 / 25 ms (24.9 so none counts as a missed frame).
+    for (let t = 0, i = 0; t < 2100; i++) { const ms = i % 2 ? 24.9 : 16.7; q.update(ms, true); t += ms; }
+    expect(q.scale).toBe(0.9);
+  });
   it('recovers with headroom after a cooldown and backs off after oscillation', () => {
     const q = new AdaptiveQuality();
     run(q, 33.4, 1.05);
