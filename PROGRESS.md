@@ -26,6 +26,19 @@ map and in the Ring Skimmer mission — `docs/PERFORMANCE.md` ("What to measure 
 Graphics are auto-tuned once per device (weak GPUs start on Low; adaptive resolution is on). Then tell me what feels
 wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
 
+## Map readability on Retina (2026-10-06, op/mapviz2)
+You said the map lines were barely visible and a planned course looked like straight pixels. Checked on a real GPU at
+2× device pixel ratio: every trajectory line now has a thin dark outline (it reads over bright planets), and the active
+and planned paths get a soft glow. Widths stay fixed on screen (active orbit 3 px). Curves are sampled more densely
+where they bend, so there are no straight chords at periapsis or along flybys. Dashes are a fixed size on screen, and
+the glow continues through the gaps. The Moon's orbit stays visible when you zoom out to plan a transfer. Your planet's
+own path round the Sun is faint and fades towards the screen edges. The part of a course inside the Moon's SOI is drawn
+where the Moon will be at the encounter. That spot shows a ghost Moon icon and a faint SOI bubble. The node gizmo
+shrinks when the orbit is small on screen, and its handles hide when the orbit is only a few pixels across, so it no
+longer covers the transfer. Ap/Pe/encounter/escape/impact/AN-DN markers are sharp SVG glyphs in the colour of their
+trajectory. Their labels have outlines. Apsides of orbits too small to tell apart are hidden. The map also has a
+faint starfield.
+
 ## Map view and maneuver planning, the classic way (2026-10-06, op/mapksp)
 
 Owner feedback: the map and maneuver planning felt unfamiliar. The map now follows the genre classic's hand habits

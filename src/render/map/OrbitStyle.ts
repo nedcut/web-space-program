@@ -87,17 +87,21 @@ export class OrbitStyle {
         float outside = max(edge - mapOutline.x, 0.) / mapGlow.y;
         float glow = mapGlow.x * exp(-outside * outside * 2.5) * step(0., edge);
         // Composite core over rim, then the glow beneath both (straight alpha).
+        #ifdef USE_DASH
+          // Dashes cut the core and rim; the glow runs on through the gaps so a dashed path still reads as one.
+          float dashAt = mod(vLineDistance + dashOffset, dashSize + gapSize);
+          float dashAA = max(fwidth(vLineDistance), .001);
+          float dash = smoothstep(0., dashAA, dashAt) * (1. - smoothstep(dashSize - dashAA, dashSize, dashAt));
+          core *= dash; rim *= dash;
+          float inner = mapGlow.x * .55 * (1. - dash) * clamp(.5 - (edge - mapOutline.x) / aa, 0., 1.);
+          glow = max(glow, inner);
+        #endif
         float solid = core + (1. - core) * rim;
         vec3 rimColor = vec3(.008, .014, .03);
         vec3 solidColor = mix(rimColor, diffuseColor.rgb, core / max(solid, 1e-4));
         float total = solid + (1. - solid) * glow;
         vec3 rgb = (solidColor * solid + diffuseColor.rgb * glow * (1. - solid)) / max(total, 1e-4);
         alpha = diffuseColor.a * total;
-        #ifdef USE_DASH
-          float dashAt = mod(vLineDistance + dashOffset, dashSize + gapSize);
-          float dashAA = max(fwidth(vLineDistance), .001);
-          alpha *= smoothstep(0., dashAA, dashAt) * (1. - smoothstep(dashSize - dashAA, dashSize, dashAt));
-        #endif
         vec3 ray = vMapPosition - cameraPosition;
         float rayLength = length(ray); vec3 direction = ray / max(rayLength, 1.);
         float occlusion = 1.;

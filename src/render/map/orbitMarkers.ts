@@ -41,7 +41,7 @@ export function firstPlannedPatch(patches: readonly TrajectoryPatch[]): number {
   return patches.length;
 }
 
-export interface MarkerBodies { radius(id: string): number }
+export interface MarkerBodies { radius(id: string): number; /** SOI radius (apsides beyond it are never reached). */ soi?(id: string): number }
 
 export function orbitMarkers(patches: readonly TrajectoryPatch[], now: number, bodies: MarkerBodies): OrbitMarker[] {
   const out: OrbitMarker[] = [];
@@ -72,6 +72,7 @@ export function orbitMarkers(patches: readonly TrajectoryPatch[], now: number, b
         // An outbound hyperbola already past periapsis has no upcoming apsis on this patch.
         if (!closed && (time > p.endTime || time < from - 1)) continue;
         const position = elementsToState(p.orbit, time).position;
+        if (length(position) > (bodies.soi?.(body) ?? Infinity)) continue;
         out.push({ key: `${kind}:${i}`, kind, body, position, time, altitude: length(position) - radius, planned: isPlanned, patch: i });
       }
     }

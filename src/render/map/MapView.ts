@@ -1100,6 +1100,7 @@ export class MapView {
 
   private readonly scratch = new THREE.Vector3();
   private readonly scratchPoint: MapPoint = { x: 0, y: 0 };
+  private readonly markerCentre: MapPoint = { x: 0, y: 0 };
   /** Closest point of the active trajectory (future only) to a CSS-pixel position. */
   private hitTrajectory(x: number, y: number): { time: number; patch: number; distance: number } | null {
     const u = this.lastUpdate;
@@ -1162,7 +1163,7 @@ export class MapView {
   // ---------- Orbit markers ----------
 
   private bodyName = (id: string) => this.bodies.get(id)?.body.name ?? id;
-  private bodyRadius = { radius: (id: string) => this.bodies.get(id)?.body.radius ?? 0 };
+  private bodyRadius = { radius: (id: string) => this.bodies.get(id)?.body.radius ?? 0, soi: (id: string) => this.bodies.get(id)?.body.soi ?? Infinity };
 
   private pushMarker(key: string, body: string, position: Vec3, caption: string, color: string, priority: number, glyph: MarkerGlyph, orbit?: OrbitMarker, detail?: string, dotOnly = false, time?: number) {
     const m = this.shown[this.shownCount] ??= { key: '', body: '', position, caption: '', color: '', priority: 0, glyph: 'dot' };
@@ -1228,7 +1229,14 @@ export class MapView {
     for (let i = 0; i < this.shownCount; i++) {
       const m = this.shown[i], el = this.markerElement(i);
       const s = this.toScreen(this.scenePosition(m.position, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.scratchPoint);
-      const on = s.x > -20 && s.y > -20 && s.x < u.viewport.width + 20 && s.y < u.viewport.height + 20;
+      let on = s.x > -20 && s.y > -20 && s.x < u.viewport.width + 20 && s.y < u.viewport.height + 20;
+      // Apsides of an orbit that is only a few pixels across are noise piled on the body icon: hide them until
+      // the orbit is large enough to tell apart (pinned markers stay).
+      if (on && (m.glyph === 'ap' || m.glyph === 'pe') && !this.pinned.has(m.key)) {
+        const sx = s.x, sy = s.y, c = this.toScreen(this.scenePosition(ZERO, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.markerCentre);
+        on = !(Math.hypot(c.x - sx, c.y - sy) < 16);
+        s.x = sx; s.y = sy;
+      }
       el.root.style.display = on ? 'block' : 'none';
       el.text.style.display = 'none';
       el.box.x = NaN;
