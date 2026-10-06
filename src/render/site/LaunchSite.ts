@@ -8,6 +8,7 @@ import { qRotate } from '../../util/quat';
 import { terrainCutout } from '../planet/cutout';
 import * as TX from './textures';
 import { withAerialPerspective } from './aerial';
+import { instancedVariant } from '../core/materialVariants';
 
 /** What LaunchSite needs from the game Universe (structural, keeps render → game imports out). */
 export interface SiteUniverse {
@@ -1081,8 +1082,9 @@ export class LaunchSite {
     const n = spots.length;
     const poleGeo = this.track(new THREE.CylinderGeometry(0.16, 0.28, 18, 6).translate(0, 9, 0));
     const headGeo = this.track(new THREE.BoxGeometry(2.2, 0.7, 0.5).translate(0, 18.2, 0.3));
-    const poles = new THREE.InstancedMesh(poleGeo, this.batches.get('steel')!.def.mat, n);
-    const heads = new THREE.InstancedMesh(headGeo, this.batches.get('lamp')!.def.mat, n);
+    // Instanced variants: the batch materials are also drawn by plain meshes (see materialVariants).
+    const poles = new THREE.InstancedMesh(poleGeo, instancedVariant(this.batches.get('steel')!.def.mat), n);
+    const heads = new THREE.InstancedMesh(headGeo, instancedVariant(this.batches.get('lamp')!.def.mat), n);
     spots.forEach((s, i) => {
       const m = this.frameAt(s.x, s.z, s.face);
       poles.setMatrixAt(i, m);

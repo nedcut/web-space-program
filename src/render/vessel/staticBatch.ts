@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { instancedVariant } from '../core/materialVariants';
 
 /** Batch only opaque static leaves. Inputs retain their shared template resources. */
 export function batchStaticParts(objects: THREE.Object3D[]): THREE.Group {
@@ -25,7 +26,7 @@ export function batchStaticParts(objects: THREE.Object3D[]): THREE.Group {
     const unique: THREE.BufferGeometry[] = [];
     for (const [geometry, matrices] of geometries) {
       if (matrices.length > 1) {
-        const mesh = new THREE.InstancedMesh(geometry, material, matrices.length);
+        const mesh = new THREE.InstancedMesh(geometry, instancedVariant(material), matrices.length);
         matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
         mesh.computeBoundingSphere(); mesh.castShadow = mesh.receiveShadow = true;
         result.add(mesh);
