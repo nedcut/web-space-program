@@ -6,7 +6,9 @@ import { PlanetRenderer, type PlanetUpdateParams } from '../planet/PlanetRendere
 import { QUALITY_PRESETS, type QualitySettings } from '../core/quality';
 import { SCALE_PRESETS } from '../../sim/bodies/scale';
 import { BodyIcons } from './BodyIcons';
-import { OrbitStyle } from './OrbitStyle';
+import { BODY_LOOK, GIZMO_LOOK, OrbitStyle, PLANNED_LOOK, TRAJECTORY_LOOK, orbitUniforms, type OrbitLook } from './OrbitStyle';
+import { adaptiveSamples, sampleConic } from './conicSampling';
+import { createMapStars, createSoiShell } from './mapBackdrop';
 import { familyColor, placeLabel, type LabelBox } from './presentation';
 import type { Network } from '../../sim/comms/network';
 import { concentrationAt } from '../../sim/resources/deposits';
@@ -15,8 +17,8 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 
-/** All map line widths are authored in CSS px and scaled up here: thin 1–2 px lines were unreadable. */
-const LINE_SCALE = 1.8;
+/** Map line widths, CSS px (the map renders at device resolution, so these are 2 device px per unit on Retina). */
+const WIDTH = { active: 3, future: 2.5, planned: 2.75, planet: 1.6, moon: 1.4, highlight: 2.6, fleet: 1.6, fleetTarget: 2.4, gizmo: 2 };
 import type { Body } from '../../sim/bodies/types';
 import type { Ephemeris } from '../../sim/orbit/ephemeris';
 import type { Orbit, TrajectoryPatch, ManeuverNode } from '../../sim/orbit/api';
@@ -29,7 +31,8 @@ import {
   type GizmoAxis, type GizmoHandle, type ScreenPolyline,
 } from './maneuverGizmo';
 import { firstPlannedPatch, markerCaption, markerDetail, orbitMarkers, patchDrawnClosed, type OrbitMarker } from './orbitMarkers';
-import { AXIS_COLORS, PLANNED_COLOR, PLANNED_CSS, handleTexture, nodeTexture } from './mapIcons';
+import { AXIS_COLORS, PLANNED_COLOR, handleTexture, nodeTexture } from './mapIcons';
+import { GLYPH_PX, LABEL_SHADOW, cssHex, glyphForKey, markerGlyphSvg, type MarkerGlyph } from './markerGlyphs';
 
 /**
  * Map view ("tracking" view): conic orbit lines for bodies and vessels, body spheres + icons,
@@ -144,8 +147,14 @@ const NONE: Hover = { kind: 'none' };
 const TARGET_COLOR = 0xff4fb8;
 const TARGET_CSS = '#ff4fb8';
 const EXTRA_COLOR = 0x6fe39a;
-/** Rest distance of gizmo handles from the node, in CSS pixels. */
+/** Rest distance of gizmo handles from the node, CSS px: full size, and the floor it shrinks to on small orbits. */
 const HANDLE_OFFSET = 58;
+const HANDLE_OFFSET_MIN = 24;
+/** Below this on-screen orbit radius (CSS px) the handles hide; zoom in to edit. */
+const GIZMO_MIN_ORBIT_PX = 3;
+/** Sprite sizes, CSS px. */
+const ICON_PX = { vessel: 24, fleet: 20, node: 20, nodeHover: 24, ghost: 20, ghostBody: 18 };
+const ZERO: Vec3 = { x: 0, y: 0, z: 0 };
 const CLICK_SLOP = 5;
 
 function snapshotOrbit(o: Orbit): Orbit {
@@ -164,9 +173,11 @@ const PATCH_COLORS = [0x5cc8ff, 0xd066ff, 0x6fe39a, 0xffe066, 0xff6b6b];
 /** Planned (post-node) patch colours. */
 const PLANNED_COLORS = [PLANNED_COLOR, 0xffd25c, 0xff7a5c, 0xffb3e0];
 
-const MARKER_COLORS: Record<OrbitMarker['kind'], string> = {
-  ap: '#9fdcff', pe: '#9fdcff', encounter: '#ffd25c', escape: '#ffd25c', impact: '#ff6b6b', atmosphere: '#ff9f6b',
-};
+/** Line colour of trajectory patch `i` (current family, or planned family after the first node). */
+function patchColor(i: number, planned: number): number {
+  return i >= planned ? PLANNED_COLORS[(i - planned) % PLANNED_COLORS.length] : PATCH_COLORS[i % PATCH_COLORS.length];
+}
+const IMPACT_CSS = '#ff5c5c';
 
 interface BodyVisual {
   body: Body;
@@ -184,9 +195,11 @@ interface BodyVisual {
 /** A marker drawn this frame (pooled). */
 interface ShownMarker {
   key: string; body: string; position: Vec3; caption: string; color: string; priority: number;
-  orbit?: OrbitMarker; detail?: string; dotOnly?: boolean; time?: number;
+  orbit?: OrbitMarker; detail?: string; dotOnly?: boolean; time?: number; glyph: MarkerGlyph;
+  /** Body placement time (encounter patches); undefined = now. */
+  frameTime?: number;
 }
-interface MarkerElement { root: HTMLDivElement; dot: HTMLDivElement; text: HTMLDivElement; box: LabelBox; content: string; color: string }
+interface MarkerElement { root: HTMLDivElement; dot: HTMLDivElement; text: HTMLDivElement; box: LabelBox; content: string; color: string; glyph: string }
 
 /** Hover-sampled trajectory polyline (body-relative positions, float64). */
 interface TrajectoryPoly { body: string; patch: number; times: Float64Array; points: Float64Array; count: number }
@@ -199,6 +212,12 @@ function makeIconTexture(color: string, ring: boolean): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 64;
   const g = c.getContext('2d')!;
+  // Dark halo first so the icon stays legible over bright planet discs.
+  g.strokeStyle = 'rgba(2,5,12,0.75)';
+  g.lineWidth = 12;
+  g.beginPath();
+  g.arc(32, 32, ring ? 20 : 14, 0, Math.PI * 2);
+  g.stroke();
   g.strokeStyle = color;
   g.fillStyle = color;
   g.lineWidth = 6;
@@ -206,6 +225,7 @@ function makeIconTexture(color: string, ring: boolean): THREE.CanvasTexture {
   g.arc(32, 32, ring ? 20 : 14, 0, Math.PI * 2);
   if (ring) g.stroke();
   else g.fill();
+  if (ring) { g.beginPath(); g.arc(32, 32, 5, 0, Math.PI * 2); g.fill(); }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   iconCache.set(key, t);
@@ -217,25 +237,7 @@ function colorOf(b: Body): THREE.Color {
   return new THREE.Color(c[0], c[1], c[2]);
 }
 
-/** Sample a conic in its parent's frame. Ellipses: full ring; hyperbolas: limited to SOI radius. */
-export function sampleConic(o: Orbit, soi: number, t0: number, t1: number | null, segments = 256): Vec3[] {
-  const pts: Vec3[] = [];
-  if (o.e < 1 && t1 === null) {
-    const T = 2 * Math.PI * Math.sqrt(o.a ** 3 / o.mu);
-    for (let i = 0; i <= segments; i++) pts.push(elementsToState(o, t0 + (T * i) / segments).position);
-    return pts;
-  }
-  let end = t1 ?? t0 + (o.e < 1 ? 2 * Math.PI * Math.sqrt(o.a ** 3 / o.mu) : 1e7);
-  if (end <= t0) end = t0 + 1;
-  // Sample uniformly in time but refine near periapsis by sampling in sqrt-time space for hyperbolas.
-  for (let i = 0; i <= segments; i++) {
-    const t = t0 + ((end - t0) * i) / segments;
-    const p = elementsToState(o, t).position;
-    if (Math.hypot(p.x, p.y, p.z) > soi * 1.02 && i > 0) break;
-    pts.push(p);
-  }
-  return pts;
-}
+export { sampleConic };
 
 export class MapView {
   private field?: AsteroidFieldView;
@@ -252,7 +254,9 @@ export class MapView {
   private hoverBody: BodyVisual | null = null;
   private tooltip: HTMLDivElement;
   private breadcrumb: HTMLDivElement;
-  private soi = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), new THREE.MeshBasicMaterial({ color: 0x9cbfdc, transparent: true, opacity: .035, side: THREE.DoubleSide, depthWrite: false }));
+  /** SOI shells: [0] the hovered body, the rest bodies the trajectory encounters. */
+  private soiShells = [createSoiShell(), createSoiShell(), createSoiShell()];
+  private encounterGhosts: THREE.Sprite[] = [];
   private renderFocus: Vec3 = { x: 0, y: 0, z: 0 };
   private previousFocus: Vec3 = { x: 0, y: 0, z: 0 };
   private focusOffset: Vec3 = { x: 0, y: 0, z: 0 };
@@ -296,6 +300,10 @@ export class MapView {
   private readonly up = new THREE.Vector3(0, 1, 0);
   private gizmo: { line: Line2; icon: THREE.Sprite; handle: GizmoHandle; axis: GizmoAxis; sign: number; screen: MapPoint; visible: boolean }[] = [];
   private gizmoCenter: MapPoint = { x: 0, y: 0 };
+  private gizmoOffset = HANDLE_OFFSET;
+  private gizmoIconPx = 26;
+  /** Sprite scale for one CSS pixel (non-attenuated sprites), updated each frame. */
+  private spritePx = .001;
   private lastUpdate: MapUpdate | null = null;
   private frameUpdate: MapUpdate = { t: 0, focus: this.renderFocus, viewport: { width: 1, height: 1 } };
   private lastPatches: TrajectoryPatch[] = [];
@@ -331,8 +339,8 @@ export class MapView {
   private approachLine: THREE.Line;
   private warmObjects: THREE.Object3D[] = [];
 
-  private scenePosition(p: Vec3, body: string, u: MapUpdate, out = new THREE.Vector3()) {
-    const b = this.ephem.getBodyState(body, u.t).position;
+  private scenePosition(p: Vec3, body: string, u: MapUpdate, out = new THREE.Vector3(), time = u.t) {
+    const b = this.framedBodyPosition(body, u, time);
     return out.set(b.x + p.x - u.focus.x, b.y + p.y - u.focus.y, b.z + p.z - u.focus.z);
   }
 
@@ -350,6 +358,35 @@ export class MapView {
     let pick = this.selectedNodeId !== null ? nodes.find(n => n.id === this.selectedNodeId) : undefined;
     if (!pick) for (const n of nodes) if (n.time >= u.t - 60 && (!pick || n.time < pick.time)) pick = n;
     return pick;
+  }
+
+  /**
+   * Time at which a patch's central body is placed. Patches around the vessel's current body and its ancestors use
+   * now; a patch inside an encountered body (a moon, a destination planet) is drawn around where that body will be
+   * at the encounter, so the arc continues from the encounter point instead of jumping to today's position.
+   */
+  private patchFrameTime(u: MapUpdate, patch: TrajectoryPatch | undefined): number {
+    const first = u.vessel?.patches[0]?.orbit.body;
+    if (!patch || !first) return u.t;
+    for (let id: string | undefined = first; id; id = this.bodies.get(id)?.body.parent) if (id === patch.orbit.body) return u.t;
+    return Math.max(u.t, patch.startTime);
+  }
+
+  /**
+   * Heliocentric draw position of `body` at `time` in the vessel's frame: the body keeps its offset from the
+   * nearest reference ancestor (the vessel's current body or one of its parents) at that time, while the ancestor
+   * itself stays where it is now. A moon at encounter is drawn where it will be relative to its planet.
+   */
+  private framedBodyPosition(body: string, u: MapUpdate, time: number): Vec3 {
+    const now = this.ephem.getBodyState(body, u.t).position;
+    if (time === u.t) return now;
+    const first = u.vessel?.patches[0]?.orbit.body;
+    let anchor: string | undefined;
+    for (let id: string | undefined = body; id && !anchor; id = this.bodies.get(id)?.body.parent)
+      for (let ref: string | undefined = first; ref; ref = this.bodies.get(ref)?.body.parent) if (ref === id) { anchor = id; break; }
+    if (!anchor || anchor === body) return now;
+    const then = this.ephem.getBodyState(body, time).position, a0 = this.ephem.getBodyState(anchor, time).position, a1 = this.ephem.getBodyState(anchor, u.t).position;
+    return { x: a1.x + then.x - a0.x, y: a1.y + then.y - a0.y, z: a1.z + then.z - a0.z };
   }
 
   private patchAt(u: MapUpdate, time: number) {
@@ -375,7 +412,7 @@ export class MapView {
 
   private hitManeuver(x: number, y: number): Hover {
     if (!this.handlers.placeNode && !this.handlers.nodesChanged) return NONE;
-    let best = 13, hit: Hover = NONE;
+    let best = Math.max(13, this.gizmoIconPx / 2 + 5), hit: Hover = NONE;
     if (this.gizmoNodeId !== null) for (let i = 0; i < this.gizmo.length; i++) {
       const g = this.gizmo[i];
       if (!g.visible) continue;
@@ -383,7 +420,7 @@ export class MapView {
       if (d < best) { best = d; hit = { kind: 'handle', index: i, nodeId: this.gizmoNodeId }; }
     }
     if (hit.kind !== 'none') return hit;
-    best = 12;
+    best = ICON_PX.node / 2 + 4;
     for (const [id, p] of this.nodeScreen) {
       const d = Math.hypot(p.x - x, p.y - y);
       if (d < best) { best = d; hit = { kind: 'node', id }; }
@@ -434,16 +471,16 @@ export class MapView {
       const { vis, color, width } = this.highlightedBody;
       if (vis.orbitLine) {
         vis.orbitLine.material.color.setHex(color);
-        vis.orbitLine.material.linewidth = (width) * LINE_SCALE;
+        vis.orbitLine.material.linewidth = width;
       }
       this.highlightedBody = null;
     }
     if (t?.kind === 'body') {
       const vis = this.bodies.get(t.id);
       if (vis?.orbitLine) {
-        this.highlightedBody = { vis, color: vis.orbitLine.material.color.getHex(), width: vis.orbitLine.material.linewidth / LINE_SCALE };
+        this.highlightedBody = { vis, color: vis.orbitLine.material.color.getHex(), width: vis.orbitLine.material.linewidth };
         vis.orbitLine.material.color.setHex(TARGET_COLOR);
-        vis.orbitLine.material.linewidth = (2.2) * LINE_SCALE;
+        vis.orbitLine.material.linewidth = WIDTH.highlight;
       }
     }
   }
@@ -517,7 +554,6 @@ export class MapView {
       let vis = this.extras.get(item.id);
       if (!vis) {
         const icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeIconTexture('#6fe39a', true), sizeAttenuation: false, depthTest: false }));
-        icon.scale.setScalar(0.025);
         icon.renderOrder = 11;
         this.scene.add(icon);
         vis = { icon, targeted: false };
@@ -528,7 +564,7 @@ export class MapView {
         vis.targeted = targeted;
         vis.icon.material.map = makeIconTexture(targeted ? TARGET_CSS : '#6fe39a', true);
         vis.icon.material.needsUpdate = true;
-        if (vis.line) { vis.line.material.color.setHex(targeted ? TARGET_COLOR : EXTRA_COLOR); vis.line.material.linewidth = (targeted ? 2.2 : 1.6) * LINE_SCALE; }
+        if (vis.line) { vis.line.material.color.setHex(targeted ? TARGET_COLOR : EXTRA_COLOR); vis.line.material.linewidth = targeted ? WIDTH.fleetTarget : WIDTH.fleet; }
       }
       const o = item.orbit;
       // Orbit elements are stable on rails; callers can throttle conic updates in physics.
@@ -537,11 +573,15 @@ export class MapView {
         vis.line = undefined;
         if (o) {
           const pts = sampleConic(o, this.bodies.get(o.body)?.body.soi ?? Infinity, u.t, null);
-          if (pts.length > 1) vis.line = vis.targeted ? this.makeLine(pts, TARGET_COLOR, 2.2, 0.95) : this.makeLine(pts, EXTRA_COLOR, 1.6, 0.8);
+          if (pts.length > 1) {
+            vis.line = vis.targeted ? this.makeLine(pts, TARGET_COLOR, WIDTH.fleetTarget, 0.95, BODY_LOOK) : this.makeLine(pts, EXTRA_COLOR, WIDTH.fleet, 0.8, BODY_LOOK);
+            vis.line.renderOrder = 2;
+          }
         }
         vis.orbit = o ? snapshotOrbit(o) : undefined;
       }
       this.place(vis.icon, item.position, u.focus);
+      vis.icon.scale.setScalar(ICON_PX.fleet * this.spritePx);
       if (vis.line && o) this.place(vis.line, this.ephem.getBodyState(o.body, u.t).position, u.focus);
     }
   }
@@ -555,7 +595,7 @@ export class MapView {
   ) {
     this.au = bodies.get('earth')?.orbit?.a ?? 149597870700;
     if (field) this.field = new AsteroidFieldView(field, bodies.get('sun')!.gm, this.au / 149597870700, this.scene);
-    this.scene.background = new THREE.Color(0x050914);
+    this.scene.background = new THREE.Color(0x03060d);
     this.sunId = [...bodies.values()].find(b => b.kind === 'star')!.id;
     const glowCanvas = document.createElement('canvas'); glowCanvas.width = glowCanvas.height = 128;
     const glowContext = glowCanvas.getContext('2d')!;
@@ -567,7 +607,13 @@ export class MapView {
     this.sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
     this.scene.add(this.sunGlow);
     this.bodyIcons = new BodyIcons(bodies.size); this.scene.add(this.bodyIcons.mesh);
-    this.soi.visible = false; this.scene.add(this.soi);
+    for (const shell of this.soiShells) this.scene.add(shell);
+    for (let i = 0; i < 2; i++) {
+      const ghost = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeIconTexture('#ffffff', true), sizeAttenuation: false, depthTest: false, transparent: true, opacity: .7 }));
+      ghost.renderOrder = 10; ghost.visible = false;
+      this.encounterGhosts.push(ghost); this.scene.add(ghost);
+    }
+    this.scene.add(createMapStars());
     this.planetParams = { camera: this.camera, origin: this.renderFocus, bodyPosition: this.renderFocus,
       bodyRotation: { x: 0, y: 0, z: 0, w: 1 }, sunPosition: this.renderFocus, dt: 0 };
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.08));
@@ -606,7 +652,7 @@ export class MapView {
       // Body icons render in one instanced draw; sprite is retained as a position proxy.
       const label = document.createElement('div');
       label.textContent = b.name;
-      Object.assign(label.style, { position: 'absolute', font: '12px system-ui', color: '#cfd8e6', textShadow: '0 1px 5px #000', whiteSpace: 'nowrap', transform: 'translate(10px,-50%)' });
+      Object.assign(label.style, { position: 'absolute', font: '500 12.5px system-ui, sans-serif', color: '#d8e2ef', textShadow: LABEL_SHADOW, whiteSpace: 'nowrap', transform: 'translate(10px,-50%)', letterSpacing: '.02em' });
       this.labels.appendChild(label);
       sphere.visible = false;
       const vis: BodyVisual = { body: b, sphere, icon, label, familyColor: familyColor(b, bodies),
@@ -616,9 +662,10 @@ export class MapView {
         const o: Orbit = { ...b.orbit, body: b.parent, mu: parent.gm + b.gm, m0: b.orbit.meanAnomalyAtEpoch };
         // Body orbits are sampled via the ephemeris (handles parentEquator frames).
         const T = b.orbitalPeriod ?? 2 * Math.PI * Math.sqrt(o.a ** 3 / o.mu);
-        const pts: Vec3[] = [];
-        for (let i = 0; i <= 256; i++) pts.push(this.ephem.getRelativeState(b.id, (T * i) / 256).position);
-        vis.orbitLine = this.makeLine(pts, vis.familyColor, b.kind === 'moon' ? 1 : 1.3, b.kind === 'moon' ? .32 : .55);
+        // Adaptive in time: eccentric comets and dwarfs stay smooth around perihelion.
+        const pts = adaptiveSamples(t => this.ephem.getRelativeState(b.id, t).position, 0, T, { initial: 192, maxPoints: 1200 });
+        vis.orbitLine = this.makeLine(pts, vis.familyColor, b.kind === 'moon' ? WIDTH.moon : WIDTH.planet, b.kind === 'moon' ? .6 : .6, BODY_LOOK);
+        vis.orbitLine.renderOrder = 1;
       }
       this.bodies.set(b.id, vis);
     }
@@ -626,11 +673,10 @@ export class MapView {
     this.labelBoxes = this.orderedBodies.map(v => v.labelBox);
     this.iconBoxes = this.orderedBodies.map(v => v.iconBox);
     this.vesselIcon = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeIconTexture('#ffffff', true), sizeAttenuation: false, depthTest: false }));
-    this.vesselIcon.scale.setScalar(0.028);
     this.vesselIcon.renderOrder = 11;
     this.scene.add(this.vesselIcon);
     this.ghost = new THREE.Sprite(new THREE.SpriteMaterial({ map: nodeTexture('ghost'), sizeAttenuation: false, depthTest: false, transparent: true }));
-    this.ghost.scale.setScalar(0.024); this.ghost.renderOrder = 14; this.ghost.visible = false;
+    this.ghost.renderOrder = 14; this.ghost.visible = false;
     this.scene.add(this.ghost);
     const approachGeometry = new THREE.BufferGeometry();
     approachGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
@@ -640,29 +686,29 @@ export class MapView {
     // Gizmo shafts reuse the orbit-line program; created up front so opening the map never compiles shaders.
     for (const handle of GIZMO_HANDLES) {
       const color = new THREE.Color(AXIS_COLORS[handle.axis]).getHex();
-      const line = this.makeLine([{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }], color, 2.2, .9);
+      const line = this.makeLine([{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }], color, WIDTH.gizmo, .8, GIZMO_LOOK);
       line.visible = false; line.renderOrder = 14;
       const icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: handleTexture(handle.axis, handle.sign), sizeAttenuation: false, depthTest: false, transparent: true }));
-      icon.scale.setScalar(.03); icon.renderOrder = 15; icon.visible = false;
+      icon.renderOrder = 15; icon.visible = false;
       this.scene.add(icon);
       this.gizmo.push({ line, icon, handle, axis: handle.axis, sign: handle.sign, screen: { x: NaN, y: NaN }, visible: false });
     }
     // Dashed trajectory variants (future patch, planned patch) for shader warm-up; never shown otherwise.
-    for (const fade of [true, false]) {
-      const line = this.makeLine([{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }], PLANNED_COLOR, 2.1, 1, fade);
+    for (const look of [TRAJECTORY_LOOK, PLANNED_LOOK]) {
+      const line = this.makeLine([{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }], PLANNED_COLOR, WIDTH.planned, 1, look);
       line.material.dashed = true; line.visible = false;
       this.warmObjects.push(line);
     }
     this.warmObjects.push(this.approachLine, this.ghost, ...this.gizmo.flatMap(g => [g.line, g.icon]));
   }
 
-  private makeLine(pts: Vec3[], color: number, width: number, opacity = 1, vesselFade = width >= 1.8): Line2 {
+  private makeLine(pts: Vec3[], color: number, width: number, opacity: number, look: OrbitLook): Line2 {
     const pos = new Float32Array(pts.length * 3);
     pts.forEach((p, i) => pos.set([p.x, p.y, p.z], i * 3));
     const geom = new LineGeometry();
     geom.setPositions(pos);
-    const mat = new LineMaterial({ color, linewidth: width * LINE_SCALE, transparent: opacity < 1, opacity, depthWrite: false });
-    this.orbitStyle.configure(mat, vesselFade);
+    const mat = new LineMaterial({ color, linewidth: width, transparent: true, opacity, depthWrite: false });
+    this.orbitStyle.configure(mat, look);
     this.materials.push(mat);
     const line = new Line2(geom, mat);
     line.computeLineDistances();
@@ -694,21 +740,21 @@ export class MapView {
       const soi = bodies.get(p.orbit.body)?.body.soi ?? Infinity;
       // The current orbit stays a full ellipse past a node (as the planned orbit does), so both read at a glance.
       const closed = patchDrawnClosed(p);
-      const pts = p.samples ? p.samples.map(s => s.position) : sampleConic(p.orbit, soi, p.startTime, closed ? null : p.endTime, 384);
+      const pts = p.samples ? p.samples.map(s => s.position) : sampleConic(p.orbit, soi, p.startTime, closed ? null : p.endTime);
       if (pts.length === 1) pts.push(pts[0]);
       // Localize numerical vertices in Float64 before conversion to GPU Float32 buffers.
       const anchor = p.samples ? pts[0] : undefined;
       const isPlanned = i >= planned;
-      const color = isPlanned ? PLANNED_COLORS[(i - planned) % PLANNED_COLORS.length] : PATCH_COLORS[i % PATCH_COLORS.length];
+      const color = patchColor(i, planned);
       // Planned patches stay bright wherever they go (an encounter far from the vessel is what is being planned).
-      const line = this.makeLine(anchor ? pts.map(point => sub(point, anchor)) : pts, color, i === 0 ? 2.4 : isPlanned ? 2.1 : 1.8, 1, !isPlanned);
+      const line = this.makeLine(anchor ? pts.map(point => sub(point, anchor)) : pts, color,
+        i === 0 ? WIDTH.active : isPlanned ? WIDTH.planned : WIDTH.future, 1, isPlanned ? PLANNED_LOOK : TRAJECTORY_LOOK);
       line.userData.numericAnchor = anchor;
+      // Dashes are sized in screen pixels each frame (see update), so they read the same at every zoom.
       line.material.dashed = i > 0;
-      line.material.dashSize = isPlanned ? 18 : 14; line.material.gapSize = isPlanned ? 9 : 8;
-      const total = line.geometry.getAttribute('instanceDistanceEnd');
-      const length = total.getX(total.count - 1);
-      line.material.dashScale = length > 0 ? 600 / length : 1;
-      line.userData.body = p.orbit.body;
+      line.material.dashSize = isPlanned ? 14 : 10; line.material.gapSize = isPlanned ? 7 : 7;
+      line.renderOrder = isPlanned ? 4 : 3;
+      line.userData.body = p.orbit.body; line.userData.patch = i;
       return line;
     });
   }
@@ -778,6 +824,9 @@ export class MapView {
     this.camera.far = this.renderedDistance * 1e6;
     this.camera.updateProjectionMatrix();
     this.camera.updateMatrixWorld();
+    this.spritePx = 2 * Math.tan(this.camera.fov * Math.PI / 360) / Math.max(1, u.viewport.height);
+    this.vesselIcon.scale.setScalar(ICON_PX.vessel * this.spritePx);
+    this.ghost.scale.setScalar(ICON_PX.ghost * this.spritePx);
 
     const sunPosition = this.ephem.getBodyState(this.sunId, t).position;
     this.place(this.sunLight, sunPosition, focus);
@@ -790,6 +839,10 @@ export class MapView {
     this.orbitStyle.uniforms.mapDistance.value = this.renderedDistance;
     this.orbitStyle.uniforms.mapVessel.value.set(u.vessel ? u.vessel.position.x-focus.x : 0,
       u.vessel ? u.vessel.position.y-focus.y : 0, u.vessel ? u.vessel.position.z-focus.z : 0);
+    this.orbitStyle.uniforms.mapViewport.value.set(w, h);
+    /** CSS px per world metre at unit distance from the camera. */
+    const pxPerWorld1 = h / (2 * Math.tan(this.camera.fov * Math.PI / 360));
+    const diagonal = Math.hypot(w, h);
     const params = this.planetParams;
     params.origin = focus; params.sunPosition = sunPosition; params.time = t; params.dt = dt; params.viewportHeight = h;
     for (const vis of this.orderedBodies) {
@@ -805,7 +858,12 @@ export class MapView {
       const orbitPx = vis.body.orbit ? vis.body.orbit.a / Math.max(dist, 1) * h / (2*Math.tan(this.camera.fov*Math.PI/360)) : 1e9;
       const parent = vis.body.parent ? this.bodies.get(vis.body.parent) : undefined;
       const parentDistance = parent ? Math.hypot(this.camera.position.x-(this.ephem.getBodyState(parent.body.id,t).position.x-focus.x), this.camera.position.y-(this.ephem.getBodyState(parent.body.id,t).position.y-focus.y), this.camera.position.z-(this.ephem.getBodyState(parent.body.id,t).position.z-focus.z)) : 0;
-      const visible = vis.body.kind !== 'moon' || (orbitPx > 24 && parentDistance < parent!.body.soi * 8) || vis.body.id === identity;
+      // Moons appear as soon as their orbit is a legible ring (sooner around the body being looked at), so the
+      // Moon's orbit stays visible while planning a transfer from far out; tiny rings fade in rather than pop.
+      const nearParent = !!parent && (parent.body.id === u.referenceBody || parent.body.id === identity || parentDistance < parent.body.soi * 40);
+      const moonMin = nearParent ? 5 : 14;
+      const visible = vis.body.kind !== 'moon' || orbitPx > moonMin || vis.body.id === identity;
+      const ringFade = vis.body.kind === 'moon' && vis.body.id !== identity ? Math.min(1, (orbitPx - moonMin) / (moonMin * 1.5)) : 1;
       vis.sphere.userData.mapVisible = visible;
       const resolved = visible && angular*h > 1.5;
       if (resolved && !vis.renderer) {
@@ -845,8 +903,12 @@ export class MapView {
         vis.orbitLine.visible = visible;
         const hovered = this.hoverBody === vis, targeted = this.target?.kind === 'body' && this.target.id === vis.body.id;
         vis.orbitLine.material.color.setHex(targeted ? TARGET_COLOR : vis.familyColor);
-        vis.orbitLine.material.linewidth = (hovered || targeted ? 2.3 : vis.body.kind === 'moon' ? 1 : 1.3) * LINE_SCALE;
-        vis.orbitLine.material.opacity = hovered || targeted ? .95 : vis.body.kind === 'moon' ? .32 : .55;
+        vis.orbitLine.material.linewidth = hovered || targeted ? WIDTH.highlight : vis.body.kind === 'moon' ? WIDTH.moon : WIDTH.planet;
+        vis.orbitLine.material.opacity = (hovered || targeted ? .95 : .62) * Math.max(0, ringFade);
+        // An orbit far larger than the screen (e.g. the focused planet's path round the Sun) is faint and fades
+        // towards the screen edges instead of slicing across the view as a straight line.
+        const radiusPx = vis.body.orbit ? vis.body.orbit.a * (1 + vis.body.orbit.e) / Math.max(dist, 1) * pxPerWorld1 : 0;
+        orbitUniforms(vis.orbitLine).mapLarge.value = hovered || targeted ? 0 : smoothstep(diagonal * 1.5, diagonal * 6, radiusPx);
       }
       v.copy(vis.sphere.position).project(this.camera);
       const onScreen = v.z > -1 && v.z < 1 && Math.abs(v.x) < .96 && Math.abs(v.y) < .94;
@@ -856,7 +918,7 @@ export class MapView {
       vis.icon.visible &&= placeLabel(iconBox, this.iconBoxes, iconCount);
       if (vis.icon.visible) {
         this.iconBoxes[iconCount] = iconBox;
-        this.bodyIcons.set(iconCount++, v, 44/w, 44/h, this.target?.id === vis.body.id ? TARGET_COLOR : vis.familyColor);
+        this.bodyIcons.set(iconCount++, v, 48/w, 48/h, this.target?.id === vis.body.id ? TARGET_COLOR : vis.familyColor);
       }
       const box = vis.labelBox;
       box.x = (v.x*.5+.5)*w+Math.max(12, angular*h/(2*Math.tan(this.camera.fov*Math.PI/360))+8); box.y = (-v.y*.5+.5)*h-9;
@@ -865,16 +927,13 @@ export class MapView {
       if (show) {
         this.labelBoxes[labelCount++] = box;
         vis.label.style.left = `${box.x-10}px`; vis.label.style.top = `${box.y+9}px`;
-        vis.label.style.color = this.hoverBody === vis ? '#fff1c9' : '#cfd8e6';
+        vis.label.style.color = this.hoverBody === vis ? '#fff1c9' : '#d8e2ef';
       }
     }
     this.labelCount = labelCount;
     this.bodyIcons.finish(iconCount);
     this.orbitStyle.uniforms.mapCount.value = occluderCount;
-    this.soi.visible = !!this.hoverBody && Number.isFinite(this.hoverBody.body.soi);
-    if (this.hoverBody && this.soi.visible) {
-      this.soi.position.copy(this.hoverBody.sphere.position); this.soi.scale.setScalar(this.hoverBody.body.soi);
-    }
+    this.updateSoiShells(u);
     const breadcrumbId = u.referenceBody ?? identity;
     const focusBody = this.bodies.get(breadcrumbId);
     if (focusBody && this.breadcrumb.dataset.focus !== breadcrumbId) {
@@ -896,8 +955,10 @@ export class MapView {
       this.updateVesselLines(u.vessel.patches, this.bodies);
       for (const line of this.vesselLines) {
         const id = line.userData.body as string;
-        const bodyPosition = this.ephem.getBodyState(id, t).position;
+        const bodyPosition = this.framedBodyPosition(id, u, this.patchFrameTime(u, u.vessel.patches[line.userData.patch as number]));
         this.place(line, line.userData.numericAnchor ? add(bodyPosition, line.userData.numericAnchor) : bodyPosition, focus);
+        // Screen-space dashes: dash lengths are px at the focus distance, whatever the conic's size.
+        if (line.material.dashed) line.material.dashScale = pxPerWorld1 / Math.max(this.renderedDistance, 1e-3);
       }
     } else this.updateVesselLines(EMPTY_PATCHES, this.bodies);
     this.updateNodes(u);
@@ -906,6 +967,35 @@ export class MapView {
     if (this.pointer.inside && !this.drag && now - this.lastHoverAt > 100) this.setHover(this.computeHover(this.pointer.x, this.pointer.y));
     else if (this.drag?.kind === 'handle' && now - this.lastHoverAt > 80) this.setHover({ kind: 'handle', index: this.drag.index, nodeId: this.drag.nodeId });
     this.updateGhost(u);
+  }
+
+  /** Faint SOI boundary for the hovered body and for every body the predicted path enters. */
+  private updateSoiShells(u: MapUpdate) {
+    let k = 0, ghosts = 0;
+    const show = (vis: BodyVisual | undefined, opacity: number, time = u.t) => {
+      if (!vis || !Number.isFinite(vis.body.soi) || k >= this.soiShells.length) return;
+      for (let i = 0; i < k; i++) if (this.soiShells[i].userData.body === vis.body.id) return;
+      const shell = this.soiShells[k++];
+      shell.visible = true; shell.userData.body = vis.body.id;
+      this.scenePosition(ZERO, vis.body.id, u, shell.position, time); shell.scale.setScalar(vis.body.soi);
+      shell.material.uniforms.uOpacity.value = opacity;
+      // Where the encountered body will be: a ghost ring in its family colour.
+      if (time !== u.t && ghosts < this.encounterGhosts.length) {
+        const ghost = this.encounterGhosts[ghosts++];
+        ghost.visible = true; ghost.position.copy(shell.position);
+        ghost.scale.setScalar(ICON_PX.ghostBody * this.spritePx);
+        const map = makeIconTexture(cssHex(vis.familyColor), true);
+        if (ghost.material.map !== map) { ghost.material.map = map; ghost.material.needsUpdate = true; }
+      }
+    };
+    show(this.hoverBody ?? undefined, 1);
+    const patches = u.vessel?.patches ?? EMPTY_PATCHES;
+    for (let i = 0; i < patches.length; i++) {
+      const p = patches[i];
+      if (p.endReason === 'soiEnter' && p.nextBody && p.endTime > u.t) show(this.bodies.get(p.nextBody), .6, this.patchFrameTime(u, patches[i + 1]));
+    }
+    for (let i = k; i < this.soiShells.length; i++) this.soiShells[i].visible = false;
+    for (let i = ghosts; i < this.encounterGhosts.length; i++) this.encounterGhosts[i].visible = false;
   }
 
   // ---------- Maneuver nodes and gizmo ----------
@@ -927,8 +1017,8 @@ export class MapView {
       const texture = nodeTexture(n === selected ? 'selected' : 'node');
       if (s.material.map !== texture) s.material.map = texture;
       const hovered = (this.hover.kind === 'node' && this.hover.id === n.id) || (this.drag?.kind === 'node' && this.drag.nodeId === n.id);
-      s.scale.setScalar(hovered ? .034 : .028);
-      this.scenePosition(patchState(patch, n.time).position, patch.orbit.body, u, s.position);
+      s.scale.setScalar((hovered ? ICON_PX.nodeHover : ICON_PX.node) * this.spritePx);
+      this.scenePosition(patchState(patch, n.time).position, patch.orbit.body, u, s.position, this.patchFrameTime(u, patch));
       s.userData.nodeId = n.id;
       const point = this.nodePoints[k] ??= { x: 0, y: 0 };
       this.toScreen(s.position, u, point);
@@ -954,19 +1044,28 @@ export class MapView {
       this.gizmoState = patchState(patch, node.time);
       this.gizmoDirs = { prograde: maneuverToInertialDv(this.gizmoState, { prograde: 1, normal: 0, radial: 0 }), normal: maneuverToInertialDv(this.gizmoState, { prograde: 0, normal: 1, radial: 0 }), radial: maneuverToInertialDv(this.gizmoState, { prograde: 0, normal: 0, radial: 1 }) };
     }
-    const base = this.scenePosition(this.gizmoState!.position, patch.orbit.body, u, this.gizmoBase);
+    const base = this.scenePosition(this.gizmoState!.position, patch.orbit.body, u, this.gizmoBase, this.patchFrameTime(u, patch));
     this.toScreen(base, u, this.gizmoCenter);
     const worldPerPx = 2 * base.distanceTo(this.camera.position) * Math.tan(this.camera.fov * Math.PI / 360) / Math.max(1, u.viewport.height);
+    // Constant screen size, but never much larger than the orbit the node sits on: zoomed far out a full-size
+    // gizmo would bury the very trajectory being planned. Too small to edit: only the node marker remains.
+    const at = this.gizmoState!.position, orbitPx = Math.hypot(at.x, at.y, at.z) / worldPerPx;
+    const dragging = drag?.kind === 'handle';
+    const show = orbitPx >= GIZMO_MIN_ORBIT_PX || dragging;
+    const offset = dragging ? this.gizmoOffset : Math.max(HANDLE_OFFSET_MIN, Math.min(HANDLE_OFFSET, 18 + orbitPx * .8));
+    this.gizmoOffset = offset;
+    this.gizmoIconPx = Math.max(17, Math.min(26, offset * .45));
+    for (const g of this.gizmo) g.visible = g.line.visible = g.icon.visible = show;
     for (let i = 0; i < this.gizmo.length; i++) {
       const g = this.gizmo[i], d = this.gizmoDirs![g.axis];
       const direction = this.gizmoDirection.set(d.x, d.y, d.z).multiplyScalar(g.sign).normalize();
       const held = drag?.kind === 'handle' && drag.index === i;
-      const px = HANDLE_OFFSET + (held ? Math.max(-40, Math.min(130, drag.pull)) : 0);
+      const px = offset + (held ? Math.max(-offset * .7, Math.min(130, drag.pull)) : 0);
       g.line.position.copy(base);
       g.line.quaternion.copy(this.gizmoQuat.setFromUnitVectors(this.up, direction));
       g.line.scale.set(1, Math.max(1e-9, px * worldPerPx), 1);
       g.icon.position.copy(base).addScaledVector(direction, px * worldPerPx);
-      g.icon.scale.setScalar(held || (this.hover.kind === 'handle' && this.hover.index === i) ? .038 : .03);
+      g.icon.scale.setScalar((held || (this.hover.kind === 'handle' && this.hover.index === i) ? this.gizmoIconPx * 1.25 : this.gizmoIconPx) * this.spritePx);
       this.toScreen(g.icon.position, u, g.screen);
     }
   }
@@ -974,7 +1073,7 @@ export class MapView {
   private updateGhost(u: MapUpdate) {
     const h = this.hover, patch = h.kind === 'orbit' && !this.drag ? u.vessel?.patches[h.patch] : undefined;
     this.ghost.visible = !!patch;
-    if (patch && h.kind === 'orbit') this.scenePosition(patchState(patch, h.time).position, patch.orbit.body, u, this.ghost.position);
+    if (patch && h.kind === 'orbit') this.scenePosition(patchState(patch, h.time).position, patch.orbit.body, u, this.ghost.position, this.patchFrameTime(u, patch));
   }
 
   /** Sample the placeable part of each trajectory patch (from now, up to the next node or one revolution). */
@@ -1009,7 +1108,7 @@ export class MapView {
     let best: { time: number; patch: number; distance: number } | null = null;
     const line = this.screenLine;
     for (const poly of this.trajectoryPolys) {
-      const b = this.ephem.getBodyState(poly.body, u.t).position;
+      const b = this.framedBodyPosition(poly.body, u, this.patchFrameTime(u, u.vessel.patches[poly.patch]));
       line.n = poly.count;
       for (let k = 0; k < poly.count; k++) {
         this.scratch.set(b.x + poly.points[k * 3] - u.focus.x, b.y + poly.points[k * 3 + 1] - u.focus.y, b.z + poly.points[k * 3 + 2] - u.focus.z);
@@ -1040,7 +1139,7 @@ export class MapView {
     if (!u || !node) return;
     const [lo, hi] = slideWindow(node.time, d.period, d.earliest, d.latest);
     if (!(hi > lo)) return;
-    const b = this.ephem.getBodyState(d.patch.orbit.body, u.t).position, line = this.screenLine;
+    const b = this.framedBodyPosition(d.patch.orbit.body, u, this.patchFrameTime(u, d.patch)), line = this.screenLine;
     const sample = (t0: number, t1: number, n: number) => {
       line.n = n + 1;
       for (let k = 0; k <= n; k++) {
@@ -1065,11 +1164,12 @@ export class MapView {
   private bodyName = (id: string) => this.bodies.get(id)?.body.name ?? id;
   private bodyRadius = { radius: (id: string) => this.bodies.get(id)?.body.radius ?? 0 };
 
-  private pushMarker(key: string, body: string, position: Vec3, caption: string, color: string, priority: number, orbit?: OrbitMarker, detail?: string, dotOnly = false, time?: number) {
-    const m = this.shown[this.shownCount] ??= { key: '', body: '', position, caption: '', color: '', priority: 0 };
+  private pushMarker(key: string, body: string, position: Vec3, caption: string, color: string, priority: number, glyph: MarkerGlyph, orbit?: OrbitMarker, detail?: string, dotOnly = false, time?: number) {
+    const m = this.shown[this.shownCount] ??= { key: '', body: '', position, caption: '', color: '', priority: 0, glyph: 'dot' };
     m.key = key; m.body = body; m.position = position; m.caption = caption; m.color = color; m.priority = priority;
-    m.orbit = orbit; m.detail = detail; m.dotOnly = dotOnly; m.time = time ?? orbit?.time;
+    m.orbit = orbit; m.detail = detail; m.dotOnly = dotOnly; m.time = time ?? orbit?.time; m.glyph = glyph; m.frameTime = undefined;
     this.shownCount++;
+    return m;
   }
 
   private markerElement(i: number): MarkerElement {
@@ -1077,11 +1177,11 @@ export class MapView {
     if (el) return el;
     const root = document.createElement('div'), dot = document.createElement('div'), text = document.createElement('div');
     Object.assign(root.style, { position: 'absolute', left: '0', top: '0', pointerEvents: 'none', display: 'none' });
-    Object.assign(dot.style, { position: 'absolute', left: '-4px', top: '-4px', width: '8px', height: '8px', borderRadius: '50%', boxSizing: 'border-box', border: '2px solid', background: '#0a1525', boxShadow: '0 0 3px #000' });
-    Object.assign(text.style, { position: 'absolute', left: '8px', top: '-8px', font: '600 11px system-ui', whiteSpace: 'pre', textShadow: '0 1px 3px #000, 0 0 2px #000', lineHeight: '15px', letterSpacing: '.02em' });
+    Object.assign(dot.style, { position: 'absolute', left: `${-GLYPH_PX / 2}px`, top: `${-GLYPH_PX / 2}px`, width: `${GLYPH_PX}px`, height: `${GLYPH_PX}px`, lineHeight: '0' });
+    Object.assign(text.style, { position: 'absolute', left: `${GLYPH_PX / 2 + 3}px`, top: '-9px', font: '600 12px system-ui, sans-serif', whiteSpace: 'pre', textShadow: LABEL_SHADOW, lineHeight: '17px', letterSpacing: '.02em' });
     root.appendChild(dot); root.appendChild(text);
     this.labels.appendChild(root);
-    el = { root, dot, text, box: { x: 0, y: 0, width: 0, height: 16 }, content: '', color: '' };
+    el = { root, dot, text, box: { x: 0, y: 0, width: 0, height: 17 }, content: '', color: '', glyph: '' };
     this.markerEls[i] = el;
     return el;
   }
@@ -1098,19 +1198,23 @@ export class MapView {
       try { this.orbitMarks = orbitMarkers(patches, u.t, this.bodyRadius); } catch { this.orbitMarks = []; }
     }
     this.shownCount = 0;
+    const planned = firstPlannedPatch(patches);
     for (const m of this.orbitMarks) {
       const apsis = m.kind === 'ap' || m.kind === 'pe';
-      this.pushMarker(m.key, m.body, m.position, markerCaption(m, this.bodyName), apsis && m.planned ? PLANNED_CSS : MARKER_COLORS[m.kind], apsis ? 1 : 2, m);
+      // Markers take the colour of the trajectory they sit on; an encounter takes the colour of the patch inside
+      // the encountered body, so marker and arc read as one.
+      const color = m.kind === 'impact' ? IMPACT_CSS : cssHex(patchColor(m.kind === 'encounter' ? m.patch + 1 : m.patch, planned));
+      this.pushMarker(m.key, m.body, m.position, markerCaption(m, this.bodyName), color, apsis ? 1 : 2, m.kind, m).frameTime = this.patchFrameTime(u, patches[m.patch]);
     }
     const markers = u.markers ?? EMPTY_MARKERS;
     for (let i = 0; i < markers.length; i++) {
-      const m = markers[i];
-      this.pushMarker(m.key ?? `ext:${i}`, m.body, m.position, m.label, m.color, 1, undefined, m.detail, false, m.time);
+      const m = markers[i], key = m.key ?? `ext:${i}`;
+      this.pushMarker(key, m.body, m.position, m.label, m.color, 1, glyphForKey(key), undefined, m.detail, false, m.time);
     }
     const a = this.approach && this.bodies.has(this.approach.body) ? this.approach : null;
     if (a) {
-      this.pushMarker('ca', a.body, a.positionA, a.label, TARGET_CSS, 2, undefined, a.detail, false, a.time);
-      this.pushMarker('ca:target', a.body, a.positionB, '', TARGET_CSS, 0, undefined, a.detail, true, a.time);
+      this.pushMarker('ca', a.body, a.positionA, a.label, TARGET_CSS, 2, 'approach', undefined, a.detail, false, a.time);
+      this.pushMarker('ca:target', a.body, a.positionB, '', TARGET_CSS, 0, 'dot', undefined, a.detail, true, a.time);
     }
     this.approachLine.visible = !!a;
     if (a) {
@@ -1123,14 +1227,17 @@ export class MapView {
     this.markerScreenCount = 0;
     for (let i = 0; i < this.shownCount; i++) {
       const m = this.shown[i], el = this.markerElement(i);
-      const s = this.toScreen(this.scenePosition(m.position, m.body, u, this.scratch), u, this.scratchPoint);
+      const s = this.toScreen(this.scenePosition(m.position, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.scratchPoint);
       const on = s.x > -20 && s.y > -20 && s.x < u.viewport.width + 20 && s.y < u.viewport.height + 20;
       el.root.style.display = on ? 'block' : 'none';
       el.text.style.display = 'none';
       el.box.x = NaN;
       if (!on) continue;
       el.root.style.transform = `translate(${s.x.toFixed(1)}px,${s.y.toFixed(1)}px)`;
-      if (el.color !== m.color) { el.color = m.color; el.dot.style.borderColor = m.color; el.text.style.color = m.color; }
+      if (el.color !== m.color || el.glyph !== m.glyph) {
+        el.color = m.color; el.glyph = m.glyph;
+        el.dot.innerHTML = markerGlyphSvg(m.glyph, m.color); el.text.style.color = m.color;
+      }
       el.box.x = s.x; el.box.y = s.y;
       const hit = this.markerScreen[this.markerScreenCount++] ??= { key: '', x: 0, y: 0 };
       hit.key = m.key; hit.x = s.x; hit.y = s.y;
@@ -1143,7 +1250,7 @@ export class MapView {
       const content = pinned ? this.markerDetailText(m, u.t) : m.caption;
       if (!content) continue;
       const lines = content.split('\n');
-      const box = { x: el.box.x + 8, y: el.box.y - 8, width: Math.max(...lines.map(l => l.length)) * 6.4 + 12, height: lines.length * 15 + (pinned ? 6 : 0) };
+      const box = { x: el.box.x + GLYPH_PX / 2 + 3, y: el.box.y - 9, width: Math.max(...lines.map(l => l.length)) * 7 + 12, height: lines.length * 17 + (pinned ? 6 : 0) };
       if (!pinned && !placeLabel(box, this.labelBoxes, labelCount)) continue;
       this.labelBoxes[labelCount++] = box;
       el.text.style.display = 'block';
@@ -1161,7 +1268,7 @@ export class MapView {
     if (man.kind !== 'none') return man;
     for (let i = 0; i < this.markerScreenCount; i++) {
       const m = this.markerScreen[i];
-      if (Math.hypot(m.x - x, m.y - y) < 9) return { kind: 'marker', key: m.key };
+      if (Math.hypot(m.x - x, m.y - y) < GLYPH_PX / 2 + 3) return { kind: 'marker', key: m.key };
     }
     const object = this.pickObject(x, y, false);
     if (object) return { kind: 'object', pick: object };
@@ -1419,4 +1526,9 @@ export class MapView {
       for (const material of materials) material?.dispose();
     });
   }
+}
+
+function smoothstep(e0: number, e1: number, x: number) {
+  const k = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+  return k * k * (3 - 2 * k);
 }
