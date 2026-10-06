@@ -14,6 +14,9 @@ import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+
+/** All map line widths are authored in CSS px and scaled up here: thin 1–2 px lines were unreadable. */
+const LINE_SCALE = 1.8;
 import type { Body } from '../../sim/bodies/types';
 import type { Ephemeris } from '../../sim/orbit/ephemeris';
 import type { Orbit, TrajectoryPatch, ManeuverNode } from '../../sim/orbit/api';
@@ -431,16 +434,16 @@ export class MapView {
       const { vis, color, width } = this.highlightedBody;
       if (vis.orbitLine) {
         vis.orbitLine.material.color.setHex(color);
-        vis.orbitLine.material.linewidth = width;
+        vis.orbitLine.material.linewidth = (width) * LINE_SCALE;
       }
       this.highlightedBody = null;
     }
     if (t?.kind === 'body') {
       const vis = this.bodies.get(t.id);
       if (vis?.orbitLine) {
-        this.highlightedBody = { vis, color: vis.orbitLine.material.color.getHex(), width: vis.orbitLine.material.linewidth };
+        this.highlightedBody = { vis, color: vis.orbitLine.material.color.getHex(), width: vis.orbitLine.material.linewidth / LINE_SCALE };
         vis.orbitLine.material.color.setHex(TARGET_COLOR);
-        vis.orbitLine.material.linewidth = 2.2;
+        vis.orbitLine.material.linewidth = (2.2) * LINE_SCALE;
       }
     }
   }
@@ -525,7 +528,7 @@ export class MapView {
         vis.targeted = targeted;
         vis.icon.material.map = makeIconTexture(targeted ? TARGET_CSS : '#6fe39a', true);
         vis.icon.material.needsUpdate = true;
-        if (vis.line) { vis.line.material.color.setHex(targeted ? TARGET_COLOR : EXTRA_COLOR); vis.line.material.linewidth = targeted ? 2.2 : 1.6; }
+        if (vis.line) { vis.line.material.color.setHex(targeted ? TARGET_COLOR : EXTRA_COLOR); vis.line.material.linewidth = (targeted ? 2.2 : 1.6) * LINE_SCALE; }
       }
       const o = item.orbit;
       // Orbit elements are stable on rails; callers can throttle conic updates in physics.
@@ -658,7 +661,7 @@ export class MapView {
     pts.forEach((p, i) => pos.set([p.x, p.y, p.z], i * 3));
     const geom = new LineGeometry();
     geom.setPositions(pos);
-    const mat = new LineMaterial({ color, linewidth: width, transparent: opacity < 1, opacity, depthWrite: false });
+    const mat = new LineMaterial({ color, linewidth: width * LINE_SCALE, transparent: opacity < 1, opacity, depthWrite: false });
     this.orbitStyle.configure(mat, vesselFade);
     this.materials.push(mat);
     const line = new Line2(geom, mat);
@@ -842,7 +845,7 @@ export class MapView {
         vis.orbitLine.visible = visible;
         const hovered = this.hoverBody === vis, targeted = this.target?.kind === 'body' && this.target.id === vis.body.id;
         vis.orbitLine.material.color.setHex(targeted ? TARGET_COLOR : vis.familyColor);
-        vis.orbitLine.material.linewidth = hovered || targeted ? 2.3 : vis.body.kind === 'moon' ? 1 : 1.3;
+        vis.orbitLine.material.linewidth = (hovered || targeted ? 2.3 : vis.body.kind === 'moon' ? 1 : 1.3) * LINE_SCALE;
         vis.orbitLine.material.opacity = hovered || targeted ? .95 : vis.body.kind === 'moon' ? .32 : .55;
       }
       v.copy(vis.sphere.position).project(this.camera);

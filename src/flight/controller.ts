@@ -206,7 +206,7 @@ export class FlightController {
     Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block' });
     host.appendChild(canvas);
     this.photo = new PhotoCamera(this.pipeline, this.scene, this.cam.camera, () => new THREE.Vector3(), active => {
-      if (active) { if (this.network || !this.world.active) return false; this.photoWasPaused = this.paused; this.paused = true; this.mapMode = false; this.map.setVisible(false); }
+      if (active) { if (this.network || !this.world.active) return false; this.photoWasPaused = this.paused; this.paused = true; this.mapMode = false; this.map.setVisible(false); this.pipeline.setMapMode(false); }
       else this.paused = this.photoWasPaused;
       return true;
     });
@@ -504,6 +504,7 @@ export class FlightController {
   toggleMap() {
     this.mapMode = !this.mapMode;
     this.map.setVisible(this.mapMode);
+    this.pipeline.setMapMode(this.mapMode);
     this.mapUi.reset();
     this.flashFade();
     if (this.mapMode) {

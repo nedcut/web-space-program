@@ -24,7 +24,10 @@ export class OrbitStyle {
       ` + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('gl_FragColor = vec4( diffuseColor.rgb, alpha );', `
         // Derivative coverage works even when the map bypasses the post-AA pipeline.
-        float capsule = length(vec2(vUv.x, max(abs(vUv.y)-1., 0.)));
+        // Flat segment ends: rounded caps of adjacent semi-transparent segments overlapped and
+        // doubled the alpha at every joint, which read as a beaded/dotted line.
+        if (abs(vUv.y) > 1.) discard;
+        float capsule = abs(vUv.x);
         float edgeDistance = capsule * (linewidth + 2.) * .5 - linewidth * .5;
         float pixelAA = max(.5, fwidth(edgeDistance) * .5);
         alpha *= 1. - smoothstep(-pixelAA, pixelAA, edgeDistance);

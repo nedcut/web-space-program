@@ -26,6 +26,7 @@ export class TrackingView {
   constructor(private host: HTMLElement, readonly world: World, private refresh: () => void,
     private focused: (focus: TrackingFocus) => void, private menu: (pick: MapPick | null, at?: MapPoint) => void = () => {}) {
     this.pipeline = new RenderPipeline({ quality: getQuality(game.get().settings.quality) });
+    this.pipeline.setMapMode(true); // the tracking station is all map: full device resolution
     const canvas = this.pipeline.renderer.domElement;
     Object.assign(canvas.style, { width: '100%', height: '100%', display: 'block' });
     host.appendChild(canvas);

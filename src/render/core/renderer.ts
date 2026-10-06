@@ -79,8 +79,17 @@ export class RenderPipeline {
     this.renderer.toneMapping = toneMappingConst(id);
   }
 
+  /** Map view is cheap to draw: render it at full device resolution so orbit lines stay crisp (Retina too). */
+  private mapHiRes = false;
+  setMapMode(on: boolean): void {
+    if (this.mapHiRes === on) return;
+    this.mapHiRes = on;
+    this.setSize(this.width, this.height);
+  }
+
   get pixelRatio(): number {
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    if (this.mapHiRes) return Math.min(dpr, 2);
     return Math.max(1 / Math.min(this.width, this.height), Math.min(dpr, this.quality.maxPixelRatio) * this.quality.renderScale * this.adaptive.scale);
   }
 
