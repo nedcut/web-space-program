@@ -36,7 +36,6 @@ import type { CraftDef } from '../sim/vessel/types';
 import { getTutorial } from '../tutorial/runtime';
 import { formatDistance, formatDuration, formatSpeed } from '../ui/format';
 import { frameProfiler as prof } from '../util/frameProfiler';
-import { detachRenderer, noteDfgLut, releaseSharedTextures } from '../render/releaseRenderer';
 import { shareUnchanged, snapshotEqual } from '../util/snapshotEqual';
 import { bindingLabel } from '../input/bindings';
 import { cross, dot, length, normalize, sub, type Vec3 } from '../util/vec3';
@@ -961,7 +960,7 @@ export class FlightController {
     t0 = prof.now();
     if (wv.body === 'earth') this.site.update(origin, t);
     else this.site.hide();
-    this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.renderer.domElement.height });
+    this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.lodViewportHeight });
     const eclipse = this.planets.sunVisibility?.(origin, sunPos) ?? 1;
     const tint = this.planets.sunTint?.(origin, sunPos) ?? [1, 1, 1];
     const tmax = Math.max(1e-6, tint[0], tint[1], tint[2]);
@@ -1162,9 +1161,7 @@ export class FlightController {
   private groundTelemetry(wv: WorldVessel): Pick<Telemetry, 'gear' | 'brakes' | 'intakeAir'> { return telemetry.groundTelemetry.call(this, this.systems, wv); }
 
   dispose() {
-    noteDfgLut(this.pipeline.renderer, this.scene);
-    detachRenderer(this.scene);
-    detachRenderer(this.map.scene);
+    this.pipeline.detach(this.scene, this.map.scene);
     window.clearTimeout(this.warmupTimer);
     this.photo.dispose();
     this.network?.close();
@@ -1185,8 +1182,6 @@ export class FlightController {
     this.labelHost.remove();
     this.fadeEl?.remove();
     this.pipeline.dispose();
-    releaseSharedTextures();
-    this.pipeline.renderer.forceContextLoss();
     this.pipeline.renderer.domElement.remove();
   }
 }

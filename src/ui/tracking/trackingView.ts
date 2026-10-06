@@ -115,6 +115,7 @@ export class TrackingView {
     cancelAnimationFrame(this.frame);
     this.resize.disconnect();
     this.detach();
+    this.pipeline.detach(this.map.scene);
     this.map.dispose();
     this.pipeline.dispose();
     this.pipeline.renderer.domElement.remove();

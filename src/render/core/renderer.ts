@@ -8,6 +8,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { classifyGpu } from '../../util/gpuTier';
+import { detachRenderer, finishRenderer, noteDfgLut } from '../releaseRenderer';
 import type { QualitySettings } from './quality';
 
 export type ToneMappingId = 'aces' | 'agx' | 'neutral';
@@ -157,9 +158,14 @@ export class RenderPipeline {
     this.smaaPass?.setSize(this.width * pr, this.height * pr);
   }
 
-  /** Viewport height in device pixels (used for screen-space LOD error). */
-  get drawingBufferHeight(): number {
-    return this.height * this.pixelRatio;
+  /**
+   * Viewport height for terrain LOD selection. The screen-space error tolerance grows with √(pixel ratio): DPR 1
+   * is unchanged, while Retina keeps device-resolution shading without ~1.9× the terrain chunks (draw calls and
+   * per-vertex aerial perspective) — the geometric error stays under 2.5 CSS px on Medium.
+   */
+  get lodViewportHeight(): number {
+    const pr = this.pixelRatio;
+    return (this.height * pr) / Math.sqrt(Math.max(1, pr));
   }
 
   /** Main-thread time from updateAdaptive (frame start) to the end of the last render submission. */
@@ -217,11 +223,23 @@ export class RenderPipeline {
     } finally { this.setSize(width, height); }
   }
 
+  /**
+   * Detach this renderer from shared materials/geometries/textures reachable from `roots` (see releaseRenderer).
+   * Call before the owner disposes its scene contents; `dispose()` then finishes the teardown.
+   */
+  detach(...roots: THREE.Object3D[]): void {
+    for (const root of roots) {
+      noteDfgLut(this.renderer, root);
+      detachRenderer(root);
+    }
+  }
+
+  /** Full teardown: passes, render targets, renderer, shared DFG LUT and the WebGL context (freed immediately). */
   dispose(): void {
     this.gpuTimer?.dispose();
     for (const pass of this.composer.passes) pass.dispose();
     this.composer.dispose();
-    this.renderer.dispose();
+    finishRenderer(this.renderer);
   }
 }
 
