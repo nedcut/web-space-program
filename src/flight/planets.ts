@@ -1,3 +1,4 @@
+import { heliocentricRanges, mayBeWithin } from '../sim/orbit/bounds';
 import { CometEffects } from '../render/planet/CometEffects';
 import * as THREE from 'three';
 import type { Universe } from '../game/universe';
@@ -74,13 +75,17 @@ export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualit
         u.origin, universe.body(id).radius, 149597870700 * scale.s, u.t);
       lastT = u.t;
       lastOrigin = u.origin;
+      // Bodies that cannot be within creation range (from their heliocentric distance bounds) are skipped
+      // without evaluating their ephemeris: same decisions, a handful of Kepler solves per frame instead of ~60.
+      const ranges = heliocentricRanges(universe.bodies), r = length(u.origin);
       for (const b of universe.bodies.values()) {
-        const bp = universe.ephem.getBodyState(b.id, u.t).position;
-        const d = Math.max(1, length(sub(bp, u.origin)));
         const extent = Math.max(b.radius + (b.atmosphere?.height ?? 0), b.rings?.outerRadius ?? 0);
-        const ang = extent / d;
         const has = renderers.has(b.id);
         const keep = b.kind === 'star' || b.id === u.focusBody;
+        if (!has && !keep && !mayBeWithin(ranges.get(b.id)!, r, extent / CREATE_ANGLE)) continue;
+        const bp = universe.ephem.getBodyState(b.id, u.t).position;
+        const d = Math.max(1, length(sub(bp, u.origin)));
+        const ang = extent / d;
         if (!has && (keep || ang > CREATE_ANGLE)) make(b.id);
         else if (has && !keep && ang < DESTROY_ANGLE) {
           const pr = renderers.get(b.id)!;
