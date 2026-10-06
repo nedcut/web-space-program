@@ -2,9 +2,9 @@
  * Pure maneuver-gizmo math (no three.js, no DOM) shared by the map view and its tests.
  *
  * Handles are rate controls: pulling a handle outward along its on-screen direction adds Δv continuously, faster
- * the further it is pulled; pushing it back towards the node removes Δv. The scroll wheel over a handle adds a
- * fixed small increment. The node centre slides along the orbit: the cursor is projected onto the orbit's screen
- * polyline and the time is interpolated within the closest segment.
+ * the further it is pulled; pushing it back towards the node removes Δv. Alt/Option + wheel over a handle adds a
+ * fixed small increment (the plain wheel always zooms). The node centre slides along the orbit: the cursor is
+ * projected onto the orbit's screen polyline and the time is interpolated within the closest segment.
  */
 import type { ManeuverNode } from '../../sim/orbit/api';
 
@@ -67,6 +67,32 @@ export function applyWheel(node: Pick<ManeuverNode, GizmoAxis>, handle: GizmoHan
   const dv = -Math.sign(deltaY) * WHEEL_STEP * (fine ? 0.1 : 1) * handle.sign;
   node[handle.axis] = Math.round((node[handle.axis] + dv) * 1000) / 1000;
   return dv;
+}
+
+/** Map zoom per wheel pixel (log-distance units). A mouse notch (100 px) zooms ≈1.17×. */
+export const ZOOM_PER_PIXEL = 0.0016;
+/** Trackpad pinch arrives as ctrl+wheel with small deltas; scale it up so a pinch feels like a swipe. */
+export const PINCH_BOOST = 8;
+
+/**
+ * Multiplicative camera-distance change for one wheel event. Normalises line/page delta modes (Firefox, some
+ * mice), boosts trackpad pinch (ctrlKey) and clamps single huge events so momentum scrolling stays controllable.
+ */
+export function wheelZoomFactor(deltaY: number, deltaMode = 0, pinch = false, pageHeight = 800): number {
+  if (!Number.isFinite(deltaY) || deltaY === 0) return 1;
+  let px = deltaY * (deltaMode === 1 ? 16 : deltaMode === 2 ? pageHeight : 1);
+  if (pinch) px *= PINCH_BOOST;
+  return Math.exp(Math.max(-400, Math.min(400, px)) * ZOOM_PER_PIXEL);
+}
+
+/**
+ * Length multiplier for a handle whose on-screen arm came out `projectedPx` long for a requested `wantedPx`:
+ * arms foreshortened by the view angle are stretched (up to `maxStretch`×) so handles keep a comfortable
+ * distance from the node centre instead of piling onto it.
+ */
+export function handleStretch(projectedPx: number, wantedPx: number, maxStretch = 5): number {
+  if (!(projectedPx > 0.5) || !Number.isFinite(projectedPx)) return maxStretch;
+  return Math.max(1, Math.min(maxStretch, wantedPx / projectedPx));
 }
 
 /** Screen-space polyline with a time per vertex. Vertices with NaN x are behind the camera and break the line. */

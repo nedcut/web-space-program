@@ -127,7 +127,10 @@ export class Universe {
         }
         return dose / Math.sqrt(SCALE_PRESETS[self.preset].s);
       },
-      integrateRelative: nbody || ['asteroid', 'comet'].includes(self.body(getDominant()).kind),
+      // Always integrate in the dominant body's translating frame: heliocentric integration with only the dominant
+      // body's gravity left out the body's own acceleration (≈6 mm/s² for Earth around the Sun), so unpacked vessels
+      // drifted ~0.1 m/s per 20 s away from their patched conic (DECISIONS: dominant-body physics frame).
+      integrateRelative: true,
       regolithConcentration(pos, t) {
         const id = getDominant();
         const dir = qRotate(qConj(self.ephem.bodyRotation(id, t)), sub(pos, self.ephem.getBodyState(id, t).position));

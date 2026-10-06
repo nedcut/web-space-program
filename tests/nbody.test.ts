@@ -37,9 +37,10 @@ function worldOrbit(radius=4e6) {
   return {world,v,u};
 }
 describe('precise gravity',()=>{
-  it('matches the pre-change OFF physics/rails/unpack trace bit for bit',()=>{
-    // SHA256 generated with HEAD's unmodified source, before implementing this feature.
-    expect(createHash('sha256').update(JSON.stringify(gravityOffTrace())).digest('hex')).toBe('9917950158dc918bd50b4b4413c0603360605ac2cf55c9327de0ab8d22785295');
+  it('keeps the OFF physics/rails/unpack trace bit for bit',()=>{
+    // Golden trace of the patched-conic (OFF) mode. Originally generated before precise gravity existed;
+    // regenerated once when physics moved to the dominant body's translating frame (DECISIONS, op/moonxfer).
+    expect(createHash('sha256').update(JSON.stringify(gravityOffTrace())).digest('hex')).toBe('81ba66e65bba9ecf631aa04074efeacddb6f6c035d402694dd7ab70f4a5ea855');
   });
   it('keeps each save isolated, defaults old saves off, and preserves numerical rails state',()=>{
     const {world,v}=worldOrbit();world.setPreciseGravity(true);world.showLagrangePoints=true;

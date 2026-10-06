@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import {
   FINE_TUNE_SCALE, HANDLE_DEAD_ZONE, HANDLE_FULL_PULL, HANDLE_MAX_RATE, WHEEL_STEP,
-  applyHandle, applyWheel, closestOnPolyline, handlePull, handleRate, handleScreenDirection, screenPolyline, slideWindow,
+  applyHandle, applyWheel, closestOnPolyline, handlePull, handleRate, handleScreenDirection, handleStretch, screenPolyline, slideWindow,
+  wheelZoomFactor,
 } from '../src/render/map/maneuverGizmo';
 import { firstPlannedPatch, markerCaption, markerDetail, orbitMarkers, patchDrawnClosed } from '../src/render/map/orbitMarkers';
 import { focusCycle, mapContextActions, nextFocus } from '../src/ui/map/mapActions';
@@ -195,8 +196,45 @@ describe('map view maneuver picking', () => {
     const h = handles[0].position.clone().project(map.camera);
     expect(map.pickManeuver(h.x, h.y)).toMatchObject({ id: 7, axis: 'prograde', sign: 1 });
     expect(map.nodeScreenPosition(7)!.x).toBeCloseTo(x, 0);
+    // The node centre is always grabbable, and every shown handle keeps a comfortable distance from it,
+    // whatever the view angle (looking straight down the orbit normal hides the normal handles instead).
+    for (const pitch of [0.5, 1.55, 0.02]) {
+      map.pitch = pitch;
+      map.update(input); map.update(input);
+      const c = map.nodeScreenPosition(7)!;
+      expect(map.pickManeuver(c.x / 640 - 1, 1 - c.y / 400)).toMatchObject({ id: 7, axis: undefined });
+      expect(map.pickManeuver((c.x + 9) / 640 - 1, 1 - (c.y - 9) / 400)).toMatchObject({ id: 7, axis: undefined });
+      const shown = map['gizmo'].filter(g => g.visible);
+      expect(shown.length).toBeGreaterThanOrEqual(4);
+      for (const g of shown) expect(Math.hypot(g.screen.x - c.x, g.screen.y - c.y)).toBeGreaterThanOrEqual(32);
+    }
     map.dispose();
     expect(placed).toEqual([]);
+  });
+});
+
+describe('map zoom and handle spacing', () => {
+  it('zooms per wheel pixel, normalising line/page deltas and boosting trackpad pinch', () => {
+    expect(wheelZoomFactor(0)).toBe(1);
+    expect(wheelZoomFactor(100)).toBeGreaterThan(1.12);
+    expect(wheelZoomFactor(-100) * wheelZoomFactor(100)).toBeCloseTo(1);
+    expect(wheelZoomFactor(3, 1)).toBeCloseTo(wheelZoomFactor(48));
+    expect(wheelZoomFactor(1, 2, false, 300)).toBeCloseTo(wheelZoomFactor(300));
+    expect(wheelZoomFactor(5, 0, true)).toBeCloseTo(wheelZoomFactor(40));
+    // A trackpad swipe (~60 events of 25 px) takes a LEO view (4 Earth radii) out past the Moon's orbit (Standard).
+    let d = 4 * 637100;
+    for (let i = 0; i < 2 * 60; i++) d *= wheelZoomFactor(25);
+    expect(d).toBeGreaterThan(2.5 * 38440e3);
+    // Momentum spikes are clamped.
+    expect(wheelZoomFactor(1e5)).toBeCloseTo(wheelZoomFactor(400));
+  });
+
+  it('stretches foreshortened handle arms up to a limit', () => {
+    expect(handleStretch(60, 60)).toBe(1);
+    expect(handleStretch(90, 60)).toBe(1);
+    expect(handleStretch(30, 60)).toBe(2);
+    expect(handleStretch(1, 60)).toBe(5);
+    expect(handleStretch(0, 60)).toBe(5);
   });
 });
 

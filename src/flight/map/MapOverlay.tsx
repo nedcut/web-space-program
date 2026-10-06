@@ -145,7 +145,9 @@ function NodeMenu({ controller: c, node }: { controller: FlightController; node:
       <span>Δv</span><span>{formatSpeed(s.dv)}</span>
       <span>Burn</span><span>{Number.isFinite(s.burn) ? `${formatDuration(s.burn)} (start T−${formatDuration(node.time - w.ut - s.burn / 2)})` : 'no active engine'}</span>
       <span>After</span><span style={{ color: '#ff9d3c' }}>Ap {Number.isFinite(s.ap) ? formatDistance(s.ap) : 'escape'} · Pe {formatDistance(s.pe)}</span>
-      {s.encounter && <><span>Encounter</span><span style={{ color: 'var(--good)' }}>{w.universe.body(s.encounter).name}</span></>}
+      {s.encounter && <><span>Encounter</span><span style={{ color: s.encounterPe !== undefined && s.encounterPe < 0 ? 'var(--bad)' : 'var(--good)' }}>
+        {w.universe.body(s.encounter).name}{s.encounterPe !== undefined ? ` · Pe ${s.encounterPe < 0 ? 'impact' : formatDistance(s.encounterPe)}` : ''}
+      </span></>}
     </div>
     <div className="actions">
       <button className="btn small" disabled={!Number.isFinite(s.orbitPeriod) || node.time - s.orbitPeriod < w.ut + 5} onClick={() => ui.shiftOrbit(node.id, -1)}>−1 orbit</button>

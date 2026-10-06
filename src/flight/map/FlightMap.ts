@@ -104,6 +104,20 @@ export class FlightMap {
     this.emit();
   }
 
+  /**
+   * Follow the active vessel and zoom out far enough to see a planned transfer to `targetId`: its whole orbit
+   * around the vessel's body (moon targets), so the encounter, the target's SOI and periapsis are on screen.
+   */
+  frameTransfer(targetId: string) {
+    const w = this.world, active = w.active, target = w.universe.bodies.get(targetId);
+    if (!active || !target?.orbit) return;
+    this.focus = null;
+    const local = target.parent === active.body;
+    const reach = local ? target.orbit.a * (1 + target.orbit.e) + target.soi : Math.max(w.universe.body(active.body).soi, target.radius * 5);
+    this.c.map.distance = Math.max(this.c.map.distance, reach * 2.6);
+    this.emit();
+  }
+
   /** Closest allowed camera distance for the current focus. */
   minDistance(): number {
     const w = this.world, f = this.focus;

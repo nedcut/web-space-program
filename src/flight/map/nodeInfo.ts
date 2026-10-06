@@ -41,6 +41,8 @@ export interface NodeSummary {
   orbitPeriod: number;
   /** First SOI encounter after the burn. */
   encounter?: string;
+  /** Periapsis altitude inside that encounter (m above the body's datum; negative = impact). */
+  encounterPe?: number;
 }
 
 export function nodeSummary(world: World, node: ManeuverNode): NodeSummary {
@@ -51,6 +53,8 @@ export function nodeSummary(world: World, node: ManeuverNode): NodeSummary {
   const body = after?.orbit.body ?? world.active?.body ?? world.universe.sunId;
   const radius = world.universe.body(body).radius;
   const index = after ? patches.indexOf(after) : patches.length;
+  const enc = patches.findIndex((p, i) => i >= index && p.endReason === 'soiEnter');
+  const inside = enc >= 0 ? patches[enc + 1] : undefined;
   return {
     dv,
     burn: burnTime(world, dv),
@@ -58,6 +62,7 @@ export function nodeSummary(world: World, node: ManeuverNode): NodeSummary {
     ap: after ? apoapsisRadius(after.orbit) - radius : NaN,
     pe: after ? periapsisRadius(after.orbit) - radius : NaN,
     orbitPeriod: before ? period(before.orbit) : NaN,
-    encounter: patches.slice(index).find((p) => p.endReason === 'soiEnter')?.nextBody,
+    encounter: enc >= 0 ? patches[enc].nextBody : undefined,
+    encounterPe: inside ? periapsisRadius(inside.orbit) - world.universe.body(inside.orbit.body).radius : undefined,
   };
 }

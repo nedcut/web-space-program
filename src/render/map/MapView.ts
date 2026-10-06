@@ -27,7 +27,8 @@ import { formatDistance, formatDuration } from '../../util/format';
 import { elementsToState, periapsisRadius, apoapsisRadius, period } from '../../sim/orbit/kepler';
 import { add, length, sub, type Vec3 } from '../../util/vec3';
 import {
-  GIZMO_HANDLES, applyHandle, applyWheel, closestOnPolyline, handlePull, handleScreenDirection, screenPolyline, slideWindow,
+  GIZMO_HANDLES, applyHandle, applyWheel, closestOnPolyline, handlePull, handleScreenDirection, handleStretch, screenPolyline, slideWindow,
+  wheelZoomFactor,
   type GizmoAxis, type GizmoHandle, type ScreenPolyline,
 } from './maneuverGizmo';
 import { firstPlannedPatch, markerCaption, markerDetail, orbitMarkers, patchDrawnClosed, type OrbitMarker } from './orbitMarkers';
@@ -41,9 +42,10 @@ import { GLYPH_PX, LABEL_SHADOW, cssHex, glyphForKey, markerGlyphSvg, type Marke
  * Precision: every line/sphere is positioned relative to the camera focus in float64 on the CPU each frame,
  * and line vertices are stored relative to their parent body, so float32 is only used for local offsets.
  *
- * Interaction (attachControls): left/right drag orbits the camera, the wheel zooms. Hovering the active trajectory
- * shows a ghost node and clicking places a maneuver node there; the selected node shows six Δv handles (drag out to
- * add Δv, wheel for fine steps) and its centre slides along the orbit. Clicks, double-clicks and right-clicks on
+ * Interaction (attachControls): left/right drag orbits the camera, the wheel (and trackpad pinch) zooms. Hovering the
+ * active trajectory shows a ghost node and clicking places a maneuver node there; the selected node shows six Δv
+ * handles at a constant screen distance (drag out to add Δv, Alt+wheel for fine steps) and its centre, which always
+ * wins hit-testing over handles, slides along the orbit. Clicks, double-clicks and right-clicks on
  * bodies, vessels and orbit lines are reported through `handlers` so the host UI can open menus or change focus.
  */
 export interface MapMarkerInput {
@@ -147,15 +149,24 @@ const NONE: Hover = { kind: 'none' };
 const TARGET_COLOR = 0xff4fb8;
 const TARGET_CSS = '#ff4fb8';
 const EXTRA_COLOR = 0x6fe39a;
-/** Rest distance of gizmo handles from the node, CSS px: full size, and the floor it shrinks to on small orbits. */
-const HANDLE_OFFSET = 58;
-const HANDLE_OFFSET_MIN = 24;
+/** Rest distance of gizmo handles from the node, CSS px (constant at every zoom, like the node icon). */
+const HANDLE_OFFSET = 60;
+/** A handle whose arm still projects shorter than this (it points almost at the camera) is hidden and unpickable,
+ * so it can never cover the node centre. */
+const HANDLE_MIN_PX = 32;
+/** Grab radius of a node centre, CSS px. Checked before any handle: the centre always wins. */
+const NODE_GRAB_PX = 16;
 /** Below this on-screen orbit radius (CSS px) the handles hide; zoom in to edit. */
 const GIZMO_MIN_ORBIT_PX = 3;
 /** Sprite sizes, CSS px. */
 const ICON_PX = { vessel: 24, fleet: 20, node: 20, nodeHover: 24, ghost: 20, ghostBody: 18 };
 const ZERO: Vec3 = { x: 0, y: 0, z: 0 };
 const CLICK_SLOP = 5;
+
+/** Platform name of the Alt key (Option on Apple keyboards) for hints. */
+function altKeyName(): string {
+  return typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? 'Option' : 'Alt';
+}
 
 function snapshotOrbit(o: Orbit): Orbit {
   return { ...o, stateAtEpoch: o.stateAtEpoch ? { position: { ...o.stateAtEpoch.position }, velocity: { ...o.stateAtEpoch.velocity } } : undefined };
@@ -298,7 +309,7 @@ export class MapView {
   private gizmoDirection = new THREE.Vector3();
   private gizmoQuat = new THREE.Quaternion();
   private readonly up = new THREE.Vector3(0, 1, 0);
-  private gizmo: { line: Line2; icon: THREE.Sprite; handle: GizmoHandle; axis: GizmoAxis; sign: number; screen: MapPoint; visible: boolean }[] = [];
+  private gizmo: { line: Line2; icon: THREE.Sprite; handle: GizmoHandle; axis: GizmoAxis; sign: number; screen: MapPoint; visible: boolean; stretch: number }[] = [];
   private gizmoCenter: MapPoint = { x: 0, y: 0 };
   private gizmoOffset = HANDLE_OFFSET;
   private gizmoIconPx = 26;
@@ -412,18 +423,19 @@ export class MapView {
 
   private hitManeuver(x: number, y: number): Hover {
     if (!this.handlers.placeNode && !this.handlers.nodesChanged) return NONE;
-    let best = Math.max(13, this.gizmoIconPx / 2 + 5), hit: Hover = NONE;
+    // Node centres first: grabbing the node to slide it along the orbit must never be stolen by a handle.
+    let best: number = NODE_GRAB_PX, hit: Hover = NONE;
+    for (const [id, p] of this.nodeScreen) {
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d < best) { best = d; hit = { kind: 'node', id }; }
+    }
+    if (hit.kind !== 'none') return hit;
+    best = Math.max(14, this.gizmoIconPx / 2 + 6);
     if (this.gizmoNodeId !== null) for (let i = 0; i < this.gizmo.length; i++) {
       const g = this.gizmo[i];
       if (!g.visible) continue;
       const d = Math.hypot(g.screen.x - x, g.screen.y - y);
       if (d < best) { best = d; hit = { kind: 'handle', index: i, nodeId: this.gizmoNodeId }; }
-    }
-    if (hit.kind !== 'none') return hit;
-    best = ICON_PX.node / 2 + 4;
-    for (const [id, p] of this.nodeScreen) {
-      const d = Math.hypot(p.x - x, p.y - y);
-      if (d < best) { best = d; hit = { kind: 'node', id }; }
     }
     return hit;
   }
@@ -691,7 +703,7 @@ export class MapView {
       const icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: handleTexture(handle.axis, handle.sign), sizeAttenuation: false, depthTest: false, transparent: true }));
       icon.renderOrder = 15; icon.visible = false;
       this.scene.add(icon);
-      this.gizmo.push({ line, icon, handle, axis: handle.axis, sign: handle.sign, screen: { x: NaN, y: NaN }, visible: false });
+      this.gizmo.push({ line, icon, handle, axis: handle.axis, sign: handle.sign, screen: { x: NaN, y: NaN }, visible: false, stretch: 1 });
     }
     // Dashed trajectory variants (future patch, planned patch) for shader warm-up; never shown otherwise.
     for (const look of [TRAJECTORY_LOOK, PLANNED_LOOK]) {
@@ -1052,21 +1064,31 @@ export class MapView {
     const at = this.gizmoState!.position, orbitPx = Math.hypot(at.x, at.y, at.z) / worldPerPx;
     const dragging = drag?.kind === 'handle';
     const show = orbitPx >= GIZMO_MIN_ORBIT_PX || dragging;
-    const offset = dragging ? this.gizmoOffset : Math.max(HANDLE_OFFSET_MIN, Math.min(HANDLE_OFFSET, 18 + orbitPx * .8));
+    // Constant screen distance at every zoom: zooming out to see the encounter must not crowd the handles onto
+    // the node centre (which is what slides the node along the orbit).
+    const offset = HANDLE_OFFSET;
     this.gizmoOffset = offset;
-    this.gizmoIconPx = Math.max(17, Math.min(26, offset * .45));
-    for (const g of this.gizmo) g.visible = g.line.visible = g.icon.visible = show;
+    this.gizmoIconPx = 24;
     for (let i = 0; i < this.gizmo.length; i++) {
       const g = this.gizmo[i], d = this.gizmoDirs![g.axis];
       const direction = this.gizmoDirection.set(d.x, d.y, d.z).multiplyScalar(g.sign).normalize();
       const held = drag?.kind === 'handle' && drag.index === i;
-      const px = offset + (held ? Math.max(-offset * .7, Math.min(130, drag.pull)) : 0);
+      // Foreshortened arms (handles pointing towards/away from the camera) are stretched to keep their distance;
+      // one still too short points at the camera and is hidden. The held handle keeps its stretch while dragged.
+      if (!held) {
+        g.icon.position.copy(base).addScaledVector(direction, offset * worldPerPx);
+        const s = this.toScreen(g.icon.position, u, g.screen);
+        g.stretch = handleStretch(Math.hypot(s.x - this.gizmoCenter.x, s.y - this.gizmoCenter.y), offset);
+      }
+      const px = (offset + (held ? Math.max(-offset * .7, Math.min(130, drag.pull)) : 0)) * g.stretch;
       g.line.position.copy(base);
       g.line.quaternion.copy(this.gizmoQuat.setFromUnitVectors(this.up, direction));
       g.line.scale.set(1, Math.max(1e-9, px * worldPerPx), 1);
       g.icon.position.copy(base).addScaledVector(direction, px * worldPerPx);
       g.icon.scale.setScalar((held || (this.hover.kind === 'handle' && this.hover.index === i) ? this.gizmoIconPx * 1.25 : this.gizmoIconPx) * this.spritePx);
       this.toScreen(g.icon.position, u, g.screen);
+      const armPx = Math.hypot(g.screen.x - this.gizmoCenter.x, g.screen.y - this.gizmoCenter.y);
+      g.visible = g.line.visible = g.icon.visible = show && (held || armPx >= HANDLE_MIN_PX);
     }
   }
 
@@ -1296,7 +1318,7 @@ export class MapView {
         const name = { prograde: ['Prograde', 'Retrograde'], normal: ['Normal', 'Anti-normal'], radial: ['Radial out', 'Radial in'] }[g.axis][g.sign > 0 ? 0 : 1];
         const total = `Δv ${Math.hypot(node.prograde, node.normal, node.radial).toFixed(1)} m/s`;
         if (this.drag?.kind === 'handle') return `${name} ${(node[g.axis] * g.sign).toFixed(1)} m/s · ${total}${this.fineTune ? ' · fine' : ''}`;
-        return `${name} ${(node[g.axis] * g.sign).toFixed(1)} m/s · ${total}\nDrag outward to add Δv, back to remove · wheel for ${this.fineTune ? '0.01' : '0.1'} m/s steps`;
+        return `${name} ${(node[g.axis] * g.sign).toFixed(1)} m/s · ${total}\nDrag outward to add Δv, back to remove · ${altKeyName()}+wheel for ${this.fineTune ? '0.01' : '0.1'} m/s steps`;
       }
       case 'node': {
         const node = u.vessel?.nodes.find(n => n.id === h.id);
@@ -1460,14 +1482,19 @@ export class MapView {
     const wheel = (e: WheelEvent) => {
       if (!enabled()) return;
       e.preventDefault();
-      const p = local(e), h = this.computeHover(p.x, p.y), u = this.lastUpdate;
-      if (h.kind === 'handle' && u) {
-        const node = u.vessel?.nodes.find(n => n.id === h.nodeId);
-        if (node && applyWheel(node, this.gizmo[h.index].handle, e.deltaY, this.fineTune) !== 0) this.handlers.nodesChanged?.();
-        this.setHover(h);
-        return;
+      // The wheel always zooms (trackpad scrolls arrive as streams of small wheel events, and a stray scroll over
+      // a handle must never change the burn). Alt/Option + wheel over a handle is the deliberate fine Δv step.
+      if (e.altKey) {
+        const p = local(e), h = this.computeHover(p.x, p.y), u = this.lastUpdate;
+        if (h.kind === 'handle' && u) {
+          const node = u.vessel?.nodes.find(n => n.id === h.nodeId);
+          if (node && applyWheel(node, this.gizmo[h.index].handle, e.deltaY || e.deltaX, this.fineTune) !== 0) this.handlers.nodesChanged?.();
+          this.setHover(h);
+          return;
+        }
       }
-      this.distance = Math.max(minDistance(), Math.min(5e13, this.distance * Math.exp(Math.max(-300, Math.min(300, e.deltaY)) * 0.0012)));
+      const factor = wheelZoomFactor(e.deltaY, e.deltaMode, e.ctrlKey, el.clientHeight || 800);
+      this.distance = Math.max(minDistance(), Math.min(5e13, this.distance * factor));
     };
     const menu = (e: Event) => e.preventDefault();
     const leave = () => { this.pointer.inside = false; if (!this.drag) this.setHover(NONE); };
