@@ -31,14 +31,12 @@ export function thumbnailVersion() {
 }
 export function subscribeThumbnails(l: () => void) {
   listeners.add(l);
+  schedule();
   return () => void listeners.delete(l);
 }
 
-const byId = new Map<string, PartDef>();
-
 export function requestThumbnails(defs: PartDef[]) {
   for (const d of defs) {
-    byId.set(d.id, d);
     if (cache.has(d.id) || queued.has(d.id)) continue;
     queued.add(d.id);
     queue.push(d);
@@ -46,39 +44,12 @@ export function requestThumbnails(defs: PartDef[]) {
   schedule();
 }
 
-let texturesFinal = false;
-let refreshArmed = false;
-
 function schedule() {
-  if (scheduled || !queue.length) return;
+  if (scheduled || !queue.length || !listeners.size) return;
   scheduled = true;
-  // Build queued meshes first so their procedural textures are requested. Wait briefly for the
-  // texture worker (instant on IndexedDB cache hits); on a slow first visit render anyway and
-  // re-render everything once the final textures land, so placeholders never stick.
-  for (const d of queue) createPartMesh(d);
-  const ready = partTexturesReady();
-  if (!refreshArmed) {
-    refreshArmed = true;
-    void ready.then(() => {
-      refreshArmed = false;
-      if (texturesFinal) return;
-      texturesFinal = true;
-      // Re-render in place: keep the provisional image visible until its replacement is ready.
-      for (const id of cache.keys()) {
-        const d = byId.get(id);
-        if (!d || queued.has(id)) continue;
-        queued.add(id);
-        queue.push(d);
-      }
-      schedule();
-    });
-  }
-  void Promise.race([ready, new Promise((r) => setTimeout(r, 2500))]).then(() =>
-    requestAnimationFrame(() => {
-      scheduled = false;
-      pump();
-    }),
-  );
+  // Building all queued templates here used to voxelise/AO-bake the entire catalogue in one
+  // multi-second task before the editor could paint. Prepare only the next thumbnail per frame.
+  requestAnimationFrame(() => void pump());
 }
 
 function setup() {
@@ -142,25 +113,38 @@ function renderOne(def: PartDef): string {
   return url;
 }
 
-function pump() {
-  const start = performance.now();
-  // A few per frame, bounded by time.
-  while (queue.length && performance.now() - start < 24) {
-    const d = queue.shift()!;
-    queued.delete(d.id);
-    try {
-      cache.set(d.id, renderOne(d));
-    } catch (e) {
-      console.warn('thumbnail failed', d.id, e);
-      cache.set(d.id, '');
+async function pump() {
+  const d = queue.shift();
+  if (!d) { scheduled = false; return; }
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    createPartMesh(d); // requests this part's textures; shared template is reused by renderOne
+    const ready = partTexturesReady();
+    let final = false;
+    void ready.then(() => { final = true; });
+    await Promise.race([ready, new Promise<void>(resolve => { timeout = setTimeout(resolve, 2500); })]);
+    // Stop GPU/geometry work when the palette unmounts (e.g. while preparing a launch).
+    if (!listeners.size) { queue.unshift(d); return; }
+    cache.set(d.id, renderOne(d));
+    if (!final) void ready.then(() => {
+      // Keep the provisional image visible while queuing its final replacement.
+      if (!queued.has(d.id)) { queued.add(d.id); queue.push(d); }
+      schedule();
+    });
+  } catch (e) {
+    console.warn('thumbnail failed', d.id, e);
+    cache.set(d.id, '');
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+    if (queue[0] !== d) queued.delete(d.id);
+    scheduled = false;
+    version++;
+    listeners.forEach(l => l());
+    if (queue.length && listeners.size) schedule();
+    else {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => { if (!scheduled) teardown(); }, 4000);
     }
-  }
-  version++;
-  listeners.forEach((l) => l());
-  if (queue.length) schedule();
-  else {
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => !queue.length && teardown(), 4000);
   }
 }
 
