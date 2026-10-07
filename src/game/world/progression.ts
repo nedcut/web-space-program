@@ -1,6 +1,6 @@
 import { careerScaleMultiplier } from '../../sim/bodies/scale';
 import { unlockTech as unlockTechModel } from '../../data/technology';
-import { acceptContract as acceptContractModel, failContract, generateContracts, type ProgressEvent } from '../../sim/science/progression';
+import { acceptContract as acceptContractModel, failContract, generateContracts, requestRecoveryGrant as requestRecoveryGrantModel, type ProgressEvent } from '../../sim/science/progression';
 import { instruments, progressionEvent, runExperiment as runExperimentModel, scienceContext as scienceContextModel, transmitScience as transmitScienceModel } from '../science';
 import type { World, WorldVessel } from '../world';
 
@@ -15,6 +15,13 @@ export function refreshContracts(this: World) {
   }));
 }
 
+
+export function requestRecoveryGrant(this: World): boolean {
+  if (this.mode !== 'career') return false;
+  const granted = requestRecoveryGrantModel(this.progression, careerScaleMultiplier(this.universe.preset));
+  if (granted) this.message('Emergency flight funding received · −5 reputation');
+  return granted;
+}
 
 export function acceptContract(this: World, id: string) { return this.mode === 'career' && acceptContractModel(this.progression, id, this.ut); }
 

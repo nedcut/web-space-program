@@ -90,6 +90,15 @@ describe('career progression invariants', () => {
       expect(p.reputation).toBe(-15);
     }
   });
+  it('routes recovery funding through World and refuses it in other modes', () => {
+    const w = new World(new Universe('standard'),PART_CATALOG,DEFAULT_START_UT,'career');
+    w.progression.funds = -100;
+    expect(w.requestRecoveryGrant()).toBe(true); expect(w.progression.funds).toBe(8000);
+    expect(w.requestRecoveryGrant()).toBe(false);
+    const sandbox = new World(new Universe('standard'),PART_CATALOG,DEFAULT_START_UT);
+    sandbox.progression.funds = -100; expect(sandbox.requestRecoveryGrant()).toBe(false);
+    expect(sandbox.progression.funds).toBe(-100);
+  });
   it('pays flyby contracts only on the target SOI event', () => {
     const p = newProgression(); p.contracts = generateContracts(1, 1, false, 1, { orbit: true, lunar: false, landing: false });
     const c = p.contracts.find(c => c.kind === 'flyby')!; acceptContract(p, c.id, 0);

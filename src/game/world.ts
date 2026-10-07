@@ -226,6 +226,7 @@ export class World {
     if (mode === 'career') this.refreshContracts();
   }
 
+  requestRecoveryGrant() { return progression.requestRecoveryGrant.call(this); }
   refreshContracts() { return progression.refreshContracts.call(this); }
   acceptContract(id: string) { return progression.acceptContract.call(this, id); }
   abandonContract(id: string) { return progression.abandonContract.call(this, id); }
