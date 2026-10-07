@@ -19,7 +19,7 @@ const DEG = Math.PI / 180;
 const SNAP_PX = 64;
 const UP = v3(0, 1, 0);
 /** Key light offset from its target (the craft centre); the shadow frustum follows the craft. */
-const KEY_OFFSET = { x: 25, y: 36, z: 5 } as const;
+const KEY_OFFSET = { x: 26, y: 30, z: 17 } as const;
 
 const toV = (v: Vec3, out = new THREE.Vector3()) => out.set(v.x, v.y, v.z);
 const toQ = (q: Quat, out = new THREE.Quaternion()) => out.set(q.x, q.y, q.z, q.w);
@@ -144,10 +144,10 @@ export class EditorView {
     // One shadow caster (the key); fill, rim and hemisphere are unshadowed.
     this.envRT = createStudioEnvironment(this.renderer, { variant: 'hangar' });
     this.scene.environment = this.envRT.texture;
-    this.scene.environmentIntensity = 0.85;
+    this.scene.environmentIntensity = 0.62;
     this.scene.background = new THREE.Color(0x0b1018);
     this.scene.fog = new THREE.Fog(0x111823, 75, 180);
-    const hemi = new THREE.HemisphereLight(0xbcd0ec, 0x23262c, 0.16);
+    const hemi = new THREE.HemisphereLight(0xbcd0ec, 0x23262c, 0.12);
     this.scene.add(hemi);
     // Key: warm, high and ~50 deg to the right of the default camera, so the shadow falls visibly across the floor.
     this.key = new THREE.DirectionalLight(0xfff3e6, 3.3);

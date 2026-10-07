@@ -38,8 +38,14 @@ function bell(o: BellOpts): THREE.Group {
     }
     return p;
   };
-  const tile = Math.max(0.3, o.len * 0.5);
-  g.add(mk(lathe(pts(0, ext), { segments: seg, uRepeat: Math.max(6, Math.round(o.re * 12)), tile }), o.outer ?? M.copperTubes(), 'bellOuter'));
+  const outer = lathe(pts(0, ext), { segments: seg, uRepeat: Math.max(6, Math.round(o.re * 12)) });
+  {
+    // One throat-to-exit heat ramp (v = 1 at the throat); a wrapping tile left a visible tone step.
+    const uv = outer.getAttribute('uv');
+    const pos = outer.getAttribute('position');
+    for (let i = 0; i < uv.count; i++) uv.setY(i, 0.002 + 0.996 * (1 + pos.getY(i) / o.len));
+  }
+  g.add(mk(outer, o.outer ?? M.copperTubes(), 'bellOuter'));
   if (ext < 1) {
     const extension = lathe(pts(ext, 1), { segments: seg, uRepeat: 1 });
     const uv = extension.getAttribute('uv');
@@ -184,6 +190,7 @@ export function buildEngine(def: PartDef): THREE.Object3D {
       rc = re * 0.42;
       chamberLen = h * 0.16;
       k = 1.7;
+      bands.push(0.55);
       break;
     case 'vacuum':
       yG = yT - h * 0.14;
@@ -221,6 +228,7 @@ export function buildEngine(def: PartDef): THREE.Object3D {
       rc = re * 0.4;
       chamberLen = h * 0.2;
       k = 1.9;
+      bands.push(0.4, 0.68);
   }
   const rt = rc * 0.55;
 
@@ -344,15 +352,26 @@ export function buildEngine(def: PartDef): THREE.Object3D {
   // gimbal actuators (two, 90 degrees apart)
   const act: THREE.BufferGeometry[] = [];
   const actChrome: THREE.BufferGeometry[] = [];
+  const hoses: THREE.BufferGeometry[] = [];
   for (const a of [PI / 2 + PI / 4, PI + PI / 4]) {
     const top: [number, number, number] = [Math.sin(a) * r * 0.62, yPlateBottom - yG - 0.01, Math.cos(a) * r * 0.62];
     const bot: [number, number, number] = [Math.sin(a) * (rc * 1.05), yThroat + chamberLen * 0.5, Math.cos(a) * (rc * 1.05)];
     const mid: [number, number, number] = [(top[0] + bot[0]) / 2, (top[1] + bot[1]) / 2, (top[2] + bot[2]) / 2];
-    act.push(rod(top, mid, 0.025 * s, 8));
-    actChrome.push(rod(mid, bot, 0.014 * s, 8));
+    act.push(rod(top, mid, 0.042 * s, 12));
+    // gland collar, clevis ends and the hydraulic hoses back to the mount
+    const at = (t: number) => [top[0] + (bot[0] - top[0]) * t, top[1] + (bot[1] - top[1]) * t, top[2] + (bot[2] - top[2]) * t] as [number, number, number];
+    act.push(rod(at(0.47), at(0.53), 0.052 * s, 12));
+    for (const p of [top, bot]) act.push(sphere(0.04 * s, 10, 8).translate(p[0], p[1], p[2]));
+    actChrome.push(rod(mid, bot, 0.022 * s, 10));
+    for (const side of [-1, 1]) {
+      const h0 = at(0.12);
+      const off = 0.06 * s * side;
+      hoses.push(pipe([[h0[0] + off * Math.cos(a), h0[1], h0[2] - off * Math.sin(a)], [h0[0] * 1.08 + off * Math.cos(a), h0[1] + 0.06 * s, h0[2] * 1.08 - off * Math.sin(a)], [top[0] * 1.15 + off * Math.cos(a), top[1] + 0.005, top[2] * 1.15 - off * Math.sin(a)]], 0.011 * s, 6, 10));
+    }
   }
-  gim.add(mk(act, M.darkMetal(), 'actuators'));
+  gim.add(mk(act, M.satinWhite(), 'actuators'));
   gim.add(mk(actChrome, M.chrome()));
+  gim.add(mk(hoses, M.cable(), 'hydraulicHoses'));
   engineMarkings(def, root, r, yT, plateT, skirtSpan);
   return root;
 }

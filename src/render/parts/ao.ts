@@ -52,7 +52,7 @@ export function bakePartAO(root: THREE.Object3D, opts: AOOptions = {}): void {
     for (const c of o.children) visit(c, g, h);
   };
   visit(root, root, false);
-  const strength = opts.strength ?? 0.8;
+  const strength = opts.strength ?? 0.75;
   const own = new Set<THREE.BufferGeometry>();
   for (const [group, entries] of groups) {
     const inv = new THREE.Matrix4().copy(group.matrixWorld).invert();
@@ -156,7 +156,7 @@ function bakeGroup(entries: Entry[], strength: number) {
           }
         }
       }
-      const ao = Math.max(0.25, 1 - strength * Math.pow(occ / RAYS, 0.85));
+      const ao = Math.max(0.42, 1 - strength * Math.pow(occ / RAYS, 0.85)); // enclosed bays stay readable
       col[v * 3] = ao * (prev ? prev.getX(v) : 1);
       col[v * 3 + 1] = ao * (prev ? prev.getY(v) : 1);
       col[v * 3 + 2] = ao * (prev ? prev.getZ(v) : 1);

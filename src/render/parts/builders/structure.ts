@@ -115,10 +115,22 @@ export function buildTank(def: PartDef): THREE.Object3D {
     s.translate(0, 0, rb + 0.008);
     paintDetail.push(...around(s, n, 0, PI / n));
   }
+  if (orange && h / r > 4) {
+    // ribbed intertank band: foam-sprayed hat stringers between two bare-metal flange rings
+    const yc = yBody0 + bodyLen * 0.77;
+    const hb = Math.min(0.32 + 0.12 * r, bodyLen * 0.12);
+    const n = Math.max(16, Math.round((2 * PI * r) / 0.15));
+    const rib = box(0.05, hb - 0.05, 0.03, 0.5);
+    rib.translate(0, yc, rb + 0.012);
+    paintDetail.push(...around(rib, n, 0, PI / n));
+    const fl = (y: number) => lathe([[rb, y - 0.022], [rb + 0.016, y - 0.016], [rb + 0.016, y + 0.016], [rb, y + 0.022]], { segments: seg });
+    root.add(mk([fl(yc - hb / 2), fl(yc + hb / 2)], M.aluminium(), 'intertankFlanges'));
+    root.add(mk([...boltRing(rb + 0.016, yc - hb / 2, nb, bs * 0.8), ...boltRing(rb + 0.016, yc + hb / 2, nb, bs * 0.8)], M.chrome()));
+  }
   if (paintDetail.length) root.add(mk(paintDetail, bodyMat, 'skinDetail'));
 
   // cable raceway with tie-down straps and a pressurisation line in clamps
-  const phiRw = 0.72 * PI; // beside the insignia, clear of the front markings
+  const phiRw = 0.44 * PI; // between the propellant stencils and the insignia
   const rwW = 0.07 + 0.05 * r;
   const rwD = 0.03 + 0.01 * r;
   const rwLen = h - 0.03;
@@ -150,8 +162,8 @@ export function buildTank(def: PartDef): THREE.Object3D {
     clamps.push(ring);
   }
   for (const g of [...tray, ...straps, line, ...clamps]) g.rotateY(phiRw);
-  root.add(mk(tray, orange ? M.orangeFoam() : finish === 'charcoal' ? M.gunmetal() : M.greyPanel(), 'raceway'));
-  root.add(mk([...straps, ...clamps], M.gunmetal(), 'clamps'));
+  root.add(mk(tray, finish === 'charcoal' ? M.aluminium() : M.gunmetal(), 'raceway'));
+  root.add(mk([...straps, ...clamps], finish === 'charcoal' ? M.gunmetal() : M.aluminium(), 'clamps'));
   root.add(mk(line, orange ? M.orangeFoam() : M.aluminium(), 'pressLine'));
 
   if (white) {
@@ -203,7 +215,7 @@ function tankMarkings(def: PartDef, root: THREE.Object3D, rb: number, yTop: numb
   if (span > 0.5) {
     const ins = decals.insignia();
     const hi2 = Math.min(0.12 + 0.18 * r, span * 0.3);
-    D.cyl(r, ins, { y: hi - hi2 * 0.8, phi: PI * 0.6, height: hi2 });
+    D.cyl(r, ins, { y: hi - hi2 * 0.8, phi: PI * 0.78, height: hi2 });
   }
   if (span > 0.8) {
     const ox = decals.text('LOX', { stencil: true, color: ink });
@@ -219,7 +231,7 @@ function tankMarkings(def: PartDef, root: THREE.Object3D, rb: number, yTop: numb
     const mid1 = hi - span * 0.32;
     const fl = decals.flag();
     const hf = Math.min(0.16 + 0.12 * r, (mid1 - mid0) * 0.2);
-    const hw = Markings.fit(word, 0.09 + 0.09 * r, (mid1 - mid0 - hf * 1.4) * 0.95);
+    const hw = Markings.fit(word, 0.12 + 0.12 * r, (mid1 - mid0 - hf * 1.4) * 0.95);
     const lw = hw * word.aspect;
     D.cyl(r, word, { y: mid0 + lw / 2, phi: PI * 0.07, height: hw, vertical: true });
     D.cyl(r, fl, { y: mid0 + lw + hf * 0.75, phi: PI * 0.07, height: hf });

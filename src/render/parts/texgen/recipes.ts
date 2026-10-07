@@ -9,7 +9,7 @@
  */
 import { Field, cavityAO, clamp01, fbm, fract, gridDist, grayImg, hash2, mix, normalImg, ormImg, rgbImg, ridge, ridged, smooth, sstep, vnoise, voronoi, type Img } from './noise';
 
-export const TEX_VERSION = 10;
+export const TEX_VERSION = 12;
 
 export type Channel = 'albedo' | 'normal' | 'orm' | 'emissive';
 export type TexData = Partial<Record<Channel, Img>>;
@@ -126,15 +126,18 @@ function panel(): TexData {
     k *= 1 - 0.3 * ridge(Math.abs(hd), 0.004);
     // stencilled data blocks: rows of small ink marks on some panels
     if (hash2(c.id, 5, 813) > 0.5) {
-      const lx = c.fu * 0.5 - 0.07;
-      const ly = (c.fv - 0.86) * 1;
-      if (lx > 0 && lx < 0.2 && ly > -0.06 && ly < 0.0) {
-        const rowI = Math.floor(-ly / 0.02);
-        const inRow = fract(-ly / 0.02) > 0.3;
-        const ci = Math.floor(lx / 0.014);
-        const inChar = fract(lx / 0.014) < 0.72;
-        const len = rowI === 0 ? 14 : rowI === 1 ? 9 : 11;
-        if (inRow && inChar && ci < len && hash2(ci + rowI * 17, c.id, 814) > 0.18) k *= 0.3;
+      // fine stencil lines: 9 mm caps, 3.5 mm stroke rhythm, word gaps
+      const lx = c.fu * 0.5 - 0.06;
+      const ly = (c.fv - 0.88) * 1;
+      if (lx > 0 && lx < 0.16 && ly > -0.05 && ly < 0.0) {
+        const rowI = Math.floor(-ly / 0.016);
+        const fy = fract(-ly / 0.016);
+        const ci = Math.floor(lx / 0.0085);
+        const fx = fract(lx / 0.0085);
+        const len = rowI === 0 ? 17 : rowI === 1 ? 11 : 14;
+        const glyph = hash2(ci + rowI * 23, c.id, 814);
+        const stroke = (fx < 0.28 || (glyph > 0.45 && fx > 0.52 && fx < 0.78) || (glyph > 0.7 && (fy < 0.42 || fy > 0.82))) && fy > 0.3;
+        if (ci < len && glyph > 0.12 && stroke) k *= 0.5;
       }
     }
     out[0] = k * (1 + warm);
@@ -166,19 +169,22 @@ function foam(): TexData {
   const albedo = rgbImg(N, N, (u, v, out) => {
     const a = fbm(u, v, 3, 4, 51);
     const b = fbm(u, v, 14, 3, 52);
-    const tan = sstep(0.4, 0.8, a * 0.7 + b * 0.3);
+    const tan = sstep(0.35, 0.8, a * 0.7 + b * 0.3);
     const light = sstep(0.55, 0.85, fbm(u, v, 6, 3, 53));
-    const r = mix(0.88, 0.76, tan) + 0.03 * light;
-    const g = mix(0.44, 0.34, tan) + 0.03 * light;
-    const bl = mix(0.16, 0.12, tan) + 0.02 * light;
+    // overlapping spray passes: soft horizontal bands with wavy edges, alternately richer and paler
+    const pass = Math.sin((v * 5 + 0.7 * fbm(u, v, 3, 3, 55)) * Math.PI * 2) * 0.5 + 0.5;
+    const band = sstep(0.35, 0.75, pass) * (0.025 + 0.035 * fbm(u, v, 2, 2, 56));
+    const r = mix(0.9, 0.68, tan) + 0.03 * light - band * 0.6;
+    const g = mix(0.45, 0.3, tan) + 0.03 * light - band;
+    const bl = mix(0.16, 0.1, tan) + 0.02 * light - band * 0.4;
     const speck = fbm(u, v, 64, 2, 54) > 0.78 ? 0.8 : 1;
     out[0] = r * speck;
     out[1] = g * speck;
     out[2] = bl * speck;
   });
   const ao = cavityAO(height, 4, 2.2, 0.55);
-  const rough = new Field(N, N).fill((u, v) => 0.8 + 0.14 * fbm(u, v, 20, 3, 61));
-  return { albedo, normal: normalImg(height, 3.2), orm: ormImg(ao, rough, 0, N, N) };
+  const rough = new Field(N, N).fill((u, v) => 0.62 + 0.22 * fbm(u, v, 20, 3, 61) + 0.1 * fbm(u, v, 3, 3, 62));
+  return { albedo, normal: normalImg(height, 3.6), orm: ormImg(ao, rough, 0, N, N) };
 }
 
 /** Brushed stainless: circumferential grain, a weld seam per metre with heat tint. Tile 1 m. */
