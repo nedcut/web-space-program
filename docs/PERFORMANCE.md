@@ -1113,3 +1113,9 @@ p50/p95/p99 33.2/33.4/50 ms; the final journey observed 2 in 217.59 seconds, wit
 before/after comparison**. The baseline journey raw export failed; the shorter baseline
 ascent/Moon traces and successful final full ascent are retained. No claim is made that
 SOI transitions, every staging combination, or all allocation/GC hitches are solved.
+
+Validation after merging `main` (still `7bd6e4f9`): `npm run lint`, `npx tsc --noEmit`,
+`npx vitest run --maxWorkers=2` (**112 files / 1,334 tests**, 216.99 s), and `npm run build`
+all pass. All ten `scripts/bench/determinism.ts` hashes are byte-identical before/after
+(`determinism-{before,after}.txt`). No `src/sim` changes. The build retains its existing
+large-chunk warning. Port 5334 preview was stopped after measurements; no server remains.
