@@ -142,6 +142,90 @@
       "sha256": "d137775d8966ab8d443fd5126dc6e7ad72072bc1ed50555c5818d221735daf0f",
       "license": "Public domain (NASA)"
     },
+    "ice-01": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-01-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-01-15",
+      "sha256": "ef9ffb0d704c32c92780ea5055a21f1a75bd81d60ce8e0edde8a619799a05189",
+      "license": "Public domain (NASA)"
+    },
+    "ice-02": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-02-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-02-15",
+      "sha256": "741e43c74853387ef44e210a718dbcb1af3b82e58ad1209a25172e1ac918d574",
+      "license": "Public domain (NASA)"
+    },
+    "ice-03": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-03-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-03-15",
+      "sha256": "d19db98a85807821db220899e6feb1fe020219d9d39a9830667445efc26baf00",
+      "license": "Public domain (NASA)"
+    },
+    "ice-04": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-04-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-04-15",
+      "sha256": "ae7bc161595449029cdcfc665935631b64ce23a9d1e96fa2ebc8c236e6cfdb27",
+      "license": "Public domain (NASA)"
+    },
+    "ice-05": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-05-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-05-15",
+      "sha256": "d6c7f755af0ddf708cbed9736ce32a53a708adf3000adf7d5eef97269a85103a",
+      "license": "Public domain (NASA)"
+    },
+    "ice-06": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-06-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-06-15",
+      "sha256": "03d13e6c72e22ff19b3e2890a3e826f30419c0b1bbe0a4f1536a76ba22142fce",
+      "license": "Public domain (NASA)"
+    },
+    "ice-07": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-07-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-07-15",
+      "sha256": "d0ab27b8191b08e4ad92681025b476157e3bf62e431c510df90a9f6b787d6ec6",
+      "license": "Public domain (NASA)"
+    },
+    "ice-08": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-08-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-08-15",
+      "sha256": "282e337199c42a17d0c4da9116bd29d1398b13bb199aa0a77186ce19ef7e4831",
+      "license": "Public domain (NASA)"
+    },
+    "ice-09": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-09-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-09-15",
+      "sha256": "5e68338aa253242b0322dc19f40eebb0ccc82c3973e3bbb3f30a253b4fee51a1",
+      "license": "Public domain (NASA)"
+    },
+    "ice-10": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-10-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-10-15",
+      "sha256": "5a8beb1d49508d869ac88a02ef18a28522587e4da0931e89dac73bf66fc0afdf",
+      "license": "Public domain (NASA)"
+    },
+    "ice-11": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-11-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-11-15",
+      "sha256": "863719c23b38c9113a808dd73bac51f54129129142e2ba239022cff6cf7a9dcb",
+      "license": "Public domain (NASA)"
+    },
+    "ice-12": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-12-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-12-15",
+      "sha256": "96074115dcbf92af66d49fbff2bbdc03448b7faf0c2ba8a12fc7779b41cee76a",
+      "license": "Public domain (NASA)"
+    },
+    "iceOcean": {
+      "title": "NASA GIBS GHRSST MUR L4 sea surface temperature (product ocean mask), 2019-07-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Surface_Temperature&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-07-15",
+      "sha256": "fa6a361dd16df3d0e74347a8fd297641da74158eec78837aec1dc9672f97f0ba",
+      "license": "Public domain (NASA)"
+    },
+    "iceColormap": {
+      "title": "NASA GIBS sea ice concentration colormap",
+      "url": "https://gibs.earthdata.nasa.gov/colormaps/v1.3/GHRSST_Sea_Ice_Concentration.xml",
+      "sha256": "f72c4d294d5b16128c62c6e8ac3f9367837c2fab03b83263be48c287597e6c4c",
+      "license": "Public domain (NASA)"
+    },
     "land": {
       "title": "Natural Earth 1:10m land polygons v5.1.2",
       "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_land.geojson",
@@ -189,303 +273,303 @@
     },
     {
       "path": "base/day-2k-07.webp",
-      "bytes": 164690,
-      "sha256": "96dc1c1571c41e6eece8f6a0012c5f9951bc71cf6836dd7c523800e95c43f987"
+      "bytes": 175878,
+      "sha256": "e3db5734876e9e384a8389ce410b5436d7dec62c0e5f3097bf0cf4e3bec8f9f2"
     },
     {
       "path": "base/day-4k-07.webp",
-      "bytes": 550734,
-      "sha256": "a528c0c6f4df039e10e6a7b1d8528226a167d7230d25eff7d45ff013b20c7e54"
+      "bytes": 583532,
+      "sha256": "4f0a5e4abb9c13c7ab7944f298665353e3f168d46305af3759513b09ba3015a9"
     },
     {
       "path": "packs/8k/day-8k-07.webp",
-      "bytes": 1413258,
-      "sha256": "01136ccd0fa51b27d82660b9492bb61f257ebf8450037792007799ddc13aab5f"
+      "bytes": 1435002,
+      "sha256": "f73393ec6d7ff77b7f2bd6274905a384c58317660818a2cc139d77638ef3ec2e"
     },
     {
       "path": "packs/16k/day-16k-07-0.webp",
-      "bytes": 2182124,
-      "sha256": "10c2100acf6821329f86f1983ff71316b943ad0b863f3e5b80bdb9208bcea153"
+      "bytes": 2200060,
+      "sha256": "3da71529944de28d27c4f38118c31b50d1d46ea6bc8955d5b9d19d722ece8dd1"
     },
     {
       "path": "packs/16k/day-16k-07-1.webp",
-      "bytes": 3043014,
-      "sha256": "0676391b075f09f371aa96dacc1cec3ba5cc9ee546ee16ccf5078e4ca8c3763b"
+      "bytes": 3051074,
+      "sha256": "a52db58fe22aee47f5fc265d27c1dfd410b1e1fc21c865e8a4d58d12f8b11959"
     },
     {
       "path": "base/day-2k-01.webp",
-      "bytes": 201120,
-      "sha256": "0d4da63fafae4081c002fcf24a7ab30a54f1c8f29192e0a4062733a9c0fb4213"
+      "bytes": 210372,
+      "sha256": "1d8432ff8708b9ce2fc6029d3ea3437fbbdbbbdda6cd2c9c054a229d88f19a28"
     },
     {
       "path": "base/day-4k-01.webp",
-      "bytes": 700852,
-      "sha256": "163664aa335bf02cff3cb877956ab0f80fb01c4c1e4f4c50dfdd0d965a71c3f5"
+      "bytes": 725774,
+      "sha256": "efeefa4ec9dd3e82d9852a70c13fa14df2eeedeed7589cc84753b7dfb03698eb"
     },
     {
       "path": "packs/8k/day-8k-01.webp",
-      "bytes": 1819026,
-      "sha256": "deacadea684a2981f4d499d7b190914afc7b11fe63a4971df906f56d27ff1114"
+      "bytes": 1824888,
+      "sha256": "01983574459add7c16db0ae19553a6483a24038655b274f56077f6b4cb5df61a"
     },
     {
       "path": "packs/16k/day-16k-01-0.webp",
-      "bytes": 2563200,
-      "sha256": "09991d5c66c8991e4f2031482d3adbd1ea0295b1c92bf5d22c600ebc65285f05"
+      "bytes": 2550544,
+      "sha256": "0b6649c164281d264ca05472d4aec8a76f818f18932e9c7494733ad90f950b58"
     },
     {
       "path": "packs/16k/day-16k-01-1.webp",
-      "bytes": 4165918,
-      "sha256": "a23161fc96abb554365177aff04c241ccb25006ccb1b093de001f1e7e8e30d2f"
+      "bytes": 4201790,
+      "sha256": "eba8ec9fbdbdf7a6b925d9925c6b539f0f68652aa54e653257c18f62e73469d8"
     },
     {
       "path": "base/day-2k-02.webp",
-      "bytes": 199830,
-      "sha256": "4753a2982fe4477f819ef45a8b34313328d68a32ecf321664984d1828b220516"
+      "bytes": 208130,
+      "sha256": "6edf9cb9ebe9fba54f7325d4ce4384f812844fecea13b09dd191eaff8a841e49"
     },
     {
       "path": "base/day-4k-02.webp",
-      "bytes": 689038,
-      "sha256": "b0e5e2a00bda8e88aa7f6df5b2e3a89e280a60b12d7a340576a2c44a461fcfdf"
+      "bytes": 712832,
+      "sha256": "ffb77491021ab73cdb629522c680dd20cd73782c9c0967f7029b6d9fb9da7fee"
     },
     {
       "path": "packs/8k/day-8k-02.webp",
-      "bytes": 1794906,
-      "sha256": "b2b7a6cf403a15cccb343379b4be753af4b20bd5ed7ea5b6787f4418f33b87bd"
+      "bytes": 1800272,
+      "sha256": "072bb987a007d7e101b47f765808f90f9f5d6bd63ec7da3f805748d9e930fcc5"
     },
     {
       "path": "packs/16k/day-16k-02-0.webp",
-      "bytes": 2523610,
-      "sha256": "ed17790a009e31f537d92cdd9e3f22ea44c1342d002369e38a2ecc69cdd0ef40"
+      "bytes": 2501424,
+      "sha256": "dd71e17eab7b719efe60788939570bf021893d949fb2e2135f5365899e727f1a"
     },
     {
       "path": "packs/16k/day-16k-02-1.webp",
-      "bytes": 4094752,
-      "sha256": "79989588893503848dc3f5d1a5d479c0c8bc9879615e6241752c508a05201378"
+      "bytes": 4161516,
+      "sha256": "4118f9044f708c09c817f55f98f3f9d47121efad931e6c44613ec900060e82d4"
     },
     {
       "path": "base/day-2k-03.webp",
-      "bytes": 195448,
-      "sha256": "92b20750bfa5d7179b822018bef3188960b7043038dff0cd0e7b55f5421df98b"
+      "bytes": 205820,
+      "sha256": "ddcc454499216bf410718d53648e8aa5382b6899462ab1e0a068c7d91a9e3763"
     },
     {
       "path": "base/day-4k-03.webp",
-      "bytes": 669264,
-      "sha256": "e7a773631140840c33903246c4fb6a4814a37c933fb8d0c2f04755c763a80fc8"
+      "bytes": 697190,
+      "sha256": "f897293e648fb2b58c4372805ce6da80464e0efbda80da9a6143bf5a17fab4fc"
     },
     {
       "path": "packs/8k/day-8k-03.webp",
-      "bytes": 1724280,
-      "sha256": "8d873e0dabb022616269565510321298cab3cacb76ad35662461a1acc69ad398"
+      "bytes": 1743426,
+      "sha256": "d61bd6ffda1e5f6acd18d8cdcf66d0130c9f3c64411855e7f78e6e5cb6c4b912"
     },
     {
       "path": "packs/16k/day-16k-03-0.webp",
-      "bytes": 2414862,
-      "sha256": "b9e84309e03306dc7bdb6864a2bc406e3a409a28372ed7c798d2c8c7f2f9b785"
+      "bytes": 2403304,
+      "sha256": "4fc6cfae18522b75fe7be6ffd169f757ab12c2508f03d6f93cb4fc27583128ca"
     },
     {
       "path": "packs/16k/day-16k-03-1.webp",
-      "bytes": 3941380,
-      "sha256": "0b481e12e2acf1533ce07179d83ab73c335f35b15e03c3887628d244d6ca998f"
+      "bytes": 3998404,
+      "sha256": "21ff70d648e14bd63d1471d57ab3b9d7631fb4618380f742d2769220ceac8a02"
     },
     {
       "path": "base/day-2k-04.webp",
-      "bytes": 187794,
-      "sha256": "679b47eee23f80c5821ac075dc4c9bce25777f0807065336b04b9037fdcadfd9"
+      "bytes": 199158,
+      "sha256": "b103cb5725ae6edcabe91b7dc482ff41075cc39c3962cdebc654ddac4d97559e"
     },
     {
       "path": "base/day-4k-04.webp",
-      "bytes": 633704,
-      "sha256": "51b8b71109c43568e8abbde5d453867b6226c215ae882fce385c73e1c5783e95"
+      "bytes": 672242,
+      "sha256": "df3e7fe3a24c386da3618b24cca1940c976d77a4e155149e655a9deabbfca2c7"
     },
     {
       "path": "packs/8k/day-8k-04.webp",
-      "bytes": 1629342,
-      "sha256": "ebe401ed87f2c40d6a7865d254da90531ee6810a5ceb22214cf5d372cdb78092"
+      "bytes": 1651132,
+      "sha256": "74749b520ae72baa059ff270625cd46d60e56eb7a263bc1c862bb3a8c549e8be"
     },
     {
       "path": "packs/16k/day-16k-04-0.webp",
-      "bytes": 2305212,
-      "sha256": "3bae7301cbb3b09486a915b5b9650ae26f78b89ae4efb687c2899bc7d5a8345f"
+      "bytes": 2299086,
+      "sha256": "f95a0ac6f5a5dcfaa28ec73dfddb5dcc9455ec11006b1e211f71796497ff404b"
     },
     {
       "path": "packs/16k/day-16k-04-1.webp",
-      "bytes": 3653892,
-      "sha256": "7f3022e8ca581677462f6f249a51287edde21ca104b2aad4c5b22b192f119277"
+      "bytes": 3705682,
+      "sha256": "861cac34a98b841a86cce120239c775708c86f49bdd122f99b410b83ed5c9222"
     },
     {
       "path": "base/day-2k-05.webp",
-      "bytes": 178866,
-      "sha256": "1eda71a9370d4ecf84e403889dbc284c7c59f0d250b3e9c4f8a54c75d6327141"
+      "bytes": 194564,
+      "sha256": "9ecc208356933f95307b04f94a526c64a7da0fb468d259cce0d38531e6525a55"
     },
     {
       "path": "base/day-4k-05.webp",
-      "bytes": 614976,
-      "sha256": "4ae18ca922a7caf14f8d8b67c83493ba6505b921e63556fb00fa47c31c5a1a8a"
+      "bytes": 644424,
+      "sha256": "672275660934947aaa9331e74245468aaf9023a10f7f4641784da43706452b9e"
     },
     {
       "path": "packs/8k/day-8k-05.webp",
-      "bytes": 1561434,
-      "sha256": "7cc5f7a6f7d92de80315f83f25ed1dccbb1b786420f6362fe3b49b40beaba7f7"
+      "bytes": 1572390,
+      "sha256": "c3e5142b645557620bb09fee48cd1d81145622743040813e34aff56e9714050d"
     },
     {
       "path": "packs/16k/day-16k-05-0.webp",
-      "bytes": 2259048,
-      "sha256": "a0746810c8cacc71db215ad6cb124451f64704eeafd87325098da1cec6d17b5b"
+      "bytes": 2257070,
+      "sha256": "f104280c20e68c624083b7024c9bae1f604f65d12f0eacb7086d5fbd5a878c72"
     },
     {
       "path": "packs/16k/day-16k-05-1.webp",
-      "bytes": 3461612,
-      "sha256": "f49ca7570921f47f2c5d610baa46a8e941269a9ce08730548583ab6e7c8f5666"
+      "bytes": 3440618,
+      "sha256": "a91cd4479060d74796359abc025eb8e5dbaa42ba18fb3d60c788d042799fa09a"
     },
     {
       "path": "base/day-2k-06.webp",
-      "bytes": 172234,
-      "sha256": "7d03d014f197370b2c025d6aa27c30d2fb6b207e8a4d13b025751ff845c05b43"
+      "bytes": 188474,
+      "sha256": "08aedb73a3deef306850cc7a2874be24b90bd822c890e356756a0d1c80749af3"
     },
     {
       "path": "base/day-4k-06.webp",
-      "bytes": 598566,
-      "sha256": "91f5a56c29a43b48e9c7af3a6be635d5934e8310244827fa7ef2185dc72541c9"
+      "bytes": 628366,
+      "sha256": "8a65a27808b3c0dbc1ed46ad75700092cc76595c8628e9dfe1b361b205e4deb3"
     },
     {
       "path": "packs/8k/day-8k-06.webp",
-      "bytes": 1510908,
-      "sha256": "6756574656a58ddec643d4b6f4a30260141d6561f28fe8d52b7dca5e627e73c1"
+      "bytes": 1533190,
+      "sha256": "930afabc9ae17bc84b43bc8e6ac0c2f67921e460eef0579a7f94eeac1cf05023"
     },
     {
       "path": "packs/16k/day-16k-06-0.webp",
-      "bytes": 2268186,
-      "sha256": "d8532b91955219e823a2b02b73af98a699110929462843ef675448965278e07f"
+      "bytes": 2275152,
+      "sha256": "3adfd9c83ae5facfe9acb89a4441e3a715be2fc7432b7ef8851a585305c49f7f"
     },
     {
       "path": "packs/16k/day-16k-06-1.webp",
-      "bytes": 3226422,
-      "sha256": "a7b1ed86ebb96e1002e646c5fdbc1e54ef53e63bb9c3b1772af4aa1ba6dcb427"
+      "bytes": 3364722,
+      "sha256": "26ba173175905b5a802d4dea66842893eb6d5a7977bd095f61a1ed7db0552e26"
     },
     {
       "path": "base/day-2k-08.webp",
-      "bytes": 161358,
-      "sha256": "1576400d5e636038488187920ccfa6abf5e582e693a10db29e67751f0562a8b6"
+      "bytes": 176338,
+      "sha256": "d6dd782006a8bc4c24117b8f1dc9620599a8e50464e00cb06c2b6f26c3727289"
     },
     {
       "path": "base/day-4k-08.webp",
-      "bytes": 562434,
-      "sha256": "0f3bfba67452fb3f8eefc7e0ae21417334867b5ce4182b62317c788d1e13a9ad"
+      "bytes": 592562,
+      "sha256": "d452f4b54d8d62e29e5a0184e5c2c2b79a5f4b97769fc5994514a2393b8ff0ae"
     },
     {
       "path": "packs/8k/day-8k-08.webp",
-      "bytes": 1411480,
-      "sha256": "5ecffea8726f55d4b281931fd83871fd3b71a87458034c9bd03fdeb368ed35e3"
+      "bytes": 1435640,
+      "sha256": "d2f845b3235a2c76fac09764f46d90a9713417add4f7dc3b67708d56d3b1d926"
     },
     {
       "path": "packs/16k/day-16k-08-0.webp",
-      "bytes": 2162922,
-      "sha256": "153aba60c25e53868877e1bc11bde2bd1aa800ca3f784db48096a8794589aede"
+      "bytes": 2192112,
+      "sha256": "f02bb90034563528034b216f59bf957f0ec53bdf974ed2f74109f2ea0929a9b0"
     },
     {
       "path": "packs/16k/day-16k-08-1.webp",
-      "bytes": 3077470,
-      "sha256": "99be252fe5091595b737fc71e12eca3c10e96e1edcb404710cb144a56badc5d2"
+      "bytes": 3103998,
+      "sha256": "6cff0ecbe1006ddf0ef15186dab129203c18ba6d788a1bacae51ef07d3344a13"
     },
     {
       "path": "base/day-2k-09.webp",
-      "bytes": 174116,
-      "sha256": "7e55221ce5ce31ecd99f76e87df55c629b86dbb3d2588a746367058707682b5f"
+      "bytes": 188886,
+      "sha256": "65a897246ab6f229176f0e38b278aa5f2f6855b01432368f30e83d2542c5afdd"
     },
     {
       "path": "base/day-4k-09.webp",
-      "bytes": 606974,
-      "sha256": "519623d6fa9448338e84f80d69b1f7d18f8c82aac7164def37a46339817ee446"
+      "bytes": 638546,
+      "sha256": "a3d442f89dd22884b6593233cc0f410a39e181de73c93addefeb4782516dafab"
     },
     {
       "path": "packs/8k/day-8k-09.webp",
-      "bytes": 1549186,
-      "sha256": "ca5798c8a848e5f955c558f8c001ab798bd4c42de1b5a4ca2d524fa8c53c9744"
+      "bytes": 1577490,
+      "sha256": "410599adc7ec8254fe5b5492024eb9b7a98ab44418798639c92bdca0ea812319"
     },
     {
       "path": "packs/16k/day-16k-09-0.webp",
-      "bytes": 2265794,
-      "sha256": "4bae17c5cec9a198c546cb727f241789e3d179102eb46c3bca548607111cdaed"
+      "bytes": 2292110,
+      "sha256": "11001535d44b3b0f27ff2565273917277859b17ca8aa9a452694eabc62edfdab"
     },
     {
       "path": "packs/16k/day-16k-09-1.webp",
-      "bytes": 3554334,
-      "sha256": "0e24f51f7e1445a4d429f934ccc37542795d547ac3b9c245fdb99abe6a22371b"
+      "bytes": 3595256,
+      "sha256": "729f12957abf6de534712ba6fe820bd885a72e8fa6a2287be039501d8cfd18f4"
     },
     {
       "path": "base/day-2k-10.webp",
-      "bytes": 183156,
-      "sha256": "9075edd70e16cbaa5a92d7b101f5192ddf335e4ac9ce8d410038722092a31475"
+      "bytes": 193558,
+      "sha256": "c7e63824be68ed515ada9c1dcc807e644f5abccbd51674fc68b0462a624302e4"
     },
     {
       "path": "base/day-4k-10.webp",
-      "bytes": 633624,
-      "sha256": "0f87485c23d2d16686f0a49fc60b43ecd56e441b7331f1038f766490df878c34"
+      "bytes": 660756,
+      "sha256": "0b5b9a937179c26ea3ead12378480279196ff2c313d42067d4d53c2d077ea7a7"
     },
     {
       "path": "packs/8k/day-8k-10.webp",
-      "bytes": 1637768,
-      "sha256": "24f6060c6cfda2c21653bc4ad6c0f7da8120dde0be0c83bbd9d87a99ca4c7e65"
+      "bytes": 1651478,
+      "sha256": "f557456cc2faa15534697fcc3488658d007f97ac709d6a00cbf53308d44dfb35"
     },
     {
       "path": "packs/16k/day-16k-10-0.webp",
-      "bytes": 2358032,
-      "sha256": "14c488414ee7c28882f2dfe57b6f4ab9de204812347b1d60f0ca6bff678fbd99"
+      "bytes": 2360902,
+      "sha256": "68d34d1e55a12e1476fd16690ec1632022971f2ba99995027b2f263fe0f48f1f"
     },
     {
       "path": "packs/16k/day-16k-10-1.webp",
-      "bytes": 3769178,
-      "sha256": "947b085c1bd4099ce95db88684fab433b1036faf94790f3fdfb26a8fe89acdf1"
+      "bytes": 3802234,
+      "sha256": "537a671723047a0da955a2f3a1e5cc6e329fbbd5706b4e3492b950bd366b072d"
     },
     {
       "path": "base/day-2k-11.webp",
-      "bytes": 196568,
-      "sha256": "09910f6e27ecc3b25a3357ddb77e1dff01e20617ca108836d3c95de98c7c65d7"
+      "bytes": 206014,
+      "sha256": "b592b5a4003e6887a9849c0e9a946095c63ac67e3d8d31ec049dcfabe90606ac"
     },
     {
       "path": "base/day-4k-11.webp",
-      "bytes": 682028,
-      "sha256": "aade44d263e76b9ebd502ad6dea1e1279d9ffa07cd14fcc842ef89bc34feca75"
+      "bytes": 710994,
+      "sha256": "984ccf2c5f0e5b8c012cdf4a0a01ebb614bfea052a0d9a206be74ad6c39687e3"
     },
     {
       "path": "packs/8k/day-8k-11.webp",
-      "bytes": 1780906,
-      "sha256": "43659eff8533eac8d45ca4c6c6a6bd2c0b5c5625abd50cd6af212b1334f46746"
+      "bytes": 1824304,
+      "sha256": "6ed27a41b22f733290353410a933820170a895e793325e547320368d4fba0b67"
     },
     {
       "path": "packs/16k/day-16k-11-0.webp",
-      "bytes": 2485604,
-      "sha256": "90ad7e7c3fc4e651a5585ed1ea17db74f365e0f705298886f6ecde2ad204bd26"
+      "bytes": 2490852,
+      "sha256": "33f18c9c6d759c0327eaf492844ca1d4dd01f3e1fb9ce019eb0a75afe469f9ce"
     },
     {
       "path": "packs/16k/day-16k-11-1.webp",
-      "bytes": 4271896,
-      "sha256": "56b0f161a8e3357fc491cdc9eddb5746e1dba5d54af4dd05bde0e5a406eb4c9f"
+      "bytes": 4258802,
+      "sha256": "d235791ffd10f32cf26f8d12f4d6fc61bb717cd0a3603190e7ac73bbcba329f2"
     },
     {
       "path": "base/day-2k-12.webp",
-      "bytes": 199888,
-      "sha256": "87fea0414b7b307f84f11b43e225ed206ff8a492221d3c6821249f94d0bfb044"
+      "bytes": 213964,
+      "sha256": "b9c48b4c9eb188a6864ddb0fd44b751270f50f54c6ac90aba9f77b7d3063e983"
     },
     {
       "path": "base/day-4k-12.webp",
-      "bytes": 694686,
-      "sha256": "dd9e17c9b41893396c090647d6a58136fd31941884c6a89d3d1b6c8f9ebf3ad2"
+      "bytes": 732340,
+      "sha256": "f1ca0def98f1dd6f5120677cb7e6f4e243eca9a9f842bb1b761377ac226aa7eb"
     },
     {
       "path": "packs/8k/day-8k-12.webp",
-      "bytes": 1821998,
-      "sha256": "44e151dc606f8ca2d2cd49c6650ef989d682cfea39c8e9bb352a8b2869921b61"
+      "bytes": 1876146,
+      "sha256": "84453505597da4d2bb906f892fbc9d4a4c05a0dae091eb84814cf3e1bd1ad0c0"
     },
     {
       "path": "packs/16k/day-16k-12-0.webp",
-      "bytes": 2586066,
-      "sha256": "cbebe657f30ec082f9eecfa8315e9e2c2f14d023737d1aa54f78183af9e6409e"
+      "bytes": 2595110,
+      "sha256": "d0ae88d46ccf48eef5fd12eb8cbd6dc77b014c9ce45871b0e88568d9abfa2154"
     },
     {
       "path": "packs/16k/day-16k-12-1.webp",
-      "bytes": 4327330,
-      "sha256": "9c2b45e5aeddf7d1d009c2a878fede404b9f68c233aa329bdc1ced9d0d6122f3"
+      "bytes": 4332738,
+      "sha256": "aa92ed846934ec49dc15948bf93d4a6dd04fc09f88bb5537d18ce3263f3e5910"
     },
     {
       "path": "base/night-4k.webp",
