@@ -3,7 +3,7 @@
 //   npx playwright install chromium firefox webkit     # once (Linux also: sudo npx playwright install-deps)
 //   npx vite --port 5328 --strictPort &                # or: npm run build && npx vite preview --port 5329 --strictPort &
 //   node scripts/browser-smoke.mjs [--base http://localhost:5328] [--browsers chromium,firefox,webkit]
-//        [--shots docs/screenshots/firefox] [--quality low] [--headed]
+//        [--shots docs/screenshots/firefox] [--quality low] [--headed] [--firefox-prefs '{"privacy.resistFingerprinting":true}'] [--verbose]
 //
 // Per browser: main menu → New Game (Sandbox) → Space Center → Vehicle Assembly → Launch → stage; then
 // `?flight=stock-meridian&scenario=orbit` → map view → back. It clicks real buttons (audio unlocks the way
@@ -28,8 +28,11 @@ const settings = { quality: args.quality ?? 'low', adaptiveQuality: false, graph
 
 // Benign noise. Everything else logged as an error (or a WebGL error warning) fails the run.
 const IGNORE = [/React DevTools/, /\[vite\]/, /KHR_parallel_shader_compile/, /lazy initialization/, /WEBGL_debug_renderer_info is deprecated/,
-  /classified as a bounce tracker/, /favicon/];
+  /classified as a bounce tracker/, /favicon/,
+  /Depth texture comparison requests/ /* Firefox's once-per-call note about hardware PCF shadow filtering */];
 const WEBGL_WARNING = /WebGL warning|GL_INVALID|INVALID_(OPERATION|ENUM|VALUE|FRAMEBUFFER)|GL ERROR/;
+// Subsystems that fail safe (audio goes silent) still log a warning the smoke test must not miss.
+const FAIL_SAFE_WARNING = /Audio disabled after an error/;
 
 let xvfb;
 function displayEnv() {
@@ -64,7 +67,7 @@ async function run(name) {
     headless: !args.headed && name !== 'firefox',
     env,
     args: name === 'chromium' ? ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] : [],
-    firefoxUserPrefs: name === 'firefox' ? { 'webgl.force-enabled': true, 'media.autoplay.default': 0 } : undefined,
+    firefoxUserPrefs: name === 'firefox' ? { 'webgl.force-enabled': true, 'media.autoplay.default': 0, ...JSON.parse(args['firefox-prefs'] ?? '{}') } : undefined,
   });
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
   await context.addInitScript((s) => {
@@ -75,14 +78,20 @@ async function run(name) {
   const page = await context.newPage();
   page.setDefaultTimeout(240000);
   const problems = [];
-  const note = (kind, text) => { if (!IGNORE.some((re) => re.test(text))) problems.push(`[${kind}] ${text.slice(0, 1500)}`); };
+  let current = 'startup';
+  const note = (kind, text) => {
+    if (IGNORE.some((re) => re.test(text))) return;
+    problems.push(`[${kind}] ${text.slice(0, 1500)}`);
+    if (args.verbose) console.log(`  ${name} @ ${current}: [${kind}] ${text.slice(0, 300)}`);
+  };
   page.on('pageerror', (e) => note('pageerror', `${e.message}\n${e.stack ?? ''}`));
-  page.on('console', (m) => { if (m.type() === 'error' || WEBGL_WARNING.test(m.text())) note(`console.${m.type()}`, m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error' || WEBGL_WARNING.test(m.text()) || FAIL_SAFE_WARNING.test(m.text())) note(`console.${m.type()}`, m.text()); });
   page.on('requestfailed', (r) => { if (!/ERR_ABORTED|NS_BINDING_ABORTED|cancelled/i.test(r.failure()?.errorText ?? '')) note('requestfailed', `${r.url()} ${r.failure()?.errorText}`); });
   page.on('worker', (w) => w.on('close', () => undefined));
   const steps = [];
   const step = async (label, fn) => {
     const t = Date.now();
+    current = label;
     try { await fn(); steps.push(`ok   ${label} (${((Date.now() - t) / 1000).toFixed(1)} s)`); }
     catch (e) { steps.push(`FAIL ${label}: ${e.message.split('\n')[0]}`); problems.push(`[step] ${label}: ${e.message.split('\n')[0]}`); throw e; }
   };

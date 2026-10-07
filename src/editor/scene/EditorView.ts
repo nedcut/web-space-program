@@ -1,4 +1,5 @@
 import { LinkView } from '../../render/vessel/LinkView';
+import { clampPixelRatio, maxDrawingEdge } from '../../render/core/drawingLimits';
 import { isTyping, matches } from '../../input/bindings';
 import * as THREE from 'three';
 import { detachRenderer, noteDfgLut, releaseRenderer } from '../../render/releaseRenderer';
@@ -129,13 +130,15 @@ export class EditorView {
   private markerMatHeld = new THREE.MeshBasicMaterial({ color: 0xffb35c, transparent: true, opacity: 0.95, toneMapped: false, fog: false, depthTest: false, depthWrite: false });
   private ghostMat = new THREE.MeshStandardMaterial({ color: 0x5cc8ff, transparent: true, opacity: 0.32, roughness: 0.4, metalness: 0, emissive: 0x1a5f8a, emissiveIntensity: 0.6, depthWrite: false });
   private warnedFloating = false;
+  private pixelRatio = 1;
   private prevPartCount = 0;
 
   constructor(private container: HTMLElement, private session: EditorSession) {
     const quality = game.get().settings.quality;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     const dpr = window.devicePixelRatio || 1;
-    this.renderer.setPixelRatio(Math.min(dpr, QUALITY_PRESETS[quality].maxPixelRatio) * game.get().settings.renderScale);
+    this.pixelRatio = Math.min(dpr, QUALITY_PRESETS[quality].maxPixelRatio) * game.get().settings.renderScale;
+    this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -859,6 +862,7 @@ export class EditorView {
   private resize() {
     this.idleFor = Infinity;
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
+    this.renderer.setPixelRatio(clampPixelRatio(this.pixelRatio, w, h, maxDrawingEdge(this.renderer)));
     this.renderer.setSize(w, h, false);
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
