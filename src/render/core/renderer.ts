@@ -218,7 +218,8 @@ export class RenderPipeline {
     this.frameStart = performance.now();
   }
 
-  get effectiveRenderScale(): number { return this.quality.renderScale * this.adaptive.scale; }
+  /** Internal 3D resolution as a fraction of the canvas resolution (per axis); 1 when not upscaling. */
+  get effectiveRenderScale(): number { const p = this.plan; return p.internal / p.output; }
 
   render(scene: THREE.Scene, camera: THREE.Camera): void {
     this.photoEffects.scene = scene; this.photoEffects.camera = camera;
