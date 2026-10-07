@@ -403,7 +403,14 @@ export class GameAudio {
       const gain = this.transientNodes.get(source)?.[1] as GainNode | undefined;
       if (!gain) continue;
       const now = this.context.currentTime;
-      gain.gain.cancelAndHoldAtTime(now);
+      const param = gain.gain;
+      if (typeof param.cancelAndHoldAtTime === 'function') param.cancelAndHoldAtTime(now);
+      else {
+        // Firefox lacks cancelAndHoldAtTime; anchor the current gain before fading.
+        const value = param.value;
+        param.cancelScheduledValues(now);
+        param.setValueAtTime(value, now);
+      }
       gain.gain.linearRampToValueAtTime(0, now + 3);
       try { source.stop(now + 3.05); } catch { /* Already ended. */ }
     }
