@@ -24,13 +24,17 @@ export class TerrainWorkerPool {
   private terrains = new Map<string, Terrain>();
   private registered = new Map<string, { body: BodyDef; minWavelength: number }>();
   readonly available: boolean;
+  private disposed = false;
+  private baked = new Map<string, BakeResult>();
+  private baking = new Map<string, Promise<BakeResult>>();
+  private bakedBytes = 0;
 
   static shared(workerCount: number): TerrainWorkerPool {
     if (!this._shared) this._shared = new TerrainWorkerPool(workerCount);
     return this._shared;
   }
 
-  constructor(workerCount: number) {
+  constructor(workerCount: number, private readonly bakeCacheBytes = 16 * 1024 * 1024) {
     let ok = false;
     if (typeof Worker !== 'undefined' && workerCount > 0) {
       try {
@@ -111,16 +115,40 @@ export class TerrainWorkerPool {
     return buildChunk(t, params);
   }
 
+  /** Immutable CPU pixels survive scene/GL teardown, with a bounded least-recently-used budget. */
   bake(key: string, width: number): Promise<BakeResult> {
-    if (!this.available) {
-      const t = this.terrains.get(key);
-      if (!t) return Promise.reject(new Error(`terrain ${key} not registered`));
-      return Promise.resolve(bakeEquirect(t, width));
+    if (this.disposed) return Promise.reject(new Error('disposed'));
+    const id = `${key}:${width}`;
+    const cached = this.baked.get(id);
+    if (cached) {
+      this.baked.delete(id); this.baked.set(id, cached);
+      return Promise.resolve(cached);
     }
-    return this.send<BakeResult>({ type: 'bake', key, width });
+    const pending = this.baking.get(id);
+    if (pending) return pending;
+    const terrain = this.terrains.get(key);
+    if (!terrain) return Promise.reject(new Error(`terrain ${key} not registered`));
+    const task = this.available ? this.send<BakeResult>({ type: 'bake', key, width })
+      : Promise.resolve(bakeEquirect(terrain, width));
+    const promise = task.then(result => {
+      const bytes = result.data.byteLength;
+      if (!this.disposed && bytes <= this.bakeCacheBytes) {
+        while (this.bakedBytes + bytes > this.bakeCacheBytes && this.baked.size) {
+          const oldest = this.baked.keys().next().value!;
+          this.bakedBytes -= this.baked.get(oldest)!.data.byteLength;
+          this.baked.delete(oldest);
+        }
+        this.baked.set(id, result); this.bakedBytes += bytes;
+      }
+      return result;
+    }).finally(() => this.baking.delete(id));
+    this.baking.set(id, promise);
+    return promise;
   }
 
   dispose(): void {
+    this.disposed = true;
+    this.baked.clear(); this.baking.clear(); this.bakedBytes = 0;
     for (const w of this.workers) w.terminate();
     this.workers = [];
     for (const p of this.pending.values()) p.reject(new Error('disposed'));

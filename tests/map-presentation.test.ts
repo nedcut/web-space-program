@@ -68,8 +68,8 @@ describe('map presentation', () => {
     const input = { camera, origin: { x: 0,y: 0,z: 0 }, bodyPosition: { x: 0,y: 0,z: 0 },
       bodyRotation: { x: 0,y: 0,z: 0,w: 1 }, sunPosition: { x: 1e10,y: 0,z: 0 }, dt: 0 };
     flight.update(input); map.update({ ...input, origin: { x: 1e5,y: 0,z: 0 } });
-    await Promise.resolve(); await Promise.resolve();
     const texture = (renderer: PlanetRenderer) => ((renderer.root.children[0] as THREE.Mesh).material as THREE.ShaderMaterial).uniforms.uMap.value;
+    await vi.waitFor(() => { expect(texture(flight)).toBeInstanceOf(THREE.DataTexture); expect(texture(map)).toBeInstanceOf(THREE.DataTexture); });
     expect(bake).toHaveBeenCalledOnce(); expect(texture(flight)).toBe(texture(map));
     expect(livePlanetUniforms('moon').uPlanetCenter.value).toBe(flight.uniforms.uPlanetCenter.value);
     expect(map.uniforms.uPlanetCenter.value.x).toBe(-1e5);
