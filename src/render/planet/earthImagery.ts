@@ -8,7 +8,8 @@ import type { QualitySettings } from '../core/quality';
  * on demand and kept in Cache Storage. Every failure falls back to the next lower level, ultimately to the
  * procedural surface (`ready` stays false and shaders keep `uEarthImagery = 0`).
  *
- * Textures are shared between renderers by URL and reference counted. Shaders sample them with
+ * Decoded images are shared between renderers by URL (reference counted); GPU textures belong to one renderer and
+ * are filled in bounded strips, one per frame, so no upload stalls the main thread. Shaders sample them with
  * `GLSL_EARTH_IMAGERY` (u = lon/2π + 0.5, v = 0.5 − lat/π, rows north → south, uploaded without a flip).
  */
 export type EarthTextureQuality = QualitySettings['earth']['textureQuality'];
@@ -89,8 +90,13 @@ function maxTextureSize(): number {
 }
 
 type Kind = 'day' | 'water' | 'night' | 'clouds';
-interface Entry { refs: number; promise: Promise<THREE.Texture> }
-const textures = new Map<string, Entry>();
+
+/** A decoded image cut into row strips. Decoding and cutting run in the browser's image decoder, off the frame. */
+interface Strips { width: number; height: number; strips: { y: number; bitmap: ImageBitmap }[] }
+interface Entry { refs: number; promise: Promise<Strips> }
+const decoded = new Map<string, Entry>();
+/** Bytes per strip upload: a few ms of texSubImage2D even on integrated GPUs (main-thread stalls stay < 16 ms). */
+const STRIP_BYTES = 4 << 20;
 
 /** URLs of a level's file(s) for one kind: several west→east tiles where the pattern has `{T}`. */
 function urlsOf(level: ManifestLevel, kind: Kind, month: number): string[] {
@@ -100,51 +106,81 @@ function urlsOf(level: ManifestLevel, kind: Kind, month: number): string[] {
   return Array.from({ length: tiles }, (_, t) => root() + pattern.replace('{MM}', mm).replace('{T}', String(t)));
 }
 
-/** One decoded image as a texture, shared by URL between renderers (reference counted). */
-function acquireTexture(url: string, kind: Kind): { key: string; promise: Promise<THREE.Texture> } {
-  let entry = textures.get(url);
+/** Decoded strips of one image, shared by URL between renderers (reference counted). */
+function acquireStrips(url: string): { key: string; promise: Promise<Strips> } {
+  let entry = decoded.get(url);
   if (!entry) {
-    const persistent = url.includes('/packs/');
-    const promise = fetchBlob(url, persistent).then(decode).then((image) => {
-      const tex = new THREE.Texture(image as unknown as HTMLImageElement);
-      tex.name = `earth:${kind}`;
-      tex.flipY = false;
-      tex.colorSpace = kind === 'day' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-      // Single-channel masks upload as R8 (WebGL2 takes the red channel of an image source).
-      if (kind !== 'day') tex.format = THREE.RedFormat;
-      tex.wrapS = THREE.RepeatWrapping;
-      tex.wrapT = THREE.ClampToEdgeWrapping;
-      tex.magFilter = THREE.LinearFilter;
-      // Merge sources are sampled 1:1 (no mip chain to build); lights and clouds are minified.
-      const sampled = kind === 'night' || kind === 'clouds';
-      tex.minFilter = sampled ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
-      tex.generateMipmaps = sampled;
-      // Isotropic for the cloud source: anisotropic taps keep the equirect polar streaks.
-      tex.anisotropy = kind === 'clouds' ? 1 : 4;
-      tex.needsUpdate = true;
-      return tex;
+    const promise = fetchBlob(url, url.includes('/packs/')).then(decode).then(async (full) => {
+      const w = full.width, h = full.height;
+      const rows = Math.max(16, Math.min(h, Math.floor(STRIP_BYTES / (w * 4))));
+      const ys: number[] = [];
+      for (let y = 0; y < h; y += rows) ys.push(y);
+      const strips = await Promise.all(ys.map(async (y) => ({ y, bitmap: await createImageBitmap(full, 0, y, w, Math.min(rows, h - y), { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }) })));
+      full.close();
+      return { width: w, height: h, strips };
     });
     entry = { refs: 0, promise };
-    textures.set(url, entry);
-    promise.catch(() => { if (textures.get(url) === entry) textures.delete(url); });
+    decoded.set(url, entry);
+    promise.catch(() => { if (decoded.get(url) === entry) decoded.delete(url); });
   }
   entry.refs++;
   return { key: url, promise: entry.promise };
 }
 
-function releaseTexture(key: string): void {
-  const entry = textures.get(key);
+function releaseStrips(key: string): void {
+  const entry = decoded.get(key);
   if (!entry || --entry.refs > 0) return;
-  textures.delete(key);
-  void entry.promise.then((t) => {
-    t.dispose();
-    (t.image as ImageBitmap | undefined)?.close?.();
-  }, () => {});
+  decoded.delete(key);
+  void entry.promise.then((s) => s.strips.forEach((x) => x.bitmap.close()), () => {});
+}
+
+/** Preallocated texture filled one strip per `step()` through texSubImage2D (three's copyTextureToTexture). */
+class StripUpload {
+  readonly texture: THREE.DataTexture;
+  private next = -1;
+  private readonly at = new THREE.Vector2();
+  constructor(private readonly src: Strips, kind: Kind) {
+    const red = kind !== 'day';
+    const mips = kind === 'night' || kind === 'clouds';
+    const t = new THREE.DataTexture(null, src.width, src.height, red ? THREE.RedFormat : THREE.RGBAFormat, THREE.UnsignedByteType);
+    t.source.dataReady = false; // storage only: strips fill it
+    t.needsUpdate = true; // version 1, so initTexture allocates (version 0 textures are never uploaded)
+    t.name = `earth:${kind}`;
+    t.colorSpace = kind === 'day' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.ClampToEdgeWrapping;
+    t.magFilter = THREE.LinearFilter;
+    // Merge sources are sampled 1:1; lights and the cloud source are minified (full chain allocated up front).
+    t.minFilter = mips ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
+    t.generateMipmaps = mips;
+    // Isotropic for the cloud source: anisotropic taps keep the equirect polar streaks.
+    t.anisotropy = kind === 'clouds' ? 1 : 4;
+    this.texture = t;
+  }
+  get done(): boolean { return this.next >= this.src.strips.length; }
+  /** Allocate, then upload one strip per call; the last strip regenerates the mip chain. */
+  step(renderer: THREE.WebGLRenderer): boolean {
+    if (this.done) return true;
+    const t = this.texture;
+    if (this.next < 0) {
+      const mips = t.generateMipmaps;
+      renderer.initTexture(t);
+      t.userData.mips = mips;
+      this.next = 0;
+      return false;
+    }
+    const strip = this.src.strips[this.next++];
+    const source = new THREE.Texture(strip.bitmap as unknown as HTMLImageElement);
+    t.generateMipmaps = !!t.userData.mips && this.done;
+    renderer.copyTextureToTexture(source, t, null, this.at.set(0, strip.y));
+    if (this.done) t.generateMipmaps = !!t.userData.mips;
+    return this.done;
+  }
 }
 
 /**
  * Colour (sRGB) + water mask → one RGBA8 sRGB render target with a hardware mip chain, so shaders take a
- * single (bicubic) fetch for both. Written in linear; the sRGB attachment re-encodes on store.
+ * single fetch for both. Written in linear; the sRGB attachment re-encodes on store.
  */
 const MERGE_VERT = /* glsl */ `void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 const MERGE_FRAG = /* glsl */ `
@@ -156,19 +192,8 @@ void main() {
   vec2 global = gl_FragCoord.xy / uRect.zw;
   gl_FragColor = vec4(texture2D(uDay, local).rgb, texture2D(uWater, global).r);
 }`;
-
-interface PendingMerge {
-  level: ManifestLevel;
-  month: number;
-  day: THREE.Texture[];
-  water: THREE.Texture;
-  night: THREE.Texture | null;
-  keys: string[];
-  nightKey: string | null;
-  target: THREE.WebGLRenderTarget | null;
-  /** Next step: 2·tile uploads, 2·tile + 1 renders. */
-  step: number;
-}
+/** Pixels merged per frame (a fraction of a millisecond of GPU time). */
+const MERGE_PIXELS = 8 << 20;
 
 /** Month index 0–11 for the Sun's ecliptic longitude seen from Earth (seasons follow the orbit, not UT). */
 export function seasonMonth(sunEclipticLongitude: number): number {
@@ -222,17 +247,22 @@ export class EarthImagery {
   readonly uniforms: EarthImageryUniforms;
   private levels: ManifestLevel[] = [];
   private target: ManifestLevel | null = null;
-  private shown: { level: ManifestLevel; month: number; rt: THREE.WebGLRenderTarget; nightKey: string | null } | null = null;
+  private shown: { level: ManifestLevel; month: number; rt: THREE.WebGLRenderTarget; night: THREE.Texture | null } | null = null;
   private loading = false;
-  private pending: PendingMerge | null = null;
+  /** GPU work for the next level/month: one unit per frame; null when idle. */
+  private jobs: ((renderer: THREE.WebGLRenderer) => boolean)[] | null = null;
   private wantedMonth = -1;
   private disposed = false;
   private settled = false;
+  private held: string[] = [];
   private cloudKey: string | null = null;
+  private cloudJob: StripUpload | null = null;
   private failedLevels = new Set<string>();
   private mergeScene: THREE.Scene | null = null;
   private mergeMat: THREE.ShaderMaterial | null = null;
   private readonly mergeCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  private pendingTextures: THREE.Texture[] = [];
+  private pendingTarget: THREE.WebGLRenderTarget | null = null;
   /** Equirect cloud reflectance for the cloud-field bake (R8), or null while loading / unavailable. */
   cloudSource: THREE.Texture | null = null;
   cloudSourceSettled = false;
@@ -281,7 +311,7 @@ export class EarthImagery {
   }
 
   private pump(): void {
-    if (this.loading || this.pending || this.disposed || !this.target || this.wantedMonth < 0) return;
+    if (this.loading || this.jobs || this.disposed || !this.target || this.wantedMonth < 0) return;
     const level = this.nextLevel();
     if (!level) { this.settled = true; return; }
     if (this.shown && this.shown.level === level && this.shown.month === this.wantedMonth) { this.settled = true; return; }
@@ -289,66 +319,102 @@ export class EarthImagery {
     const month = this.wantedMonth;
     // Water masks above 8k cost more memory than they add: Ultra pairs 16k colour with the 8k mask.
     const waterLevel = level.width > 8192 ? (this.levels.filter((l) => l.width <= 8192).pop() ?? level) : level;
-    const day = urlsOf(level, 'day', month).map((u) => acquireTexture(u, 'day'));
-    const water = acquireTexture(urlsOf(waterLevel, 'water', month)[0], 'water');
-    const night = this.opts.nightLights ? acquireTexture(urlsOf(level, 'night', month)[0], 'night') : null;
-    const keys = [...day, water].map((p) => p.key);
-    Promise.all([Promise.all(day.map((p) => p.promise)), water.promise, night?.promise ?? null]).then(([dayTex, waterTex, nightTex]) => {
+    const day = urlsOf(level, 'day', month).map(acquireStrips);
+    const water = acquireStrips(urlsOf(waterLevel, 'water', month)[0]);
+    const night = this.opts.nightLights ? acquireStrips(urlsOf(level, 'night', month)[0]) : null;
+    const parts = [...day, water, ...(night ? [night] : [])];
+    const keys = parts.map((p) => p.key);
+    Promise.all([Promise.all(day.map((p) => p.promise)), water.promise, night?.promise ?? null]).then(([dayS, waterS, nightS]) => {
       this.loading = false;
-      if (this.disposed) { keys.forEach(releaseTexture); if (night) releaseTexture(night.key); return; }
-      this.pending = { level, month, day: dayTex, water: waterTex, night: nightTex, keys, nightKey: night?.key ?? null, target: null, step: 0 };
+      if (this.disposed) { keys.forEach(releaseStrips); return; }
+      this.held = keys;
+      this.jobs = this.buildJobs(level, month, dayS, waterS, nightS);
     }, () => {
       this.loading = false;
-      keys.forEach(releaseTexture);
-      if (night) releaseTexture(night.key);
+      keys.forEach(releaseStrips);
       if (this.disposed) return;
       this.failedLevels.add(level.id);
       this.pump();
     });
   }
 
-  /** One GPU step per frame: upload a tile, or merge a tile into the RGBA target; then swap it in. */
-  step(renderer: THREE.WebGLRenderer): void {
-    const p = this.pending;
-    if (!p || this.disposed) return;
-    const tiles = p.day.length;
-    if (p.step === 0) {
-      // Allocation + the water mask upload.
-      const w = p.level.width, h = p.level.height;
-      p.target = new THREE.WebGLRenderTarget(w, h, {
-        type: THREE.UnsignedByteType, format: THREE.RGBAFormat, colorSpace: THREE.SRGBColorSpace,
-        generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
-        wrapS: THREE.RepeatWrapping, wrapT: THREE.ClampToEdgeWrapping, depthBuffer: false, anisotropy: 8,
+  /** Upload water and lights, then per tile: upload colour strips and merge them into the target in strips. */
+  private buildJobs(level: ManifestLevel, month: number, day: Strips[], water: Strips, night: Strips | null): ((r: THREE.WebGLRenderer) => boolean)[] {
+    const jobs: ((r: THREE.WebGLRenderer) => boolean)[] = [];
+    const waterUp = new StripUpload(water, 'water');
+    const nightUp = night ? new StripUpload(night, 'night') : null;
+    this.pendingTextures = [waterUp.texture, ...(nightUp ? [nightUp.texture] : [])];
+    const rt = new THREE.WebGLRenderTarget(level.width, level.height, {
+      type: THREE.UnsignedByteType, format: THREE.RGBAFormat, colorSpace: THREE.SRGBColorSpace,
+      generateMipmaps: false, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
+      wrapS: THREE.RepeatWrapping, wrapT: THREE.ClampToEdgeWrapping, depthBuffer: false, anisotropy: 8,
+    });
+    rt.texture.name = `earth:day+water:${level.id}`;
+    this.pendingTarget = rt;
+    jobs.push((r) => waterUp.step(r));
+    if (nightUp) jobs.push((r) => nightUp.step(r));
+    const tw = level.width / day.length;
+    const rows = Math.max(64, Math.min(level.height, Math.floor(MERGE_PIXELS / tw)));
+    day.forEach((tile, t) => {
+      const up = new StripUpload(tile, 'day');
+      jobs.push((r) => up.step(r));
+      let y = 0;
+      jobs.push((r) => {
+        const last = t === day.length - 1 && y + rows >= level.height;
+        this.mergeStrip(r, rt, up.texture, waterUp.texture, t, day.length, y, Math.min(rows, level.height - y), last);
+        y += rows;
+        if (y < level.height) return false;
+        up.texture.dispose(); // this tile is merged; its source upload is no longer needed
+        return true;
       });
-      p.target.texture.name = `earth:day+water:${p.level.id}`;
-      renderer.initTexture(p.water);
-    } else if (p.step <= 2 * tiles) {
-      const t = Math.floor((p.step - 1) / 2);
-      if ((p.step - 1) % 2 === 0) renderer.initTexture(p.day[t]);
-      else this.mergeTile(renderer, p, t);
-    }
-    p.step++;
-    if (p.step <= 2 * tiles) return;
-    // Done: swap in the merged texture, keep only the lights.
-    const previous = this.shown;
-    this.shown = { level: p.level, month: p.month, rt: p.target!, nightKey: p.nightKey };
-    this.uniforms.uEarthDay.value = p.target!.texture;
-    if (p.night) this.uniforms.uEarthNight.value = p.night;
-    this.uniforms.uEarthNightOn.value = p.night ? 1 : 0;
-    this.uniforms.uEarthImagery.value = 1;
-    // Imagery dominates once a texel is a few pixels on screen; the close-up palette takes over below.
-    const texel = (2 * Math.PI * this.opts.radius) / p.level.width;
-    this.uniforms.uEarthBlend.value.set(texel * 8, texel * 80);
-    p.keys.forEach(releaseTexture);
-    this.pending = null;
-    if (previous) {
-      previous.rt.dispose();
-      if (previous.nightKey) releaseTexture(previous.nightKey);
-    }
-    this.pump();
+    });
+    jobs.push(() => {
+      // Swap in the merged texture; keep only the lights.
+      const previous = this.shown;
+      this.shown = { level, month, rt, night: nightUp?.texture ?? null };
+      this.uniforms.uEarthDay.value = rt.texture;
+      if (nightUp) this.uniforms.uEarthNight.value = nightUp.texture;
+      this.uniforms.uEarthNightOn.value = nightUp ? 1 : 0;
+      this.uniforms.uEarthImagery.value = 1;
+      // Imagery dominates once a texel is a few pixels on screen; the close-up palette takes over below.
+      const texel = (2 * Math.PI * this.opts.radius) / level.width;
+      this.uniforms.uEarthBlend.value.set(texel * 8, texel * 80);
+      waterUp.texture.dispose();
+      this.held.forEach(releaseStrips);
+      this.held = [];
+      this.pendingTextures = [];
+      this.pendingTarget = null;
+      if (previous) { previous.rt.dispose(); previous.night?.dispose(); }
+      return true;
+    });
+    return jobs;
   }
 
-  private mergeTile(renderer: THREE.WebGLRenderer, p: PendingMerge, t: number): void {
+  /**
+   * Bounded GPU work per frame: allocations, strip uploads and merge strips until ~3 ms of main-thread time
+   * (each unit is ≤ 4 MB / 8 Mpx, so even the first unit stays far below a frame).
+   */
+  step(renderer: THREE.WebGLRenderer): void {
+    if (this.disposed) return;
+    const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+    const budget = () => typeof performance === 'undefined' || performance.now() - t0 < 3;
+    while (this.cloudJob && budget()) {
+      if (this.cloudJob.step(renderer)) {
+        this.cloudSource = this.cloudJob.texture;
+        this.cloudSourceSettled = true;
+        this.cloudJob = null;
+        if (this.cloudKey) { releaseStrips(this.cloudKey); this.cloudKey = null; }
+      }
+    }
+    while (this.jobs && budget()) {
+      const jobs = this.jobs;
+      if (jobs[0](renderer)) jobs.shift();
+      if (!jobs.length) { this.jobs = null; this.pump(); }
+    }
+  }
+
+  private mergeStrip(renderer: THREE.WebGLRenderer, rt: THREE.WebGLRenderTarget, day: THREE.Texture, water: THREE.Texture,
+    t: number, tiles: number, y: number, rows: number, last: boolean): void {
     if (!this.mergeMat) {
       this.mergeMat = new THREE.ShaderMaterial({
         uniforms: { uDay: { value: null }, uWater: { value: null }, uRect: { value: new THREE.Vector4() } },
@@ -359,15 +425,14 @@ export class EarthImagery {
       this.mergeScene = new THREE.Scene();
       this.mergeScene.add(quad);
     }
-    const rt = p.target!, tiles = p.day.length;
     const tw = rt.width / tiles;
     const u = this.mergeMat.uniforms;
-    u.uDay.value = p.day[t];
-    u.uWater.value = p.water;
+    u.uDay.value = day;
+    u.uWater.value = water;
     u.uRect.value.set(t * tw, tw, rt.width, rt.height);
-    // Only the final tile regenerates the mip chain.
-    rt.texture.generateMipmaps = t === tiles - 1;
-    rt.viewport.set(t * tw, 0, tw, rt.height);
+    // Only the final strip builds the mip chain.
+    rt.texture.generateMipmaps = last;
+    rt.viewport.set(t * tw, y, tw, rows);
     rt.scissor.copy(rt.viewport);
     rt.scissorTest = true;
     const prevTarget = renderer.getRenderTarget();
@@ -385,35 +450,32 @@ export class EarthImagery {
   private loadClouds(): void {
     const level = this.target!;
     const lv = this.levels.filter((l) => l.width <= Math.min(level.width, 8192)).pop() ?? level;
-    const part = acquireTexture(urlsOf(lv, 'clouds', 0)[0], 'clouds');
+    const part = acquireStrips(urlsOf(lv, 'clouds', 0)[0]);
     this.cloudKey = part.key;
-    part.promise.then((t) => {
+    part.promise.then((s) => {
       if (this.disposed) return;
-      this.cloudSource = t;
-      this.cloudSourceSettled = true;
+      this.cloudJob = new StripUpload(s, 'clouds');
     }, () => { this.cloudSourceSettled = true; });
   }
 
   /** The cloud source is only needed for the one-time cube bake. */
   releaseCloudSource(): void {
-    if (this.cloudKey) releaseTexture(this.cloudKey);
+    if (this.cloudKey) releaseStrips(this.cloudKey);
     this.cloudKey = null;
+    this.cloudSource?.dispose();
     this.cloudSource = null;
+    this.cloudJob?.texture.dispose();
+    this.cloudJob = null;
   }
 
   dispose(): void {
     this.disposed = true;
-    if (this.pending) {
-      this.pending.keys.forEach(releaseTexture);
-      if (this.pending.nightKey) releaseTexture(this.pending.nightKey);
-      this.pending.target?.dispose();
-      this.pending = null;
-    }
-    if (this.shown) {
-      this.shown.rt.dispose();
-      if (this.shown.nightKey) releaseTexture(this.shown.nightKey);
-      this.shown = null;
-    }
+    this.jobs = null;
+    this.held.forEach(releaseStrips);
+    this.held = [];
+    this.pendingTextures.forEach((t) => t.dispose());
+    this.pendingTarget?.dispose();
+    if (this.shown) { this.shown.rt.dispose(); this.shown.night?.dispose(); this.shown = null; }
     this.mergeMat?.dispose();
     this.mergeScene?.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
     this.releaseCloudSource();
@@ -451,6 +513,9 @@ EarthUV earthUV(vec3 n) { return earthUVd(n, dFdx(n), dFdy(n)); }
  * texel spread over several screen pixels reads as smooth relief instead of a bilinear staircase.
  */
 vec4 earthTex(sampler2D t, EarthUV e) {
+  #ifndef EARTH_RICH
+    return textureGrad(t, e.uv, e.dx, e.dy);
+  #endif
   vec2 size = vec2(textureSize(t, 0));
   vec2 fp = max(abs(e.dx) + abs(e.dy), vec2(1e-9)) * size;
   if (max(fp.x, fp.y) > 0.7) return textureGrad(t, e.uv, e.dx, e.dy);

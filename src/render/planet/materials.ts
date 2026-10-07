@@ -101,6 +101,11 @@ float seaWind(vec3 nBF, vec3 rel) {
   #endif
   return w;
 }
+/** Cheap sky radiance seen in flat water: diffuse sky, brightening towards the horizon at grazing view. */
+vec3 earthSkyReflApprox(vec3 rel, vec3 up, vec3 V) {
+  float mu = max(dot(up, V), 0.0);
+  return skyAmbient(rel, up) / ATMO_PI * (1.0 + 1.5 * pow(1.0 - mu, 4.0));
+}
 vec3 shadeWater(vec3 bodyAlbedo, vec3 up, vec3 N, vec3 V, vec3 rel, vec3 skyRefl, float alpha, vec3 sunT) {
   vec3 L = uSunDir;
   float NdV = max(dot(N, V), 1e-3);
@@ -182,8 +187,11 @@ function defines(q: QualitySettings, u?: PlanetUniforms): Record<string, string 
     ...(u && cloudShadowed.has(u) ? { CLOUD_SHADOWS: 1 } : {}) };
 }
 /** Define + uniforms for the three Earth surface materials (terrain, ocean, far sphere). */
-function imagery(u: PlanetUniforms): { defines: Record<string, number>; uniforms: Partial<EarthImageryUniforms> } {
-  return earthImagery.has(u) ? { defines: { EARTH_IMAGERY: 1 }, uniforms: imageryUniforms(u) } : { defines: {}, uniforms: {} };
+function imagery(u: PlanetUniforms, q: QualitySettings): { defines: Record<string, number>; uniforms: Partial<EarthImageryUniforms> } {
+  if (!earthImagery.has(u)) return { defines: {}, uniforms: {} };
+  // High/Ultra: bicubic magnification and marched sky reflection on coast water drawn by terrain.
+  const rich = q.earth.textureQuality === 'high' || q.earth.textureQuality === 'ultra';
+  return { defines: { EARTH_IMAGERY: 1, ...(rich ? { EARTH_RICH: 1 } : {}) }, uniforms: imageryUniforms(u) };
 }
 
 /** Imagery declarations: only Earth materials compile them. */
@@ -220,7 +228,7 @@ export interface TerrainMaterialOptions {
 }
 
 export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: TerrainMaterialOptions): THREE.ShaderMaterial {
-  const img = imagery(u);
+  const img = imagery(u, q);
   return new THREE.ShaderMaterial({
     defines: { ...defines(q, u), ...img.defines, ...(o.detail ? { USE_DETAIL: 1 } : {}), ...(o.cutout ? { USE_CUTOUT: 1 } : {}) },
     uniforms: {
@@ -269,10 +277,15 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           if (uEarthImagery > 0.5 && hV < 1200.0) {
             vec3 nV = normalize(transpose(uBodyRot) * relV);
             vec2 uvV = vec2(atan(nV.y, nV.x) * (0.5 / ATMO_PI) + 0.5, 0.5 - asin(clamp(nV.z, -1.0, 1.0)) / ATMO_PI);
-            float waterNear = textureLod(uEarthDay, uvV, 5.0).a;
-            if (hV > -200.0 && waterNear > 0.002) computeSkyRefl(wp.xyz, normalize(relV));
+            vec4 coarse = textureLod(uEarthDay, uvV, 5.0);
+            float waterNear = coarse.a;
+            #ifdef EARTH_RICH
+              if (hV > -200.0 && waterNear > 0.002) computeSkyRefl(wp.xyz, normalize(relV));
+            #endif
             // Deep under open water: the opaque ocean mesh covers this vertex (mask agrees, no shore nearby).
-            vCovered = hV < -150.0 && waterNear > 0.995 ? 1.0 : 0.0;
+            // Sea ice is bright: there the ocean steps aside and this terrain draws the ice.
+            float iceV = dot(coarse.rgb, vec3(0.2126, 0.7152, 0.0722));
+            vCovered = hV < -150.0 && waterNear > 0.995 && iceV < 0.1 ? 1.0 : 0.0;
           }
         #endif
         gl_Position = projectionMatrix * viewMatrix * wp;
@@ -327,6 +340,11 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         #ifdef USE_CUTOUT
         applyCutout(vWorldPos);
         #endif
+        #ifdef EARTH_IMAGERY
+          // Under open water the opaque ocean mesh always draws over this fragment; log depth defeats early-Z,
+          // so without this the full terrain shading would run and be overwritten.
+          if (vCovered > 0.999) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+        #endif
         vec3 toCam = cameraPosition - vWorldPos;
         float dist = length(toCam);
         vec3 V = toCam / dist;
@@ -373,7 +391,6 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           float wImg = uEarthImagery * smoothstep(uEarthBlend.x, uEarthBlend.y, dist);
           // Terrain well below the datum is always under the opaque ocean (log depth defeats early-Z, so
           // these hidden fragments would otherwise pay for the imagery too).
-          if (vCovered > 0.999) wImg = 0.0;
           float waterW = 0.0;
           if (wImg > 0.0) {
             eUV = earthUVd(nDir, nDx, nDy);
@@ -392,7 +409,12 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           // Coasts follow the imagery from altitude: water the terrain mesh still has above its datum.
           if (waterW > 0.0) {
             vec3 sunT = sunTransmittance(rel) * cloudShadow(rel);
-            vec3 water = shadeWater(albedo, up, up, V, rel, vSkyRefl, coxMunkAlpha(seaWind(nDir, rel)), sunT);
+            #ifdef EARTH_RICH
+              vec3 skyR = vSkyRefl;
+            #else
+              vec3 skyR = earthSkyReflApprox(rel, up, V);
+            #endif
+            vec3 water = shadeWater(albedo, up, up, V, rel, skyR, coxMunkAlpha(seaWind(nDir, rel)), sunT);
             col = mix(col, water, waterW);
           }
         #endif
@@ -477,7 +499,7 @@ export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, cen
 // ---------------------------------------------------------------- Ocean
 
 export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabed: [number, number, number], hydrocarbon = false): THREE.ShaderMaterial {
-  const img = imagery(u);
+  const img = imagery(u, q);
   return new THREE.ShaderMaterial({
     defines: { ...defines(q, u), ...img.defines },
     uniforms: {
@@ -625,7 +647,12 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
           // Shallow banks, river plumes and lakes carry their real colour from altitude.
           if (wImg > 0.0) water = mix(water, earthWaterAlbedo(dayC), wImg);
         #endif
-        vec3 col = shadeWater(water, up, N, V, rel, vSkyRefl, alpha, sunT);
+        vec3 skyR = vSkyRefl;
+        #if defined(EARTH_IMAGERY) && !defined(EARTH_RICH)
+          // Same reflection model as imagery water drawn by terrain beside it (no seam along mesh coasts).
+          skyR = mix(skyR, earthSkyReflApprox(rel, up, V), wImg);
+        #endif
+        vec3 col = shadeWater(water, up, N, V, rel, skyR, alpha, sunT);
         vec3 lightIn = uSunColor * sunT * max(dot(up, L), 0.0) / ATMO_PI + skyAmbient(rel, up) / ATMO_PI;
         // Seabed and surf follow the mesh's own shoreline; from altitude the imagery carries the shallows.
         float shallowW = 1.0 - smoothstep(0.0, 6.0, max(meshDepth, 0.0));
@@ -648,7 +675,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
 // ---------------------------------------------------------------- Far sphere (baked texture)
 
 export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, opts: { airless: number; ocean: boolean; minH: number; maxH: number; texWidth: number; irregular?: boolean }): THREE.ShaderMaterial {
-  const img = imagery(u);
+  const img = imagery(u, q);
   return new THREE.ShaderMaterial({
     defines: { ...defines(q, u), ...img.defines },
     uniforms: {
