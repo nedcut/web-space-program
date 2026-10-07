@@ -173,6 +173,7 @@ export class PlanetRenderer {
         clouds: !opts.farOnly && !!terrain && opts.quality.clouds });
       enableEarthImagery(this.uniforms, this.imagery.uniforms);
       this.root.userData.imagery = this.imagery; // diagnostics/automation
+      this.root.userData.planet = this;
     }
     if (this.kind === 'star') this.buildSun();
     else if (this.kind === 'gas') this.buildGasGiant();
