@@ -83,3 +83,10 @@ export const smin = (a: number, b: number, k: number): number => {
   return mix(b, a, h) - k * h * (1 - h);
 };
 export const smax = (a: number, b: number, k: number): number => -smin(-a, -b, k);
+
+/** Weight of a noise octave at `frequency` (cycles per unit-sphere radius) for samples `footprint` rad apart. */
+export function bandPass(frequency: number, footprint?: number): number {
+  if (!footprint) return 1;
+  const t = Math.min(1, Math.max(0, (1 / (frequency * footprint) - 2.5) / 3));
+  return t * t * (3 - 2 * t);
+}

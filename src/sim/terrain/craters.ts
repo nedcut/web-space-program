@@ -91,12 +91,32 @@ export class CraterField {
   ejecta = 0;
   /** Side output: 1 inside a crater floor (for colouring). */
   inside = 0;
+  /** Per-octave share of `ejecta`, for band-limited colouring (`ejectaAt`). */
+  private readonly ejectaOct: Float64Array;
 
   constructor(opts: CraterFieldOptions) {
     this.octaves = opts.octaves;
     this.seed = opts.seed | 0;
     this.maxR = Math.min(0.5, opts.maxRadius ?? 0.32);
     this.maxDepth = this.octaves.reduce((s, o) => s + o.depth, 0);
+    this.ejectaOct = new Float64Array(this.octaves.length);
+  }
+
+  /**
+   * Ejecta brightness of the last `height` call, keeping only craters wide enough for samples spaced
+   * `footprint` (radians) apart to draw their rim; smaller ones fade out instead of becoming speckle.
+   */
+  ejectaAt(footprint?: number): number {
+    if (!footprint) return this.ejecta;
+    let e = 0;
+    for (let o = 0; o < this.octaves.length; o++) {
+      const v = this.ejectaOct[o];
+      if (v <= e) continue;
+      const radius = this.octaves[o].cell * this.maxR * 0.6;
+      const t = Math.min(1, Math.max(0, (radius / footprint - 1.5) / 2.5));
+      e = Math.max(e, v * t * t * (3 - 2 * t));
+    }
+    return e;
   }
 
   /**
@@ -113,7 +133,7 @@ export class CraterField {
     for (let o = 0; o < this.octaves.length; o++) {
       const oct = this.octaves[o];
       const att = attenuate ? attenuate(o) : 1;
-      if (att <= 0.001) continue;
+      if (att <= 0.001) { this.ejectaOct[o] = 0; continue; }
       const c = oct.cell;
       const gx = x / c, gy = y / c, gz = z / c;
       const ix = Math.floor(gx), iy = Math.floor(gy), iz = Math.floor(gz);
@@ -123,6 +143,7 @@ export class CraterField {
       const z0 = fz < reach ? -1 : 0, z1 = fz > 1 - reach ? 1 : 0;
       const seed = this.seed + o * 7919;
       let octH = 0;
+      let octE = 0;
       for (let dx = x0; dx <= x1; dx++) {
         for (let dy = y0; dy <= y1; dy++) {
           for (let dz = z0; dz <= z1; dz++) {
@@ -159,13 +180,15 @@ export class CraterField {
             if (fresh) {
               // Bright rim + ejecta blanket fading to ~1.6 R; interior walls slightly bright.
               const e = r < 0.8 ? 0.15 : r < 1.05 ? 0.15 + 0.85 * (r - 0.8) / 0.25 : Math.max(0, 1 - (r - 1.05) / 0.55);
-              ejecta = Math.max(ejecta, e * e * (0.4 + 0.6 * sizeScale));
+              octE = Math.max(octE, e * e * (0.4 + 0.6 * sizeScale));
             }
             if (r < 0.85) inside = Math.max(inside, 1 - r / 0.85);
           }
         }
       }
       total += clamp(octH, -1, 0.35) * oct.depth * att;
+      this.ejectaOct[o] = octE;
+      if (octE > ejecta) ejecta = octE;
     }
     this.ejecta = ejecta;
     this.inside = inside;

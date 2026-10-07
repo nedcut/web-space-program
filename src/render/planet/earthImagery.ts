@@ -29,7 +29,7 @@ interface ManifestLevel {
 interface Manifest { version: number; levels: ManifestLevel[] }
 
 const CACHE_NAME = 'wsp-earth-imagery-v1';
-const LEVEL_FOR: Record<EarthTextureQuality, string> = { low: '2k', medium: '4k', high: '8k', ultra: '16k' };
+const LEVEL_FOR: Record<EarthTextureQuality, string> = { low: '2k', medium: '8k', high: '8k', ultra: '16k' };
 const ANISOTROPY: Record<EarthTextureQuality, number> = { low: 1, medium: 2, high: 8, ultra: 8 };
 /** Largest bundled level: shown first while a pack downloads. */
 const BUNDLED_PREVIEW = '4k';
@@ -558,7 +558,43 @@ vec3 earthAlbedo(vec3 c) {
  */
 vec3 earthWaterAlbedo(vec3 c) {
   vec3 excess = max(c - vec3(0.0011, 0.0026, 0.0105), vec3(0.0));
+  // A faint excess is mostly chroma noise from lossy compression beside bright banks; the albedo curve would
+  // turn it into purple and red specks in open water, so it keeps only its brightness.
+  float ey = dot(excess, vec3(0.2126, 0.7152, 0.0722));
+  excess = mix(vec3(ey), excess, smoothstep(0.002, 0.02, ey));
   return vec3(0.0035, 0.0105, 0.027) + earthAlbedo(excess) * 0.85;
+}
+float earthHash(vec2 i) {
+  uvec2 q = uvec2(ivec2(i));
+  uint h = (q.x * 1597334677u) ^ (q.y * 3812015801u);
+  h *= 0x9E3779B9u ^ (h >> 15);
+  return float(h >> 8) * (1.0 / 16777216.0);
+}
+/** Value noise on the imagery texel grid; x wraps every "period" cells so the antimeridian has no seam. */
+float earthNoise(vec2 p, float period) {
+  vec2 i = floor(p), f = p - i;
+  f = f * f * (3.0 - 2.0 * f);
+  float x1 = mod(i.x + 1.0, period);
+  i.x = mod(i.x, period);
+  return mix(mix(earthHash(i), earthHash(vec2(x1, i.y)), f.x),
+             mix(earthHash(i + vec2(0.0, 1.0)), earthHash(vec2(x1, i.y + 1.0)), f.x), f.y);
+}
+/**
+ * Water weight with a crisp coastline. While a mask texel covers many pixels (low orbit on the scaled Earth),
+ * the filtered mask is a soft, blocky ramp; sub-texel noise breaks the texel grid into an organic shore and the
+ * edge stays about a pixel wide. Unmagnified, the filtered mask is returned unchanged.
+ */
+float earthCoast(float water, EarthUV e) {
+  if (water <= 0.0 || water >= 1.0) return water;
+  vec2 size = vec2(textureSize(uEarthDay, 0));
+  vec2 fp2 = (abs(e.dx) + abs(e.dy)) * size;
+  float fp = max(max(fp2.x, fp2.y), 1e-6);
+  float mag = 1.0 - smoothstep(0.35, 1.0, fp);
+  if (mag <= 0.0) return water;
+  vec2 p = e.uv * size;
+  float n = earthNoise(p * 2.0, size.x * 2.0) * 0.65 + earthNoise(p * 5.0 + 17.0, size.x * 5.0) * 0.35;
+  float edge = clamp(fp * 0.5, 0.03, 0.5);
+  return mix(water, smoothstep(0.5 - edge, 0.5 + edge, water + (n - 0.5) * 0.5), mag);
 }
 /** Water fraction; bright pixels (snow on frozen lakes, sea ice, ice shelves) are never specular water. */
 float earthWater(float mask, vec3 c) {

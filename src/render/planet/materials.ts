@@ -419,7 +419,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             #ifdef USE_DETAIL
               img *= 1.0 + hd * 0.6 * uDetailStrength;
             #endif
-            waterW = earthWater(dayW.a, c) * wImg;
+            waterW = earthCoast(earthWater(dayW.a, c), eUV) * wImg;
             albedo = mix(albedo, mix(img, earthWaterAlbedo(c), waterW), wImg);
           }
         #endif
@@ -618,7 +618,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
             eUV = earthUVd(upBF, nDx, nDy);
             vec4 dayW = earthTex(uEarthDay, eUV);
             dayC = dayW.rgb;
-            maskW = earthWater(dayW.a, dayC);
+            maskW = earthCoast(earthWater(dayW.a, dayC), eUV);
             depth = mix(depth, (maskW - 0.5) * 40.0, wImg);
           }
         #endif

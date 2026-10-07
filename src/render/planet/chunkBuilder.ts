@@ -113,6 +113,8 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
   // Albedo, gamma-2 encoded so dark albedos stay precise in 8 bits (decoded as c*c in the shader).
   const colors = new Uint8Array(vCount * 3);
   const col: RGB = [0.5, 0.5, 0.5];
+  // Vertex spacing as an angle: colour detail finer than the mesh fades instead of speckling.
+  const footprint = chunkEdgeLength(level, R) / res / R;
   for (let j = 0; j < G; j++) {
     const t = tt0 + (j - 1) * step;
     for (let i = 0; i < G; i++) {
@@ -132,7 +134,7 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
         if (h < minH) minH = h;
         if (h > maxH) maxH = h;
         // Colour immediately after the height query so presets can reuse side outputs (no re-evaluation).
-        if (terrain.colorAt) terrain.colorAt(d[0], d[1], d[2], h, col);
+        if (terrain.colorAt) terrain.colorAt(d[0], d[1], d[2], h, col, footprint);
         const vi = ((j - 1) * N + (i - 1)) * 3;
         colors[vi] = Math.round(Math.sqrt(Math.min(1, Math.max(0, col[0]))) * 255);
         colors[vi + 1] = Math.round(Math.sqrt(Math.min(1, Math.max(0, col[1]))) * 255);

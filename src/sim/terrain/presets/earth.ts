@@ -42,7 +42,7 @@ export function siteLocalToUnit(x: number, z: number, radius: number): { x: numb
 export function earthPreset(ctx: PresetContext): PresetResult {
   const grid = earthData(), verticalScale = ctx.relief / 8800;
   const site = latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon);
-  const noise = ctx.noise(4), variation = { range: 0, coastal: false };
+  const noise = ctx.noise(4), variation = { range: 0, coastal: false, shore: 0 };
   const frequency = 4096 / (2 * Math.PI);
   const octaves = Math.min(5, octavesFor(ctx.radius, frequency, ctx.minWavelength, 2, 5));
   const extent = LAUNCH_SITE.flatRadius + LAUNCH_SITE.blendRadius;
@@ -75,11 +75,16 @@ export function earthPreset(ctx: PresetContext): PresetResult {
     colorAt: (x, y, z, h, out) => {
       const lat = Math.asin(Math.max(-1, Math.min(1, z))) * 180 / Math.PI;
       const lon = Math.atan2(y, x) * 180 / Math.PI;
-      grid.sample(x, y, z, variation);
-      const cover = earthCover(lat, lon, h / verticalScale, variation.coastal);
+      const metres = grid.sample(x, y, z, variation);
+      const cover = earthCover(lat, lon, h / verticalScale);
       const c = palette[cover];
       const v = cover === 'Ice Caps' ? 1 : 1 + .10 * noise.noise(x * 1700, y * 1700, z * 1700);
-      return setRGB(out, c[0] * v, c[1] * v, c[2] * v);
+      // Beaches fade with the interpolated grid height and coast weight instead of switching per ETOPO cell,
+      // which drew stair-stepped sand blocks along every coastline.
+      const sand = cover === 'Oceans' || cover === 'Ice Caps' ? 0
+        : (variation.shore ?? 0) * (1 - smoothstep(0, 12, metres));
+      const s = palette.Shores;
+      return setRGB(out, mix(c[0], s[0], sand) * v, mix(c[1], s[1], sand) * v, mix(c[2], s[2], sand) * v);
     },
   };
 }

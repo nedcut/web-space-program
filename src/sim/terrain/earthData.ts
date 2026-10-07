@@ -2,7 +2,13 @@
 export const EARTH_WIDTH = 4096;
 export const EARTH_HEIGHT = 2048;
 export const EARTH_DATA_BYTES = EARTH_WIDTH * EARTH_HEIGHT * 2;
-export interface EarthSample { range: number; coastal?: boolean }
+export interface EarthSample {
+  range: number;
+  /** Any corner of the containing cell is on the other side of sea level (per cell, steps at cell edges). */
+  coastal?: boolean;
+  /** 0–1: share of the containing cell's corners next to a sea-level crossing, interpolated (no cell steps). */
+  shore?: number;
+}
 export class EarthGrid {
   readonly values: Int16Array;
   private readonly north: number;
@@ -24,6 +30,14 @@ export class EarthGrid {
     return Math.max(Math.abs(this.values[iy * EARTH_WIDTH + left] - this.values[iy * EARTH_WIDTH + right]),
       Math.abs(this.values[up * EARTH_WIDTH + ix] - this.values[down * EARTH_WIDTH + ix]));
   }
+  /** 1 when this grid point or one of its 4 neighbours lies on the other side of sea level. */
+  private coastCorner(ix: number, iy: number): number {
+    const row = iy * EARTH_WIDTH, v = this.values[row + ix] > 0;
+    const left = (ix + EARTH_WIDTH - 1) % EARTH_WIDTH, right = (ix + 1) % EARTH_WIDTH;
+    const up = Math.max(0, iy - 1), down = Math.min(EARTH_HEIGHT - 1, iy + 1);
+    return (this.values[row + left] > 0) !== v || (this.values[row + right] > 0) !== v
+      || (this.values[up * EARTH_WIDTH + ix] > 0) !== v || (this.values[down * EARTH_WIDTH + ix] > 0) !== v ? 1 : 0;
+  }
   /** Metres above geoid. Inputs are body-fixed unit vectors. No allocations in the hot path. */
   sample(x: number, y: number, z: number, out?: EarthSample): number {
     const px = (Math.atan2(y, x) / (2 * Math.PI) + .5) * EARTH_WIDTH - .5;
@@ -44,6 +58,9 @@ export class EarthGrid {
       const rc = this.roughness(x0, iy + 1), rd = this.roughness(x1, iy + 1);
       out.range = ((ra + (rb - ra) * fx) * (1 - fy) + (rc + (rd - rc) * fx) * fy) * polar;
       out.coastal = Math.min(a, b, c, d) <= 0 && Math.max(a, b, c, d) > 0;
+      const sa = this.coastCorner(x0, iy), sb = this.coastCorner(x1, iy);
+      const sc = this.coastCorner(x0, iy + 1), sd = this.coastCorner(x1, iy + 1);
+      out.shore = ((sa + (sb - sa) * fx) * (1 - fy) + (sc + (sd - sc) * fx) * fy) * polar;
     }
     return h;
   }

@@ -30,6 +30,8 @@ export interface Terrain {
   /**
    * Surface albedo (linear RGB) at unit vector (x,y,z) with precomputed height h (meters).
    * Used for vertex colours and baked far-LOD textures. Optional: renderer falls back to palette.
+   * `footprint` is the sample spacing as an angle (radians on the unit sphere): colour features smaller than a
+   * few samples fade out instead of aliasing into per-vertex speckle. Omitted = full detail.
    */
-  colorAt?(x: number, y: number, z: number, h: number, out: RGB): RGB;
+  colorAt?(x: number, y: number, z: number, h: number, out: RGB, footprint?: number): RGB;
 }
