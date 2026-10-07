@@ -1,3 +1,4 @@
+import { updateSiteShadow } from '../../render/site/shadows';
 import { PhotoCamera } from '../../render/core/PhotoCamera';
 import * as THREE from 'three';
 import { game } from '../../game/store';
@@ -235,7 +236,7 @@ export class HubScene {
     const rot = u.ephem.bodyRotation('earth', t);
     const origin: Vec3 = add(bs, qRotate(rot, this.site.padFixed));
     const sunPos = u.ephem.getBodyState(u.sunId, t).position;
-    this.site.update(origin, t);
+    this.site.update(origin, t, this.camera.position);
     const frame = this.site.root.quaternion;
 
     // Cinematic camera: slow pendulum orbit on the west/south-west side of the pad, looking east into the
@@ -263,13 +264,14 @@ export class HubScene {
 
     // Sun light with a shadow frustum covering the pad area.
     const sd = new THREE.Vector3(sunPos.x - origin.x, sunPos.y - origin.y, sunPos.z - origin.z).normalize();
-    const r = 190;
+    const r = 1500;
     this.sun.position.copy(sd).multiplyScalar(1500).add(this.site.root.position);
     this.sun.target.position.copy(this.site.root.position);
     const sc = this.sun.shadow.camera as THREE.OrthographicCamera;
     sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 10; sc.far = 3000;
     sc.updateProjectionMatrix();
 
+    updateSiteShadow(this.sun, this.pipeline.renderer.shadowMap.enabled);
     this.planets.update({ t, origin, camera: this.camera, sunPos, dt, focusBody: 'earth', viewportHeight: this.pipeline.lodViewportHeight });
     const camSim = add(origin, { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z });
     const eclipse = this.planets.sunVisibility?.(camSim, sunPos) ?? 1;

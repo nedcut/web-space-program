@@ -8,6 +8,7 @@ import { qRotate } from '../../util/quat';
 import { terrainCutout } from '../planet/cutout';
 import * as TX from './textures';
 import { withAerialPerspective } from './aerial';
+import { clearSiteShadow } from './shadows';
 import { livePlanetUniforms } from '../planet/uniforms';
 import { coastalTreeGeometry } from '../planet/scatter/geometry';
 import { instancedVariant } from '../core/materialVariants';
@@ -43,7 +44,7 @@ const HIDE_DISTANCE = 200e3;
 const BODY = 'earth';
 
 type Key =
-  | 'concrete' | 'soot' | 'deck' | 'steel' | 'accent' | 'hazard' | 'grate' | 'white' | 'darkMetal' | 'cable'
+  | 'sign' | 'concrete' | 'soot' | 'deck' | 'steel' | 'accent' | 'hazard' | 'grate' | 'white' | 'darkMetal' | 'cable'
   | 'cladding' | 'vabClad' | 'door' | 'windows' | 'apron' | 'crawler' | 'road' | 'roofDark' | 'lamp' | 'beacon' | 'runway';
 
 interface BatchDef {
@@ -158,7 +159,11 @@ export class LaunchSite {
   private batches = new Map<Key, { def: BatchDef; geos: THREE.BufferGeometry[] }>();
   private disposables: { dispose(): void }[] = [];
   private dish: THREE.Group | null = null;
+  private readonly planetUniforms = livePlanetUniforms(BODY);
+  private readonly sunUp = new THREE.Vector3();
   private night = { value: 0 };
+  private vegetationLods: { near: THREE.InstancedMesh; far: THREE.InstancedMesh }[] = [];
+  private readonly lodCenter = new THREE.Vector3();
   private wind = { value: 0 };
   private windowMat: THREE.MeshStandardMaterial | null = null;
   private lampMat: THREE.MeshBasicMaterial | null = null;
@@ -270,6 +275,7 @@ export class LaunchSite {
     const claddingTex = t(TX.claddingTexture());
     const def = (mat: THREE.Material, tile: [number, number] | null, cast = true, receive = true): BatchDef => ({ mat, tile, cast, receive });
     const B: Record<Key, BatchDef> = {
+      sign: def(std({ map: t(TX.facilitySignsTexture()), roughness: 0.75 }), null, false),
       concrete: def(std({ map: concreteTex, color: 0xbdb9b1, roughness: 0.88, metalness: 0 }), [8, 8]),
       soot: def(std({ map: t(TX.sootTexture()), roughness: 0.95, metalness: 0 }), [8, 8], false),
       deck: def(std({ map: t(TX.padDeckTexture(SITE_LAYOUT.holeHalf, SITE_LAYOUT.trenchHalf)), color: 0xc4c2bc, roughness: 0.85, metalness: 0 }), null, false),
@@ -701,11 +707,19 @@ export class LaunchSite {
       this.add('door', box(w * 0.55, h * 0.72, 0.3, 0, h * 0.36, hd + 0.2), m);
       this.add('accent', box(w * 0.6, 0.3, 2.5, 0, h * 0.75, hd + 1), m);
     }
+    this.sign(m, Math.min(w * 0.3, 10), h - 2.3, hd + 0.45, wall === 'windows' ? 0 : 1);
     // Parapet
     for (const [px, pz, pw, pd] of [[0, hd - 0.2, w, 0.4], [0, -hd + 0.2, w, 0.4], [hw - 0.2, 0, 0.4, d], [-hw + 0.2, 0, 0.4, d]]) {
       this.add('concrete', boxY(pw, pd, px, pz, h, h + 1.0), m);
     }
     return m;
+  }
+
+  private sign(m: THREE.Matrix4, w: number, y: number, z: number, index: number) {
+    const g = new THREE.PlaneGeometry(w, w / 2).translate(0, y, z);
+    const uv = g.getAttribute('uv');
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 0.5 + (index % 2) * 0.5, uv.getY(i) * 0.5 + (1 - Math.floor(index / 2)) * 0.5);
+    this.add('sign', g, m);
   }
 
   private buildBuildings() {
@@ -716,6 +730,7 @@ export class LaunchSite {
       this.add('concrete', boxY(28, 16, 0, 0, 6, 7.5), m);
       this.add('roofDark', boxY(26, 14, 0, 0, 7.5, 7.7), m);
       this.add('windows', this.facing(V(-12, 2.5, 10.02), V(12, 2.5, 10.02), V(12, 5, 10.02), V(-12, 5, 10.02), V(0, 0, 1)), m);
+      this.sign(m, 5, 4, 10.08, 2);
       this.add('steel', boxY(3, 3, -9, -4, 7.7, 9.5), m);
       this.add('steel', new THREE.CylinderGeometry(0.1, 0.1, 12, 5).translate(10, 13.5, -5), m);
       this.add('white', new THREE.SphereGeometry(1.4, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).translate(6, 7.7, -4), m);
@@ -1059,12 +1074,16 @@ export class LaunchSite {
       mat.onBeforeCompile = (shader, renderer) => {
         patch(shader, renderer);
         shader.uniforms.uSiteWind = this.wind;
+        shader.uniforms.uSiteLod = { value: 1 };
         shader.vertexShader = shader.vertexShader.replace('void main() {', 'uniform float uSiteWind;\nvoid main() {')
           .replace('#include <begin_vertex>', `#include <begin_vertex>
             transformed.x += sin(uSiteWind + instanceMatrix[3].x * 0.13 + position.y) * min(position.y * position.y * 0.002, 0.18);`);
-        shader.fragmentShader = shader.fragmentShader.replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
-          float fade = 1.0 - smoothstep(7000.0, 10000.0, length(cameraPosition - vAtmoWorld));
-          if (fract(dot(floor(gl_FragCoord.xy), vec2(0.75487766, 0.56984029))) > fade) discard;`);
+        shader.fragmentShader = shader.fragmentShader.replace('void main() {', 'uniform float uSiteLod;\nvoid main() {').replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
+          float distanceToPlant = length(cameraPosition - vAtmoWorld);
+          float fade = 1.0 - smoothstep(7000.0, 10000.0, distanceToPlant);
+          float lod = smoothstep(1200.0, 1600.0, distanceToPlant);
+          float grain = fract(dot(floor(gl_FragCoord.xy), vec2(0.75487766, 0.56984029)));
+          if (grain > fade || (uSiteLod > 0.0 ? grain < lod : grain >= lod)) discard;`);
       };
       mat.customProgramCacheKey = () => 'coastal-foliage-v1';
       return this.track(mat);
@@ -1100,6 +1119,12 @@ export class LaunchSite {
         if (!cell) cells.set(key, (cell = []));
         cell.push({ m, c });
       });
+      // A coarse crown replaces detailed limbs beyond 1.2–1.6 km with a complementary dither.
+      const farGeo = this.track(new THREE.IcosahedronGeometry(1, 0).scale(name === 'site:pines' ? 3.5 : 2.5, name === 'site:pines' ? 3 : 1.7, name === 'site:pines' ? 3.5 : 2.5).translate(0, name === 'site:pines' ? 7.2 : 1.3, 0));
+      farGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(farGeo.getAttribute('position').count * 3).fill(0.85), 3));
+      const farMat = this.track(mat.clone());
+      farMat.onBeforeCompile = (shader, renderer) => { mat.onBeforeCompile(shader, renderer); shader.uniforms.uSiteLod.value = -1; };
+      farMat.customProgramCacheKey = mat.customProgramCacheKey;
       for (const cell of cells.values()) {
         const im = new THREE.InstancedMesh(shared, mat, cell.length);
         cell.forEach(({ m, c }, i) => { im.setMatrixAt(i, m); im.setColorAt(i, c); });
@@ -1107,7 +1132,14 @@ export class LaunchSite {
         im.receiveShadow = true;
         im.name = name;
         im.computeBoundingSphere();
-        this.root.add(im);
+        const far = new THREE.InstancedMesh(farGeo, farMat, cell.length);
+        far.instanceMatrix = im.instanceMatrix;
+        far.instanceColor = im.instanceColor;
+        far.name = `${name}:far`;
+        far.receiveShadow = true;
+        far.computeBoundingSphere();
+        this.vegetationLods.push({ near: im, far });
+        this.root.add(im, far);
       }
     };
     // Lumpy scrub: a few overlapping jittered blobs, smooth-shaded.
@@ -1206,7 +1238,7 @@ export class LaunchSite {
    * Place the site for the floating origin `origin` (float64 inertial) at sim time `t`, and update the terrain
    * cutout. Hidden beyond 200 km.
    */
-  update(origin: Vec3, t: number) {
+  update(origin: Vec3, t: number, cameraPosition?: THREE.Vector3) {
     const eph = this.universe.ephem;
     const bp = eph.getBodyState(BODY, t).position;
     const q = eph.bodyRotation(BODY, t);
@@ -1224,14 +1256,21 @@ export class LaunchSite {
     this.root.quaternion.multiplyQuaternions(this.tmpQ, this.qLocal);
     this.root.updateMatrix();
     this.root.updateMatrixWorld(true);
+    for (const { near, far } of this.vegetationLods) {
+      const bound = near.boundingSphere!;
+      this.lodCenter.copy(bound.center).applyMatrix4(this.root.matrixWorld);
+      const distance = cameraPosition ? this.lodCenter.distanceTo(cameraPosition) : this.lodCenter.length();
+      near.visible = distance - bound.radius < 1650;
+      far.visible = distance + bound.radius > 1150 && distance - bound.radius < 10000;
+    }
     const L = SITE_LAYOUT;
     cut.uCutMatrix.value.copy(this.tmpM.copy(this.root.matrixWorld).invert());
     cut.uCutA.value.set(0, 0, L.padHalf, L.padHalf);
     cut.uCutB.value.set(0, (-L.padHalf + 0.5 + L.trenchEnd - 1.5) / 2, L.trenchHalf + 1.5, (L.padHalf - 0.5 - (L.trenchEnd - 1.5)) / 2);
     cut.uCutParams.value.set(L.padCorner, 0, 500, 1);
 
-    const solar = livePlanetUniforms(BODY).uSunDir.value;
-    const up = V(0, 1, 0).applyQuaternion(this.root.quaternion);
+    const solar = this.planetUniforms.uSunDir.value;
+    const up = this.sunUp.set(0, 1, 0).applyQuaternion(this.root.quaternion);
     this.night.value = 1 - THREE.MathUtils.smoothstep(up.dot(solar), -0.06, 0.12);
     this.wind.value = t % 4096;
     if (this.windowMat) this.windowMat.emissiveIntensity = this.night.value * 1.8;
@@ -1253,6 +1292,7 @@ export class LaunchSite {
   }
 
   dispose() {
+    clearSiteShadow();
     terrainCutout(BODY).uCutParams.value.w = 0;
     this.root.removeFromParent();
     this.root.traverse((o) => {

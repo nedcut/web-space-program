@@ -148,6 +148,14 @@ function padDeckTextureImpl(holeHalf: number, trenchHalf: number): THREE.CanvasT
     g.beginPath(); g.moveTo(m * px, 0); g.lineTo(m * px, S); g.stroke();
     g.beginPath(); g.moveTo(0, m * px); g.lineTo(S, m * px); g.stroke();
   }
+  // Irregular oily wheel marks and rain-washed iron stains, baked once into the cached deck.
+  for (let i = 0; i < 24; i++) {
+    const x = (0.12 + r() * 0.76) * S, y = (0.12 + r() * 0.76) * S;
+    g.save(); g.translate(x, y); g.rotate(r() * 6.28);
+    g.fillStyle = i % 3 ? 'rgba(36,30,23,0.12)' : 'rgba(103,56,28,0.16)';
+    g.beginPath(); g.ellipse(0, 0, 8 + r() * 28, 3 + r() * 8, 0, 0, Math.PI * 2); g.fill();
+    g.restore();
+  }
   // Painted rings.
   g.strokeStyle = 'rgba(236,236,230,0.8)';
   g.lineWidth = 0.35 * px;
@@ -502,3 +510,18 @@ function windowLightTextureImpl(): THREE.CanvasTexture {
   return tex(c);
 }
 export const windowLightTexture = cachedSite('windowLightTexture', windowLightTextureImpl);
+
+/** Compact original facility signage atlas; opaque panels batch into one draw. */
+function facilitySignsTextureImpl(): THREE.CanvasTexture {
+  const { c, g } = canvas(1024, 512);
+  const labels = [['WSP', 'FLIGHT OPERATIONS'], ['WSP', 'SYSTEMS WORKSHOP'], ['RANGE 01', 'LAUNCH CONTROL'], ['COASTAL', 'LAUNCH COMPLEX']];
+  for (let i = 0; i < labels.length; i++) {
+    const x = (i % 2) * 512, y = Math.floor(i / 2) * 256;
+    g.fillStyle = '#183a43'; g.fillRect(x, y, 512, 256);
+    g.fillStyle = '#d8b56c'; g.fillRect(x + 24, y + 26, 8, 204);
+    g.fillStyle = '#eee8d5'; g.font = '700 68px sans-serif'; g.fillText(labels[i][0], x + 52, y + 113);
+    g.font = '500 28px sans-serif'; g.fillText(labels[i][1], x + 52, y + 174);
+  }
+  return tex(c, true, false);
+}
+export const facilitySignsTexture = cachedSite('facilitySignsTexture', facilitySignsTextureImpl);
