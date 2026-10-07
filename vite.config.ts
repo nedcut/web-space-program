@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   // Keep optimizer artifacts local when worktrees share installed dependencies.
   cacheDir: '.vite-cache',
-  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)), ...(process.env.WSP_PROFILE === '1' ? { 'react-dom/client': 'react-dom/profiling' } : {}) } },
+  define: { 'import.meta.env.WSP_PROFILE': JSON.stringify(process.env.WSP_PROFILE === '1') },
   plugins: [
     react(),
     VitePWA({
