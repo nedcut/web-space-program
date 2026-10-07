@@ -107,6 +107,11 @@ export class FlightController {
   paused = false;
   /** A modal (the Controls reference) covers the flight: flight input is suspended but the sim keeps running. */
   modalOpen = false;
+  /** Applies at once rather than on the next rendered frame, so no key slips through while a slow frame is pending. */
+  setModalOpen(open: boolean) {
+    this.modalOpen = open;
+    this.input.enabled = !this.paused && !open;
+  }
   readonly photo: PhotoCamera;
   private photoWasPaused = false;
   assist: Autopilot | null = null;

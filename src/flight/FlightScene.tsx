@@ -12,7 +12,7 @@ import type { ActionGroupId } from '../sim/vessel/types';
 import { tutorialContext, getTutorial, endTutorial, startLesson } from '../tutorial/runtime';
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { game, updateSettings, useGame } from '../game/store';
 import { FlightController } from './controller';
 import { Hud, NavballView, type Telemetry } from './hud/Hud';
@@ -131,7 +131,7 @@ export default function FlightScene() {
       }
       const cc = c;
       cc.paused = pausedRef.current;
-      cc.modalOpen = helpRef.current;
+      cc.setModalOpen(helpRef.current);
       setLost(false);
       setReport(false);
       cc.onActiveLost = () => {
@@ -222,8 +222,8 @@ export default function FlightScene() {
     if (paused || photo.active) audioRef.current?.silenceFlight();
   }, [paused, awaitingTelemetry, photo.active, scenarioFinished]);
   // The Controls reference blocks flight input; closing it returns to whatever it covered (flight or the Pause menu).
-  useEffect(() => {
-    if (ctrl.current) ctrl.current.modalOpen = help;
+  useLayoutEffect(() => {
+    ctrl.current?.setModalOpen(help);
   }, [help, awaitingTelemetry]);
 
   // Input reads settings each frame; planet quality, clouds and scattering rebuild from a snapshot.

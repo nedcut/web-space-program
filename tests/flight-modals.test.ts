@@ -44,6 +44,6 @@ describe('Controls overlay in flight', () => {
     // Neither Pause card may resume the flight on the way into Controls.
     const scene = readFileSync(new URL('../src/flight/FlightScene.tsx', import.meta.url), 'utf8');
     expect(scene).not.toMatch(/setPaused\(false\);\s*setHelp\(true\)/);
-    expect(scene).toMatch(/modalOpen = help/);
+    expect(scene).toMatch(/setModalOpen\(help\)/);
   });
 });
