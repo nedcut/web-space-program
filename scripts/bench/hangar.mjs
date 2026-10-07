@@ -18,10 +18,16 @@ try {
   await page.goto(base);
   await page.evaluate(() => window.__game.set({ scene: 'editor' }));
   await page.waitForFunction(() => !!window.__editor?.view);
+  if (label === 'before') await page.evaluate(async () => {
+    const { EditorView } = await import('/.tmp/hangar-baseline/src/editor/scene/EditorView.ts');
+    const editor = window.__editor, host = editor.view.container;
+    editor.view.dispose();
+    editor.view = new EditorView(host, editor.session);
+  });
   for (const id of ['selene', 'meridian']) {
     await page.evaluate(id => window.__editor.loadStock(id), id);
     await page.waitForTimeout(3000);
-    await page.evaluate(async () => { await (await import('/src/render/parts/textures.ts')).partTexturesReady(); });
+    await page.evaluate(async source => { await (await import(source + '/render/parts/textures.ts')).partTexturesReady(); }, label === 'before' ? '/.tmp/hangar-baseline/src' : '/src');
     for (const zoom of ['wide', 'close']) {
       await page.evaluate(zoom => {
         const v = window.__editor.view;
@@ -132,7 +138,7 @@ try {
   await page.evaluate(() => {
     const v = window.__editor.view;
     const target = v.nodeMarkers.find(m => !m.key.startsWith('h'));
-    const p = target.mesh.getWorldPosition(v.markerWorld).clone().project(v.camera);
+    const p = target.mesh.getWorldPosition(target.mesh.position.clone()).clone().project(v.camera);
     const el = v.renderer.domElement, rect = el.getBoundingClientRect();
     el.dispatchEvent(new PointerEvent('pointermove', { clientX: rect.left + (p.x + 1) * rect.width / 2, clientY: rect.top + (1 - p.y) * rect.height / 2 }));
   });
@@ -154,7 +160,7 @@ try {
   // Restore the snap after the shadow-cache edit check moved the camera/held part.
   await page.evaluate(() => {
     const v = window.__editor.view, target = v.nodeMarkers.find(m => !m.key.startsWith('h'));
-    const p = target.mesh.getWorldPosition(v.markerWorld).clone().project(v.camera);
+    const p = target.mesh.getWorldPosition(target.mesh.position.clone()).clone().project(v.camera);
     const el = v.renderer.domElement, rect = el.getBoundingClientRect();
     el.dispatchEvent(new PointerEvent('pointermove', { clientX: rect.left + (p.x + 1) * rect.width / 2, clientY: rect.top + (1 - p.y) * rect.height / 2 }));
   });
