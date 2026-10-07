@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-07",
+  "origin": "http://localhost:5325",
+  "build": "48f735a7",
+  "serviceWorkerState": "activated",
+  "earthCacheBytes": 16777216,
+  "cacheRevision": "b46f869be401fbe4f4a9e2c39741ae5a",
+  "method": "Load production vite preview, await service worker activation and control, verify Cache API Earth entry, terminate preview server, navigate to /?flight=stock-kestrel&scenario=orbit. curl confirms HTTP 000 (connection refused).",
+  "offlineResult": { "controlled": true, "scene": "flight", "flightReady": true, "standardHimalayaMetres": 972.2000727577332 },
+  "nodeHimalayaMetres": 972.2000727577332
+}
