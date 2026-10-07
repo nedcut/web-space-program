@@ -682,3 +682,12 @@ Replaced capped point sprites with pooled GPU billboards; added growing launch s
 - Adaptive resolution reacts to a steady 45–55 fps (ProMotion displays, no GPU timer) and undoes reductions that don't help instead of blurring for nothing.
 - Map: 59 → ~9 layouts per second (labels move with transforms). Loading: the flight scene is ready ~1.5–2 s sooner, shader warm-up no longer freezes the loading screen, and the first frames don't stall on uploads.
 - Visuals unchanged: before/after at DPR 2 in `docs/screenshots/snappy/`. Details, method and what's left: `docs/PERFORMANCE.md`.
+
+## In-the-moment UX cues (2026-10-06, cx/cues)
+
+- Added staging/throttle/warp/control explanations; a bounded, deduplicated accessible flight-message stack; orbit, landing, communications and SOI notices; per-save dismissible map/node/orbit/SOI/landing/EVA tips; clearer unavailable part actions and HUD tooltips.
+- Editor preflight review covers first-stage engines, launch TWR, command source, crew parachutes, fuel paths, separator order and estimated aero instability, with “Show me” part highlighting.
+- Unified error recovery for React, frame/promise and terrain-worker errors: copy report, return to Space Center, reload existing quicksave. No recovery write overwrites saved progress.
+- Real Windows Chrome / RTX 3060 Ti at DPR 2: staging refusal, map tip dismissal, quicksave→worker-error→reload, dismissal persistence, and editor highlighting passed without browser errors. Inspected screenshots in `docs/screenshots/cues/`; messages/tips clear the navball and staging. Repro: Windows Node runs `scripts/cues-browser.mjs` against Vite port 5335.
+- Limits: aerodynamic check is a small-angle static estimate; authority warning detects zero aggregate torque rather than marginal per-axis performance. Human screen-reader/listening and extended interplanetary playthrough remain useful follow-up QA.
+- Verification: `git merge main` up to date; lint, typecheck, full Vitest **96 files / 1,052 tests** (286.82 s), production build and whitespace checks passed. Existing large-chunk/mixed-import build warnings remain. Port 5335 stopped after browser checks.

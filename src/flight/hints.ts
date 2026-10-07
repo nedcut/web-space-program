@@ -6,11 +6,16 @@ import { bindingText } from '../input/bindings';
  * passes (or the pilot dismisses it), so experienced players stop seeing it. Pure logic + tiny storage
  * helpers; the HUD renders the result.
  */
-export type HintId = 'turn' | 'coast' | 'circularize' | 'orbit';
+export type HintId = 'turn' | 'coast' | 'circularize' | 'orbit' | 'map' | 'node' | 'soi' | 'landing' | 'eva';
 
 export interface HintInput {
   /** Hints only make sense for a free single-player flight from the home planet. */
   enabled: boolean;
+  map?: boolean;
+  node?: boolean;
+  soi?: boolean;
+  landing?: boolean;
+  eva?: boolean;
   flying: boolean;
   altitude: number;
   surfaceSpeed: number;
@@ -29,6 +34,11 @@ export interface Hint {
 }
 
 const TEXT: Record<HintId, string> = {
+  map: 'Plan a burn: click your orbit line to add a maneuver node. Return to flight with {map}.',
+  node: 'Drag the colored node handles to change the burn direction and strength. Drag the node along the orbit to change its time.',
+  soi: 'New sphere of influence: your orbit is now measured around this body. Check periapsis in the map before accelerating time.',
+  landing: 'Powered landing: point Retrograde and slow down before the ground arrives. Start your braking burn early; the Flight assist landing program can help.',
+  eva: 'Outside the cabin: use {pitchUp}/{pitchDown} to move, {toggleRcs} for the jetpack. Approach the hatch slowly and press {board} to board.',
   turn: 'Gravity turn: tap {yawRight} to tip the nose about 10° east (heading 90°), then pick the Prograde SAS mode (left of the navball) so SAS follows the prograde marker as the rocket arcs over.',
   coast: 'Apoapsis is above the atmosphere. Cut the throttle ({throttleCut}) and coast up — the ⇥ button next to time warp (top-left) can take you straight to apoapsis.',
   circularize: 'Approaching apoapsis: hold Prograde in SAS and burn ({throttleFull}) until the periapsis climbs above the atmosphere.',
@@ -37,9 +47,11 @@ const TEXT: Record<HintId, string> = {
 
 /** The single most relevant hint for this moment, or null. */
 export function hintFor(i: HintInput, seen: ReadonlySet<HintId>): Hint | null {
-  if (!i.enabled || !i.flying) return null;
+  if (!i.enabled) return null;
   const atmo = i.atmosphereHeight;
   const pick = (id: HintId): Hint | null => (seen.has(id) ? null : { id, text: bindingText(TEXT[id]) });
+  for (const id of ['eva', 'soi', 'node', 'map', 'landing'] as const) if (i[id] && !seen.has(id)) return pick(id);
+  if (!i.flying) return null;
   if (i.periapsis > atmo) return pick('orbit');
   if (i.apoapsis < atmo && i.altitude < atmo * 0.25 && i.surfaceSpeed > 50 && i.surfaceSpeed < 300) return pick('turn');
   if (i.apoapsis > atmo + 5000 && i.throttle > 0 && i.altitude < atmo) return pick('coast');

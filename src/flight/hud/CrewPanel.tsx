@@ -33,15 +33,15 @@ export function CrewPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 12 }}>{person.name}</div>
         <div style={{ fontSize: 10, color: 'var(--text-dim)' }} title="Personality stats — flavour only">Courage {person.courage} · Skill {person.skill}</div>
-        {!t.eva && <button className="btn small" onClick={() => cb.onEva(person.id)} style={{ marginTop: 4 }}>Go EVA · {key('eva')}</button>}
+        {!t.eva && <button className="btn small" title={`Leave the cabin (${key('eva')})`} onClick={() => cb.onEva(person.id)} style={{ marginTop: 4 }}>Go EVA · {key('eva')}</button>}
       </div>
     </div>)}
     {!t.crew.length && <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{t.noControl ? 'An astronaut or probe core is required.' : 'Uncrewed · remote control'}</div>}
     {t.eva && <>
       <div className="mono" style={{ fontSize: 11, marginBottom: 6 }}>Jetpack {t.eva.fuel.toFixed(2)} / 5 kg</div>
       <div style={{ display: 'flex', gap: 5 }}>
-        <button className="btn small" disabled={!t.eva.canBoard} onClick={cb.onBoard}>Board · {key('board')}</button>
-        <button className="btn small" disabled={!t.eva.landed} onClick={cb.onPlantFlag}>Flag · {key('plantFlag')}</button>
+        <button className="btn small" disabled={!t.eva.canBoard} title={`Board at a free hatch within 3 m, below 3 m/s (${key('board')})`} onClick={cb.onBoard}>Board · {key('board')}</button>
+        <button className="btn small" disabled={!t.eva.landed} title={`Plant a flag on solid ground (${key('plantFlag')})`} onClick={cb.onPlantFlag}>Flag · {key('plantFlag')}</button>
       </div>
       <div style={{ fontSize: 10, marginTop: 7, color: 'var(--text-dim)', lineHeight: 1.5 }}>
         {key('evaForward')}/{key('evaLeft')}/{key('evaBack')}/{key('evaRight')} move<br />{t.eva.landed ? `${key('evaRun')} run · ${key('stage')} hop` : `${key('evaUp')}/${key('evaDown')} rise / descend`}<br />Mouse drag to turn · Board within 3 m

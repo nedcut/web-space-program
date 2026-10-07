@@ -307,7 +307,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
       <div className="hud-top">
         <Altimeter t={t} cb={cb} imperial={imperial} />
         {showOrbit && <OrbitStrip t={t} distance={distance} />}
-        <div className="hud-messages">
+        <div className="hud-messages" role="log" aria-live="polite" aria-relevant="additions" aria-label="Flight notifications">
           <AlertStack alerts={t.feel.alerts} />
           {t.messages.map((m) => (
             <Panel key={m.id} className={`hud-msg ${m.level}`}>{m.text}</Panel>
@@ -332,7 +332,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
 
       <StageFlash count={t.feel.stagedCount} stage={t.stage} />
       <Countdown value={t.feel.countdown} />
-      {!t.mapMode && <FlightHint hint={t.feel.hint} onDismiss={cb.onDismissHint} navballSize={settings.navballSize} />}
+      <FlightHint hint={t.feel.hint} onDismiss={cb.onDismissHint} navballSize={settings.navballSize} />
       {highlight && partScreen && !t.mapMode && <PartHighlight uids={highlight} at={partScreen} scale={settings.hudScale} strong={!!picked} />}
     </div>
   );
@@ -342,7 +342,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
 function OrbitStrip({ t, distance }: { t: Telemetry; distance: (m: number) => string }) {
   const dash = t.onSurface;
   const cell = (label: string, value: string, color?: string) => (
-    <div className="orbit-cell"><span className="label">{label}</span><span className="mono" style={{ color }}>{dash ? '—' : value}</span></div>
+    <div className="orbit-cell" title={{ Ap: 'Apoapsis: highest point of orbit', Pe: 'Periapsis: lowest point of orbit', 'T-Ap': 'Time to apoapsis', 'T-Pe': 'Time to periapsis', Inc: 'Inclination to the equator' }[label]}><span className="label">{label}</span><span className="mono" style={{ color }}>{dash ? '—' : value}</span></div>
   );
   return (
     <div className="orbit-strip panel" aria-label="Orbit summary">

@@ -255,3 +255,9 @@
 .vab-binding-main span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vab-binding-main small { color: var(--accent); font-size: 10.5px; }
 .vab-groups-foot { display: flex; justify-content: space-between; gap: 6px; padding-top: 10px; border-top: 1px solid var(--panel-border); margin-top: 8px; }
+
+.preflight-checks { padding: 8px 10px; border-bottom: 1px solid var(--panel-border); font-size: 12px; }
+.preflight-checks summary { color: var(--warn); cursor: pointer; }
+.preflight-list { max-height: 180px; overflow: auto; }
+.preflight-list > div { padding-top: 8px; line-height: 1.4; }
+.preflight-list button { display: block; margin-top: 3px; }

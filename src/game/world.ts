@@ -1,3 +1,4 @@
+import { enqueueNotification, whyCantWarp } from './cues';
 import { NumericalPrediction } from '../sim/orbit/numericalPrediction';
 import { LAGRANGE_PAIRS, lagrangePoints } from '../sim/orbit/lagrange';
 import { advancePackedHazards, advanceCrewDose } from './world/hazards';
@@ -178,6 +179,8 @@ export class World {
   ut: number;
   warp: WarpState = { mode: 'rails', index: 0 };
   nodes: ManeuverNode[] = [];
+  seenTips: string[] = [];
+  private recentMessages = new Map<string, number>();
   messages: WorldMessage[] = [];
   /** Navigation target: a vessel id or a body id (null = none). */
   targetId: string | null = null;
@@ -233,7 +236,10 @@ export class World {
   }
 
   message(text: string, level: WorldMessage['level'] = 'info', seconds = 4) {
-    this.messages.push({ id: ++this.msgId, text, level, expires: performance.now() + seconds * 1000 });
+    const now = performance.now();
+    const next = enqueueNotification(this.messages, this.recentMessages, { id: ++this.msgId, text, level, expires: now + seconds * 1000 }, now);
+    this.messages = next.messages;
+    this.recentMessages = next.history;
   }
 
   /** Lowest point of the vessel along its own -Y axis, measured from the COM (positive number). */
@@ -452,6 +458,11 @@ export class World {
 
   changeWarp(delta: number) {
     const next = stepWarp(this.warp, delta, this.warpContext());
+    if (delta > 0) {
+      const reason = whyCantWarp(this.warpContext());
+      if (reason) this.message(reason, 'warn');
+      else if (next.index === this.warp.index && next.mode === this.warp.mode) this.message('Time warp limited at this altitude — climb higher for faster warp', 'warn');
+    }
     if (next.mode === 'rails' && next.index > 0 && this.warp.index === 0 && this.warp.mode === 'rails') {
       // Entering rails warp: refuse if the vessel is spinning fast or accelerating (would lose state).
     }
@@ -745,7 +756,8 @@ export class World {
     if (e.type === 'hazardWarning') this.message(e.message, 'warn', 6);
     if (e.type === 'linkBroken') this.message('Structural brace broke!', 'bad', 4);
     if (e.type === 'structuralFailure') this.message('Structural failure — attachment broke!', 'bad', 4);
-    if (e.type === 'flameout') this.message('Flameout!', 'warn', 2);
+    if (e.type === 'stage') this.message(`Stage ${e.stage} activated`);
+    if (e.type === 'flameout') this.message('Engine flameout — check propellant and intake air', 'warn', 4);
     if (e.type === 'docked' || e.type === 'undocked') this.approachCache = null;
     if (e.type === 'partDestroyed') {
       const why = e.reason === 'pressure' ? 'collapsed under ambient pressure' : e.reason === 'overheat' ? 'overheated and exploded' : 'was destroyed on impact';

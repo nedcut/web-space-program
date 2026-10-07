@@ -1,3 +1,4 @@
+import { CrashOverlay } from '../ui/CrashOverlay';
 import { Panel, Button } from '../ui/components';
 import { attachScenarioWorld, endScenario, getScenarioRun, startScenario } from '../scenarios/runtime';
 import { FlightReport } from '../ui/FlightLog';
@@ -156,6 +157,7 @@ export default function FlightScene() {
         setMountKey((k) => k + 1);
       };
       ctrl.current = cc;
+      if (mountKey > 0) cc.world.message('Flight restored');
       setNetworkReady(!!cc.network);
       tutorialContext.flight = cc;
       tutorialContext.world = cc.world;
@@ -321,17 +323,7 @@ export default function FlightScene() {
     setMountKey((k) => k + 1);
   };
 
-  if (error) {
-    return (
-      <div className="fullscreen" style={{ display: 'grid', placeItems: 'center' }}>
-        <Panel className="panel" style={{ padding: 24, maxWidth: 420 }}>
-          <div className="label" style={{ color: 'var(--bad)' }}>Could not start flight</div>
-          <p style={{ color: 'var(--text-dim)' }}>{error}</p>
-          <Button className="btn" onClick={() => getScenarioRun() ? endScenario() : getTutorial() ? endTutorial() : game.set({ scene: multiplayer ? 'menu' : 'spaceCenter', multiplayer: null, launchPending: false })}>{multiplayer ? 'Back to menu' : 'Back to Space Center'}</Button>
-        </Panel>
-      </div>
-    );
-  }
+  if (error) return <CrashOverlay error={new Error(error)} onRecover={() => { setError(null); setMountKey(k => k + 1); }} />;
 
   const c = ctrl.current;
   const active = c?.world.active;
