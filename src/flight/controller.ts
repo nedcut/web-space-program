@@ -870,8 +870,10 @@ export class FlightController {
       this.updateMapScene(wv);
       r.setRenderTarget(null);
       this.map.setWarmup(true);
-      const map = r.compileAsync(this.map.scene, this.map.camera);
-      this.map.setWarmup(false);
+      const map = compileInSlices(r, [this.map.scene], this.map.camera, this.map.scene, {
+        renderTarget: null,
+        cancelled: () => this.warmup !== 'compiling',
+      }).finally(() => this.map.setWarmup(false));
       // The flight scene has ~90 programs: build them a few ms per frame so the loading screen keeps animating.
       const flight = compileInSlices(r, [this.scene], this.cam.camera, this.scene, {
         renderTarget: this.pipeline.composer.readBuffer,
