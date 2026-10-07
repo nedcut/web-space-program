@@ -150,7 +150,7 @@ export class EditorView {
     const hemi = new THREE.HemisphereLight(0xbcd0ec, 0x23262c, 0.12);
     this.scene.add(hemi);
     // Key: warm, high and ~50 deg to the right of the default camera, so the shadow falls visibly across the floor.
-    this.key = new THREE.DirectionalLight(0xfff3e6, 3.3);
+    this.key = new THREE.DirectionalLight(0xfff3e6, 4.1);
     this.key.position.set(KEY_OFFSET.x, KEY_OFFSET.y, KEY_OFFSET.z);
     this.key.castShadow = game.get().settings.shadows;
     const sm = quality === 'high' ? 2048 : 1024;
@@ -167,9 +167,13 @@ export class EditorView {
     this.scene.add(fill);
     // Soft warm rim from high behind-left separates silhouettes from the dark hall. High enough that its glint on
     // the glossy floor stays out of the usual camera angles; desaturated so it doesn't tint the floor.
-    const rim = new THREE.DirectionalLight(0xffe6cc, 2.6);
+    const rim = new THREE.DirectionalLight(0xffe6cc, 3.2);
     rim.position.set(-16, 26, -24);
     this.scene.add(rim);
+    // Cool kicker from behind-right outlines the other silhouette edge against the dark hall.
+    const kicker = new THREE.DirectionalLight(0xc8dcff, 2.2);
+    kicker.position.set(22, 14, -20);
+    this.scene.add(kicker);
 
     this.hangar = buildHangar(this.renderer);
     this.scene.add(this.hangar.group);

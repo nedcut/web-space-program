@@ -136,7 +136,7 @@ export function buildTank(def: PartDef): THREE.Object3D {
 
   const body = lathe(shellProfile(rb, yBody0, yBody1), { segments: seg, tile, vOffset: 0.5 * tile });
   const hid = idHash(def.id);
-  weather(body, yBody0, yBody1, { soot: orange ? 0.22 : white ? 0.3 : 0.16, streaks: orange ? 0.16 : white ? 0.1 : 0.06, tint: 0.95 + 0.05 * hid, seed: 1 + Math.floor(hid * 97) });
+  weather(body, yBody0, yBody1, { soot: orange ? 0.22 : white ? 0.3 : 0.16, streaks: orange ? 0.26 : white ? 0.17 : 0.1, tint: 0.95 + 0.05 * hid, seed: 1 + Math.floor(hid * 97) });
   root.add(mk(body, bodyMat, 'body'));
   root.add(mk([lathe(endFrame(r, rb, yBody1, h / 2), { segments: seg }), lathe(endFrame(r, rb, yBody0, -h / 2), { segments: seg })], frameMat, 'frames'));
   root.add(mk([bulkhead(r * 0.985, h / 2, 1, seg), bulkhead(r * 0.985, -h / 2, -1, seg)], M.darkMetal(), 'bulkheads'));
