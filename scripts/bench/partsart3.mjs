@@ -82,6 +82,28 @@ try {
     await page.evaluate(() => { const f = window.__flight; f.cam.distance *= 0.4; });
     await page.waitForTimeout(2500);
     await shot('pad-close');
+    // Upper stages (lander, legs, arrays, capsule) from a fixed camera beside the stack.
+    await page.evaluate(async () => {
+      const f = window.__flight, w = f.world, u = w.universe, t = w.ut, v = w.active.state;
+      const THREE = await import('/node_modules/.vite/deps/three.js');
+      const es = u.ephem.getBodyState('earth', t), ss = u.ephem.getBodyState('sun', t);
+      const up = new THREE.Vector3(v.position.x - es.position.x, v.position.y - es.position.y, v.position.z - es.position.z).normalize();
+      const sun = new THREE.Vector3(ss.position.x - v.position.x, ss.position.y - v.position.y, ss.position.z - v.position.z).normalize();
+      const side = sun.clone().addScaledVector(up, -sun.dot(up)).normalize();
+      const across = new THREE.Vector3().crossVectors(up, side).normalize();
+      const leg = v.parts.find(p => p.partId.startsWith('leg-')) ?? v.parts[0];
+      const q = new THREE.Quaternion(v.orientation.x, v.orientation.y, v.orientation.z, v.orientation.w);
+      const local = new THREE.Vector3(leg.position.x - v.com.x, leg.position.y - v.com.y + 0.8, leg.position.z - v.com.z).applyQuaternion(q);
+      const target = local.clone();
+      const camDir = side.clone().multiplyScalar(0.55).addScaledVector(across, 0.8).addScaledVector(up, 0.12).normalize();
+      f.cam.update = () => {};
+      const cam = f.cam.camera;
+      cam.up.copy(up);
+      cam.position.copy(target).addScaledVector(camDir, 9);
+      cam.lookAt(target); cam.zoom = 1; cam.updateProjectionMatrix();
+    });
+    await page.waitForTimeout(2500);
+    await shot('pad-upper');
     result.pad = await page.evaluate(async () => {
       const p = window.__flight.pipeline; const s = [];
       for (let i = 0; i < 40; i++) { await new Promise(r => setTimeout(r, 100)); s.push(p.gpuMs); }

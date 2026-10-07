@@ -88,7 +88,8 @@ function sootAt(s: Source, x: THREE.Vector3, n: THREE.Vector3): number {
     // full strength along the engine bay, decaying above it
     const h = Math.max(0, -a - s.len);
     const out = Math.max(0, rho - 1.15 * s.r);
-    const k = Math.exp(-h / (0.65 * s.r + 0.3)) * Math.exp(-out / (1.3 * s.r + 0.45));
+    // far field fades out: the stage itself shields hardware well above its engine bay
+    const k = Math.exp(-h / (0.75 * s.r + 0.36) - (h / (1.6 + s.r)) ** 4) * Math.exp(-out / (1.3 * s.r + 0.45));
     return k * (0.85 + 0.15 * Math.max(0, facing));
   }
   // cone plus a near-field wall jet: exhaust hitting a surface close to the exit spreads radially along it
@@ -167,9 +168,9 @@ export function bakeEngineSoot(parts: THREE.Object3D[], frame: THREE.Object3D, o
           const st = 0.45 + 0.8 * streak(phi, 3) * (0.55 + 0.45 * streak(phi * 2.7, 7));
           keep *= 1 - Math.min(1, s.amp * k * st);
         }
-        const v = Math.min(0.86, 1 - keep);
+        const v = Math.min(0.9, 1 - keep);
         dark[i] = v;
-        if (v > 0.04) any = true;
+        if (v > 0.06) any = true;
       }
       if (!any) return;
       if (opts.cloneShared && !originals.has(mesh)) {
