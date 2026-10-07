@@ -32,20 +32,65 @@ function boltRing(r: number, y: number, n: number, size: number): THREE.BufferGe
 
 // ---------------------------------------------------------------------------------------------
 
-/** Vertical soot/grime gradient baked into a body's vertex colour (bottom = engine side). AO multiplies it. */
-export function grimeGradient(g: THREE.BufferGeometry, y0: number, y1: number, amount: number, reach = 0.4): THREE.BufferGeometry {
+/** Smooth periodic 1D value noise over angle (n cells around), deterministic per seed. */
+function ringNoise(phi: number, n: number, seed: number): number {
+  const x = ((phi / (2 * PI)) % 1 + 1) % 1 * n;
+  const i = Math.floor(x);
+  const f = x - i;
+  const h = (k: number) => {
+    const v = Math.sin(((k % n) + 1) * 127.1 + seed * 311.7) * 43758.5453;
+    return v - Math.floor(v);
+  };
+  const t = f * f * (3 - 2 * f);
+  return h(i) * (1 - t) + h(i + 1) * t;
+}
+
+export interface WeatherOpts {
+  /** Soot darkening at the bottom (0..1). */
+  soot: number;
+  /** Fraction of the height the soot reaches. */
+  reach?: number;
+  /** Vertical stain streak strength. */
+  streaks?: number;
+  /** Per-part paint batch brightness (multiplies everything). */
+  tint?: number;
+  seed?: number;
+}
+
+/**
+ * Large-scale weathering baked into a body's vertex colour (AO multiplies it later): engine soot at the bottom,
+ * faint handling dirt at the top, vertical stains hanging from the top frame and a per-part paint batch tint.
+ * These read at whole-vehicle distance where texture detail is sub-pixel, and break up texture tiling.
+ */
+export function weather(g: THREE.BufferGeometry, y0: number, y1: number, o: WeatherOpts): THREE.BufferGeometry {
   const pos = g.getAttribute('position');
   const col = new Float32Array(pos.count * 3);
+  const reach = o.reach ?? 0.4;
+  const seed = o.seed ?? 1;
   for (let i = 0; i < pos.count; i++) {
     const t = (pos.getY(i) - y0) / Math.max(1e-3, y1 - y0);
+    const phi = Math.atan2(pos.getX(i), pos.getZ(i));
     const k = Math.max(0, 1 - t / reach);
-    const s = amount * k * k * (3 - 2 * k) + 0.03 * Math.max(0, (t - 0.85) / 0.15); // soot below, faint handling dirt at the top
-    col[i * 3] = 1 - s * 0.92;
-    col[i * 3 + 1] = 1 - s * 0.97;
-    col[i * 3 + 2] = 1 - s;
+    let s = o.soot * k * k * (3 - 2 * k) + 0.03 * Math.max(0, (t - 0.85) / 0.15);
+    if (o.streaks) {
+      const streak = Math.max(0, ringNoise(phi, 37, seed) * 0.7 + ringNoise(phi, 91, seed + 3) * 0.5 - 0.55) / 0.65;
+      const hang = Math.pow(Math.max(0, t), 1.6) * (0.6 + 0.4 * ringNoise(phi, 13, seed + 7));
+      s += o.streaks * streak * hang + o.streaks * 0.35 * (ringNoise(phi, 7, seed + 11) - 0.5);
+    }
+    const tint = o.tint ?? 1;
+    col[i * 3] = tint * (1 - s * 0.92);
+    col[i * 3 + 1] = tint * (1 - s * 0.97);
+    col[i * 3 + 2] = tint * (1 - s);
   }
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   return g;
+}
+
+/** Deterministic 0..1 hash of a part id (paint batches, stain layouts). */
+export function idHash(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return ((h >>> 0) % 10007) / 10007;
 }
 
 /** Straight run [rOut, y0..y1] subdivided so vertex colour gradients have rings to live on. */
@@ -90,7 +135,9 @@ export function buildTank(def: PartDef): THREE.Object3D {
   const bodyLen = yBody1 - yBody0;
 
   const body = lathe(shellProfile(rb, yBody0, yBody1), { segments: seg, tile, vOffset: 0.5 * tile });
-  root.add(mk(grimeGradient(body, yBody0, yBody1, orange ? 0.22 : white ? 0.3 : 0.16), bodyMat, 'body'));
+  const hid = idHash(def.id);
+  weather(body, yBody0, yBody1, { soot: orange ? 0.22 : white ? 0.3 : 0.16, streaks: orange ? 0.16 : white ? 0.1 : 0.06, tint: 0.95 + 0.05 * hid, seed: 1 + Math.floor(hid * 97) });
+  root.add(mk(body, bodyMat, 'body'));
   root.add(mk([lathe(endFrame(r, rb, yBody1, h / 2), { segments: seg }), lathe(endFrame(r, rb, yBody0, -h / 2), { segments: seg })], frameMat, 'frames'));
   root.add(mk([bulkhead(r * 0.985, h / 2, 1, seg), bulkhead(r * 0.985, -h / 2, -1, seg)], M.darkMetal(), 'bulkheads'));
 
@@ -250,7 +297,7 @@ export function buildAdapter(def: PartDef): THREE.Object3D {
   const n = Math.max(3, Math.ceil((y1 - y0) / 0.3));
   const prof: Profile = [];
   for (let i = 0; i <= n; i++) prof.push([(rBot + ((rTop - rBot) * i) / n) * 0.995, y0 + ((y1 - y0) * i) / n]);
-  root.add(mk(grimeGradient(lathe(prof, { segments: seg, tile: 0.8 }), y0, y1, 0.2, 0.5), M.charcoalPanel(), 'body'));
+  root.add(mk(weather(lathe(prof, { segments: seg, tile: 0.8 }), y0, y1, { soot: 0.2, reach: 0.5, streaks: 0.08, seed: 5 }), M.charcoalPanel(), 'body'));
   // external hat stringers along the slant
   const nS = Math.max(12, Math.round((2 * PI * Math.max(rTop, rBot)) / 0.16));
   const slant = Math.atan2(rBot - rTop, y1 - y0);
