@@ -1,0 +1,7 @@
+{
+  "scene": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "calls": 256,
+    "programs": 21
+  }
+}
