@@ -28,6 +28,7 @@ import { buildDockingPort, buildHeatShield, buildLandingLeg, buildLight, buildPa
 import { disposeMaterials, M } from './materials';
 import { withDetail, type DeployData } from './geom';
 import { optimizePartTemplate } from './optimize';
+import { bakePartAO } from './ao';
 
 export { createPlume, type Plume, type PlumeParams, type PlumeOptions } from './plume';
 export { disposeMaterials } from './materials';
@@ -126,6 +127,7 @@ export function buildPartMesh(def: PartDef, detail: PartDetail = defaultDetail):
   if (!t) {
     const builder = MESH_BUILDERS[def.mesh] ?? fallback;
     t = withDetail(detail === 'high' ? 1 : 0.5, () => builder(def));
+    bakePartAO(t);
     optimizePartTemplate(t);
     t.name = def.id;
     t.userData.partId = def.id;

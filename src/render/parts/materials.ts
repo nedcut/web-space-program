@@ -47,8 +47,9 @@ function maps(t: TexSet, n = 1, normal = 1) {
     aoMap: repeated(t.ormMap, n),
   };
 }
-const std = (p: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial(defined(p));
-const phys = (p: THREE.MeshPhysicalMaterialParameters) => new THREE.MeshPhysicalMaterial(defined(p));
+// Every part material reads the baked per-vertex AO / grime colour (see ao.ts); one shared program variant.
+const std = (p: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial(defined({ vertexColors: true, ...p }));
+const phys = (p: THREE.MeshPhysicalMaterialParameters) => new THREE.MeshPhysicalMaterial(defined({ vertexColors: true, ...p }));
 
 /** Livery accent paints (one per manufacturer family; see livery.ts / docs/ART.md). */
 export const ACCENTS = {

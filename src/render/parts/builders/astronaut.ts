@@ -3,10 +3,10 @@ import * as THREE from 'three';
 /** Original human proportions, +Y upright, -Z forward; ~3,500 triangles. */
 export function buildAstronaut(): THREE.Group {
   const root = new THREE.Group();
-  const white = new THREE.MeshStandardMaterial({ color: 0xe8e9e3, roughness: 0.8 });
-  const orange = new THREE.MeshStandardMaterial({ color: 0xe76724, roughness: 0.7 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x293340, roughness: 0.75 });
-  const gold = new THREE.MeshStandardMaterial({ color: 0xd9a33d, metalness: 0.8, roughness: 0.2 });
+  const white = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xe8e9e3, roughness: 0.8 });
+  const orange = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xe76724, roughness: 0.7 });
+  const dark = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0x293340, roughness: 0.75 });
+  const gold = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xd9a33d, metalness: 0.8, roughness: 0.2 });
   const add = (parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number) => {
     const m = new THREE.Mesh(geo, mat); m.position.set(x,y,z); parent.add(m); return m;
   };

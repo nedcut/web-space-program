@@ -248,9 +248,11 @@ export function around(geo: THREE.BufferGeometry, n: number, r: number, phase = 
 /** Merge geometries (normalising attributes and indexing). */
 export function merge(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const anyNonIndexed = geos.some((g) => !g.index);
+  // Baked colour (grime gradients) survives only when every input carries it.
+  const keepColor = geos.every((g) => g.getAttribute('color')?.itemSize === 3);
   const prepared = geos.map((g) => {
     let h = anyNonIndexed && g.index ? g.toNonIndexed() : g;
-    for (const name of Object.keys(h.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'uv') h.deleteAttribute(name);
+    for (const name of Object.keys(h.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'uv' && !(keepColor && name === 'color')) h.deleteAttribute(name);
     if (!h.getAttribute('uv')) {
       h = h.clone();
       h.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((h.getAttribute('position').count) * 2), 2));

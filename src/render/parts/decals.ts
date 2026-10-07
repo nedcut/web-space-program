@@ -338,7 +338,7 @@ function roundRect(c: CanvasRenderingContext2D, x: number, y: number, w: number,
 export function decalMaterial(): THREE.Material {
   if (!material) {
     atlas();
-    material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.0, alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    material = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.5, metalness: 0.0, alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     if (texture) material.map = texture;
     material.name = 'decal';
   }
