@@ -686,3 +686,11 @@ Replaced capped point sprites with pooled GPU billboards; added growing launch s
 ## Coastal ground art — cx/groundart
 
 Replaced cone trees with original branched coastal crowns, added building courses/roof plant/doors and warmer weathered cladding, lit tower platforms and dusk-driven window masks. Continuing terrain/shadow integration and real RTX 3060 Ti DPR-2 verification; final evidence follows in docs/PERFORMANCE.md.
+## In-the-moment UX cues (2026-10-06, cx/cues)
+
+- Added staging/throttle/warp/control explanations; a bounded, deduplicated accessible flight-message stack; orbit, landing, communications and SOI notices; per-save dismissible map/node/orbit/SOI/landing/EVA tips; clearer unavailable part actions and HUD tooltips.
+- Editor preflight review covers first-stage engines, launch TWR, command source, crew parachutes, fuel paths, separator order and estimated aero instability, with “Show me” part highlighting.
+- Unified error recovery for React, frame/promise and terrain-worker errors: copy report, return to Space Center, reload existing quicksave. No recovery write overwrites saved progress.
+- Real Windows Chrome / RTX 3060 Ti at DPR 2: staging refusal, map tip dismissal, quicksave→worker-error→reload, dismissal persistence, and editor highlighting passed without browser errors. Inspected screenshots in `docs/screenshots/cues/`; messages/tips clear the navball and staging. Repro: Windows Node runs `scripts/cues-browser.mjs` against Vite port 5335.
+- Limits: aerodynamic check is a small-angle static estimate; authority warning detects zero aggregate torque rather than marginal per-axis performance. Human screen-reader/listening and extended interplanetary playthrough remain useful follow-up QA.
+- Verification: `git merge main` up to date; lint, typecheck, full Vitest **96 files / 1,052 tests** (286.82 s), production build and whitespace checks passed. Existing large-chunk/mixed-import build warnings remain. Port 5335 stopped after browser checks.
