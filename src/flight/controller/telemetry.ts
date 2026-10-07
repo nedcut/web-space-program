@@ -1,3 +1,6 @@
+import { throttleExplanation } from '../cues';
+import { controlAuthority } from '../../sim/vessel/integrator';
+import { neutralInput } from '../../sim/vessel/runtime';
 import { RESOURCES } from '../../data/resources';
 import { RESOURCE_COLORS } from '../../ui/inspector/resources';
 import { flightData, flightPredictions } from '../../game/flightData';
@@ -22,6 +25,7 @@ import { warpTargets } from './warp';
 import { game } from '../../game/store';
 import { getTutorial } from '../../tutorial/runtime';
 
+const cueStates = new WeakMap<FlightController, { body: string; signal: boolean; throttle: string | null; sas: boolean; soi: boolean; orbit: boolean; situation: string }>();
 const alertTrackers = new WeakMap<FlightController, AlertTracker>();
 const burnTrackers = new WeakMap<FlightController, BurnTracker>();
 
@@ -232,8 +236,24 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   }, performance.now() / 1000);
   const warpTo = this.warpDriver.target;
   const settings = game.get().settings;
+  const previous = cueStates.get(this);
+  const signal = w.canControl();
+  const throttle = this.input.state.throttle > 0.05 && !st.eva ? throttleExplanation(st) : null;
+  if (throttle && throttle !== previous?.throttle) w.message(throttle, 'warn');
+  if (previous?.signal && !signal) w.message('Control lost — check crew, probe signal and power', 'warn');
+  const torque = this.sasOn && !st.eva ? controlAuthority(st, neutralInput({ rcs: this.rcsOn }), w.universe.createEnvironment(() => wv.body, w.preciseGravity), w.ut) : null;
+  const noTorque = !!torque && Math.hypot(torque.x, torque.y, torque.z) < 1e-6;
+  if (noTorque && !previous?.sas) w.message('SAS has no torque — enable reaction wheels or RCS; fins need airflow and gimbals need thrust', 'warn', 6);
+  const changedBody = !!previous && previous.body !== wv.body;
+  const orbit = flying && orb.orbit.e < 1 && orb.pe > Math.max(b.atmosphere?.height ?? 0, w.universe.terrain(wv.body).maxHeight);
+  if (previous && !previous.orbit && orbit) w.message(`Orbit achieved around ${b.name}`);
+  if (previous && previous.situation === 'flying' && st.situation !== 'flying') w.message(st.situation === 'splashed' ? `Splashed down on ${b.name}` : `Landed on ${b.name}`);
+  const soi = changedBody || (previous?.soi ?? false);
+  cueStates.set(this, { body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation });
   const hint = this.hints.update({
-    enabled: settings.flightHints && !this.network && !getTutorial() && !game.get().scenarioActive && wv.body === 'earth' && !st.eva && !this.assist,
+    enabled: settings.flightHints && !this.network && !getTutorial() && !game.get().scenarioActive && !this.assist,
+    map: this.mapMode, node: w.nodes.length > 0, soi, eva: !!st.eva,
+    landing: flying && info.altitude < 10000 && vs < -20,
     flying,
     altitude: info.altitude,
     surfaceSpeed,

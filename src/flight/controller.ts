@@ -1,3 +1,5 @@
+import { stageExplanation } from './cues';
+import { actionAvailable, partActions } from '../sim/vessel/actions';
 import { CondensationFx } from '../render/fx/CondensationFx';
 import { flightRumble } from '../audio/design';
 import { FlightFx, isBurstEvent } from '../render/fx/FlightFx';
@@ -107,7 +109,7 @@ export class FlightController {
   /** Warp-to targets and the rails warp ramp. */
   readonly warpDriver = new WarpDriver();
   /** First-orbit coaching hints (remembered per browser profile). */
-  readonly hints = new HintTracker();
+  readonly hints: HintTracker;
   /** Stage events on the active vessel (the HUD flashes when this changes). */
   stagedCount = 0;
   sasOn = false;
@@ -204,6 +206,7 @@ export class FlightController {
     }
     if (craft && !this.network) this.world.launch(craft);
     const universe = this.world.universe;
+    this.hints = new HintTracker(new Set(this.world.seenTips as import('./hints').HintId[]), seen => { this.world.seenTips = [...seen]; });
     this.input = new FlightInput();
 
     this.pipeline = new RenderPipeline({ quality: getQuality(quality), toneMapping: 'aces', exposure: 1 });
@@ -400,7 +403,7 @@ export class FlightController {
   cancelAssist(msg = 'Assist cancelled') { return assist.cancelAssist.call(this, this.systems, msg); }
 
   toggleSas() {
-    if (!this.world.canControl()) return;
+    if (!this.world.canControl()) return this.world.message('SAS command unavailable — check control source and probe signal', 'warn');
     this.sasOn = !this.sasOn;
     if (this.sasOn && this.sas === 'off') this.sas = 'stabilityAssist';
     if (this.hasBindings('sas')) this.fireGroup('sas', this.sasOn);
@@ -419,7 +422,12 @@ export class FlightController {
     if (!this.world.canControl() || !this.world.active || this.world.active.state.eva) return;
     this.pendingCommands.push(...commands);
   }
-  partAction(uid: number, action: PartActionId, experiment?: string) { this.command({ kind: 'part', uid, action, ...(experiment ? { experiment } : {}) }); }
+  partAction(uid: number, action: PartActionId, experiment?: string) {
+    const part = this.world.active?.state.cache.byUid.get(uid);
+    if (!this.world.canControl()) return this.world.message('Part action unavailable — no control source or probe signal', 'warn');
+    if (!part || !partActions(part.def).includes(action) || !actionAvailable(part, action)) return this.world.message('Part action unavailable — already activated, expended or unsupported', 'warn');
+    this.command({ kind: 'part', uid, action, ...(experiment ? { experiment } : {}) });
+  }
   setTweaks(uid: number, tweaks: FlightTweaks, symmetric = true) { this.command({ kind: 'tweak', uid, tweaks, symmetric }); }
   private hasBindings(group: ActionGroupId) {
     const v = this.world.active?.state;
@@ -609,7 +617,6 @@ export class FlightController {
   }
 
   stage() {
-    if (!this.world.canControl()) return;
     this.requestStage();
   }
 
@@ -636,6 +643,10 @@ export class FlightController {
   /** Stage now, or start the optional launch countdown when the first stage would release the clamps. */
   private requestStage() {
     const wv = this.world.active;
+    if (!wv) return this.world.message('No active vessel to stage', 'warn');
+    const explanation = stageExplanation(wv.state, this.stageLocked, this.world.canControl());
+    if (explanation) this.world.message(explanation, 'warn');
+    if (!this.world.canControl() || wv.state.eva || wv.state.nextStage < 0) return;
     if (this.stageLocked) {
       this.world.message(`Staging is locked · ${bindingLabel('stageLock')} to unlock`, 'warn', 2);
       return;
