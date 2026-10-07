@@ -104,6 +104,24 @@ export function buildSoundingRocket(catalog: PartCatalog = PART_CATALOG): CraftD
   return b.done();
 }
 
+/** A foundation-only orbital design; demonstrates progression without research dependencies. */
+export function buildFoundationOrbiter(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Firstlight Orbiter', 'Starting equipment: two stages to Standard-scale orbit.');
+  const pod = b.root('pod-lantern-1');
+  b.stack(pod, 'chute-main', 'top');
+  const shield = b.stack(pod, 'shield-1');
+  const upperDec = b.stack(shield, 'dec-1');
+  const upper = b.stack(upperDec, 'tank-1-mid');
+  const engine = b.stack(upper, 'eng-gust');
+  const boosterDec = b.stack(engine, 'dec-1');
+  const top = b.stack(boosterDec, 'tank-1-mid');
+  const middle = b.stack(top, 'tank-1-mid');
+  const bottom = b.stack(middle, 'tank-1-mid');
+  b.stack(bottom, 'eng-sirocco');
+  b.radial(bottom, 'fin-keel', 4, -0.95, 45);
+  return b.done();
+}
+
 export function buildOrbiter(catalog: PartCatalog = PART_CATALOG): CraftDef {
   const b = new Builder(catalog, 'Meridian Orbiter', 'Two-stage crewed orbital rocket with a heat-shielded return capsule. About 5 km/s.');
   const pod = b.root('pod-lantern-1');
@@ -589,6 +607,7 @@ export function buildPebblecatcher(catalog: PartCatalog = PART_CATALOG): CraftDe
 
 export const STOCK_CRAFTS: StockCraft[] = ([
   { scale: 'standard', id: 'stock-kestrel', name: 'Kestrel Sounding Rocket', blurb: 'Suborbital test hop · 1 stage + capsule', build: () => buildSoundingRocket() },
+  { scale: 'standard', id: 'stock-firstlight', name: 'Firstlight Orbiter', blurb: 'Starting equipment · Standard-scale orbit', build: () => buildFoundationOrbiter() },
   { scale: 'standard', id: 'stock-meridian', name: 'Meridian Orbiter', blurb: 'Standard scale · two stages to low orbit and back', build: () => buildOrbiter() },
   { scale: 'standard', id: 'stock-selene', name: 'Selene Lunar Lander', blurb: 'Three stages · land on the Moon and return', build: () => buildMoonLander() },
   { scale: 'standard', id: 'stock-swift', name: 'Swift Jet', blurb: 'Runway takeoff · turbofan trainer aircraft', build: () => buildSwift() },
