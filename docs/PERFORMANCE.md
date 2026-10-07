@@ -1095,3 +1095,21 @@ They do not support a claim of a corresponding hardware speedup. The after ascen
 recorded 63 long tasks over 12.55 seconds, and its maximum traced GC pause was 22.35 ms.
 The requested ≤4 ms at 4× is not demonstrated. Raw diagnostic rAF/GC data is retained for
 repeatability, but the hardware trace-free table is the flight pacing comparison.
+
+Final hardware trace evidence (`perfcpu-journey-traced-*`, `perfcpu-moon-traced-*`): the
+scripted ascent completed orbit assist at **81.32 × 85.07 km**. Its recorded trace contains
+**two** main-thread tasks >50 ms (75.27 and 74.15 ms). The first is dominated by native
+waiting around a Mojo reply, with essentially no nested JS; the second includes 43.60 ms
+of animation-frame work and 29.14 ms of compositor `Commit`. Trace main-thread occupancy
+is 78.09% Commit waiting and 21.78% other work; those inclusive event timings are not CPU
+utilization. Largest traced GC pause: **5.73 ms**. Moon descent has **zero** >50 ms tasks,
+with largest GC pause **2.82 ms**. The baseline short Moon trace has one 50.4 ms native-wait
+task; baseline short pad/ascent/orbit/map/high-warp traces have none. `trace-reports.json`
+contains task attribution without double-counting nested Chrome task wrappers.
+
+The earlier baseline journey observed 8 long tasks in 199.14 seconds, with frame
+p50/p95/p99 33.2/33.4/50 ms; the final journey observed 2 in 217.59 seconds, with
+16.7/33.4/33.4 ms. These differently extended readout windows are **not a controlled
+before/after comparison**. The baseline journey raw export failed; the shorter baseline
+ascent/Moon traces and successful final full ascent are retained. No claim is made that
+SOI transitions, every staging combination, or all allocation/GC hitches are solved.

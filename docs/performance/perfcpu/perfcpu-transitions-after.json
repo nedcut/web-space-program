@@ -1,0 +1,94 @@
+{
+  "base": "http://172.24.204.38:5334",
+  "label": "perfcpu-transitions-after",
+  "throttle": 1,
+  "date": "2026-10-07T18:08:19.360Z",
+  "runs": [
+    {
+      "cache": "cold",
+      "timings": {
+        "menu": {
+          "ms": 1210
+        },
+        "menu-hub": {
+          "ms": 885,
+          "longTasks": 3,
+          "maxTaskMs": 331
+        },
+        "hub-editor": {
+          "ms": 856,
+          "longTasks": 2,
+          "maxTaskMs": 378
+        },
+        "editor-pad": {
+          "ms": 3197,
+          "longTasks": 5,
+          "maxTaskMs": 177
+        },
+        "flight-map": {
+          "ms": 105,
+          "longTasks": 0,
+          "maxTaskMs": 0
+        },
+        "quickload": {
+          "ms": 2763,
+          "longTasks": 5,
+          "maxTaskMs": 156
+        },
+        "revert-launch": {
+          "ms": 2925,
+          "longTasks": 5,
+          "maxTaskMs": 149
+        },
+        "flight-tracking": {
+          "ms": 312,
+          "longTasks": 1,
+          "maxTaskMs": 128
+        }
+      }
+    },
+    {
+      "cache": "warm",
+      "timings": {
+        "menu": {
+          "ms": 1289
+        },
+        "menu-hub": {
+          "ms": 610,
+          "longTasks": 3,
+          "maxTaskMs": 319
+        },
+        "hub-editor": {
+          "ms": 804,
+          "longTasks": 2,
+          "maxTaskMs": 356
+        },
+        "editor-pad": {
+          "ms": 3249,
+          "longTasks": 9,
+          "maxTaskMs": 170
+        },
+        "flight-map": {
+          "ms": 94,
+          "longTasks": 0,
+          "maxTaskMs": 0
+        },
+        "quickload": {
+          "ms": 2741,
+          "longTasks": 6,
+          "maxTaskMs": 150
+        },
+        "revert-launch": {
+          "ms": 2722,
+          "longTasks": 6,
+          "maxTaskMs": 146
+        },
+        "flight-tracking": {
+          "ms": 332,
+          "longTasks": 1,
+          "maxTaskMs": 153
+        }
+      }
+    }
+  ]
+}

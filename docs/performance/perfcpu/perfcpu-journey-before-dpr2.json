@@ -1,0 +1,115 @@
+{
+ "label": "perfcpu-journey-before",
+ "base": "http://172.24.204.38:5334",
+ "local": false,
+ "noRaster": false,
+ "noSubmission": false,
+ "dpr": 2,
+ "throttle": 1,
+ "quality": "medium",
+ "seconds": 120,
+ "size": "1470x920",
+ "date": "2026-10-07T17:58:38.812Z",
+ "cases": {
+  "journey": {
+   "fps": 39.58,
+   "frames": 7881,
+   "frameP50": 33.2,
+   "frameP95": 33.4,
+   "frameP99": 50,
+   "frameMax": 100,
+   "hitches25": 3962,
+   "hitches50": 17,
+   "cpuMs": 4.59,
+   "cpuP95": 6.8,
+   "sections": {
+    "input": 0.16,
+    "sim": 0.29,
+    "vessels": 0.03,
+    "fx": 0.04,
+    "planets": 0.37,
+    "map": 0,
+    "render": 3.31,
+    "telemetry": 0.07,
+    "audio": 0.02,
+    "navball": 0.15,
+    "hud": 0.13
+   },
+   "scriptMsPerFrame": 4.8,
+   "taskMsPerFrame": 25.19,
+   "layoutsPerSec": 8.09,
+   "styleRecalcsPerSec": 6.62,
+   "layoutMsPerSec": 3.36,
+   "styleMsPerSec": 0.47,
+   "sampleSeconds": 199.14,
+   "longTasks": 8,
+   "longTasksPerMin": 2.41,
+   "longTaskMsPerMin": 137.39,
+   "longTaskMax": 72,
+   "heapMB": 45.78,
+   "heapGrowthMBPerMin": 4.3,
+   "domNodes": 560,
+   "listeners": 1521,
+   "reactCommitsPerSec": 12.37,
+   "reactRendersPerSec": 367.99,
+   "journey": {
+    "elapsedSim": 334.02563738822937,
+    "assist": null,
+    "body": "earth",
+    "orbit": {
+     "orbit": {
+      "body": "earth",
+      "mu": 3986004355070,
+      "a": 720315.8005685715,
+      "e": 0.0026313206322868105,
+      "i": 0.8157191956256019,
+      "lan": 2.6154524996214827,
+      "argPe": 3.053779117935812,
+      "m0": 4.946807006928822,
+      "epoch": 964051536.9056346,
+      "p": 720310.8132112622
+     },
+     "ap": 85110.3423963699,
+     "pe": 81319.57874077349,
+     "timeToAp": 1371.1873560035945,
+     "timeToPe": 409.208779384742
+    }
+   },
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 972,
+     "in": 978
+    }
+   },
+   "gl": {
+    "calls": 346,
+    "tris": 514866,
+    "programs": 87,
+    "geometries": 990,
+    "textures": 96,
+    "canvas": "2940x1840",
+    "scale": 1,
+    "gpuMs": 3.65334426645624,
+    "gpuName": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+   },
+   "trace": {
+    "error": "RangeError: Invalid string length"
+   },
+   "readyMs": 4829,
+   "marks": {
+    "wsp:flight:construct": 1512,
+    "wsp:flight:shaderWarmup": 2464,
+    "wsp:flight:firstFrame": 2566,
+    "wsp:flight:construct:start": 1193,
+    "wsp:flight:ready": 4151
+   }
+  }
+ }
+}

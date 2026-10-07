@@ -1,0 +1,1592 @@
+[
+  {
+    "file": "docs/performance/perfcpu/perfcpu-cpu-after-ascent.trace.json.gz",
+    "pid": 1158134,
+    "longTasks": 49,
+    "longest": [
+      {
+        "ms": 138.918,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            138.874
+          ],
+          [
+            "FireAnimationFrame",
+            127.998
+          ],
+          [
+            "v8.callFunction",
+            127.956
+          ],
+          [
+            "FunctionCall",
+            127.464
+          ],
+          [
+            "MajorGC",
+            21.358
+          ]
+        ]
+      },
+      {
+        "ms": 87.101,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            87.061
+          ],
+          [
+            "FireAnimationFrame",
+            75.101
+          ],
+          [
+            "v8.callFunction",
+            75.079
+          ],
+          [
+            "FunctionCall",
+            75.035
+          ],
+          [
+            "FireAnimationFrame",
+            3.771
+          ]
+        ]
+      },
+      {
+        "ms": 81.206,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            80.469
+          ],
+          [
+            "FireAnimationFrame",
+            69.507
+          ],
+          [
+            "v8.callFunction",
+            69.492
+          ],
+          [
+            "FunctionCall",
+            69.473
+          ],
+          [
+            "FireAnimationFrame",
+            3.387
+          ]
+        ]
+      },
+      {
+        "ms": 76.744,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            76.713
+          ],
+          [
+            "FireAnimationFrame",
+            72.657
+          ],
+          [
+            "v8.callFunction",
+            72.643
+          ],
+          [
+            "FunctionCall",
+            72.261
+          ],
+          [
+            "HitTest",
+            1.063
+          ]
+        ]
+      },
+      {
+        "ms": 75.924,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            75.892
+          ],
+          [
+            "FireAnimationFrame",
+            71.123
+          ],
+          [
+            "v8.callFunction",
+            71.106
+          ],
+          [
+            "FunctionCall",
+            70.808
+          ],
+          [
+            "Commit",
+            1.734
+          ]
+        ]
+      },
+      {
+        "ms": 75.413,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            75.361
+          ],
+          [
+            "FireAnimationFrame",
+            69.881
+          ],
+          [
+            "v8.callFunction",
+            69.866
+          ],
+          [
+            "FunctionCall",
+            69.742
+          ],
+          [
+            "FireAnimationFrame",
+            1.944
+          ]
+        ]
+      },
+      {
+        "ms": 75.167,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            75.139
+          ],
+          [
+            "FireAnimationFrame",
+            72.875
+          ],
+          [
+            "v8.callFunction",
+            71.59
+          ],
+          [
+            "FunctionCall",
+            71.518
+          ],
+          [
+            "MajorGC",
+            22.351
+          ]
+        ]
+      },
+      {
+        "ms": 71.539,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            71.509
+          ],
+          [
+            "FireAnimationFrame",
+            67.269
+          ],
+          [
+            "v8.callFunction",
+            67.191
+          ],
+          [
+            "FunctionCall",
+            67.112
+          ],
+          [
+            "FireAnimationFrame",
+            1.42
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-cpu-after-map.trace.json.gz",
+    "pid": 1158660,
+    "longTasks": 1,
+    "longest": [
+      {
+        "ms": 51.181,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            51.087
+          ],
+          [
+            "FireAnimationFrame",
+            36.527
+          ],
+          [
+            "v8.callFunction",
+            36.499
+          ],
+          [
+            "FunctionCall",
+            36.475
+          ],
+          [
+            "Commit",
+            5.141
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-cpu-after-moon.trace.json.gz",
+    "pid": 1158977,
+    "longTasks": 3,
+    "longest": [
+      {
+        "ms": 53.883,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            53.848
+          ],
+          [
+            "FireAnimationFrame",
+            48.037
+          ],
+          [
+            "v8.callFunction",
+            48.018
+          ],
+          [
+            "FunctionCall",
+            47.941
+          ],
+          [
+            "FireAnimationFrame",
+            1.081
+          ]
+        ]
+      },
+      {
+        "ms": 52.187,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            52.151
+          ],
+          [
+            "FireAnimationFrame",
+            47.508
+          ],
+          [
+            "v8.callFunction",
+            47.49
+          ],
+          [
+            "FunctionCall",
+            46.928
+          ],
+          [
+            "FireAnimationFrame",
+            1.369
+          ]
+        ]
+      },
+      {
+        "ms": 52.106,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            52.058
+          ],
+          [
+            "FireAnimationFrame",
+            45.561
+          ],
+          [
+            "v8.callFunction",
+            44.774
+          ],
+          [
+            "FunctionCall",
+            35.082
+          ],
+          [
+            "v8.callFunction",
+            9.627
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-cpu-after-orbit.trace.json.gz",
+    "pid": 1158419,
+    "longTasks": 0,
+    "longest": []
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-cpu-after-pad.trace.json.gz",
+    "pid": 1157568,
+    "longTasks": 0,
+    "longest": []
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-cpu-after-warp100k.trace.json.gz",
+    "pid": 1158542,
+    "longTasks": 0,
+    "longest": []
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-cpu-before-ascent.trace.json.gz",
+    "pid": 1149460,
+    "longTasks": 93,
+    "longest": [
+      {
+        "ms": 175.333,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            175.297
+          ],
+          [
+            "FireAnimationFrame",
+            171.999
+          ],
+          [
+            "v8.callFunction",
+            171.979
+          ],
+          [
+            "FunctionCall",
+            171.888
+          ],
+          [
+            "FireAnimationFrame",
+            0.377
+          ]
+        ]
+      },
+      {
+        "ms": 170.998,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            170.957
+          ],
+          [
+            "FireAnimationFrame",
+            161.103
+          ],
+          [
+            "v8.callFunction",
+            161.091
+          ],
+          [
+            "FunctionCall",
+            160.999
+          ],
+          [
+            "Commit",
+            5.689
+          ]
+        ]
+      },
+      {
+        "ms": 149.017,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            148.956
+          ],
+          [
+            "FireAnimationFrame",
+            112.985
+          ],
+          [
+            "v8.callFunction",
+            112.875
+          ],
+          [
+            "FunctionCall",
+            112.853
+          ],
+          [
+            "Commit",
+            21.853
+          ]
+        ]
+      },
+      {
+        "ms": 146.572,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            146.542
+          ],
+          [
+            "FireAnimationFrame",
+            135.493
+          ],
+          [
+            "v8.callFunction",
+            135.48
+          ],
+          [
+            "FunctionCall",
+            135.455
+          ],
+          [
+            "MinorGC",
+            15.253
+          ]
+        ]
+      },
+      {
+        "ms": 146.313,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            146.273
+          ],
+          [
+            "FireAnimationFrame",
+            140.427
+          ],
+          [
+            "v8.callFunction",
+            140.41
+          ],
+          [
+            "FunctionCall",
+            140.291
+          ],
+          [
+            "MinorGC",
+            16.029
+          ]
+        ]
+      },
+      {
+        "ms": 140.117,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            140.075
+          ],
+          [
+            "FireAnimationFrame",
+            129.673
+          ],
+          [
+            "v8.callFunction",
+            129.624
+          ],
+          [
+            "FunctionCall",
+            128.246
+          ],
+          [
+            "MajorGC",
+            35.992
+          ]
+        ]
+      },
+      {
+        "ms": 137.575,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            137.508
+          ],
+          [
+            "FireAnimationFrame",
+            119.95
+          ],
+          [
+            "v8.callFunction",
+            119.935
+          ],
+          [
+            "FunctionCall",
+            119.905
+          ],
+          [
+            "FireAnimationFrame",
+            6.899
+          ]
+        ]
+      },
+      {
+        "ms": 136.624,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            135.978
+          ],
+          [
+            "FireAnimationFrame",
+            132.127
+          ],
+          [
+            "v8.callFunction",
+            132.115
+          ],
+          [
+            "FunctionCall",
+            131.518
+          ],
+          [
+            "FireAnimationFrame",
+            1.121
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-cpu-before-map.trace.json.gz",
+    "pid": 1150168,
+    "longTasks": 28,
+    "longest": [
+      {
+        "ms": 109.852,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            103.725
+          ],
+          [
+            "FireAnimationFrame",
+            66.444
+          ],
+          [
+            "v8.callFunction",
+            66.1
+          ],
+          [
+            "FunctionCall",
+            66.076
+          ],
+          [
+            "Commit",
+            9.007
+          ]
+        ]
+      },
+      {
+        "ms": 94.046,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            94.009
+          ],
+          [
+            "FireAnimationFrame",
+            45.957
+          ],
+          [
+            "v8.callFunction",
+            42.893
+          ],
+          [
+            "FireAnimationFrame",
+            41.454
+          ],
+          [
+            "v8.callFunction",
+            41.437
+          ]
+        ]
+      },
+      {
+        "ms": 92.614,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            84.579
+          ],
+          [
+            "FireAnimationFrame",
+            64.811
+          ],
+          [
+            "v8.callFunction",
+            64.788
+          ],
+          [
+            "FunctionCall",
+            64.707
+          ],
+          [
+            "Commit",
+            8.304
+          ]
+        ]
+      },
+      {
+        "ms": 88.906,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            88.86
+          ],
+          [
+            "FireAnimationFrame",
+            70.832
+          ],
+          [
+            "v8.callFunction",
+            70.801
+          ],
+          [
+            "FunctionCall",
+            69.807
+          ],
+          [
+            "Commit",
+            6.821
+          ]
+        ]
+      },
+      {
+        "ms": 77.942,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            77.902
+          ],
+          [
+            "FireAnimationFrame",
+            45.752
+          ],
+          [
+            "v8.callFunction",
+            45.73
+          ],
+          [
+            "FunctionCall",
+            45.71
+          ],
+          [
+            "UpdateLayoutTree",
+            11.349
+          ]
+        ]
+      },
+      {
+        "ms": 77.36,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            65.71
+          ],
+          [
+            "FireAnimationFrame",
+            39.576
+          ],
+          [
+            "v8.callFunction",
+            33.645
+          ],
+          [
+            "FunctionCall",
+            33.25
+          ],
+          [
+            "Commit",
+            12.374
+          ]
+        ]
+      },
+      {
+        "ms": 74.429,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            72.409
+          ],
+          [
+            "FireAnimationFrame",
+            52.38
+          ],
+          [
+            "v8.callFunction",
+            52.351
+          ],
+          [
+            "FunctionCall",
+            50.33
+          ],
+          [
+            "FireAnimationFrame",
+            4.292
+          ]
+        ]
+      },
+      {
+        "ms": 72.007,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            64.269
+          ],
+          [
+            "Commit",
+            15.858
+          ],
+          [
+            "Paint",
+            13.209
+          ],
+          [
+            "HitTest",
+            8.516
+          ],
+          [
+            "Paint",
+            8.223
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-cpu-before-moon.trace.json.gz",
+    "pid": 1150324,
+    "longTasks": 4,
+    "longest": [
+      {
+        "ms": 58.537,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            58.511
+          ],
+          [
+            "FireAnimationFrame",
+            52.982
+          ],
+          [
+            "v8.callFunction",
+            52.962
+          ],
+          [
+            "FunctionCall",
+            49.539
+          ],
+          [
+            "v8.callFunction",
+            3.365
+          ]
+        ]
+      },
+      {
+        "ms": 57.525,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            57.115
+          ],
+          [
+            "FireAnimationFrame",
+            45.77
+          ],
+          [
+            "v8.callFunction",
+            45.754
+          ],
+          [
+            "FunctionCall",
+            39.977
+          ],
+          [
+            "v8.callFunction",
+            5.704
+          ]
+        ]
+      },
+      {
+        "ms": 55.327,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            55.281
+          ],
+          [
+            "FireAnimationFrame",
+            51.456
+          ],
+          [
+            "v8.callFunction",
+            50.403
+          ],
+          [
+            "FunctionCall",
+            50.337
+          ],
+          [
+            "MinorGC",
+            4.378
+          ]
+        ]
+      },
+      {
+        "ms": 51.272,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            51.242
+          ],
+          [
+            "FireAnimationFrame",
+            45.739
+          ],
+          [
+            "v8.callFunction",
+            45.727
+          ],
+          [
+            "FunctionCall",
+            43.382
+          ],
+          [
+            "v8.callFunction",
+            2.303
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-cpu-before-orbit.trace.json.gz",
+    "pid": 1149614,
+    "longTasks": 45,
+    "longest": [
+      {
+        "ms": 85.383,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            79.789
+          ],
+          [
+            "FireAnimationFrame",
+            62.177
+          ],
+          [
+            "v8.callFunction",
+            61.506
+          ],
+          [
+            "FunctionCall",
+            61.489
+          ],
+          [
+            "Commit",
+            8.743
+          ]
+        ]
+      },
+      {
+        "ms": 80.284,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            80.251
+          ],
+          [
+            "FireAnimationFrame",
+            76.049
+          ],
+          [
+            "v8.callFunction",
+            76.034
+          ],
+          [
+            "FunctionCall",
+            75.712
+          ],
+          [
+            "PrePaint",
+            1.36
+          ]
+        ]
+      },
+      {
+        "ms": 79.135,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            79.097
+          ],
+          [
+            "FireAnimationFrame",
+            67.511
+          ],
+          [
+            "v8.callFunction",
+            67.495
+          ],
+          [
+            "FunctionCall",
+            67.421
+          ],
+          [
+            "PrePaint",
+            6.641
+          ]
+        ]
+      },
+      {
+        "ms": 77.212,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            77.177
+          ],
+          [
+            "FireAnimationFrame",
+            71.211
+          ],
+          [
+            "v8.callFunction",
+            71.194
+          ],
+          [
+            "FunctionCall",
+            71.161
+          ],
+          [
+            "Commit",
+            3.51
+          ]
+        ]
+      },
+      {
+        "ms": 76.456,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            76.398
+          ],
+          [
+            "FireAnimationFrame",
+            60.656
+          ],
+          [
+            "v8.callFunction",
+            60.64
+          ],
+          [
+            "FunctionCall",
+            60.619
+          ],
+          [
+            "Commit",
+            9.289
+          ]
+        ]
+      },
+      {
+        "ms": 72.241,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            72.202
+          ],
+          [
+            "FireAnimationFrame",
+            61.77
+          ],
+          [
+            "v8.callFunction",
+            61.756
+          ],
+          [
+            "FunctionCall",
+            61.677
+          ],
+          [
+            "Commit",
+            7.602
+          ]
+        ]
+      },
+      {
+        "ms": 68.905,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            68.865
+          ],
+          [
+            "FireAnimationFrame",
+            50.402
+          ],
+          [
+            "v8.callFunction",
+            50.382
+          ],
+          [
+            "FunctionCall",
+            50.3
+          ],
+          [
+            "Commit",
+            13.904
+          ]
+        ]
+      },
+      {
+        "ms": 67.704,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            67.504
+          ],
+          [
+            "FireAnimationFrame",
+            49.891
+          ],
+          [
+            "v8.callFunction",
+            49.876
+          ],
+          [
+            "FunctionCall",
+            49.855
+          ],
+          [
+            "Commit",
+            14.046
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-cpu-before-pad.trace.json.gz",
+    "pid": 1149027,
+    "longTasks": 96,
+    "longest": [
+      {
+        "ms": 169.484,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            168.887
+          ],
+          [
+            "FireAnimationFrame",
+            158.421
+          ],
+          [
+            "v8.callFunction",
+            158.374
+          ],
+          [
+            "FunctionCall",
+            135.837
+          ],
+          [
+            "MajorGC",
+            31.933
+          ]
+        ]
+      },
+      {
+        "ms": 139.081,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            139.032
+          ],
+          [
+            "FireAnimationFrame",
+            132.739
+          ],
+          [
+            "v8.callFunction",
+            132.723
+          ],
+          [
+            "FunctionCall",
+            132.623
+          ],
+          [
+            "FireAnimationFrame",
+            5.343
+          ]
+        ]
+      },
+      {
+        "ms": 128.348,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            128.265
+          ],
+          [
+            "FireAnimationFrame",
+            111.4
+          ],
+          [
+            "v8.callFunction",
+            110.503
+          ],
+          [
+            "FunctionCall",
+            110.474
+          ],
+          [
+            "Commit",
+            9.298
+          ]
+        ]
+      },
+      {
+        "ms": 123.156,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            123.122
+          ],
+          [
+            "FireAnimationFrame",
+            121.29
+          ],
+          [
+            "v8.callFunction",
+            121.263
+          ],
+          [
+            "FunctionCall",
+            121.14
+          ],
+          [
+            "V8.DeoptimizeCode",
+            0.558
+          ]
+        ]
+      },
+      {
+        "ms": 118.488,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            118.444
+          ],
+          [
+            "FireAnimationFrame",
+            71.301
+          ],
+          [
+            "v8.callFunction",
+            71.283
+          ],
+          [
+            "FunctionCall",
+            71.26
+          ],
+          [
+            "Commit",
+            25.611
+          ]
+        ]
+      },
+      {
+        "ms": 111.112,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            110.92
+          ],
+          [
+            "FireAnimationFrame",
+            95.613
+          ],
+          [
+            "v8.callFunction",
+            95.579
+          ],
+          [
+            "FunctionCall",
+            95.474
+          ],
+          [
+            "Commit",
+            13.067
+          ]
+        ]
+      },
+      {
+        "ms": 105.01,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            104.963
+          ],
+          [
+            "FireAnimationFrame",
+            72.41
+          ],
+          [
+            "v8.callFunction",
+            72.391
+          ],
+          [
+            "FunctionCall",
+            72.369
+          ],
+          [
+            "FireAnimationFrame",
+            15.537
+          ]
+        ]
+      },
+      {
+        "ms": 104.464,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            104.417
+          ],
+          [
+            "FireAnimationFrame",
+            103.212
+          ],
+          [
+            "v8.callFunction",
+            100.072
+          ],
+          [
+            "FunctionCall",
+            95.102
+          ],
+          [
+            "MajorGC",
+            47.867
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-cpu-before-warp100k.trace.json.gz",
+    "pid": 1149954,
+    "longTasks": 20,
+    "longest": [
+      {
+        "ms": 97.576,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            97.54
+          ],
+          [
+            "FireAnimationFrame",
+            84.674
+          ],
+          [
+            "v8.callFunction",
+            84.645
+          ],
+          [
+            "FunctionCall",
+            84.543
+          ],
+          [
+            "Commit",
+            2.147
+          ]
+        ]
+      },
+      {
+        "ms": 84.338,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            84.282
+          ],
+          [
+            "FireAnimationFrame",
+            71.689
+          ],
+          [
+            "v8.callFunction",
+            63.706
+          ],
+          [
+            "FunctionCall",
+            61.835
+          ],
+          [
+            "Commit",
+            6.29
+          ]
+        ]
+      },
+      {
+        "ms": 77.119,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            61.308
+          ],
+          [
+            "FireAnimationFrame",
+            52.071
+          ],
+          [
+            "v8.callFunction",
+            51.342
+          ],
+          [
+            "FunctionCall",
+            51.266
+          ],
+          [
+            "Commit",
+            6.757
+          ]
+        ]
+      },
+      {
+        "ms": 76.999,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            76.733
+          ],
+          [
+            "FireAnimationFrame",
+            39.91
+          ],
+          [
+            "v8.callFunction",
+            39.871
+          ],
+          [
+            "FunctionCall",
+            39.847
+          ],
+          [
+            "Paint",
+            12.004
+          ]
+        ]
+      },
+      {
+        "ms": 74.524,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            74.478
+          ],
+          [
+            "FireAnimationFrame",
+            49.85
+          ],
+          [
+            "v8.callFunction",
+            49.818
+          ],
+          [
+            "FunctionCall",
+            47.492
+          ],
+          [
+            "Commit",
+            10.55
+          ]
+        ]
+      },
+      {
+        "ms": 73.714,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            73.672
+          ],
+          [
+            "FireAnimationFrame",
+            27.152
+          ],
+          [
+            "v8.callFunction",
+            27.135
+          ],
+          [
+            "FunctionCall",
+            27.118
+          ],
+          [
+            "Commit",
+            18.893
+          ]
+        ]
+      },
+      {
+        "ms": 69.089,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            69.045
+          ],
+          [
+            "FireAnimationFrame",
+            50.769
+          ],
+          [
+            "v8.callFunction",
+            48.867
+          ],
+          [
+            "FunctionCall",
+            48.845
+          ],
+          [
+            "Commit",
+            4.166
+          ]
+        ]
+      },
+      {
+        "ms": 68.115,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            67.718
+          ],
+          [
+            "FireAnimationFrame",
+            59.348
+          ],
+          [
+            "v8.callFunction",
+            59.33
+          ],
+          [
+            "FunctionCall",
+            59.269
+          ],
+          [
+            "HitTest",
+            5.195
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-hardware-before-ascent.trace.json.gz",
+    "pid": 46808,
+    "longTasks": 0,
+    "longest": []
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-hardware-before-map.trace.json.gz",
+    "pid": 38136,
+    "longTasks": 0,
+    "longest": []
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-hardware-before-moon.trace.json.gz",
+    "pid": 36412,
+    "longTasks": 1,
+    "longest": [
+      {
+        "ms": 50.365,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            50.341
+          ],
+          [
+            "Receive mojo reply",
+            0.019
+          ],
+          [
+            "BlinkScheduler_PerformMicrotaskCheckpoint",
+            0.004
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-hardware-before-orbit.trace.json.gz",
+    "pid": 45304,
+    "longTasks": 0,
+    "longest": []
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-hardware-before-pad.trace.json.gz",
+    "pid": 18536,
+    "longTasks": 0,
+    "longest": []
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-hardware-before-warp100k.trace.json.gz",
+    "pid": 20108,
+    "longTasks": 0,
+    "longest": []
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-journey-traced-journey.trace.json.gz",
+    "pid": 46092,
+    "longTasks": 2,
+    "longest": [
+      {
+        "ms": 75.267,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            75.211
+          ],
+          [
+            "Receive mojo reply",
+            0.005
+          ],
+          [
+            "BlinkScheduler_PerformMicrotaskCheckpoint",
+            0.005
+          ]
+        ]
+      },
+      {
+        "ms": 74.154,
+        "work": [
+          [
+            "ThreadControllerImpl::RunTask",
+            74.127
+          ],
+          [
+            "FireAnimationFrame",
+            43.599
+          ],
+          [
+            "v8.callFunction",
+            43.585
+          ],
+          [
+            "FunctionCall",
+            43.575
+          ],
+          [
+            "Commit",
+            29.14
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "file": "docs/performance/perfcpu/perfcpu-moon-traced-moon.trace.json.gz",
+    "pid": 35876,
+    "longTasks": 0,
+    "longest": []
+  }
+]
