@@ -18,6 +18,7 @@ if (!await stat(input).catch(() => null)) {
 }
 const sha256 = data => createHash('sha256').update(data).digest('hex');
 const sourceHash = sha256(await readFile(input));
+if (sourceHash !== '9d27d4b8ea8e76977e2988bca667d7c8fa68b927355feffcddd6b4875a7fd08e') throw Error('Source checksum mismatch; remove incomplete cache or review changed upstream data');
 const tif = await fromFile(input.pathname), raster = await tif.getImage();
 const sw = raster.getWidth(), sh = raster.getHeight(), width = 4096, height = 2048;
 if (sw !== 21600 || sh !== 10800) throw Error('Unexpected source dimensions');

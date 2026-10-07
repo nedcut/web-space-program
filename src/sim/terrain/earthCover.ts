@@ -3,12 +3,12 @@ export type EarthCover = 'Oceans' | 'Shores' | 'Grasslands' | 'Deserts' | 'Mount
 function ellipse(lat: number, lon: number, la: number, lo: number, ry: number, rx: number): boolean {
   return ((lat - la) / ry) ** 2 + ((lon - lo) / rx) ** 2 < 1;
 }
-export function earthCover(lat: number, lon: number, elevation: number): EarthCover {
-  if (lat < -60 || (lat > 60 && lon > -73 && lon < -12 && elevation > 500)) return 'Ice Caps';
+export function earthCover(lat: number, lon: number, elevation: number, coastal = false): EarthCover {
   if (elevation < 0) return 'Oceans';
+  if (lat < -60 || (lat > 60 && lon > -73 && lon < -12 && elevation > 500)) return 'Ice Caps';
   const snowline = Math.max(800, 5100 - Math.abs(lat) * 50);
   if (elevation > snowline) return 'Ice Caps';
-  if (elevation < 25) return 'Shores';
+  if (elevation < 25 && coastal) return 'Shores';
   if (elevation > 2200) return 'Mountains';
   if (Math.abs(lat) > 66 || (lat > 58 && elevation > 700)) return 'Tundra';
   if (ellipse(lat, lon, 24, 12, 10, 29) || ellipse(lat, lon, 24, 46, 10, 14)

@@ -1,7 +1,7 @@
 import { earthData } from '../earthData';
 import { earthCover } from '../earthCover';
 import type { RGB } from '../api';
-import { fbm, octavesFor, smoothstep, mix } from '../fbm';
+import { fbm, ridged, octavesFor, smoothstep, mix } from '../fbm';
 import { latLonToUnit, angleTo } from '../geo';
 import { setRGB, type PresetContext, type PresetResult } from './common';
 
@@ -42,7 +42,7 @@ export function siteLocalToUnit(x: number, z: number, radius: number): { x: numb
 export function earthPreset(ctx: PresetContext): PresetResult {
   const grid = earthData(), verticalScale = ctx.relief / 8800;
   const site = latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon);
-  const noise = ctx.noise(4), variation = { range: 0 };
+  const noise = ctx.noise(4), variation = { range: 0, coastal: false };
   const frequency = 4096 / (2 * Math.PI);
   const octaves = Math.min(5, octavesFor(ctx.radius, frequency, ctx.minWavelength, 2, 5));
   const extent = LAUNCH_SITE.flatRadius + LAUNCH_SITE.blendRadius;
@@ -57,7 +57,10 @@ export function earthPreset(ctx: PresetContext): PresetResult {
     // Local elevation range approximates slope. Plains stay flat, rugged cells receive ridges.
     // Fade at sea level so noise never creates fictional islands/coast crossings.
     const amplitude = Math.min(120, Math.abs(metres) * .08, variation.range * .12);
-    const detail = amplitude * fbm(noise, x * frequency, y * frequency, z * frequency, octaves);
+    const mountain = smoothstep(300, 1400, variation.range) * smoothstep(400, 1800, metres);
+    const rolling = fbm(noise, x * frequency, y * frequency, z * frequency, octaves);
+    const crests = mountain > 0 ? 2 * ridged(noise, x * frequency, y * frequency, z * frequency, octaves) - 1 : 0;
+    const detail = amplitude * mix(rolling, crests, mountain);
     let h = (metres + detail) * verticalScale;
     if (distance < extent) h = mix(h, LAUNCH_SITE.elevation, 1 - smoothstep(LAUNCH_SITE.flatRadius, extent, distance));
     return h;
@@ -72,7 +75,8 @@ export function earthPreset(ctx: PresetContext): PresetResult {
     colorAt: (x, y, z, h, out) => {
       const lat = Math.asin(Math.max(-1, Math.min(1, z))) * 180 / Math.PI;
       const lon = Math.atan2(y, x) * 180 / Math.PI;
-      const cover = earthCover(lat, lon, h / verticalScale);
+      grid.sample(x, y, z, variation);
+      const cover = earthCover(lat, lon, h / verticalScale, variation.coastal);
       const c = palette[cover];
       const v = cover === 'Ice Caps' ? 1 : 1 + .10 * noise.noise(x * 1700, y * 1700, z * 1700);
       return setRGB(out, c[0] * v, c[1] * v, c[2] * v);

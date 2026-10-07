@@ -22,7 +22,10 @@ export function biomeAt(body: Body, terrain: Terrain, direction: Vec3): string {
   const d = normalize(direction), lat = Math.abs(Math.asin(d.z));
   if (body.id === 'earth') {
     if (Math.acos(Math.min(1, dot(d, latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon)))) * body.radius < 2500) return 'Launch Complex';
-    return earthCover(Math.asin(d.z) * 180 / Math.PI, Math.atan2(d.y, d.x) * 180 / Math.PI, earthData().sample(d.x, d.y, d.z));
+    const sample = { range: 0, coastal: false };
+    earthData().sample(d.x, d.y, d.z, sample);
+    const elevation = terrain.heightAt(d.x, d.y, d.z) * 8800 / body.surface.relief;
+    return earthCover(Math.asin(d.z) * 180 / Math.PI, Math.atan2(d.y, d.x) * 180 / Math.PI, elevation, sample.coastal);
   }
   const h = terrain.heightAt(d.x, d.y, d.z);
   const relief = Math.max(1, terrain.maxHeight - terrain.minHeight);
