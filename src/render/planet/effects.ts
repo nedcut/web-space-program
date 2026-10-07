@@ -83,8 +83,6 @@ export function createPlanetEffect(u: PlanetUniforms, q: QualitySettings, kind: 
         vec4 clip = projectionMatrix * viewMatrix * vec4(cameraPosition + rdWorld * start * uPlanetRadius, 1.0);
         #ifdef USE_LOGARITHMIC_DEPTH_BUFFER
           gl_FragDepth = log2(max(1e-6, 1.0 + clip.w)) * logDepthBufFC * 0.5;
-        #elif defined(USE_REVERSED_DEPTH_BUFFER)
-          gl_FragDepth = clip.w > 0.0 ? clamp(clip.z / clip.w, 0.0, 1.0) : 1.0;
         #else
           gl_FragDepth = clip.w > 0.0 ? clamp(clip.z / clip.w * 0.5 + 0.5, 0.0, 1.0) : 0.0;
         #endif

@@ -40,7 +40,6 @@ export class RenderPipeline {
   private smaaPass?: SMAAPass;
   private upscalePass!: UpscalePass;
   private hdrTarget?: THREE.WebGLRenderTarget;
-  private reversedDepth = false;
   /** Unmasked WebGL renderer string, when the browser exposes it. */
   readonly gpuName: string | null;
   photoEffects!: PhotoEffectsPass;
@@ -57,14 +56,10 @@ export class RenderPipeline {
 
   constructor(opts: RenderPipelineOptions) {
     this.quality = opts.quality;
-    // EXPERIMENT (?rz=1): reversed float depth instead of logarithmic depth (keeps early-Z / hidden-surface removal).
-    const reversed = typeof location !== 'undefined' && /[?&]rz=1/.test(location.search);
-    this.reversedDepth = reversed;
     this.renderer = new THREE.WebGLRenderer({
       canvas: opts.canvas,
       antialias: false,
-      logarithmicDepthBuffer: !reversed,
-      reversedDepthBuffer: reversed,
+      logarithmicDepthBuffer: true,
       powerPreference: 'high-performance',
       alpha: false,
       stencil: false,
@@ -142,7 +137,6 @@ export class RenderPipeline {
       samples: q.msaaSamples,
       depthBuffer: true,
     }));
-    if (this.reversedDepth) hdr.depthTexture = new THREE.DepthTexture(this.width, this.height, THREE.FloatType);
     const ldr = new THREE.WebGLRenderTarget(this.width, this.height, { type: THREE.UnsignedByteType, depthBuffer: false });
     const composer = new EffectComposer(this.renderer, ldr);
     composer.setPixelRatio(this.pixelRatio);
