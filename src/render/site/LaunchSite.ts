@@ -1086,8 +1086,8 @@ export class LaunchSite {
         shader.fragmentShader = shader.fragmentShader.replace('void main() {', 'uniform float uSiteLod;\nvoid main() {').replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
           float distanceToPlant = length(cameraPosition - vAtmoWorld);
           float fade = 1.0 - smoothstep(7000.0, 10000.0, distanceToPlant);
-          // Complementary dithers: detailed < 300–400 m < mid < 1.2–1.6 km < coarse crowns (uSiteLod 0 / 1 / 2).
-          float lodMid = smoothstep(300.0, 400.0, distanceToPlant);
+          // Complementary dithers: detailed < 220–300 m < mid < 1.2–1.6 km < coarse crowns (uSiteLod 0 / 1 / 2).
+          float lodMid = smoothstep(220.0, 300.0, distanceToPlant);
           float lodFar = smoothstep(1200.0, 1600.0, distanceToPlant);
           float grain = fract(dot(floor(gl_FragCoord.xy), vec2(0.75487766, 0.56984029)));
           float keepBelow = uSiteLod < 0.5 ? 2.0 : uSiteLod < 1.5 ? lodMid : lodFar;
@@ -1161,8 +1161,8 @@ export class LaunchSite {
         };
         this.vegetationLods.push({
           levels: [
-            { mesh: level(shared, mat, '', true), min: 0, max: 400 },
-            { mesh: level(sharedMid, midMat, ':mid', true), min: 300, max: 1600 },
+            { mesh: level(shared, mat, '', true), min: 0, max: 300 },
+            { mesh: level(sharedMid, midMat, ':mid', true), min: 220, max: 1600 },
             { mesh: level(farGeo, farMat, ':far', false), min: 1200, max: 10000 },
           ],
           matrices, colors, xyz,
