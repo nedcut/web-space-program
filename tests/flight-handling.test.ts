@@ -82,3 +82,25 @@ describe('rest on the pad', () => {
     }, 60000);
   }
 });
+
+describe('runway spawn', () => {
+  for (const id of ['stock-swift', 'stock-daybreak']) {
+    it(`${id}: starts at rest on compressed gear (no drop onto the wheels, no rocking)`, () => {
+      const world = mkWorld();
+      const wv = world.launch(craft(id), 'runway');
+      const r0 = rootFixed(world, wv);
+      const up = normalize(r0);
+      let maxVz = 0, minH = 0;
+      for (let i = 0; i < 50 * 3; i++) {
+        world.tick(PHYSICS_DT, neutralInput({ brakes: true }));
+        maxVz = Math.max(maxVz, Math.abs(dot(world.surfaceVelocity(wv), up)));
+        minH = Math.min(minH, dot(sub(rootFixed(world, wv), r0), up));
+      }
+      // Previously 0.8–1.1 m/s and a 15–30 cm drop as the gear took the weight.
+      expect(maxVz).toBeLessThan(0.05);
+      expect(minH).toBeGreaterThan(-0.02);
+      // No wheel bottomed out on its stops.
+      for (const p of wv.state.parts) if (p.wheel) expect(p.wheel.inContact).toBe(true);
+    }, 60000);
+  }
+});

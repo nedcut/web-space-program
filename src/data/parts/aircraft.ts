@@ -100,7 +100,7 @@ export const aircraft: PartDef[] = [
   }),
   landingGear({
     id: 'gear-bogie', name: 'Bogie Main Gear', dryMass: 130, cost: 700, radius: 0.34, strut: 1.05, fold: 1,
-    spring: 150_000, damper: 16_000, travel: 0.28, brakeTorque: 6_000, crashTolerance: 14,
+    spring: 300_000, damper: 30_000, travel: 0.28, brakeTorque: 6_000, crashTolerance: 14,
     description: 'Heavy retractable main leg with carbon brakes. Takes a firm landing without complaint, and a soft one with pride.',
   }),
   liftingSurface({
