@@ -1,5 +1,6 @@
+import { loadEarthData } from '../earthLoader';
 import { createPlannerHandler } from './handler';
 import type { PlannerMessage } from './protocol';
 
 const handle = createPlannerHandler(event => self.postMessage(event));
-self.onmessage = (event: MessageEvent<PlannerMessage>) => { void handle(event.data); };
+self.onmessage = (event: MessageEvent<PlannerMessage>) => { void loadEarthData().then(() => handle(event.data)); };

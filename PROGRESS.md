@@ -771,3 +771,10 @@ Added original branched coastal vegetation with wind and fading LOD, warmer deta
 - Before/after (including a Selene lander on the Moon) are in `docs/screenshots/partsart3/` (see its README for crops, numbers and known limits).
 - Current main merged; lint, typecheck, **107 files / 1,296 tests** and the production build pass.
 
+
+## Real Earth geography — terrain integration ready (cx/realearth)
+
+- CC0 ETOPO pipeline and committed 16 MiB real elevation/bathymetry, exact imagery alignment contract in `public/earth/manifest.json`.
+- Main/worker/Node loading, deterministic sampler, real coast cloud mask through shared height function, scaled relief, bounded sub-grid detail, geographic ground colours and science classes.
+- Existing launch plateau/runway geometry and legacy biome IDs retained. Targeted terrain/science/nbody suite: 41 tests pass; production build passes and precaches Earth data.
+- Graphics agent can merge the `REALEARTH-TERRAIN-READY` commit. Earth imagery/effects remain owned by op/earthgfx. Remaining: worker/seam/data regressions, performance, full checks, main integration and screenshots.

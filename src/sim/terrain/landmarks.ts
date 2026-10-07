@@ -20,7 +20,7 @@ export const LANDMARKS: readonly Landmark[] = [
   { id: 'blue-gate', body: 'enceladus', name: 'Blue Gate', lat: -78, lon: 45, kind: 'arch', description: 'A blue ice bridge straddles the young south-polar terrain.' },
   { id: 'fold', body: 'mercury', name: 'Last Fold', lat: 22, lon: -35, kind: 'cairn', description: 'A buckled ridge records the contraction of a cooling world.' },
   { id: 'reed-field', body: 'earth', name: 'Reed Airfield', lat: 29.5, lon: -82, kind: 'airfield', description: 'A small inland survey strip with a painted threshold and navigation mast.' },
-  { id: 'salt-field', body: 'earth', name: 'Saltwind Airfield', lat: 27, lon: -80.8, kind: 'airfield', description: 'A coastal strip used by the fictional Saltwind atmospheric survey.' },
+  { id: 'salt-field', body: 'earth', name: 'Saltwind Airfield', lat: 27.5, lon: -80.5, kind: 'airfield', description: 'A coastal strip used by the fictional Saltwind atmospheric survey.' },
 ];
 export function landmarkPosition(body: BodyDef, terrain: Terrain, landmark: Landmark): Vec3 {
   const d = latLonToUnit(landmark.lat, landmark.lon);
