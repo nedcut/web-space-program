@@ -129,9 +129,10 @@ async function stopTrace(cdp, pageUrl, name) {
   const done = new Promise((res) => cdp.once('Tracing.tracingComplete', res));
   await cdp.send('Tracing.end');
   const { stream } = await done;
-  // Chrome exports one JSON event per line. Filter while draining the stream: a two-minute
+  // Parse complete event objects while draining the stream: a two-minute
   // whole-browser trace can exceed V8's 512 MiB string limit on a shared GPU harness.
   let pending = '', pid = null;
+  let inEvents = false, ended = false, depth = 0, quoted = false, escaped = false, event = '';
   let ev = [];
   const consume = (line) => {
     const value = line.trim().replace(/,$/, '');
@@ -147,9 +148,29 @@ async function stopTrace(cdp, pageUrl, name) {
   };
   for (;;) {
     const r = await cdp.send('IO.read', { handle: stream, size: 1 << 22 });
-    pending += r.base64Encoded ? Buffer.from(r.data, 'base64').toString() : r.data;
-    const lines = pending.split('\n'); pending = lines.pop();
-    for (const line of lines) consume(line);
+    let chunk = r.base64Encoded ? Buffer.from(r.data, 'base64').toString() : r.data;
+    if (!inEvents) {
+      pending += chunk;
+      const start = pending.indexOf('[');
+      if (start < 0) continue;
+      chunk = pending.slice(start + 1); pending = ''; inEvents = true;
+    }
+    for (const ch of chunk) {
+      if (ended) break;
+      if (!depth) {
+        if (ch === ']') { ended = true; break; }
+        if (ch !== '{') continue;
+        depth = 1; event = '{'; continue;
+      }
+      event += ch;
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') quoted = false;
+      } else if (ch === '"') quoted = true;
+      else if (ch === '{') depth++;
+      else if (ch === '}' && --depth === 0) { consume(event); event = ''; }
+    }
     if (r.eof) break;
   }
   await cdp.send('IO.close', { handle: stream });
