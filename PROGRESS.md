@@ -794,3 +794,18 @@ Added original branched coastal vegetation with wind and fading LOD, warmer deta
 - Pipeline regenerated identical bytes/hash. Production PWA cache verified at 16,777,216 Earth bytes; after stopping the server the orbit flight still loads, with a sampled height exactly equal to Node. Evidence in `docs/screenshots/realearth/offline-check.json`.
 - Servers stopped and automation tabs closed; temporary service-worker registration removed. Only `cx/realearth` worktree changed. Terrain-ready integration anchor is `5990a805`; merge the branch tip to include subsequent parity, loading and verification fixes.
 - **Zen startup fix (2026-10-07):** Reproduced New Game → Start leaving a blank page in the live Zen tab. The scene music switch threw because `AudioParam.cancelAndHoldAtTime` is unavailable. Added feature detection and a current-gain fallback using `cancelScheduledValues`/`setValueAtTime`. All 26 focused audio tests and typecheck pass; live Zen now opens Space Center and renders Vehicle Assembly.
+
+## Firefox, Zen and Safari compatibility (op/firefox, 2026-10-07)
+
+- **Cause of "doesn't work in Firefox":** after the first click, the menu → Space Center music switch called `AudioParam.cancelAndHoldAtTime`, which Firefox lacks. The audio hook sits above the scene error boundary, so the whole app unmounted to a black page. I reproduced it on real Windows Firefox 143. Your PR #1 fix was merged here, and the branch's equivalent copy was dropped.
+- **Hardening, so the next browser gap cannot blank the game:**
+  - Audio now fails safe: any Web Audio error silences sound instead of crashing.
+  - A root error boundary shows a reload page instead of a black screen.
+  - A browser without WebGL 2 gets a friendly fix-it screen and a main-menu warning, instead of a "Flight interrupted" crash.
+  - With site data blocked (localStorage throws), the game runs on session memory and says so.
+- **Privacy-hardened Firefox (resistFingerprinting):** part-heat shaders failed to link and editor buffers exceeded the reported size limits; both are fixed. Canvas read-back is randomised there, so the texture cache no longer stores it.
+- **Verified:**
+  - Real Windows Firefox 143 on the RTX 3060 Ti, production build: full flow with no console errors (menu → editor → launch → staging → orbit → map → quicksave/quickload → Tracking Station → Continue). Medium quality at 1600×915 runs ~59 fps with ~6 ms CPU/frame.
+  - Playwright Firefox 155, WebKit 26.6 (Safari proxy) and Chromium pass `node scripts/browser-smoke.mjs`; Firefox also passes with resistFingerprinting at Medium.
+  - Screenshots: `docs/screenshots/firefox/`. How to run it: `docs/BROWSERS.md`.
+- **Not verified:** real Safari on a Mac, and Firefox on macOS (it uses Apple's OpenGL driver rather than ANGLE). WebKit on Linux is only a proxy.

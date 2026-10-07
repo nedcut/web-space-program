@@ -22,7 +22,7 @@ if (process.env.GLCOUNT) await page.evaluateOnNewDocument(() => {
     const d = Object.getOwnPropertyDescriptor(P, k); if (!d || typeof d.value !== 'function') continue;
     const o = d.value; P[k] = function (...a) { if (window.__glOn) { const key = k === 'getParameter' ? 'getParameter:' + a[0] : k; counts.set(key, (counts.get(key) || 0) + 1); } return o.apply(this, a); };
   }
-  const raf = window.requestAnimationFrame.bind(window); let n = 0;
+  const raf = window.requestAnimationFrame.bind(window);
   window.__glStart = () => { counts.clear(); window.__glOn = true; window.__glFrames = 0; const tick = () => { if (!window.__glOn) return; window.__glFrames++; raf(tick); }; raf(tick); };
 });
 if (process.env.INJECT_CSS) await page.evaluateOnNewDocument((css) => { document.addEventListener('DOMContentLoaded', () => { const st = document.createElement('style'); st.textContent = css; document.head.append(st); }); }, process.env.INJECT_CSS);
