@@ -1,0 +1,282 @@
+[
+  {
+    "round": 0,
+    "side": "before",
+    "visit": "cold",
+    "readyMs": 6639.899999976158,
+    "constructorMs": 405.10000002384186,
+    "maxTaskMs": 412,
+    "longTasks": [
+      {
+        "start": 135.29999995231628,
+        "ms": 102
+      },
+      {
+        "start": 451.10000002384186,
+        "ms": 87
+      },
+      {
+        "start": 974.7999999523163,
+        "ms": 412
+      },
+      {
+        "start": 1470.8999999761581,
+        "ms": 335
+      },
+      {
+        "start": 1840.7999999523163,
+        "ms": 60
+      },
+      {
+        "start": 1946.1999999284744,
+        "ms": 82
+      },
+      {
+        "start": 2286.1999999284744,
+        "ms": 132
+      },
+      {
+        "start": 7211.199999928474,
+        "ms": 68
+      }
+    ],
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+  },
+  {
+    "round": 0,
+    "side": "before",
+    "visit": "warm",
+    "readyMs": 3137.5,
+    "constructorMs": 202,
+    "maxTaskMs": 219,
+    "longTasks": [
+      {
+        "start": 523.5999999046326,
+        "ms": 204
+      },
+      {
+        "start": 728.2999999523163,
+        "ms": 219
+      },
+      {
+        "start": 1044.6999999284744,
+        "ms": 65
+      },
+      {
+        "start": 1360.8999999761581,
+        "ms": 100
+      }
+    ],
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+  },
+  {
+    "round": 0,
+    "side": "after",
+    "visit": "cold",
+    "readyMs": 4177.300000071526,
+    "constructorMs": 409.5,
+    "maxTaskMs": 416,
+    "longTasks": [
+      {
+        "start": 156.60000002384186,
+        "ms": 109
+      },
+      {
+        "start": 914.7000000476837,
+        "ms": 416
+      },
+      {
+        "start": 1427.9000000953674,
+        "ms": 297
+      },
+      {
+        "start": 1753.6000000238419,
+        "ms": 59
+      },
+      {
+        "start": 1850.6000000238419,
+        "ms": 78
+      },
+      {
+        "start": 2201.3000000715256,
+        "ms": 133
+      }
+    ],
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+  },
+  {
+    "round": 0,
+    "side": "after",
+    "visit": "warm",
+    "readyMs": 3228.600000023842,
+    "constructorMs": 345.59999990463257,
+    "maxTaskMs": 348,
+    "longTasks": [
+      {
+        "start": 476.7000000476837,
+        "ms": 348
+      },
+      {
+        "start": 901.6000000238419,
+        "ms": 174
+      },
+      {
+        "start": 1120.1000000238419,
+        "ms": 54
+      },
+      {
+        "start": 1183.7000000476837,
+        "ms": 71
+      },
+      {
+        "start": 1484.3000000715256,
+        "ms": 95
+      }
+    ],
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+  },
+  {
+    "round": 1,
+    "side": "before",
+    "visit": "cold",
+    "readyMs": 6449.399999976158,
+    "constructorMs": 394.40000009536743,
+    "maxTaskMs": 402,
+    "longTasks": [
+      {
+        "start": 140.39999997615814,
+        "ms": 109
+      },
+      {
+        "start": 369.7000000476837,
+        "ms": 93
+      },
+      {
+        "start": 999.8999999761581,
+        "ms": 402
+      },
+      {
+        "start": 1477.1000000238419,
+        "ms": 296
+      },
+      {
+        "start": 1807.6000000238419,
+        "ms": 62
+      },
+      {
+        "start": 1909.5,
+        "ms": 92
+      },
+      {
+        "start": 2260.899999976158,
+        "ms": 118
+      }
+    ],
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+  },
+  {
+    "round": 1,
+    "side": "before",
+    "visit": "warm",
+    "readyMs": 2877.6999999284744,
+    "constructorMs": 180.29999995231628,
+    "maxTaskMs": 182,
+    "longTasks": [
+      {
+        "start": 482.6999999284744,
+        "ms": 182
+      },
+      {
+        "start": 671,
+        "ms": 182
+      },
+      {
+        "start": 956.2999999523163,
+        "ms": 68
+      },
+      {
+        "start": 1252.8999999761581,
+        "ms": 79
+      }
+    ],
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+  },
+  {
+    "round": 1,
+    "side": "after",
+    "visit": "cold",
+    "readyMs": 6394.200000047684,
+    "constructorMs": 397.89999997615814,
+    "maxTaskMs": 406,
+    "longTasks": [
+      {
+        "start": 139.10000002384186,
+        "ms": 114
+      },
+      {
+        "start": 266.90000009536743,
+        "ms": 85
+      },
+      {
+        "start": 925.9000000953674,
+        "ms": 406
+      },
+      {
+        "start": 1404.2000000476837,
+        "ms": 286
+      },
+      {
+        "start": 1720.3000000715256,
+        "ms": 56
+      },
+      {
+        "start": 1816.1000000238419,
+        "ms": 78
+      },
+      {
+        "start": 2186.9000000953674,
+        "ms": 127
+      },
+      {
+        "start": 2315.4000000953674,
+        "ms": 52
+      }
+    ],
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+  },
+  {
+    "round": 1,
+    "side": "after",
+    "visit": "warm",
+    "readyMs": 2868.2000000476837,
+    "constructorMs": 196,
+    "maxTaskMs": 198,
+    "longTasks": [
+      {
+        "start": 454.7999999523163,
+        "ms": 198
+      },
+      {
+        "start": 659.6000000238419,
+        "ms": 183
+      },
+      {
+        "start": 933.8999999761581,
+        "ms": 74
+      },
+      {
+        "start": 1287.2000000476837,
+        "ms": 86
+      }
+    ],
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+  }
+]

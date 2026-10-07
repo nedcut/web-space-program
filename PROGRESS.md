@@ -685,7 +685,7 @@ Replaced capped point sprites with pooled GPU billboards; added growing launch s
 
 ## Coastal ground art — cx/groundart
 
-Replaced cone trees with original branched coastal crowns, added building courses/roof plant/doors and warmer weathered cladding, lit tower platforms and dusk-driven window masks. Continuing terrain/shadow integration and real RTX 3060 Ti DPR-2 verification; final evidence follows in docs/PERFORMANCE.md.
+Added original branched coastal vegetation with wind and fading LOD, warmer detailed façades/roof plant/signage, dusk windows and pad work lighting, worker-evaluated coastal colour, stronger surface grain and night settlements. Terrain receives the existing widened solar shadow map. Real RTX 3060 Ti DPR-2 Medium pair: 4.85 → 5.06 ms (+0.21 ms); contended per-pass scene/shadow delta +0.83 ms. See [performance evidence](docs/PERFORMANCE.md) and [six-view review](docs/screenshots/groundart/README.md) for limits. Merged main; lint, typecheck, 97 files / 1,053 tests and build passed. Heights/hydrology and the existing atmospheric integration are retained; vegetation remains stylized and the wider shadow map softens fine shadows.
 ## In-the-moment UX cues (2026-10-06, cx/cues)
 
 - Added staging/throttle/warp/control explanations; a bounded, deduplicated accessible flight-message stack; orbit, landing, communications and SOI notices; per-save dismissible map/node/orbit/SOI/landing/EVA tips; clearer unavailable part actions and HUD tooltips.

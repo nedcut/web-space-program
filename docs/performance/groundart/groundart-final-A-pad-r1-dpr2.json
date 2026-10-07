@@ -1,0 +1,81 @@
+{
+ "label": "groundart-final-A-pad-r1",
+ "base": "http://localhost:5334/.tmp/baseline",
+ "dpr": 2,
+ "throttle": 1,
+ "quality": "medium",
+ "seconds": 10,
+ "size": "1470x920",
+ "date": "2026-10-07T02:46:25.205Z",
+ "cases": {
+  "pad": {
+   "fps": 39.3,
+   "frameP50": 33.3,
+   "frameP95": 33.4,
+   "frameP99": 33.4,
+   "frameMax": 33.4,
+   "hitches25": 207,
+   "hitches50": 0,
+   "cpuMs": 6.49,
+   "cpuP95": 8.6,
+   "sections": {
+    "input": 0.09,
+    "sim": 0.18,
+    "vessels": 0.06,
+    "fx": 0.07,
+    "planets": 0.84,
+    "map": 0,
+    "render": 4.84,
+    "telemetry": 0.09,
+    "audio": 0.02,
+    "navball": 0.16,
+    "hud": 0.12
+   },
+   "scriptMsPerFrame": 6.81,
+   "taskMsPerFrame": 25.45,
+   "layoutsPerSec": 5.18,
+   "styleRecalcsPerSec": 3.29,
+   "layoutMsPerSec": 1.17,
+   "styleMsPerSec": 0.21,
+   "longTasksPerMin": 0,
+   "longTaskMsPerMin": 0,
+   "longTaskMax": 0,
+   "heapMB": 67.57,
+   "heapGrowthMBPerMin": 138.17,
+   "domNodes": 520,
+   "listeners": 4782,
+   "reactCommitsPerSec": 12.35,
+   "reactRendersPerSec": 318.48,
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    }
+   },
+   "gl": {
+    "calls": 621,
+    "tris": 1472767,
+    "programs": 89,
+    "geometries": 777,
+    "textures": 84,
+    "canvas": "2940x1840",
+    "scale": 1,
+    "gpuMs": 4.8513043670880025
+   },
+   "readyMs": 10826,
+   "marks": {
+    "wsp:flight:construct": 3370,
+    "wsp:flight:shaderWarmup": 4322,
+    "wsp:flight:firstFrame": 4430,
+    "wsp:flight:construct:start": 2931,
+    "wsp:flight:ready": 9311
+   }
+  }
+ }
+}
