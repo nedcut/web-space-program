@@ -2,7 +2,7 @@
 // node gfxsettings-check.mjs http://<WSL-IP>:5327 C:\wsp-tools\bench\gfxsettings-live.json
 import { chromium } from 'playwright-core';
 import { writeFileSync } from 'node:fs';
-const [base, out] = process.argv.slice(2);
+const [base, out, mode] = process.argv.slice(2);
 const browser = await chromium.connectOverCDP('http://127.0.0.1:9333');
 const context = await browser.newContext({ viewport: { width: 1024, height: 768 }, deviceScaleFactor: 2 });
 const page = await context.newPage();
@@ -21,7 +21,7 @@ try {
   await page.addInitScript(() => localStorage.setItem('wsp.settings.v1', JSON.stringify({ quality: 'medium', graphicsProfile: 2, adaptiveQuality: false, advancedGraphics: {}, autoSaveInterval: 0 })));
   await page.goto(`${base}/?flight=stock-kestrel&scenario=orbit`);
   await page.waitForFunction(() => window.__flight && !document.querySelector('.loading-screen'), null, { timeout: 90000 });
-  for (const [key, value] of checks) {
+  for (const [key, value] of mode === 'pipeline' ? [] : checks) {
     const expected = await page.evaluate(async ([key, value]) => {
       const { updateSettings } = await import('/src/game/store.ts');
       const { presetSettings, resolveQuality } = await import('/src/render/core/quality.ts');
@@ -37,6 +37,30 @@ try {
         gpu: p.gpuName, glError: gl.getError(), ut: c.world.ut };
     });
     if (actual.glError || actual.samples !== expected.msaaSamples || actual.shadows !== (expected.shadowMapSize > 0)) throw new Error(`render configuration failed: ${key}`);
+    result.checks.push({ key, value, actual });
+    console.log(`PASS ${key}=${value}`);
+  }
+  for (const [key, value] of [['renderScale', .75], ['bloom', false], ['scatter', false], ['adaptiveQuality', false], ['adaptiveQuality', true]]) {
+    await page.evaluate(async ([key, value]) => {
+      const { updateSettings } = await import('/src/game/store.ts');
+      const { presetSettings } = await import('/src/render/core/quality.ts');
+      updateSettings({ ...presetSettings('medium'), adaptiveQuality: false, [key]: value });
+    }, [key, value]);
+    await page.waitForFunction(async ([key, value]) => {
+      const c = window.__flight;
+      if (!c || document.querySelector('.loading-screen')) return false;
+      const { getQuality } = await import('/src/render/core/quality.ts');
+      return JSON.stringify(c.pipeline.quality) === JSON.stringify(getQuality('medium')) && window.__game.get().settings[key] === value;
+    }, [key, value], { timeout: 90000 });
+    await page.waitForTimeout(1000);
+    const actual = await page.evaluate(() => {
+      const p = window.__flight.pipeline;
+      return { pixelRatio: p.renderer.getPixelRatio(), scale: p.effectiveRenderScale,
+        bloomPass: p.composer.passes.some(x => x.constructor.name === 'UnrealBloomPass'),
+        atmosphere: p.quality.atmosphereScattering, adaptive: window.__game.get().settings.adaptiveQuality,
+        glError: p.renderer.getContext().getError() };
+    });
+    if (actual.glError || (key === 'bloom' && actual.bloomPass !== value) || (key === 'renderScale' && Math.abs(actual.scale - value) > .01) || (key === 'scatter' && actual.atmosphere !== value)) throw new Error(`pipeline setting failed: ${key}`);
     result.checks.push({ key, value, actual });
     console.log(`PASS ${key}=${value}`);
   }
