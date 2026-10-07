@@ -2,6 +2,7 @@
 const jobs: { run: () => void | Promise<void>; cancelled: boolean }[] = [];
 let scheduled = false;
 let lastInput = -Infinity;
+const INPUT_QUIET_MS = 350;
 let listening = false;
 function observeInput() {
   if (listening || typeof document === 'undefined') return;
@@ -13,7 +14,7 @@ function schedule() {
   if (scheduled || !jobs.length) return;
   scheduled = true;
   const pump = async () => {
-    const quietIn = 120 - (performance.now() - lastInput);
+    const quietIn = INPUT_QUIET_MS - (performance.now() - lastInput);
     if (quietIn > 0) { setTimeout(() => { scheduled = false; schedule(); }, quietIn); return; }
     while (jobs[0]?.cancelled) jobs.shift();
     const job = jobs.shift();
@@ -28,4 +29,15 @@ export function enqueueIdle(run: () => void | Promise<void>): () => void {
   jobs.push(job);
   schedule();
   return () => { job.cancelled = true; };
+}
+
+/** Shader compilation can finish during a gesture: defer its draw/readback until input settles too. */
+export function waitForInputQuiet(): Promise<void> {
+  return new Promise(resolve => {
+    const check = () => {
+      const remaining = INPUT_QUIET_MS - (performance.now() - lastInput);
+      if (remaining > 0) setTimeout(check, remaining); else resolve();
+    };
+    check();
+  });
 }

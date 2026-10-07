@@ -1,5 +1,5 @@
 import { releaseRenderer } from '../../render/releaseRenderer';
-import { enqueueIdle } from '../../util/idleQueue';
+import { enqueueIdle, waitForInputQuiet } from '../../util/idleQueue';
 import * as THREE from 'three';
 import { cachedThumbnail, persistThumbnail, preloadThumbnails } from './thumbnailCache';
 import { createStudioEnvironment } from '../../render/core/studioEnv';
@@ -137,6 +137,7 @@ async function renderOne(def: PartDef): Promise<Blob> {
   try {
     // Shader preparation and PNG encoding can yield instead of blocking the next UI paint.
     await renderer!.compileAsync(scene!, camera!);
+    await waitForInputQuiet();
     renderer!.render(scene!, camera!);
     return await new Promise<Blob>((resolve, reject) => renderer!.domElement.toBlob(blob => {
       if (blob) resolve(blob); else reject(new Error('Thumbnail encoding failed'));
