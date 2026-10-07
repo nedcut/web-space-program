@@ -82,7 +82,9 @@ export function MainMenu() {
                 onClick={() => {
                   const world = new World(new Universe(scale), PART_CATALOG, DEFAULT_START_UT, mode);
                   // Program-scoped lookups isolate old quicksaves; retain them for legacy migration.
-                  game.set({ saveId: `${mode}-${Date.now()}` });
+                  // Clear the editor with the program switch so neither the first autosave nor the
+                  // new program's draft inherits the previous program's craft.
+                  game.set({ saveId: `${mode}-${Date.now()}`, craft: null });
                   saveProgram(world);
                   game.set({ mode, scalePreset: scale, craft: null, launchPending: false, ut: DEFAULT_START_UT, scene: 'spaceCenter' });
                 }}

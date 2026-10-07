@@ -1,5 +1,5 @@
 import { localId } from '../util/localId';
-import { game } from './store';
+import { game, loadLastCraft, reportSaveError } from './store';
 import { SLOTS_KEY, listSaveSlots, writeSaveSlot } from './saveSlots';
 import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { newProgression, type GameMode, type Progression } from '../sim/science/progression';
@@ -157,7 +157,9 @@ export function saveWorldToStorage(slot: string, world: World, displayName?: str
   }
   const data = serializeWorld(world), savedAt = Date.now();
   const programId = game.get().saveId ?? 'legacy-program';
-  writeSaveSlot({ id: slot === 'autosave' ? localId() : `${programId}:${slot}`, programId, name: displayName ?? (slot === 'autosave' ? 'Autosave' : slot === 'quicksave' ? 'Quicksave' : slot), kind: slot === 'autosave' ? 'auto' : 'manual', savedAt, data });
+  // The editor draft travels with the program save so Load restores this program's craft.
+  const craft = game.get().trainingActive || game.get().scenarioActive ? loadLastCraft(programId) : game.get().craft;
+  writeSaveSlot({ id: slot === 'autosave' ? localId() : `${programId}:${slot}`, programId, name: displayName ?? (slot === 'autosave' ? 'Autosave' : slot === 'quicksave' ? 'Quicksave' : slot), kind: slot === 'autosave' ? 'auto' : 'manual', savedAt, data, craft });
   localStorage.setItem(KEY_PREFIX + slot, JSON.stringify({ savedAt, data }));
 }
 
@@ -188,6 +190,17 @@ export function deleteSave(slot: string) {
   }
 }
 
+
+/** Never throws: a failed write (full or blocked storage) is reported as a notification and play/navigation continues. */
+export function trySaveWorld(slot: string, world: World, displayName?: string): boolean {
+  try {
+    saveWorldToStorage(slot, world, displayName);
+    return true;
+  } catch (e) {
+    reportSaveError(e);
+    return false;
+  }
+}
 
 /** Manual names cannot collide with the reserved autosave/quicksave channels. */
 export function saveNamedWorld(name: string, world: World) {

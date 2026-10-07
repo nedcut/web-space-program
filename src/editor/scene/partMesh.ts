@@ -34,6 +34,30 @@ function fallbackMesh(def: PartDef): THREE.Object3D {
   return g;
 }
 
+// Editor-only material values. Shared flight templates remain untouched and retain exactly
+// the same shader variants; these clones use the existing maps and material features.
+const studioMaterials = new WeakMap<THREE.Material, THREE.Material>();
+function studioMaterial(material: THREE.Material): THREE.Material {
+  const colors: Record<string, number> = {
+    charcoalPanel: 0x1c2735,
+    'accent-blue': 0x286bc0,
+    'accent-teal': 0x149a92,
+    'accent-orange': 0xe87126,
+    gunmetal: 0x68788c,
+    nozzleExt: 0xa8adbd,
+    copperTubes: 0xffccab,
+  };
+  const color = colors[material.name];
+  if (color === undefined) return material;
+  let clone = studioMaterials.get(material);
+  if (!clone) {
+    clone = material.clone();
+    (clone as THREE.MeshStandardMaterial).color.setHex(color);
+    studioMaterials.set(material, clone);
+  }
+  return clone;
+}
+
 /** Returns a fresh instance (shares geometry & materials with a cached template). */
 export function createPartMesh(def: PartDef): THREE.Object3D {
   let t = templates.get(def.id);
@@ -46,7 +70,12 @@ export function createPartMesh(def: PartDef): THREE.Object3D {
     }
     t.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) {
-        o.castShadow = true;
+        const mesh = o as THREE.Mesh;
+        mesh.material = Array.isArray(mesh.material) ? mesh.material.map(studioMaterial) : studioMaterial(mesh.material);
+        // Coplanar printed markings have no independent silhouette. Avoid an alpha-tested
+        // shadow draw for each label; the hull beneath it already casts the same shadow.
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        o.castShadow = !materials.every(m => m.name === 'decal');
         o.receiveShadow = true;
       }
     });

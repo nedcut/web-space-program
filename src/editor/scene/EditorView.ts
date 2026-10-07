@@ -119,10 +119,14 @@ export class EditorView {
   private heldParts: PartInstance[] = [];
   private ghostCount = 0;
   private nodeMarkers: { mesh: THREE.Mesh; key: string; base: number }[] = [];
-  private markerGeo = new THREE.SphereGeometry(1, 20, 14);
-  private markerMat = new THREE.MeshBasicMaterial({ color: 0x5cc8ff, transparent: true, opacity: 0.75, depthTest: false, depthWrite: false });
-  private markerMatHi = new THREE.MeshBasicMaterial({ color: 0x6fe39a, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false });
-  private markerMatHeld = new THREE.MeshBasicMaterial({ color: 0xffb35c, transparent: true, opacity: 0.8, depthTest: false, depthWrite: false });
+  private markerGeo = new THREE.RingGeometry(0.58, 1, 32);
+  private markerHaloGeo = new THREE.RingGeometry(0.4, 1.25, 32);
+  private markerHaloMat = new THREE.MeshBasicMaterial({ color: 0x07111d, depthTest: false, depthWrite: false, transparent: true, opacity: 0.95, toneMapped: false, fog: false });
+  private markerWorld = new THREE.Vector3();
+  private markerRotation = new THREE.Quaternion();
+  private markerMat = new THREE.MeshBasicMaterial({ color: 0x5cc8ff, transparent: true, opacity: 0.95, toneMapped: false, fog: false, depthTest: false, depthWrite: false });
+  private markerMatHi = new THREE.MeshBasicMaterial({ color: 0x6fe39a, transparent: true, opacity: 0.95, toneMapped: false, fog: false, depthTest: false, depthWrite: false });
+  private markerMatHeld = new THREE.MeshBasicMaterial({ color: 0xffb35c, transparent: true, opacity: 0.95, toneMapped: false, fog: false, depthTest: false, depthWrite: false });
   private ghostMat = new THREE.MeshStandardMaterial({ color: 0x5cc8ff, transparent: true, opacity: 0.32, roughness: 0.4, metalness: 0, emissive: 0x1a5f8a, emissiveIntensity: 0.6, depthWrite: false });
   private warnedFloating = false;
   private prevPartCount = 0;
@@ -137,6 +141,10 @@ export class EditorView {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = game.get().settings.shadows;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // The hall lights and assembled craft are stationary while orbiting the camera.
+    // Rebuild their shadow only for assembly/held-part changes, not every safety-net frame.
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
     this.renderer.domElement.style.display = 'block';
     this.renderer.domElement.style.touchAction = 'none';
     container.appendChild(this.renderer.domElement);
@@ -147,7 +155,7 @@ export class EditorView {
     this.scene.environment = this.envRT.texture;
     this.scene.environmentIntensity = 0.62;
     this.scene.background = new THREE.Color(0x0b1018);
-    this.scene.fog = new THREE.Fog(0x111823, 75, 180);
+    this.scene.fog = new THREE.Fog(0x101c2b, 32, 125);
     const hemi = new THREE.HemisphereLight(0xbcd0ec, 0x23262c, 0.12);
     this.scene.add(hemi);
     // Key: warm, high and ~50 deg to the right of the default camera, so the shadow falls visibly across the floor.
@@ -168,11 +176,11 @@ export class EditorView {
     this.scene.add(fill);
     // Soft warm rim from high behind-left separates silhouettes from the dark hall. High enough that its glint on
     // the glossy floor stays out of the usual camera angles; desaturated so it doesn't tint the floor.
-    const rim = new THREE.DirectionalLight(0xffe6cc, 3.2);
+    const rim = new THREE.DirectionalLight(0xffe6cc, 3.8);
     rim.position.set(-16, 26, -24);
     this.scene.add(rim);
     // Cool kicker from behind-right outlines the other silhouette edge against the dark hall.
-    const kicker = new THREE.DirectionalLight(0xc8dcff, 2.2);
+    const kicker = new THREE.DirectionalLight(0xc8dcff, 2.6);
     kicker.position.set(22, 14, -20);
     this.scene.add(kicker);
 
@@ -237,6 +245,7 @@ export class EditorView {
 
   // ------------------------------------------------------------------ session sync
   private sync() {
+    this.renderer.shadowMap.needsUpdate = true;
     const snap = this.session.getSnapshot();
     if (snap.craftType === 'SPH' !== this.horizontal) {
       this.horizontal = snap.craftType === 'SPH';
@@ -587,7 +596,11 @@ export class EditorView {
     if (!snap.held || this.session.isLinkPlacement()) return;
     const add = (n: WorldAttachNode, parent: THREE.Object3D, key: string) => {
       const mesh = new THREE.Mesh(this.markerGeo, this.markerMat);
-      mesh.renderOrder = 10;
+      mesh.renderOrder = 11;
+      const halo = new THREE.Mesh(this.markerHaloGeo, this.markerHaloMat);
+      halo.renderOrder = 10;
+      halo.userData.noTint = true;
+      mesh.add(halo);
       toV(n.position, mesh.position);
       const base = 0.1 + n.size * 0.07;
       mesh.scale.setScalar(base);
@@ -884,6 +897,7 @@ export class EditorView {
     if (key !== this.frameKey) {
       this.frameKey = key;
       this.updateHover();
+      if (this.session.getSnapshot().held) this.renderer.shadowMap.needsUpdate = true;
       this.updatePlacement();
     } else if (this.snapKey) this.pulseMarkers();
     const t1 = performance.now();
@@ -894,6 +908,7 @@ export class EditorView {
     if (!changed && this.idleFor < 0.5) return;
     if (!changed) this.idleFor = 0;
     this.renderedKey = key;
+    this.updateNodePresentation();
     this.renderer.render(this.scene, this.camera);
     const t2 = performance.now();
     this.timing = { update: t1 - t0, render: t2 - t1, calls: this.renderer.info.render.calls, tris: this.renderer.info.render.triangles };
@@ -901,6 +916,22 @@ export class EditorView {
   private frameKey = '';
   private renderedKey = '';
   private idleFor = Infinity;
+  /** Camera-facing hollow targets, with a dark keyline and a bounded CSS-pixel size. */
+  private updateNodePresentation() {
+    this.craftGroup.updateMatrixWorld(true);
+    this.camera.updateMatrixWorld();
+    const pixelAngle = 2 * Math.tan(this.camera.fov * DEG / 2) / Math.max(1, this.renderer.domElement.clientHeight);
+    for (const m of this.nodeMarkers) {
+      m.mesh.getWorldPosition(this.markerWorld).applyMatrix4(this.camera.matrixWorldInverse);
+      const pixelWorld = Math.max(0.01, -this.markerWorld.z) * pixelAngle;
+      const radius = THREE.MathUtils.clamp(m.base, 6 * pixelWorld, 10 * pixelWorld);
+      const pulse = m.key === this.snapKey ? 1.3 + Math.sin(performance.now() / 120) * 0.12 : 1;
+      m.mesh.scale.setScalar(radius * pulse);
+      m.mesh.parent!.getWorldQuaternion(this.markerRotation).invert();
+      m.mesh.quaternion.copy(this.markerRotation).multiply(this.camera.quaternion);
+    }
+  }
+
   private pulseMarkers() {
     for (const m of this.nodeMarkers) if (m.key === this.snapKey) m.mesh.scale.setScalar(m.base * (1.5 + Math.sin(performance.now() / 120) * 0.2));
   }
@@ -931,6 +962,8 @@ export class EditorView {
     this.links.dispose();
     this.linkPreviewGeometry.dispose(); this.linkPreviewMaterial.dispose();
     this.markerGeo.dispose();
+    this.markerHaloGeo.dispose();
+    this.markerHaloMat.dispose();
     this.markerMat.dispose();
     this.markerMatHi.dispose();
     this.markerMatHeld.dispose();

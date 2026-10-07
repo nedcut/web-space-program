@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { game, loadLastCraft } from '../game/store';
+import { draftForSave, game } from '../game/store';
 import { loadWorldFromStorage } from '../game/persistence';
 import { SLOTS_KEY, exportSaveSlot, importSaveSlot, listSaveSlots, removeSaveSlot, writeSaveSlot, type SaveSlot } from '../game/saveSlots';
 import { downloadFile } from '../game/craftSharing';
@@ -24,7 +24,7 @@ export function SaveLoadDialog({ onClose }: { onClose(): void }) {
     {error && <p role="alert">{error}</p>}
     {slots.map(slot => <div key={slot.id} style={{ padding: '12px 0', borderBottom: '1px solid #33404c' }}>
       <strong>{slot.name}</strong> <small>{slot.programId}</small><p>{new Date(slot.savedAt).toLocaleString()} · {formatDate(slot.data.ut)} · {slot.data.mode ?? 'sandbox'} · {slot.data.preset} scale</p>
-      <div style={{ display: 'flex', gap: 8 }}><button className="btn small primary" onClick={() => game.set({ saveId: slot.programId, resumeWorld: slot.data, mode: slot.data.mode ?? 'sandbox', scalePreset: slot.data.preset, ut: slot.data.ut, launchPending: false, craft: game.get().craft ?? loadLastCraft(), scene: 'spaceCenter' })}>Load</button>
+      <div style={{ display: 'flex', gap: 8 }}><button className="btn small primary" onClick={() => game.set({ saveId: slot.programId, resumeWorld: slot.data, mode: slot.data.mode ?? 'sandbox', scalePreset: slot.data.preset, ut: slot.data.ut, launchPending: false, craft: draftForSave(slot), scene: 'spaceCenter' })}>Load</button>
       <button className="btn small" onClick={() => downloadFile(`${slot.name.replace(/[^a-z0-9_-]/gi, '_')}.wsp-save.json`, exportSaveSlot(slot))}>Export</button>
       {!slot.id.startsWith('legacy:') && <button className="btn small danger" onClick={() => { try { removeSaveSlot(slot.id); setRev(rev + 1); } catch (e) { setError((e as Error).message); } }}>Delete</button>}</div>
     </div>)}

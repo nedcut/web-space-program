@@ -13,6 +13,7 @@ import { STOCK_CRAFTS } from '../stockCrafts';
 import { computeStageStats } from './dv';
 import { Icon } from './icons';
 import { fmtDv, fmtKg } from './partInfo';
+import { saveErrorText } from '../../game/storageErrors';
 
 function summary(craft: CraftDef) {
   try {
@@ -40,7 +41,7 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
   const [folder, setFolder] = useState('');
   const [error, setError] = useState('');
   useEffect(() => { let live = true; void listLibrary().then(items => { if (live) setSaved(items); }).catch(e => { if (live) setError((e as Error).message); }); return () => { live = false; }; }, [rev]);
-  const refresh = (action: Promise<unknown>) => void action.then(() => setRev(r => r + 1)).catch(e => setError((e as Error).message));
+  const refresh = (action: Promise<unknown>) => void action.then(() => setRev(r => r + 1)).catch(e => setError(saveErrorText(e)));
   function edit(item: LibraryCraft, field: 'name' | 'folder' | 'tags') {
     const value = window.prompt(`Vehicle ${field}`, field === 'name' ? item.craft.name : field === 'folder' ? item.folder : item.tags.join(', '));
     if (value === null || (field === 'name' && !value.trim())) return;

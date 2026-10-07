@@ -96,7 +96,8 @@ export function persistTextures(group: string, id: string, entries: CachedTextur
       stale.onsuccess = () => {
         const cur = stale.result;
         if (!cur) {
-          entries.forEach((e, i) => store.put({ id, group, slot: e.slot, srgb: e.srgb, blob: blobs[i]! } satisfies Record_));
+          // A throw inside this IDB callback would escape to window.onerror (the crash screen); the cache is optional.
+          try { entries.forEach((e, i) => store.put({ id, group, slot: e.slot, srgb: e.srgb, blob: blobs[i]! } satisfies Record_)); } catch { /* best-effort */ }
           return;
         }
         if ((cur.value as Record_).id !== id) cur.delete();

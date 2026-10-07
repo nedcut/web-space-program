@@ -20,13 +20,13 @@ describe('practice recorder and program isolation', () => {
     world.launch(buildOrbiter()); world.discoveries = ['program-discovery'];
     const saved = serializeWorld(world);
     game.set({ resumeWorld: saved, saveId: 'qa-program', craft: buildOrbiter(), scene: 'spaceCenter' });
-    const prior = game.get(), remembered = values.get('wsp.craft.v1');
+    const prior = game.get(), remembered = values.get('wsp.craft.v1.qa-program');
     if (kind === 'lesson') startLesson('moon-landing'); else startScenario('moon-landing');
     const practice = deserializeWorld(game.get().resumeWorld!, PART_CATALOG);
     practice.tick(0.02, neutralInput());
     expect(practice.flightlog.records.some(r => r.bodies.includes('moon'))).toBe(true);
     expect(loadAchievements().unlocked['soi-moon']).toBeDefined();
-    expect(values.get('wsp.craft.v1')).toBe(remembered);
+    expect(values.get('wsp.craft.v1.qa-program')).toBe(remembered);
     if (kind === 'lesson') endTutorial(); else endScenario();
     expect(game.get().resumeWorld).toEqual(prior.resumeWorld);
     expect(game.get().saveId).toBe('qa-program');

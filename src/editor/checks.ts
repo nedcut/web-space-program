@@ -1,11 +1,9 @@
 import { buildVessel, decouplerCutChildren } from '../sim/vessel/assembly';
 import { availableResource } from '../sim/vessel/resources';
 import { engineModule } from '../sim/vessel/engines';
-import { computeAeroForces } from '../sim/vessel/aero';
-import { sampleAtmosphere } from '../sim/atmosphere';
+import { aeroControlMargin } from './aeroStability';
 import type { CraftDef, PartDef, ResourceId } from '../sim/vessel/types';
 import type { StageStats } from './ui/dv';
-import { v3 } from '../util/vec3';
 
 export interface PreflightCheck { id: string; text: string; uids: number[] }
 /** Advisory only. Uses the same fuel topology and static aerodynamic forces as flight. */
@@ -38,9 +36,6 @@ export function preflightChecks(craft: CraftDef, catalog: Map<string, PartDef>, 
     const premature = engines.filter(e => dropped(e.uid) && p.stage !== undefined && e.stage !== undefined && p.stage >= e.stage);
     if (premature.length) add(`order-${p.uid}`, 'Separator fires before its attached engines finish their stage. Review the order.', [p.uid, ...premature.map(e => e.uid)]);
   }
-  // Positive lateral velocity: positive Z torque turns the nose away from the flow (CP ahead of COM).
-  const air = { density: 1.225, pressure: 101325, temperature: 288, speedOfSound: 340 } as ReturnType<typeof sampleAtmosphere>;
-  const aero = computeAeroForces(v, { air, airVelocityBody: v3(5, 100, 0), control: v3() });
-  if (aero.torqueBody.z > 1) add('aero', 'Possible aero instability: pressure acts ahead of mass. Move fins aft or mass forward (small-angle estimate).', v.parts.filter(p => p.def.modules.some(m => m.type === 'liftingSurface')).map(p => p.uid));
+  if (craft.type === 'VAB' && aeroControlMargin(craft, catalog) < -0.01) add('aero', 'Possible aero instability: insufficient restoring/control margin through launch fuel burn and Mach range. Move fins aft or mass forward.', v.parts.filter(p => p.def.modules.some(m => m.type === 'liftingSurface')).map(p => p.uid));
   return out;
 }

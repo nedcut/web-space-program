@@ -1,0 +1,54 @@
+{
+  "nodes": [
+    {
+      "key": "12:bottom",
+      "radius": 0.17,
+      "facing": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "key": "h-1:top",
+      "radius": 0.17,
+      "facing": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "key": "h-1:bottom",
+      "radius": 0.17,
+      "facing": [
+        0,
+        0,
+        0,
+        1
+      ]
+    }
+  ],
+  "shadowCache": {
+    "enabled": false,
+    "stable": true,
+    "orbit": true,
+    "edit": false
+  },
+  "attachment": {
+    "snap": "12:bottom",
+    "kind": "stack",
+    "before": 16,
+    "placed": 17,
+    "undone": 16
+  },
+  "scene": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "calls": 286,
+    "programs": 22,
+    "glError": 0,
+    "failedPrograms": 0
+  }
+}

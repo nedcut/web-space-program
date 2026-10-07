@@ -12,7 +12,7 @@ import type { ActionGroupId } from '../sim/vessel/types';
 import { tutorialContext, getTutorial, endTutorial, startLesson } from '../tutorial/runtime';
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { game, updateSettings, useGame } from '../game/store';
 import { FlightController } from './controller';
 import { Hud, NavballView, type Telemetry } from './hud/Hud';
@@ -32,6 +32,8 @@ import { textureCacheReady } from '../render/core/textureCache';
 import { frameProfiler } from '../util/frameProfiler';
 import { ArrivalBanner } from './hud/FeelHud';
 import { situationBanner, type SituationBannerText } from './situation';
+import { pauseMenuVisible } from './modals';
+import { saveErrorText } from '../game/storageErrors';
 
 export default function FlightScene() {
   useRenderProfile();
@@ -129,6 +131,7 @@ export default function FlightScene() {
       }
       const cc = c;
       cc.paused = pausedRef.current;
+      cc.setModalOpen(helpRef.current);
       setLost(false);
       setReport(false);
       cc.onActiveLost = () => {
@@ -218,6 +221,10 @@ export default function FlightScene() {
     audioRef.current?.setPaused(paused || photo.active || scenarioFinished);
     if (paused || photo.active) audioRef.current?.silenceFlight();
   }, [paused, awaitingTelemetry, photo.active, scenarioFinished]);
+  // The Controls reference blocks flight input; closing it returns to whatever it covered (flight or the Pause menu).
+  useLayoutEffect(() => {
+    ctrl.current?.setModalOpen(help);
+  }, [help, awaitingTelemetry]);
 
   // Input reads settings each frame; planet quality, clouds and scattering rebuild from a snapshot.
   useEffect(() => {
@@ -386,12 +393,12 @@ export default function FlightScene() {
       {settings.perfOverlay && c && !photo.active && <PerfOverlay controller={c} />}
       {help && ready && !photo.active && <HelpOverlay eva={!!tele?.eva} onClose={closeHelp} />}
       {networkReady && c?.network && <MultiplayerPanel client={c.network} />}
-      {paused && multiplayer && (
+      {pauseMenuVisible({ paused, help }) && multiplayer && (
         <div className="modal-backdrop">
           <Panel className="pause-card" style={{ padding: 24, display: 'grid', gap: 10 }}>
             <p>Flight controls suspended. The shared clock continues.</p>
             <Button className="btn" onClick={() => setPaused(false)}>Resume controls</Button>
-            <Button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls ({bindingLabel('help')})</Button>
+            <Button className="btn" onClick={() => setHelp(true)}>Controls ({bindingLabel('help')})</Button>
             <Button className="btn" onClick={() => game.set({ multiplayer: null, scene: 'menu' })}>Disconnect</Button>
           </Panel>
         </div>
@@ -408,7 +415,7 @@ export default function FlightScene() {
           {r ? <FlightReport record={r} /> : <p style={{ color: 'var(--text-dim)' }}>No flight record yet.</p>}
         </Panel></div>;
       })()}
-      {paused && !multiplayer && !photo.active && !report && (
+      {pauseMenuVisible({ paused, help }) && !multiplayer && !photo.active && !report && (
         <div className="modal-backdrop">
           {showSettings ? (
             <SettingsPanel world={c?.world} onClose={() => setShowSettings(false)} />
@@ -424,10 +431,10 @@ export default function FlightScene() {
               )}
               {launched.current && <Button className="btn" onClick={revertToLaunch}>Revert to launch</Button>}
               {launched.current && <Button className="btn" onClick={revert}>Revert to editor</Button>}
-              {!lost && !getTutorial() && !getScenarioRun() && <Button className="btn" onClick={() => { const name = window.prompt('Save slot name', 'Mission save'); if (name?.trim() && ctrl.current) { try { saveNamedWorld(name, ctrl.current.world); ctrl.current.world.message('Mission saved.'); } catch (e) { ctrl.current.world.message((e as Error).message, 'bad'); } } }}>Save as…</Button>}
+              {!lost && !getTutorial() && !getScenarioRun() && <Button className="btn" onClick={() => { const name = window.prompt('Save slot name', 'Mission save'); if (name?.trim() && ctrl.current) { try { saveNamedWorld(name, ctrl.current.world); ctrl.current.world.message('Mission saved.'); } catch (e) { ctrl.current.world.message(saveErrorText(e), 'bad'); } } }}>Save as…</Button>}
               {!lost && !getTutorial() && !getScenarioRun() && <Button className="btn" onClick={() => ctrl.current?.quicksave()}>Quicksave <span className="kbd" style={{ marginLeft: 6 }}>F5</span></Button>}
               {!lost && !getTutorial() && !getScenarioRun() && hasSave('quicksave') && <Button className="btn" onClick={() => ctrl.current?.onQuickload?.()}>Quickload <span className="kbd" style={{ marginLeft: 6 }}>F9</span></Button>}
-              <Button className="btn" onClick={() => { setPaused(false); setHelp(true); }}>Controls <span className="kbd" style={{ marginLeft: 6 }}>{bindingLabel('help')}</span></Button>
+              <Button className="btn" onClick={() => setHelp(true)}>Controls <span className="kbd" style={{ marginLeft: 6 }}>{bindingLabel('help')}</span></Button>
               <Button className="btn" onClick={() => setShowSettings(true)}>Settings</Button>
               <Button className="btn" onClick={() => exitTo('spaceCenter')}>{getScenarioRun() ? 'Back to scenarios' : getTutorial() ? 'Back to lessons' : 'Space Center'}</Button>
               <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>{(getTutorial() || getScenarioRun()) ? 'Practice is separate from your saved program.' : 'Progress is autosaved when you leave flight.'}</div>
