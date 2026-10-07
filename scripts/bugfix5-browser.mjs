@@ -15,7 +15,7 @@ const newPage = async (width, height) => {
   const page = await browser.newPage({ viewport: { width, height } });
   page.setDefaultTimeout(60000);
   page.on('pageerror', e => errors.push(e.message));
-  page.on('dialog', d => d.accept());
+  page.on('dialog', d => d.accept(d.defaultValue()));
   await page.addInitScript(() => { localStorage.setItem('wsp.settings.v1', JSON.stringify({ quality: 'low', shadows: false, bloom: false, clouds: false, scatter: false, renderScale: 0.5, masterVolume: 0, reduceMotion: true, autoSaveInterval: 0 })); localStorage.setItem('wsp.help.seen.v1', '1'); });
   return page;
 };
@@ -53,7 +53,6 @@ try {
   }
   if (what === 'draft') {
     const page = await newPage(1366, 768);
-    page.on('dialog', d => d.accept());
     await page.goto(base);
     const program = async () => { await page.getByRole('button', { name: 'New Game', exact: true }).click(); await page.getByRole('button', { name: 'Sandbox', exact: true }).click(); await page.getByRole('button', { name: 'Start', exact: true }).click(); };
     const build = async (stock) => {
@@ -70,6 +69,8 @@ try {
     await program(); await build('swift');
     await page.getByRole('button', { name: 'Main menu' }).click();
     await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByRole('heading', { name: 'Load a program' }).waitFor();
+    console.log('slots:', (await page.locator('.panel').filter({ has: page.getByRole('heading', { name: 'Load a program' }) }).innerText()).replace(/\n+/g, ' | '));
     const slot = page.locator('div', { has: page.getByText(programA, { exact: true }) }).filter({ has: page.getByText('Program save', { exact: true }) }).last();
     await slot.getByRole('button', { name: 'Load' }).click();
     await page.getByRole('button', { name: 'Save as…' }).waitFor();
