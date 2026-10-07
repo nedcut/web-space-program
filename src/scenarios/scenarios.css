@@ -25,3 +25,9 @@
 .scenario-briefing h3 { font-size: 16px; font-weight: 600; margin-top: 24px; }
 .scenario-briefing h2 { font-weight: 500; letter-spacing: -.02em; }
 .scenario-briefing a { color: var(--accent); }
+.scenario-flight-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.scenario-toggle { flex: none; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 1px solid var(--border, #ffffff22); border-radius: 6px; background: transparent; color: var(--text-dim); font: inherit; font-size: 16px; line-height: 1; cursor: pointer; }
+.scenario-toggle:hover { color: var(--text); border-color: var(--accent); }
+.scenario-collapsed { padding: 10px 14px; width: min(260px, calc(100vw - 36px)); }
+.scenario-collapsed h2 { font-size: 15px; margin: 4px 0; }
+.scenario-collapsed p { margin: 4px 0; font-size: 12px; line-height: 1.4; }
