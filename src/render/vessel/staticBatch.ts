@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { instancedVariant } from '../core/materialVariants';
-import { bindThermalRadiance, thermalGeometry, thermalSources } from '../fx/thermalSurface';
+import { thermalGeometry, thermalSources } from '../fx/thermalSurface';
 
 /** Batch only opaque static leaves. Inputs retain their shared template resources. */
 export function batchStaticParts(objects: THREE.Object3D[]): THREE.Group {
@@ -31,10 +31,7 @@ export function batchStaticParts(objects: THREE.Object3D[]): THREE.Group {
       if (matrices.length > 1) {
         const heated = matrices[0].slot !== undefined;
         const g = heated ? geometry.clone() : geometry;
-        if (heated) {
-          g.setAttribute('wspHeatSlot', new THREE.InstancedBufferAttribute(new Float32Array(matrices.map(m => m.slot!)), 1));
-          bindThermalRadiance(g);
-        }
+        if (heated) g.setAttribute('wspHeatSlot', new THREE.InstancedBufferAttribute(new Float32Array(matrices.map(m => m.slot!)), 1));
         const mesh = new THREE.InstancedMesh(g, instancedVariant(material), matrices.length);
         mesh.userData.ownedGeometry = heated;
         matrices.forEach((m, i) => mesh.setMatrixAt(i, m.matrix));
@@ -56,7 +53,6 @@ export function batchStaticParts(objects: THREE.Object3D[]): THREE.Group {
     for (const group of layouts.values()) {
       const geometry = group.length === 1 ? group[0] : mergeGeometries(group)!;
       if (group.length > 1) group.forEach(g => g.dispose());
-      bindThermalRadiance(geometry);
       geometry.computeBoundingSphere();
       const mesh = new THREE.Mesh(geometry, material);
       mesh.userData.ownedGeometry = true;

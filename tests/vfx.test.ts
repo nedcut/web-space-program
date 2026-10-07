@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { thermalRadiance } from '../src/render/fx/thermalSurface';
+import { thermalTexture } from '../src/render/fx/thermalSurface';
 import { blackbody, PartHeat } from '../src/render/fx/PartHeat';
 import { ParticlePool } from '../src/render/fx/ParticlePool';
 import { FlightFx, FX_BUDGET } from '../src/render/fx/FlightFx';
@@ -11,7 +11,7 @@ import type { PartState } from '../src/sim/vessel/runtime';
 
 function radiance(mesh: THREE.Mesh): number {
   const slot = mesh.geometry.getAttribute('wspHeatSlot').getX(0);
-  return thermalRadiance[slot * 3];
+  return thermalTexture.image.data![slot * 4];
 }
 
 describe('flight visual effects', () => {
