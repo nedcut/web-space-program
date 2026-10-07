@@ -23,6 +23,8 @@ export class LinkView {
     mesh.visible = span > 1e-6;
   }
   update(parts: RenderPart[] | PartState[]) {
+    // Most craft have no physical links. Avoid allocating a part index and UID tuples every frame.
+    if (!parts.some(p => p.link) && this.meshes.size === 0) return;
     const by = new Map(parts.map(p => [p.uid, p]));
     const seen = new Set<number>();
     for (const p of parts) {
