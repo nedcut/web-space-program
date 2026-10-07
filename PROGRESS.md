@@ -811,3 +811,9 @@ Post-merge verification: `git merge main` reports already up to date (`main` at 
 - Final `npx vitest run --maxWorkers=2`: **108 files / 1,306 tests pass**, 411.54 s. Earlier full run: 108 / 1,305 pass; the added internal-grid seam regression accounts for the count change.
 - Pipeline regenerated identical bytes/hash. Production PWA cache verified at 16,777,216 Earth bytes; after stopping the server the orbit flight still loads, with a sampled height exactly equal to Node. Evidence in `docs/screenshots/realearth/offline-check.json`.
 - Servers stopped and automation tabs closed; temporary service-worker registration removed. Only `cx/realearth` worktree changed. Terrain-ready integration anchor is `5990a805`; merge the branch tip to include subsequent parity, loading and verification fixes.
+
+Integrated the newly landed real Earth geography from `main` at `8e91a05d` (merge `e5aaf9af`), resolving
+only documentation append conflicts and preserving both teams' notes. Re-ran lint/typecheck/build and the
+full suite: **109 files / 1,327 tests**, 407.78 s. Re-measured all four presets in pad and orbit on the merged
+production build; final raw data is `docs/performance/gfxsettings/gfxsettings-merged-*-dpr2.json`.
+Earlier GPU runs are labelled and archived separately so their revisions cannot be confused.

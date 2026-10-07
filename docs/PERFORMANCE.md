@@ -934,3 +934,43 @@ but an actual ProMotion/Apple-GPU run was not available. No Apple performance cl
 The ETOPO sampler replaces many continental/warp/noise evaluations with bilinear int16 lookups and bounded fine detail. Following the batch-mean methodology above, an alternating baseline/current comparison (5 warmups, 9 batches × 8 chunks, 24 quads) measured median **4.193 → 0.712 ms** for the existing Earth chunk, **3.796 → 0.827 ms** for a coastal-face chunk, and **4.489 → 1.222 ms** for a whole-face chunk. p95 improved in every case. Shared host / simultaneous test load; these establish no chunk CPU regression, not a promised FPS uplift. The separate initial existing-harness run measured 2.079 ms before / 0.616 ms after the first integration; use the final paired artifact for comparisons.
 
 Raw samples, exact baseline revision, reproduction and the identical 20-second ascent hashes are in [realearth evidence](screenshots/realearth/README.md). The grid is **16,777,216 bytes** on disk and resident; float64 interpolation uses JS scalars, with no float64 raster copy or extra masks. Ordinary non-isolated browsers retain 16 MiB main + 16 MiB per terrain worker (64 MiB for three workers). Cross-origin-isolated hosts share one 16 MiB buffer; loading temporarily retains the fetched buffer too. Worker messages send the grid only once, independent of LOD and preset registrations. Browser PWA precache includes the grid (about 18.4 MiB total app precache at the initial integration); no optional high-resolution pack is shipped.
+
+### Final merged-code hardware measurements
+
+Revision `e5aaf9af` incorporates main's real Earth geography (`8e91a05d`). Production build, Windows Chrome
+CDP 9333 / ANGLE D3D11 / NVIDIA GeForce RTX 3060 Ti; 1470×920 CSS at DPR 2, adaptive resolution off,
+preset render scales, no cap. Each case has its own browser context and waits 15 seconds after the loading
+screen before a 10-second capture. Orbit is `?flight=stock-kestrel&scenario=orbit`; pad is `?flight=stock-kestrel`.
+GPU columns are the pipeline's **final exponentially smoothed elapsed-query readings**, not medians of raw
+GPU samples. FPS and pacing statistics cover the capture window. All eight cases returned WebGL error 0.
+
+| Preset | Pad GPU ms | Orbit GPU ms | Pad fps | Orbit fps | Pad / orbit draws |
+|---|---:|---:|---:|---:|---:|
+| Low | 1.04 | 0.88 | 52.60 | 59.50 | 220 / 166 |
+| Medium | 6.66 | 4.95 | 25.89 | 28.15 | 704 / 418 |
+| High | 12.89 | 9.10 | 20.67 | 22.61 | 1391 / 710 |
+| Ultra | 19.84 | 10.56 | 15.68 | 25.64 | 2032 / 997 |
+
+Low renders 735×460 pixels; Medium/High/Ultra render 2940×1840. This comparison measures the complete
+preset policies, including Low's reduced resolution. Ultra increases pad geometry to about 16.1 million
+triangles and ~2,032 draws in this capture, versus High's ~7.2 million and ~1,391. The larger 4096-wide
+bake now retains close-up terrain instead of hiding it behind a smooth far sphere. Shared CPU/GPU use,
+background scheduling and remaining terrain/texture work make absolute FPS and small timing differences
+noisy. These are observed costs, not guaranteed 60/120 fps or measurements of Apple hardware.
+
+Raw captures: [Low](performance/gfxsettings/gfxsettings-merged-low-dpr2.json),
+[Medium](performance/gfxsettings/gfxsettings-merged-medium-dpr2.json),
+[High](performance/gfxsettings/gfxsettings-merged-high-dpr2.json),
+[Ultra](performance/gfxsettings/gfxsettings-merged-ultra-dpr2.json). Each has a matching Markdown readout.
+Earlier captures are explicitly archived under `performance/gfxsettings/pre-earth-merge/` and are not the
+final merged-code comparison. Reproduction (Windows driver location and Node match the owner's harness):
+
+```sh
+npm run build
+npx vite preview --host 0.0.0.0 --port 5327 --strictPort
+bash scripts/bench/gpu-bench.sh --base http://<WSL-IP>:5327 --label gfxsettings-merged-ultra \
+  --quality ultra --dpr 2 --cases pad,orbit --seconds 10 --settle 15000 --trace 0
+```
+
+Final merged-code validation: lint, `npx tsc --noEmit`, production build, and full
+`npx vitest run --maxWorkers=2` pass: **109 files / 1,327 tests**, 407.78 s.
