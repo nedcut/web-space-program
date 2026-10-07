@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { game, DEFAULT_START_UT } from '../game/store';
 import { SCALE_PRESETS, type ScalePresetId } from '../sim/bodies/scale';
 import { MenuBackdrop } from './MenuBackdrop';
+import { UnsupportedNotice } from './Unsupported';
 import { hasSave } from '../game/persistence';
 
 const SCALE_INFO: Record<ScalePresetId, { label: string; blurb: string }> = {
@@ -45,6 +46,7 @@ export function MainMenu() {
             <Button className="btn" onClick={() => setPanel('settings')}><Icon name="settings" />Settings</Button>
           </div>
         )}
+        {panel === 'root' && <UnsupportedNotice />}
 
         {panel === 'new' && (
           <Panel className="menu-new">

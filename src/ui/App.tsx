@@ -15,6 +15,8 @@ import { MainMenu } from './MainMenu';
 import { SpaceCenter } from './SpaceCenter';
 import { ErrorBoundary } from './ErrorBoundary';
 import { SaveErrorNotice } from './SaveErrorNotice';
+import { UnsupportedScreen } from './Unsupported';
+import { browserSupport, SCENES_NEEDING_WEBGL2 } from './browserSupport';
 
 // Heavy 3D scenes are code-split so the menu loads instantly.
 const Scenarios = lazy(() => import('../scenarios/Scenarios'));
@@ -52,7 +54,7 @@ export function App() {
   return (
     <div className="fullscreen" style={{ width: `${100 / settings.uiScale}%`, height: `${100 / settings.uiScale}%`, transform: `scale(${settings.uiScale})`, transformOrigin: 'top left' }}>
       <ErrorBoundary>
-      <Suspense fallback={<Loading />}>
+      {SCENES_NEEDING_WEBGL2.has(scene) && !browserSupport().webgl2 ? <UnsupportedScreen /> : <Suspense fallback={<Loading />}>
         {scene === 'scenarios' && <Scenarios />}
         {scene === 'flightlog' && <FlightLog />}
         {scene === 'pedia' && <Spacepedia />}
@@ -64,7 +66,7 @@ export function App() {
         {scene === 'research' && <Research />}
         {scene === 'missions' && <Missions />}
         {scene === 'tracking' && <TrackingStation />}
-      </Suspense>
+      </Suspense>}
       {!photo.active && <TutorialPanel />}
       {!photo.active && scene === 'flight' && <ScenarioPanel />}
       <PhotoPanel />

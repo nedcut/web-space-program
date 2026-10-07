@@ -1,4 +1,5 @@
 import { PhotoEffectsPass } from './PhotoEffectsPass';
+import { clampPixelRatio, maxDrawingEdge } from './drawingLimits';
 import { AdaptiveQuality } from './adaptiveQuality';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -99,8 +100,9 @@ export class RenderPipeline {
 
   get pixelRatio(): number {
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-    if (this.mapHiRes) return Math.min(dpr, 2);
-    return Math.max(1 / Math.min(this.width, this.height), Math.min(dpr, this.quality.maxPixelRatio) * this.quality.renderScale * this.adaptive.scale);
+    const pr = this.mapHiRes ? Math.min(dpr, 2)
+      : Math.max(1 / Math.min(this.width, this.height), Math.min(dpr, this.quality.maxPixelRatio) * this.quality.renderScale * this.adaptive.scale);
+    return clampPixelRatio(pr, this.width, this.height, maxDrawingEdge(this.renderer));
   }
 
   private buildComposer(): void {

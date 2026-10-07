@@ -225,6 +225,28 @@ describe('Web Audio lifecycle', () => {
     }
   });
 
+  it('goes silent instead of throwing when a Web Audio call fails mid-game', () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ramp = Param.prototype.linearRampToValueAtTime;
+    vi.stubGlobal('AudioContext', ContextDouble);
+    let audio: GameAudio | undefined;
+    try {
+      audio = new GameAudio();
+      audio.resume();
+      audio.setMusic('menu');
+      Param.prototype.linearRampToValueAtTime = () => { throw new Error('unsupported automation'); };
+      expect(() => { audio!.setMusic('space'); vi.advanceTimersByTime(5000); audio!.update(state); audio!.uiClick(); audio!.staging(); }).not.toThrow();
+      expect(ContextDouble.latest.state).toBe('closed');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      Param.prototype.linearRampToValueAtTime = ramp;
+      audio?.dispose(); warn.mockRestore();
+      vi.unstubAllGlobals(); vi.useRealTimers();
+    }
+  });
+
   it('remains safe when a browser denies context creation', () => {
     vi.stubGlobal('AudioContext', class { constructor() { throw new Error('unavailable'); } });
     try {

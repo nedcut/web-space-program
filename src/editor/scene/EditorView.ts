@@ -1,6 +1,7 @@
 import { untintedMaterials } from '../../render/parts/materialState';
 import { enqueueIdle } from '../../util/idleQueue';
 import { LinkView } from '../../render/vessel/LinkView';
+import { clampPixelRatio, maxDrawingEdge } from '../../render/core/drawingLimits';
 import { isTyping, matches } from '../../input/bindings';
 import * as THREE from 'three';
 import { detachRenderer, noteDfgLut, releaseRenderer } from '../../render/releaseRenderer';
@@ -138,6 +139,7 @@ export class EditorView {
   private markerMatHeld = new THREE.MeshBasicMaterial({ color: 0xffb35c, transparent: true, opacity: 0.95, toneMapped: false, fog: false, depthTest: false, depthWrite: false });
   private ghostMat = new THREE.MeshStandardMaterial({ color: 0x5cc8ff, transparent: true, opacity: 0.32, roughness: 0.4, metalness: 0, emissive: 0x1a5f8a, emissiveIntensity: 0.6, depthWrite: false });
   private warnedFloating = false;
+  private pixelRatio = 1;
   private prevPartCount = 0;
 
   constructor(private container: HTMLElement, private session: EditorSession) {
@@ -145,7 +147,8 @@ export class EditorView {
     setPartDetail(getQuality(quality).partDetail);
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     const dpr = window.devicePixelRatio || 1;
-    this.renderer.setPixelRatio(Math.min(dpr, getQuality(quality).maxPixelRatio) * game.get().settings.renderScale);
+    this.pixelRatio = Math.min(dpr, getQuality(quality).maxPixelRatio) * game.get().settings.renderScale;
+    this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -172,7 +175,7 @@ export class EditorView {
     this.key = new THREE.DirectionalLight(0xfff3e6, 4.1);
     this.key.position.set(KEY_OFFSET.x, KEY_OFFSET.y, KEY_OFFSET.z);
     this.key.castShadow = getQuality(quality).shadowMapSize > 0;
-    const sm = getQuality(quality).shadowMapSize || 512;
+    const sm = Math.min(getQuality(quality).shadowMapSize || 512, maxDrawingEdge(this.renderer));
     this.key.shadow.mapSize.set(sm, sm);
     this.key.shadow.bias = -0.0003;
     this.key.shadow.normalBias = 0.03;
@@ -895,6 +898,7 @@ export class EditorView {
   private resize() {
     this.idleFor = Infinity;
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
+    this.renderer.setPixelRatio(clampPixelRatio(this.pixelRatio, w, h, maxDrawingEdge(this.renderer)));
     this.renderer.setSize(w, h, false);
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';

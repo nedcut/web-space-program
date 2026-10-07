@@ -844,3 +844,18 @@ Final main merge was already up to date at `7bd6e4f9`; post-merge lint, TypeScri
 - 100-part CPU-isolated held motion ~59 fps after removing the serialization stall, attach/undo correctness passes; HUD drag persists only on release and finishes as a floating panel at the expected location. Scene GPU drawing is suppressed in this diagnostic, so actual Apple/120 Hz FPS remains unverified.
 - Flight profiling after maxima vary 4.2–10.1 ms; not every strict target is established. Full-render software flight remains GPU-bound; cold backdrop/menu and input-queue outliers, unmeasured maneuver/tracking flows, and the failed shared-GPU attempt are explicitly documented in docs/PERFORMANCE.md.
 - Each implementation step is committed. Final lint (including architecture layering), TypeScript check and normal production build pass. Full Vitest: 113 files / 1,332 tests pass before the final `git merge main` and again afterward; merge was already up to date. Production preview stopped at completion.
+## Firefox, Zen and Safari compatibility (op/firefox, 2026-10-07)
+
+- **Cause of "doesn't work in Firefox":** after the first click, the menu → Space Center music switch called `AudioParam.cancelAndHoldAtTime`, which Firefox lacks. The audio hook sits above the scene error boundary, so the whole app unmounted to a black page. I reproduced it on real Windows Firefox 143. Your PR #1 fix was merged here, and the branch's equivalent copy was dropped.
+- **Hardening, so the next browser gap cannot blank the game:**
+  - Audio now fails safe: any Web Audio error silences sound instead of crashing.
+  - A root error boundary shows a reload page instead of a black screen.
+  - A browser without WebGL 2 gets a friendly fix-it screen and a main-menu warning, instead of a "Flight interrupted" crash.
+  - With site data blocked (localStorage throws), the game runs on session memory and says so.
+- **Privacy-hardened Firefox (resistFingerprinting):** part-heat shaders failed to link and editor buffers exceeded the reported size limits; both are fixed. Canvas read-back is randomised there, so the texture cache no longer stores it.
+- **Verified:**
+  - Real Windows Firefox 143 on the RTX 3060 Ti, production build: full flow with no console errors (menu → editor → launch → staging → orbit → map → quicksave/quickload → Tracking Station → Continue). Medium quality at 1600×915 runs ~59 fps with ~6 ms CPU/frame.
+  - Playwright Firefox 155, WebKit 26.6 (Safari proxy) and Chromium pass `node scripts/browser-smoke.mjs`; Firefox also passes with resistFingerprinting at Medium.
+  - Screenshots: `docs/screenshots/firefox/`. How to run it: `docs/BROWSERS.md`.
+- **Not verified:** real Safari on a Mac, and Firefox on macOS (it uses Apple's OpenGL driver rather than ANGLE). WebKit on Linux is only a proxy.
+- **Post-merge verification:** merged main (graphics settings/Ultra preset). Shadow maps are now also capped to the context limit; the Ultra preset's 4096-px planet bake remains a caveat on 2048-limited contexts. `npm run lint`, `npx tsc --noEmit` and `npm run build` pass, and the full vitest run passes (**111 files / 1,333 tests**). Re-tested the production build after the merge: the full real Windows Firefox 143 flow, and Playwright Firefox, WebKit and Firefox with resistFingerprinting at Medium, all with no errors.
