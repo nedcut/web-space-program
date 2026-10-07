@@ -102,11 +102,12 @@ float seaWind(vec3 nBF, vec3 rel) {
   return w;
 }
 /** Cheap sky radiance seen in flat water: diffuse sky, brightening towards the horizon at grazing view. */
-vec3 earthSkyReflApprox(vec3 rel, vec3 up, vec3 V) {
-  float mu = max(dot(up, V), 0.0);
-  return skyAmbient(rel, up) / ATMO_PI * (1.0 + 1.5 * pow(1.0 - mu, 4.0));
+vec3 earthSkyReflApprox(vec3 skyAmb, vec3 up, vec3 V) {
+  float mu = 1.0 - max(dot(up, V), 0.0);
+  mu *= mu;
+  return skyAmb / ATMO_PI * (1.0 + 1.5 * mu * mu);
 }
-vec3 shadeWater(vec3 bodyAlbedo, vec3 up, vec3 N, vec3 V, vec3 rel, vec3 skyRefl, float alpha, vec3 sunT) {
+vec3 shadeWater(vec3 bodyAlbedo, vec3 up, vec3 N, vec3 V, vec3 rel, vec3 skyRefl, float alpha, vec3 sunT, vec3 skyAmb) {
   vec3 L = uSunDir;
   float NdV = max(dot(N, V), 1e-3);
   float NdL = max(dot(N, L), 0.0);
@@ -119,7 +120,7 @@ vec3 shadeWater(vec3 bodyAlbedo, vec3 up, vec3 N, vec3 V, vec3 rel, vec3 skyRefl
   vec3 spec = min(uSunColor * sunT * waterGGX(NdH, alpha) * G * Fs / (4.0 * NdV), vec3(200.0));
   // Rough-surface Schlick: unresolved wave facets cap grazing reflectance of the sky.
   float F = 0.02 + 0.53 * pow(1.0 - NdV, 5.0);
-  vec3 lightIn = uSunColor * sunT * max(dot(up, L), 0.0) / ATMO_PI + skyAmbient(rel, up) / ATMO_PI;
+  vec3 lightIn = uSunColor * sunT * max(dot(up, L), 0.0) / ATMO_PI + skyAmb / ATMO_PI;
   return mix(bodyAlbedo * lightIn, skyRefl, F) + spec;
 }
 `;
@@ -285,7 +286,9 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             // Deep under open water: the opaque ocean mesh covers this vertex (mask agrees, no shore nearby).
             // Sea ice is bright: there the ocean steps aside and this terrain draws the ice.
             float iceV = dot(coarse.rgb, vec3(0.2126, 0.7152, 0.0722));
-            vCovered = hV < -150.0 && waterNear > 0.995 && iceV < 0.1 ? 1.0 : 0.0;
+            // 10 m below the datum the ocean mesh's own depth exceeds its ±2 m shoreline noise, so it never
+            // steps aside there (scaled relief puts most continental shelves only ~20 m down).
+            vCovered = hV < -10.0 && waterNear > 0.995 && iceV < 0.1 ? 1.0 : 0.0;
           }
         #endif
         gl_Position = projectionMatrix * viewMatrix * wp;
@@ -409,12 +412,13 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           // Coasts follow the imagery from altitude: water the terrain mesh still has above its datum.
           if (waterW > 0.0) {
             vec3 sunT = sunTransmittance(rel) * cloudShadow(rel);
+            vec3 skyAmb = skyAmbient(rel, up);
             #ifdef EARTH_RICH
               vec3 skyR = vSkyRefl;
             #else
-              vec3 skyR = earthSkyReflApprox(rel, up, V);
+              vec3 skyR = earthSkyReflApprox(skyAmb, up, V);
             #endif
-            vec3 water = shadeWater(albedo, up, up, V, rel, skyR, coxMunkAlpha(seaWind(nDir, rel)), sunT);
+            vec3 water = shadeWater(albedo, up, up, V, rel, skyR, coxMunkAlpha(seaWind(nDir, rel)), sunT, skyAmb);
             col = mix(col, water, waterW);
           }
         #endif
@@ -520,6 +524,10 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
       varying float vDepth;
       varying vec3 vDetail;
       uniform mat3 uBodyRot;
+      #ifdef EARTH_IMAGERY
+      uniform float uEarthImagery;
+      uniform vec2 uEarthBlend;
+      #endif
       ${GLSL_AERIAL_VERT}
       ${GLSL_SKY_REFL_VERT}
       void main() {
@@ -529,7 +537,13 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         vDepth = aDepth;
         vDetail = aDetail;
         computeAerial(wp.xyz);
-        computeSkyRefl(wp.xyz, normalize(uBodyRot * normal));
+        #if defined(EARTH_IMAGERY) && !defined(EARTH_RICH)
+          // From altitude Medium blends to the analytic reflection: only march where it is still visible.
+          if (uEarthImagery < 0.5 || distance(cameraPosition, wp.xyz) < uEarthBlend.y) computeSkyRefl(wp.xyz, normalize(uBodyRot * normal));
+          else vSkyRefl = vec3(0.0);
+        #else
+          computeSkyRefl(wp.xyz, normalize(uBodyRot * normal));
+        #endif
         gl_Position = projectionMatrix * viewMatrix * wp;
         ${GLSL_LOGDEPTH_VERT}
       }`,
@@ -600,9 +614,11 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         #if OCEAN_QUALITY == 0
           vec3 g = vec3(0.0);
         #else
-          vec3 g = waveGrad(vDetail, w, 64.0, vec2(t * 1.3, t * 0.7)) * fade1
-                 + waveGrad(vDetail, w, 23.0, vec2(-t * 0.9, t * 1.6)) * fade1 * 0.7
-                 + waveGrad(vDetail, w, 512.0, vec2(t * 2.0, -t * 1.1)) * fade2 * 0.6;
+          // Faded octaves are skipped, not multiplied by zero: from orbit every water pixel is beyond both fades.
+          vec3 g = vec3(0.0);
+          if (fade1 > 0.0) g += waveGrad(vDetail, w, 64.0, vec2(t * 1.3, t * 0.7)) * fade1
+                              + waveGrad(vDetail, w, 23.0, vec2(-t * 0.9, t * 1.6)) * fade1 * 0.7;
+          if (fade2 > 0.0) g += waveGrad(vDetail, w, 512.0, vec2(t * 2.0, -t * 1.1)) * fade2 * 0.6;
         #endif
         if (uHydrocarbon > 0.5) {
           g *= 0.18;
@@ -638,8 +654,8 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         }
         vec3 sunT = sunTransmittance(rel) * ringShadow(rel) * cloudShadow(rel);
         // Resolved waves up close; Cox–Munk slope statistics once individual waves are sub-pixel.
-        vec3 nDirW = normalize(transpose(uBodyRot) * rel);
-        float alpha = mix(0.07, coxMunkAlpha(seaWind(nDirW, rel)), smoothstep(400.0, 25000.0, dist));
+        float alpha = mix(0.07, coxMunkAlpha(seaWind(upBF, rel)), smoothstep(400.0, 25000.0, dist));
+        vec3 skyAmb = skyAmbient(rel, up);
         // Water body colour: absorption with depth, lit by sun + sky.
         float depthT = 1.0 - exp(-depth / 18.0);
         vec3 water = mix(uShallow, uDeep, depthT);
@@ -650,10 +666,10 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         vec3 skyR = vSkyRefl;
         #if defined(EARTH_IMAGERY) && !defined(EARTH_RICH)
           // Same reflection model as imagery water drawn by terrain beside it (no seam along mesh coasts).
-          skyR = mix(skyR, earthSkyReflApprox(rel, up, V), wImg);
+          skyR = mix(skyR, earthSkyReflApprox(skyAmb, up, V), wImg);
         #endif
-        vec3 col = shadeWater(water, up, N, V, rel, skyR, alpha, sunT);
-        vec3 lightIn = uSunColor * sunT * max(dot(up, L), 0.0) / ATMO_PI + skyAmbient(rel, up) / ATMO_PI;
+        vec3 col = shadeWater(water, up, N, V, rel, skyR, alpha, sunT, skyAmb);
+        vec3 lightIn = uSunColor * sunT * max(dot(up, L), 0.0) / ATMO_PI + skyAmb / ATMO_PI;
         // Seabed and surf follow the mesh's own shoreline; from altitude the imagery carries the shallows.
         float shallowW = 1.0 - smoothstep(0.0, 6.0, max(meshDepth, 0.0));
         #ifdef EARTH_IMAGERY
@@ -772,7 +788,8 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
         col = waterW < 1.0 ? shadeSurface(albedo, N, V, rel) : vec3(0.0);
         if (waterW > 0.0) {
           vec3 sunT = sunTransmittance(rel) * cloudShadow(rel);
-          col = mix(col, shadeWater(waterAlbedo, up, up, V, rel, skyAmbient(rel, up) / ATMO_PI, coxMunkAlpha(seaWind(n, rel)), sunT), waterW);
+          vec3 skyAmb = skyAmbient(rel, up);
+          col = mix(col, shadeWater(waterAlbedo, up, up, V, rel, earthSkyReflApprox(skyAmb, up, V), coxMunkAlpha(seaWind(n, rel)), sunT, skyAmb), waterW);
         }
         #ifdef EARTH_IMAGERY
           if (uEarthImagery > 0.5) col += earthNightLights(eUV, dot(up, uSunDir), rel);

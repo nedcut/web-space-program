@@ -30,6 +30,7 @@ interface Manifest { version: number; levels: ManifestLevel[] }
 
 const CACHE_NAME = 'wsp-earth-imagery-v1';
 const LEVEL_FOR: Record<EarthTextureQuality, string> = { low: '2k', medium: '4k', high: '8k', ultra: '16k' };
+const ANISOTROPY: Record<EarthTextureQuality, number> = { low: 1, medium: 2, high: 8, ultra: 8 };
 /** Largest bundled level: shown first while a pack downloads. */
 const BUNDLED_PREVIEW = '4k';
 
@@ -347,7 +348,9 @@ export class EarthImagery {
     const rt = new THREE.WebGLRenderTarget(level.width, level.height, {
       type: THREE.UnsignedByteType, format: THREE.RGBAFormat, colorSpace: THREE.SRGBColorSpace,
       generateMipmaps: false, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
-      wrapS: THREE.RepeatWrapping, wrapT: THREE.ClampToEdgeWrapping, depthBuffer: false, anisotropy: 8,
+      wrapS: THREE.RepeatWrapping, wrapT: THREE.ClampToEdgeWrapping, depthBuffer: false,
+      // Orbit views are oblique: anisotropic taps are a real cost, so they scale with the tier.
+      anisotropy: ANISOTROPY[this.opts.quality],
     });
     rt.texture.name = `earth:day+water:${level.id}`;
     this.pendingTarget = rt;
