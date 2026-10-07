@@ -43,7 +43,7 @@ function sources(parts: THREE.Object3D[], toFrame: THREE.Matrix4): Source[] {
       const r = Math.max(0.05, (o.userData.exitRadius as number | undefined) ?? 0.3);
       const ref = Math.abs(d.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
       const u = ref.addScaledVector(d, -ref.dot(d)).normalize();
-      out.push({ p, d, u, w: new THREE.Vector3().crossVectors(d, u), r, owner, amp: Math.min(0.95, 0.7 + 0.25 * r), len: engineLength(owner, toFrame, p, d) });
+      out.push({ p, d, u, w: new THREE.Vector3().crossVectors(d, u), r, owner, amp: Math.min(1, 0.82 + 0.25 * r), len: engineLength(owner, toFrame, p, d) });
     });
   return out;
 }
@@ -185,8 +185,8 @@ export function bakeEngineSoot(parts: THREE.Object3D[], frame: THREE.Object3D, o
       const arr = attr.array as Float32Array;
       for (let i = 0; i < pos.count; i++) {
         const v = dark[i];
-        arr[i * 3] = base[i * 3] * (1 - v * 0.9);
-        arr[i * 3 + 1] = base[i * 3 + 1] * (1 - v * 0.95);
+        arr[i * 3] = base[i * 3] * (1 - v * 0.93);
+        arr[i * 3 + 1] = base[i * 3 + 1] * (1 - v * 0.97);
         arr[i * 3 + 2] = base[i * 3 + 2] * (1 - v);
       }
       attr.needsUpdate = true;
