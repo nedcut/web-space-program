@@ -123,3 +123,12 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); opacity: .8;
 label.panel:has(.scale-radio:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 [tabindex="-1"]:focus-visible { outline: none; }
+
+/* Failed-save notification: above every scene, never blocking input elsewhere. */
+.save-error-notice {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 900; width: min(520px, calc(100% - 24px));
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 10px 10px 14px; border-color: var(--warn); background: rgba(16, 14, 8, 0.94);
+}
+.save-error-notice strong { color: var(--warn); font-size: 14px; }
+.save-error-notice p { margin: 4px 0 0; font-size: 12.5px; color: var(--text-dim); line-height: 1.45; }
+.save-error-notice > div { flex: 1; }

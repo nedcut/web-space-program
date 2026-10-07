@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { game, updateSettings, useGame } from '../../game/store';
 import { World, type WorldVessel } from '../../game/world';
 import { Universe } from '../../game/universe';
-import { deserializeWorld, serializeWorld, saveWorldToStorage } from '../../game/persistence';
+import { deserializeWorld } from '../../game/persistence';
+import { leaveTracking, persistTracking } from './leave';
 import { PART_CATALOG } from '../../data/parts';
 import { RAILS_WARP, warpRate } from '../../game/timewarp';
 import type { Body } from '../../sim/bodies/types';
@@ -46,16 +47,11 @@ export default function TrackingStation() {
     return () => {
       renderer.dispose();
       view.current = null;
-      game.set({ resumeWorld: serializeWorld(world), mode: world.mode, ut: world.ut });
-      saveWorldToStorage('autosave', world);
+      persistTracking(world);
     };
   }, [world]);
 
-  const exit = (scene: 'spaceCenter' | 'flight' | 'pedia' | 'flightlog') => {
-    world.warp = { mode: 'rails', index: 0 };
-    saveWorldToStorage('autosave', world);
-    game.set({ resumeWorld: serializeWorld(world), mode: world.mode, ut: world.ut, launchPending: false, scene });
-  };
+  const exit = (scene: 'spaceCenter' | 'flight' | 'pedia' | 'flightlog') => leaveTracking(world, scene);
   const remove = (id: string) => {
     const vessel = world.vessels.get(id);
     if (vessel) world.finishFlight(vessel, 'lost');

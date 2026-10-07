@@ -48,6 +48,17 @@ for (const [row, [id, ...names]] of branches.entries()) {
     parts: [...parts.filter((_, i) => Math.min(3, Math.floor(i * 4 / parts.length)) === tier).map(p => p.id),
       ...PART_DEFS.filter(p => expansionTiers[p.id] === `${id}-${tier}`).map(p => p.id)], column: tier + 1, row }));
 }
+// Move only named early-game essentials; keep every unrelated catalogue assignment stable.
+for (const [id, ids] of Object.entries({
+  'propulsion-0': ['tank-1-long', 'eng-zephyr'],
+  'propulsion-1': ['tank-2-short', 'tank-2-mid', 'tank-2-long', 'eng-chinook', 'eng-doldrum'],
+  'propulsion-2': ['tank-3-mid', 'tank-3-long', 'eng-tempest', 'eng-foehn'],
+  'structures-0': ['adapt-1-2'],
+  'structures-1': ['leg-stilt', 'leg-strider'],
+})) {
+  for (const node of TECH_NODES) node.parts = node.parts.filter(part => !ids.includes(part));
+  TECH_NODES.find(node => node.id === id)!.parts.push(...ids);
+}
 // Explicit assignments preserve the existing cost-sorted tiers when ISRU equipment is added.
 for (const p of ISRU_PARTS) {
   const tier = p.id === 'scanner-assay' || p.id === 'regolith-hopper' ? 1 : p.id === 'drill-quarry' || p.id === 'converter-foundry' ? 3 : 2;

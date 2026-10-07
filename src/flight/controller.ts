@@ -59,6 +59,8 @@ import { HintTracker } from './hints';
 import type { DockingTelemetry, Telemetry } from './hud/Hud';
 import type { NavballFrame, NavballMarker } from './hud/navball';
 import { FlightInput } from './input';
+import { actionAllowedWhileSuspended } from './modals';
+import { saveErrorText } from '../game/storageErrors';
 import { createPlanetLayer, type PlanetLayer } from './planets';
 
 
@@ -103,6 +105,13 @@ export class FlightController {
   readonly mapUi: FlightMap;
   mapMode = false;
   paused = false;
+  /** A modal (the Controls reference) covers the flight: flight input is suspended but the sim keeps running. */
+  modalOpen = false;
+  /** Applies at once rather than on the next rendered frame, so no key slips through while a slow frame is pending. */
+  setModalOpen(open: boolean) {
+    this.modalOpen = open;
+    this.input.enabled = !this.paused && !open;
+  }
   readonly photo: PhotoCamera;
   private photoWasPaused = false;
   assist: Autopilot | null = null;
@@ -266,9 +275,9 @@ export class FlightController {
     this.disposers.push(
       this.input.onAction((a) => {
         if (this.photo.active) return;
-        // While paused (pause menu, vessel lost) only the menu toggle and quickload are live; a momentary SAS
-        // toggle still restores itself when its key is released.
-        if (this.paused && a !== 'menu' && a !== 'quickload' && a !== 'sasHoldRelease') return;
+        // While paused (pause menu, vessel lost) or under a modal only the menu toggle and quickload are live;
+        // a momentary SAS toggle still restores itself when its key is released.
+        if ((this.paused || this.modalOpen) && !actionAllowedWhileSuspended(a)) return;
         switch (a) {
           case 'stage': this.requestStage(); break;
           case 'eva': this.goEva(); break;
@@ -387,7 +396,7 @@ export class FlightController {
       saveWorldToStorage(slot, this.world);
       if (slot === 'quicksave') this.world.message(`Quicksaved (${bindingLabel('quickload')} to load)`);
     } catch (e) {
-      this.world.message(`Save failed: ${(e as Error).message}`, 'bad');
+      this.world.message(saveErrorText(e), 'bad');
     }
   }
 
@@ -725,7 +734,7 @@ export class FlightController {
       this.sasOn = false;
     }
     const settings = game.get().settings;
-    this.input.enabled = !this.paused;
+    this.input.enabled = !this.paused && !this.modalOpen;
     if (!this.photo.active) this.cam.camera.fov = settings.cameraFov;
     const graphicsKey = graphicsKeyOf(settings);
     if (graphicsKey !== this.graphicsKey) {

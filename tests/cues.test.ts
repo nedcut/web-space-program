@@ -76,8 +76,9 @@ it('detects a separator firing before the engines it carries', () => {
   for (const p of craft.parts) if (PART_CATALOG.get(p.partId)!.modules.some(m => m.type === 'decoupler')) p.stage = 9;
   expect(preflightChecks(craft, PART_CATALOG).some(c => c.id.startsWith('order-'))).toBe(true);
 });
-it('distinguishes stabilizing aft fins from destabilizing forward fins', () => {
+it('distinguishes passive stabilizing aft fins from destabilizing forward fins', () => {
   const craft = STOCK_CRAFTS[0].build();
+  for (const p of craft.parts) if (PART_CATALOG.get(p.partId)!.modules.some(m => m.type === 'engine')) p.tweaks = { gimbalLock: true };
   const fins = craft.parts.filter(p => PART_CATALOG.get(p.partId)!.modules.some(m => m.type === 'liftingSurface'));
   expect(fins.length).toBeGreaterThan(0);
   for (const p of fins) p.position.y = -100;

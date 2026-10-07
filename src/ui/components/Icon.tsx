@@ -43,6 +43,7 @@ const paths: Record<string, ReactElement> = {
   frame: <>{P('M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5')}</>,
   wand: <>{P('M4 20L16 8M14 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1z')}</>,
   close: P('M6 6l12 12M18 6 6 18'),
+  more: <><circle cx="5" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="19" cy="12" r="1.3" /></>,
   groups: <>{P('M4 5h4v4H4zM4 15h4v4H4zM11 7h9M11 17h9M11 12h6')}</>,
 };
 

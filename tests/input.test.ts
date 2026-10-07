@@ -308,4 +308,38 @@ describe('flight gamepad actions', () => {
       expect(h.input.state.throttle).toBeCloseTo(0.2, 6);
     } finally { h.input.dispose(); game.set({ settings }); }
   });
+  it('bound Alt chords act only as their action: Alt+L stage lock does not translate, trim chords do not steer', () => {
+    const h = harness(); const settings = game.get().settings;
+    const ev = (type: string, code: string, altKey = false) => h.target.dispatchEvent(Object.assign(new Event(type), { code, ctrlKey: false, shiftKey: false, metaKey: false, altKey, repeat: false }));
+    const run = () => { for (let i = 0; i < 30; i++) h.input.update(1 / 60); };
+    try {
+      game.set({ settings: { ...settings, gamepadEnabled: false, inputSmoothing: 0, invertPitch: false } });
+      saveBindings(defaultBindings(), memory());
+      ev('keydown', 'AltLeft'); ev('keydown', 'KeyL', true); run();
+      expect(h.actions).toEqual(['stageLock']);
+      expect(h.input.state.tx).toBe(0);
+      // Releasing Alt first must not turn the still-held L into a translation burst.
+      ev('keyup', 'AltLeft'); run();
+      expect(h.input.state.tx).toBe(0);
+      ev('keyup', 'KeyL');
+      ev('keydown', 'KeyL'); run();
+      expect(h.input.state.tx).toBe(1); // plain L still translates right
+      ev('keyup', 'KeyL'); run();
+      // Alt+X clears trim only; Alt + attitude keys trim without deflecting or translating.
+      ev('keydown', 'AltLeft');
+      for (const code of ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE']) {
+        ev('keydown', code, true); run();
+        expect(h.input.state).toMatchObject({ pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, throttle: 0 });
+        ev('keyup', code);
+      }
+      ev('keydown', 'KeyX', true); run();
+      expect(h.input.state).toMatchObject({ pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, throttle: 0 });
+      expect(h.actions).toEqual(['stageLock', 'trimReset']);
+      ev('keyup', 'KeyX');
+      // Documented: an unbound Alt + translation key is fine translation (Alt is hold-for-fine).
+      ev('keydown', 'KeyI', true); run();
+      expect(h.input.state.ty).toBeCloseTo(0.35, 6);
+      ev('keyup', 'KeyI'); ev('keyup', 'AltLeft');
+    } finally { h.input.dispose(); game.set({ settings }); }
+  });
 });

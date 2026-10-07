@@ -36,7 +36,7 @@ it.each(['standard', 'challenging', 'real'] as const)('%s physical scale invaria
   const world = new World(universe, PART_CATALOG, 0, 'career');
   const multiplier = careerScaleMultiplier(preset);
   expect(world.progression.funds).toBeCloseTo(60000 * multiplier);
-  expect(world.progression.contracts[0].reward).toBeCloseTo(10000 * multiplier);
+  expect(world.progression.contracts[0].reward).toBeCloseTo(18000 * multiplier);
   const loaded = deserializeWorld(serializeWorld(world), PART_CATALOG);
   expect(loaded.progression).toEqual(world.progression);
   const craft = buildRealOrbiter();

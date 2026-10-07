@@ -2,7 +2,10 @@ import { localId } from '../util/localId';
 import type { SavedWorld } from './persistence';
 import { deserializeWorld, SAVE_VERSION } from './persistence';
 import { PART_CATALOG } from '../data/parts';
-export interface SaveSlot { id: string; programId: string; name: string; kind: 'manual' | 'auto'; savedAt: number; data: SavedWorld }
+import type { CraftDef } from '../sim/vessel/types';
+import { validateCraft } from './craftSharing';
+/** `craft` is the program's editor draft when the slot was written (null: empty editor; absent: older slot). */
+export interface SaveSlot { id: string; programId: string; name: string; kind: 'manual' | 'auto'; savedAt: number; data: SavedWorld; craft?: CraftDef | null }
 export const SLOTS_KEY = 'wsp.save-slots.v1';
 type SlotStorage = Pick<Storage, 'getItem' | 'setItem'>;
 export function listSaveSlots(storage: SlotStorage = localStorage): SaveSlot[] {
@@ -32,5 +35,7 @@ export function importSaveSlot(text: string): SaveSlot {
   for (const vessel of world.vessels.values()) {
     if (!world.universe.bodies.has(vessel.body) || !Number.isFinite(vessel.state.mass) || ![vessel.state.position, vessel.state.velocity].every(v => [v.x, v.y, v.z].every(Number.isFinite))) throw new Error('Invalid vessel state.');
   }
-  return { id: localId(), programId: s.programId, name: s.name, kind: 'manual', savedAt: s.savedAt, data: s.data };
+  // An invalid editor draft is dropped rather than rejecting the whole program.
+  const craft = s.craft ? validateCraft(s.craft, PART_CATALOG).craft : null;
+  return { id: localId(), programId: s.programId, name: s.name, kind: 'manual', savedAt: s.savedAt, data: s.data, craft };
 }

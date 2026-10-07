@@ -12,6 +12,7 @@ import { sub, v3, type Vec3 } from '../util/vec3';
 import { CraftEditor, craftStats, getStageList, type CraftStats, type Stage, type LinkHit } from './core';
 import { STOCK_CRAFTS } from './stockCrafts';
 import { computeStageStats, type StageStats } from './ui/dv';
+import { saveErrorText } from '../game/storageErrors';
 
 export const CATALOG = PART_CATALOG;
 export const DENSITIES: Partial<Record<ResourceId, number>> = Object.fromEntries(
@@ -268,8 +269,8 @@ export class EditorSession {
     try {
       await saveCraft(craft);
       this.toast(`Saved "${craft.name}"`, 'good');
-    } catch {
-      this.toast('Could not save (storage unavailable)', 'bad');
+    } catch (e) {
+      this.toast(saveErrorText(e), 'bad');
     }
   }
 

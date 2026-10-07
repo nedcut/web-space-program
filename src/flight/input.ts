@@ -1,5 +1,5 @@
 import { game } from '../game/store';
-import { getBindings, isTyping, matches, type Action } from '../input/bindings';
+import { getBindings, isFlightChord, isTyping, matches, type Action } from '../input/bindings';
 import { mapGamepad } from '../input/gamepad';
 export interface FlightInputState {
   pitch: number;
@@ -37,6 +37,8 @@ export class FlightInput {
   /** Control trim (added to pitch/yaw/roll by the controller while SAS is off). */
   readonly trim = { pitch: 0, yaw: 0, roll: 0 };
   private held = new Set<string>();
+  /** Keys pressed as part of a bound chord (Alt+L): consumed by that action, they drive no plain-key axis until released. */
+  private chordKeys = new Set<string>();
   private listeners = new Set<(a: FlightAction) => void>();
   private buttons = new Set<number>();
   private stageHeld = 0;
@@ -68,7 +70,7 @@ export class FlightInput {
   }
   onAction(fn: (a: FlightAction) => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
   private emit(a: FlightAction) { this.listeners.forEach(l => l(a)); }
-  private onBlur = () => { this.releaseSasHold(); this.held.clear(); this.mouse = { x: 0, y: 0 }; this.keyRamp = { pitch: 0, yaw: 0, roll: 0 }; this.resetPad(); };
+  private onBlur = () => { this.releaseSasHold(); this.held.clear(); this.chordKeys.clear(); this.mouse = { x: 0, y: 0 }; this.keyRamp = { pitch: 0, yaw: 0, roll: 0 }; this.resetPad(); };
   private onMouse = (e: PointerEvent) => {
     // Right-button drag remains the camera control; left-button drag is optional flight assist.
     if (this.mouseEnabled && game.get().settings.mouseFlight && e.buttons === 1 && e.target instanceof HTMLCanvasElement) {
@@ -80,6 +82,7 @@ export class FlightInput {
     return getBindings()[a].some(k => {
       const parts = k.split('+');
       const code = parts.pop()!;
+      if (!parts.length) return this.held.has(code) && !this.chordKeys.has(code);
       return this.held.has(code) && parts.every(p => p === 'Ctrl' ? this.held.has('ControlLeft') || this.held.has('ControlRight') : p === 'Shift' ? this.held.has('ShiftLeft') || this.held.has('ShiftRight') : p === 'Alt' && (this.held.has('AltLeft') || this.held.has('AltRight')));
     });
   }
@@ -90,6 +93,7 @@ export class FlightInput {
     const actions = (Object.keys(getBindings()) as Action[]).filter(a => !a.startsWith('editor') && matches(a, e));
     if (actions.length) e.preventDefault();
     this.held.add(e.code);
+    if (isFlightChord(e)) this.chordKeys.add(e.code);
     if (e.repeat) return;
     if (actions.includes('precision')) this.precision = !this.precision;
     if (actions.includes('trimReset')) { this.trim.pitch = this.trim.yaw = this.trim.roll = 0; this.emit('trimReset'); }
@@ -100,7 +104,7 @@ export class FlightInput {
     if (!this.evaMode && actions.includes('throttleFull')) this.state.throttle = 1;
     if (!this.evaMode && actions.includes('throttleCut')) this.state.throttle = 0;
   };
-  private onUp = (e: KeyboardEvent) => { this.held.delete(e.code); if (e.code === this.sasHoldKey) this.releaseSasHold(); };
+  private onUp = (e: KeyboardEvent) => { this.held.delete(e.code); this.chordKeys.delete(e.code); if (e.code === this.sasHoldKey) this.releaseSasHold(); };
   private releaseSasHold() { if (!this.sasHoldKey) return; this.sasHoldKey = null; this.emit('sasHoldRelease'); }
   private resetPad() { this.buttons.clear(); this.stageHeld = this.stageProgress = 0; this.stageConfirmed = false; this.padIndex = null; this.gamepadConnected = false; }
   update(dt: number) {

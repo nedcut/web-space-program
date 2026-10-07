@@ -1,6 +1,6 @@
 import { careerScaleMultiplier } from '../../sim/bodies/scale';
 import { unlockTech as unlockTechModel } from '../../data/technology';
-import { acceptContract as acceptContractModel, failContract, generateContracts, type ProgressEvent } from '../../sim/science/progression';
+import { acceptContract as acceptContractModel, failContract, generateContracts, requestRecoveryGrant as requestRecoveryGrantModel, type ProgressEvent } from '../../sim/science/progression';
 import { instruments, progressionEvent, runExperiment as runExperimentModel, scienceContext as scienceContextModel, transmitScience as transmitScienceModel } from '../science';
 import type { World, WorldVessel } from '../world';
 
@@ -8,16 +8,29 @@ import type { World, WorldVessel } from '../world';
 export function refreshContracts(this: World) {
   if (this.mode !== 'career' || this.progression.contracts.some(c => c.status === 'offered')) return;
   const p = this.progression;
-  p.contracts.push(...generateContracts(p.contractSeed, p.contractBatch++, p.milestones.includes('first-moon'), careerScaleMultiplier(this.universe.preset)));
+  p.contracts.push(...generateContracts(p.contractSeed, p.contractBatch++, p.milestones.includes('first-moon') && p.unlocked.includes('propulsion-3') && p.unlocked.includes('energy-2'), careerScaleMultiplier(this.universe.preset), {
+    orbit: p.milestones.includes('first-orbit') && p.unlocked.includes('propulsion-0'),
+    lunar: p.milestones.includes('first-moon-flyby') && p.unlocked.includes('propulsion-1'),
+    landing: p.milestones.includes('first-moon-flyby') && p.unlocked.includes('structures-1') && p.unlocked.includes('propulsion-1'),
+  }));
 }
 
+
+export function requestRecoveryGrant(this: World): boolean {
+  if (this.mode !== 'career') return false;
+  const granted = requestRecoveryGrantModel(this.progression, careerScaleMultiplier(this.universe.preset));
+  if (granted) this.message('Emergency flight funding received · −5 reputation');
+  return granted;
+}
 
 export function acceptContract(this: World, id: string) { return this.mode === 'career' && acceptContractModel(this.progression, id, this.ut); }
 
 
 export function abandonContract(this: World, id: string) {
   const c = this.progression.contracts.find(c => c.id === id);
-  return this.mode === 'career' && !!c && failContract(this.progression, c);
+  if (this.mode !== 'career' || !c) return false;
+  if (c.status === 'offered') { c.status = 'failed'; return true; }
+  return failContract(this.progression, c);
 }
 
 

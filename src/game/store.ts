@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react';
 import type { ScalePresetId } from '../sim/bodies/scale';
 import type { CraftDef } from '../sim/vessel/types';
 import type { SavedWorld } from './persistence';
+import { saveFailure, type SaveFailure } from './storageErrors';
 
 export type Scene = 'scenarios' | 'flightlog' | 'pedia' | 'training' | 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking' | 'research' | 'missions';
 export type QualityPreset = 'low' | 'medium' | 'high';
@@ -60,6 +61,8 @@ export interface GameState {
   settings: Settings;
   /** One-shot message shown on the Space Center hub (e.g. recovery summary). */
   notice: string | null;
+  /** Latest failed save, shown as a non-blocking notification over every scene (`at` restarts its timer). */
+  saveError: (SaveFailure & { at: number }) | null;
 }
 
 const SETTINGS_KEY = 'wsp.settings.v1';
@@ -120,14 +123,22 @@ export const game = createStore<GameState>({
   launchPending: false,
   settings: loadSettings(),
   notice: null,
+  saveError: null,
 });
+
+/** Report a failed storage write without interrupting play or navigation. */
+export function reportSaveError(e: unknown) {
+  console.warn('Save failed', e);
+  game.set({ saveError: { ...saveFailure(e), at: Date.now() } });
+}
 
 export function updateSettings(patch: Partial<Settings>) {
   game.set((s) => ({ settings: { ...s.settings, ...patch } }));
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(game.get().settings));
-  } catch {
-    /* storage unavailable */
+  } catch (e) {
+    // Settings stay applied for this session.
+    reportSaveError(e);
   }
 }
 
@@ -145,26 +156,41 @@ export function applyCommsSettings(world: import('./world').World) {
 }
 
 // Remember the craft in the editor / on the pad across page reloads (restored by Continue).
+// Drafts are scoped to the program (`saveId`) so loading one program never brings back
+// another program's editor craft. The unscoped key is the pre-program legacy draft.
 const CRAFT_KEY = 'wsp.craft.v1';
+export const LEGACY_PROGRAM_ID = 'legacy-program';
+export const programCraftKey = (programId: string | null) => (programId && programId !== LEGACY_PROGRAM_ID ? `${CRAFT_KEY}.${programId}` : CRAFT_KEY);
 let lastCraft: CraftDef | null = game.get().craft;
 game.subscribe(() => {
   if (game.get().trainingActive || game.get().scenarioActive) return;
-  const craft = game.get().craft;
+  const { craft, saveId } = game.get();
   if (craft === lastCraft) return;
   lastCraft = craft;
   try {
-    if (craft) localStorage.setItem(CRAFT_KEY, JSON.stringify(craft));
-    else localStorage.removeItem(CRAFT_KEY);
-  } catch {
-    /* storage unavailable */
+    // An explicit null records "this program's editor is empty" (absent = unknown).
+    localStorage.setItem(programCraftKey(saveId), JSON.stringify(craft));
+  } catch (e) {
+    reportSaveError(e);
   }
 });
 
-export function loadLastCraft(): CraftDef | null {
+/** Last editor draft recorded for a program: null when its editor was emptied, undefined when unknown. */
+export function loadProgramDraft(programId: string | null = game.get().saveId): CraftDef | null | undefined {
   try {
-    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(CRAFT_KEY) : null;
-    return raw ? (JSON.parse(raw) as CraftDef) : null;
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(programCraftKey(programId)) : null;
+    return raw === null ? undefined : (JSON.parse(raw) as CraftDef | null);
   } catch {
-    return null;
+    return undefined;
   }
+}
+
+export function loadLastCraft(programId: string | null = game.get().saveId): CraftDef | null {
+  return loadProgramDraft(programId) ?? null;
+}
+
+/** Editor craft to restore with a loaded save: the program's latest draft, else the one stored in the slot. */
+export function draftForSave(slot: { programId: string; craft?: CraftDef | null }): CraftDef | null {
+  const draft = loadProgramDraft(slot.programId);
+  return draft !== undefined ? draft : (slot.craft ?? null);
 }
