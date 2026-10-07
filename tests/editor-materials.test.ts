@@ -22,7 +22,13 @@ describe('editor studio material isolation', () => {
       const def = PART_DEFS.find(d => d.id === id)!;
       const flight = materials(buildPartMesh(def));
       const originalColors = new Map([...flight].map(([name, m]) => [name, m.color.getHex()]));
-      const editor = materials(createPartMesh(def));
+      const editorMesh = createPartMesh(def);
+      const editor = materials(editorMesh);
+      editorMesh.traverse(o => {
+        if (!(o instanceof THREE.Mesh)) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        if (mats.every(m => m.name === 'decal')) expect(o.castShadow).toBe(false);
+      });
       const laterFlight = materials(buildPartMesh(def));
       for (const [name, m] of editor) {
         const source = flight.get(name)!;
