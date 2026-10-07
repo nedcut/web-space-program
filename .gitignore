@@ -9,3 +9,6 @@ playwright-report
 .vite-cache
 .tmp/
 dist-prof
+
+# Downloaded Earth source grid (regenerate with scripts/earth-data/build.mjs)
+scripts/earth-data/.cache/
