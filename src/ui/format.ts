@@ -1,1 +1,1 @@
-export { formatDate, formatDistance, formatSpeed, formatDuration } from '../util/format';
+export { formatCountdown, formatDate, formatDistance, formatSpeed, formatDuration } from '../util/format';

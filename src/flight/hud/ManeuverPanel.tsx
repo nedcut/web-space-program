@@ -4,7 +4,7 @@ import { TransferWindow } from './TransferWindow';
 import { useEffect, useState } from 'react';
 import type { World } from '../../game/world';
 import { period, timeToApoapsis, timeToPeriapsis } from '../../sim/orbit';
-import { formatDistance, formatDuration } from '../../ui/format';
+import { formatCountdown, formatDistance, formatDuration } from '../../ui/format';
 import { planCircularization } from '../../game/autopilot';
 import { useRenderProfile } from './useRenderProfile';
 import { getTutorial } from '../../tutorial/runtime';
@@ -136,7 +136,7 @@ export function ManeuverPanel({ world, map }: { world: World; map?: FlightMap })
       {nodes.length > 0 && <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: 6, display: 'grid', gap: 4, fontSize: 12 }}>
         {nodes.map((n, i) => <div key={n.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6, alignItems: 'center' }}>
           <button className="btn ghost small" style={{ textAlign: 'left' }} onClick={() => map?.openNode(n.id)} title="Select and open the node menu">
-            <span className="mono">#{i + 1} · {Math.hypot(n.prograde, n.normal, n.radial).toFixed(1)} m/s · T−{formatDuration(n.time - world.ut)}</span>
+            <span className="mono">#{i + 1} · {Math.hypot(n.prograde, n.normal, n.radial).toFixed(1)} m/s · {formatCountdown(n.time - world.ut)}</span>
           </button>
           {map && <button className="btn small" onClick={() => map.warpToNode(n.id)}>Warp</button>}
           <button className="btn small danger" aria-label={`Delete node ${i + 1}`} onClick={() => map ? map.deleteNode(n.id) : world.removeNode(n.id)}>×</button>

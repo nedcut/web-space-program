@@ -1,6 +1,6 @@
 import type { WorldVessel } from '../../game/world';
 import type { ControlInput } from '../../sim/vessel/runtime';
-import { createAssist, warpIndexFor, type AssistId } from '../assist';
+import { assistFrame, createAssist, type AssistId } from '../assist';
 import type { FlightController } from '../controller';
 import type { FlightControllerInternals } from './internals';
 
@@ -10,6 +10,8 @@ export function startAssist(this: FlightController, _internals: FlightController
   if (!this.world.active || this.world.active.state.eva || !this.world.canControl()) return;
   try {
     this.assist = createAssist(id, this.world);
+    // The program owns time warp from here on: drop any "warp to" so the two never fight.
+    this.warpDriver.cancel(this.world);
     this.world.message(`Assist: ${this.assist.name}`);
   } catch (e) {
     this.world.message((e as Error).message, 'warn');
@@ -20,37 +22,33 @@ export function startAssist(this: FlightController, _internals: FlightController
 export function cancelAssist(this: FlightController, internals: FlightControllerInternals, msg = 'Assist cancelled'): void {
   if (!this.assist) return;
   this.assist = null;
-  if (internals.assistWarped) this.world.warp = { mode: 'rails', index: 0 };
+  // Never hand back a vessel packed on rails: it would ignore throttle, attitude and SAS until warp changes.
+  if (this.world.warp.mode === 'rails' && this.world.warp.index > 0) this.world.warp = { mode: 'rails', index: 0 };
   internals.assistWarped = false;
+  this.input.state.throttle = 0;
+  handBack(this);
   this.world.message(msg, 'warn');
+}
+
+/** After a program the craft holds its attitude: SAS on, and in a mode that still has something to point at. */
+function handBack(c: FlightController) {
+  if (!c.sasOn || c.sas === 'off' || (c.sas === 'maneuver' && !c.world.nodes.length)) {
+    c.sasOn = true;
+    c.sas = 'stabilityAssist';
+  }
 }
 
 /** Apply the assist after manual controls have been assembled for this frame. */
 export function driveAssist(this: FlightController, internals: FlightControllerInternals, wv: WorldVessel | null, ctrl: ControlInput, dt: number): ControlInput {
-  const s = this.input.state;
-  let input = ctrl;
-  if (this.assist && wv && !this.paused) {
-    // Any manual attitude/throttle input cancels the assist (pilot override).
-    if (s.pitch || s.yaw || s.roll) this.cancelAssist('Assist cancelled: manual control');
-    else {
-      const step = this.assist.update(this.world);
-      input = { ...step.input, stage: step.input.stage || ctrl.stage };
-      this.input.state.throttle = step.input.throttle;
-      if (this.assist.error) this.cancelAssist(`Assist stopped: ${this.assist.error}`);
-      else if (this.assist.done) {
-        this.world.message(`${this.assist.name}: complete`);
-        this.assist = null;
-        this.input.state.throttle = 0;
-      } else if (step.coastUntil !== undefined) {
-        const idx = warpIndexFor(step.coastUntil - this.world.ut, dt);
-        this.world.warp = { mode: 'rails', index: idx };
-        internals.assistWarped = idx > 0;
-      } else if (internals.assistWarped) {
-        this.world.warp = { mode: 'rails', index: 0 };
-        internals.assistWarped = false;
-      }
-    }
-  }
-
-  return input;
+  if (!this.assist || !wv || this.paused) return ctrl;
+  const state = { warped: internals.assistWarped };
+  const frame = assistFrame(this.world, this.assist, ctrl, dt, state);
+  internals.assistWarped = state.warped;
+  if (frame.ended) {
+    this.assist = null;
+    this.input.state.throttle = 0;
+    handBack(this);
+    this.world.message(frame.ended.message, frame.ended.reason === 'done' ? 'info' : 'warn');
+  } else this.input.state.throttle = frame.input.throttle;
+  return frame.input;
 }

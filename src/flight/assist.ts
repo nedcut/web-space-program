@@ -9,6 +9,7 @@ import {
 } from '../game/autopilot';
 import { RAILS_WARP } from '../game/timewarp';
 import { neutralInput } from '../sim/vessel';
+import type { ControlInput } from '../sim/vessel/runtime';
 
 /**
  * Flight assist ("autopilot") programs exposed in the HUD. Each is a sequence of autopilot stages built
@@ -89,4 +90,58 @@ export function warpIndexFor(remaining: number, frameDt = 0.1): number {
   let idx = 0;
   for (let i = 1; i < RAILS_WARP.length; i++) if (RAILS_WARP[i] * frameDt * 3 <= remaining) idx = i;
   return idx;
+}
+
+/** Per-program driver state kept by the flight scene between frames. */
+export interface AssistDriveState {
+  /** The program put the world into rails warp (it releases that warp when it stops coasting or ends). */
+  warped: boolean;
+}
+
+export interface AssistFrame {
+  /** Input to hand World.tick this frame. */
+  input: ControlInput;
+  /** Set when the program ended this frame: completed, failed or overridden by the pilot. */
+  ended?: { reason: 'done' | 'error' | 'pilot'; message: string };
+}
+
+/** Leave rails warp: a packed vessel ignores throttle, attitude and SAS, so no program may end with it on. */
+function releaseRailsWarp(world: World) {
+  if (world.warp.mode === 'rails' && world.warp.index > 0) world.warp = { mode: 'rails', index: 0 };
+}
+
+/**
+ * One frame of a flight-assist program, as the flight scene runs it. The program owns time warp while it runs:
+ * it rails-warps only while it coasts, and every other frame (and its end, however it ends) runs at 1× even if
+ * someone else had warp on, so control is never handed back to a vessel stuck on rails. The pilot's part commands,
+ * staging, RCS, gear and brakes pass through; any attitude input ends the program.
+ */
+export function assistFrame(world: World, assist: Autopilot, pilot: ControlInput, dt: number, state: AssistDriveState): AssistFrame {
+  const end = (reason: 'done' | 'error' | 'pilot', message: string): AssistFrame => {
+    releaseRailsWarp(world);
+    state.warped = false;
+    return { input: { ...pilot, throttle: 0 }, ended: { reason, message } };
+  };
+  if (pilot.pitch || pilot.yaw || pilot.roll) return end('pilot', 'Assist cancelled: manual control');
+  const step = assist.update(world);
+  if (assist.error) return end('error', `Assist stopped: ${assist.error}`);
+  if (assist.done) return end('done', `${assist.name}: complete`);
+  const input: ControlInput = {
+    ...step.input,
+    stage: step.input.stage || pilot.stage,
+    commands: pilot.commands,
+    rcs: step.input.rcs || pilot.rcs,
+    gear: step.input.gear ?? pilot.gear,
+    brakes: pilot.brakes,
+    target: step.input.target ?? pilot.target,
+  };
+  if (step.coastUntil !== undefined) {
+    const idx = warpIndexFor(step.coastUntil - world.ut, dt);
+    world.warp = { mode: 'rails', index: idx };
+    state.warped = idx > 0;
+  } else {
+    releaseRailsWarp(world);
+    state.warped = false;
+  }
+  return { input };
 }

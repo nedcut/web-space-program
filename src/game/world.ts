@@ -76,6 +76,12 @@ export interface WorldMessage {
 }
 
 
+/** Pilot input that only means something under physics: steering, or throttle with an engine able to fire. */
+function wantsToFly(v: VesselState, input: ControlInput): boolean {
+  if (Math.abs(input.pitch) + Math.abs(input.yaw) + Math.abs(input.roll) > 1e-3) return true;
+  return input.throttle > 0 && v.parts.some(p => p.engine?.ignited && !p.engine.flamedOut);
+}
+
 export class World {
   private readonly systems: WorldInternals = ((owner: World) => ({
     advanceRails: (target: number) => owner.advanceRails(target),
@@ -495,6 +501,12 @@ export class World {
     this.messages = this.messages.filter((m) => m.expires > now);
     this.validateTarget();
     this.warp = clampWarp(this.warp, this.warpContext());
+    // A vessel packed on rails ignores throttle, attitude and SAS. Commanding thrust from a live engine or steering
+    // is a request to fly, as staging is below: drop to 1× instead of silently ignoring the controls.
+    if (this.warp.mode === 'rails' && this.warp.index > 0 && this.active && !this.active.state.eva && wantsToFly(this.active.state, input)) {
+      this.warp = { mode: 'rails', index: 0 };
+      this.message('Time warp stopped: controls in use', 'info', 2.5);
+    }
     const rate = warpRate(this.warp);
 
     if (input.evaJump) this.evaJumpRequested = true;

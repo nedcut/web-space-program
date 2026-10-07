@@ -118,7 +118,6 @@ export function computeSas(v: VesselState, input: ControlInput, env: Environment
     alphaDes[i] = err + integ[i];
     if (Math.abs(alphaDes[i]) < aMax) integ[i] = Math.max(-0.2 * aMax, Math.min(0.2 * aMax, integ[i] + (err * h) / SAS_INTEGRAL_TIME));
   }
-  sas.integral = { x: integ[0], y: integ[1], z: integ[2] };
   const a = { x: alphaDes[0], y: alphaDes[1], z: alphaDes[2] };
   const Iw = m3MulVec(I, w);
   const tau = m3MulVec(I, a);
@@ -126,5 +125,10 @@ export function computeSas(v: VesselState, input: ControlInput, env: Environment
   const tq = [tau.x + gyro.x, tau.y + gyro.y, tau.z + gyro.z];
   const c = [0, 0, 0];
   for (let i = 0; i < 3; i++) c[i] = auth[i] > 0 ? Math.max(-1, Math.min(1, tq[i] / auth[i])) : 0;
+  // The pilot wins on every axis they steer: directional holds yield there and resume on release (roll stays free
+  // while pointing is held). Summed with a saturated hold command the pilot's input would cancel out completely.
+  const pilot = [input.pitch, input.roll, -input.yaw];
+  for (let i = 0; i < 3; i++) if (Math.abs(pilot[i]) > 1e-3) { c[i] = 0; integ[i] = 0; }
+  sas.integral = { x: integ[0], y: integ[1], z: integ[2] };
   return { x: c[0], y: c[1], z: c[2] };
 }

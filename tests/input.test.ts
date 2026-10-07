@@ -1,7 +1,7 @@
 import { FlightInput } from '../src/flight/input';
 import { game } from '../src/game/store';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BINDINGS_KEY, conflicts, defaultBindings, getBindings, loadBindings, saveBindings, matches, isTyping, bindingText } from '../src/input/bindings';
+import { BINDINGS_KEY, conflicts, defaultBindings, getBindings, loadBindings, saveBindings, matches, isTyping, bindingText, TYPING_SELECTOR } from '../src/input/bindings';
 import { deadZone, mapGamepad } from '../src/input/gamepad';
 
 const memory = () => {
@@ -137,6 +137,12 @@ describe('keyboard matching', () => {
       expect(isTyping(new ElementDouble(false) as unknown as EventTarget)).toBe(false);
       expect(isTyping(null)).toBe(false);
     } finally { vi.unstubAllGlobals(); }
+  });
+  it('lets switches, sliders and buttons keep the keyboard for game controls', () => {
+    // A focused part-menu switch (e.g. gimbal lock) used to count as typing and silently disabled every flight key.
+    expect(TYPING_SELECTOR).toContain(':not([type="checkbox"])');
+    expect(TYPING_SELECTOR).toContain(':not([type="range"])');
+    expect(TYPING_SELECTOR).toMatch(/textarea, select/);
   });
 });
 

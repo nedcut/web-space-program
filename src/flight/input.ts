@@ -61,13 +61,23 @@ export class FlightInput {
     target.addEventListener('keyup', this.onUp);
     target.addEventListener('blur', this.onBlur);
     target.addEventListener('pointermove', this.onMouse);
+    target.addEventListener('change', this.onChange, true);
   }
   dispose() {
     this.target.removeEventListener('keydown', this.onDown);
     this.target.removeEventListener('keyup', this.onUp);
     this.target.removeEventListener('blur', this.onBlur);
     this.target.removeEventListener('pointermove', this.onMouse);
+    this.target.removeEventListener('change', this.onChange, true);
   }
+  /**
+   * A HUD list box keeps keyboard focus after a pick, and while it has focus every flight key is ignored (and a
+   * letter key would even re-pick an option). Hand the keyboard back to the flight as soon as the choice is made.
+   */
+  private onChange = (e: Event) => {
+    const el = e.target as { tagName?: string; blur?: () => void } | null;
+    if (el?.tagName === 'SELECT') el.blur?.();
+  };
   onAction(fn: (a: FlightAction) => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
   private emit(a: FlightAction) { this.listeners.forEach(l => l(a)); }
   private onBlur = () => { this.releaseSasHold(); this.held.clear(); this.chordKeys.clear(); this.mouse = { x: 0, y: 0 }; this.keyRamp = { pitch: 0, yaw: 0, roll: 0 }; this.resetPad(); };

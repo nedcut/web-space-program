@@ -780,6 +780,9 @@ export class FlightController {
       if (this.speedMode === 'target') this.speedMode = 'orbit';
       if (this.sas === 'target' || this.sas === 'antiTarget') this.sas = 'stabilityAssist';
     }
+    // Node executed or deleted: a maneuver hold with nothing to point at would only damp rotation (and read as
+    // "SAS does nothing"), so fall back to holding attitude like the target modes above.
+    if (this.sas === 'maneuver' && !this.world.nodes.length) this.sas = 'stabilityAssist';
     const targetState = this.world.targetState();
     // Trim offsets the controls only while SAS is off: SAS would otherwise read it as the pilot steering.
     const trim = this.sasOn || wv?.state.eva ? { pitch: 0, yaw: 0, roll: 0 } : this.input.trim;

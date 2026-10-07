@@ -5,7 +5,7 @@ import { MapContextMenu, MapInfoCard, clampToParent } from '../../ui/map/MapCont
 import type { MapObject } from '../../ui/map/mapActions';
 import { AXIS_COLORS } from '../../render/map/mapIcons';
 import { period } from '../../sim/orbit';
-import { formatDistance, formatDuration, formatSpeed } from '../../util/format';
+import { formatCountdown, formatDistance, formatDuration, formatSpeed } from '../../util/format';
 import { bindingLabel } from '../../input/bindings';
 import { bodyBreadcrumbs } from '../../render/map/presentation';
 import { nodeSummary } from './nodeInfo';
@@ -33,7 +33,7 @@ export function MapOverlay({ controller: c }: { controller: FlightController }) 
       subtitle={context.obj.kind === 'vessel' ? (context.obj.id === c.world.activeId ? 'Active vessel' : 'Vessel') : BODY_KIND[c.world.universe.body(context.obj.id).kind]}
       actions={ui.actions(context.obj)} onAction={id => ui.run(id, context.obj!)} onClose={() => ui.closeMenus()} />}
     {context?.point && <MapContextMenu x={context.x} y={context.y} title={context.point.label}
-      subtitle={context.point.time !== undefined ? `T−${formatDuration(context.point.time - c.world.ut)}` : undefined}
+      subtitle={context.point.time !== undefined ? formatCountdown(context.point.time - c.world.ut) : undefined}
       actions={ui.pointActions(context.point)} onAction={id => ui.runPoint(id, context.point!)} onClose={() => ui.closeMenus()} />}
     {info && <InfoCard controller={c} obj={info} />}
   </>;
@@ -132,7 +132,7 @@ function NodeMenu({ controller: c, node }: { controller: FlightController; node:
   const index = [...w.nodes].sort((a, b) => a.time - b.time).indexOf(node) + 1;
   return <div ref={ref} className="panel map-node-menu" role="dialog" aria-label="Maneuver node" onPointerDown={e => e.stopPropagation()} onWheel={e => e.stopPropagation()}>
     <div className="map-menu-head" style={{ marginBottom: 0 }}>
-      <strong>Node {index}{w.nodes.length > 1 ? ` of ${w.nodes.length}` : ''} · T−{formatDuration(node.time - w.ut)}</strong>
+      <strong>Node {index}{w.nodes.length > 1 ? ` of ${w.nodes.length}` : ''} · {formatCountdown(node.time - w.ut)}</strong>
       <button className="btn ghost small" aria-label="Close node menu" onClick={() => ui.closeMenus()}>×</button>
     </div>
     {AXES.map(({ axis, label }) => <div className="row" key={axis}>
@@ -143,7 +143,7 @@ function NodeMenu({ controller: c, node }: { controller: FlightController; node:
     </div>)}
     <div className="summary mono">
       <span>Δv</span><span>{formatSpeed(s.dv)}</span>
-      <span>Burn</span><span>{Number.isFinite(s.burn) ? `${formatDuration(s.burn)} (start T−${formatDuration(node.time - w.ut - s.burn / 2)})` : 'no active engine'}</span>
+      <span>Burn</span><span>{Number.isFinite(s.burn) ? `${formatDuration(s.burn)} (start ${formatCountdown(node.time - w.ut - s.burn / 2)})` : 'no active engine'}</span>
       <span>After</span><span style={{ color: '#ff9d3c' }}>Ap {Number.isFinite(s.ap) ? formatDistance(s.ap) : 'escape'} · Pe {formatDistance(s.pe)}</span>
       {s.encounter && <><span>Encounter</span><span style={{ color: s.encounterPe !== undefined && s.encounterPe < 0 ? 'var(--bad)' : 'var(--good)' }}>
         {w.universe.body(s.encounter).name}{s.encounterPe !== undefined ? ` · Pe ${s.encounterPe < 0 ? 'impact' : formatDistance(s.encounterPe)}` : ''}

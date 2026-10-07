@@ -69,8 +69,12 @@ export function saveBindings(bindings: Bindings, storage?: Pick<Storage, 'setIte
   try { (storage ?? globalThis.localStorage)?.setItem(BINDINGS_KEY, JSON.stringify({ ...current, __layout: BINDINGS_LAYOUT })); } catch { /* Session-only when storage is unavailable. */ }
   listeners.forEach(fn => fn());
 }
+/** Inputs that take no text: a focused switch, slider or button must not swallow flight or editor keys. */
+const NON_TEXT_INPUTS = ['checkbox', 'radio', 'range', 'button', 'submit', 'reset', 'color', 'file', 'image'];
+export const TYPING_SELECTOR = `input${NON_TEXT_INPUTS.map(t => `:not([type="${t}"])`).join('')}, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [data-settings-modal]`;
+/** Keyboard focus is in a text field, list box or the settings modal: keys belong to it, not to game controls. */
 export function isTyping(target: EventTarget | null): boolean {
-  return typeof HTMLElement !== 'undefined' && target instanceof HTMLElement && !!target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [data-settings-modal]');
+  return typeof HTMLElement !== 'undefined' && target instanceof HTMLElement && !!target.closest(TYPING_SELECTOR);
 }
 export function keyChord(e: Pick<KeyboardEvent, 'code' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey'>): string {
   return `${(e.ctrlKey || e.metaKey) && !/^(Control|Meta)/.test(e.code) ? 'Ctrl+' : ''}${e.altKey && !e.code.startsWith('Alt') ? 'Alt+' : ''}${e.shiftKey && !e.code.startsWith('Shift') ? 'Shift+' : ''}${e.code}`;

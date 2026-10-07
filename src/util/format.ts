@@ -24,6 +24,11 @@ export function formatSpeed(ms: number): string {
   return a < 1e4 ? `${ms.toFixed(1)} m/s` : `${(ms / 1e3).toFixed(2)} km/s`;
 }
 
+/** Countdown to an event: "T−1m 5.0s" before it, "T+49.3s" once it has passed. */
+export function formatCountdown(sec: number): string {
+  return sec >= 0 ? `T−${formatDuration(sec)}` : `T+${formatDuration(-sec)}`;
+}
+
 export function formatDuration(sec: number): string {
   if (!isFinite(sec)) return '—';
   const neg = sec < 0;
