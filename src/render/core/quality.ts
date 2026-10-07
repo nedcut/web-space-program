@@ -93,7 +93,9 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     scatter: { radius: 0, maxAltitude: 0, vegetation: false, cellsPerFrame: 0, budgetMs: 0 },
     maxPixelRatio: 1,
     renderScale: 0.5,
-    upscale: { mode: 'edge', retinaScale: 1, sharpness: 0.5 },
+    // Weak GPUs: keep the browser's free stretch of the half-resolution canvas (the upscaler costs ~10–15 % of a Low
+    // frame); Advanced → Retina resolution can enable it.
+    upscale: { mode: 'off', retinaScale: 1, sharpness: 0.5 },
     msaaSamples: 0,
     aa: 'fxaa',
     bloom: { enabled: false, strength: 0.3, radius: 0.4, threshold: 3.0 },

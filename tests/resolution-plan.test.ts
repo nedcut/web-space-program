@@ -44,9 +44,10 @@ describe('resolution plan', () => {
     expect(resolutionPlan(2, q, 1, false, 920)).toMatchObject({ internal: 3, output: 3, upscaling: false });
   });
 
-  it('Low upscales its half-resolution scene to the 1× canvas', () => {
-    const p = resolutionPlan(2, QUALITY_PRESETS.low, 1, false, 920);
-    expect(p).toMatchObject({ internal: 0.5, output: 1, upscaling: true });
+  it('Low keeps its half-resolution canvas by default and can opt into upscaling it to 1×', () => {
+    expect(resolutionPlan(2, QUALITY_PRESETS.low, 1, false, 920)).toMatchObject({ internal: 0.5, output: 0.5, upscaling: false });
+    const q = resolveQuality('low', { ...base, renderScale: 0.5, advancedGraphics: { upscale: 'quality' } });
+    expect(resolutionPlan(2, q, 1, false, 920)).toMatchObject({ internal: 0.5, output: 1, upscaling: true });
   });
 
   it('the map draws directly at device resolution', () => {

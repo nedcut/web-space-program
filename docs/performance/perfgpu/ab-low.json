@@ -1,0 +1,602 @@
+{
+ "ascent": {
+  "A": [
+   {
+    "mode": "flight",
+    "loopFps": 60.025,
+    "loopGpuMs": 0.698,
+    "canvas": [
+     735,
+     460
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 199,
+     "triangles": 146119,
+     "points": 4000,
+     "programs": 65,
+     "textures": 72,
+     "geometries": 376
+    },
+    "passes": {
+     "fxaa": 0.016,
+     "tonemap": 0.008,
+     "scene": 0.723
+    },
+    "fencedWall": 1.76,
+    "fenced": 0.587,
+    "glError": 0,
+    "errors": []
+   }
+  ],
+  "B": [
+   {
+    "mode": "flight",
+    "loopFps": 59.915,
+    "loopGpuMs": 1.615,
+    "canvas": [
+     1470,
+     920
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 200,
+     "triangles": 146120,
+     "points": 4000,
+     "programs": 66,
+     "textures": 72,
+     "geometries": 382
+    },
+    "passes": {
+     "upscale": 0.051,
+     "fxaa": 0.017,
+     "tonemap": 0.008,
+     "scene": 0.646
+    },
+    "fencedWall": 2.62,
+    "fenced": 1.322,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-low-B-ascent-r1-ascent.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "loopFps": 57.858,
+    "loopGpuMs": 1.17,
+    "canvas": [
+     1470,
+     920
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 200,
+     "triangles": 146120,
+     "points": 4000,
+     "programs": 66,
+     "textures": 72,
+     "geometries": 378
+    },
+    "passes": {
+     "upscale": 0.051,
+     "fxaa": 0.017,
+     "tonemap": 0.008,
+     "scene": 0.346
+    },
+    "fencedWall": 1.255,
+    "fenced": 0.509,
+    "glError": 0,
+    "errors": []
+   }
+  ]
+ },
+ "editor": {
+  "A": [
+   {
+    "mode": "editor",
+    "loopFps": 56.122,
+    "canvas": [
+     735,
+     460
+    ],
+    "pixelRatio": 0.5,
+    "fencedWall": 2.315,
+    "fenced": 1.282,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-low-A-editor-r1-editor.png",
+    "errors": []
+   },
+   {
+    "mode": "editor",
+    "loopFps": 58.997,
+    "canvas": [
+     735,
+     460
+    ],
+    "pixelRatio": 0.5,
+    "fencedWall": 4.42,
+    "fenced": 1.236,
+    "glError": 0,
+    "errors": []
+   }
+  ],
+  "B": [
+   {
+    "mode": "editor",
+    "loopFps": 59.13,
+    "canvas": [
+     735,
+     460
+    ],
+    "pixelRatio": 0.5,
+    "fencedWall": 2.455,
+    "fenced": 1.351,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-low-B-editor-r1-editor.png",
+    "errors": []
+   },
+   {
+    "mode": "editor",
+    "loopFps": 59.359,
+    "canvas": [
+     735,
+     460
+    ],
+    "pixelRatio": 0.5,
+    "fencedWall": 3.835,
+    "fenced": 1.515,
+    "glError": 0,
+    "errors": []
+   }
+  ]
+ },
+ "map": {
+  "A": [
+   {
+    "mode": "map",
+    "loopFps": 38.831,
+    "loopGpuMs": 0.585,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 2,
+    "stats": {
+     "calls": 32,
+     "triangles": 50056,
+     "points": 2808,
+     "programs": 65,
+     "textures": 66,
+     "geometries": 249
+    },
+    "fencedWall": 0.94,
+    "fenced": 0.411,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-low-A-map-r1-map.png",
+    "errors": []
+   },
+   {
+    "mode": "map",
+    "loopFps": 42.049,
+    "loopGpuMs": 0.55,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 2,
+    "stats": {
+     "calls": 32,
+     "triangles": 50056,
+     "points": 2808,
+     "programs": 65,
+     "textures": 66,
+     "geometries": 251
+    },
+    "fencedWall": 0.715,
+    "fenced": 0.392,
+    "glError": 0,
+    "errors": []
+   }
+  ],
+  "B": [
+   {
+    "mode": "map",
+    "loopFps": 40.309,
+    "loopGpuMs": 0.495,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 2,
+    "stats": {
+     "calls": 32,
+     "triangles": 50056,
+     "points": 2808,
+     "programs": 66,
+     "textures": 66,
+     "geometries": 247
+    },
+    "fencedWall": 0.725,
+    "fenced": 0.403,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-low-B-map-r1-map.png",
+    "errors": []
+   },
+   {
+    "mode": "map",
+    "loopFps": 37.263,
+    "loopGpuMs": 0.503,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 2,
+    "stats": {
+     "calls": 32,
+     "triangles": 50056,
+     "points": 2808,
+     "programs": 66,
+     "textures": 66,
+     "geometries": 249
+    },
+    "fencedWall": 0.925,
+    "fenced": 0.39,
+    "glError": 0,
+    "errors": []
+   }
+  ]
+ },
+ "moon": {
+  "A": [
+   {
+    "mode": "flight",
+    "loopFps": 60.154,
+    "loopGpuMs": 0.715,
+    "canvas": [
+     735,
+     460
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 212,
+     "triangles": 111878,
+     "points": 4000,
+     "programs": 64,
+     "textures": 69,
+     "geometries": 247
+    },
+    "passes": {
+     "fxaa": 0.017,
+     "tonemap": 0.009,
+     "scene": 0.758
+    },
+    "fencedWall": 1.61,
+    "fenced": 0.613,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-low-A-moon-r1-moon.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "loopFps": 60.127,
+    "loopGpuMs": 0.547,
+    "canvas": [
+     735,
+     460
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 212,
+     "triangles": 111878,
+     "points": 4000,
+     "programs": 64,
+     "textures": 69,
+     "geometries": 244
+    },
+    "passes": {
+     "fxaa": 0.016,
+     "tonemap": 0.009,
+     "scene": 0.872
+    },
+    "fencedWall": 2.285,
+    "fenced": 0.749,
+    "glError": 0,
+    "errors": []
+   }
+  ],
+  "B": [
+   {
+    "mode": "flight",
+    "loopFps": 58.09,
+    "loopGpuMs": 0.858,
+    "canvas": [
+     1470,
+     920
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 213,
+     "triangles": 111879,
+     "points": 4000,
+     "programs": 65,
+     "textures": 70,
+     "geometries": 248
+    },
+    "passes": {
+     "upscale": 0.062,
+     "fxaa": 0.016,
+     "tonemap": 0.008,
+     "scene": 0.48
+    },
+    "fencedWall": 2.105,
+    "fenced": 0.733,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-low-B-moon-r1-moon.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "loopFps": 58.277,
+    "loopGpuMs": 0.487,
+    "canvas": [
+     1470,
+     920
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 213,
+     "triangles": 111879,
+     "points": 4000,
+     "programs": 65,
+     "textures": 70,
+     "geometries": 246
+    },
+    "passes": {
+     "upscale": 0.062,
+     "fxaa": 0.016,
+     "tonemap": 0.008,
+     "scene": 0.798
+    },
+    "fencedWall": 1.135,
+    "fenced": 0.614,
+    "glError": 0,
+    "errors": []
+   }
+  ]
+ },
+ "orbit": {
+  "A": [
+   {
+    "mode": "flight",
+    "loopFps": 60.14,
+    "loopGpuMs": 1.097,
+    "canvas": [
+     735,
+     460
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 168,
+     "triangles": 161879,
+     "points": 4000,
+     "programs": 65,
+     "textures": 65,
+     "geometries": 227
+    },
+    "passes": {
+     "fxaa": 0.016,
+     "tonemap": 0.009,
+     "scene": 0.793
+    },
+    "fencedWall": 2.295,
+    "fenced": 0.915,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-low-A-orbit-r1-orbit.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "loopFps": 60.115,
+    "loopGpuMs": 0.549,
+    "canvas": [
+     735,
+     460
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 168,
+     "triangles": 161879,
+     "points": 4000,
+     "programs": 65,
+     "textures": 65,
+     "geometries": 223
+    },
+    "passes": {
+     "fxaa": 0.016,
+     "tonemap": 0.009,
+     "scene": 0.508
+    },
+    "fencedWall": 1.93,
+    "fenced": 0.637,
+    "glError": 0,
+    "errors": []
+   }
+  ],
+  "B": [
+   {
+    "mode": "flight",
+    "loopFps": 58.912,
+    "loopGpuMs": 0.665,
+    "canvas": [
+     1470,
+     920
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 169,
+     "triangles": 161880,
+     "points": 4000,
+     "programs": 66,
+     "textures": 67,
+     "geometries": 223
+    },
+    "passes": {
+     "upscale": 0.049,
+     "fxaa": 0.016,
+     "tonemap": 0.008,
+     "scene": 0.714
+    },
+    "fencedWall": 2.67,
+    "fenced": 0.841,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-low-B-orbit-r1-orbit.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "loopFps": 59.69,
+    "loopGpuMs": 0.857,
+    "canvas": [
+     1470,
+     920
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 169,
+     "triangles": 161880,
+     "points": 4000,
+     "programs": 66,
+     "textures": 66,
+     "geometries": 225
+    },
+    "passes": {
+     "upscale": 0.048,
+     "fxaa": 0.016,
+     "tonemap": 0.008,
+     "scene": 0.462
+    },
+    "fencedWall": 1.485,
+    "fenced": 0.585,
+    "glError": 0,
+    "errors": []
+   }
+  ]
+ },
+ "pad": {
+  "A": [
+   {
+    "mode": "flight",
+    "loopFps": 60.257,
+    "loopGpuMs": 1.484,
+    "canvas": [
+     735,
+     460
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 220,
+     "triangles": 545818,
+     "points": 4000,
+     "programs": 65,
+     "textures": 65,
+     "geometries": 299
+    },
+    "passes": {
+     "fxaa": 0.02,
+     "tonemap": 0.009,
+     "scene": 1.028
+    },
+    "fencedWall": 1.505,
+    "fenced": 0.553,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-low-A-pad-r1-pad.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "loopFps": 60.176,
+    "loopGpuMs": 0.886,
+    "canvas": [
+     735,
+     460
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 220,
+     "triangles": 545818,
+     "points": 4000,
+     "programs": 65,
+     "textures": 66,
+     "geometries": 295
+    },
+    "passes": {
+     "fxaa": 0.02,
+     "tonemap": 0.009,
+     "scene": 0.786
+    },
+    "fencedWall": 1.915,
+    "fenced": 0.631,
+    "glError": 0,
+    "errors": []
+   }
+  ],
+  "B": [
+   {
+    "mode": "flight",
+    "loopFps": 59.189,
+    "loopGpuMs": 1.625,
+    "canvas": [
+     1470,
+     920
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 223,
+     "triangles": 360147,
+     "points": 4000,
+     "programs": 66,
+     "textures": 66,
+     "geometries": 301
+    },
+    "passes": {
+     "upscale": 0.073,
+     "fxaa": 0.017,
+     "tonemap": 0.007,
+     "scene": 1.045
+    },
+    "fencedWall": 1.885,
+    "fenced": 0.894,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-low-B-pad-r1-pad.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "loopFps": 59.933,
+    "loopGpuMs": 0.548,
+    "canvas": [
+     1470,
+     920
+    ],
+    "pixelRatio": 0.5,
+    "stats": {
+     "calls": 223,
+     "triangles": 360147,
+     "points": 4000,
+     "programs": 66,
+     "textures": 67,
+     "geometries": 297
+    },
+    "passes": {
+     "upscale": 0.086,
+     "fxaa": 0.02,
+     "tonemap": 0.008,
+     "scene": 0.362
+    },
+    "fencedWall": 1.28,
+    "fenced": 0.692,
+    "glError": 0,
+    "errors": []
+   }
+  ]
+ }
+}
