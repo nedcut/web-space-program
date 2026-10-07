@@ -740,22 +740,28 @@ export class MapView {
     obj.position.set(helio.x-focus.x, helio.y-focus.y, helio.z-focus.z);
   }
 
-  /** Rebuild vessel trajectory lines when the patch set changes. */
+  /**
+   * Rebuild vessel trajectory lines whose patch changed. Only changed patches are rebuilt: during a burn the current
+   * conic changes every frame while its continuation does not.
+   */
   private updateVesselLines(patches: TrajectoryPatch[], bodies: Map<string, BodyVisual>) {
-    let unchanged = patches.length === this.lastPatches.length;
-    for (let i = 0; unchanged && i < patches.length; i++) {
+    const planned = firstPlannedPatch(patches);
+    const lastPlanned = firstPlannedPatch(this.lastPatches);
+    const same = (i: number) => {
       const p = patches[i], previous = this.lastPatches[i];
-      unchanged = p.startTime === previous.startTime && p.endTime === previous.endTime && p.endReason === previous.endReason
-        && p.samples === previous.samples && sameOrbit(p.orbit, previous.orbit);
-    }
+      return !!previous && p.startTime === previous.startTime && p.endTime === previous.endTime && p.endReason === previous.endReason
+        && p.samples === previous.samples && sameOrbit(p.orbit, previous.orbit)
+        && patchColor(i, planned) === patchColor(i, lastPlanned) && (i >= planned) === (i >= lastPlanned);
+    };
+    let unchanged = patches.length === this.lastPatches.length;
+    for (let i = 0; unchanged && i < patches.length; i++) unchanged = same(i);
     if (unchanged) return;
+    const keep = patches.map((_, i) => same(i));
     this.lastPatches = patches.map(p => ({ ...p, orbit: snapshotOrbit(p.orbit) }));
     this.patchVersion++;
-    for (const l of this.vesselLines) {
-      this.removeLine(l);
-    }
-    const planned = firstPlannedPatch(patches);
+    for (let i = 0; i < this.vesselLines.length; i++) if (!keep[i]) this.removeLine(this.vesselLines[i]);
     this.vesselLines = patches.map((p, i) => {
+      if (keep[i]) return this.vesselLines[i];
       const soi = bodies.get(p.orbit.body)?.body.soi ?? Infinity;
       // The current orbit stays a full ellipse past a node (as the planned orbit does), so both read at a glance.
       const closed = patchDrawnClosed(p);

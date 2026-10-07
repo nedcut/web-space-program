@@ -41,6 +41,8 @@ export const PHYSICS_DT = 1 / 50;
 const PHYSICS_RANGE = 5000;
 /** Max physics steps per frame before we drop simulated time (prevents spiral of death on slow machines). */
 const MAX_STEPS_PER_FRAME = 12;
+/** Map patches drawn while the engines burn: the current conic and the next one (see World.burnTrajectory). */
+const BURN_MAP_PATCHES = 2;
 
 export type VesselMode = 'physics' | 'rails' | 'prelaunch' | 'landedRails';
 
@@ -840,7 +842,7 @@ export class World {
   get numericalPrediction() { return this.numericalCache?.prediction; }
   /** Rendering only. Planners deliberately retain trajectory()'s fast patched conics. */
   mapTrajectory(): TrajectoryPatch[] {
-    if (!this.preciseGravity) return this.trajectory();
+    if (!this.preciseGravity) return this.burnTrajectory();
     const v = this.active;
     if (!v || v.mode === 'prelaunch' || v.state.situation !== 'flying') return [];
     const key = `${v.state.id}:${v.body}:`+this.nodes.map(n=>`${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}`).join(',');
@@ -902,18 +904,7 @@ export class World {
       return this.trajectoryCache.patches;
     }
     const rs = this.relativeState(wv);
-    const o = stateToElements(this.universe.body(wv.body).gm, wv.body, rs.position, rs.velocity, this.ut);
-    // Horizon: one revolution of the orbit that results after the last node (not the current orbit: a
-    // trans-lunar injection from a ~30 min parking orbit leads to a multi-day transfer that must be shown).
-    const upcoming = this.nodes.filter((n) => n.time >= this.ut).sort((a, b) => a.time - b.time);
-    let after = o;
-    for (const n of upcoming) {
-      const s = propagate(after, n.time);
-      after = stateToElements(after.mu, after.body, s.position, add(s.velocity, maneuverToInertialDv(s, n)), n.time);
-    }
-    const lastNode = upcoming.length ? upcoming[upcoming.length - 1].time - this.ut : 0;
-    const Tafter = period(after);
-    let horizon = Math.min(3e9, lastNode + (isFinite(Tafter) ? Tafter * 1.02 : 3e7));
+    let horizon = this.trajectoryHorizon(wv, rs);
     let patches: TrajectoryPatch[];
     try {
       const predict = () => predictTrajectory({
@@ -923,7 +914,8 @@ export class World {
         state: rs,
         t0: this.ut,
         horizon,
-        maxPatches: 6,
+        // Under thrust only the current conic and the next one are shown (see burnTrajectory); skip the rest.
+        maxPatches: thrusting ? BURN_MAP_PATCHES : 6,
         maneuvers: this.nodes,
       });
       patches = predict();
@@ -940,6 +932,55 @@ export class World {
     }
     this.trajectoryCache = { time: this.ut, key, patches, thrusting };
     return patches;
+  }
+
+  /**
+   * Horizon: one revolution of the orbit that results after the last node (not the current orbit: a
+   * trans-lunar injection from a ~30 min parking orbit leads to a multi-day transfer that must be shown).
+   */
+  private trajectoryHorizon(wv: WorldVessel, rs: StateVector): number {
+    const o = stateToElements(this.universe.body(wv.body).gm, wv.body, rs.position, rs.velocity, this.ut);
+    const upcoming = this.nodes.filter((n) => n.time >= this.ut).sort((a, b) => a.time - b.time);
+    let after = o;
+    for (const n of upcoming) {
+      const s = propagate(after, n.time);
+      after = stateToElements(after.mu, after.body, s.position, add(s.velocity, maneuverToInertialDv(s, n)), n.time);
+    }
+    const lastNode = upcoming.length ? upcoming[upcoming.length - 1].time - this.ut : 0;
+    const Tafter = period(after);
+    return Math.min(3e9, lastNode + (isFinite(Tafter) ? Tafter * 1.02 : 3e7));
+  }
+
+  /**
+   * Map path (patched conics). While the engines burn, the current-SOI conic is recomputed from the live state every
+   * frame (the cached trajectory() refreshes only at 5 Hz) and only the next continuation is drawn: further
+   * continuations (re-encounters after an escape, etc.) are sensitive to every m/s and would jump between branches on
+   * each refresh. They return as soon as thrust ends (trajectory() refreshes at once after a cut).
+   */
+  private burnTrajectory(): TrajectoryPatch[] {
+    const base = this.trajectory();
+    const wv = this.active;
+    if (!wv || wv.mode === 'prelaunch' || !(wv.state.telemetry.thrust > 0) || !base.length) return base;
+    const shown = base.length > BURN_MAP_PATCHES ? base.slice(0, BURN_MAP_PATCHES) : base;
+    // Computed this frame: already live.
+    if (this.trajectoryCache?.time === this.ut) return shown;
+    const rs = this.relativeState(wv);
+    let live: TrajectoryPatch | undefined;
+    try {
+      live = predictTrajectory({
+        ephem: this.universe.ephem, bodies: this.universe.bodies, initialBody: wv.body, state: rs, t0: this.ut,
+        horizon: this.trajectoryHorizon(wv, rs), maxPatches: 1, maneuvers: this.nodes,
+      })[0];
+    } catch {
+      return shown;
+    }
+    if (!live) return shown;
+    // The cached continuation still applies when the live conic ends the same way (same SOI change); otherwise it
+    // describes a path the vessel no longer takes (e.g. the escape just closed into an orbit): drop it until the
+    // next refresh rather than drawing a stale branch.
+    const first = shown[0];
+    const same = first.endReason === live.endReason && first.nextBody === live.nextBody && first.orbit.body === live.orbit.body;
+    return same ? [live, ...shown.slice(1)] : [live];
   }
 
   /** Orbit summary for HUD. */
