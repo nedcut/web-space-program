@@ -108,7 +108,7 @@ export class FlightController {
   sas: SasMode = 'off';
   /** Warp-to targets and the rails warp ramp. */
   readonly warpDriver = new WarpDriver();
-  /** First-orbit coaching hints (remembered per browser profile). */
+  /** Contextual coaching hints (remembered in the world save). */
   readonly hints: HintTracker;
   /** Stage events on the active vessel (the HUD flashes when this changes). */
   stagedCount = 0;
