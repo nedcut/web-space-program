@@ -694,3 +694,16 @@ Added original branched coastal vegetation with wind and fading LOD, warmer deta
 - Real Windows Chrome / RTX 3060 Ti at DPR 2: staging refusal, map tip dismissal, quicksave→worker-error→reload, dismissal persistence, and editor highlighting passed without browser errors. Inspected screenshots in `docs/screenshots/cues/`; messages/tips clear the navball and staging. Repro: Windows Node runs `scripts/cues-browser.mjs` against Vite port 5335.
 - Limits: aerodynamic check is a small-angle static estimate; authority warning detects zero aggregate torque rather than marginal per-axis performance. Human screen-reader/listening and extended interplanetary playthrough remain useful follow-up QA.
 - Verification: `git merge main` up to date; lint, typecheck, full Vitest **96 files / 1,052 tests** (286.82 s), production build and whitespace checks passed. Existing large-chunk/mixed-import build warnings remain. Port 5335 stopped after browser checks.
+
+## Flight feel, pass 2 (2026-10-06, op/feel)
+
+- **Pad:** staging now lights the engines with the rocket held down; it lets go once thrust beats weight ("Liftoff!", ~1 s on the Meridian), with no sag or hop at release and no movement while held. Rockets at rest on the pad: under 0.1 mm movement and no rotation; in the real browser the camera moved under 0.2 mm per frame on the pad.
+- **Runway:** planes used to drop 15–30 cm onto their gear at 0.8–1.1 m/s and slide 15–32 cm when the flight loaded; they now start at rest on compressed gear (≤ 0.01 m/s, 1–2 cm). The Daybreak's main gear was bottomed out on its stops and is stiffer now.
+- **Staging:** stronger decoupler kicks and spent engines cut at once, so debris drifts clear (0.3–3 m after 1 s, 5–16 m after 3 s on stock rockets). The camera and the drawn rocket stay put when the centre of mass jumps, and the reframe onto the smaller stage now glides over about 1.5 s instead of a snap zoom (browser, Kestrel: largest camera step 1.18 m → 0.30 m per frame).
+- **Landing legs/wheels** absorb a firm touchdown instead of bouncing it back (1–2 m/s drops on the Moon: one small rebound ≤ 0.2 m/s, settled in 1.1–1.6 s). Hard landings kick the camera; camera shake has a slider (Settings → Accessibility).
+- **Controls:** Alt + W/S/A/D/Q/E trims (Alt+X clears; TRIM readout by the SAS buttons), fine control also slows the throttle. SAS settles every standard stock craft without overshoot or wobble (small craft 30° in 1.3–2 s; big upper stages 13–25 s for 90° on reaction wheels).
+- **Time warp** says why it did not go faster, including the altitude the next rate needs.
+- **Smoothness:** render interpolation measured at 60/120/144 Hz, with uneven 6–22 ms frames and in 4× physics warp (judder ≤ 0.5 %); in the browser 0.1–1.5 % during liftoff and physics warp.
+- Tests: `tests/flight-handling.test.ts` (hold-down, pad rest, runway spawn, separation clearance, warp refusals), SAS on every standard stock craft, staging reframe glide, interpolation cases.
+- **Needs your hands:** whether the 1 s hold-down feels right or should release on staging like the genre classic; trim key choice (Alt is also hold-for-fine); plane handling after releasing rudder/roll (the Daybreak yaws back ~0.1 rad/s from weathervaning — realistic, but could be damped harder); camera shake strength at 1.0; the strength of the new decoupler kick.
+

@@ -20,7 +20,9 @@ describe('world regressions (review findings)', () => {
     const w = mk();
     w.tick(0.005, neutralInput({ stage: true, throttle: 1 }));
     for (let i = 0; i < 5; i++) w.tick(0.02, neutralInput({ throttle: 1 }));
-    expect(w.active!.mode).toBe('physics');
+    // The stage fired (engines lit); the hold-down clamps may still be holding while they spool up.
+    expect(w.active!.state.parts.some(p => p.engine?.ignited)).toBe(true);
+    expect(w.active!.mode === 'physics' || !!w.active!.holdDown).toBe(true);
   });
 
   it('decoupled stages spawn next to the parent, not a step behind', () => {

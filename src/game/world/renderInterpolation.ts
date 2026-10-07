@@ -1,4 +1,4 @@
-import type { Quat } from '../../util/quat';
+import { qRotate, type Quat } from '../../util/quat';
 import type { Vec3 } from '../../util/vec3';
 
 /**
@@ -13,12 +13,20 @@ import type { Vec3 } from '../../util/vec3';
  * This is purely read-only with respect to the simulation: `apply` swaps in freshly allocated position and
  * orientation objects for the duration of a render and `restore` puts the original references back, so the
  * float64 state seen by the next physics step is bit-for-bit unchanged.
+ *
+ * Positions are interpolated for the vessel's build-frame origin (`position − R·com`), not its centre of mass:
+ * when staging or draining tanks move the COM inside the vessel, the parts themselves do not move, so the
+ * drawn vessel must not slide between the two steps either.
  */
 
 export interface InterpolatedVessel {
   body: string;
-  state: { id: string; position: Vec3; velocity: Vec3; orientation: Quat };
+  state: { id: string; position: Vec3; velocity: Vec3; orientation: Quat; com?: Vec3 };
 }
+
+const ZERO: Vec3 = { x: 0, y: 0, z: 0 };
+/** World offset of the centre of mass from the build-frame origin. */
+const comOffset = (s: InterpolatedVessel['state'], q: Quat = s.orientation) => (s.com ? qRotate(q, s.com) : ZERO);
 
 interface Sample {
   position: Vec3;
@@ -46,7 +54,8 @@ export class RenderHistory {
         e = { position: { x: 0, y: 0, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 }, body: v.body };
         this.prev.set(s.id, e);
       }
-      e.position.x = s.position.x; e.position.y = s.position.y; e.position.z = s.position.z;
+      const c = comOffset(s);
+      e.position.x = s.position.x - c.x; e.position.y = s.position.y - c.y; e.position.z = s.position.z - c.z;
       e.orientation.x = s.orientation.x; e.orientation.y = s.orientation.y; e.orientation.z = s.orientation.z; e.orientation.w = s.orientation.w;
       e.body = v.body;
     }
@@ -93,17 +102,20 @@ export class RenderHistory {
       if (!p || p.body !== v.body) continue;
       const b = bodyAt(v.body);
       const r0x = p.position.x - b.p0.x, r0y = p.position.y - b.p0.y, r0z = p.position.z - b.p0.z;
-      const r1x = s.position.x - b.p1.x, r1y = s.position.y - b.p1.y, r1z = s.position.z - b.p1.z;
+      const c1 = comOffset(s);
+      const r1x = s.position.x - c1.x - b.p1.x, r1y = s.position.y - c1.y - b.p1.y, r1z = s.position.z - c1.z - b.p1.z;
       // Teleports (splits, scenario setup, docking re-roots) are not interpolated.
       const rel = Math.hypot(s.velocity.x - b.v1.x, s.velocity.y - b.v1.y, s.velocity.z - b.v1.z);
       if (Math.hypot(r1x - r0x, r1y - r0y, r1z - r0z) > rel * stepDt * 2 + 5) continue;
       swapped.push({ state: s, position: s.position, orientation: s.orientation });
+      const q = slerp(p.orientation, s.orientation, a);
+      const c = comOffset(s, q);
       s.position = {
-        x: b.pr.x + r0x + (r1x - r0x) * a,
-        y: b.pr.y + r0y + (r1y - r0y) * a,
-        z: b.pr.z + r0z + (r1z - r0z) * a,
+        x: b.pr.x + r0x + (r1x - r0x) * a + c.x,
+        y: b.pr.y + r0y + (r1y - r0y) * a + c.y,
+        z: b.pr.z + r0z + (r1z - r0z) * a + c.z,
       };
-      s.orientation = slerp(p.orientation, s.orientation, a);
+      s.orientation = q;
     }
     if (!swapped.length) return { renderUt, restore: noop };
     return {

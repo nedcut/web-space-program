@@ -9,7 +9,7 @@ export const expansion: PartDef[] = [
   { ...expandedEngine('eng-monsoon', 'Monsoon Heavy Cluster', 4, 4.5, 14000, 23000, 6200000, 330, 295, 'cluster', 'kerolox', 0.95),
     meshParams: { style: 'cluster', exitRadius: 0.95, bells: 4, nozzleSegments: 18, nozzleRings: 7 } },
   adapter('adapt-3-4', 'Bellmouth 375-500 Adapter', 3, 4, 1.5, 680, 1600, 'Five metre load spreader with a tapered shell and uninterrupted propellant crossfeed.'),
-  stackDecoupler('dec-4', 'Breakwater 500 Decoupler', 4, 0.3, 620, 9000, 2100, 'Heavy five metre separation ring with distributed explosive bolts and balanced ejector springs.'),
+  stackDecoupler('dec-4', 'Breakwater 500 Decoupler', 4, 0.3, 620, 18000, 2100, 'Heavy five metre separation ring with distributed explosive bolts and balanced ejector springs.'),
   { ...hardware('shield-4', 'Cinder 500 Heat Shield', 'utility', 1800, 6200, cyl(2.5, 2.62, 0.5), 'heatShield', [{ type: 'heatShield', ablationRate: 0.05, maxTemp: 3600 }], {}, 4), resources: { ablator: 2400 }, maxTemp: 3600 },
   noseCone('nose-4', 'Spire 500 Nose Cone', 4, 3.8, 550, 1400, 'Ogive cap for five metre boosters, with a flush tip and a lightweight ribbed internal shell.'),
   { ...expandedEngine('eng-hearth', 'Hearth Thermal Drive', 1, 3.2, 3000, 26000, 65000, 850, 185, 'vacuum', 'hydrolox', 0.6), mesh: 'nuclearEngine',

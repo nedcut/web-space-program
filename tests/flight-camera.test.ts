@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { CAMERA_MODES, FlightCamera, framingDistance, zoomLimits, type CameraFrame } from '../src/flight/camera';
+import { CAMERA_MODES, FlightCamera, PivotSmoother, TouchdownKick, framingDistance, zoomLimits, type CameraFrame } from '../src/flight/camera';
 import { PART_CATALOG } from '../src/data/parts';
-import { buildOrbiter } from '../src/editor/stockCrafts';
+import { buildMoonLander, buildOrbiter } from '../src/editor/stockCrafts';
+import { placeInCircularOrbit } from '../src/game/scenarios';
+import { bodyToWorld } from '../src/sim/vessel';
+import { qRotate } from '../src/util/quat';
 import { DEFAULT_START_UT } from '../src/game/store';
 import { Universe } from '../src/game/universe';
 import { PHYSICS_DT, World } from '../src/game/world';
 import { neutralInput } from '../src/sim/vessel';
-import { cross, normalize, sub } from '../src/util/vec3';
+import { cross, length, normalize, sub } from '../src/util/vec3';
 
 const frame = (over: Partial<CameraFrame> = {}): CameraFrame => ({
   up: new THREE.Vector3(0, 0, 1),
@@ -55,6 +58,17 @@ describe('flight camera feel', () => {
     const before = cam.distance;
     for (let i = 0; i < 120; i++) cam.update(frame({ radius: 5 }), 1 / 60);
     expect(cam.distance).toBeCloseTo(before / 2, 0);
+  });
+
+  it('glides rather than snaps when staging reframes (no more than 15 % closer in the first 0.1 s)', () => {
+    // Measured in the browser before: 12.5 m → 7.9 m within five frames of a Kestrel staging.
+    const cam = new FlightCamera();
+    cam.update(frame({ radius: 4 }), 1 / 120);
+    const before = cam.distance;
+    for (let i = 0; i < 12; i++) cam.update(frame({ radius: 1.6 }), 1 / 120);
+    expect(cam.distance / before).toBeGreaterThan(0.85);
+    for (let i = 0; i < 360; i++) cam.update(frame({ radius: 1.6 }), 1 / 120);
+    expect(cam.distance / before).toBeCloseTo(0.4, 1);
   });
 
   it('eases to frame a newly focused vessel', () => {
@@ -140,4 +154,87 @@ describe('flight camera feel', () => {
     expect(smooth).toBeLessThan(0.2);
     expect(smooth).toBeLessThan(raw / 10);
   }, 60000);
+});
+
+describe('camera continuity across staging', () => {
+  it('PivotSmoother eases a COM jump without overshoot', () => {
+    const p = new PivotSmoother();
+    p.update('a', { x: 0, y: 0, z: 0 }, 1 / 60);
+    const o = p.update('a', { x: 0, y: 5, z: 0 }, 1 / 60);
+    expect(o.y).toBeLessThan(-4.9); // still at the old COM right after the jump
+    let prev = o.y, t95 = -1;
+    for (let i = 2; i < 240; i++) {
+      const y = p.update('a', { x: 0, y: 5, z: 0 }, 1 / 60).y;
+      expect(y).toBeLessThanOrEqual(1e-12); // never past the new COM
+      expect(y).toBeGreaterThanOrEqual(prev - 1e-12);
+      if (t95 < 0 && y > -0.25) t95 = i / 60;
+      prev = y;
+    }
+    expect(t95).toBeGreaterThan(0.8);
+    expect(t95).toBeLessThan(2);
+    expect(p.update('b', { x: 0, y: 0, z: 0 }, 1 / 60).y).toBe(0); // a vessel switch snaps
+  });
+
+  it('keeps the drawn vessel and the camera continuous when a stage drops', () => {
+    const run = (smooth: boolean) => {
+      const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+      world.commsSettings.enabled = false;
+      const wv = world.launch(buildMoonLander());
+      placeInCircularOrbit(world, wv, 'earth', 300000);
+      world.tick(PHYSICS_DT, neutralInput({ stage: true })); // light the first stage; the next press decouples
+      const cam = new FlightCamera();
+      const pivot = new PivotSmoother();
+      const root = wv.state.rootUid;
+      let worstCam = 0, worstPart = 0, lastCam: THREE.Vector3 | null = null, lastPart: THREE.Vector3 | null = null, comShift = 0;
+      for (let i = 0; i < 120; i++) {
+        const dt = 1 / 120;
+        const com0 = { ...wv.state.com };
+        world.tick(dt, neutralInput({ stage: i === 30 }));
+        comShift = Math.max(comShift, length(sub(wv.state.com, com0)));
+        const { renderUt, restore } = world.renderHistory.apply(world.ut, PHYSICS_DT, world.renderAlpha, world.vessels.values(), world.universe.ephem);
+        const body = world.universe.ephem.getBodyState('earth', renderUt);
+        const r = sub(wv.state.position, body.position);
+        const q = wv.state.orientation;
+        const po = pivot.update(wv.state.id, wv.state.com, smooth ? dt : 10);
+        const pw = qRotate(q, po);
+        cam.update(frame({ up: new THREE.Vector3(...Object.values(normalize(r)) as [number, number, number]), vesselQuat: new THREE.Quaternion(q.x, q.y, q.z, q.w), radius: 8, vesselId: wv.state.id, pivot: new THREE.Vector3(pw.x, pw.y, pw.z), spaceBlend: 1 }), dt);
+        const part = wv.state.cache.byUid.get(root)!;
+        const pp = sub(bodyToWorld(wv.state, part.position), body.position);
+        const partNow = new THREE.Vector3(pp.x, pp.y, pp.z);
+        const camNow = new THREE.Vector3(r.x, r.y, r.z).add(cam.camera.position);
+        restore();
+        // Motion relative to the orbital drift of the drawn root part (the pod the player is looking at).
+        if (lastCam && lastPart) {
+          const drift = partNow.clone().sub(lastPart);
+          worstCam = Math.max(worstCam, camNow.clone().sub(lastCam).sub(drift).length());
+        }
+        if (lastPart) worstPart = Math.max(worstPart, partNow.distanceTo(lastPart));
+        lastCam = camNow; lastPart = partNow;
+      }
+      return { worstCam, worstPart, comShift };
+    };
+    const smooth = run(true);
+    const raw = run(false);
+    console.log(`Selene stage drop: COM shift ${smooth.comShift.toFixed(2)} m; worst camera step vs pod ${smooth.worstCam.toFixed(3)} m (unsmoothed ${raw.worstCam.toFixed(3)} m)`);
+    expect(smooth.comShift).toBeGreaterThan(2);
+    expect(smooth.worstCam).toBeLessThan(0.15);
+    expect(raw.worstCam).toBeGreaterThan(smooth.comShift * 0.5);
+    // The pod itself moves only with the orbit (~7.7 km/s / 120 Hz ≈ 64 m per frame), never with the COM jump.
+    expect(smooth.worstPart).toBeLessThan(70);
+  }, 60000);
+});
+
+describe('touchdown camera kick', () => {
+  it('stays still for a gentle landing and kicks for a hard one', () => {
+    const k = new TouchdownKick();
+    const land = (sink: number) => {
+      k.update('a', true, 0, 0.016);
+      k.update('a', false, -sink, 0.016);
+      return k.update('a', true, 0, 0.016);
+    };
+    expect(k.update('a', true, 0, 0.016)).toBe(0); // spawning on the ground is not a touchdown
+    expect(land(1.2)).toBe(0);
+    expect(land(5)).toBeGreaterThan(0.3);
+    expect(land(20)).toBe(1);
+  });
 });

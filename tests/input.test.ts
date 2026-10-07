@@ -286,4 +286,26 @@ describe('flight gamepad actions', () => {
       expect(t).toBeLessThan(0.35);
     } finally { h.input.dispose(); game.set({ settings }); }
   });
+  it('trims with Alt + attitude keys, clears with Alt+X, and slows the throttle in fine mode', () => {
+    const h = harness(); const settings = game.get().settings;
+    const ev = (type: string, code: string, altKey = false) => h.target.dispatchEvent(Object.assign(new Event(type), { code, ctrlKey: false, shiftKey: false, metaKey: false, altKey, repeat: false }));
+    try {
+      game.set({ settings: { ...settings, gamepadEnabled: false, inputSmoothing: 0, invertPitch: false } });
+      saveBindings(defaultBindings(), memory());
+      ev('keydown', 'AltLeft'); ev('keydown', 'KeyS', true);
+      for (let i = 0; i < 30; i++) h.input.update(1 / 60);
+      expect(h.input.state.pitch).toBe(0); // trimming does not deflect
+      expect(h.input.trim.pitch).toBeCloseTo(0.1, 6);
+      ev('keyup', 'KeyS'); h.input.state.throttle = 0.5;
+      ev('keydown', 'KeyX', true);
+      expect(h.input.trim.pitch).toBe(0);
+      expect(h.actions).toContain('trimReset');
+      expect(h.input.state.throttle).toBe(0.5); // Alt+X is not throttle cut
+      ev('keyup', 'KeyX'); ev('keyup', 'AltLeft');
+      h.input.precision = true; h.input.state.throttle = 0;
+      ev('keydown', 'ShiftLeft');
+      for (let i = 0; i < 60; i++) h.input.update(1 / 60);
+      expect(h.input.state.throttle).toBeCloseTo(0.2, 6);
+    } finally { h.input.dispose(); game.set({ settings }); }
+  });
 });

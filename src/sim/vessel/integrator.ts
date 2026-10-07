@@ -15,7 +15,7 @@ import { recomputeMassProperties, removePart, setGear } from './assembly';
 import { activateNextStage } from './staging';
 import { gimbalAuthority, produceIntakeAir, rcsAuthority, stepEngines, stepRcs, stepReactionWheels, wheelAuthority } from './engines';
 import { computeAeroForces, controlSurfaceAuthority, updateParachutes } from './aero';
-import { gatherContacts, nearSurface, penetrationCorrection, solveContacts, updateWheelDeploy } from './contact';
+import { gatherContacts, nearSurface, penetrationCorrection, REBOUND_DAMPING, solveContacts, updateWheelDeploy } from './contact';
 import { stepThermal } from './heating';
 import { computeSas } from './sas';
 import { addResource, drawResource } from './resources';
@@ -93,13 +93,13 @@ function requiredSubsteps(v: VesselState, env: Environment, t: number, dt: numbe
     if (p.leg?.deployed) {
       const m = p.def.modules[p.leg.moduleIndex] as LandingLegModule;
       K += m.spring;
-      C += m.damper;
+      C += m.damper * REBOUND_DAMPING;
     }
   for (const p of v.parts)
     if (p.wheel && p.wheel.deploy >= 1) {
       const m = p.def.modules[p.wheel.moduleIndex] as WheelModule;
       K += m.spring;
-      C += m.damper;
+      C += m.damper * REBOUND_DAMPING;
     }
   if (K <= 0 || v.mass <= 0) return 1;
   const nK = Math.ceil((dt * Math.sqrt(K / v.mass)) / 0.2);

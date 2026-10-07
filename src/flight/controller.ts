@@ -14,7 +14,7 @@ import { PART_CATALOG } from '../data/parts';
 import type { Autopilot } from '../game/autopilot';
 import { flightPredictions, targetOrbitState } from '../game/flightData';
 import { deserializeWorld, loadWorldFromStorage, saveWorldToStorage, serializeWorld, type SavedWorld } from '../game/persistence';
-import { applyCommsSettings, game } from '../game/store';
+import { applyCommsSettings, cameraShakeScale, game } from '../game/store';
 import { Universe } from '../game/universe';
 import { PHYSICS_DT, World, type WorldVessel } from '../game/world';
 import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
@@ -45,8 +45,9 @@ import { frameProfiler as prof } from '../util/frameProfiler';
 import { shareUnchanged, snapshotEqual } from '../util/snapshotEqual';
 import { bindingLabel } from '../input/bindings';
 import { cross, dot, length, normalize, sub, type Vec3 } from '../util/vec3';
+import { qRotate } from '../util/quat';
 import { type AssistId } from './assist';
-import { CAMERA_MODE_INFO, FlightCamera } from './camera';
+import { CAMERA_MODE_INFO, FlightCamera, PivotSmoother, TouchdownKick } from './camera';
 import * as assist from './controller/assist';
 import * as audio from './controller/audio';
 import type { FlightControllerInternals } from './controller/internals';
@@ -295,14 +296,16 @@ export class FlightController {
             this.fireGroup(`custom${a.slice(11)}` as ActionGroupId, undefined, true); break;
           case 'quickload': if (!this.network) this.onQuickload?.(); break;
           case 'toggleCamMode': this.cycleCameraMode(); break;
+          case 'trimReset': this.world.message('Trim cleared', 'info', 1.5); break;
         }
       }),
     );
     this.world.onEvent = (e) => {
       if (e.type === 'stage' && e.vesselId === this.world.activeId) this.stagedCount++;
-      if (e.vesselId === this.world.activeId && !game.get().settings.reduceMotion) {
-        if (e.type === 'stage') this.cam.addKick(0.35);
-        else if (e.type === 'decouple' || e.type === 'structuralFailure') this.cam.addKick(0.6);
+      const shake = cameraShakeScale(game.get().settings);
+      if (e.vesselId === this.world.activeId && shake > 0) {
+        if (e.type === 'stage') this.cam.addKick(0.35 * shake);
+        else if (e.type === 'decouple' || e.type === 'structuralFailure') this.cam.addKick(0.6 * shake);
       }
       if (isBurstEvent(e)) {
         const vessel = this.world.vessels.get(e.vesselId) ?? this.world.active;
@@ -767,15 +770,17 @@ export class FlightController {
       if (this.sas === 'target' || this.sas === 'antiTarget') this.sas = 'stabilityAssist';
     }
     const targetState = this.world.targetState();
+    // Trim offsets the controls only while SAS is off: SAS would otherwise read it as the pilot steering.
+    const trim = this.sasOn || wv?.state.eva ? { pitch: 0, yaw: 0, roll: 0 } : this.input.trim;
     const drivingRover = wv?.state.situation === 'landed' && wv.state.parts.some(p => p.def.modules.some(m => m.type === 'wheel' && !!m.motorTorque));
     const ctrl = neutralInput({
       evaHeading: wv?.state.eva ? { x: this.cam.camera.quaternion.x, y: this.cam.camera.quaternion.y, z: this.cam.camera.quaternion.z, w: this.cam.camera.quaternion.w } : undefined,
       evaJump: !!wv?.state.eva && this.stagePending,
       evaRun: this.input.running,
-      pitch: drivingRover ? 0 : s.pitch,
+      pitch: drivingRover ? 0 : s.pitch + trim.pitch,
       wheelThrottle: drivingRover ? -s.pitch : 0,
-      yaw: s.yaw,
-      roll: s.roll,
+      yaw: s.yaw + trim.yaw,
+      roll: s.roll + trim.roll,
       translateX: s.tx,
       translateY: s.ty,
       translateZ: s.tz,
@@ -953,7 +958,7 @@ export class FlightController {
     const camera = this.cam.camera;
     this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors, u.body(wv.body).surfaceGravity);
     this.effects.rcs(wv.state,this.rcsOn,this.input.state);
-    if (!this.paused) this.effects.shake(camera, game.get().settings.reduceMotion);
+    if (!this.paused) this.effects.shake(camera, cameraShakeScale(game.get().settings) === 0);
     prof.add('fx', t0);
     if (this.network) {
       const live = new Set<string>();
@@ -1076,6 +1081,9 @@ export class FlightController {
   private readonly camVel = new THREE.Vector3();
   private readonly camNormal = new THREE.Vector3();
   private readonly camProbe = { x: 0, y: 0, z: 0 };
+  private readonly camPivot = new THREE.Vector3();
+  private readonly pivotSmoother = new PivotSmoother();
+  private readonly touchdown = new TouchdownKick();
 
   /** Feed the orbit camera its reference frame, framing size, terrain clearance and rumble for this frame. */
   private updateCamera(wv: WorldVessel, origin: Vec3, bodyState: { position: Vec3; velocity: Vec3 }, airVel: Vec3, t: number, dt: number) {
@@ -1098,15 +1106,23 @@ export class FlightController {
     const agl = Number.isFinite(tel.altitudeAGL) ? tel.altitudeAGL : alt;
     const settings = game.get().settings;
     let rumble = 0;
-    if (!settings.reduceMotion && !this.paused) {
-      rumble = flightRumble(tel.thrust, st.mass * body.surfaceGravity, agl, tel.dynamicPressure, tel.mach);
+    const shake = cameraShakeScale(settings);
+    if (shake > 0 && !this.paused) {
+      rumble = flightRumble(tel.thrust, st.mass * body.surfaceGravity, agl, tel.dynamicPressure, tel.mach) * shake;
+      // Touchdown kick, growing with the vertical speed at contact (a gentle 1.5 m/s landing stays still).
+      const touchdown = this.touchdown.update(st.id, st.situation !== 'flying', dot(airVel, up), dt);
+      if (touchdown > 0) this.cam.addKick(touchdown * shake);
     }
     const probe = this.camProbe;
     this.cam.drive.yaw = this.input.camera.yaw;
     this.cam.drive.pitch = this.input.camera.pitch;
     this.cam.drive.zoom = this.input.camera.zoom;
     const q = st.orientation;
+    // Staging/docking move the COM (the scene origin) inside the vessel: ease the orbit point across instead of jumping.
+    const po = this.pivotSmoother.update(st.id, st.com, dt);
+    const pw = qRotate(q, po);
     this.cam.update({
+      pivot: this.camPivot.set(pw.x, pw.y, pw.z),
       up: this.camUp.set(up.x, up.y, up.z),
       vesselQuat: this.camQuat.set(q.x, q.y, q.z, q.w),
       velocity: this.camVel.set(vel.x, vel.y, vel.z),
