@@ -20,7 +20,7 @@ const result = { date: new Date().toISOString(), checks: [], errors };
 try {
   await page.addInitScript(() => localStorage.setItem('wsp.settings.v1', JSON.stringify({ quality: 'medium', graphicsProfile: 2, adaptiveQuality: false, advancedGraphics: {}, autoSaveInterval: 0 })));
   await page.goto(`${base}/?flight=stock-kestrel&scenario=orbit`);
-  await page.waitForFunction(() => window.__flight && !document.querySelector('.loading-screen'), { timeout: 90000 });
+  await page.waitForFunction(() => window.__flight && !document.querySelector('.loading-screen'), null, { timeout: 90000 });
   for (const [key, value] of checks) {
     const expected = await page.evaluate(async ([key, value]) => {
       const { updateSettings } = await import('/src/game/store.ts');
