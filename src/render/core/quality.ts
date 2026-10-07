@@ -19,6 +19,13 @@ export interface QualitySettings {
   maxPixelRatio: number;
   /** Render scale applied on top of pixel ratio (dynamic resolution hook). */
   renderScale: number;
+  /**
+   * Reduced internal resolution + edge-adaptive upscale (`render/core/UpscalePass.ts`). With `mode: 'edge'` any
+   * internal resolution below the device's (Retina scale, render scale < 1, adaptive) is reconstructed at device
+   * resolution instead of being stretched by the browser. `retinaScale` is the internal fraction (per axis) used on
+   * displays with ≥ 1.5 device pixels per CSS pixel; `sharpness` 0–1 restores fine contrast after the upscale.
+   */
+  upscale: { mode: 'edge' | 'off'; retinaScale: number; sharpness: number };
   /** MSAA samples on the HDR render target (WebGL2). 0 = off. */
   msaaSamples: number;
   /** Post-process anti-aliasing after tone mapping (SMAA: better edges, FXAA: cheapest). */
@@ -86,6 +93,9 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     scatter: { radius: 0, maxAltitude: 0, vegetation: false, cellsPerFrame: 0, budgetMs: 0 },
     maxPixelRatio: 1,
     renderScale: 0.5,
+    // Weak GPUs: keep the browser's free stretch of the half-resolution canvas (the upscaler costs ~10–15 % of a Low
+    // frame); Advanced → Retina resolution can enable it.
+    upscale: { mode: 'off', retinaScale: 1, sharpness: 0.5 },
     msaaSamples: 0,
     aa: 'fxaa',
     bloom: { enabled: false, strength: 0.3, radius: 0.4, threshold: 3.0 },
@@ -110,6 +120,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     // GPU is the bottleneck, down to half the device ratio. The DOM HUD stays crisp regardless.
     maxPixelRatio: 2,
     renderScale: 1,
+    upscale: { mode: 'edge', retinaScale: 0.7, sharpness: 0.5 },
     msaaSamples: 0,
     aa: 'smaa',
     bloom: { enabled: true, strength: 0.35, radius: 0.45, threshold: 2.5 },
@@ -132,6 +143,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     scatter: { radius: 1024, maxAltitude: 3000, vegetation: true, cellsPerFrame: 4, budgetMs: 2 },
     maxPixelRatio: 2,
     renderScale: 1,
+    upscale: { mode: 'edge', retinaScale: 0.85, sharpness: 0.4 },
     msaaSamples: 4,
     aa: 'smaa',
     bloom: { enabled: true, strength: 0.4, radius: 0.5, threshold: 2.2 },
@@ -149,7 +161,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
   ultra: {
     id: 'ultra', particleQuality: 'ultra', partDetail: 'high',
     earth: { textureQuality: 'ultra', atmosphereQuality: 'ultra', cloudQuality: 'ultra', oceanQuality: 'ultra', nightLights: true },
-    maxPixelRatio: 2, renderScale: 1, msaaSamples: 4, aa: 'smaa',
+    maxPixelRatio: 2, renderScale: 1, msaaSamples: 4, aa: 'smaa', upscale: { mode: 'edge', retinaScale: 1, sharpness: 0.3 },
     bloom: { enabled: true, strength: .4, radius: .5, threshold: 2.2 },
     shadowMapSize: 4096,
     terrain: { chunkResolution: 48, maxScreenError: 1, minVertexSpacing: .75, buildBudgetMs: 6, workers: 4, maxInFlight: 20, cacheSize: 1600, detail: true },
@@ -204,8 +216,13 @@ export function autoConfigureGraphics(renderer = detectGpuRenderer()): string | 
   return `Graphics tuned for this device: ${quality === 'low' ? 'Low' : 'Medium'} quality with adaptive resolution. Change it any time in Settings → Graphics.`;
 }
 
+/** Advanced "Retina resolution" choices: internal fraction per axis on ≥ 1.5× displays ('native' = no upscaling). */
+export const UPSCALE_LEVELS = { native: 1, quality: 0.85, balanced: 0.7, performance: 0.58 } as const;
+export type UpscaleLevel = keyof typeof UPSCALE_LEVELS;
+
 export interface AdvancedGraphics {
   maxPixelRatio?: number;
+  upscale?: UpscaleLevel;
   antiAliasing?: 'off' | 'fxaa' | 'smaa' | 'msaa+smaa';
   shadowQuality?: 'off' | QualityId;
   terrainDetail?: QualityId;
@@ -230,6 +247,7 @@ export function resolveQuality(id: QualityId, s: Pick<import('../../game/store')
   return { ...p,
     maxPixelRatio: a.maxPixelRatio ?? p.maxPixelRatio,
     renderScale: s.renderScale,
+    upscale: a.upscale ? { ...p.upscale, mode: a.upscale === 'native' ? 'off' : 'edge', retinaScale: UPSCALE_LEVELS[a.upscale] } : p.upscale,
     aa: a.antiAliasing === 'off' ? 'none' : a.antiAliasing === 'msaa+smaa' ? 'smaa' : a.antiAliasing ?? p.aa,
     msaaSamples: a.antiAliasing ? (a.antiAliasing === 'msaa+smaa' ? 4 : 0) : p.msaaSamples,
     shadowMapSize: a.shadowQuality === 'off' ? 0 : a.shadowQuality ? QUALITY_PRESETS[a.shadowQuality].shadowMapSize || 512 : s.shadows ? p.shadowMapSize || 512 : 0,

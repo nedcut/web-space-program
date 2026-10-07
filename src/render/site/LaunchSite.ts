@@ -10,7 +10,8 @@ import * as TX from './textures';
 import { withAerialPerspective } from './aerial';
 import { clearSiteShadow } from './shadows';
 import { livePlanetUniforms } from '../planet/uniforms';
-import { coastalTreeGeometry } from '../planet/scatter/geometry';
+import { coastalTreeGeometry, smoothSphereNormals } from '../planet/scatter/geometry';
+import { packBand } from './vegetationBands';
 import { instancedVariant } from '../core/materialVariants';
 
 /** What LaunchSite needs from the game Universe (structural, keeps render → game imports out). */
@@ -174,7 +175,12 @@ export class LaunchSite {
   private readonly planetUniforms = livePlanetUniforms(BODY);
   private readonly sunUp = new THREE.Vector3();
   private night = { value: 0 };
-  private vegetationLods: { near: THREE.InstancedMesh; far: THREE.InstancedMesh }[] = [];
+  /**
+   * Per cell: all instances (root-local matrices/colours/positions) and one mesh per detail level whose instance
+   * buffer holds only the instances inside that level's distance band (rewritten when the camera moves ≥ 20 m).
+   */
+  private vegetationLods: { levels: { mesh: THREE.InstancedMesh; min: number; max: number }[]; matrices: Float32Array; colors: Float32Array; xyz: Float32Array }[] = [];
+  private readonly vegCamera = new THREE.Vector3(Infinity, 0, 0);
   private readonly lodCenter = new THREE.Vector3();
   private wind = { value: 0 };
   private windowMat: THREE.MeshStandardMaterial | null = null;
@@ -1091,18 +1097,22 @@ export class LaunchSite {
       mat.onBeforeCompile = (shader, renderer) => {
         patch(shader, renderer);
         shader.uniforms.uSiteWind = this.wind;
-        shader.uniforms.uSiteLod = { value: 1 };
+        shader.uniforms.uSiteLod = { value: 0 };
         shader.vertexShader = shader.vertexShader.replace('void main() {', 'uniform float uSiteWind;\nvoid main() {')
           .replace('#include <begin_vertex>', `#include <begin_vertex>
             transformed.x += sin(uSiteWind + instanceMatrix[3].x * 0.13 + position.y) * min(position.y * position.y * 0.002, 0.18);`);
         shader.fragmentShader = shader.fragmentShader.replace('void main() {', 'uniform float uSiteLod;\nvoid main() {').replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
           float distanceToPlant = length(cameraPosition - vAtmoWorld);
           float fade = 1.0 - smoothstep(7000.0, 10000.0, distanceToPlant);
-          float lod = smoothstep(1200.0, 1600.0, distanceToPlant);
+          // Complementary dithers: detailed < 300–400 m < mid < 1.2–1.6 km < coarse crowns (uSiteLod 0 / 1 / 2).
+          float lodMid = smoothstep(300.0, 400.0, distanceToPlant);
+          float lodFar = smoothstep(1200.0, 1600.0, distanceToPlant);
           float grain = fract(dot(floor(gl_FragCoord.xy), vec2(0.75487766, 0.56984029)));
-          if (grain > fade || (uSiteLod > 0.0 ? grain < lod : grain >= lod)) discard;`);
+          float keepBelow = uSiteLod < 0.5 ? 2.0 : uSiteLod < 1.5 ? lodMid : lodFar;
+          float keepFrom = uSiteLod < 0.5 ? lodMid : uSiteLod < 1.5 ? lodFar : -1.0;
+          if (grain > fade || grain >= keepBelow || grain < keepFrom) discard;`);
       };
-      mat.customProgramCacheKey = () => 'coastal-foliage-v1';
+      mat.customProgramCacheKey = () => 'coastal-foliage-v2';
       return this.track(mat);
     };
     // Instances are bucketed into 1400 m cells so frustum culling (and the vessel-hugging shadow
@@ -1111,18 +1121,21 @@ export class LaunchSite {
     const CELL = 1400;
     const density = this.options.vegetationDensity ?? 1;
     let kept = 0;
-    const mk = (geo: THREE.BufferGeometry, mat: THREE.Material, list: THREE.Matrix4[], name: string, tint: [number, number]) => {
-      if (!list.length) return;
-      if (!geo.getAttribute('color')) {
-        const p = geo.getAttribute('position');
-        const colors = new Float32Array(p.count * 3);
-        for (let i = 0; i < p.count; i++) {
-          const shade = 0.65 + Math.min(0.35, Math.max(0, p.getY(i)) * 0.15);
-          colors.set([shade, shade, shade], i * 3);
-        }
-        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const shade = (geo: THREE.BufferGeometry) => {
+      if (geo.getAttribute('color')) return;
+      const p = geo.getAttribute('position');
+      const colors = new Float32Array(p.count * 3);
+      for (let i = 0; i < p.count; i++) {
+        const v = 0.65 + Math.min(0.35, Math.max(0, p.getY(i)) * 0.15);
+        colors.set([v, v, v], i * 3);
       }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    };
+    const mk = (geo: THREE.BufferGeometry, midGeo: THREE.BufferGeometry, mat: THREE.Material, list: THREE.Matrix4[], name: string, tint: [number, number]) => {
+      if (!list.length) return;
+      shade(geo); shade(midGeo);
       const shared = this.track(geo);
+      const sharedMid = this.track(midGeo);
       const cells = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
       const pos = new THREE.Vector3();
       list.forEach((m, i) => {
@@ -1139,29 +1152,45 @@ export class LaunchSite {
       // A coarse crown replaces detailed limbs beyond 1.2–1.6 km with a complementary dither.
       const farGeo = this.track(new THREE.IcosahedronGeometry(1, 0).scale(name === 'site:pines' ? 3.5 : 2.5, name === 'site:pines' ? 3 : 1.7, name === 'site:pines' ? 3.5 : 2.5).translate(0, name === 'site:pines' ? 7.2 : 1.3, 0));
       farGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(farGeo.getAttribute('position').count * 3).fill(0.85), 3));
-      const farMat = this.track(mat.clone());
-      farMat.onBeforeCompile = (shader, renderer) => { mat.onBeforeCompile(shader, renderer); shader.uniforms.uSiteLod.value = -1; };
-      farMat.customProgramCacheKey = mat.customProgramCacheKey;
+      const levelMat = (level: number) => {
+        const m = this.track(mat.clone());
+        m.onBeforeCompile = (shader, renderer) => { mat.onBeforeCompile(shader, renderer); shader.uniforms.uSiteLod.value = level; };
+        m.customProgramCacheKey = mat.customProgramCacheKey;
+        return m;
+      };
+      const midMat = levelMat(1), farMat = levelMat(2);
       for (const cell of cells.values()) {
-        const im = new THREE.InstancedMesh(shared, mat, cell.length);
-        cell.forEach(({ m, c }, i) => { im.setMatrixAt(i, m); im.setColorAt(i, c); });
-        im.castShadow = true;
-        im.receiveShadow = true;
-        im.name = name;
-        im.computeBoundingSphere();
-        const far = new THREE.InstancedMesh(farGeo, farMat, cell.length);
-        far.instanceMatrix = im.instanceMatrix;
-        far.instanceColor = im.instanceColor;
-        far.name = `${name}:far`;
-        far.receiveShadow = true;
-        far.computeBoundingSphere();
-        this.vegetationLods.push({ near: im, far });
-        this.root.add(im, far);
+        const matrices = new Float32Array(cell.length * 16), colors = new Float32Array(cell.length * 3), xyz = new Float32Array(cell.length * 3);
+        cell.forEach(({ m, c }, i) => {
+          m.toArray(matrices, i * 16); c.toArray(colors, i * 3);
+          xyz.set([matrices[i * 16 + 12], matrices[i * 16 + 13], matrices[i * 16 + 14]], i * 3);
+        });
+        const level = (g: THREE.BufferGeometry, m: THREE.Material, suffix: string, castShadow: boolean) => {
+          const im = new THREE.InstancedMesh(g, m, cell.length);
+          im.instanceMatrix.array.set(matrices);
+          im.instanceColor = new THREE.InstancedBufferAttribute(colors.slice(), 3);
+          im.castShadow = castShadow;
+          im.receiveShadow = true;
+          im.name = name + suffix;
+          // Bounding spheres stay those of the whole cell (frustum culling); counts change with distance.
+          im.computeBoundingSphere();
+          this.root.add(im);
+          return im;
+        };
+        this.vegetationLods.push({
+          levels: [
+            { mesh: level(shared, mat, '', true), min: 0, max: 400 },
+            { mesh: level(sharedMid, midMat, ':mid', true), min: 300, max: 1600 },
+            { mesh: level(farGeo, farMat, ':far', false), min: 1200, max: 10000 },
+          ],
+          matrices, colors, xyz,
+        });
       }
     };
     // Lumpy scrub: a few overlapping jittered blobs, smooth-shaded.
     const blobs: THREE.BufferGeometry[] = [];
-    for (const [bx, by, bz, br] of [[0, 1.3, 0, 2.0], [1.4, 0.9, 0.6, 1.4], [-1.2, 0.8, -0.8, 1.5]]) {
+    const blobSpecs = [[0, 1.3, 0, 2.0], [1.4, 0.9, 0.6, 1.4], [-1.2, 0.8, -0.8, 1.5]];
+    for (const [bx, by, bz, br] of blobSpecs) {
       const g = new THREE.IcosahedronGeometry(br, 1);
       const p = g.getAttribute('position');
       for (let i = 0; i < p.count; i++) {
@@ -1173,8 +1202,18 @@ export class LaunchSite {
     }
     const bushGeo = mergeGeometries(blobs)!;
     blobs.forEach((g) => g.dispose());
-    mk(bushGeo, foliage(0x46552f), bushes, 'site:scrub', [0.7, 1.05]);
-    mk(coastalTreeGeometry(), foliage(0x657044), pines, 'site:pines', [0.7, 1.05]);
+    // Scrub mid level: the same blobs with 20 faces each, shaded as spheres.
+    const midBlobs = blobSpecs.map(([bx, by, bz, br]) => {
+      const g = new THREE.IcosahedronGeometry(br, 0);
+      const p = g.getAttribute('position');
+      for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i), p.getY(i) * 0.8, p.getZ(i));
+      smoothSphereNormals(g);
+      return g.translate(bx, by, bz);
+    });
+    const bushMid = mergeGeometries(midBlobs)!;
+    midBlobs.forEach((g) => g.dispose());
+    mk(bushGeo, bushMid, foliage(0x46552f), bushes, 'site:scrub', [0.7, 1.05]);
+    mk(coastalTreeGeometry(), coastalTreeGeometry('mid'), foliage(0x657044), pines, 'site:pines', [0.7, 1.05]);
     this.vegetationCount = kept;
 
   }
@@ -1273,13 +1312,7 @@ export class LaunchSite {
     this.root.quaternion.multiplyQuaternions(this.tmpQ, this.qLocal);
     this.root.updateMatrix();
     this.root.updateWorldMatrix(true, false);
-    for (const { near, far } of this.vegetationLods) {
-      const bound = near.boundingSphere!;
-      this.lodCenter.copy(bound.center).applyMatrix4(this.root.matrixWorld);
-      const distance = cameraPosition ? this.lodCenter.distanceTo(cameraPosition) : this.lodCenter.length();
-      near.visible = distance - bound.radius < 1650;
-      far.visible = distance + bound.radius > 1150 && distance - bound.radius < 10000;
-    }
+    this.updateVegetationLod(cameraPosition);
     const L = SITE_LAYOUT;
     cut.uCutMatrix.value.copy(this.tmpM.copy(this.root.matrixWorld).invert());
     cut.uCutA.value.set(0, 0, L.padHalf, L.padHalf);
@@ -1299,6 +1332,36 @@ export class LaunchSite {
     if (this.beaconMat) {
       const on = Math.sin(t * Math.PI * 1.2) > 0.2 ? 8 : 0.4;
       this.beaconMat.color.setRGB(on, on * 0.08, on * 0.04);
+    }
+  }
+
+  /**
+   * Vegetation LOD bands (the shader dithers between them over 1.2–1.6 km and fades out at 7–10 km). Each cell's
+   * near and far meshes draw only the instances inside their band, so detailed trees are not vertex-shaded (and
+   * shadow-rendered) out to the cell's far edge only to be discarded per fragment.
+   */
+  private updateVegetationLod(cameraPosition?: THREE.Vector3) {
+    const cam = this.lodCenter;
+    if (cameraPosition) cam.copy(cameraPosition); else cam.set(0, 0, 0);
+    cam.applyMatrix4(this.tmpM.copy(this.root.matrixWorld).invert());
+    const STEP = 20;
+    if (cam.distanceToSquared(this.vegCamera) < STEP * STEP) return;
+    this.vegCamera.copy(cam);
+    for (const { levels, matrices, colors, xyz } of this.vegetationLods) {
+      const bound = levels[0].mesh.boundingSphere!;
+      const centre = bound.center.distanceTo(cam);
+      for (const { mesh, min, max } of levels) {
+        // Bands widened by the update step so a stale partition still covers the shader's dither band.
+        const lo = Math.max(0, min - STEP), hi = max + STEP;
+        const k = centre + bound.radius > lo && centre - bound.radius < hi
+          ? packBand(xyz, matrices, colors, cam, lo, hi, mesh.instanceMatrix.array as Float32Array, mesh.instanceColor!.array as Float32Array)
+          : 0;
+        mesh.visible = k > 0;
+        if (k === 0) continue;
+        mesh.count = k;
+        mesh.instanceMatrix.clearUpdateRanges(); mesh.instanceMatrix.addUpdateRange(0, k * 16); mesh.instanceMatrix.needsUpdate = true;
+        mesh.instanceColor!.clearUpdateRanges(); mesh.instanceColor!.addUpdateRange(0, k * 3); mesh.instanceColor!.needsUpdate = true;
+      }
     }
   }
 

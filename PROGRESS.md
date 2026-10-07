@@ -1,6 +1,6 @@
 # Progress Report
 
-_Last updated: 2026-10-06_
+_Last updated: 2026-10-07_
 
 ## Start here (for Ned)
 **Run it:** `npm install && npm run play` (optimised production build, opens http://localhost:4173). `npm run dev` is for development only: it serves unbundled modules with React's debug build and is much slower to load and run. Pick **New Game → Sandbox → Standard** for the easiest start;
@@ -25,6 +25,30 @@ performance overlay (fps, frame-time graph, CPU/GPU breakdown) and use **Copy re
 map and in the Ring Skimmer mission — `docs/PERFORMANCE.md` ("What to measure on the laptop") lists what to send.
 Graphics are auto-tuned once per device (weak GPUs start on Low; adaptive resolution is on). Then tell me what feels
 wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
+
+## Smoother on a Retina Mac: ~40 % less GPU time per frame (2026-10-07, op/perfgpu)
+You said the game feels slow. On a Retina MacBook the 3D view was drawn at the full 2940×1840 device pixels; an
+M1/M2's GPU is 4–6× slower than my test card, so Medium ran at ~25–35 fps on the pad. Changes (no new settings
+needed; details and measurements in `docs/PERFORMANCE.md`, "GPU frame cost for Retina Macs"):
+- **Sharp upscaling instead of 4× the pixels.** On Retina screens Medium now draws the 3D scene at 70 % resolution
+  (about half the pixels) and rebuilds full resolution with an edge-aware upscaler plus sharpening. The HUD and all
+  text stay native. In side-by-side screenshots at normal size I could not tell them apart; at 1:1 pixel zoom the
+  finest decal text is a touch softer. Settings → Graphics → Advanced → **Retina resolution / upscaling** has
+  Native / Quality 85 % / Balanced 70 % (Medium default) / Performance 58 %.
+- **Trees around the launch site** were drawn in full detail out to 1.5 km and twice (once for shadows): ~1.4 million
+  triangles for trees a few pixels tall. They now switch to a simpler model beyond ~350 m (not visible).
+- Low is unchanged by default (it keeps its cheap half-resolution stretch); the upscaler is opt-in there.
+- **Cheaper post-processing** (8-bit buffers after tone mapping, bloom merged into tone mapping) and a cheaper sun glare.
+- **Adaptive resolution** now uses the same upscaler, so when it has to drop resolution to hold the frame rate it is
+  much less visible; Apple GPUs (incl. Safari's "Apple GPU") start on Medium with this enabled.
+
+**Measured on my test GPU at Retina resolution (GPU time per frame, Medium):** pad 4.5 → 2.8 ms, ascent 3.6 → 2.0,
+orbit 3.9 → 2.3, Moon surface 1.7 → 1.6, map and editor unchanged (already cheap). High: pad 11.9 → 8.7, orbit
+8.1 → 5.6. **Estimate for an M1/M2 MacBook:** the pad goes from ~40–55 fps to ~60, ascent and orbit from ~45–65 to
+~80–110 fps, the Moon, map and editor already ran fast. Screenshots: `docs/screenshots/perfgpu/`.
+
+**Please check on the Mac:** play on the pad, during an ascent and in orbit with F8 open; if it still isn't smooth,
+use **Copy report** and send it. If anything looks soft, try Advanced → Retina resolution → Quality 85 %.
 
 ## Map readability on Retina (2026-10-06, op/mapviz2)
 You said the map lines were barely visible and a planned course looked like straight pixels. Checked on a real GPU at

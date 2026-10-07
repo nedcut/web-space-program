@@ -1,11 +1,12 @@
 import { PhotoEffectsPass } from './PhotoEffectsPass';
 import { clampPixelRatio, maxDrawingEdge } from './drawingLimits';
+import { UpscalePass } from './UpscalePass';
+import { FusedBloomPass, ToneMapPass } from './fusedBloom';
 import { AdaptiveQuality } from './adaptiveQuality';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
 import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { classifyGpu } from '../../util/gpuTier';
@@ -23,17 +24,22 @@ export interface RenderPipelineOptions {
 
 /**
  * HDR render pipeline:
- *   scene → HalfFloat RT (optional MSAA) → UnrealBloom → OutputPass (tonemap + sRGB) → FXAA (optional)
- * The renderer uses a logarithmic depth buffer so one camera can span 0.05 m to 10^13 m.
+ *   scene → HalfFloat RT (optional MSAA) → bloom mips → tone map (+ bloom, sRGB) → 8-bit → SMAA/FXAA (optional)
+ *   → edge-adaptive upscale to device resolution (when the internal resolution is below it)
+ * Everything before the upscale runs at the internal resolution (device pixels × Retina scale × render scale ×
+ * adaptive scale); the canvas keeps device resolution, so the image is reconstructed by `UpscalePass` rather than
+ * stretched bilinearly by the browser. The renderer uses a logarithmic depth buffer so one camera can span 0.05 m to 10^13 m.
  * All custom ShaderMaterials must include three's logdepthbuf chunks (see render/planet/shaders).
  */
 export class RenderPipeline {
   readonly renderer: THREE.WebGLRenderer;
   composer!: EffectComposer;
   private renderPass!: RenderPass;
-  private bloomPass?: UnrealBloomPass;
+  private bloomPass?: FusedBloomPass;
   private fxaaPass?: FXAAPass;
   private smaaPass?: SMAAPass;
+  private upscalePass!: UpscalePass;
+  private hdrTarget?: THREE.WebGLRenderTarget;
   /** Unmasked WebGL renderer string, when the browser exposes it. */
   readonly gpuName: string | null;
   photoEffects!: PhotoEffectsPass;
@@ -74,8 +80,11 @@ export class RenderPipeline {
     this.gpuTimer = GpuTimer.create(r.getContext());
     this.gpuName = rendererName(r.getContext());
     // Adaptive resolution starts where this class of GPU usually lands, then converges from measurements.
+    // A Retina-reduced, upscaled start already draws about half the device pixels, so mid-range GPUs start there.
     const tier = classifyGpu(this.gpuName);
-    this.adaptive.scale = tier === 'strong' ? 1 : tier === 'mid' ? 0.75 : 0.6;
+    const start = resolutionPlan(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, opts.quality, 1, false, 1);
+    const reduced = start.lod > start.internal * 1.2;
+    this.adaptive.scale = tier === 'strong' ? 1 : tier === 'mid' ? (reduced ? 1 : 0.75) : 0.6;
     this.buildComposer();
   }
 
@@ -98,12 +107,30 @@ export class RenderPipeline {
     this.setSize(this.width, this.height);
   }
 
-  get pixelRatio(): number {
+  /** Current resolution plan (internal/output pixel ratios, upscaling); see `resolutionPlan`. */
+  get plan(): ResolutionPlan { return (this.cachedPlan ??= this.computePlan()); }
+  private cachedPlan: ResolutionPlan | null = null;
+  private computePlan(): ResolutionPlan {
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-    const pr = this.mapHiRes ? Math.min(dpr, 2)
-      : Math.max(1 / Math.min(this.width, this.height), Math.min(dpr, this.quality.maxPixelRatio) * this.quality.renderScale * this.adaptive.scale);
-    return clampPixelRatio(pr, this.width, this.height, maxDrawingEdge(this.renderer));
+    // Photo captures render at full device resolution (no Retina reduction, no adaptive reduction).
+    const q = this.capturing ? { ...this.quality, upscale: { ...this.quality.upscale, retinaScale: 1 } } : this.quality;
+    const plan = resolutionPlan(dpr, q, this.capturing ? 1 : this.adaptive.scale, this.mapHiRes, Math.min(this.width, this.height));
+    // Never exceed the context's drawing-buffer limits (Firefox resistFingerprinting reports 2048; 6K displays).
+    const edge = maxDrawingEdge(this.renderer);
+    const output = clampPixelRatio(plan.output, this.width, this.height, edge);
+    const internal = Math.min(clampPixelRatio(plan.internal, this.width, this.height, edge), output);
+    return { ...plan, internal, output, upscaling: plan.upscaling && internal < output * 0.98 };
   }
+  private capturing = false;
+
+  /** The scene is rendered below device resolution and reconstructed by the edge-adaptive upscale pass. */
+  get upscaling(): boolean { return this.plan.upscaling; }
+
+  /** Pixel ratio of the scene and post-processing buffers (internal resolution). */
+  get pixelRatio(): number { return this.plan.internal; }
+
+  /** Pixel ratio of the canvas (display output). */
+  get outputPixelRatio(): number { return this.plan.output; }
 
   private buildComposer(): void {
     const q = this.quality;
@@ -111,22 +138,29 @@ export class RenderPipeline {
       for (const pass of this.composer.passes) pass.dispose();
       this.composer.dispose();
     }
-    const rt = new THREE.WebGLRenderTarget(this.width, this.height, {
+    // The HDR scene target (MSAA, depth) is used only by the scene, bloom and tone mapping. Everything after tone
+    // mapping is display-referred 8-bit, so the composer's ping-pong buffers are RGBA8 without depth or MSAA
+    // (half the bandwidth of half-float targets, and no multisample resolve after SMAA).
+    this.hdrTarget?.dispose();
+    const hdr = (this.hdrTarget = new THREE.WebGLRenderTarget(this.width, this.height, {
       type: THREE.HalfFloatType,
       samples: q.msaaSamples,
       depthBuffer: true,
-    });
-    const composer = new EffectComposer(this.renderer, rt);
+    }));
+    const ldr = new THREE.WebGLRenderTarget(this.width, this.height, { type: THREE.UnsignedByteType, depthBuffer: false });
+    const composer = new EffectComposer(this.renderer, ldr);
     composer.setPixelRatio(this.pixelRatio);
     composer.setSize(this.width, this.height);
     this.renderPass = new RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());
-    composer.addPass(this.renderPass);
+    composer.addPass(new OnHdr(this.renderPass, hdr));
     this.bloomPass = undefined;
     if (q.bloom.enabled) {
-      this.bloomPass = new UnrealBloomPass(new THREE.Vector2(this.width, this.height), q.bloom.strength, q.bloom.radius, q.bloom.threshold);
-      composer.addPass(this.bloomPass);
+      this.bloomPass = new FusedBloomPass(new THREE.Vector2(this.width, this.height), q.bloom.strength, q.bloom.radius, q.bloom.threshold);
+      composer.addPass(new OnHdr(this.bloomPass, hdr));
     }
-    composer.addPass(new OutputPass());
+    const toneMap = new ToneMapPass();
+    toneMap.bloom = this.bloomPass ?? null;
+    composer.addPass(new OnHdr(toneMap, hdr));
     this.fxaaPass = undefined;
     this.smaaPass = undefined;
     if (q.aa === 'fxaa') {
@@ -134,10 +168,15 @@ export class RenderPipeline {
       composer.addPass(this.fxaaPass);
     } else if (q.aa === 'smaa') {
       this.smaaPass = new SMAAPass();
+      // Edges and blend weights are 8-bit quantities in the reference implementation.
+      for (const t of [(this.smaaPass as unknown as SmaaTargets)._edgesRT, (this.smaaPass as unknown as SmaaTargets)._weightsRT]) t.texture.type = THREE.UnsignedByteType;
       composer.addPass(this.smaaPass);
     }
     this.photoEffects = new PhotoEffectsPass();
     composer.addPass(this.photoEffects);
+    this.upscalePass = new UpscalePass();
+    this.upscalePass.sharpness = q.upscale.sharpness;
+    composer.addPass(this.upscalePass);
     this.composer = composer;
     this.setSize(this.width, this.height);
   }
@@ -151,11 +190,13 @@ export class RenderPipeline {
   setSize(width: number, height: number): void {
     this.width = Math.max(1, Math.floor(width));
     this.height = Math.max(1, Math.floor(height));
-    const pr = this.pixelRatio;
-    this.renderer.setPixelRatio(pr);
+    const plan = (this.cachedPlan = this.computePlan()), pr = plan.internal;
+    this.upscalePass.enabled = plan.upscaling;
+    this.renderer.setPixelRatio(plan.output);
     this.renderer.setSize(this.width, this.height, false);
     this.composer.setPixelRatio(pr);
     this.composer.setSize(this.width, this.height);
+    this.hdrTarget?.setSize(Math.round(this.width * pr), Math.round(this.height * pr));
     this.fxaaPass?.setSize(this.width * pr, this.height * pr);
     this.smaaPass?.setSize(this.width * pr, this.height * pr);
   }
@@ -166,7 +207,8 @@ export class RenderPipeline {
    * per-vertex aerial perspective) — the geometric error stays under 2.5 CSS px on Medium.
    */
   get lodViewportHeight(): number {
-    const pr = this.pixelRatio;
+    // Terrain detail follows the device resolution the upscaler reconstructs, not the reduced internal one.
+    const pr = this.plan.lod;
     return (this.height * pr) / Math.sqrt(Math.max(1, pr));
   }
 
@@ -182,7 +224,8 @@ export class RenderPipeline {
     this.frameStart = performance.now();
   }
 
-  get effectiveRenderScale(): number { return this.quality.renderScale * this.adaptive.scale; }
+  /** Internal 3D resolution as a fraction of the preset's device resolution (per axis). */
+  get effectiveRenderScale(): number { const p = this.plan; return p.internal / p.device; }
 
   render(scene: THREE.Scene, camera: THREE.Camera): void {
     this.photoEffects.scene = scene; this.photoEffects.camera = camera;
@@ -217,13 +260,14 @@ export class RenderPipeline {
   capture(scene: THREE.Scene, camera: THREE.PerspectiveCamera, scale: 1 | 2): HTMLCanvasElement {
     const width = this.width, height = this.height;
     try {
+      this.capturing = true;
       this.setSize(width * scale, height * scale);
       this.render(scene, camera);
       const canvas = document.createElement('canvas');
       canvas.width = this.renderer.domElement.width; canvas.height = this.renderer.domElement.height;
       const context = canvas.getContext('2d'); if (!context) throw new Error('PNG capture is unavailable.');
       context.drawImage(this.renderer.domElement, 0, 0); return canvas;
-    } finally { this.setSize(width, height); }
+    } finally { this.capturing = false; this.setSize(width, height); }
   }
 
   /**
@@ -242,8 +286,60 @@ export class RenderPipeline {
     this.gpuTimer?.dispose();
     for (const pass of this.composer.passes) pass.dispose();
     this.composer.dispose();
+    this.hdrTarget?.dispose();
     finishRenderer(this.renderer);
   }
+}
+
+export interface ResolutionPlan {
+  /** Pixel ratio of the scene / post-processing buffers. */
+  internal: number;
+  /** Pixel ratio of the canvas. Above `internal` only while upscaling. */
+  output: number;
+  upscaling: boolean;
+  /** Pixel ratio terrain LOD is selected for (the reconstructed resolution, before the Retina reduction). */
+  lod: number;
+  /** The preset's device pixel ratio, min(devicePixelRatio, maxPixelRatio). */
+  device: number;
+}
+
+/**
+ * Resolution policy. The preset's device ratio is min(devicePixelRatio, maxPixelRatio). With the edge upscaler,
+ * displays of ≥ 1.5× render internally at `retinaScale` of it, and any internal ratio below the device ratio
+ * (Retina scale, render scale, adaptive) is upscaled into a device-resolution canvas. Without it (or when
+ * supersampling) the canvas itself takes the internal ratio and the browser scales it. The map draws directly at
+ * up to 2× device resolution.
+ */
+export function resolutionPlan(dpr: number, q: Pick<QualitySettings, 'maxPixelRatio' | 'renderScale' | 'upscale'>, adaptiveScale: number, map: boolean, minCssSide: number): ResolutionPlan {
+  if (map) { const pr = Math.min(dpr, 2); return { internal: pr, output: pr, upscaling: false, lod: pr, device: pr }; }
+  const device = Math.min(dpr, q.maxPixelRatio);
+  const edge = q.upscale.mode === 'edge';
+  const retina = edge && device >= 1.5 ? q.upscale.retinaScale : 1;
+  const scale = retina * q.renderScale * adaptiveScale;
+  const internal = Math.max(1 / Math.max(1, minCssSide), device * scale);
+  const upscaling = edge && scale < 0.98;
+  return { internal, output: upscaling ? device : internal, upscaling, lod: internal / retina, device };
+}
+
+interface SmaaTargets { _edgesRT: THREE.WebGLRenderTarget; _weightsRT: THREE.WebGLRenderTarget }
+
+/**
+ * Runs a composer pass against the pipeline's HDR scene target instead of the composer's (8-bit) read buffer:
+ * the scene renders into it, bloom composites into it, and tone mapping reads it and writes the 8-bit chain.
+ */
+class OnHdr extends Pass {
+  constructor(readonly inner: Pass, private hdr: THREE.WebGLRenderTarget) {
+    super();
+    this.needsSwap = inner.needsSwap;
+    this.clear = inner.clear;
+  }
+  setSize(width: number, height: number): void { this.inner.setSize(width, height); }
+  render(renderer: THREE.WebGLRenderer, writeBuffer: THREE.WebGLRenderTarget, _readBuffer: THREE.WebGLRenderTarget, deltaTime: number, maskActive: boolean): void {
+    if (!this.inner.enabled && !this.needsSwap) return; // e.g. bloom toggled off at runtime
+    this.inner.renderToScreen = this.renderToScreen;
+    this.inner.render(renderer, writeBuffer, this.hdr, deltaTime, maskActive);
+  }
+  dispose(): void { this.inner.dispose(); }
 }
 
 function rendererName(gl: WebGLRenderingContext | WebGL2RenderingContext): string | null {
