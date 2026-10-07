@@ -166,7 +166,7 @@ function floorRoughness(maxAniso: number): THREE.Texture {
   const r = rng(19);
   const v = (x: number) => Math.round(THREE.MathUtils.clamp(x, 0, 1) * 255);
   const grey = (x: number, a = 1) => `rgba(${v(x)},${v(x)},${v(x)},${a})`;
-  g.fillStyle = grey(0.5);
+  g.fillStyle = grey(0.32);
   g.fillRect(0, 0, S, S);
   // Low-frequency patches (some areas more worn).
   for (let i = 0; i < 700; i++) {
@@ -192,7 +192,7 @@ function floorRoughness(maxAniso: number): THREE.Texture {
     g.beginPath(); g.moveTo(0, m * px); g.lineTo(S, m * px); g.stroke();
   }
   // The assembly pad is freshly polished.
-  g.fillStyle = grey(0.48, 0.8);
+  g.fillStyle = grey(0.3, 0.8);
   g.beginPath(); g.arc(S / 2, S / 2, 9 * px, 0, Math.PI * 2); g.fill();
   paintMarkings(g, S, () => grey(0.6));
   const t = new THREE.CanvasTexture(c);
@@ -434,7 +434,8 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   const cyanMat = track(new THREE.MeshBasicMaterial({ color: new THREE.Color(0x5cc8ff).multiplyScalar(0.38) }));
 
   // ---------------------------------------------------------------- floor: polished epoxy
-  const floorMat = track(new THREE.MeshStandardMaterial({
+  const floorMat = track(new THREE.MeshPhysicalMaterial({
+    specularIntensity: 0.22,
     map: track(floorTexture(aniso)),
     roughnessMap: track(floorRoughness(aniso)),
     roughness: 1,
@@ -450,7 +451,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   group.add(floor);
 
   // ---------------------------------------------------------------- assembly platform (low turntable)
-  const platMat = track(new THREE.MeshStandardMaterial({ map: track(platformTexture(aniso)), roughness: 0.58, metalness: 0.12, color: 0x687888, envMapIntensity: 0.35 }));
+  const platMat = track(new THREE.MeshPhysicalMaterial({ specularIntensity: 0.28, map: track(platformTexture(aniso)), roughness: 0.48, metalness: 0, color: 0x687888, envMapIntensity: 0.35 }));
   boxProjected(platMat);
   // Side, top cap, bottom cap: the textured deck only on top.
   const plat = new THREE.Mesh(track(new THREE.CylinderGeometry(PLATFORM_R, PLATFORM_R + 0.12, PLATFORM_H, 96, 1)), [trimMat, platMat, trimMat]);

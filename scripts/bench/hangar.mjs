@@ -45,6 +45,7 @@ try {
       const result = {};
       for (const id of ['selene', 'meridian']) {
         window.__editor.loadStock(id);
+        await (await import('/.tmp/hangar-baseline/src/render/parts/textures.ts')).partTexturesReady();
         await new Promise(r => setTimeout(r, 1000));
         for (const zoom of ['wide', 'close']) {
           for (const v of Object.values(views)) {
@@ -52,20 +53,26 @@ try {
             v.setView({ yaw: 0.55, pitch: 0.18, dist: v.dist * (zoom === 'close' ? 0.58 : 1.15), targetY: v.targetY + (zoom === 'close' ? 3 : 0) });
             cancelAnimationFrame(v.raf); v.loop(); cancelAnimationFrame(v.raf);
           }
-          const samples = { before: [], after: [] }, pairs = [];
+          const samples = { before: [], after: [] }, pairs = [], calls = {};
           let seed = 91817;
           for (let i = 0; i < 160; i++) {
             seed = (1664525 * seed + 1013904223) >>> 0;
             const pair = {};
             for (const name of seed & 0x10000 ? ['before', 'after'] : ['after', 'before']) {
-              const v = views[name], gl = v.renderer.getContext();
+              const v = views[name], gl = after.renderer.getContext();
               const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
               if (!ext) throw new Error('GPU timer unavailable');
               const q = gl.createQuery();
               gl.beginQuery(ext.TIME_ELAPSED_EXT, q);
-              v.renderer.render(v.scene, v.camera);
+              after.renderer.render(v.scene, v.camera);
+              calls[name] = after.renderer.info.render.calls;
               gl.endQuery(ext.TIME_ELAPSED_EXT);
-              while (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) await new Promise(r => setTimeout(r, 4));
+              gl.flush();
+              const deadline = performance.now() + 5000;
+              while (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) {
+                if (performance.now() > deadline) throw new Error('GPU query timed out');
+                await new Promise(r => setTimeout(r, 4));
+              }
               if (gl.getParameter(ext.GPU_DISJOINT_EXT)) throw new Error('Disjoint GPU sample');
               pair[name] = gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6;
               gl.deleteQuery(q);
@@ -78,7 +85,7 @@ try {
             gpu: gl.getParameter(debug.UNMASKED_RENDERER_WEBGL),
             beforeMs: median(samples.before), afterMs: median(samples.after), pairedDeltaMs: median(pairs.map(p => p.after-p.before)),
             canvas: [after.renderer.domElement.width, after.renderer.domElement.height],
-            calls: Object.fromEntries(Object.entries(views).map(([n,v]) => [n,v.renderer.info.render.calls])), pairs,
+            calls, pairs,
           };
         }
       }
