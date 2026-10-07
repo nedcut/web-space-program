@@ -6,6 +6,7 @@ import type { QualitySettings } from '../core/quality';
 import { siteShadowUniforms, GLSL_SITE_SHADOW } from '../site/shadows';
 import { getDetailTexture } from './textures';
 import { GLSL_CUTOUT, type TerrainCutoutUniforms } from './cutout';
+import { GLSL_EARTH_IMAGERY, type EarthImageryUniforms } from './earthImagery';
 
 /** Surface lighting shared by terrain / far sphere: Lambert ↔ Lommel–Seeliger (airless regolith). */
 const GLSL_SHADE = /* glsl */ `
@@ -68,9 +69,54 @@ float cloudShadow(vec3 rel) {
   float d = texture(uCloudMap, uCloudRot * p, 1.0).r;
   return 1.0 - 0.78 * smoothstep(0.05, 0.85, d);
 }
+/** Blurred cloud cover straight above a point (weather proxy for wind; diffuses night lights). */
+float cloudCover(vec3 rel) {
+  if (uCloudShell <= 0.0) return 0.0;
+  return texture(uCloudMap, uCloudRot * rel, 3.0).r;
+}
 #else
 float cloudShadow(vec3 rel) { return 1.0; }
+float cloudCover(vec3 rel) { return 0.0; }
 #endif
+`;
+
+/**
+ * Water as seen from altitude: Cox–Munk sea-surface slopes as GGX roughness (sun glint widens with wind),
+ * Schlick Fresnel capped at grazing for unresolved facets, sky reflection and a lit water body.
+ */
+const GLSL_WATER = /* glsl */ `
+float waterGGX(float NdH, float a) {
+  float a2 = a * a;
+  float d = NdH * NdH * (a2 - 1.0) + 1.0;
+  return a2 / (ATMO_PI * d * d);
+}
+/** Cox & Munk (1954): mean square slope 0.003 + 5.12e-3·W (wind m/s at 12.5 m) → GGX alpha ≈ rms slope. */
+float coxMunkAlpha(float wind) { return sqrt(0.003 + 0.00512 * wind); }
+/** Wind speed (m/s): doldrums, trades and westerlies by latitude; cloudy weather systems are windier. */
+float seaWind(vec3 nBF, vec3 rel) {
+  float s = abs(nBF.z);
+  float w = mix(4.0, 7.0, smoothstep(0.05, 0.3, s)) + 3.5 * exp(-((s - 0.76) * (s - 0.76)) / 0.02) - 2.0 * smoothstep(0.9, 0.98, s);
+  #if OCEAN_QUALITY >= 2
+    w += 5.0 * smoothstep(0.25, 0.9, cloudCover(rel));
+  #endif
+  return w;
+}
+vec3 shadeWater(vec3 bodyAlbedo, vec3 up, vec3 N, vec3 V, vec3 rel, vec3 skyRefl, float alpha, vec3 sunT) {
+  vec3 L = uSunDir;
+  float NdV = max(dot(N, V), 1e-3);
+  float NdL = max(dot(N, L), 0.0);
+  vec3 H = normalize(L + V);
+  float NdH = max(dot(N, H), 0.0);
+  float VdH = max(dot(V, H), 0.0);
+  float k = alpha * 0.5;
+  float G = (NdL / (NdL * (1.0 - k) + k)) * (NdV / (NdV * (1.0 - k) + k));
+  float Fs = 0.02 + 0.98 * pow(1.0 - VdH, 5.0);
+  vec3 spec = min(uSunColor * sunT * waterGGX(NdH, alpha) * G * Fs / (4.0 * NdV), vec3(200.0));
+  // Rough-surface Schlick: unresolved wave facets cap grazing reflectance of the sky.
+  float F = 0.02 + 0.53 * pow(1.0 - NdV, 5.0);
+  vec3 lightIn = uSunColor * sunT * max(dot(up, L), 0.0) / ATMO_PI + skyAmbient(rel, up) / ATMO_PI;
+  return mix(bodyAlbedo * lightIn, skyRefl, F) + spec;
+}
 `;
 
 
@@ -99,17 +145,49 @@ varying vec3 vAerialT;
 `;
 
 function baseHeader(): string {
-  return GLSL_ATMOSPHERE + GLSL_RING_SHADOW + GLSL_CLOUD_SHADOW;
+  return GLSL_ATMOSPHERE + GLSL_RING_SHADOW + GLSL_CLOUD_SHADOW + GLSL_WATER + GLSL_IMAGERY_DECL;
 }
 
 /** Planets whose surface materials receive cloud shadows (decided before their materials are built). */
 const cloudShadowed = new WeakSet<PlanetUniforms>();
 export function enableCloudShadows(u: PlanetUniforms): void { cloudShadowed.add(u); }
 
+/** Earth materials that sample real imagery (decided before their materials are built). */
+const earthImagery = new WeakMap<PlanetUniforms, EarthImageryUniforms>();
+export function enableEarthImagery(u: PlanetUniforms, imagery: EarthImageryUniforms): void { earthImagery.set(u, imagery); }
+/** Imagery uniforms to spread into a surface material (empty for bodies without imagery). */
+function imageryUniforms(u: PlanetUniforms): Partial<EarthImageryUniforms> { return earthImagery.get(u) ?? {}; }
+
+const OCEAN_LEVEL = { low: 0, medium: 1, high: 2, ultra: 3 } as const;
+
 function defines(q: QualitySettings, u?: PlanetUniforms): Record<string, string | number> {
   return { AERIAL_STEPS: q.atmosphere.aerialSteps, VIEW_STEPS: q.atmosphere.viewSteps, DETAIL_OCTAVES: q.planetDetails.gasOctaves,
+    OCEAN_QUALITY: OCEAN_LEVEL[q.earth.oceanQuality],
     ...(u && cloudShadowed.has(u) ? { CLOUD_SHADOWS: 1 } : {}) };
 }
+/** Define + uniforms for the three Earth surface materials (terrain, ocean, far sphere). */
+function imagery(u: PlanetUniforms): { defines: Record<string, number>; uniforms: Partial<EarthImageryUniforms> } {
+  return earthImagery.has(u) ? { defines: { EARTH_IMAGERY: 1 }, uniforms: imageryUniforms(u) } : { defines: {}, uniforms: {} };
+}
+
+/** Imagery declarations: only Earth materials compile them. */
+const GLSL_IMAGERY_DECL = /* glsl */ `
+#ifdef EARTH_IMAGERY
+${GLSL_EARTH_IMAGERY}
+/**
+ * Black Marble city lights: sRGB-encoded radiance, decoded and lifted to HDR. Sodium-orange in dim suburbs,
+ * whiter in saturated cores; dimmed and spread under cloud. Close-up street texture comes from earthEmission.
+ */
+vec3 earthNightLights(EarthUV e, float sunAltitude, vec3 rel) {
+  float night = 1.0 - smoothstep(-0.11, 0.025, sunAltitude);
+  if (night <= 0.0 || uEarthNightOn < 0.5) return vec3(0.0);
+  float s = textureGrad(uEarthNight, e.uv, e.dx, e.dy).r;
+  float L = s * s * (0.35 + 0.65 * s);
+  vec3 tint = mix(vec3(1.0, 0.52, 0.2), vec3(1.0, 0.8, 0.58), smoothstep(0.45, 1.0, s));
+  return tint * L * night * 1.6 * (1.0 - 0.75 * smoothstep(0.2, 0.9, cloudCover(rel)));
+}
+#endif
+`;
 
 // ---------------------------------------------------------------- Terrain
 
@@ -126,10 +204,12 @@ export interface TerrainMaterialOptions {
 }
 
 export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: TerrainMaterialOptions): THREE.ShaderMaterial {
+  const img = imagery(u);
   return new THREE.ShaderMaterial({
-    defines: { ...defines(q, u), ...(o.detail ? { USE_DETAIL: 1 } : {}), ...(o.cutout ? { USE_CUTOUT: 1 } : {}) },
+    defines: { ...defines(q, u), ...img.defines, ...(o.detail ? { USE_DETAIL: 1 } : {}), ...(o.cutout ? { USE_CUTOUT: 1 } : {}) },
     uniforms: {
       ...u,
+      ...img.uniforms,
       ...(o.cutout ?? {}),
       ...siteShadowUniforms,
       uDetailTex: { value: getDetailTexture() },
@@ -194,10 +274,15 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
 
       void main() {
         ${GLSL_LOGDEPTH_FRAG}
+        vec3 rel = vWorldPos - uPlanetCenter;
+        #ifdef EARTH_IMAGERY
+          // Before any discard: derivatives need uniform control flow.
+          vec3 nDir = normalize(transpose(uBodyRot) * rel);
+          EarthUV eUV = earthUV(nDir);
+        #endif
         #ifdef USE_CUTOUT
         applyCutout(vWorldPos);
         #endif
-        vec3 rel = vWorldPos - uPlanetCenter;
         vec3 toCam = cameraPosition - vWorldPos;
         float dist = length(toCam);
         vec3 V = toCam / dist;
@@ -239,11 +324,42 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           N = normalize(uBodyRot * nBF);
         #endif
         albedo = mix(albedo, uRockColor * (0.85 + 0.3 * albedo / max(max(albedo.r, albedo.g), 0.05)), rockT);
+        #ifdef EARTH_IMAGERY
+          // Imagery owns the colour wherever a texel is small on screen; the close-up palette takes over below.
+          float wImg = uEarthImagery * smoothstep(uEarthBlend.x, uEarthBlend.y, dist);
+          float waterW = 0.0;
+          if (wImg > 0.0) {
+            vec3 c = textureGrad(uEarthDay, eUV.uv, eUV.dx, eUV.dy).rgb;
+            vec3 img = earthAlbedo(c);
+            #ifdef USE_DETAIL
+              img *= 1.0 + hd * 0.6 * uDetailStrength;
+            #endif
+            albedo = mix(albedo, img, wImg);
+            waterW = earthWater(textureGrad(uEarthWater, eUV.uv, eUV.dx, eUV.dy).r, c) * wImg;
+          }
+        #endif
         vec3 col = shadeSurface(albedo, N, V, rel);
+        #ifdef EARTH_IMAGERY
+          // Coasts follow the imagery from altitude: water the terrain mesh still has above its datum.
+          if (waterW > 0.0) {
+            vec3 sunT = sunTransmittance(rel) * cloudShadow(rel);
+            vec3 water = shadeWater(albedo, up, up, V, rel, skyAmbient(rel, up) / ATMO_PI, coxMunkAlpha(seaWind(nDir, rel)), sunT);
+            col = mix(col, water, waterW);
+          }
+        #endif
         #ifdef EARTH_DETAILS
           col *= mix(0.42, 1.0, siteShadow(vWorldPos));
         #endif
-        col += earthEmission(normalize(transpose(uBodyRot) * rel), length(rel) - uPlanetRadius, dot(up, uSunDir));
+        #ifdef EARTH_IMAGERY
+          float sunAlt = dot(up, uSunDir);
+          vec3 lightsImg = earthNightLights(eUV, sunAlt, rel);
+          // Close up, the procedural street texture breaks the 3 km light pixels into streets.
+          float streets = 1.0 - smoothstep(uEarthBlend.x * 0.5, uEarthBlend.x * 2.0, dist);
+          col += lightsImg * (1.0 - streets) * (1.0 - waterW);
+          if (streets > 0.0 && dot(lightsImg, lightsImg) > 0.0) col += earthEmission(nDir, length(rel) - uPlanetRadius, sunAlt) * streets * min(1.0, lightsImg.r * 3.0);
+        #else
+          col += earthEmission(normalize(transpose(uBodyRot) * rel), length(rel) - uPlanetRadius, dot(up, uSunDir));
+        #endif
         col = col * vAerialT + vAerialL;
         gl_FragColor = vec4(col, 1.0);
       }`,
@@ -311,10 +427,12 @@ export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, cen
 // ---------------------------------------------------------------- Ocean
 
 export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabed: [number, number, number], hydrocarbon = false): THREE.ShaderMaterial {
+  const img = imagery(u);
   return new THREE.ShaderMaterial({
-    defines: defines(q, u),
+    defines: { ...defines(q, u), ...img.defines },
     uniforms: {
       ...u,
+      ...img.uniforms,
       uDetailTex: { value: getDetailTexture() },
       uSeabed: { value: new THREE.Vector3(...seabed) },
       uHydrocarbon: { value: hydrocarbon ? 1 : 0 },
@@ -350,7 +468,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
           if (dot(R, up) < 0.03) R = normalize(R + up * (0.03 - dot(R, up)));
           vec2 ta = raySphereC(dot(rel, R), dot(rel, rel) - uAtmoRadius * uAtmoRadius);
           vec3 tr;
-          integrateScattering(rel, R, 0.0, max(ta.y, 0.0), 6, vSkyRefl, tr);
+          integrateScattering(rel, R, 0.0, max(ta.y, 0.0), OCEAN_QUALITY >= 3 ? 10 : 6, vSkyRefl, tr);
         }
         gl_Position = projectionMatrix * viewMatrix * wp;
         ${GLSL_LOGDEPTH_VERT}
@@ -378,15 +496,12 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         return vec3(0.0, a.x, a.y) * w.x + vec3(b.y, 0.0, b.x) * w.y + vec3(c.x, c.y, 0.0) * w.z;
       }
 
-      float ggx(float NdH, float a) {
-        float a2 = a * a;
-        float d = NdH * NdH * (a2 - 1.0) + 1.0;
-        return a2 / (ATMO_PI * d * d);
-      }
-
       void main() {
         ${GLSL_LOGDEPTH_FRAG}
         vec3 upBF = normalize(vUpBF);
+        #ifdef EARTH_IMAGERY
+          EarthUV eUV = earthUV(upBF);
+        #endif
         vec3 w = abs(upBF); w = w * w; w *= w; w /= (w.x + w.y + w.z);
         // Flat coasts are tessellated coarsely (little geometric error), so the interpolated depth's zero
         // crossing would follow triangle edges. Perturb it with world-space noise (≈600 m and 90 m) for an
@@ -398,17 +513,33 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
           shore = (n1 - 0.5) * 3.0 + (n2 - 0.5) * 1.0;
         }
         float depth = vDepth + shore;
-        if (depth <= 0.0) discard;
         vec3 rel = vWorldPos - uPlanetCenter;
         vec3 toCam = cameraPosition - vWorldPos;
         float dist = length(toCam);
+        #ifdef EARTH_IMAGERY
+          // From altitude the coastline follows the imagery mask (the mesh follows the coarser relief grid);
+          // land showing through reveals the terrain just below the datum, coloured by the same imagery.
+          float wImg = uEarthImagery * smoothstep(uEarthBlend.x, uEarthBlend.y, dist);
+          vec3 dayC = vec3(0.0);
+          float maskW = 1.0;
+          if (wImg > 0.0) {
+            dayC = textureGrad(uEarthDay, eUV.uv, eUV.dx, eUV.dy).rgb;
+            maskW = earthWater(textureGrad(uEarthWater, eUV.uv, eUV.dx, eUV.dy).r, dayC);
+            depth = mix(depth, (maskW - 0.5) * 40.0, wImg);
+          }
+        #endif
+        if (depth <= 0.0) discard;
         vec3 V = toCam / dist;
         float t = uTime;
         float fade1 = 1.0 - smoothstep(200.0, 2000.0, dist);
         float fade2 = 1.0 - smoothstep(2000.0, 30000.0, dist);
-        vec3 g = waveGrad(vDetail, w, 64.0, vec2(t * 1.3, t * 0.7)) * fade1
-               + waveGrad(vDetail, w, 23.0, vec2(-t * 0.9, t * 1.6)) * fade1 * 0.7
-               + waveGrad(vDetail, w, 512.0, vec2(t * 2.0, -t * 1.1)) * fade2 * 0.6;
+        #if OCEAN_QUALITY == 0
+          vec3 g = vec3(0.0);
+        #else
+          vec3 g = waveGrad(vDetail, w, 64.0, vec2(t * 1.3, t * 0.7)) * fade1
+                 + waveGrad(vDetail, w, 23.0, vec2(-t * 0.9, t * 1.6)) * fade1 * 0.7
+                 + waveGrad(vDetail, w, 512.0, vec2(t * 2.0, -t * 1.1)) * fade2 * 0.6;
+        #endif
         if (uHydrocarbon > 0.5) {
           g *= 0.18;
           vec3 cell = fract(vDetail / 3.0) - 0.5;
@@ -424,8 +555,6 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         float NdL = max(dot(N, L), 0.0);
         vec3 H = normalize(L + V);
         float NdH = max(dot(N, H), 0.0);
-        // Roughness grows with distance (unresolved waves widen the glint).
-        float rough = clamp(0.05 + dist * 2e-7, 0.05, 0.2);
         // Rough-surface Schlick: unresolved wave facets cap grazing reflectance.
         float F = 0.02 + (0.55 - 0.02) * pow(1.0 - NdV, 5.0);
         if (uHydrocarbon > 0.5) {
@@ -444,22 +573,26 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
           return;
         }
         vec3 sunT = sunTransmittance(rel) * ringShadow(rel) * cloudShadow(rel);
-        float k = rough * 0.5;
-        float G = (NdL / (NdL * (1.0 - k) + k)) * (NdV / (NdV * (1.0 - k) + k));
-        vec3 spec = uSunColor * sunT * ggx(NdH, rough * rough) * G * F / (4.0 * NdV + 1e-4);
-        spec = min(spec, vec3(200.0));
-        // Sky reflection along the facet-averaged reflected ray (marched per vertex).
-        vec3 skyL = vSkyRefl;
+        // Resolved waves up close; Cox–Munk slope statistics once individual waves are sub-pixel.
+        vec3 nDirW = normalize(transpose(uBodyRot) * rel);
+        float alpha = mix(0.07, coxMunkAlpha(seaWind(nDirW, rel)), smoothstep(400.0, 25000.0, dist));
         // Water body colour: absorption with depth, lit by sun + sky.
         float depthT = 1.0 - exp(-depth / 18.0);
         vec3 water = mix(uShallow, uDeep, depthT);
+        #ifdef EARTH_IMAGERY
+          // Shallow banks, river plumes and lakes carry their real colour from altitude.
+          if (wImg > 0.0) water = mix(water, earthAlbedo(dayC), wImg);
+        #endif
+        vec3 col = shadeWater(water, up, N, V, rel, vSkyRefl, alpha, sunT);
         vec3 lightIn = uSunColor * sunT * max(dot(up, L), 0.0) / ATMO_PI + skyAmbient(rel, up) / ATMO_PI;
-        vec3 body = water * lightIn;
         vec3 bed = uSeabed * lightIn * exp(-depth * vec3(0.45, 0.12, 0.06));
-        body = mix(bed, body, smoothstep(0.0, 6.0, depth));
-        vec3 col = mix(body, skyL, F) + spec;
+        col = mix(bed + vSkyRefl * F, col, smoothstep(0.0, 6.0, depth));
         // foam at the very shoreline
         col += lightIn * 0.4 * (1.0 - uHydrocarbon) * (1.0 - smoothstep(0.0, 0.6, depth)) * fade1;
+        #ifdef EARTH_IMAGERY
+          // Lit ships, platforms and coastal cities over water pixels of the light map.
+          col += earthNightLights(eUV, dot(up, uSunDir), rel) * 0.6;
+        #endif
         col = col * vAerialT + vAerialL;
         gl_FragColor = vec4(col, 1.0);
       }`,
@@ -469,10 +602,12 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
 // ---------------------------------------------------------------- Far sphere (baked texture)
 
 export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, opts: { airless: number; ocean: boolean; minH: number; maxH: number; texWidth: number; irregular?: boolean }): THREE.ShaderMaterial {
+  const img = imagery(u);
   return new THREE.ShaderMaterial({
-    defines: defines(q, u),
+    defines: { ...defines(q, u), ...img.defines },
     uniforms: {
       ...u,
+      ...img.uniforms,
       uMap: { value: null as THREE.Texture | null },
       uHasMap: { value: 0 },
       uFallback: { value: new THREE.Vector3(0.3, 0.3, 0.3) },
@@ -513,6 +648,9 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
       void main() {
         ${GLSL_LOGDEPTH_FRAG}
         vec3 n = normalize(vObj);
+        #ifdef EARTH_IMAGERY
+          EarthUV eUV = earthUV(n);
+        #endif
         float lon = atan(n.y, n.x);
         float lat = asin(clamp(n.z, -1.0, 1.0));
         vec2 uv = vec2(lon / (2.0 * ATMO_PI) + 0.5, lat / ATMO_PI + 0.5);
@@ -544,23 +682,30 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
         vec3 V = toCam / dist;
         vec3 N = normalize(uBodyRot * nBF);
         vec3 col;
-        if (uOcean > 0.5 && h < 0.0) {
-          vec3 up = normalize(rel);
-          float depthT = 1.0 - exp(-(-h) / 18.0);
-          vec3 water = mix(vec3(0.01, 0.07, 0.075), vec3(0.002, 0.011, 0.03), depthT);
+        float waterW = uOcean > 0.5 && h < 0.0 ? 1.0 : 0.0;
+        vec3 waterAlbedo = mix(vec3(0.01, 0.07, 0.075), vec3(0.002, 0.011, 0.03), 1.0 - exp(-(-h) / 18.0));
+        #ifdef EARTH_IMAGERY
+          if (uEarthImagery > 0.5) {
+            vec3 c = textureGrad(uEarthDay, eUV.uv, eUV.dx, eUV.dy).rgb;
+            albedo = earthAlbedo(c);
+            waterAlbedo = albedo;
+            waterW = earthWater(textureGrad(uEarthWater, eUV.uv, eUV.dx, eUV.dy).r, c);
+            // The relief bump comes from the coarse bake: keep it off imagery water.
+            N = normalize(mix(N, normalize(uBodyRot * n), waterW));
+          }
+        #endif
+        vec3 up = normalize(rel);
+        col = waterW < 1.0 ? shadeSurface(albedo, N, V, rel) : vec3(0.0);
+        if (waterW > 0.0) {
           vec3 sunT = sunTransmittance(rel) * cloudShadow(rel);
-          col = water * (uSunColor * sunT * max(dot(up, uSunDir), 0.0) / ATMO_PI + skyAmbient(rel, up) / ATMO_PI);
-          vec3 H = normalize(uSunDir + V);
-          float NdV = max(dot(up, V), 0.001);
-          float F = 0.02 + 0.98 * pow(1.0 - NdV, 5.0);
-          float a2 = 0.09 * 0.09;
-          float NdH = max(dot(up, H), 0.0);
-          float d = NdH * NdH * (a2 - 1.0) + 1.0;
-          col += uSunColor * sunT * (a2 / (ATMO_PI * d * d)) * F * max(dot(up, uSunDir), 0.0) / (4.0 * NdV);
-        } else {
-          col = shadeSurface(albedo, N, V, rel);
-          col += earthEmission(n, h, dot(normalize(rel), uSunDir));
+          col = mix(col, shadeWater(waterAlbedo, up, up, V, rel, skyAmbient(rel, up) / ATMO_PI, coxMunkAlpha(seaWind(n, rel)), sunT), waterW);
         }
+        #ifdef EARTH_IMAGERY
+          if (uEarthImagery > 0.5) col += earthNightLights(eUV, dot(up, uSunDir), rel);
+          else col += earthEmission(n, h, dot(up, uSunDir));
+        #else
+          col += earthEmission(n, h, dot(up, uSunDir)) * (1.0 - waterW);
+        #endif
         col = applyAerialPerspective(col, -V, dist, AERIAL_STEPS * uStepScale);
         gl_FragColor = vec4(col, 1.0);
       }`,

@@ -9,3 +9,6 @@ playwright-report
 .vite-cache
 .tmp/
 dist-prof
+
+# Earth imagery: the 16k pack is built locally (scripts/earth-imagery/build.mjs --ultra) and hosted with the app.
+public/earth/imagery/packs/16k/
