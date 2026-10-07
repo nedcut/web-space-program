@@ -10,7 +10,7 @@
 //   flock /tmp/wsp-gpu.lock scripts/bench/gpu-passes.sh --base http://<ip>:5332 --label base-medium \
 //     --quality medium --cases pad,ascent,orbit,map,moon,editor [--families 1] [--settings '{...}']
 import { chromium } from 'playwright-core';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => {
   if (a.startsWith('--')) acc.push([a.slice(2), all[i + 1] && !all[i + 1].startsWith('--') ? all[i + 1] : 'true']);
@@ -23,6 +23,8 @@ const quality = args.quality ?? 'medium';
 const settleMs = +(args.settle ?? 12000);
 const families = args.families === '1';
 const shots = args.shots !== '0';
+// --eval <file.js>: evaluate an expression (may return a promise) after settling, instead of measuring.
+const evalSrc = args.eval ? readFileSync(args.eval, 'utf8') : null;
 const [vw, vh] = (args.size ?? '1470x920').split('x').map(Number);
 const outDir = args.out ?? 'C:\\wsp-tools\\bench\\perfgpu';
 const shotDir = args.shotdir ?? 'C:\\wsp-tools\\shots\\perfgpu';
@@ -152,6 +154,7 @@ async function run(name, url, { setup, mode = 'flight', settle = settleMs } = {}
       // Keep the editor rendering continuously while measuring (camera orbit).
       await page.evaluate(() => { const v = window.__editor.view; window.__edSpin = setInterval(() => { v.gYaw = (v.gYaw ?? 0) + 0.002; }, 16); });
     }
+    if (evalSrc) { const r = await page.evaluate(evalSrc); log(`== ${name}: ${JSON.stringify(r)}`); results.cases[name] = r; return; }
     const m = await page.evaluate(pageMeasure, { mode, families });
     if (mode === 'editor') await page.evaluate(() => clearInterval(window.__edSpin));
     if (shots) {
