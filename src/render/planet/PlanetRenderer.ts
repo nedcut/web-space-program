@@ -101,6 +101,8 @@ export class PlanetRenderer {
   private farSphere: THREE.Mesh | null = null;
   private farMaterial: THREE.ShaderMaterial | null = null;
   private farTexture: THREE.DataTexture | null = null;
+  /** The last update wanted near (quadtree) terrain: until its roots are built, the far sphere is a stand-in. */
+  private wantNear = false;
   private bakeRequested = false;
   private surfaceBake?: ReturnType<typeof acquireSurfaceBake>;
   private disposed = false;
@@ -515,6 +517,7 @@ export class PlanetRenderer {
     // Flat, colorful moons need texture resolution, not geometric refinement: retain the bake longer.
     const colorDominated = this.body.id === 'io' || this.body.id === 'europa';
     const wantNear = !!qt && wantsTerrainLod(R, camDist, projR, this.quality.bakedTextureWidth, colorDominated);
+    this.wantNear = wantNear;
     if (qt && wantNear) {
       this.tmpM4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
       this.frustum.setFromProjectionMatrix(this.tmpM4);
@@ -551,7 +554,9 @@ export class PlanetRenderer {
   get surfaceReady(): boolean {
     if (this.kind !== 'solid') return true;
     const bakeDone = !this.terrain || !!this.farTexture;
-    return bakeDone && (!this.quadtree || this.stats.mode === 'far' || this.quadtree.idle);
+    if (!bakeDone) return false;
+    // Far mode is final only when near terrain is not wanted; otherwise it is the stand-in shown while roots build.
+    return !this.quadtree || (this.wantNear ? this.stats.mode === 'near' && this.quadtree.idle : true);
   }
 
   /** Fully settled, including decoration (screenshots/tests can still wait for this). */
