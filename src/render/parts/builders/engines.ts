@@ -41,7 +41,12 @@ function bell(o: BellOpts): THREE.Group {
   const tile = Math.max(0.3, o.len * 0.5);
   g.add(mk(lathe(pts(0, ext), { segments: seg, uRepeat: Math.max(6, Math.round(o.re * 12)), tile }), o.outer ?? M.copperTubes(), 'bellOuter'));
   if (ext < 1) {
-    g.add(mk(lathe(pts(ext, 1), { segments: seg, uRepeat: 1, tile: o.len * (1 - ext) }), o.ext ?? M.nozzleExt(), 'nozzleExtension'));
+    const extension = lathe(pts(ext, 1), { segments: seg, uRepeat: 1 });
+    const uv = extension.getAttribute('uv');
+    const pos = extension.getAttribute('position');
+    // One axial temper ramp, irrespective of nozzle slope/arc length (no repeated rainbow bands).
+    for (let i = 0; i < uv.count; i++) uv.setY(i, 0.002 + 0.996 * (pos.getY(i) + o.len) / (o.len * (1 - ext)));
+    g.add(mk(extension, o.ext ?? M.nozzleExt(), 'nozzleExtension'));
     const rr = bellRadius(ext, o.rt, o.re, o.k);
     g.add(mk(torus(rr + 0.004, 0.012 + rr * 0.025, 6, seg).translate(0, -ext * o.len, 0), M.gunmetal(), 'extFlange'));
   }

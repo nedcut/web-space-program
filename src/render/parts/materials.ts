@@ -79,9 +79,9 @@ const metal = (key: string, set: string, color: number, rough: number, o: { norm
 export const M = {
   // --- white thermal paint family -------------------------------------------------------------
   /** Gloss-white painted aluminium with panel lines, rivets, welds and light grime. */
-  whitePanel: () => paint('whitePanel', 'panel', 0xf2f1ec, { normal: 0.9 }),
+  whitePanel: () => paint('whitePanel', 'panel', 0xf2f1ec, { normal: 0.55, cc: 0.2, ccRough: 0.3 }),
   /** Charcoal painted panels (interstages, adapters, skirts). */
-  charcoalPanel: () => paint('charcoalPanel', 'panel', 0x2f3237, { normal: 0.9, cc: 0.25, ccRough: 0.35 }),
+  charcoalPanel: () => paint('charcoalPanel', 'panel', 0x2f3237, { normal: 0.55, cc: 0.2, ccRough: 0.35 }),
   /** Light-grey airframe panels (wings, fins). */
   greyPanel: () => paint('greyPanel', 'panel', 0xc6c9ce, { normal: 0.7, cc: 0.3 }),
   /** Smooth satin-white composite/paint. */
@@ -99,11 +99,11 @@ export const M = {
   /** Gold multi-layer insulation foil (anisotropic crinkle). */
   goldFoil: () => {
     const t = texSet('foil');
-    return get('goldFoil', () => phys({ color: 0xe6b04a, ...maps(t, 1, 1), roughness: 1, metalness: 1, anisotropy: 0.45 }));
+    return get('goldFoil', () => phys({ color: 0xe7bb62, ...maps(t, 1, 0.85), roughness: 1, metalness: 1, anisotropy: 0.45 }));
   },
   silverFoil: () => {
     const t = texSet('foil');
-    return get('silverFoil', () => phys({ color: 0xd8dbe0, ...maps(t, 1, 1), roughness: 1, metalness: 1, anisotropy: 0.45 }));
+    return get('silverFoil', () => phys({ color: 0xe0e2e5, ...maps(t, 1, 0.85), roughness: 1, metalness: 1, anisotropy: 0.45 }));
   },
   /** Quilted beta-cloth blanket. */
   quilt: () => {
@@ -112,10 +112,10 @@ export const M = {
   },
 
   // --- metals -----------------------------------------------------------------------------------
-  steel: () => metal('steel', 'brushed', 0xdfe2e6, 1, { env: 1.3 }),
+  steel: () => metal('steel', 'brushed', 0xdfe2e6, 1, { env: 1, normal: 0.22 }),
   aluminium: () => metal('aluminium', 'brushed', 0xb9bec6, 1.5, { normal: 0.3 }),
   titanium: () => metal('titanium', 'brushed', 0x9ea5af, 1.35, { normal: 0.4 }),
-  gunmetal: () => metal('gunmetal', 'metal', 0x4b5058, 1.15, { normal: 0.4 }),
+  gunmetal: () => metal('gunmetal', 'metal', 0x737983, 1.2, { normal: 0.4 }),
   darkMetal: () => metal('darkMetal', 'metal', 0x34373c, 1.4, { normal: 0.4, metal: 0.45 }),
   chrome: () => metal('chrome', 'metal', 0xeef0f3, 0.3, { normal: 0.15 }),
   /** Coloured anodised aluminium (docking hardware, fittings). */
@@ -155,12 +155,12 @@ export const M = {
   },
   ablator: () => {
     const t = texSet('ablator');
-    return get('ablator', () => std({ color: 0xffffff, ...maps(t, 1, 1), roughness: 1, metalness: 0 }));
+    return get('ablator', () => std({ color: 0xffffff, ...maps(t, 1, 0.3), roughness: 1, metalness: 0 }));
   },
 
   // --- glass, composites, cells -------------------------------------------------------------------
   glass: () =>
-    get('glass', () => phys({ color: 0x0b1622, roughness: 0.04, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.8, emissive: 0x0a1a24, emissiveIntensity: 0.35 })),
+    get('glass', () => phys({ color: 0x0b1622, roughness: 0.04, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.2, ior: 1.46 })),
   solarCells: () => {
     const t = texSet('solar');
     return get('solarCells', () => phys({ color: 0xffffff, ...maps(t, 1, 1), roughness: 1, metalness: 1, clearcoat: 0.8, clearcoatRoughness: 0.06 }));

@@ -9,7 +9,7 @@
  */
 import { Field, cavityAO, clamp01, fbm, fract, gridDist, grayImg, hash2, mix, normalImg, ormImg, rgbImg, ridge, ridged, smooth, sstep, vnoise, voronoi, type Img } from './noise';
 
-export const TEX_VERSION = 5;
+export const TEX_VERSION = 8;
 
 export type Channel = 'albedo' | 'normal' | 'orm' | 'emissive';
 export type TexData = Partial<Record<Channel, Img>>;
@@ -64,12 +64,12 @@ function panel(): TexData {
     let h = 0.08 * Math.sin(Math.PI * fract(u * 4)); // pillowing between stringers
     const su = seamU(u);
     const sv = seamV(v);
-    h -= 0.6 * ridge(Math.abs(su), 0.0022);
-    h -= 0.6 * ridge(Math.abs(sv), 0.0022);
+    h -= 0.22 * ridge(Math.abs(su), 0.0022);
+    h -= 0.22 * ridge(Math.abs(sv), 0.0022);
     const dw = Math.abs(v - 0.5);
     h += 0.3 * ridge(dw, 0.0035) - 0.2 * ridge(Math.abs(dw - 0.006), 0.0025);
-    h += 0.45 * rivetRow(su, v, 40, 0.014);
-    h += 0.45 * rivetRow(sv, u, 40, 0.014);
+    h += 0.18 * rivetRow(su, v, 40, 0.014);
+    h += 0.18 * rivetRow(sv, u, 40, 0.014);
     const ad = inAccess(u, v);
     h -= 0.45 * ridge(Math.abs(ad), 0.002);
     if (ad < 0) h += 0.03;
@@ -78,7 +78,7 @@ function panel(): TexData {
       const d = Math.hypot(u - px, v - py);
       if (d < 0.004) h += 0.35 * smooth(1 - d / 0.004) - (d < 0.0012 ? 0.3 : 0);
     }
-    h += 0.03 * fbm(u, v, 32, 3, 3);
+    h += 0.008 * fbm(u, v, 32, 3, 3);
     return h;
   });
   const grime = new Field(N, N);
@@ -94,7 +94,7 @@ function panel(): TexData {
     const g = clamp01(streak * 0.55 + smudge * 0.35);
     grime.data[y * N + x] = g;
     const near = Math.min(su, sv);
-    const c = near < 0.02 && fbm(u, v, 64, 3, 91) > 0.74 ? 1 : 0;
+    const c = near < 0.009 && fbm(u, v, 64, 3, 91) > 0.82 ? 1 : 0;
     chip.data[y * N + x] = c;
     if (c) {
       out[0] = 0.62;
@@ -103,14 +103,14 @@ function panel(): TexData {
       return;
     }
     const tone = 0.965 - 0.035 * fbm(u, v, 4, 3, 7);
-    const k = tone * (1 - 0.16 * g) - 0.1 * ridge(Math.abs(v - 0.5), 0.006);
+    const k = tone * (1 - 0.10 * g) - 0.035 * ridge(Math.abs(v - 0.5), 0.006);
     out[0] = k;
     out[1] = k * 0.995;
     out[2] = k * 0.985 - 0.02 * g;
   });
-  const ao = cavityAO(height, 3, 3.5, 0.45);
+  const ao = cavityAO(height, 2, 1.4, 0.78);
   const rough = new Field(N, N).fill((u, v, x, y) => 0.36 + 0.1 * fbm(u, v, 12, 4, 21) + 0.22 * grime.data[y * N + x] - 0.1 * chip.data[y * N + x]);
-  return { albedo, normal: normalImg(height, 5), orm: ormImg(ao, rough, chip, N, N) };
+  return { albedo, normal: normalImg(height, 2.2), orm: ormImg(ao, rough, chip, N, N) };
 }
 
 /**
@@ -125,7 +125,7 @@ function foam(): TexData {
     const rind = ridged(u, v, 6, 3, 43, 9);
     const p = voronoi(u, v, 90, 44);
     const pore = p.d1 < 0.16 && hash2(p.id & 255, (p.id >> 8) & 255, 45) > 0.72 ? -0.25 * smooth(1 - p.d1 / 0.16) : 0;
-    return big * 0.9 + mid * 0.25 + rind * 0.18 + pore;
+    return big * 0.25 + mid * 0.16 + rind * 0.08 + pore * 0.6;
   });
   const albedo = rgbImg(N, N, (u, v, out) => {
     const a = fbm(u, v, 3, 4, 51);
@@ -191,30 +191,21 @@ function foil(): TexData {
   const albedoF = new Field(N, N);
   const roughF = new Field(N, N);
   const aoF = new Field(N, N);
-  const facet = (u: number, v: number, cells: number, seed: number) => {
-    const c = voronoi(u, v, cells, seed, 1, 2.4);
-    const gx = hash2(c.id & 255, (c.id >> 8) & 255, seed + 3) * 2 - 1;
-    const gy = hash2(c.id & 255, (c.id >> 8) & 255, seed + 5) * 2 - 1;
-    const r = hash2(c.id & 255, (c.id >> 8) & 255, seed + 7);
-    // facet plane: use position within the cell (approximate through fractional coordinates)
-    const fx = fract(u * cells) - 0.5;
-    const fy = fract(v * cells) - 0.5;
-    return { h: (fx * gx + fy * gy * 1.6) * 0.5, edge: c.edge, r };
-  };
+  // Continuous folded film: the former random facet planes jumped at cell boundaries,
+  // producing black fractures instead of thin crinkled foil under a sharp reflection.
   const height = new Field(N, N).fill((u, v, x, y) => {
-    const a = facet(u, v, 10, 301);
-    const b = facet(u, v, 26, 311);
+    const warp = fbm(u, v, 4, 3, 301);
+    const fold = ridged(u + warp * 0.08, v, 12, 3, 311, 2.4);
+    const broad = fbm(u, v, 5, 3, 312, 2);
     const tapeD = gridDist(v, 2);
-    const tape = tapeD < 0.018 ? 1 : 0;
-    const crease = ridge(a.edge, 0.06) * 0.4 + ridge(b.edge, 0.08) * 0.15;
+    const tape = 1 - sstep(0.009, 0.016, tapeD);
     const i = y * N + x;
-    albedoF.data[i] = tape ? 0.88 : 0.8 + 0.2 * a.r - 0.15 * crease;
-    roughF.data[i] = tape ? 0.4 : 0.12 + 0.22 * b.r + 0.15 * crease;
-    aoF.data[i] = tape ? 1 : 1 - 0.45 * crease;
-    if (tape) return 0.1 * fbm(u, v, 24, 2, 321) + 0.4 * (1 - sstep(0.014, 0.018, tapeD));
-    return a.h + b.h * 0.35 - crease * 0.5 + 0.02 * fbm(u, v, 48, 2, 101);
+    albedoF.data[i] = 0.96 - fold * 0.045 - tape * 0.025;
+    roughF.data[i] = 0.19 + 0.10 * fold + tape * 0.08;
+    aoF.data[i] = 0.97 - fold * 0.06;
+    return (broad * 0.8 + fold * 0.45) * (1 - tape * 0.8) + tape * 0.2;
   });
-  return { albedo: grayImg(albedoF), normal: normalImg(height, 7), orm: ormImg(aoF, roughF, 1, N, N) };
+  return { albedo: grayImg(albedoF), normal: normalImg(height, 18), orm: ormImg(aoF, roughF, 1, N, N) };
 }
 
 /** Quilted beta-cloth blanket: stitched pillows 5 × 5 per metre with faint handling dirt. */
@@ -293,10 +284,10 @@ function ablator(): TexData {
     const cellTone = hash2(h.id & 255, h.id >> 8, 403);
     const charF = sstep(0.35, 0.7, fbm(u, v, 4, 4, 404) * 0.7 + cellTone * 0.3);
     const wall = sstep(0.4, 0.48, h.d);
-    const r = mix(0.4, 0.13, charF) * (1 - 0.35 * wall);
+    const r = mix(0.22, 0.065, charF) * (1 - 0.35 * wall);
     out[0] = r;
-    out[1] = r * 0.82;
-    out[2] = r * 0.66;
+    out[1] = r * 0.92;
+    out[2] = r * 0.86;
   });
   const ao = cavityAO(height, 2, 3, 0.5);
   const rough = new Field(N, N).fill((u, v) => 0.82 + 0.15 * fbm(u, v, 12, 3, 405));
@@ -309,7 +300,7 @@ function tubes(): TexData {
   const T = 8;
   const height = new Field(N, N).fill((u, v) => {
     const x = fract(u * T) * 2 - 1;
-    return Math.sqrt(Math.max(0, 1 - x * x)) * 0.8 + 0.05 * fbm(u, v, 8, 2, 131);
+    return Math.sqrt(Math.max(0, 1 - x * x)) * 0.38 + 0.012 * fbm(u, v, 8, 2, 131);
   });
   const albedo = rgbImg(N, N, (u, v, out) => {
     const f = fract(u * T);
@@ -331,15 +322,15 @@ function nozzleExt(): TexData {
   const N = 256;
   const albedo = rgbImg(N, N, (u, v, out) => {
     const t = v + (fbm(u, v, 4, 3, 141) - 0.5) * 0.15;
-    const c1 = [0.66, 0.52, 0.32];
-    const c2 = [0.38, 0.28, 0.44];
-    const c3 = [0.3, 0.34, 0.42];
+    const c1 = [0.52, 0.46, 0.36];
+    const c2 = [0.39, 0.36, 0.42];
+    const c3 = [0.36, 0.39, 0.43];
     const a = sstep(0.55, 0.95, t);
     const b = sstep(0.2, 0.55, t);
     for (let i = 0; i < 3; i++) out[i] = mix(c3[i], mix(c2[i], c1[i], a), b) * (0.92 + 0.08 * fbm(u, v, 24, 2, 146));
   });
-  const height = new Field(N, N).fill((u, v) => 0.6 * ridge(Math.abs(fract(v * 4) - 0.5), 0.02) + 0.04 * fbm(u, v, 20, 2, 143));
-  const rough = new Field(N, N).fill((u, v) => 0.26 + 0.12 * fbm(u, v, 8, 3, 145));
+  const height = new Field(N, N).fill((u, v) => 0.12 * ridge(Math.abs(fract(v * 4) - 0.5), 0.02) + 0.04 * fbm(u, v, 20, 2, 143));
+  const rough = new Field(N, N).fill((u, v) => 0.43 + 0.16 * fbm(u, v, 8, 3, 145));
   return { albedo, normal: normalImg(height, 4), orm: ormImg(1, rough, 1, N, N) };
 }
 

@@ -51,7 +51,13 @@ const fragment = /* glsl */ `
     float t = clamp((h - uHorizonCos) / max(1.0 - uHorizonCos, 1e-3), 0.0, 1.0);
     vec3 skyCol = mix(uHorizon, uZenith, pow(t, 0.55));
     skyCol += uHorizon * 0.6 * pow(sunAmt, 6.0); // forward-scatter glow around the sun
-    vec3 groundCol = uGround * (0.55 + 0.45 * smoothstep(-1.0, max(uHorizonCos, -0.999), h));
+    // Lit spherical disc, including the planet's terminator. The old uniform hemisphere
+    // illuminated every reflected planet face even on the night side.
+    float bodyRadius = sqrt(max(0.0001, 1.0 - uHorizonCos * uHorizonCos));
+    float hit = max(0.0, -h - sqrt(max(0.0, h * h + bodyRadius * bodyRadius - 1.0)));
+    vec3 bodyNormal = normalize(d * hit + uUp);
+    float lambert = max(dot(bodyNormal, uSun), 0.0);
+    vec3 groundCol = uGround * (0.06 + 0.94 * lambert);
     vec3 col = mix(groundCol, skyCol, sky);
     col += uSunCol * (pow(sunAmt, 900.0) * 40.0 + pow(sunAmt, 40.0) * 0.6);
     gl_FragColor = vec4(col, 1.0);
@@ -93,9 +99,9 @@ export class SkyEnvironment {
   /** Re-bake if inputs changed meaningfully. Returns the current environment texture. */
   update(p: SkyEnvParams, nowMs: number): THREE.Texture | null {
     const q = (x: number, s: number) => Math.round(x * s);
-    const key = [q(p.up.x, 12), q(p.up.y, 12), q(p.up.z, 12), q(p.sun.x, 12), q(p.sun.y, 12), q(p.sun.z, 12), q(p.air, 20), q(p.daylight, 10), q(p.bodyAngle, 20)].join(',');
+    const key = [q(p.up.x, 12), q(p.up.y, 12), q(p.up.z, 12), q(p.sun.x, 12), q(p.sun.y, 12), q(p.sun.z, 12), q(p.air, 20), q(p.daylight, 10), q(p.bodyAngle, 20), ...p.ground, ...(p.skyTint ?? [])].join(',');
     if (key === this.key && this.rt) return this.rt.texture;
-    if (this.rt && nowMs - this.lastBake < 250) return this.rt.texture;
+    if (this.rt && nowMs - this.lastBake < 1000) return this.rt.texture;
     this.key = key;
     this.lastBake = nowMs;
     this.bake(p);
@@ -119,12 +125,11 @@ export class SkyEnvironment {
     u.uHorizon.value.copy(hor);
     // Ground / planetshine: albedo lit by the sun, a little skylight even in shadow.
     const g = p.ground;
-    const lit = 0.25 + 0.75 * day;
-    u.uGround.value.setRGB(g[0] * lit * 0.9, g[1] * lit * 0.9, g[2] * lit * 0.9);
+    u.uGround.value.setRGB(g[0] * 0.9, g[1] * 0.9, g[2] * 0.9);
     u.uSunCol.value.setRGB(1, 0.97, 0.9).multiplyScalar(p.daylight);
     // Horizon dips as the planet shrinks below us: cos of the angle from up to the limb.
     u.uHorizonCos.value = -Math.cos(Math.min(Math.PI / 2, p.bodyAngle));
-    const next = this.pmrem.fromScene(this.scene, 0, 0.1, 100);
+    const next = this.pmrem.fromScene(this.scene, 0, 0.1, 100, { size: 128 });
     this.rt?.dispose();
     this.rt = next;
   }

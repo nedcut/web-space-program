@@ -11,7 +11,7 @@ import type { PartState } from '../src/sim/vessel/runtime';
 
 function radiance(mesh: THREE.Mesh): number {
   const slot = mesh.geometry.getAttribute('wspHeatSlot').getX(0);
-  return thermalTexture.image.data[slot * 4];
+  return thermalTexture.image.data![slot * 4];
 }
 
 describe('flight visual effects', () => {

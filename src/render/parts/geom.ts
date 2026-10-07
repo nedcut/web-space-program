@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
 /**
  * Tessellation detail for part templates: 1 = full ('high'), 0.5 = 'low' LOD. Set only while a
@@ -186,6 +187,22 @@ export function box(w: number, h: number, d: number, tile = 1): THREE.BufferGeom
   return g;
 }
 
+/** Small machined housings only: one bevel segment; retain the cheap box on Low. */
+export function bevelBox(w: number, h: number, d: number, tile = 1): THREE.BufferGeometry {
+  if (DETAIL < 1) return box(w, h, d, tile);
+  const g = new RoundedBoxGeometry(w, h, d, 1, Math.min(w, h, d) * 0.12);
+  const uv = g.getAttribute('uv');
+  const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+  for (let face = 0; face < 6; face++) {
+    const group = g.groups[face];
+    for (let i = group.start; i < group.start + group.count; i++)
+      uv.setXY(i, uv.getX(i) * dims[face][0] / tile, uv.getY(i) * dims[face][1] / tile);
+  }
+  // Match the indexed layout of adjacent hardware, so template merging stays effective.
+  g.setIndex(Array.from({ length: uv.count }, (_, i) => i));
+  return g;
+}
+
 export function sphere(r: number, w = 20, h = 14): THREE.BufferGeometry {
   return new THREE.SphereGeometry(r, seg(w, 8), seg(h, 6));
 }
@@ -266,7 +283,7 @@ export function grp(name?: string, ...children: THREE.Object3D[]): THREE.Group {
 
 /** Bell-nozzle contour from throat (s=0) to exit (s=1). */
 export function bellRadius(s: number, rThroat: number, rExit: number, k: number): number {
-  return rThroat + (rExit - rThroat) * (1 - Math.pow(1 - s, k));
+  return rThroat + (rExit - rThroat) * (0.78 * (1 - Math.pow(1 - s, k)) + 0.22 * s);
 }
 
 /**

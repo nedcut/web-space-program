@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { PartDef } from '../../../sim/vessel/types';
 import { landingLegLayout } from '../../../data/parts';
 import { M } from '../materials';
-import { around, box, cyl, cylinder, grp, lathe, mk, pipe, rod, setDeployData, sphere, torus, type Profile } from '../geom';
+import { around, bevelBox, box, cyl, cylinder, grp, lathe, mk, pipe, rod, setDeployData, sphere, torus, type Profile } from '../geom';
 import { boxDims, cylDims, num, srfMount, str } from './common';
 
 const PI = Math.PI;
@@ -143,9 +143,9 @@ export function buildLandingLeg(def: PartDef): THREE.Object3D {
   const root = grp('landingLeg');
   const rail = box(0.12 * s, 0.9 * s, 0.04 * s);
   rail.translate(0, -0.03 * s, mz + 0.02 * s);
-  const bracket = box(0.16 * s, 0.1 * s, 0.07 * s);
+  const bracket = bevelBox(0.16 * s, 0.1 * s, 0.07 * s);
   bracket.translate(0, my, mz + 0.035 * s);
-  const clevis = box(0.15 * s, 0.08 * s, 0.07 * s);
+  const clevis = bevelBox(0.15 * s, 0.08 * s, 0.07 * s);
   clevis.translate(0, L.hinge.y, mz + 0.05 * s);
   root.add(mk([rail, bracket, clevis], M.gunmetal(), 'mount'));
   const pin = cyl(0.025 * s, 0.025 * s, 0.17 * s, 12);
@@ -250,7 +250,7 @@ export function buildRcsQuad(def: PartDef): THREE.Object3D {
   const rcsMod = def.modules.find((m) => m.type === 'rcs');
   const nozzles = rcsMod && rcsMod.type === 'rcs' ? rcsMod.nozzles : [];
   const zBlock = nozzles[0]?.position.z ?? 0.04;
-  const blk = box(0.11, 0.11, 0.08, 0.25);
+  const blk = bevelBox(0.11, 0.11, 0.08, 0.25);
   blk.translate(0, 0, zBlock);
   root.add(mk(blk, M.whitePanel(), 'block'));
   const arms: THREE.BufferGeometry[] = [];

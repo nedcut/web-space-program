@@ -10,7 +10,7 @@ import { PART_CATALOG } from '../src/data/parts';
 import type { PartState } from '../src/sim/vessel/runtime';
 
 const hot = { skinTemperature: [290, 290, 290, 1600, 290, 290] } as PartState;
-const radiance = (slot: number) => thermalTexture.image.data[slot * 4];
+const radiance = (slot: number) => thermalTexture.image.data![slot * 4];
 
 describe('batched thermal surfaces', () => {
   it('keeps repeated parts in one instanced draw with independent radiance and a stable shader binding', () => {
