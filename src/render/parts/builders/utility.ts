@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { PartDef } from '../../../sim/vessel/types';
 import { landingLegLayout } from '../../../data/parts';
 import { M } from '../materials';
-import { around, bevelBox, box, cyl, cylinder, grp, lathe, mk, pipe, rod, setDeployData, sphere, torus, type Profile } from '../geom';
+import { around, bevelBox, box, cyl, cylinder, detailLevel, grp, lathe, mk, pipe, rod, setDeployData, sphere, torus, type Profile } from '../geom';
 import { boxDims, cylDims, num, srfMount, str } from './common';
 
 const PI = Math.PI;
@@ -136,68 +136,152 @@ export function buildHeatShield(def: PartDef): THREE.Object3D {
 
 // ---------------------------------------------------------------------------------------------
 
+/** Hex nut / bolt head with its axis along +Y (6 flats read as hardware even at a few pixels). */
+function hexNut(r: number, h: number): THREE.BufferGeometry {
+  return cyl(r, r, h, 6);
+}
+
+/** A tube from a to b (both [x, y, z]) with `seg` sides. */
+const tube = (a: [number, number, number], b: [number, number, number], r: number, seg = 10) => rod(a, b, r, seg);
+
+/**
+ * Landing leg: bolted mount rail with a clevis and through-pin, a hydraulic primary strut (white barrel with a
+ * hex gland nut, wiper seal, reservoir and hose; chrome piston), a gusseted foot pad on a ball joint, and two
+ * three-stage telescoping deploy braces that swing and extend with the leg ('legBrace*' nodes).
+ */
 export function buildLandingLeg(def: PartDef): THREE.Object3D {
   const s = num(def, 'scale', 1);
   const L = landingLegLayout(s);
   const { y: my, z: mz } = srfMount(def);
+  const fine = detailLevel() === 1;
   const root = grp('landingLeg');
+  const H = L.hinge;
+
+  // --- mount: rail with bolted back plate, standoff lugs for the braces and clevis cheeks
   const rail = box(0.12 * s, 0.9 * s, 0.04 * s);
   rail.translate(0, -0.03 * s, mz + 0.02 * s);
   const bracket = bevelBox(0.16 * s, 0.1 * s, 0.07 * s);
   bracket.translate(0, my, mz + 0.035 * s);
-  const clevis = bevelBox(0.15 * s, 0.08 * s, 0.07 * s);
-  clevis.translate(0, L.hinge.y, mz + 0.05 * s);
-  root.add(mk([rail, bracket, clevis], M.gunmetal(), 'mount'));
-  const pin = cyl(0.025 * s, 0.025 * s, 0.17 * s, 12);
+  const mount: THREE.BufferGeometry[] = [rail, bracket];
+  for (const sx of [-1, 1]) {
+    // clevis cheeks either side of the strut eye
+    const cheek = bevelBox(0.022 * s, 0.11 * s, 0.085 * s);
+    cheek.translate(sx * 0.05 * s, H.y, mz + 0.055 * s);
+    mount.push(cheek);
+    // brace standoff lug
+    const lug = bevelBox(0.045 * s, 0.07 * s, 0.05 * s);
+    lug.translate(sx * 0.07 * s, H.y + 0.5 * s, mz + 0.045 * s);
+    mount.push(lug);
+  }
+  root.add(mk(mount, M.gunmetal(), 'mount'));
+  // hinge pin with nut caps, rail bolts
+  const pin = cyl(0.022 * s, 0.022 * s, 0.15 * s, 12);
   pin.rotateZ(PI / 2);
-  pin.translate(0, L.hinge.y, L.hinge.z);
-  root.add(mk(pin, M.chrome()));
+  pin.translate(0, H.y, H.z);
+  const hw: THREE.BufferGeometry[] = [pin];
+  for (const sx of [-1, 1]) hw.push(hexNut(0.026 * s, 0.018 * s).rotateZ(PI / 2).translate(sx * 0.078 * s, H.y, H.z));
+  if (fine)
+    for (const y of [-0.42, -0.2, 0.05, 0.3])
+      for (const sx of [-1, 1]) hw.push(hexNut(0.009 * s, 0.008 * s).rotateX(PI / 2).translate(sx * 0.04 * s, y * s, mz + 0.044 * s));
+  root.add(mk(hw, M.chrome(), 'hingeHardware'));
 
+  // --- primary strut (rotates about the hinge pin)
   const upper = grp('legUpper');
-  upper.position.set(L.hinge.x, L.hinge.y, L.hinge.z);
+  upper.position.set(H.x, H.y, H.z);
   root.add(upper);
   const sleeveLen = 0.55 * s;
   upper.add(mk(cylinder(0.038 * s, 0.042 * s, sleeveLen, { segments: 16, y: sleeveLen / 2 }), M.satinWhite(), 'sleeve'));
-  upper.add(mk([torus(0.04 * s, 0.008 * s, 6, 16).translate(0, sleeveLen, 0), sphere(0.045 * s, 12, 8)], M.gunmetal()));
-  // damper reservoir along the sleeve
-  upper.add(mk(cyl(0.018 * s, 0.018 * s, sleeveLen * 0.6, 10, sleeveLen * 0.45).translate(0, 0, 0.05 * s), M.accent('blue')));
-  // hydraulic hose from the reservoir to the gland, hazard collar at the gland, clamp bands
-  upper.add(mk(pipe([[0, sleeveLen * 0.16, 0.05 * s], [0.03 * s, sleeveLen * 0.05, 0.05 * s], [0.04 * s, sleeveLen * 0.3, 0.02 * s], [0.035 * s, sleeveLen * 0.92, 0.01 * s], [0.012 * s, sleeveLen * 0.97, 0.03 * s]], 0.006 * s, 6, 28), M.cable(), 'hose'));
-  upper.add(mk(lathe([[0.0425 * s, sleeveLen * 0.82], [0.0435 * s, sleeveLen * 0.83], [0.0435 * s, sleeveLen * 0.95], [0.0425 * s, sleeveLen * 0.96]], { segments: 16, tile: 0.25 }), M.hazard(), 'glandBand'));
-  upper.add(mk([0.25, 0.55].map((t) => torus(0.0195 * s, 0.004 * s, 4, 12).translate(0, sleeveLen * t, 0.05 * s)), M.chrome()));
+  // eye at the pin, hex gland nut and black wiper seal at the rod end
+  const eye = cyl(0.046 * s, 0.046 * s, 0.075 * s, 14).rotateZ(PI / 2);
+  const gland = hexNut(0.05 * s, 0.045 * s).translate(0, sleeveLen - 0.005 * s, 0);
+  const brCollar = box(0.17 * s, 0.035 * s, 0.035 * s).translate(0, 0.22 * s, 0);
+  upper.add(mk([eye, gland, brCollar], M.gunmetal(), 'strutFittings'));
+  upper.add(mk(torus(0.03 * s, 0.006 * s, 6, 16).translate(0, sleeveLen + 0.018 * s, 0), M.rubber(), 'wiper'));
+  // damper reservoir along the sleeve, hose to the gland, hazard band at the gland, clamp bands
+  upper.add(mk(cyl(0.018 * s, 0.018 * s, sleeveLen * 0.5, 10, sleeveLen * 0.55).translate(0, 0, 0.055 * s), M.accent('blue'), 'reservoir'));
+  upper.add(mk(pipe([[0, sleeveLen * 0.3, 0.055 * s], [0.02 * s, sleeveLen * 0.26, 0.06 * s], [0.04 * s, sleeveLen * 0.4, 0.03 * s], [0.04 * s, sleeveLen * 0.88, 0.02 * s], [0.015 * s, sleeveLen * 0.95, 0.04 * s]], 0.006 * s, 6, 28), M.cable(), 'hose'));
+  upper.add(mk(lathe([[0.0425 * s, sleeveLen * 0.8], [0.0435 * s, sleeveLen * 0.81], [0.0435 * s, sleeveLen * 0.93], [0.0425 * s, sleeveLen * 0.94]], { segments: 16, tile: 0.25 }), M.hazard(), 'glandBand'));
+  upper.add(mk([0.4, 0.75].map((t) => torus(0.0195 * s, 0.004 * s, 4, 12).translate(0, sleeveLen * t, 0.055 * s)), M.chrome()));
 
   const lower = grp('legLower');
   upper.add(lower);
   const rodLen = 0.68 * s;
-  lower.add(mk(cyl(0.024 * s, 0.024 * s, rodLen, 12, -rodLen / 2), M.chrome(), 'piston'));
-  lower.add(mk(sphere(0.035 * s, 12, 8), M.gunmetal()));
+  lower.add(mk(cyl(0.024 * s, 0.024 * s, rodLen, 14, -rodLen / 2), M.chrome(), 'piston'));
+  // rod-end fork around the ball joint
+  const fork: THREE.BufferGeometry[] = [cyl(0.032 * s, 0.03 * s, 0.05 * s, 12, 0.03 * s)];
+  for (const sx of [-1, 1]) fork.push(bevelBox(0.014 * s, 0.06 * s, 0.05 * s).translate(sx * 0.035 * s, -0.005 * s, 0));
+  lower.add(mk(fork, M.gunmetal(), 'rodEnd'));
   setDeployData(lower, { pos0: [0, L.stowedLength, 0], pos1: [0, L.deployedLength, 0] });
 
+  // --- foot: ball joint, dished pad with a rolled rim, radial gussets, bolts and a crush-pad sole
   const foot = grp('legFoot');
   lower.add(foot);
+  const R = L.padRadius, ph = L.padHeight, pd = L.padDrop;
   const pad = lathe(
     [
-      [0, -L.padDrop - L.padHeight / 2],
-      [L.padRadius * 0.92, -L.padDrop - L.padHeight / 2],
-      [L.padRadius, -L.padDrop - L.padHeight * 0.2],
-      [L.padRadius * 0.85, -L.padDrop + L.padHeight / 2],
-      [L.padRadius * 0.25, -L.padDrop + L.padHeight * 0.6],
-      [0.03 * s, -L.padDrop * 0.4],
-      [0, -L.padDrop * 0.3],
+      [0, -pd - ph / 2],
+      [R * 0.9, -pd - ph / 2],
+      [R, -pd - ph * 0.25],
+      [R, -pd + ph * 0.05],
+      [R * 0.93, -pd + ph * 0.12],
+      [R * 0.86, -pd + ph * 0.02],
+      [R * 0.3, -pd + ph * 0.42],
+      [0.035 * s, -pd * 0.5],
+      [0, -pd * 0.42],
     ],
-    { segments: 24 },
+    { segments: 32 },
   );
-  foot.add(mk(pad, M.gunmetal(), 'pad'));
-  // stiffening ribs on the pad's upper surface
-  const ribs: THREE.BufferGeometry[] = [];
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * PI * 2;
-    ribs.push(rod([Math.sin(a) * L.padRadius * 0.28, -L.padDrop + L.padHeight * 0.62, Math.cos(a) * L.padRadius * 0.28], [Math.sin(a) * L.padRadius * 0.8, -L.padDrop + L.padHeight * 0.4, Math.cos(a) * L.padRadius * 0.8], 0.006 * s, 4));
+  foot.add(mk(pad, M.aluminium(), 'pad'));
+  const ribs: THREE.BufferGeometry[] = [sphere(0.03 * s, 12, 8)];
+  const nRib = fine ? 8 : 4;
+  for (let i = 0; i < nRib; i++) {
+    const a = (i / nRib) * PI * 2 + PI / nRib;
+    const g = box(0.008 * s, ph * 0.5, R * 0.56);
+    g.rotateX(0.32);
+    g.translate(0, -pd + ph * 0.3, R * 0.56);
+    g.rotateY(a);
+    ribs.push(g);
   }
   foot.add(mk(ribs, M.gunmetal(), 'padRibs'));
-  foot.add(mk(cyl(L.padRadius * 0.95, L.padRadius * 0.95, 0.008 * s, 24, -L.padDrop - L.padHeight / 2 + 0.004 * s), M.rubber()));
+  if (fine) {
+    const bolts: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * PI * 2;
+      bolts.push(hexNut(0.007 * s, 0.006 * s).translate(Math.sin(a) * R * 0.9, -pd + ph * 0.1, Math.cos(a) * R * 0.9));
+    }
+    foot.add(mk(bolts, M.chrome(), 'padBolts'));
+  }
+  foot.add(mk(cyl(R * 0.94, R * 0.9, 0.012 * s, 24, -pd - ph / 2 + 0.006 * s), M.rubber(), 'sole'));
   setDeployData(upper, { rot0: [0, 0, 0], rot1: [L.deployAngle, 0, 0] });
   setDeployData(foot, { rot0: [0, 0, 0], rot1: [-L.deployAngle, 0, 0] });
+
+  // --- deploy braces: three-stage telescopes from the rail lugs to the strut collar, either side of the strut;
+  // setPartDeploy aims and extends them at the collar ('legBraceTip*') in every pose.
+  const bAt = 0.22 * s;
+  const A = new THREE.Vector3(0, H.y + 0.5 * s, mz + 0.055 * s);
+  const L0 = new THREE.Vector3(0, H.y + bAt, H.z).distanceTo(A);
+  const T = L0 * 0.94;
+  const rr = [0.017 * s, 0.013 * s, 0.009 * s];
+  for (const sx of [-1, 1]) {
+    const tag = sx > 0 ? 'R' : 'L';
+    const tip = new THREE.Object3D();
+    tip.name = `legBraceTip${tag}`;
+    tip.position.set(sx * 0.07 * s, bAt, 0);
+    upper.add(tip);
+    const br = grp(`legBrace${tag}`);
+    br.position.set(sx * 0.07 * s, A.y, A.z);
+    setDeployData(br, { aim: tip.name, tube: T });
+    root.add(br);
+    br.add(mk([tube([0, 0, 0], [0, T, 0], rr[0], 10), torus(rr[0] * 1.15, 0.004 * s, 4, 12).translate(0, T, 0), sphere(rr[0] * 1.3, 10, 8)], M.satinWhite(), 'braceBarrel'));
+    const st2 = grp('braceStage');
+    setDeployData(st2, {}); // own AO group: it slides inside the barrel
+    br.add(st2);
+    st2.add(mk(tube([0, 0, 0], [0, T, 0], rr[1], 10), M.aluminium(), 'braceMid'));
+    const st3 = grp('braceStage');
+    setDeployData(st3, {});
+    st2.add(st3);
+    st3.add(mk([tube([0, 0, 0], [0, T, 0], rr[2], 8), sphere(rr[2] * 1.9, 10, 8).translate(0, T, 0)], M.chrome(), 'braceRod'));
+  }
   return root;
 }
 

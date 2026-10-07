@@ -155,8 +155,10 @@ const lerp3 = (a: [number, number, number], b: [number, number, number], t: numb
 ];
 
 /** Drive all deployables (legs, solar arrays, chutes) in a part mesh. t = 0 stowed, 1 deployed. */
+const _aim = new THREE.Vector3();
 export function setPartDeploy(root: THREE.Object3D, t: number) {
   const k = Math.max(0, Math.min(1, t));
+  let links: THREE.Object3D[] | undefined;
   root.traverse((o) => {
     const d = o.userData.deploy as DeployData | undefined;
     if (!d) return;
@@ -164,7 +166,23 @@ export function setPartDeploy(root: THREE.Object3D, t: number) {
     if (d.rot0 && d.rot1) o.rotation.fromArray(lerp3(d.rot0, d.rot1, k));
     if (d.scale0 && d.scale1) o.scale.fromArray(lerp3(d.scale0, d.scale1, k));
     if (d.visibleAbove !== undefined) o.visible = k > d.visibleAbove;
+    if (d.aim) (links ??= []).push(o);
   });
+  if (!links) return;
+  // Telescoping links follow their (already posed) attach points exactly.
+  root.updateMatrixWorld(true);
+  for (const o of links) {
+    const d = o.userData.deploy as DeployData;
+    const target = root.getObjectByName(d.aim!);
+    if (!target || !o.parent) continue;
+    o.parent.worldToLocal(target.getWorldPosition(_aim)).sub(o.position);
+    o.rotation.set(Math.atan2(_aim.z, _aim.y), 0, 0);
+    const len = Math.hypot(_aim.y, _aim.z);
+    let stage: THREE.Object3D | undefined = o.children.find((c) => c.name === 'braceStage');
+    const stages: THREE.Object3D[] = [];
+    while (stage) { stages.push(stage); stage = stage.children.find((c) => c.name === 'braceStage'); }
+    for (const st of stages) st.position.y = Math.max(0, (len - (d.tube ?? 0)) / Math.max(1, stages.length));
+  }
 }
 
 /**

@@ -301,6 +301,12 @@ export interface DeployData {
   scale1?: [number, number, number];
   /** Node visible only when t > this. */
   visibleAbove?: number;
+  /**
+   * Telescoping link: after interpolation, rotate about local X so +Y points at the part node named `aim`,
+   * and slide each direct-or-nested child named 'braceStage' so the link (stages of length `tube`) reaches it.
+   */
+  aim?: string;
+  tube?: number;
 }
 
 export function setDeployData(o: THREE.Object3D, d: DeployData) {

@@ -26,6 +26,7 @@ const PREVIEW = [
   ['capsules', 'pod-lantern-1,pod-harbor-3', 0.9, 1],
   ['legs', 'leg-strider,leg-stilt', 0.5, 1],
   ['legs-stowed', 'leg-strider,leg-stilt', 0.5, 0],
+  ['legs-mid', 'leg-strider', 1.2, 0.5],
   ['solar', 'solar-fold,solar-wing,solar-grand-1,solar-patch', 0.35, 1],
   ['couplers', 'dec-2,sep-1,dec-radial,dock-1', 0.7, 1],
   ['aero', 'wing-swept,fin-pivot,ctrl-elevon,wing-delta', 0.8, 1],
