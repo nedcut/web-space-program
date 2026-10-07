@@ -59,6 +59,13 @@ describe('real Earth geography', () => {
       expect(Math.abs(t.heightAt(...point(sign * (90 - 1e-6), lon)) - pole)).toBeLessThan(.1);
     }
   });
+  it('keeps height continuous across internal grid-cell edges', () => {
+    const t = new Universe('real').terrain('earth');
+    for (let x = 100; x < 4000; x += 113) for (const lat of [-30, 28, 45]) {
+      const lon = -180 + (x + .5) * 360 / 4096;
+      expect(Math.abs(t.heightAt(...point(lat, lon - 1e-8)) - t.heightAt(...point(lat, lon + 1e-8)))).toBeLessThan(.01);
+    }
+  });
   it('uses real cover regions and retains every legacy science ID', () => {
     const u = new Universe('real'), t = u.terrain('earth');
     for (const [lat, lon, name] of [[24, 15, 'Deserts'], [-80, 0, 'Ice Caps'], [0, -30, 'Oceans'], [-4, -63, 'Rainforests'], [50, 10, 'Forests']] as const) {

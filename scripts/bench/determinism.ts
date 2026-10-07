@@ -1,3 +1,4 @@
+import '../earth-data/register';
 /** Stable trace hashes for comparison against the parent commit; no renderer or wall clock. */
 import { createHash } from 'node:crypto';
 import { World } from '../../src/game/world';

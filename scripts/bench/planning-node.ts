@@ -1,3 +1,4 @@
+import '../earth-data/register';
 /** Main-thread event-loop proxy using the actual production Web Worker bundle in worker_threads.
  * Run npm run build first, then npx tsx scripts/bench/planning-node.ts.
  * Browser benchmark (Long Tasks API) lives beside this in planning.ts.

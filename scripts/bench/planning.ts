@@ -1,3 +1,4 @@
+import '../earth-data/register';
 /** Browser-only benchmark. Serve with Vite; import /scripts/bench/planning.ts in a blank same-origin page. */
 import { Universe } from '../../src/game/universe';
 import { stateToElements } from '../../src/sim/orbit';
