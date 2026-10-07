@@ -40,11 +40,16 @@ export class SunGlare {
           vec2 p = vNdc;
           vec2 d = (p - uSun) * vec2(uAspect, 1.0);
           float r = length(d);
-          float ang = atan(d.y, d.x);
           // Core glow + wide halo
           float glow = uSize * uSize / (r * r + uSize * uSize * 0.5) * 0.6 + exp(-r * 7.0) * 0.06 + exp(-r * 1.6) * 0.012;
-          // Starburst rays (diffraction spikes)
-          float rays = pow(abs(cos(ang * 3.0)), 60.0) + pow(abs(cos(ang * 3.0 + 0.5236)), 120.0) * 0.6;
+          // Starburst rays (diffraction spikes): |cos 3θ|^60 + 0.6·|cos(3θ + π/6)|^120, with the triple-angle
+          // identities and repeated squaring instead of atan/cos/pow (same values, a fraction of the ALU).
+          vec2 u = d / max(r, 1e-6);
+          float c3 = u.x * (4.0 * u.x * u.x - 3.0), s3 = u.y * (3.0 - 4.0 * u.y * u.y);
+          float a = abs(c3), b = abs(c3 * 0.8660254 - s3 * 0.5);
+          float a4 = a * a; a4 *= a4; float a8 = a4 * a4, a16 = a8 * a8;
+          float b4 = b * b; b4 *= b4; float b8 = b4 * b4, b16 = b8 * b8, b60 = b16 * b16 * b16 * b8 * b4;
+          float rays = (a16 * a16) * a16 * a8 * a4 + b60 * b60 * 0.6;
           rays *= exp(-r * 8.0) * 0.18;
           // Fine streaks
           float streak = exp(-abs(d.y) * 220.0) * exp(-abs(d.x) * 2.5) * 0.25;
@@ -56,7 +61,8 @@ export class SunGlare {
           c += vec3(1.0, 0.75, 0.55) * ghost(p, uSun + axis * 1.7, 0.11, 0.85) * 0.012;
           c += vec3(0.75, 0.7, 1.0) * ghost(p, uSun + axis * 2.2, 0.18, 0.9) * 0.008;
           // Halo ring
-          float ring = exp(-(((length((p - uSun - axis) * vec2(uAspect, 1.0)) - 0.45) * 25.0) * ((length((p - uSun - axis) * vec2(uAspect, 1.0)) - 0.45) * 25.0)));
+          float ringD = (length((p - uSun - axis) * vec2(uAspect, 1.0)) - 0.45) * 25.0;
+          float ring = exp(-ringD * ringD);
           c += vec3(0.6, 0.7, 1.0) * ring * 0.005;
           gl_FragColor = vec4(clamp(c * uIntensity, 0.0, 64.0), 1.0);
         }`,
