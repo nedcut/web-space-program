@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
+import { thermalTexture } from '../src/render/fx/thermalSurface';
 import { blackbody, PartHeat } from '../src/render/fx/PartHeat';
 import { ParticlePool } from '../src/render/fx/ParticlePool';
 import { FlightFx, FX_BUDGET } from '../src/render/fx/FlightFx';
@@ -8,28 +9,33 @@ import { buildMoonLander, buildTender } from '../src/editor/stockCrafts';
 import { PART_CATALOG } from '../src/data/parts';
 import type { PartState } from '../src/sim/vessel/runtime';
 
+function radiance(mesh: THREE.Mesh): number {
+  const slot = mesh.geometry.getAttribute('wspHeatSlot').getX(0);
+  return thermalTexture.image.data[slot * 4];
+}
+
 describe('flight visual effects', () => {
   it('isolates hottest-face emission from shared template materials and other parts', () => {
     const original = new THREE.MeshStandardMaterial();
     const a = new THREE.Mesh(new THREE.BoxGeometry(),original), b = a.clone();
     const heat = new PartHeat(a);
     heat.update({ skinTemperature: [290,290,290,1600,290,290] } as PartState,.1);
-    expect(a.material.emissive.r).toBeGreaterThan(1);
+    expect(radiance(a)).toBeGreaterThan(1);
     expect(b.material.emissive.r).toBe(0);
     expect(original.emissive.r).toBe(0);
     heat.update({ skinTemperature: [290,290,290,290,290,290] } as PartState,.1);
-    expect(a.material.emissive.r).toBe(0);
+    expect(radiance(a)).toBe(0);
     heat.dispose(); original.dispose(); a.geometry.dispose();
   });
   it('retains nozzle heat after shutdown and cools over time', () => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshStandardMaterial()); mesh.name='bellOuter';
     const original=mesh.material, heat=new PartHeat(mesh);
     const part = {skinTemperature:[290],engine:{thrust:100}} as PartState;
-    heat.update(part,10); const peak=mesh.material.emissive.r;
+    heat.update(part,10); const peak=radiance(mesh);
     part.engine!.thrust=0; heat.update(part,.1);
-    expect(mesh.material.emissive.r).toBeGreaterThan(0);
-    expect(mesh.material.emissive.r).toBeLessThan(peak);
-    heat.update(part,120); expect(mesh.material.emissive.r).toBe(0);
+    expect(radiance(mesh)).toBeGreaterThan(0);
+    expect(radiance(mesh)).toBeLessThan(peak);
+    heat.update(part,120); expect(radiance(mesh)).toBe(0);
     heat.dispose(); original.dispose(); mesh.geometry.dispose();
   });
   it('becomes progressively less red with blackbody temperature', () => {

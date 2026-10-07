@@ -86,6 +86,7 @@ export class VesselView {
     for (const p of this.vessel.parts) {
       if (this.parts.has(p.uid)) continue;
       const obj = buildPartMesh(p.def);
+      const heat = new PartHeat(obj);
       const surfaces = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
       obj.traverse((o) => {
         if ((o as THREE.Mesh).isMesh) {
@@ -95,7 +96,6 @@ export class VesselView {
           o.receiveShadow = true;
         }
       });
-      const heat = new PartHeat(obj);
       const plumes: Plume[] = [];
       const eng = p.def.modules.find((m): m is EngineModule => m.type === 'engine');
       if (eng) {

@@ -1,0 +1,79 @@
+import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
+import { PartHeat } from '../src/render/fx/PartHeat';
+import { thermalTexture } from '../src/render/fx/thermalSurface';
+import { batchStaticParts, disposeStaticBatch } from '../src/render/vessel/staticBatch';
+import { VesselView } from '../src/render/vessel/VesselView';
+import { buildVessel } from '../src/sim/vessel';
+import { buildMoonLander } from '../src/editor/stockCrafts';
+import { PART_CATALOG } from '../src/data/parts';
+import type { PartState } from '../src/sim/vessel/runtime';
+
+const hot = { skinTemperature: [290, 290, 290, 1600, 290, 290] } as PartState;
+const radiance = (slot: number) => thermalTexture.image.data[slot * 4];
+
+describe('batched thermal surfaces', () => {
+  it('keeps repeated parts in one instanced draw with independent radiance and a stable shader binding', () => {
+    const geometry = new THREE.BoxGeometry(), material = new THREE.MeshStandardMaterial();
+    const a = new THREE.Mesh(geometry, material), b = new THREE.Mesh(geometry, material);
+    b.position.x = 3;
+    const ah = new PartHeat(a), bh = new PartHeat(b);
+    expect(a.material).toBe(b.material);
+    const batch = batchStaticParts([a, b]);
+    expect(batch.children).toHaveLength(1);
+    const mesh = batch.children[0] as THREE.InstancedMesh;
+    expect(mesh.isInstancedMesh).toBe(true);
+    const slots = mesh.geometry.getAttribute('wspHeatSlot');
+    expect(slots).toBeInstanceOf(THREE.InstancedBufferAttribute);
+    expect(slots.getX(0)).not.toBe(slots.getX(1));
+    ah.update(hot, 1);
+    expect(radiance(slots.getX(0))).toBeGreaterThan(1);
+    expect(radiance(slots.getX(1))).toBe(0);
+    const instanced = mesh.material as THREE.Material;
+    expect(instanced).not.toBe(a.material);
+    expect(instanced.onBeforeCompile).toBe(a.material.onBeforeCompile);
+    expect(instanced.customProgramCacheKey()).toBe(a.material.customProgramCacheKey());
+    const version = instanced.version;
+    ah.update(hot, 1);
+    expect(instanced.version).toBe(version);
+    disposeStaticBatch(batch); ah.dispose(); bh.dispose();
+    expect(radiance(slots.getX(0))).toBe(0);
+    geometry.dispose(); material.dispose();
+  });
+
+  it('preserves thermal indices through a unique-geometry merge', () => {
+    const m = new THREE.MeshStandardMaterial();
+    const a = new THREE.Mesh(new THREE.BoxGeometry(), m);
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(), m);
+    const ah = new PartHeat(a), bh = new PartHeat(b);
+    const slotA = a.geometry.getAttribute('wspHeatSlot').getX(0);
+    const slotB = b.geometry.getAttribute('wspHeatSlot').getX(0);
+    const batch = batchStaticParts([a, b]);
+    expect(batch.children).toHaveLength(1);
+    const slots = (batch.children[0] as THREE.Mesh).geometry.getAttribute('wspHeatSlot');
+    expect(new Set(slots.array)).toEqual(new Set([slotA, slotB]));
+    bh.update(hot, 1);
+    expect(radiance(slotA)).toBe(0); expect(radiance(slotB)).toBeGreaterThan(1);
+    disposeStaticBatch(batch); ah.dispose(); bh.dispose(); m.dispose();
+  });
+
+  it('keeps live heat materials after vessel rebuilding and stress-overlay round trips', () => {
+    const vessel = buildVessel(buildMoonLander(), PART_CATALOG), view = new VesselView(vessel);
+    for (const p of vessel.parts) p.skinTemperature.fill(1600);
+    for (const stress of [false, true, false]) {
+      view.setStressOverlay(stress);
+      view.update({ x: 0, y: 0, z: 0 }, 0, 0, 0.02);
+      let hotMeshes = 0;
+      view.root.traverseVisible(o => {
+        if (!(o instanceof THREE.Mesh) || Array.isArray(o.material) || !(o.material instanceof THREE.MeshStandardMaterial)) return;
+        const slots = o.geometry.getAttribute('wspHeatSlot');
+        if (!slots) return;
+        expect(o.material.name).toContain('#thermal');
+        expect(radiance(slots.getX(0))).toBeGreaterThan(1);
+        hotMeshes++;
+      });
+      if (!stress) expect(hotMeshes).toBeGreaterThan(10);
+    }
+    view.dispose();
+  });
+});

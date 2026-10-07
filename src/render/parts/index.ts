@@ -176,6 +176,8 @@ export function setLightAppearance(root: THREE.Object3D, on: boolean, color = '#
     if (!mat) {
       const prev = (o.userData.baseMat ?? mesh.material) as THREE.MeshStandardMaterial;
       mat = prev.clone();
+      mat.onBeforeCompile = prev.onBeforeCompile;
+      mat.customProgramCacheKey = prev.customProgramCacheKey;
       o.userData.lampMat = mat;
       if (mesh.material === prev) mesh.material = mat;
       if (o.userData.baseMat !== undefined) o.userData.baseMat = mat;
