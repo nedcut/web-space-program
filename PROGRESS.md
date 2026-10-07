@@ -822,3 +822,7 @@ Earlier GPU runs are labelled and archived separately so their revisions cannot 
 Final Ultra pad capture uses the requested Windows `cdp2.mjs` driver; after preparation it confirms the
 exact Ultra Earth grades, 48-quad terrain / 0.75 m spacing, hardware RTX rendering and GL error 0.
 All work is committed on `cx/gfxsettings`; the port-5327 dev/preview server is stopped on completion.
+
+## Loading and main-thread CPU (2026-10-07, cx/perfcpu)
+
+Implementation and repeatable production probes are committed incrementally in the assigned worktree. The editor profile attributes over four seconds to eagerly preparing the entire thumbnail catalogue; preparation now yields between parts and pauses on scene exit. Earth/application downloads overlap, distant flights omit hidden launch scenery, site transforms avoid a duplicate subtree traversal, map warm-up is sliced, and cosmetic scatter no longer blocks flight readiness. Thermal/link bookkeeping skips exact redundant work. Production before/after results and validation are recorded in docs/PERFORMANCE.md; hardware CPU throttling is unreliable on this shared Chrome, so synthetic WSL 4× diagnostics are kept distinct from RTX runs.
