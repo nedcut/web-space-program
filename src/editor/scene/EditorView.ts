@@ -3,7 +3,7 @@ import { isTyping, matches } from '../../input/bindings';
 import * as THREE from 'three';
 import { detachRenderer, noteDfgLut, releaseRenderer } from '../../render/releaseRenderer';
 import { game } from '../../game/store';
-import { QUALITY_PRESETS } from '../../render/core/quality';
+import { getQuality } from '../../render/core/quality';
 import type { PartInstance } from '../../sim/vessel/types';
 import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../../util/quat';
 import { add, sub, v3, type Vec3 } from '../../util/vec3';
@@ -13,7 +13,7 @@ import { surfaceTransform } from '../surface';
 import { createStudioEnvironment } from '../../render/core/studioEnv';
 import { buildHangar, HANGAR, type Hangar } from './hangar';
 import { createPartMesh } from './partMesh';
-import { bakeEngineSoot, releaseSoot, setLightAppearance } from '../../render/parts';
+import { bakeEngineSoot, releaseSoot, setLightAppearance, setPartDetail } from '../../render/parts';
 
 const DEG = Math.PI / 180;
 const SNAP_PX = 64;
@@ -133,13 +133,14 @@ export class EditorView {
 
   constructor(private container: HTMLElement, private session: EditorSession) {
     const quality = game.get().settings.quality;
+    setPartDetail(getQuality(quality).partDetail);
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     const dpr = window.devicePixelRatio || 1;
-    this.renderer.setPixelRatio(Math.min(dpr, QUALITY_PRESETS[quality].maxPixelRatio) * game.get().settings.renderScale);
+    this.renderer.setPixelRatio(Math.min(dpr, getQuality(quality).maxPixelRatio) * game.get().settings.renderScale);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.shadowMap.enabled = game.get().settings.shadows;
+    this.renderer.shadowMap.enabled = getQuality(quality).shadowMapSize > 0;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     // The hall lights and assembled craft are stationary while orbiting the camera.
     // Rebuild their shadow only for assembly/held-part changes, not every safety-net frame.
@@ -161,8 +162,8 @@ export class EditorView {
     // Key: warm, high and ~50 deg to the right of the default camera, so the shadow falls visibly across the floor.
     this.key = new THREE.DirectionalLight(0xfff3e6, 4.1);
     this.key.position.set(KEY_OFFSET.x, KEY_OFFSET.y, KEY_OFFSET.z);
-    this.key.castShadow = game.get().settings.shadows;
-    const sm = quality === 'high' ? 2048 : 1024;
+    this.key.castShadow = getQuality(quality).shadowMapSize > 0;
+    const sm = getQuality(quality).shadowMapSize || 512;
     this.key.shadow.mapSize.set(sm, sm);
     this.key.shadow.bias = -0.0003;
     this.key.shadow.normalBias = 0.03;
@@ -870,6 +871,8 @@ export class EditorView {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     const now = performance.now();
+    const cap = game.get().settings.frameRateCap;
+    if (cap && now - this.last < 1000 / cap - .5) return;
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     const k = 1 - Math.exp(-dt * 12);

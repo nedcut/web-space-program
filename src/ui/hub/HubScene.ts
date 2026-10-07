@@ -221,11 +221,13 @@ export class HubScene {
 
   private frame = (now: number) => {
     this.raf = requestAnimationFrame(this.frame);
+    const cap = game.get().settings.frameRateCap;
+    if (cap && now - this.last < 1000 / cap - .5) return;
     const frameMs = now - this.last;
     const dt = Math.min(0.1, frameMs / 1000);
     this.last = now;
     if (!this.photo.active) this.elapsed += dt;
-    this.pipeline.updateAdaptive(frameMs, game.get().settings.adaptiveQuality && !this.photo.active);
+    this.pipeline.updateAdaptive(frameMs, game.get().settings.adaptiveQuality && !this.photo.active, game.get().settings.frameRateCap);
     this.render(dt);
   };
 

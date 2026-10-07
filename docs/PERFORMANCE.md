@@ -880,8 +880,101 @@ Before/after DPR-2 images and critical review: [ground-art screenshots](screensh
 
 Remaining visual limitations: the coastal height field/hydrology is unchanged; no geographic wetland reconstruction or new distant settlement meshes. Crowns retain a faceted silhouette. The single wide shadow map softens nearby fine shadows compared with a true cascade. Night work lighting is a bounded material wash, not local shadow-casting lights. Existing warm aerial perspective is retained; no extra volumetric fog pass. The city mask is fictional, coast/latitude weighted, and intentionally subtle.
 
+## Adjustable graphics / Ultra — 2026-10-07 (`cx/gfxsettings`)
+
+Ultra is opt-in; first-run GPU tiering still selects Low for weak/integrated hardware or Medium otherwise.
+Graphics profile 2 preserves existing profile-1 settings instead of resetting manual choices. Advanced changes
+persist under the existing settings key. Custom retains its base preset and stores only overrides.
+
+| Preset | Max DPR × scale | AA | Sun shadow | Terrain error / spacing | Sky / aerial samples | Baked width | Stars | Particle pool |
+|---|---|---|---|---|---|---|---|---|
+| Low | 1 × 0.5 | FXAA | off | 6 px / 6 m | 8 / 3 | 512 | 4,000 | 128 |
+| Medium | 2 × 1 | SMAA | 1024² | 3.5 px / 3 m | 16 / 6 | 1024 | 9,000 | 512 |
+| High | 2 × 1 | MSAA 4× + SMAA | 2048² | 2 px / 1.5 m | 24 / 8 | 2048 | 16,000 | 1024 |
+| Ultra | 2 × 1 | MSAA 4× + SMAA | 4096² | 1 px / 0.75 m | 32 / 12 | 4096 | 24,000 | 2048 |
+
+Ultra also increases chunk resolution to 48, scatter radius to 1536 m, cloud cube faces to 2048²,
+and resolved planet-effect sample budgets. Part detail stays High. Earth exposes the exact shared
+texture/atmosphere/cloud/ocean/night-light grades; each preset uses its own grade, with night lights enabled.
+Low retains its legacy clouds-off default (its Earth cloud resource grade is Low); selecting Low cloud quality
+explicitly enables the low-resolution shell. Ocean quality independently selects its aerial sample budget.
+This branch wires existing effects and does not build the realistic Earth artwork.
+
+Advanced controls: render scale 50–150%, Retina limit 1/1.5/2/3, AA off/FXAA/SMAA/MSAA+SMAA,
+shadows off/Low/Medium/High/Ultra, terrain detail, ground clutter/vegetation (including off), atmosphere,
+clouds (including off), Earth texture, ocean, night lights, bloom, stars/Milky Way (including off), particles,
+part detail, 30/60/120/unlimited frame cap, and adaptive resolution. Rows include visible cost explanations
+and title tooltips. Resolution/AA/shadows/bloom/particles are live in flight; resource/geometry changes rebuild
+single-player flight from a snapshot without a page reload. Multiplayer defers structural changes until re-entry.
+Other scenes use new graphics resources on entry. Frame caps pace flight, hub, editor and tracking, and adaptation
+uses the selected cap rather than treating intentional 30 fps pacing as overload. Unlimited retains the existing
+60 fps adaptive-resolution target; turning adaptation off allows full display-rate rendering.
+
+Screenshots and viewport checks: [1024×768](screenshots/gfxsettings/settings-1024x768.png),
+[800×768](screenshots/gfxsettings/settings-800x768.png),
+[lower controls](screenshots/gfxsettings/settings-800x768-lower.png). Both menus fit within the viewport,
+scroll independently of the header, and have no horizontal overflow or clipped selects.
+
+Hardware integration: Windows Chrome over CDP 9333, hardware ANGLE/D3D11 RTX 3060 Ti.
+[Advanced-control checks](performance/gfxsettings/live-controls.json) passed 15 changes;
+[pipeline checks](performance/gfxsettings/pipeline-controls.json) passed scale, bloom, scattering and adaptive on/off.
+Both also exercised all four frame caps, with no browser/GL errors. Observed frame rates can be below a cap;
+this verifies an upper limit, not the ability to achieve 120 fps on this hardware/display.
+Run `scripts/bench/gfxsettings-check.mjs` beside Windows `playwright-core` against the dev server for these
+source-module integration checks (optional third argument `pipeline` skips the advanced-resource checks).
+
+Limits: one sun shadow map (no cascade system); MSAA remains four samples and the device clamps supported
+sample counts. Ultra substantially increases render-target/geometry/texture memory and does not promise
+60 or 120 fps at Retina resolution. Terrain, scatter and larger texture bakes can take time to settle.
+Frame caps limit cadence rather than guaranteeing it. The editor retains its existing native antialiasing
+path rather than the flight HDR/post-processing chain. The 120 Hz control and adaptation budget are covered,
+but an actual ProMotion/Apple-GPU run was not available. No Apple performance claim is made.
 ## Real Earth terrain (2026-10-07, cx/realearth)
 
 The ETOPO sampler replaces many continental/warp/noise evaluations with bilinear int16 lookups and bounded fine detail. Following the batch-mean methodology above, an alternating baseline/current comparison (5 warmups, 9 batches × 8 chunks, 24 quads) measured median **4.193 → 0.712 ms** for the existing Earth chunk, **3.796 → 0.827 ms** for a coastal-face chunk, and **4.489 → 1.222 ms** for a whole-face chunk. p95 improved in every case. Shared host / simultaneous test load; these establish no chunk CPU regression, not a promised FPS uplift. The separate initial existing-harness run measured 2.079 ms before / 0.616 ms after the first integration; use the final paired artifact for comparisons.
 
 Raw samples, exact baseline revision, reproduction and the identical 20-second ascent hashes are in [realearth evidence](screenshots/realearth/README.md). The grid is **16,777,216 bytes** on disk and resident; float64 interpolation uses JS scalars, with no float64 raster copy or extra masks. Ordinary non-isolated browsers retain 16 MiB main + 16 MiB per terrain worker (64 MiB for three workers). Cross-origin-isolated hosts share one 16 MiB buffer; loading temporarily retains the fetched buffer too. Worker messages send the grid only once, independent of LOD and preset registrations. Browser PWA precache includes the grid (about 18.4 MiB total app precache at the initial integration); no optional high-resolution pack is shipped.
+
+### Final merged-code hardware measurements
+
+Revision `e5aaf9af` incorporates main's real Earth geography (`8e91a05d`). Production build, Windows Chrome
+CDP 9333 / ANGLE D3D11 / NVIDIA GeForce RTX 3060 Ti; 1470×920 CSS at DPR 2, adaptive resolution off,
+preset render scales, no cap. Each case has its own browser context and waits 15 seconds after the loading
+screen before a 10-second capture. Orbit is `?flight=stock-kestrel&scenario=orbit`; pad is `?flight=stock-kestrel`.
+GPU columns are the pipeline's **final exponentially smoothed elapsed-query readings**, not medians of raw
+GPU samples. FPS and pacing statistics cover the capture window. All eight cases returned WebGL error 0.
+
+| Preset | Pad GPU ms | Orbit GPU ms | Pad fps | Orbit fps | Pad / orbit draws |
+|---|---:|---:|---:|---:|---:|
+| Low | 1.04 | 0.88 | 52.60 | 59.50 | 220 / 166 |
+| Medium | 6.66 | 4.95 | 25.89 | 28.15 | 704 / 418 |
+| High | 12.89 | 9.10 | 20.67 | 22.61 | 1391 / 710 |
+| Ultra | 19.84 | 10.56 | 15.68 | 25.64 | 2032 / 997 |
+
+Low renders 735×460 pixels; Medium/High/Ultra render 2940×1840. This comparison measures the complete
+preset policies, including Low's reduced resolution. Ultra increases pad geometry to about 16.1 million
+triangles and ~2,032 draws in this capture, versus High's ~7.2 million and ~1,391. The larger 4096-wide
+bake now retains close-up terrain instead of hiding it behind a smooth far sphere. Shared CPU/GPU use,
+background scheduling and remaining terrain/texture work make absolute FPS and small timing differences
+noisy. These are observed costs, not guaranteed 60/120 fps or measurements of Apple hardware.
+
+Raw captures: [Low](performance/gfxsettings/gfxsettings-merged-low-dpr2.json),
+[Medium](performance/gfxsettings/gfxsettings-merged-medium-dpr2.json),
+[High](performance/gfxsettings/gfxsettings-merged-high-dpr2.json),
+[Ultra](performance/gfxsettings/gfxsettings-merged-ultra-dpr2.json). Each has a matching Markdown readout.
+Earlier captures are explicitly archived under `performance/gfxsettings/pre-earth-merge/` and are not the
+final merged-code comparison. Reproduction (Windows driver location and Node match the owner's harness):
+
+```sh
+npm run build
+npx vite preview --host 0.0.0.0 --port 5327 --strictPort
+bash scripts/bench/gpu-bench.sh --base http://<WSL-IP>:5327 --label gfxsettings-merged-ultra \
+  --quality ultra --dpr 2 --cases pad,orbit --seconds 10 --settle 15000 --trace 0
+```
+
+Final merged-code validation: lint, `npx tsc --noEmit`, production build, and full
+`npx vitest run --maxWorkers=2` pass: **109 files / 1,327 tests**, 407.78 s.
+
+Ultra cold readiness in the final harness was about **30.3 s on the pad / 24.8 s in orbit**. Larger
+terrain/texture resources make initial preparation and structural setting rebuilds noticeably slower;
+these startup durations are separate from the steady rendering measurements above.
