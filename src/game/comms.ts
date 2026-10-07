@@ -8,8 +8,8 @@ import { isExtended } from '../sim/vessel/tweaks';
 /** Degrees, body-fixed. Ratings are metres in the playable universe, across scale presets. */
 export const GROUND_STATIONS = [
   { id: 'ground-coastal', name: 'Coastal Launch Complex', lat: LAUNCH_SITE.lat, lon: LAUNCH_SITE.lon, range: 8e12 },
-  { id: 'ground-ochre', name: 'Ochre Plateau Station', lat: -25, lon: 45, range: 8e12 },
-  { id: 'ground-dawn', name: 'Dawn Reach Station', lat: 12, lon: 165, range: 8e12 },
+  { id: 'ground-ochre', name: 'Ochre Plateau Station', lat: 40.4, lon: -4.2, range: 8e12 },
+  { id: 'ground-dawn', name: 'Dawn Reach Station', lat: -35.4, lon: 149.0, range: 8e12 },
 ];
 
 const stationSites = new WeakMap<World['universe'], { direction: ReturnType<typeof latLonToUnit>; altitude: number }[]>();

@@ -1,3 +1,4 @@
+import { loadEarthData } from '../game/earthLoader';
 /**
  * Dev page: visual verification of terrain LOD, atmosphere, rings, sky.
  * URL params (for automated screenshots): body, quality, alt (m), lat, lon, head, pitch, hour, dec, exp, ui=0, fov
@@ -12,6 +13,8 @@ import type { Vec3 } from '../util/vec3';
 import { RenderPipeline, getQuality, createPlanetaryCamera, updatePlanetaryClipping, type QualityId } from '../render/core';
 import { Starfield, SunGlare } from '../render/sky';
 import { PlanetRenderer } from '../render/planet';
+
+await loadEarthData();
 
 const SCALE = SCALE_PRESETS.standard;
 const DEG = Math.PI / 180;

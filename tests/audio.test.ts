@@ -1,6 +1,6 @@
 import { game } from '../src/game/store';
 import { describe, expect, it, vi } from 'vitest';
-import { GameAudio, holdAt, engineLoudness, windGain, transonicBuffeting, distanceGain, dopplerPitch, selectTheme, crossfadeSchedule, type AudioState } from '../src/audio';
+import { GameAudio, engineLoudness, windGain, transonicBuffeting, distanceGain, dopplerPitch, selectTheme, crossfadeSchedule, type AudioState } from '../src/audio';
 
 const state: AudioState = {
   engines: [{ type: 'kerolox', thrustFraction: 1, count: 2 }],
@@ -117,6 +117,31 @@ class ContextDouble {
 }
 
 describe('Web Audio lifecycle', () => {
+  it('switches and stops music when cancelAndHoldAtTime is unavailable', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(Param.prototype, 'cancelAndHoldAtTime')!;
+    Object.defineProperty(Param.prototype, 'cancelAndHoldAtTime', { ...descriptor, value: undefined });
+    vi.stubGlobal('AudioContext', ContextDouble);
+    const audio = new GameAudio();
+    try {
+      audio.setMusic('menu');
+      audio.resume();
+      const ctx = ContextDouble.latest;
+      const graphSize = ctx.nodes.length;
+      await Promise.resolve();
+      const outgoing = ctx.nodes.slice(graphSize).filter(node => node.type === 'sine');
+      expect(outgoing.length).toBeGreaterThan(0);
+      const initial = ctx.nodes.length;
+      expect(() => audio.setMusic('spaceCenter')).not.toThrow();
+      expect(outgoing.every(node => node.stopped)).toBe(true);
+      expect(ctx.nodes.length).toBeGreaterThan(initial);
+      expect(() => audio.setMusic('off')).not.toThrow();
+    } finally {
+      audio.dispose();
+      vi.unstubAllGlobals();
+      Object.defineProperty(Param.prototype, 'cancelAndHoldAtTime', descriptor);
+    }
+  });
+
   it('does not create audio before a gesture and retains the requested theme', () => {
     const construct = vi.fn();
     vi.stubGlobal('AudioContext', class extends ContextDouble { constructor() { super(); construct(); } });
@@ -198,33 +223,6 @@ describe('Web Audio lifecycle', () => {
       vi.unstubAllGlobals();
       vi.useRealTimers();
     }
-  });
-
-  it('switches music themes on Firefox, whose AudioParam has no cancelAndHoldAtTime', () => {
-    vi.useFakeTimers();
-    const proto = Param.prototype as Partial<Param>;
-    const original = proto.cancelAndHoldAtTime;
-    delete proto.cancelAndHoldAtTime;
-    vi.stubGlobal('AudioContext', ContextDouble);
-    let audio: GameAudio | undefined;
-    try {
-      audio = new GameAudio();
-      audio.resume();
-      expect(() => { audio!.setMusic('menu'); vi.advanceTimersByTime(3000); audio!.setMusic('space'); audio!.setMusic('off'); }).not.toThrow();
-    } finally {
-      audio?.dispose(); proto.cancelAndHoldAtTime = original;
-      vi.unstubAllGlobals(); vi.useRealTimers();
-    }
-  });
-
-  it('holdAt freezes the current value where cancelAndHoldAtTime is missing', () => {
-    const calls: string[] = [];
-    const param = { value: 0.37, cancelScheduledValues: (t: number) => calls.push(`cancel@${t}`), setValueAtTime: (v: number, t: number) => calls.push(`set ${v}@${t}`) };
-    holdAt(param as unknown as AudioParam, 5);
-    expect(calls).toEqual(['cancel@5', 'set 0.37@5']);
-    const native = { cancelAndHoldAtTime: vi.fn() };
-    holdAt(native as unknown as AudioParam, 2);
-    expect(native.cancelAndHoldAtTime).toHaveBeenCalledWith(2);
   });
 
   it('remains safe when a browser denies context creation', () => {
