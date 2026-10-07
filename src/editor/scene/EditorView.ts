@@ -144,13 +144,13 @@ export class EditorView {
     // One shadow caster (the key); fill, rim and hemisphere are unshadowed.
     this.envRT = createStudioEnvironment(this.renderer, { variant: 'hangar' });
     this.scene.environment = this.envRT.texture;
-    this.scene.environmentIntensity = 1.0;
+    this.scene.environmentIntensity = 0.85;
     this.scene.background = new THREE.Color(0x0b1018);
     this.scene.fog = new THREE.Fog(0x111823, 75, 180);
-    const hemi = new THREE.HemisphereLight(0xbcd0ec, 0x23262c, 0.35);
+    const hemi = new THREE.HemisphereLight(0xbcd0ec, 0x23262c, 0.16);
     this.scene.add(hemi);
     // Key: warm, high and ~50 deg to the right of the default camera, so the shadow falls visibly across the floor.
-    this.key = new THREE.DirectionalLight(0xfff3e6, 2.2);
+    this.key = new THREE.DirectionalLight(0xfff3e6, 3.3);
     this.key.position.set(KEY_OFFSET.x, KEY_OFFSET.y, KEY_OFFSET.z);
     this.key.castShadow = game.get().settings.shadows;
     const sm = quality === 'high' ? 2048 : 1024;
@@ -161,13 +161,13 @@ export class EditorView {
     const sc = this.key.shadow.camera;
     sc.left = -24; sc.right = 24; sc.top = 28; sc.bottom = -20; sc.near = 5; sc.far = 110;
     this.scene.add(this.key, this.key.target);
-    // Cool fill from the front-left keeps the shadow side readable.
-    const fill = new THREE.DirectionalLight(0xd3e1ff, 0.9);
+    // Cool fill from the front-left keeps the shadow side readable without flattening the form.
+    const fill = new THREE.DirectionalLight(0xd3e1ff, 0.42);
     fill.position.set(-16, 12, 26);
     this.scene.add(fill);
     // Soft warm rim from high behind-left separates silhouettes from the dark hall. High enough that its glint on
     // the glossy floor stays out of the usual camera angles; desaturated so it doesn't tint the floor.
-    const rim = new THREE.DirectionalLight(0xffe6cc, 1.25);
+    const rim = new THREE.DirectionalLight(0xffe6cc, 2.6);
     rim.position.set(-16, 26, -24);
     this.scene.add(rim);
 

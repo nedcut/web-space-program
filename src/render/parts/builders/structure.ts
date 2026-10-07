@@ -32,94 +32,152 @@ function boltRing(r: number, y: number, n: number, size: number): THREE.BufferGe
 
 // ---------------------------------------------------------------------------------------------
 
+/** Vertical soot/grime gradient baked into a body's vertex colour (bottom = engine side). AO multiplies it. */
+export function grimeGradient(g: THREE.BufferGeometry, y0: number, y1: number, amount: number, reach = 0.4): THREE.BufferGeometry {
+  const pos = g.getAttribute('position');
+  const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const t = (pos.getY(i) - y0) / Math.max(1e-3, y1 - y0);
+    const k = Math.max(0, 1 - t / reach);
+    const s = amount * k * k * (3 - 2 * k) + 0.03 * Math.max(0, (t - 0.85) / 0.15); // soot below, faint handling dirt at the top
+    col[i * 3] = 1 - s * 0.92;
+    col[i * 3 + 1] = 1 - s * 0.97;
+    col[i * 3 + 2] = 1 - s;
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return g;
+}
+
+/** Straight run [rOut, y0..y1] subdivided so vertex colour gradients have rings to live on. */
+function shellProfile(r: number, y0: number, y1: number, step = 0.3): Profile {
+  const n = Math.max(3, Math.ceil((y1 - y0) / step));
+  const p: Profile = [];
+  for (let i = 0; i <= n; i++) p.push([r, y0 + ((y1 - y0) * i) / n]);
+  return p;
+}
+
+/** Stepped end frame: lip, machined groove, bolt flange and chamfer. Ordered so normals face outward. */
+function endFrame(r: number, rb: number, yIn: number, yEdge: number): Profile {
+  const s = Math.sign(yEdge - yIn);
+  const b = Math.abs(yEdge - yIn);
+  const p: Profile = [
+    [rb, yIn],
+    [r * 1.003, yIn + s * 0.006],
+    [r * 1.003, yIn + s * b * 0.3],
+    [r * 0.994, yIn + s * (b * 0.3 + 0.006)],
+    [r * 0.994, yIn + s * b * 0.46],
+    [r * 1.006, yIn + s * (b * 0.46 + 0.006)],
+    [r * 1.006, yEdge - s * 0.012],
+    [r * 0.985, yEdge],
+  ];
+  return s > 0 ? p : p.reverse();
+}
+
 export function buildTank(def: PartDef): THREE.Object3D {
   const { rTop: r, h } = cylDims(def);
   const finish = str(def, 'finish', 'white');
   const root = grp('tank');
-  const band = Math.min(0.05 + 0.05 * r, h * 0.12);
+  const band = Math.min(0.07 + 0.06 * r, h * 0.14);
   const rb = r * 0.992;
-  const bodyMat = finish === 'orange' ? M.orangeFoam() : finish === 'steel' ? M.steel() : finish === 'charcoal' ? M.charcoalPanel() : M.whitePanel();
-  const bandMat = finish === 'orange' ? M.aluminium() : finish === 'steel' ? M.gunmetal() : M.gunmetal();
-  const tile = finish === 'orange' ? 1.5 : finish === 'steel' ? 1.2 : 1;
-  const seg = r > 1 ? 64 : 48;
+  const white = finish === 'white';
+  const orange = finish === 'orange';
+  const bodyMat = orange ? M.orangeFoam() : finish === 'steel' ? M.steel() : finish === 'charcoal' ? M.charcoalPanel() : M.whitePanel();
+  const frameMat = white || orange ? M.aluminium() : M.gunmetal();
+  const tile = orange ? 1.5 : finish === 'steel' ? 1.2 : 1;
+  const seg = r > 1.5 ? 112 : r > 0.9 ? 96 : r > 0.5 ? 72 : 56;
+  const yBody0 = -h / 2 + band;
+  const yBody1 = h / 2 - band;
+  const bodyLen = yBody1 - yBody0;
 
-  root.add(mk(lathe([[rb, -h / 2 + band], [rb, h / 2 - band]], { segments: seg, tile, vOffset: 0.5 * tile }), bodyMat, 'body'));
-  // end frames
-  const ring = (y0: number, y1: number, top: boolean): Profile => {
-    const yEdge = top ? y1 : y0;
-    const yIn = top ? y0 : y1;
-    const pts: Profile = [
-      [rb, yIn],
-      [r, yIn + (top ? 0.004 : -0.004)],
-      [r, yEdge + (top ? -0.012 : 0.012)],
-      [r * 0.985, yEdge],
-    ];
-    return top ? pts : pts.reverse();
-  };
-  root.add(mk([lathe(ring(h / 2 - band, h / 2, true), { segments: seg }), lathe(ring(-h / 2, -h / 2 + band, false), { segments: seg })], bandMat, 'frames'));
+  const body = lathe(shellProfile(rb, yBody0, yBody1), { segments: seg, tile, vOffset: 0.5 * tile });
+  root.add(mk(grimeGradient(body, yBody0, yBody1, orange ? 0.22 : white ? 0.3 : 0.16), bodyMat, 'body'));
+  root.add(mk([lathe(endFrame(r, rb, yBody1, h / 2), { segments: seg }), lathe(endFrame(r, rb, yBody0, -h / 2), { segments: seg })], frameMat, 'frames'));
   root.add(mk([bulkhead(r * 0.985, h / 2, 1, seg), bulkhead(r * 0.985, -h / 2, -1, seg)], M.darkMetal(), 'bulkheads'));
 
-  // fasteners on the frames
-  const nb = Math.round(14 * r + 8);
-  root.add(mk([...boltRing(r, h / 2 - band * 0.5, nb, 0.008 + 0.004 * r), ...boltRing(r, -h / 2 + band * 0.5, nb, 0.008 + 0.004 * r)], M.chrome(), 'bolts'));
+  // fasteners on the bolt flanges
+  const nb = Math.round(16 * r + 10);
+  const bs = 0.009 + 0.005 * r;
+  root.add(mk([...boltRing(r * 1.006, h / 2 - band * 0.3, nb, bs), ...boltRing(r * 1.006, -h / 2 + band * 0.3, nb, bs)], M.chrome(), 'bolts'));
 
-  const details: THREE.BufferGeometry[] = [];
-  const bodyLen = h - band * 2;
-  if (finish === 'white') {
+  // raised weld lands (white/charcoal) or external hat stringers (charcoal intertank look)
+  const paintDetail: THREE.BufferGeometry[] = [];
+  if (!orange && finish !== 'steel') {
+    const lands = Math.floor(bodyLen / 1.3);
+    for (let i = 1; i <= lands; i++) {
+      const y = yBody0 + (bodyLen * i) / (lands + 1);
+      const w = 0.028 + 0.008 * r;
+      paintDetail.push(lathe([[rb, y - w], [rb + 0.0045, y - w + 0.005], [rb + 0.0045, y + w - 0.005], [rb, y + w]], { segments: seg, tile }));
+    }
+  }
+  if (finish === 'charcoal') {
+    const n = Math.max(12, Math.round((2 * PI * r) / 0.17));
+    const s = box(0.04, bodyLen - 0.02, 0.022, 0.5);
+    s.translate(0, 0, rb + 0.008);
+    paintDetail.push(...around(s, n, 0, PI / n));
+  }
+  if (paintDetail.length) root.add(mk(paintDetail, bodyMat, 'skinDetail'));
+
+  // cable raceway with tie-down straps and a pressurisation line in clamps
+  const phiRw = 0.72 * PI; // beside the insignia, clear of the front markings
+  const rwW = 0.07 + 0.05 * r;
+  const rwD = 0.03 + 0.01 * r;
+  const rwLen = h - 0.03;
+  const tray: THREE.BufferGeometry[] = [];
+  const t0 = box(rwW, rwLen, rwD, 0.5);
+  t0.translate(0, 0, rb + rwD / 2 - 0.003);
+  tray.push(t0);
+  const straps: THREE.BufferGeometry[] = [];
+  const nStraps = Math.max(2, Math.round(rwLen / 0.45));
+  for (let i = 0; i < nStraps; i++) {
+    const y = -rwLen / 2 + (rwLen * (i + 0.5)) / nStraps;
+    const st = box(rwW * 1.22, 0.028, rwD + 0.012);
+    st.translate(0, y, rb + rwD / 2 + 0.002);
+    straps.push(st);
+  }
+  const pr = orange ? 0.035 + 0.02 * r : 0.016 + 0.01 * r;
+  const pipeOff = rwW / 2 + pr + 0.05;
+  const lineR = rb + pr + 0.012;
+  const line = cyl(pr, pr, h - 0.01, orange ? 14 : 10);
+  line.translate(pipeOff, 0, lineR);
+  const clamps: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < nStraps; i++) {
+    const y = -rwLen / 2 + (rwLen * (i + 0.5)) / nStraps;
+    const c = box(pr * 2.6, 0.035, pr + 0.02);
+    c.translate(pipeOff, y, rb + (pr + 0.02) / 2);
+    clamps.push(c);
+    const ring = torus(pr * 1.12, 0.006 + pr * 0.12, 4, 14);
+    ring.translate(pipeOff, y, lineR);
+    clamps.push(ring);
+  }
+  for (const g of [...tray, ...straps, line, ...clamps]) g.rotateY(phiRw);
+  root.add(mk(tray, orange ? M.orangeFoam() : finish === 'charcoal' ? M.gunmetal() : M.greyPanel(), 'raceway'));
+  root.add(mk([...straps, ...clamps], M.gunmetal(), 'clamps'));
+  root.add(mk(line, orange ? M.orangeFoam() : M.aluminium(), 'pressLine'));
+
+  if (white) {
     const livery: THREE.BufferGeometry[] = [];
     const lr = r * 0.9945;
     if (h / r > 3.5) {
       // roll-pattern quadrants
-      const y1 = h / 2 - band - 0.05;
+      const y1 = yBody1 - 0.05;
       const y0 = y1 - bodyLen * 0.28;
-      livery.push(lathe([[lr, y0], [lr, y1]], { segments: 12, phiStart: 0, phiLength: PI / 2, vOffset: 0.5 }));
-      livery.push(lathe([[lr, y0], [lr, y1]], { segments: 12, phiStart: PI, phiLength: PI / 2, vOffset: 0.5 }));
-      const z1 = -h / 2 + band + 0.05 + bodyLen * 0.12;
-      const z0 = -h / 2 + band + 0.05;
-      livery.push(lathe([[lr, z0], [lr, z1]], { segments: 12, phiStart: PI / 2, phiLength: PI / 2, vOffset: 0.5 }));
-      livery.push(lathe([[lr, z0], [lr, z1]], { segments: 12, phiStart: (3 * PI) / 2, phiLength: PI / 2, vOffset: 0.5 }));
+      livery.push(lathe([[lr, y0], [lr, y1]], { segments: 16, phiStart: 0, phiLength: PI / 2, vOffset: 0.5 }));
+      livery.push(lathe([[lr, y0], [lr, y1]], { segments: 16, phiStart: PI, phiLength: PI / 2, vOffset: 0.5 }));
+      const z1 = yBody0 + 0.05 + bodyLen * 0.12;
+      const z0 = yBody0 + 0.05;
+      livery.push(lathe([[lr, z0], [lr, z1]], { segments: 16, phiStart: PI / 2, phiLength: PI / 2, vOffset: 0.5 }));
+      livery.push(lathe([[lr, z0], [lr, z1]], { segments: 16, phiStart: (3 * PI) / 2, phiLength: PI / 2, vOffset: 0.5 }));
     } else {
-      const y = h / 2 - band - 0.04 - r * 0.06;
-      for (const dy of [0, -0.06 - r * 0.04]) livery.push(lathe([[lr, y + dy - 0.015 - r * 0.01], [lr, y + dy]], { segments: seg }));
+      const y = yBody1 - 0.05 - r * 0.06;
+      for (const dy of [0, -0.07 - r * 0.04]) livery.push(lathe([[lr, y + dy - 0.018 - r * 0.012], [lr, y + dy]], { segments: seg }));
     }
     root.add(mk(livery, M.charcoalPanel(), 'livery'));
-    if (r >= 0.6) {
-      const rw = box(0.07 * r + 0.03, bodyLen - 0.04, 0.03);
-      rw.translate(0, 0, rb + 0.012);
-      rw.rotateY(PI * 0.75);
-      details.push(rw);
-    }
-  } else if (finish === 'orange') {
-    // cable raceway and an insulated propellant feedline
-    const rw = box(0.12 * r, bodyLen, 0.05);
-    rw.translate(0, 0, rb + 0.02);
-    details.push(rw);
-    const pr = 0.045 * r;
-    const feed = cyl(pr, pr, h - 0.02, 12);
-    feed.translate(r + pr * 0.4, 0, 0);
-    const brackets = [-0.35, 0, 0.35].map((f) => {
-      const b = box(pr * 3.2, 0.04, pr * 2);
-      b.translate(r - pr * 0.4, f * h, 0);
-      return b;
-    });
-    root.add(mk(feed, M.orangeFoam(), 'feedline'));
-    root.add(mk(brackets, M.aluminium()));
-  } else if (finish === 'steel') {
-    const pr = 0.04 * r;
-    const conduit = cyl(pr, pr, h - band * 2, 10);
-    conduit.translate(0, 0, r + pr * 0.3);
-    details.push(conduit);
-    const chine = box(0.05, bodyLen * 0.9, 0.02);
-    chine.translate(0, 0, rb + 0.008);
-    chine.rotateY(PI);
-    details.push(chine);
   }
-  if (details.length) root.add(mk(details, finish === 'steel' ? M.steel() : M.gunmetal(), 'details'));
-  tankMarkings(def, root, rb, h / 2 - band, -h / 2 + band, finish);
+  tankMarkings(def, root, rb, yBody1, yBody0, finish);
   return root;
 }
 
-/** Manufacturer badge, part plate, agency insignia and propellant stencils on a tank body. */
+/** Manufacturer badge, part plate, program wordmark/flag and propellant stencils on a tank body. */
 function tankMarkings(def: PartDef, root: THREE.Object3D, rb: number, yTop: number, yBot: number, finish: string) {
   const D = new Markings(def);
   const dark = finish === 'charcoal';
@@ -127,7 +185,7 @@ function tankMarkings(def: PartDef, root: THREE.Object3D, rb: number, yTop: numb
   const lo = yBot + 0.03;
   const hi = yTop - 0.03;
   const span = hi - lo;
-  const r = rb;
+  const r = rb + 0.003; // clear of the raised weld lands
   if (span < 0.15) return;
   const badge = dark ? D.badgeDark : D.badge;
   if (span > 1.1) {
@@ -154,6 +212,18 @@ function tankMarkings(def: PartDef, root: THREE.Object3D, rb: number, yTop: numb
     D.cyl(r, ox, { y: hi - ht * 1.2, phi: PI * 0.25, height: ht });
     D.cyl(r, fu, { y: lo + hp * 2 + ht, phi: PI * 0.25, height: ht });
   }
+  if (finish !== 'steel' && span > 1.6 && r > 0.45) {
+    // program wordmark down the front (between the roll-pattern blocks) with the flag above it
+    const word = decals.text('WEB SPACE PROGRAM', { color: dark ? '#eceae4' : finish === 'orange' ? '#1a2230' : '#1d3f78', weight: 900 });
+    const mid0 = lo + span * 0.16;
+    const mid1 = hi - span * 0.32;
+    const fl = decals.flag();
+    const hf = Math.min(0.16 + 0.12 * r, (mid1 - mid0) * 0.2);
+    const hw = Markings.fit(word, 0.09 + 0.09 * r, (mid1 - mid0 - hf * 1.4) * 0.95);
+    const lw = hw * word.aspect;
+    D.cyl(r, word, { y: mid0 + lw / 2, phi: PI * 0.07, height: hw, vertical: true });
+    D.cyl(r, fl, { y: mid0 + lw + hf * 0.75, phi: PI * 0.07, height: hf });
+  }
   D.addTo(root);
 }
 
@@ -163,7 +233,19 @@ export function buildAdapter(def: PartDef): THREE.Object3D {
   const { rTop, rBot, h } = cylDims(def);
   const root = grp('adapter');
   const f = 0.035;
-  root.add(mk(lathe([[rBot * 0.995, -h / 2 + f], [rTop * 0.995, h / 2 - f]], { segments: 56, tile: 0.8 }), M.charcoalPanel(), 'body'));
+  const seg = Math.max(rTop, rBot) > 0.9 ? 96 : 72;
+  const y0 = -h / 2 + f, y1 = h / 2 - f;
+  const n = Math.max(3, Math.ceil((y1 - y0) / 0.3));
+  const prof: Profile = [];
+  for (let i = 0; i <= n; i++) prof.push([(rBot + ((rTop - rBot) * i) / n) * 0.995, y0 + ((y1 - y0) * i) / n]);
+  root.add(mk(grimeGradient(lathe(prof, { segments: seg, tile: 0.8 }), y0, y1, 0.2, 0.5), M.charcoalPanel(), 'body'));
+  // external hat stringers along the slant
+  const nS = Math.max(12, Math.round((2 * PI * Math.max(rTop, rBot)) / 0.16));
+  const slant = Math.atan2(rBot - rTop, y1 - y0);
+  const len = (y1 - y0) / Math.cos(slant) - 0.02;
+  const st = box(0.036, len, 0.02, 0.5).rotateX(-slant);
+  st.translate(0, 0, (rTop + rBot) / 2 * 0.995 + 0.007);
+  root.add(mk(around(st, nS, 0, PI / nS), M.charcoalPanel(), 'stringers'));
   root.add(
     mk(
       [
@@ -178,7 +260,7 @@ export function buildAdapter(def: PartDef): THREE.Object3D {
   const t0 = 0.42;
   const t1 = 0.52;
   const ry = (t: number) => rBot + (rTop - rBot) * t;
-  root.add(mk(lathe([[ry(t0) * 0.999 + 0.002, -h / 2 + h * t0], [ry(t1) * 0.999 + 0.002, -h / 2 + h * t1]], { segments: 56 }), M.satinWhite(), 'stripe'));
+  root.add(mk(lathe([[ry(t0) * 0.999 + 0.02, -h / 2 + h * t0], [ry(t1) * 0.999 + 0.02, -h / 2 + h * t1]], { segments: seg }), M.satinWhite(), 'stripe'));
   root.add(mk([bulkhead(rTop * 0.98, h / 2, 1), bulkhead(rBot * 0.98, -h / 2, -1)], M.darkMetal()));
   root.add(mk([...boltRing(rTop, h / 2 - f / 2, Math.round(20 * rTop + 8), 0.009), ...boltRing(rBot, -h / 2 + f / 2, Math.round(20 * rBot + 8), 0.009)], M.chrome()));
   const D = new Markings(def);

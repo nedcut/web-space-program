@@ -9,7 +9,7 @@
  */
 import { Field, cavityAO, clamp01, fbm, fract, gridDist, grayImg, hash2, mix, normalImg, ormImg, rgbImg, ridge, ridged, smooth, sstep, vnoise, voronoi, type Img } from './noise';
 
-export const TEX_VERSION = 8;
+export const TEX_VERSION = 10;
 
 export type Channel = 'albedo' | 'normal' | 'orm' | 'emissive';
 export type TexData = Partial<Record<Channel, Img>>;
@@ -30,87 +30,123 @@ export interface Recipe {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Painted aluminium skin (white thermal paint family). 1 m tile: panel seams every 0.5 m around,
- * a circumferential weld at v = 0.5, panel joint at v = 0, rivet rows beside every seam, a screwed
- * access panel, gentle pillowing between four stringers, grime streaks below seams and chips.
+ * Painted aluminium skin (white thermal paint family). One tile = 2 m × 2 m (materials repeat it at 0.5, so
+ * part UVs stay metres): 4 × 2 staggered panels of 0.5 m × 1 m, each with its own paint tone, warmth and gloss,
+ * 8 mm seams with rolled lips, rivet rows, doubler plates, one screwed access hatch, stencil data blocks,
+ * grime running down from the seams and a few chips. Seams, tones and gloss are sized to read at 10–20 m.
  */
 function panel(): TexData {
-  const N = 512;
-  const rivetRow = (ds: number, along: number, pitch: number, off: number) => {
-    const dx = Math.abs(ds) - off;
-    const dy = (fract(along * pitch) - 0.5) / pitch;
-    const d = Math.hypot(dx, dy);
-    return d < 0.0032 ? smooth(1 - d / 0.0032) : 0;
+  const N = 1024;
+  const M = 2; // metres per tile
+  const cell = (u: number, v: number) => {
+    const col = Math.floor(u * 4) & 3;
+    const vv = v + (col & 1 ? 0.25 : 0);
+    const row = Math.floor(vv * 2) & 1;
+    const fu = fract(u * 4);
+    const fv = fract(vv * 2);
+    const du = Math.min(fu, 1 - fu) * 0.5; // metres to the vertical seam
+    const dv = Math.min(fv, 1 - fv) * 1; // metres to the horizontal seam
+    return { col, row, fu, fv, du, dv, id: col * 2 + row };
   };
-  const seamU = (u: number) => {
-    const s = fract(u * 2);
-    return (s < 0.5 ? s : s - 1) / 2; // signed metres from the nearest vertical seam
+  const rivets = (c: ReturnType<typeof cell>) => {
+    let h = 0;
+    const r = 0.0035;
+    // rows 16 mm either side of each seam, 45 mm pitch
+    const along = (d: number, t: number, len: number) => {
+      const dd = Math.abs(d - 0.016);
+      if (dd > r) return 0;
+      const q = (fract((t * len) / 0.045) - 0.5) * 0.045;
+      const dist = Math.hypot(dd, q);
+      return dist < r ? smooth(1 - dist / r) : 0;
+    };
+    h = Math.max(along(c.du, c.fv, 1), along(c.dv, c.fu, 0.5));
+    return h;
   };
-  const seamV = (v: number) => {
-    const s = fract(v);
-    return s < 0.5 ? s : s - 1;
+  const hatch = (c: ReturnType<typeof cell>) => {
+    if (c.id !== 5) return 1;
+    const x = (c.fu - 0.5) * 0.5;
+    const y = (c.fv - 0.32) * 1;
+    const qx = Math.abs(x) - 0.09 + 0.014;
+    const qy = Math.abs(y) - 0.11 + 0.014;
+    return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - 0.014;
   };
-  const inAccess = (u: number, v: number) => {
-    const cx = 0.375;
-    const cy = 0.22;
-    const hw = 0.085;
-    const hh = 0.1;
-    const qx = Math.abs(u - cx) - hw + 0.012;
-    const qy = Math.abs(v - cy) - hh + 0.012;
-    const d = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - 0.012;
-    return d; // signed distance to the rounded rectangle
+  const doubler = (c: ReturnType<typeof cell>) => {
+    if (hash2(c.id, 3, 801) < 0.62) return 1;
+    const x = Math.min(c.fu, 1 - c.fu) * 0.5;
+    const y = Math.min(c.fv, 1 - c.fv) * 1;
+    return Math.min(x - 0.045, y - 0.06); // >0 inside the plate
   };
   const height = new Field(N, N).fill((u, v) => {
-    let h = 0.08 * Math.sin(Math.PI * fract(u * 4)); // pillowing between stringers
-    const su = seamU(u);
-    const sv = seamV(v);
-    h -= 0.22 * ridge(Math.abs(su), 0.0022);
-    h -= 0.22 * ridge(Math.abs(sv), 0.0022);
-    const dw = Math.abs(v - 0.5);
-    h += 0.3 * ridge(dw, 0.0035) - 0.2 * ridge(Math.abs(dw - 0.006), 0.0025);
-    h += 0.18 * rivetRow(su, v, 40, 0.014);
-    h += 0.18 * rivetRow(sv, u, 40, 0.014);
-    const ad = inAccess(u, v);
-    h -= 0.45 * ridge(Math.abs(ad), 0.002);
-    if (ad < 0) h += 0.03;
-    // access panel screws
-    for (const [px, py] of [[0.3, 0.13], [0.45, 0.13], [0.3, 0.31], [0.45, 0.31]]) {
-      const d = Math.hypot(u - px, v - py);
-      if (d < 0.004) h += 0.35 * smooth(1 - d / 0.004) - (d < 0.0012 ? 0.3 : 0);
-    }
-    h += 0.008 * fbm(u, v, 32, 3, 3);
+    const c = cell(u, v);
+    const sd = Math.min(c.du, c.dv);
+    let h = 0.05 * Math.pow(Math.sin(Math.PI * c.fu) * Math.sin(Math.PI * c.fv), 0.4); // oil-canning
+    h -= 0.7 * ridge(sd, 0.0045);
+    h += 0.12 * ridge(Math.abs(sd - 0.008), 0.003);
+    h += 0.3 * rivets(c);
+    const d = doubler(c);
+    if (d > 0 && d < 1) h += 0.06 * sstep(0, 0.004, d);
+    const hd = hatch(c);
+    h -= 0.5 * ridge(Math.abs(hd), 0.0025);
+    if (hd < 0) h += 0.025;
+    if (c.id === 5)
+      for (const [px, py] of [[-0.07, -0.09], [0.07, -0.09], [-0.07, 0.09], [0.07, 0.09], [0, -0.09], [0, 0.09]]) {
+        const dd = Math.hypot((c.fu - 0.5) * 0.5 - px, (c.fv - 0.32) - py);
+        if (dd < 0.005) h += 0.35 * smooth(1 - dd / 0.005) - (dd < 0.0015 ? 0.3 : 0);
+      }
+    h += 0.01 * fbm(u, v, 48, 3, 3) * M;
     return h;
   });
   const grime = new Field(N, N);
   const chip = new Field(N, N);
+  const tone = new Field(N, N);
   const albedo = rgbImg(N, N, (u, v, out, x, y) => {
-    const su = Math.abs(seamU(u));
-    const sv = Math.abs(seamV(v));
-    // streaks run downwards (-v) from horizontal seams
-    const below = Math.min(fract(0.5 - v + 1), fract(1 - v));
-    const fall = Math.exp(-below * 5);
-    const streak = sstep(0.5, 0.85, fbm(u, v, 48, 3, 11, 2)) * (0.35 + 0.65 * fall);
-    const smudge = sstep(0.45, 0.8, fbm(u, v, 5, 4, 5));
-    const g = clamp01(streak * 0.55 + smudge * 0.35);
-    grime.data[y * N + x] = g;
-    const near = Math.min(su, sv);
-    const c = near < 0.009 && fbm(u, v, 64, 3, 91) > 0.82 ? 1 : 0;
-    chip.data[y * N + x] = c;
-    if (c) {
-      out[0] = 0.62;
-      out[1] = 0.63;
-      out[2] = 0.65;
+    const c = cell(u, v);
+    const i = y * N + x;
+    const sd = Math.min(c.du, c.dv);
+    const pt = hash2(c.id, 7, 811);
+    const warm = (hash2(c.id, 9, 812) - 0.5) * 0.035;
+    tone.data[i] = pt;
+    // streaks fall from the seam at the top of each panel (+v is up the part)
+    const below = (1 - c.fv) * 1;
+    const fall = Math.exp(-below * 2.4);
+    const streak = sstep(0.52, 0.86, fbm(u, v, 96, 3, 11, 3)) * (0.25 + 0.75 * fall);
+    const smudge = sstep(0.5, 0.82, fbm(u, v, 6, 4, 5));
+    const g = clamp01(streak * 0.6 + smudge * 0.35);
+    grime.data[i] = g;
+    const ch = sd < 0.012 && fbm(u, v, 96, 3, 91) > 0.8 ? 1 : 0;
+    chip.data[i] = ch;
+    if (ch) {
+      out[0] = 0.6; out[1] = 0.61; out[2] = 0.63;
       return;
     }
-    const tone = 0.965 - 0.035 * fbm(u, v, 4, 3, 7);
-    const k = tone * (1 - 0.10 * g) - 0.035 * ridge(Math.abs(v - 0.5), 0.006);
-    out[0] = k;
-    out[1] = k * 0.995;
-    out[2] = k * 0.985 - 0.02 * g;
+    let k = (0.85 + 0.15 * pt) * (1 - 0.035 * fbm(u, v, 8, 3, 7));
+    k *= 1 - 0.13 * g;
+    k *= 1 - 0.42 * ridge(sd, 0.006) - 0.08 * ridge(sd, 0.02);
+    const hd = hatch(c);
+    k *= 1 - 0.3 * ridge(Math.abs(hd), 0.004);
+    // stencilled data blocks: rows of small ink marks on some panels
+    if (hash2(c.id, 5, 813) > 0.5) {
+      const lx = c.fu * 0.5 - 0.07;
+      const ly = (c.fv - 0.86) * 1;
+      if (lx > 0 && lx < 0.2 && ly > -0.06 && ly < 0.0) {
+        const rowI = Math.floor(-ly / 0.02);
+        const inRow = fract(-ly / 0.02) > 0.3;
+        const ci = Math.floor(lx / 0.014);
+        const inChar = fract(lx / 0.014) < 0.72;
+        const len = rowI === 0 ? 14 : rowI === 1 ? 9 : 11;
+        if (inRow && inChar && ci < len && hash2(ci + rowI * 17, c.id, 814) > 0.18) k *= 0.3;
+      }
+    }
+    out[0] = k * (1 + warm);
+    out[1] = k * (0.997 + warm * 0.2);
+    out[2] = k * (0.985 - warm) - 0.025 * g;
   });
-  const ao = cavityAO(height, 2, 1.4, 0.78);
-  const rough = new Field(N, N).fill((u, v, x, y) => 0.36 + 0.1 * fbm(u, v, 12, 4, 21) + 0.22 * grime.data[y * N + x] - 0.1 * chip.data[y * N + x]);
-  return { albedo, normal: normalImg(height, 2.2), orm: ormImg(ao, rough, chip, N, N) };
+  const ao = cavityAO(height, 3, 1.6, 0.62);
+  const rough = new Field(N, N).fill((u, v, x, y) => {
+    const i = y * N + x;
+    return 0.24 + 0.2 * tone.data[i] + 0.06 * fbm(u, v, 16, 4, 21) + 0.25 * grime.data[i] - 0.1 * chip.data[i];
+  });
+  return { albedo, normal: normalImg(height, 2.6), orm: ormImg(ao, rough, chip, N, N) };
 }
 
 /**
@@ -568,7 +604,7 @@ function treadPlate(): TexData {
 // ---------------------------------------------------------------------------------------------
 
 export const RECIPES: Record<string, Recipe> = {
-  panel: { size: 512, channels: ['albedo', 'normal', 'orm'], make: panel },
+  panel: { size: 1024, channels: ['albedo', 'normal', 'orm'], make: panel },
   foam: { avg: [0.8, 0.4, 0.15], size: 512, channels: ['albedo', 'normal', 'orm'], make: foam },
   brushed: { size: 512, channels: ['albedo', 'normal', 'orm'], metal: 1, make: brushed },
   metal: { size: 256, channels: ['albedo', 'normal', 'orm'], metal: 1, make: metal },

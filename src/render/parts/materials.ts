@@ -80,11 +80,11 @@ const metal = (key: string, set: string, color: number, rough: number, o: { norm
 export const M = {
   // --- white thermal paint family -------------------------------------------------------------
   /** Gloss-white painted aluminium with panel lines, rivets, welds and light grime. */
-  whitePanel: () => paint('whitePanel', 'panel', 0xf2f1ec, { normal: 0.55, cc: 0.2, ccRough: 0.3 }),
+  whitePanel: () => paint('whitePanel', 'panel', 0xf4f3ee, { normal: 1, cc: 0.08, ccRough: 0.25, tile: 0.5 }),
   /** Charcoal painted panels (interstages, adapters, skirts). */
-  charcoalPanel: () => paint('charcoalPanel', 'panel', 0x2f3237, { normal: 0.55, cc: 0.2, ccRough: 0.35 }),
+  charcoalPanel: () => paint('charcoalPanel', 'panel', 0x2f3237, { normal: 1, cc: 0.12, ccRough: 0.3, tile: 0.5 }),
   /** Light-grey airframe panels (wings, fins). */
-  greyPanel: () => paint('greyPanel', 'panel', 0xc6c9ce, { normal: 0.7, cc: 0.3 }),
+  greyPanel: () => paint('greyPanel', 'panel', 0xc6c9ce, { normal: 1, cc: 0.15, tile: 0.5 }),
   /** Smooth satin-white composite/paint. */
   satinWhite: () => paint('satinWhite', 'smooth', 0xf3f2ee, { normal: 0.5, cc: 0.45, ccRough: 0.18 }),
   blackPaint: () => paint('blackPaint', 'smooth', 0x18191c, { normal: 0.4, cc: 0.3, ccRough: 0.3 }),

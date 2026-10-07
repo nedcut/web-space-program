@@ -248,6 +248,40 @@ export const decals = {
   insignia(): Region {
     return decals.logo('program');
   },
+  /** Program flag (original): navy field, sky-blue hoist band, white orbit sweep and star. */
+  flag(): Region {
+    const w = 192;
+    const h = 120;
+    return alloc('flag', w, h, (c, x, y) => {
+      c.fillStyle = '#1a2a48';
+      c.fillRect(x, y, w, h);
+      c.fillStyle = '#2f8fd6';
+      c.fillRect(x, y, w * 0.24, h);
+      c.fillStyle = '#e8b21c';
+      c.fillRect(x + w * 0.24, y, w * 0.035, h);
+      c.strokeStyle = '#f4f3ee';
+      c.lineWidth = 9;
+      c.beginPath();
+      c.ellipse(x + w * 0.64, y + h * 0.56, w * 0.27, h * 0.2, -0.35, 0, Math.PI * 2);
+      c.stroke();
+      c.fillStyle = '#2f8fd6';
+      c.beginPath();
+      c.arc(x + w * 0.62, y + h * 0.58, h * 0.17, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = '#f4f3ee';
+      c.beginPath();
+      const sx = x + w * 0.84, sy = y + h * 0.24;
+      for (let i = 0; i < 10; i++) {
+        const r = i % 2 ? 6 : 15;
+        const a = -Math.PI / 2 + (i * Math.PI) / 5;
+        if (i) c.lineTo(sx + Math.cos(a) * r, sy + Math.sin(a) * r);
+        else c.moveTo(sx + Math.cos(a) * r, sy + Math.sin(a) * r);
+      }
+      c.closePath();
+      c.fill();
+      wear(c, x, y, w, h, 0.35, 4242);
+    }, w / h);
+  },
   symbol(kind: 'warn' | 'arrow' | 'target' | 'lift' | 'ground'): Region {
     const S = 128;
     return alloc(`sym:${kind}`, S, S, (c, x, y) => {
