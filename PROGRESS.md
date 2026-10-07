@@ -769,4 +769,5 @@ Added original branched coastal vegetation with wind and fading LOD, warmer deta
 - **Soot now follows the engines.** It is baked per craft around each nozzle and in the plume path onto the stage below, scaled by engine size. Parts away from engines stay clean (editor and flight).
 - Real RTX 3060 Ti, pad, DPR 2: the paired GPU delta vs main is **+0.20 ms** over 600 pairs (+0.33/+0.35 ms in shorter runs; budget +0.4 ms). The material set is unchanged at 51, with 0 program re-resolutions and no new programs. Selene goes from 84k to 112k triangles; every part stays under the 8.5k High budget, and Low is now tested too.
 - Before/after (including a Selene lander on the Moon) are in `docs/screenshots/partsart3/` (see its README for crops, numbers and known limits).
+- Current main merged; lint, typecheck, **107 files / 1,296 tests** and the production build pass.
 
