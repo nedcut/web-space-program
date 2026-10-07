@@ -332,6 +332,10 @@ if (cases.includes('journey')) {
       f.startAssist('orbit');
       f.world.warp = { mode: 'physics', index: 3 };
       window.__journeyStart = f.world.ut;
+      window.__game.set({ settings: { ...window.__game.get().settings, autoSaveInterval: 15 } });
+      // Include actual map entry/exit while guidance, staging and autosave continue.
+      setTimeout(() => f.toggleMap(), 15000);
+      setTimeout(() => f.toggleMap(), 18000);
     });
   }, 0);
   // A bounded run is not automatically a successful orbit; retain its actual final state.
