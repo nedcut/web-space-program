@@ -218,8 +218,8 @@ export class RenderPipeline {
     this.frameStart = performance.now();
   }
 
-  /** Internal 3D resolution as a fraction of the canvas resolution (per axis); 1 when not upscaling. */
-  get effectiveRenderScale(): number { const p = this.plan; return p.internal / p.output; }
+  /** Internal 3D resolution as a fraction of the preset's device resolution (per axis). */
+  get effectiveRenderScale(): number { const p = this.plan; return p.internal / p.device; }
 
   render(scene: THREE.Scene, camera: THREE.Camera): void {
     this.photoEffects.scene = scene; this.photoEffects.camera = camera;
@@ -293,6 +293,8 @@ export interface ResolutionPlan {
   upscaling: boolean;
   /** Pixel ratio terrain LOD is selected for (the reconstructed resolution, before the Retina reduction). */
   lod: number;
+  /** The preset's device pixel ratio, min(devicePixelRatio, maxPixelRatio). */
+  device: number;
 }
 
 /**
@@ -303,14 +305,14 @@ export interface ResolutionPlan {
  * up to 2× device resolution.
  */
 export function resolutionPlan(dpr: number, q: Pick<QualitySettings, 'maxPixelRatio' | 'renderScale' | 'upscale'>, adaptiveScale: number, map: boolean, minCssSide: number): ResolutionPlan {
-  if (map) { const pr = Math.min(dpr, 2); return { internal: pr, output: pr, upscaling: false, lod: pr }; }
+  if (map) { const pr = Math.min(dpr, 2); return { internal: pr, output: pr, upscaling: false, lod: pr, device: pr }; }
   const device = Math.min(dpr, q.maxPixelRatio);
   const edge = q.upscale.mode === 'edge';
   const retina = edge && device >= 1.5 ? q.upscale.retinaScale : 1;
   const scale = retina * q.renderScale * adaptiveScale;
   const internal = Math.max(1 / Math.max(1, minCssSide), device * scale);
   const upscaling = edge && scale < 0.98;
-  return { internal, output: upscaling ? device : internal, upscaling, lod: internal / retina };
+  return { internal, output: upscaling ? device : internal, upscaling, lod: internal / retina, device };
 }
 
 interface SmaaTargets { _edgesRT: THREE.WebGLRenderTarget; _weightsRT: THREE.WebGLRenderTarget }

@@ -15,7 +15,7 @@ describe('resolution plan', () => {
 
   it('Medium at DPR 1 is native and does not upscale', () => {
     const p = resolutionPlan(1, QUALITY_PRESETS.medium, 1, false, 920);
-    expect(p).toEqual({ internal: 1, output: 1, upscaling: false, lod: 1 });
+    expect(p).toEqual({ internal: 1, output: 1, upscaling: false, lod: 1, device: 1 });
   });
 
   it('adaptive reductions are upscaled instead of shrinking the canvas', () => {
@@ -28,7 +28,7 @@ describe('resolution plan', () => {
 
   it('native mode keeps the previous canvas-scaling behaviour', () => {
     const q = resolveQuality('medium', { ...base, advancedGraphics: { upscale: 'native' } });
-    expect(resolutionPlan(2, q, 1, false, 920)).toEqual({ internal: 2, output: 2, upscaling: false, lod: 2 });
+    expect(resolutionPlan(2, q, 1, false, 920)).toEqual({ internal: 2, output: 2, upscaling: false, lod: 2, device: 2 });
     expect(resolutionPlan(2, q, 0.8, false, 920)).toMatchObject({ internal: 1.6, output: 1.6, upscaling: false });
   });
 
@@ -50,6 +50,6 @@ describe('resolution plan', () => {
   });
 
   it('the map draws directly at device resolution', () => {
-    expect(resolutionPlan(2, QUALITY_PRESETS.medium, 0.5, true, 920)).toEqual({ internal: 2, output: 2, upscaling: false, lod: 2 });
+    expect(resolutionPlan(2, QUALITY_PRESETS.medium, 0.5, true, 920)).toEqual({ internal: 2, output: 2, upscaling: false, lod: 2, device: 2 });
   });
 });
