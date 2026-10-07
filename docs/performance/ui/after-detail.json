@@ -1,0 +1,1351 @@
+{
+  "label": "after-detail",
+  "base": "http://localhost:5336",
+  "cpuThrottle": 4,
+  "dpr": 2,
+  "renderer": "WSL Chromium SwiftShader (software GPU)",
+  "paintMethod": "capture event to second rAF; upper bound on next paint opportunity",
+  "cases": {
+    "100part-symmetry": {
+      "samples": [
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 489.7999999523163
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 62.89999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 91
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 82.10000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 106.10000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 155.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 107.30000007152557
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 92.39999997615814
+        }
+      ],
+      "p75Ms": 107.30000007152557,
+      "p95FrameGapMs": 1633.4000000000015,
+      "frames": 49
+    },
+    "100part-undo-redo": {
+      "samples": [
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 183.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 227.80000007152557
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 142.30000007152557
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 168.70000004768372
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 165.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 151.70000004768372
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 184.70000004768372
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 155.10000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 154
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 146.20000004768372
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 165
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 174.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 111.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 109.10000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 121.39999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 152.89999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 125.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 142.19999992847443
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 139.79999995231628
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 160.89999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 138.60000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 165.29999995231628
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 8
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 120.10000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 140
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 144.89999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 108.69999992847443
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 20.09999990463257
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 107.29999995231628
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 132.10000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 112.89999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 113.89999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 12.199999928474426
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 80.80000007152557
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 111.69999992847443
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 183.60000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 148.19999992847443
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 212
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 210.90000009536743
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 208.70000004768372
+        }
+      ],
+      "p75Ms": 165.29999995231628,
+      "p95FrameGapMs": 183.29999999999563,
+      "frames": 107
+    },
+    "resources-panel": {
+      "samples": [
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 3400.5999999046326
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 3393.6999999284744
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 3518
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 1738.1000000238419
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 1749.7999999523163
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 2638.9000000953674
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 1714.1000000238419
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 1889
+        }
+      ],
+      "p75Ms": 3393.6999999284744,
+      "p95FrameGapMs": 2599.9000000000015,
+      "frames": 19
+    },
+    "settings-panel": {
+      "samples": [
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 1912
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 1736.6999999284744
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 1733.3999999761581
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 903
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 1790.5
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 1785.7999999523163
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 1762
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 1748.7999999523163
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 931.3999999761581
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 1723.6000000238419
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 1716.1000000238419
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 879.4000000953674
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 2756.7000000476837
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 2755.8000000715256
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 2739.100000023842
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 2712.100000023842
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 1903.7999999523163
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 1708.8999999761581
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 1703.7000000476837
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 53.10000002384186
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 2230.7000000476837
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 2226.399999976158
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 2217.100000023842
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 2208.5
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 1346.1000000238419
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 3295.5
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 3290.600000023842
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 2217.0999999046326
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 1372
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 1367.2000000476837
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 1356
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 1346
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 191.10000002384186
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 3225.3000000715256
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 3224.5
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 1118.3999999761581
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 2289.5999999046326
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 2288.5
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 2269.0999999046326
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 2241.5999999046326
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 289.6999999284744
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 3309.1999999284744
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 3308.5
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 1091.1999999284744
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 1437.8999999761581
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 1434.1999999284744
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 1426.0999999046326
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 1398.1999999284744
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 1289.1999999284744
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 3320.6999999284744
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 3319.899999976158
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 1119.7999999523163
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 1197.8999999761581
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 1191.5
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 1170.8999999761581
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 1144.1000000238419
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 65.09999990463257
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 3205.2999999523163
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 3204.5
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 1168.9000000953674
+        }
+      ],
+      "p75Ms": 2288.5,
+      "p95FrameGapMs": 2249.899999999994,
+      "frames": 36
+    },
+    "menu-hover": {
+      "samples": [
+        {
+          "name": "pointerover",
+          "target": "btn primary",
+          "ms": 24.600000023841858
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 5779
+        },
+        {
+          "name": "pointerover",
+          "target": "btn primary",
+          "ms": 189.89999997615814
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 10.900000095367432
+        },
+        {
+          "name": "pointerover",
+          "target": "btn primary",
+          "ms": 2.299999952316284
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 16.600000023841858
+        },
+        {
+          "name": "pointerover",
+          "target": "btn primary",
+          "ms": 29.199999928474426
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 12.799999952316284
+        }
+      ],
+      "p75Ms": 29.199999928474426,
+      "p95FrameGapMs": 1049.8999999999942,
+      "frames": 59
+    }
+  },
+  "errors": [],
+  "partCount": 100,
+  "drag": {
+    "samples": [
+      {
+        "gap": -12.999999976156687,
+        "update": 3.8000000715255737,
+        "render": 88.19999992847443
+      },
+      {
+        "gap": 33.299999999995634,
+        "update": 1.5,
+        "render": 47
+      },
+      {
+        "gap": 83.40000000000146,
+        "update": 2,
+        "render": 67.60000002384186
+      },
+      {
+        "gap": 83.20000000000437,
+        "update": 3.6999999284744263,
+        "render": 65.30000007152557
+      },
+      {
+        "gap": 100.09999999999854,
+        "update": 3.1999999284744263,
+        "render": 83.80000007152557
+      },
+      {
+        "gap": 483.29999999999563,
+        "update": 3,
+        "render": 63.300000071525574
+      },
+      {
+        "gap": 99.90000000000146,
+        "update": 1.399999976158142,
+        "render": 43.90000009536743
+      },
+      {
+        "gap": 350,
+        "update": 9.600000023841858,
+        "render": 55.200000047683716
+      },
+      {
+        "gap": 83.40000000000146,
+        "update": 8,
+        "render": 54.199999928474426
+      },
+      {
+        "gap": 766.5999999999985,
+        "update": 12.300000071525574,
+        "render": 47.89999997615814
+      },
+      {
+        "gap": 466.59999999999854,
+        "update": 1.7000000476837158,
+        "render": 93.79999995231628
+      },
+      {
+        "gap": 8933,
+        "update": 1.399999976158142,
+        "render": 43.5
+      }
+    ],
+    "fps": 1.0462257406384645
+  },
+  "editorProfile": [
+    {
+      "phase": "mount",
+      "duration": 17.5,
+      "commitTime": 896.8999999761581
+    },
+    {
+      "phase": "update",
+      "duration": 17.600000023841858,
+      "commitTime": 951.8000000715256
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 2032.8000000715256
+    },
+    {
+      "phase": "update",
+      "duration": 66.39999973773956,
+      "commitTime": 2225
+    },
+    {
+      "phase": "update",
+      "duration": 58.59999990463257,
+      "commitTime": 11796
+    },
+    {
+      "phase": "update",
+      "duration": 0.7999999523162842,
+      "commitTime": 14086.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 11.399999976158142,
+      "commitTime": 23318.899999976158
+    },
+    {
+      "phase": "update",
+      "duration": 7.199999928474426,
+      "commitTime": 23529.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 1,
+      "commitTime": 23532.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 4.299999833106995,
+      "commitTime": 23579.399999976158
+    },
+    {
+      "phase": "update",
+      "duration": 3.6999999284744263,
+      "commitTime": 28495.899999976158
+    },
+    {
+      "phase": "update",
+      "duration": 5.799999952316284,
+      "commitTime": 28631.600000023842
+    },
+    {
+      "phase": "update",
+      "duration": 4.200000047683716,
+      "commitTime": 28652.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 7.199999928474426,
+      "commitTime": 28782.399999976158
+    },
+    {
+      "phase": "update",
+      "duration": 5.700000047683716,
+      "commitTime": 30438.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.5999999046325684,
+      "commitTime": 30564.600000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0.3999999761581421,
+      "commitTime": 30572.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 1.2999999523162842,
+      "commitTime": 30608.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 9.700000047683716,
+      "commitTime": 30929.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 5.700000047683716,
+      "commitTime": 34319.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 1,
+      "commitTime": 34437.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.20000004768371582,
+      "commitTime": 34438.89999997616
+    },
+    {
+      "phase": "update",
+      "duration": 46.200000047683716,
+      "commitTime": 35608.10000002384
+    },
+    {
+      "phase": "update",
+      "duration": 97.69999992847443,
+      "commitTime": 35777.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 57.39999997615814,
+      "commitTime": 36012.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.5,
+      "commitTime": 36143.39999997616
+    },
+    {
+      "phase": "update",
+      "duration": 3.600000023841858,
+      "commitTime": 36147.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 26.799999952316284,
+      "commitTime": 38984.5
+    },
+    {
+      "phase": "update",
+      "duration": 37.800000071525574,
+      "commitTime": 39123.39999997616
+    },
+    {
+      "phase": "update",
+      "duration": 56.90000009536743,
+      "commitTime": 39346.39999997616
+    },
+    {
+      "phase": "update",
+      "duration": 1.600000023841858,
+      "commitTime": 39478.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 2,
+      "commitTime": 39485.5
+    },
+    {
+      "phase": "update",
+      "duration": 42.89999985694885,
+      "commitTime": 39661.60000002384
+    },
+    {
+      "phase": "update",
+      "duration": 82.09999990463257,
+      "commitTime": 39848.5
+    },
+    {
+      "phase": "update",
+      "duration": 35.90000009536743,
+      "commitTime": 40002.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 26.40000009536743,
+      "commitTime": 45547.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 30.600000023841858,
+      "commitTime": 45645.5
+    },
+    {
+      "phase": "update",
+      "duration": 57.50000011920929,
+      "commitTime": 45883.5
+    },
+    {
+      "phase": "update",
+      "duration": 14,
+      "commitTime": 46093.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 2.100000023841858,
+      "commitTime": 46104
+    },
+    {
+      "phase": "update",
+      "duration": 52.199999928474426,
+      "commitTime": 46229.10000002384
+    },
+    {
+      "phase": "update",
+      "duration": 60.59999990463257,
+      "commitTime": 46379
+    },
+    {
+      "phase": "update",
+      "duration": 32.09999990463257,
+      "commitTime": 46552.39999997616
+    },
+    {
+      "phase": "update",
+      "duration": 22.899999976158142,
+      "commitTime": 46890.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 30.600000023841858,
+      "commitTime": 51854
+    },
+    {
+      "phase": "update",
+      "duration": 39,
+      "commitTime": 52019.5
+    },
+    {
+      "phase": "update",
+      "duration": 4.200000047683716,
+      "commitTime": 52179.60000002384
+    },
+    {
+      "phase": "update",
+      "duration": 1.5999999046325684,
+      "commitTime": 52193.89999997616
+    },
+    {
+      "phase": "update",
+      "duration": 50.90000021457672,
+      "commitTime": 52472.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 46.59999990463257,
+      "commitTime": 52621.5
+    },
+    {
+      "phase": "update",
+      "duration": 24.299999952316284,
+      "commitTime": 56797.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 1,
+      "commitTime": 56947.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.30000007152557373,
+      "commitTime": 56948.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 42.700000047683716,
+      "commitTime": 57176.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 37.700000047683716,
+      "commitTime": 57320.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 83.2999997138977,
+      "commitTime": 57531.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 4.600000023841858,
+      "commitTime": 60814
+    },
+    {
+      "phase": "update",
+      "duration": 4.599999904632568,
+      "commitTime": 61790.10000002384
+    },
+    {
+      "phase": "update",
+      "duration": 1.7000000476837158,
+      "commitTime": 61796
+    }
+  ],
+  "attachment": {
+    "before": 100,
+    "placed": 101,
+    "kind": "stack",
+    "callMs": 730.3999999761581
+  },
+  "flightProfile": [
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 30100.599999904633
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 30261.299999952316
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 30426.5
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 30580
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 30741.899999976158
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 30899.899999976158
+    },
+    {
+      "phase": "update",
+      "duration": 0.09999990463256836,
+      "commitTime": 31059.599999904633
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 31224
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 31380.399999976158
+    },
+    {
+      "phase": "update",
+      "duration": 0.8999999761581421,
+      "commitTime": 31546.699999928474
+    },
+    {
+      "phase": "update",
+      "duration": 1.899999976158142,
+      "commitTime": 31702.199999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0.20000004768371582,
+      "commitTime": 31870.399999976158
+    },
+    {
+      "phase": "update",
+      "duration": 0.20000004768371582,
+      "commitTime": 32019.5
+    },
+    {
+      "phase": "update",
+      "duration": 0.30000007152557373,
+      "commitTime": 32180.5
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 32342.299999952316
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 32500.799999952316
+    },
+    {
+      "phase": "update",
+      "duration": 1.3000000715255737,
+      "commitTime": 32690.5
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 32691.599999904633
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 32820.09999990463
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 32983.59999990463
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 33141.699999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 33299.299999952316
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 33461.699999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0.09999990463256836,
+      "commitTime": 33621.299999952316
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 33779.699999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 33940.199999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 34099.699999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 34260.09999990463
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 34427.799999952316
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 34579.59999990463
+    },
+    {
+      "phase": "update",
+      "duration": 0.7000000476837158,
+      "commitTime": 34743.39999997616
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 34904.699999928474
+    },
+    {
+      "phase": "update",
+      "duration": 4.199999928474426,
+      "commitTime": 35020.699999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 35060.199999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0.09999990463256836,
+      "commitTime": 35221.09999990463
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 35380
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 35540.699999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 35706.699999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0.6000000238418579,
+      "commitTime": 35891.799999952316
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 36020.89999997616
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 36180.699999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0.19999992847442627,
+      "commitTime": 36347.199999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 36501
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 36662.89999997616
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 36819.299999952316
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 36980.699999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 37140.299999952316
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 37300.299999952316
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 37468.09999990463
+    },
+    {
+      "phase": "update",
+      "duration": 0.20000004768371582,
+      "commitTime": 37627
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 37779.5
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 37940.699999928474
+    },
+    {
+      "phase": "update",
+      "duration": 0.19999992847442627,
+      "commitTime": 38110.09999990463
+    }
+  ],
+  "dragSavedDuringMove": false,
+  "panelFloating": 1,
+  "finalPanelBounds": {
+    "x": 940,
+    "y": 184,
+    "width": 250,
+    "height": 154
+  },
+  "longTasks": [
+    72,
+    192,
+    230,
+    1792,
+    2211,
+    66,
+    177,
+    355,
+    880,
+    56,
+    2252,
+    71,
+    112,
+    68,
+    162,
+    50,
+    389,
+    55,
+    728,
+    172,
+    419,
+    70,
+    51,
+    127,
+    61,
+    51,
+    64,
+    60,
+    103,
+    53,
+    53,
+    67,
+    50,
+    55,
+    50,
+    15580,
+    448,
+    703,
+    81
+  ]
+}

@@ -7,7 +7,7 @@ const [label = 'after', base = 'http://localhost:5336', mode = 'catalog'] = proc
 const browser = process.platform === 'win32' ? await chromium.connectOverCDP('http://127.0.0.1:9333') : await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const context = await browser.newContext({ viewport: { width: 1470, height: 920 }, deviceScaleFactor: 2 });
 await context.addInitScript(() => {
-  localStorage.setItem('wsp.settings.v1', JSON.stringify({ quality: 'low', graphicsProfile: 99, masterVolume: 0, adaptiveQuality: false, frameCap: 120 }));
+  localStorage.setItem('wsp.settings.v1', JSON.stringify({ quality: 'low', graphicsProfile: 99, masterVolume: 0, adaptiveQuality: false, frameRateCap: 120 }));
   localStorage.setItem('wsp.help.seen.v1', '1');
   window.__uiBench = { events: [], gaps: [], longTasks: [] };
   let last;
@@ -46,6 +46,7 @@ try {
   };
   await enter();
   console.log('editor ready');
+  if (mode === 'cpu') { results.gpuDrawingSuppressed=true; await page.evaluate(() => { window.__editor.view.renderer.render=()=>{}; }); }
   if (mode === 'catalog') {
   const thumbnailStart = Date.now();
   await page.waitForFunction(() => document.querySelectorAll('.vab-thumb img').length >= 18, null, { timeout: 120000 });
@@ -84,6 +85,7 @@ try {
       session.load({...craft,parts:[...craft.parts,...extra]}, false);
     });
     await page.waitForTimeout(4000);
+    results.preflight = await page.locator('.preflight-checks summary').innerText();
     results.partCount = await page.evaluate(() => window.__editor.session.getSnapshot().craft.parts.length);
     await measure('100part-symmetry', () => page.keyboard.press('x'));
     await measure('100part-undo-redo', async () => {
@@ -100,6 +102,7 @@ try {
         if (now-start<5000) requestAnimationFrame(tick); else resolve({samples, fps: samples.length*1000/(now-start)});
       }; requestAnimationFrame(tick);
     }));
+    results.editorProfile = await page.evaluate(() => window.__uiProfile ?? null);
     // Exact snap/attach correctness and undo on the large fixture.
     results.attachment = await page.evaluate(() => {
       const {view,session}=window.__editor;
@@ -116,12 +119,13 @@ try {
     });
     await page.goto(`${base}/?flight=stock-kestrel&scenario=orbit`);
     await page.waitForFunction(() => !!window.__flight?.sceneReady, null, {timeout:120000});
+    if (mode === 'cpu') await page.evaluate(() => { window.__flight.pipeline.render=()=>{}; });
     await page.waitForTimeout(5000);
     await page.evaluate(() => { if(window.__uiProfile) window.__uiProfile.length=0; });
     await page.waitForTimeout(8000);
     results.flightProfile = await page.evaluate(() => window.__uiProfile ?? null);
     await measure('resources-panel', () => page.getByRole('button',{name:'Resources',exact:true}).click());
-    await measure('settings-panel', async () => { await page.getByRole('button',{name:'Settings',exact:true}).click(); await page.getByRole('button',{name:'Done',exact:true}).click(); });
+    await measure('settings-panel', async () => { await page.locator('.app-btn[aria-label=Settings]').click(); await page.getByRole('button',{name:'Done',exact:true}).click(); await page.keyboard.press('Escape'); });
     await page.getByRole('button',{name:'Resources',exact:true}).click();
     const header=page.locator('.app-win-head').first(); await header.waitFor();
     const bounds=await header.boundingBox();
@@ -141,5 +145,5 @@ try {
   const out = new URL('../../docs/performance/ui/', import.meta.url);
   mkdirSync(out, { recursive: true });
   writeFileSync(new URL(`${label}.json`,out),JSON.stringify(results,null,2));
-  console.log(JSON.stringify(results, (k,v) => ['samples','longTasks'].includes(k) ? undefined : v,null,2));
+  console.log(JSON.stringify(results, (k,v) => ['samples','longTasks','editorProfile','flightProfile'].includes(k) ? undefined : v,null,2));
 } catch (e) { console.log(errors, await page.locator('body').innerText()); results.failure=String(e); const out=new URL('../../docs/performance/ui/',import.meta.url); mkdirSync(out,{recursive:true}); writeFileSync(new URL(`${label}-failed.json`,out),JSON.stringify(results,null,2)); throw e; } finally { await context.close(); await browser.close(); }
