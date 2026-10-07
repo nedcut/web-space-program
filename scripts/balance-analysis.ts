@@ -15,10 +15,12 @@ const table = (head: string[], rows: (string | number)[][]) => {
   for (const row of rows) console.log(`| ${row.join(' | ')} |`);
 };
 console.log('Stock hardware and advisories (vacuum Δv is not a destination guarantee)');
-table(['Craft', 'Scale', 'Cost cr', 'Δv m/s', 'Required research', 'Advisories'], STOCK_CRAFTS.map(stock => {
+table(['Craft', 'Scale', 'Cost cr', 'Δv m/s', 'Earth launch TWR', 'Required research', 'Advisories'], STOCK_CRAFTS.map(stock => {
   const c = stock.build();
+  const stats = computeStageStats(c, PART_CATALOG, new Universe(stock.scale).body('earth'));
+  const first = stats.get(0);
   const nodes = TECH_NODES.filter(n => n.id !== 'foundation' && c.parts.some(p => n.parts.includes(p.partId)));
-  return [stock.name, stock.scale, launchCost(c, PART_CATALOG), Math.round([...computeStageStats(c, PART_CATALOG).values()].reduce((sum, s) => sum + s.dvVac, 0)), nodes.map(n => n.id).join(', ') || 'foundation', preflightChecks(c, PART_CATALOG).map(c => c.id).join(', ') || 'none'];
+  return [stock.name, stock.scale, launchCost(c, PART_CATALOG), Math.round([...stats.values()].reduce((sum, s) => sum + s.dvVac, 0)), first?.twrAsl.toFixed(2) ?? '—', nodes.map(n => n.id).join(', ') || 'foundation', preflightChecks(c, PART_CATALOG, first).map(c => c.id).join(', ') || 'none'];
 }));
 console.log('\nUnlock envelopes: highest Δv Earth rocket fixture whose every part is available. These are lower bounds on achievable Δv; unlimited staging has no unique maximum.');
 table(['Cumulative branch tier', 'Science for propulsion branch', 'Standard fixture Δv', 'Challenging fixture Δv', 'Real fixture Δv'], [-1, 0, 1, 2, 3].map(tier => {

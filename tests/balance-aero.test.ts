@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PART_CATALOG } from '../src/data/parts';
 import { STOCK_CRAFTS, buildMoonLander, buildSoundingRocket } from '../src/editor/stockCrafts';
 import { preflightChecks } from '../src/editor/checks';
+import { computeStageStats } from '../src/editor/ui/dv';
 import { aeroControlMargin } from '../src/editor/aeroStability';
 import { World } from '../src/game/world';
 import { Universe } from '../src/game/universe';
@@ -41,11 +42,14 @@ describe('launch stability advisory', () => {
     for (const p of tail.parts) if (p.partId.startsWith('eng-')) p.tweaks = { gimbalLock: true };
     expect(preflightChecks(tail, PART_CATALOG).some(c => c.id === 'aero')).toBe(true);
   });
-  it('audits every stock craft; remaining advisories identify real missing parachutes', () => {
+  it('audits every stock craft with editor stage readouts; remaining advisories identify missing parachutes or low Earth TWR', () => {
     const withoutChutes = ['stock-swift', 'stock-hearthlight', 'stock-longreach', 'stock-daybreak', 'stock-alembic'];
     for (const stock of STOCK_CRAFTS) {
       const c = stock.build();
-      expect(preflightChecks(c, PART_CATALOG).map(c => c.id), stock.id).toEqual(withoutChutes.includes(stock.id) ? ['chute'] : []);
+      const first = computeStageStats(c, PART_CATALOG, new Universe(stock.scale).body('earth')).get(0);
+      const expected = [...(c.type === 'VAB' && first && first.twrAsl < 1 ? ['twr'] : []), ...(withoutChutes.includes(stock.id) ? ['chute'] : [])];
+      expect(preflightChecks(c, PART_CATALOG, first).map(c => c.id), stock.id).toEqual(expected);
+      if (expected.includes('twr')) expect(first!.twrAsl).toBeLessThan(1);
       if (withoutChutes.includes(stock.id)) expect(c.parts.some(p => PART_CATALOG.get(p.partId)!.modules.some(m => m.type === 'parachute'))).toBe(false);
     }
   });

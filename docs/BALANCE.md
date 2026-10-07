@@ -19,10 +19,14 @@ wheels receive no credit. Negative remaining restoring/control margin warns. Thi
 SAS-assisted ascent advisory; an unpowered/reentry assessment needs another flight envelope.
 Forward fixed fins and an uncontrolled heavy-tail/no-fin rocket still warn in tests.
 
-All 27 stock crafts were checked. Remaining warnings are **missing parachutes** on Swift,
+All 27 stock crafts were checked using the same first-stage stats as the editor.
+Remaining warnings include **missing parachutes** on Swift,
 Daybreak, Hearthlight, Longreach and Alembic. Inspection confirms these crewed vehicles have
 no parachute modules: runway, powered landing or orbital crew transfer is required. The audit
-checks presence of the warning against actual hardware. A clear preflight does not certify that
+checks presence of the warning against actual hardware. **Earth launch TWR below 1** is
+also correctly reported for Pebblecatcher, Moonmoth Delivery Lander, Bedrock, Longreach,
+Emberleaf and Hazewalker: these are destination/orbital designs, not standalone Earth launchers.
+Their first-stage Earth TWR is listed below. A clear preflight does not certify that
 an orbital tug, rover or destination lander can launch from Earth.
 
 The old first batch offered a Moon surface-return mission immediately, first propulsion research
@@ -116,35 +120,35 @@ current craft can be declined; no specific locked part is required by an early c
 ## Generated reference tables
 
 Stock hardware and advisories (vacuum Δv is not a destination guarantee)
-| Craft | Scale | Cost cr | Δv m/s | Required research | Advisories |
-| --- | --- | --- | --- | --- | --- |
-| Kestrel Sounding Rocket | standard | 5068 | 2722 | foundation | none |
-| Meridian Orbiter | standard | 10870 | 4962 | propulsion-0, energy-0 | none |
-| Selene Lunar Lander | standard | 30977 | 7162 | propulsion-0, propulsion-1, structures-0, structures-1, guidance-0, energy-0 | none |
-| Swift Jet | standard | 11080 | 12416 | aviation-0, aviation-1, aviation-2, aviation-3, guidance-0 | chute |
-| Ringrunner Saturn Probe | standard | 37275 | 10940 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-2, aviation-0, guidance-0, guidance-2, guidance-3, energy-0, energy-1 | none |
-| Pebblecatcher | standard | 18844 | 2116 | propulsion-0, propulsion-1, structures-1, guidance-1, guidance-3, energy-0, energy-3, discovery-2 | none |
-| Wren Tender | standard | 9204 | 2706 | propulsion-0, propulsion-1, structures-2, guidance-1, guidance-3, energy-0 | none |
-| Hearthlight Station | standard | 118784 | 9103 | propulsion-0, propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, guidance-0, guidance-1, guidance-2, guidance-3, energy-1, energy-2 | chute |
-| Homeward Crew Ferry | standard | 111129 | 8897 | propulsion-0, propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, guidance-0, guidance-1, guidance-3, energy-0 | none |
-| Moonmoth Rover | standard | 33024 | 660 | propulsion-0, propulsion-1, structures-1, structures-2, guidance-3, energy-3, discovery-1 | none |
-| Moonmoth Delivery Lander | standard | 39878 | 2379 | propulsion-0, propulsion-1, structures-0, structures-1, structures-2, guidance-3, energy-3, discovery-1 | none |
-| Bedrock Prospector | standard | 37194 | 1208 | propulsion-0, propulsion-1, structures-3, guidance-3, energy-2, energy-3, discovery-1, discovery-2, discovery-3 | none |
-| Longreach Transfer Ship | standard | 53278 | 4656 | propulsion-0, propulsion-1, propulsion-3, structures-0, structures-2, guidance-1, guidance-2, guidance-3, energy-2 | chute |
-| Daybreak Spaceplane | standard | 22800 | 2793 | propulsion-0, propulsion-2, aviation-1, aviation-2, aviation-3, guidance-0 | chute |
-| Emberleaf Mars Lander | standard | 40963 | 725 | propulsion-1, structures-0, structures-1, structures-2, structures-3, guidance-3, energy-1, energy-3 | none |
-| Hazewalker Titan Probe | standard | 40963 | 725 | propulsion-1, structures-0, structures-1, structures-2, structures-3, guidance-3, energy-1, energy-3 | none |
-| Frostwhisker Plume Sampler | standard | 43864 | 2549 | propulsion-1, structures-1, aviation-0, guidance-3, energy-3, discovery-3 | none |
-| Gossamer Ring Observatory | standard | 74455 | 10219 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-2, aviation-0, guidance-0, guidance-2, guidance-3, energy-0, energy-1, energy-3 | none |
-| Atlaswake Heavy Lifter | standard | 93991 | 11753 | propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, aviation-0, guidance-0, guidance-3 | none |
-| Beaconseed Relay Launcher | standard | 33621 | 10946 | propulsion-1, propulsion-2, structures-0, structures-2, aviation-0, guidance-0, guidance-3, energy-0, energy-1 | none |
-| Alembic Laboratory | standard | 122384 | 8818 | propulsion-0, propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, guidance-0, guidance-1, guidance-3, energy-1, energy-2, discovery-3 | chute |
-| Meridian Challenging Orbiter | challenging | 42925 | 8135 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-2, energy-0 | none |
-| Selene Challenging Expedition | challenging | 157177 | 15106 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-1, structures-2, structures-3, guidance-2, energy-0 | none |
-| Ringrunner Real Saturn Probe | real | 1473660 | 18843 | propulsion-2, propulsion-3, structures-0, structures-2, structures-3, aviation-0, guidance-2, guidance-3, energy-2, energy-3 | none |
-| Meridian Real Orbiter | real | 84332 | 10874 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-2, energy-0 | none |
-| Selene Real Expedition | real | 1393197 | 20379 | propulsion-0, propulsion-1, propulsion-2, propulsion-3, structures-0, structures-1, structures-2, structures-3, guidance-2, energy-0 | none |
-| Firstlight Orbiter | standard | 7456 | 4140 | foundation | none |
+| Craft | Scale | Cost cr | Δv m/s | Earth launch TWR | Required research | Advisories |
+| --- | --- | --- | --- | --- | --- | --- |
+| Kestrel Sounding Rocket | standard | 5068 | 2722 | 3.41 | foundation | none |
+| Meridian Orbiter | standard | 10870 | 4962 | 1.40 | propulsion-0, energy-0 | none |
+| Selene Lunar Lander | standard | 30977 | 7162 | 1.81 | propulsion-0, propulsion-1, structures-0, structures-1, guidance-0, energy-0 | none |
+| Swift Jet | standard | 11080 | 12416 | 1.36 | aviation-0, aviation-1, aviation-2, aviation-3, guidance-0 | chute |
+| Ringrunner Saturn Probe | standard | 37275 | 10940 | 1.52 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-2, aviation-0, guidance-0, guidance-2, guidance-3, energy-0, energy-1 | none |
+| Pebblecatcher | standard | 18844 | 2116 | 0.37 | propulsion-0, propulsion-1, structures-1, guidance-1, guidance-3, energy-0, energy-3, discovery-2 | twr |
+| Wren Tender | standard | 9204 | 2706 | 1.24 | propulsion-0, propulsion-1, structures-2, guidance-1, guidance-3, energy-0 | none |
+| Hearthlight Station | standard | 118784 | 9103 | 2.35 | propulsion-0, propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, guidance-0, guidance-1, guidance-2, guidance-3, energy-1, energy-2 | chute |
+| Homeward Crew Ferry | standard | 111129 | 8897 | 2.27 | propulsion-0, propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, guidance-0, guidance-1, guidance-3, energy-0 | none |
+| Moonmoth Rover | standard | 33024 | 660 | 0.10 | propulsion-0, propulsion-1, structures-1, structures-2, guidance-3, energy-3, discovery-1 | none |
+| Moonmoth Delivery Lander | standard | 39878 | 2379 | 0.90 | propulsion-0, propulsion-1, structures-0, structures-1, structures-2, guidance-3, energy-3, discovery-1 | twr |
+| Bedrock Prospector | standard | 37194 | 1208 | 0.57 | propulsion-0, propulsion-1, structures-3, guidance-3, energy-2, energy-3, discovery-1, discovery-2, discovery-3 | twr |
+| Longreach Transfer Ship | standard | 53278 | 4656 | 0.08 | propulsion-0, propulsion-1, propulsion-3, structures-0, structures-2, guidance-1, guidance-2, guidance-3, energy-2 | twr, chute |
+| Daybreak Spaceplane | standard | 22800 | 2793 | 1.45 | propulsion-0, propulsion-2, aviation-1, aviation-2, aviation-3, guidance-0 | chute |
+| Emberleaf Mars Lander | standard | 40963 | 725 | 0.63 | propulsion-1, structures-0, structures-1, structures-2, structures-3, guidance-3, energy-1, energy-3 | twr |
+| Hazewalker Titan Probe | standard | 40963 | 725 | 0.63 | propulsion-1, structures-0, structures-1, structures-2, structures-3, guidance-3, energy-1, energy-3 | twr |
+| Frostwhisker Plume Sampler | standard | 43864 | 2549 | 1.19 | propulsion-1, structures-1, aviation-0, guidance-3, energy-3, discovery-3 | none |
+| Gossamer Ring Observatory | standard | 74455 | 10219 | 1.51 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-2, aviation-0, guidance-0, guidance-2, guidance-3, energy-0, energy-1, energy-3 | none |
+| Atlaswake Heavy Lifter | standard | 93991 | 11753 | 2.41 | propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, aviation-0, guidance-0, guidance-3 | none |
+| Beaconseed Relay Launcher | standard | 33621 | 10946 | 1.80 | propulsion-1, propulsion-2, structures-0, structures-2, aviation-0, guidance-0, guidance-3, energy-0, energy-1 | none |
+| Alembic Laboratory | standard | 122384 | 8818 | 2.35 | propulsion-0, propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, guidance-0, guidance-1, guidance-3, energy-1, energy-2, discovery-3 | chute |
+| Meridian Challenging Orbiter | challenging | 42925 | 8135 | 3.97 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-2, energy-0 | none |
+| Selene Challenging Expedition | challenging | 157177 | 15106 | 1.73 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-1, structures-2, structures-3, guidance-2, energy-0 | none |
+| Ringrunner Real Saturn Probe | real | 1473660 | 18843 | 1.30 | propulsion-2, propulsion-3, structures-0, structures-2, structures-3, aviation-0, guidance-2, guidance-3, energy-2, energy-3 | none |
+| Meridian Real Orbiter | real | 84332 | 10874 | 1.36 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-2, energy-0 | none |
+| Selene Real Expedition | real | 1393197 | 20379 | 1.30 | propulsion-0, propulsion-1, propulsion-2, propulsion-3, structures-0, structures-1, structures-2, structures-3, guidance-2, energy-0 | none |
+| Firstlight Orbiter | standard | 7456 | 4140 | 1.98 | foundation | none |
 
 Unlock envelopes: highest Δv Earth rocket fixture whose every part is available. These are lower bounds on achievable Δv; unlimited staging has no unique maximum.
 | Cumulative branch tier | Science for propulsion branch | Standard fixture Δv | Challenging fixture Δv | Real fixture Δv |
