@@ -292,6 +292,10 @@ export class EarthImagery {
 
   /** True once the target level (or its fallback) is shown, or loading has given up. */
   get ready(): boolean { return this.settled; }
+  /** True once any level is on screen (packs keep streaming afterwards), or loading has given up. */
+  get presentable(): boolean { return this.settled || !!this.shown; }
+  /** Diagnostics: GPU steps run and the longest main-thread time spent in one frame's `step()` (ms). */
+  readonly stats = { units: 0, maxFrameMs: 0 };
   get levelId(): string | null { return this.shown?.level.id ?? null; }
 
   /** Feed the season (month 0–11). Starts a load when the month or the level to show changes. */
@@ -402,6 +406,7 @@ export class EarthImagery {
     const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
     const budget = () => typeof performance === 'undefined' || performance.now() - t0 < 3;
     while (this.cloudJob && budget()) {
+      this.stats.units++;
       if (this.cloudJob.step(renderer)) {
         this.cloudSource = this.cloudJob.texture;
         this.cloudSourceSettled = true;
@@ -411,9 +416,11 @@ export class EarthImagery {
     }
     while (this.jobs && budget()) {
       const jobs = this.jobs;
+      this.stats.units++;
       if (jobs[0](renderer)) jobs.shift();
       if (!jobs.length) { this.jobs = null; this.pump(); }
     }
+    if (typeof performance !== 'undefined') this.stats.maxFrameMs = Math.max(this.stats.maxFrameMs, performance.now() - t0);
   }
 
   private mergeStrip(renderer: THREE.WebGLRenderer, rt: THREE.WebGLRenderTarget, day: THREE.Texture, water: THREE.Texture,

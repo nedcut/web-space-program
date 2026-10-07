@@ -172,6 +172,7 @@ export class PlanetRenderer {
         radius: body.radius, maxLevel: opts.farOnly ? '4k' : undefined,
         clouds: !opts.farOnly && !!terrain && opts.quality.clouds });
       enableEarthImagery(this.uniforms, this.imagery.uniforms);
+      this.root.userData.imagery = this.imagery; // diagnostics/automation
     }
     if (this.kind === 'star') this.buildSun();
     else if (this.kind === 'gas') this.buildGasGiant();
@@ -584,10 +585,13 @@ export class PlanetRenderer {
     return (!this.scatter?.group.visible || this.scatter.idle) && bakeDone && (!this.quadtree || this.stats.mode === 'far' || this.quadtree.idle);
   }
 
-  /** Imagery settled (shown, or given up), bounded so a slow pack never holds the loading screen for long. */
+  /**
+   * Some imagery is on screen (the bundled level); higher-resolution packs stream in afterwards and never hold the
+   * loading screen. Bounded in case even the bundled level is slow.
+   */
   private get imageryIdle(): boolean {
-    if (!this.imagery || this.imagery.ready) return true;
-    return typeof performance !== 'undefined' && performance.now() - this.imageryStart > 8000;
+    if (!this.imagery || this.imagery.presentable) return true;
+    return typeof performance !== 'undefined' && performance.now() - this.imageryStart > 4000;
   }
 
   /** Terrain height under a body-fixed unit direction (m), 0 if no terrain. */
