@@ -1006,16 +1006,16 @@ The GPU was shared with other agents' game tabs throughout; absolute numbers mov
 use the paired medians. "loop fps" on this desktop is dominated by DPR-2 emulation/compositing and contention and
 is not a laptop prediction.
 
-## What was hot (baseline `7bd6e4f9`, Medium, DPR 2, fenced GPU ms)
+## What was hot (baseline `7bd6e4f9`, Medium, DPR 2, fenced GPU ms; families from one profiling run)
 
 | Scene | Frame | Scene pass | Post chain (bloom / tone map / SMAA) | Biggest families (ms, hidden-family differences) |
 |---|---:|---:|---|---|
 | Pad | 4.58 | 4.11 | 0.34 / 0.13 / 0.58 | PBR site + vegetation + parts 1.57, sky 0.78, terrain 0.72, empty-scene post 0.83, clouds 0.26, shadow map 0.21 |
 | Ascent | 3.55 | 3.22 | 0.34 / 0.12 / 0.53 | sky 1.13, clouds 0.47, terrain 0.52, glare 0.43, particles/other 0.50, plumes 0.28 |
 | Orbit (Earth in view) | 3.92 | 3.90 | 0.33 / 0.12 / 0.54 | ocean 0.69, terrain 0.61, clouds 0.60, sky 0.47 |
-| Moon surface (descent) | 3.79 | 2.99 | 0.34 / 0.12 / 0.54 | — |
+| Moon surface (descent) | 1.72 | 1.41 | ≈1.0 total | geometry/draw bound (563 draws), regolith detail |
 | Map | 0.48 | — | — | 32 draws |
-| Editor (73 parts, orbiting) | 1.91 | — | — | separate renderer, native MSAA |
+| Editor (73 parts, orbiting) | 1.30 | — | — | separate renderer, native MSAA |
 
 1. **Resolution.** Every Medium pixel cost was paid at 2940×1840. Scene and post scale with pixels.
 2. **Launch-site vegetation geometry.** The pad drew 3.48 M triangles: pines 0.92 M and scrub 0.51 M, all of
