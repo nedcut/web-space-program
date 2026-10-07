@@ -224,13 +224,14 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
   const avg = fr.reduce((a, b) => a + b, 0) / n;
   const d = (k) => m1[k] - m0[k];
   const out = {
-    fps: r2(1000 / avg), frameP50: r2(pct(fr, 0.5)), frameP95: r2(pct(fr, 0.95)), frameP99: r2(pct(fr, 0.99)), frameMax: r2(Math.max(0, ...fr)),
+    fps: fr.length ? r2(1000 / avg) : null, frames: fr.length, frameP50: r2(pct(fr, 0.5)), frameP95: r2(pct(fr, 0.95)), frameP99: r2(pct(fr, 0.99)), frameMax: r2(Math.max(0, ...fr)),
     hitches25: fr.filter((x) => x > 25).length, hitches50: fr.filter((x) => x > 50).length,
     cpuMs: inPage.prof ? r2(inPage.prof.cpuAvg) : null, cpuP95: inPage.prof ? r2(inPage.prof.cpuP95) : null,
     sections: inPage.prof ? Object.fromEntries(Object.entries(inPage.prof.sections).map(([k, v]) => [k, r2(v)])) : null,
     scriptMsPerFrame: r2((d('ScriptDuration') * 1000) / n), taskMsPerFrame: r2((d('TaskDuration') * 1000) / n),
     layoutsPerSec: r2(d('LayoutCount') / secs), styleRecalcsPerSec: r2(d('RecalcStyleCount') / secs),
     layoutMsPerSec: r2((d('LayoutDuration') * 1000) / secs), styleMsPerSec: r2((d('RecalcStyleDuration') * 1000) / secs),
+    sampleSeconds: r2(secs), longTasks: inPage.longTasks,
     longTasksPerMin: r2((inPage.longTasks / secs) * 60), longTaskMsPerMin: r2((inPage.longTaskMs / secs) * 60), longTaskMax: r2(inPage.longTaskMax),
     heapMB: r2(m1.JSHeapUsedSize / 1e6), heapGrowthMBPerMin: r2(((m1.JSHeapUsedSize - m0.JSHeapUsedSize) / 1e6 / secs) * 60),
     domNodes: m1.Nodes, listeners: m1.JSEventListeners,
