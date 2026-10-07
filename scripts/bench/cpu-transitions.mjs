@@ -3,7 +3,8 @@ import { chromium } from 'playwright-core';
 import { mkdirSync, writeFileSync } from 'node:fs';
 const [base, label = 'transitions', rate = '4'] = process.argv.slice(2);
 if (!base) throw new Error('Usage: cpu-transitions.sh http://<WSL-IP>:5334 label [CPU-rate]');
-const browser = await chromium.connectOverCDP('http://127.0.0.1:9333');
+const local = process.env.WSP_CPU_LOCAL === '1';
+const browser = local ? await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] }) : await chromium.connectOverCDP('http://127.0.0.1:9333');
 const out = { base, label, throttle: +rate, date: new Date().toISOString(), runs: [] };
 const context = await browser.newContext({ viewport: { width: 1470, height: 920 }, deviceScaleFactor: 2, serviceWorkers: 'block' });
 await context.addInitScript(() => {
@@ -62,7 +63,8 @@ try {
     await page.evaluate(() => { delete window.__oldFlight; window.__game.set({ scene: 'menu' }); });
   }
 } finally {
-  mkdirSync('C:/wsp-tools/bench', { recursive: true });
-  writeFileSync(`C:/wsp-tools/bench/${label}.json`, JSON.stringify(out, null, 2));
+  const dir = local ? 'docs/performance/perfcpu' : 'C:/wsp-tools/bench';
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(`${dir}/${label}.json`, JSON.stringify(out, null, 2));
   await context.close(); await browser.close();
 }

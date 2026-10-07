@@ -25,7 +25,7 @@ const dpr = +(args.dpr ?? 2);
 const throttle = +(args.throttle ?? 1);
 const quality = args.quality ?? 'medium';
 const [vw, vh] = (args.size ?? '1470x920').split('x').map(Number);
-const outDir = args.out ?? 'C:\\wsp-tools\\bench';
+const outDir = args.out ?? (args.local === '1' ? 'docs/performance/perfcpu' : 'C:\\wsp-tools\\bench');
 const ALL = 'load,menu,pad,ascent,orbit,warp1k,warp100k,map,moon,saturn,editor,tracking,soak,cycles';
 const cases = (args.cases ?? ALL).split(',');
 const trace = args.trace !== '0';
@@ -37,8 +37,10 @@ const PRESETS = {
 };
 const settings = { quality, ...PRESETS[quality], scatter: true, adaptiveQuality: args.adaptive === '1', graphicsProfile: 99, showFps: false, autoSaveInterval: 0, masterVolume: 0, ...(args.settings ? JSON.parse(args.settings) : {}) };
 
-const browser = await chromium.connectOverCDP('http://127.0.0.1:9333');
-const results = { label, base, dpr, throttle, quality, seconds, size: `${vw}x${vh}`, date: new Date().toISOString(), cases: {} };
+const browser = args.local === '1'
+  ? await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
+  : await chromium.connectOverCDP('http://127.0.0.1:9333', { timeout: 30000 });
+const results = { label, base, local: args.local === '1', noSubmission: args.nogpu === '1', dpr, throttle, quality, seconds, size: `${vw}x${vh}`, date: new Date().toISOString(), cases: {} };
 const log = (...a) => console.log(...a);
 
 // ---------------------------------------------------------------------------------------------------------
@@ -239,11 +241,16 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
 
 async function flightCase(name, url, setup, settle = 3000, timing = true) {
   const { context, page, cdp } = await newPage();
+  log(`starting ${name}`);
   try {
     const t0 = Date.now();
     await page.goto(`${base}${url}`);
     await flightReady(page);
     const readyMs = Date.now() - t0;
+    if (args.nogpu === '1') await page.evaluate(() => {
+      window.__flight.pipeline.render = () => {}; window.__flight.pipeline.renderMap = () => {};
+      window.__flight.pipeline.renderer.render = () => {};
+    });
     const marks = timing ? await page.evaluate(() => Object.fromEntries([...performance.getEntriesByType('measure'), ...performance.getEntriesByType('mark')].filter((e) => e.name.startsWith('wsp:')).map((e) => [e.name, Math.round(e.startTime + e.duration)]))) : {};
     if (setup) await setup(page);
     await page.waitForTimeout(settle);
@@ -328,6 +335,7 @@ if (cases.includes('saturn')) await flightCase('saturn', '/?mission=ring-skimmer
 
 if (cases.includes('editor')) {
   const { context, page, cdp } = await newPage();
+  log(`starting ${name}`);
   try {
     const t0 = Date.now();
     await page.goto(`${base}/?scene=editor&stock=stock-ringrunner-real`);
@@ -402,7 +410,7 @@ await browser.close().catch(() => {});
 
 // ---------------------------------------------------------------------------------------------------------
 mkdirSync(outDir, { recursive: true });
-const file = `${outDir}\\${label}-dpr${dpr}${throttle > 1 ? `-cpu${throttle}x` : ''}`;
+const file = `${outDir}/${label}-dpr${dpr}${throttle > 1 ? `-cpu${throttle}x` : ''}`;
 writeFileSync(`${file}.json`, JSON.stringify(results, null, 1));
 const rows = Object.entries(results.cases).filter(([, c]) => c.fps !== undefined);
 const secCols = ['sim', 'vessels', 'planets', 'map', 'render', 'telemetry', 'hud', 'navball'];

@@ -218,6 +218,11 @@ export class LaunchSite {
     this.buildVegetation();
     this.buildPickables();
     this.flush();
+    // Mesh-local transforms are immutable; the dish animates its parent group. Avoid composing
+    // hundreds of unchanged local matrices on every frame (world transforms still follow Earth).
+    this.root.traverse(o => {
+      if ((o as THREE.Mesh).isMesh) { o.updateMatrix(); o.matrixAutoUpdate = false; }
+    });
   }
 
   // ------------------------------------------------------------------ terrain queries
@@ -1267,7 +1272,7 @@ export class LaunchSite {
     this.root.position.set(px, py, pz);
     this.root.quaternion.multiplyQuaternions(this.tmpQ, this.qLocal);
     this.root.updateMatrix();
-    this.root.updateMatrixWorld(true);
+    this.root.updateWorldMatrix(true, false);
     for (const { near, far } of this.vegetationLods) {
       const bound = near.boundingSphere!;
       this.lodCenter.copy(bound.center).applyMatrix4(this.root.matrixWorld);
