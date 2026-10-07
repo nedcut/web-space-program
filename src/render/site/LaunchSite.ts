@@ -162,7 +162,12 @@ export class LaunchSite {
   private readonly planetUniforms = livePlanetUniforms(BODY);
   private readonly sunUp = new THREE.Vector3();
   private night = { value: 0 };
-  private vegetationLods: { near: THREE.InstancedMesh; far: THREE.InstancedMesh }[] = [];
+  /**
+   * Per cell: all instances (root-local matrices/colours/positions) and the near/far meshes whose instance
+   * buffers hold only the instances in their distance band (rewritten when the camera moves ≥ 40 m).
+   */
+  private vegetationLods: { near: THREE.InstancedMesh; far: THREE.InstancedMesh; matrices: Float32Array; colors: Float32Array; xyz: Float32Array }[] = [];
+  private readonly vegCamera = new THREE.Vector3(Infinity, 0, 0);
   private readonly lodCenter = new THREE.Vector3();
   private wind = { value: 0 };
   private windowMat: THREE.MeshStandardMaterial | null = null;
@@ -1133,12 +1138,18 @@ export class LaunchSite {
         im.name = name;
         im.computeBoundingSphere();
         const far = new THREE.InstancedMesh(farGeo, farMat, cell.length);
-        far.instanceMatrix = im.instanceMatrix;
-        far.instanceColor = im.instanceColor;
+        far.instanceMatrix.array.set(im.instanceMatrix.array);
+        far.setColorAt(0, cell[0].c);
+        far.instanceColor!.array.set(im.instanceColor!.array);
         far.name = `${name}:far`;
         far.receiveShadow = true;
         far.computeBoundingSphere();
-        this.vegetationLods.push({ near: im, far });
+        // Bounding spheres stay those of the whole cell (frustum culling); counts change with distance.
+        const matrices = (im.instanceMatrix.array as Float32Array).slice();
+        const colors = (im.instanceColor!.array as Float32Array).slice();
+        const xyz = new Float32Array(cell.length * 3);
+        for (let i = 0; i < cell.length; i++) xyz.set([matrices[i * 16 + 12], matrices[i * 16 + 13], matrices[i * 16 + 14]], i * 3);
+        this.vegetationLods.push({ near: im, far, matrices, colors, xyz });
         this.root.add(im, far);
       }
     };
@@ -1256,13 +1267,7 @@ export class LaunchSite {
     this.root.quaternion.multiplyQuaternions(this.tmpQ, this.qLocal);
     this.root.updateMatrix();
     this.root.updateMatrixWorld(true);
-    for (const { near, far } of this.vegetationLods) {
-      const bound = near.boundingSphere!;
-      this.lodCenter.copy(bound.center).applyMatrix4(this.root.matrixWorld);
-      const distance = cameraPosition ? this.lodCenter.distanceTo(cameraPosition) : this.lodCenter.length();
-      near.visible = distance - bound.radius < 1650;
-      far.visible = distance + bound.radius > 1150 && distance - bound.radius < 10000;
-    }
+    this.updateVegetationLod(cameraPosition);
     const L = SITE_LAYOUT;
     cut.uCutMatrix.value.copy(this.tmpM.copy(this.root.matrixWorld).invert());
     cut.uCutA.value.set(0, 0, L.padHalf, L.padHalf);
@@ -1282,6 +1287,48 @@ export class LaunchSite {
     if (this.beaconMat) {
       const on = Math.sin(t * Math.PI * 1.2) > 0.2 ? 8 : 0.4;
       this.beaconMat.color.setRGB(on, on * 0.08, on * 0.04);
+    }
+  }
+
+  /**
+   * Vegetation LOD bands (the shader dithers between them over 1.2–1.6 km and fades out at 7–10 km). Each cell's
+   * near and far meshes draw only the instances inside their band, so detailed trees are not vertex-shaded (and
+   * shadow-rendered) out to the cell's far edge only to be discarded per fragment.
+   */
+  private updateVegetationLod(cameraPosition?: THREE.Vector3) {
+    const cam = this.lodCenter;
+    if (cameraPosition) cam.copy(cameraPosition); else cam.set(0, 0, 0);
+    cam.applyMatrix4(this.tmpM.copy(this.root.matrixWorld).invert());
+    const NEAR = 1650, FAR_MIN = 1150, FAR_MAX = 10000;
+    if (cam.distanceToSquared(this.vegCamera) < 40 * 40) return;
+    this.vegCamera.copy(cam);
+    // Band limits widened by the 40 m update threshold so a stale partition still covers the dither band.
+    const near2 = (NEAR + 40) ** 2, farMin2 = Math.max(0, FAR_MIN - 40) ** 2, farMax2 = (FAR_MAX + 40) ** 2;
+    for (const lod of this.vegetationLods) {
+      const { near, far, matrices, colors, xyz } = lod;
+      const bound = near.boundingSphere!;
+      const centre = bound.center.distanceTo(cam);
+      const wantNear = centre - bound.radius < NEAR + 40, wantFar = centre + bound.radius > FAR_MIN - 40 && centre - bound.radius < FAR_MAX + 40;
+      let n = 0, f = 0;
+      const nm = near.instanceMatrix.array as Float32Array, nc = near.instanceColor!.array as Float32Array;
+      const fm = far.instanceMatrix.array as Float32Array, fc = far.instanceColor!.array as Float32Array;
+      if (wantNear || wantFar) {
+        for (let i = 0, count = xyz.length / 3; i < count; i++) {
+          const dx = xyz[i * 3] - cam.x, dy = xyz[i * 3 + 1] - cam.y, dz = xyz[i * 3 + 2] - cam.z;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (wantNear && d2 < near2) { nm.set(matrices.subarray(i * 16, i * 16 + 16), n * 16); nc.set(colors.subarray(i * 3, i * 3 + 3), n * 3); n++; }
+          if (wantFar && d2 > farMin2 && d2 < farMax2) { fm.set(matrices.subarray(i * 16, i * 16 + 16), f * 16); fc.set(colors.subarray(i * 3, i * 3 + 3), f * 3); f++; }
+        }
+      }
+      for (const [mesh, k] of [[near, n], [far, f]] as const) {
+        if (mesh.count === k && k === 0) { mesh.visible = false; continue; }
+        mesh.count = k;
+        mesh.visible = k > 0;
+        if (k > 0) {
+          mesh.instanceMatrix.clearUpdateRanges(); mesh.instanceMatrix.addUpdateRange(0, k * 16); mesh.instanceMatrix.needsUpdate = true;
+          mesh.instanceColor!.clearUpdateRanges(); mesh.instanceColor!.addUpdateRange(0, k * 3); mesh.instanceColor!.needsUpdate = true;
+        }
+      }
     }
   }
 
