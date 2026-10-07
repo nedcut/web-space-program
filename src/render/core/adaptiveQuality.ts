@@ -133,7 +133,7 @@ export class AdaptiveQuality {
     return previous !== this.scale;
   }
 
-  /** Frame-time goal: the display interval, but never chase more than 60 fps on fast displays. */
+  /** Frame-time goal: cap/display interval. Unlimited retains the default 60 fps adaptive target. */
   get targetMs(): number { return Math.max(this.refreshMs, 1000 / (this.frameRateCap || 60)); }
 
   private resetWindow(): void {

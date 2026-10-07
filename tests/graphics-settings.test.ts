@@ -98,3 +98,10 @@ it('intentional 30 fps pacing retains full resolution and 120 fps uses its own f
   adaptive.refreshMs = 1000 / 120;
   expect(adaptive.targetMs).toBeCloseTo(1000 / 120);
 });
+
+it('Ultra textures keep terrain on the pad and preserve High terrain activation in orbit', async () => {
+  const { wantsTerrainLod } = await import('../src/render/planet/PlanetRenderer');
+  for (const width of [512, 1024, 2048, 4096]) expect(wantsTerrainLod(637100, 637120, 300, width, false)).toBe(true);
+  expect(wantsTerrainLod(637100, 787100, 600, 4096, false)).toBe(true);
+  expect(wantsTerrainLod(637100, 6371000, 60, 4096, false)).toBe(false);
+});

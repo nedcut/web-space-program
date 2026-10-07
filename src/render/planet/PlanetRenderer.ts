@@ -79,6 +79,12 @@ const AU = 149597870700;
  * giant shader, sun, atmosphere shell (single scattering), clouds, rings. Add `root` to the scene and
  * call `update()` every frame BEFORE rendering.
  */
+/** Large baked textures must never replace close-up geometry with the smooth far sphere. */
+export function wantsTerrainLod(radius: number, cameraDistance: number, projectedRadius: number, textureWidth: number, colorDominated: boolean): boolean {
+  const threshold = Math.max(140, Math.min(2048, textureWidth) / (colorDominated ? 2 : 5));
+  return cameraDistance < radius * 1.1 || projectedRadius > threshold;
+}
+
 export class PlanetRenderer {
   private surfaceFeatures?: SurfaceFeatures;
   readonly root = new THREE.Group();
@@ -508,8 +514,7 @@ export class PlanetRenderer {
     const qt = this.quadtree;
     // Flat, colorful moons need texture resolution, not geometric refinement: retain the bake longer.
     const colorDominated = this.body.id === 'io' || this.body.id === 'europa';
-    const farThresholdPx = Math.max(140, this.quality.bakedTextureWidth / (colorDominated ? 2 : 5));
-    const wantNear = !!qt && projR > farThresholdPx;
+    const wantNear = !!qt && wantsTerrainLod(R, camDist, projR, this.quality.bakedTextureWidth, colorDominated);
     if (qt && wantNear) {
       this.tmpM4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
       this.frustum.setFromProjectionMatrix(this.tmpM4);
