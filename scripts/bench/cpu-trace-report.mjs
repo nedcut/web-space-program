@@ -16,7 +16,9 @@ if (pid === undefined) throw new Error('Could not identify benchmark renderer');
 const own = events.filter(e => e.pid === pid);
 const tid = own.find(e => e.name === 'thread_name' && e.args.name === 'CrRendererMain')?.tid;
 const main = own.filter(e => e.tid === tid && e.ph === 'X');
-const tasks = main.filter(e => /^(RunTask|ThreadControllerImpl::RunTask)$/.test(e.name) && e.dur > 50000);
+// Chrome can emit both the outer RunTask and its nested ThreadController task. Count once.
+const taskName = main.some(e => e.name === 'RunTask') ? 'RunTask' : 'ThreadControllerImpl::RunTask';
+const tasks = main.filter(e => e.name === taskName && e.dur > 50000);
 const report = {
   file, pid, longTasks: tasks.length,
   longest: tasks.sort((a, b) => b.dur - a.dur).slice(0, 8).map(task => ({
