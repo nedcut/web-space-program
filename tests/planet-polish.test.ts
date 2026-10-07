@@ -71,7 +71,7 @@ describe('reflected planet irradiance', () => {
 describe('planet detail integration', () => {
   const body = (id: string) => ({ ...BODY_DEFS.find((b) => b.id === id)!, atmosphere: undefined });
 
-  it('disables resolved rings, emission and volume effects on Low', () => {
+  it('disables resolved rings and volume effects on Low while retaining Earth night lights', () => {
     for (const id of ['saturn', 'earth', 'enceladus', 'io', 'titan', 'sun']) {
       const planet = new PlanetRenderer(body(id), null, { quality: getQuality('low') });
       try {
@@ -79,11 +79,23 @@ describe('planet detail integration', () => {
           expect(object).not.toBeInstanceOf(THREE.InstancedMesh);
           expect(object.userData.extent).toBeUndefined();
           if (object instanceof THREE.Mesh && object.material instanceof THREE.ShaderMaterial) {
-            expect(object.material.defines.EARTH_DETAILS).toBeUndefined();
+            if (id === 'earth') expect(object.material.defines.EARTH_DETAILS).toBe(1);
+            else expect(object.material.defines.EARTH_DETAILS).toBeUndefined();
           }
         });
       } finally { planet.dispose(); }
     }
+  });
+
+  it('night lights off removes city-emission shader work on every Earth material', () => {
+    const quality = getQuality('high');
+    const planet = new PlanetRenderer(body('earth'), null, { quality: { ...quality, earth: { ...quality.earth, nightLights: false } } });
+    try {
+      planet.root.traverse(object => {
+        if (object instanceof THREE.Mesh && object.material instanceof THREE.ShaderMaterial)
+          expect(object.material.defines.EARTH_DETAILS).toBeUndefined();
+      });
+    } finally { planet.dispose(); }
   });
 
   it('lights a moon from its parent only in the same scene and respects quality and disposal', () => {
