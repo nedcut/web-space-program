@@ -1,6 +1,9 @@
-import { loadEarthData } from '../earthLoader';
+import { installEarthData } from '../../sim/terrain/earthData';
 import { createPlannerHandler } from './handler';
 import type { PlannerMessage } from './protocol';
 
 const handle = createPlannerHandler(event => self.postMessage(event));
-self.onmessage = (event: MessageEvent<PlannerMessage>) => { void loadEarthData().then(() => handle(event.data)).catch(error => self.postMessage({ type: 'error', id: event.data.id, name: 'Error', message: String(error) })); };
+self.onmessage = (event: MessageEvent<PlannerMessage | { type: 'earthData'; buffer: ArrayBufferLike }>) => {
+  if (event.data.type === 'earthData') { installEarthData(event.data.buffer); return; }
+  void handle(event.data);
+};

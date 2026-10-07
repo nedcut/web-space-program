@@ -778,3 +778,10 @@ Added original branched coastal vegetation with wind and fading LOD, warmer deta
 - Main/worker/Node loading, deterministic sampler, real coast cloud mask through shared height function, scaled relief, bounded sub-grid detail, geographic ground colours and science classes.
 - Existing launch plateau/runway geometry and legacy biome IDs retained. Targeted terrain/science/nbody suite: 41 tests pass; production build passes and precaches Earth data.
 - Graphics agent can merge the `REALEARTH-TERRAIN-READY` commit. Earth imagery/effects remain owned by op/earthgfx. Remaining: worker/seam/data regressions, performance, full checks, main integration and screenshots.
+
+### Real Earth validation follow-up
+
+- Exact worker/main heights and chunk arrays, source/output SHA-256, known features, antimeridian/poles/internal grid seams, pad/runway, all scales, real station/airfield land, cover regions, legacy science archive/contract preservation and cloud-mask orientation are covered by tests.
+- Baseline/current 20-second ascent hashes are identical. No golden trace updates. Three paired chunk cases improve from 3.8–4.5 ms to 0.7–1.2 ms (shared-host CPU results; see docs/PERFORMANCE.md).
+- Real-GPU orbit and launch screenshots committed under `docs/screenshots/realearth/`. Lint/layering, typecheck and production build pass. `git merge main` reports already up to date at `0b3f8cb2`.
+- Node benchmark entry points now bootstrap the data; the browser planning benchmark awaits browser loading. Planning workers receive the initialized buffer directly, avoiding a redundant fetch per request and keeping the production worker usable in Node's worker bridge.
