@@ -153,12 +153,21 @@ async function run(name, url, { setup, mode = 'flight', settle = settleMs } = {}
   try {
     await page.goto(base + url + (extraQuery ? (url.includes('?') ? '&' : '?') + extraQuery : ''));
     if (mode === 'editor') await page.waitForFunction(() => !!(window.__editor?.view && window.__editor.session), null, { timeout: 90000 });
+    else if (mode === 'page') await page.waitForSelector('canvas', { timeout: 60000 });
     else await page.waitForFunction(() => !!window.__flight && !document.querySelector('.loading-screen'), null, { timeout: 120000, polling: 200 });
     if (setup) await setup(page);
     await page.waitForTimeout(settle);
     if (mode === 'editor') {
       // Keep the editor rendering continuously while measuring (camera orbit).
       await page.evaluate(() => { const v = window.__editor.view; window.__edSpin = setInterval(() => { v.gYaw = (v.gYaw ?? 0) + 0.002; }, 16); });
+    }
+    if (mode === 'page') {
+      // Smoke-only scenes: canvases, console errors and a screenshot.
+      const canvases = await page.evaluate(() => [...document.querySelectorAll('canvas')].map((c) => [c.width, c.height, c.clientWidth, c.clientHeight]));
+      if (shots) await page.screenshot({ path: `${shotDir}\\${label}-${name}.png` });
+      results.cases[name] = { canvases, errors: errors.slice(0, 5) };
+      log(`== ${name}: canvases ${JSON.stringify(canvases)} errors ${JSON.stringify(errors.slice(0, 3))}`);
+      return;
     }
     if (preJs) { await page.evaluate(preJs); await page.waitForTimeout(500); }
     if (evalSrc) { const r = await page.evaluate(evalSrc); log(`== ${name}: ${JSON.stringify(r)}`); results.cases[name] = r; return; }
@@ -196,6 +205,8 @@ for (const c of cases) {
   else if (c === 'map') await run('map', '/?flight=stock-kestrel&scenario=orbit', { mode: 'map', setup: async (page) => { await page.evaluate(() => window.__flight.toggleMap()); } });
   else if (c === 'moon') await run('moon', '/?mission=suicide-burn', { setup: async (page) => { await page.evaluate(() => { window.__flight.input.state.throttle = 0.35; }); }, settle: 4000 });
   else if (c === 'sea') await run('sea', '/?flight=stock-kestrel&scenario=sea');
+  else if (c === 'menu') await run('menu', '/', { mode: 'page', settle: 6000 });
+  else if (c === 'spaceCenter' || c === 'tracking') await run(c, `/?scene=${c}`, { mode: 'page', settle: 8000 });
   else if (c === 'editor') await run('editor', '/?scene=editor&stock=stock-ringrunner-real', { mode: 'editor', settle: 4000 });
 }
 const file = `${outDir}\\${label}.json`;
