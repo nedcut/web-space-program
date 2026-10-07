@@ -25,6 +25,13 @@ export const INTAKE_STATIC_SPEED = 60;
 export const JET_MIN_AIR_FRACTION = 0.15;
 /** Throttle fraction below which a spooling-down engine is considered shut off. */
 export const SPOOL_CUTOFF = 0.01;
+/**
+ * Time constant (s) of a running liquid rocket's throttle response (valves, not turbopump inertia): a cut ends
+ * combustion in a fraction of a second (real tail-off is ~0.1 s; with SPOOL_CUTOFF a full-throttle cut ends in
+ * 0.1 s) and throttle changes follow almost at once. Only the start-up transient after ignition follows the
+ * engine's `spoolTime`. Jets keep their turbine spool time both ways.
+ */
+export const ROCKET_THROTTLE_TIME = 0.02;
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 
@@ -100,6 +107,22 @@ export function targetThrottle(m: EngineModule, cmd: number): number {
   if (cmd <= 0) return 0;
   if (!m.throttleable) return 1;
   return m.minThrottle + (1 - m.minThrottle) * clamp(cmd, 0, 1);
+}
+
+/**
+ * Time constant used when the engine's flow is decreasing: jets spool down on their turbine inertia, liquid rockets
+ * shut off almost at once (ROCKET_THROTTLE_TIME). Solid motors cannot be throttled.
+ */
+export function spoolDownTime(m: EngineModule): number {
+  if (isSolidMotor(m)) return 0;
+  return m.airBreathing ? m.spoolTime : Math.min(m.spoolTime, ROCKET_THROTTLE_TIME);
+}
+
+/** Time constant toward `target` for an ignited engine in state `st` (start-up transient, then fast for rockets). */
+export function throttleTimeConstant(m: EngineModule, st: { throttle: number; spooledUp?: boolean }, target: number): number {
+  if (isSolidMotor(m)) return 0;
+  if (target < st.throttle) return spoolDownTime(m);
+  return m.airBreathing || !st.spooledUp ? m.spoolTime : Math.min(m.spoolTime, ROCKET_THROTTLE_TIME);
 }
 
 /** First-order lag toward target with time constant spoolTime. */
@@ -215,12 +238,15 @@ export function stepEngines(
     if (!st || !m) continue;
     if (!st.ignited) {
       st.throttle = 0;
+      st.spooledUp = undefined;
       st.thrust = 0;
       st.massFlow = 0;
       continue;
     }
     const target = targetThrottle(m, throttleCmd);
-    st.throttle = spoolThrottle(st.throttle, target, isSolidMotor(m) ? 0 : m.spoolTime, dt);
+    st.throttle = spoolThrottle(st.throttle, target, throttleTimeConstant(m, st, target), dt);
+    // The start-up transient ends once the engine first reaches a commanded (non-zero) setting.
+    if (!st.spooledUp && target > 0 && st.throttle >= target - SPOOL_CUTOFF) st.spooledUp = true;
     // A commanded cut ends once the flow has decayed below the cutoff; otherwise the exponential lag never
     // reaches zero (thrust and propellant drain lingering for tens of seconds, blocking rails warp).
     if (target === 0 && st.throttle < SPOOL_CUTOFF) st.throttle = 0;

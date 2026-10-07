@@ -51,3 +51,8 @@
   .program-note { font-size: 12px; margin-bottom: 0; }
 }
 @media (max-width: 800px) { .menu-actions { width: 340px; } .hub-header { flex-wrap: wrap; } .hub-tiles { margin-top: 40px; } }
+
+/* Space Center: shown over the dark backdrop until the 3D launch complex is ready to fade in. */
+.hub-preparing { display: flex; align-items: center; justify-content: center; pointer-events: none; animation: hub-preparing-pulse 1.6s ease-in-out infinite alternate; }
+@keyframes hub-preparing-pulse { from { opacity: 0.35; } to { opacity: 0.8; } }
+:root[data-reduce-motion="true"] .hub-preparing { animation: none; opacity: 0.7; }

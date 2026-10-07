@@ -28,10 +28,13 @@ export function cancelAssist(this: FlightController, internals: FlightController
 /** Apply the assist after manual controls have been assembled for this frame. */
 export function driveAssist(this: FlightController, internals: FlightControllerInternals, wv: WorldVessel | null, ctrl: ControlInput, dt: number): ControlInput {
   const s = this.input.state;
+  // Consumed every frame so a throttle press made before an assist starts cannot cancel it later.
+  const throttleTouched = this.input.takeThrottleInput();
   let input = ctrl;
   if (this.assist && wv && !this.paused) {
-    // Any manual attitude/throttle input cancels the assist (pilot override).
-    if (s.pitch || s.yaw || s.roll) this.cancelAssist('Assist cancelled: manual control');
+    // Any manual attitude/throttle input cancels the assist (pilot override). The pilot's throttle (e.g. a cut)
+    // then applies this same frame: `ctrl` already carries it, the assist has not overwritten it yet.
+    if (s.pitch || s.yaw || s.roll || throttleTouched) this.cancelAssist('Assist cancelled: manual control');
     else {
       const step = this.assist.update(this.world);
       input = { ...step.input, stage: step.input.stage || ctrl.stage };

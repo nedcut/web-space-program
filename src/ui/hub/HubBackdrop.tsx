@@ -11,6 +11,7 @@ export function HubBackdrop() {
   const host = useRef<HTMLDivElement>(null);
   const hub = useRef<HubScene | null>(null);
   const [failed, setFailed] = useState(false);
+  const [ready, setReady] = useState(false);
   const quality = useGame((s) => s.settings.quality);
   const preset = useGame((s) => s.scalePreset);
   const craft = useGame((s) => s.craft);
@@ -27,6 +28,7 @@ export function HubBackdrop() {
             quality,
             ut: g.ut,
             craft: g.craft,
+            onReady: () => { if (!disposed) setReady(true); },
             onPick: (id) => {
               const s = game.get();
               if (id === 'vab') game.set({ scene: 'editor' });
@@ -39,6 +41,7 @@ export function HubBackdrop() {
         }
       })
       .catch(() => setFailed(true));
+    setReady(false);
     return () => {
       disposed = true;
       hub.current?.dispose();
@@ -51,5 +54,10 @@ export function HubBackdrop() {
   }, [craft]);
 
   if (failed) return <MenuBackdrop />;
-  return <div ref={host} className="fullscreen" style={{ background: '#05070c' }} />;
+  return (
+    <>
+      <div ref={host} className="fullscreen" style={{ background: '#05070c' }} />
+      {!ready && <div className="fullscreen hub-preparing label" role="status">Preparing the launch complex…</div>}
+    </>
+  );
 }
