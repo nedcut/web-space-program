@@ -11,6 +11,7 @@ import { withAerialPerspective } from './aerial';
 import { clearSiteShadow } from './shadows';
 import { livePlanetUniforms } from '../planet/uniforms';
 import { coastalTreeGeometry, smoothSphereNormals } from '../planet/scatter/geometry';
+import { packBand } from './vegetationBands';
 import { instancedVariant } from '../core/materialVariants';
 
 /** What LaunchSite needs from the game Universe (structural, keeps render → game imports out). */
@@ -1335,17 +1336,9 @@ export class LaunchSite {
       for (const { mesh, min, max } of levels) {
         // Bands widened by the update step so a stale partition still covers the shader's dither band.
         const lo = Math.max(0, min - STEP), hi = max + STEP;
-        let k = 0;
-        if (centre + bound.radius > lo && centre - bound.radius < hi) {
-          const lo2 = lo * lo, hi2 = hi * hi;
-          const m = mesh.instanceMatrix.array as Float32Array, c = mesh.instanceColor!.array as Float32Array;
-          for (let i = 0, count = xyz.length / 3; i < count; i++) {
-            const dx = xyz[i * 3] - cam.x, dy = xyz[i * 3 + 1] - cam.y, dz = xyz[i * 3 + 2] - cam.z;
-            const d2 = dx * dx + dy * dy + dz * dz;
-            if (d2 < lo2 || d2 >= hi2) continue;
-            m.set(matrices.subarray(i * 16, i * 16 + 16), k * 16); c.set(colors.subarray(i * 3, i * 3 + 3), k * 3); k++;
-          }
-        }
+        const k = centre + bound.radius > lo && centre - bound.radius < hi
+          ? packBand(xyz, matrices, colors, cam, lo, hi, mesh.instanceMatrix.array as Float32Array, mesh.instanceColor!.array as Float32Array)
+          : 0;
         mesh.visible = k > 0;
         if (k === 0) continue;
         mesh.count = k;
