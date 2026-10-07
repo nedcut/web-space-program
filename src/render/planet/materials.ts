@@ -246,6 +246,12 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       varying vec3 vDetail;
       ${GLSL_AERIAL_VERT}
       ${GLSL_SKY_REFL_VERT}
+      #ifdef EARTH_IMAGERY
+      uniform mat3 uBodyRot;
+      uniform sampler2D uEarthDay;
+      uniform float uEarthImagery;
+      varying float vCovered;
+      #endif
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vWorldPos = wp.xyz;
@@ -254,8 +260,20 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         vDetail = aDetail;
         computeAerial(wp.xyz);
         #ifdef EARTH_IMAGERY
-          // Imagery water drawn by terrain must match the ocean mesh beside it.
-          computeSkyRefl(wp.xyz, normalize(wp.xyz - uPlanetCenter));
+          // Imagery water drawn by terrain must match the ocean mesh beside it. Only vertices near the
+          // datum with water nearby (coarse mip of the mask) can draw it.
+          vSkyRefl = vec3(0.0);
+          vCovered = 0.0;
+          vec3 relV = wp.xyz - uPlanetCenter;
+          float hV = length(relV) - uPlanetRadius;
+          if (uEarthImagery > 0.5 && hV < 1200.0) {
+            vec3 nV = normalize(transpose(uBodyRot) * relV);
+            vec2 uvV = vec2(atan(nV.y, nV.x) * (0.5 / ATMO_PI) + 0.5, 0.5 - asin(clamp(nV.z, -1.0, 1.0)) / ATMO_PI);
+            float waterNear = textureLod(uEarthDay, uvV, 5.0).a;
+            if (hV > -200.0 && waterNear > 0.002) computeSkyRefl(wp.xyz, normalize(relV));
+            // Deep under open water: the opaque ocean mesh covers this vertex (mask agrees, no shore nearby).
+            vCovered = hV < -150.0 && waterNear > 0.995 ? 1.0 : 0.0;
+          }
         #endif
         gl_Position = projectionMatrix * viewMatrix * wp;
         ${GLSL_LOGDEPTH_VERT}
@@ -274,6 +292,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       ${GLSL_SITE_SHADOW}
       #ifdef EARTH_IMAGERY
       varying vec3 vSkyRefl;
+      varying float vCovered;
       #endif
       varying vec3 vWorldPos;
       varying vec3 vNormalBF;
@@ -351,14 +370,18 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         #ifdef EARTH_IMAGERY
           // Imagery owns the colour wherever a texel is small on screen; the close-up palette takes over below.
           float wImg = uEarthImagery * smoothstep(uEarthBlend.x, uEarthBlend.y, dist);
+          // Terrain well below the datum is always under the opaque ocean (log depth defeats early-Z, so
+          // these hidden fragments would otherwise pay for the imagery too).
+          if (vCovered > 0.999) wImg = 0.0;
           float waterW = 0.0;
           if (wImg > 0.0) {
-            vec3 c = earthTex(uEarthDay, eUV).rgb;
+            vec4 dayW = earthTex(uEarthDay, eUV);
+            vec3 c = dayW.rgb;
             vec3 img = earthAlbedo(c);
             #ifdef USE_DETAIL
               img *= 1.0 + hd * 0.6 * uDetailStrength;
             #endif
-            waterW = earthWater(earthTex(uEarthWater, eUV).r, c) * wImg;
+            waterW = earthWater(dayW.a, c) * wImg;
             albedo = mix(albedo, mix(img, earthWaterAlbedo(c), waterW), wImg);
           }
         #endif
@@ -536,8 +559,9 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
           vec3 dayC = vec3(0.0);
           float maskW = 1.0;
           if (wImg > 0.0) {
-            dayC = earthTex(uEarthDay, eUV).rgb;
-            maskW = earthWater(earthTex(uEarthWater, eUV).r, dayC);
+            vec4 dayW = earthTex(uEarthDay, eUV);
+            dayC = dayW.rgb;
+            maskW = earthWater(dayW.a, dayC);
             depth = mix(depth, (maskW - 0.5) * 40.0, wImg);
           }
         #endif
@@ -703,10 +727,11 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
         vec3 waterAlbedo = mix(vec3(0.01, 0.07, 0.075), vec3(0.002, 0.011, 0.03), 1.0 - exp(-(-h) / 18.0));
         #ifdef EARTH_IMAGERY
           if (uEarthImagery > 0.5) {
-            vec3 c = earthTex(uEarthDay, eUV).rgb;
+            vec4 dayW = earthTex(uEarthDay, eUV);
+            vec3 c = dayW.rgb;
             albedo = earthAlbedo(c);
             waterAlbedo = earthWaterAlbedo(c);
-            waterW = earthWater(earthTex(uEarthWater, eUV).r, c);
+            waterW = earthWater(dayW.a, c);
             // The relief bump comes from the coarse bake: keep it off imagery water.
             N = normalize(mix(N, normalize(uBodyRot * n), waterW));
           }

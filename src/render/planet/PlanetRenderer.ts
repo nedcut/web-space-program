@@ -103,6 +103,8 @@ export class PlanetRenderer {
   private sky: THREE.Mesh | null = null;
   /** Real Earth imagery (Earth only; null elsewhere or when unavailable). */
   readonly imagery: EarthImagery | null = null;
+  /** Renderer drawing this planet (seen in material callbacks): imagery uploads/merges run through it. */
+  private glRenderer: THREE.WebGLRenderer | null = null;
   /** Dev/automation: pin the imagery month (0–11) instead of following the season. */
   seasonOverride: number | null = null;
   private readonly imageryStart = typeof performance !== 'undefined' ? performance.now() : 0;
@@ -185,6 +187,10 @@ export class PlanetRenderer {
     }
     if (body.id === 'titan') {
       for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.TITAN_HAZE = 1;
+    }
+    if (this.imagery) {
+      const capture = (r: THREE.WebGLRenderer) => { this.glRenderer = r; };
+      for (const m of this.materials) m.onBeforeRender = capture;
     }
     if (body.id === 'earth' && this.quality.planetDetails.surfaceEmission) {
       for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.EARTH_DETAILS = 1;
@@ -423,6 +429,7 @@ export class PlanetRenderer {
     u.uSunDir.value.set(sx / sd, sy / sd, sz / sd);
     // Seasons follow the orbit (scaled universes shorten the year): Sun's ecliptic longitude → month.
     this.imagery?.update(this.seasonOverride ?? seasonMonth(Math.atan2(sy, sx)));
+    if (this.imagery && this.glRenderer) this.imagery.step(this.glRenderer);
     const auScaled = AU * this.scale.s;
     const E = this.kind === 'star' ? 0 : this.sunIlluminance * Math.pow(auScaled / Math.max(sd, auScaled * 0.2), 0.3);
     u.uSunColor.value.set(E, E * 0.985, E * 0.96);
