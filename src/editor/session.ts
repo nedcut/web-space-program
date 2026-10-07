@@ -1,3 +1,4 @@
+import { snapshotEqual } from '../util/snapshotEqual';
 import { getTutorial, endTutorial } from '../tutorial/runtime';
 import { partUnlocked, launchProblem } from '../data/technology';
 import { newProgression } from '../sim/science/progression';
@@ -95,6 +96,7 @@ export class EditorSession {
   editor: CraftEditor;
   private listeners = new Set<() => void>();
   private snap!: SessionView;
+  private referenceEarth?: { preset: ReturnType<typeof game.get>['scalePreset']; body: ReturnType<Universe['body']> };
   private name: string;
   private launchWarnedAt = -Infinity;
   private scaleNotices = new Set<string>();
@@ -156,10 +158,14 @@ export class EditorSession {
   }
 
   private refresh() {
-    const craft = this.editor.craft;
-    const stats = craftStats(craft, CATALOG, DENSITIES);
-    const stages = getStageList(craft);
-    const stageStats = computeStageStats(craft, CATALOG, new Universe(game.get().scalePreset).body('earth'));
+    let craft = this.editor.craft;
+    const preset = game.get().scalePreset;
+    const same = this.referenceEarth?.preset === preset && snapshotEqual(craft, this.snap?.craft);
+    if (same) craft = this.snap.craft;
+    if (this.referenceEarth?.preset !== preset) this.referenceEarth = { preset, body: new Universe(preset).body('earth') };
+    const stats = same ? this.snap.stats : craftStats(craft, CATALOG, DENSITIES);
+    const stages = same ? this.snap.stages : getStageList(craft);
+    const stageStats = same ? this.snap.stageStats : computeStageStats(craft, CATALOG, this.referenceEarth!.body);
     let totalDvVac = 0, totalDvAsl = 0;
     for (const s of stageStats.values()) { totalDvVac += s.dvVac; totalDvAsl += s.dvAsl; }
     this.version++;

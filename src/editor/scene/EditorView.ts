@@ -43,6 +43,8 @@ function tinted(m: THREE.Material, key: string, color: number, intensity: number
   return c;
 }
 function setTint(root: THREE.Object3D, tint: { key: string; color: number; intensity: number } | null) {
+  if (root.userData.editorTint === (tint?.key ?? 'none')) return;
+  root.userData.editorTint = tint?.key ?? 'none';
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh || o.userData.noTint) return;
@@ -107,6 +109,8 @@ export class EditorView {
   private raycaster = new THREE.Raycaster();
   private placement: Placement | null = null;
   private snapKey: string | null = null;
+  private craftNodes: WorldAttachNode[] = [];
+  private heldNodes: WorldAttachNode[] = [];
   private lastCraft: SessionView['craft'] | null = null;
   private lastHeldSig = '';
   private lastLoad = -1;
@@ -246,7 +250,6 @@ export class EditorView {
 
   // ------------------------------------------------------------------ session sync
   private sync() {
-    this.renderer.shadowMap.needsUpdate = true;
     const snap = this.session.getSnapshot();
     if (snap.craftType === 'SPH' !== this.horizontal) {
       this.horizontal = snap.craftType === 'SPH';
@@ -254,6 +257,7 @@ export class EditorView {
       this.lastCraft = null;
     }
     if (snap.craft !== this.lastCraft) {
+      this.renderer.shadowMap.needsUpdate = true;
       this.lastCraft = snap.craft;
       this.syncCraft(snap);
     }
@@ -261,6 +265,7 @@ export class EditorView {
     const heldSig = snap.held ? `${snap.held.kind}|${snap.held.kind === 'new' ? snap.held.partId : coreHeld?.parts.map((p) => p.uid).join(',')}|${JSON.stringify(snap.held.rotation)}|${snap.symmetry}|${JSON.stringify(coreHeld?.parts[0]?.rotation ?? null)}` : '';
     if (heldSig !== this.lastHeldSig) {
       const structural = heldSig.split('|').slice(0, 2).join('|') !== this.lastHeldSig.split('|').slice(0, 2).join('|') || heldSig.split('|')[4] !== this.lastHeldSig.split('|')[4];
+      this.renderer.shadowMap.needsUpdate = true;
       this.lastHeldSig = heldSig;
       this.heldParts = this.session.heldParts();
       if (structural) this.buildHeld();
@@ -343,6 +348,7 @@ export class EditorView {
 
   // ------------------------------------------------------------------ held assembly
   private buildHeld() {
+    delete this.heldGroup.userData.editorTint;
     this.heldMeshes.clear();
     this.ghostGroup.clear();
     this.ghostCount = 0;
@@ -496,10 +502,9 @@ export class EditorView {
   }
 
   private findStackSnap(C: Vec3): { child: WorldAttachNode; childAt: WorldAttachNode; parent: WorldAttachNode } | null {
-    const craft = this.session.getSnapshot().craft;
-    const heldNodes = freeAttachNodes({ parts: this.heldParts }, CATALOG).filter((n) => n.id !== 'srf');
+    const heldNodes = this.heldNodes;
     if (!heldNodes.length) return null;
-    const craftNodes = freeAttachNodes(craft, CATALOG).filter((n) => n.id !== 'srf');
+    const craftNodes = this.craftNodes;
     let best: { child: WorldAttachNode; childAt: WorldAttachNode; parent: WorldAttachNode; rank: number } | null = null;
     const pa = new THREE.Vector2(), pb = new THREE.Vector2();
     for (const h of heldNodes) {
@@ -594,6 +599,8 @@ export class EditorView {
     for (const m of this.nodeMarkers) m.mesh.removeFromParent();
     this.nodeMarkers = [];
     const snap = this.session.getSnapshot();
+    this.craftNodes = freeAttachNodes(snap.craft, CATALOG).filter(n => n.id !== 'srf');
+    this.heldNodes = freeAttachNodes({ parts: this.heldParts }, CATALOG).filter(n => n.id !== 'srf');
     if (!snap.held || this.session.isLinkPlacement()) return;
     const add = (n: WorldAttachNode, parent: THREE.Object3D, key: string) => {
       const mesh = new THREE.Mesh(this.markerGeo, this.markerMat);
@@ -609,8 +616,8 @@ export class EditorView {
       parent.add(mesh);
       this.nodeMarkers.push({ mesh, key, base });
     };
-    for (const n of freeAttachNodes(snap.craft, CATALOG)) if (n.id !== 'srf') add(n, this.nodeGroup, `${n.uid}:${n.id}`);
-    for (const n of freeAttachNodes({ parts: this.heldParts }, CATALOG)) if (n.id !== 'srf') add(n, this.heldGroup, `h${n.uid}:${n.id}`);
+    for (const n of this.craftNodes) add(n, this.nodeGroup, `${n.uid}:${n.id}`);
+    for (const n of this.heldNodes) add(n, this.heldGroup, `h${n.uid}:${n.id}`);
   }
 
   // ------------------------------------------------------------------ highlights
