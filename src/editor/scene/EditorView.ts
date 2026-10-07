@@ -140,6 +140,10 @@ export class EditorView {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = game.get().settings.shadows;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // The hall lights and assembled craft are stationary while orbiting the camera.
+    // Rebuild their shadow only for assembly/held-part changes, not every safety-net frame.
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
     this.renderer.domElement.style.display = 'block';
     this.renderer.domElement.style.touchAction = 'none';
     container.appendChild(this.renderer.domElement);
@@ -240,6 +244,7 @@ export class EditorView {
 
   // ------------------------------------------------------------------ session sync
   private sync() {
+    this.renderer.shadowMap.needsUpdate = true;
     const snap = this.session.getSnapshot();
     if (snap.craftType === 'SPH' !== this.horizontal) {
       this.horizontal = snap.craftType === 'SPH';
@@ -885,6 +890,7 @@ export class EditorView {
     if (key !== this.frameKey) {
       this.frameKey = key;
       this.updateHover();
+      if (this.session.getSnapshot().held) this.renderer.shadowMap.needsUpdate = true;
       this.updatePlacement();
     } else if (this.snapKey) this.pulseMarkers();
     const t1 = performance.now();

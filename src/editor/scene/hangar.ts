@@ -447,7 +447,8 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   boxProjected(floorMat, 0.22);
   const floor = new THREE.Mesh(track(new THREE.PlaneGeometry(FLOOR_W, FLOOR_W)), floorMat);
   floor.rotation.x = -Math.PI / 2;
-  floor.receiveShadow = true;
+  // The deck uses the soft footprint below; reserve filtered shadow-map sampling for craft self-shadowing.
+  floor.receiveShadow = false;
   floor.name = 'floor';
   group.add(floor);
 
@@ -457,7 +458,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   // Side, top cap, bottom cap: the textured deck only on top.
   const plat = new THREE.Mesh(track(new THREE.CylinderGeometry(PLATFORM_R, PLATFORM_R + 0.12, PLATFORM_H, 96, 1)), [trimMat, platMat, trimMat]);
   plat.position.y = PLATFORM_H / 2;
-  plat.receiveShadow = true;
+  plat.receiveShadow = false;
   group.add(plat);
   const ringGeos = [
     new THREE.RingGeometry(PLATFORM_R - 0.32, PLATFORM_R - 0.22, 128, 1),

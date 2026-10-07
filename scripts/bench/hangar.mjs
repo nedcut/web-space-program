@@ -79,13 +79,13 @@ try {
             const pair = {};
             for (const name of seed & 0x10000 ? ['before', 'after'] : ['after', 'before']) {
               active = name;
-              const v = views[name], gl = after.renderer.getContext();
+              const v = views[name], renderer = profile === 'shared' ? after.renderer : v.renderer, gl = renderer.getContext();
               const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
               if (!ext) throw new Error('GPU timer unavailable');
               const q = gl.createQuery();
               gl.beginQuery(ext.TIME_ELAPSED_EXT, q);
-              after.renderer.render(v.scene, v.camera);
-              calls[name] = after.renderer.info.render.calls;
+              renderer.render(v.scene, v.camera);
+              calls[name] = renderer.info.render.calls;
               gl.endQuery(ext.TIME_ELAPSED_EXT);
               gl.flush();
               const deadline = performance.now() + 5000;
@@ -137,6 +137,27 @@ try {
   });
   await page.waitForTimeout(600);
   await page.screenshot({ path: fileURLToPath(new URL(`${label}-snap.png`, out)) });
+  results.shadowCache = await page.evaluate(() => {
+    const { view: v, session } = window.__editor;
+    session.cancelHeld();
+    v.renderer.render(v.scene, v.camera);
+    const stable = !v.renderer.shadowMap.needsUpdate;
+    v.setView({ yaw: v.yaw + 0.08 });
+    cancelAnimationFrame(v.raf); v.loop(); cancelAnimationFrame(v.raf);
+    const orbit = !v.renderer.shadowMap.needsUpdate;
+    session.pickNew('tank-1-short');
+    const edit = v.renderer.shadowMap.needsUpdate;
+    v.loop();
+    return { enabled: !v.renderer.shadowMap.autoUpdate, stable, orbit, edit };
+  });
+  // Restore the snap after the shadow-cache edit check moved the camera/held part.
+  await page.evaluate(() => {
+    const v = window.__editor.view, target = v.nodeMarkers.find(m => !m.key.startsWith('h'));
+    const p = target.mesh.getWorldPosition(v.markerWorld).clone().project(v.camera);
+    const el = v.renderer.domElement, rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent('pointermove', { clientX: rect.left + (p.x + 1) * rect.width / 2, clientY: rect.top + (1 - p.y) * rect.height / 2 }));
+  });
+  await page.waitForTimeout(600);
   results.attachment = await page.evaluate(() => {
     const { view: v, session } = window.__editor;
     const before = session.getSnapshot().craft.parts.length;
@@ -151,7 +172,7 @@ try {
   });
   results.scene = await page.evaluate(() => {
     const v = window.__editor.view, gl = v.renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
-    return { gpu: gl.getParameter(ext.UNMASKED_RENDERER_WEBGL), calls: v.renderer.info.render.calls, programs: v.renderer.info.programs.length };
+    return { gpu: gl.getParameter(ext.UNMASKED_RENDERER_WEBGL), calls: v.renderer.info.render.calls, programs: v.renderer.info.programs.length, glError: gl.getError(), failedPrograms: v.renderer.info.programs.filter(p => p.diagnostics?.runnable === false).length };
   });
   writeFileSync(new URL(`${label}-metrics.json`, out), JSON.stringify(results, null, 2));
   console.log(JSON.stringify(results, (k,v) => k === 'pairs' ? undefined : v));
