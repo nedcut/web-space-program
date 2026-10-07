@@ -43,7 +43,7 @@ function sources(parts: THREE.Object3D[], toFrame: THREE.Matrix4): Source[] {
       const r = Math.max(0.05, (o.userData.exitRadius as number | undefined) ?? 0.3);
       const ref = Math.abs(d.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
       const u = ref.addScaledVector(d, -ref.dot(d)).normalize();
-      out.push({ p, d, u, w: new THREE.Vector3().crossVectors(d, u), r, owner, amp: Math.min(0.85, 0.45 + 0.3 * r), len: engineLength(owner, toFrame, p, d) });
+      out.push({ p, d, u, w: new THREE.Vector3().crossVectors(d, u), r, owner, amp: Math.min(0.95, 0.7 + 0.25 * r), len: engineLength(owner, toFrame, p, d) });
     });
   return out;
 }
@@ -89,11 +89,12 @@ function sootAt(s: Source, x: THREE.Vector3, n: THREE.Vector3): number {
     const h = Math.max(0, -a - s.len);
     const out = Math.max(0, rho - 1.15 * s.r);
     const k = Math.exp(-h / (0.65 * s.r + 0.3)) * Math.exp(-out / (1.3 * s.r + 0.45));
-    return k * (0.62 + 0.38 * Math.max(0, facing));
+    return k * (0.85 + 0.15 * Math.max(0, facing));
   }
-  const w = s.r * 1.1 + a * 0.24;
-  const k = 0.7 * Math.exp(-a / (7 * s.r + 2.5)) * Math.exp(-((rho / w) ** 2));
-  return k * (0.3 + 0.7 * Math.max(0, -facing));
+  // cone plus a near-field wall jet: exhaust hitting a surface close to the exit spreads radially along it
+  const w = s.r * 1.1 + a * 0.24 + (1.2 + 1.5 * s.r) * Math.exp(-a / (2 * s.r + 0.4));
+  const k = 0.8 * Math.exp(-a / (7 * s.r + 2.5)) * Math.exp(-((rho / w) ** 2));
+  return k * (0.4 + 0.6 * Math.max(0, -facing));
 }
 
 /** Upper bound of a source's soot anywhere within a bounding sphere (for culling). */
@@ -163,7 +164,7 @@ export function bakeEngineSoot(parts: THREE.Object3D[], frame: THREE.Object3D, o
           if (k < 1e-3) continue;
           // streaks: angular noise around the plume axis (sootAt leaves the radial offset in _q)
           const phi = Math.atan2(_q.dot(s.w), _q.dot(s.u));
-          const st = 0.62 + 0.55 * streak(phi, 3) * (0.6 + 0.4 * streak(phi * 2.7, 7));
+          const st = 0.45 + 0.8 * streak(phi, 3) * (0.55 + 0.45 * streak(phi * 2.7, 7));
           keep *= 1 - Math.min(1, s.amp * k * st);
         }
         const v = Math.min(0.86, 1 - keep);

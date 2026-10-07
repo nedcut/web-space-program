@@ -36,7 +36,7 @@ describe('engine-aware soot', () => {
     bakeEngineSoot([tank, pod, eng], frame, { cloneShared: true });
     const bottom = shade(tank, 'body', -th / 2, -th / 2 + 0.3), topShade = shade(tank, 'body', th / 2 - 0.3, th / 2);
     expect(bottom).toBeLessThan(cleanBottom * 0.85);
-    expect(topShade).toBeGreaterThan(cleanTop * 0.94);
+    expect(topShade).toBeGreaterThan(cleanTop * 0.92);
     let podSooted = false, engSooted = false;
     pod.traverse((c) => { if ((c as THREE.Mesh).isMesh && isSooted((c as THREE.Mesh).geometry)) podSooted = true; });
     eng.traverse((c) => { if ((c as THREE.Mesh).isMesh && isSooted((c as THREE.Mesh).geometry)) engSooted = true; });
