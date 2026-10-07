@@ -3,6 +3,8 @@
 .vab-canvas { z-index: 0; }
 .vab-vignette { z-index: 1; pointer-events: none; background: radial-gradient(ellipse 75% 70% at 50% 48%, transparent 55%, rgba(4, 7, 12, 0.55) 100%); }
 .vab-root > .panel { position: absolute; z-index: 2; }
+/* Above the side panels so its menu, share-code card and sharing row are never covered. */
+.vab-root > .vab-topbar { z-index: 6; }
 
 /* ---------------------------------------------------------------- top bar */
 .vab-topbar {
@@ -43,7 +45,26 @@
 .vab-stat .accent { color: var(--accent); font-weight: 600; }
 .vab-launch { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 18px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
 .vab-launch-cost { font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; opacity: 0.85; text-transform: none; }
-.vab-topbar > .vab-ibtn:last-child { flex-shrink: 0; }
+.vab-topbar > .vab-exit, .vab-topbar > .vab-mode { flex-shrink: 0; }
+/* Middle tools take the leftover width and clip rather than push Launch/Exit off screen (long names, UI scale). */
+.vab-tools { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: inherit; overflow: hidden; }
+.vab-tools > * { flex-shrink: 0; }
+.vab-topbar .vab-name { flex: 0 1 auto; min-width: 72px; }
+.vab-more { position: relative; display: none; flex-shrink: 0; }
+.vab-more-menu {
+  position: absolute; top: calc(100% + 10px); right: 0; z-index: 60; min-width: 230px; padding: 6px; background: rgba(10, 15, 26, 0.97);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.vab-more-menu hr { width: 100%; border: none; border-top: 1px solid var(--panel-border); margin: 4px 0; }
+.vab-more-stats { padding: 6px 10px 8px; font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+.vab-more-stats .accent { color: var(--accent); font-weight: 600; }
+.vab-more-item {
+  display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border: none; border-radius: var(--radius-sm);
+  background: transparent; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.vab-more-item:hover, .vab-more-item:focus-visible { background: rgba(92, 200, 255, 0.12); }
+.vab-more-item:disabled { opacity: 0.4; cursor: default; }
+.vab-more-item .mono { color: var(--text-dim); font-size: 11px; }
 
 /* ---------------------------------------------------------------- palette */
 .vab-palette {
@@ -205,6 +226,23 @@
 @media (max-width: 1300px) {
   .vab-stats .vab-stat:nth-child(3) { display: none; }
   .vab-name { width: 150px; }
+}
+/* Responsive toolbar: Launch and Exit stay visible down to 760 px; secondary tools move into the "More tools" menu. */
+@media (max-width: 1200px) {
+  .vab-topbar .vab-collapsible { display: none; }
+  .vab-more { display: block; }
+}
+@media (max-width: 1100px) {
+  .vab-topbar .vab-name { width: 130px; }
+  .vab-stats .vab-stat:nth-child(2) { display: none; }
+  .vab-actions-label { display: none; }
+}
+@media (max-width: 900px) {
+  .vab-topbar { gap: 6px; padding: 0 6px; }
+  .vab-topbar .vab-name { width: 140px; }
+  .vab-stats { display: none; }
+  .vab-mode .vab-brand-mark { padding: 0 7px; letter-spacing: 0.08em; }
+  .vab-launch { padding: 0 12px; }
 }
 .vab-stock-locked { font-size: 10.5px; color: var(--warn); margin-top: 4px; }
 
