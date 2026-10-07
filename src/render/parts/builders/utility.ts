@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { PartDef } from '../../../sim/vessel/types';
 import { landingLegLayout } from '../../../data/parts';
 import { M } from '../materials';
-import { around, bevelBox, box, cyl, cylinder, detailLevel, grp, lathe, mk, pipe, rod, setDeployData, sphere, torus, type Profile } from '../geom';
+import { around, bevelBox, box, cyl, cylinder, detailLevel, grp, lathe, mk, pipe, rod, setDeployData, sphere, tint, torus, type Profile } from '../geom';
 import { boxDims, cylDims, num, srfMount, str } from './common';
 import { charShield } from './command';
 
@@ -212,8 +212,8 @@ export function buildLandingLeg(def: PartDef): THREE.Object3D {
   const eye = cyl(0.046 * s, 0.046 * s, 0.075 * s, 14).rotateZ(PI / 2);
   const gland = hexNut(0.05 * s, 0.045 * s).translate(0, sleeveLen - 0.005 * s, 0);
   const brCollar = box(0.17 * s, 0.035 * s, 0.035 * s).translate(0, 0.22 * s, 0);
-  upper.add(mk([eye, gland, brCollar], M.gunmetal(), 'strutFittings'));
-  upper.add(mk(torus(0.03 * s, 0.006 * s, 6, 16).translate(0, sleeveLen + 0.018 * s, 0), M.rubber(), 'wiper'));
+  const wiper = tint(torus(0.03 * s, 0.006 * s, 6, 16).translate(0, sleeveLen + 0.018 * s, 0), 0.22);
+  upper.add(mk([tint(eye, 1), tint(gland, 1), tint(brCollar, 1), wiper], M.gunmetal(), 'strutFittings'));
   // damper reservoir along the sleeve, hose to the gland, hazard band at the gland, clamp bands
   upper.add(mk(cyl(0.018 * s, 0.018 * s, sleeveLen * 0.5, 10, sleeveLen * 0.55).translate(0, 0, 0.055 * s), M.accent('blue'), 'reservoir'));
   upper.add(mk(pipe([[0, sleeveLen * 0.3, 0.055 * s], [0.02 * s, sleeveLen * 0.26, 0.06 * s], [0.04 * s, sleeveLen * 0.4, 0.03 * s], [0.04 * s, sleeveLen * 0.88, 0.02 * s], [0.015 * s, sleeveLen * 0.95, 0.04 * s]], 0.006 * s, 6, 28), M.cable(), 'hose'));
@@ -248,7 +248,7 @@ export function buildLandingLeg(def: PartDef): THREE.Object3D {
     ],
     { segments: 32 },
   );
-  foot.add(mk(pad, M.aluminium(), 'pad'));
+  foot.add(mk(pad, M.gunmetal(), 'pad'));
   const ribs: THREE.BufferGeometry[] = [sphere(0.03 * s, 12, 8)];
   const nRib = fine ? 8 : 4;
   for (let i = 0; i < nRib; i++) {
@@ -260,25 +260,16 @@ export function buildLandingLeg(def: PartDef): THREE.Object3D {
     ribs.push(g);
   }
   foot.add(mk(ribs, M.gunmetal(), 'padRibs'));
-  if (fine) {
-    const bolts: THREE.BufferGeometry[] = [];
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * PI * 2;
-      bolts.push(hexNut(0.007 * s, 0.006 * s).translate(Math.sin(a) * R * 0.9, -pd + ph * 0.1, Math.cos(a) * R * 0.9));
-    }
-    foot.add(mk(bolts, M.chrome(), 'padBolts'));
-  }
   foot.add(mk(cyl(R * 0.94, R * 0.9, 0.012 * s, 24, -pd - ph / 2 + 0.006 * s), M.rubber(), 'sole'));
   setDeployData(upper, { rot0: [0, 0, 0], rot1: [L.deployAngle, 0, 0] });
   setDeployData(foot, { rot0: [0, 0, 0], rot1: [-L.deployAngle, 0, 0] });
 
-  // --- deploy braces: three-stage telescopes from the rail lugs to the strut collar, either side of the strut;
-  // setPartDeploy aims and extends them at the collar ('legBraceTip*') in every pose.
+  // --- deploy braces: telescopes from the rail lugs to the strut collar, either side of the strut; the barrel
+  // runs back up past its lug pivot, and setPartDeploy aims it and slides the rod to the collar ('legBraceTip*').
   const bAt = 0.22 * s;
   const A = new THREE.Vector3(0, H.y + 0.5 * s, mz + 0.055 * s);
   const L0 = new THREE.Vector3(0, H.y + bAt, H.z).distanceTo(A);
-  const T = L0 * 0.94;
-  const rr = [0.017 * s, 0.013 * s, 0.009 * s];
+  const rodL = 0.5 * s, back = rodL - L0 + 0.03 * s, T = 0.26 * s;
   for (const sx of [-1, 1]) {
     const tag = sx > 0 ? 'R' : 'L';
     const tip = new THREE.Object3D();
@@ -287,17 +278,13 @@ export function buildLandingLeg(def: PartDef): THREE.Object3D {
     upper.add(tip);
     const br = grp(`legBrace${tag}`);
     br.position.set(sx * 0.07 * s, A.y, A.z);
-    setDeployData(br, { aim: tip.name, tube: T });
+    setDeployData(br, { aim: tip.name, tube: rodL });
     root.add(br);
-    br.add(mk([tube([0, 0, 0], [0, T, 0], rr[0], 10), torus(rr[0] * 1.15, 0.004 * s, 4, 12).translate(0, T, 0), sphere(rr[0] * 1.3, 10, 8)], M.satinWhite(), 'braceBarrel'));
-    const st2 = grp('braceStage');
-    setDeployData(st2, {}); // own AO group: it slides inside the barrel
-    br.add(st2);
-    st2.add(mk(tube([0, 0, 0], [0, T, 0], rr[1], 10), M.aluminium(), 'braceMid'));
-    const st3 = grp('braceStage');
-    setDeployData(st3, {});
-    st2.add(st3);
-    st3.add(mk([tube([0, 0, 0], [0, T, 0], rr[2], 8), sphere(rr[2] * 1.9, 10, 8).translate(0, T, 0)], M.chrome(), 'braceRod'));
+    br.add(mk([tube([0, -back, 0], [0, T, 0], 0.017 * s, 10), torus(0.0195 * s, 0.004 * s, 4, 12).translate(0, T, 0), sphere(0.022 * s, 10, 8), torus(0.0195 * s, 0.004 * s, 4, 12).translate(0, -back, 0)], M.satinWhite(), 'braceBarrel'));
+    const st = grp('braceStage');
+    setDeployData(st, {}); // own AO group: it slides inside the barrel
+    br.add(st);
+    st.add(mk([tube([0, 0, 0], [0, rodL, 0], 0.011 * s, 8), sphere(0.019 * s, 10, 8).translate(0, rodL, 0)], M.chrome(), 'braceRod'));
   }
   return root;
 }
