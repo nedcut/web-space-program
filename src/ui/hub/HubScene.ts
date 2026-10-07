@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { game } from '../../game/store';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RenderPipeline, getQuality, type QualityId } from '../../render/core';
+import { compileInSlices } from '../../render/core/compileInSlices';
 import { Starfield } from '../../render/sky/Starfield';
 import { SunGlare } from '../../render/sky/SunGlare';
 import { LaunchSite, type SiteObjectId } from '../../render/site/LaunchSite';
@@ -28,7 +29,12 @@ export interface HubSceneOptions {
   craft: CraftDef | null;
   /** Called when a building is clicked. */
   onPick?: (id: SiteObjectId) => void;
+  /** Called once when the scene is ready and fades in. */
+  onReady?: () => void;
 }
+
+/** Reveal the hub even if Earth's terrain has not settled by then (slow machines, stalled workers). */
+const HUB_REVEAL_TIMEOUT_MS = 12000;
 
 /** Target sun elevation (deg) for the cinematic golden-hour look. */
 const GOLDEN_ELEVATION = 8;
@@ -98,13 +104,23 @@ export class HubScene {
   private camPhase = 0;
   /** Dev: ?hubCam=az,dist,height,targetX,targetY,targetZ fixes the camera (local pad frame). */
   private devCam: number[] | null = null;
+  /**
+   * First-load gate: the canvas stays transparent (the dark host shows) while shaders compile in slices and Earth's
+   * terrain bakes/streams, then fades in once. Drawing earlier showed the complex in stages on a cold cache (black,
+   * then a washed-out white ground before the terrain bake, then trees and chunks popping in).
+   */
+  private warmup: 'pending' | 'compiling' | 'done' = 'pending';
+  private warmupTimer = 0;
+  private framesRendered = 0;
+  private revealed = false;
+  private readonly startedAt = performance.now();
 
   constructor(private host: HTMLElement, private opts: HubSceneOptions) {
     const q = getQuality(opts.quality);
     this.universe = new Universe(opts.preset);
     this.pipeline = new RenderPipeline({ quality: q, toneMapping: 'aces', exposure: 1.3 });
     const canvas = this.pipeline.renderer.domElement;
-    Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block' });
+    Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block', opacity: '0', transition: 'opacity 0.45s ease' });
     host.appendChild(canvas);
     this.photo = new PhotoCamera(this.pipeline, this.scene, this.camera, () => this.vessel?.view.root.position.clone() ?? this.site.root.position.clone(), () => true, 2000);
 
@@ -230,10 +246,44 @@ export class HubScene {
     this.last = now;
     if (!this.photo.active) this.elapsed += dt;
     this.pipeline.updateAdaptive(frameMs, game.get().settings.adaptiveQuality && !this.photo.active, game.get().settings.frameRateCap);
-    this.render(dt);
+    // Until shaders are built, update (terrain requests, site LOD) without drawing.
+    this.render(dt, this.warmup === 'done');
+    if (this.warmup === 'pending') this.startWarmup();
+    else if (this.warmup === 'done') {
+      this.framesRendered++;
+      if (!this.revealed && this.framesRendered >= 3 && ((this.planets.isSurfaceReady?.('earth') ?? true) || performance.now() - this.startedAt > HUB_REVEAL_TIMEOUT_MS)) this.reveal();
+    }
   };
 
-  private render(dt: number) {
+  /** Build every program in slices (a few ms per frame) instead of in the first visible frames. */
+  private startWarmup() {
+    this.warmup = 'compiling';
+    const start = performance.now();
+    const finish = () => {
+      window.clearTimeout(this.warmupTimer);
+      if (this.warmup !== 'compiling') return;
+      this.warmup = 'done';
+      performance.measure('wsp:hub:shaderWarmup', { start });
+    };
+    try {
+      compileInSlices(this.pipeline.renderer, [this.scene], this.camera, this.scene, {
+        renderTarget: this.pipeline.composer.readBuffer,
+        cancelled: () => this.warmup !== 'compiling',
+      }).then(finish, finish);
+      this.warmupTimer = window.setTimeout(finish, 15000);
+    } catch {
+      finish();
+    }
+  }
+
+  private reveal() {
+    this.revealed = true;
+    this.pipeline.renderer.domElement.style.opacity = '1';
+    performance.measure('wsp:hub:ready', { start: this.startedAt });
+    this.opts.onReady?.();
+  }
+
+  private render(dt: number, submit = true) {
     const u = this.universe;
     const t = this.t;
     const bs = u.ephem.getBodyState('earth', t).position;
@@ -309,10 +359,12 @@ export class HubScene {
       document.body.style.cursor = hit ? 'pointer' : '';
     }
 
-    this.pipeline.render(this.scene, this.camera);
+    if (submit) this.pipeline.render(this.scene, this.camera);
   }
 
   dispose() {
+    this.warmup = 'done';
+    window.clearTimeout(this.warmupTimer);
     this.pipeline.detach(this.scene);
     this.photo.dispose();
     cancelAnimationFrame(this.raf);
