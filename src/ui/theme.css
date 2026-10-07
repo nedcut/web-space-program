@@ -10,8 +10,7 @@ button { font: inherit; color: inherit; }
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius);
-  backdrop-filter: blur(var(--blur-panel)) saturate(1.2);
-  -webkit-backdrop-filter: blur(var(--blur-panel)) saturate(1.2);
+  /* Nearly opaque panel gradients provide contrast without resampling the live canvas. */
   box-shadow: var(--shadow-panel);
 }
 
@@ -63,7 +62,7 @@ input[type='range'] { accent-color: var(--accent); }
 .transfer-plot { max-height: calc(100vh - 30px); overflow-y: auto; width: min(700px, calc(100vw - 30px)); padding: 18px; display: flex; flex-direction: column; gap: 12px; }
 .transfer-plot canvas { width: 100%; aspect-ratio: 1.8; cursor: crosshair; }
 button, input, select, textarea { font-size: 1em; }
-.settings-backdrop { position: fixed; inset: 0; z-index: 1000; background: #020812b8; backdrop-filter: blur(6px); display: grid; place-items: center; padding: 20px; }
+.settings-backdrop { position: fixed; inset: 0; z-index: 1000; background: #020812b8; display: grid; place-items: center; padding: 20px; }
 .settings-dialog { width: min(780px, 100%); max-height: calc(100dvh - 40px); display: flex; flex-direction: column; padding: 24px; gap: 14px; outline: none; }
 .settings-dialog h2 { margin: 0; }
 .settings-tabs { flex-wrap: wrap; flex-shrink: 0; }
@@ -113,7 +112,7 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); opacity: .8;
 .settings-dialog { box-shadow: var(--shadow-modal); border-radius: var(--radius-lg); }
 .settings-dialog h2 { font-weight: 500; font-size: 24px; }
 .settings-tabs button { flex: 1; }
-.modal-backdrop { padding: 16px; backdrop-filter: blur(4px); }
+.modal-backdrop { padding: 16px; }
 .loading-screen::before { content: ''; position: absolute; width: 320px; height: 320px; border: 1px solid var(--panel-border); border-radius: 50%; box-shadow: 0 0 0 40px #79d7ee03, 0 0 0 80px #79d7ee02; pointer-events: none; }
 .loading-screen > div { position: relative; }
 .loading-bar { margin-left: auto; margin-right: auto; }

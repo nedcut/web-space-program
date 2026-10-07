@@ -1,0 +1,617 @@
+{
+  "label": "before-detail",
+  "base": "http://localhost:5336",
+  "cpuThrottle": 4,
+  "dpr": 2,
+  "renderer": "WSL Chromium SwiftShader (software GPU)",
+  "paintMethod": "capture event to second rAF; upper bound on next paint opportunity",
+  "cases": {
+    "100part-symmetry": {
+      "samples": [
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 672.2000000476837
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 14610.100000023842
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 6794.099999904633
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 7142.100000023842
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 4579.600000023842
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 3056.4000000953674
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 4200.600000023842
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 3469.5
+        }
+      ],
+      "p75Ms": 6794.099999904633,
+      "p95FrameGapMs": 12899.499999999996,
+      "frames": 16
+    },
+    "100part-undo-redo": {
+      "samples": [
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 3790.600000023842
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 3517.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 411.89999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 2937.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 3273.2000000476837
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 2875.3000000715256
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 2891.2999999523163
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 201.80000007152557
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1289.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1656.7000000476837
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1469.1000000238419
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1503.7000000476837
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1674.7999999523163
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1859.1000000238419
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1857.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1693
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1815.7999999523163
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 172.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1304.3999999761581
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1370.2999999523163
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1900.2999999523163
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 2106.1999999284744
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1851.2000000476837
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 2059.100000023842
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 2056.399999976158
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1887.7999999523163
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1881.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 186.30000007152557
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1930.7000000476837
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1978.6000000238419
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1605.6999999284744
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1709.1999999284744
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1339.1000000238419
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1338.2999999523163
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1454.0999999046326
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1528.8999999761581
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1850.5999999046326
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 152.70000004768372
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1327.7000000476837
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 1778.7000000476837
+        }
+      ],
+      "p75Ms": 1930.7000000476837,
+      "p95FrameGapMs": 2316.5,
+      "frames": 91
+    },
+    "resources-panel": {
+      "samples": [
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 3289.7000000476837
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 3265.3000000715256
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 4792.899999976158
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 3732.399999976158
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 3044.3000000715256
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 5268.199999928474
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 3597.899999976158
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 1551.6000000238419
+        }
+      ],
+      "p75Ms": 3732.399999976158,
+      "p95FrameGapMs": 3949.9000000000015,
+      "frames": 17
+    }
+  },
+  "errors": [],
+  "partCount": 100,
+  "drag": {
+    "samples": [
+      {
+        "gap": -9.300000047689537,
+        "update": 3.600000023841858,
+        "render": 63.300000071525574
+      },
+      {
+        "gap": 100,
+        "update": 6,
+        "render": 32.60000002384186
+      },
+      {
+        "gap": 2033.2000000000116,
+        "update": 3.700000047683716,
+        "render": 54.799999952316284
+      },
+      {
+        "gap": 1416.6000000000058,
+        "update": 0.6999999284744263,
+        "render": 30.90000009536743
+      },
+      {
+        "gap": 1533.2999999999884,
+        "update": 4,
+        "render": 83
+      }
+    ],
+    "fps": 0.9854546888026706
+  },
+  "attachment": {
+    "before": 100,
+    "placed": 101,
+    "kind": "stack",
+    "callMs": 933.5
+  },
+  "flightProfile": [
+    {
+      "phase": "update",
+      "duration": 3,
+      "commitTime": 29932.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 30087.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.3999999761581421,
+      "commitTime": 30247.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 30407.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 1.2999999523162842,
+      "commitTime": 30570
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 30727.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 30887.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 31048.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 31206.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 31400
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 31527.5
+    },
+    {
+      "phase": "update",
+      "duration": 0.8000000715255737,
+      "commitTime": 31691.399999976158
+    },
+    {
+      "phase": "update",
+      "duration": 0.09999990463256836,
+      "commitTime": 31847.899999976158
+    },
+    {
+      "phase": "update",
+      "duration": 3.299999952316284,
+      "commitTime": 31967
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 32011.5
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 32167.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 2,
+      "commitTime": 32328.899999976158
+    },
+    {
+      "phase": "update",
+      "duration": 0.8999999761581421,
+      "commitTime": 32487.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 32651.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 32806.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 32967.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.09999990463256836,
+      "commitTime": 33126.89999997616
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 33300.60000002384
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 33446.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.7999999523162842,
+      "commitTime": 33610.60000002384
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 33766.60000002384
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 33929.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 34091.89999997616
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 34251
+    },
+    {
+      "phase": "update",
+      "duration": 0.20000004768371582,
+      "commitTime": 34408.10000002384
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 34572.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 34727.39999997616
+    },
+    {
+      "phase": "update",
+      "duration": 0.20000004768371582,
+      "commitTime": 34888.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.7000000476837158,
+      "commitTime": 35051.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.8000000715255737,
+      "commitTime": 35215.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 35366.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 8.300000071525574,
+      "commitTime": 35519.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 35531.89999997616
+    },
+    {
+      "phase": "update",
+      "duration": 0.09999990463256836,
+      "commitTime": 35687.39999997616
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 35851.10000002384
+    },
+    {
+      "phase": "update",
+      "duration": 0.20000004768371582,
+      "commitTime": 36007.60000002384
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 36167.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 36327.10000002384
+    },
+    {
+      "phase": "update",
+      "duration": 0.7000000476837158,
+      "commitTime": 36487.60000002384
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 36648
+    },
+    {
+      "phase": "update",
+      "duration": 4.200000047683716,
+      "commitTime": 36733.60000002384
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 36807
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 36970.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 37129.60000002384
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 37292.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.5,
+      "commitTime": 37450.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 37608
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 37813.200000047684
+    }
+  ],
+  "failure": "Error: locator.click: Error: strict mode violation: getByRole('button', { name: 'Settings', exact: true }) resolved to 2 elements:\n    1) <button type=\"button\" class=\"app-btn \" title=\"Settings\" aria-label=\"Settings\">…</button> aka getByRole('button', { name: 'Settings', description: 'Settings' })\n    2) <button class=\"btn\" type=\"button\">Settings</button> aka getByText('Settings')\n\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Settings', exact: true })\u001b[22m\n"
+}

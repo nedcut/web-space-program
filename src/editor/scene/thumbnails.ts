@@ -1,4 +1,7 @@
+import { releaseRenderer } from '../../render/releaseRenderer';
+import { enqueueIdle, waitForInputQuiet } from '../../util/idleQueue';
 import * as THREE from 'three';
+import { cachedThumbnail, persistThumbnail, preloadThumbnails } from './thumbnailCache';
 import { createStudioEnvironment } from '../../render/core/studioEnv';
 import { partTexturesReady } from '../../render/parts/textures';
 import type { PartDef } from '../../sim/vessel/types';
@@ -16,6 +19,7 @@ const queued = new Set<string>();
 const listeners = new Set<() => void>();
 let version = 0;
 
+const renderedParts = new Map<string, THREE.Object3D>();
 let renderer: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
 let camera: THREE.PerspectiveCamera | null = null;
@@ -24,32 +28,50 @@ let scheduled = false;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function getThumbnail(id: string): string | undefined {
-  return cache.get(id);
+  return cache.get(id) ?? cachedThumbnail(id);
 }
 export function thumbnailVersion() {
   return version;
 }
 export function subscribeThumbnails(l: () => void) {
   listeners.add(l);
-  schedule();
   return () => void listeners.delete(l);
 }
 
 export function requestThumbnails(defs: PartDef[]) {
   for (const d of defs) {
-    if (cache.has(d.id) || queued.has(d.id)) continue;
+    if (getThumbnail(d.id) !== undefined || queued.has(d.id)) continue;
     queued.add(d.id);
     queue.push(d);
   }
   schedule();
 }
 
+const texturesFinal = new Set<string>();
+
 function schedule() {
-  if (scheduled || !queue.length || !listeners.size) return;
+  if (scheduled || !queue.length) return;
   scheduled = true;
-  // Building all queued templates here used to voxelise/AO-bake the entire catalogue in one
-  // multi-second task before the editor could paint. Prepare only the next thumbnail per frame.
-  requestAnimationFrame(() => void pump());
+  // Storage and texture readiness never run mesh construction in a React effect.
+  void preloadThumbnails().then(() => {
+    notify();
+    const run = async () => { await pump(); scheduled = false; schedule(); };
+    enqueueIdle(run);
+  });
+}
+
+function notify() {
+  version++;
+  listeners.forEach((l) => l());
+}
+
+function watchTextures(def: PartDef) {
+  if (texturesFinal.has(def.id)) return;
+  void partTexturesReady().then(() => {
+    texturesFinal.add(def.id);
+    if (!queued.has(def.id)) { queued.add(def.id); queue.push(def); }
+    schedule();
+  });
 }
 
 function setup() {
@@ -77,8 +99,12 @@ function setup() {
 }
 
 function teardown() {
-  renderer?.dispose();
-  renderer?.forceContextLoss();
+  if (renderer) {
+    const resources = new THREE.Group();
+    for (const obj of renderedParts.values()) resources.add(obj);
+    releaseRenderer(renderer, resources);
+    renderedParts.clear();
+  }
   envRT?.dispose();
   renderer = null;
   scene = null;
@@ -86,7 +112,8 @@ function teardown() {
   envRT = null;
 }
 
-function renderOne(def: PartDef): string {
+async function renderOne(def: PartDef): Promise<Blob> {
+  if (idleTimer) clearTimeout(idleTimer);
   setup();
   const obj = createPartMesh(def);
   const box = new THREE.Box3().setFromObject(obj);
@@ -107,45 +134,41 @@ function renderOne(def: PartDef): string {
   camera!.far = dist * 4;
   camera!.updateProjectionMatrix();
   camera!.lookAt(0, 0, 0);
-  renderer!.render(scene!, camera!);
-  const url = renderer!.domElement.toDataURL('image/png');
-  scene!.remove(holder);
-  return url;
+  try {
+    // Shader preparation and PNG encoding can yield instead of blocking the next UI paint.
+    await renderer!.compileAsync(scene!, camera!);
+    await waitForInputQuiet();
+    renderer!.render(scene!, camera!);
+    return await new Promise<Blob>((resolve, reject) => renderer!.domElement.toBlob(blob => {
+      if (blob) resolve(blob); else reject(new Error('Thumbnail encoding failed'));
+    }, 'image/png'));
+  } finally { scene!.remove(holder); renderedParts.set(def.id, holder); }
 }
 
 async function pump() {
-  if (!listeners.size) { scheduled = false; return; }
+  // At most one mesh/render/readback per idle slice: the old 24 ms batch exceeded a 120 Hz frame.
   const d = queue.shift();
-  if (!d) { scheduled = false; return; }
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    createPartMesh(d); // requests this part's textures; shared template is reused by renderOne
-    const ready = partTexturesReady();
-    let final = false;
-    void ready.then(() => { final = true; });
-    await Promise.race([ready, new Promise<void>(resolve => { timeout = setTimeout(resolve, 2500); })]);
-    // Stop GPU/geometry work when the palette unmounts (e.g. while preparing a launch).
-    if (!listeners.size) { queue.unshift(d); return; }
-    cache.set(d.id, renderOne(d));
-    if (!final) void ready.then(() => {
-      // Keep the provisional image visible while queuing its final replacement.
-      if (!queued.has(d.id)) { queued.add(d.id); queue.push(d); }
-      schedule();
-    });
-  } catch (e) {
-    console.warn('thumbnail failed', d.id, e);
-    cache.set(d.id, '');
-  } finally {
-    if (timeout !== undefined) clearTimeout(timeout);
-    if (queue[0] !== d) queued.delete(d.id);
-    scheduled = false;
-    version++;
-    listeners.forEach(l => l());
-    if (queue.length && listeners.size) schedule();
-    else {
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => { if (!scheduled) teardown(); }, 4000);
+  if (d) {
+    queued.delete(d.id);
+    if (!cachedThumbnail(d.id)) {
+      try {
+        const blob = await renderOne(d);
+        const previous = cache.get(d.id);
+        cache.set(d.id, URL.createObjectURL(blob));
+        if (previous?.startsWith('blob:')) URL.revokeObjectURL(previous);
+        watchTextures(d);
+        // Canvas encoding is asynchronous; only final images enter persistent storage.
+        if (texturesFinal.has(d.id)) void persistThumbnail(d.id, blob);
+      } catch (e) {
+        console.warn('thumbnail failed', d.id, e);
+        cache.set(d.id, '');
+      }
     }
+  }
+  notify();
+  if (!queue.length) {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => !queue.length && teardown(), 4000);
   }
 }
 
@@ -220,6 +243,7 @@ export function renderCraftThumbnail(craft: import('../../sim/vessel/types').Cra
     return renderer!.domElement.toDataURL('image/png');
   } finally {
     scene!.remove(holder);
+    renderedParts.set('craft', holder);
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => !queue.length && teardown(), 4000);
   }

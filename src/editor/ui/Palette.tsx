@@ -2,7 +2,7 @@ import { Button, Panel } from '../../ui/components';
 import { useGame } from '../../game/store';
 import { partUnlocked } from '../../data/technology';
 import { newProgression } from '../../sim/science/progression';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { PART_DEFS } from '../../data/parts';
 import type { PartCategory, PartDef } from '../../sim/vessel/types';
 import type { EditorSession, SessionView } from '../session';
@@ -20,8 +20,27 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
   const available = useMemo(() => PART_DEFS.filter(p => partUnlocked(p.id, mode, saved?.progression ?? newProgression())), [mode, saved]);
   const [tab, setTab] = useState<PartCategory | 'all'>('all');
   const [query, setQuery] = useState('');
+  const deferredQuery = useDeferredValue(query);
+  const observer = useRef<IntersectionObserver | null>(null);
+  const observed = useRef(new Map<Element, PartDef>());
+  const watch = useCallback((el: HTMLElement, def: PartDef) => {
+    if (getThumbnail(def.id) !== undefined) return () => {};
+    if (!observer.current) observer.current = new IntersectionObserver(entries => {
+      for (const entry of entries) if (entry.isIntersecting) {
+        const part = observed.current.get(entry.target);
+        if (part) requestThumbnails([part]);
+        observed.current.delete(entry.target);
+        observer.current?.unobserve(entry.target);
+      }
+    }, { root: el.closest('.vab-cards'), rootMargin: '160px' });
+    observed.current.set(el, def); observer.current.observe(el);
+    return () => { observed.current.delete(el); observer.current?.unobserve(el); };
+  }, []);
+  useEffect(() => {
+    const entries = observed.current;
+    return () => { observer.current?.disconnect(); entries.clear(); };
+  }, []);
   const [hover, setHover] = useState<{ def: PartDef; y: number } | null>(null);
-  useThumbnails();
   const heldAtDown = useRef(false);
 
   const counts = useMemo(() => {
@@ -31,15 +50,13 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
   }, [available]);
 
   const parts = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     return available.filter((d) => (tab === 'all' || d.category === tab) && (!q || `${d.name} ${d.manufacturer} ${d.description} ${d.category}`.toLowerCase().includes(q)));
-  }, [tab, query, available]);
+  }, [tab, deferredQuery, available]);
 
-  useEffect(() => {
-    // Visible parts first, then the rest of the catalogue in the background.
-    requestThumbnails(parts);
-    requestThumbnails(PART_DEFS);
-  }, [parts]);
+  const enter = useCallback((def: PartDef, y: number) => setHover({ def, y }), []);
+  const leave = useCallback((def: PartDef) => setHover(h => h?.def === def ? null : h), []);
+  const pick = useCallback((id: string) => { if (!heldAtDown.current) session.pickNew(id); }, [session]);
 
   const holding = !!view.held;
 
@@ -66,25 +83,8 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
             <input value={query} placeholder="Search parts" onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQuery('')} />
           </div>
         </div>
-        <div className="vab-cards">
-          {parts.map((d) => {
-            const src = getThumbnail(d.id);
-            return (
-              <Button
-                key={d.id}
-                className={`vab-card ${view.held?.kind === 'new' && view.held.partId === d.id ? 'on' : ''}`}
-                onMouseEnter={(e) => setHover({ def: d, y: (e.currentTarget as HTMLElement).getBoundingClientRect().top })}
-                onMouseLeave={() => setHover((h) => (h?.def === d ? null : h))}
-                onClick={() => {
-                  if (heldAtDown.current) return;
-                  session.pickNew(d.id);
-                }}
-              >
-                <div className="vab-thumb">{src ? <img src={src} alt="" draggable={false} /> : <div className="vab-thumb-wait" />}</div>
-                <div className="vab-card-name">{d.name}</div>
-              </Button>
-            );
-          })}
+        <div className="vab-cards" aria-busy={query !== deferredQuery}>
+          {parts.map(d => <PartCard key={d.id} def={d} selected={view.held?.kind === 'new' && view.held.partId === d.id} enter={enter} leave={leave} pick={pick} watch={watch} />)}
           {!parts.length && <div className="vab-empty">No parts match “{query}”.</div>}
         </div>
       </div>
@@ -98,6 +98,24 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
     </div>
   );
 }
+
+/** Cards subscribe to their own image and request only the viewport plus a small scrolling margin. */
+const PartCard = memo(function PartCard({ def, selected, enter, leave, pick, watch }: {
+  def: PartDef; selected: boolean; watch: (el: HTMLElement, def: PartDef) => () => void; enter: (def: PartDef, y: number) => void; leave: (def: PartDef) => void; pick: (id: string) => void;
+}) {
+  const host = useRef<HTMLDivElement>(null);
+  const src = useSyncExternalStore(subscribeThumbnails, () => getThumbnail(def.id));
+  useEffect(() => {
+    return watch(host.current!, def);
+  }, [def, watch]);
+  return <div ref={host} className="vab-card-slot">
+    <Button className={`vab-card ${selected ? 'on' : ''}`}
+      onMouseEnter={e => enter(def, e.currentTarget.getBoundingClientRect().top)} onMouseLeave={() => leave(def)} onClick={() => pick(def.id)}>
+      <div className="vab-thumb">{src ? <img src={src} alt="" draggable={false} /> : <div className="vab-thumb-wait" />}</div>
+      <div className="vab-card-name">{def.name}</div>
+    </Button>
+  </div>;
+});
 
 function PartTooltip({ def, y }: { def: PartDef; y: number }) {
   const engine = def.modules.find((m) => m.type === 'engine');

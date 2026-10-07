@@ -1,0 +1,743 @@
+{
+  "label": "final",
+  "base": "http://localhost:5336",
+  "cpuThrottle": 4,
+  "dpr": 2,
+  "renderer": "WSL Chromium SwiftShader (software GPU)",
+  "paintMethod": "capture and event timestamp to second rAF; upper bounds on next paint opportunity",
+  "cases": {
+    "search": {
+      "samples": [
+        {
+          "name": "input",
+          "target": "",
+          "ms": 44.10000002384186,
+          "queuedMs": 0.8999999761581421,
+          "eventToPaintMs": 45
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 338.7999999523163,
+          "queuedMs": 4.600000023841858,
+          "eventToPaintMs": 343.39999997615814
+        },
+        {
+          "name": "input",
+          "target": "",
+          "ms": 81.29999995231628,
+          "queuedMs": 0.8999999761581421,
+          "eventToPaintMs": 82.19999992847443
+        },
+        {
+          "name": "input",
+          "target": "",
+          "ms": 22.699999928474426,
+          "queuedMs": 1.2000000476837158,
+          "eventToPaintMs": 23.899999976158142
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 101.10000002384186,
+          "queuedMs": 6.399999976158142,
+          "eventToPaintMs": 107.5
+        },
+        {
+          "name": "input",
+          "target": "",
+          "ms": 94.89999997615814,
+          "queuedMs": 1.8000000715255737,
+          "eventToPaintMs": 96.70000004768372
+        },
+        {
+          "name": "input",
+          "target": "",
+          "ms": 52,
+          "queuedMs": 0.3999999761581421,
+          "eventToPaintMs": 52.39999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 132.5,
+          "queuedMs": 6.600000023841858,
+          "eventToPaintMs": 139.10000002384186
+        },
+        {
+          "name": "input",
+          "target": "",
+          "ms": 128.19999992847443,
+          "queuedMs": 1.2000000476837158,
+          "eventToPaintMs": 129.39999997615814
+        },
+        {
+          "name": "input",
+          "target": "",
+          "ms": 388.5,
+          "queuedMs": 1.5,
+          "eventToPaintMs": 390
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 93.39999997615814,
+          "queuedMs": 5,
+          "eventToPaintMs": 98.39999997615814
+        },
+        {
+          "name": "input",
+          "target": "",
+          "ms": 92.60000002384186,
+          "queuedMs": 0.09999990463256836,
+          "eventToPaintMs": 92.69999992847443
+        }
+      ],
+      "p75Ms": 128.19999992847443,
+      "p75EventToPaintMs": 129.39999997615814,
+      "p95FrameGapMs": 316.6999999999971,
+      "frames": 80
+    },
+    "hover": {
+      "samples": [
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 65.89999997615814,
+          "queuedMs": 12.100000023841858,
+          "eventToPaintMs": 78
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 48.5,
+          "queuedMs": 17.899999976158142,
+          "eventToPaintMs": 66.39999997615814
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 503.90000009536743,
+          "queuedMs": 12.899999976158142,
+          "eventToPaintMs": 516.8000000715256
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 48.200000047683716,
+          "queuedMs": 6,
+          "eventToPaintMs": 54.200000047683716
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 270.3000000715256,
+          "queuedMs": 16.199999928474426,
+          "eventToPaintMs": 286.5
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 43.40000009536743,
+          "queuedMs": 5.199999928474426,
+          "eventToPaintMs": 48.60000002384186
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 42.200000047683716,
+          "queuedMs": 4.799999952316284,
+          "eventToPaintMs": 47
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 48.60000002384186,
+          "queuedMs": 7.700000047683716,
+          "eventToPaintMs": 56.300000071525574
+        }
+      ],
+      "p75Ms": 65.89999997615814,
+      "p75EventToPaintMs": 78,
+      "p95FrameGapMs": 516.5999999999985,
+      "frames": 92
+    },
+    "scroll": {
+      "samples": [
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 38,
+          "queuedMs": 87.39999997615814,
+          "eventToPaintMs": 125.39999997615814
+        },
+        {
+          "name": "wheel",
+          "target": "",
+          "ms": 82.69999992847443,
+          "queuedMs": 87.10000002384186,
+          "eventToPaintMs": 169.79999995231628
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 70.10000002384186,
+          "queuedMs": 6.099999904632568,
+          "eventToPaintMs": 76.19999992847443
+        },
+        {
+          "name": "wheel",
+          "target": "",
+          "ms": 30.399999976158142,
+          "queuedMs": 36.799999952316284,
+          "eventToPaintMs": 67.19999992847443
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 53.10000002384186,
+          "queuedMs": 4.899999976158142,
+          "eventToPaintMs": 58
+        },
+        {
+          "name": "wheel",
+          "target": "",
+          "ms": 21.300000071525574,
+          "queuedMs": 29.399999976158142,
+          "eventToPaintMs": 50.700000047683716
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 73.59999990463257,
+          "queuedMs": 4.600000023841858,
+          "eventToPaintMs": 78.19999992847443
+        },
+        {
+          "name": "wheel",
+          "target": "",
+          "ms": 21.600000023841858,
+          "queuedMs": 57.700000047683716,
+          "eventToPaintMs": 79.30000007152557
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 40.10000002384186,
+          "queuedMs": 7.600000023841858,
+          "eventToPaintMs": 47.700000047683716
+        },
+        {
+          "name": "wheel",
+          "target": "",
+          "ms": 37,
+          "queuedMs": 38.39999997615814,
+          "eventToPaintMs": 75.39999997615814
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 68.5,
+          "queuedMs": 4.600000023841858,
+          "eventToPaintMs": 73.10000002384186
+        },
+        {
+          "name": "wheel",
+          "target": "",
+          "ms": 42.799999952316284,
+          "queuedMs": 28.600000023841858,
+          "eventToPaintMs": 71.39999997615814
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 67,
+          "queuedMs": 5.299999952316284,
+          "eventToPaintMs": 72.29999995231628
+        },
+        {
+          "name": "wheel",
+          "target": "",
+          "ms": 23.5,
+          "queuedMs": 32.90000009536743,
+          "eventToPaintMs": 56.40000009536743
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 63.299999952316284,
+          "queuedMs": 1.9000000953674316,
+          "eventToPaintMs": 65.20000004768372
+        },
+        {
+          "name": "wheel",
+          "target": "",
+          "ms": 36.10000002384186,
+          "queuedMs": 28.199999928474426,
+          "eventToPaintMs": 64.29999995231628
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 94.10000002384186,
+          "queuedMs": 6,
+          "eventToPaintMs": 100.10000002384186
+        }
+      ],
+      "p75Ms": 68.5,
+      "p75EventToPaintMs": 78.19999992847443,
+      "p95FrameGapMs": 100,
+      "frames": 99
+    },
+    "symmetry": {
+      "samples": [
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 67.80000007152557,
+          "queuedMs": 23.699999928474426,
+          "eventToPaintMs": 91.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 123.5,
+          "queuedMs": 53.39999997615814,
+          "eventToPaintMs": 176.89999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 110.80000007152557,
+          "queuedMs": 41.39999997615814,
+          "eventToPaintMs": 152.20000004768372
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 259.7000000476837,
+          "queuedMs": 5.600000023841858,
+          "eventToPaintMs": 265.3000000715256
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 54.299999952316284,
+          "queuedMs": 34.700000047683716,
+          "eventToPaintMs": 89
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 10717.699999928474,
+          "queuedMs": 6.300000071525574,
+          "eventToPaintMs": 10724
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 65.5,
+          "queuedMs": 10472.5,
+          "eventToPaintMs": 10538
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 133.5,
+          "queuedMs": 8.600000023841858,
+          "eventToPaintMs": 142.10000002384186
+        }
+      ],
+      "p75Ms": 133.5,
+      "p75EventToPaintMs": 265.3000000715256,
+      "p95FrameGapMs": 166.70000000000437,
+      "frames": 55
+    },
+    "pick-cancel": {
+      "samples": [
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 94.89999997615814,
+          "queuedMs": 6.800000071525574,
+          "eventToPaintMs": 101.70000004768372
+        },
+        {
+          "name": "pointerdown",
+          "target": "",
+          "ms": 84.29999995231628,
+          "queuedMs": 17.300000071525574,
+          "eventToPaintMs": 101.60000002384186
+        },
+        {
+          "name": "pointerover",
+          "target": "vab-discard",
+          "ms": 55.299999952316284,
+          "queuedMs": 3.3000000715255737,
+          "eventToPaintMs": 58.60000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "vab-card ",
+          "ms": 71.69999992847443,
+          "queuedMs": 24.800000071525574,
+          "eventToPaintMs": 96.5
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 56,
+          "queuedMs": 1.2999999523162842,
+          "eventToPaintMs": 57.299999952316284
+        },
+        {
+          "name": "pointerdown",
+          "target": "",
+          "ms": 54.10000002384186,
+          "queuedMs": 5.699999928474426,
+          "eventToPaintMs": 59.799999952316284
+        },
+        {
+          "name": "pointerover",
+          "target": "vab-discard",
+          "ms": 40.10000002384186,
+          "queuedMs": 1.899999976158142,
+          "eventToPaintMs": 42
+        },
+        {
+          "name": "keydown",
+          "target": "vab-card ",
+          "ms": 82.10000002384186,
+          "queuedMs": 21.600000023841858,
+          "eventToPaintMs": 103.70000004768372
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 66.80000007152557,
+          "queuedMs": 4.600000023841858,
+          "eventToPaintMs": 71.40000009536743
+        },
+        {
+          "name": "pointerdown",
+          "target": "",
+          "ms": 69.70000004768372,
+          "queuedMs": 9.600000023841858,
+          "eventToPaintMs": 79.30000007152557
+        },
+        {
+          "name": "pointerover",
+          "target": "vab-discard",
+          "ms": 46.10000002384186,
+          "queuedMs": 2,
+          "eventToPaintMs": 48.10000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "vab-card ",
+          "ms": 111.29999995231628,
+          "queuedMs": 7.600000023841858,
+          "eventToPaintMs": 118.89999997615814
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 92.20000004768372,
+          "queuedMs": 1.2999999523162842,
+          "eventToPaintMs": 93.5
+        },
+        {
+          "name": "pointerdown",
+          "target": "",
+          "ms": 78.10000002384186,
+          "queuedMs": 8.5,
+          "eventToPaintMs": 86.60000002384186
+        },
+        {
+          "name": "pointerover",
+          "target": "vab-discard",
+          "ms": 49.200000047683716,
+          "queuedMs": 1.399999976158142,
+          "eventToPaintMs": 50.60000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "vab-card ",
+          "ms": 146.69999992847443,
+          "queuedMs": 25.800000071525574,
+          "eventToPaintMs": 172.5
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 126.69999992847443,
+          "queuedMs": 0.8999999761581421,
+          "eventToPaintMs": 127.59999990463257
+        },
+        {
+          "name": "pointerdown",
+          "target": "",
+          "ms": 112.60000002384186,
+          "queuedMs": 19.199999928474426,
+          "eventToPaintMs": 131.79999995231628
+        },
+        {
+          "name": "pointerover",
+          "target": "vab-discard",
+          "ms": 78.60000002384186,
+          "queuedMs": 0.5,
+          "eventToPaintMs": 79.10000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "vab-card ",
+          "ms": 89,
+          "queuedMs": 0.7000000476837158,
+          "eventToPaintMs": 89.70000004768372
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 67.10000002384186,
+          "queuedMs": 6.799999952316284,
+          "eventToPaintMs": 73.89999997615814
+        },
+        {
+          "name": "pointerdown",
+          "target": "",
+          "ms": 80.29999995231628,
+          "queuedMs": 35.300000071525574,
+          "eventToPaintMs": 115.60000002384186
+        },
+        {
+          "name": "pointerover",
+          "target": "vab-discard",
+          "ms": 75.29999995231628,
+          "queuedMs": 0.30000007152557373,
+          "eventToPaintMs": 75.60000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "vab-card ",
+          "ms": 159.70000004768372,
+          "queuedMs": 4.299999952316284,
+          "eventToPaintMs": 164
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 108.89999997615814,
+          "queuedMs": 10.899999976158142,
+          "eventToPaintMs": 119.79999995231628
+        },
+        {
+          "name": "pointerdown",
+          "target": "",
+          "ms": 95.30000007152557,
+          "queuedMs": 27.100000023841858,
+          "eventToPaintMs": 122.40000009536743
+        },
+        {
+          "name": "pointerover",
+          "target": "vab-discard",
+          "ms": 61,
+          "queuedMs": 2.5,
+          "eventToPaintMs": 63.5
+        },
+        {
+          "name": "keydown",
+          "target": "vab-card ",
+          "ms": 80.89999997615814,
+          "queuedMs": 0.19999992847442627,
+          "eventToPaintMs": 81.09999990463257
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 67.29999995231628,
+          "queuedMs": 1,
+          "eventToPaintMs": 68.29999995231628
+        },
+        {
+          "name": "pointerdown",
+          "target": "",
+          "ms": 70.80000007152557,
+          "queuedMs": 10.100000023841858,
+          "eventToPaintMs": 80.90000009536743
+        },
+        {
+          "name": "pointerover",
+          "target": "vab-discard",
+          "ms": 47.10000002384186,
+          "queuedMs": 0.6000000238418579,
+          "eventToPaintMs": 47.700000047683716
+        },
+        {
+          "name": "keydown",
+          "target": "vab-card ",
+          "ms": 79.79999995231628,
+          "queuedMs": 4.300000071525574,
+          "eventToPaintMs": 84.10000002384186
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 69.10000002384186,
+          "queuedMs": 1.1999999284744263,
+          "eventToPaintMs": 70.29999995231628
+        }
+      ],
+      "p75Ms": 92.20000004768372,
+      "p75EventToPaintMs": 103.70000004768372,
+      "p95FrameGapMs": 916.6000000000058,
+      "frames": 139
+    },
+    "held-pointer": {
+      "samples": [
+        {
+          "name": "pointerover",
+          "target": "vab-discard",
+          "ms": 37.89999997615814,
+          "queuedMs": 2.399999976158142,
+          "eventToPaintMs": 40.299999952316284
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 80.69999992847443,
+          "queuedMs": 14.100000023841858,
+          "eventToPaintMs": 94.79999995231628
+        }
+      ],
+      "p75Ms": 80.69999992847443,
+      "p75EventToPaintMs": 94.79999995231628,
+      "p95FrameGapMs": 66.70000000001164,
+      "frames": 65
+    }
+  },
+  "errors": [],
+  "coldFirst18Ms": 17830,
+  "thumbnailsAtFirst18": 18,
+  "thumbnailCount": 32,
+  "totalParts": 168,
+  "longTasks": [
+    180,
+    60,
+    291,
+    50,
+    128,
+    10367,
+    2019,
+    6731,
+    361,
+    389,
+    156,
+    777,
+    228,
+    384,
+    316,
+    281,
+    82,
+    131,
+    270,
+    63,
+    69,
+    106,
+    299,
+    63,
+    71,
+    299,
+    307,
+    76,
+    94,
+    102,
+    279,
+    110,
+    91,
+    248,
+    82,
+    90,
+    298,
+    64,
+    73,
+    69,
+    84,
+    911,
+    285,
+    73,
+    692,
+    71,
+    177,
+    52,
+    720,
+    90,
+    135,
+    353,
+    69,
+    63,
+    766,
+    1225,
+    793,
+    471,
+    832,
+    224,
+    182,
+    320,
+    997,
+    51,
+    1558,
+    85,
+    2225,
+    959,
+    52,
+    1741,
+    473,
+    1274,
+    3173,
+    52,
+    58,
+    76,
+    51,
+    50,
+    164,
+    10567,
+    92,
+    1392,
+    54,
+    2446,
+    68,
+    3171,
+    76,
+    73,
+    123,
+    2673,
+    74,
+    125,
+    70,
+    72,
+    110,
+    2462,
+    74,
+    123,
+    1820,
+    57,
+    50,
+    2815,
+    60,
+    933,
+    56,
+    59,
+    1855,
+    68,
+    61,
+    2682,
+    89,
+    1478,
+    55,
+    73,
+    698,
+    78,
+    57
+  ],
+  "warmFirst18Ms": 647
+}

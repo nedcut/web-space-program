@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { AppIcon, type AppGlyph } from './glyphs';
 
 export type AppId = 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms';
@@ -65,30 +65,51 @@ export function AppToolbar({ apps, open, onToggle, actions }: { apps: HudApp[]; 
 /** A draggable app window. Undragged windows stack under the toolbar; dragging detaches one (double-click the title to re-dock). */
 export function AppWindow({ app, pos, scale, onClose, onMove, onDock }: { app: HudApp; pos?: { x: number; y: number }; scale: number; onClose(): void; onMove(x: number, y: number): void; onDock(): void }) {
   const ref = useRef<HTMLElement>(null);
-  const drag = useRef<{ dx: number; dy: number; id: number } | null>(null);
+  const drag = useRef<{ dx: number; dy: number; id: number; x: number; y: number; style: string; scale: number; left: number; top: number; maxX: number; maxY: number } | null>(null);
+  const frame = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  const paint = () => {
+    frame.current = 0;
+    const el = ref.current, d = drag.current;
+    if (el && d) { el.style.left = `${d.x}px`; el.style.top = `${d.y}px`; }
+  };
   const down = (e: ReactPointerEvent) => {
     if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
     const el = ref.current, host = el?.closest('.overlay');
     if (!el || !host) return;
     const r = el.getBoundingClientRect(), h = host.getBoundingClientRect();
-    drag.current = { dx: (e.clientX - r.left) / scale, dy: (e.clientY - r.top) / scale, id: e.pointerId };
+    const effectiveScale = h.width / Math.max(1, host.clientWidth) || scale;
+    drag.current = { dx: (e.clientX - r.left) / effectiveScale, dy: (e.clientY - r.top) / effectiveScale, id: e.pointerId,
+      x: (r.left - h.left) / effectiveScale, y: (r.top - h.top) / effectiveScale, style: el.style.cssText,
+      scale: effectiveScale, left: h.left, top: h.top,
+      maxX: h.width / effectiveScale - el.offsetWidth, maxY: h.height / effectiveScale - 40 };
+    // Keep the same DOM node/capture while undocking. Persist and reparent only on release.
+    el.style.position = 'fixed';
+    el.style.zIndex = '12';
+    paint();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    onMove((r.left - h.left) / scale, (r.top - h.top) / scale);
+
   };
   const move = (e: ReactPointerEvent) => {
-    const d = drag.current, host = ref.current?.closest('.overlay');
-    if (!d || !host || e.pointerId !== d.id) return;
-    const h = host.getBoundingClientRect();
-    const w = (ref.current?.offsetWidth ?? 200);
-    const x = Math.max(0, Math.min(h.width / scale - w, (e.clientX - h.left) / scale - d.dx));
-    const y = Math.max(0, Math.min(h.height / scale - 40, (e.clientY - h.top) / scale - d.dy));
-    onMove(x, y);
+    const d = drag.current;
+    if (!d || e.pointerId !== d.id) return;
+    const x = Math.max(0, Math.min(d.maxX, (e.clientX - d.left) / d.scale - d.dx));
+    const y = Math.max(0, Math.min(d.maxY, (e.clientY - d.top) / d.scale - d.dy));
+    d.x = x; d.y = y;
+    if (!frame.current) frame.current = requestAnimationFrame(paint);
   };
-  const up = () => { drag.current = null; };
+  const up = () => {
+    const d = drag.current;
+    if (!d) return;
+    cancelAnimationFrame(frame.current); frame.current = 0;
+    if (ref.current) ref.current.style.cssText = d.style;
+    drag.current = null;
+    onMove(d.x, d.y);
+  };
   return (
     <section ref={ref} className={`app-win panel ${pos ? 'floating' : ''}`} aria-label={app.title}
       style={{ width: app.width ?? 270, ...(pos ? { left: pos.x, top: pos.y } : {}) }}>
-      <header className="app-win-head" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={onDock}
+      <header className="app-win-head" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up} onDoubleClick={onDock}
         title="Drag to move · double-click to dock under the toolbar">
         <AppIcon name={app.icon} size={14} />
         <span>{app.title}</span>

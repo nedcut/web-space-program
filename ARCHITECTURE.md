@@ -184,3 +184,12 @@ of toggling visibility, and create runtime materials from existing variants.
 Earth terrain requires the immutable ETOPO grid before the first `createTerrain(earth)`. Browser entry points await `game/earthLoader.loadEarthData`; the main thread sends the installed buffer before the first Earth worker init. Planning workers receive it before requests too. Node tests use the Vitest setup file `scripts/earth-data/register.ts`; server and benchmark entry points import that Node adapter. New standalone Node consumers can use `node --import tsx --import ./scripts/earth-data/register.ts <script.ts>`. Missing initialization throws rather than substituting procedural geography.
 
 The sim decoder/sampler (`sim/terrain/earthData.ts`) accepts ArrayBuffer/SharedArrayBuffer and has no host I/O, DOM, or three.js dependency. The base int16 grid is 16 MiB; interpolation and relief/detail math remain float64. Terrain workers share the buffer when the browser is cross-origin isolated, otherwise each gets one copy. PWA precaches the binary. Projection/pixel-centre conventions, hashes and licensing live under `public/earth/`; deterministic generation lives under `scripts/earth-data/`. Legacy science biome strings remain stable identifiers; new observations use geographic cover classes while old archives/onboard data/contracts retain their keys.
+
+Editor preflight advisories run in `editor/preflight.worker.ts` against plain craft/stage data and the static
+part catalogue. Superseding an edit terminates the previous worker; the UI never displays old-craft checks.
+Unsupported/failed workers use a cancellable idle fallback. This worker needs no Universe or Earth-grid setup.
+Catalogue and craft thumbnails share `util/idleQueue.ts`, which serializes asynchronous renderer users and
+waits for quiet input. `editor/scene/thumbnailCache.ts` stores optional PNG blobs in IndexedDB; a hashed
+production chunk URL invalidates art revisions. Editor-only soot uses `prepareEngineSoot` to apply exact
+colors in idle batches; flight retains the synchronous wrapper. Material references must not be stored in
+Object3D `userData`, since three.js clones JSON-serialize it (including procedural texture canvases).
