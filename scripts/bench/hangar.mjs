@@ -86,6 +86,20 @@ try {
       return result;
     });
   }
+  await page.evaluate(() => {
+    const { session, view } = window.__editor;
+    view.frameCraft(true);
+    session.select([session.getSnapshot().craft.parts.find(p => p.partId.startsWith('tank')).uid]);
+  });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: fileURLToPath(new URL(`${label}-selection.png`, out)) });
+  await page.evaluate(() => { window.__editor.session.select([]); window.__editor.session.pickNew('tank-1-short'); });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: fileURLToPath(new URL(`${label}-nodes.png`, out)) });
+  results.nodes = await page.evaluate(() => {
+    const v = window.__editor.view;
+    return v.nodeMarkers.map(m => ({ key: m.key, radius: m.mesh.scale.x, facing: m.mesh.quaternion.toArray() }));
+  });
   results.scene = await page.evaluate(() => {
     const v = window.__editor.view, gl = v.renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
     return { gpu: gl.getParameter(ext.UNMASKED_RENDERER_WEBGL), calls: v.renderer.info.render.calls, programs: v.renderer.info.programs.length };
