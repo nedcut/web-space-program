@@ -132,10 +132,6 @@ async function stopTrace(cdp, pageUrl, name) {
   let data = '';
   for (;;) { const r = await cdp.send('IO.read', { handle: stream, size: 1 << 22 }); data += r.base64Encoded ? Buffer.from(r.data, 'base64').toString() : r.data; if (r.eof) break; }
   await cdp.send('IO.close', { handle: stream });
-  if (args['save-traces'] === '1') {
-    mkdirSync(outDir, { recursive: true });
-    writeFileSync(`${outDir}/${label}-${name}.trace.json.gz`, gzipSync(data));
-  }
   const parsed = JSON.parse(data);
   const ev = Array.isArray(parsed) ? parsed : parsed.traceEvents;
   // Our renderer process: the one whose frames include the page URL.
@@ -150,6 +146,14 @@ async function stopTrace(cdp, pageUrl, name) {
   const names = new Map();
   for (const e of ev) if (e.ph === 'M' && e.name === 'thread_name') names.set(`${e.pid}:${e.tid}`, e.args.name);
   if (pid == null) { const main = [...names.entries()].find(([, n]) => n === 'CrRendererMain'); pid = main ? +main[0].split(':')[0] : null; }
+  if (args['save-traces'] === '1') {
+    mkdirSync(outDir, { recursive: true });
+    // Chrome traces the shared browser. Retain only our renderer process (including its workers),
+    // not unrelated tabs. Metadata keeps the process identifiable on later analysis.
+    writeFileSync(`${outDir}/${label}-${name}.trace.json.gz`, gzipSync(JSON.stringify({
+      traceEvents: ev.filter(e => e.pid === pid), metadata: { pageUrl, pagePid: pid },
+    })));
+  }
   let t0 = Infinity, t1 = -Infinity;
   const busy = {}; const gc = { minor: [], major: [] }; const mainEv = {};
   for (const e of ev) {
