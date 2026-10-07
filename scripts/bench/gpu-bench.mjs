@@ -40,7 +40,7 @@ const settings = { quality, ...PRESETS[quality], scatter: true, adaptiveQuality:
 const browser = args.local === '1'
   ? await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
   : await chromium.connectOverCDP('http://127.0.0.1:9333', { timeout: 30000 });
-const results = { label, base, local: args.local === '1', noSubmission: args.nogpu === '1', dpr, throttle, quality, seconds, size: `${vw}x${vh}`, date: new Date().toISOString(), cases: {} };
+const results = { label, base, local: args.local === '1', noRaster: args['cpu-only'] === '1', noSubmission: args.nogpu === '1', dpr, throttle, quality, seconds, size: `${vw}x${vh}`, date: new Date().toISOString(), cases: {} };
 const log = (...a) => console.log(...a);
 
 // ---------------------------------------------------------------------------------------------------------
@@ -97,6 +97,15 @@ function instrument(s) {
 
 async function newPage() {
   const context = await browser.newContext({ viewport: { width: vw, height: vh }, deviceScaleFactor: dpr, serviceWorkers: 'block' });
+  if (args['cpu-only'] === '1') await context.addInitScript(() => {
+    // CPU diagnostic only: keep three's traversal/submission but omit software rasterisation in WSL.
+    // This does NOT measure real rendered frame pacing or GPU cost.
+    for (const proto of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
+      for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
+        if (name in proto) proto[name] = () => {};
+      }
+    }
+  });
   await context.addInitScript(instrument, settings);
   const page = await context.newPage();
   page.on('pageerror', (e) => log(`  [pageerror] ${e.message}`));

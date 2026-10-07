@@ -191,7 +191,7 @@ export class FlightController {
     if (this.warmup !== 'done' || this.framesRendered < 3) return false;
     if (performance.now() - this.startedAt > 20000) return true;
     const body = this.world.active?.body;
-    return !body || (this.planets.isIdle?.(body) ?? true);
+    return !body || (this.planets.isSurfaceReady?.(body) ?? true);
   }
 
   constructor(

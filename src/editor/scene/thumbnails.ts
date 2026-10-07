@@ -114,6 +114,7 @@ function renderOne(def: PartDef): string {
 }
 
 async function pump() {
+  if (!listeners.size) { scheduled = false; return; }
   const d = queue.shift();
   if (!d) { scheduled = false; return; }
   let timeout: ReturnType<typeof setTimeout> | undefined;
