@@ -129,20 +129,30 @@ async function stopTrace(cdp, pageUrl, name) {
   const done = new Promise((res) => cdp.once('Tracing.tracingComplete', res));
   await cdp.send('Tracing.end');
   const { stream } = await done;
-  let data = '';
-  for (;;) { const r = await cdp.send('IO.read', { handle: stream, size: 1 << 22 }); data += r.base64Encoded ? Buffer.from(r.data, 'base64').toString() : r.data; if (r.eof) break; }
-  await cdp.send('IO.close', { handle: stream });
-  const parsed = JSON.parse(data);
-  const ev = Array.isArray(parsed) ? parsed : parsed.traceEvents;
-  // Our renderer process: the one whose frames include the page URL.
-  let pid = null;
-  for (const e of ev) {
+  // Chrome exports one JSON event per line. Filter while draining the stream: a two-minute
+  // whole-browser trace can exceed V8's 512 MiB string limit on a shared GPU harness.
+  let pending = '', pid = null;
+  let ev = [];
+  const consume = (line) => {
+    const value = line.trim().replace(/,$/, '');
+    if (!value.startsWith('{') || value.startsWith('{"traceEvents"')) return;
+    const e = JSON.parse(value);
+    if (!e.ph) return;
     const frames = e.args?.data?.frames;
     if ((e.name === 'TracingStartedInBrowser' || e.name === 'TracingStartedInPage') && frames) {
-      const f = frames.find((x) => x.url && pageUrl.startsWith(x.url.split('#')[0].split('?')[0])) ?? frames.find((x) => x.url?.includes(new URL(pageUrl).host));
-      if (f) pid = f.processId ?? e.pid;
+      const f = frames.find(x => x.url && pageUrl.startsWith(x.url.split('#')[0].split('?')[0]));
+      if (f) { pid = f.processId ?? e.pid; ev = ev.filter(x => x.pid === pid); }
     }
+    if (pid === null || e.pid === pid) ev.push(e);
+  };
+  for (;;) {
+    const r = await cdp.send('IO.read', { handle: stream, size: 1 << 22 });
+    pending += r.base64Encoded ? Buffer.from(r.data, 'base64').toString() : r.data;
+    const lines = pending.split('\n'); pending = lines.pop();
+    for (const line of lines) consume(line);
+    if (r.eof) break;
   }
+  await cdp.send('IO.close', { handle: stream });
   const names = new Map();
   for (const e of ev) if (e.ph === 'M' && e.name === 'thread_name') names.set(`${e.pid}:${e.tid}`, e.args.name);
   if (pid == null) { const main = [...names.entries()].find(([, n]) => n === 'CrRendererMain'); pid = main ? +main[0].split(':')[0] : null; }
