@@ -119,7 +119,8 @@ function acquireTexture(url: string, kind: Kind): { key: string; promise: Promis
       const sampled = kind === 'night' || kind === 'clouds';
       tex.minFilter = sampled ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
       tex.generateMipmaps = sampled;
-      tex.anisotropy = 4;
+      // Isotropic for the cloud source: anisotropic taps keep the equirect polar streaks.
+      tex.anisotropy = kind === 'clouds' ? 1 : 4;
       tex.needsUpdate = true;
       return tex;
     });
@@ -430,17 +431,21 @@ uniform float uEarthImagery;
 uniform float uEarthNightOn;
 uniform vec2 uEarthBlend;
 struct EarthUV { vec2 uv; vec2 dx; vec2 dy; };
-EarthUV earthUV(vec3 n) {
+/**
+ * Lookup coordinates from a unit body-fixed direction and its screen derivatives (taken by the caller in
+ * uniform control flow, e.g. dFdx(n)). Analytic UV derivatives have no antimeridian seam, and the trig can sit
+ * inside branches.
+ */
+EarthUV earthUVd(vec3 n, vec3 ndx, vec3 ndy) {
   EarthUV e;
-  float lon = atan(n.y, n.x);
-  float lat = asin(clamp(n.z, -1.0, 1.0));
-  e.uv = vec2(lon * (0.5 / ATMO_PI) + 0.5, 0.5 - lat / ATMO_PI);
-  vec2 uv2 = vec2(fract(e.uv.x + 0.5), e.uv.y);
-  e.dx = dFdx(e.uv); e.dy = dFdy(e.uv);
-  vec2 dx2 = dFdx(uv2), dy2 = dFdy(uv2);
-  if (dot(dx2, dx2) + dot(dy2, dy2) < dot(e.dx, e.dx) + dot(e.dy, e.dy)) { e.dx = dx2; e.dy = dy2; }
+  float r2 = max(n.x * n.x + n.y * n.y, 1e-8);
+  e.uv = vec2(atan(n.y, n.x) * (0.5 / ATMO_PI) + 0.5, 0.5 - asin(clamp(n.z, -1.0, 1.0)) / ATMO_PI);
+  float invC = inversesqrt(r2);
+  e.dx = vec2((n.x * ndx.y - n.y * ndx.x) / r2 * (0.5 / ATMO_PI), -ndx.z * invC / ATMO_PI);
+  e.dy = vec2((n.x * ndy.y - n.y * ndy.x) / r2 * (0.5 / ATMO_PI), -ndy.z * invC / ATMO_PI);
   return e;
 }
+EarthUV earthUV(vec3 n) { return earthUVd(n, dFdx(n), dFdy(n)); }
 /**
  * Bicubic B-spline lookup from four bilinear taps (Sigg & Hadwiger 2005) while the texture is magnified, so a
  * texel spread over several screen pixels reads as smooth relief instead of a bilinear staircase.

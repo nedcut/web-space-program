@@ -319,9 +319,10 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         ${GLSL_LOGDEPTH_FRAG}
         vec3 rel = vWorldPos - uPlanetCenter;
         #ifdef EARTH_IMAGERY
-          // Before any discard: derivatives need uniform control flow.
+          // Before any discard: derivatives need uniform control flow. The lookup itself is built lazily.
           vec3 nDir = normalize(transpose(uBodyRot) * rel);
-          EarthUV eUV = earthUV(nDir);
+          vec3 nDx = dFdx(nDir), nDy = dFdy(nDir);
+          EarthUV eUV;
         #endif
         #ifdef USE_CUTOUT
         applyCutout(vWorldPos);
@@ -375,6 +376,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           if (vCovered > 0.999) wImg = 0.0;
           float waterW = 0.0;
           if (wImg > 0.0) {
+            eUV = earthUVd(nDir, nDx, nDy);
             vec4 dayW = earthTex(uEarthDay, eUV);
             vec3 c = dayW.rgb;
             vec3 img = earthAlbedo(c);
@@ -399,7 +401,8 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         #endif
         #ifdef EARTH_IMAGERY
           float sunAlt = dot(up, uSunDir);
-          vec3 lightsImg = earthNightLights(eUV, sunAlt, rel);
+          vec3 lightsImg = vec3(0.0);
+          if (sunAlt < 0.025) lightsImg = earthNightLights(earthUVd(nDir, nDx, nDy), sunAlt, rel);
           // Close up, the procedural street texture breaks the 3 km light pixels into streets.
           float streets = 1.0 - smoothstep(uEarthBlend.x * 0.5, uEarthBlend.x * 2.0, dist);
           col += lightsImg * (1.0 - streets) * (1.0 - waterW);
@@ -535,7 +538,8 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         ${GLSL_LOGDEPTH_FRAG}
         vec3 upBF = normalize(vUpBF);
         #ifdef EARTH_IMAGERY
-          EarthUV eUV = earthUV(upBF);
+          vec3 nDx = dFdx(upBF), nDy = dFdy(upBF);
+          EarthUV eUV;
         #endif
         vec3 w = abs(upBF); w = w * w; w *= w; w /= (w.x + w.y + w.z);
         // Flat coasts are tessellated coarsely (little geometric error), so the interpolated depth's zero
@@ -559,6 +563,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
           vec3 dayC = vec3(0.0);
           float maskW = 1.0;
           if (wImg > 0.0) {
+            eUV = earthUVd(upBF, nDx, nDy);
             vec4 dayW = earthTex(uEarthDay, eUV);
             dayC = dayW.rgb;
             maskW = earthWater(dayW.a, dayC);
@@ -632,7 +637,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         col += lightIn * 0.4 * (1.0 - uHydrocarbon) * (1.0 - smoothstep(0.0, 0.6, meshDepth)) * fade1;
         #ifdef EARTH_IMAGERY
           // Lit ships, platforms and coastal cities over water pixels of the light map.
-          col += earthNightLights(eUV, dot(up, uSunDir), rel) * 0.6;
+          if (dot(up, uSunDir) < 0.025) col += earthNightLights(earthUVd(upBF, nDx, nDy), dot(up, uSunDir), rel) * 0.6;
         #endif
         col = col * vAerialT + vAerialL;
         gl_FragColor = vec4(col, 1.0);

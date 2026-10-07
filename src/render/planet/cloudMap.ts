@@ -80,7 +80,9 @@ float realClouds(vec3 pBF) {
   vec2 uv2 = vec2(fract(uv.x + 0.5), uv.y);
   vec2 dx = dFdx(uv), dy = dFdy(uv), dx2 = dFdx(uv2), dy2 = dFdy(uv2);
   if (dot(dx2, dx2) + dot(dy2, dy2) < dot(dx, dx) + dot(dy, dy)) { dx = dx2; dy = dy2; }
-  float r = textureGrad(uReal, uv, dx, dy).r;
+  // The equirect source converges into radial streaks at the poles: filter wider there.
+  float polar = 1.0 + 24.0 * smoothstep(0.93, 0.995, abs(pBF.z));
+  float r = textureGrad(uReal, uv, dx * polar, dy * polar).r;
   float d = smoothstep(0.07, 0.78, r);
   d = pow(d, 0.85);
   float fine = cloudFbm(pBF * 160.0, FINE_OCT);

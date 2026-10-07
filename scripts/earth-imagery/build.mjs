@@ -36,6 +36,18 @@ const SOURCES = {
   }])),
   night: { file: 'BlackMarble_2016_3km_gray.jpg', url: `${NASA}/imagerecords/144000/144897/BlackMarble_2016_3km_gray.jpg`, title: 'NASA Earth at Night (Black Marble) 2016, 3 km grayscale' },
   clouds: { file: 'cloud_combined_8192.tif', url: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57747/cloud_combined_8192.tif', title: 'NASA Blue Marble cloud composite (Terra/MODIS, 2001–2002)' },
+  ...Object.fromEntries(MONTHS.map((m, i) => [`ice-${mm(i)}`, {
+    file: `seaice-2019${mm(i)}15.png`,
+    url: `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-${mm(i)}-15`,
+    title: `NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-${mm(i)}-15`,
+  }])),
+  // Same product family and land mask as the ice layer: valid wherever the product has ocean.
+  iceOcean: {
+    file: 'ghrsst-mur25-sst-20190715.png',
+    url: 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Surface_Temperature&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-07-15',
+    title: 'NASA GIBS GHRSST MUR L4 sea surface temperature (product ocean mask), 2019-07-15',
+  },
+  iceColormap: { file: 'GHRSST_Sea_Ice_Concentration.xml', url: 'https://gibs.earthdata.nasa.gov/colormaps/v1.3/GHRSST_Sea_Ice_Concentration.xml', title: 'NASA GIBS sea ice concentration colormap' },
   land: { file: 'ne_10m_land.geojson', url: 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_land.geojson', title: 'Natural Earth 1:10m land polygons v5.1.2' },
   lakes: { file: 'ne_10m_lakes.geojson', url: 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_lakes.geojson', title: 'Natural Earth 1:10m lakes v5.1.2' },
   shelves: { file: 'ne_10m_antarctic_ice_shelves_polys.geojson', url: 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_antarctic_ice_shelves_polys.geojson', title: 'Natural Earth 1:10m Antarctic ice shelves v5.1.2' },
@@ -117,6 +129,70 @@ function waterMask(rgb, land, W, H) {
   return mask;
 }
 
+// ------------------------------------------------------------------ sea ice (Blue Marble has none)
+
+/** Sea-ice fraction (0–255) at the source resolution from a GIBS concentration map (exact colormap inversion). */
+async function seaIce(month, W, H) {
+  const xml = await readFile(await fetchSource('iceColormap'), 'utf8');
+  const lut = new Map();
+  for (const m of xml.matchAll(/rgb="(\d+),(\d+),(\d+)" transparent="false" sourceValue="\[(\d+),/g)) {
+    lut.set((+m[1] << 16) | (+m[2] << 8) | +m[3], Math.min(100, +m[4]));
+  }
+  const { data, info } = await sharp(await fetchSource(`ice-${mm(month)}`)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const w = info.width, h = info.height;
+  let conc = Buffer.alloc(w * h);
+  let valid = new Uint8Array(w * h);
+  for (let i = 0, k = 0; i < conc.length; i++, k += 4) {
+    if (data[k + 3] < 128) continue;
+    const v = lut.get((data[k] << 16) | (data[k + 1] << 8) | data[k + 2]);
+    if (v !== undefined) { conc[i] = Math.round(v * 2.55); valid[i] = 1; }
+  }
+  // Ice is drawn only where present: open ocean and the product's (coarse) land are both transparent. The SST
+  // layer of the same product is valid over all of its ocean, so transparent-SST cells that Natural Earth calls
+  // water are coastline gaps (ice-shelf fronts, fjords): fill those from neighbouring ice; open ocean stays 0.
+  const sst = await sharp(await fetchSource('iceOcean')).ensureAlpha().raw().toBuffer();
+  const ne = await sharp(await naturalEarthLand(21600, 10800), { raw: { width: 21600, height: 10800, channels: 1 } }).resize(w, h).extractChannel(0).raw().toBuffer();
+  const gap = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) gap[i] = !valid[i] && sst[i * 4 + 3] < 128 && ne[i] < 128 ? 1 : 0;
+  for (let it = 0; it < 60; it++) {
+    let changed = false;
+    const c2 = Buffer.from(conc), v2 = valid.slice();
+    for (let y = 1; y < h - 1; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!gap[i] || valid[i]) continue;
+      let sum = 0, n = 0;
+      for (const j of [x > 0 ? i - 1 : i + w - 1, x < w - 1 ? i + 1 : i - w + 1, i - w, i + w, i - w - 1, i - w + 1, i + w - 1, i + w + 1]) {
+        if (valid[j]) { sum += conc[j]; n++; }
+      }
+      // Two valid neighbours at least: the front advances smoothly instead of in single-column spikes.
+      if (n >= 2) { c2[i] = Math.round(sum / n); v2[i] = 1; changed = true; }
+    }
+    conc = c2; valid = v2;
+    if (!changed) break;
+  }
+  // Soften the 0.25° grid before upsampling (otherwise the marginal-ice edge is serrated).
+  return sharp(conc, { raw: { width: w, height: h, channels: 1 } }).blur(2).resize(W, H, { kernel: 'cubic' }).extractChannel(0).raw().toBuffer();
+}
+
+/**
+ * Pack ice over water: consolidated ice is bright and faintly blue (summer melt ponds greyer), thin marginal ice
+ * lets the dark sea through. Only water pixels change; land snow/ice is already in the imagery.
+ */
+function applySeaIce(rgb, ice, mask, W, H, month) {
+  const meltSeason = month >= 5 && month <= 8;
+  for (let i = 0, j = 0; i < W * H; i++, j += 3) {
+    const c = (ice[i] / 255) * (mask[i] / 255);
+    if (c <= 0.02) continue;
+    const a = Math.pow(c, 0.75);
+    // Arctic summer pack ice is melt-pond grey-blue; winter and Antarctic ice is whiter.
+    const ponds = meltSeason && i < (W * H) / 2;
+    const r = ponds ? 188 : 214, g = ponds ? 204 : 224, b = ponds ? 218 : 232;
+    rgb[j] = Math.round(rgb[j] + (r - rgb[j]) * a);
+    rgb[j + 1] = Math.round(rgb[j + 1] + (g - rgb[j + 1]) * a);
+    rgb[j + 2] = Math.round(rgb[j + 2] + (b - rgb[j + 2]) * a);
+  }
+}
+
 const webp = (img, quality) => img.webp({ quality, effort: 5, smartSubsample: true }).toBuffer();
 const webpLossless = img => img.webp({ lossless: true, effort: 6 }).toBuffer();
 const rawImage = (buf, W, H, channels) => sharp(buf, { raw: { width: W, height: H, channels }, limitInputPixels: false });
@@ -162,6 +238,7 @@ async function main() {
     }
   };
   let maskDone = false;
+  let mask = null;
   for (const m of [6, ...months.filter(i => i !== 6)]) {
     const key = `bmng-${mm(m)}`;
     const path = await fetchSource(key);
@@ -170,11 +247,12 @@ async function main() {
     if (info.width !== SW || info.height !== SH) throw Error(`${key}: ${info.width}x${info.height}`);
     // The static water mask comes from July (northern lakes unfrozen); a fill colour is the same every month.
     if (!maskDone) {
-      const mask = waterMask(rgb, land, SW, SH);
+      mask = waterMask(rgb, land, SW, SH);
       for (const L of levels) if (L.build !== false) await emit(mask, 1, L, `water-${L.id}`, webpLossless);
       maskDone = true;
     }
     if (!months.includes(m)) continue;
+    applySeaIce(rgb, await seaIce(m, SW, SH), mask, SW, SH, m);
     for (const L of levels) if (L.build !== false) await emit(rgb, 3, L, `day-${L.id}-${mm(m)}`, img => webp(img, L.quality));
   }
 
