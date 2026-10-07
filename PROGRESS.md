@@ -786,3 +786,7 @@ Real RTX 3060 Ti / Windows Chrome CDP check passed 15 advanced changes plus four
 browser or GL errors: `docs/performance/gfxsettings/live-controls.json`. Preset measurements and limits
 are documented in `docs/PERFORMANCE.md`. Ultra's larger bake exposed the old far-sphere threshold removing
 close-up terrain; the threshold is bounded and a regression test covers pad/orbit activation.
+
+Post-merge verification: `git merge main` reports already up to date (`main` at `0b3f8cb2`);
+`npm run lint`, `npx tsc --noEmit`, `npm run build` and full
+`npx vitest run --maxWorkers=2` pass (**108 files / 1,317 tests**, 441.19 s).

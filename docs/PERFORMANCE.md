@@ -922,3 +922,10 @@ Both also exercised all four frame caps, with no browser/GL errors. Observed fra
 this verifies an upper limit, not the ability to achieve 120 fps on this hardware/display.
 Run `scripts/bench/gfxsettings-check.mjs` beside Windows `playwright-core` against the dev server for these
 source-module integration checks (optional third argument `pipeline` skips the advanced-resource checks).
+
+Limits: one sun shadow map (no cascade system); MSAA remains four samples and the device clamps supported
+sample counts. Ultra substantially increases render-target/geometry/texture memory and does not promise
+60 or 120 fps at Retina resolution. Terrain, scatter and larger texture bakes can take time to settle.
+Frame caps limit cadence rather than guaranteeing it. The editor retains its existing native antialiasing
+path rather than the flight HDR/post-processing chain. The 120 Hz control and adaptation budget are covered,
+but an actual ProMotion/Apple-GPU run was not available. No Apple performance claim is made.
