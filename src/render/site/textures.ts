@@ -148,6 +148,14 @@ function padDeckTextureImpl(holeHalf: number, trenchHalf: number): THREE.CanvasT
     g.beginPath(); g.moveTo(m * px, 0); g.lineTo(m * px, S); g.stroke();
     g.beginPath(); g.moveTo(0, m * px); g.lineTo(S, m * px); g.stroke();
   }
+  // Irregular oily wheel marks and rain-washed iron stains, baked once into the cached deck.
+  for (let i = 0; i < 24; i++) {
+    const x = (0.12 + r() * 0.76) * S, y = (0.12 + r() * 0.76) * S;
+    g.save(); g.translate(x, y); g.rotate(r() * 6.28);
+    g.fillStyle = i % 3 ? 'rgba(36,30,23,0.12)' : 'rgba(103,56,28,0.16)';
+    g.beginPath(); g.ellipse(0, 0, 8 + r() * 28, 3 + r() * 8, 0, 0, Math.PI * 2); g.fill();
+    g.restore();
+  }
   // Painted rings.
   g.strokeStyle = 'rgba(236,236,230,0.8)';
   g.lineWidth = 0.35 * px;
@@ -320,15 +328,15 @@ function runwayEndTextureImpl(designator: string): THREE.CanvasTexture {
 
 function claddingTextureImpl(): THREE.CanvasTexture {
   const { c, g } = canvas(256, 512);
-  g.fillStyle = '#93a0ad';
+  g.fillStyle = '#c3c1b4';
   g.fillRect(0, 0, 256, 512);
   for (let x = 0; x < 256; x += 32) {
     const grd = g.createLinearGradient(x, 0, x + 32, 0);
-    grd.addColorStop(0, '#7d8996');
-    grd.addColorStop(0.2, '#b0bcc8');
-    grd.addColorStop(0.35, '#9aa6b3');
-    grd.addColorStop(0.8, '#87929f');
-    grd.addColorStop(1, '#727d89');
+    grd.addColorStop(0, '#94998f');
+    grd.addColorStop(0.2, '#d3d0c4');
+    grd.addColorStop(0.35, '#bfbdaf');
+    grd.addColorStop(0.8, '#aaa99f');
+    grd.addColorStop(1, '#8c9087');
     g.fillStyle = grd;
     g.fillRect(x, 0, 32, 512);
   }
@@ -488,3 +496,32 @@ export const vabDoorTexture = cachedSite('vabDoorTexture', vabDoorTextureImpl);
 export const logoTexture = cachedSite('logoTexture', logoTextureImpl);
 export const flagTexture = cachedSite('flagTexture', flagTextureImpl);
 export const windowsTexture = cachedSite('windowsTexture', windowsTextureImpl);
+
+/** Only occupied window panes emit; walls and mullions stay dark. Cached with all site canvases. */
+function windowLightTextureImpl(): THREE.CanvasTexture {
+  const { c, g } = canvas(512, 256);
+  g.fillStyle = '#000'; g.fillRect(0, 0, 512, 256);
+  for (const i of [0, 2, 3, 5]) {
+    const x = i * 512 / 6 + 8, w = 512 / 6 - 16;
+    g.fillStyle = i === 2 ? '#a4b8bd' : '#efd5a0';
+    g.fillRect(x, 256 * 0.3, w, 256 * 0.45);
+    g.fillStyle = '#000'; g.fillRect(x + w / 2 - 2, 256 * 0.3, 4, 256 * 0.45);
+  }
+  return tex(c);
+}
+export const windowLightTexture = cachedSite('windowLightTexture', windowLightTextureImpl);
+
+/** Compact original facility signage atlas; opaque panels batch into one draw. */
+function facilitySignsTextureImpl(): THREE.CanvasTexture {
+  const { c, g } = canvas(1024, 512);
+  const labels = [['WSP', 'FLIGHT OPERATIONS'], ['WSP', 'SYSTEMS WORKSHOP'], ['RANGE 01', 'LAUNCH CONTROL'], ['COASTAL', 'LAUNCH COMPLEX']];
+  for (let i = 0; i < labels.length; i++) {
+    const x = (i % 2) * 512, y = Math.floor(i / 2) * 256;
+    g.fillStyle = '#183a43'; g.fillRect(x, y, 512, 256);
+    g.fillStyle = '#d8b56c'; g.fillRect(x + 24, y + 26, 8, 204);
+    g.fillStyle = '#eee8d5'; g.font = '700 68px sans-serif'; g.fillText(labels[i][0], x + 52, y + 113);
+    g.font = '500 28px sans-serif'; g.fillText(labels[i][1], x + 52, y + 174);
+  }
+  return tex(c, true, false);
+}
+export const facilitySignsTexture = cachedSite('facilitySignsTexture', facilitySignsTextureImpl);

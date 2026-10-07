@@ -3,6 +3,7 @@ import { GLSL_NOISE, GLSL_LOGDEPTH_FRAG, GLSL_LOGDEPTH_FRAG_PARS, GLSL_LOGDEPTH_
 import { GLSL_ATMOSPHERE, GLSL_RING_SHADOW } from './shaders/atmosphere.glsl';
 import type { PlanetUniforms } from './uniforms';
 import type { QualitySettings } from '../core/quality';
+import { siteShadowUniforms, GLSL_SITE_SHADOW } from '../site/shadows';
 import { getDetailTexture } from './textures';
 import { GLSL_CUTOUT, type TerrainCutoutUniforms } from './cutout';
 
@@ -19,8 +20,16 @@ vec3 earthEmission(vec3 n, float height, float sunAltitude) {
     if (night <= 0.0) return vec3(0.0);
     float coast = exp(-height / (uPlanetRadius * 0.0012));
     float population = smoothstep(-0.1, 0.45, fbm3(n * 18.0 + 7.1, 3));
-    float towns = smoothstep(0.60, 0.87, snoise(n * 750.0)) + 0.22 * smoothstep(0.4, 0.75, snoise(n * 240.0));
-    return vec3(1.0, 0.53, 0.16) * night * coast * population * towns * 1.3;
+    float metro = smoothstep(0.35, 0.78, snoise(n * 240.0));
+    float towns = smoothstep(0.52, 0.85, snoise(n * 750.0));
+    // Fine street networks inside settlements, wider diffuse glow around urban cores.
+    vec2 streets = vec2(atan(n.y, n.x), asin(clamp(n.z, -1.0, 1.0))) * 3200.0;
+    vec2 footprint = fwidth(streets);
+    vec2 grid = abs(fract(streets) - 0.5);
+    float roads = mix(0.16, 1.0 - smoothstep(0.035, 0.10, min(grid.x, grid.y)),
+      1.0 - smoothstep(0.2, 1.0, max(footprint.x, footprint.y)));
+    float lights = towns * (0.18 + roads * 0.82) + metro * 0.16;
+    return vec3(1.0, 0.60, 0.27) * night * coast * population * lights * 2.4;
   #else
     return vec3(0.0);
   #endif
@@ -122,11 +131,12 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
     uniforms: {
       ...u,
       ...(o.cutout ?? {}),
+      ...siteShadowUniforms,
       uDetailTex: { value: getDetailTexture() },
       uRockColor: { value: new THREE.Vector3(...o.rockColor) },
       uRockBlend: { value: o.rockBlend },
       uAirless: { value: o.airless },
-      uAmbientFloor: { value: 0.0015 },
+      uAmbientFloor: { value: 0.004 },
       uDetailStrength: { value: o.detailStrength },
       uDuneRipples: { value: o.duneRipples ? 1 : 0 },
     },
@@ -160,6 +170,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       uniform float uDetailStrength;
       uniform float uDuneRipples;
       ${GLSL_AERIAL_FRAG}
+      ${GLSL_SITE_SHADOW}
       varying vec3 vWorldPos;
       varying vec3 vNormalBF;
       varying vec3 vColor;
@@ -202,16 +213,26 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           float f2 = 1.0 - smoothstep(500.0, 3000.0, dist);
           float f3 = 1.0 - smoothstep(6000.0, 40000.0, dist);
           float hd = 0.0;
+          float cover = 0.5;
           vec3 g = vec3(0.0);
           // Three octaves; the large one uses the decorrelated A channel (+swizzle) to hide tiling.
-          if (f3 > 0.0) { vec4 s = triSample(vDetail.zxy, w.zxy, 1024.0); vec4 s2 = triSample(vDetail, w, 256.0); hd += ((s.a - 0.5) * 0.7 + (s2.a - 0.5) * 0.5) * f3; g += triGrad(vDetail, w, 256.0) * f3 * 0.35; }
+          if (f3 > 0.0) { vec4 s = triSample(vDetail.zxy, w.zxy, 1024.0); vec4 s2 = triSample(vDetail, w, 256.0); cover = s.a * 0.6 + s2.a * 0.4; hd += ((s.a - 0.5) * 0.7 + (s2.a - 0.5) * 0.5) * f3; g += triGrad(vDetail, w, 256.0) * f3 * 0.35; }
           if (f2 > 0.0) { vec4 s = triSample(vDetail.yzx, w.yzx, 32.0); hd += (s.r - 0.5) * f2 * 0.6; g += triGrad(vDetail, w, 32.0) * f2 * 0.6; }
           if (f1 > 0.0) { vec4 s = triSample(vDetail, w, 4.0); hd += (s.r - 0.5) * f1 * 0.5; g += triGrad(vDetail, w, 4.0) * f1; }
           float microFade = 1.0 - smoothstep(15.0, 100.0, dist);
           if (microFade > 0.0) g += triGrad(vDetail, w, 0.5) * microFade * 0.35;
           // Shallow wind ripples, projected into the tangent plane below; no collision relief.
           g += vec3(cos(vDetail.x * 6.2831853 + sin(vDetail.y * 0.09817477)) * 0.12, 0.0, 0.0) * uDuneRipples * f1;
-          albedo *= 1.0 + hd * 0.55 * uDetailStrength;
+          // Muted grass, dry thatch and exposed sand share the existing octave fetches.
+          // Large patch colours survive at 2 km; small grains fade before they can shimmer.
+          #ifdef EARTH_DETAILS
+            float green = smoothstep(1.05, 1.35, vColor.g / max(vColor.r, 0.001));
+            float dry = smoothstep(0.48, 0.70, cover) * green * f3;
+            albedo = mix(albedo, vec3(0.24, 0.205, 0.105), dry * 0.28);
+            albedo *= 1.0 + hd * 0.85 * uDetailStrength;
+          #else
+            albedo *= 1.0 + hd * 0.95 * uDetailStrength;
+          #endif
           rockT = clamp(rockT + hd * 0.4 * uRockBlend, 0.0, 1.0);
           vec3 gt = g - dot(g, nBF) * nBF;
           nBF = normalize(nBF - gt * 1.6 * uDetailStrength);
@@ -219,6 +240,9 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         #endif
         albedo = mix(albedo, uRockColor * (0.85 + 0.3 * albedo / max(max(albedo.r, albedo.g), 0.05)), rockT);
         vec3 col = shadeSurface(albedo, N, V, rel);
+        #ifdef EARTH_DETAILS
+          col *= mix(0.42, 1.0, siteShadow(vWorldPos));
+        #endif
         col += earthEmission(normalize(transpose(uBodyRot) * rel), length(rel) - uPlanetRadius, dot(up, uSunDir));
         col = col * vAerialT + vAerialL;
         gl_FragColor = vec4(col, 1.0);
@@ -229,12 +253,13 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
 /** Instanced cell-local assets, using the same solar lighting and aerial perspective as terrain. */
 export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, centers: THREE.DataTexture, color: number[], plant: boolean, radius: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: defines(q, u),
-    uniforms: { ...u, uCenters: { value: centers }, uColor: { value: new THREE.Vector3(...color) }, uAirless: { value: plant ? 0 : 0.65 }, uAmbientFloor: { value: 0.0015 }, uRange: { value: radius } },
+    defines: { ...defines(q, u), ...(plant ? { PLANT_WIND: 1 } : {}) },
+    uniforms: { ...u, uCenters: { value: centers }, uColor: { value: new THREE.Vector3(...color) }, uAirless: { value: plant ? 0 : 0.65 }, uAmbientFloor: { value: 0.004 }, uRange: { value: radius } },
     side: plant ? THREE.DoubleSide : THREE.FrontSide,
     vertexShader: /* glsl */ `
       ${GLSL_LOGDEPTH_VERT_PARS}
       uniform sampler2D uCenters;
+      uniform float uTime;
       attribute float aCell;
       attribute vec3 color;
       varying vec3 vTint;
@@ -243,7 +268,11 @@ export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, cen
       void main() {
         vTint = color;
         vec3 centre = texture2D(uCenters, vec2((aCell + 0.5) / 2048.0, 0.5)).xyz;
-        vec4 local = instanceMatrix * vec4(position, 1.0);
+        vec3 swaying = position;
+        #ifdef PLANT_WIND
+          swaying.x += sin(mod(uTime, 4096.0) + instanceMatrix[3].x + position.y * 2.0) * position.y * 0.025;
+        #endif
+        vec4 local = instanceMatrix * vec4(swaying, 1.0);
         vec4 wp = modelMatrix * vec4(local.xyz + centre, 1.0);
         vWorldPos = wp.xyz;
         // Inverse transpose for the non-uniform instance scale (rotation columns are orthogonal).
@@ -448,7 +477,7 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
       uHasMap: { value: 0 },
       uFallback: { value: new THREE.Vector3(0.3, 0.3, 0.3) },
       uAirless: { value: opts.airless },
-      uAmbientFloor: { value: 0.0015 },
+      uAmbientFloor: { value: 0.004 },
       uOcean: { value: opts.ocean ? 1 : 0 },
       uHRange: { value: new THREE.Vector2(opts.minH, opts.maxH) },
       uTexel: { value: new THREE.Vector2(2 / opts.texWidth, 4 / opts.texWidth) },
@@ -681,7 +710,7 @@ export function createGasGiantMaterial(u: PlanetUniforms, q: QualitySettings, s:
         // Upper methane haze softens ice-giant markings towards the limb.
         if (uStyle > 1.5) albedo = mix(albedo, mix(uC1, uC2, 0.55), 0.22 + 0.35 * ((1.0 - mu) * (1.0 - mu)));
         vec3 sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(1.0)) * ringShadow(rel);
-        vec3 col = albedo * uSunColor * sunT * minn / ATMO_PI;
+        vec3 col = albedo * (uSunColor * sunT * minn / ATMO_PI + vec3(0.004));
         col += albedo * (skyAmbient(rel, N) * 0.5 + uPlanetshineColor * max(dot(N, uPlanetshineDir), 0.0)) / ATMO_PI;
         col = applyAerialPerspective(col, -V, dist, AERIAL_STEPS * uStepScale);
         gl_FragColor = vec4(col, 1.0);

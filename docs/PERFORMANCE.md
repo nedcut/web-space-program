@@ -845,3 +845,37 @@ warm-up from one ~200 ms task to ≤ 8 ms slices (≈ 470 ms wall, behind the lo
   CPU lever if a CPU-bound device shows up.
 - Cold load: the remaining long tasks are WebGL context creation (~45 ms), uncached site textures (~120 ms, cached
   after the first visit) and Earth's renderer build (~100 ms).
+
+## Coastal ground art (cx/groundart, 2026-10-06)
+
+Ground art retains the HDR → bloom → tonemap → SMAA pipeline and adds no render pass. New façade pieces/signs share merged material batches. Coastal trees use instanced near/coarse crowns with a 1.2–1.6 km dither transition and 7–10 km fade; terrain detail reuses existing triplanar samples. Grass colour is evaluated in terrain workers. Site textures, including the two small new window/sign atlases, use the existing memory/IndexedDB cache. Earth terrain receives the existing solar comparison-depth map; its pad footprint is widened to 420 m, avoiding a second cascade.
+
+Real Windows Chrome / ANGLE D3D11 / RTX 3060 Ti, **1470×920 CSS, DPR 2 (2940×1840), Medium, scale 1, adaptive off**, stock Kestrel on the pad. Baseline `b6ec2204`, ground-art implementation `0a1d9086`. Production snapshots were served from a single Vite on port 5334. `scripts/bench/gpu-ab.sh` completed this interleaved pair using the F8 timer:
+
+| Measurement | Before | After | Delta |
+|---|---:|---:|---:|
+| Whole scene GPU | 4.851 ms | 5.061 ms | +0.210 ms |
+| Draw calls | 621 | 637 | +16 |
+| Triangles | 1,472,767 | 3,358,445 | +1,885,678 |
+| Textures | 84 | 87 | +3 |
+
+Raw pair: [before](performance/groundart/groundart-final-A-pad-r1-dpr2.json), [after](performance/groundart/groundart-final-B-pad-r1-dpr2.json). This pair meets the +1 ms / under-6 ms pad target. It is one completed pair from the standard harness, not a confidence interval. Concurrent agents shared Chrome/GPU; do not infer an FPS improvement from these captures.
+
+Two further interleaved pairs sampled the same F8 timer at DPR 2 through page-specific CDP (`scripts/groundart/timing.mjs`, 120 settling frames + 300 samples per case). Median GPU times were **4.897 → 5.550 ms** and **5.026 → 5.489 ms**: average **4.962 → 5.519 ms (+0.558 ms)**, both after medians below 6 ms and both increments below 1 ms. [Raw repeated timings](performance/groundart/groundart-timing.json). All four cases report the RTX renderer, 2940×1840 canvas and WebGL error 0. These isolate the ground-art implementation; the later main merge's flight-handling changes were separately smoke-tested on the pad.
+
+A later instrumented pass run (`scripts/groundart/passes.mjs`, hardware elapsed queries, no disjoint or GL errors) measured scene + shadows **4.556 → 5.383 ms**, bloom **0.354 → 0.342 ms**, SMAA **0.574 → 0.575 ms**, output **0.129 → 0.132 ms** (per-pass medians). It confirms the added work is in scene/shadows, with about **+0.83 ms** there. Whole-frame rolling timers in these more contended runs were **7.013 → 6.444 ms**; the absolute under-6 ms target therefore is not guaranteed under concurrent GPU load. Preserve this evidence alongside the cleaner pair: [before passes](performance/groundart/groundart-before-passes.json), [after passes](performance/groundart/groundart-after-passes.json). No GPU timing claim is made for Apple hardware.
+
+Interleaved cold/warm direct-flight loads (`scripts/groundart/load.mjs`, two rounds, fresh browser context per side, one reload for warm cache):
+
+| Ready mark | Before | After |
+|---|---:|---:|
+| Cold, round 1 | 6.640 s | 4.177 s |
+| Cold, round 2 | 6.449 s | 6.394 s |
+| Warm, round 1 | 3.138 s | 3.229 s |
+| Warm, round 2 | 2.878 s | 2.868 s |
+
+Cold constructor times were **394–405 → 398–410 ms**; maximum cold main-thread task **412 → 416 ms**. Warm ready time changed by **+91 / −10 ms**. The first warm after run had a 348 ms constructor task versus 219 ms maximum before; the second settled to 198 versus 182 ms. There is no increase in the measured worst-case load stall, but the small sample and shared machine do not establish a startup speedup. [Raw load evidence](performance/groundart/groundart-load.json). New atlases are cached; no added network art assets or dependencies. Isolated ground-art precache grew about **9 KiB (0.4%)**; the later main merge also adds unrelated UX code.
+
+Before/after DPR-2 images and critical review: [ground-art screenshots](screenshots/groundart/README.md). Six views cover chase pad, Space Center, 2 km coastal land, sunset, Earth night orbit and lunar surface. The standalone preview initially exposed an incomplete comparison sampler; an explicit 1×1 depth fallback fixed it. Accepted views returned WebGL error 0. Main was merged; lint, typecheck, **98 files / 1,099 tests**, and production build passed.
+
+Remaining visual limitations: the coastal height field/hydrology is unchanged; no geographic wetland reconstruction or new distant settlement meshes. Crowns retain a faceted silhouette. The single wide shadow map softens nearby fine shadows compared with a true cascade. Night work lighting is a bounded material wash, not local shadow-casting lights. Existing warm aerial perspective is retained; no extra volumetric fog pass. The city mask is fictional, coast/latitude weighted, and intentionally subtle.

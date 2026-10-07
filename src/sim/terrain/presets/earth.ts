@@ -197,6 +197,18 @@ export function earthPreset(ctx: PresetContext): PresetResult {
     blendRGB(out, ROCK, smoothstep(0.22, 0.45, hr + 0.05 * n1));
     // Beaches
     blendRGB(out, BEACH, smoothstep(relief * 0.0025, 0, h) * 0.85 * (1 - smoothstep(0.3, 0.15, temp)));
+    // Coastal grass/scrub mosaic, evaluated in terrain workers and the far bake. Render colour only:
+    // launch/runway elevation, collisions and water boundaries are unchanged.
+    const coastal = gaussCap(x, y, z, site, 0.045) * (1 - smoothstep(60, 220, h));
+    if (coastal > 0.01) {
+      const field = nMoist.noise(x * R / 900, y * R / 900, z * R / 900);
+      const scrub = nMoist.noise(x * R / 250, y * R / 250, z * R / 250);
+      const dry = smoothstep(-0.1, 0.45, field + scrub * 0.22);
+      tmp[0] = mix(0.07, 0.16, dry);
+      tmp[1] = mix(0.105, 0.155, dry);
+      tmp[2] = mix(0.045, 0.085, dry);
+      blendRGB(out, tmp, coastal * smoothstep(0.5, 5, h));
+    }
     // Snow / ice caps
     blendRGB(out, SNOW, smoothstep(0.14, 0.04, temp));
     return out;

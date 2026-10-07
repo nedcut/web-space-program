@@ -1,0 +1,40 @@
+{
+  "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "canvas": [
+    2940,
+    1840
+  ],
+  "wholeMs": 7.0129056164429455,
+  "disjoint": false,
+  "glError": 0,
+  "passes": {
+    "SMAA": {
+      "n": 106,
+      "medianMs": 0.574464,
+      "p95Ms": 1.742848
+    },
+    "output-2": {
+      "n": 106,
+      "medianMs": 0.129024,
+      "p95Ms": 0.139264
+    },
+    "bloom": {
+      "n": 106,
+      "medianMs": 0.354272,
+      "p95Ms": 0.36864
+    },
+    "scene+shadows": {
+      "n": 106,
+      "medianMs": 4.555776,
+      "p95Ms": 7.45472
+    }
+  },
+  "stats": {
+    "calls": 621,
+    "triangles": 1472767,
+    "points": 9000,
+    "programs": 89,
+    "textures": 84,
+    "geometries": 773
+  }
+}

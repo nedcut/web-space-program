@@ -1,3 +1,4 @@
+import { updateSiteShadow } from '../render/site/shadows';
 import { stageExplanation } from './cues';
 import { actionAvailable, partActions } from '../sim/vessel/actions';
 import { CondensationFx } from '../render/fx/CondensationFx';
@@ -985,7 +986,9 @@ export class FlightController {
 
     // Sun light: directional, shadow frustum hugging the active vessel.
     const sd = new THREE.Vector3(sunDir.x, sunDir.y, sunDir.z);
-    const r = Math.max(10, wv.state.cache.boundingRadius * 2.5);
+    // Cover the tower, trench and low-sun ground shadows near the launch complex.
+    const nearSite = wv.body === 'earth' && this.site.root.position.length() < 600;
+    const r = Math.max(nearSite ? 210 : 10, wv.state.cache.boundingRadius * 2.5);
     this.sunLight.position.copy(sd).multiplyScalar(r * 4);
     this.sunLight.target.position.set(0, 0, 0);
     const sc = this.sunLight.shadow.camera as THREE.OrthographicCamera;
@@ -999,8 +1002,9 @@ export class FlightController {
       this.sunLight.shadow.bias = -0.00002;
     }
 
+    updateSiteShadow(this.sunLight, this.pipeline.renderer.shadowMap.enabled && wv.body === 'earth');
     t0 = prof.now();
-    if (wv.body === 'earth') this.site.update(origin, t);
+    if (wv.body === 'earth') this.site.update(origin, t, camera.position);
     else this.site.hide();
     this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.lodViewportHeight });
     const eclipse = this.planets.sunVisibility?.(origin, sunPos) ?? 1;

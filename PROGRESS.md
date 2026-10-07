@@ -683,6 +683,9 @@ Replaced capped point sprites with pooled GPU billboards; added growing launch s
 - Map: 59 → ~9 layouts per second (labels move with transforms). Loading: the flight scene is ready ~1.5–2 s sooner, shader warm-up no longer freezes the loading screen, and the first frames don't stall on uploads.
 - Visuals unchanged: before/after at DPR 2 in `docs/screenshots/snappy/`. Details, method and what's left: `docs/PERFORMANCE.md`.
 
+## Coastal ground art — cx/groundart
+
+Added original branched coastal vegetation with wind and fading LOD, warmer detailed façades/roof plant/signage, dusk windows and pad work lighting, worker-evaluated coastal colour, stronger surface grain and night settlements. Terrain receives the existing widened solar shadow map. Real RTX 3060 Ti DPR-2 Medium: original pair 4.85 → 5.06 ms; two repeat pairs average 4.96 → 5.52 ms (+0.56 ms). Contended per-pass scene/shadow delta +0.83 ms. See [performance evidence](docs/PERFORMANCE.md) and [six-view review](docs/screenshots/groundart/README.md) for limits. Merged main including flight handling; lint, typecheck, 98 files / 1,099 tests and build passed. Heights/hydrology and the existing atmospheric integration are retained; vegetation remains stylized and the wider shadow map softens fine shadows.
 ## In-the-moment UX cues (2026-10-06, cx/cues)
 
 - Added staging/throttle/warp/control explanations; a bounded, deduplicated accessible flight-message stack; orbit, landing, communications and SOI notices; per-save dismissible map/node/orbit/SOI/landing/EVA tips; clearer unavailable part actions and HUD tooltips.

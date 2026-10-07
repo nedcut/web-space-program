@@ -8,6 +8,9 @@ import { qRotate } from '../../util/quat';
 import { terrainCutout } from '../planet/cutout';
 import * as TX from './textures';
 import { withAerialPerspective } from './aerial';
+import { clearSiteShadow } from './shadows';
+import { livePlanetUniforms } from '../planet/uniforms';
+import { coastalTreeGeometry } from '../planet/scatter/geometry';
 import { instancedVariant } from '../core/materialVariants';
 
 /** What LaunchSite needs from the game Universe (structural, keeps render → game imports out). */
@@ -41,7 +44,7 @@ const HIDE_DISTANCE = 200e3;
 const BODY = 'earth';
 
 type Key =
-  | 'concrete' | 'soot' | 'deck' | 'steel' | 'accent' | 'hazard' | 'grate' | 'white' | 'darkMetal' | 'cable'
+  | 'sign' | 'concrete' | 'soot' | 'deck' | 'steel' | 'accent' | 'hazard' | 'grate' | 'white' | 'darkMetal' | 'cable'
   | 'cladding' | 'vabClad' | 'door' | 'windows' | 'apron' | 'crawler' | 'road' | 'roofDark' | 'lamp' | 'beacon' | 'runway';
 
 interface BatchDef {
@@ -156,6 +159,14 @@ export class LaunchSite {
   private batches = new Map<Key, { def: BatchDef; geos: THREE.BufferGeometry[] }>();
   private disposables: { dispose(): void }[] = [];
   private dish: THREE.Group | null = null;
+  private readonly planetUniforms = livePlanetUniforms(BODY);
+  private readonly sunUp = new THREE.Vector3();
+  private night = { value: 0 };
+  private vegetationLods: { near: THREE.InstancedMesh; far: THREE.InstancedMesh }[] = [];
+  private readonly lodCenter = new THREE.Vector3();
+  private wind = { value: 0 };
+  private windowMat: THREE.MeshStandardMaterial | null = null;
+  private lampMat: THREE.MeshBasicMaterial | null = null;
   private beaconMat: THREE.MeshBasicMaterial | null = null;
   private highlightRing: THREE.Mesh | null = null;
   private vabMaterials: THREE.MeshStandardMaterial[] = [];
@@ -241,12 +252,30 @@ export class LaunchSite {
 
   private createBatches() {
     const t = <T extends THREE.Texture>(x: T) => this.track(x);
-    const std = (p: THREE.MeshStandardMaterialParameters) => this.track(withAerialPerspective(new THREE.MeshStandardMaterial(p), BODY));
+    const std = (p: THREE.MeshStandardMaterialParameters) => {
+      const mat = withAerialPerspective(new THREE.MeshStandardMaterial(p), BODY);
+      const aerial = mat.onBeforeCompile;
+      mat.onBeforeCompile = (shader, renderer) => {
+        aerial(shader, renderer);
+        shader.uniforms.uSiteNight = this.night;
+        shader.fragmentShader = shader.fragmentShader.replace('void main() {', 'uniform float uSiteNight;\nvoid main() {');
+        // A bounded warm work-light wash on the pad: no dynamic lights or extra shadow passes.
+        shader.vertexShader = shader.vertexShader.replace('void main() {', 'varying vec3 vSiteLocal;\nvoid main() {')
+          .replace('#include <project_vertex>', '#include <project_vertex>\nvSiteLocal = transformed;\n#ifdef USE_INSTANCING\nvSiteLocal = (instanceMatrix * vec4(transformed, 1.0)).xyz;\n#endif');
+        shader.fragmentShader = shader.fragmentShader.replace('void main() {', 'varying vec3 vSiteLocal;\nvoid main() {')
+          .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+            float pool = exp(-dot(vSiteLocal.xz, vSiteLocal.xz) / 3400.0);
+            totalEmissiveRadiance += diffuseColor.rgb * vec3(0.65, 0.43, 0.22) * pool * uSiteNight * 0.8;`);
+      };
+      mat.customProgramCacheKey = () => 'site-worklight-v1';
+      return this.track(mat);
+    };
     const concreteTex = t(TX.concreteTexture(3));
     const apronTex = t(TX.concreteTexture(9, '#a6a39b'));
     const claddingTex = t(TX.claddingTexture());
     const def = (mat: THREE.Material, tile: [number, number] | null, cast = true, receive = true): BatchDef => ({ mat, tile, cast, receive });
     const B: Record<Key, BatchDef> = {
+      sign: def(std({ map: t(TX.facilitySignsTexture()), roughness: 0.75 }), null, false),
       concrete: def(std({ map: concreteTex, color: 0xbdb9b1, roughness: 0.88, metalness: 0 }), [8, 8]),
       soot: def(std({ map: t(TX.sootTexture()), roughness: 0.95, metalness: 0 }), [8, 8], false),
       deck: def(std({ map: t(TX.padDeckTexture(SITE_LAYOUT.holeHalf, SITE_LAYOUT.trenchHalf)), color: 0xc4c2bc, roughness: 0.85, metalness: 0 }), null, false),
@@ -257,10 +286,10 @@ export class LaunchSite {
       white: def(std({ color: 0xe4e4df, roughness: 0.62, metalness: 0.05 }), null),
       darkMetal: def(std({ color: 0x2b2826, roughness: 0.8, metalness: 0.6 }), null, false),
       cable: def(std({ color: 0x2a2b2e, roughness: 0.6, metalness: 0.4 }), null, false, false),
-      cladding: def(std({ map: claddingTex, color: 0xc8d4e2, roughness: 0.6, metalness: 0.3 }), [4, 8]),
-      vabClad: def(std({ map: claddingTex, color: 0xc8d4e2, roughness: 0.6, metalness: 0.3 }), [4, 8]),
+      cladding: def(std({ map: claddingTex, color: 0xe1ddd0, roughness: 0.76, metalness: 0.12 }), [4, 8]),
+      vabClad: def(std({ map: claddingTex, color: 0xe1ddd0, roughness: 0.76, metalness: 0.12 }), [4, 8]),
       door: def(std({ map: t(TX.vabDoorTexture()), roughness: 0.5, metalness: 0.5 }), null),
-      windows: def(std({ map: t(TX.windowsTexture()), roughness: 0.4, metalness: 0.2 }), [12, 4]),
+      windows: def(std({ map: t(TX.windowsTexture()), emissiveMap: t(TX.windowLightTexture()), emissive: 0xffce88, emissiveIntensity: 0, roughness: 0.4, metalness: 0.2 }), [12, 4]),
       apron: def(std({ map: apronTex, color: 0xb4b2ac, roughness: 0.9, metalness: 0 }), [8, 8], false),
       crawler: def(std({ map: t(TX.roadTexture(true)), roughness: 0.92, metalness: 0 }), null, false),
       road: def(std({ map: t(TX.roadTexture(false)), roughness: 0.85, metalness: 0 }), null, false),
@@ -269,6 +298,8 @@ export class LaunchSite {
       beacon: def(this.track(new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.08, 0.04).multiplyScalar(8) })), null, false, false),
       runway: def(std({ map: t(TX.runwayTexture()), roughness: 0.9, metalness: 0 }), null, false),
     };
+    this.windowMat = B.windows.mat as THREE.MeshStandardMaterial;
+    this.lampMat = B.lamp.mat as THREE.MeshBasicMaterial;
     this.beaconMat = B.beacon.mat as THREE.MeshBasicMaterial;
     this.vabMaterials = [B.vabClad.mat as THREE.MeshStandardMaterial, B.door.mat as THREE.MeshStandardMaterial];
     for (const k of Object.keys(B) as Key[]) this.batches.set(k, { def: B[k], geos: [] });
@@ -483,6 +514,7 @@ export class LaunchSite {
     }
     // Platforms every 9 m with handrails.
     for (let y = 9.5; y < H; y += 9) {
+      this.add('lamp', box(1.8, 0.12, 0.25, tx + h + 0.6, y + 2.4, tz));
       const w = 2 * h + 2.4;
       grate.push(boxY(w, w, tx, tz, y - 0.25, y));
       const r = w / 2 - 0.1;
@@ -659,11 +691,35 @@ export class LaunchSite {
     this.add(wall, this.facing(V(hw, y0, hd), V(hw, y0, -hd), V(hw, h, -hd), V(hw, h, hd), V(1, 0, 0)), m);
     this.add(wall, this.facing(V(-hw, y0, -hd), V(-hw, y0, hd), V(-hw, h, hd), V(-hw, h, -hd), V(-1, 0, 0)), m);
     this.add(roof, this.facing(V(-hw, h, hd), V(hw, h, hd), V(hw, h, -hd), V(-hw, h, -hd), up), m);
+    // Horizontal spandrels, corner piers and roof plant give the façades readable scale.
+    for (let y = 4; y < h; y += 4) {
+      for (const side of [-1, 1]) this.add('white', box(w + 0.3, 0.22, 0.3, 0, y, side * hd), m);
+    }
+    for (const side of [-1, 1]) {
+      for (let x = -hw; x <= hw; x += 6) this.add('white', box(0.25, h, 0.4, x, h / 2, side * hd), m);
+      this.add('accent', box(w + 0.6, 0.8, 0.5, 0, h - 0.4, side * hd), m);
+    }
+    for (let x = -hw + 5; x < hw - 3; x += 12) {
+      this.add('steel', box(3, 1.5, 3, x, h + 0.75, 0), m);
+      this.add('grate', box(2.7, 0.1, 2.7, x, h + 1.55, 0), m);
+    }
+    if (wall === 'cladding') {
+      this.add('door', box(w * 0.55, h * 0.72, 0.3, 0, h * 0.36, hd + 0.2), m);
+      this.add('accent', box(w * 0.6, 0.3, 2.5, 0, h * 0.75, hd + 1), m);
+    }
+    this.sign(m, Math.min(w * 0.3, 10), h - 2.3, hd + 0.45, wall === 'windows' ? 0 : 1);
     // Parapet
     for (const [px, pz, pw, pd] of [[0, hd - 0.2, w, 0.4], [0, -hd + 0.2, w, 0.4], [hw - 0.2, 0, 0.4, d], [-hw + 0.2, 0, 0.4, d]]) {
       this.add('concrete', boxY(pw, pd, px, pz, h, h + 1.0), m);
     }
     return m;
+  }
+
+  private sign(m: THREE.Matrix4, w: number, y: number, z: number, index: number) {
+    const g = new THREE.PlaneGeometry(w, w / 2).translate(0, y, z);
+    const uv = g.getAttribute('uv');
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 0.5 + (index % 2) * 0.5, uv.getY(i) * 0.5 + (1 - Math.floor(index / 2)) * 0.5);
+    this.add('sign', g, m);
   }
 
   private buildBuildings() {
@@ -674,6 +730,7 @@ export class LaunchSite {
       this.add('concrete', boxY(28, 16, 0, 0, 6, 7.5), m);
       this.add('roofDark', boxY(26, 14, 0, 0, 7.5, 7.7), m);
       this.add('windows', this.facing(V(-12, 2.5, 10.02), V(12, 2.5, 10.02), V(12, 5, 10.02), V(-12, 5, 10.02), V(0, 0, 1)), m);
+      this.sign(m, 5, 4, 10.08, 2);
       this.add('steel', boxY(3, 3, -9, -4, 7.7, 9.5), m);
       this.add('steel', new THREE.CylinderGeometry(0.1, 0.1, 12, 5).translate(10, 13.5, -5), m);
       this.add('white', new THREE.SphereGeometry(1.4, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).translate(6, 7.7, -4), m);
@@ -721,6 +778,12 @@ export class LaunchSite {
     this.add('accent', boxY(3.2, 2.4, doorX - doorW / 2 - 1.6, hd + 0.4, -0.5, doorH + 3), m);
     this.add('accent', boxY(3.2, 2.4, doorX + doorW / 2 + 1.6, hd + 0.4, -0.5, doorH + 3), m);
     this.add('accent', boxY(doorW + 6.4, 2.4, doorX, hd + 0.4, doorH, doorH + 4), m);
+    // Broad horizontal façade courses read at overview distance; fine ribs remain in the texture.
+    for (let y = 20; y < h - 8; y += 20) {
+      this.add('white', box(w + 0.6, 0.7, 0.6, 0, y, -hd), m);
+      for (const side of [-1, 1]) this.add('white', box(0.6, 0.7, d, side * hw, y, 0), m);
+    }
+    this.add('roofDark', box(w - 2, 0.3, d - 2, 0, h + 0.8, 0), m);
     // Door slot above the main door (narrow vertical panel).
     this.add('door', box(10, h - doorH - 12, 0.8, doorX, doorH + 4 + (h - doorH - 12) / 2, hd + 0.15), m);
     // Low bay entrance canopy + windows
@@ -1005,8 +1068,26 @@ export class LaunchSite {
         (pineCluster && rnd() < 0.85 ? pines : bushes).push(m);
       }
     }
-    const foliage = (color: number) =>
-      this.track(withAerialPerspective(new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0 }), BODY));
+    const foliage = (color: number) => {
+      const mat = withAerialPerspective(new THREE.MeshStandardMaterial({ color, roughness: 0.95, vertexColors: true }), BODY);
+      const patch = mat.onBeforeCompile;
+      mat.onBeforeCompile = (shader, renderer) => {
+        patch(shader, renderer);
+        shader.uniforms.uSiteWind = this.wind;
+        shader.uniforms.uSiteLod = { value: 1 };
+        shader.vertexShader = shader.vertexShader.replace('void main() {', 'uniform float uSiteWind;\nvoid main() {')
+          .replace('#include <begin_vertex>', `#include <begin_vertex>
+            transformed.x += sin(uSiteWind + instanceMatrix[3].x * 0.13 + position.y) * min(position.y * position.y * 0.002, 0.18);`);
+        shader.fragmentShader = shader.fragmentShader.replace('void main() {', 'uniform float uSiteLod;\nvoid main() {').replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
+          float distanceToPlant = length(cameraPosition - vAtmoWorld);
+          float fade = 1.0 - smoothstep(7000.0, 10000.0, distanceToPlant);
+          float lod = smoothstep(1200.0, 1600.0, distanceToPlant);
+          float grain = fract(dot(floor(gl_FragCoord.xy), vec2(0.75487766, 0.56984029)));
+          if (grain > fade || (uSiteLod > 0.0 ? grain < lod : grain >= lod)) discard;`);
+      };
+      mat.customProgramCacheKey = () => 'coastal-foliage-v1';
+      return this.track(mat);
+    };
     // Instances are bucketed into 1400 m cells so frustum culling (and the vessel-hugging shadow
     // camera) skips vegetation that is off screen, instead of drawing all ~4k plants every pass.
     // Colours consume the random sequence in the original order, so placement/tint are unchanged.
@@ -1015,6 +1096,15 @@ export class LaunchSite {
     let kept = 0;
     const mk = (geo: THREE.BufferGeometry, mat: THREE.Material, list: THREE.Matrix4[], name: string, tint: [number, number]) => {
       if (!list.length) return;
+      if (!geo.getAttribute('color')) {
+        const p = geo.getAttribute('position');
+        const colors = new Float32Array(p.count * 3);
+        for (let i = 0; i < p.count; i++) {
+          const shade = 0.65 + Math.min(0.35, Math.max(0, p.getY(i)) * 0.15);
+          colors.set([shade, shade, shade], i * 3);
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      }
       const shared = this.track(geo);
       const cells = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
       const pos = new THREE.Vector3();
@@ -1029,6 +1119,12 @@ export class LaunchSite {
         if (!cell) cells.set(key, (cell = []));
         cell.push({ m, c });
       });
+      // A coarse crown replaces detailed limbs beyond 1.2–1.6 km with a complementary dither.
+      const farGeo = this.track(new THREE.IcosahedronGeometry(1, 0).scale(name === 'site:pines' ? 3.5 : 2.5, name === 'site:pines' ? 3 : 1.7, name === 'site:pines' ? 3.5 : 2.5).translate(0, name === 'site:pines' ? 7.2 : 1.3, 0));
+      farGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(farGeo.getAttribute('position').count * 3).fill(0.85), 3));
+      const farMat = this.track(mat.clone());
+      farMat.onBeforeCompile = (shader, renderer) => { mat.onBeforeCompile(shader, renderer); shader.uniforms.uSiteLod.value = -1; };
+      farMat.customProgramCacheKey = mat.customProgramCacheKey;
       for (const cell of cells.values()) {
         const im = new THREE.InstancedMesh(shared, mat, cell.length);
         cell.forEach(({ m, c }, i) => { im.setMatrixAt(i, m); im.setColorAt(i, c); });
@@ -1036,13 +1132,20 @@ export class LaunchSite {
         im.receiveShadow = true;
         im.name = name;
         im.computeBoundingSphere();
-        this.root.add(im);
+        const far = new THREE.InstancedMesh(farGeo, farMat, cell.length);
+        far.instanceMatrix = im.instanceMatrix;
+        far.instanceColor = im.instanceColor;
+        far.name = `${name}:far`;
+        far.receiveShadow = true;
+        far.computeBoundingSphere();
+        this.vegetationLods.push({ near: im, far });
+        this.root.add(im, far);
       }
     };
     // Lumpy scrub: a few overlapping jittered blobs, smooth-shaded.
     const blobs: THREE.BufferGeometry[] = [];
     for (const [bx, by, bz, br] of [[0, 1.3, 0, 2.0], [1.4, 0.9, 0.6, 1.4], [-1.2, 0.8, -0.8, 1.5]]) {
-      const g = new THREE.IcosahedronGeometry(br, 0);
+      const g = new THREE.IcosahedronGeometry(br, 1);
       const p = g.getAttribute('position');
       for (let i = 0; i < p.count; i++) {
         const k = 0.85 + 0.3 * Math.abs(Math.sin(p.getX(i) * 3.1 + p.getY(i) * 5.7 + p.getZ(i) * 4.3));
@@ -1054,15 +1157,9 @@ export class LaunchSite {
     const bushGeo = mergeGeometries(blobs)!;
     blobs.forEach((g) => g.dispose());
     mk(bushGeo, foliage(0x46552f), bushes, 'site:scrub', [0.7, 1.05]);
-    const pineParts = [
-      new THREE.CylinderGeometry(0.25, 0.35, 4, 5).translate(0, 2, 0),
-      new THREE.ConeGeometry(2.6, 6, 7).translate(0, 5.5, 0),
-      new THREE.ConeGeometry(2.0, 5, 7).translate(0, 8.5, 0),
-      new THREE.ConeGeometry(1.3, 4, 7).translate(0, 11, 0),
-    ].map(toNonIndexed);
-    mk(mergeGeometries(pineParts)!, foliage(0x2f4024), pines, 'site:pines', [0.7, 1.05]);
+    mk(coastalTreeGeometry(), foliage(0x657044), pines, 'site:pines', [0.7, 1.05]);
     this.vegetationCount = kept;
-    pineParts.forEach((g) => g.dispose());
+
   }
 
   private buildLights() {
@@ -1141,7 +1238,7 @@ export class LaunchSite {
    * Place the site for the floating origin `origin` (float64 inertial) at sim time `t`, and update the terrain
    * cutout. Hidden beyond 200 km.
    */
-  update(origin: Vec3, t: number) {
+  update(origin: Vec3, t: number, cameraPosition?: THREE.Vector3) {
     const eph = this.universe.ephem;
     const bp = eph.getBodyState(BODY, t).position;
     const q = eph.bodyRotation(BODY, t);
@@ -1159,12 +1256,28 @@ export class LaunchSite {
     this.root.quaternion.multiplyQuaternions(this.tmpQ, this.qLocal);
     this.root.updateMatrix();
     this.root.updateMatrixWorld(true);
+    for (const { near, far } of this.vegetationLods) {
+      const bound = near.boundingSphere!;
+      this.lodCenter.copy(bound.center).applyMatrix4(this.root.matrixWorld);
+      const distance = cameraPosition ? this.lodCenter.distanceTo(cameraPosition) : this.lodCenter.length();
+      near.visible = distance - bound.radius < 1650;
+      far.visible = distance + bound.radius > 1150 && distance - bound.radius < 10000;
+    }
     const L = SITE_LAYOUT;
     cut.uCutMatrix.value.copy(this.tmpM.copy(this.root.matrixWorld).invert());
     cut.uCutA.value.set(0, 0, L.padHalf, L.padHalf);
     cut.uCutB.value.set(0, (-L.padHalf + 0.5 + L.trenchEnd - 1.5) / 2, L.trenchHalf + 1.5, (L.padHalf - 0.5 - (L.trenchEnd - 1.5)) / 2);
     cut.uCutParams.value.set(L.padCorner, 0, 500, 1);
 
+    const solar = this.planetUniforms.uSunDir.value;
+    const up = this.sunUp.set(0, 1, 0).applyQuaternion(this.root.quaternion);
+    this.night.value = 1 - THREE.MathUtils.smoothstep(up.dot(solar), -0.06, 0.12);
+    this.wind.value = t % 4096;
+    if (this.windowMat) this.windowMat.emissiveIntensity = this.night.value * 1.8;
+    if (this.lampMat) {
+      this.lampMat.color.setRGB(1, 0.82, 0.56).multiplyScalar(0.6 + 3.4 * this.night.value);
+      instancedVariant(this.lampMat).color.copy(this.lampMat.color);
+    }
     if (this.dish) this.dish.rotation.y = (t * 0.02) % (Math.PI * 2);
     if (this.beaconMat) {
       const on = Math.sin(t * Math.PI * 1.2) > 0.2 ? 8 : 0.4;
@@ -1179,6 +1292,7 @@ export class LaunchSite {
   }
 
   dispose() {
+    clearSiteShadow();
     terrainCutout(BODY).uCutParams.value.w = 0;
     this.root.removeFromParent();
     this.root.traverse((o) => {
