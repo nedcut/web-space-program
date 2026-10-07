@@ -11,6 +11,7 @@
 // browser context (cold caches, isolated storage) and closes it, so concurrent users of the browser are safe.
 import { chromium } from 'playwright-core';
 import { writeFileSync, mkdirSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => {
   if (a.startsWith('--')) acc.push([a.slice(2), all[i + 1] && !all[i + 1].startsWith('--') ? all[i + 1] : 'true']);
@@ -113,13 +114,17 @@ const r2 = (v) => (Number.isFinite(v) ? Math.round(v * 100) / 100 : v);
 async function startTrace(cdp) {
   await cdp.send('Tracing.start', { transferMode: 'ReturnAsStream', traceConfig: { recordMode: 'recordAsMuchAsPossible', includedCategories: ['toplevel', 'devtools.timeline', 'v8', 'disabled-by-default-devtools.timeline'], excludedCategories: ['*'] } });
 }
-async function stopTrace(cdp, pageUrl) {
+async function stopTrace(cdp, pageUrl, name) {
   const done = new Promise((res) => cdp.once('Tracing.tracingComplete', res));
   await cdp.send('Tracing.end');
   const { stream } = await done;
   let data = '';
   for (;;) { const r = await cdp.send('IO.read', { handle: stream, size: 1 << 22 }); data += r.base64Encoded ? Buffer.from(r.data, 'base64').toString() : r.data; if (r.eof) break; }
   await cdp.send('IO.close', { handle: stream });
+  if (args['save-traces'] === '1') {
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(`${outDir}/${label}-${name}.trace.json.gz`, gzipSync(data));
+  }
   const parsed = JSON.parse(data);
   const ev = Array.isArray(parsed) ? parsed : parsed.traceEvents;
   // Our renderer process: the one whose frames include the page URL.
@@ -186,7 +191,7 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
   const m0 = await metrics(cdp);
   if (trace) await startTrace(cdp);
   await page.waitForTimeout(ms);
-  const tr = trace ? await stopTrace(cdp, page.url()).catch((e) => ({ error: String(e) })) : undefined;
+  const tr = trace ? await stopTrace(cdp, page.url(), name).catch((e) => ({ error: String(e) })) : undefined;
   const m1 = await metrics(cdp);
   const inPage = await page.evaluate(() => {
     const B = window.__bench; B.raf.on = false;
@@ -200,6 +205,7 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
       longTasks: lt.length, longTaskMs: lt.reduce((a, x) => a + x[1], 0), longTaskMax: lt.reduce((a, x) => Math.max(a, x[1]), 0),
       prof: s && { cpuAvg: s.cpuMs.avg, cpuP95: s.cpuMs.p95, sections: s.sections },
       gl: p ? { calls: p.stats.calls, tris: p.stats.triangles, programs: info.programs?.length ?? 0, geometries: info.memory.geometries, textures: info.memory.textures, canvas: `${p.renderer.domElement.width}x${p.renderer.domElement.height}`, scale: p.effectiveRenderScale, gpuMs: p.gpuMs, gpuName: p.gpuName, glError: p.renderer.getContext().getError() } : null,
+      journey: f && window.__journeyStart ? { elapsedSim: f.world.ut - window.__journeyStart, assist: f.assist?.status ?? null, body: f.world.active?.body, orbit: f.world.active ? f.world.orbitSummary(f.world.active) : null } : undefined,
       heapLimitMB: performance.memory ? performance.memory.jsHeapSizeLimit / 1e6 : null,
     };
   });
@@ -218,7 +224,7 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
     heapMB: r2(m1.JSHeapUsedSize / 1e6), heapGrowthMBPerMin: r2(((m1.JSHeapUsedSize - m0.JSHeapUsedSize) / 1e6 / secs) * 60),
     domNodes: m1.Nodes, listeners: m1.JSEventListeners,
     reactCommitsPerSec: r2(inPage.commits / secs), reactRendersPerSec: r2(inPage.fibers / secs),
-    workers: inPage.workers, gl: inPage.gl, trace: tr, ...extra,
+    journey: inPage.journey, workers: inPage.workers, gl: inPage.gl, trace: tr, ...extra,
   };
   results.cases[name] = { ...(results.cases[name] ?? {}), ...out };
   const sec = out.sections ? Object.entries(out.sections).filter(([, v]) => v >= 0.01).map(([k, v]) => `${k} ${v}`).join(' · ') : '';
@@ -301,6 +307,17 @@ if (cases.includes('ascent')) {
     await page.evaluate(() => { window.__flight.world.warp = { mode: 'physics', index: 3 }; });
   }, 1500);
   // Keep the measurement inside the ascent: at 4× the dense atmosphere passes in roughly 10–20 s.
+}
+if (cases.includes('journey')) {
+  await flightCase('journey', '/?flight=stock-meridian', async (page) => {
+    await page.evaluate(() => {
+      const f = window.__flight;
+      f.startAssist('orbit');
+      f.world.warp = { mode: 'physics', index: 3 };
+      window.__journeyStart = f.world.ut;
+    });
+  }, 0);
+  // A bounded run is not automatically a successful orbit; retain its actual final state.
 }
 if (cases.includes('orbit')) await flightCase('orbit', '/?flight=stock-kestrel&scenario=orbit', undefined, settleMs);
 if (cases.includes('warp1k')) await flightCase('warp1k', '/?flight=stock-kestrel&scenario=highorbit', async (page) => { await page.evaluate(() => { window.__flight.world.warp = { mode: 'rails', index: 5 }; }); });
