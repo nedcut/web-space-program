@@ -2,10 +2,6 @@ import * as THREE from 'three';
 import type { PartDef } from '../../../sim/vessel/types';
 import { M } from '../materials';
 import { bevelBox, box, detailLevel, grp, lathe, mk, rod, tint } from '../geom';
-import { decals } from '../decals';
-import { Markings } from './markings';
-
-const PI = Math.PI;
 import { num, srfMount } from './common';
 
 /**
@@ -104,15 +100,6 @@ function surface(def: PartDef, skin: THREE.Material, edge: THREE.Material, flapS
         line(z, le(z) - 0.05, z, rear(z) + 0.03, 0.01, p.t, lines, 0.84);
       }
       if (lines.length) holder.add(mk(lines, skin, 'panelLines'));
-      // no-step stencils near the root on both faces
-      if ((z1 - z0) > 0.5 && (leR - teR) > 0.5) {
-        const D = new Markings(def);
-        const ns = decals.text('NO STEP', { color: '#2a2d33', stencil: true });
-        const hgt = Math.min(0.05, (leR - teR) * 0.05);
-        const zc = z0 + Math.min(0.35, (z1 - z0) * 0.25), yc = (le(zc) + rear(zc)) / 2;
-        for (const sx of [-1, 1]) D.plane(ns, hgt, (g) => g.rotateY(sx * PI / 2).rotateX(sx > 0 ? -PI / 2 : PI / 2).translate(sx * (p.t / 2 + 0.0012), yc, zc));
-        D.addTo(holder);
-      }
     }
     // titanium leading-edge strip
     const rl = p.t * 0.48;
