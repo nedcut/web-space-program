@@ -817,3 +817,7 @@ only documentation append conflicts and preserving both teams' notes. Re-ran lin
 full suite: **109 files / 1,327 tests**, 407.78 s. Re-measured all four presets in pad and orbit on the merged
 production build; final raw data is `docs/performance/gfxsettings/gfxsettings-merged-*-dpr2.json`.
 Earlier GPU runs are labelled and archived separately so their revisions cannot be confused.
+
+Final Ultra pad capture uses the requested Windows `cdp2.mjs` driver; after preparation it confirms the
+exact Ultra Earth grades, 48-quad terrain / 0.75 m spacing, hardware RTX rendering and GL error 0.
+All work is committed on `cx/gfxsettings`; the port-5327 dev/preview server is stopped on completion.

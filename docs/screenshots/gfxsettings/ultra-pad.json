@@ -1,0 +1,28 @@
+{
+  "quality": "ultra",
+  "earth": {
+    "textureQuality": "ultra",
+    "atmosphereQuality": "ultra",
+    "cloudQuality": "ultra",
+    "oceanQuality": "ultra",
+    "nightLights": true
+  },
+  "terrain": {
+    "chunkResolution": 48,
+    "maxScreenError": 1,
+    "minVertexSpacing": 0.75,
+    "buildBudgetMs": 6,
+    "workers": 4,
+    "maxInFlight": 20,
+    "cacheSize": 1600,
+    "detail": true
+  },
+  "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "glError": 0,
+  "draws": 2030,
+  "triangles": 16052285,
+  "canvas": [
+    2940,
+    1840
+  ]
+}
