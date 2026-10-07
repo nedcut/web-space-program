@@ -1,3 +1,4 @@
+import { releaseRenderer } from '../../render/releaseRenderer';
 import { enqueueIdle } from '../../util/idleQueue';
 import * as THREE from 'three';
 import { cachedThumbnail, persistThumbnail, preloadThumbnails } from './thumbnailCache';
@@ -18,6 +19,7 @@ const queued = new Set<string>();
 const listeners = new Set<() => void>();
 let version = 0;
 
+const renderedParts = new Map<string, THREE.Object3D>();
 let renderer: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
 let camera: THREE.PerspectiveCamera | null = null;
@@ -97,8 +99,12 @@ function setup() {
 }
 
 function teardown() {
-  renderer?.dispose();
-  renderer?.forceContextLoss();
+  if (renderer) {
+    const resources = new THREE.Group();
+    for (const obj of renderedParts.values()) resources.add(obj);
+    releaseRenderer(renderer, resources);
+    renderedParts.clear();
+  }
   envRT?.dispose();
   renderer = null;
   scene = null;
@@ -135,7 +141,7 @@ async function renderOne(def: PartDef): Promise<Blob> {
     return await new Promise<Blob>((resolve, reject) => renderer!.domElement.toBlob(blob => {
       if (blob) resolve(blob); else reject(new Error('Thumbnail encoding failed'));
     }, 'image/png'));
-  } finally { scene!.remove(holder); }
+  } finally { scene!.remove(holder); renderedParts.set(def.id, holder); }
 }
 
 async function pump() {
@@ -236,6 +242,7 @@ export function renderCraftThumbnail(craft: import('../../sim/vessel/types').Cra
     return renderer!.domElement.toDataURL('image/png');
   } finally {
     scene!.remove(holder);
+    renderedParts.set('craft', holder);
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => !queue.length && teardown(), 4000);
   }

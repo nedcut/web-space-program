@@ -5,12 +5,13 @@ let database: Promise<IDBDatabase | null> | undefined;
 function open() {
   return database ??= new Promise<IDBDatabase | null>(resolve => {
     if (typeof indexedDB === 'undefined') return resolve(null);
-    const timer = setTimeout(() => resolve(null), 500);
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; resolve(null); }, 500);
     try {
       const request = indexedDB.open('wsp-part-thumbnails', 1);
       request.onupgradeneeded = () => request.result.createObjectStore('images');
       request.onerror = () => { clearTimeout(timer); resolve(null); };
-      request.onsuccess = () => { clearTimeout(timer); resolve(request.result); };
+      request.onsuccess = () => { clearTimeout(timer); if (timedOut) request.result.close(); else resolve(request.result); };
     } catch { clearTimeout(timer); resolve(null); }
   });
 }
@@ -27,8 +28,10 @@ export function preloadThumbnails(): Promise<void> {
           const cursor = req.result;
           if (!cursor) return;
           const key = String(cursor.key);
-          if (key.startsWith(`${revision}:`)) urls.set(key.slice(revision.length + 1), URL.createObjectURL(cursor.value as Blob));
-          else cursor.delete();
+          try {
+            if (key.startsWith(`${revision}:`) && cursor.value instanceof Blob) urls.set(key.slice(revision.length + 1), URL.createObjectURL(cursor.value));
+            else cursor.delete();
+          } catch { /* A corrupt optional cache entry must not trigger the crash overlay. */ }
           cursor.continue();
         };
         tx.oncomplete = () => resolve();

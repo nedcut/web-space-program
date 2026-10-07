@@ -15,6 +15,7 @@ function schedule() {
   const pump = async () => {
     const quietIn = 120 - (performance.now() - lastInput);
     if (quietIn > 0) { setTimeout(() => { scheduled = false; schedule(); }, quietIn); return; }
+    while (jobs[0]?.cancelled) jobs.shift();
     const job = jobs.shift();
     try { if (job && !job.cancelled) await job.run(); } finally { scheduled = false; schedule(); }
   };
