@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { PartDef } from '../../../sim/vessel/types';
 import { M } from '../materials';
-import { around, box, cyl, cylinder, detailLevel, grp, lathe, merge, mk, pipe, rod, sphere, torus, type Profile } from '../geom';
+import { around, bevelBox, box, cyl, cylinder, detailLevel, grp, lathe, merge, mk, pipe, rod, sphere, torus, type Profile } from '../geom';
 import { boxDims, cylDims, num, srfMount, str } from './common';
 import { decals } from '../decals';
 import { Markings } from './markings';
@@ -462,45 +462,102 @@ export function buildFairing(def: PartDef): THREE.Object3D {
 
 // ---------------------------------------------------------------------------------------------
 
+/** Hex fastener head with its axis along +Y. */
+const hexHead = (r: number, h: number) => cyl(r, r, h, 6);
+
+/**
+ * Clamp-band decoupler: bolted flanges, hazard-striped upper and lower rings with stiffeners, and a V-section
+ * clamp band over the separation plane. The band is closed by tension-bolt blocks, each with a pair of pyro bolt
+ * cutters wired into a firing harness; a ring of explosive-bolt bumps straddles the joint between them.
+ */
 export function buildDecoupler(def: PartDef): THREE.Object3D {
   const { rTop: r, h } = cylDims(def);
   const root = grp('decoupler');
+  const fine = detailLevel() === 1;
   const fl = h * 0.3;
   const seg = 56;
+  const g = Math.min(0.022 + 0.008 * r, (h - 2 * fl) * 0.3); // clamp band half-height
+  const rb = r * 0.955;
   root.add(
     mk(
       [
-        lathe([[r * 0.98, -h / 2], [r, -h / 2 + 0.005], [r, -h / 2 + fl], [r * 0.955, -h / 2 + fl]], { segments: seg }),
-        lathe([[r * 0.955, h / 2 - fl], [r, h / 2 - fl], [r, h / 2 - 0.005], [r * 0.98, h / 2]], { segments: seg }),
+        lathe([[r * 0.98, -h / 2], [r, -h / 2 + 0.005], [r, -h / 2 + fl], [rb, -h / 2 + fl]], { segments: seg }),
+        lathe([[rb, h / 2 - fl], [r, h / 2 - fl], [r, h / 2 - 0.005], [r * 0.98, h / 2]], { segments: seg }),
       ],
       M.aluminium(),
       'flanges',
     ),
   );
-  root.add(mk(lathe([[r * 0.955, -h / 2 + fl], [r * 0.955, h / 2 - fl]], { segments: seg, tile: 0.25 }), M.hazard(), 'hazardBand'));
-  root.add(mk([bulkhead(r * 0.98, h / 2, 1), bulkhead(r * 0.98, -h / 2, -1)], M.darkMetal()));
-  const nb = Math.round(16 * r + 8);
+  root.add(mk([lathe([[rb, -h / 2 + fl], [rb, -g]], { segments: seg, tile: 0.25 }), lathe([[rb, g], [rb, h / 2 - fl]], { segments: seg, tile: 0.25 })], M.hazard(), 'hazardBand'));
+  // V-band over the joint with the dark separation groove in its waist
+  const rv = r * 0.995;
+  const band = lathe([[rb, -g], [rv, -g * 0.6], [rv, -g * 0.16], [rv * 0.985, 0], [rv, g * 0.16], [rv, g * 0.6], [rb, g]], { segments: seg });
+  root.add(mk(band, M.steel(), 'clampBand'));
+  root.add(mk([bulkhead(r * 0.98, h / 2, 1, 40), bulkhead(r * 0.98, -h / 2, -1, 40)], M.darkMetal()));
+  const nb = Math.round(12 * r + 8);
   const bs = 0.01 + 0.006 * r;
   root.add(mk([...boltRing(r, h / 2 - fl / 2, nb, bs), ...boltRing(r, -h / 2 + fl / 2, nb, bs)], M.chrome(), 'bolts'));
-  // pyro boxes on the band
-  const pb = box(0.05 + 0.03 * r, h - fl * 2 - 0.01, 0.03);
-  root.add(mk(around(pb.translate(0, 0, r * 0.955 + 0.012), 4, 0, PI / 4), M.darkMetal(), 'pyros'));
-  // ordnance warning on each pyro box, maker's mark on the flange
+  // stiffeners on the hazard rings (High only)
+  const stiff: THREE.BufferGeometry[] = [];
+  if (fine) {
+    const nS = Math.max(10, Math.round((2 * PI * r) / 0.34));
+    for (const [y0, y1] of [[-h / 2 + fl, -g], [g, h / 2 - fl]]) {
+      const st = box(0.014 + 0.004 * r, y1 - y0 - 0.006, 0.012).translate(0, (y0 + y1) / 2, rb + 0.005);
+      stiff.push(...around(st, nS, 0, PI / nS));
+    }
+    root.add(mk(stiff, M.gunmetal(), 'stiffeners'));
+  }
+  // tension-bolt blocks with pyro bolt cutters, 2 or 3 around the band
+  const nBlk = r > 1.5 ? 3 : 2;
+  const bw = 0.07 + 0.03 * r;
+  const blocks: THREE.BufferGeometry[] = [];
+  const cutters: THREE.BufferGeometry[] = [];
+  const wires: THREE.BufferGeometry[] = [];
+  const studs: THREE.BufferGeometry[] = [];
+  for (let k = 0; k < nBlk; k++) {
+    const a = (k / nBlk) * PI * 2 + PI / 4;
+    const place = (gg: THREE.BufferGeometry) => gg.rotateY(a);
+    for (const sx of [-1, 1]) blocks.push(place(bevelBox(bw * 0.38, g * 2.2, 0.03 + 0.006 * r).translate(sx * bw * 0.36, 0, rv + 0.014)));
+    studs.push(place(cyl(0.008 + 0.002 * r, 0.008 + 0.002 * r, bw * 1.2, 8).rotateZ(PI / 2).translate(0, 0, rv + 0.02)));
+    for (const sx of [-1, 1]) studs.push(place(hexHead(0.013 + 0.003 * r, 0.012).rotateZ(PI / 2).translate(sx * bw * 0.62, 0, rv + 0.02)));
+    for (const sy of [-1, 1]) {
+      cutters.push(place(cyl(0.012 + 0.003 * r, 0.012 + 0.003 * r, bw * 0.4, 10).rotateZ(PI / 2).translate(0, sy * g * 0.62, rv + 0.034)));
+      if (fine) wires.push(place(pipe([[bw * 0.18, sy * g * 0.62, rv + 0.04], [bw * 0.45, sy * g * 1.4, rv + 0.03], [bw * 0.9, sy * (h / 2 - fl * 0.9), rb + 0.012]], 0.0035 + 0.001 * r, 4, 8)));
+    }
+  }
+  root.add(mk(blocks, M.gunmetal(), 'clampBlocks'));
+  root.add(mk(studs, M.chrome(), 'clampStuds'));
+  root.add(mk(cutters, M.accent('red'), 'pyroCutters'));
+  // explosive-bolt bumps straddling the joint between the blocks
+  const nBump = fine ? Math.round(6 + 4 * r) : 4;
+  const bump = lathe([[0.016 + 0.004 * r, 0], [0.016 + 0.004 * r, 0.01], [0, 0.02]], { segments: 8 });
+  bump.rotateX(PI / 2);
+  root.add(mk(around(bump.translate(0, 0, rv), nBump, 0, PI / nBump), M.darkMetal(), 'pyros'));
+  // firing harness: a cable run under the upper flange feeding the cutters
+  if (fine) wires.push(torus(rb + 0.006, 0.0045 + 0.001 * r, 3, 48).translate(0, h / 2 - fl - 0.008, 0));
+  if (wires.length) root.add(mk(wires, M.cable(), 'harness'));
+  // ordnance warning beside each clamp block, maker's mark on the flange
   const D = new Markings(def);
   const sym = decals.symbol('warn');
-  const s = Math.min(0.05 + 0.03 * r, h - fl * 2 - 0.02) * 0.8;
-  for (let i = 0; i < 4; i++) {
-    const a = PI / 4 + (i * PI) / 2;
-    D.plane(sym, s, (g) => g.translate(0, 0, r * 0.955 + 0.0285).rotateY(a));
-  }
+  const sz = Math.min(0.05 + 0.03 * r, h / 2 - fl - g - 0.01) * 0.85;
+  if (sz > 0.015)
+    for (let k = 0; k < nBlk; k++) {
+      const a = (k / nBlk) * PI * 2 + PI / 4 + (bw * 1.1) / r;
+      D.cyl(rb + 0.004, sym, { y: g + (h / 2 - fl - g) / 2, phi: a, height: sz });
+    }
   if (fl > 0.03) D.cyl(r, decals.logo(D.livery.id, '#f2f1ec'), { y: h / 2 - fl / 2, phi: 0, height: fl * 0.7 });
   D.addTo(root);
   return root;
 }
 
+/**
+ * Frangible-joint separator: charcoal shells with hat stringers, bolt rows either side of the chrome joint,
+ * the linear charge's conduit ring, hazard chevrons, red initiator boxes and their connector blocks.
+ */
 export function buildSeparator(def: PartDef): THREE.Object3D {
   const { rTop: r, h } = cylDims(def);
   const root = grp('separator');
+  const fine = detailLevel() === 1;
   const seg = 56;
   const g = 0.02 + 0.01 * r;
   root.add(
@@ -515,6 +572,19 @@ export function buildSeparator(def: PartDef): THREE.Object3D {
   );
   root.add(mk(lathe([[r * 0.96, -g * 0.3], [r * 0.94, 0], [r * 0.96, g * 0.3]], { segments: seg }), M.chrome(), 'frangibleJoint'));
   root.add(mk([bulkhead(r * 0.98, h / 2, 1), bulkhead(r * 0.98, -h / 2, -1)], M.darkMetal()));
+  // bolt rows either side of the joint and the charge conduit ring in the groove
+  const nb = Math.round(14 * r + 8);
+  root.add(mk([...boltRing(r, g * 1.6, nb, 0.008 + 0.003 * r), ...boltRing(r, -g * 1.6, nb, 0.008 + 0.003 * r)], M.chrome(), 'bolts'));
+  root.add(mk(torus(r * 0.955, 0.006 + 0.002 * r, 4, 64), M.darkMetal(), 'chargeConduit'));
+  if (fine) {
+    const nS = Math.max(12, Math.round((2 * PI * r) / 0.2));
+    const st: THREE.BufferGeometry[] = [];
+    for (const [y0, y1] of [[-h / 2 + 0.015, -g * 2.4], [g * 2.4, h / 2 - 0.015]]) {
+      if (y1 - y0 < 0.02) continue;
+      st.push(...around(box(0.03, y1 - y0, 0.014, 0.5).translate(0, (y0 + y1) / 2, r + 0.005), nS, 0, PI / nS));
+    }
+    if (st.length) root.add(mk(st, M.charcoalPanel(), 'stringers'));
+  }
   // hazard chevrons
   const chev = lathe([[r + 0.002, h * 0.22], [r + 0.002, h * 0.36]], { segments: 8, phiLength: PI / 8, tile: 0.25 });
   const chevs: THREE.BufferGeometry[] = [];
@@ -527,9 +597,18 @@ export function buildSeparator(def: PartDef): THREE.Object3D {
     chevs.push(c2);
   }
   root.add(mk(chevs, M.hazard()));
-  const pb = box(0.06 + 0.02 * r, g * 2.6, 0.035);
+  const pb = bevelBox(0.06 + 0.02 * r, g * 2.6, 0.035);
   pb.translate(0, 0, r + 0.005);
   root.add(mk(around(pb, 6, 0, PI / 6), M.accent('red'), 'pyros'));
+  // connector block and lead beside each initiator
+  const cb: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 6; i++) {
+    const a = PI / 6 + (i * PI) / 3;
+    const off = (0.06 + 0.02 * r) / r;
+    cb.push(cyl(0.012, 0.012, 0.03, 8).rotateX(PI / 2).translate(0, g * 2.2, r + 0.012).rotateY(a + off));
+    if (fine) cb.push(pipe([[0, g * 1.2, r + 0.022], [0.025, g * 2.1, r + 0.02], [0.04, g * 2.2, r + 0.012]], 0.004, 5, 8).rotateY(a + off * 0.4));
+  }
+  root.add(mk(cb, M.gunmetal(), 'connectors'));
   return root;
 }
 
@@ -566,6 +645,19 @@ export function buildRadialDecoupler(def: PartDef): THREE.Object3D {
       bolts.push(b);
     }
   root.add(mk(bolts, M.chrome()));
+  // explosive bolts through the outer plate (domed initiators), their leads, and a red arming plug
+  const pyro: THREE.BufferGeometry[] = [];
+  const leads: THREE.BufferGeometry[] = [];
+  for (const sy of [-1, 1]) {
+    const b = lathe([[0.022, 0], [0.022, 0.012], [0.012, 0.022], [0, 0.024]], { segments: 10 });
+    b.rotateX(PI / 2);
+    b.translate(0, sy * h * 0.28, zm + d);
+    pyro.push(b);
+    if (detailLevel() === 1) leads.push(pipe([[0.016, sy * h * 0.28, zm + d + 0.012], [w * 0.22, sy * h * 0.18, zm + d + 0.01], [w * 0.3, 0, zm + d + 0.006]], 0.0045, 4, 8));
+  }
+  root.add(mk(pyro, M.darkMetal(), 'pyros'));
+  if (leads.length) root.add(mk(leads, M.cable(), 'leads'));
+  root.add(mk(bevelBox(0.05, 0.04, 0.025).translate(w * 0.3, 0, zm + d + 0.012), M.accent('red'), 'armPlug'));
   return root;
 }
 
