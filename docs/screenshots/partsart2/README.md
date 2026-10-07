@@ -44,7 +44,8 @@ The paired A/B uses the fixed 30-part fixture (Selene plus two cloned panels), i
 | Compositor draws | 1,043 | 1,057 |
 | Program re-resolutions after warm-up | 0 | 0 |
 | Scene programs (orbit) | 91 | 91 |
-| Selene vertices / triangles (High, 28 parts, before trimming the final budget) | 69.3k / 67.7k | 101.9k / 103.8k |
+| Selene vertices / triangles (High, 28 parts) | 69.3k / 67.7k | 84.0k / 83.3k (+21% / +23%) |
+| Meridian / Pebblecatcher triangles | 35.0k / 38.3k | 43.6k / 40.5k |
 
 Both runs are within the +1.0 ms budget. Every part stays inside the existing 8.5k-triangle test budget. The new fine geometry (weld lands, stringers, straps, intertank) is High-detail only, so Low keeps the cheap silhouette. Vertex colour adds 12 bytes per vertex. The 1024² panel texture takes about 1.05 s in a texture worker on the first visit, then loads from the IndexedDB cache (`TEX_VERSION` 12). The precache grows from 2,385.80 to 2,394.96 KiB.
 
