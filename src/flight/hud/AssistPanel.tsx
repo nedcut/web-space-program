@@ -16,7 +16,7 @@ export function AssistPanel({ active, onStart, onCancel }: { active: { name: str
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div className="label" style={{ color: 'var(--accent)' }}>Assist · {active.name}</div>
           <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{active.status}</div>
-          <button className="btn small danger" onClick={onCancel}>Cancel (or steer manually)</button>
+          <button className="btn small danger" title="Cancel automatic flight control; steering also cancels" onClick={onCancel}>Cancel (or steer manually)</button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

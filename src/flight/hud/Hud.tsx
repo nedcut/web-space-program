@@ -332,7 +332,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
 
       <StageFlash count={t.feel.stagedCount} stage={t.stage} />
       <Countdown value={t.feel.countdown} />
-      {<FlightHint hint={t.feel.hint} onDismiss={cb.onDismissHint} navballSize={settings.navballSize} />}
+      <FlightHint hint={t.feel.hint} onDismiss={cb.onDismissHint} navballSize={settings.navballSize} />
       {highlight && partScreen && !t.mapMode && <PartHighlight uids={highlight} at={partScreen} scale={settings.hudScale} strong={!!picked} />}
     </div>
   );

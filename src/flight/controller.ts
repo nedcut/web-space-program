@@ -381,7 +381,7 @@ export class FlightController {
     if (this.network || getTutorial() || game.get().scenarioActive) return;
     try {
       saveWorldToStorage(slot, this.world);
-      if (slot === 'quicksave') this.world.message('Quicksaved (F9 to load)');
+      if (slot === 'quicksave') this.world.message(`Quicksaved (${bindingLabel('quickload')} to load)`);
     } catch (e) {
       this.world.message(`Save failed: ${(e as Error).message}`, 'bad');
     }
@@ -571,6 +571,7 @@ export class FlightController {
   goEva(astronautId?: string) {
     if (this.paused) return;
     if (this.network) return this.network.action('eva', { astronautId });
+    if (this.world.active?.state.eva) return this.world.message('Already on EVA — approach the hatch to board', 'info');
     if (this.world.goEva(astronautId)) {
       this.cancelAssist();
       this.stagePending = false;
@@ -644,13 +645,13 @@ export class FlightController {
   private requestStage() {
     const wv = this.world.active;
     if (!wv) return this.world.message('No active vessel to stage', 'warn');
-    const explanation = stageExplanation(wv.state, this.stageLocked, this.world.canControl());
-    if (explanation) this.world.message(explanation, 'warn');
-    if (!this.world.canControl() || wv.state.eva || wv.state.nextStage < 0) return;
     if (this.stageLocked) {
-      this.world.message(`Staging is locked · ${bindingLabel('stageLock')} to unlock`, 'warn', 2);
+      this.world.message(`Staging locked (${bindingLabel('stageLock')} to unlock)`, 'warn', 3);
       return;
     }
+    const explanation = stageExplanation(wv.state, false, this.world.canControl());
+    if (explanation) this.world.message(explanation, 'warn');
+    if (!this.world.canControl() || wv.state.eva || wv.state.nextStage < 0) return;
     if (this.countdown !== null) {
       // Stage again during the count: go now.
       this.countdown = null;

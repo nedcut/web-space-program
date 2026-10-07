@@ -34,7 +34,7 @@ export interface Hint {
 }
 
 const TEXT: Record<HintId, string> = {
-  map: 'Plan a burn: click your orbit line, then choose Add maneuver node. Return to flight with {map}.',
+  map: 'Plan a burn: click your orbit line to add a maneuver node. Return to flight with {map}.',
   node: 'Drag the colored node handles to change the burn direction and strength. Drag the node along the orbit to change its time.',
   soi: 'New sphere of influence: your orbit is now measured around this body. Check periapsis in the map before accelerating time.',
   landing: 'Powered landing: point Retrograde and slow down before the ground arrives. Start your braking burn early; the Flight assist landing program can help.',

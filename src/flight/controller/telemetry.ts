@@ -25,7 +25,7 @@ import { warpTargets } from './warp';
 import { game } from '../../game/store';
 import { getTutorial } from '../../tutorial/runtime';
 
-const cueStates = new WeakMap<FlightController, { body: string; signal: boolean; throttle: string | null; sas: boolean; soi: boolean; orbit: boolean; situation: string }>();
+const cueStates = new WeakMap<FlightController, { vessel: string; body: string; signal: boolean; throttle: string | null; sas: boolean; soi: boolean; orbit: boolean; situation: string }>();
 const alertTrackers = new WeakMap<FlightController, AlertTracker>();
 const burnTrackers = new WeakMap<FlightController, BurnTracker>();
 
@@ -236,7 +236,8 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   }, performance.now() / 1000);
   const warpTo = this.warpDriver.target;
   const settings = game.get().settings;
-  const previous = cueStates.get(this);
+  const stored = cueStates.get(this);
+  const previous = stored?.vessel === st.id ? stored : undefined;
   const signal = w.canControl();
   const throttle = this.input.state.throttle > 0.05 && !st.eva ? throttleExplanation(st) : null;
   if (throttle && throttle !== previous?.throttle) w.message(throttle, 'warn');
@@ -245,11 +246,12 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   const noTorque = !!torque && Math.hypot(torque.x, torque.y, torque.z) < 1e-6;
   if (noTorque && !previous?.sas) w.message('SAS has no torque — enable reaction wheels or RCS; fins need airflow and gimbals need thrust', 'warn', 6);
   const changedBody = !!previous && previous.body !== wv.body;
+  if (changedBody) w.message(`Entering ${b.name}'s sphere of influence`);
   const orbit = flying && orb.orbit.e < 1 && orb.pe > Math.max(b.atmosphere?.height ?? 0, w.universe.terrain(wv.body).maxHeight);
   if (previous && !previous.orbit && orbit) w.message(`Orbit achieved around ${b.name}`);
   if (previous && previous.situation === 'flying' && st.situation !== 'flying') w.message(st.situation === 'splashed' ? `Splashed down on ${b.name}` : `Landed on ${b.name}`);
   const soi = changedBody || (previous?.soi ?? false);
-  cueStates.set(this, { body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation });
+  cueStates.set(this, { vessel: st.id, body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation });
   const hint = this.hints.update({
     enabled: settings.flightHints && !this.network && !getTutorial() && !game.get().scenarioActive && !this.assist,
     map: this.mapMode, node: w.nodes.length > 0, soi, eva: !!st.eva,

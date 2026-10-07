@@ -38,9 +38,9 @@ export function preflightChecks(craft: CraftDef, catalog: Map<string, PartDef>, 
     const premature = engines.filter(e => dropped(e.uid) && p.stage !== undefined && e.stage !== undefined && p.stage >= e.stage);
     if (premature.length) add(`order-${p.uid}`, 'Separator fires before its attached engines finish their stage. Review the order.', [p.uid, ...premature.map(e => e.uid)]);
   }
-  // Positive lateral velocity: negative Z torque turns the nose away from the flow (CP ahead of COM).
+  // Positive lateral velocity: positive Z torque turns the nose away from the flow (CP ahead of COM).
   const air = { density: 1.225, pressure: 101325, temperature: 288, speedOfSound: 340 } as ReturnType<typeof sampleAtmosphere>;
   const aero = computeAeroForces(v, { air, airVelocityBody: v3(5, 100, 0), control: v3() });
-  if (aero.torqueBody.z < -1) add('aero', 'Possible aero instability: pressure acts ahead of mass. Move fins aft or mass forward (small-angle estimate).', v.parts.filter(p => p.def.modules.some(m => m.type === 'liftingSurface')).map(p => p.uid));
+  if (aero.torqueBody.z > 1) add('aero', 'Possible aero instability: pressure acts ahead of mass. Move fins aft or mass forward (small-angle estimate).', v.parts.filter(p => p.def.modules.some(m => m.type === 'liftingSurface')).map(p => p.uid));
   return out;
 }
