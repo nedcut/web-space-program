@@ -109,8 +109,11 @@ export class RenderPipeline {
   /** Current resolution plan (internal/output pixel ratios, upscaling); see `resolutionPlan`. */
   get plan(): ResolutionPlan {
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-    return resolutionPlan(dpr, this.quality, this.adaptive.scale, this.mapHiRes, Math.min(this.width, this.height));
+    // Photo captures render at full device resolution (no Retina reduction, no adaptive reduction).
+    const q = this.capturing ? { ...this.quality, upscale: { ...this.quality.upscale, retinaScale: 1 } } : this.quality;
+    return resolutionPlan(dpr, q, this.capturing ? 1 : this.adaptive.scale, this.mapHiRes, Math.min(this.width, this.height));
   }
+  private capturing = false;
 
   /** The scene is rendered below device resolution and reconstructed by the edge-adaptive upscale pass. */
   get upscaling(): boolean { return this.plan.upscaling; }
@@ -248,13 +251,14 @@ export class RenderPipeline {
   capture(scene: THREE.Scene, camera: THREE.PerspectiveCamera, scale: 1 | 2): HTMLCanvasElement {
     const width = this.width, height = this.height;
     try {
+      this.capturing = true;
       this.setSize(width * scale, height * scale);
       this.render(scene, camera);
       const canvas = document.createElement('canvas');
       canvas.width = this.renderer.domElement.width; canvas.height = this.renderer.domElement.height;
       const context = canvas.getContext('2d'); if (!context) throw new Error('PNG capture is unavailable.');
       context.drawImage(this.renderer.domElement, 0, 0); return canvas;
-    } finally { this.setSize(width, height); }
+    } finally { this.capturing = false; this.setSize(width, height); }
   }
 
   /**
