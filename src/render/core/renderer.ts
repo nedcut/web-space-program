@@ -1,4 +1,5 @@
 import { PhotoEffectsPass } from './PhotoEffectsPass';
+import { UpscalePass } from './UpscalePass';
 import { AdaptiveQuality } from './adaptiveQuality';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -22,8 +23,11 @@ export interface RenderPipelineOptions {
 
 /**
  * HDR render pipeline:
- *   scene → HalfFloat RT (optional MSAA) → UnrealBloom → OutputPass (tonemap + sRGB) → FXAA (optional)
- * The renderer uses a logarithmic depth buffer so one camera can span 0.05 m to 10^13 m.
+ *   scene → HalfFloat RT (optional MSAA) → UnrealBloom → OutputPass (tonemap + sRGB) → SMAA/FXAA (optional)
+ *   → edge-adaptive upscale to device resolution (when the internal resolution is below it)
+ * Everything before the upscale runs at the internal resolution (device pixels × Retina scale × render scale ×
+ * adaptive scale); the canvas keeps device resolution, so the image is reconstructed by `UpscalePass` rather than
+ * stretched bilinearly by the browser. The renderer uses a logarithmic depth buffer so one camera can span 0.05 m to 10^13 m.
  * All custom ShaderMaterials must include three's logdepthbuf chunks (see render/planet/shaders).
  */
 export class RenderPipeline {
@@ -33,6 +37,7 @@ export class RenderPipeline {
   private bloomPass?: UnrealBloomPass;
   private fxaaPass?: FXAAPass;
   private smaaPass?: SMAAPass;
+  private upscalePass!: UpscalePass;
   /** Unmasked WebGL renderer string, when the browser exposes it. */
   readonly gpuName: string | null;
   photoEffects!: PhotoEffectsPass;
@@ -73,8 +78,11 @@ export class RenderPipeline {
     this.gpuTimer = GpuTimer.create(r.getContext());
     this.gpuName = rendererName(r.getContext());
     // Adaptive resolution starts where this class of GPU usually lands, then converges from measurements.
+    // A Retina-reduced, upscaled start already draws about half the device pixels, so mid-range GPUs start there.
     const tier = classifyGpu(this.gpuName);
-    this.adaptive.scale = tier === 'strong' ? 1 : tier === 'mid' ? 0.75 : 0.6;
+    const start = resolutionPlan(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, opts.quality, 1, false, 1);
+    const reduced = start.lod > start.internal * 1.2;
+    this.adaptive.scale = tier === 'strong' ? 1 : tier === 'mid' ? (reduced ? 1 : 0.75) : 0.6;
     this.buildComposer();
   }
 
@@ -97,11 +105,20 @@ export class RenderPipeline {
     this.setSize(this.width, this.height);
   }
 
-  get pixelRatio(): number {
+  /** Current resolution plan (internal/output pixel ratios, upscaling); see `resolutionPlan`. */
+  get plan(): ResolutionPlan {
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-    if (this.mapHiRes) return Math.min(dpr, 2);
-    return Math.max(1 / Math.min(this.width, this.height), Math.min(dpr, this.quality.maxPixelRatio) * this.quality.renderScale * this.adaptive.scale);
+    return resolutionPlan(dpr, this.quality, this.adaptive.scale, this.mapHiRes, Math.min(this.width, this.height));
   }
+
+  /** The scene is rendered below device resolution and reconstructed by the edge-adaptive upscale pass. */
+  get upscaling(): boolean { return this.plan.upscaling; }
+
+  /** Pixel ratio of the scene and post-processing buffers (internal resolution). */
+  get pixelRatio(): number { return this.plan.internal; }
+
+  /** Pixel ratio of the canvas (display output). */
+  get outputPixelRatio(): number { return this.plan.output; }
 
   private buildComposer(): void {
     const q = this.quality;
@@ -136,6 +153,9 @@ export class RenderPipeline {
     }
     this.photoEffects = new PhotoEffectsPass();
     composer.addPass(this.photoEffects);
+    this.upscalePass = new UpscalePass();
+    this.upscalePass.sharpness = q.upscale.sharpness;
+    composer.addPass(this.upscalePass);
     this.composer = composer;
     this.setSize(this.width, this.height);
   }
@@ -149,8 +169,9 @@ export class RenderPipeline {
   setSize(width: number, height: number): void {
     this.width = Math.max(1, Math.floor(width));
     this.height = Math.max(1, Math.floor(height));
-    const pr = this.pixelRatio;
-    this.renderer.setPixelRatio(pr);
+    const plan = this.plan, pr = plan.internal;
+    this.upscalePass.enabled = plan.upscaling;
+    this.renderer.setPixelRatio(plan.output);
     this.renderer.setSize(this.width, this.height, false);
     this.composer.setPixelRatio(pr);
     this.composer.setSize(this.width, this.height);
@@ -164,7 +185,8 @@ export class RenderPipeline {
    * per-vertex aerial perspective) — the geometric error stays under 2.5 CSS px on Medium.
    */
   get lodViewportHeight(): number {
-    const pr = this.pixelRatio;
+    // Terrain detail follows the device resolution the upscaler reconstructs, not the reduced internal one.
+    const pr = this.plan.lod;
     return (this.height * pr) / Math.sqrt(Math.max(1, pr));
   }
 
@@ -242,6 +264,34 @@ export class RenderPipeline {
     this.composer.dispose();
     finishRenderer(this.renderer);
   }
+}
+
+export interface ResolutionPlan {
+  /** Pixel ratio of the scene / post-processing buffers. */
+  internal: number;
+  /** Pixel ratio of the canvas. Above `internal` only while upscaling. */
+  output: number;
+  upscaling: boolean;
+  /** Pixel ratio terrain LOD is selected for (the reconstructed resolution, before the Retina reduction). */
+  lod: number;
+}
+
+/**
+ * Resolution policy. The preset's device ratio is min(devicePixelRatio, maxPixelRatio). With the edge upscaler,
+ * displays of ≥ 1.5× render internally at `retinaScale` of it, and any internal ratio below the device ratio
+ * (Retina scale, render scale, adaptive) is upscaled into a device-resolution canvas. Without it (or when
+ * supersampling) the canvas itself takes the internal ratio and the browser scales it. The map draws directly at
+ * up to 2× device resolution.
+ */
+export function resolutionPlan(dpr: number, q: Pick<QualitySettings, 'maxPixelRatio' | 'renderScale' | 'upscale'>, adaptiveScale: number, map: boolean, minCssSide: number): ResolutionPlan {
+  if (map) { const pr = Math.min(dpr, 2); return { internal: pr, output: pr, upscaling: false, lod: pr }; }
+  const device = Math.min(dpr, q.maxPixelRatio);
+  const edge = q.upscale.mode === 'edge';
+  const retina = edge && device >= 1.5 ? q.upscale.retinaScale : 1;
+  const scale = retina * q.renderScale * adaptiveScale;
+  const internal = Math.max(1 / Math.max(1, minCssSide), device * scale);
+  const upscaling = edge && scale < 0.98;
+  return { internal, output: upscaling ? device : internal, upscaling, lod: internal / retina };
 }
 
 function rendererName(gl: WebGLRenderingContext | WebGL2RenderingContext): string | null {
