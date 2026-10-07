@@ -402,7 +402,9 @@ export class LaunchSite {
     // Hazard paint strip on the inner curb face top.
     for (let i = 0; i < inner.length; i += 2) {
       const j = (i + 1) % inner.length;
-      const a = inner[i], b = inner[j];
+      // 1.5 cm proud of the curb face (coplanar paint z-fights).
+      const ka = 1 - 0.015 / Math.hypot(inner[i][0], inner[i][1]), kb = 1 - 0.015 / Math.hypot(inner[j][0], inner[j][1]);
+      const a = [inner[i][0] * ka, inner[i][1] * ka], b = [inner[j][0] * kb, inner[j][1] * kb];
       this.add('hazard', this.facing(V(a[0], 0.0, a[1]), V(b[0], 0.0, b[1]), V(b[0], top + 0.005, b[1]), V(a[0], top + 0.005, a[1]), V(-a[0], 0, -a[1])));
     }
 
@@ -412,11 +414,13 @@ export class LaunchSite {
     const up = V(0, 1, 0);
     this.add('soot', this.facing(V(-T, D, zS), V(T, D, zS), V(T, D, zRamp), V(-T, D, zRamp), up));
     this.add('soot', this.facing(V(-T, D, zRamp), V(T, D, zRamp), V(T, floorAt(zN), zN), V(-T, floorAt(zN), zN), up));
-    // Side walls: segments with different tops (hole: 0, under deck: −1.5, open: coping).
+    // Side walls: segments with different tops (hole: 0, under deck: −1.5, open: up to the coping, whose inner
+    // face continues the wall; overlapping it drew z-fighting stripes along the trench).
+    const COPING_BOTTOM = -0.6;
     const segs: [number, number, number][] = [
       [zS, -H, 0],
       [-H, zDeck, -1.5],
-      [zDeck, zN, 0.15],
+      [zDeck, zN, COPING_BOTTOM],
     ];
     for (const sx of [-1, 1]) {
       for (const [z0, z1, yt] of segs) {
@@ -431,13 +435,13 @@ export class LaunchSite {
     this.add('soot', this.facing(V(-T, -1.5, -H), V(T, -1.5, -H), V(T, -1.5, zDeck), V(-T, -1.5, zDeck), V(0, -1, 0)));
     this.add('soot', this.facing(V(-T, -1.5, -H), V(T, -1.5, -H), V(T, 0, -H), V(-T, 0, -H), V(0, 0, 1)));
     this.add('soot', this.facing(V(-T, D, zS), V(T, D, zS), V(T, 0, zS), V(-T, 0, zS), V(0, 0, -1)));
-    this.add('soot', this.facing(V(-T, floorAt(zN), zN), V(T, floorAt(zN), zN), V(T, 0.15, zN), V(-T, 0.15, zN), V(0, 0, 1)));
-    // Lintel at the deck edge over the trench mouth.
-    this.add('concrete', boxY(2 * T + 0.2, 1.2, 0, zDeck - 0.1, -1.5, 0.21));
+    this.add('soot', this.facing(V(-T, floorAt(zN), zN), V(T, floorAt(zN), zN), V(T, COPING_BOTTOM, zN), V(-T, COPING_BOTTOM, zN), V(0, 0, 1)));
+    // Lintel at the deck edge over the trench mouth (hangs just below the ceiling so the two never coincide).
+    this.add('concrete', boxY(2 * T + 0.2, 1.2, 0, zDeck - 0.1, -1.56, 0.21));
     // Coping along the open trench (covers the cutout boundary).
     const cz0 = zDeck - 0.4, cz1 = zN - 2.2;
-    for (const sx of [-1, 1]) this.add('concrete', boxY(2.2, cz0 - cz1, sx * (T + 1.1), (cz0 + cz1) / 2, -0.6, 0.15));
-    this.add('concrete', boxY(2 * T + 4.4, 2.2, 0, zN - 1.1, -0.6, 0.15));
+    for (const sx of [-1, 1]) this.add('concrete', boxY(2.2, cz0 - cz1, sx * (T + 1.1), (cz0 + cz1) / 2, COPING_BOTTOM, 0.15));
+    this.add('concrete', boxY(2 * T + 4.4, 2.2, 0, zN - 1.1, COPING_BOTTOM, 0.15));
     // Guard rails along the open trench.
     for (const sx of [-1, 1]) {
       const x = sx * (T + 1.6);
