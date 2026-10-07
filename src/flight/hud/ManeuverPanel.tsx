@@ -1,9 +1,10 @@
 import { usePlanner } from './usePlanner';
+import type { TransferWindow as DepartureWindow } from '../../game/planning/windows';
 import { applyPlanningResult } from '../../game/planning/apply';
 import { TransferWindow } from './TransferWindow';
 import { useEffect, useState } from 'react';
 import type { World } from '../../game/world';
-import { period, timeToApoapsis, timeToPeriapsis } from '../../sim/orbit';
+import { timeToApoapsis, timeToPeriapsis } from '../../sim/orbit';
 import { formatCountdown, formatDistance, formatDuration } from '../../ui/format';
 import { planCircularization } from '../../game/autopilot';
 import { useRenderProfile } from './useRenderProfile';
@@ -26,6 +27,7 @@ export function ManeuverPanel({ world, map }: { world: World; map?: FlightMap })
   const planner = usePlanner(world);
   const [planMsg, setPlanMsg] = useState('');
   const [transferTarget, setTransferTarget] = useState<string | null>(null);
+  const [options, setOptions] = useState<{ target: string; windows: DepartureWindow[] } | null>(null);
 
   // Node list readouts refresh at 4 Hz while the panel is open.
   useEffect(() => {
@@ -65,17 +67,18 @@ export function ManeuverPanel({ world, map }: { world: World; map?: FlightMap })
   const targets = [...siblings, ...body.children.map((id) => world.universe.body(id)), ...(body.parent && body.parent !== world.universe.sunId ? [world.universe.body(body.parent)] : [])]
     .filter((b) => b.kind !== 'star')
     .sort((a, b) => (a.orbit?.a ?? 0) - (b.orbit?.a ?? 0));
-  const planTransfer = async (id: string) => {
+  const planTransfer = async (id: string, departure?: number) => {
     setPlanMsg('');
     try {
-      const { result: plan, snapshot } = await planner.run('transfer', { target: id });
-      if (!plan) { setPlanMsg('No transfer window found'); return; }
+      const { result: plan, snapshot } = await planner.run('transfer', { target: id, ...(departure !== undefined ? { options: { departure } } : {}) });
+      if (!plan) { setPlanMsg(departure !== undefined ? 'That departure did not refine to an encounter. Try another option.' : 'No transfer window found'); return; }
       applyPlanningResult(world, snapshot, plan);
       const target = world.universe.body(id), node = world.nodes[0];
       if (map && node) { map.selectNode(node.id); map.frameTransfer(id); }
-      const wait = plan.node.time - world.ut, T = period(world.orbitOf(world.active!));
-      setPlanMsg(`${target.name} transfer: ${plan.dv.toFixed(0)} m/s, burn in ${formatDuration(wait)}`
-        + `${Number.isFinite(T) && wait > 2 * T ? ' (next window: the target must line up with your orbital plane)' : ''}. `
+      // Keep the option list from the first search when the player picks one of its departures.
+      if (plan.windows?.length) setOptions({ target: id, windows: plan.windows });
+      const wait = plan.node.time - world.ut;
+      setPlanMsg(`${target.name} transfer: ${plan.dv.toFixed(0)} m/s, burn in ${formatDuration(wait)}. `
         + `Encounter in ${formatDuration(plan.encounterTime - world.ut)}, periapsis ${formatDistance(plan.periapsisAltitude)}. `
         + `Use Warp below to reach the burn; Assist → Execute next node can fly it.`);
     } catch (e) {
@@ -133,6 +136,7 @@ export function ManeuverPanel({ world, map }: { world: World; map?: FlightMap })
         <button className="btn small" onClick={() => { planner.cancel(); setPlanMsg('Planning cancelled'); }}>Cancel</button>
       </div>}
       {planMsg && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{planMsg}</div>}
+      {options && <DepartureOptions world={world} options={options} busy={!!planner.progress} onPick={w => planTransfer(options.target, w.departure)} />}
       {nodes.length > 0 && <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: 6, display: 'grid', gap: 4, fontSize: 12 }}>
         {nodes.map((n, i) => <div key={n.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6, alignItems: 'center' }}>
           <button className="btn ghost small" style={{ textAlign: 'left' }} onClick={() => map?.openNode(n.id)} title="Select and open the node menu">
@@ -145,4 +149,29 @@ export function ManeuverPanel({ world, map }: { world: World; map?: FlightMap })
     </div>
     </>
   );
+}
+
+/**
+ * The departures the planner found for the last transfer: wait versus Δv, so the player can trade a long wait for
+ * a dearer burn now (usually a plane change) or the reverse. Δv values are estimates until picked and refined.
+ */
+function DepartureOptions({ world, options, busy, onPick }: { world: World; options: { target: string; windows: DepartureWindow[] }; busy: boolean; onPick(w: DepartureWindow): void }) {
+  const live = options.windows.filter(w => w.departure > world.ut + 120);
+  if (live.length < 2) return null;
+  const cheapest = Math.min(...live.map(w => w.dv));
+  const soonest = live[0];
+  const node = world.nodes[0];
+  const current = node ? live.reduce((a, b) => (Math.abs(b.departure - node.time) < Math.abs(a.departure - node.time) ? b : a)) : null;
+  const near = (w: DepartureWindow) => !!node && w === current && Math.abs(w.departure - node.time) < Math.max(3600, 0.05 * (w.departure - world.ut));
+  return <div style={{ display: 'grid', gap: 3, fontSize: 12 }} aria-label="Departure options">
+    <div className="label">Departure options · {world.universe.body(options.target).name}</div>
+    {live.map(w => {
+      const tags = [w === soonest ? 'soonest' : '', w.dv <= cheapest + 0.5 ? 'cheapest' : '', w === soonest && w.dv > cheapest * 1.1 + 20 ? 'plane change' : ''].filter(Boolean);
+      return <button key={w.departure} className="btn ghost small" disabled={busy || near(w)} style={{ textAlign: 'left' }}
+        title={near(w) ? 'Planned' : 'Plan this departure (refines the encounter)'} onClick={() => onPick(w)}>
+        <span className="mono">{near(w) ? '● ' : '○ '}in {formatDuration(w.departure - world.ut)} · ~{w.dv.toFixed(0)} m/s · flight {formatDuration(w.timeOfFlight)}</span>
+        {tags.length > 0 && <span style={{ color: 'var(--text-dim)' }}> · {tags.join(', ')}</span>}
+      </button>;
+    })}
+  </div>;
 }

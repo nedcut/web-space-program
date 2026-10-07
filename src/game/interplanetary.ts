@@ -1,8 +1,9 @@
 /** Impulsive planet-to-planet targeting, followed by full patched-conic encounter refinement. */
 import type { PlanningWorld, PlanningProgressReporter } from './planning/context';
 import type { TransferPlan } from './planning/transfers';
+import type { TransferWindow } from './planning/windows';
 import type { Orbit, TrajectoryPatch } from '../sim/orbit/api';
-import { solveLambert, propagate, period, periapsisRadius, predictTrajectory,
+import { solveLambert, propagate, period, periapsisRadius, apoapsisRadius, predictTrajectory,
   closestApproach, inertialDvToManeuver, maneuverToInertialDv } from '../sim/orbit';
 import { add, sub, scale, length, dot, normalize, type Vec3 } from '../util/vec3';
 import { nelderMead } from '../util/nelderMead';
@@ -23,6 +24,8 @@ export interface InterplanetaryOptions {
   periapsisAltitude?: number;
   /** Include insertion into a circular orbit at the requested periapsis in the grid score (default true). */
   includeCapture?: boolean;
+  /** Plan the window departing nearest this UT (one of a previous plan's `windows`). */
+  departure?: number;
 }
 export interface InterplanetaryPlan extends TransferPlan {
   departureTime: number;
@@ -89,6 +92,49 @@ export function ejectionVelocity(mu: number, r: Vec3, excess: Vec3): Vec3 {
   return add(scale(d, k), scale(q, k - speed));
 }
 
+/** Cheapest single-burn ejection onto the asymptote `excess` from the parking orbit within half a revolution of
+ * `t`: the parking plane is fixed, so an asymptote far out of it costs a dog-leg that the coplanar estimate ignores. */
+function ejectionCost(orbit: Orbit, gm: number, t: number, excess: Vec3, T: number, samples = 24): number {
+  let best = Infinity;
+  for (let k = 0; k < samples; k++) {
+    const s = propagate(orbit, t + (k / samples - 0.5) * T);
+    best = Math.min(best, length(sub(ejectionVelocity(gm, s.position, excess), s.velocity)));
+  }
+  return best;
+}
+
+/** Departure options over `span`: local minima of the plane-aware departure Δv (best flight time per date),
+ * cheapest few in time order, plus departing at once when that is not absurd. Estimates only. */
+function interplanetaryWindows(world: PlanningWorld, a: string, b: string, orbit: Orbit, earliest: number, span: number,
+  tofRange: SearchRange, altitude: number, includeCapture: boolean, max = 4): TransferWindow[] {
+  const u = world.universe, T = period(orbit), gm = u.body(a).gm, parking = length(world.relativeState(world.active!).position);
+  const rows: { t: number; dv: number; tof: number; capture: number; score: number }[] = [];
+  const N = 60, M = 12;
+  for (let i = 0; i < N; i++) {
+    const t = earliest + (span * i) / (N - 1);
+    let best = { t, dv: Infinity, tof: 0, capture: 0, score: Infinity };
+    for (let j = 0; j < M; j++) {
+      const tof = tofRange.min + ((tofRange.max - tofRange.min) * j) / (M - 1);
+      try {
+        const p = point(world, a, b, t, tof, parking, u.body(b).radius + altitude);
+        const dv = ejectionCost(orbit, gm, t, p.departureExcess, T, 12);
+        const score = dv + (includeCapture ? p.captureDv : 0);
+        if (score < best.score) best = { t, dv, tof, capture: p.captureDv, score };
+      } catch { /* collinear cell */ }
+    }
+    rows.push(best);
+  }
+  const finite = rows.filter(r => Number.isFinite(r.score));
+  if (!finite.length) return [];
+  // Ranked like the planner ranks departures (departure plus capture unless capture is excluded).
+  const cheapest = Math.min(...finite.map(r => r.score));
+  const minima = rows.filter((r, i) => Number.isFinite(r.score) && r.score <= (rows[i - 1]?.score ?? Infinity) && r.score <= (rows[i + 1]?.score ?? Infinity));
+  const picked = minima.sort((x, y) => x.score - y.score).slice(0, max);
+  if (rows[0] && Number.isFinite(rows[0].score) && rows[0].score < 2.5 * cheapest && !picked.includes(rows[0])) picked.push(rows[0]);
+  return picked.sort((x, y) => x.t - y.t).map(r => ({ departure: r.t, wait: r.t - world.ut, dv: r.dv, captureDv: r.capture, timeOfFlight: r.tof,
+    kind: r === rows[0] ? 'now' as const : 'window' as const, seed: [0, 0, 0] as [number, number, number] }));
+}
+
 function predict(world: PlanningWorld, orbit: Orbit, time: number, components: number[], horizon: number): TrajectoryPatch[] {
   const s = propagate(orbit, time);
   const dv = maneuverToInertialDv(s, { prograde: components[0], normal: components[1], radial: components[2] });
@@ -110,11 +156,16 @@ export function refine(world: PlanningWorld, orbit: Orbit, targetId: string, tim
         const error = Math.abs(periapsisRadius(encounter.orbit) - goal);
         return error < 100 ? 0 : (error / target.soi) ** 2;
       }
-      const helio = patches.find(p => p.orbit.body === u.sunId);
-      if (!helio) return 1e8;
-      const ca = closestApproach(helio.orbit, tt => u.ephem.getRelativeState(targetId, tt), helio.startTime, helio.endTime);
-      // A miss outside the SOI must always cost more than a valid near-periapsis encounter.
-      return ((ca.distance - goal) / target.soi) ** 2;
+      // Missed: closest approach in the target's parent frame (heliocentric for planets, planet-centred for moons)…
+      const around = patches.find(p => p.orbit.body === target.parent);
+      if (around) {
+        const ca = closestApproach(around.orbit, tt => u.ephem.getRelativeState(targetId, tt), around.startTime, around.endTime);
+        // A miss outside the SOI must always cost more than a valid near-periapsis encounter.
+        return ((ca.distance - goal) / target.soi) ** 2;
+      }
+      // …or, still bound to the departure body, how far the apoapsis falls short of its SOI edge.
+      const first = patches[0], soi = u.body(first.orbit.body).soi;
+      return 100 + (Number.isFinite(soi) ? Math.max(0, soi - apoapsisRadius(first.orbit)) / soi : 1);
     } catch { return 1e12; }
   };
   const x0 = [...initial, ...(timeFreedom > 0 ? [0] : [])];
@@ -150,8 +201,22 @@ export function planInterplanetaryTransfer(world: PlanningWorld, targetPlanetId:
   const earliest = Math.max(world.ut + 300, opts.earliest ?? world.ut + 300);
   const na = Math.sqrt(mu / a.orbit!.a ** 3), nb = Math.sqrt(mu / b.orbit!.a ** 3);
   const hohmann = Math.PI * Math.sqrt(((a.orbit!.a + b.orbit!.a) / 2) ** 3 / mu);
-  let dep = opts.departureRange ?? { min: earliest, max: earliest + (opts.window ?? 2 * Math.PI / Math.abs(na - nb)), samples: 25 };
+  const synodic = 2 * Math.PI / Math.abs(na - nb);
   let tof = opts.timeOfFlightRange ?? { min: hohmann * 0.65, max: hohmann * 1.35, samples: 25 };
+  checkRange(tof, true);
+  // Options over two synodic periods. Unless a range or window was given, plan the earliest option within a few
+  // percent of the cheapest (departure + capture): a slightly dearer window months earlier beats waiting.
+  report?.('Listing transfer windows', 0);
+  const windows = opts.departureRange ? [] : interplanetaryWindows(world, a.id, b.id, orbit, earliest, 2 * synodic, tof, altitude, opts.includeCapture !== false);
+  let pick = opts.departure;
+  if (pick === undefined && opts.window === undefined && windows.length) {
+    const totals = windows.map(w => w.dv + (opts.includeCapture === false ? 0 : w.captureDv ?? 0));
+    const cheapest = Math.min(...totals);
+    pick = windows[totals.findIndex(x => x <= cheapest * 1.08 + 25)].departure;
+  }
+  const around = pick !== undefined && !opts.departureRange
+    ? { min: Math.max(earliest, pick - synodic / 30), max: Math.max(earliest, pick - synodic / 30) + synodic / 15, samples: 9 } : undefined;
+  let dep = opts.departureRange ?? around ?? { min: earliest, max: earliest + (opts.window ?? synodic), samples: 25 };
   checkRange(dep); checkRange(tof, true);
   if (dep.min < earliest) throw new RangeError('Departure range starts before the earliest safe node time');
   const depBounds = { ...dep }, tofBounds = { ...tof };
@@ -163,7 +228,8 @@ export function planInterplanetaryTransfer(world: PlanningWorld, targetPlanetId:
       try {
         const p = point(world, a.id, b.id, dep.min + (dep.max - dep.min) * i / ((dep.samples ?? 25) - 1),
           tof.min + (tof.max - tof.min) * j / ((tof.samples ?? 25) - 1), parking, b.radius + altitude);
-        const score = p.departureDv + (opts.includeCapture === false ? 0 : p.captureDv);
+        // The parking orbit's plane is fixed: score the real ejection from it, not a coplanar departure.
+        const score = ejectionCost(orbit, a.gm, p.departureTime, p.departureExcess, T, 12) + (opts.includeCapture === false ? 0 : p.captureDv);
         if (score < bestScore) { best = p; bestScore = score; }
       } catch { /* Collinear cell; neighbouring cells still cover the transfer window. */ }
     }
@@ -189,7 +255,7 @@ export function planInterplanetaryTransfer(world: PlanningWorld, targetPlanetId:
   report?.('Refining encounter', 0.7);
   const plan = refine(world, orbit, b.id, time, [c.prograde, c.normal, c.radial], choice.arrivalTime, altitude, Infinity, T / 8, depBounds.min, depBounds.max);
   if (!plan) return null;
-  return { ...plan, departureTime: plan.node.time, arrivalTime: choice.arrivalTime, timeOfFlight: choice.arrivalTime - plan.node.time,
+  return { ...plan, windows, departureTime: plan.node.time, arrivalTime: choice.arrivalTime, timeOfFlight: choice.arrivalTime - plan.node.time,
     departureExcess: choice.departureExcess, arrivalExcess: choice.arrivalExcess, captureDvEstimate: choice.captureDv };
 }
 

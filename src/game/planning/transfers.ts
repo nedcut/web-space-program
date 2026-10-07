@@ -5,10 +5,13 @@ import { propagate, stateToElements, period, periapsisRadius, apoapsisRadius, ti
   predictTrajectory, maneuverToInertialDv, closestApproach } from '../../sim/orbit';
 import { add, sub, scale, length, normalize, type Vec3 } from '../../util/vec3';
 import { nelderMead } from '../../util/nelderMead';
-import { planInterplanetaryTransfer } from '../interplanetary';
+import { planInterplanetaryTransfer, refine } from '../interplanetary';
+import { transferWindows, type TransferWindow } from './windows';
 
 export interface TransferPlan {
   node: ManeuverNode;
+  /** Departure options found for this target (estimates), in time order, when the planner searched them. */
+  windows?: TransferWindow[];
   /** Predicted patches from the node onward. */
   patches: TrajectoryPatch[];
   /** UT of the SOI change into the target. */
@@ -25,6 +28,8 @@ export interface TransferOptions {
   earliest?: number;
   /** Search window length for the departure time, s (default: one synodic-ish period). */
   window?: number;
+  /** Plan the departure option nearest this UT (one of a previous plan's `windows`) instead of choosing one. */
+  departure?: number;
 }
 
 /**
@@ -71,14 +76,14 @@ function evaluateEncounter(world: PlanningWorld, orbit: Orbit, t: number, dv: Ve
  * trailing side, then refines (time, prograde) to hit the requested periapsis around the parent.
  * The resulting node is added to `world.nodes`. Returns null if no encounter was found.
  */
-export function planTransferToBody(world: PlanningWorld, targetId: string, opts: TransferOptions = {}, report?: PlanningProgressReporter): TransferPlan | null {
+function firstWindowTransfer(world: PlanningWorld, targetId: string, opts: TransferOptions = {}, report?: PlanningProgressReporter): TransferPlan | null {
   const u = world.universe;
   const wv = world.active!;
   const o = world.orbitOf(wv);
   const central = u.body(o.body);
   const target = u.body(targetId);
   if (central.parent === u.sunId && target.parent === u.sunId && targetId !== central.id)
-    return planInterplanetaryTransfer(world, targetId, opts, report);
+    throw new Error('interplanetary targets are routed by planTransferToBody');
   const T = period(o);
   if (!isFinite(T)) return null;
   const earliest = opts.earliest ?? world.ut + 300;
@@ -205,10 +210,93 @@ export function planTransferToBody(world: PlanningWorld, targetId: string, opts:
   const t = found.t;
   const ev = found.ev;
   if (!ev || !ev.hit) return null;
-  const node = world.addNode(t);
-  node.prograde = x[1];
-  node.normal = x[2] ?? 0;
+  const node = { id: -1, time: t, prograde: x[1], normal: x[2] ?? 0, radial: 0 };
   return { node, patches: ev.patches, encounterTime: ev.encounterTime, periapsisAltitude: ev.periapsis, dv: Math.hypot(x[1], x[2] ?? 0) };
+}
+
+/**
+ * Plan a transfer from the current orbit to `targetId`: a moon of the current body (e.g. Earth orbit → Moon), its
+ * parent (lunar orbit → Earth), or a sibling planet (routed to the Lambert/patched-conic planner in
+ * interplanetary.ts).
+ *
+ * Moons and parents get two independent searches. The first-window planner (an analytic Hohmann scan refined on
+ * the patched-conic prediction) is fast and exact from circular orbits. A Lambert scan of departures from the actual
+ * orbit, in any plane, lists the options — the cheapest within the next revolution ("now", often with a plane
+ * change) and the cheaper windows later — and seeds a refinement that also covers elliptical, part-burnt, overshot
+ * and inclined orbits. The chosen plan is the first-window plan when it is accurate, prompt and not clearly dearer
+ * than the best window; otherwise the earliest window within a few percent of the cheapest. `opts.departure` plans
+ * the option nearest that UT instead. Exactly one node is added on success, none on failure.
+ */
+export function planTransferToBody(world: PlanningWorld, targetId: string, opts: TransferOptions = {}, report?: PlanningProgressReporter): TransferPlan | null {
+  const u = world.universe;
+  const wv = world.active!;
+  const o = world.orbitOf(wv);
+  const central = u.body(o.body);
+  const target = u.body(targetId);
+  if (central.parent === u.sunId && target.parent === u.sunId && targetId !== central.id)
+    return planInterplanetaryTransfer(world, targetId, opts, report);
+  if (target.parent !== central.id && central.parent !== targetId)
+    throw new Error(`planTransferToBody: ${targetId} is neither a child nor the parent of ${central.id}`);
+  const outbound = target.parent === central.id;
+  const earliest = opts.earliest ?? world.ut + 300;
+  const peAlt = opts.periapsisAltitude ?? (target.atmosphere ? target.atmosphere.height * 0.5 : 30000);
+  const tolerance = Math.max(5000, target.radius * 0.05);
+  const T = period(o);
+  const accurate = (p: TransferPlan | null): p is TransferPlan => !!p && p.node.time > world.ut && Math.abs(p.periapsisAltitude - peAlt) <= tolerance;
+
+  report?.('Searching departures', 0);
+  const windows = transferWindows(world, targetId, { earliest, periapsisRadius: target.radius + peAlt });
+  const refineWindow = (w: TransferWindow) => {
+    const arrival = w.departure + (outbound ? w.timeOfFlight : 1.5 * w.timeOfFlight + central.soi / 150);
+    try {
+      const freedom = Number.isFinite(T) ? Math.min(T / 8, 0.05 * w.timeOfFlight) : 0;
+      return refine(world, o, targetId, w.departure, [...w.seed], arrival, peAlt, Infinity, freedom, earliest, Infinity, false);
+    } catch { return null; }
+  };
+  let chosen: TransferPlan | null = null;
+  /** Options offered to the player: the window estimates plus the first-window plan when it is a distinct option. */
+  let offered = windows;
+  if (opts.departure !== undefined && windows.length) {
+    const want = opts.departure;
+    const w = windows.reduce((a, b) => (Math.abs(b.departure - want) < Math.abs(a.departure - want) ? b : a));
+    report?.('Refining encounter', 0.5);
+    chosen = refineWindow(w);
+    if (!accurate(chosen)) chosen = null;
+  } else {
+    const first = Number.isFinite(T) ? firstWindowTransfer(world, targetId, { ...opts, earliest, periapsisAltitude: peAlt }, report) : null;
+    // Take the earliest option that costs about the least: waiting is worth it only for a clearly cheaper burn.
+    const cheapest = Math.min(...windows.map(w => w.dv), accurate(first) ? first.dv : Infinity);
+    const affordable = (dv: number) => dv <= cheapest * 1.08 + 25;
+    const options: ({ at: number; plan: TransferPlan } | { at: number; window: TransferWindow })[] = [
+      ...windows.map(w => ({ at: w.departure, window: w })),
+      ...(accurate(first) ? [{ at: first.node.time, plan: first }] : []),
+    ].sort((x, y) => x.at - y.at);
+    const refined: TransferPlan[] = accurate(first) ? [first] : [];
+    if (accurate(first) && !windows.some(w => Math.abs(w.departure - first.node.time) < Math.max(3600, (Number.isFinite(T) ? T : 0) / 4))) {
+      const n = first.node, wait = n.time - world.ut;
+      offered = [...windows, { departure: n.time, wait, dv: first.dv, timeOfFlight: first.encounterTime - n.time, kind: windows.some(w => w.kind === 'now') ? 'window' as const : 'now' as const, seed: [n.prograde, n.normal, n.radial] as [number, number, number] }]
+        .sort((x, y) => x.departure - y.departure);
+    }
+    report?.('Refining departure windows', 0.75);
+    for (const option of options) {
+      if ('plan' in option) {
+        if (affordable(option.plan.dv)) { chosen = option.plan; break; }
+        continue;
+      }
+      if (!affordable(option.window.dv)) continue;
+      const p = refineWindow(option.window);
+      if (!accurate(p)) continue;
+      refined.push(p);
+      if (affordable(p.dv)) { chosen = p; break; }
+    }
+    chosen ??= refined.sort((x, y) => x.dv - y.dv)[0] ?? null;
+  }
+  if (!chosen) return null;
+  const node = world.addNode(chosen.node.time);
+  node.prograde = chosen.node.prograde;
+  node.normal = chosen.node.normal;
+  node.radial = chosen.node.radial;
+  return { ...chosen, node, windows: offered };
 }
 
 /**

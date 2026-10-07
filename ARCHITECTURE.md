@@ -148,6 +148,9 @@ porkchop rows, results, errors and cancellations. Each async request owns a work
 it even during synchronous refinement. Node/no-Worker callers use the same handler asynchronously in-process;
 only row boundaries and pre-start work yield there. UI hooks cancel on supersession/unmount. Results are
 applied explicitly with fresh World node IDs, after rejecting stale vessel/trajectory/node-list changes.
+`planning/windows.ts` estimates departure options (Lambert arcs from the actual orbit, any plane) for moons and
+returns home; transfer results carry them as `windows`, and `options.departure` re-plans a chosen one.
+Flight-assist programs run through `flight/assist.ts assistFrame`, which owns time warp for the program's lifetime.
 ## Quick-start scenarios
 
 `scenarios/catalog.ts` defines original mission briefings, stock-payload setup and medal budgets.

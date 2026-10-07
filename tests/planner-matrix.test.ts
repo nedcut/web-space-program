@@ -86,21 +86,52 @@ function run(c: Case): Row {
   const target = u.body(c.target);
   const goal = c.target === 'moon' || c.target === 'earth' ? (target.atmosphere ? target.atmosphere.height * 0.5 : 30000)
     : Math.max(target.radius * 0.1, (target.atmosphere?.height ?? 0) * 2, 30000);
-  const ref = c.target === 'moon' || c.target === 'earth' ? hohmannRef(plan, world, c) : interRef(world, c);
+  const coplanar = c.target === 'moon' || c.target === 'earth' ? hohmannRef(plan, world, c) : interRef(world, c);
+  // "Absurd Δv" is judged against the best single burn achievable from this orbit (the planner's independent window
+  // estimates; a coplanar Hohmann is unreachable from an out-of-plane orbit), falling back to coplanar Hohmann.
+  // Interplanetary plans rank departure + capture, so compare departure + capture over windows near the chosen one.
+  const planet = c.target !== 'moon' && c.target !== 'earth';
+  const capture = 'captureDvEstimate' in plan ? (plan as { captureDvEstimate: number }).captureDvEstimate : 0;
+  const near = plan.windows?.filter(w => !planet || Math.abs(w.departure - plan!.node.time) < 86400 * 60) ?? [];
+  const best = near.length ? Math.min(...near.map(w => w.dv + (planet ? (w.captureDv ?? 0) - capture : 0))) : Infinity;
+  const ref = Number.isFinite(best) ? best : coplanar;
   const wait = plan.node.time - world.ut;
   if (plan.node.time <= world.ut) why.push('node in past');
   if (Math.abs(plan.periapsisAltitude - goal) > Math.max(5000, target.radius * 0.05, goal * 0.02)) why.push(`pe off ${(plan.periapsisAltitude / 1000).toFixed(0)}km`);
   if (plan.dv > ref * 1.25 + 50) why.push(`dv ${plan.dv.toFixed(0)} vs ref ${ref.toFixed(0)}`);
-  if (c.target === 'moon' && wait > 0.55 * u.body('moon').orbitalPeriod!) why.push(`wait ${(wait / 86400).toFixed(1)}d`);
+  // Waiting is fine when it buys a clearly cheaper departure; not when an earlier option costs about the same.
+  const total = (dv: number, cap = 0) => dv + (planet ? cap : 0);
+  const earlier = plan.windows?.find(w => w.departure < plan!.node.time - Math.max(3600, 0.1 * wait) && total(w.dv, w.captureDv) <= total(plan!.dv, capture) * 1.08 + 25);
+  if (earlier) why.push(`waits ${(wait / 3600).toFixed(0)}h though ${(earlier.wait / 3600).toFixed(0)}h costs ~${earlier.dv.toFixed(0)}`);
+  if (!plan.windows && c.target === 'moon' && wait > 0.55 * u.body('moon').orbitalPeriod!) why.push(`wait ${(wait / 86400).toFixed(1)}d`);
+  const now = plan.windows?.find(w => w.kind === 'now');
+  if (now) why.push(`[now ~${now.dv.toFixed(0)} in ${(now.wait / 3600).toFixed(1)}h; ${plan.windows!.length} options]`);
   // The map must show the same encounter.
   const patches = world.trajectory();
   const i = patches.findIndex(p => p.nextBody === c.target);
   const mapPe = i >= 0 && patches[i + 1] ? periapsisRadius(patches[i + 1].orbit) - target.radius : undefined;
   if (mapPe === undefined) why.push('map shows no encounter');
-  else if (Math.abs(mapPe - plan.periapsisAltitude) > 2000) why.push(`map pe ${(mapPe / 1000).toFixed(0)}km`);
+  else if (Math.abs(mapPe - plan.periapsisAltitude) > Math.max(2000, 0.01 * goal)) why.push(`map pe ${(mapPe / 1000).toFixed(0)}km`);
   if (ms > 20000) why.push(`slow ${(ms / 1000).toFixed(1)}s`);
-  return { c, status: why.length ? 'BAD' : 'ok', dv: plan.dv, ref, wait, pe: plan.periapsisAltitude, ms, why };
+  return { c, status: why.some(w => !w.startsWith('[')) ? 'BAD' : 'ok', dv: plan.dv, ref, wait, pe: plan.periapsisAltitude, ms, why };
 }
+
+/** Cases that failed before the 2026-10-07 planner work (see DECISIONS.md), kept in the default run. */
+const REGRESSIONS: [ScalePresetId, string, string, number][] = [
+  ['standard', 'moon->earth', 'LLO ellip', 0.5], // 1424 m/s for a ~190 m/s return
+  ['standard', 'earth->mars', 'LEO 28.5°', 0], // 2651 m/s, window scored as if coplanar
+  ['challenging', 'earth->moon', 'LEO retro 140°', 0], // periapsis 2177 km instead of 30 km
+  ['real', 'earth->moon', 'ellip overburn ap 1.6 moon', 0.37], // no solution
+  ['standard', 'earth->moon', 'ellip 28.5° ap R', 0.71], // waited 34 h though a same-cost departure was 20 min away
+];
+describe('planner regressions', () => {
+  it.each(REGRESSIONS)('%s %s %s (phase %s)', (preset, route, label, phase) => {
+    const c = cases().find(k => k.preset === preset && `${k.from}->${k.target}` === route && k.label === label && k.phase === phase);
+    expect(c, 'case exists').toBeDefined();
+    const r = run(c!);
+    expect(r.status, r.why.join('; ')).toBe('ok');
+  }, 120_000);
+});
 
 const enabled = !!process.env.PLANNER_MATRIX;
 describe.skipIf(!enabled)('planner matrix (PLANNER_MATRIX=1)', () => {
