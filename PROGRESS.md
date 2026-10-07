@@ -729,3 +729,18 @@ Added original branched coastal vegetation with wind and fading LOD, warmer deta
 - Hangar lighting now shows form: stronger key, less fill, stronger rim, plus a new cool kicker.
 - Real RTX 3060 Ti at DPR 2: 14 before/after shots plus side-by-side crops in `docs/screenshots/partsart2/` (see its README). 30-part paired GPU delta is **+0.19 to +0.30 ms** (budget +1.0), with 1,043 → 1,057 draws, 0 program re-resolutions and 91 programs unchanged. Selene goes from 67.7k to 83.3k triangles; every part stays within the 8.5k-triangle part budget, and the new fine geometry is High-detail only.
 - Left: soot is not tied to the actual engine position or burn history; there is no AO between neighbouring parts; pods, legs and panels only gained AO and lighting.
+
+## Vessel art, pass 3 (2026-10-07, op/partsart3)
+
+- The rest of the rocket now matches the tanks and engines from pass 2:
+  - **Capsules**: framed, bolted windows; hatch hardware; charred heat shields on a bolted carrier ring with compression pads; recessed RCS ports with plume staining; shingle straps or blanket tapes.
+  - **Landing legs**: a pinned clevis, a hydraulic strut and gusseted pads, plus telescoping braces that stay attached through the deploy animation.
+  - **Solar arrays**: framed honeycomb panels with cells on one face, busbars, a back truss, hinges and an array drive.
+  - **Decouplers**: a clamp band with pyro bolt cutters, explosive-bolt bumps and a firing harness.
+  - **Wings**: leading-edge strips, spar/rib lines, hinge-gap seals and brackets.
+  - **Wheels**: split-rim hubs, brakes, and torque links that follow the suspension.
+  - **Small parts**: chutes, RCS blocks, nose cones and shields got smaller touches.
+- **Soot now follows the engines.** It is baked per craft around each nozzle and in the plume path onto the stage below, scaled by engine size. Parts away from engines stay clean (editor and flight).
+- Real RTX 3060 Ti, pad, DPR 2: the paired GPU delta vs main is **+0.20 ms** over 600 pairs (+0.33/+0.35 ms in shorter runs; budget +0.4 ms). The material set is unchanged at 51, with 0 program re-resolutions and no new programs. Selene goes from 84k to 112k triangles; every part stays under the 8.5k High budget, and Low is now tested too.
+- Before/after (including a Selene lander on the Moon) are in `docs/screenshots/partsart3/` (see its README for crops, numbers and known limits).
+

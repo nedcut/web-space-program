@@ -1,13 +1,13 @@
 {
   "pad": {
-    "medianGpuMs": 5.751532315221045,
+    "medianGpuMs": 6.207555438131371,
     "stats": {
-      "calls": 827,
-      "triangles": 3450673,
+      "calls": 966,
+      "triangles": 3617736,
       "points": 9000,
       "programs": 91,
       "textures": 97,
-      "geometries": 947
+      "geometries": 1103
     }
   }
 }
