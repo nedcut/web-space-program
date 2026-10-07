@@ -81,6 +81,23 @@ function boundChords(): Set<string> {
   if (chordCache?.bindings !== current) chordCache = { bindings: current, chords: new Set(Object.values(current).flat().filter(k => k.includes('+'))) };
   return chordCache.chords;
 }
+/**
+ * Modifier rules in flight. Alt (precisionHold) is hold-for-fine-control, so Alt + a plain key still acts at fine
+ * authority (Alt+I/J/K/H/N translate at 35 %). Alt + attitude keys (W/S/A/D/Q/E) trim instead of deflecting
+ * (FlightInput zeroes their deflection while Alt is held) — intentional, the trim keys. A chord bound to its own
+ * action (Alt+L stage lock, Alt+X trim reset, Shift+F1 help…) consumes its key: it never also fires the plain key's
+ * action (`matches`) nor drives the plain key's continuous axis (`isFlightChord`; L would translate right), until
+ * that key is released.
+ */
+let flightChordCache: { bindings: Bindings; chords: Set<string> } | null = null;
+export function isFlightChord(e: Pick<KeyboardEvent, 'code' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey'>): boolean {
+  if (flightChordCache?.bindings !== current) {
+    const chords = (Object.keys(current) as Action[]).filter(a => context(a) !== 'editor').flatMap(a => current[a]).filter(k => k.includes('+'));
+    flightChordCache = { bindings: current, chords: new Set(chords) };
+  }
+  const chord = keyChord(e);
+  return chord.includes('+') && flightChordCache.chords.has(chord);
+}
 export function matches(action: Action, e: KeyboardEvent): boolean {
   const chord = keyChord(e);
   // A plain binding still fires with Shift/Alt held (e.g. staging while holding throttle-up), unless that exact
