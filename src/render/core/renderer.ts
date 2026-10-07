@@ -107,7 +107,9 @@ export class RenderPipeline {
   }
 
   /** Current resolution plan (internal/output pixel ratios, upscaling); see `resolutionPlan`. */
-  get plan(): ResolutionPlan {
+  get plan(): ResolutionPlan { return (this.cachedPlan ??= this.computePlan()); }
+  private cachedPlan: ResolutionPlan | null = null;
+  private computePlan(): ResolutionPlan {
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
     // Photo captures render at full device resolution (no Retina reduction, no adaptive reduction).
     const q = this.capturing ? { ...this.quality, upscale: { ...this.quality.upscale, retinaScale: 1 } } : this.quality;
@@ -182,7 +184,7 @@ export class RenderPipeline {
   setSize(width: number, height: number): void {
     this.width = Math.max(1, Math.floor(width));
     this.height = Math.max(1, Math.floor(height));
-    const plan = this.plan, pr = plan.internal;
+    const plan = (this.cachedPlan = this.computePlan()), pr = plan.internal;
     this.upscalePass.enabled = plan.upscaling;
     this.renderer.setPixelRatio(plan.output);
     this.renderer.setSize(this.width, this.height, false);
