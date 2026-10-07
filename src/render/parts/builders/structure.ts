@@ -46,7 +46,7 @@ function ringNoise(phi: number, n: number, seed: number): number {
 }
 
 export interface WeatherOpts {
-  /** Soot darkening at the bottom (0..1). */
+  /** Generic soot darkening at the bottom (0..1); engine-aware soot is baked per craft (soot.ts). */
   soot: number;
   /** Fraction of the height the soot reaches. */
   reach?: number;
@@ -133,9 +133,12 @@ export function buildTank(def: PartDef): THREE.Object3D {
   const yBody1 = h / 2 - band;
   const bodyLen = yBody1 - yBody0;
 
-  const body = lathe(shellProfile(rb, yBody0, yBody1), { segments: seg, tile, vOffset: 0.5 * tile });
+  const shell = shellProfile(rb, yBody0, yBody1);
+  // one extra ring near the aft end so engine soot (baked per craft, soot.ts) has a gradient to live on
+  if (detailLevel() === 1 && shell[1][1] - yBody0 > 0.45) shell.splice(1, 0, [rb, yBody0 + 0.28]);
+  const body = lathe(shell, { segments: seg, tile, vOffset: 0.5 * tile });
   const hid = idHash(def.id);
-  weather(body, yBody0, yBody1, { soot: orange ? 0.22 : white ? 0.3 : 0.16, streaks: orange ? 0.26 : white ? 0.17 : 0.1, tint: 0.95 + 0.05 * hid, seed: 1 + Math.floor(hid * 97) });
+  weather(body, yBody0, yBody1, { soot: 0, streaks: orange ? 0.26 : white ? 0.17 : 0.1, tint: 0.95 + 0.05 * hid, seed: 1 + Math.floor(hid * 97) });
   root.add(mk(body, bodyMat, 'body'));
   root.add(mk([lathe(endFrame(r, rb, yBody1, h / 2), { segments: seg }), lathe(endFrame(r, rb, yBody0, -h / 2), { segments: seg })], frameMat, 'frames'));
   root.add(mk([bulkhead(r * 0.985, h / 2, 1, 48), bulkhead(r * 0.985, -h / 2, -1, 48)], M.darkMetal(), 'bulkheads'));
@@ -293,7 +296,7 @@ export function buildAdapter(def: PartDef): THREE.Object3D {
   const n = Math.max(3, Math.ceil((y1 - y0) / 0.3));
   const prof: Profile = [];
   for (let i = 0; i <= n; i++) prof.push([(rBot + ((rTop - rBot) * i) / n) * 0.995, y0 + ((y1 - y0) * i) / n]);
-  root.add(mk(weather(lathe(prof, { segments: seg, tile: 0.8 }), y0, y1, { soot: 0.2, reach: 0.5, streaks: 0.08, seed: 5 }), M.charcoalPanel(), 'body'));
+  root.add(mk(weather(lathe(prof, { segments: seg, tile: 0.8 }), y0, y1, { soot: 0, streaks: 0.08, seed: 5 }), M.charcoalPanel(), 'body'));
   // external hat stringers along the slant (High detail only)
   const nS = detailLevel() < 1 ? 0 : Math.max(12, Math.round((2 * PI * Math.max(rTop, rBot)) / 0.16));
   const slant = Math.atan2(rBot - rTop, y1 - y0);

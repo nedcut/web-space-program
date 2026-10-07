@@ -13,7 +13,7 @@ import { surfaceTransform } from '../surface';
 import { createStudioEnvironment } from '../../render/core/studioEnv';
 import { buildHangar, HANGAR, type Hangar } from './hangar';
 import { createPartMesh } from './partMesh';
-import { setLightAppearance } from '../../render/parts';
+import { bakeEngineSoot, releaseSoot, setLightAppearance } from '../../render/parts';
 
 const DEG = Math.PI / 180;
 const SNAP_PX = 64;
@@ -87,6 +87,7 @@ export class EditorView {
   private horizontal = false;
   private shiftZ = 0;
   private partObjs = new Map<number, { obj: THREE.Object3D; partId: string }>();
+  private sootKey = '';
   private raf = 0;
   private last = performance.now();
   private disposed = false;
@@ -278,7 +279,7 @@ export class EditorView {
       seen.add(p.uid);
       let entry = this.partObjs.get(p.uid);
       if (!entry || entry.partId !== p.partId) {
-        if (entry) this.craftGroup.remove(entry.obj);
+        if (entry) { releaseSoot(entry.obj); this.craftGroup.remove(entry.obj); }
         const obj = createPartMesh(CATALOG.get(p.partId)!);
         obj.userData.uid = p.uid;
         entry = { obj, partId: p.partId };
@@ -290,7 +291,13 @@ export class EditorView {
       if (p.tweaks?.lightOn !== undefined || p.tweaks?.lightColor !== undefined || CATALOG.get(p.partId)!.modules.some(m => m.type === 'light'))
         setLightAppearance(entry.obj, p.tweaks?.lightOn !== false, p.tweaks?.lightColor);
     }
-    for (const [uid, e] of this.partObjs) if (!seen.has(uid)) { this.craftGroup.remove(e.obj); this.partObjs.delete(uid); }
+    for (const [uid, e] of this.partObjs) if (!seen.has(uid)) { releaseSoot(e.obj); this.craftGroup.remove(e.obj); this.partObjs.delete(uid); }
+    // Engine soot depends on where every engine sits; re-bake only when the layout changes.
+    const sootKey = snap.craft.parts.map(p => `${p.uid}:${p.partId}:${p.position.x},${p.position.y},${p.position.z}:${p.rotation.x},${p.rotation.y},${p.rotation.z},${p.rotation.w}`).join('|');
+    if (sootKey !== this.sootKey) {
+      this.sootKey = sootKey;
+      bakeEngineSoot([...this.partObjs.values()].map(e => e.obj), this.craftGroup, { cloneShared: true });
+    }
 
     // Keep the craft's lowest point above the floor; shift the camera with it so the view doesn't jump.
     const s = snap.stats;
@@ -904,6 +911,7 @@ export class EditorView {
     noteDfgLut(this.renderer, this.scene);
     detachRenderer(this.scene);
     this.disposed = true;
+    for (const e of this.partObjs.values()) releaseSoot(e.obj);
     window.clearTimeout(this.longPress);
     cancelAnimationFrame(this.raf);
     this.unsub();

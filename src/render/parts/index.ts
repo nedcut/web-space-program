@@ -34,6 +34,7 @@ export { createPlume, type Plume, type PlumeParams, type PlumeOptions } from './
 export { disposeMaterials } from './materials';
 export { partTexturesReady } from './textures';
 export { setGearPose } from './builders/aircraft';
+export { bakeEngineSoot, releaseSoot, isSooted } from './soot';
 
 /**
  * Procedural part meshes.

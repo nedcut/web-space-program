@@ -4,7 +4,7 @@ import { batchStaticParts, disposeStaticBatch } from './staticBatch';
 import * as THREE from 'three';
 import type { VesselState, PartState } from '../../sim/vessel/runtime';
 import type { EngineModule } from '../../sim/vessel/types';
-import { buildPartMesh, createPlume, getExhaustAnchors, setLightAppearance, setPartDeploy, setEngineGimbal, setGearPose, type Plume } from '../parts';
+import { bakeEngineSoot, buildPartMesh, createPlume, getExhaustAnchors, setLightAppearance, setPartDeploy, setEngineGimbal, setGearPose, type Plume } from '../parts';
 import { qRotate } from '../../util/quat';
 import type { Vec3 } from '../../util/vec3';
 
@@ -124,6 +124,8 @@ export class VesselView {
       }
       if (pv.static && !this.stressOverlay) staticObjects.push(obj);
     }
+    // Soot follows the current engine layout (PartHeat already gave every part its own geometry copy).
+    bakeEngineSoot([...this.parts.values()].map(pv => pv.object), this.inner);
     this.batch = batchStaticParts(staticObjects);
     this.inner.add(this.batch);
     for (const obj of staticObjects) obj.traverse(o => { o.matrixAutoUpdate = false; });

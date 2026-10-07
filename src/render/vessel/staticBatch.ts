@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { instancedVariant } from '../core/materialVariants';
 import { thermalGeometry, thermalSources } from '../fx/thermalSurface';
+import { isSooted } from '../parts/soot';
 
 /** Batch only opaque static leaves. Inputs retain their shared template resources. */
 export function batchStaticParts(objects: THREE.Object3D[]): THREE.Group {
@@ -14,7 +15,8 @@ export function batchStaticParts(objects: THREE.Object3D[]): THREE.Group {
     if (o instanceof THREE.Mesh && !Array.isArray(o.material) && !o.material.transparent && o.children.length === 0) {
       let materials = buckets.get(o.material);
       if (!materials) buckets.set(o.material, materials = new Map());
-      const thermal = thermalSources.get(o.geometry);
+      // Craft-specific soot makes a part's geometry unique: draw it from its own (already heat-slotted) copy.
+      const thermal = isSooted(o.geometry) ? undefined : thermalSources.get(o.geometry);
       const source = thermal?.source ?? o.geometry;
       let transforms = materials.get(source);
       if (!transforms) materials.set(source, transforms = []);
