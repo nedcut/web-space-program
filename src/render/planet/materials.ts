@@ -254,7 +254,9 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       varying vec3 vColor;
       varying vec3 vDetail;
       ${GLSL_AERIAL_VERT}
+      #ifdef EARTH_RICH
       ${GLSL_SKY_REFL_VERT}
+      #endif
       #ifdef EARTH_IMAGERY
       uniform mat3 uBodyRot;
       uniform sampler2D uEarthDay;
@@ -271,11 +273,18 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         #ifdef EARTH_IMAGERY
           // Imagery water drawn by terrain must match the ocean mesh beside it. Only vertices near the
           // datum with water nearby (coarse mip of the mask) can draw it.
-          vSkyRefl = vec3(0.0);
+          #ifdef EARTH_RICH
+            vSkyRefl = vec3(0.0);
+          #endif
           vCovered = 0.0;
           vec3 relV = wp.xyz - uPlanetCenter;
           float hV = length(relV) - uPlanetRadius;
-          if (uEarthImagery > 0.5 && hV < 1200.0) {
+          #ifdef EARTH_RICH
+            const float COAST_TEST = 1200.0; // coast sky reflection needs the mask above the datum too
+          #else
+            const float COAST_TEST = -10.0;  // only the covered test: land vertices skip the lookup
+          #endif
+          if (uEarthImagery > 0.5 && hV < COAST_TEST) {
             vec3 nV = normalize(transpose(uBodyRot) * relV);
             vec2 uvV = vec2(atan(nV.y, nV.x) * (0.5 / ATMO_PI) + 0.5, 0.5 - asin(clamp(nV.z, -1.0, 1.0)) / ATMO_PI);
             vec4 coarse = textureLod(uEarthDay, uvV, 5.0);
@@ -307,8 +316,10 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       ${GLSL_AERIAL_FRAG}
       ${GLSL_SITE_SHADOW}
       #ifdef EARTH_IMAGERY
-      varying vec3 vSkyRefl;
       varying float vCovered;
+      #endif
+      #ifdef EARTH_RICH
+      varying vec3 vSkyRefl;
       #endif
       varying vec3 vWorldPos;
       varying vec3 vNormalBF;
@@ -335,9 +346,14 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         ${GLSL_LOGDEPTH_FRAG}
         vec3 rel = vWorldPos - uPlanetCenter;
         #ifdef EARTH_IMAGERY
-          // Before any discard: derivatives need uniform control flow. The lookup itself is built lazily.
-          vec3 nDir = normalize(transpose(uBodyRot) * rel);
-          vec3 nDx = dFdx(nDir), nDy = dFdy(nDir);
+          // Only distant or night-side terrain uses imagery. Both conditions are smooth across the screen, so
+          // quads agree on the branch and the derivatives inside it stay well defined (taken before any discard).
+          vec3 nDir = vec3(0.0, 0.0, 1.0), nDx = vec3(0.0), nDy = vec3(0.0);
+          bool imgUsed = uEarthImagery > 0.5 && (length(cameraPosition - vWorldPos) > uEarthBlend.x * 0.9 || dot(rel, uSunDir) < 0.04 * length(rel));
+          if (imgUsed) {
+            nDir = normalize(transpose(uBodyRot) * rel);
+            nDx = dFdx(nDir); nDy = dFdy(nDir);
+          }
           EarthUV eUV;
         #endif
         #ifdef USE_CUTOUT
@@ -391,7 +407,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         albedo = mix(albedo, uRockColor * (0.85 + 0.3 * albedo / max(max(albedo.r, albedo.g), 0.05)), rockT);
         #ifdef EARTH_IMAGERY
           // Imagery owns the colour wherever a texel is small on screen; the close-up palette takes over below.
-          float wImg = uEarthImagery * smoothstep(uEarthBlend.x, uEarthBlend.y, dist);
+          float wImg = imgUsed ? smoothstep(uEarthBlend.x, uEarthBlend.y, dist) : 0.0;
           // Terrain well below the datum is always under the opaque ocean (log depth defeats early-Z, so
           // these hidden fragments would otherwise pay for the imagery too).
           float waterW = 0.0;
@@ -428,7 +444,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         #ifdef EARTH_IMAGERY
           float sunAlt = dot(up, uSunDir);
           vec3 lightsImg = vec3(0.0);
-          if (sunAlt < 0.025) lightsImg = earthNightLights(earthUVd(nDir, nDx, nDy), sunAlt, rel);
+          if (imgUsed && sunAlt < 0.025) lightsImg = earthNightLights(earthUVd(nDir, nDx, nDy), sunAlt, rel);
           // Close up, the procedural street texture breaks the 3 km light pixels into streets.
           float streets = 1.0 - smoothstep(uEarthBlend.x * 0.5, uEarthBlend.x * 2.0, dist);
           col += lightsImg * (1.0 - streets) * (1.0 - waterW);
