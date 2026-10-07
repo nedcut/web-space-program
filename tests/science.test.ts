@@ -175,7 +175,7 @@ describe('contracts, events and persistence', () => {
   it('evaluates surveys and requires returned expedition hardware, not an unrelated Earth vessel', () => {
     const w = world(); const survey = w.progression.contracts.find(c => c.kind === 'science')!;
     w.acceptContract(survey.id); w.launch(craft()); w.runExperiment(2, 'temperature'); expect(survey.status).toBe('completed');
-    const c = w.progression.contracts.find(c => c.kind === 'return')!; w.acceptContract(c.id);
+    const c = w.progression.contracts.find(c => c.kind === 'return')!; c.body = 'moon'; w.acceptContract(c.id);
     w.emitProgress({ type: 'landed', body: c.body, vesselId: 'expedition' }); expect(c.landed).toBe(true);
     w.recoverActive(); expect(c.status).toBe('active');
     const v = w.launch(craft()); v.state.parts[0].visitedBodies = [c.body];

@@ -82,6 +82,7 @@ export function progressionEvent(w: World, event: ProgressEvent) {
   if (w.mode === 'sandbox') return;
   if (w.mode === 'career') for (const message of evaluateContracts(w.progression, event)) w.message(message, 'info', 9);
   const milestone = event.type === 'orbit' && event.body === 'earth' ? ['first-orbit', 'First Earth orbit', 20, 15000] as const
+    : event.type === 'soi' && event.body === 'moon' ? ['first-moon-flyby', 'First Moon arrival', 35, 40000] as const
     : event.type === 'landed' && event.body === 'moon' ? ['first-moon', 'First Moon landing', 50, 30000] as const
     : event.type === 'soi' && event.body === 'saturn' ? ['first-saturn', 'First Saturn arrival', 150, 100000] as const : null;
   if (milestone && !w.progression.milestones.includes(milestone[0])) {
