@@ -23,6 +23,10 @@ import { Pass, FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js'
  *    lobe is limited per pixel so no channel can clip (contrast-adaptive), reusing the taps already loaded. The
  *    detail it adds is interpolated bilinearly onto the reconstruction and the result clamped to the sharpened range.
  *
+ * Footprints whose luma range is below ~2/255 per channel take a bilinear early-out: there is no edge to orient
+ * and the sharpening would change them by less than a code value. This removes most of the cost over sky,
+ * space and smooth terrain shading.
+ *
  * Inputs are display-referred (after tone mapping and sRGB encoding), where luma differences match perception.
  * The algorithm follows the published structure of edge-adaptive spatial upscalers; the code is original.
  */
@@ -33,6 +37,8 @@ export class UpscalePass extends Pass {
     uScale: { value: new THREE.Vector2(1, 1) },
     /** 0 = no sharpening, 1 = strongest. */
     uSharpness: { value: 0.5 },
+    /** Footprint luma range (0–2 scale) below which the pixel is interpolated bilinearly. */
+    uFlat: { value: 4 / 255 },
   };
   private material = new THREE.ShaderMaterial({
     name: 'EdgeUpscale',
@@ -47,6 +53,7 @@ export class UpscalePass extends Pass {
       uniform sampler2D tInput;
       uniform vec2 uScale;
       uniform float uSharpness;
+      uniform float uFlat;
       out vec4 outColor;
 
       ivec2 gMax;
@@ -91,14 +98,20 @@ export class UpscalePass extends Pass {
         vec2 fp = floor(pp);
         vec2 t = pp - fp;
         ivec2 p = ivec2(fp);
-        vec3 b = tap(p + ivec2(0, -1)), c = tap(p + ivec2(1, -1));
-        vec3 e = tap(p + ivec2(-1, 0)), f = tap(p), g = tap(p + ivec2(1, 0)), h = tap(p + ivec2(2, 0));
-        vec3 i = tap(p + ivec2(-1, 1)), j = tap(p + ivec2(0, 1)), k = tap(p + ivec2(1, 1)), l = tap(p + ivec2(2, 1));
-        vec3 n = tap(p + ivec2(0, 2)), o = tap(p + ivec2(1, 2));
-        float lb = luma(b), lc = luma(c), le = luma(e), lf = luma(f), lg = luma(g), lh = luma(h);
-        float li = luma(i), lj = luma(j), lk = luma(k), ll = luma(l), ln = luma(n), lo = luma(o);
-
+        vec3 f = tap(p), g = tap(p + ivec2(1, 0)), j = tap(p + ivec2(0, 1)), k = tap(p + ivec2(1, 1));
         vec4 bw = vec4((1.0 - t.x) * (1.0 - t.y), t.x * (1.0 - t.y), (1.0 - t.x) * t.y, t.x * t.y); // f g j k
+        float lf = luma(f), lg = luma(g), lj = luma(j), lk = luma(k);
+        // Flat footprint (sky, space, smooth gradients): no edge to orient and nothing to sharpen — plain bilinear.
+        if (max(max(lf, lg), max(lj, lk)) - min(min(lf, lg), min(lj, lk)) < uFlat) {
+          outColor = vec4(f * bw.x + g * bw.y + j * bw.z + k * bw.w, 1.0);
+          return;
+        }
+        vec3 b = tap(p + ivec2(0, -1)), c = tap(p + ivec2(1, -1));
+        vec3 e = tap(p + ivec2(-1, 0)), h = tap(p + ivec2(2, 0));
+        vec3 i = tap(p + ivec2(-1, 1)), l = tap(p + ivec2(2, 1));
+        vec3 n = tap(p + ivec2(0, 2)), o = tap(p + ivec2(1, 2));
+        float lb = luma(b), lc = luma(c), le = luma(e), lh = luma(h);
+        float li = luma(i), ll = luma(l), ln = luma(n), lo = luma(o);
         vec2 dir = vec2(0.0);
         float len = 0.0;
         edgeVote(bw.x, lb, le, lf, lg, lj, dir, len);
