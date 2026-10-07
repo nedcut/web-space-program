@@ -30,7 +30,7 @@ function report(c: FlightController, x: Snapshot, quality: string, adaptive: boo
   const f = (n: number, d = 1) => (Number.isFinite(n) ? n.toFixed(d) : 'n/a');
   return [
     `Web Space Program performance · ${new Date().toISOString()}`,
-    `GPU: ${gpuName(c)} · quality ${quality} · adaptive ${adaptive ? 'on' : 'off'} · ${x.w}×${x.h} px (scale ${f(x.scale, 2)}) · DPR ${devicePixelRatio}`,
+    `GPU: ${gpuName(c)} · quality ${quality} · adaptive ${adaptive ? 'on' : 'off'} · ${x.w}×${x.h} px (3D scale ${f(x.scale, 2)}${c.pipeline.upscaling ? ', upscaled' : ''}) · DPR ${devicePixelRatio}`,
     `FPS ${f(x.s.fps)} · frame p50 ${f(x.s.frameMs.p50)} / p95 ${f(x.s.frameMs.p95)} / p99 ${f(x.s.frameMs.p99)} / max ${f(x.s.frameMs.max)} ms · hitches >25 ms: ${x.s.hitches25}, >50 ms: ${x.s.hitches50} (last ${x.s.frames} frames)`,
     `CPU ${f(x.s.cpuMs.avg, 2)} ms avg, p95 ${f(x.s.cpuMs.p95, 2)} ms · GPU ${f(x.gpuMs, 2)} ms · ${x.calls} draws · ${x.tris.toLocaleString()} tris · ${x.programs} programs · ${x.textures} textures · ${x.geometries} geometries · heap ${f(x.heapMB, 0)} MB`,
     ...PROFILE_SECTIONS.map((k) => `  ${LABELS[k].padEnd(18)} ${f(x.s.sections[k], 2)} ms`),

@@ -147,6 +147,29 @@ export class GameAudio {
     if (this.interfaceGain) this.target(this.interfaceGain.gain, unit(s.uiVolume));
     if (this.musicGain) this.target(this.musicGain.gain, this.musicLevel());
   };
+  constructor() {
+    // Sound is optional. A Web Audio gap in one browser (Firefox has no cancelAndHoldAtTime, which once
+    // blanked the whole app) or a driver failure must leave the game silent, never crash a scene: every
+    // method, timer and listener callback below runs through this guard, which disposes the graph on a throw.
+    const self = this as unknown as Record<string, unknown>;
+    const names = [...Object.getOwnPropertyNames(GameAudio.prototype), 'visibility', 'applySettings'];
+    for (const name of names) {
+      if (name === 'constructor' || name === 'dispose') continue;
+      const own = Object.getOwnPropertyDescriptor(this, name) ?? Object.getOwnPropertyDescriptor(GameAudio.prototype, name);
+      const method = own?.value;
+      if (typeof method !== 'function') continue;
+      self[name] = (...args: unknown[]) => {
+        try { return method.apply(this, args); } catch (error) { this.fail(error); return undefined; }
+      };
+    }
+  }
+
+  private fail(error: unknown): void {
+    if (this.disposed) return;
+    console.warn('Audio disabled after an error; the game continues silently.', error);
+    try { this.dispose(); } catch { /* Best effort. */ }
+  }
+
   private musicLevel() { return (this.musicMode === 'off' ? 0 : this.musicMode === 'menu' || this.musicMode === 'saturn' ? 0.12 : 0.085) * this.musicVolume * this.duck; }
 
   private initialize(): void {

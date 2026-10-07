@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
-// Two texels per part: skin and nozzle. Slot zero is always cold. One shared vertex-stage
-// lookup keeps emission independent per part even after static merging / instancing.
+// Two texels per part: skin and nozzle. Slot zero is always cold. One shared lookup by a per-vertex
+// slot keeps emission independent per part even after static merging / instancing.
 const WIDTH = 128;
 const HEIGHT = 64;
 const values = new Float32Array(WIDTH * HEIGHT * 4);
@@ -38,13 +38,18 @@ export function thermalMaterial(m: THREE.Material): THREE.Material {
   variant.onBeforeCompile = (shader, renderer) => {
     m.onBeforeCompile(shader, renderer);
     shader.uniforms.wspThermal = { value: thermalTexture };
-    shader.vertexShader = 'attribute float wspHeatSlot;\nuniform sampler2D wspThermal;\nvarying vec3 wspRadiance;\n' + shader.vertexShader;
-    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-      wspRadiance = texture2D(wspThermal, (vec2(mod(wspHeatSlot, 128.0), floor(wspHeatSlot / 128.0)) + 0.5) / vec2(128.0, 64.0)).rgb;`);
-    shader.fragmentShader = 'varying vec3 wspRadiance;\n' + shader.fragmentShader;
-    shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += wspRadiance;');
+    // A float varying packs into a spare component beside three's vec3 varyings; a vec3 needs a whole
+    // vector, and physical materials with maps, shadows and log depth already use WebGL 2's minimum of 15
+    // (what Firefox reports under resistFingerprinting, and some mobile GPUs): those programs failed to link.
+    shader.vertexShader = 'attribute float wspHeatSlot;\nvarying float wspSlot;\n' + shader.vertexShader;
+    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n      wspSlot = wspHeatSlot;');
+    shader.fragmentShader = 'uniform sampler2D wspThermal;\nvarying float wspSlot;\n' + shader.fragmentShader;
+    shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      // Every vertex of a part carries the same slot; rounding absorbs interpolation error.
+      float wspIndex = floor(wspSlot + 0.5);
+      totalEmissiveRadiance += texelFetch(wspThermal, ivec2(int(mod(wspIndex, 128.0)), int(wspIndex / 128.0)), 0).rgb;`);
   };
-  variant.customProgramCacheKey = () => `${m.customProgramCacheKey()}:thermal-v1`;
+  variant.customProgramCacheKey = () => `${m.customProgramCacheKey()}:thermal-v2`;
   variants.set(m, variant);
   const owned = variant;
   m.addEventListener('dispose', () => owned.dispose());

@@ -1,6 +1,8 @@
+import { storageBlocked, STORAGE_BLOCKED_NOTICE } from './ui/storageGuard';
 import { loadEarthData } from './game/earthLoader';
 import { Profiler } from 'react';
 import { createRoot } from 'react-dom/client';
+import { RootErrorBoundary } from './ui/ErrorBoundary';
 import { game } from './game/store';
 import { autoConfigureGraphics, GRAPHICS_PROFILE } from './render/core/quality';
 import { preloadTextureCache } from './render/core/textureCache';
@@ -21,6 +23,7 @@ try { [ , { App } ] = await Promise.all([loadEarthData(), appModule]); } catch (
 // Probing the GPU creates a throwaway WebGL context (~30 ms on the main thread): only when a re-tune is due.
 const graphicsNotice = game.get().settings.graphicsProfile >= GRAPHICS_PROFILE ? null : autoConfigureGraphics();
 if (graphicsNotice) game.set({ notice: graphicsNotice });
+if (storageBlocked) game.set({ notice: STORAGE_BLOCKED_NOTICE });
 
 // Dev shortcut: ?flight=<stock-craft-id>&scale=real jumps onto the pad in the selected universe.
 const params = new URLSearchParams(location.search);
@@ -39,7 +42,7 @@ if (flight) {
 const mission = params.get('mission');
 if (mission) import('./scenarios/runtime').then(({ startScenario }) => startScenario(mission));
 
-const application = <App />;
+const application = <RootErrorBoundary><App /></RootErrorBoundary>;
 // Opt-in production profiling build; ordinary production includes no Profiler component.
 const uiProfile: { phase: string; duration: number; commitTime: number }[] = [];
 if (import.meta.env.WSP_PROFILE) Object.assign(window, { __uiProfile: uiProfile });

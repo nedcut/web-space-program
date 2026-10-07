@@ -66,7 +66,9 @@ than importing `World`. `LaunchSite` already follows that structural-input patte
 - `data/parts.ts` preserves the public catalog API. `data/parts/` contains category arrays and shared builders;
   the facade concatenates them in the original order, including expansion and the separate `data/isru.ts`.
   IDs, generated definitions and catalog order must remain stable across refactors.
-- `render/core`: pipeline (GPU timer queries), adaptive resolution, camera helpers, quality presets with first-run GPU
+- `render/core`: pipeline (GPU timer queries; HDR scene target → bloom mips → tone map → 8-bit SMAA → `UpscalePass`, with the
+  resolution policy in the pure `resolutionPlan`: Retina internal scale + adaptive scale reconstructed into a device-resolution
+  canvas, terrain LOD at device resolution), adaptive resolution, camera helpers, quality presets with first-run GPU
   tiering (`util/gpuTier.ts`), and `textureCache.ts` (IndexedDB PNG cache for procedural canvas textures, keyed by a
   hash of the drawing code); `render/planet`: renderer,
   atmosphere/effects, cube-sphere quadtree, worker-built chunks, textures and rings. `planet/scatter/` streams

@@ -35,6 +35,7 @@ export function thumbnailVersion() {
 }
 export function subscribeThumbnails(l: () => void) {
   listeners.add(l);
+  schedule();
   return () => void listeners.delete(l);
 }
 
@@ -50,7 +51,8 @@ export function requestThumbnails(defs: PartDef[]) {
 const texturesFinal = new Set<string>();
 
 function schedule() {
-  if (scheduled || !queue.length) return;
+  // No palette mounted (e.g. preparing a launch): leave the queue suspended until it returns.
+  if (scheduled || !queue.length || !listeners.size) return;
   scheduled = true;
   // Storage and texture readiness never run mesh construction in a React effect.
   void preloadThumbnails().then(() => {
@@ -146,6 +148,8 @@ async function renderOne(def: PartDef): Promise<Blob> {
 }
 
 async function pump() {
+  // Leaving the editor (palette unmounted) suspends the queue; it resumes on the next subscription.
+  if (!listeners.size) return;
   // At most one mesh/render/readback per idle slice: the old 24 ms batch exceeded a 120 Hz frame.
   const d = queue.shift();
   if (d) {

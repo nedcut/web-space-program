@@ -1,6 +1,6 @@
 # Progress Report
 
-_Last updated: 2026-10-06_
+_Last updated: 2026-10-07_
 
 ## Start here (for Ned)
 **Run it:** `npm install && npm run play` (optimised production build, opens http://localhost:4173). `npm run dev` is for development only: it serves unbundled modules with React's debug build and is much slower to load and run. Pick **New Game → Sandbox → Standard** for the easiest start;
@@ -36,6 +36,30 @@ once, ~25 MB), Ultra 16k (needs `npm run earth:imagery -- --ultra` once, then ho
 memory). Medium costs the same as before on the test GPU (and less on the night side); High/Ultra add bicubic
 detail, cloud-top relief and richer water. Imagery streams in the background without hitches. Before/after shots
 and numbers: `docs/screenshots/earthgfx/README.md`.
+
+## Smoother on a Retina Mac: ~40 % less GPU time per frame (2026-10-07, op/perfgpu)
+You said the game feels slow. On a Retina MacBook the 3D view was drawn at the full 2940×1840 device pixels; an
+M1/M2's GPU is 4–6× slower than my test card, so Medium ran at ~25–35 fps on the pad. Changes (no new settings
+needed; details and measurements in `docs/PERFORMANCE.md`, "GPU frame cost for Retina Macs"):
+- **Sharp upscaling instead of 4× the pixels.** On Retina screens Medium now draws the 3D scene at 70 % resolution
+  (about half the pixels) and rebuilds full resolution with an edge-aware upscaler plus sharpening. The HUD and all
+  text stay native. In side-by-side screenshots at normal size I could not tell them apart; at 1:1 pixel zoom the
+  finest decal text is a touch softer. Settings → Graphics → Advanced → **Retina resolution / upscaling** has
+  Native / Quality 85 % / Balanced 70 % (Medium default) / Performance 58 %.
+- **Trees around the launch site** were drawn in full detail out to 1.5 km and twice (once for shadows): ~1.4 million
+  triangles for trees a few pixels tall. They now switch to a simpler model beyond ~350 m (not visible).
+- Low is unchanged by default (it keeps its cheap half-resolution stretch); the upscaler is opt-in there.
+- **Cheaper post-processing** (8-bit buffers after tone mapping, bloom merged into tone mapping) and a cheaper sun glare.
+- **Adaptive resolution** now uses the same upscaler, so when it has to drop resolution to hold the frame rate it is
+  much less visible; Apple GPUs (incl. Safari's "Apple GPU") start on Medium with this enabled.
+
+**Measured on my test GPU at Retina resolution (GPU time per frame, Medium):** pad 4.5 → 2.8 ms, ascent 3.6 → 2.0,
+orbit 3.9 → 2.3, Moon surface 1.7 → 1.6, map and editor unchanged (already cheap). High: pad 11.9 → 8.7, orbit
+8.1 → 5.6. **Estimate for an M1/M2 MacBook:** the pad goes from ~40–55 fps to ~60, ascent and orbit from ~45–65 to
+~80–110 fps, the Moon, map and editor already ran fast. Screenshots: `docs/screenshots/perfgpu/`.
+
+**Please check on the Mac:** play on the pad, during an ascent and in orbit with F8 open; if it still isn't smooth,
+use **Copy report** and send it. If anything looks soft, try Advanced → Retina resolution → Quality 85 %.
 
 ## Map readability on Retina (2026-10-06, op/mapviz2)
 You said the map lines were barely visible and a planned course looked like straight pixels. Checked on a real GPU at
@@ -855,3 +879,18 @@ Final main merge was already up to date at `7bd6e4f9`; post-merge lint, TypeScri
 - 100-part CPU-isolated held motion ~59 fps after removing the serialization stall, attach/undo correctness passes; HUD drag persists only on release and finishes as a floating panel at the expected location. Scene GPU drawing is suppressed in this diagnostic, so actual Apple/120 Hz FPS remains unverified.
 - Flight profiling after maxima vary 4.2–10.1 ms; not every strict target is established. Full-render software flight remains GPU-bound; cold backdrop/menu and input-queue outliers, unmeasured maneuver/tracking flows, and the failed shared-GPU attempt are explicitly documented in docs/PERFORMANCE.md.
 - Each implementation step is committed. Final lint (including architecture layering), TypeScript check and normal production build pass. Full Vitest: 113 files / 1,332 tests pass before the final `git merge main` and again afterward; merge was already up to date. Production preview stopped at completion.
+## Firefox, Zen and Safari compatibility (op/firefox, 2026-10-07)
+
+- **Cause of "doesn't work in Firefox":** after the first click, the menu → Space Center music switch called `AudioParam.cancelAndHoldAtTime`, which Firefox lacks. The audio hook sits above the scene error boundary, so the whole app unmounted to a black page. I reproduced it on real Windows Firefox 143. Your PR #1 fix was merged here, and the branch's equivalent copy was dropped.
+- **Hardening, so the next browser gap cannot blank the game:**
+  - Audio now fails safe: any Web Audio error silences sound instead of crashing.
+  - A root error boundary shows a reload page instead of a black screen.
+  - A browser without WebGL 2 gets a friendly fix-it screen and a main-menu warning, instead of a "Flight interrupted" crash.
+  - With site data blocked (localStorage throws), the game runs on session memory and says so.
+- **Privacy-hardened Firefox (resistFingerprinting):** part-heat shaders failed to link and editor buffers exceeded the reported size limits; both are fixed. Canvas read-back is randomised there, so the texture cache no longer stores it.
+- **Verified:**
+  - Real Windows Firefox 143 on the RTX 3060 Ti, production build: full flow with no console errors (menu → editor → launch → staging → orbit → map → quicksave/quickload → Tracking Station → Continue). Medium quality at 1600×915 runs ~59 fps with ~6 ms CPU/frame.
+  - Playwright Firefox 155, WebKit 26.6 (Safari proxy) and Chromium pass `node scripts/browser-smoke.mjs`; Firefox also passes with resistFingerprinting at Medium.
+  - Screenshots: `docs/screenshots/firefox/`. How to run it: `docs/BROWSERS.md`.
+- **Not verified:** real Safari on a Mac, and Firefox on macOS (it uses Apple's OpenGL driver rather than ANGLE). WebKit on Linux is only a proxy.
+- **Post-merge verification:** merged main (graphics settings/Ultra preset). Shadow maps are now also capped to the context limit; the Ultra preset's 4096-px planet bake remains a caveat on 2048-limited contexts. `npm run lint`, `npx tsc --noEmit` and `npm run build` pass, and the full vitest run passes (**111 files / 1,333 tests**). Re-tested the production build after the merge: the full real Windows Firefox 143 flow, and Playwright Firefox, WebKit and Firefox with resistFingerprinting at Medium, all with no errors.

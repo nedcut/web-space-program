@@ -1,4 +1,5 @@
 import { updateSiteShadow } from '../render/site/shadows';
+import { maxDrawingEdge } from '../render/core/drawingLimits';
 import { stageExplanation } from './cues';
 import { actionAvailable, partActions } from '../sim/vessel/actions';
 import { CondensationFx } from '../render/fx/CondensationFx';
@@ -241,7 +242,8 @@ export class FlightController {
     this.scene.add(this.condensation.object);
     this.scene.add(this.effects.root, this.reentry.object, this.flags.root);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.set(q.shadowMapSize || 512, q.shadowMapSize || 512);
+    const shadowSize = Math.min(q.shadowMapSize || 512, maxDrawingEdge(this.pipeline.renderer));
+    this.sunLight.shadow.mapSize.set(shadowSize, shadowSize);
     // The pipeline was just built from these settings; do not rebuild it on the first frame.
     if (game.get().settings.quality === quality) this.graphicsKey = graphicsKeyOf(game.get().settings);
     this.sunLight.shadow.bias = -0.00002;
@@ -742,7 +744,7 @@ export class FlightController {
       const quality = getQuality(settings.quality);
       this.pipeline.setQuality(quality);
       this.effects.setQuality(quality.particleQuality);
-      const size = quality.shadowMapSize || 512;
+      const size = Math.min(quality.shadowMapSize || 512, maxDrawingEdge(this.pipeline.renderer));
       if (this.sunLight.shadow.mapSize.x !== size) {
         this.sunLight.shadow.mapSize.set(size, size);
         this.sunLight.shadow.map?.dispose();

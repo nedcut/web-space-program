@@ -1,4 +1,5 @@
 import { updateSiteShadow } from '../../render/site/shadows';
+import { maxDrawingEdge } from '../../render/core/drawingLimits';
 import { PhotoCamera } from '../../render/core/PhotoCamera';
 import * as THREE from 'three';
 import { game } from '../../game/store';
@@ -112,7 +113,8 @@ export class HubScene {
     this.scene.add(this.sun, this.sun.target, this.ambient);
     if (q.shadowMapSize > 0) {
       this.sun.castShadow = true;
-      this.sun.shadow.mapSize.set(q.shadowMapSize * 2, q.shadowMapSize * 2);
+      const size = Math.min(q.shadowMapSize * 2, maxDrawingEdge(this.pipeline.renderer));
+      this.sun.shadow.mapSize.set(size, size);
       this.sun.shadow.bias = -0.0003;
       this.sun.shadow.normalBias = 0.05;
     }
