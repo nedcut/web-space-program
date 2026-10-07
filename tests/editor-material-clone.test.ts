@@ -1,0 +1,22 @@
+import * as THREE from 'three';
+import { expect, it } from 'vitest';
+import { setLightAppearance } from '../src/render/parts';
+import { lampMaterials, untintedMaterials } from '../src/render/parts/materialState';
+it('lamp tweaks preserve tint bases and symmetry clones never serialize material textures', () => {
+  const root = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial();
+  material.toJSON = () => { throw new Error('Material/texture serialization is off the drag path'); };
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(), material); mesh.name = 'lightLens'; root.add(mesh);
+  untintedMaterials.set(mesh, material);
+  setLightAppearance(root, true, '#ff0000');
+  const lamp = lampMaterials.get(mesh)!;
+  lamp.toJSON = material.toJSON;
+  expect(untintedMaterials.get(mesh)).toBe(lamp);
+  expect(lamp.emissive.getHexString()).toBe('ff0000');
+  const tinted = lamp.clone(); tinted.toJSON = material.toJSON; mesh.material = tinted;
+  setLightAppearance(root, false);
+  expect(mesh.material).toBe(tinted);
+  expect(untintedMaterials.get(mesh)).toBe(lamp);
+  expect(lamp.emissiveIntensity).toBe(0);
+  expect(() => root.clone(true)).not.toThrow();
+});

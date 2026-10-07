@@ -1,3 +1,4 @@
+import { untintedMaterials } from '../../render/parts/materialState';
 import { enqueueIdle } from '../../util/idleQueue';
 import { LinkView } from '../../render/vessel/LinkView';
 import { isTyping, matches } from '../../input/bindings';
@@ -26,7 +27,6 @@ const toV = (v: Vec3, out = new THREE.Vector3()) => out.set(v.x, v.y, v.z);
 const toQ = (q: Quat, out = new THREE.Quaternion()) => out.set(q.x, q.y, q.z, q.w);
 const fromV = (v: THREE.Vector3): Vec3 => v3(v.x, v.y, v.z);
 
-type Mat = THREE.Material | THREE.Material[];
 const tintCaches = new Map<string, WeakMap<THREE.Material, THREE.Material>>();
 function tinted(m: THREE.Material, key: string, color: number, intensity: number): THREE.Material {
   let cache = tintCaches.get(key);
@@ -49,8 +49,8 @@ function setTint(root: THREE.Object3D, tint: { key: string; color: number; inten
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh || o.userData.noTint) return;
-    if (o.userData.baseMat === undefined) o.userData.baseMat = mesh.material;
-    const base = o.userData.baseMat as Mat;
+    let base = untintedMaterials.get(mesh);
+    if (!base) { base = mesh.material; untintedMaterials.set(mesh, base); }
     if (!tint) mesh.material = base;
     else mesh.material = Array.isArray(base) ? base.map((b) => tinted(b, tint.key, tint.color, tint.intensity)) : tinted(base, tint.key, tint.color, tint.intensity);
   });
@@ -91,6 +91,9 @@ export class EditorView {
   private shiftZ = 0;
   private partObjs = new Map<number, { obj: THREE.Object3D; partId: string }>();
   private sootKey = '';
+  private lightKey = '';
+  private visualKey = '';
+  private visualVersion = 0;
   private cancelSoot: () => void = () => {};
   private raf = 0;
   private last = performance.now();
@@ -286,11 +289,20 @@ export class EditorView {
     this.com.visible = snap.showCoM && snap.stats.partCount > 0;
     this.cot.visible = snap.showCoT && !!snap.stats.centreOfThrust;
     this.col.visible = snap.showCoL && !!snap.stats.centreOfLift;
+    // Names, toasts, inspector panels and symmetry without a held part only affect React.
+    const visualKey = [this.sootKey, this.lightKey, heldSig, snap.held ? snap.symmetryMode : '', snap.craftType,
+      snap.highlightUids.join(','), snap.selectedUids.join(','), snap.hoverUid,
+      snap.mode === 'actions' ? snap.groupUids.join(',') : '',
+      snap.showCoM ? JSON.stringify(snap.stats.centreOfMass) : '',
+      snap.showCoT ? JSON.stringify(snap.stats.centreOfThrust) : '',
+      snap.showCoL ? JSON.stringify(snap.stats.centreOfLift) : ''].join('|');
+    if (visualKey !== this.visualKey) { this.visualKey = visualKey; this.visualVersion++; }
   }
 
   private syncCraft(snap: SessionView) {
     this.links.update(snap.craft.parts);
     const seen = new Set<number>();
+    let lightKey = '';
     for (const p of snap.craft.parts) {
       seen.add(p.uid);
       let entry = this.partObjs.get(p.uid);
@@ -304,9 +316,12 @@ export class EditorView {
       }
       toV(p.position, entry.obj.position);
       toQ(p.rotation, entry.obj.quaternion);
-      if (p.tweaks?.lightOn !== undefined || p.tweaks?.lightColor !== undefined || CATALOG.get(p.partId)!.modules.some(m => m.type === 'light'))
+      if (p.tweaks?.lightOn !== undefined || p.tweaks?.lightColor !== undefined || CATALOG.get(p.partId)!.modules.some(m => m.type === 'light')) {
+        lightKey += `${p.uid}:${p.tweaks?.lightOn !== false}:${p.tweaks?.lightColor ?? '#fff1cf'}|`;
         setLightAppearance(entry.obj, p.tweaks?.lightOn !== false, p.tweaks?.lightColor);
+      }
     }
+    this.lightKey = lightKey;
     for (const [uid, e] of this.partObjs) if (!seen.has(uid)) { releaseSoot(e.obj); this.craftGroup.remove(e.obj); this.partObjs.delete(uid); }
     // Engine soot depends on where every engine sits; re-bake only when the layout changes.
     const sootKey = snap.craft.parts.map(p => `${p.uid}:${p.partId}:${p.position.x},${p.position.y},${p.position.z}:${p.rotation.x},${p.rotation.y},${p.rotation.z},${p.rotation.w}`).join('|');
@@ -916,7 +931,7 @@ export class EditorView {
     const t0 = performance.now();
     // Raycasts only when something that affects them changed (mouse, camera, craft, held state, Alt).
     const cp2 = this.camera.position;
-    const key = `${this.mouse.x.toFixed(4)},${this.mouse.y.toFixed(4)},${cp2.x.toFixed(3)},${cp2.y.toFixed(3)},${cp2.z.toFixed(3)},${this.session.getSnapshot().version},${this.altDown},${this.mouseInside},${!!this.drag}`;
+    const key = `${this.mouse.x.toFixed(4)},${this.mouse.y.toFixed(4)},${cp2.x.toFixed(3)},${cp2.y.toFixed(3)},${cp2.z.toFixed(3)},${this.visualVersion},${this.altDown},${this.mouseInside},${!!this.drag}`;
     if (key !== this.frameKey) {
       this.frameKey = key;
       this.updateHover();

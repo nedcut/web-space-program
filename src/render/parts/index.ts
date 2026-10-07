@@ -1,3 +1,4 @@
+import { lampMaterials, untintedMaterials } from './materialState';
 import { buildFramework, buildBay, buildHabitat, buildPowerUnit, buildRcsPorts, buildNuclearEngine, buildRadialEngine, buildAerospike } from './builders/expedition';
 import { buildISRU } from './builders/isru';
 import { buildInstrument } from './builders/science';
@@ -187,22 +188,23 @@ export function setPartDeploy(root: THREE.Object3D, t: number) {
 
 /**
  * Lamp lens appearance (on/off, colour). The lens gets its own material clone on first use so colours stay per part;
- * editor tint bookkeeping (userData.baseMat) follows the clone.
+ * editor tint bookkeeping in weak maps follows the clone without JSON-serializing textures.
  */
 export function setLightAppearance(root: THREE.Object3D, on: boolean, color = '#fff1cf') {
+  delete root.userData.editorTint;
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh || o.name !== 'lightLens') return;
-    let mat = o.userData.lampMat as THREE.MeshStandardMaterial | undefined;
+    let mat = lampMaterials.get(mesh);
     if (!mat) {
-      const prev = (o.userData.baseMat ?? mesh.material) as THREE.MeshStandardMaterial;
+      const prev = (untintedMaterials.get(mesh) ?? mesh.material) as THREE.MeshStandardMaterial;
       mat = prev.clone();
       mat.onBeforeCompile = prev.onBeforeCompile;
       mat.customProgramCacheKey = prev.customProgramCacheKey;
-      o.userData.lampMat = mat;
+      lampMaterials.set(mesh, mat);
       if (mesh.material === prev) mesh.material = mat;
-      if (o.userData.baseMat !== undefined) o.userData.baseMat = mat;
-    } else if (o.userData.baseMat === undefined && mesh.material !== mat) mesh.material = mat;
+      if (untintedMaterials.has(mesh)) untintedMaterials.set(mesh, mat);
+    } else if (!untintedMaterials.has(mesh) && mesh.material !== mat) mesh.material = mat;
     mat.emissive.set(color);
     mat.emissiveIntensity = on ? 2.5 : 0;
     mat.color.set(on ? color : '#8a8f96');
