@@ -1,0 +1,154 @@
+{
+ "label": "gfxsettings-merged-low",
+ "base": "http://172.24.204.38:5327",
+ "dpr": 2,
+ "throttle": 1,
+ "quality": "low",
+ "seconds": 10,
+ "size": "1470x920",
+ "date": "2026-10-07T16:33:10.221Z",
+ "cases": {
+  "pad": {
+   "fps": 52.6,
+   "frameP50": 16.7,
+   "frameP95": 33.3,
+   "frameP99": 50,
+   "frameMax": 216.5,
+   "hitches25": 48,
+   "hitches50": 3,
+   "cpuMs": 4.89,
+   "cpuP95": 8.7,
+   "sections": {
+    "input": 0.11,
+    "sim": 0.19,
+    "vessels": 0.07,
+    "fx": 0.07,
+    "planets": 0.53,
+    "map": 0,
+    "render": 3.49,
+    "telemetry": 0.06,
+    "audio": 0.02,
+    "navball": 0.2,
+    "hud": 0.12
+   },
+   "scriptMsPerFrame": 5.61,
+   "taskMsPerFrame": 16.3,
+   "layoutsPerSec": 4.28,
+   "styleRecalcsPerSec": 1.1,
+   "layoutMsPerSec": 1.3,
+   "styleMsPerSec": 0.38,
+   "longTasksPerMin": 35.86,
+   "longTaskMsPerMin": 2982.73,
+   "longTaskMax": 208,
+   "heapMB": 57.73,
+   "heapGrowthMBPerMin": -15.79,
+   "domNodes": 549,
+   "listeners": 9260,
+   "reactCommitsPerSec": 13.45,
+   "reactRendersPerSec": 321.48,
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    }
+   },
+   "gl": {
+    "calls": 220,
+    "tris": 545818,
+    "programs": 65,
+    "geometries": 299,
+    "textures": 65,
+    "canvas": "735x460",
+    "scale": 0.5,
+    "gpuMs": 1.0402687054826454,
+    "gpuName": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+   },
+   "readyMs": 6240,
+   "marks": {
+    "wsp:flight:construct": 3406,
+    "wsp:flight:shaderWarmup": 4522,
+    "wsp:flight:firstFrame": 4565,
+    "wsp:flight:construct:start": 2855,
+    "wsp:flight:ready": 5625
+   }
+  },
+  "orbit": {
+   "fps": 59.5,
+   "frameP50": 16.7,
+   "frameP95": 16.7,
+   "frameP99": 16.8,
+   "frameMax": 33.4,
+   "hitches25": 5,
+   "hitches50": 0,
+   "cpuMs": 3.19,
+   "cpuP95": 4.5,
+   "sections": {
+    "input": 0.07,
+    "sim": 0.27,
+    "vessels": 0.04,
+    "fx": 0.06,
+    "planets": 0.26,
+    "map": 0,
+    "render": 2.17,
+    "telemetry": 0.05,
+    "audio": 0.01,
+    "navball": 0.16,
+    "hud": 0.07
+   },
+   "scriptMsPerFrame": 3.95,
+   "taskMsPerFrame": 11.66,
+   "layoutsPerSec": 1,
+   "styleRecalcsPerSec": 1,
+   "layoutMsPerSec": 0.23,
+   "styleMsPerSec": 0.07,
+   "longTasksPerMin": 0,
+   "longTaskMsPerMin": 0,
+   "longTaskMax": 0,
+   "heapMB": 50.46,
+   "heapGrowthMBPerMin": 129.52,
+   "domNodes": 552,
+   "listeners": 4282,
+   "reactCommitsPerSec": 14.27,
+   "reactRendersPerSec": 363.94,
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    }
+   },
+   "gl": {
+    "calls": 166,
+    "tris": 159191,
+    "programs": 65,
+    "geometries": 215,
+    "textures": 66,
+    "canvas": "735x460",
+    "scale": 0.5,
+    "gpuMs": 0.8767352579154719,
+    "gpuName": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+   },
+   "readyMs": 40051,
+   "marks": {
+    "wsp:flight:construct": 37032,
+    "wsp:flight:shaderWarmup": 38699,
+    "wsp:flight:firstFrame": 38755,
+    "wsp:flight:construct:start": 36273,
+    "wsp:flight:ready": 39449
+   }
+  }
+ }
+}

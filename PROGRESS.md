@@ -3,7 +3,7 @@
 _Last updated: 2026-10-06_
 
 ## Start here (for Ned)
-**Run it:** `npm install && npm run dev`, open http://localhost:5173. Pick **New Game → Sandbox → Standard** for the easiest start;
+**Run it:** `npm install && npm run play` (optimised production build, opens http://localhost:4173). `npm run dev` is for development only: it serves unbundled modules with React's debug build and is much slower to load and run. Pick **New Game → Sandbox → Standard** for the easiest start;
 the first flight shows a controls cheat sheet (Shift+F1 or the toolbar "?" brings it back). **Training** on the main menu has 8 guided lessons.
 
 **What exists:** the real solar system (Sun, 8 planets, Pluto, Ceres, 40+ moons, plus asteroids/comets like Vesta, Bennu,
@@ -772,6 +772,24 @@ Added original branched coastal vegetation with wind and fading LOD, warmer deta
 - Current main merged; lint, typecheck, **107 files / 1,296 tests** and the production build pass.
 
 
+## Adjustable graphics — cx/gfxsettings (2026-10-07)
+
+Implemented Ultra and visible Custom overrides, all requested advanced controls with cost explanations/tooltips,
+persistence and graphics-profile-2 migration. Earth knob coordination commit: `a54b3df2`
+(`GFXSETTINGS-KNOBS-READY`); Ultra values are included in `8d1a1c21`. GPU auto-detection remains conservative.
+Live pipeline controls and snapshot-preserving flight rebuilds are differentiated in the UI. 30/60/120/unlimited
+caps cover flight, Space Center, editor and tracking; adaptive resolution respects deliberate caps.
+
+Verified UI at 1024×768 and 800×768 (scrollable body, no horizontal overflow, every select accessible),
+Custom selection and stored overrides. Screenshots: `docs/screenshots/gfxsettings/`.
+Real RTX 3060 Ti / Windows Chrome CDP check passed 15 advanced changes plus four cap settings without
+browser or GL errors: `docs/performance/gfxsettings/live-controls.json`. Preset measurements and limits
+are documented in `docs/PERFORMANCE.md`. Ultra's larger bake exposed the old far-sphere threshold removing
+close-up terrain; the threshold is bounded and a regression test covers pad/orbit activation.
+
+Post-merge verification: `git merge main` reports already up to date (`main` at `0b3f8cb2`);
+`npm run lint`, `npx tsc --noEmit`, `npm run build` and full
+`npx vitest run --maxWorkers=2` pass (**108 files / 1,317 tests**, 441.19 s).
 ## Real Earth geography — terrain integration ready (cx/realearth)
 
 - CC0 ETOPO pipeline and committed 16 MiB real elevation/bathymetry, exact imagery alignment contract in `public/earth/manifest.json`.
@@ -794,6 +812,16 @@ Added original branched coastal vegetation with wind and fading LOD, warmer deta
 - Pipeline regenerated identical bytes/hash. Production PWA cache verified at 16,777,216 Earth bytes; after stopping the server the orbit flight still loads, with a sampled height exactly equal to Node. Evidence in `docs/screenshots/realearth/offline-check.json`.
 - Servers stopped and automation tabs closed; temporary service-worker registration removed. Only `cx/realearth` worktree changed. Terrain-ready integration anchor is `5990a805`; merge the branch tip to include subsequent parity, loading and verification fixes.
 - **Zen startup fix (2026-10-07):** Reproduced New Game → Start leaving a blank page in the live Zen tab. The scene music switch threw because `AudioParam.cancelAndHoldAtTime` is unavailable. Added feature detection and a current-gain fallback using `cancelScheduledValues`/`setValueAtTime`. All 26 focused audio tests and typecheck pass; live Zen now opens Space Center and renders Vehicle Assembly.
+
+Integrated the newly landed real Earth geography from `main` at `8e91a05d` (merge `e5aaf9af`), resolving
+only documentation append conflicts and preserving both teams' notes. Re-ran lint/typecheck/build and the
+full suite: **109 files / 1,327 tests**, 407.78 s. Re-measured all four presets in pad and orbit on the merged
+production build; final raw data is `docs/performance/gfxsettings/gfxsettings-merged-*-dpr2.json`.
+Earlier GPU runs are labelled and archived separately so their revisions cannot be confused.
+
+Final Ultra pad capture uses the requested Windows `cdp2.mjs` driver; after preparation it confirms the
+exact Ultra Earth grades, 48-quad terrain / 0.75 m spacing, hardware RTX rendering and GL error 0.
+All work is committed on `cx/gfxsettings`; the port-5327 dev/preview server is stopped on completion.
 
 ## Firefox, Zen and Safari compatibility (op/firefox, 2026-10-07)
 

@@ -19,7 +19,7 @@ Safari/WebKit, what was fixed, and how to re-check.
 | Any Web Audio error | — | `GameAudio` wraps every method, timer and listener: on an exception it logs `Audio disabled after an error`, disposes the graph and the game continues silently. |
 | Errors outside the scene boundary | — | `RootErrorBoundary` (main.tsx) renders a store-free recovery page instead of a blank screen. |
 | Blocked site data (cookie blocking, privacy extensions) | Any `localStorage` access throws `SecurityError` | `src/ui/storageGuard.ts` (first import of main.tsx) swaps in an in-memory Storage for the session and shows a notice. A full but readable store is left alone. |
-| WebGL 2 limits under `privacy.resistFingerprinting` (Firefox, LibreWolf, Mullvad, some Zen setups) | Reports the spec minimums: 2048-px textures/renderbuffers, devicePixelRatio 2, minimum varyings | Part-heat shader passes a scalar slot instead of a `vec3` varying (physical materials were at the 15-vector limit: link failure). Flight and editor clamp the pixel ratio to the context's renderbuffer/texture size (`render/core/drawingLimits.ts`), which also protects 6K displays. |
+| WebGL 2 limits under `privacy.resistFingerprinting` (Firefox, LibreWolf, Mullvad, some Zen setups) | Reports the spec minimums: 2048-px textures/renderbuffers, devicePixelRatio 2, minimum varyings | Part-heat shader passes a scalar slot instead of a `vec3` varying (physical materials were at the 15-vector limit: link failure). Flight and editor clamp the pixel ratio to the context's renderbuffer/texture size (`render/core/drawingLimits.ts`), which also protects 6K displays. Shadow maps in flight, Space Center and editor are capped to the same limit. |
 | `EXT_disjoint_timer_query_webgl2`, `KHR_parallel_shader_compile` | Not exposed by Firefox | Already optional: adaptive resolution falls back to frame intervals; three compiles synchronously behind the loading screen. |
 | `WEBGL_debug_renderer_info` | Firefox returns a generalised GPU name ("GeForce GTX 980, or similar") | GPU tiering still works on the vendor/family. |
 | Wheel `deltaMode` | Firefox uses lines | Map, flight camera and editor already normalise. |
@@ -63,6 +63,8 @@ Real Windows browsers: `scripts/windows-firefox/{flow,perf}.mjs` drive installed
 with puppeteer-core installed on the Windows side (instructions in the file headers).
 
 ## Caveats
+
+- The opt-in Ultra preset bakes 4096-px planet textures; on contexts limited to 2048 px (resistFingerprinting) choose High or lower.
 
 - Real Safari on macOS was not tested; WebKit on Linux is a proxy (different GPU backend, no Metal).
   Firefox on macOS draws WebGL through Apple's OpenGL driver rather than ANGLE/Metal, which was not tested either.

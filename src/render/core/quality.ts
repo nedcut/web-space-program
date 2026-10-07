@@ -4,10 +4,17 @@ import { classifyGpu, presetForTier } from '../../util/gpuTier';
  * Render quality presets. `low` targets integrated laptop GPUs at 60 fps; `high` a discrete GPU.
  * Every renderer subsystem reads its knobs from here — never hard-code quality-dependent numbers.
  */
-export type QualityId = 'low' | 'medium' | 'high';
+export type QualityId = 'low' | 'medium' | 'high' | 'ultra';
 
 export interface QualitySettings {
   id: QualityId;
+  earth: {
+    textureQuality: 'low' | 'medium' | 'high' | 'ultra';
+    atmosphereQuality: 'low' | 'medium' | 'high' | 'ultra';
+    cloudQuality: 'off' | 'low' | 'medium' | 'high' | 'ultra';
+    oceanQuality: 'low' | 'medium' | 'high' | 'ultra';
+    nightLights: boolean;
+  };
   /** Upper bound on devicePixelRatio used for the canvas. */
   maxPixelRatio: number;
   /** Render scale applied on top of pixel ratio (dynamic resolution hook). */
@@ -66,12 +73,15 @@ export interface QualitySettings {
   /** User toggle: atmospheric scattering (sky shells / aerial perspective). */
   atmosphereScattering?: boolean;
   /** Part mesh LOD: 'low' halves tessellation and drops decals (see render/parts). */
+  particleQuality: QualityId;
   partDetail: 'high' | 'low';
 }
 
 export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
   low: {
     id: 'low',
+    particleQuality: 'low',
+    earth: { textureQuality: 'low', atmosphereQuality: 'low', cloudQuality: 'low', oceanQuality: 'low', nightLights: true },
     partDetail: 'low',
     scatter: { radius: 0, maxAltitude: 0, vegetation: false, cellsPerFrame: 0, budgetMs: 0 },
     maxPixelRatio: 1,
@@ -92,6 +102,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
   },
   medium: {
     id: 'medium',
+    particleQuality: 'medium',
+    earth: { textureQuality: 'medium', atmosphereQuality: 'medium', cloudQuality: 'medium', oceanQuality: 'medium', nightLights: true },
     partDetail: 'high',
     scatter: { radius: 256, maxAltitude: 3000, vegetation: false, cellsPerFrame: 3, budgetMs: 1.5 },
     // Full device resolution (Retina too); adaptive resolution trades pixels for frame time when the
@@ -114,6 +126,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
   },
   high: {
     id: 'high',
+    particleQuality: 'high',
+    earth: { textureQuality: 'high', atmosphereQuality: 'high', cloudQuality: 'high', oceanQuality: 'high', nightLights: true },
     partDetail: 'high',
     scatter: { radius: 1024, maxAltitude: 3000, vegetation: true, cellsPerFrame: 4, budgetMs: 2 },
     maxPixelRatio: 2,
@@ -132,16 +146,29 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     siteVegetation: 1,
     planetDetails: { ringCells: 8, ringChunksPerCell: 32, volumeSteps: 32, plumeSteps: 48, gasOctaves: 5, surfaceEmission: true },
   },
+  ultra: {
+    id: 'ultra', particleQuality: 'ultra', partDetail: 'high',
+    earth: { textureQuality: 'ultra', atmosphereQuality: 'ultra', cloudQuality: 'ultra', oceanQuality: 'ultra', nightLights: true },
+    maxPixelRatio: 2, renderScale: 1, msaaSamples: 4, aa: 'smaa',
+    bloom: { enabled: true, strength: .4, radius: .5, threshold: 2.2 },
+    shadowMapSize: 4096,
+    terrain: { chunkResolution: 48, maxScreenError: 1, minVertexSpacing: .75, buildBudgetMs: 6, workers: 4, maxInFlight: 20, cacheSize: 1600, detail: true },
+    scatter: { radius: 1536, maxAltitude: 4000, vegetation: true, cellsPerFrame: 5, budgetMs: 2.5 },
+    atmosphere: { viewSteps: 32, aerialSteps: 12 },
+    bakedTextureWidth: 4096, sphereSegments: 160, ringSegments: 768,
+    stars: { count: 24000, milkyWay: true }, clouds: true, siteVegetation: 1,
+    planetDetails: { ringCells: 10, ringChunksPerCell: 32, volumeSteps: 48, plumeSteps: 64, gasOctaves: 6, surfaceEmission: true },
+  },
 };
 
 /** Settings toggles that mirror a preset (used when the user picks a preset or on auto-configuration). */
 export function presetSettings(id: QualityId) {
   const p = QUALITY_PRESETS[id];
-  return { quality: id, shadows: p.shadowMapSize > 0, bloom: p.bloom.enabled, clouds: p.clouds, scatter: true, renderScale: p.renderScale };
+  return { graphicsCustom: false, advancedGraphics: {}, quality: id, shadows: p.shadowMapSize > 0, bloom: p.bloom.enabled, clouds: p.clouds, scatter: true, renderScale: p.renderScale };
 }
 
 /** Bumped when automatic graphics configuration should run again for existing players. */
-export const GRAPHICS_PROFILE = 1;
+export const GRAPHICS_PROFILE = 2;
 
 /** WebGL renderer string (unmasked when the browser allows it), for diagnostics and GPU tiering. */
 export function detectGpuRenderer(): string | null {
@@ -165,6 +192,10 @@ export function detectGpuRenderer(): string | null {
 export function autoConfigureGraphics(renderer = detectGpuRenderer()): string | null {
   const s = game.get().settings;
   if (s.graphicsProfile >= GRAPHICS_PROFILE) return null;
+  if (s.graphicsProfile > 0) {
+    updateSettings({ graphicsProfile: GRAPHICS_PROFILE });
+    return null; // Migrate established preferences without resetting manual choices.
+  }
   // No WebGL 2 right now (acceleration off, blocklisted driver): nothing to tune, and retry next launch.
   if (renderer === null) return null;
   const tier = classifyGpu(renderer);
@@ -173,9 +204,48 @@ export function autoConfigureGraphics(renderer = detectGpuRenderer()): string | 
   return `Graphics tuned for this device: ${quality === 'low' ? 'Low' : 'Medium'} quality with adaptive resolution. Change it any time in Settings → Graphics.`;
 }
 
-export function getQuality(id: QualityId): QualitySettings {
-  const p = QUALITY_PRESETS[id];
-  const s = game.get().settings;
-  return { ...p, shadowMapSize: s.shadows ? (p.shadowMapSize || 512) : 0,
-    bloom: { ...p.bloom, enabled: s.bloom }, clouds: s.clouds, atmosphereScattering: s.scatter, renderScale: s.renderScale };
+export interface AdvancedGraphics {
+  maxPixelRatio?: number;
+  antiAliasing?: 'off' | 'fxaa' | 'smaa' | 'msaa+smaa';
+  shadowQuality?: 'off' | QualityId;
+  terrainDetail?: QualityId;
+  groundClutter?: 'off' | QualityId;
+  atmosphereQuality?: QualityId;
+  cloudQuality?: 'off' | QualityId;
+  textureQuality?: QualityId;
+  oceanQuality?: QualityId;
+  nightLights?: boolean;
+  starQuality?: 'off' | QualityId;
+  particleQuality?: QualityId;
+  partDetail?: 'low' | 'high';
 }
+
+/** Pure resolved configuration, shared by renderers and configuration tests. */
+export function resolveQuality(id: QualityId, s: Pick<import('../../game/store').Settings, 'shadows' | 'bloom' | 'clouds' | 'scatter' | 'renderScale' | 'advancedGraphics'>): QualitySettings {
+  const p = QUALITY_PRESETS[id], a = s.advancedGraphics;
+  const atmosphere = QUALITY_PRESETS[a.atmosphereQuality ?? id];
+  const cloudQuality = a.cloudQuality ?? p.earth.cloudQuality;
+  const texture = QUALITY_PRESETS[a.textureQuality ?? id];
+  const clutter = a.groundClutter === 'off' ? QUALITY_PRESETS.low : QUALITY_PRESETS[a.groundClutter ?? id];
+  return { ...p,
+    maxPixelRatio: a.maxPixelRatio ?? p.maxPixelRatio,
+    renderScale: s.renderScale,
+    aa: a.antiAliasing === 'off' ? 'none' : a.antiAliasing === 'msaa+smaa' ? 'smaa' : a.antiAliasing ?? p.aa,
+    msaaSamples: a.antiAliasing ? (a.antiAliasing === 'msaa+smaa' ? 4 : 0) : p.msaaSamples,
+    shadowMapSize: a.shadowQuality === 'off' ? 0 : a.shadowQuality ? QUALITY_PRESETS[a.shadowQuality].shadowMapSize || 512 : s.shadows ? p.shadowMapSize || 512 : 0,
+    terrain: QUALITY_PRESETS[a.terrainDetail ?? id].terrain,
+    scatter: clutter.scatter, siteVegetation: a.groundClutter === 'off' ? 0 : clutter.siteVegetation,
+    atmosphere: atmosphere.atmosphere, atmosphereScattering: s.scatter,
+    bakedTextureWidth: texture.bakedTextureWidth,
+    earth: { textureQuality: a.textureQuality ?? p.earth.textureQuality,
+      atmosphereQuality: a.atmosphereQuality ?? p.earth.atmosphereQuality,
+      cloudQuality, oceanQuality: a.oceanQuality ?? p.earth.oceanQuality,
+      nightLights: a.nightLights ?? p.earth.nightLights },
+    clouds: a.cloudQuality ? cloudQuality !== 'off' : s.clouds,
+    stars: a.starQuality === 'off' ? { count: 0, milkyWay: false } : QUALITY_PRESETS[a.starQuality ?? id].stars,
+    particleQuality: a.particleQuality ?? p.particleQuality,
+    partDetail: a.partDetail ?? p.partDetail,
+    bloom: { ...p.bloom, enabled: s.bloom },
+  };
+}
+export function getQuality(id: QualityId): QualitySettings { return resolveQuality(id, game.get().settings); }

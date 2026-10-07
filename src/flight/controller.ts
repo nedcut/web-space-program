@@ -1,4 +1,5 @@
 import { updateSiteShadow } from '../render/site/shadows';
+import { maxDrawingEdge } from '../render/core/drawingLimits';
 import { stageExplanation } from './cues';
 import { actionAvailable, partActions } from '../sim/vessel/actions';
 import { CondensationFx } from '../render/fx/CondensationFx';
@@ -65,7 +66,7 @@ import { createPlanetLayer, type PlanetLayer } from './planets';
 
 
 const graphicsKeyOf = (s: { quality: string; shadows: boolean; bloom: boolean; renderScale: number }) =>
-  `${s.quality}:${s.shadows}:${s.bloom}:${s.renderScale}`;
+  `${s.quality}:${s.shadows}:${s.bloom}:${s.renderScale}:${JSON.stringify(game.get().settings.advancedGraphics)}`;
 
 /**
  * Owns the flight scene: world simulation, rendering (flight + map), input, camera.
@@ -237,11 +238,12 @@ export class FlightController {
     this.glare = new SunGlare();
     this.scene.add(this.glare.mesh);
     this.scene.add(this.sunLight, this.sunLight.target, this.ambient);
-    this.effects = new FlightFx(quality);
+    this.effects = new FlightFx(getQuality(quality).particleQuality);
     this.scene.add(this.condensation.object);
     this.scene.add(this.effects.root, this.reentry.object, this.flags.root);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.set(q.shadowMapSize || 512, q.shadowMapSize || 512);
+    const shadowSize = Math.min(q.shadowMapSize || 512, maxDrawingEdge(this.pipeline.renderer));
+    this.sunLight.shadow.mapSize.set(shadowSize, shadowSize);
     // The pipeline was just built from these settings; do not rebuild it on the first frame.
     if (game.get().settings.quality === quality) this.graphicsKey = graphicsKeyOf(game.get().settings);
     this.sunLight.shadow.bias = -0.00002;
@@ -720,6 +722,8 @@ export class FlightController {
   private graphicsKey = '';
   private frame = (now: number) => {
     this.raf = requestAnimationFrame(this.frame);
+    const cap = game.get().settings.frameRateCap;
+    if (cap && now - this.last < 1000 / cap - .5) return;
     prof.beginFrame(now);
     let t0 = prof.now();
     const frameMs = now - this.last;
@@ -741,15 +745,15 @@ export class FlightController {
       this.graphicsKey = graphicsKey;
       const quality = getQuality(settings.quality);
       this.pipeline.setQuality(quality);
-      this.effects.setQuality(settings.quality);
-      const size = quality.shadowMapSize || 512;
+      this.effects.setQuality(quality.particleQuality);
+      const size = Math.min(quality.shadowMapSize || 512, maxDrawingEdge(this.pipeline.renderer));
       if (this.sunLight.shadow.mapSize.x !== size) {
         this.sunLight.shadow.mapSize.set(size, size);
         this.sunLight.shadow.map?.dispose();
         this.sunLight.shadow.map = null;
       }
     }
-    this.pipeline.updateAdaptive(frameMs, settings.adaptiveQuality);
+    this.pipeline.updateAdaptive(frameMs, settings.adaptiveQuality, settings.frameRateCap);
     if (!this.paused && settings.autoSaveInterval > 0) {
       this.autosaveTimer += dt;
       if (this.autosaveTimer >= settings.autoSaveInterval) { this.autosaveTimer = 0; this.quicksave('autosave'); }

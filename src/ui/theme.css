@@ -64,7 +64,7 @@ input[type='range'] { accent-color: var(--accent); }
 .transfer-plot canvas { width: 100%; aspect-ratio: 1.8; cursor: crosshair; }
 button, input, select, textarea { font-size: 1em; }
 .settings-backdrop { position: fixed; inset: 0; z-index: 1000; background: #020812b8; backdrop-filter: blur(6px); display: grid; place-items: center; padding: 20px; }
-.settings-dialog { width: min(780px, 100%); max-height: 100%; display: flex; flex-direction: column; padding: 24px; gap: 14px; outline: none; }
+.settings-dialog { width: min(780px, 100%); max-height: calc(100dvh - 40px); display: flex; flex-direction: column; padding: 24px; gap: 14px; outline: none; }
 .settings-dialog h2 { margin: 0; }
 .settings-tabs { flex-wrap: wrap; flex-shrink: 0; }
 .settings-content { overflow: auto; min-height: 0; padding-right: 8px; }
@@ -132,3 +132,7 @@ label.panel:has(.scale-radio:focus-visible) { outline: 2px solid var(--accent); 
 .save-error-notice strong { color: var(--warn); font-size: 14px; }
 .save-error-notice p { margin: 4px 0 0; font-size: 12.5px; color: var(--text-dim); line-height: 1.45; }
 .save-error-notice > div { flex: 1; }
+
+.graphics-hint { display: block; font-size: 11px; opacity: .7; max-width: 440px; margin-top: 4px; }
+.advanced-graphics summary { cursor: pointer; font-weight: 600; padding: 10px 0; }
+.advanced-graphics select { min-width: 120px; flex-shrink: 0; }
