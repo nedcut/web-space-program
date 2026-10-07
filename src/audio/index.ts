@@ -47,6 +47,18 @@ const positive = (v: number): number => Number.isFinite(v) ? Math.max(0, v) : 0;
 const unit = (v: number): number => Math.min(1, positive(v));
 const atmosphere = (pressure: number): number => Math.sqrt(unit(pressure / 101325));
 
+/**
+ * Freezes an automated parameter at its current value from `time` onwards. Firefox has no
+ * `cancelAndHoldAtTime`: there the fallback holds the last rendered value, which can lag a running
+ * ramp by one audio quantum (~3 ms) — inaudible for the 3 s music fade-outs that use it.
+ */
+export function holdAt(param: AudioParam, time: number): void {
+  if (typeof param.cancelAndHoldAtTime === 'function') { param.cancelAndHoldAtTime(time); return; }
+  const value = param.value;
+  param.cancelScheduledValues(time);
+  param.setValueAtTime(value, time);
+}
+
 /** Perceived engine amplitude, including a small structure-borne component in vacuum. */
 export function engineLoudness(thrust: number, pressure: number): number {
   return Math.sqrt(unit(thrust)) * (0.12 + 0.88 * atmosphere(pressure));
@@ -403,7 +415,7 @@ export class GameAudio {
       const gain = this.transientNodes.get(source)?.[1] as GainNode | undefined;
       if (!gain) continue;
       const now = this.context.currentTime;
-      gain.gain.cancelAndHoldAtTime(now);
+      holdAt(gain.gain, now);
       gain.gain.linearRampToValueAtTime(0, now + 3);
       try { source.stop(now + 3.05); } catch { /* Already ended. */ }
     }

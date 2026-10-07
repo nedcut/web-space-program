@@ -13,9 +13,12 @@ export function useInterfaceAudio(): void {
   useEffect(() => {
     const audio = getGameAudio();
     if (scene !== 'flight') {
-      audio.setPaused(false);
-      audio.silenceFlight();
-      audio.setMusic(selectTheme({ scene, bodyId: game.get().resumeWorld?.vessels.find(v => v.state.id === game.get().resumeWorld?.activeId)?.body }));
+      // App-level hook outside the scene ErrorBoundary: a Web Audio gap in one browser must not unmount the game.
+      try {
+        audio.setPaused(false);
+        audio.silenceFlight();
+        audio.setMusic(selectTheme({ scene, bodyId: game.get().resumeWorld?.vessels.find(v => v.state.id === game.get().resumeWorld?.activeId)?.body }));
+      } catch (error) { console.warn('Audio scene change failed', error); }
     }
   }, [scene]);
   useEffect(() => {
