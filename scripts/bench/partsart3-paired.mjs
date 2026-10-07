@@ -7,6 +7,7 @@ import { connect } from './partsart-cdp.mjs';
 const label = process.argv[2] ?? 'after';
 const base = process.argv[3] ?? 'http://localhost:5323';
 const craftId = process.argv[4] ?? 'selene';
+const nSamples = Number(process.argv[5] ?? 240);
 const browser = await connect();
 const context = await browser.newContext({ viewport: { width: 1470, height: 920 }, deviceScaleFactor: 2, serviceWorkers: 'block' });
 await context.addInitScript(() => {
@@ -22,10 +23,11 @@ try {
   console.log('launch');
   await page.evaluate(async (id) => {
     const { STOCK_CRAFTS } = await import('/src/editor/stockCrafts.ts');
-    const craft = STOCK_CRAFTS.find(c => c.id === `stock-${id}`).build();
-    window.__pa3Craft = id;
+    const craft = STOCK_CRAFTS.find(c => c.id === `stock-${id[0]}`).build();
+    window.__pa3Craft = id[0];
+    window.__pa3N = id[1];
     window.__game.set({ craft, scene: 'flight', launchPending: true });
-  }, craftId);
+  }, [craftId, nSamples]);
   await page.waitForFunction(() => !!window.__flight && !document.querySelector('.loading-screen'), null, { timeout: 120000 });
   await page.evaluate(() => { window.__flight.paused = true; });
   await page.waitForTimeout(12000);
@@ -72,8 +74,8 @@ try {
       original.apply(this, args); draws[name].push(drawCount); gl.endQuery(ext.TIME_ELAPSED_EXT); pending.push({ q, name, pair: Math.floor((frames - 120) / 2) });
     };
     const start = performance.now();
-    while (samples.before.length < 240 || samples.after.length < 240) {
-      if (performance.now() - start > 90000) throw new Error('Paired GPU sampling timed out');
+    while (samples.before.length < window.__pa3N || samples.after.length < window.__pa3N) {
+      if (performance.now() - start > 240000) throw new Error('Paired GPU sampling timed out');
       await new Promise(r => setTimeout(r, 50));
       while (pending.length && gl.getQueryParameter(pending[0].q, gl.QUERY_RESULT_AVAILABLE)) {
         const { q, name, pair } = pending.shift();
