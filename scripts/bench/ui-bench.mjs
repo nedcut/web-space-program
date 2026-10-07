@@ -14,9 +14,9 @@ await context.addInitScript(() => {
   const frame = now => { if (last) window.__uiBench.gaps.push(now-last); last = now; requestAnimationFrame(frame); };
   requestAnimationFrame(frame);
   for (const name of ['pointerdown', 'pointerover', 'input', 'keydown', 'wheel']) document.addEventListener(name, e => {
-    const start = performance.now();
+    const start = performance.now(), timestamp = e.timeStamp > 0 && e.timeStamp <= performance.now() ? e.timeStamp : start;
     // Double rAF: first callback precedes the next paint; second bounds the paint opportunity.
-    requestAnimationFrame(() => requestAnimationFrame(() => window.__uiBench.events.push({ name, target: e.target.className, ms: performance.now()-start })));
+    requestAnimationFrame(() => requestAnimationFrame(() => window.__uiBench.events.push({ name, target: e.target.className, ms: performance.now()-start, queuedMs: start-timestamp, eventToPaintMs: performance.now()-timestamp })));
   }, true);
   new PerformanceObserver(list => window.__uiBench.longTasks.push(...list.getEntries().map(e => e.duration))).observe({ type: 'longtask', buffered: true });
 });
@@ -25,14 +25,14 @@ const cdp = await context.newCDPSession(page);
 await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
 const errors = [];
 page.on('pageerror', e => errors.push(String(e)));
-const results = { label, base, cpuThrottle: 4, dpr: 2, renderer: process.platform === 'win32' ? 'Windows Chrome CDP (hardware GPU)' : 'WSL Chromium SwiftShader (software GPU)', paintMethod: 'capture event to second rAF; upper bound on next paint opportunity', cases: {}, errors };
+const results = { label, base, cpuThrottle: 4, dpr: 2, renderer: process.platform === 'win32' ? 'Windows Chrome CDP (hardware GPU)' : 'WSL Chromium SwiftShader (software GPU)', paintMethod: 'capture and event timestamp to second rAF; upper bounds on next paint opportunity', cases: {}, errors };
 const measure = async (name, action) => {
   await page.evaluate(() => { window.__uiBench.events = []; window.__uiBench.gaps = []; });
   for (let i=0; i<8; i++) { await action(i); await page.waitForTimeout(150); }
   await page.waitForTimeout(250);
   results.cases[name] = await page.evaluate(() => {
     const b=window.__uiBench, percentile=(a,p)=>a.toSorted((x,y)=>x-y)[Math.max(0,Math.ceil(a.length*p)-1)] ?? null;
-    return { samples: b.events, p75Ms: percentile(b.events.map(e=>e.ms),.75), p95FrameGapMs: percentile(b.gaps,.95), frames: b.gaps.length };
+    return { samples: b.events, p75Ms: percentile(b.events.map(e=>e.ms),.75), p75EventToPaintMs: percentile(b.events.map(e=>e.eventToPaintMs),.75), p95FrameGapMs: percentile(b.gaps,.95), frames: b.gaps.length };
   });
   console.log(name, results.cases[name].p75Ms);
 };
