@@ -17,7 +17,7 @@ export default defineConfig({
       load(id: string) {
         const path = relative(process.cwd(), id).replaceAll('\\', '/');
         if (!['src/editor/scene/EditorView.ts', 'src/editor/scene/thumbnails.ts', 'src/editor/session.ts',
-          'src/editor/ui/CraftThumbnail.tsx', 'src/editor/ui/Palette.tsx', 'src/editor/ui/editor.css',
+          'src/editor/ui/CraftThumbnail.tsx', 'src/editor/ui/Palette.tsx', 'src/editor/ui/StagingPanel.tsx', 'src/editor/ui/editor.css',
           'src/flight/hud/AppLauncher.tsx', 'src/flight/hud/hud.css', 'src/ui/theme.css'].includes(path)) return;
         return execFileSync('git', ['show', `${process.env.WSP_UI_BASELINE}:${path}`], { encoding: 'utf8' });
       },
