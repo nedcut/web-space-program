@@ -88,7 +88,11 @@ export class Starfield {
         void main() {
           vec3 d = mat3(viewMatrix) * position;
           gl_Position = projectionMatrix * vec4(d, 0.0);
+          #ifdef USE_REVERSED_DEPTH_BUFFER
+          gl_Position.z = gl_Position.w * 1e-6;
+          #else
           gl_Position.z = gl_Position.w * 0.99999;
+          #endif
           // Faint stars are kept at minimum size and dimmed instead (avoids sub-pixel shimmer).
           float s = aSize * uPixelRatio;
           gl_PointSize = s;
@@ -165,7 +169,11 @@ export class Starfield {
             vDir = position;
             vec3 d = mat3(viewMatrix) * position;
             gl_Position = projectionMatrix * vec4(d, 0.0);
-            gl_Position.z = gl_Position.w * 0.99999;
+            #ifdef USE_REVERSED_DEPTH_BUFFER
+          gl_Position.z = gl_Position.w * 1e-6;
+          #else
+          gl_Position.z = gl_Position.w * 0.99999;
+          #endif
           }`,
         fragmentShader: /* glsl */ `
           uniform samplerCube uMilky;

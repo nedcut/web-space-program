@@ -37,7 +37,7 @@ const PRESETS = {
   ultra: { shadows: true, bloom: true, clouds: true, renderScale: 1 },
 };
 const settings = { quality, ...PRESETS[quality], scatter: true, adaptiveQuality: args.adaptive === '1', graphicsProfile: 99, showFps: false, autoSaveInterval: 0, masterVolume: 0, ...(args.settings ? JSON.parse(args.settings) : {}) };
-const browser = await chromium.connectOverCDP('http://127.0.0.1:9333');
+const browser = await chromium.connectOverCDP('http://127.0.0.1:9333', { timeout: 180000 });
 const results = { label, base, dpr, quality, settings, size: `${vw}x${vh}`, date: new Date().toISOString(), cases: {} };
 const log = (...a) => console.log(...a);
 

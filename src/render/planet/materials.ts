@@ -848,6 +848,10 @@ export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloud
         #ifdef USE_LOGARITHMIC_DEPTH_BUFFER
           float viewDepth = max(0.0, -t * (viewMatrix * vec4(rd, 0.0)).z);
           gl_FragDepth = log2(1.0 + viewDepth) * logDepthBufFC * 0.5;
+        #elif defined(USE_REVERSED_DEPTH_BUFFER)
+          // clip.z / clip.w of the hit point from its view depth (reversed projection, [0, 1] depth range).
+          float viewDepth = max(1e-6, -t * (viewMatrix * vec4(rd, 0.0)).z);
+          gl_FragDepth = clamp(projectionMatrix[3][2] / viewDepth - projectionMatrix[2][2], 0.0, 1.0);
         #endif
         vec3 rel = uCamRel + rd * t;
         float d = cloudAt(rel, t, 0.0);
