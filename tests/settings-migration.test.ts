@@ -14,6 +14,9 @@ it('auto-configures graphics once per profile: weak GPUs start on Low with adapt
   vi.stubGlobal('localStorage', { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v; } });
   const { game } = await import('../src/game/store');
   const { autoConfigureGraphics, GRAPHICS_PROFILE } = await import('../src/render/core/quality');
+  // No WebGL 2 (probe returned nothing): leave settings alone and retry on a later launch.
+  expect(autoConfigureGraphics(null)).toBeNull();
+  expect(game.get().settings.graphicsProfile).toBe(0);
   expect(autoConfigureGraphics('ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)')).toMatch(/Low/);
   expect(game.get().settings).toMatchObject({ quality: 'low', adaptiveQuality: true, renderScale: 0.5, shadows: false, graphicsProfile: GRAPHICS_PROFILE });
   expect(JSON.parse(store['wsp.settings.v1']).graphicsProfile).toBe(GRAPHICS_PROFILE);

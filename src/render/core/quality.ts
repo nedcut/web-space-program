@@ -165,6 +165,8 @@ export function detectGpuRenderer(): string | null {
 export function autoConfigureGraphics(renderer = detectGpuRenderer()): string | null {
   const s = game.get().settings;
   if (s.graphicsProfile >= GRAPHICS_PROFILE) return null;
+  // No WebGL 2 right now (acceleration off, blocklisted driver): nothing to tune, and retry next launch.
+  if (renderer === null) return null;
   const tier = classifyGpu(renderer);
   const quality = presetForTier(tier);
   updateSettings({ ...presetSettings(quality), adaptiveQuality: true, graphicsProfile: GRAPHICS_PROFILE });

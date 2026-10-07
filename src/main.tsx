@@ -1,6 +1,7 @@
 import { loadEarthData } from './game/earthLoader';
 import { createRoot } from 'react-dom/client';
 import { App } from './ui/App';
+import { RootErrorBoundary } from './ui/ErrorBoundary';
 import { game } from './game/store';
 import { autoConfigureGraphics, GRAPHICS_PROFILE } from './render/core/quality';
 import { preloadTextureCache } from './render/core/textureCache';
@@ -34,7 +35,7 @@ if (flight) {
 const mission = params.get('mission');
 if (mission) import('./scenarios/runtime').then(({ startScenario }) => startScenario(mission));
 
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(<RootErrorBoundary><App /></RootErrorBoundary>);
 // Benchmark/automation hook (scripts/bench/gpu-bench.mjs drives scene changes through the store).
 (window as unknown as { __game?: typeof game }).__game = game;
 // Decode procedurally generated textures saved by an earlier session (off the main thread).
