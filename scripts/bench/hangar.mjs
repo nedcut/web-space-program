@@ -50,7 +50,7 @@ try {
           for (const v of Object.values(views)) {
             v.frameCraft(true);
             v.setView({ yaw: 0.55, pitch: 0.18, dist: v.dist * (zoom === 'close' ? 0.58 : 1.15), targetY: v.targetY + (zoom === 'close' ? 3 : 0) });
-            v.loop(); cancelAnimationFrame(v.raf);
+            cancelAnimationFrame(v.raf); v.loop(); cancelAnimationFrame(v.raf);
           }
           const samples = { before: [], after: [] }, pairs = [];
           let seed = 91817;

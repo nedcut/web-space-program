@@ -146,7 +146,7 @@ export class EditorView {
     this.scene.environment = this.envRT.texture;
     this.scene.environmentIntensity = 0.62;
     this.scene.background = new THREE.Color(0x0b1018);
-    this.scene.fog = new THREE.Fog(0x111823, 75, 180);
+    this.scene.fog = new THREE.Fog(0x101c2b, 32, 125);
     const hemi = new THREE.HemisphereLight(0xbcd0ec, 0x23262c, 0.12);
     this.scene.add(hemi);
     // Key: warm, high and ~50 deg to the right of the default camera, so the shadow falls visibly across the floor.
@@ -167,11 +167,11 @@ export class EditorView {
     this.scene.add(fill);
     // Soft warm rim from high behind-left separates silhouettes from the dark hall. High enough that its glint on
     // the glossy floor stays out of the usual camera angles; desaturated so it doesn't tint the floor.
-    const rim = new THREE.DirectionalLight(0xffe6cc, 3.2);
+    const rim = new THREE.DirectionalLight(0xffe6cc, 3.8);
     rim.position.set(-16, 26, -24);
     this.scene.add(rim);
     // Cool kicker from behind-right outlines the other silhouette edge against the dark hall.
-    const kicker = new THREE.DirectionalLight(0xc8dcff, 2.2);
+    const kicker = new THREE.DirectionalLight(0xc8dcff, 2.6);
     kicker.position.set(22, 14, -20);
     this.scene.add(kicker);
 
