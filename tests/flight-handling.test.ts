@@ -3,6 +3,7 @@ import { PART_CATALOG } from '../src/data/parts';
 import { STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { DEFAULT_START_UT } from '../src/game/store';
 import { Universe } from '../src/game/universe';
+import { stepWarp, warpRefusal, type WarpContext, type WarpState } from '../src/game/timewarp';
 import { HOLD_DOWN_MAX, PHYSICS_DT, World, type WorldVessel } from '../src/game/world';
 import { bodyToWorld, neutralInput } from '../src/sim/vessel';
 import { qConj, qRotate } from '../src/util/quat';
@@ -103,4 +104,32 @@ describe('runway spawn', () => {
       for (const p of wv.state.parts) if (p.wheel) expect(p.wheel.inContact).toBe(true);
     }, 60000);
   }
+});
+
+describe('time warp refusals', () => {
+  const ctx = (o: Partial<WarpContext> = {}): WarpContext => ({ thrusting: false, inAtmosphere: false, landed: false, altitude: 200_000, bodyRadius: 637_100, atmosphereHeight: 70_000, ...o });
+  const up = (w: WarpState, c: WarpContext) => warpRefusal(w, stepWarp(w, 1, c), c)?.text ?? null;
+
+  it('stays quiet when warp goes up as asked', () => {
+    expect(up({ mode: 'rails', index: 0 }, ctx())).toBeNull();
+    expect(up({ mode: 'rails', index: 3 }, ctx())).toBeNull();
+  });
+  it('explains physics warp and its limit while thrusting or in the atmosphere', () => {
+    expect(up({ mode: 'rails', index: 0 }, ctx({ thrusting: true }))).toMatch(/Physics warp 2×: engines are firing/);
+    expect(up({ mode: 'physics', index: 3 }, ctx({ inAtmosphere: true, altitude: 20_000 }))).toMatch(/maximum \(in the atmosphere\)/);
+  });
+  it('names the altitude the next rails rate needs', () => {
+    // 200 km over a 70 km atmosphere allows 10k× (index 6, 63.7 km clearance); 100k× needs 318.6 km clearance.
+    const w = { mode: 'rails' as const, index: 6 };
+    expect(stepWarp(w, 1, ctx()).index).toBe(6);
+    expect(up(w, ctx())).toBe('Cannot warp to 100k× below 389 km altitude');
+  });
+  it('World.changeWarp posts the reason once, however often the key is pressed', () => {
+    const world = mkWorld();
+    world.launch(craft('stock-meridian'));
+    world.tick(PHYSICS_DT, neutralInput({ throttle: 1, stage: true }));
+    for (let i = 0; i < 5; i++) world.changeWarp(1);
+    expect(world.warp.mode).toBe('physics');
+    expect(world.messages.filter(m => /warp/i.test(m.text)).map(m => m.text)).toEqual(['Physics warp 2×: engines are firing', 'Physics warp is at its 4× maximum (engines are firing)']);
+  });
 });

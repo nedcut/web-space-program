@@ -23,7 +23,7 @@ import { qRotate, type Quat } from '../util/quat';
 import { add, length, scale, sub, type Vec3 } from '../util/vec3';
 import { worldNetwork } from './comms';
 import { advanceTransmissions, evaluateProgression, recoverScience } from './science';
-import { clampWarp, RAILS_WARP, stepWarp, warpRate, type WarpContext, type WarpState } from './timewarp';
+import { clampWarp, RAILS_WARP, stepWarp, warpRate, warpRefusal, type WarpContext, type WarpState } from './timewarp';
 import { Universe } from './universe';
 import * as crew from './world/crew';
 import * as docking from './world/docking';
@@ -243,6 +243,9 @@ export class World {
   }
 
   message(text: string, level: WorldMessage['level'] = 'info', seconds = 4) {
+    // A repeat of a message still on screen (e.g. a held warp key) extends it instead of stacking copies.
+    const same = this.messages.find(m => m.text === text && m.level === level);
+    if (same) { same.expires = Math.max(same.expires, performance.now() + seconds * 1000); return; }
     this.messages.push({ id: ++this.msgId, text, level, expires: performance.now() + seconds * 1000 });
   }
 
@@ -463,10 +466,11 @@ export class World {
   warpContext(): WarpContext { return readouts.warpContext.call(this); }
 
   changeWarp(delta: number) {
-    const next = stepWarp(this.warp, delta, this.warpContext());
-    if (next.mode === 'rails' && next.index > 0 && this.warp.index === 0 && this.warp.mode === 'rails') {
-      // Entering rails warp: refuse if the vessel is spinning fast or accelerating (would lose state).
-    }
+    const ctx = this.warpContext();
+    const next = stepWarp(this.warp, delta, ctx);
+    // Say why a warp-up did not happen (or became physics warp) instead of silently ignoring the key.
+    const why = delta > 0 ? warpRefusal(this.warp, next, ctx) : null;
+    if (why) this.message(why.text, why.level, 2.5);
     this.warp = next;
   }
 
