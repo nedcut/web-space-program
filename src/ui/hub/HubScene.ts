@@ -227,7 +227,7 @@ export class HubScene {
     const dt = Math.min(0.1, frameMs / 1000);
     this.last = now;
     if (!this.photo.active) this.elapsed += dt;
-    this.pipeline.updateAdaptive(frameMs, game.get().settings.adaptiveQuality && !this.photo.active);
+    this.pipeline.updateAdaptive(frameMs, game.get().settings.adaptiveQuality && !this.photo.active, game.get().settings.frameRateCap);
     this.render(dt);
   };
 

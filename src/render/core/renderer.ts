@@ -172,7 +172,8 @@ export class RenderPipeline {
   cpuMs = NaN;
   private frameStart = NaN;
 
-  updateAdaptive(frameMs: number, enabled: boolean): void {
+  updateAdaptive(frameMs: number, enabled: boolean, frameRateCap = 0): void {
+    this.adaptive.frameRateCap = frameRateCap;
     const gpu = this.gpuTimer?.poll();
     if (gpu !== undefined) this.gpuMs = Number.isFinite(this.gpuMs) ? this.gpuMs * 0.9 + gpu * 0.1 : gpu;
     if (this.adaptive.update(frameMs, enabled, gpu, this.cpuMs)) this.setSize(this.width, this.height);

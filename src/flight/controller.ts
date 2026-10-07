@@ -751,7 +751,7 @@ export class FlightController {
         this.sunLight.shadow.map = null;
       }
     }
-    this.pipeline.updateAdaptive(frameMs, settings.adaptiveQuality);
+    this.pipeline.updateAdaptive(frameMs, settings.adaptiveQuality, settings.frameRateCap);
     if (!this.paused && settings.autoSaveInterval > 0) {
       this.autosaveTimer += dt;
       if (this.autosaveTimer >= settings.autoSaveInterval) { this.autosaveTimer = 0; this.quicksave('autosave'); }

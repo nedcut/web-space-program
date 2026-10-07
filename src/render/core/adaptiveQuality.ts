@@ -22,6 +22,8 @@
  */
 export class AdaptiveQuality {
   scale = 1;
+  /** Intentional frame pacing must not be mistaken for GPU overload. */
+  frameRateCap = 0;
   readonly min = 0.5;
   /** Estimated display refresh interval (ms); a slowly relaxing minimum of observed intervals. */
   refreshMs = 1000 / 60;
@@ -132,7 +134,7 @@ export class AdaptiveQuality {
   }
 
   /** Frame-time goal: the display interval, but never chase more than 60 fps on fast displays. */
-  get targetMs(): number { return Math.max(this.refreshMs, 1000 / 60); }
+  get targetMs(): number { return Math.max(this.refreshMs, 1000 / (this.frameRateCap || 60)); }
 
   private resetWindow(): void {
     this.elapsed = 0; this.frames = 0; this.slow = 0; this.gpuSum = 0; this.gpuN = 0; this.cpuSum = 0; this.cpuN = 0; this.windowMin = Infinity;

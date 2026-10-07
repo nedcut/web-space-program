@@ -20,7 +20,7 @@ export function AdvancedGraphicsPanel({ settings }: { settings: Settings }) {
     {select('groundClutter', 'Ground clutter / vegetation', 'More rocks and trees over a larger radius. Costs geometry and draws. Rebuild.', settings.advancedGraphics.groundClutter ?? settings.quality, ['off', ...levels])}
     {select('atmosphereQuality', 'Atmosphere quality', 'More scattering samples smooth the sky and haze. Costs GPU time. Rebuild.', q.earth.atmosphereQuality, levels)}
     {toggle('Atmospheric scattering', 'Sky and aerial haze. Turning off saves shader work. Rebuild.', settings.scatter, v => updateSettings({ scatter: v, graphicsCustom: true }))}
-    {select('cloudQuality', 'Cloud quality', 'Sharper cloud maps and more detail samples. Costs texture memory and GPU time. Rebuild.', q.earth.cloudQuality, ['off', ...levels])}
+    {select('cloudQuality', 'Cloud quality', 'Sharper cloud maps and more detail samples. Costs texture memory and GPU time. Rebuild.', q.clouds ? q.earth.cloudQuality : 'off', ['off', ...levels])}
     {select('textureQuality', 'Earth texture quality', 'Larger baked surface textures improve distant detail; more memory and bake time. Rebuild.', q.earth.textureQuality, levels)}
     {select('oceanQuality', 'Ocean quality', 'More aerial-perspective samples over water. Costs GPU time. Rebuild.', q.earth.oceanQuality, levels)}
     {toggle('Night lights', 'Surface city emission on Earth. Saves night-side shader work when disabled. Rebuild.', q.earth.nightLights, v => set('nightLights', v))}

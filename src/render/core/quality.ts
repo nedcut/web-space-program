@@ -222,7 +222,7 @@ export interface AdvancedGraphics {
 export function resolveQuality(id: QualityId, s: Pick<import('../../game/store').Settings, 'shadows' | 'bloom' | 'clouds' | 'scatter' | 'renderScale' | 'advancedGraphics'>): QualitySettings {
   const p = QUALITY_PRESETS[id], a = s.advancedGraphics;
   const atmosphere = QUALITY_PRESETS[a.atmosphereQuality ?? id];
-  const cloudQuality = a.cloudQuality ?? (s.clouds ? p.earth.cloudQuality : 'off');
+  const cloudQuality = a.cloudQuality ?? p.earth.cloudQuality;
   const texture = QUALITY_PRESETS[a.textureQuality ?? id];
   const clutter = a.groundClutter === 'off' ? QUALITY_PRESETS.low : QUALITY_PRESETS[a.groundClutter ?? id];
   return { ...p,
@@ -239,7 +239,7 @@ export function resolveQuality(id: QualityId, s: Pick<import('../../game/store')
       atmosphereQuality: a.atmosphereQuality ?? p.earth.atmosphereQuality,
       cloudQuality, oceanQuality: a.oceanQuality ?? p.earth.oceanQuality,
       nightLights: a.nightLights ?? p.earth.nightLights },
-    clouds: cloudQuality !== 'off',
+    clouds: a.cloudQuality ? cloudQuality !== 'off' : s.clouds,
     stars: a.starQuality === 'off' ? { count: 0, milkyWay: false } : QUALITY_PRESETS[a.starQuality ?? id].stars,
     particleQuality: a.particleQuality ?? p.particleQuality,
     partDetail: a.partDetail ?? p.partDetail,
