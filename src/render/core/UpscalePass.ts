@@ -85,8 +85,8 @@ export class UpscalePass extends Pass {
       vec3 sharpen(vec3 c, vec3 n, vec3 w, vec3 e, vec3 s, float amount) {
         vec3 mn = min(min(n, w), min(e, s));
         vec3 mx = max(max(n, w), max(e, s));
-        vec3 hitMin = mn / max(4.0 * mx, vec3(1e-4));
-        vec3 hitMax = (1.0 - mx) / min(4.0 * mn - 4.0, vec3(-1e-4));
+        vec3 hitMin = min(mn, c) / max(4.0 * mx, vec3(1e-4));
+        vec3 hitMax = (1.0 - max(mx, c)) / min(4.0 * mn - 4.0, vec3(-1e-4));
         vec3 l3 = max(-hitMin, hitMax);
         float lobe = max(-0.1875, min(max(l3.r, max(l3.g, l3.b)), 0.0)) * amount;
         return (lobe * (n + w + e + s) + c) / (4.0 * lobe + 1.0);
