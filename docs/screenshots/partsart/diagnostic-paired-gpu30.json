@@ -1,0 +1,10 @@
+{
+  "fixture": "Pseudorandomly alternating original and updated 30-part VesselView (seed 91817), same environment/camera/full compositor, 120 warm-up frames",
+  "canvas": [2940, 1840],
+  "draws": { "before": [1026], "after": [1026] },
+  "resolves": { "before": 0, "after": 0 },
+  "before": { "n": 259, "medianMs": 4.881376, "p10Ms": 3.983968, "p90Ms": 5.974944 },
+  "after": { "n": 241, "medianMs": 5.202944, "p10Ms": 4.231648, "p90Ms": 6.392384 },
+  "deltaMs": 0.3215679999999992,
+  "captureNote": "Timer results preserved from driver stdout; subsequent screenshot/context cleanup timed out. Separate image captures use the screenshot driver."
+}

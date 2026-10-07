@@ -1,0 +1,20 @@
+{
+  "fixture": "Pseudorandomly alternating original and updated 30-part VesselView (seed 91817), same environment/camera/full compositor, 120 warm-up frames",
+  "canvas": [
+    2940,
+    1840
+  ],
+  "before": {
+    "n": 259,
+    "medianMs": 5.571424,
+    "p10Ms": 4.671488,
+    "p90Ms": 7.462912
+  },
+  "after": {
+    "n": 241,
+    "medianMs": 6.296576,
+    "p10Ms": 5.493376,
+    "p90Ms": 7.59296
+  },
+  "deltaMs": 0.7251519999999996
+}

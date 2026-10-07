@@ -1,0 +1,29 @@
+{
+  "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "parts": 30,
+  "canvas": [
+    2940,
+    1840
+  ],
+  "gpuMedianMs": 5.746717505938229,
+  "changingHeatGpuMedianMs": 6.47843507151133,
+  "passMedianMs": {
+    "0-RenderPass": 5.074752,
+    "1-UnrealBloomPass": 0.355328,
+    "2-OutputPass": 0.131072,
+    "3-SMAAPass": 0.565248
+  },
+  "vessel": {
+    "vertices": 67613,
+    "triangles": 67380,
+    "draws": 248
+  },
+  "fullFrame": {
+    "calls": 1027,
+    "triangles": 1593511,
+    "points": 9000,
+    "programs": 90,
+    "textures": 93,
+    "geometries": 857
+  }
+}

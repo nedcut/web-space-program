@@ -707,3 +707,11 @@ Added original branched coastal vegetation with wind and fading LOD, warmer deta
 - Tests: `tests/flight-handling.test.ts` (hold-down, pad rest, runway spawn, separation clearance, warp refusals), SAS on every standard stock craft, staging reframe glide, interpolation cases.
 - **Needs your hands:** whether the 1 s hold-down feels right or should release on staging like the genre classic; trim key choice (Alt is also hold-for-fine); plane handling after releasing rudder/roll (the Daybreak yaws back ~0.1 rad/s from weathervaning — realistic, but could be damped harder); camera shake strength at 1.0; the strength of the new decoupler kick.
 
+
+## Rocket part surfaces (2026-10-06, cx/partsart)
+
+- Refined original procedural PBR paint, metal, foam, ablator and crinkled foil; softened oversized seams/wear, corrected nozzle temper UVs and contour, bevelled small RCS/leg hardware, strengthened hangar fill and added a lit planet disc to the low-resolution PMREM. Existing hardware detail and batching remain; no downloaded assets or new runtime dependencies/passes.
+- Fixed invisible part heat after vessel material restoration. A compact shared radiance texture preserves independent skin and burn-history glow through static merging, instancing and stress overlays, without per-part shader variants or draw-time program churn.
+- Captured 28 DPR-2 real RTX 3060 Ti screenshots and critically inspected close-ups: three stock editor crafts, pad/orbit close-ups, engine bell, controlled long-burn glow, actual simulated 1101 K shield heating. Comparisons, reproducible drivers, raw timings and limits: `docs/screenshots/partsart/README.md`.
+- Thirty-part Medium / DPR-2 acceptance: **+0.285 ms median adjacent-pair GPU delta** (240 pairs; budget +0.5 ms), **248 vessel draw groups unchanged**, **zero program re-resolutions**, **+2,400 vertices / +768 triangles**. All-30-parts hot/changing stress also uses the compact lookup; the rejected attribute-streaming experiment and earlier timing variation are recorded in the evidence.
+- Current main merged; lint, typecheck, **99 files / 1,102 tests**, build and whitespace checks pass. Remaining: directional skin glow, accumulated charring/erosion, and reflections of nearby geometry; the current cheap environment is a sky/planet approximation. Screenshots stay out of the runtime bundle.

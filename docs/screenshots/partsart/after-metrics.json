@@ -1,0 +1,98 @@
+{
+  "pad": {
+    "programResolutions": 0,
+    "sampledFrames": 429,
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "medianGpuMs": 5.161302233005844,
+    "stats": {
+      "calls": 876,
+      "triangles": 3234522,
+      "points": 9000,
+      "programs": 91,
+      "textures": 97,
+      "geometries": 889
+    },
+    "parts": 28,
+    "canvas": [
+      2940,
+      1840
+    ]
+  },
+  "orbit": {
+    "programResolutions": 0,
+    "sampledFrames": 389,
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "medianGpuMs": 1.6332687273817788,
+    "stats": {
+      "calls": 457,
+      "triangles": 193657,
+      "points": 9000,
+      "programs": 91,
+      "textures": 97,
+      "geometries": 860
+    },
+    "parts": 28,
+    "canvas": [
+      2940,
+      1840
+    ]
+  },
+  "burn": {
+    "programResolutions": 0,
+    "sampledFrames": 394,
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "medianGpuMs": 1.356316727664504,
+    "stats": {
+      "calls": 285,
+      "triangles": 159809,
+      "points": 9000,
+      "programs": 91,
+      "textures": 97,
+      "geometries": 934
+    },
+    "parts": 28,
+    "canvas": [
+      2940,
+      1840
+    ]
+  },
+  "reentry": {
+    "seconds": 6.639999999999946,
+    "parts": [
+      {
+        "id": "pod-lantern-1",
+        "skin": [
+          308.7752195411993,
+          287.33094637293414,
+          288.00356006215156,
+          288.00356006215156,
+          305.6021135146752,
+          295.7145054003458
+        ]
+      },
+      {
+        "id": "chute-main",
+        "skin": [
+          308.9864485325108,
+          287.34243729676206,
+          404.41800704794116,
+          292.67971835688894,
+          305.78434101337314,
+          292.45203431228225
+        ]
+      },
+      {
+        "id": "shield-1",
+        "skin": [
+          308.97622842887466,
+          287.4567781737378,
+          288.0944328673127,
+          1101.000115466087,
+          305.78678098033566,
+          298.5819167997342
+        ],
+        "ablator": 149.96873319354384
+      }
+    ]
+  }
+}

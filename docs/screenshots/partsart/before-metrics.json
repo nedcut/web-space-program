@@ -1,0 +1,59 @@
+{
+  "pad": {
+    "programResolutions": 0,
+    "sampledFrames": 401,
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "medianGpuMs": 5.258611496098094,
+    "stats": {
+      "calls": 876,
+      "triangles": 3232986,
+      "points": 9000,
+      "programs": 91,
+      "textures": 95,
+      "geometries": 812
+    },
+    "parts": 28,
+    "canvas": [
+      2940,
+      1840
+    ]
+  },
+  "orbit": {
+    "programResolutions": 0,
+    "sampledFrames": 388,
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "medianGpuMs": 1.610636104897345,
+    "stats": {
+      "calls": 457,
+      "triangles": 192121,
+      "points": 9000,
+      "programs": 91,
+      "textures": 95,
+      "geometries": 782
+    },
+    "parts": 28,
+    "canvas": [
+      2940,
+      1840
+    ]
+  },
+  "burn": {
+    "programResolutions": 0,
+    "sampledFrames": 393,
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "medianGpuMs": 1.365054247269251,
+    "stats": {
+      "calls": 285,
+      "triangles": 159041,
+      "points": 9000,
+      "programs": 91,
+      "textures": 95,
+      "geometries": 792
+    },
+    "parts": 28,
+    "canvas": [
+      2940,
+      1840
+    ]
+  }
+}

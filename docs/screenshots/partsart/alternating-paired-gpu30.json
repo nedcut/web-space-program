@@ -1,0 +1,20 @@
+{
+  "fixture": "Alternating original and updated 30-part VesselView every frame, same environment/camera/full compositor, 120 warm-up frames",
+  "canvas": [
+    2940,
+    1840
+  ],
+  "before": {
+    "n": 240,
+    "medianMs": 5.842688,
+    "p10Ms": 4.798464,
+    "p90Ms": 7.703552
+  },
+  "after": {
+    "n": 240,
+    "medianMs": 6.469472,
+    "p10Ms": 5.349312,
+    "p90Ms": 8.25344
+  },
+  "deltaMs": 0.6267839999999998
+}
