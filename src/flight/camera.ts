@@ -93,6 +93,8 @@ export class PivotSmoother {
 /** Ease time constants (s). Short enough to feel direct, long enough to hide mouse/wheel quantisation. */
 const ORBIT_TAU = 0.07;
 const ZOOM_TAU = 0.14;
+/** The automatic reframe when staging shrinks the vessel eases slower than the wheel: a glide, not a snap-zoom. */
+const REFRAME_TAU = 0.6;
 const CHASE_TAU = 0.35;
 const MIN_PITCH = -1.5;
 const MAX_PITCH = 1.5;
@@ -185,10 +187,12 @@ export class FlightCamera {
   private distanceSet = false;
   get targetDistance() { return this.tDist; }
 
-  /** Ease to a new distance (vessel switch, staging, EVA). */
-  zoomTo(d: number) {
+  /** Ease to a new distance (vessel switch, staging, EVA); `tau` = ease time constant, s. */
+  zoomTo(d: number, tau = ZOOM_TAU) {
     this.tDist = Math.max(this.minDistance, Math.min(this.maxDistance, d));
+    this.zoomTau = tau;
   }
+  private zoomTau = ZOOM_TAU;
 
   /** Short decaying camera kick (staging, decoupling). */
   addKick(amount: number) {
@@ -203,7 +207,7 @@ export class FlightCamera {
     const rate = 1.8; // rad/s at full keyboard deflection
     this.tYaw += this.drive.yaw * rate * dt;
     this.tPitch += this.drive.pitch * rate * dt;
-    if (this.drive.zoom) this.tDist *= Math.exp(this.drive.zoom * 1.6 * dt);
+    if (this.drive.zoom) { this.tDist *= Math.exp(this.drive.zoom * 1.6 * dt); this.zoomTau = ZOOM_TAU; }
     if (!this.dragging) {
       this.tYaw += this.yawVel * dt;
       this.tPitch += this.pitchVel * dt;
@@ -270,7 +274,7 @@ export class FlightCamera {
     const ko = ease(dt, ORBIT_TAU);
     this.cYaw += (this.tYaw - this.cYaw) * ko;
     this.cPitch += (this.tPitch - this.cPitch) * ko;
-    this.cDist = Math.exp(Math.log(this.cDist) + (Math.log(this.tDist) - Math.log(this.cDist)) * ease(dt, ZOOM_TAU));
+    this.cDist = Math.exp(Math.log(this.cDist) + (Math.log(this.tDist) - Math.log(this.cDist)) * ease(dt, this.zoomTau));
 
     const yaw = this.cYaw + baseYaw;
     const pitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, this.cPitch + basePitch));
@@ -352,7 +356,7 @@ export class FlightCamera {
     }
     // Same vessel changed size (staging, docking): keep the same apparent size if it was framed closely.
     if (Math.abs(r - this.radius) > this.radius * 0.2) {
-      if (this.tDist < this.radius * 8) this.zoomTo(this.tDist * (r / this.radius));
+      if (this.tDist < this.radius * 8) this.zoomTo(this.tDist * (r / this.radius), REFRAME_TAU);
       this.radius = r;
     }
   }
@@ -400,6 +404,7 @@ export class FlightCamera {
       e.preventDefault();
       const delta = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
       this.tDist = Math.max(this.minDistance, Math.min(this.maxDistance, this.tDist * Math.exp(delta * 0.0012)));
+      this.zoomTau = ZOOM_TAU;
     };
     const ctx = (e: Event) => e.preventDefault();
     el.addEventListener('pointerdown', down);

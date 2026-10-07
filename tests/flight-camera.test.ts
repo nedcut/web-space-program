@@ -60,6 +60,17 @@ describe('flight camera feel', () => {
     expect(cam.distance).toBeCloseTo(before / 2, 0);
   });
 
+  it('glides rather than snaps when staging reframes (no more than 15 % closer in the first 0.1 s)', () => {
+    // Measured in the browser before: 12.5 m → 7.9 m within five frames of a Kestrel staging.
+    const cam = new FlightCamera();
+    cam.update(frame({ radius: 4 }), 1 / 120);
+    const before = cam.distance;
+    for (let i = 0; i < 12; i++) cam.update(frame({ radius: 1.6 }), 1 / 120);
+    expect(cam.distance / before).toBeGreaterThan(0.85);
+    for (let i = 0; i < 360; i++) cam.update(frame({ radius: 1.6 }), 1 / 120);
+    expect(cam.distance / before).toBeCloseTo(0.4, 1);
+  });
+
   it('eases to frame a newly focused vessel', () => {
     const cam = new FlightCamera();
     cam.update(frame({ radius: 10 }), 1 / 60);
