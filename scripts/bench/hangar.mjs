@@ -79,9 +79,10 @@ try {
             const pair = {};
             for (const name of seed & 0x10000 ? ['before', 'after'] : ['after', 'before']) {
               active = name;
-              const v = views[name], renderer = profile === 'shared' ? after.renderer : v.renderer, gl = renderer.getContext();
+              const v = views[name], renderer = v.renderer, gl = renderer.getContext();
               const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
               if (!ext) throw new Error('GPU timer unavailable');
+              if (profile === 'dirty') renderer.shadowMap.needsUpdate = true;
               const q = gl.createQuery();
               gl.beginQuery(ext.TIME_ELAPSED_EXT, q);
               renderer.render(v.scene, v.camera);

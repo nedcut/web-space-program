@@ -72,7 +72,10 @@ export function createPartMesh(def: PartDef): THREE.Object3D {
       if ((o as THREE.Mesh).isMesh) {
         const mesh = o as THREE.Mesh;
         mesh.material = Array.isArray(mesh.material) ? mesh.material.map(studioMaterial) : studioMaterial(mesh.material);
-        o.castShadow = true;
+        // Coplanar printed markings have no independent silhouette. Avoid an alpha-tested
+        // shadow draw for each label; the hull beneath it already casts the same shadow.
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        o.castShadow = !materials.every(m => m.name === 'decal');
         o.receiveShadow = true;
       }
     });
