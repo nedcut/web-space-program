@@ -145,26 +145,41 @@ export function applyCommsSettings(world: import('./world').World) {
 }
 
 // Remember the craft in the editor / on the pad across page reloads (restored by Continue).
+// Drafts are scoped to the program (`saveId`) so loading one program never brings back
+// another program's editor craft. The unscoped key is the pre-program legacy draft.
 const CRAFT_KEY = 'wsp.craft.v1';
+export const LEGACY_PROGRAM_ID = 'legacy-program';
+export const programCraftKey = (programId: string | null) => (programId && programId !== LEGACY_PROGRAM_ID ? `${CRAFT_KEY}.${programId}` : CRAFT_KEY);
 let lastCraft: CraftDef | null = game.get().craft;
 game.subscribe(() => {
   if (game.get().trainingActive || game.get().scenarioActive) return;
-  const craft = game.get().craft;
+  const { craft, saveId } = game.get();
   if (craft === lastCraft) return;
   lastCraft = craft;
   try {
-    if (craft) localStorage.setItem(CRAFT_KEY, JSON.stringify(craft));
-    else localStorage.removeItem(CRAFT_KEY);
+    // An explicit null records "this program's editor is empty" (absent = unknown).
+    localStorage.setItem(programCraftKey(saveId), JSON.stringify(craft));
   } catch {
     /* storage unavailable */
   }
 });
 
-export function loadLastCraft(): CraftDef | null {
+/** Last editor draft recorded for a program: null when its editor was emptied, undefined when unknown. */
+export function loadProgramDraft(programId: string | null = game.get().saveId): CraftDef | null | undefined {
   try {
-    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(CRAFT_KEY) : null;
-    return raw ? (JSON.parse(raw) as CraftDef) : null;
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(programCraftKey(programId)) : null;
+    return raw === null ? undefined : (JSON.parse(raw) as CraftDef | null);
   } catch {
-    return null;
+    return undefined;
   }
+}
+
+export function loadLastCraft(programId: string | null = game.get().saveId): CraftDef | null {
+  return loadProgramDraft(programId) ?? null;
+}
+
+/** Editor craft to restore with a loaded save: the program's latest draft, else the one stored in the slot. */
+export function draftForSave(slot: { programId: string; craft?: CraftDef | null }): CraftDef | null {
+  const draft = loadProgramDraft(slot.programId);
+  return draft !== undefined ? draft : (slot.craft ?? null);
 }

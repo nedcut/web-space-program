@@ -1,5 +1,5 @@
 import { localId } from '../util/localId';
-import { game } from './store';
+import { game, loadLastCraft } from './store';
 import { SLOTS_KEY, listSaveSlots, writeSaveSlot } from './saveSlots';
 import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { newProgression, type GameMode, type Progression } from '../sim/science/progression';
@@ -157,7 +157,9 @@ export function saveWorldToStorage(slot: string, world: World, displayName?: str
   }
   const data = serializeWorld(world), savedAt = Date.now();
   const programId = game.get().saveId ?? 'legacy-program';
-  writeSaveSlot({ id: slot === 'autosave' ? localId() : `${programId}:${slot}`, programId, name: displayName ?? (slot === 'autosave' ? 'Autosave' : slot === 'quicksave' ? 'Quicksave' : slot), kind: slot === 'autosave' ? 'auto' : 'manual', savedAt, data });
+  // The editor draft travels with the program save so Load restores this program's craft.
+  const craft = game.get().trainingActive || game.get().scenarioActive ? loadLastCraft(programId) : game.get().craft;
+  writeSaveSlot({ id: slot === 'autosave' ? localId() : `${programId}:${slot}`, programId, name: displayName ?? (slot === 'autosave' ? 'Autosave' : slot === 'quicksave' ? 'Quicksave' : slot), kind: slot === 'autosave' ? 'auto' : 'manual', savedAt, data, craft });
   localStorage.setItem(KEY_PREFIX + slot, JSON.stringify({ savedAt, data }));
 }
 
