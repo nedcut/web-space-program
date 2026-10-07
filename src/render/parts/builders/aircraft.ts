@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { PartDef, WheelModule } from '../../../sim/vessel/types';
 import { gearLayout } from '../../../data/parts';
 import { M } from '../materials';
-import { box, cyl, cylinder, grp, lathe, mk, rod, setDeployData, sphere, torus, type Profile } from '../geom';
+import { bevelBox, box, cyl, cylinder, detailLevel, grp, lathe, mk, pipe, rod, setDeployData, sphere, torus, type Profile } from '../geom';
 import { boxDims, cylDims, num, srfMount, str } from './common';
 
 /**
@@ -209,12 +209,60 @@ export function buildFuselage(def: PartDef): THREE.Object3D {
 function tyre(radius: number, width: number): THREE.BufferGeometry {
   const ri = radius * 0.6;
   const w = width / 2;
-  const p: Profile = [[ri, -w * 0.9], [radius * 0.9, -w], [radius, -w * 0.45], [radius, w * 0.45], [radius * 0.9, w], [ri, w * 0.9]];
+  // bead, sidewall with a rim-protector rib, rounded shoulder, tread crown
+  const p: Profile = [
+    [ri, -w * 0.88], [radius * 0.68, -w * 0.97], [radius * 0.72, -w * 1.01], [radius * 0.76, -w * 0.98],
+    [radius * 0.9, -w * 0.94], [radius * 0.97, -w * 0.72], [radius, -w * 0.42], [radius, w * 0.42],
+    [radius * 0.97, w * 0.72], [radius * 0.9, w * 0.94], [radius * 0.76, w * 0.98], [radius * 0.72, w * 1.01],
+    [radius * 0.68, w * 0.97], [ri, w * 0.88],
+  ];
   let arc = 0;
   for (let i = 1; i < p.length; i++) arc += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
-  const g = lathe(p, { segments: 40, creaseAngle: PI, tile: arc, uRepeat: Math.max(4, Math.round(radius * 18)) });
+  const g = lathe(p, { segments: 48, creaseAngle: PI, tile: arc, uRepeat: Math.max(4, Math.round(radius * 18)) });
   g.rotateZ(PI / 2); // axle along X
   return g;
+}
+
+/** Split-rim wheel: flanged rim halves, dished web with lightening holes, tie bolts, hub cap and valve stem. */
+function wheelHub(radius: number, tw: number, fine: boolean): { metal: THREE.BufferGeometry[]; dark: THREE.BufferGeometry[]; bolts: THREE.BufferGeometry[] } {
+  const rr = radius * 0.6, w = tw / 2;
+  const rim: Profile = [
+    [rr * 0.2, -w * 0.62], [rr * 0.46, -w * 0.6], [rr * 0.56, -w * 0.78], [rr * 0.94, -w * 0.82], [rr * 1.04, -w * 0.9],
+    [rr * 1.04, -w * 0.82], [rr * 0.98, -w * 0.72], [rr * 0.98, w * 0.72], [rr * 1.04, w * 0.82], [rr * 1.04, w * 0.9],
+    [rr * 0.94, w * 0.82], [rr * 0.56, w * 0.78], [rr * 0.46, w * 0.6], [rr * 0.2, w * 0.62],
+  ];
+  // the lathe runs along Y; turn it so the axle is X
+  const metal = [lathe(rim, { segments: 32, creaseAngle: 0.5 }).rotateZ(PI / 2)];
+  // hub cap
+  metal.push(lathe([[rr * 0.2, w * 0.62], [rr * 0.14, w * 0.74], [0, w * 0.76]], { segments: 16 }).rotateZ(PI / 2));
+  metal.push(lathe([[0, -w * 0.76], [rr * 0.14, -w * 0.74], [rr * 0.2, -w * 0.62]], { segments: 16 }).rotateZ(PI / 2));
+  const dark: THREE.BufferGeometry[] = [];
+  const bolts: THREE.BufferGeometry[] = [];
+  const nH = 6;
+  for (let i = 0; i < nH; i++) {
+    const a = (i / nH) * PI * 2 + PI / nH;
+    // lightening holes on both web faces (dark discs just proud of the web)
+    for (const sx of [-1, 1]) {
+      const hole = new THREE.CircleGeometry(rr * 0.13, 12);
+      hole.rotateY((sx * PI) / 2);
+      hole.translate(sx * (w * 0.79 + 0.002), Math.sin(a) * rr * 0.74, Math.cos(a) * rr * 0.74);
+      dark.push(hole);
+    }
+  }
+  const nB = fine ? 10 : 5;
+  for (let i = 0; i < nB; i++) {
+    const a = (i / nB) * PI * 2;
+    bolts.push(cyl(rr * 0.045, rr * 0.045, tw * 0.9, 6).rotateZ(PI / 2).translate(0, Math.sin(a) * rr * 0.36, Math.cos(a) * rr * 0.36));
+  }
+  if (fine) bolts.push(cyl(rr * 0.025, rr * 0.025, w * 0.5, 6).rotateZ(PI / 2).translate(w * 0.9, rr * 0.9, 0));
+  return { metal, dark, bolts };
+}
+
+/** Torque-link (scissor) pose for an oleo whose link pivots are `d` apart; links have length l. */
+function linkAngles(l: number, d: number): { up: number; low: number } {
+  const half = Math.min(l * 0.98, Math.max(0.01, d / 2));
+  const h = Math.sqrt(Math.max(0, l * l - half * half));
+  return { up: -Math.asin(h / l), low: Math.atan2(-h / l, -half / l) };
 }
 
 export function buildGear(def: PartDef): THREE.Object3D {
@@ -224,6 +272,7 @@ export function buildGear(def: PartDef): THREE.Object3D {
   const steerable = def.meshParams?.steerable === true;
   const L = gearLayout(radius, strut, fold);
   const wheelMod = def.modules.find((m): m is WheelModule => m.type === 'wheel');
+  const fine = detailLevel() === 1;
   const root = grp('gear');
   // Mount bracket on the parent surface (mount face at z = L.mountZ).
   const plate = box(L.width * 0.9, Math.min(L.size.y * 0.5, 0.5), 0.05);
@@ -231,6 +280,12 @@ export function buildGear(def: PartDef): THREE.Object3D {
   const yoke = box(L.width * 0.7, 0.14, L.hinge.z - L.mountZ);
   yoke.translate(0, L.hinge.y, (L.hinge.z + L.mountZ) / 2);
   root.add(mk([plate, yoke], M.gunmetal(), 'mount'));
+  if (fine) {
+    const mb: THREE.BufferGeometry[] = [];
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) mb.push(cyl(0.012, 0.012, 0.012, 6).rotateX(PI / 2).translate(sx * L.width * 0.38, L.hinge.y * 0.5 + sy * Math.min(L.size.y * 0.5, 0.5) * 0.4, L.mountZ + 0.054));
+    mb.push(cyl(0.022, 0.022, L.width * 0.78, 10).rotateZ(PI / 2).translate(0, L.hinge.y, L.hinge.z));
+    root.add(mk(mb, M.chrome(), 'mountBolts'));
+  }
   // Strut: local +Z runs from the hinge to the wheel axle.
   const strutG = grp('gearStrut');
   strutG.position.set(0, L.hinge.y, L.hinge.z);
@@ -238,34 +293,54 @@ export function buildGear(def: PartDef): THREE.Object3D {
   const r0 = Math.max(0.035, radius * 0.16);
   const outer = cyl(r0, r0 * 1.1, strut * 0.55, 14).rotateX(PI / 2).translate(0, 0, strut * 0.275);
   strutG.add(mk([outer, sphere(r0 * 1.2, 12, 8)], M.satinWhite(), 'oleo'));
+  // gland nut at the bottom of the oleo, hydraulic line down its side
+  const fit: THREE.BufferGeometry[] = [cyl(r0 * 1.22, r0 * 1.22, 0.035, 6).rotateX(PI / 2).translate(0, 0, strut * 0.54)];
+  if (fine) fit.push(pipe([[r0 * 0.9, 0.02, 0.02], [r0 * 1.2, 0.01, strut * 0.2], [r0 * 1.2, 0.0, strut * 0.45], [r0 * 1.05, 0, strut * 0.52]], 0.006, 5, 14));
+  strutG.add(mk(fit, M.gunmetal(), 'oleoFittings'));
   // Drag brace for retractable gear.
   if (fold !== 0) strutG.add(mk(rod([0, 0, strut * 0.15], [0, fold * strut * 0.35, strut * 0.05], r0 * 0.4), M.gunmetal()));
   const slide = grp('gearSlide');
   strutG.add(slide);
   const piston = cyl(r0 * 0.7, r0 * 0.7, strut * 0.55, 12).rotateX(PI / 2).translate(0, 0, strut * 0.7);
   slide.add(mk(piston, M.chrome(), 'piston'));
+  // torque links: scissor between the oleo and the axle beam, posed by setGearPose from the compression
+  const zU = strut * 0.48, zL = strut * 0.86, l = (zL - zU) * 0.62;
+  const ang = linkAngles(l, zL - zU);
+  const side = fold === 0 ? 1 : -fold;
+  for (const [name, z, parent, rot] of [['gearLinkU', zU, strutG, ang.up], ['gearLinkL', zL, slide, ang.low]] as const) {
+    const lk = grp(name);
+    lk.position.set(0, 0, z);
+    lk.rotation.x = rot * side;
+    lk.userData.link = { l, d0: zL - zU, side };
+    const arm = box(r0 * 0.5, r0 * 0.45, l).translate(0, 0, l / 2);
+    const lug = cyl(r0 * 0.42, r0 * 0.42, r0 * 1.6, 10).rotateZ(PI / 2);
+    lk.add(mk([arm, lug], M.gunmetal(), 'torqueLink'));
+    parent.add(lk);
+  }
   const steer = grp('gearSteer');
   steer.position.set(0, 0, strut);
   slide.add(steer);
   // Fork: two arms either side of the tyre (single wheel), axle along X.
   const tw = L.tyreWidth;
   const fork = [
-    box(0.04, 0.08, radius * 0.9).translate(tw / 2 + 0.04, 0, -radius * 0.45),
-    box(0.04, 0.08, radius * 0.9).translate(-tw / 2 - 0.04, 0, -radius * 0.45),
-    box(tw + 0.12, 0.08, 0.06).translate(0, 0, -radius * 0.9),
+    bevelBox(0.04, 0.08, radius * 0.9).translate(tw / 2 + 0.04, 0, -radius * 0.45),
+    bevelBox(0.04, 0.08, radius * 0.9).translate(-tw / 2 - 0.04, 0, -radius * 0.45),
+    bevelBox(tw + 0.12, 0.08, 0.06).translate(0, 0, -radius * 0.9),
   ];
+  // brake caliper on the inboard arm (does not spin)
+  const braked = (wheelMod?.brakeTorque ?? 0) > 0;
+  if (braked && fine) fork.push(bevelBox(0.05, radius * 0.32, radius * 0.22).translate(-tw / 2 - 0.005, radius * 0.38, -radius * 0.08));
   steer.add(mk(fork, M.gunmetal(), 'fork'));
   if (steerable) steer.add(mk(torus(r0 * 1.4, 0.015, 6, 20).rotateX(-PI / 2).translate(0, 0, -radius * 0.95), M.accent('yellow')));
   const wheel = grp('gearWheel');
   steer.add(wheel);
   wheel.add(mk(tyre(radius, tw), M.tyre(), 'tyre'));
-  const hub = cylinder(radius * 0.6, radius * 0.6, tw * 0.85, { segments: 24 }).rotateZ(PI / 2);
-  wheel.add(mk(hub, M.aluminium(), 'hub'));
-  // Hub bolts make the spin readable.
-  for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * PI * 2;
-    wheel.add(mk(box(tw * 0.9, 0.04, 0.04).translate(0, Math.sin(a) * radius * 0.35, Math.cos(a) * radius * 0.35), M.darkMetal()));
-  }
+  const hub = wheelHub(radius, tw, fine);
+  wheel.add(mk(hub.metal, M.aluminium(), 'hub'));
+  wheel.add(mk(hub.dark, M.darkMetal(), 'hubWeb'));
+  wheel.add(mk(hub.bolts, M.chrome(), 'tieBolts'));
+  // brake disc between the rim and the inboard fork arm
+  if (braked) wheel.add(mk(cyl(radius * 0.5, radius * 0.5, 0.012, 24).rotateZ(PI / 2).translate(-tw * 0.5 + 0.004, 0, 0), M.steel(), 'brakeDisc'));
   wheel.add(mk(cyl(0.025, 0.025, tw + 0.16, 8).rotateZ(PI / 2), M.chrome(), 'axle'));
   // Deploy: rotate the strut from folded (stowedAngle about X) to straight down (+Z).
   if (fold !== 0) setDeployData(strutG, { rot0: [L.stowedAngle, 0, 0], rot1: [0, 0, 0] });
@@ -279,5 +354,11 @@ export function setGearPose(root: THREE.Object3D, compression: number, steer: nu
     if (o.name === 'gearSlide') o.position.z = -compression;
     else if (o.name === 'gearSteer') o.rotation.set(0, 0, steer);
     else if (o.name === 'gearWheel') o.rotation.set(spin, 0, 0);
+    else if (o.name === 'gearLinkU' || o.name === 'gearLinkL') {
+      const k = o.userData.link as { l: number; d0: number; side: number } | undefined;
+      if (!k) return;
+      const a = linkAngles(k.l, k.d0 - compression);
+      o.rotation.x = (o.name === 'gearLinkU' ? a.up : a.low) * k.side;
+    }
   });
 }
