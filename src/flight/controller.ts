@@ -65,7 +65,7 @@ import { createPlanetLayer, type PlanetLayer } from './planets';
 
 
 const graphicsKeyOf = (s: { quality: string; shadows: boolean; bloom: boolean; renderScale: number }) =>
-  `${s.quality}:${s.shadows}:${s.bloom}:${s.renderScale}`;
+  `${s.quality}:${s.shadows}:${s.bloom}:${s.renderScale}:${JSON.stringify(game.get().settings.advancedGraphics)}`;
 
 /**
  * Owns the flight scene: world simulation, rendering (flight + map), input, camera.
@@ -237,7 +237,7 @@ export class FlightController {
     this.glare = new SunGlare();
     this.scene.add(this.glare.mesh);
     this.scene.add(this.sunLight, this.sunLight.target, this.ambient);
-    this.effects = new FlightFx(quality);
+    this.effects = new FlightFx(getQuality(quality).particleQuality);
     this.scene.add(this.condensation.object);
     this.scene.add(this.effects.root, this.reentry.object, this.flags.root);
     this.sunLight.castShadow = true;
@@ -720,6 +720,8 @@ export class FlightController {
   private graphicsKey = '';
   private frame = (now: number) => {
     this.raf = requestAnimationFrame(this.frame);
+    const cap = game.get().settings.frameRateCap;
+    if (cap && now - this.last < 1000 / cap - .5) return;
     prof.beginFrame(now);
     let t0 = prof.now();
     const frameMs = now - this.last;
@@ -741,7 +743,7 @@ export class FlightController {
       this.graphicsKey = graphicsKey;
       const quality = getQuality(settings.quality);
       this.pipeline.setQuality(quality);
-      this.effects.setQuality(settings.quality);
+      this.effects.setQuality(quality.particleQuality);
       const size = quality.shadowMapSize || 512;
       if (this.sunLight.shadow.mapSize.x !== size) {
         this.sunLight.shadow.mapSize.set(size, size);

@@ -3,7 +3,7 @@ import { isTyping, matches } from '../../input/bindings';
 import * as THREE from 'three';
 import { detachRenderer, noteDfgLut, releaseRenderer } from '../../render/releaseRenderer';
 import { game } from '../../game/store';
-import { QUALITY_PRESETS } from '../../render/core/quality';
+import { getQuality } from '../../render/core/quality';
 import type { PartInstance } from '../../sim/vessel/types';
 import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../../util/quat';
 import { add, sub, v3, type Vec3 } from '../../util/vec3';
@@ -135,7 +135,7 @@ export class EditorView {
     const quality = game.get().settings.quality;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     const dpr = window.devicePixelRatio || 1;
-    this.renderer.setPixelRatio(Math.min(dpr, QUALITY_PRESETS[quality].maxPixelRatio) * game.get().settings.renderScale);
+    this.renderer.setPixelRatio(Math.min(dpr, getQuality(quality).maxPixelRatio) * game.get().settings.renderScale);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -870,6 +870,8 @@ export class EditorView {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     const now = performance.now();
+    const cap = game.get().settings.frameRateCap;
+    if (cap && now - this.last < 1000 / cap - .5) return;
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     const k = 1 - Math.exp(-dt * 12);

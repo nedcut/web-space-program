@@ -132,3 +132,7 @@ label.panel:has(.scale-radio:focus-visible) { outline: 2px solid var(--accent); 
 .save-error-notice strong { color: var(--warn); font-size: 14px; }
 .save-error-notice p { margin: 4px 0 0; font-size: 12.5px; color: var(--text-dim); line-height: 1.45; }
 .save-error-notice > div { flex: 1; }
+
+.graphics-hint { display: block; font-size: 11px; opacity: .7; max-width: 440px; margin-top: 4px; }
+.advanced-graphics summary { cursor: pointer; font-weight: 600; padding: 10px 0; }
+.advanced-graphics select { min-width: 120px; flex-shrink: 0; }

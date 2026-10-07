@@ -30,6 +30,7 @@ const trace = args.trace !== '0';
 const PRESETS = {
   low: { shadows: false, bloom: false, clouds: false, renderScale: 0.5 },
   medium: { shadows: true, bloom: true, clouds: true, renderScale: 1 },
+  ultra: { shadows: true, bloom: true, clouds: true, renderScale: 1 },
   high: { shadows: true, bloom: true, clouds: true, renderScale: 1 },
 };
 const settings = { quality, ...PRESETS[quality], scatter: true, adaptiveQuality: args.adaptive === '1', graphicsProfile: 99, showFps: false, autoSaveInterval: 0, masterVolume: 0, ...(args.settings ? JSON.parse(args.settings) : {}) };

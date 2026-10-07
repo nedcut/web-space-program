@@ -230,7 +230,10 @@ export default function FlightScene() {
   useEffect(() => {
     audioRef.current?.setMasterVolume(settings.masterVolume);
   }, [settings.masterVolume]);
-  const sceneGraphics = JSON.stringify([settings.quality, settings.clouds, settings.scatter]);
+  const a = settings.advancedGraphics;
+  const sceneGraphics = JSON.stringify([settings.quality, settings.clouds, settings.scatter,
+    a.terrainDetail, a.groundClutter, a.atmosphereQuality, a.cloudQuality, a.textureQuality,
+    a.oceanQuality, a.nightLights, a.starQuality, a.partDetail]);
   const quality = useRef(sceneGraphics);
   useEffect(() => {
     if (quality.current === sceneGraphics) return;

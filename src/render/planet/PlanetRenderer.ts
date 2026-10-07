@@ -7,7 +7,7 @@ import type { Terrain } from '../../sim/terrain/api';
 import { SCALE_PRESETS, type ScaleConfig } from '../../sim/bodies/scale';
 import type { Vec3 } from '../../util/vec3';
 import type { Quat } from '../../util/quat';
-import type { QualitySettings } from '../core/quality';
+import { QUALITY_PRESETS, type QualitySettings } from '../core/quality';
 import { screenSpaceFactor } from '../core/camera';
 import { computeAtmosphereParams, buildTransmittanceLUT, type AtmosphereParams } from './atmosphereParams';
 import { createPlanetUniforms, registerPlanetUniforms, unregisterPlanetUniforms, type PlanetUniforms } from './uniforms';
@@ -172,7 +172,7 @@ export class PlanetRenderer {
     if (body.id === 'titan') {
       for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.TITAN_HAZE = 1;
     }
-    if (body.id === 'earth' && this.quality.planetDetails.surfaceEmission) {
+    if (body.id === 'earth' && this.quality.earth.nightLights) {
       for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.EARTH_DETAILS = 1;
     }
     lightSources.set(this, { position: { x: 0, y: 0, z: 0 }, radius: body.radius,
@@ -274,7 +274,7 @@ export class PlanetRenderer {
     this.materials.push(terrainMat);
     let oceanMat: THREE.ShaderMaterial | undefined;
     if (ocean) {
-      oceanMat = createOceanMaterial(this.uniforms, q, [0.35, 0.31, 0.22], terrain?.liquid?.kind === 'hydrocarbon');
+      oceanMat = createOceanMaterial(this.uniforms, { ...q, atmosphere: QUALITY_PRESETS[q.earth.oceanQuality].atmosphere }, [0.35, 0.31, 0.22], terrain?.liquid?.kind === 'hydrocarbon');
       this.materials.push(oceanMat);
     }
     const R = this.body.radius;
@@ -306,7 +306,7 @@ export class PlanetRenderer {
     if (wantClouds && this.atmosphere) {
       const H = this.atmosphere.atmosphereRadius - R;
       this.cloudRadius = R + Math.min(H * 0.08, 6000);
-      this.cloudMap = new CloudMap(q.id === 'high' ? 1536 : q.id === 'medium' ? 1024 : 512, terrain!.heightAt);
+      this.cloudMap = new CloudMap(q.earth.cloudQuality === 'ultra' ? 2048 : q.earth.cloudQuality === 'high' ? 1536 : q.earth.cloudQuality === 'medium' ? 1024 : 512, terrain!.heightAt);
       this.uniforms.uCloudMap.value = this.cloudMap.target.texture;
       const cgeo = new THREE.SphereGeometry(1, 96, 48);
       const cmat = createCloudMaterial(this.uniforms, q, this.cloudRadius);

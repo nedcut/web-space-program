@@ -221,6 +221,8 @@ export class HubScene {
 
   private frame = (now: number) => {
     this.raf = requestAnimationFrame(this.frame);
+    const cap = game.get().settings.frameRateCap;
+    if (cap && now - this.last < 1000 / cap - .5) return;
     const frameMs = now - this.last;
     const dt = Math.min(0.1, frameMs / 1000);
     this.last = now;
