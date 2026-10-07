@@ -68,6 +68,15 @@ describe('part meshes (headless)', () => {
     }
   });
 
+  it.each(PART_DEFS.map((p) => [p.id, p] as const))('%s stays within budget at Low detail and never above High', (_id, def: PartDef) => {
+    const low = triCount(buildPartMesh(def, 'low'));
+    const high = triCount(buildPartMesh(def, 'high'));
+    expect(low).toBeGreaterThan(20);
+    expect(low).toBeLessThanOrEqual(high);
+    // Low halves tessellation and drops fine hardware: keep it well under the High budget
+    expect(low).toBeLessThan(5000);
+  });
+
   it('landing leg foot reaches the simulated contact point when deployed', () => {
     for (const id of ['leg-stilt', 'leg-strider']) {
       const def = PART_DEFS.find((p) => p.id === id)!;
