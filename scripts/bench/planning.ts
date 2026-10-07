@@ -1,3 +1,4 @@
+import { loadEarthData } from '../../src/game/earthLoader';
 /** Browser-only benchmark. Serve with Vite; import /scripts/bench/planning.ts in a blank same-origin page. */
 import { Universe } from '../../src/game/universe';
 import { stateToElements } from '../../src/sim/orbit';
@@ -11,6 +12,7 @@ import type { ScalePresetId } from '../../src/sim/bodies';
 
 const pause = (ms = 0) => new Promise<void>(resolve => setTimeout(resolve, ms));
 export async function benchmarkPlanning(preset: ScalePresetId, operation: 'moon' | 'saturn', worker: boolean) {
+  await loadEarthData();
   const universe = new Universe(preset), b = universe.body('earth');
   const ut = (Date.UTC(2030, 6, 20, 12) - Date.UTC(2000, 0, 1, 12)) / 1000;
   const radius = b.radius + (preset === 'real' ? 220000 : 120000);

@@ -117,6 +117,31 @@ class ContextDouble {
 }
 
 describe('Web Audio lifecycle', () => {
+  it('switches and stops music when cancelAndHoldAtTime is unavailable', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(Param.prototype, 'cancelAndHoldAtTime')!;
+    Object.defineProperty(Param.prototype, 'cancelAndHoldAtTime', { ...descriptor, value: undefined });
+    vi.stubGlobal('AudioContext', ContextDouble);
+    const audio = new GameAudio();
+    try {
+      audio.setMusic('menu');
+      audio.resume();
+      const ctx = ContextDouble.latest;
+      const graphSize = ctx.nodes.length;
+      await Promise.resolve();
+      const outgoing = ctx.nodes.slice(graphSize).filter(node => node.type === 'sine');
+      expect(outgoing.length).toBeGreaterThan(0);
+      const initial = ctx.nodes.length;
+      expect(() => audio.setMusic('spaceCenter')).not.toThrow();
+      expect(outgoing.every(node => node.stopped)).toBe(true);
+      expect(ctx.nodes.length).toBeGreaterThan(initial);
+      expect(() => audio.setMusic('off')).not.toThrow();
+    } finally {
+      audio.dispose();
+      vi.unstubAllGlobals();
+      Object.defineProperty(Param.prototype, 'cancelAndHoldAtTime', descriptor);
+    }
+  });
+
   it('does not create audio before a gesture and retains the requested theme', () => {
     const construct = vi.fn();
     vi.stubGlobal('AudioContext', class extends ContextDouble { constructor() { super(); construct(); } });

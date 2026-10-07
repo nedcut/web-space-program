@@ -1,3 +1,4 @@
+import '../earth-data/register';
 /** Run: npx tsx scripts/bench/run.ts [filter]. Reports median/p95 microseconds per operation. */
 import { performance } from 'node:perf_hooks';
 import { readFileSync } from 'node:fs';

@@ -1,3 +1,4 @@
+import './earth-data/register';
 /** Reproduce numeric balance tables: npx tsx scripts/balance-analysis.ts.
  * Delta-v uses the runtime fuel/staging model, not a sum of isolated engine Isp estimates.
  * The campaign is a scripted successful-mission ledger; flights are verified separately in Vitest.

@@ -1,3 +1,4 @@
+import { installEarthData } from '../../sim/terrain/earthData';
 /// <reference lib="webworker" />
 /**
  * Web Worker: owns one Terrain per body and builds chunk meshes / equirect bakes on request.
@@ -15,6 +16,7 @@ import { bakeEquirect } from './bake';
 const terrains = new Map<string, Terrain>();
 
 type InMsg =
+  | { type: 'earthData'; buffer: ArrayBufferLike }
   | { type: 'init'; key: string; body: BodyDef; minWavelength: number }
   | { type: 'build'; id: number; key: string; params: ChunkBuildParams }
   | { type: 'bake'; id: number; key: string; width: number };
@@ -23,6 +25,7 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 ctx.onmessage = (ev: MessageEvent<InMsg>) => {
   const msg = ev.data;
+  if (msg.type === 'earthData') { installEarthData(msg.buffer); return; }
   if (msg.type === 'init') {
     terrains.set(msg.key, createTerrain(msg.body, { minWavelength: msg.minWavelength }));
     return;

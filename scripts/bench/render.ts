@@ -1,3 +1,4 @@
+import '../earth-data/register';
 /** Headless render CPU/structural benchmark; these are NOT measured GPU draw calls. */
 import * as THREE from 'three';
 import { performance } from 'node:perf_hooks';

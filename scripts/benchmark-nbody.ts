@@ -1,3 +1,4 @@
+import './earth-data/register';
 /** Run with npx tsx scripts/benchmark-nbody.ts. Measures this machine, not a hardware FPS guarantee. */
 import { World } from '../src/game/world';
 import { Universe } from '../src/game/universe';

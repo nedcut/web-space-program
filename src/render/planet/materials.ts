@@ -969,7 +969,7 @@ export function createSkyMaterial(u: PlanetUniforms, q: QualitySettings): THREE.
 
 export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloudRadius: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: { ...defines(q), CLOUD_DETAIL: q.id === 'high' ? 3 : q.id === 'medium' ? 2 : 1 },
+    defines: { ...defines(q), CLOUD_DETAIL: q.earth.cloudQuality === 'ultra' ? 4 : q.earth.cloudQuality === 'high' ? 3 : q.earth.cloudQuality === 'medium' ? 2 : 1 },
     uniforms: {
       ...u,
       uCloudRadius: { value: cloudRadius },

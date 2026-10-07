@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "source": {
+    "title": "NOAA NCEI ETOPO 2022 v1, 60 arc-second ice surface",
+    "url": "https://www.ngdc.noaa.gov/mgg/global/relief/ETOPO2022/data/60s/60s_surface_elev_gtif/ETOPO_2022_v1_60s_N90W180_surface.tif",
+    "sha256": "9d27d4b8ea8e76977e2988bca667d7c8fa68b927355feffcddd6b4875a7fd08e",
+    "license": "CC0-1.0",
+    "doi": "https://doi.org/10.25921/fd45-gt74"
+  },
+  "files": [
+    {
+      "path": "height.i16",
+      "width": 4096,
+      "height": 2048,
+      "bytes": 16777216,
+      "sha256": "e8002be84906b0083f980228bf8c72ae569299a99a40d51e10910401a8110131",
+      "encoding": "int16 little-endian, signed metres above EGM2008 geoid; negative bathymetry",
+      "resampling": "bilinear pixel-centre sampling, rounded to nearest metre"
+    }
+  ],
+  "projection": "equirectangular EPSG:4326 geographic coordinates",
+  "convention": {
+    "rows": "north to south",
+    "columns": "west to east",
+    "pixelCenterLongitudeDegrees": "-180 + (x + 0.5) * 360 / width",
+    "pixelCenterLatitudeDegrees": "90 - (y + 0.5) * 180 / height",
+    "unitVector": "x=cos(lat)*cos(lon), y=cos(lat)*sin(lon), z=sin(lat); angles in radians (sim/terrain/geo.ts latLonToUnit)",
+    "u": "(longitudeDegrees + 180) / 360",
+    "v": "(90 - latitudeDegrees) / 180",
+    "sampling": "wrap longitude; bilinear float64; outer half-row blends to the mean polar row at each pole"
+  },
+  "limits": "Approx. 9.8 km equatorial spacing. Narrow islands, coastlines, summits and trenches are smoothed. Ice surface, not bedrock. Climate/cover classes are approximate geographic rules, not measured land cover. Launch plateau is an explicit gameplay override."
+}

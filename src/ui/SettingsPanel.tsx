@@ -1,9 +1,10 @@
 import type { World } from '../game/world';
 import { openProgram, saveProgram } from '../game/program';
-import { Button, Slider, Toggle, Tabs, Segmented } from './components';
+import { Button, Slider, Toggle, Tabs } from './components';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { updateSettings, useGame, type Settings } from '../game/store';
 import { actionLabel, conflicts, defaultBindings, getBindings, keyChord, saveBindings, subscribeBindings, type Action } from '../input/bindings';
+import { AdvancedGraphicsPanel } from './AdvancedGraphics';
 import { presetSettings } from '../render/core/quality';
 
 const TABS = ['Graphics', 'Audio', 'Controls', 'Gameplay', 'Accessibility'] as const;
@@ -59,11 +60,13 @@ export function SettingsPanel({ onClose, world }: { onClose: () => void; world?:
       <Tabs label="Settings categories" options={TABS} value={tab} panelId="settings-content" className="settings-tabs" onChange={t => { setCapture(null); setTab(t); }} />
       <div role="tabpanel" id="settings-content" aria-label={tab} className="settings-content">
         {tab === 'Graphics' && <>
-          <div className="setting-row"><span>Quality preset</span><Segmented label="Quality preset" options={['low', 'medium', 'high'] as const} value={settings.quality} onChange={q => updateSettings(presetSettings(q))} /></div>
-          {check('shadows', 'Shadows')}{check('bloom', 'Bloom')}{check('clouds', 'Clouds')}{check('scatter', 'Atmospheric scattering')}
-          {check('adaptiveQuality', 'Adaptive render scale')}{range('renderScale', 'Render scale', 0.5, 1.5, 0.05)}{check('showFps', 'Show FPS / draw calls / triangles')}{check('perfOverlay', 'Performance overlay: frame graph, CPU/GPU breakdown (F8)')}
-          <p className="settings-note">Adaptive render scale lowers the 3D resolution (to 50%) when frames run late and restores it when there is headroom. Low suits older integrated GPUs; Medium targets 60 fps on current laptop GPUs.</p>
-          <p className="settings-note">Graphics changes apply immediately in flight. Other scenes use the new settings when you enter them.</p>
+          <label className="setting-row"><span>Quality preset</span><select aria-label="Quality preset" value={settings.graphicsCustom ? 'custom' : settings.quality} onChange={e => { if (e.target.value !== 'custom') updateSettings(presetSettings(e.target.value as Settings['quality'])); }}>
+            {['low', 'medium', 'high', 'ultra'].map(v => <option key={v} value={v}>{v}</option>)}
+            {settings.graphicsCustom && <option value="custom">Custom (based on {settings.quality})</option>}
+          </select></label>
+          <p className="settings-note">Low suits older integrated GPUs; Medium suits current laptops. Ultra is an opt-in for strong desktop GPUs and uses more memory.</p>
+          <AdvancedGraphicsPanel settings={settings} />
+          {check('showFps', 'Show FPS / draw calls / triangles')}{check('perfOverlay', 'Performance overlay: frame graph, CPU/GPU breakdown (F8)')}
         </>}
         {tab === 'Audio' && <>{range('masterVolume', 'Master volume', 0, 1, 0.05)}{range('musicVolume', 'Music volume', 0, 1, 0.05)}{range('sfxVolume', 'Effects volume', 0, 1, 0.05)}{range('uiVolume', 'Interface & alarms volume', 0, 1, 0.05)}</>}
         {tab === 'Controls' && <>

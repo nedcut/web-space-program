@@ -83,6 +83,8 @@ export class TrackingView {
   }
 
   private animate = (now: number) => {
+    const cap = game.get().settings.frameRateCap;
+    if (cap && now - this.last < 1000 / cap - .5) { this.frame = requestAnimationFrame(this.animate); return; }
     const dt = Math.min((now - this.last) / 1000, 0.25);
     this.last = now;
     const world = this.world;

@@ -1,3 +1,5 @@
+import { earthCover } from '../terrain/earthCover';
+import { earthData } from '../terrain/earthData';
 import type { Body } from '../bodies/types';
 import type { Terrain, RGB } from '../terrain/api';
 import { LAUNCH_SITE, latLonToUnit } from '../terrain';
@@ -6,7 +8,7 @@ import { add, cross, dot, normalize, scale, type Vec3 } from '../../util/vec3';
 export type Situation = 'landed' | 'splashed' | 'flyingLow' | 'flyingHigh' | 'spaceLow' | 'spaceHigh';
 export const BIOMES: Record<string, readonly string[]> = {
   ...Object.fromEntries(['vesta', 'pallas', 'hygiea', 'bennu', 'ryugu', 'itokawa', 'eros', 'psyche', 'halley', '67p'].map(id => [id, ['Surface']])),
-  earth: ['Oceans', 'Shores', 'Grasslands', 'Deserts', 'Mountains', 'Ice Caps', 'Launch Complex'],
+  earth: ['Oceans', 'Shores', 'Grasslands', 'Deserts', 'Mountains', 'Ice Caps', 'Launch Complex', 'Forests', 'Rainforests', 'Tundra'],
   moon: ['Highlands', 'Lowland Maria', 'Polar Craters', 'Crater Rims'],
   mars: ['Plains', 'Highlands', 'Canyons', 'Polar Caps', 'Volcanic Rise'],
   titan: ['Hydrocarbon Seas', 'Dunes', 'Highlands'],
@@ -18,6 +20,13 @@ export function biomeAt(body: Body, terrain: Terrain, direction: Vec3): string {
   if (body.kind === 'asteroid' || body.kind === 'comet') return 'Surface';
   if (!body.solidSurface) return 'Atmospheric Bands';
   const d = normalize(direction), lat = Math.abs(Math.asin(d.z));
+  if (body.id === 'earth') {
+    if (Math.acos(Math.min(1, dot(d, latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon)))) * body.radius < 2500) return 'Launch Complex';
+    const sample = { range: 0, coastal: false };
+    earthData().sample(d.x, d.y, d.z, sample);
+    const elevation = terrain.heightAt(d.x, d.y, d.z) * 8800 / body.surface.relief;
+    return earthCover(Math.asin(d.z) * 180 / Math.PI, Math.atan2(d.y, d.x) * 180 / Math.PI, elevation, sample.coastal);
+  }
   const h = terrain.heightAt(d.x, d.y, d.z);
   const relief = Math.max(1, terrain.maxHeight - terrain.minHeight);
   const level = (h - terrain.minHeight) / relief;
@@ -28,15 +37,6 @@ export function biomeAt(body: Body, terrain: Terrain, direction: Vec3): string {
   const slope = Math.hypot(terrain.heightAt(a.x, a.y, a.z) - h, terrain.heightAt(b.x, b.y, b.z) - h) / (body.radius * eps);
   const color: RGB = [0, 0, 0];
   terrain.colorAt?.(d.x, d.y, d.z, h, color);
-  if (body.id === 'earth') {
-    if (Math.acos(Math.min(1, dot(d, latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon)))) * body.radius < 2500) return 'Launch Complex';
-    if (lat > 1.18) return 'Ice Caps';
-    if (h < 0) return 'Oceans';
-    if (h < relief * 0.012) return 'Shores';
-    if (level > 0.68 || slope > 0.24) return 'Mountains';
-    if ((lat > 0.25 && lat < 0.65) || (color[0] > color[1] * 1.25 && color[0] > 0.15)) return 'Deserts';
-    return 'Grasslands';
-  }
   if (body.id === 'moon') {
     if (lat > 1.15) return 'Polar Craters';
     if (slope > 0.13) return 'Crater Rims';

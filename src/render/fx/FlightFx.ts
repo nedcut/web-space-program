@@ -10,7 +10,7 @@ export function isBurstEvent(event: VesselEvent): event is BurstEvent {
   return event.type === 'partDestroyed' || event.type === 'decouple' || event.type === 'structuralFailure';
 }
 
-export const FX_BUDGET = { low: { count: 128, rate: 12 }, medium: { count: 512, rate: 40 }, high: { count: 1024, rate: 80 } } as const;
+export const FX_BUDGET = { low: { count: 128, rate: 12 }, medium: { count: 512, rate: 40 }, high: { count: 1024, rate: 80 }, ultra: { count: 2048, rate: 120 } } as const;
 const smoke = new THREE.Color(.38,.36,.32), steam = new THREE.Color(.8,.82,.85), fire = new THREE.Color(8,2,.15);
 const blue = new THREE.Color(.3,.45,1), warm = new THREE.Color(1,.36,.08);
 const spark = new THREE.Color(10,4,.6), dust = new THREE.Color();

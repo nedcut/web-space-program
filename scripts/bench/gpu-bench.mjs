@@ -19,6 +19,7 @@ const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) =>
 const base = args.base ?? 'http://localhost:5315';
 const label = args.label ?? 'run';
 const seconds = +(args.seconds ?? 10);
+const settleMs = +(args.settle ?? 3000);
 const dpr = +(args.dpr ?? 2);
 const throttle = +(args.throttle ?? 1);
 const quality = args.quality ?? 'medium';
@@ -30,6 +31,7 @@ const trace = args.trace !== '0';
 const PRESETS = {
   low: { shadows: false, bloom: false, clouds: false, renderScale: 0.5 },
   medium: { shadows: true, bloom: true, clouds: true, renderScale: 1 },
+  ultra: { shadows: true, bloom: true, clouds: true, renderScale: 1 },
   high: { shadows: true, bloom: true, clouds: true, renderScale: 1 },
 };
 const settings = { quality, ...PRESETS[quality], scatter: true, adaptiveQuality: args.adaptive === '1', graphicsProfile: 99, showFps: false, autoSaveInterval: 0, masterVolume: 0, ...(args.settings ? JSON.parse(args.settings) : {}) };
@@ -197,7 +199,7 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
       dur, frames: B.raf.t.slice(1), commits: B.commits - B.commits0, fibers: B.fibers - B.fibers0, workers: w,
       longTasks: lt.length, longTaskMs: lt.reduce((a, x) => a + x[1], 0), longTaskMax: lt.reduce((a, x) => Math.max(a, x[1]), 0),
       prof: s && { cpuAvg: s.cpuMs.avg, cpuP95: s.cpuMs.p95, sections: s.sections },
-      gl: p ? { calls: p.stats.calls, tris: p.stats.triangles, programs: info.programs?.length ?? 0, geometries: info.memory.geometries, textures: info.memory.textures, canvas: `${p.renderer.domElement.width}x${p.renderer.domElement.height}`, scale: p.effectiveRenderScale, gpuMs: p.gpuMs } : null,
+      gl: p ? { calls: p.stats.calls, tris: p.stats.triangles, programs: info.programs?.length ?? 0, geometries: info.memory.geometries, textures: info.memory.textures, canvas: `${p.renderer.domElement.width}x${p.renderer.domElement.height}`, scale: p.effectiveRenderScale, gpuMs: p.gpuMs, gpuName: p.gpuName, glError: p.renderer.getContext().getError() } : null,
       heapLimitMB: performance.memory ? performance.memory.jsHeapSizeLimit / 1e6 : null,
     };
   });
@@ -290,7 +292,7 @@ if (cases.includes('menu')) {
   try { await page.goto(base); await page.waitForSelector('.menu-actions button', { state: 'visible' }); await page.waitForTimeout(4000); await measure(page, cdp, 'menu'); }
   catch (e) { log(`!! menu failed: ${e.message}`); } finally { await context.close(); }
 }
-if (cases.includes('pad')) await flightCase('pad', '/?flight=stock-kestrel');
+if (cases.includes('pad')) await flightCase('pad', '/?flight=stock-kestrel', undefined, settleMs);
 if (cases.includes('ascent')) {
   // Meridian off the pad at full throttle with physics warp 4×: measured through the dense lower atmosphere (max-Q).
   await flightCase('ascent', '/?flight=stock-meridian', async (page) => {
@@ -300,7 +302,7 @@ if (cases.includes('ascent')) {
   }, 1500);
   // Keep the measurement inside the ascent: at 4× the dense atmosphere passes in roughly 10–20 s.
 }
-if (cases.includes('orbit')) await flightCase('orbit', '/?flight=stock-kestrel&scenario=orbit');
+if (cases.includes('orbit')) await flightCase('orbit', '/?flight=stock-kestrel&scenario=orbit', undefined, settleMs);
 if (cases.includes('warp1k')) await flightCase('warp1k', '/?flight=stock-kestrel&scenario=highorbit', async (page) => { await page.evaluate(() => { window.__flight.world.warp = { mode: 'rails', index: 5 }; }); });
 if (cases.includes('warp100k')) await flightCase('warp100k', '/?flight=stock-kestrel&scenario=highorbit', async (page) => { await page.evaluate(() => { window.__flight.world.warp = { mode: 'rails', index: 7 }; }); });
 if (cases.includes('map')) await flightCase('map', '/?flight=stock-kestrel&scenario=orbit', async (page) => { await page.evaluate(() => window.__flight.toggleMap()); });

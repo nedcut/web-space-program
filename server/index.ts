@@ -1,3 +1,4 @@
+import '../scripts/earth-data/register';
 import { createLanServer } from './server';
 
 const port = Number(process.env.PORT ?? 8787);
