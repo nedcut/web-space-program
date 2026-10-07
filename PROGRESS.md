@@ -729,3 +729,13 @@ Added original branched coastal vegetation with wind and fading LOD, warmer deta
 - Hangar lighting now shows form: stronger key, less fill, stronger rim, plus a new cool kicker.
 - Real RTX 3060 Ti at DPR 2: 14 before/after shots plus side-by-side crops in `docs/screenshots/partsart2/` (see its README). 30-part paired GPU delta is **+0.19 to +0.30 ms** (budget +1.0), with 1,043 → 1,057 draws, 0 program re-resolutions and 91 programs unchanged. Selene goes from 67.7k to 83.3k triangles; every part stays within the 8.5k-triangle part budget, and the new fine geometry is High-detail only.
 - Left: soot is not tied to the actual engine position or burn history; there is no AO between neighbouring parts; pods, legs and panels only gained AO and lighting.
+
+## QA bugfixes, pass 5 (2026-10-07, op/bugfix5)
+
+- **Load restores the right craft:** each program now keeps its own editor draft. Loading program A brings back A's craft (or an empty editor), never the one you were building in program B. Saves and exported save files carry their draft.
+- **Controls overlay:** while it is open, throttle, staging and steering do nothing. Opened from the Pause menu, it keeps the game paused and closes back to the Pause menu.
+- **Alt+L (staging lock)** no longer nudges the craft sideways with RCS. Trim chords (Alt + W/S/A/D/Q/E, Alt+X) only trim.
+- **Editor toolbar fits small windows:** Launch and Exit stay visible down to 760 px wide. File, sharing and centre-of-mass/thrust/lift tools move into a "⋯" menu below 1200 px. Screenshots are in `docs/screenshots/bugfix5/` (`*-before.png` shows the old overflow).
+- **Full storage no longer crashes the game:** leaving the Tracking Station (Back/Fly), autosaves, hub saves, settings and editor saves now keep going and show "Couldn't save — storage is full" with a hint.
+- Tests: `tests/program-draft.test.ts`, `tests/flight-modals.test.ts`, the Alt-chord case in `tests/input.test.ts`, `tests/editor-toolbar.test.ts` and `tests/storage-full.test.ts`. Browser checks: `node scripts/bugfix5-browser.mjs toolbar|draft|controls|quota` (Vite on port 5321).
+- **Needs your hands:** whether the Controls overlay should also pause the simulation when opened in flight (it currently only blocks input).
