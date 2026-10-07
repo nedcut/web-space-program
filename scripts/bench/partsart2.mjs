@@ -90,8 +90,9 @@ try {
       w.active.state.angularVelocity = { x: 0, y: 0, z: 0 };
       w.renderHistory.invalidate();
       f.paused = true;
-      // Camera: above and sunward of the craft, looking down past it at the lit planet.
-      const camDir = radial.clone().multiplyScalar(0.5).addScaledVector(sunH, 0.75).addScaledVector(axis, 0.25).normalize();
+      // Camera: above the craft, looking down past it at the lit planet.
+      // Mostly overhead, so the lit planet fills the frame; the sun rakes across the hull at ~70 degrees.
+      const camDir = radial.clone().multiplyScalar(0.94).addScaledVector(sunH, -0.342).addScaledVector(axis, 0.12).normalize();
       f.cam.update = () => {};
       const cam = f.cam.camera;
       cam.up.copy(axis);
