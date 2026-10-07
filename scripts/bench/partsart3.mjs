@@ -28,6 +28,7 @@ const PREVIEW = [
   ['legs-stowed', 'leg-strider,leg-stilt', 0.5, 0],
   ['legs-mid', 'leg-strider', 1.2, 0.5],
   ['solar', 'solar-fold,solar-wing,solar-grand-1,solar-patch', 0.35, 1],
+  ['solar-back', 'solar-wing,solar-patch', 3.6, 1],
   ['couplers', 'dec-2,sep-1,dec-radial,dock-1', 0.7, 1],
   ['aero', 'wing-swept,fin-pivot,ctrl-elevon,wing-delta', 0.8, 1],
   ['gear', 'gear-trundle,gear-bogie,rover-wheel-1,gear-skid', 1.1, 1],

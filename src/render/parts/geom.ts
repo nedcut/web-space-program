@@ -245,6 +245,19 @@ export function around(geo: THREE.BufferGeometry, n: number, r: number, phase = 
   return out;
 }
 
+/**
+ * Bake a constant vertex colour (multiplied by the material colour and later by AO). Lets one shared material
+ * show darker hardware (truss, grime, seals) without another draw. Every input of a later `merge` must be
+ * tinted (use 1 for unchanged), otherwise the colour attribute is dropped.
+ */
+export function tint(g: THREE.BufferGeometry, r: number, gg = r, b = r): THREE.BufferGeometry {
+  const n = g.getAttribute('position').count;
+  const c = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { c[i * 3] = r; c[i * 3 + 1] = gg; c[i * 3 + 2] = b; }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
+  return g;
+}
+
 /** Merge geometries (normalising attributes and indexing). */
 export function merge(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const anyNonIndexed = geos.some((g) => !g.index);
