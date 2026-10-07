@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { PartDef } from '../../../sim/vessel/types';
 import { M } from '../materials';
-import { around, box, cyl, cylinder, grp, lathe, merge, mk, pipe, rod, sphere, torus, type Profile } from '../geom';
+import { around, box, cyl, cylinder, detailLevel, grp, lathe, merge, mk, pipe, rod, sphere, torus, type Profile } from '../geom';
 import { boxDims, cylDims, num, srfMount, str } from './common';
 import { decals } from '../decals';
 import { Markings } from './markings';
@@ -146,9 +146,10 @@ export function buildTank(def: PartDef): THREE.Object3D {
   const bs = 0.009 + 0.005 * r;
   root.add(mk([...boltRing(r * 1.006, h / 2 - band * 0.3, nb, bs), ...boltRing(r * 1.006, -h / 2 + band * 0.3, nb, bs)], M.chrome(), 'bolts'));
 
-  // raised weld lands (white/charcoal) or external hat stringers (charcoal intertank look)
+  // raised weld lands (white/charcoal) or external hat stringers (charcoal intertank look); High detail only
+  const fine = detailLevel() === 1;
   const paintDetail: THREE.BufferGeometry[] = [];
-  if (!orange && finish !== 'steel') {
+  if (fine && !orange && finish !== 'steel') {
     const lands = Math.floor(bodyLen / 1.3);
     for (let i = 1; i <= lands; i++) {
       const y = yBody0 + (bodyLen * i) / (lands + 1);
@@ -156,13 +157,13 @@ export function buildTank(def: PartDef): THREE.Object3D {
       paintDetail.push(lathe([[rb, y - w], [rb + 0.0045, y - w + 0.005], [rb + 0.0045, y + w - 0.005], [rb, y + w]], { segments: seg, tile }));
     }
   }
-  if (finish === 'charcoal') {
+  if (fine && finish === 'charcoal') {
     const n = Math.max(12, Math.round((2 * PI * r) / 0.17));
     const s = box(0.04, bodyLen - 0.02, 0.022, 0.5);
     s.translate(0, 0, rb + 0.008);
     paintDetail.push(...around(s, n, 0, PI / n));
   }
-  if (orange && h / r > 4) {
+  if (fine && orange && h / r > 4) {
     // ribbed intertank band: foam-sprayed hat stringers between two bare-metal flange rings
     const yc = yBody0 + bodyLen * 0.77;
     const hb = Math.min(0.32 + 0.12 * r, bodyLen * 0.12);
@@ -186,7 +187,7 @@ export function buildTank(def: PartDef): THREE.Object3D {
   t0.translate(0, 0, rb + rwD / 2 - 0.003);
   tray.push(t0);
   const straps: THREE.BufferGeometry[] = [];
-  const nStraps = Math.max(2, Math.round(rwLen / 0.45));
+  const nStraps = fine ? Math.max(2, Math.round(rwLen / 0.45)) : 0;
   for (let i = 0; i < nStraps; i++) {
     const y = -rwLen / 2 + (rwLen * (i + 0.5)) / nStraps;
     const st = box(rwW * 1.22, 0.028, rwD + 0.012);
@@ -210,7 +211,7 @@ export function buildTank(def: PartDef): THREE.Object3D {
   }
   for (const g of [...tray, ...straps, line, ...clamps]) g.rotateY(phiRw);
   root.add(mk(tray, finish === 'charcoal' ? M.aluminium() : M.gunmetal(), 'raceway'));
-  root.add(mk([...straps, ...clamps], finish === 'charcoal' ? M.gunmetal() : M.aluminium(), 'clamps'));
+  if (nStraps) root.add(mk([...straps, ...clamps], finish === 'charcoal' ? M.gunmetal() : M.aluminium(), 'clamps'));
   root.add(mk(line, orange ? M.orangeFoam() : M.aluminium(), 'pressLine'));
 
   if (white) {
@@ -298,13 +299,13 @@ export function buildAdapter(def: PartDef): THREE.Object3D {
   const prof: Profile = [];
   for (let i = 0; i <= n; i++) prof.push([(rBot + ((rTop - rBot) * i) / n) * 0.995, y0 + ((y1 - y0) * i) / n]);
   root.add(mk(weather(lathe(prof, { segments: seg, tile: 0.8 }), y0, y1, { soot: 0.2, reach: 0.5, streaks: 0.08, seed: 5 }), M.charcoalPanel(), 'body'));
-  // external hat stringers along the slant
-  const nS = Math.max(12, Math.round((2 * PI * Math.max(rTop, rBot)) / 0.16));
+  // external hat stringers along the slant (High detail only)
+  const nS = detailLevel() < 1 ? 0 : Math.max(12, Math.round((2 * PI * Math.max(rTop, rBot)) / 0.16));
   const slant = Math.atan2(rBot - rTop, y1 - y0);
   const len = (y1 - y0) / Math.cos(slant) - 0.02;
   const st = box(0.036, len, 0.02, 0.5).rotateX(-slant);
   st.translate(0, 0, (rTop + rBot) / 2 * 0.995 + 0.007);
-  root.add(mk(around(st, nS, 0, PI / nS), M.charcoalPanel(), 'stringers'));
+  if (nS) root.add(mk(around(st, nS, 0, PI / nS), M.charcoalPanel(), 'stringers'));
   root.add(
     mk(
       [
