@@ -49,9 +49,11 @@ export class UpscalePass extends Pass {
     vertexShader: /* glsl */ `
       void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }`,
     fragmentShader: /* glsl */ `
-      precision highp float;
-      uniform sampler2D tInput;
-      uniform vec2 uScale;
+      // Colour/weight math in mediump (fp16 on Apple and mobile GPUs: twice the ALU rate); coordinates stay highp.
+      precision mediump float;
+      precision highp int;
+      uniform highp sampler2D tInput;
+      uniform highp vec2 uScale;
       uniform float uSharpness;
       uniform float uFlat;
       out vec4 outColor;
@@ -63,9 +65,9 @@ export class UpscalePass extends Pass {
       // One footprint corner's edge vote: centre C, horizontal neighbours W/E, vertical N/S, bilinear weight w.
       void edgeVote(float w, float n, float wl, float c, float e, float s, inout vec2 dir, inout float len) {
         float dx = e - wl;
-        float lx = clamp(abs(dx) / max(max(abs(e - c), abs(c - wl)), 1e-5), 0.0, 1.0);
+        float lx = clamp(abs(dx) / max(max(abs(e - c), abs(c - wl)), 1e-4), 0.0, 1.0);
         float dy = s - n;
-        float ly = clamp(abs(dy) / max(max(abs(s - c), abs(c - n)), 1e-5), 0.0, 1.0);
+        float ly = clamp(abs(dy) / max(max(abs(s - c), abs(c - n)), 1e-4), 0.0, 1.0);
         dir += vec2(dx, dy) * w;
         len += (lx * lx + ly * ly) * w;
       }
@@ -94,8 +96,8 @@ export class UpscalePass extends Pass {
 
       void main() {
         gMax = textureSize(tInput, 0) - 1;
-        vec2 pp = gl_FragCoord.xy * uScale - 0.5;
-        vec2 fp = floor(pp);
+        highp vec2 pp = gl_FragCoord.xy * uScale - 0.5;
+        highp vec2 fp = floor(pp);
         vec2 t = pp - fp;
         ivec2 p = ivec2(fp);
         vec3 f = tap(p), g = tap(p + ivec2(1, 0)), j = tap(p + ivec2(0, 1)), k = tap(p + ivec2(1, 1));
@@ -120,7 +122,7 @@ export class UpscalePass extends Pass {
         edgeVote(bw.w, lg, lj, lk, ll, lo, dir, len);
 
         float d2 = dot(dir, dir);
-        dir = d2 < 1.0 / 32768.0 ? vec2(1.0, 0.0) : dir * inversesqrt(d2);
+        dir = d2 < 1e-4 ? vec2(1.0, 0.0) : dir * inversesqrt(d2);
         len *= 0.5; len *= len;
         float stretch = 1.0 / max(abs(dir.x), abs(dir.y));
         vec2 len2 = vec2(1.0 + (stretch - 1.0) * len, 1.0 - 0.5 * len);
@@ -142,7 +144,7 @@ export class UpscalePass extends Pass {
         kernel(o, vec2(1.0, 2.0) - t, dir, len2, lob, clp, acc, wsum);
         vec3 lo4 = min(min(f, g), min(j, k));
         vec3 hi4 = max(max(f, g), max(j, k));
-        vec3 col = clamp(acc / max(wsum, 1e-5), lo4, hi4);
+        vec3 col = clamp(acc / max(wsum, 1e-4), lo4, hi4);
 
         if (uSharpness > 0.0) {
           vec3 fs = sharpen(f, b, e, g, j, uSharpness);
