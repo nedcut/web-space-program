@@ -894,3 +894,11 @@ Final main merge was already up to date at `7bd6e4f9`; post-merge lint, TypeScri
   - Screenshots: `docs/screenshots/firefox/`. How to run it: `docs/BROWSERS.md`.
 - **Not verified:** real Safari on a Mac, and Firefox on macOS (it uses Apple's OpenGL driver rather than ANGLE). WebKit on Linux is only a proxy.
 - **Post-merge verification:** merged main (graphics settings/Ultra preset). Shadow maps are now also capped to the context limit; the Ultra preset's 4096-px planet bake remains a caveat on 2048-limited contexts. `npm run lint`, `npx tsc --noEmit` and `npm run build` pass, and the full vitest run passes (**111 files / 1,333 tests**). Re-tested the production build after the merge: the full real Windows Firefox 143 flow, and Playwright Firefox, WebKit and Firefox with resistFingerprinting at Medium, all with no errors.
+
+## Owner play-test fixes (2026-10-07)
+Fixes from the owner's first short career play-through on a MacBook (Medium):
+- **Steering/SAS dead until toggling gimbal lock:** assists could hand back control while still in rails time warp (which ignores input). Every assist ending now returns to 1× with SAS holding; steering or throttling a live engine drops warp; HUD switches no longer swallow flight keys.
+- **Burn-stop lag:** running liquid engines throttled down with their start-up spool time (thrust lingered ~4.6 s); they now respond in ~0.1 s. Pilot throttle cancels an assist. The map's current orbit is recomputed every frame during burns (later patched-conic branches hidden while burning, back within a frame of the cut).
+- **Transfer planning / Execute node:** departure-window search from the actual orbit (plane changes, return from inclined lunar orbits, interplanetary from the real parking plane), with selectable options; matrix 104/135 → 135/135. The node assist stages, leads the burn by half its duration and lands within ±0.5 m/s of the plan.
+- **First load of a new career:** the Space Center stays hidden until Earth's surface is ready and fades in once (no black → white ground → pop-in sequence).
+- **Looks on Medium:** smooth beach colour (no stair-step coast blocks), crisp imagery coastlines, 8k Earth imagery on Medium, no per-vertex speckle on the Moon/Mars, no z-fighting in the flame trench. Medium GPU cost measured at parity with main.
