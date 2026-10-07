@@ -13,5 +13,8 @@
     "server/**/*.ts",
     "tests/**/*.ts",
     "scripts/**/*.{ts,mjs}"
+  ],
+  "ignoreDependencies": [
+    "puppeteer-core"
   ]
 }

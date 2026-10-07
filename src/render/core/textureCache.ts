@@ -82,9 +82,29 @@ export function takeCachedTextures(id: string): CachedTexture[] | null {
   });
 }
 
+let readbackOk: boolean | undefined;
+/**
+ * Privacy modes (Firefox resistFingerprinting, some extensions) blank or randomise canvas read-back. Caching
+ * that output would replace good textures with blank ones on every later visit, so check once with a known colour.
+ */
+function canvasReadbackTrusted(): boolean {
+  if (readbackOk !== undefined) return readbackOk;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 2;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+    ctx.fillStyle = 'rgb(17, 102, 203)';
+    ctx.fillRect(0, 0, 2, 2);
+    const d = ctx.getImageData(0, 0, 2, 2).data;
+    readbackOk = true;
+    for (let i = 0; i < d.length; i += 4) if (d[i] !== 17 || d[i + 1] !== 102 || d[i + 2] !== 203 || d[i + 3] !== 255) readbackOk = false;
+  } catch { readbackOk = false; }
+  return readbackOk;
+}
+
 /** Store freshly generated canvases in the background and drop older versions of the same group. */
 export function persistTextures(group: string, id: string, entries: CachedTexture[]): void {
-  if (disabled || typeof indexedDB === 'undefined') return;
+  if (disabled || typeof indexedDB === 'undefined' || !canvasReadbackTrusted()) return;
   const run = async () => {
     try {
       const blobs = await Promise.all(entries.map((e) => new Promise<Blob | null>((resolve) => e.canvas.toBlob(resolve, 'image/png'))));
