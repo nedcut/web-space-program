@@ -879,3 +879,46 @@ Cold constructor times were **394–405 → 398–410 ms**; maximum cold main-th
 Before/after DPR-2 images and critical review: [ground-art screenshots](screenshots/groundart/README.md). Six views cover chase pad, Space Center, 2 km coastal land, sunset, Earth night orbit and lunar surface. The standalone preview initially exposed an incomplete comparison sampler; an explicit 1×1 depth fallback fixed it. Accepted views returned WebGL error 0. Main was merged; lint, typecheck, **98 files / 1,099 tests**, and production build passed.
 
 Remaining visual limitations: the coastal height field/hydrology is unchanged; no geographic wetland reconstruction or new distant settlement meshes. Crowns retain a faceted silhouette. The single wide shadow map softens nearby fine shadows compared with a true cascade. Night work lighting is a bounded material wash, not local shadow-casting lights. Existing warm aerial perspective is retained; no extra volumetric fog pass. The city mask is fictional, coast/latitude weighted, and intentionally subtle.
+
+## Adjustable graphics / Ultra — 2026-10-07 (`cx/gfxsettings`)
+
+Ultra is opt-in; first-run GPU tiering still selects Low for weak/integrated hardware or Medium otherwise.
+Graphics profile 2 preserves existing profile-1 settings instead of resetting manual choices. Advanced changes
+persist under the existing settings key. Custom retains its base preset and stores only overrides.
+
+| Preset | Max DPR × scale | AA | Sun shadow | Terrain error / spacing | Sky / aerial samples | Baked width | Stars | Particle pool |
+|---|---|---|---|---|---|---|---|---|
+| Low | 1 × 0.5 | FXAA | off | 6 px / 6 m | 8 / 3 | 512 | 4,000 | 128 |
+| Medium | 2 × 1 | SMAA | 1024² | 3.5 px / 3 m | 16 / 6 | 1024 | 9,000 | 512 |
+| High | 2 × 1 | MSAA 4× + SMAA | 2048² | 2 px / 1.5 m | 24 / 8 | 2048 | 16,000 | 1024 |
+| Ultra | 2 × 1 | MSAA 4× + SMAA | 4096² | 1 px / 0.75 m | 32 / 12 | 4096 | 24,000 | 2048 |
+
+Ultra also increases chunk resolution to 48, scatter radius to 1536 m, cloud cube faces to 2048²,
+and resolved planet-effect sample budgets. Part detail stays High. Earth exposes the exact shared
+texture/atmosphere/cloud/ocean/night-light grades; each preset uses its own grade, with night lights enabled.
+Low retains its legacy clouds-off default (its Earth cloud resource grade is Low); selecting Low cloud quality
+explicitly enables the low-resolution shell. Ocean quality independently selects its aerial sample budget.
+This branch wires existing effects and does not build the realistic Earth artwork.
+
+Advanced controls: render scale 50–150%, Retina limit 1/1.5/2/3, AA off/FXAA/SMAA/MSAA+SMAA,
+shadows off/Low/Medium/High/Ultra, terrain detail, ground clutter/vegetation (including off), atmosphere,
+clouds (including off), Earth texture, ocean, night lights, bloom, stars/Milky Way (including off), particles,
+part detail, 30/60/120/unlimited frame cap, and adaptive resolution. Rows include visible cost explanations
+and title tooltips. Resolution/AA/shadows/bloom/particles are live in flight; resource/geometry changes rebuild
+single-player flight from a snapshot without a page reload. Multiplayer defers structural changes until re-entry.
+Other scenes use new graphics resources on entry. Frame caps pace flight, hub, editor and tracking, and adaptation
+uses the selected cap rather than treating intentional 30 fps pacing as overload. Unlimited retains the existing
+60 fps adaptive-resolution target; turning adaptation off allows full display-rate rendering.
+
+Screenshots and viewport checks: [1024×768](screenshots/gfxsettings/settings-1024x768.png),
+[800×768](screenshots/gfxsettings/settings-800x768.png),
+[lower controls](screenshots/gfxsettings/settings-800x768-lower.png). Both menus fit within the viewport,
+scroll independently of the header, and have no horizontal overflow or clipped selects.
+
+Hardware integration: Windows Chrome over CDP 9333, hardware ANGLE/D3D11 RTX 3060 Ti.
+[Advanced-control checks](performance/gfxsettings/live-controls.json) passed 15 changes;
+[pipeline checks](performance/gfxsettings/pipeline-controls.json) passed scale, bloom, scattering and adaptive on/off.
+Both also exercised all four frame caps, with no browser/GL errors. Observed frame rates can be below a cap;
+this verifies an upper limit, not the ability to achieve 120 fps on this hardware/display.
+Run `scripts/bench/gfxsettings-check.mjs` beside Windows `playwright-core` against the dev server for these
+source-module integration checks (optional third argument `pipeline` skips the advanced-resource checks).
