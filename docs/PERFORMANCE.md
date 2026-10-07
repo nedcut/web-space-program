@@ -978,3 +978,133 @@ Final merged-code validation: lint, `npx tsc --noEmit`, production build, and fu
 Ultra cold readiness in the final harness was about **30.3 s on the pad / 24.8 s in orbit**. Larger
 terrain/texture resources make initial preparation and structural setting rebuilds noticeably slower;
 these startup durations are separate from the steady rendering measurements above.
+
+# GPU frame cost for Retina Macs — 2026-10-07 (`op/perfgpu`)
+
+Goal (owner): the game feels slow on an Apple M-series MacBook (Retina, DPR 2, 120 Hz). An M1/M2 base GPU has
+roughly 1/4–1/6 of an RTX 3060 Ti's throughput, so the target was Medium at DPR 2 ≤ ~2.5 ms GPU on the 3060 Ti in
+the common scenes, without visible quality loss at normal viewing.
+
+## Method
+
+Windows Chrome over CDP (RTX 3060 Ti, ANGLE/D3D11), production builds (`vite build` + `vite preview`), 1470×920 CSS px
+at DPR 2 (2940×1840 device pixels), adaptive resolution off, every run in its own browser context, shared harness
+serialised with `flock /tmp/wsp-gpu.lock`. New driver `scripts/bench/gpu-passes.mjs` (`gpu-passes.sh`):
+
+- **fenced GPU ms** — one `EXT_disjoint_timer_query_webgl2` elapsed query around 20 back-to-back renders of the
+  settled scene, median of 5 batches. This is pure GPU time (no vsync, compositor or CPU submission), the number
+  that scales to a weaker GPU. The pipeline's own timer is parked while measuring (queries cannot nest).
+- **per-pass GPU ms** — elapsed queries around every composer pass in the running game loop (scene incl. shadow
+  map, bloom, tone map, SMAA, upscale).
+- **families** (`--families 1`) — fenced cost difference with one material family hidden (terrain, sky, clouds,
+  vegetation, site, parts …); `scripts/bench/perfgpu/toggles.js` does the same per object group, `tris.js` is a
+  frustum-culled triangle census, `upscale-cost.js` isolates the upscaler.
+- **paired A/B** — `scripts/bench/gpu-passes-ab.sh` alternates baseline and candidate per case and repetition (each
+  pair holds the GPU lock), `gpu-passes-report.mjs` writes medians to `docs/performance/perfgpu/ab-<preset>.md`.
+
+The GPU was shared with other agents' game tabs throughout; absolute numbers move ±15 % between runs, so claims
+use the paired medians. "loop fps" on this desktop is dominated by DPR-2 emulation/compositing and contention and
+is not a laptop prediction.
+
+## What was hot (baseline `7bd6e4f9`, Medium, DPR 2, fenced GPU ms)
+
+| Scene | Frame | Scene pass | Post chain (bloom / tone map / SMAA) | Biggest families (ms, hidden-family differences) |
+|---|---:|---:|---|---|
+| Pad | 4.58 | 4.11 | 0.34 / 0.13 / 0.58 | PBR site + vegetation + parts 1.57, sky 0.78, terrain 0.72, empty-scene post 0.83, clouds 0.26, shadow map 0.21 |
+| Ascent | 3.55 | 3.22 | 0.34 / 0.12 / 0.53 | sky 1.13, clouds 0.47, terrain 0.52, glare 0.43, particles/other 0.50, plumes 0.28 |
+| Orbit (Earth in view) | 3.92 | 3.90 | 0.33 / 0.12 / 0.54 | ocean 0.69, terrain 0.61, clouds 0.60, sky 0.47 |
+| Moon surface (descent) | 3.79 | 2.99 | 0.34 / 0.12 / 0.54 | — |
+| Map | 0.48 | — | — | 32 draws |
+| Editor (73 parts, orbiting) | 1.91 | — | — | separate renderer, native MSAA |
+
+1. **Resolution.** Every Medium pixel cost was paid at 2940×1840. Scene and post scale with pixels.
+2. **Launch-site vegetation geometry.** The pad drew 3.48 M triangles: pines 0.92 M and scrub 0.51 M, all of
+   them also in the shadow map. Each 1.4 km cell drew every instance with the detailed model and only *discarded*
+   the far ones per fragment, so ~1,500 detailed pines (728 triangles each) and ~2,100 scrubs were vertex-shaded
+   twice to cover a few pixels. This is why halving the pixels first cut the pad's scene pass by only ~20 %.
+3. **Post chain bandwidth.** The composer ping-pong buffers were half-float (and MSAA on High) after tone mapping,
+   SMAA's edge/weight targets half-float, and bloom ended with a full-resolution read-modify-write of the HDR target.
+4. **Sun glare** — a full-screen additive pass with `atan`, two `cos` and `pow(x, 60/120)` per pixel.
+5. Not mine to change now: sky shell, clouds, ocean and terrain shading (`op/earthgfx` replaces them). The sky is
+   transparent but log-depth `gl_FragDepth` writes defeat early-Z, so covered sky pixels still march (see "Limits").
+
+## Changes
+
+| Change | Where | Effect |
+|---|---|---|
+| Retina internal resolution + edge-adaptive upscale + contrast-limited sharpen (one full-screen pass; flat footprints take a bilinear early-out) | `render/core/UpscalePass.ts`, `renderer.ts` (`resolutionPlan`), `quality.ts`, `ui/AdvancedGraphics.tsx` | Medium 70 %, High 85 %, Ultra native; Low keeps its old canvas stretch by default (opt-in). Terrain LOD keeps device resolution. Advanced: Native / Quality 85 % / Balanced 70 % / Performance 58 % |
+| Adaptive resolution lowers the internal resolution under the same upscaler (canvas stays native); mid-tier GPUs (Apple base M-series, "Apple GPU") start at the Retina scale instead of a further ×0.75 | `renderer.ts` | adaptive steps are much less visible |
+| Vegetation per-instance LOD bands (CPU partition on ≥ 20 m camera moves) + mid level (no limbs, 20-face sphere-shaded crowns) | `site/LaunchSite.ts`, `planet/scatter/geometry.ts` | pad 3.48 M → 2.29 M triangles |
+| HDR scene target owned by the pipeline; 8-bit ping-pong/SMAA targets; bloom blend fused into tone mapping | `renderer.ts`, `fusedBloom.ts` | bloom 0.19 → 0.145, tone map 0.066 → 0.04, SMAA 0.30 → 0.27 ms (internal res) |
+| Sun glare rays via triple-angle identities and repeated squaring (max abs diff 5e-6) | `sky/SunGlare.ts` | cheaper full-screen pass |
+| Photo captures render at full device resolution; F8 report shows the true 3D scale and "upscaled" | `renderer.ts`, `hud/PerfOverlay.tsx` | — |
+
+## Before / after (paired A/B, DPR 2, adaptive off)
+
+Baseline `7bd6e4f9` (main) vs this branch at `03a5fa0e` (the later commits change no rendering except Low's
+default, see below). Medians of interleaved runs; Medium 3 pairs, Low/High 2 pairs per scene. Full tables with loop
+GPU, fps, per-pass and triangle columns: [Medium](performance/perfgpu/ab-medium.md),
+[Low](performance/perfgpu/ab-low.md), [High](performance/perfgpu/ab-high.md).
+
+**Fenced GPU ms per frame (RTX 3060 Ti):**
+
+| Scene | Medium | High | Low |
+|---|---:|---:|---:|
+| Pad | 4.51 → **2.77** (−39 %) | 11.86 → 8.65 (−27 %) | 0.6 → 0.6–0.9 ¹ |
+| Ascent (max-Q, 4× physics warp) | 3.56 → **2.03** (−43 %) | 7.73 → 5.20 (−33 %) | ≈ ¹ |
+| Orbit, Earth in view | 3.92 → **2.26** (−42 %) | 8.09 → 5.60 (−31 %) | 0.92 → 0.84 |
+| Moon surface (terminal descent) | 1.72 → **1.57** (−8 %) | 4.98 → 4.17 (−16 %) | 0.75 → 0.73 |
+| Map | 0.40 → 0.39 (unchanged, draws direct at 2×) | 0.45 → 0.47 | 0.41 → 0.40 |
+| Editor, 73 parts, orbiting | 1.30 → 1.23 (unchanged renderer) | 1.89 → 2.10 (noise) | 1.28 → 1.51 (noise) |
+
+Per pass, Medium pad: scene 4.13 → 2.80 ms, post chain 1.05 → 0.79 ms (incl. 0.33 ms upscale); triangles
+3.48 M → 2.29 M. The smoothed in-loop GPU timer (the number the F8 overlay shows) moved 5.50 → 3.77 (pad),
+4.35 → 3.12 (ascent), 4.63 → 2.85 (orbit). The Moon gains least: its scene is geometry/draw bound and its lunar
+regolith is high-frequency everywhere, so the upscaler takes its full path (0.47 ms).
+
+¹ Low frames are below 1 ms and run-to-run noise (0.5–1.3 ms) dominates. The measured build upscaled Low too
+(+0.05–0.09 ms, 10–15 % of a Low frame); the final build keeps Low's old canvas stretch by default, so Low gets only
+the vegetation saving (pad 546 k → 360 k triangles).
+
+**Visual check** (left before, right after; device resolution, normal viewing size and 1:1 crops):
+[pad](screenshots/perfgpu/pad-before-after.jpg) ([1:1](screenshots/perfgpu/pad-crop-1to1.jpg)),
+[ascent](screenshots/perfgpu/ascent-before-after.jpg) ([1:1](screenshots/perfgpu/ascent-crop-1to1.jpg)),
+[orbit](screenshots/perfgpu/orbit-before-after.jpg) ([1:1](screenshots/perfgpu/orbit-crop-1to1.jpg)),
+[Moon](screenshots/perfgpu/moon-before-after.jpg) ([1:1](screenshots/perfgpu/moon-crop-1to1.jpg)),
+[map](screenshots/perfgpu/map-before-after.jpg), [editor](screenshots/perfgpu/editor-before-after.jpg).
+At normal size they are indistinguishable; at 1:1 the finest decal text and lunar regolith grain are slightly
+softer. Sky, cloud, coastline and vessel differences are timing (different moment of the flight), not rendering.
+Functional checks: live switching of every Retina level, map toggle, photo capture (now full device resolution),
+Space Center, Tracking Station and menu — WebGL error 0, no console errors.
+
+## Estimated Mac frame rate
+
+Taking the brief's ratio (M1/M2 base ≈ 1/4–1/6 of the 3060 Ti) on the fenced GPU time, Medium at Retina:
+
+| Scene | Before (GPU ms → fps cap) | After |
+|---|---|---|
+| Pad | 18–27 ms → 37–55 fps | 11–17 ms → ~60 fps (adaptive trims the rest) |
+| Ascent | 14–21 ms → 47–70 fps | 8–12 ms → 80–120 fps |
+| Orbit | 16–24 ms → 42–64 fps | 9–14 ms → 70–110 fps |
+| Moon surface | 7–10 ms | 6–9 ms → 110–120+ fps |
+| Map / editor | 2–8 ms | unchanged (already ≥ 120 / ~60–120 fps) |
+
+These are GPU-only estimates; the Mac's compositor, CPU frame (~3–4 ms here) and browser scheduling add to them,
+and adaptive resolution is on by default (it targets 60 fps on unlimited/120 Hz caps). A real Mac profile (F8 →
+Copy report) is the next confirmation.
+
+## Limits / next
+
+- **Earth sky, clouds, ocean and terrain shaders** are untouched (owned by `op/earthgfx`, about to change). On the
+  pad they are now the largest items (terrain 0.6, sky 0.3, ocean 0.2 ms at internal resolution).
+- **Log depth defeats early-Z / Apple hidden-surface removal** for every opaque and transparent fragment (all
+  shaders write `gl_FragDepth`). Reversed float depth would restore it; the prototype needs float depth attachments,
+  map/hub/canvas depth handling, custom depth writers and shadow sampling changes and `EXT_clip_control`. It gained
+  ~5 % on the pad here (more expected on Apple TBDR), not shipped.
+- The upscaler costs 0.2–0.5 ms here (≈ 1–2 ms on a base M1) on textured scenes; mediump math is used so Apple's
+  fp16 ALUs run it at double rate. Luma-only sharpening and an isotropic shortcut showed no measurable gain within
+  the harness noise.
+- No Apple hardware was available; all numbers are RTX 3060 Ti with DPR-2 emulation under shared-GPU contention.
+
+Reproduce: `npx vite build && npx vite preview --port 5332 --strictPort --host`, baseline build on 5331, then
+`scripts/bench/gpu-passes-ab.sh medium http://<ip>:5331 http://<ip>:5332 "pad,ascent,orbit,map,moon,editor" 3 --quality medium`.
