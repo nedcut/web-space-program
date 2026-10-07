@@ -374,6 +374,14 @@ export function buildNoseCone(def: PartDef): THREE.Object3D {
       'stripe',
     ),
   );
+  if (detailLevel() === 1) {
+    // fastener row above the flange and one circumferential panel seam
+    const nb = Math.round(R * 20 + 8);
+    const b0 = cyl(0.006 + 0.002 * R, 0.006 + 0.002 * R, 0.006, 6).rotateX(PI / 2);
+    root.add(mk(around(b0, nb, ogive(R * 0.995, L, 0.025) + 0.002, 0, yb + 0.025), M.gunmetal(), 'fasteners'));
+    const ys = 0.42;
+    root.add(mk(lathe([[ogive(R, L, ys * L - 0.006) - 0.0005, yb + ys * L - 0.006], [ogive(R, L, ys * L) - 0.003, yb + ys * L], [ogive(R, L, ys * L + 0.006) - 0.0005, yb + ys * L + 0.006]], { segments: 56, creaseAngle: PI }), M.darkMetal(), 'seam'));
+  }
   const D = new Markings(def);
   const rOf = (y: number) => ogive(R * 0.995, L, y - yb);
   const b = D.badge;

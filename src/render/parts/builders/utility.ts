@@ -4,6 +4,7 @@ import { landingLegLayout } from '../../../data/parts';
 import { M } from '../materials';
 import { around, bevelBox, box, cyl, cylinder, detailLevel, grp, lathe, mk, pipe, rod, setDeployData, sphere, torus, type Profile } from '../geom';
 import { boxDims, cylDims, num, srfMount, str } from './common';
+import { charShield } from './command';
 
 const PI = Math.PI;
 
@@ -97,6 +98,22 @@ export function buildParachute(def: PartDef): THREE.Object3D {
     ),
   );
   root.add(mk(torus(rTop * 0.35, 0.008, 6, 24).translate(0, yT - 0.004, 0), M.chrome(), 'pullRing'));
+  if (detailLevel() === 1) {
+    // pressure vents in the cap, base bolts, and the red arming-pin streamer on the canister
+    const vents: THREE.BufferGeometry[] = [];
+    const yv = yCap + h * 0.13, rv = (rb * 1.01 + rTop) / 2;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * PI * 2 + PI / 6;
+      const c = new THREE.CircleGeometry(0.012, 10);
+      c.rotateX(-0.5).translate(0, yv, rv + 0.003).rotateY(a);
+      vents.push(c);
+    }
+    root.add(mk(vents, M.darkMetal(), 'vents'));
+    const b = cyl(0.007, 0.007, 0.008, 6);
+    root.add(mk(around(b.rotateX(PI / 2), Math.round(rBot * 40 + 8), rBot * 0.995, PI / 16, yB + 0.02), M.chrome(), 'baseBolts'));
+    const tag = [cyl(0.006, 0.006, 0.03, 6).rotateX(PI / 2).translate(0, yCap - 0.04, rb + 0.012), box(0.025, 0.09, 0.002).translate(0.015, yCap - 0.1, rb + 0.016)];
+    root.add(mk(tag, M.accent('red'), 'armingTag'));
+  }
   const strap = box(0.025, yCap - yB - 0.05, 0.008);
   strap.translate(0, (yCap + yB + 0.05) / 2, rb + 0.003);
   root.add(mk(around(strap, 4, 0, PI / 4), M.cable(), 'straps'));
@@ -116,12 +133,12 @@ export function buildHeatShield(def: PartDef): THREE.Object3D {
   const yEdge = yB + h * 0.35;
   root.add(
     mk(
-      lathe([[0, yB], [rb * 0.5, yB + h * 0.07], [rb * 0.82, yB + h * 0.18], [rb * 0.97, yB + h * 0.29], [rb, yEdge]], { segments: 64, tile: 0.5 }),
+      charShield(lathe([[0, yB], [rb * 0.5, yB + h * 0.07], [rb * 0.82, yB + h * 0.18], [rb * 0.97, yB + h * 0.29], [rb, yEdge]], { segments: 64, tile: 0.5 }), rb, 6),
       M.heatTiles(),
       'tiles',
     ),
   );
-  root.add(mk(lathe([[rb, yEdge], [rb, yB + h * 0.6], [r, yT - h * 0.15], [r, yT - h * 0.15]], { segments: 64 }), M.ablator(), 'sidewall'));
+  root.add(mk(charShield(lathe([[rb, yEdge], [rb, yB + h * 0.6], [r, yT - h * 0.15], [r, yT - h * 0.15]], { segments: 64 }), rb, 7), M.ablator(), 'sidewall'));
   root.add(
     mk(
       lathe([[r, yT - h * 0.15], [r, yT - 0.006], [r * 0.97, yT], [r * 0.97, yT], [r * 0.85, yT], [r * 0.83, yT - 0.01], [0, yT - 0.01]], { segments: 64 }),
@@ -336,6 +353,23 @@ export function buildRcsQuad(def: PartDef): THREE.Object3D {
   const zBlock = nozzles[0]?.position.z ?? 0.04;
   const blk = bevelBox(0.11, 0.11, 0.08, 0.25);
   blk.translate(0, 0, zBlock);
+  {
+    // exhaust staining on the block faces around each thruster arm
+    const pos = blk.getAttribute('position');
+    const col = new Float32Array(pos.count * 3);
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      let s2 = 0;
+      for (const n of nozzles) {
+        const d = Math.hypot(v.x - n.position.x * 0.6, v.y - n.position.y * 0.6, v.z - (n.position.z * 0.6 + zBlock * 0.4));
+        s2 += 0.6 * Math.exp(-(d * d) / 0.0012);
+      }
+      const k = 1 - Math.min(0.7, s2);
+      col[i * 3] = k; col[i * 3 + 1] = k * 0.98; col[i * 3 + 2] = k * 0.95;
+    }
+    blk.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  }
   root.add(mk(blk, M.whitePanel(), 'block'));
   const arms: THREE.BufferGeometry[] = [];
   const bells: THREE.BufferGeometry[] = [];
@@ -359,7 +393,23 @@ export function buildRcsQuad(def: PartDef): THREE.Object3D {
   if (arms.length) root.add(mk(arms, M.aluminium(), 'arms'));
   if (bells.length) root.add(mk(bells, M.darkMetal(), 'nozzles'));
   if (valves.length) root.add(mk(valves, M.gunmetal()));
-  // interior of nozzles (soot): small discs at the throat are enough at this scale
+  // sooted throats: dark discs just inside each exit
+  const throats: THREE.BufferGeometry[] = [];
+  for (const n of nozzles) {
+    const dir = new THREE.Vector3(n.direction.x, n.direction.y, n.direction.z).normalize();
+    const exit = new THREE.Vector3(n.position.x, n.position.y, n.position.z).addScaledVector(dir, 0.006);
+    const c = new THREE.CircleGeometry(0.02, 12);
+    c.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir));
+    c.translate(exit.x, exit.y, exit.z);
+    throats.push(c);
+  }
+  if (throats.length) root.add(mk(throats, M.soot(), 'throats'));
+  if (detailLevel() === 1) {
+    const hw: THREE.BufferGeometry[] = [];
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) hw.push(cyl(0.008, 0.008, 0.008, 6).rotateX(PI / 2).translate(sx * 0.062, sy * 0.062, zm + 0.024));
+    root.add(mk(hw, M.chrome(), 'mountBolts'));
+    root.add(mk(pipe([[0.05, -0.07, zm + 0.02], [0.05, -0.05, zm + 0.04], [0.035, -0.03, zBlock - 0.02]], 0.006, 5, 10), M.aluminium(), 'feedLine'));
+  }
   return root;
 }
 

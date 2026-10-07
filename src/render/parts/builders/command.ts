@@ -131,7 +131,7 @@ function capsuleGrime(g: THREE.BufferGeometry, ports: { y: number; phi: number }
 }
 
 /** Char gradient on a heat-shield / ablator lathe: darker toward the rim and in a blotchy band. */
-function charShield(g: THREE.BufferGeometry, R: number, seed: number): THREE.BufferGeometry {
+export function charShield(g: THREE.BufferGeometry, R: number, seed: number): THREE.BufferGeometry {
   const pos = g.getAttribute('position');
   const col = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) {
