@@ -18,5 +18,15 @@ held-part motion, exact snap/attach/undo checks, flight panel toggles/dragging a
 `WSP_PROFILE=1` enables React's production profiling renderer; its `actualDuration` is React render
 work for a commit, not DOM commit/presentation duration. Closed-panel steady flight captures exclude
 loading/mounting and include eight seconds after a five-second settling interval.
-`WSP_UI_BASELINE=7bd6e4f9` overlays the nine changed original UI source files read-only from git,
+`WSP_UI_BASELINE=7bd6e4f9` overlays the ten changed original UI source files read-only from git,
 keeping profiling instrumentation and all unchanged application code identical. No checkout is changed.
+
+
+`final-v2.json` is the final measured palette after shared card observation, deferred filtering,
+weak-map material bookkeeping and visual-only scene invalidation. It precedes the final 350 ms
+input-quiet thumbnail submission refinement. Later artifacts include both handler capture time and
+`event.timeStamp` → second rAF, retaining input-queue delay separately; early artifacts have only
+capture timing. `final-cpu-fixed.json` profiles the 100-part/flight workload with only editor/flight
+GPU draw submission suppressed; its ~59 fps is CPU isolation, not in-game performance.
+See [the performance report](../../PERFORMANCE.md#ui-responsiveness--production-interaction-probes)
+for the before/after tables, measurement limits and reproduction commands.
