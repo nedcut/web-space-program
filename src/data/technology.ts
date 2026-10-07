@@ -52,6 +52,7 @@ for (const [row, [id, ...names]] of branches.entries()) {
 for (const [id, ids] of Object.entries({
   'propulsion-0': ['tank-1-long', 'eng-zephyr'],
   'propulsion-1': ['tank-2-short', 'tank-2-mid', 'tank-2-long', 'eng-chinook', 'eng-doldrum'],
+  'propulsion-2': ['tank-3-mid', 'tank-3-long', 'eng-tempest', 'eng-foehn'],
   'structures-0': ['adapt-1-2'],
   'structures-1': ['leg-stilt', 'leg-strider'],
 })) {

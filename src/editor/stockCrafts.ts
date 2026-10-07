@@ -607,7 +607,6 @@ export function buildPebblecatcher(catalog: PartCatalog = PART_CATALOG): CraftDe
 
 export const STOCK_CRAFTS: StockCraft[] = ([
   { scale: 'standard', id: 'stock-kestrel', name: 'Kestrel Sounding Rocket', blurb: 'Suborbital test hop · 1 stage + capsule', build: () => buildSoundingRocket() },
-  { scale: 'standard', id: 'stock-firstlight', name: 'Firstlight Orbiter', blurb: 'Starting equipment · Standard-scale orbit', build: () => buildFoundationOrbiter() },
   { scale: 'standard', id: 'stock-meridian', name: 'Meridian Orbiter', blurb: 'Standard scale · two stages to low orbit and back', build: () => buildOrbiter() },
   { scale: 'standard', id: 'stock-selene', name: 'Selene Lunar Lander', blurb: 'Three stages · land on the Moon and return', build: () => buildMoonLander() },
   { scale: 'standard', id: 'stock-swift', name: 'Swift Jet', blurb: 'Runway takeoff · turbofan trainer aircraft', build: () => buildSwift() },
@@ -638,6 +637,7 @@ export const STOCK_CRAFTS: StockCraft[] = ([
   { scale: 'real', id: 'stock-ringrunner-real', name: 'Ringrunner Real Saturn Probe', blurb: 'Real scale · isotope-powered nuclear Saturn flyby', build: () => buildRealRingrunner() },
   { scale: 'real', id: 'stock-meridian-real', name: 'Meridian Real Orbiter', blurb: 'Real scale · orbital launcher and return capsule', build: () => buildRealOrbiter() },
   { scale: 'real', id: 'stock-selene-real', name: 'Selene Real Expedition', blurb: 'Real scale · five-metre Moon landing and return expedition', build: () => buildRealMoonLander() },
+  { scale: 'standard', id: 'stock-firstlight', name: 'Firstlight Orbiter', blurb: 'Starting equipment · Standard-scale orbit', build: () => buildFoundationOrbiter() },
 ] satisfies StockCraft[]).map(stock => ({
   ...stock,
   build: () => wireStockGroups({ ...stock.build(), stockId: stock.id }),

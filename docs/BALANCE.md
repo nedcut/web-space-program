@@ -1,0 +1,179 @@
+# Career and launch balance — 2026-10-07
+
+Reproduce the tables with `npx tsx scripts/balance-analysis.ts`. Flight regressions live in
+`tests/balance-aero.test.ts` and `tests/balance-career.test.ts`; run with
+`npx vitest run --maxWorkers=2`. No physics parameters, resource densities, engine ratings,
+or deterministic trace fixtures were changed.
+
+## Findings and scope
+
+Selene's old launch warning was misleading as an assessment of its normal controlled ascent.
+The fully fuelled craft really has a destabilizing aerodynamic moment; it is not passively stable.
+Fuel burn moves its CoM forward, and the powered ascent has sufficient gimbal/control authority.
+A normal Standard ascent measured maximum AoA **8.66° above 1 kPa dynamic pressure**, without
+flipping or structural loss. The regression bounds this at 12°. A symmetric two-axis estimator
+now samples launch-stage fuel draw at 0–80% burn and Mach 0.3/0.8/1.1/1.5/2.5, uses the actual
+occluded drag/lift/control force model, and includes engine gimbal torque with a 50% reserve.
+Dynamic pressure is bounded by sea-level density and a conservative 25 kPa envelope. Reaction
+wheels receive no credit. Negative remaining restoring/control margin warns. This is a powered,
+SAS-assisted ascent advisory; an unpowered/reentry assessment needs another flight envelope.
+Forward fixed fins and an uncontrolled heavy-tail/no-fin rocket still warn in tests.
+
+All 27 stock crafts were checked. Remaining warnings are **missing parachutes** on Swift,
+Daybreak, Hearthlight, Longreach and Alembic. Inspection confirms these crewed vehicles have
+no parachute modules: runway, powered landing or orbital crew transfer is required. The audit
+checks presence of the warning against actual hardware. A clear preflight does not certify that
+an orbital tug, rover or destination lander can launch from Earth.
+
+The old first batch offered a Moon surface-return mission immediately, first propulsion research
+lacked the obvious orbital vacuum engine/tank, and there was no financial recovery path.
+The revised program starts with Earth orbit, Earth recovery and Earth field science. Lunar flyby
+commissions require Earth orbit and first propulsion research; lunar orbit follows demonstrated
+Moon arrival plus propulsion tier 1; lunar landing/return and lunar surface surveys also require
+structures tier 1. Far-body offers require Moon landing, propulsion tier 3 and energy tier 2.
+No contract specifies a particular instrument: the starting thermal sensor can satisfy biome
+surveys on the surface. Existing accepted commissions retain their original terms.
+
+## What changed
+
+- Firstlight is an original foundation-only orbital stock craft. Its headless career flight (with
+  a starting thermal sensor attached) reaches a periapsis above the Standard atmosphere.
+- Propulsion 0 (10 science) unlocks Zephyr and the long 1.25 m tank. Propulsion 1 (35 more)
+  unlocks Chinook, Doldrum and the 2.5 m tank family. Adapter 1–2 moves to structures 0;
+  landing legs move to structures 1. Three-metre tanks, Tempest and Foehn move to propulsion 2 for larger-scale orbit;
+  all other catalogue assignments remain unchanged.
+- Earth orbit pays a 5,000-credit advance and 18,000-credit completion; the first-orbit milestone
+  adds 15,000 credits and 20 science. Moon flyby pays 20,000 advance and 40,000 completion;
+  first Moon arrival adds 40,000 credits and 35 science. Rewards/advances scale with the existing
+  credit multiplier; research prices and experiment yields do not.
+- Offered commissions can be declined without penalty, allowing stale/unwanted offers to be
+  cleared. Existing active commissions retain their penalties and three-slot limit.
+- Mission Control provides repeatable emergency funding: funds below 8,000 scaled credits are
+  restored to that amount at a cost of 5 reputation. This works with all slots occupied, negative
+  funds, exhausted science subjects and any research state. No reputation minimum blocks it.
+  The stipend funds Firstlight (7,456 cr) or an instrumented Kestrel; advanced missions still
+  require earning more. The rule deliberately permits recovery after arbitrary failures.
+
+## Progression and science assumptions
+
+The scripted ledger below pays full craft prices, equips only unlocked sensors and gives **zero
+salvage refunds**. Science is calculated with the actual experiment availability, subject keys,
+body multipliers and 50% repeat decay. It assumes successful recovery of stored data, crew
+observations, EVA surface samples at landed field sites, and deliberately selected new biomes.
+Every vehicle purchase is checked against the actual unlock/funds validator. Orbital missions
+carry only the thermal sensor, avoiding irrelevant atmospheric/surface instruments.
+
+Flight tests separately verify starting-only orbit and a 20-science Meridian orbit-to-Moon-SOI
+sequence; the entire 12-mission ledger is not an autopilot campaign. Biome targeting, EVA,
+science recovery and pilot success rates remain player skills. A skilled player can orbit/fly by
+earlier; the missions 4/11 schedule is a plausible learning route, not an enforced grind.
+Landing hardware costs only 110 cumulative science across the selected propulsion, structures,
+guidance and energy path, and is available by mission 7 in this ledger; landing is scheduled
+later than the first flyby for flight practice. The existing Selene mission tests verify landing
+and return propulsion independently.
+
+| Research path | Cumulative science | Demonstrated capability |
+| --- | ---: | --- |
+| Foundation | 0 | Standard orbit: Firstlight, no locked parts |
+| Propulsion 0 + energy 0 | 20 | Standard Meridian orbit and Moon flyby (headless flight) |
+| Propulsion 1 + structures 1 + guidance 0 + energy 0 | 110 | Standard Selene landing/return hardware |
+| Propulsion 2 + structures 2 + energy 0 | 280 | Challenging/Real Meridian stock orbital hardware |
+| Propulsion 2 + structures 3 + guidance 2 + energy 0 | 595 | Challenging Selene expedition hardware |
+| Propulsion 3 + structures 3 + guidance 2 + energy 0 | 775 | Real Selene expedition hardware |
+
+## Scale and tier interpretation
+
+There is no finite maximum Δv for a tier with unlimited stages. The unlock-envelope table gives
+**achievable reference designs**, not an optimizer's bound. Identical parts have identical ideal
+Δv at every scale; gravity/drag losses and required orbital speed change. The table repeats
+smaller designs on larger worlds to make the shortfall visible. Higher tiers retain earlier parts.
+Jet Δv in the stock table includes intake-air propulsion and is not a vacuum launch budget.
+
+Standard meets the requested orbit by missions 4–6 and Moon flyby by 10–14 on the scripted
+route. Challenging/Real foundation hardware falls short of a comfortable orbital budget: those
+scales intentionally require more staging/research. Four deliberate field/hop science missions can provide 326 science before orbit: 46 from the
+initial crew/thermal/EVA survey, 100 from a fresh surface site plus low-atmosphere observations
+with pressure/seismic instruments, then 90 each at two fresh sites after adding magnetometry.
+Discovery 0/1 costs 45, leaving 281 for the 280-science stock-orbiter path. This supports larger-scale
+orbit around missions 5–6. Orbital milestones, new situations and more field work can then fund
+the 595/775-science expedition paths for Moon flyby around missions 10–14, followed by landing
+practice. These larger-scale mission counts are analytical estimates, not newly flown career
+campaigns; existing tests fly the Challenging/Real expedition vehicles through orbit and lunar landing.
+
+| Scale | Initial funds | Recovery floor | Stock orbital cost | Stock lunar expedition cost |
+| --- | ---: | ---: | ---: | ---: |
+| Standard | 60,000 | 8,000 | 10,870 (or 7,456 foundation) | 30,977 |
+| Challenging | 614,400 | 81,920 | 42,925 | 157,177 |
+| Real | 6,000,000 | 800,000 | 84,332 | 1,393,197 |
+
+Existing credit scaling is generous and covers the heavy launchers; science, not vehicle price,
+is the larger-scale constraint. Retain it for this pass rather than add an untested harsher economy.
+Repeated orbit contracts provide renewable income; repeated science subjects have finite yield,
+so new situations/biomes/instruments are required for research. Emergency funding protects
+against bankruptcy even if all active contracts are impractical. Offers that outstrip a player's
+current craft can be declined; no specific locked part is required by an early commission.
+
+## Generated reference tables
+
+Stock hardware and advisories (vacuum Δv is not a destination guarantee)
+| Craft | Scale | Cost cr | Δv m/s | Required research | Advisories |
+| --- | --- | --- | --- | --- | --- |
+| Kestrel Sounding Rocket | standard | 5068 | 2722 | foundation | none |
+| Meridian Orbiter | standard | 10870 | 4962 | propulsion-0, energy-0 | none |
+| Selene Lunar Lander | standard | 30977 | 7162 | propulsion-0, propulsion-1, structures-0, structures-1, guidance-0, energy-0 | none |
+| Swift Jet | standard | 11080 | 12416 | aviation-0, aviation-1, aviation-2, aviation-3, guidance-0 | chute |
+| Ringrunner Saturn Probe | standard | 37275 | 10940 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-2, aviation-0, guidance-0, guidance-2, guidance-3, energy-0, energy-1 | none |
+| Pebblecatcher | standard | 18844 | 2116 | propulsion-0, propulsion-1, structures-1, guidance-1, guidance-3, energy-0, energy-3, discovery-2 | none |
+| Wren Tender | standard | 9204 | 2706 | propulsion-0, propulsion-1, structures-2, guidance-1, guidance-3, energy-0 | none |
+| Hearthlight Station | standard | 118784 | 9103 | propulsion-0, propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, guidance-0, guidance-1, guidance-2, guidance-3, energy-1, energy-2 | chute |
+| Homeward Crew Ferry | standard | 111129 | 8897 | propulsion-0, propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, guidance-0, guidance-1, guidance-3, energy-0 | none |
+| Moonmoth Rover | standard | 33024 | 660 | propulsion-0, propulsion-1, structures-1, structures-2, guidance-3, energy-3, discovery-1 | none |
+| Moonmoth Delivery Lander | standard | 39878 | 2379 | propulsion-0, propulsion-1, structures-0, structures-1, structures-2, guidance-3, energy-3, discovery-1 | none |
+| Bedrock Prospector | standard | 37194 | 1208 | propulsion-0, propulsion-1, structures-3, guidance-3, energy-2, energy-3, discovery-1, discovery-2, discovery-3 | none |
+| Longreach Transfer Ship | standard | 53278 | 4656 | propulsion-0, propulsion-1, propulsion-3, structures-0, structures-2, guidance-1, guidance-2, guidance-3, energy-2 | chute |
+| Daybreak Spaceplane | standard | 22800 | 2793 | propulsion-0, propulsion-2, aviation-1, aviation-2, aviation-3, guidance-0 | chute |
+| Emberleaf Mars Lander | standard | 40963 | 725 | propulsion-1, structures-0, structures-1, structures-2, structures-3, guidance-3, energy-1, energy-3 | none |
+| Hazewalker Titan Probe | standard | 40963 | 725 | propulsion-1, structures-0, structures-1, structures-2, structures-3, guidance-3, energy-1, energy-3 | none |
+| Frostwhisker Plume Sampler | standard | 43864 | 2549 | propulsion-1, structures-1, aviation-0, guidance-3, energy-3, discovery-3 | none |
+| Gossamer Ring Observatory | standard | 74455 | 10219 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-2, aviation-0, guidance-0, guidance-2, guidance-3, energy-0, energy-1, energy-3 | none |
+| Atlaswake Heavy Lifter | standard | 93991 | 11753 | propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, aviation-0, guidance-0, guidance-3 | none |
+| Beaconseed Relay Launcher | standard | 33621 | 10946 | propulsion-1, propulsion-2, structures-0, structures-2, aviation-0, guidance-0, guidance-3, energy-0, energy-1 | none |
+| Alembic Laboratory | standard | 122384 | 8818 | propulsion-0, propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, guidance-0, guidance-1, guidance-3, energy-1, energy-2, discovery-3 | chute |
+| Meridian Challenging Orbiter | challenging | 42925 | 8135 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-2, energy-0 | none |
+| Selene Challenging Expedition | challenging | 157177 | 15106 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-1, structures-2, structures-3, guidance-2, energy-0 | none |
+| Ringrunner Real Saturn Probe | real | 1473660 | 18843 | propulsion-2, propulsion-3, structures-0, structures-2, structures-3, aviation-0, guidance-2, guidance-3, energy-2, energy-3 | none |
+| Meridian Real Orbiter | real | 84332 | 10874 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-2, energy-0 | none |
+| Selene Real Expedition | real | 1393197 | 20379 | propulsion-0, propulsion-1, propulsion-2, propulsion-3, structures-0, structures-1, structures-2, structures-3, guidance-2, energy-0 | none |
+| Firstlight Orbiter | standard | 7456 | 4140 | foundation | none |
+
+Unlock envelopes: highest Δv Earth rocket fixture whose every part is available. These are lower bounds on achievable Δv; unlimited staging has no unique maximum.
+| Cumulative branch tier | Science for propulsion branch | Standard fixture Δv | Challenging fixture Δv | Real fixture Δv |
+| --- | --- | --- | --- | --- |
+| foundation | 0 | 4140 | 4140 | 4140 |
+| 0 (all branches) | 10 | 4962 | 4962 | 4962 |
+| 1 (all branches) | 45 | 7162 | 4962 | 4962 |
+| 2 (all branches) | 135 | 7162 | 8135 | 10874 |
+| 3 (all branches) | 315 | 11753 | 15106 | 20379 |
+
+Scale requirements (circular speed; launch allowances are planning assumptions)
+| Scale | Low orbit altitude km | Circular speed m/s | Launch budget m/s | Moon departure from low orbit m/s |
+| --- | --- | --- | --- | --- |
+| standard | 90 | 2341 | 3741 | 939 |
+| challenging | 119 | 4349 | 6149 | 1748 |
+| real | 160 | 7812 | 9612 | 3143 |
+
+Scripted Standard campaign: full vehicle cost lost each flight, full recovered science, no salvage credited. Surface/flight contexts are chosen deliberately; this is not a novice success-rate model.
+| Mission | Objective | Cost cr | Science earned | Science bank | Funds after | Research purchased |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Pad survey / short hop | 5248 | 46.0 | 36.0 | 84752 | discovery-0 |
+| 2 | Low atmosphere / grassland hop | 6148 | 100.0 | 116.0 | 95604 | propulsion-0, energy-0 |
+| 3 | High atmosphere / splashdown | 5498 | 52.0 | 168.0 | 107106 | — |
+| 4 | First orbit | 7636 | 36.0 | 159.0 | 154470 | propulsion-1, structures-0 |
+| 5 | Orbital repeat / technique | 7636 | 8.0 | 167.0 | 169834 | — |
+| 6 | Higher orbit survey | 11050 | 16.0 | 183.0 | 181784 | — |
+| 7 | New surface research | 6148 | 74.0 | 212.0 | 175636 | structures-1, guidance-0 |
+| 8 | Orbit practice | 11050 | 0.0 | 212.0 | 187586 | — |
+| 9 | New field site | 6148 | 74.0 | 286.0 | 181438 | — |
+| 10 | Departure rehearsal | 11050 | 0.0 | 286.0 | 193388 | — |
+| 11 | Moon flyby | 11050 | 83.0 | 369.0 | 305338 | — |
+| 12 | Lunar science follow-up | 11050 | 48.0 | 417.0 | 317288 | — |
