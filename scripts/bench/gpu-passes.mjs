@@ -24,6 +24,8 @@ const settleMs = +(args.settle ?? 12000);
 const families = args.families === '1';
 const shots = args.shots !== '0';
 // --eval <file.js>: evaluate an expression (may return a promise) after settling, instead of measuring.
+// --query <k=v&…>: extra URL parameters for every case (e.g. experiment flags).
+const extraQuery = args.query ?? '';
 const evalSrc = args.eval ? readFileSync(args.eval, 'utf8') : null;
 const [vw, vh] = (args.size ?? '1470x920').split('x').map(Number);
 const outDir = args.out ?? 'C:\\wsp-tools\\bench\\perfgpu';
@@ -145,7 +147,7 @@ async function run(name, url, { setup, mode = 'flight', settle = settleMs } = {}
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 300)); });
   try {
-    await page.goto(base + url);
+    await page.goto(base + url + (extraQuery ? (url.includes('?') ? '&' : '?') + extraQuery : ''));
     if (mode === 'editor') await page.waitForFunction(() => !!(window.__editor?.view && window.__editor.session), null, { timeout: 90000 });
     else await page.waitForFunction(() => !!window.__flight && !document.querySelector('.loading-screen'), null, { timeout: 120000, polling: 200 });
     if (setup) await setup(page);

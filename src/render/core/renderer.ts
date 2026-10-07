@@ -6,6 +6,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
 import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { classifyGpu } from '../../util/gpuTier';
@@ -38,6 +39,7 @@ export class RenderPipeline {
   private fxaaPass?: FXAAPass;
   private smaaPass?: SMAAPass;
   private upscalePass!: UpscalePass;
+  private hdrTarget?: THREE.WebGLRenderTarget;
   private reversedDepth = false;
   /** Unmasked WebGL renderer string, when the browser exposes it. */
   readonly gpuName: string | null;
@@ -131,23 +133,28 @@ export class RenderPipeline {
       for (const pass of this.composer.passes) pass.dispose();
       this.composer.dispose();
     }
-    const rt = new THREE.WebGLRenderTarget(this.width, this.height, {
+    // The HDR scene target (MSAA, depth) is used only by the scene, bloom and tone mapping. Everything after tone
+    // mapping is display-referred 8-bit, so the composer's ping-pong buffers are RGBA8 without depth or MSAA
+    // (half the bandwidth of half-float targets, and no multisample resolve after SMAA).
+    this.hdrTarget?.dispose();
+    const hdr = (this.hdrTarget = new THREE.WebGLRenderTarget(this.width, this.height, {
       type: THREE.HalfFloatType,
       samples: q.msaaSamples,
       depthBuffer: true,
-    });
-    if (this.reversedDepth) rt.depthTexture = new THREE.DepthTexture(this.width, this.height, THREE.FloatType);
-    const composer = new EffectComposer(this.renderer, rt);
+    }));
+    if (this.reversedDepth) hdr.depthTexture = new THREE.DepthTexture(this.width, this.height, THREE.FloatType);
+    const ldr = new THREE.WebGLRenderTarget(this.width, this.height, { type: THREE.UnsignedByteType, depthBuffer: false });
+    const composer = new EffectComposer(this.renderer, ldr);
     composer.setPixelRatio(this.pixelRatio);
     composer.setSize(this.width, this.height);
     this.renderPass = new RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());
-    composer.addPass(this.renderPass);
+    composer.addPass(new OnHdr(this.renderPass, hdr));
     this.bloomPass = undefined;
     if (q.bloom.enabled) {
       this.bloomPass = new UnrealBloomPass(new THREE.Vector2(this.width, this.height), q.bloom.strength, q.bloom.radius, q.bloom.threshold);
-      composer.addPass(this.bloomPass);
+      composer.addPass(new OnHdr(this.bloomPass, hdr));
     }
-    composer.addPass(new OutputPass());
+    composer.addPass(new OnHdr(new OutputPass(), hdr));
     this.fxaaPass = undefined;
     this.smaaPass = undefined;
     if (q.aa === 'fxaa') {
@@ -155,6 +162,8 @@ export class RenderPipeline {
       composer.addPass(this.fxaaPass);
     } else if (q.aa === 'smaa') {
       this.smaaPass = new SMAAPass();
+      // Edges and blend weights are 8-bit quantities in the reference implementation.
+      for (const t of [(this.smaaPass as unknown as SmaaTargets)._edgesRT, (this.smaaPass as unknown as SmaaTargets)._weightsRT]) t.texture.type = THREE.UnsignedByteType;
       composer.addPass(this.smaaPass);
     }
     this.photoEffects = new PhotoEffectsPass();
@@ -181,6 +190,7 @@ export class RenderPipeline {
     this.renderer.setSize(this.width, this.height, false);
     this.composer.setPixelRatio(pr);
     this.composer.setSize(this.width, this.height);
+    this.hdrTarget?.setSize(Math.round(this.width * pr), Math.round(this.height * pr));
     this.fxaaPass?.setSize(this.width * pr, this.height * pr);
     this.smaaPass?.setSize(this.width * pr, this.height * pr);
   }
@@ -268,6 +278,7 @@ export class RenderPipeline {
     this.gpuTimer?.dispose();
     for (const pass of this.composer.passes) pass.dispose();
     this.composer.dispose();
+    this.hdrTarget?.dispose();
     finishRenderer(this.renderer);
   }
 }
@@ -298,6 +309,26 @@ export function resolutionPlan(dpr: number, q: Pick<QualitySettings, 'maxPixelRa
   const internal = Math.max(1 / Math.max(1, minCssSide), device * scale);
   const upscaling = edge && scale < 0.98;
   return { internal, output: upscaling ? device : internal, upscaling, lod: internal / retina };
+}
+
+interface SmaaTargets { _edgesRT: THREE.WebGLRenderTarget; _weightsRT: THREE.WebGLRenderTarget }
+
+/**
+ * Runs a composer pass against the pipeline's HDR scene target instead of the composer's (8-bit) read buffer:
+ * the scene renders into it, bloom composites into it, and tone mapping reads it and writes the 8-bit chain.
+ */
+class OnHdr extends Pass {
+  constructor(readonly inner: Pass, private hdr: THREE.WebGLRenderTarget) {
+    super();
+    this.needsSwap = inner.needsSwap;
+    this.clear = inner.clear;
+  }
+  setSize(width: number, height: number): void { this.inner.setSize(width, height); }
+  render(renderer: THREE.WebGLRenderer, writeBuffer: THREE.WebGLRenderTarget, _readBuffer: THREE.WebGLRenderTarget, deltaTime: number, maskActive: boolean): void {
+    this.inner.renderToScreen = this.renderToScreen;
+    this.inner.render(renderer, writeBuffer, this.hdr, deltaTime, maskActive);
+  }
+  dispose(): void { this.inner.dispose(); }
 }
 
 function rendererName(gl: WebGLRenderingContext | WebGL2RenderingContext): string | null {
