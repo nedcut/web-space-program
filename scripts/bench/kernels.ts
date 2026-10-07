@@ -1,3 +1,4 @@
+import '../earth-data/register';
 /** Isolated kernels; BENCH_BASELINE=1 is for temporary *.baseline.ts copies of the parent revision. */
 import { performance } from 'node:perf_hooks';
 import { buildVessel } from '../../src/sim/vessel';

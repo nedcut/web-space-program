@@ -19,8 +19,8 @@ export default defineConfig({
         display: 'fullscreen',
         icons: [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml' }],
       },
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,jpg,webp,glsl,json}'], maximumFileSizeToCacheInBytes: 20_000_000 },
+      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,jpg,webp,glsl,json,i16,md}'], maximumFileSizeToCacheInBytes: 20_000_000 },
     }),
   ],
-  test: { include: ['tests/**/*.test.ts', 'src/**/*.test.ts'], environment: 'node' },
+  test: { include: ['tests/**/*.test.ts', 'src/**/*.test.ts'], environment: 'node', setupFiles: ['./scripts/earth-data/register.ts'] },
 });

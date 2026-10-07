@@ -178,3 +178,9 @@ Shader programs are part of the frame budget: the flight controller compiles the
 program key at runtime — light count/visibility, shadow type, defines, `needsUpdate` on materials — recompiles every
 affected material and stalls the frame (hundreds of ms on ANGLE/D3D). Keep lights resident (zero intensity) instead
 of toggling visibility, and create runtime materials from existing variants.
+
+## Real Earth data initialization
+
+Earth terrain requires the immutable ETOPO grid before the first `createTerrain(earth)`. Browser entry points await `game/earthLoader.loadEarthData`; the main thread sends the installed buffer before the first Earth worker init. Planning workers receive it before requests too. Node tests use the Vitest setup file `scripts/earth-data/register.ts`; server and benchmark entry points import that Node adapter. New standalone Node consumers can use `node --import tsx --import ./scripts/earth-data/register.ts <script.ts>`. Missing initialization throws rather than substituting procedural geography.
+
+The sim decoder/sampler (`sim/terrain/earthData.ts`) accepts ArrayBuffer/SharedArrayBuffer and has no host I/O, DOM, or three.js dependency. The base int16 grid is 16 MiB; interpolation and relief/detail math remain float64. Terrain workers share the buffer when the browser is cross-origin isolated, otherwise each gets one copy. PWA precaches the binary. Projection/pixel-centre conventions, hashes and licensing live under `public/earth/`; deterministic generation lives under `scripts/earth-data/`. Legacy science biome strings remain stable identifiers; new observations use geographic cover classes while old archives/onboard data/contracts retain their keys.

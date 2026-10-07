@@ -790,3 +790,24 @@ close-up terrain; the threshold is bounded and a regression test covers pad/orbi
 Post-merge verification: `git merge main` reports already up to date (`main` at `0b3f8cb2`);
 `npm run lint`, `npx tsc --noEmit`, `npm run build` and full
 `npx vitest run --maxWorkers=2` pass (**108 files / 1,317 tests**, 441.19 s).
+## Real Earth geography — terrain integration ready (cx/realearth)
+
+- CC0 ETOPO pipeline and committed 16 MiB real elevation/bathymetry, exact imagery alignment contract in `public/earth/manifest.json`.
+- Main/worker/Node loading, deterministic sampler, real coast cloud mask through shared height function, scaled relief, bounded sub-grid detail, geographic ground colours and science classes.
+- Existing launch plateau/runway geometry and legacy biome IDs retained. Targeted terrain/science/nbody suite: 41 tests pass; production build passes and precaches Earth data.
+- Graphics agent can merge the `REALEARTH-TERRAIN-READY` commit. Earth imagery/effects remain owned by op/earthgfx. Remaining: worker/seam/data regressions, performance, full checks, main integration and screenshots.
+
+### Real Earth validation follow-up
+
+- Exact worker/main heights and chunk arrays, source/output SHA-256, known features, antimeridian/poles/internal grid seams, pad/runway, all scales, real station/airfield land, cover regions, legacy science archive/contract preservation and cloud-mask orientation are covered by tests.
+- Baseline/current 20-second ascent hashes are identical. No golden trace updates. Three paired chunk cases improve from 3.8–4.5 ms to 0.7–1.2 ms (shared-host CPU results; see docs/PERFORMANCE.md).
+- Real-GPU orbit and launch screenshots committed under `docs/screenshots/realearth/`. Lint/layering, typecheck and production build pass. `git merge main` reports already up to date at `0b3f8cb2`.
+- Node benchmark entry points now bootstrap the data; the browser planning benchmark awaits browser loading. Planning workers receive the initialized buffer directly, avoiding a redundant fetch per request and keeping the production worker usable in Node's worker bridge.
+
+### Real Earth complete — final verification (2026-10-07)
+
+- `git merge main`: already up to date with `0b3f8cb2`.
+- Final post-integration `npm run lint`, `npx tsc --noEmit`, `npm run build`: pass (existing bundle-size advisory only).
+- Final `npx vitest run --maxWorkers=2`: **108 files / 1,306 tests pass**, 411.54 s. Earlier full run: 108 / 1,305 pass; the added internal-grid seam regression accounts for the count change.
+- Pipeline regenerated identical bytes/hash. Production PWA cache verified at 16,777,216 Earth bytes; after stopping the server the orbit flight still loads, with a sampled height exactly equal to Node. Evidence in `docs/screenshots/realearth/offline-check.json`.
+- Servers stopped and automation tabs closed; temporary service-worker registration removed. Only `cx/realearth` worktree changed. Terrain-ready integration anchor is `5990a805`; merge the branch tip to include subsequent parity, loading and verification fixes.

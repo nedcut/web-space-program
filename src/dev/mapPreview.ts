@@ -1,7 +1,10 @@
+import { loadEarthData } from '../game/earthLoader';
 import * as THREE from 'three';
 import { Universe } from '../game/universe';
 import { MapView } from '../render/map/MapView';
 import { DEFAULT_START_UT } from '../game/store';
+
+await loadEarthData();
 
 const params = new URLSearchParams(location.search);
 const universe = new Universe((params.get('scale') as 'standard') ?? 'standard');

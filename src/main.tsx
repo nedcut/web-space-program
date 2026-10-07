@@ -1,8 +1,16 @@
+import { loadEarthData } from './game/earthLoader';
 import { createRoot } from 'react-dom/client';
 import { App } from './ui/App';
 import { game } from './game/store';
 import { autoConfigureGraphics, GRAPHICS_PROFILE } from './render/core/quality';
 import { preloadTextureCache } from './render/core/textureCache';
+
+const root = document.getElementById('root')!;
+root.textContent = 'Loading Earth geography…';
+try { await loadEarthData(); } catch (error) {
+  root.textContent = String(error);
+  throw error;
+}
 
 // First run / new graphics profile: choose a preset for this GPU (weak iGPUs start on Low).
 // Probing the GPU creates a throwaway WebGL context (~30 ms on the main thread): only when a re-tune is due.

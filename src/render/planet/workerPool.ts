@@ -1,3 +1,4 @@
+import { earthData } from '../../sim/terrain/earthData';
 import type { BodyDef } from '../../sim/bodies/types';
 import type { Terrain } from '../../sim/terrain/api';
 import { buildChunk, type ChunkBuildParams, type ChunkData } from './chunkBuilder';
@@ -19,6 +20,7 @@ export class TerrainWorkerPool {
   private inflight: number[] = [];
   private pending = new Map<number, Pending>();
   private nextId = 1;
+  private earthSent = false;
   private terrains = new Map<string, Terrain>();
   private registered = new Map<string, { body: BodyDef; minWavelength: number }>();
   readonly available: boolean;
@@ -65,6 +67,10 @@ export class TerrainWorkerPool {
     this.terrains.set(key, terrain);
     if (this.registered.has(key)) return;
     this.registered.set(key, { body, minWavelength });
+    if (body.surface.preset === 'earth' && !this.earthSent) {
+      for (const w of this.workers) w.postMessage({ type: 'earthData', buffer: earthData().buffer });
+      this.earthSent = true;
+    }
     for (const w of this.workers) w.postMessage({ type: 'init', key, body, minWavelength });
   }
 
