@@ -257,7 +257,6 @@ export class EditorView {
       this.lastCraft = null;
     }
     if (snap.craft !== this.lastCraft) {
-      this.renderer.shadowMap.needsUpdate = true;
       this.lastCraft = snap.craft;
       this.syncCraft(snap);
     }
@@ -310,6 +309,7 @@ export class EditorView {
     // Engine soot depends on where every engine sits; re-bake only when the layout changes.
     const sootKey = snap.craft.parts.map(p => `${p.uid}:${p.partId}:${p.position.x},${p.position.y},${p.position.z}:${p.rotation.x},${p.rotation.y},${p.rotation.z},${p.rotation.w}`).join('|');
     if (sootKey !== this.sootKey) {
+      this.renderer.shadowMap.needsUpdate = true;
       this.sootKey = sootKey;
       bakeEngineSoot([...this.partObjs.values()].map(e => e.obj), this.craftGroup, { cloneShared: true });
     }
