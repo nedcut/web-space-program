@@ -102,13 +102,13 @@ export function lunarPreset(ctx: PresetContext): PresetResult {
   const m0 = ctx.pal(0, [0.075, 0.072, 0.07]);
   const MARE: RGB = [m0[0] * 0.55 + HIGH[0] * 0.45, m0[1] * 0.55 + HIGH[1] * 0.45, m0[2] * 0.55 + HIGH[2] * 0.45];
   const FRESH: RGB = ctx.pal(2, [0.36, 0.35, 0.34]);
-  const colorAt = (x: number, y: number, z: number, _h: number, out: RGB): RGB => {
+  const colorAt = (x: number, y: number, z: number, _h: number, out: RGB, fp?: number): RGB => {
     if (x !== lx || y !== ly || z !== lz) height(x, y, z); // refresh side outputs (mare mask, ejecta)
     setRGB(out, HIGH[0], HIGH[1], HIGH[2]);
     const n = nCol.noise(x * 7, y * 7, z * 7) * 0.5 + nCol.noise(x * 30, y * 30, z * 30) * 0.2;
     out[0] *= 1 + 0.12 * n; out[1] *= 1 + 0.12 * n; out[2] *= 1 + 0.12 * n;
     blendRGB(out, MARE, lastMare * (0.9 + 0.1 * n));
-    blendRGB(out, FRESH, clamp(craters.ejecta * 0.45, 0, 1));
+    blendRGB(out, FRESH, clamp(craters.ejectaAt(fp) * 0.45, 0, 1));
     return out;
   };
 
@@ -135,12 +135,12 @@ export function mercuryPreset(ctx: PresetContext): PresetResult {
   const A = ctx.pal(1, [0.16, 0.15, 0.14]);
   const B = ctx.pal(0, [0.11, 0.105, 0.1]);
   const F = ctx.pal(2, [0.3, 0.29, 0.27]);
-  const colorAt = (x: number, y: number, z: number, _h: number, out: RGB): RGB => {
+  const colorAt = (x: number, y: number, z: number, _h: number, out: RGB, fp?: number): RGB => {
     height(x, y, z);
     const n = fbm(nPlain, x * 2, y * 2, z * 2, 4);
     setRGB(out, A[0], A[1], A[2]);
     blendRGB(out, B, smoothstep(0.0, 0.3, n));
-    blendRGB(out, F, clamp(craters.ejecta * 0.8, 0, 1));
+    blendRGB(out, F, clamp(craters.ejectaAt(fp) * 0.8, 0, 1));
     return out;
   };
   return { height, maxHeight: relief * 0.3 + craters.maxDepth * 0.35, minHeight: -relief * 0.3 - craters.maxDepth, colorAt };
@@ -169,7 +169,7 @@ export function icyPreset(ctx: PresetContext): PresetResult {
   const DARK = iapetus ? ctx.pal(0, [0.03, 0.025, 0.02]) : ctx.pal(1, [0.22, 0.2, 0.18]);
   const BRIGHT = ctx.pal(2, [0.55, 0.55, 0.56]);
   const FRESH = ctx.pal(3, [0.75, 0.76, 0.78]);
-  const colorAt = (x: number, y: number, z: number, _h: number, out: RGB): RGB => {
+  const colorAt = (x: number, y: number, z: number, _h: number, out: RGB, fp?: number): RGB => {
     if (x !== lx || y !== ly || z !== lz) height(x, y, z);
     setRGB(out, DARK[0], DARK[1], DARK[2]);
     if (iapetus) {
@@ -178,7 +178,7 @@ export function icyPreset(ctx: PresetContext): PresetResult {
     } else {
       blendRGB(out, BRIGHT, lastMask);
     }
-    blendRGB(out, FRESH, clamp(craters.ejecta, 0, 1) * (iapetus ? 0.3 : 1));
+    blendRGB(out, FRESH, clamp(craters.ejectaAt(fp), 0, 1) * (iapetus ? 0.3 : 1));
     return out;
   };
   return { height, maxHeight: relief * 0.22 + craters.maxDepth * 0.35, minHeight: -relief * 0.15 - craters.maxDepth, colorAt };
@@ -197,11 +197,11 @@ export function rockyPreset(ctx: PresetContext): PresetResult {
   const A = ctx.pal(1, [0.2, 0.18, 0.16]);
   const B = ctx.pal(0, [0.12, 0.11, 0.1]);
   const C = ctx.pal(2, [0.3, 0.28, 0.25]);
-  const colorAt = (x: number, y: number, z: number, h: number, out: RGB): RGB => {
+  const colorAt = (x: number, y: number, z: number, h: number, out: RGB, fp?: number): RGB => {
     setRGB(out, A[0], A[1], A[2]);
     blendRGB(out, B, smoothstep(0, -relief * 0.4, h) * 0.6);
     craters.height(x, y, z);
-    blendRGB(out, C, clamp(craters.ejecta * 0.6, 0, 1));
+    blendRGB(out, C, clamp(craters.ejectaAt(fp) * 0.6, 0, 1));
     return out;
   };
   return { height, maxHeight: relief * 0.3 + craters.maxDepth * 0.35, minHeight: -relief * 0.3 - craters.maxDepth, colorAt };

@@ -10,5 +10,7 @@ playwright-report
 .tmp/
 dist-prof
 
+# Earth imagery: the 16k pack is built locally (scripts/earth-imagery/build.mjs --ultra) and hosted with the app.
+public/earth/imagery/packs/16k/
 # Downloaded Earth source grid (regenerate with scripts/earth-data/build.mjs)
 scripts/earth-data/.cache/

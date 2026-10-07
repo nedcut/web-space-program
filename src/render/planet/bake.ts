@@ -23,6 +23,7 @@ function linearToSrgb(c: number): number {
 export function bakeRows(terrain: Terrain, width: number, height: number, data: Uint8Array, row0: number, row1: number, lo: number, hi: number): void {
   const col: RGB = [0, 0, 0];
   const inv = hi > lo ? 1 / (hi - lo) : 0;
+  const footprint = (2 * Math.PI) / width;
   for (let j = row0; j < row1; j++) {
     const lat = ((j + 0.5) / height - 0.5) * Math.PI;
     const cl = Math.cos(lat), sl = Math.sin(lat);
@@ -30,7 +31,7 @@ export function bakeRows(terrain: Terrain, width: number, height: number, data: 
       const lon = ((i + 0.5) / width) * Math.PI * 2 - Math.PI;
       const x = cl * Math.cos(lon), y = cl * Math.sin(lon), z = sl;
       const h = terrain.heightAt(x, y, z);
-      if (terrain.colorAt) terrain.colorAt(x, y, z, h, col);
+      if (terrain.colorAt) terrain.colorAt(x, y, z, h, col, footprint);
       else { col[0] = col[1] = col[2] = 0.5; }
       const k = (j * width + i) * 4;
       data[k] = Math.round(linearToSrgb(col[0]) * 255);

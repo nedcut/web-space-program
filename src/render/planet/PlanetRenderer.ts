@@ -19,6 +19,7 @@ import {
   createSkyMaterial,
   createCloudMaterial,
   enableCloudShadows,
+  enableEarthImagery,
   createRingMaterial,
   createSunMaterial,
   type GasGiantStyle,
@@ -31,6 +32,7 @@ import { createPlanetEffect } from './effects';
 import { reflectedIrradiance, type PlanetLightSource } from './planetshine';
 import { SurfaceScatter } from './scatter/SurfaceScatter';
 import { terrainCutout } from './cutout';
+import { EarthImagery, seasonMonth } from './earthImagery';
 
 export interface PlanetRendererOptions {
   /** Portraits bake surface detail without allocating close-up terrain. */
@@ -101,13 +103,23 @@ export class PlanetRenderer {
   private farSphere: THREE.Mesh | null = null;
   private farMaterial: THREE.ShaderMaterial | null = null;
   private farTexture: THREE.DataTexture | null = null;
+  /** The last update wanted near (quadtree) terrain: until its roots are built, the far sphere is a stand-in. */
+  private wantNear = false;
   private bakeRequested = false;
   private surfaceBake?: ReturnType<typeof acquireSurfaceBake>;
   private disposed = false;
   private sky: THREE.Mesh | null = null;
+  /** Real Earth imagery (Earth only; null elsewhere or when unavailable). */
+  readonly imagery: EarthImagery | null = null;
+  /** Renderer drawing this planet (seen in material callbacks): imagery uploads/merges run through it. */
+  private glRenderer: THREE.WebGLRenderer | null = null;
+  /** Dev/automation: pin the imagery month (0–11) instead of following the season. */
+  seasonOverride: number | null = null;
+  private readonly imageryStart = typeof performance !== 'undefined' ? performance.now() : 0;
   private clouds: THREE.Mesh | null = null;
   private cloudRadius = 0;
   private cloudMap: CloudMap | null = null;
+  private cloudSourceBound = false;
   /** Renderer seen by the cloud mesh's onBeforeRender; used to bake the cloud map in update(). */
   private bakeRenderer: THREE.WebGLRenderer | null = null;
   private readonly cloudRotM = new THREE.Matrix3();
@@ -157,6 +169,14 @@ export class PlanetRenderer {
       this.uniforms.uStepScale.value = Math.ceil(64 / this.quality.atmosphere.aerialSteps);
     }
 
+    if (body.id === 'earth' && this.kind === 'solid') {
+      this.imagery = new EarthImagery({ quality: opts.quality.earth.textureQuality, nightLights: opts.quality.earth.nightLights,
+        radius: body.radius, maxLevel: opts.farOnly ? '4k' : undefined,
+        clouds: !opts.farOnly && !!terrain && opts.quality.clouds });
+      enableEarthImagery(this.uniforms, this.imagery.uniforms);
+      this.root.userData.imagery = this.imagery; // diagnostics/automation
+      this.root.userData.planet = this;
+    }
     if (this.kind === 'star') this.buildSun();
     else if (this.kind === 'gas') this.buildGasGiant();
     else this.buildSolid(opts);
@@ -177,6 +197,10 @@ export class PlanetRenderer {
     }
     if (body.id === 'titan') {
       for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.TITAN_HAZE = 1;
+    }
+    if (this.imagery) {
+      const capture = (r: THREE.WebGLRenderer) => { this.glRenderer = r; };
+      for (const m of this.materials) m.onBeforeRender = capture;
     }
     if (body.id === 'earth' && this.quality.earth.nightLights) {
       for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.EARTH_DETAILS = 1;
@@ -413,6 +437,9 @@ export class PlanetRenderer {
     const sx = p.sunPosition.x - p.bodyPosition.x, sy = p.sunPosition.y - p.bodyPosition.y, sz = p.sunPosition.z - p.bodyPosition.z;
     const sd = Math.sqrt(sx * sx + sy * sy + sz * sz) || 1;
     u.uSunDir.value.set(sx / sd, sy / sd, sz / sd);
+    // Seasons follow the orbit (scaled universes shorten the year): Sun's ecliptic longitude → month.
+    this.imagery?.update(this.seasonOverride ?? seasonMonth(Math.atan2(sy, sx)));
+    if (this.imagery && this.glRenderer) this.imagery.step(this.glRenderer);
     const auScaled = AU * this.scale.s;
     const E = this.kind === 'star' ? 0 : this.sunIlluminance * Math.pow(auScaled / Math.max(sd, auScaled * 0.2), 0.3);
     u.uSunColor.value.set(E, E * 0.985, E * 0.96);
@@ -470,8 +497,15 @@ export class PlanetRenderer {
     }
     if (this.sky) placeWhole(this.sky, Ra * 1.002);
     if (this.clouds) {
-      if (this.cloudMap && !this.cloudMap.done && this.bakeRenderer) {
-        if (this.cloudMap.step(this.bakeRenderer)) { u.uCloudShell.value = this.cloudRadius; this.bakeRenderer = null; }
+      // Earth bakes from real cloud imagery once it has loaded (or failed: the synoptic model then).
+      const sourceReady = !this.imagery || this.imagery.cloudSourceSettled;
+      if (this.cloudMap && !this.cloudMap.done && this.bakeRenderer && sourceReady) {
+        if (!this.cloudSourceBound) { this.cloudMap.setSource(this.imagery?.cloudSource ?? null); this.cloudSourceBound = true; }
+        if (this.cloudMap.step(this.bakeRenderer)) {
+          u.uCloudShell.value = this.cloudRadius;
+          this.bakeRenderer = null;
+          this.imagery?.releaseCloudSource();
+        }
       }
       // Body-fixed weather keeps marine decks aligned with their coastlines.
       u.uCloudRot.value.copy(this.cloudRotM.copy(this.rotM).transpose());
@@ -515,6 +549,7 @@ export class PlanetRenderer {
     // Flat, colorful moons need texture resolution, not geometric refinement: retain the bake longer.
     const colorDominated = this.body.id === 'io' || this.body.id === 'europa';
     const wantNear = !!qt && wantsTerrainLod(R, camDist, projR, this.quality.bakedTextureWidth, colorDominated);
+    this.wantNear = wantNear;
     if (qt && wantNear) {
       this.tmpM4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
       this.frustum.setFromProjectionMatrix(this.tmpM4);
@@ -550,13 +585,24 @@ export class PlanetRenderer {
   /** Solid surface is ready for control. Cosmetic scatter continues streaming independently. */
   get surfaceReady(): boolean {
     if (this.kind !== 'solid') return true;
-    const bakeDone = !this.terrain || !!this.farTexture;
-    return bakeDone && (!this.quadtree || this.stats.mode === 'far' || this.quadtree.idle);
+    const bakeDone = (!this.terrain || !!this.farTexture) && this.imageryIdle;
+    if (!bakeDone) return false;
+    // Far mode is final only when near terrain is not wanted; otherwise it is the stand-in shown while roots build.
+    return !this.quadtree || (this.wantNear ? this.stats.mode === 'near' && this.quadtree.idle : true);
   }
 
   /** Fully settled, including decoration (screenshots/tests can still wait for this). */
   get idle(): boolean {
     return this.surfaceReady && (!this.scatter?.group.visible || this.scatter.idle);
+  }
+
+  /**
+   * Some imagery is on screen (the bundled level); higher-resolution packs stream in afterwards and never hold the
+   * loading screen. Bounded in case even the bundled level is slow.
+   */
+  private get imageryIdle(): boolean {
+    if (!this.imagery || this.imagery.presentable) return true;
+    return typeof performance !== 'undefined' && performance.now() - this.imageryStart > 4000;
   }
 
   /** Terrain height under a body-fixed unit direction (m), 0 if no terrain. */
@@ -625,6 +671,7 @@ export class PlanetRenderer {
     for (const m of this.materials) m.dispose();
     this.lut?.dispose();
     this.cloudMap?.dispose();
+    this.imagery?.dispose();
     this.surfaceBake?.release();
     this.root.removeFromParent();
   }

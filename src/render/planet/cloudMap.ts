@@ -20,10 +20,19 @@ export class CloudMap extends ProceduralCubeMap {
     super(size, GLSL_CLOUD_BAKE, {
       format: THREE.RedFormat,
       defines: { FINE_OCT: size >= 1024 ? 2 : 1, BILLOW_OCT: size >= 1024 ? 3 : 2 },
-      uniforms: { uLand: { value: land } },
+      uniforms: { uLand: { value: land }, uReal: { value: land }, uHasReal: { value: 0 } },
     });
     this.land = land;
     this.texture.anisotropy = 4;
+  }
+
+  /**
+   * Bake from real cloud imagery (equirect reflectance, rows north → south) instead of the synoptic model.
+   * Must be called before the first `step()`.
+   */
+  setSource(texture: THREE.Texture | null): void {
+    this.material.uniforms.uReal.value = texture ?? this.land;
+    this.material.uniforms.uHasReal.value = texture ? 1 : 0;
   }
 
   override dispose(): void {
@@ -35,6 +44,8 @@ export class CloudMap extends ProceduralCubeMap {
 const GLSL_CLOUD_BAKE = /* glsl */ `
 ${GLSL_NOISE}
 uniform sampler2D uLand;
+uniform sampler2D uReal;
+uniform float uHasReal;
 // Warping a front can compress even a low octave below a texel. Filter in the
 // bake's footprint as well as limiting the octave count; never bake aliases into mip 0.
 float cloudFbm(vec3 p, int octaves) {
@@ -58,7 +69,27 @@ vec3 swirl(vec3 p, vec3 c, float radius, float strength) {
   float ca = cos(a), sa = sin(a);
   return p * ca + cross(c, p) * sa + c * dot(c, p) * (1.0 - ca);
 }
+/**
+ * NASA Blue Marble cloud composite: reflectance → coverage. Thin cirrus and haze (≲ 0.1) stay clear so the
+ * surface reads through; optically thick decks saturate. Fine structure only modulates existing cloud.
+ */
+float realClouds(vec3 pBF) {
+  float lat = asin(clamp(pBF.z, -1.0, 1.0));
+  vec2 uv = vec2(atan(pBF.y, pBF.x) / 6.28318530718 + 0.5, 0.5 - lat / 3.14159265359);
+  // Seam-safe footprint: take derivatives of the wrapped copy across the antimeridian.
+  vec2 uv2 = vec2(fract(uv.x + 0.5), uv.y);
+  vec2 dx = dFdx(uv), dy = dFdy(uv), dx2 = dFdx(uv2), dy2 = dFdy(uv2);
+  if (dot(dx2, dx2) + dot(dy2, dy2) < dot(dx, dx) + dot(dy, dy)) { dx = dx2; dy = dy2; }
+  // The equirect source converges into radial streaks at the poles: filter wider there.
+  float polar = 1.0 + 24.0 * smoothstep(0.93, 0.995, abs(pBF.z));
+  float r = textureGrad(uReal, uv, dx * polar, dy * polar).r;
+  float d = smoothstep(0.07, 0.78, r);
+  d = pow(d, 0.85);
+  float fine = cloudFbm(pBF * 160.0, FINE_OCT);
+  return clamp(d * (0.92 + 0.16 * fine), 0.0, 1.0);
+}
 vec4 bake(vec3 pBF) {
+  if (uHasReal > 0.5) return vec4(realClouds(pBF), 0.0, 0.0, 1.0);
   float lat = asin(clamp(pBF.z, -1.0, 1.0));
   float alat = abs(lat);
   // Broad, hemisphere-correct baroclinic curls. Deform the weather coordinates, not the

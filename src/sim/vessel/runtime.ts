@@ -100,6 +100,8 @@ export interface EngineState {
   flamedOut: boolean;
   /** Actual (spooled) throttle 0..1 — fraction of max mass flow. */
   throttle: number;
+  /** Start-up transient finished since ignition: a liquid rocket now follows throttle changes almost at once. */
+  spooledUp?: boolean;
   /** Remaining ignitions (-1 = unlimited). */
   ignitionsLeft: number;
   /** Current thrust, N (telemetry/render). */

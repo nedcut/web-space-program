@@ -256,6 +256,29 @@ describe('flight gamepad actions', () => {
       h.input.update(0.1); expect(h.input.state.pitch).toBe(-1);
     } finally { h.input.dispose(); game.set({ settings }); }
   });
+  it('reports pilot throttle input once (cut, full, ramp keys) so it can override a flight assist', () => {
+    const h = harness(); const settings = game.get().settings;
+    const ev = (type: string, code: string) => h.target.dispatchEvent(Object.assign(new Event(type), { code, ctrlKey: false, shiftKey: false, metaKey: false, altKey: false, repeat: false }));
+    try {
+      game.set({ settings: { ...settings, gamepadEnabled: false, inputSmoothing: 0 } });
+      h.input.update(0.02);
+      expect(h.input.takeThrottleInput()).toBe(false);
+      h.input.state.throttle = 0.7; // e.g. set by an assist: not pilot input
+      h.input.update(0.02);
+      expect(h.input.takeThrottleInput()).toBe(false);
+      ev('keydown', 'KeyX');
+      expect(h.input.state.throttle).toBe(0);
+      expect(h.input.takeThrottleInput()).toBe(true);
+      expect(h.input.takeThrottleInput()).toBe(false);
+      ev('keyup', 'KeyX');
+      ev('keydown', 'KeyZ'); ev('keyup', 'KeyZ');
+      expect(h.input.takeThrottleInput()).toBe(true);
+      ev('keydown', 'ControlLeft'); h.input.update(0.02); ev('keyup', 'ControlLeft');
+      expect(h.input.takeThrottleInput()).toBe(true);
+      h.input.update(0.02);
+      expect(h.input.takeThrottleInput()).toBe(false);
+    } finally { h.input.dispose(); game.set({ settings }); }
+  });
   it('uses rebound continuous keys and clears them while paused', () => {
     const h = harness(); const settings = game.get().settings;
     try {

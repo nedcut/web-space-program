@@ -26,8 +26,8 @@ export function AdvancedGraphicsPanel({ settings }: { settings: Settings }) {
     {select('atmosphereQuality', 'Atmosphere quality', 'More scattering samples smooth the sky and haze. Costs GPU time. Rebuild.', q.earth.atmosphereQuality, levels)}
     {toggle('Atmospheric scattering', 'Sky and aerial haze. Turning off saves shader work. Rebuild.', settings.scatter, v => updateSettings({ scatter: v, graphicsCustom: true }))}
     {select('cloudQuality', 'Cloud quality', 'Sharper cloud maps and more detail samples. Costs texture memory and GPU time. Rebuild.', q.clouds ? q.earth.cloudQuality : 'off', ['off', ...levels])}
-    {select('textureQuality', 'Earth texture quality', 'Larger baked surface textures improve distant detail; more memory and bake time. Rebuild.', q.earth.textureQuality, levels)}
-    {select('oceanQuality', 'Ocean quality', 'More aerial-perspective samples over water. Costs GPU time. Rebuild.', q.earth.oceanQuality, levels)}
+    {select('textureQuality', 'Earth texture quality', 'NASA Earth imagery resolution: Low 2k (bundled); Medium and High 8k and Ultra 16k download once and are cached, showing the bundled 4k meanwhile and offline (Medium/High ≈ 0.2 GB, Ultra ≈ 0.8 GB GPU memory). Rebuild.', q.earth.textureQuality, levels)}
+    {select('oceanQuality', 'Ocean quality', 'Wave detail, wind-driven sun glint and sky-reflection samples over water. Costs GPU time. Rebuild.', q.earth.oceanQuality, levels)}
     {toggle('Night lights', 'Surface city emission on Earth. Saves night-side shader work when disabled. Rebuild.', q.earth.nightLights, v => set('nightLights', v))}
     {toggle('Bloom', 'Glow around bright engines and sunlight. Adds post-processing GPU cost.', settings.bloom, v => updateSettings({ bloom: v, graphicsCustom: true }))}
     {select('starQuality', 'Stars / Milky Way', 'More stars; off also hides the Milky Way. Costs geometry and a sky texture. Rebuild.', settings.advancedGraphics.starQuality ?? settings.quality, ['off', ...levels])}

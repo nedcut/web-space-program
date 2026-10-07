@@ -26,6 +26,17 @@ map and in the Ring Skimmer mission — `docs/PERFORMANCE.md` ("What to measure 
 Graphics are auto-tuned once per device (weak GPUs start on Low; adaptive resolution is on). Then tell me what feels
 wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
 
+## Real Earth from orbit (2026-10-07, op/earthgfx)
+
+Earth now wears real NASA imagery: monthly Blue Marble colour with sea ice, Black Marble city lights on the night
+side, real cloud systems, shallow banks in their true turquoise, and a sun glint whose width follows the wind. It
+lines up with the real ETOPO terrain and hands over smoothly to the close-up ground colours as you descend.
+Settings → Graphics → Advanced → *Earth texture quality*: Low 2k / Medium 4k (bundled, offline), High 8k (downloads
+once, ~25 MB), Ultra 16k (needs `npm run earth:imagery -- --ultra` once, then hosted with the app; ~0.7 GB GPU
+memory). Medium costs the same as before on the test GPU (and less on the night side); High/Ultra add bicubic
+detail, cloud-top relief and richer water. Imagery streams in the background without hitches. Before/after shots
+and numbers: `docs/screenshots/earthgfx/README.md`.
+
 ## Smoother on a Retina Mac: ~40 % less GPU time per frame (2026-10-07, op/perfgpu)
 You said the game feels slow. On a Retina MacBook the 3D view was drawn at the full 2940×1840 device pixels; an
 M1/M2's GPU is 4–6× slower than my test card, so Medium ran at ~25–35 fps on the pad. Changes (no new settings

@@ -20,7 +20,7 @@ export class ProceduralCubeMap {
   private next = 0;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  private readonly material: THREE.ShaderMaterial;
+  protected readonly material: THREE.ShaderMaterial;
   private readonly quad: THREE.Mesh;
 
   constructor(size: number, bakeGlsl: string, opts: ProceduralCubeOptions = {}) {

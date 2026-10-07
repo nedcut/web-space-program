@@ -1,7 +1,8 @@
 import { loadEarthData } from '../game/earthLoader';
 /**
  * Dev page: visual verification of terrain LOD, atmosphere, rings, sky.
- * URL params (for automated screenshots): body, quality, alt (m), lat, lon, head, pitch, hour, dec, exp, ui=0, fov
+ * URL params (for automated screenshots): body, quality, alt (m), lat, lon, head, pitch, hour, dec, exp, ui=0, fov,
+ * month (1–12, Earth imagery; default follows the preview sun), earth (low|medium|high|ultra Earth knobs)
  * `window.__preview.ready` becomes true once terrain work has settled.
  */
 import * as THREE from 'three';
@@ -26,7 +27,12 @@ const defs = new Map<string, BodyDef>(BODY_DEFS.map((d) => [d.id, d]));
 
 const canvas = $<HTMLCanvasElement>('c');
 let qualityId = (params.get('quality') as QualityId) || 'medium';
-let quality = getQuality(qualityId);
+/** `earth=<low|medium|high|ultra>` overrides every Earth knob (imagery/atmosphere/cloud/ocean tiers). */
+const earthTier = params.get('earth') as 'low' | 'medium' | 'high' | 'ultra' | null;
+const withEarth = (q: ReturnType<typeof getQuality>) => earthTier
+  ? { ...q, earth: { textureQuality: earthTier, atmosphereQuality: earthTier, cloudQuality: earthTier, oceanQuality: earthTier, nightLights: true } }
+  : q;
+let quality = withEarth(getQuality(qualityId));
 const pipeline = new RenderPipeline({ canvas, quality, toneMapping: 'aces', exposure: 1 });
 const scene = new THREE.Scene();
 const camera = createPlanetaryCamera(Number(params.get('fov') ?? 60), innerWidth / innerHeight);
@@ -78,6 +84,7 @@ function loadBody(id: string): void {
   maxAlt = body.radius * (body.rings ? 12 : 8);
   const terrain = body.solidSurface ? createTerrain(body) : null;
   planet = new PlanetRenderer(body, terrain, { quality, scale: SCALE });
+  if (params.get('month')) planet.seasonOverride = Number(params.get('month')) - 1;
   scene.add(planet.root);
   if (id !== 'sun') {
     sun = new PlanetRenderer(sunDef, null, { quality, scale: SCALE });
@@ -89,6 +96,8 @@ function loadBody(id: string): void {
   renderedFrames = 0;
 }
 
+/** Exact altitude from the URL (beyond the slider's 8 R range, e.g. lunar distance) until the user zooms. */
+let altExact: number | null = params.get('alt') !== null ? Number(params.get('alt')) : null;
 let readyFrames = 0;
 let renderedFrames = 0;
 const SETTLE = params.get('settle') === '1';
@@ -97,9 +106,10 @@ const state = { ready: false, stats: {} as Record<string, unknown>, pipeline, sc
 (window as unknown as { __preview: typeof state }).__preview = state;
 
 bodySel.addEventListener('change', () => loadBody(bodySel.value));
+ui.alt.addEventListener('input', () => { altExact = null; });
 ui.quality.addEventListener('change', () => {
   qualityId = ui.quality.value as QualityId;
-  quality = getQuality(qualityId);
+  quality = withEarth(getQuality(qualityId));
   pipeline.setQuality(quality);
   scene.remove(stars.group);
   stars.dispose();
@@ -118,6 +128,7 @@ canvas.addEventListener('pointermove', (e) => {
   ui.pitch.value = String(Math.max(-90, Math.min(45, Number(ui.pitch.value) - e.movementY * 0.2)));
 });
 canvas.addEventListener('wheel', (e) => {
+  altExact = null;
   ui.alt.value = String(Math.max(0, Math.min(1000, Number(ui.alt.value) + Math.sign(e.deltaY) * 12)));
   e.preventDefault();
 }, { passive: false });
@@ -152,7 +163,7 @@ function frame(): void {
   const hour = Number(ui.hour.value);
   const dec = Number(ui.dec.value) * DEG;
   pipeline.exposure = Math.pow(2, Number(ui.exp.value));
-  const alt = altFromSlider(Number(ui.alt.value));
+  const alt = altExact ?? altFromSlider(Number(ui.alt.value));
   const R = body.radius;
 
   // Local frame at (lat, lon) in the body-fixed (= inertial here) frame.

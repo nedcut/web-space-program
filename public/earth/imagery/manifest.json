@@ -1,0 +1,595 @@
+{
+  "version": 1,
+  "projection": "equirectangular EPSG:4326 (same convention as public/earth/manifest.json)",
+  "convention": {
+    "rows": "north to south (row 0 = 90°N); upload without a Y flip and sample v = 0.5 − lat/π",
+    "columns": "west to east (column 0 = 180°W); u = lon/2π + 0.5 with lon = atan(y, x) in the body-fixed frame",
+    "tiles": "a level with tiles > 1 is split west→east into equal squares",
+    "day": "RGB = sRGB Blue Marble colour (monthly)",
+    "water": "R = linear water fraction (255 = water; lossless). Ice is removed at runtime from the day colour",
+    "night": "R = sRGB-encoded Black Marble radiance (saturated city cores = 255)",
+    "clouds": "R = cloud reflectance (sRGB-ish greyscale as published)"
+  },
+  "levels": [
+    {
+      "id": "2k",
+      "width": 2048,
+      "height": 1024,
+      "tiles": 1,
+      "bundled": true,
+      "day": "base/day-2k-{MM}.webp",
+      "water": "base/water-2k.webp",
+      "night": "base/night-4k.webp",
+      "clouds": "base/clouds-4k.webp"
+    },
+    {
+      "id": "4k",
+      "width": 4096,
+      "height": 2048,
+      "tiles": 1,
+      "bundled": true,
+      "day": "base/day-4k-{MM}.webp",
+      "water": "base/water-4k.webp",
+      "night": "base/night-4k.webp",
+      "clouds": "base/clouds-4k.webp"
+    },
+    {
+      "id": "8k",
+      "width": 8192,
+      "height": 4096,
+      "tiles": 1,
+      "bundled": false,
+      "day": "packs/8k/day-8k-{MM}.webp",
+      "water": "packs/8k/water-8k.webp",
+      "night": "packs/8k/night-8k.webp",
+      "clouds": "packs/8k/clouds-8k.webp"
+    },
+    {
+      "id": "16k",
+      "width": 16384,
+      "height": 8192,
+      "tiles": 2,
+      "bundled": false,
+      "optional": true,
+      "day": "packs/16k/day-16k-{MM}-{T}.webp",
+      "water": "packs/16k/water-16k-{T}.webp",
+      "night": "packs/8k/night-8k.webp",
+      "clouds": "packs/8k/clouds-8k.webp"
+    }
+  ],
+  "sources": {
+    "bmng-01": {
+      "title": "NASA Blue Marble Next Generation, january 2004 (land surface, shallow water; no shaded relief)",
+      "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base/january/world.200401.3x21600x10800.jpg",
+      "sha256": "c2f2c80a352518cfea23d462dad6f6e778375ddd74bbec5786bcfc85cc49c61d",
+      "license": "Public domain (NASA)"
+    },
+    "bmng-02": {
+      "title": "NASA Blue Marble Next Generation, february 2004 (land surface, shallow water; no shaded relief)",
+      "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base/february/world.200402.3x21600x10800.jpg",
+      "sha256": "8800081f38b53bfa1e3f0c2fa17be694b7646942fe5add009ea0dcd64c03e70b",
+      "license": "Public domain (NASA)"
+    },
+    "bmng-03": {
+      "title": "NASA Blue Marble Next Generation, march 2004 (land surface, shallow water; no shaded relief)",
+      "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base/march/world.200403.3x21600x10800.jpg",
+      "sha256": "af37f61a9715c59dc86763df19f588a20c9d92b3d0a8034a0b00acd6b97ccb7d",
+      "license": "Public domain (NASA)"
+    },
+    "bmng-04": {
+      "title": "NASA Blue Marble Next Generation, april 2004 (land surface, shallow water; no shaded relief)",
+      "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base/april/world.200404.3x21600x10800.jpg",
+      "sha256": "3bd13f173555eb24451c45d3a83ca177baca02e9a8bdd9fa3e4989f7b496ce6b",
+      "license": "Public domain (NASA)"
+    },
+    "bmng-05": {
+      "title": "NASA Blue Marble Next Generation, may 2004 (land surface, shallow water; no shaded relief)",
+      "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base/may/world.200405.3x21600x10800.jpg",
+      "sha256": "0de40c868680ab9e86fef42406d76386b243b32444ff50edfd406b296638c206",
+      "license": "Public domain (NASA)"
+    },
+    "bmng-06": {
+      "title": "NASA Blue Marble Next Generation, june 2004 (land surface, shallow water; no shaded relief)",
+      "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base/june/world.200406.3x21600x10800.jpg",
+      "sha256": "282608580a290723655bfbe917e69ea2f93f4da068dfa96ff4a152b1c6ec36be",
+      "license": "Public domain (NASA)"
+    },
+    "bmng-07": {
+      "title": "NASA Blue Marble Next Generation, july 2004 (land surface, shallow water; no shaded relief)",
+      "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base/july/world.200407.3x21600x10800.jpg",
+      "sha256": "dea8b4dc8a4f93f5f8bce0c8c85a508a178e7901e9ed8e6bf86e6ce7ef6d61e2",
+      "license": "Public domain (NASA)"
+    },
+    "bmng-08": {
+      "title": "NASA Blue Marble Next Generation, august 2004 (land surface, shallow water; no shaded relief)",
+      "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base/august/world.200408.3x21600x10800.jpg",
+      "sha256": "926be7253be90a1fd57071a33afbfe7a712a2dfe0d5b5b4602bc5dfbcfdc2c89",
+      "license": "Public domain (NASA)"
+    },
+    "bmng-09": {
+      "title": "NASA Blue Marble Next Generation, september 2004 (land surface, shallow water; no shaded relief)",
+      "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base/september/world.200409.3x21600x10800.jpg",
+      "sha256": "7cf788e13a3a7b4a926b524f8f71d635c56a18c48ba0bfe35695b05a305db3f3",
+      "license": "Public domain (NASA)"
+    },
+    "bmng-10": {
+      "title": "NASA Blue Marble Next Generation, october 2004 (land surface, shallow water; no shaded relief)",
+      "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base/october/world.200410.3x21600x10800.jpg",
+      "sha256": "bf568ceca2ad55e9c8dd7bcedfd0e419201d03bb560206a7bfa2cc57c1e04c64",
+      "license": "Public domain (NASA)"
+    },
+    "bmng-11": {
+      "title": "NASA Blue Marble Next Generation, november 2004 (land surface, shallow water; no shaded relief)",
+      "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base/november/world.200411.3x21600x10800.jpg",
+      "sha256": "1959bbe72897d3e9526c440dae3ec04cfdbdc4080c8ff0b14632925ae31167b1",
+      "license": "Public domain (NASA)"
+    },
+    "bmng-12": {
+      "title": "NASA Blue Marble Next Generation, december 2004 (land surface, shallow water; no shaded relief)",
+      "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base/december/world.200412.3x21600x10800.jpg",
+      "sha256": "b0ffc9d12205689aeaec66116bbae2c4c263fcd98a0cbadba8d5488567b53278",
+      "license": "Public domain (NASA)"
+    },
+    "night": {
+      "title": "NASA Earth at Night (Black Marble) 2016, 3 km grayscale",
+      "url": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144897/BlackMarble_2016_3km_gray.jpg",
+      "sha256": "3fbc8aae3529dc1ebfcf3aa9361bd3dfc11d19950a6af6d8ed2df61bd8b0134d",
+      "license": "Public domain (NASA)"
+    },
+    "clouds": {
+      "title": "NASA Blue Marble cloud composite (Terra/MODIS, 2001–2002)",
+      "url": "https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57747/cloud_combined_8192.tif",
+      "sha256": "d137775d8966ab8d443fd5126dc6e7ad72072bc1ed50555c5818d221735daf0f",
+      "license": "Public domain (NASA)"
+    },
+    "ice-01": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-01-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-01-15",
+      "sha256": "ef9ffb0d704c32c92780ea5055a21f1a75bd81d60ce8e0edde8a619799a05189",
+      "license": "Public domain (NASA)"
+    },
+    "ice-02": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-02-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-02-15",
+      "sha256": "741e43c74853387ef44e210a718dbcb1af3b82e58ad1209a25172e1ac918d574",
+      "license": "Public domain (NASA)"
+    },
+    "ice-03": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-03-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-03-15",
+      "sha256": "d19db98a85807821db220899e6feb1fe020219d9d39a9830667445efc26baf00",
+      "license": "Public domain (NASA)"
+    },
+    "ice-04": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-04-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-04-15",
+      "sha256": "ae7bc161595449029cdcfc665935631b64ce23a9d1e96fa2ebc8c236e6cfdb27",
+      "license": "Public domain (NASA)"
+    },
+    "ice-05": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-05-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-05-15",
+      "sha256": "d6c7f755af0ddf708cbed9736ce32a53a708adf3000adf7d5eef97269a85103a",
+      "license": "Public domain (NASA)"
+    },
+    "ice-06": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-06-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-06-15",
+      "sha256": "03d13e6c72e22ff19b3e2890a3e826f30419c0b1bbe0a4f1536a76ba22142fce",
+      "license": "Public domain (NASA)"
+    },
+    "ice-07": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-07-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-07-15",
+      "sha256": "d0ab27b8191b08e4ad92681025b476157e3bf62e431c510df90a9f6b787d6ec6",
+      "license": "Public domain (NASA)"
+    },
+    "ice-08": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-08-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-08-15",
+      "sha256": "282e337199c42a17d0c4da9116bd29d1398b13bb199aa0a77186ce19ef7e4831",
+      "license": "Public domain (NASA)"
+    },
+    "ice-09": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-09-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-09-15",
+      "sha256": "5e68338aa253242b0322dc19f40eebb0ccc82c3973e3bbb3f30a253b4fee51a1",
+      "license": "Public domain (NASA)"
+    },
+    "ice-10": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-10-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-10-15",
+      "sha256": "5a8beb1d49508d869ac88a02ef18a28522587e4da0931e89dac73bf66fc0afdf",
+      "license": "Public domain (NASA)"
+    },
+    "ice-11": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-11-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-11-15",
+      "sha256": "863719c23b38c9113a808dd73bac51f54129129142e2ba239022cff6cf7a9dcb",
+      "license": "Public domain (NASA)"
+    },
+    "ice-12": {
+      "title": "NASA GIBS GHRSST MUR L4 sea ice concentration, 2019-12-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Ice_Concentration&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-12-15",
+      "sha256": "96074115dcbf92af66d49fbff2bbdc03448b7faf0c2ba8a12fc7779b41cee76a",
+      "license": "Public domain (NASA)"
+    },
+    "iceOcean": {
+      "title": "NASA GIBS GHRSST MUR L4 sea surface temperature (product ocean mask), 2019-07-15",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GHRSST_L4_MUR25_Sea_Surface_Temperature&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=4096&HEIGHT=2048&FORMAT=image/png&TRANSPARENT=TRUE&TIME=2019-07-15",
+      "sha256": "fa6a361dd16df3d0e74347a8fd297641da74158eec78837aec1dc9672f97f0ba",
+      "license": "Public domain (NASA)"
+    },
+    "iceColormap": {
+      "title": "NASA GIBS sea ice concentration colormap",
+      "url": "https://gibs.earthdata.nasa.gov/colormaps/v1.3/GHRSST_Sea_Ice_Concentration.xml",
+      "sha256": "f72c4d294d5b16128c62c6e8ac3f9367837c2fab03b83263be48c287597e6c4c",
+      "license": "Public domain (NASA)"
+    },
+    "land": {
+      "title": "Natural Earth 1:10m land polygons v5.1.2",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_land.geojson",
+      "sha256": "1ac90796408bc6ad6911d69448485d3c4dbf2190370080368a09976e1c9f7416",
+      "license": "Public domain (Natural Earth)"
+    },
+    "lakes": {
+      "title": "Natural Earth 1:10m lakes v5.1.2",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_lakes.geojson",
+      "sha256": "2d036f53dedec578001c5c30c2959ee7d4eebc1306900fa4367c49929ec8f2d9",
+      "license": "Public domain (Natural Earth)"
+    },
+    "shelves": {
+      "title": "Natural Earth 1:10m Antarctic ice shelves v5.1.2",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_antarctic_ice_shelves_polys.geojson",
+      "sha256": "8f9bf62368695f5664b5fcd9bc0e2baea66da295aea014ce0e9cf510f209898d",
+      "license": "Public domain (Natural Earth)"
+    }
+  },
+  "files": [
+    {
+      "path": "base/water-2k.webp",
+      "bytes": 163848,
+      "sha256": "03e08b7c5f0c0448ab0a7c63ac177c09b16a185317b2f5dd08d77f54ef2ef9c1"
+    },
+    {
+      "path": "base/water-4k.webp",
+      "bytes": 399862,
+      "sha256": "923296e55868008edbb3666b3a65a2af85ebe1b26b97bb1df4067f8a1098b382"
+    },
+    {
+      "path": "packs/8k/water-8k.webp",
+      "bytes": 953670,
+      "sha256": "2005736f317c7074610d34935d14eff2a7a4d80fbfedf73e50f303dca8bb5ed0"
+    },
+    {
+      "path": "packs/16k/water-16k-0.webp",
+      "bytes": 745540,
+      "sha256": "a0d94ad56a87c918b4f3243364790a4ff60962492330c8f9c77c12938163bb3c"
+    },
+    {
+      "path": "packs/16k/water-16k-1.webp",
+      "bytes": 1324182,
+      "sha256": "a676269ba113bfc3caecc34a8cbca4ff81ad93f7295bfb10006c466f41f6d96e"
+    },
+    {
+      "path": "base/day-2k-07.webp",
+      "bytes": 175878,
+      "sha256": "e3db5734876e9e384a8389ce410b5436d7dec62c0e5f3097bf0cf4e3bec8f9f2"
+    },
+    {
+      "path": "base/day-4k-07.webp",
+      "bytes": 583532,
+      "sha256": "4f0a5e4abb9c13c7ab7944f298665353e3f168d46305af3759513b09ba3015a9"
+    },
+    {
+      "path": "packs/8k/day-8k-07.webp",
+      "bytes": 1435002,
+      "sha256": "f73393ec6d7ff77b7f2bd6274905a384c58317660818a2cc139d77638ef3ec2e"
+    },
+    {
+      "path": "packs/16k/day-16k-07-0.webp",
+      "bytes": 2200060,
+      "sha256": "3da71529944de28d27c4f38118c31b50d1d46ea6bc8955d5b9d19d722ece8dd1"
+    },
+    {
+      "path": "packs/16k/day-16k-07-1.webp",
+      "bytes": 3051074,
+      "sha256": "a52db58fe22aee47f5fc265d27c1dfd410b1e1fc21c865e8a4d58d12f8b11959"
+    },
+    {
+      "path": "base/day-2k-01.webp",
+      "bytes": 210372,
+      "sha256": "1d8432ff8708b9ce2fc6029d3ea3437fbbdbbbdda6cd2c9c054a229d88f19a28"
+    },
+    {
+      "path": "base/day-4k-01.webp",
+      "bytes": 725774,
+      "sha256": "efeefa4ec9dd3e82d9852a70c13fa14df2eeedeed7589cc84753b7dfb03698eb"
+    },
+    {
+      "path": "packs/8k/day-8k-01.webp",
+      "bytes": 1824888,
+      "sha256": "01983574459add7c16db0ae19553a6483a24038655b274f56077f6b4cb5df61a"
+    },
+    {
+      "path": "packs/16k/day-16k-01-0.webp",
+      "bytes": 2550544,
+      "sha256": "0b6649c164281d264ca05472d4aec8a76f818f18932e9c7494733ad90f950b58"
+    },
+    {
+      "path": "packs/16k/day-16k-01-1.webp",
+      "bytes": 4201790,
+      "sha256": "eba8ec9fbdbdf7a6b925d9925c6b539f0f68652aa54e653257c18f62e73469d8"
+    },
+    {
+      "path": "base/day-2k-02.webp",
+      "bytes": 208130,
+      "sha256": "6edf9cb9ebe9fba54f7325d4ce4384f812844fecea13b09dd191eaff8a841e49"
+    },
+    {
+      "path": "base/day-4k-02.webp",
+      "bytes": 712832,
+      "sha256": "ffb77491021ab73cdb629522c680dd20cd73782c9c0967f7029b6d9fb9da7fee"
+    },
+    {
+      "path": "packs/8k/day-8k-02.webp",
+      "bytes": 1800272,
+      "sha256": "072bb987a007d7e101b47f765808f90f9f5d6bd63ec7da3f805748d9e930fcc5"
+    },
+    {
+      "path": "packs/16k/day-16k-02-0.webp",
+      "bytes": 2501424,
+      "sha256": "dd71e17eab7b719efe60788939570bf021893d949fb2e2135f5365899e727f1a"
+    },
+    {
+      "path": "packs/16k/day-16k-02-1.webp",
+      "bytes": 4161516,
+      "sha256": "4118f9044f708c09c817f55f98f3f9d47121efad931e6c44613ec900060e82d4"
+    },
+    {
+      "path": "base/day-2k-03.webp",
+      "bytes": 205820,
+      "sha256": "ddcc454499216bf410718d53648e8aa5382b6899462ab1e0a068c7d91a9e3763"
+    },
+    {
+      "path": "base/day-4k-03.webp",
+      "bytes": 697190,
+      "sha256": "f897293e648fb2b58c4372805ce6da80464e0efbda80da9a6143bf5a17fab4fc"
+    },
+    {
+      "path": "packs/8k/day-8k-03.webp",
+      "bytes": 1743426,
+      "sha256": "d61bd6ffda1e5f6acd18d8cdcf66d0130c9f3c64411855e7f78e6e5cb6c4b912"
+    },
+    {
+      "path": "packs/16k/day-16k-03-0.webp",
+      "bytes": 2403304,
+      "sha256": "4fc6cfae18522b75fe7be6ffd169f757ab12c2508f03d6f93cb4fc27583128ca"
+    },
+    {
+      "path": "packs/16k/day-16k-03-1.webp",
+      "bytes": 3998404,
+      "sha256": "21ff70d648e14bd63d1471d57ab3b9d7631fb4618380f742d2769220ceac8a02"
+    },
+    {
+      "path": "base/day-2k-04.webp",
+      "bytes": 199158,
+      "sha256": "b103cb5725ae6edcabe91b7dc482ff41075cc39c3962cdebc654ddac4d97559e"
+    },
+    {
+      "path": "base/day-4k-04.webp",
+      "bytes": 672242,
+      "sha256": "df3e7fe3a24c386da3618b24cca1940c976d77a4e155149e655a9deabbfca2c7"
+    },
+    {
+      "path": "packs/8k/day-8k-04.webp",
+      "bytes": 1651132,
+      "sha256": "74749b520ae72baa059ff270625cd46d60e56eb7a263bc1c862bb3a8c549e8be"
+    },
+    {
+      "path": "packs/16k/day-16k-04-0.webp",
+      "bytes": 2299086,
+      "sha256": "f95a0ac6f5a5dcfaa28ec73dfddb5dcc9455ec11006b1e211f71796497ff404b"
+    },
+    {
+      "path": "packs/16k/day-16k-04-1.webp",
+      "bytes": 3705682,
+      "sha256": "861cac34a98b841a86cce120239c775708c86f49bdd122f99b410b83ed5c9222"
+    },
+    {
+      "path": "base/day-2k-05.webp",
+      "bytes": 194564,
+      "sha256": "9ecc208356933f95307b04f94a526c64a7da0fb468d259cce0d38531e6525a55"
+    },
+    {
+      "path": "base/day-4k-05.webp",
+      "bytes": 644424,
+      "sha256": "672275660934947aaa9331e74245468aaf9023a10f7f4641784da43706452b9e"
+    },
+    {
+      "path": "packs/8k/day-8k-05.webp",
+      "bytes": 1572390,
+      "sha256": "c3e5142b645557620bb09fee48cd1d81145622743040813e34aff56e9714050d"
+    },
+    {
+      "path": "packs/16k/day-16k-05-0.webp",
+      "bytes": 2257070,
+      "sha256": "f104280c20e68c624083b7024c9bae1f604f65d12f0eacb7086d5fbd5a878c72"
+    },
+    {
+      "path": "packs/16k/day-16k-05-1.webp",
+      "bytes": 3440618,
+      "sha256": "a91cd4479060d74796359abc025eb8e5dbaa42ba18fb3d60c788d042799fa09a"
+    },
+    {
+      "path": "base/day-2k-06.webp",
+      "bytes": 188474,
+      "sha256": "08aedb73a3deef306850cc7a2874be24b90bd822c890e356756a0d1c80749af3"
+    },
+    {
+      "path": "base/day-4k-06.webp",
+      "bytes": 628366,
+      "sha256": "8a65a27808b3c0dbc1ed46ad75700092cc76595c8628e9dfe1b361b205e4deb3"
+    },
+    {
+      "path": "packs/8k/day-8k-06.webp",
+      "bytes": 1533190,
+      "sha256": "930afabc9ae17bc84b43bc8e6ac0c2f67921e460eef0579a7f94eeac1cf05023"
+    },
+    {
+      "path": "packs/16k/day-16k-06-0.webp",
+      "bytes": 2275152,
+      "sha256": "3adfd9c83ae5facfe9acb89a4441e3a715be2fc7432b7ef8851a585305c49f7f"
+    },
+    {
+      "path": "packs/16k/day-16k-06-1.webp",
+      "bytes": 3364722,
+      "sha256": "26ba173175905b5a802d4dea66842893eb6d5a7977bd095f61a1ed7db0552e26"
+    },
+    {
+      "path": "base/day-2k-08.webp",
+      "bytes": 176338,
+      "sha256": "d6dd782006a8bc4c24117b8f1dc9620599a8e50464e00cb06c2b6f26c3727289"
+    },
+    {
+      "path": "base/day-4k-08.webp",
+      "bytes": 592562,
+      "sha256": "d452f4b54d8d62e29e5a0184e5c2c2b79a5f4b97769fc5994514a2393b8ff0ae"
+    },
+    {
+      "path": "packs/8k/day-8k-08.webp",
+      "bytes": 1435640,
+      "sha256": "d2f845b3235a2c76fac09764f46d90a9713417add4f7dc3b67708d56d3b1d926"
+    },
+    {
+      "path": "packs/16k/day-16k-08-0.webp",
+      "bytes": 2192112,
+      "sha256": "f02bb90034563528034b216f59bf957f0ec53bdf974ed2f74109f2ea0929a9b0"
+    },
+    {
+      "path": "packs/16k/day-16k-08-1.webp",
+      "bytes": 3103998,
+      "sha256": "6cff0ecbe1006ddf0ef15186dab129203c18ba6d788a1bacae51ef07d3344a13"
+    },
+    {
+      "path": "base/day-2k-09.webp",
+      "bytes": 188886,
+      "sha256": "65a897246ab6f229176f0e38b278aa5f2f6855b01432368f30e83d2542c5afdd"
+    },
+    {
+      "path": "base/day-4k-09.webp",
+      "bytes": 638546,
+      "sha256": "a3d442f89dd22884b6593233cc0f410a39e181de73c93addefeb4782516dafab"
+    },
+    {
+      "path": "packs/8k/day-8k-09.webp",
+      "bytes": 1577490,
+      "sha256": "410599adc7ec8254fe5b5492024eb9b7a98ab44418798639c92bdca0ea812319"
+    },
+    {
+      "path": "packs/16k/day-16k-09-0.webp",
+      "bytes": 2292110,
+      "sha256": "11001535d44b3b0f27ff2565273917277859b17ca8aa9a452694eabc62edfdab"
+    },
+    {
+      "path": "packs/16k/day-16k-09-1.webp",
+      "bytes": 3595256,
+      "sha256": "729f12957abf6de534712ba6fe820bd885a72e8fa6a2287be039501d8cfd18f4"
+    },
+    {
+      "path": "base/day-2k-10.webp",
+      "bytes": 193558,
+      "sha256": "c7e63824be68ed515ada9c1dcc807e644f5abccbd51674fc68b0462a624302e4"
+    },
+    {
+      "path": "base/day-4k-10.webp",
+      "bytes": 660756,
+      "sha256": "0b5b9a937179c26ea3ead12378480279196ff2c313d42067d4d53c2d077ea7a7"
+    },
+    {
+      "path": "packs/8k/day-8k-10.webp",
+      "bytes": 1651478,
+      "sha256": "f557456cc2faa15534697fcc3488658d007f97ac709d6a00cbf53308d44dfb35"
+    },
+    {
+      "path": "packs/16k/day-16k-10-0.webp",
+      "bytes": 2360902,
+      "sha256": "68d34d1e55a12e1476fd16690ec1632022971f2ba99995027b2f263fe0f48f1f"
+    },
+    {
+      "path": "packs/16k/day-16k-10-1.webp",
+      "bytes": 3802234,
+      "sha256": "537a671723047a0da955a2f3a1e5cc6e329fbbd5706b4e3492b950bd366b072d"
+    },
+    {
+      "path": "base/day-2k-11.webp",
+      "bytes": 206014,
+      "sha256": "b592b5a4003e6887a9849c0e9a946095c63ac67e3d8d31ec049dcfabe90606ac"
+    },
+    {
+      "path": "base/day-4k-11.webp",
+      "bytes": 710994,
+      "sha256": "984ccf2c5f0e5b8c012cdf4a0a01ebb614bfea052a0d9a206be74ad6c39687e3"
+    },
+    {
+      "path": "packs/8k/day-8k-11.webp",
+      "bytes": 1824304,
+      "sha256": "6ed27a41b22f733290353410a933820170a895e793325e547320368d4fba0b67"
+    },
+    {
+      "path": "packs/16k/day-16k-11-0.webp",
+      "bytes": 2490852,
+      "sha256": "33f18c9c6d759c0327eaf492844ca1d4dd01f3e1fb9ce019eb0a75afe469f9ce"
+    },
+    {
+      "path": "packs/16k/day-16k-11-1.webp",
+      "bytes": 4258802,
+      "sha256": "d235791ffd10f32cf26f8d12f4d6fc61bb717cd0a3603190e7ac73bbcba329f2"
+    },
+    {
+      "path": "base/day-2k-12.webp",
+      "bytes": 213964,
+      "sha256": "b9c48b4c9eb188a6864ddb0fd44b751270f50f54c6ac90aba9f77b7d3063e983"
+    },
+    {
+      "path": "base/day-4k-12.webp",
+      "bytes": 732340,
+      "sha256": "f1ca0def98f1dd6f5120677cb7e6f4e243eca9a9f842bb1b761377ac226aa7eb"
+    },
+    {
+      "path": "packs/8k/day-8k-12.webp",
+      "bytes": 1876146,
+      "sha256": "84453505597da4d2bb906f892fbc9d4a4c05a0dae091eb84814cf3e1bd1ad0c0"
+    },
+    {
+      "path": "packs/16k/day-16k-12-0.webp",
+      "bytes": 2595110,
+      "sha256": "d0ae88d46ccf48eef5fd12eb8cbd6dc77b014c9ce45871b0e88568d9abfa2154"
+    },
+    {
+      "path": "packs/16k/day-16k-12-1.webp",
+      "bytes": 4332738,
+      "sha256": "aa92ed846934ec49dc15948bf93d4a6dd04fc09f88bb5537d18ce3263f3e5910"
+    },
+    {
+      "path": "base/night-4k.webp",
+      "bytes": 178888,
+      "sha256": "6ea61c7ff05c465cd04302af422664a9b3afce7a694d047dd57a2af01240e84b"
+    },
+    {
+      "path": "base/clouds-4k.webp",
+      "bytes": 2022998,
+      "sha256": "e9668326007451e962740da34c93cbab22505cabc29350bc08ad905f6b1acdb8"
+    },
+    {
+      "path": "packs/8k/night-8k.webp",
+      "bytes": 445292,
+      "sha256": "6d49d8d03cb543cafd909d550230c26747967171efd82128436bace33fb4f75c"
+    },
+    {
+      "path": "packs/8k/clouds-8k.webp",
+      "bytes": 4586690,
+      "sha256": "d4b05e479201dcb58bd8de2adb179fc56be23bb9ceba28edcbfdcb9a661e6657"
+    }
+  ]
+}

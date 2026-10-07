@@ -1,0 +1,8 @@
+{
+  "day": "alt=150000&lat=24&lon=-72&head=250&pitch=-50&hour=10.5&dec=20&month=7",
+  "glint": "alt=200000&lat=5&lon=-150&head=95&pitch=-50&hour=8.5&dec=20&month=7",
+  "terminator": "alt=250000&lat=44&lon=2&head=85&pitch=-54&hour=19.6&dec=20&month=7",
+  "sunrise": "alt=180000&lat=0&lon=100&head=70&pitch=-37&hour=3.3&dec=20&month=7",
+  "disc": "alt=2600000&lat=15&lon=20&head=0&pitch=-90&hour=11&dec=20&month=7&fov=30",
+  "moon": "alt=37800000&lat=10&lon=-30&head=0&pitch=-90&hour=15&dec=20&month=7&fov=2.4"
+}

@@ -9,7 +9,7 @@ import type { Autopilot } from '../src/game/autopilot';
 import { assistFrame, createAssist, type AssistId } from '../src/flight/assist';
 import { neutralInput } from '../src/sim/vessel';
 import type { ControlInput } from '../src/sim/vessel/runtime';
-import { add, length, normalize, scale, v3 } from '../src/util/vec3';
+import { add, length, normalize, scale, sub, v3 } from '../src/util/vec3';
 import { requireIntactFlight } from './helpers/structural';
 
 /** The flight scene's assist loop (`assistFrame`), frame by frame; `pilot` supplies the pilot's input per frame. */
@@ -35,19 +35,24 @@ function probe(world: World) {
   // Hands off for a moment first: the craft must already be flyable (not packed on rails) without any input.
   hold(world, 0.5, { sas: 'stabilityAssist' });
   const handback = { mode: world.active!.mode, warp: world.warp.index };
-  const w0 = length(v.angularVelocity);
+  const w0 = { ...v.angularVelocity };
   let maxGimbal = 0;
   for (let t = 0; t < 1; t += 1 / 60) {
     world.tick(1 / 60, neutralInput({ sas: 'off', pitch: 1, throttle: 1 }));
     for (const p of v.parts) if (p.engine?.ignited) maxGimbal = Math.max(maxGimbal, Math.hypot(p.engine.gimbal?.a ?? 0, p.engine.gimbal?.b ?? 0));
   }
   const thrust = v.telemetry.thrust;
-  const turn = length(v.angularVelocity) - w0;
+  // Change of the rotation rate (any residual spin from the program is fine; pitch input must change it).
+  const turn = length(sub(v.angularVelocity, w0));
   hold(world, 0.2, { sas: 'off', throttle: 0 });
   v.angularVelocity = v3(0.05, 0, 0.05);
   const spin0 = length(v.angularVelocity);
-  hold(world, 4, { sas: 'stabilityAssist' });
-  return { ...handback, thrust, turn, maxGimbal, spin0, spin1: length(v.angularVelocity) };
+  // Unpowered, a full launcher has only the capsule's reaction wheel (engines cut in ~0.1 s), so measure SAS by
+  // its command (saturated against the spin) and by the spin starting to fall, not by how fast it stops.
+  hold(world, 0.5, { sas: 'stabilityAssist' });
+  const sasCommand = Math.hypot(v.telemetry.control.pitch, v.telemetry.control.roll, v.telemetry.control.yaw);
+  hold(world, 3.5, { sas: 'stabilityAssist' });
+  return { ...handback, thrust, turn, maxGimbal, spin0, sasCommand, spin1: length(v.angularVelocity) };
 }
 
 function selene(orbit: boolean) {
@@ -65,7 +70,8 @@ function expectControl(r: ReturnType<typeof probe>, label: string) {
   expect(r.thrust, label).toBeGreaterThan(0);
   expect(r.maxGimbal, label).toBeGreaterThan(1e-3);
   expect(r.turn, label).toBeGreaterThan(0.005);
-  expect(r.spin1, label).toBeLessThan(r.spin0 * 0.5);
+  expect(r.sasCommand, label).toBeGreaterThan(0.5);
+  expect(r.spin1, label).toBeLessThan(r.spin0 * 0.97);
 }
 
 function stagedInOrbit() {
@@ -102,6 +108,32 @@ describe('assist hands control back', () => {
     const ended = drive(world, ap, 2000);
     expect(ended?.reason, ap.error).toBe('done');
     expectControl(probe(world), 'node after warp-to');
+  }, 120000);
+
+  it('a pilot throttle input ends the program mid-burn and applies the pilot throttle that frame', () => {
+    const world = stagedInOrbit();
+    world.addNode(world.ut + 300).prograde = 40;
+    const ap = createAssist('node', world);
+    const state = { warped: false };
+    let frame = assistFrame(world, ap, neutralInput({ sas: 'stabilityAssist' }), 1 / 60, state);
+    for (let k = 0; k < 600_000 && !frame.ended && !(world.active!.state.telemetry.thrust > 0); k++) {
+      world.tick(1 / 60, frame.input);
+      frame = assistFrame(world, ap, neutralInput({ sas: 'stabilityAssist' }), 1 / 60, state);
+    }
+    expect(world.active!.state.telemetry.thrust).toBeGreaterThan(0);
+    // The pilot hits "cut throttle" (throttle 0, flagged as touched by FlightInput.takeThrottleInput).
+    frame = assistFrame(world, ap, neutralInput({ sas: 'stabilityAssist', throttle: 0 }), 1 / 60, state, true);
+    expect(frame.ended?.reason).toBe('pilot');
+    expect(frame.input.throttle).toBe(0);
+    // ...and a "full throttle" press keeps the pilot's throttle rather than zeroing it.
+    const again = createAssist('node', world);
+    const full = assistFrame(world, again, neutralInput({ sas: 'stabilityAssist', throttle: 1 }), 1 / 60, { warped: false }, true);
+    expect(full.ended?.reason).toBe('pilot');
+    expect(full.input.throttle).toBe(1);
+    world.tick(1 / 60, frame.input);
+    hold(world, 0.5, { sas: 'stabilityAssist' });
+    expect(world.active!.state.telemetry.thrust).toBe(0);
+    expect(world.warp.index).toBe(0);
   }, 120000);
 
   it('drops rails warp when the pilot throttles up or steers (a packed craft ignores both)', () => {

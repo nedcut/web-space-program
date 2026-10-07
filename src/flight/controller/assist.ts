@@ -40,13 +40,16 @@ function handBack(c: FlightController) {
 
 /** Apply the assist after manual controls have been assembled for this frame. */
 export function driveAssist(this: FlightController, internals: FlightControllerInternals, wv: WorldVessel | null, ctrl: ControlInput, dt: number): ControlInput {
+  // Consumed every frame (assist or not) so a throttle press made before an assist starts cannot cancel it later.
+  const throttleTouched = this.input.takeThrottleInput();
   if (!this.assist || !wv || this.paused) return ctrl;
   const state = { warped: internals.assistWarped };
-  const frame = assistFrame(this.world, this.assist, ctrl, dt, state);
+  const frame = assistFrame(this.world, this.assist, ctrl, dt, state, throttleTouched);
   internals.assistWarped = state.warped;
   if (frame.ended) {
     this.assist = null;
-    this.input.state.throttle = 0;
+    // 0 after a program; the pilot's own setting when their throttle input is what ended it (e.g. a cut).
+    this.input.state.throttle = frame.input.throttle;
     handBack(this);
     this.world.message(frame.ended.message, frame.ended.reason === 'done' ? 'info' : 'warn');
   } else this.input.state.throttle = frame.input.throttle;

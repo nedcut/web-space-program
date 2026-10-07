@@ -48,6 +48,10 @@ export class FlightInput {
   private keyRamp = { pitch: 0, yaw: 0, roll: 0 };
   /** Physical key that started a momentary SAS toggle (F held); its release emits 'sasHoldRelease'. */
   private sasHoldKey: string | null = null;
+  /** Set by any pilot throttle input (cut/full keys, ramp keys, analog trigger); read and cleared by the controller. */
+  private throttleTouched = false;
+  /** True once if the pilot moved the throttle since the last call (lets a pilot cut override a flight assist). */
+  takeThrottleInput(): boolean { const t = this.throttleTouched; this.throttleTouched = false; return t; }
   precision = false;
   get precisionActive() { return this.precision || this.down('precisionHold'); }
   gamepadConnected = false;
@@ -111,8 +115,8 @@ export class FlightInput {
       if (a === 'sasHold') { if (this.sasHoldKey) continue; this.sasHoldKey = e.code; }
       this.emit(a);
     }
-    if (!this.evaMode && actions.includes('throttleFull')) this.state.throttle = 1;
-    if (!this.evaMode && actions.includes('throttleCut')) this.state.throttle = 0;
+    if (!this.evaMode && actions.includes('throttleFull')) { this.state.throttle = 1; this.throttleTouched = true; }
+    if (!this.evaMode && actions.includes('throttleCut')) { this.state.throttle = 0; this.throttleTouched = true; }
   };
   private onUp = (e: KeyboardEvent) => { this.held.delete(e.code); this.chordKeys.delete(e.code); if (e.code === this.sasHoldKey) this.releaseSasHold(); };
   private releaseSasHold() { if (!this.sasHoldKey) return; this.sasHoldKey = null; this.emit('sasHoldRelease'); }
@@ -192,6 +196,10 @@ export class FlightInput {
     }
     this.state.brakes = !this.evaMode && (this.down('brakes') || analog.brakes);
     if (this.evaMode) this.state.throttle = 0;
-    else this.state.throttle = Math.max(0, Math.min(1, this.state.throttle + (axis('throttleUp', 'throttleDown') + analog.throttle) * dt * (this.precisionActive ? FINE_THROTTLE_RATE : THROTTLE_RATE)));
+    else {
+      const rate = axis('throttleUp', 'throttleDown') + analog.throttle;
+      if (rate) this.throttleTouched = true;
+      this.state.throttle = Math.max(0, Math.min(1, this.state.throttle + rate * dt * (this.precisionActive ? FINE_THROTTLE_RATE : THROTTLE_RATE)));
+    }
   }
 }

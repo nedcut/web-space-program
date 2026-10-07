@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { length, sub } from '../src/util/vec3';
 import {
   G0, buildVessel, computeStageDeltaV, ispAtPressure, neutralInput, spoolThrottle, stepVessel, thrustAtPressure,
-  shutdownEngine, activateNextStage, maxMassFlow,
+  shutdownEngine, activateNextStage, maxMassFlow, spoolDownTime, ROCKET_THROTTLE_TIME, targetThrottle,
 } from '../src/sim/vessel';
 import type { EngineModule } from '../src/sim/vessel';
 import { TEST_CATALOG, stackCraft, vacuumEnv, flatEarthEnv, NOSE_UP } from '../src/sim/vessel/testing';
@@ -31,6 +31,32 @@ describe('engine performance', () => {
     let th = 0;
     for (let i = 0; i < 10; i++) th = spoolThrottle(th, 1, 0.2, 0.02);
     expect(th).toBeCloseTo(1 - Math.exp(-1), 6);
+  });
+
+  it('liquid engines cut thrust within 0.1 s; only the start-up after ignition follows the spool time', () => {
+    const v = buildVessel(stackCraft(['capsule', 'tank', { partId: 'engine', stage: 0 }]), TEST_CATALOG, { orientation: NOSE_UP });
+    const env = vacuumEnv();
+    const eng = v.parts.find((p) => p.engine)!;
+    let t = 0;
+    stepVessel(v, neutralInput({ stage: true, throttle: 1 }), env, t);
+    for (let i = 0; i < 9; i++) stepVessel(v, neutralInput({ throttle: 1 }), env, (t += 0.02));
+    // Start-up still follows the turbopump spool time (0.2 s here): ~63 % after one time constant.
+    expect(eng.engine!.throttle).toBeGreaterThan(0.55);
+    expect(eng.engine!.throttle).toBeLessThan(0.75);
+    for (let i = 0; i < 100; i++) stepVessel(v, neutralInput({ throttle: 1 }), env, (t += 0.02));
+    expect(eng.engine!.thrust).toBeGreaterThan(190_000);
+    // Throttling down is fast too (valve response), not a turbopump spool.
+    for (let i = 0; i < 5; i++) stepVessel(v, neutralInput({ throttle: 0.5 }), env, (t += 0.02));
+    expect(eng.engine!.throttle).toBeCloseTo(targetThrottle(engineDef, 0.5), 2);
+    for (let i = 0; i < 100; i++) stepVessel(v, neutralInput({ throttle: 1 }), env, (t += 0.02));
+    let steps = 0;
+    while (eng.engine!.thrust > 0 && steps < 500) { stepVessel(v, neutralInput({ throttle: 0 }), env, (t += 0.02)); steps++; }
+    expect(steps * 0.02).toBeLessThanOrEqual(0.1 + 1e-9);
+    expect(eng.engine!.ignited).toBe(true); // a cut is not a shutdown: it can be throttled up again
+    // A running engine throttles back up quickly too (the start-up transient happens once per ignition).
+    for (let i = 0; i < 5; i++) stepVessel(v, neutralInput({ throttle: 1 }), env, (t += 0.02));
+    expect(eng.engine!.throttle).toBeGreaterThan(0.99);
+    expect(spoolDownTime(engineDef)).toBe(ROCKET_THROTTLE_TIME);
   });
 
   it('solid motors ignore throttle and cannot be shut down', () => {

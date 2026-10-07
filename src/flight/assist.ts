@@ -115,16 +115,19 @@ function releaseRailsWarp(world: World) {
  * One frame of a flight-assist program, as the flight scene runs it. The program owns time warp while it runs:
  * it rails-warps only while it coasts, and every other frame (and its end, however it ends) runs at 1× even if
  * someone else had warp on, so control is never handed back to a vessel stuck on rails. The pilot's part commands,
- * staging, RCS, gear and brakes pass through; any attitude input ends the program.
+ * staging, RCS, gear and brakes pass through; any attitude or throttle input ends the program.
  */
-export function assistFrame(world: World, assist: Autopilot, pilot: ControlInput, dt: number, state: AssistDriveState): AssistFrame {
-  const end = (reason: 'done' | 'error' | 'pilot', message: string): AssistFrame => {
+export function assistFrame(world: World, assist: Autopilot, pilot: ControlInput, dt: number, state: AssistDriveState, pilotThrottle = false): AssistFrame {
+  const end = (reason: 'done' | 'error' | 'pilot', message: string, keepThrottle = false): AssistFrame => {
     releaseRailsWarp(world);
     state.warped = false;
     const restore = assist.release?.() ?? [];
     const commands = [...(pilot.commands ?? []), ...restore];
-    return { input: { ...pilot, throttle: 0, commands: commands.length ? commands : undefined }, ended: { reason, message } };
+    return { input: { ...pilot, throttle: keepThrottle ? pilot.throttle : 0, commands: commands.length ? commands : undefined }, ended: { reason, message } };
   };
+  // Pilot override: attitude input, or any throttle input (`pilotThrottle`: keys or gamepad touched the throttle this
+  // frame). A throttle override applies the pilot's throttle this same frame (e.g. an emergency cut).
+  if (pilotThrottle) return end('pilot', 'Assist cancelled: manual control', true);
   if (pilot.pitch || pilot.yaw || pilot.roll) return end('pilot', 'Assist cancelled: manual control');
   const step = assist.update(world);
   if (assist.error) return end('error', `Assist stopped: ${assist.error}`);

@@ -22,7 +22,7 @@ import { PHYSICS_DT } from './world';
 import { RAILS_WARP } from './timewarp';
 import type { ControlInput, VesselCommand, VesselState } from '../sim/vessel/runtime';
 import type { EngineModule } from '../sim/vessel/types';
-import { neutralInput, G0 } from '../sim/vessel';
+import { neutralInput, G0, spoolDownTime } from '../sim/vessel';
 import { SPOOL_CUTOFF } from '../sim/vessel/engines';
 import { applyVesselCommands } from '../sim/vessel/actions';
 import type { ManeuverNode, Orbit } from '../sim/orbit/api';
@@ -419,7 +419,7 @@ function guidanceTarget(o: Orbit, node: number, soi: number): { time: number; po
 
 /**
  * Δv the engines still deliver if cut now: the same discrete spool-down the engine model runs each physics step
- * (exponential decay, thrust at the decayed throttle, falling mass, cut below SPOOL_CUTOFF). `step` is the gain of
+ * (exponential decay with `spoolDownTime`, thrust at the decayed throttle, falling mass, cut below SPOOL_CUTOFF). `step` is the gain of
  * burning one more step at the current throttle, so the cut can stay on the short (trimmable) side.
  */
 export function spoolDownDv(v: VesselState): { tail: number; step: number } {
@@ -432,7 +432,9 @@ export function spoolDownDv(v: VesselState): { tail: number; step: number } {
     if (!st?.ignited || !(st.throttle > 0) || !(st.thrust > 0)) continue;
     const m = p.def.modules[st.moduleIndex] as EngineModule;
     const full = st.thrust / st.throttle;
-    engines.push({ u: st.throttle, decay: m.spoolTime > 0 ? Math.exp(-PHYSICS_DT / m.spoolTime) : 0, full, mdot: full / (Math.max(1, st.isp) * G0) });
+    // Cuts decay with the engine's spool-down time (rockets: a fraction of a second; jets: their spool time).
+    const down = spoolDownTime(m);
+    engines.push({ u: st.throttle, decay: down > 0 ? Math.exp(-PHYSICS_DT / down) : 0, full, mdot: full / (Math.max(1, st.isp) * G0) });
     step += (st.thrust * PHYSICS_DT) / v.mass;
   }
   for (let k = 0; k < 2000 && engines.some(e => e.u > 0); k++) {

@@ -1,6 +1,6 @@
 import type { RGB } from '../api';
 import { CraterField, makeCraterOctaves } from '../craters';
-import { fbm, ridged, billow, octavesFor, smoothstep, clamp } from '../fbm';
+import { fbm, ridged, billow, octavesFor, smoothstep, clamp, bandPass } from '../fbm';
 import { latLonToUnit, angleTo, gaussCap, GreatArc, type UnitVec } from '../geo';
 import { blendRGB, setRGB, type PresetContext, type PresetResult } from './common';
 
@@ -111,7 +111,7 @@ export function marsPreset(ctx: PresetContext): PresetResult {
   const DUST = ctx.pal(2, [0.55, 0.32, 0.16]);
   const CAP: RGB = ctx.pal(3, [0.82, 0.8, 0.77]);
   const WALL: RGB = [0.2, 0.09, 0.045];
-  const colorAt = (x: number, y: number, z: number, h: number, out: RGB): RGB => {
+  const colorAt = (x: number, y: number, z: number, h: number, out: RGB, fp?: number): RGB => {
     if (x !== lx || y !== ly || z !== lz) height(x, y, z);
     const a = fbm(nAlb, x * 2.5, y * 2.5, z * 2.5, 6);
     setRGB(out, RUST[0], RUST[1], RUST[2]);
@@ -121,8 +121,11 @@ export function marsPreset(ctx: PresetContext): PresetResult {
     blendRGB(out, WALL, lastCanyon * 0.85);
     blendRGB(out, DARK, smoothstep(0.6, 1, lastCanyon) * 0.5);
     const n = nAlb.noise(x * 60, y * 60, z * 60);
-    // Local mottling: darker rocky outcrops vs bright dust drifts at km and sub-km scales.
-    const nl = nAlb.noise(x * 900, y * 900, z * 900) * 0.6 + nAlb.noise(x * 4000, y * 4000, z * 4000) * 0.4;
+    // Local mottling: darker rocky outcrops vs bright dust drifts at km and sub-km scales. Octaves finer than
+    // a few samples are dropped so coarse chunks don't speckle.
+    const w900 = bandPass(900, fp), w4000 = bandPass(4000, fp);
+    const nl = (w900 > 0 ? nAlb.noise(x * 900, y * 900, z * 900) * 0.6 * w900 : 0)
+      + (w4000 > 0 ? nAlb.noise(x * 4000, y * 4000, z * 4000) * 0.4 * w4000 : 0);
     const m = 1 + 0.1 * n + 0.22 * nl;
     out[0] *= m; out[1] *= m * 0.98; out[2] *= m * 0.96;
     blendRGB(out, DARK, smoothstep(0.25, 0.6, -nl) * 0.5);
