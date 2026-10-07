@@ -31,3 +31,5 @@
 .scenario-collapsed { padding: 10px 14px; width: min(260px, calc(100vw - 36px)); }
 .scenario-collapsed h2 { font-size: 15px; margin: 4px 0; }
 .scenario-collapsed p { margin: 4px 0; font-size: 12px; line-height: 1.4; }
+.scenario-flight:not(.scenario-debrief) .scenario-drag { cursor: grab; user-select: none; touch-action: none; }
+.scenario-flight:not(.scenario-debrief) .scenario-drag:active { cursor: grabbing; }
