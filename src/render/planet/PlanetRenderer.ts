@@ -103,6 +103,8 @@ export class PlanetRenderer {
   private sky: THREE.Mesh | null = null;
   /** Real Earth imagery (Earth only; null elsewhere or when unavailable). */
   readonly imagery: EarthImagery | null = null;
+  /** Dev/automation: pin the imagery month (0–11) instead of following the season. */
+  seasonOverride: number | null = null;
   private readonly imageryStart = typeof performance !== 'undefined' ? performance.now() : 0;
   private clouds: THREE.Mesh | null = null;
   private cloudRadius = 0;
@@ -420,7 +422,7 @@ export class PlanetRenderer {
     const sd = Math.sqrt(sx * sx + sy * sy + sz * sz) || 1;
     u.uSunDir.value.set(sx / sd, sy / sd, sz / sd);
     // Seasons follow the orbit (scaled universes shorten the year): Sun's ecliptic longitude → month.
-    this.imagery?.update(seasonMonth(Math.atan2(sy, sx)));
+    this.imagery?.update(this.seasonOverride ?? seasonMonth(Math.atan2(sy, sx)));
     const auScaled = AU * this.scale.s;
     const E = this.kind === 'star' ? 0 : this.sunIlluminance * Math.pow(auScaled / Math.max(sd, auScaled * 0.2), 0.3);
     u.uSunColor.value.set(E, E * 0.985, E * 0.96);
