@@ -320,15 +320,15 @@ function runwayEndTextureImpl(designator: string): THREE.CanvasTexture {
 
 function claddingTextureImpl(): THREE.CanvasTexture {
   const { c, g } = canvas(256, 512);
-  g.fillStyle = '#93a0ad';
+  g.fillStyle = '#c3c1b4';
   g.fillRect(0, 0, 256, 512);
   for (let x = 0; x < 256; x += 32) {
     const grd = g.createLinearGradient(x, 0, x + 32, 0);
-    grd.addColorStop(0, '#7d8996');
-    grd.addColorStop(0.2, '#b0bcc8');
-    grd.addColorStop(0.35, '#9aa6b3');
-    grd.addColorStop(0.8, '#87929f');
-    grd.addColorStop(1, '#727d89');
+    grd.addColorStop(0, '#94998f');
+    grd.addColorStop(0.2, '#d3d0c4');
+    grd.addColorStop(0.35, '#bfbdaf');
+    grd.addColorStop(0.8, '#aaa99f');
+    grd.addColorStop(1, '#8c9087');
     g.fillStyle = grd;
     g.fillRect(x, 0, 32, 512);
   }
@@ -488,3 +488,17 @@ export const vabDoorTexture = cachedSite('vabDoorTexture', vabDoorTextureImpl);
 export const logoTexture = cachedSite('logoTexture', logoTextureImpl);
 export const flagTexture = cachedSite('flagTexture', flagTextureImpl);
 export const windowsTexture = cachedSite('windowsTexture', windowsTextureImpl);
+
+/** Only occupied window panes emit; walls and mullions stay dark. Cached with all site canvases. */
+function windowLightTextureImpl(): THREE.CanvasTexture {
+  const { c, g } = canvas(512, 256);
+  g.fillStyle = '#000'; g.fillRect(0, 0, 512, 256);
+  for (const i of [0, 2, 3, 5]) {
+    const x = i * 512 / 6 + 8, w = 512 / 6 - 16;
+    g.fillStyle = i === 2 ? '#a4b8bd' : '#efd5a0';
+    g.fillRect(x, 256 * 0.3, w, 256 * 0.45);
+    g.fillStyle = '#000'; g.fillRect(x + w / 2 - 2, 256 * 0.3, 4, 256 * 0.45);
+  }
+  return tex(c);
+}
+export const windowLightTexture = cachedSite('windowLightTexture', windowLightTextureImpl);

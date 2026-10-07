@@ -682,3 +682,7 @@ Replaced capped point sprites with pooled GPU billboards; added growing launch s
 - Adaptive resolution reacts to a steady 45–55 fps (ProMotion displays, no GPU timer) and undoes reductions that don't help instead of blurring for nothing.
 - Map: 59 → ~9 layouts per second (labels move with transforms). Loading: the flight scene is ready ~1.5–2 s sooner, shader warm-up no longer freezes the loading screen, and the first frames don't stall on uploads.
 - Visuals unchanged: before/after at DPR 2 in `docs/screenshots/snappy/`. Details, method and what's left: `docs/PERFORMANCE.md`.
+
+## Coastal ground art — cx/groundart
+
+Replaced cone trees with original branched coastal crowns, added building courses/roof plant/doors and warmer weathered cladding, lit tower platforms and dusk-driven window masks. Continuing terrain/shadow integration and real RTX 3060 Ti DPR-2 verification; final evidence follows in docs/PERFORMANCE.md.

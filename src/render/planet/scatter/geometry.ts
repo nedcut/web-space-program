@@ -24,17 +24,44 @@ export function plantGeometry(kind: 'grass' | 'bush' | 'tree'): THREE.BufferGeom
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3)); g.computeVertexNormals(); return g;
   }
   if (kind === 'tree') {
-    const trunk = new THREE.CylinderGeometry(0.07, 0.12, 1.0, 6).translate(0, 0.5, 0);
-    const lower = new THREE.ConeGeometry(0.8, 1.7, 7).translate(0, 1.55, 0);
-    const upper = new THREE.ConeGeometry(0.55, 1.5, 7).translate(0, 2.3, 0);
-    const pieces = [trunk, lower, upper].map((g, i) => {
-      const tint = new Float32Array(g.getAttribute('position').count * 3);
-      for (let j = 0; j < tint.length; j += 3) { tint[j] = i === 0 ? 2.5 : 1; tint[j + 1] = i === 0 ? 0.7 : 1; tint[j + 2] = i === 0 ? 0.5 : 1; }
-      g.setAttribute('color', new THREE.BufferAttribute(tint, 3)); return g;
-    });
-    const tree = mergeGeometries(pieces)!;
-    pieces.forEach(g => g.dispose()); return tree;
+    return coastalTreeGeometry().scale(0.27, 0.27, 0.27);
   }
   const g = new THREE.IcosahedronGeometry(0.7, 1);
   g.translate(0, 0.7, 0); return g;
+}
+
+/** Wind-shaped coastal pine: exposed trunk, branching limbs and irregular rounded needle crowns. */
+export function coastalTreeGeometry(): THREE.BufferGeometry {
+  const pieces: THREE.BufferGeometry[] = [];
+  const add = (g: THREE.BufferGeometry, tint: number[]) => {
+    const geo = g.index ? g.toNonIndexed() : g;
+    if (geo !== g) g.dispose();
+    const p = geo.getAttribute('position');
+    const c = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const ao = 0.68 + Math.max(0, p.getY(i)) * 0.028;
+      c.set(tint.map(v => v * ao), i * 3);
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    pieces.push(geo);
+  };
+  add(new THREE.CylinderGeometry(0.15, 0.34, 8.5, 7).translate(0, 4.25, 0), [0.8, 0.57, 0.35]);
+  for (let i = 0; i < 7; i++) {
+    const a = i * 2.39996, spread = i === 6 ? 0 : 1.6 + Math.sin(i * 7) * 0.5;
+    const x = Math.cos(a) * spread, z = Math.sin(a) * spread, y = 5.8 + i * 0.67;
+    const branch = new THREE.CylinderGeometry(0.07, 0.15, Math.hypot(spread, 1.3), 5);
+    branch.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(x, 1.3, z).normalize()));
+    add(branch.translate(x * 0.5, y - 0.65, z * 0.5), [0.8, 0.57, 0.35]);
+    const crown = new THREE.IcosahedronGeometry(1, 1);
+    const p = crown.getAttribute('position');
+    for (let j = 0; j < p.count; j++) {
+      const k = 1 + 0.16 * Math.sin(p.getX(j) * 13 + p.getY(j) * 9 + i);
+      p.setXYZ(j, p.getX(j) * k, p.getY(j) * k, p.getZ(j) * k);
+    }
+    crown.computeVertexNormals();
+    add(crown.scale(1.9, 1.15, 1.65).translate(x, y, z), [0.95 + i * 0.015, 1, 0.8]);
+  }
+  const merged = mergeGeometries(pieces)!;
+  pieces.forEach(g => g.dispose());
+  return merged;
 }
