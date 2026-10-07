@@ -20,10 +20,11 @@ export type { TransferPlan, TransferOptions } from './planning/transfers';
 import type { World, WorldVessel } from './world';
 import { PHYSICS_DT } from './world';
 import { RAILS_WARP } from './timewarp';
-import type { ControlInput, VesselState } from '../sim/vessel/runtime';
+import type { ControlInput, VesselCommand, VesselState } from '../sim/vessel/runtime';
 import type { EngineModule } from '../sim/vessel/types';
 import { neutralInput, G0 } from '../sim/vessel';
 import { SPOOL_CUTOFF } from '../sim/vessel/engines';
+import { applyVesselCommands } from '../sim/vessel/actions';
 import type { ManeuverNode, Orbit } from '../sim/orbit/api';
 import {
   propagate,
@@ -63,6 +64,11 @@ export interface Autopilot {
   /** Set when the controller gives up (e.g. out of fuel); `done` stays false. */
   error?: string;
   update(world: World): AutopilotStep;
+  /**
+   * Commands that undo temporary vessel settings the program made (e.g. a thrust limiter for a fine trim). The
+   * driver sends them however the program ends: done, failed or overridden by the pilot.
+   */
+  release?(): VesselCommand[];
 }
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
@@ -196,7 +202,12 @@ export function runAutopilot(world: World, ap: Autopilot, opts: RunOptions): boo
       break;
     }
     const step = ap.update(world);
-    if (ap.done || ap.error) break;
+    if (ap.done || ap.error) {
+      // Undo temporary settings (thrust limiters) the program made, as the flight scene's driver does.
+      const restore = [...(step.input.commands ?? []), ...(ap.error ? ap.release?.() ?? [] : [])];
+      if (restore.length) applyVesselCommands(wv.state, restore, []);
+      break;
+    }
     const warped = opts.warp !== false && step.coastUntil !== undefined && warpToward(world, step.coastUntil, step.input);
     if (!warped) {
       world.warp = { mode: 'rails', index: 0 };
@@ -409,7 +420,7 @@ function guidanceTarget(o: Orbit, node: number, soi: number): { time: number; po
 /**
  * Δv the engines still deliver if cut now: the same discrete spool-down the engine model runs each physics step
  * (exponential decay, thrust at the decayed throttle, falling mass, cut below SPOOL_CUTOFF). `step` is the gain of
- * burning one more step at the current throttle, so the cut can land on the nearer side.
+ * burning one more step at the current throttle, so the cut can stay on the short (trimmable) side.
  */
 export function spoolDownDv(v: VesselState): { tail: number; step: number } {
   let tail = 0;
@@ -512,6 +523,8 @@ export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeO
   let turning = 0;
   let stageCooldown = 0;
   let trims = 0;
+  /** Thrust limiters changed for the fine trim, with the player's values to restore. */
+  const limiters = new Map<number, number | undefined>();
   let residual = NaN;
   /** Closed-loop guidance: the burn steers to put the craft on the planned orbit's aim point (Lambert). */
   let guide: ReturnType<typeof guidanceTarget> = null;
@@ -551,6 +564,11 @@ export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeO
     dvUsed: () => used,
     remaining: () => length(dvRem),
     residual: () => residual,
+    release() {
+      const commands: VesselCommand[] = [...limiters].map(([uid, prev]) => ({ kind: 'tweak', uid, tweaks: { thrustLimit: prev }, symmetric: false }));
+      limiters.clear();
+      return commands;
+    },
     update(w) {
       const wv = w.active!;
       const v = wv.state;
@@ -629,23 +647,36 @@ export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeO
         }
       }
       if (phase === 'cutoff') {
-        // Wait for the engines to spool down so the resulting orbit is final, then touch up a short cut with a
-        // gentle pulse (spool-up lag makes short pulses fine-grained).
+        // Wait for the engines to spool down so the resulting orbit is final.
         ap.status = 'Engine cutoff';
         if (v.telemetry.thrust > 0) return { input: steer(steerDir, 0) };
-        // One physics step at minimum throttle is the finest pulse available: only trim when that halves the miss.
-        const pulse = propulsion(v).minThrottle * propulsion(v).thrust * PHYSICS_DT / v.mass;
-        if (along > Math.max(0.01, pulse / 2) && trims < 8 && propulsion(v).thrust > 0) {
+        // One physics step at minimum throttle is the finest pulse a big engine gives (≈0.3 m/s on a heavy booster;
+        // on a TLI that is tens of km at the Moon). Trim through the engines' thrust limiters, restored afterwards.
+        const prop = propulsion(v);
+        const pulse = (prop.minThrottle || 0.01) * prop.thrust * PHYSICS_DT / v.mass;
+        if (along > Math.max(0.005, 2e-6 * dv0) && trims < 6 && prop.thrust > 0) {
           trims++;
           phase = 'burn';
+          if (along < pulse * 4) {
+            const limit = clamp((along / 8 / pulse) * Math.min(1, ...v.parts.filter(q => q.engine?.ignited).map(q => thrustLimit(q))), 0.005, 1);
+            const commands: VesselCommand[] = [];
+            for (const q of v.parts) {
+              if (!q.engine?.ignited) continue;
+              if (!limiters.has(q.uid)) limiters.set(q.uid, q.tweaks?.thrustLimit);
+              commands.push({ kind: 'tweak', uid: q.uid, tweaks: { thrustLimit: limit }, symmetric: false });
+            }
+            ap.status = `Fine trim · ${along.toFixed(2)} m/s · thrust limited to ${(limit * 100).toFixed(1)}%`;
+            return { input: steer(steerDir, 0, { commands }) };
+          }
         } else {
-            finish(w);
-          return { input: steer(steerDir, 0) };
+          finish(w);
+          return { input: steer(steerDir, 0, { commands: ap.release!() }) };
         }
       }
       // Burn.
       const { tail: spoolTail, step: stepGain } = spoolDownDv(v);
-      if (along <= Math.max(0.01, spoolTail + stepGain / 2)) {
+      // Cut a step early rather than late: a short cut can be trimmed, an overshoot cannot.
+      if (along <= Math.max(0.01, spoolTail + stepGain)) {
         phase = 'cutoff';
         ap.status = 'Engine cutoff';
         return { input: steer(steerDir, 0) };

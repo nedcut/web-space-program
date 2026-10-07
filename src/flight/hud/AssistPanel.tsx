@@ -2,7 +2,7 @@ import { ASSIST_LABELS, type AssistId } from '../assist';
 
 const ASSIST_HINTS: Record<AssistId, string> = {
   orbit: 'Flies the ascent and circularizes in a low orbit. Stages automatically.',
-  node: 'Points at the next maneuver node and burns it.',
+  node: 'Turns to the next node, warps to it, stages when nothing is thrusting, starts half the burn early and trims to the plan.',
   land: 'Suicide-burn landing below the current position.',
   circAp: 'Plans and burns a circularization at apoapsis.',
   circPe: 'Plans and burns a circularization at periapsis.',

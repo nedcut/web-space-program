@@ -31,6 +31,7 @@ class Sequence implements Autopilot {
   done = false;
   error?: string;
   private current: Autopilot | null = null;
+  release() { return this.current?.release?.() ?? []; }
   private i = 0;
   constructor(name: string, private stages: ((w: World) => Autopilot)[]) {
     this.name = name;
@@ -120,16 +121,19 @@ export function assistFrame(world: World, assist: Autopilot, pilot: ControlInput
   const end = (reason: 'done' | 'error' | 'pilot', message: string): AssistFrame => {
     releaseRailsWarp(world);
     state.warped = false;
-    return { input: { ...pilot, throttle: 0 }, ended: { reason, message } };
+    const restore = assist.release?.() ?? [];
+    const commands = [...(pilot.commands ?? []), ...restore];
+    return { input: { ...pilot, throttle: 0, commands: commands.length ? commands : undefined }, ended: { reason, message } };
   };
   if (pilot.pitch || pilot.yaw || pilot.roll) return end('pilot', 'Assist cancelled: manual control');
   const step = assist.update(world);
   if (assist.error) return end('error', `Assist stopped: ${assist.error}`);
   if (assist.done) return end('done', `${assist.name}: complete`);
+  const commands = [...(step.input.commands ?? []), ...(pilot.commands ?? [])];
   const input: ControlInput = {
     ...step.input,
     stage: step.input.stage || pilot.stage,
-    commands: pilot.commands,
+    commands: commands.length ? commands : undefined,
     rcs: step.input.rcs || pilot.rcs,
     gear: step.input.gear ?? pilot.gear,
     brakes: pilot.brakes,

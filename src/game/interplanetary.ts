@@ -204,15 +204,22 @@ export function planInterplanetaryTransfer(world: PlanningWorld, targetPlanetId:
   const synodic = 2 * Math.PI / Math.abs(na - nb);
   let tof = opts.timeOfFlightRange ?? { min: hohmann * 0.65, max: hohmann * 1.35, samples: 25 };
   checkRange(tof, true);
+  /** When the automatically picked window does not refine, search the whole next synodic period as before. */
+  const fallback = () => {
+    const plan = planInterplanetaryTransfer(world, targetPlanetId, { ...opts, window: synodic }, report);
+    return plan && { ...plan, windows };
+  };
   // Options over two synodic periods. Unless a range or window was given, plan the earliest option within a few
   // percent of the cheapest (departure + capture): a slightly dearer window months earlier beats waiting.
   report?.('Listing transfer windows', 0);
   const windows = opts.departureRange ? [] : interplanetaryWindows(world, a.id, b.id, orbit, earliest, 2 * synodic, tof, altitude, opts.includeCapture !== false);
   let pick = opts.departure;
+  let auto = false;
   if (pick === undefined && opts.window === undefined && windows.length) {
     const totals = windows.map(w => w.dv + (opts.includeCapture === false ? 0 : w.captureDv ?? 0));
     const cheapest = Math.min(...totals);
     pick = windows[totals.findIndex(x => x <= cheapest * 1.08 + 25)].departure;
+    auto = true;
   }
   const around = pick !== undefined && !opts.departureRange
     ? { min: Math.max(earliest, pick - synodic / 30), max: Math.max(earliest, pick - synodic / 30) + synodic / 15, samples: 9 } : undefined;
@@ -233,7 +240,7 @@ export function planInterplanetaryTransfer(world: PlanningWorld, targetPlanetId:
         if (score < bestScore) { best = p; bestScore = score; }
       } catch { /* Collinear cell; neighbouring cells still cover the transfer window. */ }
     }
-    if (!best) return null;
+    if (!best) return auto ? fallback() : null;
     const dd = (dep.max - dep.min) / ((dep.samples ?? 25) - 1), dt = (tof.max - tof.min) / ((tof.samples ?? 25) - 1);
     dep = { min: Math.max(depBounds.min, best.departureTime - dd), max: Math.min(depBounds.max, best.departureTime + dd), samples: 9 };
     tof = { min: Math.max(tofBounds.min, best.timeOfFlight - dt), max: Math.min(tofBounds.max, best.timeOfFlight + dt), samples: 9 };
@@ -254,7 +261,7 @@ export function planInterplanetaryTransfer(world: PlanningWorld, targetPlanetId:
   const c = inertialDvToManeuver(propagate(orbit, time), dv);
   report?.('Refining encounter', 0.7);
   const plan = refine(world, orbit, b.id, time, [c.prograde, c.normal, c.radial], choice.arrivalTime, altitude, Infinity, T / 8, depBounds.min, depBounds.max);
-  if (!plan) return null;
+  if (!plan) return auto ? fallback() : null;
   return { ...plan, windows, departureTime: plan.node.time, arrivalTime: choice.arrivalTime, timeOfFlight: choice.arrivalTime - plan.node.time,
     departureExcess: choice.departureExcess, arrivalExcess: choice.arrivalExcess, captureDvEstimate: choice.captureDv };
 }
