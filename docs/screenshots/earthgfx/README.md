@@ -34,6 +34,16 @@ timer-query A/B (`gpu-ab.sh`) was too contended for sub-0.3 ms claims during thi
 | Preview: terminator / city lights | 4.77 | 4.13 | −0.64 |
 | Preview: full disc | 2.45 | 2.53 | +0.08 |
 
+**After merging main's Retina GPU pass** (op/perfgpu: Medium renders the 3D scene below device resolution and
+reconstructs), same method, two pairs each:
+
+| Scene | main | real Earth | Δ |
+|---|---:|---:|---:|
+| Flight, low orbit | 3.17 / 3.03 | 3.12 / 2.98 | −0.05 / −0.05 |
+| Flight, pad | 3.86 / 4.56 | 3.96 / 3.73 | +0.10 / −0.83 (noisy) |
+
+The screenshots above were captured before that merge (full-resolution Medium); the imagery is unchanged by it.
+
 Medium is within noise of main in orbit and on the pad, and cheaper on the night side (texture lights replace five
 simplex evaluations per land pixel) and over open ocean (faded wave octaves are now skipped instead of multiplied
 by zero, and terrain hidden under the opaque ocean is no longer shaded). The imagery fetch itself is ≈ 0.1–0.17 ms
