@@ -39,6 +39,7 @@ export class TerrainWorkerPool {
           w.onmessage = (ev) => this.onMessage(i, ev.data);
           w.onerror = (ev) => {
             console.warn('[terrain worker] error', ev.message);
+            window.dispatchEvent(new CustomEvent('wsp:worker-error', { detail: `Terrain worker failed: ${ev.message}` }));
           };
           this.workers.push(w);
           this.inflight.push(0);

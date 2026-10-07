@@ -92,7 +92,10 @@ function FlightPartBody({ c, part: p, copies }: { c: FlightController; part: Par
 
   const buttons: { action: PartActionId; label: string; experiment?: string; danger?: boolean; disabled?: boolean }[] = [];
   for (const a of partActions(p.def)) {
-    if (!actionAvailable(p, a)) continue;
+    if (!actionAvailable(p, a)) {
+      buttons.push({ action: a, label: `${ACTION_LABELS[a]} — unavailable`, disabled: true });
+      continue;
+    }
     switch (a) {
       case 'engine.activate': buttons.push({ action: a, label: 'Activate engine' }); break;
       case 'engine.shutdown': buttons.push({ action: a, label: 'Shut down' }); break;
@@ -129,6 +132,7 @@ function FlightPartBody({ c, part: p, copies }: { c: FlightController; part: Par
     </Section>}
     {buttons.length > 0 && <Section title="Actions">
       <div className="insp-actions">{buttons.map(b => <Button key={`${b.action}-${b.experiment ?? ''}`} className={`btn small ${b.danger ? 'danger' : ''}`} disabled={!enabled || b.disabled}
+        title={!enabled ? 'No command authority' : b.disabled ? 'Already active, expended, or requirements not met; check Status above' : b.label}
         onClick={() => c.partAction(p.uid, b.action, b.experiment)}>{b.label}</Button>)}</div>
     </Section>}
     {descriptors.length > 0 && <Section title={copies > 1 ? `Settings · all ${copies}` : 'Settings'}>

@@ -1,38 +1,28 @@
 import { Component, type ReactNode } from 'react';
-import { game } from '../game/store';
+import { CrashOverlay } from './CrashOverlay';
 
-/** Last-resort crash screen: never leave the player on a blank page. */
+/** Unmounting a failed scene disposes its animation loops, inputs, audio and workers. */
 export class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
-
-  static getDerivedStateFromError(error: Error) {
-    return { error };
-  }
-
-  componentDidCatch(error: Error) {
-    console.error('Unhandled UI error', error);
-  }
-
-  private recover = () => {
-    game.set({ scene: 'spaceCenter', launchPending: false });
-    this.setState({ error: null });
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error) { console.error('Unhandled UI error', error); }
+  private fail = (reason: unknown) => {
+    if (!this.state.error) this.setState({ error: reason instanceof Error ? reason : new Error(String(reason)) });
   };
-
+  private onError = (event: ErrorEvent) => this.fail(event.error ?? event.message);
+  private onRejection = (event: PromiseRejectionEvent) => this.fail(event.reason);
+  private onWorkerError = (event: Event) => this.fail((event as CustomEvent<string>).detail);
+  componentDidMount() {
+    window.addEventListener('error', this.onError);
+    window.addEventListener('unhandledrejection', this.onRejection);
+    window.addEventListener('wsp:worker-error', this.onWorkerError);
+  }
+  componentWillUnmount() {
+    window.removeEventListener('error', this.onError);
+    window.removeEventListener('unhandledrejection', this.onRejection);
+    window.removeEventListener('wsp:worker-error', this.onWorkerError);
+  }
   render() {
-    if (!this.state.error) return this.props.children;
-    return (
-      <div className="fullscreen" style={{ display: 'grid', placeItems: 'center' }}>
-        <div className="panel" style={{ padding: 24, maxWidth: 520 }}>
-          <div className="label" style={{ color: 'var(--bad)' }}>Something went wrong</div>
-          <pre className="mono" style={{ whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--text-dim)', maxHeight: 200, overflow: 'auto' }}>
-            {this.state.error.message}
-          </pre>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn primary" onClick={this.recover}>Back to Space Center</button>
-            <button className="btn" onClick={() => location.reload()}>Reload</button>
-          </div>
-        </div>
-      </div>
-    );
+    return this.state.error ? <CrashOverlay error={this.state.error} onRecover={() => this.setState({ error: null })} /> : this.props.children;
   }
 }
