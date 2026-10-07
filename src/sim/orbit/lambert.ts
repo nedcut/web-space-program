@@ -42,3 +42,20 @@ export function solveLambert(mu: number, r1: Vec3, r2: Vec3, tof: number): Lambe
     throw new RangeError('Lambert failed to converge');
   return { departureVelocity, arrivalVelocity };
 }
+
+/** Lambert transfer from `r1` to `r2` in `tof`, going the short way round the plane normal `h` (any orientation:
+ * the solver above is prograde about +Z, so this solves in a frame with `h` along +Z).
+ */
+export function solveLambertAround(mu: number, r1: Vec3, r2: Vec3, tof: number, h: Vec3): LambertSolution {
+  const hn = length(h);
+  if (!(hn > 0)) throw new RangeError('Lambert plane normal must be nonzero');
+  const z = scale(h, 1 / hn);
+  const r1n = sub(r1, scale(z, dot(r1, z)));
+  if (!(length(r1n) > 0)) throw new RangeError('Departure lies along the plane normal');
+  const x = scale(r1n, 1 / length(r1n));
+  const y = cross(z, x);
+  const to = (a: Vec3) => ({ x: dot(a, x), y: dot(a, y), z: dot(a, z) });
+  const back = (a: Vec3) => ({ x: x.x * a.x + y.x * a.y + z.x * a.z, y: x.y * a.x + y.y * a.y + z.y * a.z, z: x.z * a.x + y.z * a.y + z.z * a.z });
+  const s = solveLambert(mu, to(r1), to(r2), tof);
+  return { departureVelocity: back(s.departureVelocity), arrivalVelocity: back(s.arrivalVelocity) };
+}

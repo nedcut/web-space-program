@@ -23,6 +23,7 @@ import { RAILS_WARP } from './timewarp';
 import type { ControlInput, VesselState } from '../sim/vessel/runtime';
 import type { EngineModule } from '../sim/vessel/types';
 import { neutralInput, G0 } from '../sim/vessel';
+import { SPOOL_CUTOFF } from '../sim/vessel/engines';
 import type { ManeuverNode, Orbit } from '../sim/orbit/api';
 import {
   propagate,
@@ -34,10 +35,15 @@ import {
   maneuverToInertialDv,
   inertialDvToManeuver,
   burnTimeEstimate,
+  solveLambertAround,
+  stateToElements,
 } from '../sim/orbit';
 import { add, sub, scale, length, normalize, dot, cross, v3, type Vec3 } from '../util/vec3';
 import { qRotate } from '../util/quat';
 import { thrustLimit } from '../sim/vessel/tweaks';
+import type { StageDeltaV } from '../sim/vessel/staging';
+import { cachedStageDeltaV } from './stageDeltaVCache';
+import { formatDuration } from '../util/format';
 
 // ---------------------------------------------------------------------------------------------------
 // Common types & helpers
@@ -362,7 +368,7 @@ export function planPeriapsisChange(world: World, periapsisAltitude: number): Ma
 export interface ExecuteNodeOptions {
   /** Do not auto-stage below this stage number. */
   minStage?: number;
-  /** Seconds before burn start to stop warping and point the vessel. */
+  /** Seconds before burn start to stop warping and re-aim (the craft is already pointed before warping). */
   alignLead?: number;
   /** Final-phase time constant: throttle ramps down once the remaining dv is below aMax·tail. */
   tail?: number;
@@ -378,133 +384,298 @@ export interface ExecuteNodeOptions {
 }
 
 /**
- * Fly a maneuver node: coast (warpable) until `alignLead` before the burn, point along the burn vector,
- * then burn centered on the node time. The remaining delta-v is tracked by integrating the vessel's measured
- * proper acceleration, so the burn ends on the planned dv regardless of thrust, staging or mass changes; the
- * throttle tapers over the last second and engine spool-down is anticipated.
+ * Aim point for closed-loop burn guidance: where the planned post-burn orbit is about a quarter turn after the
+ * node (a well-conditioned Lambert arc), never past ~90% of the SOI radius. Null when no usable point exists.
  */
-export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeOptions = {}): Autopilot & { dvUsed(): number; remaining(): number } {
+function guidanceTarget(o: Orbit, node: number, soi: number): { time: number; position: Vec3; normal: Vec3 } | null {
+  const s0 = propagate(o, node);
+  const normal = cross(s0.position, s0.velocity);
+  if (!(length(normal) > 0)) return null;
+  const T = period(o);
+  const span = Number.isFinite(T) ? 0.45 * T : 4 * length(s0.position) / Math.max(1, length(s0.velocity)) * 20;
+  let best: { time: number; position: Vec3; normal: Vec3 } | null = null;
+  for (let k = 1; k <= 240; k++) {
+    const t = node + (span * k) / 240;
+    const r = propagate(o, t).position;
+    if (length(r) > 0.9 * soi) break;
+    const angle = angleBetween(s0.position, r);
+    if (angle < (20 * Math.PI) / 180) continue;
+    best = { time: t, position: r, normal };
+    if (angle >= Math.PI / 2) break;
+  }
+  return best;
+}
+
+/**
+ * Δv the engines still deliver if cut now: the same discrete spool-down the engine model runs each physics step
+ * (exponential decay, thrust at the decayed throttle, falling mass, cut below SPOOL_CUTOFF). `step` is the gain of
+ * burning one more step at the current throttle, so the cut can land on the nearer side.
+ */
+export function spoolDownDv(v: VesselState): { tail: number; step: number } {
+  let tail = 0;
+  let step = 0;
+  let mass = v.mass;
+  const engines: { u: number; decay: number; full: number; mdot: number }[] = [];
+  for (const p of v.parts) {
+    const st = p.engine;
+    if (!st?.ignited || !(st.throttle > 0) || !(st.thrust > 0)) continue;
+    const m = p.def.modules[st.moduleIndex] as EngineModule;
+    const full = st.thrust / st.throttle;
+    engines.push({ u: st.throttle, decay: m.spoolTime > 0 ? Math.exp(-PHYSICS_DT / m.spoolTime) : 0, full, mdot: full / (Math.max(1, st.isp) * G0) });
+    step += (st.thrust * PHYSICS_DT) / v.mass;
+  }
+  for (let k = 0; k < 2000 && engines.some(e => e.u > 0); k++) {
+    let f = 0;
+    for (const e of engines) {
+      e.u *= e.decay;
+      if (e.u < SPOOL_CUTOFF) e.u = 0;
+      f += e.u * e.full;
+      mass -= e.u * e.mdot * PHYSICS_DT;
+    }
+    tail += (f * PHYSICS_DT) / Math.max(1, mass);
+  }
+  return { tail, step };
+}
+
+/** Seconds lost per stage activation during a burn (decouple, ignite, spool up). */
+const STAGE_PAUSE = 1;
+/** Pointing error that allows staging and throttle, rad. */
+const BURN_CONE = (15 * Math.PI) / 180;
+
+/**
+ * Full-throttle time to deliver `dv`, spending `stages` (per-stage Δv readout) in firing order, highest stage
+ * number first, starting at `burning` (the stage burning now, or the one that fires next). Each stage that still has
+ * to be activated adds `pause` seconds. Infinity if the stages run out.
+ */
+export function stageBurnTime(stages: StageDeltaV[], burning: number, dv: number, pause = 0, lit = true): number {
+  let left = dv;
+  let t = 0;
+  for (const s of [...stages].filter(s => s.stage <= burning).sort((a, b) => b.stage - a.stage)) {
+    if (left <= 1e-6) break;
+    if (!lit || s.stage < burning) t += pause;
+    if (!(s.dv > 0) || !(s.thrust > 0) || !(s.isp > 0)) continue;
+    const use = Math.min(left, s.dv);
+    t += burnTimeEstimate(use, s.thrust, s.startMass, s.isp);
+    left -= use;
+  }
+  return left > 1e-3 ? Infinity : t;
+}
+
+/** Vacuum stage readout limited to the stages the program may use, from the one burning now (or firing next). */
+function usableStages(v: VesselState, minStage: number) {
+  const lit = v.parts.some(p => p.engine?.ignited && !p.engine.flamedOut);
+  const burning = lit ? v.nextStage + 1 : v.nextStage;
+  const stages = cachedStageDeltaV(v, 0, G0).filter(s => s.stage >= minStage && s.stage <= burning);
+  return { stages, burning, lit, dv: stages.reduce((a, s) => a + (s.dv > 0 ? s.dv : 0), 0) };
+}
+
+/** Why the next stage may not be fired automatically (null when it may). */
+function stageBlocker(v: VesselState, minStage: number): string | null {
+  if (v.nextStage < 0 || v.nextStage < minStage) return 'no propulsion remains in the allowed stages';
+  if (!usableStages(v, minStage).stages.some(s => s.stage <= v.nextStage && s.dv > 0)) return 'no propulsion remains in the allowed stages (no engine with fuel)';
+  if (v.parts.some(p => p.stage === v.nextStage && !p.activated && p.chute)) return 'the next stage holds parachutes, stage manually';
+  return null;
+}
+
+const fmtS = (s: number) => (!Number.isFinite(s) ? '—' : s >= 90 ? formatDuration(s) : `${Math.max(0, s).toFixed(0)} s`);
+
+/**
+ * Fly a maneuver node the way a careful pilot does:
+ *  1. turn to the burn vector at 1× (rails warp keeps an inertial attitude), then warp until `alignLead` before
+ *     the burn and re-aim;
+ *  2. start the burn so half of the Δv is delivered before the node. The burn time comes from the per-stage Δv
+ *     readout, so mass loss and the stages still to fire (with a pause for each) are accounted for;
+ *  3. stage automatically whenever nothing can thrust (an unstaged craft, a burnt-out stage), never firing a
+ *     stage below `minStage` or one holding parachutes;
+ *  4. track the remaining Δv by integrating measured proper acceleration (or, for prograde/retrograde burns, stop on
+ *     the planned orbital energy), taper the throttle, anticipate spool-down and wait for the engines to stop.
+ * `status` says what it is doing for the HUD; `residual()` is the final miss against the planned post-burn velocity.
+ */
+export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeOptions = {}): Autopilot & { dvUsed(): number; remaining(): number; residual(): number } {
   if (world.preciseGravity) world.message('Precise gravity prediction differs from patched-conic planning. This node may need a correction burn.', 'warn', 10);
-  const stager = new AutoStager(opts.minStage ?? 0);
-  const alignLead = opts.alignLead ?? 40;
+  const minStage = opts.minStage ?? 0;
+  const alignLead = opts.alignLead ?? 20;
   const tail = opts.tail ?? 1.5;
-  let initialised = false;
-  let aimed = false;
+  type Phase = 'init' | 'turn' | 'coast' | 'align' | 'burn' | 'cutoff' | 'done';
+  let phase: Phase = 'init';
   let dvRem = v3();
   let dvDir = v3();
+  let target = v3();
   let burnStart = node.time;
+  let burnTime = 0;
   let lastUt = world.ut;
   let used = 0;
   let targetEnergy = NaN;
   let dv0 = 0;
   let steerDir = v3(0, 1, 0);
   let stalled = 0;
-  let starved = 0;
-  /** Burn vector from the vessel's *current* orbit (it may have drifted since planning). */
+  let turning = 0;
+  let stageCooldown = 0;
+  let trims = 0;
+  let residual = NaN;
+  /** Closed-loop guidance: the burn steers to put the craft on the planned orbit's aim point (Lambert). */
+  let guide: ReturnType<typeof guidanceTarget> = null;
+  /** Burn vector and timing from the vessel's *current* orbit (it may have drifted since planning). */
   const aim = (w: World) => {
     const wv = w.active!;
     const o = w.orbitOf(wv);
     const sNode = propagate(o, node.time);
     dvRem = maneuverToInertialDv(sNode, node);
-    const vAfter = add(sNode.velocity, dvRem);
-    targetEnergy = dot(vAfter, vAfter) / 2 - o.mu / length(sNode.position);
+    target = add(sNode.velocity, dvRem);
+    targetEnergy = dot(target, target) / 2 - o.mu / length(sNode.position);
     dvDir = length(dvRem) > 0 ? normalize(dvRem) : noseDirection(wv.state);
     steerDir = dvDir;
     dv0 = length(dvRem);
-    const p = propulsion(wv.state);
-    const dv = length(dvRem);
-    const bt = p.thrust > 0 ? burnTimeEstimate(dv, p.thrust, wv.state.mass, p.isp) : 0;
-    burnStart = node.time - bt / 2;
+    guide = null;
+    try {
+      guide = guidanceTarget(stateToElements(o.mu, o.body, sNode.position, target, node.time), node.time, w.universe.body(o.body).soi);
+    } catch { /* degenerate planned orbit: open-loop burn */ }
+    const { stages, burning, lit, dv } = usableStages(wv.state, minStage);
+    const deliverable = Math.min(dv0, dv);
+    burnTime = stageBurnTime(stages, burning, deliverable, STAGE_PAUSE, lit);
+    const half = stageBurnTime(stages, burning, deliverable / 2, STAGE_PAUSE, lit);
+    burnStart = node.time - (Number.isFinite(half) ? half : 0);
+    if (dv < dv0 - 0.5) w.message(`Node needs ${dv0.toFixed(0)} m/s; the usable stages hold ${dv.toFixed(0)} m/s`, 'warn', 8);
   };
   const finish = (w: World) => {
+    residual = length(sub(target, propagate(w.orbitOf(w.active!), node.time).velocity));
+    phase = 'done';
     ap.done = true;
-    ap.status = 'done';
+    ap.status = `Done · ${residual.toFixed(1)} m/s off the plan`;
     if (opts.removeNode !== false) w.removeNode(node.id);
   };
-  const ap: Autopilot & { dvUsed: () => number; remaining: () => number } = {
+  const ap: Autopilot & { dvUsed: () => number; remaining: () => number; residual: () => number } = {
     name: 'node',
-    status: 'coast',
+    status: 'Preparing the burn',
     done: false,
     dvUsed: () => used,
     remaining: () => length(dvRem),
+    residual: () => residual,
     update(w) {
       const wv = w.active!;
       const v = wv.state;
-      if (!initialised) {
-        initialised = true;
+      const dt = Math.max(0, w.ut - lastUt);
+      lastUt = w.ut;
+      if (phase === 'init') {
         aim(w);
-        lastUt = w.ut;
         if (length(dvRem) < 0.05) {
           finish(w);
           return { input: neutralInput({ sas: 'stabilityAssist' }) };
         }
+        phase = w.ut < burnStart - alignLead ? 'turn' : 'align';
       }
-      const dt = Math.max(0, w.ut - lastUt);
-      lastUt = w.ut;
-      if ((ap.status === 'burn' || ap.status === 'cutoff') && dt > 0 && wv.mode === 'physics') {
+      let guided = false;
+      if ((phase === 'burn' || phase === 'cutoff') && dt > 0 && wv.mode === 'physics') {
         // Thrust-induced acceleration since the last update (gravity excluded).
         const a = v.telemetry.properAcceleration;
         dvRem = sub(dvRem, scale(a, dt));
         used += length(a) * dt;
       }
+      if (phase === 'burn' && guide && guide.time - w.ut > 1) {
+        // The velocity that reaches the planned aim point on time from here, minus the current velocity: this
+        // absorbs finite-burn losses, burn timing and steering errors that open-loop Δv tracking leaves behind.
+        try {
+          const rs = w.relativeState(wv);
+          const need = solveLambertAround(w.universe.body(wv.body).gm, rs.position, guide.position, guide.time - w.ut, guide.normal).departureVelocity;
+          const rem = sub(need, rs.velocity);
+          if (length(rem) < 2 * dv0 + 10) { dvRem = rem; guided = true; }
+        } catch { /* fall back to the integrated estimate this frame */ }
+      }
       // Steer along the remaining dv vector; once it is nearly used up its direction is just noise, so keep
       // the last good direction (the energy criterion may still ask for a few m/s of finite-burn losses).
       if (length(dvRem) > Math.max(0.5, 0.03 * dv0)) steerDir = normalize(dvRem);
-      const dirRem = steerDir;
-      if (ap.status === 'coast' || ap.status === 'align') {
+      const burning = phase === 'burn' || phase === 'cutoff';
+      const err = angleBetween(noseDirection(v), burning ? steerDir : dvDir);
+      const deg = (err * 180) / Math.PI;
+      if (phase === 'turn') {
+        // Point first, then warp: rails warp keeps the attitude, so the craft reaches the burn already aligned
+        // however slowly it turns.
+        turning += dt;
+        const settled = err < (2 * Math.PI) / 180 && length(v.angularVelocity) < 0.01;
+        if (settled || turning > 300 || w.ut >= burnStart - alignLead) phase = 'coast';
+        else {
+          ap.status = `Turning to the burn · ${deg.toFixed(0)}° to go · burn in ${fmtS(burnStart - w.ut)}`;
+          return { input: steer(dvDir, 0) };
+        }
+      }
+      if (phase === 'coast') {
         if (w.ut < burnStart - alignLead) {
-          ap.status = 'coast';
+          ap.status = `Waiting for the burn · starts in ${fmtS(burnStart - w.ut)} · ${fmtS(burnTime)} burn`;
           return { input: steer(dvDir, 0), coastUntil: burnStart - alignLead };
         }
-        if (!aimed) {
-          aimed = true;
-          aim(w);
+        phase = 'align';
+        aim(w);
+      }
+      if (phase === 'align') {
+        if (w.ut < burnStart) {
+          ap.status = `Burn soon · starts in ${fmtS(burnStart - w.ut)} · ${fmtS(burnTime)} burn · ${deg.toFixed(0)}° off`;
+          return { input: steer(dvDir, 0) };
         }
-        ap.status = 'align';
-        if (w.ut < burnStart) return { input: steer(dvDir, 0) };
-        ap.status = 'burn';
+        phase = 'burn';
       }
-      if (ap.status === 'cutoff') {
-        // Wait for the engines to spool down so the resulting orbit is final.
-        if (v.telemetry.thrust <= 0) finish(w);
-        return { input: steer(dirRem, 0) };
-      }
-      // Burn.
-      let along = dot(dvRem, dvDir);
+      // Remaining Δv along the burn. Guidance steers; for mostly along-track burns the cut still comes from the
+      // planned orbital energy, which fixes the transfer timing far more tightly than an aim point a quarter turn
+      // ahead can (TLI: 0.1 m/s moves the lunar periapsis by tens of km).
+      let along = dot(dvRem, guided ? steerDir : dvDir);
       if (opts.matchEnergy !== false) {
         const rs = w.relativeState(wv);
         const mu = w.universe.body(wv.body).gm;
         const vAlong = dot(rs.velocity, dvDir);
         if (Math.abs(vAlong) > 0.7 * length(rs.velocity) && isFinite(targetEnergy)) {
           const energy = dot(rs.velocity, rs.velocity) / 2 - mu / length(rs.position);
-          along = (targetEnergy - energy) / vAlong;
+          // Exact for a straight-line Δv: E' − E = vAlong·Δv + Δv²/2 (linearising overshoots ~0.2 m/s on a TLI).
+          const disc = vAlong * vAlong + 2 * (targetEnergy - energy);
+          along = disc >= 0 ? -vAlong + Math.sign(vAlong) * Math.sqrt(disc) : (targetEnergy - energy) / vAlong;
         }
+      }
+      if (phase === 'cutoff') {
+        // Wait for the engines to spool down so the resulting orbit is final, then touch up a short cut with a
+        // gentle pulse (spool-up lag makes short pulses fine-grained).
+        ap.status = 'Engine cutoff';
+        if (v.telemetry.thrust > 0) return { input: steer(steerDir, 0) };
+        // One physics step at minimum throttle is the finest pulse available: only trim when that halves the miss.
+        const pulse = propulsion(v).minThrottle * propulsion(v).thrust * PHYSICS_DT / v.mass;
+        if (along > Math.max(0.01, pulse / 2) && trims < 8 && propulsion(v).thrust > 0) {
+          trims++;
+          phase = 'burn';
+        } else {
+            finish(w);
+          return { input: steer(steerDir, 0) };
+        }
+      }
+      // Burn.
+      const { tail: spoolTail, step: stepGain } = spoolDownDv(v);
+      if (along <= Math.max(0.01, spoolTail + stepGain / 2)) {
+        phase = 'cutoff';
+        ap.status = 'Engine cutoff';
+        return { input: steer(steerDir, 0) };
       }
       const p = propulsion(v);
       const aMax = p.thrust / v.mass;
-      // Stop instead of integrating empty burns forever when the allowed stages are exhausted.
-      starved = aMax === 0 && v.nextStage < (opts.minStage ?? 0) ? starved + dt : 0;
-      if (starved > 2) ap.error = 'no propulsion remains in the allowed stages';
-      // Delta-v still to come from spool-down after a cut.
-      let spoolTail = 0;
-      for (const part of v.parts) {
-        if (!part.engine?.ignited) continue;
-        const m = part.def.modules[part.engine.moduleIndex] as EngineModule;
-        spoolTail += (part.engine.thrust * m.spoolTime) / v.mass;
+      stageCooldown -= dt;
+      if (aMax === 0) {
+        // Nothing can thrust: an unstaged craft or a burnt-out stage. Stage (once pointed) until an engine lights.
+        const blocker = stageBlocker(v, minStage);
+        if (blocker) {
+          ap.error = blocker;
+          return { input: steer(steerDir, 0) };
+        }
+        ap.status = `Staging · no thrust in the active stage · ${length(dvRem).toFixed(0)} m/s left`;
+        let stage = false;
+        if (err < BURN_CONE && stageCooldown <= 0) {
+          stage = true;
+          stageCooldown = 0.6;
+          w.message('Assist: staging, no thrust in the active stage', 'info', 2.5);
+        }
+        return { input: steer(steerDir, 1, { stage }) };
       }
-      if (along <= Math.max(0.02, spoolTail)) {
-        ap.status = 'cutoff';
-        return { input: steer(dirRem, 0) };
-      }
-      const err = angleBetween(noseDirection(v), dirRem);
-      let fraction = aMax > 0 ? clamp(along / (aMax * tail), 0, 1) : 1;
-      if (err > (15 * Math.PI) / 180) fraction = 0;
+      let fraction = clamp(along / (aMax * tail), 0, 1);
+      if (err > BURN_CONE) fraction = 0;
       else if (err > (4 * Math.PI) / 180) fraction *= 0.25;
       stalled = fraction === 0 ? stalled + dt : 0;
       if (stalled > 120) ap.error = 'unable to point along the burn vector';
-      const throttle = throttleForFraction(fraction, p.minThrottle || 0);
-      const stage = stager.update(v, fraction > 0 ? 1 : 0, dt);
-      return { input: steer(dirRem, aMax > 0 ? throttle : 1, { stage }) };
+      ap.status = fraction === 0 ? `Burn paused · turning (${deg.toFixed(0)}° off)` : trims ? `Fine trim · ${Math.max(0, along).toFixed(2)} m/s left` : `Burning · ${Math.max(0, along).toFixed(1)} m/s left`;
+      return { input: steer(steerDir, throttleForFraction(fraction, p.minThrottle || 0)) };
     },
   };
   return ap;

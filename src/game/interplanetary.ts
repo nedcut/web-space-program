@@ -82,7 +82,7 @@ export function* porkchopRows(world: PlanningWorld, from: string, to: string, de
 /** Velocity at position r on a hyperbola with the specified outgoing asymptote v∞.
  * The hyperbola's plane contains r and v∞; scanning the parking orbit finds the low-cost ejection angle.
  */
-function ejectionVelocity(mu: number, r: Vec3, excess: Vec3): Vec3 {
+export function ejectionVelocity(mu: number, r: Vec3, excess: Vec3): Vec3 {
   const R = length(r), speed = length(excess), q = scale(r, 1 / R), d = normalize(excess);
   const c = dot(q, d);
   const k = speed / 2 + Math.sqrt(speed * speed / 4 + mu / (R * Math.max(1e-12, 1 + c)));
@@ -96,8 +96,8 @@ function predict(world: PlanningWorld, orbit: Orbit, time: number, components: n
     state: { position: s.position, velocity: add(s.velocity, dv) }, t0: time, horizon, maxPatches: orbit.body === world.universe.sunId ? 2 : 3 });
 }
 /** Continuous-ish miss objective through the SOI edge, then periapsis targeting inside the target SOI. */
-function refine(world: PlanningWorld, orbit: Orbit, targetId: string, time: number, initial: number[], arrival: number,
-  altitude: number, maxDv = Infinity, timeFreedom = 0, earliest = time, latest = Infinity): TransferPlan | null {
+export function refine(world: PlanningWorld, orbit: Orbit, targetId: string, time: number, initial: number[], arrival: number,
+  altitude: number, maxDv = Infinity, timeFreedom = 0, earliest = time, latest = Infinity, commit = true): TransferPlan | null {
   const u = world.universe, target = u.body(targetId), goal = target.radius + altitude;
   const horizon = Math.max(1, arrival - time) * 1.3;
   const objective = (x: number[]) => {
@@ -128,7 +128,8 @@ function refine(world: PlanningWorld, orbit: Orbit, targetId: string, time: numb
   try { patches = predict(world, orbit, t, res.x, horizon); } catch { return null; }
   const enc = patches.find(p => p.orbit.body === targetId);
   if (!enc || Math.abs(periapsisRadius(enc.orbit) - goal) > Math.max(1000, goal * 0.02)) return null;
-  const node = world.addNode(t);
+  // Uncommitted candidates carry a detached node; the caller adds the one it picks.
+  const node = commit ? world.addNode(t) : { id: -1, time: t, prograde: 0, normal: 0, radial: 0 };
   [node.prograde, node.normal, node.radial] = res.x;
   return { node, patches, encounterTime: enc.startTime, periapsisAltitude: periapsisRadius(enc.orbit) - target.radius,
     dv: Math.hypot(...res.x.slice(0, 3)) };

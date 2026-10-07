@@ -1,4 +1,5 @@
-import { burnTimeEstimate, maneuverToInertialDv, propagate } from '../../sim/orbit';
+import { maneuverToInertialDv, propagate } from '../../sim/orbit';
+import { stageBurnTime } from '../../game/autopilot';
 import type { ManeuverNode } from '../../sim/orbit/api';
 import type { StageDeltaV } from '../../sim/vessel';
 import { add, length, sub, type Vec3 } from '../../util/vec3';
@@ -58,19 +59,5 @@ function plannedVelocity(world: World, wv: WorldVessel, node: ManeuverNode): Vec
   return add(s.velocity, maneuverToInertialDv(s, node));
 }
 
-/**
- * Full-throttle time to deliver `dv`, spending the stages in firing order (highest stage number first, starting at
- * the one that is burning or fires next). Exhausting every stage gives Infinity.
- */
-export function stageBurnTime(stages: StageDeltaV[], burning: number, dv: number): number {
-  let left = dv;
-  let t = 0;
-  for (const s of [...stages].filter(s => s.stage <= burning).sort((a, b) => b.stage - a.stage)) {
-    if (left <= 1e-6) break;
-    if (!(s.dv > 0) || !(s.thrust > 0) || !(s.isp > 0)) continue;
-    const use = Math.min(left, s.dv);
-    t += burnTimeEstimate(use, s.thrust, s.startMass, s.isp);
-    left -= use;
-  }
-  return left > 1e-3 ? Infinity : t;
-}
+/** Shared with the node executor, which adds a pause per stage activation. */
+export { stageBurnTime } from '../../game/autopilot';
