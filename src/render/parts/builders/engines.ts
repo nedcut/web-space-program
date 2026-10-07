@@ -221,7 +221,7 @@ export function buildEngine(def: PartDef): THREE.Object3D {
       chamberLen = h * 0.13;
       k = 2.4;
       extStart = 0.3;
-      bands.push(0.5, 0.7, 0.88);
+      bands.push(0.55, 0.85);
       break;
     default: // lifter
       yG = yT - h * 0.2;
@@ -357,17 +357,14 @@ export function buildEngine(def: PartDef): THREE.Object3D {
     const top: [number, number, number] = [Math.sin(a) * r * 0.62, yPlateBottom - yG - 0.01, Math.cos(a) * r * 0.62];
     const bot: [number, number, number] = [Math.sin(a) * (rc * 1.05), yThroat + chamberLen * 0.5, Math.cos(a) * (rc * 1.05)];
     const mid: [number, number, number] = [(top[0] + bot[0]) / 2, (top[1] + bot[1]) / 2, (top[2] + bot[2]) / 2];
-    act.push(rod(top, mid, 0.042 * s, 12));
-    // gland collar, clevis ends and the hydraulic hoses back to the mount
+    act.push(rod(top, mid, 0.042 * s, 10));
     const at = (t: number) => [top[0] + (bot[0] - top[0]) * t, top[1] + (bot[1] - top[1]) * t, top[2] + (bot[2] - top[2]) * t] as [number, number, number];
-    act.push(rod(at(0.47), at(0.53), 0.052 * s, 12));
-    for (const p of [top, bot]) act.push(sphere(0.04 * s, 10, 8).translate(p[0], p[1], p[2]));
-    actChrome.push(rod(mid, bot, 0.022 * s, 10));
-    for (const side of [-1, 1]) {
-      const h0 = at(0.12);
-      const off = 0.06 * s * side;
-      hoses.push(pipe([[h0[0] + off * Math.cos(a), h0[1], h0[2] - off * Math.sin(a)], [h0[0] * 1.08 + off * Math.cos(a), h0[1] + 0.06 * s, h0[2] * 1.08 - off * Math.sin(a)], [top[0] * 1.15 + off * Math.cos(a), top[1] + 0.005, top[2] * 1.15 - off * Math.sin(a)]], 0.011 * s, 6, 10));
-    }
+    act.push(sphere(0.04 * s, 8, 6).translate(bot[0], bot[1], bot[2])); // lower clevis (the upper one sits in the mount)
+    actChrome.push(rod(mid, bot, 0.022 * s, 8));
+    // one hydraulic hose per actuator, back to the mount
+    const h0 = at(0.12);
+    const off = 0.06 * s;
+    hoses.push(pipe([[h0[0] + off * Math.cos(a), h0[1], h0[2] - off * Math.sin(a)], [h0[0] * 1.08 + off * Math.cos(a), h0[1] + 0.06 * s, h0[2] * 1.08 - off * Math.sin(a)], [top[0] * 1.15 + off * Math.cos(a), top[1] + 0.005, top[2] * 1.15 - off * Math.sin(a)]], 0.011 * s, 4, 8));
   }
   gim.add(mk(act, M.satinWhite(), 'actuators'));
   gim.add(mk(actChrome, M.chrome()));

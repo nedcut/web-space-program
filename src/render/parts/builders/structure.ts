@@ -94,8 +94,8 @@ export function idHash(id: string): number {
 }
 
 /** Straight run [rOut, y0..y1] subdivided so vertex colour gradients have rings to live on. */
-function shellProfile(r: number, y0: number, y1: number, step = 0.3): Profile {
-  const n = Math.max(3, Math.ceil((y1 - y0) / step));
+function shellProfile(r: number, y0: number, y1: number, step = 0.5): Profile {
+  const n = Math.min(8, Math.max(3, Math.ceil((y1 - y0) / step)));
   const p: Profile = [];
   for (let i = 0; i <= n; i++) p.push([r, y0 + ((y1 - y0) * i) / n]);
   return p;
@@ -107,9 +107,8 @@ function endFrame(r: number, rb: number, yIn: number, yEdge: number): Profile {
   const b = Math.abs(yEdge - yIn);
   const p: Profile = [
     [rb, yIn],
-    [r * 1.003, yIn + s * 0.006],
-    [r * 1.003, yIn + s * b * 0.3],
-    [r * 0.994, yIn + s * (b * 0.3 + 0.006)],
+    [r * 1.003, yIn + s * b * 0.32],
+    [r * 0.994, yIn + s * (b * 0.32 + 0.006)],
     [r * 0.994, yIn + s * b * 0.46],
     [r * 1.006, yIn + s * (b * 0.46 + 0.006)],
     [r * 1.006, yEdge - s * 0.012],
@@ -129,7 +128,7 @@ export function buildTank(def: PartDef): THREE.Object3D {
   const bodyMat = orange ? M.orangeFoam() : finish === 'steel' ? M.steel() : finish === 'charcoal' ? M.charcoalPanel() : M.whitePanel();
   const frameMat = white || orange ? M.aluminium() : M.gunmetal();
   const tile = orange ? 1.5 : finish === 'steel' ? 1.2 : 1;
-  const seg = r > 1.5 ? 112 : r > 0.9 ? 96 : r > 0.5 ? 72 : 56;
+  const seg = r > 0.9 ? 96 : r > 0.5 ? 72 : 56;
   const yBody0 = -h / 2 + band;
   const yBody1 = h / 2 - band;
   const bodyLen = yBody1 - yBody0;
@@ -139,10 +138,10 @@ export function buildTank(def: PartDef): THREE.Object3D {
   weather(body, yBody0, yBody1, { soot: orange ? 0.22 : white ? 0.3 : 0.16, streaks: orange ? 0.26 : white ? 0.17 : 0.1, tint: 0.95 + 0.05 * hid, seed: 1 + Math.floor(hid * 97) });
   root.add(mk(body, bodyMat, 'body'));
   root.add(mk([lathe(endFrame(r, rb, yBody1, h / 2), { segments: seg }), lathe(endFrame(r, rb, yBody0, -h / 2), { segments: seg })], frameMat, 'frames'));
-  root.add(mk([bulkhead(r * 0.985, h / 2, 1, seg), bulkhead(r * 0.985, -h / 2, -1, seg)], M.darkMetal(), 'bulkheads'));
+  root.add(mk([bulkhead(r * 0.985, h / 2, 1, 48), bulkhead(r * 0.985, -h / 2, -1, 48)], M.darkMetal(), 'bulkheads'));
 
   // fasteners on the bolt flanges
-  const nb = Math.round(16 * r + 10);
+  const nb = Math.round(8 * r + 10);
   const bs = 0.009 + 0.005 * r;
   root.add(mk([...boltRing(r * 1.006, h / 2 - band * 0.3, nb, bs), ...boltRing(r * 1.006, -h / 2 + band * 0.3, nb, bs)], M.chrome(), 'bolts'));
 
@@ -150,11 +149,11 @@ export function buildTank(def: PartDef): THREE.Object3D {
   const fine = detailLevel() === 1;
   const paintDetail: THREE.BufferGeometry[] = [];
   if (fine && !orange && finish !== 'steel') {
-    const lands = Math.floor(bodyLen / 1.3);
+    const lands = Math.min(2, Math.floor(bodyLen / 1.6));
     for (let i = 1; i <= lands; i++) {
       const y = yBody0 + (bodyLen * i) / (lands + 1);
       const w = 0.028 + 0.008 * r;
-      paintDetail.push(lathe([[rb, y - w], [rb + 0.0045, y - w + 0.005], [rb + 0.0045, y + w - 0.005], [rb, y + w]], { segments: seg, tile }));
+      paintDetail.push(lathe([[rb, y - w], [rb + 0.0045, y - w * 0.4], [rb + 0.0045, y + w * 0.4], [rb, y + w]], { segments: seg, tile, creaseAngle: PI }));
     }
   }
   if (fine && finish === 'charcoal') {
@@ -173,7 +172,6 @@ export function buildTank(def: PartDef): THREE.Object3D {
     paintDetail.push(...around(rib, n, 0, PI / n));
     const fl = (y: number) => lathe([[rb, y - 0.022], [rb + 0.016, y - 0.016], [rb + 0.016, y + 0.016], [rb, y + 0.022]], { segments: seg });
     root.add(mk([fl(yc - hb / 2), fl(yc + hb / 2)], M.aluminium(), 'intertankFlanges'));
-    root.add(mk([...boltRing(rb + 0.016, yc - hb / 2, nb, bs * 0.8), ...boltRing(rb + 0.016, yc + hb / 2, nb, bs * 0.8)], M.chrome()));
   }
   if (paintDetail.length) root.add(mk(paintDetail, bodyMat, 'skinDetail'));
 
@@ -187,7 +185,7 @@ export function buildTank(def: PartDef): THREE.Object3D {
   t0.translate(0, 0, rb + rwD / 2 - 0.003);
   tray.push(t0);
   const straps: THREE.BufferGeometry[] = [];
-  const nStraps = fine ? Math.max(2, Math.round(rwLen / 0.45)) : 0;
+  const nStraps = fine ? Math.max(2, Math.min(12, Math.round(rwLen / 0.6))) : 0;
   for (let i = 0; i < nStraps; i++) {
     const y = -rwLen / 2 + (rwLen * (i + 0.5)) / nStraps;
     const st = box(rwW * 1.22, 0.028, rwD + 0.012);
@@ -205,9 +203,6 @@ export function buildTank(def: PartDef): THREE.Object3D {
     const c = box(pr * 2.6, 0.035, pr + 0.02);
     c.translate(pipeOff, y, rb + (pr + 0.02) / 2);
     clamps.push(c);
-    const ring = torus(pr * 1.12, 0.006 + pr * 0.12, 4, 14);
-    ring.translate(pipeOff, y, lineR);
-    clamps.push(ring);
   }
   for (const g of [...tray, ...straps, line, ...clamps]) g.rotateY(phiRw);
   root.add(mk(tray, finish === 'charcoal' ? M.aluminium() : M.gunmetal(), 'raceway'));
