@@ -8,6 +8,13 @@ export type QualityId = 'low' | 'medium' | 'high';
 
 export interface QualitySettings {
   id: QualityId;
+  earth: {
+    textureQuality: 'low' | 'medium' | 'high' | 'ultra';
+    atmosphereQuality: 'low' | 'medium' | 'high' | 'ultra';
+    cloudQuality: 'off' | 'low' | 'medium' | 'high' | 'ultra';
+    oceanQuality: 'low' | 'medium' | 'high' | 'ultra';
+    nightLights: boolean;
+  };
   /** Upper bound on devicePixelRatio used for the canvas. */
   maxPixelRatio: number;
   /** Render scale applied on top of pixel ratio (dynamic resolution hook). */
@@ -72,6 +79,7 @@ export interface QualitySettings {
 export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
   low: {
     id: 'low',
+    earth: { textureQuality: 'low', atmosphereQuality: 'low', cloudQuality: 'low', oceanQuality: 'low', nightLights: true },
     partDetail: 'low',
     scatter: { radius: 0, maxAltitude: 0, vegetation: false, cellsPerFrame: 0, budgetMs: 0 },
     maxPixelRatio: 1,
@@ -92,6 +100,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
   },
   medium: {
     id: 'medium',
+    earth: { textureQuality: 'medium', atmosphereQuality: 'medium', cloudQuality: 'medium', oceanQuality: 'medium', nightLights: true },
     partDetail: 'high',
     scatter: { radius: 256, maxAltitude: 3000, vegetation: false, cellsPerFrame: 3, budgetMs: 1.5 },
     // Full device resolution (Retina too); adaptive resolution trades pixels for frame time when the
@@ -114,6 +123,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
   },
   high: {
     id: 'high',
+    earth: { textureQuality: 'high', atmosphereQuality: 'high', cloudQuality: 'high', oceanQuality: 'high', nightLights: true },
     partDetail: 'high',
     scatter: { radius: 1024, maxAltitude: 3000, vegetation: true, cellsPerFrame: 4, budgetMs: 2 },
     maxPixelRatio: 2,
