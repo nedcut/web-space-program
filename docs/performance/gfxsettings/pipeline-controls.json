@@ -1,0 +1,82 @@
+{
+  "date": "2026-10-07T16:23:43.157Z",
+  "checks": [
+    {
+      "key": "renderScale",
+      "value": 0.75,
+      "actual": {
+        "pixelRatio": 1.5,
+        "scale": 0.75,
+        "bloomPass": true,
+        "atmosphere": true,
+        "adaptive": false,
+        "glError": 0
+      }
+    },
+    {
+      "key": "bloom",
+      "value": false,
+      "actual": {
+        "pixelRatio": 2,
+        "scale": 1,
+        "bloomPass": false,
+        "atmosphere": true,
+        "adaptive": false,
+        "glError": 0
+      }
+    },
+    {
+      "key": "scatter",
+      "value": false,
+      "actual": {
+        "pixelRatio": 2,
+        "scale": 1,
+        "bloomPass": true,
+        "atmosphere": false,
+        "adaptive": false,
+        "glError": 0
+      }
+    },
+    {
+      "key": "adaptiveQuality",
+      "value": false,
+      "actual": {
+        "pixelRatio": 2,
+        "scale": 1,
+        "bloomPass": true,
+        "atmosphere": true,
+        "adaptive": false,
+        "glError": 0
+      }
+    },
+    {
+      "key": "adaptiveQuality",
+      "value": true,
+      "actual": {
+        "pixelRatio": 2,
+        "scale": 1,
+        "bloomPass": true,
+        "atmosphere": true,
+        "adaptive": true,
+        "glError": 0
+      }
+    },
+    {
+      "frameRateCap": 30,
+      "observedFps": 30.327135328986305
+    },
+    {
+      "frameRateCap": 60,
+      "observedFps": 40.055385225430214
+    },
+    {
+      "frameRateCap": 120,
+      "observedFps": 32.36245954730391
+    },
+    {
+      "frameRateCap": 0,
+      "observedFps": 21.34524695954331
+    }
+  ],
+  "errors": []
+}
