@@ -974,3 +974,7 @@ bash scripts/bench/gpu-bench.sh --base http://<WSL-IP>:5327 --label gfxsettings-
 
 Final merged-code validation: lint, `npx tsc --noEmit`, production build, and full
 `npx vitest run --maxWorkers=2` pass: **109 files / 1,327 tests**, 407.78 s.
+
+Ultra cold readiness in the final harness was about **30.3 s on the pad / 24.8 s in orbit**. Larger
+terrain/texture resources make initial preparation and structural setting rebuilds noticeably slower;
+these startup durations are separate from the steady rendering measurements above.
