@@ -22,6 +22,8 @@ if (sourceHash !== '9d27d4b8ea8e76977e2988bca667d7c8fa68b927355feffcddd6b4875a7f
 const tif = await fromFile(input.pathname), raster = await tif.getImage();
 const sw = raster.getWidth(), sh = raster.getHeight(), width = 4096, height = 2048;
 if (sw !== 21600 || sh !== 10800) throw Error('Unexpected source dimensions');
+const origin = raster.getOrigin(), resolution = raster.getResolution();
+if (origin[0] !== -180 || origin[1] !== 90 || resolution[0] !== 1/60 || resolution[1] !== -1/60) throw Error('Unexpected source projection');
 const bytes = Buffer.alloc(width * height * 2);
 // Target pixel centres: lon=-180+(x+.5)*360/W; lat=90-(y+.5)*180/H.
 // Read bounded strips rather than a 933 MB float raster. Interpolate in float64, round once to metres.

@@ -1,3 +1,4 @@
+import { STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -75,13 +76,18 @@ describe('real Earth geography', () => {
   });
   it('identity-migrates legacy archive keys, decay and accepted biome contracts through saves', () => {
     const w = new World(new Universe('standard'), PART_CATALOG, 0, 'science');
+    w.launch(STOCK_CRAFTS.find(c => c.id === 'stock-kestrel')!.build());
+    w.active!.state.parts[0].scienceData = [];
     for (const biome of BIOMES.earth.slice(0, 7)) {
       const context = { body: 'earth', biome, situation: 'landed' as const };
       const key = subjectKey(EXPERIMENTS[0], context);
       w.progression.archive[key] = { ...context, experiment: EXPERIMENTS[0].id, science: 7, runs: 3 };
+      w.progression.contracts.push({ id: biome, kind: 'science', title: biome, ...context, status: 'active', advance: 1, reward: 2, penalty: 0, reputation: 1, landed: false });
+      w.active!.state.parts[0].scienceData!.push({ ...context, id: w.progression.nextDataId++, subject: key, experiment: EXPERIMENTS[0].id, value: 3, credited: 1 });
     }
     const saved = serializeWorld(w), restored = deserializeWorld(saved, PART_CATALOG);
     expect(restored.progression).toEqual(saved.progression);
+    expect(restored.active!.state.parts[0].scienceData).toEqual(w.active!.state.parts[0].scienceData);
   });
   it('keeps ground stations and named Earth airfields on real land', () => {
     const t = new Universe('real').terrain('earth');
