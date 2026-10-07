@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { connect } from './partsart-cdp.mjs';
 const [label = 'after', base = 'http://172.24.204.38:5322', mode] = process.argv.slice(2);
-const out = new URL('../../docs/screenshots/hangar/', import.meta.url);
+const out = new URL(process.argv[5] ? '../../.tmp/hangar-profile/' : '../../docs/screenshots/hangar/', import.meta.url);
 mkdirSync(out, { recursive: true });
 const browser = await connect();
 const ctx = await browser.newContext({ viewport: { width: 1470, height: 920 }, deviceScaleFactor: 2 });
@@ -33,7 +33,7 @@ try {
     }
   }
   if (mode === 'paired') {
-    results.paired = await page.evaluate(async () => {
+    results.paired = await page.evaluate(async profile => {
       const after = window.__editor.view;
       const { EditorView } = await import('/.tmp/hangar-baseline/src/editor/scene/EditorView.ts');
       const host = document.createElement('div');
@@ -42,8 +42,12 @@ try {
       const before = new EditorView(host, window.__editor.session);
       await (await import('/.tmp/hangar-baseline/src/render/parts/textures.ts')).partTexturesReady();
       const views = { before, after };
+      if (profile) for (const v of Object.values(views)) {
+        if (profile === 'craft') v.hangar.group.visible = false;
+        if (profile === 'hall') v.craftGroup.visible = false;
+      }
       const result = {};
-      for (const id of ['selene', 'meridian']) {
+      for (const id of ['meridian', 'selene']) {
         window.__editor.loadStock(id);
         await (await import('/.tmp/hangar-baseline/src/render/parts/textures.ts')).partTexturesReady();
         await new Promise(r => setTimeout(r, 1000));
@@ -54,11 +58,27 @@ try {
             cancelAnimationFrame(v.raf); v.loop(); cancelAnimationFrame(v.raf);
           }
           const samples = { before: [], after: [] }, pairs = [], calls = {};
+          const resolves = { before: {}, after: {} }, originalKeys = new Map();
+          let active = 'before';
+          for (const v of Object.values(views)) v.scene.traverse(o => {
+            if (!o.material) return;
+            for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+              if (originalKeys.has(m)) continue;
+              const original = m.customProgramCacheKey;
+              originalKeys.set(m, original);
+              m.customProgramCacheKey = function () {
+                const key = m.name || m.type;
+                resolves[active][key] = (resolves[active][key] ?? 0) + 1;
+                return original.call(this);
+              };
+            }
+          });
           let seed = 91817;
           for (let i = 0; i < 160; i++) {
             seed = (1664525 * seed + 1013904223) >>> 0;
             const pair = {};
             for (const name of seed & 0x10000 ? ['before', 'after'] : ['after', 'before']) {
+              active = name;
               const v = views[name], gl = after.renderer.getContext();
               const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
               if (!ext) throw new Error('GPU timer unavailable');
@@ -79,19 +99,20 @@ try {
             }
             if (i >= 40) { pairs.push(pair); for (const name of ['before', 'after']) samples[name].push(pair[name]); }
           }
+          for (const [m,key] of originalKeys) m.customProgramCacheKey = key;
           const median = a => a.sort((a,b) => a-b)[Math.floor(a.length / 2)];
           const gl = after.renderer.getContext(), debug = gl.getExtension('WEBGL_debug_renderer_info');
           result[`${id}-${zoom}`] = {
             gpu: gl.getParameter(debug.UNMASKED_RENDERER_WEBGL),
             beforeMs: median(samples.before), afterMs: median(samples.after), pairedDeltaMs: median(pairs.map(p => p.after-p.before)),
             canvas: [after.renderer.domElement.width, after.renderer.domElement.height],
-            calls, pairs,
+            calls, resolves, pairs,
           };
         }
       }
-      before.dispose(); host.remove(); after.loop();
+      before.dispose(); host.remove(); after.hangar.group.visible = true; after.craftGroup.visible = true; after.loop();
       return result;
-    });
+    }, process.argv[5]);
   }
   await page.evaluate(() => {
     const { session, view } = window.__editor;
@@ -106,6 +127,27 @@ try {
   results.nodes = await page.evaluate(() => {
     const v = window.__editor.view;
     return v.nodeMarkers.map(m => ({ key: m.key, radius: m.mesh.scale.x, facing: m.mesh.quaternion.toArray() }));
+  });
+  await page.evaluate(() => {
+    const v = window.__editor.view;
+    const target = v.nodeMarkers.find(m => !m.key.startsWith('h'));
+    const p = target.mesh.getWorldPosition(v.markerWorld).clone().project(v.camera);
+    const el = v.renderer.domElement, rect = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent('pointermove', { clientX: rect.left + (p.x + 1) * rect.width / 2, clientY: rect.top + (1 - p.y) * rect.height / 2 }));
+  });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: fileURLToPath(new URL(`${label}-snap.png`, out)) });
+  results.attachment = await page.evaluate(() => {
+    const { view: v, session } = window.__editor;
+    const before = session.getSnapshot().craft.parts.length;
+    const snap = v.snapKey, kind = v.placement?.kind;
+    v.click();
+    const placed = session.getSnapshot().craft.parts.length;
+    session.undo();
+    const undone = session.getSnapshot().craft.parts.length;
+    session.cancelHeld();
+    if (!snap || placed !== before + 1 || undone !== before) throw new Error('Attach/undo smoke test failed');
+    return { snap, kind, before, placed, undone };
   });
   results.scene = await page.evaluate(() => {
     const v = window.__editor.view, gl = v.renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');

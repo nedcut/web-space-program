@@ -389,9 +389,10 @@ const PROBE = new THREE.Vector3(0, 2, 0);
  * Patch a standard material so its env-map lookups are box-projected onto the hall's walls (parallax-corrected
  * cube-map reflections): a cheap stand-in for a planar mirror on a polished floor.
  */
-function boxProjected(mat: THREE.MeshStandardMaterial) {
+function boxProjected(mat: THREE.MeshStandardMaterial, specular = 1) {
   const { halfX: HX, halfZ: HZ, height: H } = HANGAR;
   const uniforms = {
+    uHallSpecular: { value: specular },
     uBoxMin: { value: new THREE.Vector3(-HX, 0, -HZ) },
     uBoxMax: { value: new THREE.Vector3(HX, H, HZ) },
     uBoxCenter: { value: PROBE.clone() },
@@ -402,7 +403,8 @@ function boxProjected(mat: THREE.MeshStandardMaterial) {
       .replace('#include <common>', '#include <common>\nvarying vec3 vBoxWorldPos;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvBoxWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vBoxWorldPos;\nuniform vec3 uBoxMin;\nuniform vec3 uBoxMax;\nuniform vec3 uBoxCenter;')
+      .replace('#include <common>', '#include <common>\nuniform float uHallSpecular;\nvarying vec3 vBoxWorldPos;\nuniform vec3 uBoxMin;\nuniform vec3 uBoxMax;\nuniform vec3 uBoxCenter;')
+      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\nmaterial.specularColor *= uHallSpecular;\nmaterial.specularF90 *= uHallSpecular;')
       .replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
         'reflectVec = transformDirectionByInverseViewMatrix( reflectVec, viewMatrix );',
         `reflectVec = transformDirectionByInverseViewMatrix( reflectVec, viewMatrix );
@@ -415,7 +417,7 @@ function boxProjected(mat: THREE.MeshStandardMaterial) {
         }`,
       ));
   };
-  mat.customProgramCacheKey = () => 'hangar-box-projected';
+  mat.customProgramCacheKey = () => 'hangar-box-projected-specular-v2';
 }
 
 export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
@@ -434,8 +436,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   const cyanMat = track(new THREE.MeshBasicMaterial({ color: new THREE.Color(0x5cc8ff).multiplyScalar(0.38) }));
 
   // ---------------------------------------------------------------- floor: polished epoxy
-  const floorMat = track(new THREE.MeshPhysicalMaterial({
-    specularIntensity: 0.22,
+  const floorMat = track(new THREE.MeshStandardMaterial({
     map: track(floorTexture(aniso)),
     roughnessMap: track(floorRoughness(aniso)),
     roughness: 1,
@@ -443,7 +444,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
     envMapIntensity: 0.38,
     color: 0x778795,
   }));
-  boxProjected(floorMat);
+  boxProjected(floorMat, 0.22);
   const floor = new THREE.Mesh(track(new THREE.PlaneGeometry(FLOOR_W, FLOOR_W)), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -451,8 +452,8 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   group.add(floor);
 
   // ---------------------------------------------------------------- assembly platform (low turntable)
-  const platMat = track(new THREE.MeshPhysicalMaterial({ specularIntensity: 0.28, map: track(platformTexture(aniso)), roughness: 0.48, metalness: 0, color: 0x687888, envMapIntensity: 0.35 }));
-  boxProjected(platMat);
+  const platMat = track(new THREE.MeshStandardMaterial({ map: track(platformTexture(aniso)), roughness: 0.48, metalness: 0, color: 0x687888, envMapIntensity: 0.35 }));
+  boxProjected(platMat, 0.28);
   // Side, top cap, bottom cap: the textured deck only on top.
   const plat = new THREE.Mesh(track(new THREE.CylinderGeometry(PLATFORM_R, PLATFORM_R + 0.12, PLATFORM_H, 96, 1)), [trimMat, platMat, trimMat]);
   plat.position.y = PLATFORM_H / 2;
@@ -480,8 +481,9 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   group.add(blob);
 
   // ---------------------------------------------------------------- walls
+  // Matte architectural cladding uses vertex diffuse lighting; save per-pixel PBR for the craft and floor.
   const clad = track(claddingTexture(aniso));
-  const wallMat = track(new THREE.MeshStandardMaterial({ map: clad, color: 0x66768b, roughness: 0.82, metalness: 0.15 }));
+  const wallMat = track(new THREE.MeshLambertMaterial({ map: clad, color: 0x56667d }));
   const addWall = (w: number, h: number, pos: THREE.Vector3, rotY: number) => {
     const t = track(clad.clone());
     t.repeat.set(w / 4, h / 4);
@@ -513,7 +515,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
 
   // ---------------------------------------------------------------- hangar doors (slightly parted)
   const doorTex = track(doorTexture());
-  const doorMat = track(new THREE.MeshStandardMaterial({ map: doorTex, color: 0x728397, roughness: 0.75, metalness: 0.25 }));
+  const doorMat = track(new THREE.MeshLambertMaterial({ map: doorTex, color: 0x53647a }));
   const panels = 6, pw = doorW / panels;
   const doorGeos: THREE.BufferGeometry[] = [];
   for (let i = 0; i < panels; i++) {
