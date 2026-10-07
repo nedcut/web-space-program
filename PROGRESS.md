@@ -715,3 +715,17 @@ Added original branched coastal vegetation with wind and fading LOD, warmer deta
 - Captured 28 DPR-2 real RTX 3060 Ti screenshots and critically inspected close-ups: three stock editor crafts, pad/orbit close-ups, engine bell, controlled long-burn glow, actual simulated 1101 K shield heating. Comparisons, reproducible drivers, raw timings and limits: `docs/screenshots/partsart/README.md`.
 - Thirty-part Medium / DPR-2 acceptance: **+0.285 ms median adjacent-pair GPU delta** (240 pairs; budget +0.5 ms), **248 vessel draw groups unchanged**, **zero program re-resolutions**, **+2,400 vertices / +768 triangles**. All-30-parts hot/changing stress also uses the compact lookup; the rejected attribute-streaming experiment and earlier timing variation are recorded in the evidence.
 - Current main merged; lint, typecheck, **99 files / 1,102 tests**, build and whitespace checks pass. Remaining: directional skin glow, accumulated charring/erosion, and reflections of nearby geometry; the current cheap environment is a sky/planet approximation. Screenshots stay out of the runtime bundle.
+
+## Vessel art, pass 2 (2026-10-07, op/partsart2)
+
+- Rockets no longer read as plain white cylinders. Tanks now have:
+  - A new 2 m painted skin: panel-by-panel tone and gloss, 8 mm seams with rivets, hatches and stencils.
+  - Bright stepped metal end rings with bolt flanges, raised weld lands, and a cable raceway plus pressurisation line with clamps.
+  - Stringers on black adapters and a ribbed intertank band on long foam tanks.
+  - A big "WEB SPACE PROGRAM" wordmark and an original program flag.
+  - Soot, stains and per-part paint tone baked into vertex colour.
+- Engines gained chunkier gimbal actuators with hoses and banded bells, and the bell tone step is fixed. Foam has spray bands and mottling.
+- Every part gets baked ambient occlusion: crevices, under rings, inside trusses and bays. It goes through `vertexColors` on all part materials, so there are no new shader variants.
+- Hangar lighting now shows form: stronger key, less fill, stronger rim, plus a new cool kicker.
+- Real RTX 3060 Ti at DPR 2: 14 before/after shots plus side-by-side crops in `docs/screenshots/partsart2/` (see its README). 30-part paired GPU delta is **+0.19 to +0.30 ms** (budget +1.0), with 1,043 → 1,057 draws, 0 program re-resolutions and 91 programs unchanged. All parts stay within the 8.5k-triangle part budget, and the new fine geometry is High-detail only.
+- Left: soot is not tied to the actual engine position or burn history; there is no AO between neighbouring parts; pods, legs and panels only gained AO and lighting.

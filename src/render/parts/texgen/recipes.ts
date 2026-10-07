@@ -49,7 +49,6 @@ function panel(): TexData {
     return { col, row, fu, fv, du, dv, id: col * 2 + row };
   };
   const rivets = (c: ReturnType<typeof cell>) => {
-    let h = 0;
     const r = 0.0035;
     // rows 16 mm either side of each seam, 45 mm pitch
     const along = (d: number, t: number, len: number) => {
@@ -59,8 +58,7 @@ function panel(): TexData {
       const dist = Math.hypot(dd, q);
       return dist < r ? smooth(1 - dist / r) : 0;
     };
-    h = Math.max(along(c.du, c.fv, 1), along(c.dv, c.fu, 0.5));
-    return h;
+    return Math.max(along(c.du, c.fv, 1), along(c.dv, c.fu, 0.5));
   };
   const hatch = (c: ReturnType<typeof cell>) => {
     if (c.id !== 5) return 1;

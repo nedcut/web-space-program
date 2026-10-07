@@ -1,0 +1,13 @@
+{
+  "orbit": {
+    "medianGpuMs": 4.897931137437845,
+    "stats": {
+      "calls": 598,
+      "triangles": 517441,
+      "points": 9000,
+      "programs": 91,
+      "textures": 97,
+      "geometries": 914
+    }
+  }
+}
