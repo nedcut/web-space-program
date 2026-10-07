@@ -184,3 +184,16 @@ of toggling visibility, and create runtime materials from existing variants.
 Earth terrain requires the immutable ETOPO grid before the first `createTerrain(earth)`. Browser entry points await `game/earthLoader.loadEarthData`; the main thread sends the installed buffer before the first Earth worker init. Planning workers receive it before requests too. Node tests use the Vitest setup file `scripts/earth-data/register.ts`; server and benchmark entry points import that Node adapter. New standalone Node consumers can use `node --import tsx --import ./scripts/earth-data/register.ts <script.ts>`. Missing initialization throws rather than substituting procedural geography.
 
 The sim decoder/sampler (`sim/terrain/earthData.ts`) accepts ArrayBuffer/SharedArrayBuffer and has no host I/O, DOM, or three.js dependency. The base int16 grid is 16 MiB; interpolation and relief/detail math remain float64. Terrain workers share the buffer when the browser is cross-origin isolated, otherwise each gets one copy. PWA precaches the binary. Projection/pixel-centre conventions, hashes and licensing live under `public/earth/`; deterministic generation lives under `scripts/earth-data/`. Legacy science biome strings remain stable identifiers; new observations use geographic cover classes while old archives/onboard data/contracts retain their keys.
+
+## Earth imagery (render only)
+
+`render/planet/earthImagery.ts` loads NASA imagery built by `scripts/earth-imagery/` (`public/earth/imagery/`,
+same equirect convention as the terrain grid) for Earth's `PlanetRenderer` only; the sim never sees it. Levels follow
+`quality.earth.textureQuality` (2k/4k bundled, 8k/16k packs in Cache Storage) and the season follows the Sun's
+ecliptic longitude (scaled universes shorten the year). Decoded images are shared by URL; GPU textures belong to one
+renderer and are filled in bounded strips from `PlanetRenderer.update()` (renderer captured in material callbacks),
+then colour + water mask are merged into one sRGB RGBA render target. Shaders read it through `GLSL_EARTH_IMAGERY`
+behind the `EARTH_IMAGERY` define (uniforms only change when data arrives — no program changes mid-flight);
+`EARTH_RICH` (High/Ultra) adds bicubic magnification and marched coast reflections. Terrain hands colour over to
+the imagery with distance (`uEarthBlend`, texel-size driven); from altitude coastlines follow the imagery mask on
+both the ocean and terrain meshes. The cloud cube map bakes from the real cloud composite when available.

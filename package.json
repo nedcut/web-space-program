@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "server": "tsx server/index.ts",
     "lint": "eslint . --max-warnings=0 && node scripts/check-layering.mjs",
-    "check:unused": "knip"
+    "check:unused": "knip",
+    "earth:imagery": "npm ci --prefix scripts/earth-imagery && node scripts/earth-imagery/build.mjs"
   },
   "dependencies": {
     "react": "^19.3.0",

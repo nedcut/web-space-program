@@ -26,6 +26,17 @@ map and in the Ring Skimmer mission — `docs/PERFORMANCE.md` ("What to measure 
 Graphics are auto-tuned once per device (weak GPUs start on Low; adaptive resolution is on). Then tell me what feels
 wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
 
+## Real Earth from orbit (2026-10-07, op/earthgfx)
+
+Earth now wears real NASA imagery: monthly Blue Marble colour with sea ice, Black Marble city lights on the night
+side, real cloud systems, shallow banks in their true turquoise, and a sun glint whose width follows the wind. It
+lines up with the real ETOPO terrain and hands over smoothly to the close-up ground colours as you descend.
+Settings → Graphics → Advanced → *Earth texture quality*: Low 2k / Medium 4k (bundled, offline), High 8k (downloads
+once, ~25 MB), Ultra 16k (needs `npm run earth:imagery -- --ultra` once, then hosted with the app; ~0.7 GB GPU
+memory). Medium costs the same as before on the test GPU (and less on the night side); High/Ultra add bicubic
+detail, cloud-top relief and richer water. Imagery streams in the background without hitches. Before/after shots
+and numbers: `docs/screenshots/earthgfx/README.md`.
+
 ## Map readability on Retina (2026-10-06, op/mapviz2)
 You said the map lines were barely visible and a planned course looked like straight pixels. Checked on a real GPU at
 2× device pixel ratio: every trajectory line now has a thin dark outline (it reads over bright planets), and the active

@@ -978,3 +978,14 @@ Final merged-code validation: lint, `npx tsc --noEmit`, production build, and fu
 Ultra cold readiness in the final harness was about **30.3 s on the pad / 24.8 s in orbit**. Larger
 terrain/texture resources make initial preparation and structural setting rebuilds noticeably slower;
 these startup durations are separate from the steady rendering measurements above.
+
+## Real Earth imagery (2026-10-07, op/earthgfx)
+
+Full tables, method and screenshots: [`docs/screenshots/earthgfx/README.md`](screenshots/earthgfx/README.md); raw
+logs in `docs/performance/earthgfx/`. Summary (RTX 3060 Ti, DPR 2, paired readPixels-fenced frames, shared GPU):
+Medium flight low orbit +0.03…+0.09 ms and pad +0.07…+0.14 ms vs main (within noise), 1,500 km orbit −0.01 ms,
+night side −0.64 ms, open-ocean glint −0.21 ms. High +1.3 ms and Ultra +0.6 ms over main's same preset. Imagery
+streaming peaks at 5.2 ms of main-thread time in one frame (High). Tools: `scripts/bench/earthgfx-ab.mjs` (preview
+views), `earthgfx-flightfam.mjs` (flight, per material family), `earthgfx-stalls.mjs` (frame intervals and long
+tasks while streaming), `earthgfx-texleak.mjs` (textures across 12 month swaps), `earthgfx-shots.mjs`. Wrap GPU
+runs in `flock /tmp/wsp-gpu.lock` — the harness is shared.
