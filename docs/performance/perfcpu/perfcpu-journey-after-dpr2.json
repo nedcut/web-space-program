@@ -1,0 +1,115 @@
+{
+ "label": "perfcpu-journey-after",
+ "base": "http://172.24.204.38:5334",
+ "local": false,
+ "noRaster": false,
+ "noSubmission": false,
+ "dpr": 2,
+ "throttle": 1,
+ "quality": "medium",
+ "seconds": 120,
+ "size": "1470x920",
+ "date": "2026-10-07T18:08:52.206Z",
+ "cases": {
+  "journey": {
+   "fps": 41.92,
+   "frames": 8018,
+   "frameP50": 16.7,
+   "frameP95": 33.4,
+   "frameP99": 50,
+   "frameMax": 99.9,
+   "hitches25": 3353,
+   "hitches50": 21,
+   "cpuMs": 3.37,
+   "cpuP95": 5.1,
+   "sections": {
+    "input": 0.06,
+    "sim": 0.2,
+    "vessels": 0.03,
+    "fx": 0.04,
+    "planets": 0.31,
+    "map": 0,
+    "render": 2.47,
+    "telemetry": 0.05,
+    "audio": 0.01,
+    "navball": 0.11,
+    "hud": 0.07
+   },
+   "scriptMsPerFrame": 4.59,
+   "taskMsPerFrame": 23.8,
+   "layoutsPerSec": 8.1,
+   "styleRecalcsPerSec": 6.79,
+   "layoutMsPerSec": 3.37,
+   "styleMsPerSec": 0.48,
+   "sampleSeconds": 191.32,
+   "longTasks": 5,
+   "longTasksPerMin": 1.57,
+   "longTaskMsPerMin": 88.75,
+   "longTaskMax": 64,
+   "heapMB": 32.85,
+   "heapGrowthMBPerMin": 1.61,
+   "domNodes": 550,
+   "listeners": 1395,
+   "reactCommitsPerSec": 12.69,
+   "reactRendersPerSec": 369.43,
+   "journey": {
+    "elapsedSim": 326.6876187324524,
+    "assist": null,
+    "body": "earth",
+    "orbit": {
+     "orbit": {
+      "body": "earth",
+      "mu": 3986004355070,
+      "a": 720294.2095453871,
+      "e": 0.002610710136268648,
+      "i": 0.8157595868422218,
+      "lan": 2.61566675400543,
+      "argPe": 3.0687898924565156,
+      "m0": 4.907833774206384,
+      "epoch": 964051528.1876173,
+      "p": 720289.3001587719
+     },
+     "ap": 85073.84893934242,
+     "pe": 81312.89015143085,
+     "timeToAp": 1383.059057179036,
+     "timeToPe": 421.1237323105078
+    }
+   },
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 1272,
+     "in": 1276
+    }
+   },
+   "gl": {
+    "calls": 344,
+    "tris": 510258,
+    "programs": 87,
+    "geometries": 982,
+    "textures": 106,
+    "canvas": "2940x1840",
+    "scale": 1,
+    "gpuMs": 3.341074790430203,
+    "gpuName": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+   },
+   "trace": {
+    "error": "SyntaxError: Unexpected non-whitespace character after JSON at position 134 (line 1 column 135)"
+   },
+   "readyMs": 3427,
+   "marks": {
+    "wsp:flight:construct": 1307,
+    "wsp:flight:shaderWarmup": 2502,
+    "wsp:flight:firstFrame": 2607,
+    "wsp:flight:construct:start": 1194,
+    "wsp:flight:ready": 2727
+   }
+  }
+ }
+}

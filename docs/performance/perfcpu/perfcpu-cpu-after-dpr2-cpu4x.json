@@ -1,0 +1,675 @@
+{
+ "label": "perfcpu-cpu-after",
+ "base": "http://localhost:5334",
+ "local": true,
+ "noRaster": true,
+ "noSubmission": false,
+ "dpr": 2,
+ "throttle": 4,
+ "quality": "medium",
+ "seconds": 10,
+ "size": "1470x920",
+ "date": "2026-10-07T18:12:54.453Z",
+ "cases": {
+  "pad": {
+   "fps": 34.99,
+   "frames": 449,
+   "frameP50": 33.3,
+   "frameP95": 33.4,
+   "frameP99": 50,
+   "frameMax": 50,
+   "hitches25": 311,
+   "hitches50": 0,
+   "cpuMs": 25.13,
+   "cpuP95": 32.8,
+   "sections": {
+    "input": 0.3,
+    "sim": 0.56,
+    "vessels": 0.11,
+    "fx": 0.2,
+    "planets": 3.03,
+    "map": 0,
+    "render": 19.4,
+    "telemetry": 0.32,
+    "audio": 0.12,
+    "navball": 0.51,
+    "hud": 0.46
+   },
+   "scriptMsPerFrame": 26.07,
+   "taskMsPerFrame": 28.54,
+   "layoutsPerSec": 4.11,
+   "styleRecalcsPerSec": 1.01,
+   "layoutMsPerSec": 3.05,
+   "styleMsPerSec": 0.37,
+   "sampleSeconds": 12.9,
+   "longTasks": 0,
+   "longTasksPerMin": 0,
+   "longTaskMsPerMin": 0,
+   "longTaskMax": 0,
+   "heapMB": 49.08,
+   "heapGrowthMBPerMin": 16.47,
+   "domNodes": 527,
+   "listeners": 4147,
+   "reactCommitsPerSec": 12.02,
+   "reactRendersPerSec": 320.78,
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    }
+   },
+   "gl": {
+    "calls": 704,
+    "tris": 3482301,
+    "programs": 86,
+    "geometries": 750,
+    "textures": 100,
+    "canvas": "2940x1840",
+    "scale": 1,
+    "gpuMs": 0.3441342173666424,
+    "gpuName": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "glError": 0
+   },
+   "trace": {
+    "spanMs": 10007.06,
+    "workerThreads": 5,
+    "mainTop": {
+     "v8.callFunction": 916.19,
+     "FunctionCall": 904.39,
+     "FireAnimationFrame": 892.56,
+     "Commit": 29.92,
+     "SimpleWatcher::OnHandleReady": 21.75,
+     "PrePaint": 10.03,
+     "Layout": 3.17,
+     "MinorGC": 2.72,
+     "V8.GCScavenger": 2.64,
+     "V8.GC_SCAVENGER": 2.53,
+     "V8.GC_SCAVENGER_SCAVENGE": 2.52,
+     "TimerFire": 2.46
+    },
+    "busyPct": {
+     "workers": 0,
+     "PerfettoTrace": 0.03,
+     "Chrome_ChildIOThread": 1.78,
+     "Compositor": 1.99,
+     "CrRendererMain": 99.2,
+     "ThreadPoolServiceThread": 0
+    },
+    "mainWorkPct": 96.21,
+    "commitWaitPct": 2.99,
+    "gc": {
+     "minorCount": 8,
+     "minorMs": 52.57,
+     "majorCount": 2,
+     "majorMs": 35.63,
+     "maxPauseMs": 17.94,
+     "msPerSec": 8.81
+    }
+   },
+   "readyMs": 15615,
+   "marks": {
+    "wsp:flight:construct": 4065,
+    "wsp:flight:shaderWarmup": 11923,
+    "wsp:flight:firstFrame": 12137,
+    "wsp:flight:construct:start": 3276,
+    "wsp:flight:ready": 14899
+   }
+  },
+  "ascent": {
+   "fps": 20.67,
+   "frames": 257,
+   "frameP50": 50,
+   "frameP95": 66.7,
+   "frameP99": 100,
+   "frameMax": 149.9,
+   "hitches25": 255,
+   "hitches50": 60,
+   "cpuMs": 40.34,
+   "cpuP95": 56.2,
+   "sections": {
+    "input": 0.47,
+    "sim": 7.77,
+    "vessels": 0.32,
+    "fx": 0.45,
+    "planets": 2.77,
+    "map": 0,
+    "render": 22.96,
+    "telemetry": 2.46,
+    "audio": 0.56,
+    "navball": 1.13,
+    "hud": 1.27
+   },
+   "scriptMsPerFrame": 42.67,
+   "taskMsPerFrame": 48.41,
+   "layoutsPerSec": 7.49,
+   "styleRecalcsPerSec": 7.49,
+   "layoutMsPerSec": 16.76,
+   "styleMsPerSec": 2.77,
+   "sampleSeconds": 12.55,
+   "longTasks": 63,
+   "longTasksPerMin": 301.08,
+   "longTaskMsPerMin": 17730.13,
+   "longTaskMax": 138,
+   "heapMB": 61.81,
+   "heapGrowthMBPerMin": 119.87,
+   "domNodes": 548,
+   "listeners": 683,
+   "reactCommitsPerSec": 11.07,
+   "reactRendersPerSec": 375.15,
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 92,
+     "in": 92
+    }
+   },
+   "gl": {
+    "calls": 510,
+    "tris": 726670,
+    "programs": 87,
+    "geometries": 874,
+    "textures": 106,
+    "canvas": "2940x1840",
+    "scale": 1,
+    "gpuMs": 0.6498342717775953,
+    "gpuName": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "glError": 0
+   },
+   "trace": {
+    "spanMs": 10011.29,
+    "workerThreads": 5,
+    "mainTop": {
+     "v8.callFunction": 898.49,
+     "FunctionCall": 886.92,
+     "FireAnimationFrame": 856.86,
+     "SimpleWatcher::OnHandleReady": 34.76,
+     "Commit": 26.19,
+     "Layout": 16.77,
+     "Paint": 16.38,
+     "PrePaint": 11,
+     "MinorGC": 7.56,
+     "V8.GCScavenger": 7.42,
+     "V8.GC_SCAVENGER": 7.18,
+     "V8.GC_SCAVENGER_SCAVENGE": 7.16
+    },
+    "busyPct": {
+     "workers": 1.26,
+     "PerfettoTrace": 0.03,
+     "Compositor": 2.59,
+     "Chrome_ChildIOThread": 1.66,
+     "CrRendererMain": 98.84,
+     "ThreadPoolServiceThread": 0.01
+    },
+    "mainWorkPct": 96.23,
+    "commitWaitPct": 2.62,
+    "gc": {
+     "minorCount": 22,
+     "minorMs": 147.56,
+     "majorCount": 4,
+     "majorMs": 86.46,
+     "maxPauseMs": 22.35,
+     "msPerSec": 23.38
+    }
+   },
+   "readyMs": 16514,
+   "marks": {
+    "wsp:flight:construct": 4488,
+    "wsp:flight:shaderWarmup": 10270,
+    "wsp:flight:firstFrame": 10477,
+    "wsp:flight:construct:start": 3623,
+    "wsp:flight:ready": 15725
+   }
+  },
+  "orbit": {
+   "fps": 37.55,
+   "frames": 495,
+   "frameP50": 33.3,
+   "frameP95": 49.9,
+   "frameP99": 50.1,
+   "frameMax": 50.1,
+   "hitches25": 271,
+   "hitches50": 7,
+   "cpuMs": 22.39,
+   "cpuP95": 33.8,
+   "sections": {
+    "input": 0.43,
+    "sim": 1.28,
+    "vessels": 0.15,
+    "fx": 0.25,
+    "planets": 1.8,
+    "map": 0,
+    "render": 16.17,
+    "telemetry": 0.44,
+    "audio": 0.15,
+    "navball": 0.93,
+    "hud": 0.67
+   },
+   "scriptMsPerFrame": 23,
+   "taskMsPerFrame": 26.21,
+   "layoutsPerSec": 0.98,
+   "styleRecalcsPerSec": 0.98,
+   "layoutMsPerSec": 0.64,
+   "styleMsPerSec": 0.18,
+   "sampleSeconds": 13.26,
+   "longTasks": 0,
+   "longTasksPerMin": 0,
+   "longTaskMsPerMin": 0,
+   "longTaskMax": 0,
+   "heapMB": 51.27,
+   "heapGrowthMBPerMin": 56.3,
+   "domNodes": 545,
+   "listeners": 1929,
+   "reactCommitsPerSec": 12.52,
+   "reactRendersPerSec": 341.83,
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 12,
+     "in": 12
+    }
+   },
+   "gl": {
+    "calls": 414,
+    "tris": 679430,
+    "programs": 84,
+    "geometries": 401,
+    "textures": 100,
+    "canvas": "2940x1840",
+    "scale": 1,
+    "gpuMs": 0.14783003324372054,
+    "gpuName": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "glError": 0
+   },
+   "trace": {
+    "spanMs": 10014.46,
+    "workerThreads": 5,
+    "mainTop": {
+     "v8.callFunction": 871.77,
+     "FunctionCall": 851.92,
+     "FireAnimationFrame": 834.26,
+     "Commit": 49.87,
+     "SimpleWatcher::OnHandleReady": 35.94,
+     "PrePaint": 12.76,
+     "UpdateLayer": 4.38,
+     "V8.GCIncrementalMarking": 3.76,
+     "V8.GC_MC_INCREMENTAL": 3.55,
+     "MajorGC": 3.49,
+     "V8.GCFinalizeMC": 2.95,
+     "V8.GC_MARK_COMPACTOR": 2.95
+    },
+    "busyPct": {
+     "workers": 0.21,
+     "PerfettoTrace": 0.03,
+     "Chrome_ChildIOThread": 2.33,
+     "Compositor": 4.36,
+     "CrRendererMain": 98.24,
+     "ThreadPoolServiceThread": 0
+    },
+    "mainWorkPct": 93.25,
+    "commitWaitPct": 4.99,
+    "gc": {
+     "minorCount": 8,
+     "minorMs": 49.31,
+     "majorCount": 6,
+     "majorMs": 64.47,
+     "maxPauseMs": 12.18,
+     "msPerSec": 11.36
+    }
+   },
+   "readyMs": 14411,
+   "marks": {
+    "wsp:flight:construct": 3491,
+    "wsp:flight:shaderWarmup": 13333,
+    "wsp:flight:firstFrame": 13645,
+    "wsp:flight:construct:start": 2384,
+    "wsp:flight:ready": 13787
+   }
+  },
+  "warp100k": {
+   "fps": 37.44,
+   "frames": 483,
+   "frameP50": 16.7,
+   "frameP95": 50,
+   "frameP99": 66.7,
+   "frameMax": 100,
+   "hitches25": 235,
+   "hitches50": 12,
+   "cpuMs": 13.68,
+   "cpuP95": 23.7,
+   "sections": {
+    "input": 0.38,
+    "sim": 2.38,
+    "vessels": 0.17,
+    "fx": 0.22,
+    "planets": 0.84,
+    "map": 0,
+    "render": 7.71,
+    "telemetry": 0.48,
+    "audio": 0.07,
+    "navball": 0.78,
+    "hud": 0.59
+   },
+   "scriptMsPerFrame": 15.31,
+   "taskMsPerFrame": 19.36,
+   "layoutsPerSec": 8.26,
+   "styleRecalcsPerSec": 9.5,
+   "layoutMsPerSec": 8.62,
+   "styleMsPerSec": 1.88,
+   "sampleSeconds": 12.95,
+   "longTasks": 0,
+   "longTasksPerMin": 0,
+   "longTaskMsPerMin": 0,
+   "longTaskMax": 0,
+   "heapMB": 58.6,
+   "heapGrowthMBPerMin": 107.9,
+   "domNodes": 523,
+   "listeners": 2187,
+   "reactCommitsPerSec": 13.98,
+   "reactRendersPerSec": 356.01,
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    }
+   },
+   "gl": {
+    "calls": 149,
+    "tris": 119969,
+    "programs": 75,
+    "geometries": 293,
+    "textures": 82,
+    "canvas": "2940x1840",
+    "scale": 1,
+    "gpuMs": 1.8759410992121022,
+    "gpuName": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "glError": 0
+   },
+   "trace": {
+    "spanMs": 9997.97,
+    "workerThreads": 5,
+    "mainTop": {
+     "v8.callFunction": 637.89,
+     "FunctionCall": 617.99,
+     "FireAnimationFrame": 598.6,
+     "Commit": 51.73,
+     "SimpleWatcher::OnHandleReady": 35.27,
+     "PrePaint": 13.58,
+     "Paint": 12.69,
+     "Layout": 9.05,
+     "Layerize": 6.6,
+     "MinorGC": 5.99,
+     "V8.GCScavenger": 5.96,
+     "V8.GC_SCAVENGER": 5.88
+    },
+    "busyPct": {
+     "workers": 0.01,
+     "PerfettoTrace": 0.04,
+     "CrRendererMain": 77.52,
+     "Compositor": 5.48,
+     "Chrome_ChildIOThread": 2.17,
+     "ThreadPoolServiceThread": 0.01
+    },
+    "mainWorkPct": 72.34,
+    "commitWaitPct": 5.17,
+    "gc": {
+     "minorCount": 14,
+     "minorMs": 118.69,
+     "majorCount": 2,
+     "majorMs": 35.31,
+     "maxPauseMs": 17.68,
+     "msPerSec": 15.4
+    }
+   },
+   "readyMs": 9409,
+   "marks": {
+    "wsp:flight:construct": 3357,
+    "wsp:flight:shaderWarmup": 7428,
+    "wsp:flight:firstFrame": 7571,
+    "wsp:flight:construct:start": 2183,
+    "wsp:flight:ready": 8768
+   }
+  },
+  "map": {
+   "fps": 37.33,
+   "frames": 476,
+   "frameP50": 16.7,
+   "frameP95": 50.1,
+   "frameP99": 66.8,
+   "frameMax": 99.9,
+   "hitches25": 210,
+   "hitches50": 26,
+   "cpuMs": 9.86,
+   "cpuP95": 19.6,
+   "sections": {
+    "input": 0.47,
+    "sim": 1.11,
+    "vessels": 0,
+    "fx": 0,
+    "planets": 0,
+    "map": 3.29,
+    "render": 2.59,
+    "telemetry": 0.31,
+    "audio": 0.06,
+    "navball": 0.81,
+    "hud": 1.16
+   },
+   "scriptMsPerFrame": 10.33,
+   "taskMsPerFrame": 15.48,
+   "layoutsPerSec": 8.44,
+   "styleRecalcsPerSec": 19.54,
+   "layoutMsPerSec": 7.58,
+   "styleMsPerSec": 5.27,
+   "sampleSeconds": 12.8,
+   "longTasks": 1,
+   "longTasksPerMin": 4.69,
+   "longTaskMsPerMin": 239.14,
+   "longTaskMax": 51,
+   "heapMB": 39.54,
+   "heapGrowthMBPerMin": 58.26,
+   "domNodes": 564,
+   "listeners": 2714,
+   "reactCommitsPerSec": 20.71,
+   "reactRendersPerSec": 376.38,
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    }
+   },
+   "gl": {
+    "calls": 32,
+    "tris": 50056,
+    "programs": 84,
+    "geometries": 532,
+    "textures": 100,
+    "canvas": "2940x1840",
+    "scale": 1,
+    "gpuMs": 1.9270408510158954,
+    "gpuName": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "glError": 0
+   },
+   "trace": {
+    "spanMs": 10009.5,
+    "workerThreads": 5,
+    "mainTop": {
+     "v8.callFunction": 427.3,
+     "FunctionCall": 403.79,
+     "FireAnimationFrame": 379.74,
+     "Commit": 54.55,
+     "SimpleWatcher::OnHandleReady": 43.36,
+     "Layerize": 20.79,
+     "PrePaint": 15.16,
+     "Paint": 13.74,
+     "Layout": 6.94,
+     "TimerFire": 6.71,
+     "UpdateLayoutTree": 6.31,
+     "HitTest": 5.46
+    },
+    "busyPct": {
+     "workers": 0.01,
+     "Chrome_ChildIOThread": 1.1,
+     "PerfettoTrace": 0.04,
+     "Compositor": 5.55,
+     "CrRendererMain": 60.27,
+     "ThreadPoolServiceThread": 0.01
+    },
+    "mainWorkPct": 54.81,
+    "commitWaitPct": 5.45,
+    "gc": {
+     "minorCount": 8,
+     "minorMs": 84.88,
+     "majorCount": 2,
+     "majorMs": 25.02,
+     "maxPauseMs": 13.66,
+     "msPerSec": 10.98
+    }
+   },
+   "readyMs": 13760,
+   "marks": {
+    "wsp:flight:construct": 3162,
+    "wsp:flight:shaderWarmup": 10847,
+    "wsp:flight:firstFrame": 11032,
+    "wsp:flight:construct:start": 2148,
+    "wsp:flight:ready": 12988
+   }
+  },
+  "moon": {
+   "fps": 29.3,
+   "frames": 378,
+   "frameP50": 33.3,
+   "frameP95": 50,
+   "frameP99": 50.1,
+   "frameMax": 66.7,
+   "hitches25": 310,
+   "hitches50": 16,
+   "cpuMs": 28.23,
+   "cpuP95": 43.1,
+   "sections": {
+    "input": 0.5,
+    "sim": 2.21,
+    "vessels": 0.24,
+    "fx": 0.39,
+    "planets": 2.11,
+    "map": 0,
+    "render": 18.58,
+    "telemetry": 1.95,
+    "audio": 0.12,
+    "navball": 0.97,
+    "hud": 0.99
+   },
+   "scriptMsPerFrame": 29.59,
+   "taskMsPerFrame": 33.88,
+   "layoutsPerSec": 10.08,
+   "styleRecalcsPerSec": 10.16,
+   "layoutMsPerSec": 13.05,
+   "styleMsPerSec": 2.15,
+   "sampleSeconds": 13,
+   "longTasks": 6,
+   "longTasksPerMin": 27.7,
+   "longTaskMsPerMin": 1458.99,
+   "longTaskMax": 55,
+   "heapMB": 62.99,
+   "heapGrowthMBPerMin": 93.58,
+   "domNodes": 582,
+   "listeners": 8194,
+   "reactCommitsPerSec": 14.93,
+   "reactRendersPerSec": 462.17,
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 40,
+     "in": 40
+    }
+   },
+   "gl": {
+    "calls": 571,
+    "tris": 663969,
+    "programs": 74,
+    "geometries": 474,
+    "textures": 85,
+    "canvas": "2940x1840",
+    "scale": 1,
+    "gpuMs": 0.5621059941012034,
+    "gpuName": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "glError": 0
+   },
+   "trace": {
+    "spanMs": 10003.78,
+    "workerThreads": 5,
+    "mainTop": {
+     "v8.callFunction": 899.04,
+     "FunctionCall": 874.03,
+     "FireAnimationFrame": 855.9,
+     "Commit": 31.09,
+     "SimpleWatcher::OnHandleReady": 27.38,
+     "Layout": 11.96,
+     "PrePaint": 10.79,
+     "Paint": 9.71,
+     "MinorGC": 5.99,
+     "V8.GCScavenger": 5.85,
+     "V8.GC_SCAVENGER": 5.72,
+     "V8.GC_SCAVENGER_SCAVENGE": 5.71
+    },
+    "busyPct": {
+     "workers": 2.05,
+     "PerfettoTrace": 0.05,
+     "CrRendererMain": 98.76,
+     "Compositor": 3.35,
+     "Chrome_ChildIOThread": 2.04,
+     "ThreadPoolServiceThread": 0
+    },
+    "mainWorkPct": 95.65,
+    "commitWaitPct": 3.11,
+    "gc": {
+     "minorCount": 16,
+     "minorMs": 117.19,
+     "majorCount": 0,
+     "majorMs": 0,
+     "maxPauseMs": 12.92,
+     "msPerSec": 11.71
+    }
+   },
+   "readyMs": 11269,
+   "marks": {
+    "wsp:flight:construct": 3445,
+    "wsp:flight:shaderWarmup": 8462,
+    "wsp:flight:firstFrame": 8666,
+    "wsp:flight:construct:start": 2525,
+    "wsp:flight:ready": 10476
+   }
+  }
+ }
+}

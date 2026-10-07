@@ -11,6 +11,7 @@
 // browser context (cold caches, isolated storage) and closes it, so concurrent users of the browser are safe.
 import { chromium } from 'playwright-core';
 import { writeFileSync, mkdirSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => {
   if (a.startsWith('--')) acc.push([a.slice(2), all[i + 1] && !all[i + 1].startsWith('--') ? all[i + 1] : 'true']);
@@ -24,7 +25,7 @@ const dpr = +(args.dpr ?? 2);
 const throttle = +(args.throttle ?? 1);
 const quality = args.quality ?? 'medium';
 const [vw, vh] = (args.size ?? '1470x920').split('x').map(Number);
-const outDir = args.out ?? 'C:\\wsp-tools\\bench';
+const outDir = args.out ?? (args.local === '1' ? 'docs/performance/perfcpu' : 'C:\\wsp-tools\\bench');
 const ALL = 'load,menu,pad,ascent,orbit,warp1k,warp100k,map,moon,saturn,editor,tracking,soak,cycles';
 const cases = (args.cases ?? ALL).split(',');
 const trace = args.trace !== '0';
@@ -36,8 +37,10 @@ const PRESETS = {
 };
 const settings = { quality, ...PRESETS[quality], scatter: true, adaptiveQuality: args.adaptive === '1', graphicsProfile: 99, showFps: false, autoSaveInterval: 0, masterVolume: 0, ...(args.settings ? JSON.parse(args.settings) : {}) };
 
-const browser = await chromium.connectOverCDP('http://127.0.0.1:9333');
-const results = { label, base, dpr, throttle, quality, seconds, size: `${vw}x${vh}`, date: new Date().toISOString(), cases: {} };
+const browser = args.local === '1'
+  ? await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
+  : await chromium.connectOverCDP('http://127.0.0.1:9333', { timeout: 30000 });
+const results = { label, base, local: args.local === '1', noRaster: args['cpu-only'] === '1', noSubmission: args.nogpu === '1', dpr, throttle, quality, seconds, size: `${vw}x${vh}`, date: new Date().toISOString(), cases: {} };
 const log = (...a) => console.log(...a);
 
 // ---------------------------------------------------------------------------------------------------------
@@ -94,6 +97,15 @@ function instrument(s) {
 
 async function newPage() {
   const context = await browser.newContext({ viewport: { width: vw, height: vh }, deviceScaleFactor: dpr, serviceWorkers: 'block' });
+  if (args['cpu-only'] === '1') await context.addInitScript(() => {
+    // CPU diagnostic only: keep three's traversal/submission but omit software rasterisation in WSL.
+    // This does NOT measure real rendered frame pacing or GPU cost.
+    for (const proto of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
+      for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
+        if (name in proto) proto[name] = () => {};
+      }
+    }
+  });
   await context.addInitScript(instrument, settings);
   const page = await context.newPage();
   page.on('pageerror', (e) => log(`  [pageerror] ${e.message}`));
@@ -113,27 +125,66 @@ const r2 = (v) => (Number.isFinite(v) ? Math.round(v * 100) / 100 : v);
 async function startTrace(cdp) {
   await cdp.send('Tracing.start', { transferMode: 'ReturnAsStream', traceConfig: { recordMode: 'recordAsMuchAsPossible', includedCategories: ['toplevel', 'devtools.timeline', 'v8', 'disabled-by-default-devtools.timeline'], excludedCategories: ['*'] } });
 }
-async function stopTrace(cdp, pageUrl) {
+async function stopTrace(cdp, pageUrl, name) {
   const done = new Promise((res) => cdp.once('Tracing.tracingComplete', res));
   await cdp.send('Tracing.end');
   const { stream } = await done;
-  let data = '';
-  for (;;) { const r = await cdp.send('IO.read', { handle: stream, size: 1 << 22 }); data += r.base64Encoded ? Buffer.from(r.data, 'base64').toString() : r.data; if (r.eof) break; }
-  await cdp.send('IO.close', { handle: stream });
-  const parsed = JSON.parse(data);
-  const ev = Array.isArray(parsed) ? parsed : parsed.traceEvents;
-  // Our renderer process: the one whose frames include the page URL.
-  let pid = null;
-  for (const e of ev) {
+  // Parse complete event objects while draining the stream: a two-minute
+  // whole-browser trace can exceed V8's 512 MiB string limit on a shared GPU harness.
+  let pending = '', pid = null;
+  let inEvents = false, ended = false, depth = 0, quoted = false, escaped = false, event = '';
+  let ev = [];
+  const consume = (line) => {
+    const value = line.trim().replace(/,$/, '');
+    if (!value.startsWith('{') || value.startsWith('{"traceEvents"')) return;
+    const e = JSON.parse(value);
+    if (!e.ph) return;
     const frames = e.args?.data?.frames;
     if ((e.name === 'TracingStartedInBrowser' || e.name === 'TracingStartedInPage') && frames) {
-      const f = frames.find((x) => x.url && pageUrl.startsWith(x.url.split('#')[0].split('?')[0])) ?? frames.find((x) => x.url?.includes(new URL(pageUrl).host));
-      if (f) pid = f.processId ?? e.pid;
+      const f = frames.find(x => x.url && pageUrl.startsWith(x.url.split('#')[0].split('?')[0]));
+      if (f) { pid = f.processId ?? e.pid; ev = ev.filter(x => x.pid === pid); }
     }
+    if (pid === null || e.pid === pid) ev.push(e);
+  };
+  for (;;) {
+    const r = await cdp.send('IO.read', { handle: stream, size: 1 << 22 });
+    let chunk = r.base64Encoded ? Buffer.from(r.data, 'base64').toString() : r.data;
+    if (!inEvents) {
+      pending += chunk;
+      const start = pending.indexOf('[');
+      if (start < 0) continue;
+      chunk = pending.slice(start + 1); pending = ''; inEvents = true;
+    }
+    for (const ch of chunk) {
+      if (ended) break;
+      if (!depth) {
+        if (ch === ']') { ended = true; break; }
+        if (ch !== '{') continue;
+        depth = 1; event = '{'; continue;
+      }
+      event += ch;
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') quoted = false;
+      } else if (ch === '"') quoted = true;
+      else if (ch === '{') depth++;
+      else if (ch === '}' && --depth === 0) { consume(event); event = ''; }
+    }
+    if (r.eof) break;
   }
+  await cdp.send('IO.close', { handle: stream });
   const names = new Map();
   for (const e of ev) if (e.ph === 'M' && e.name === 'thread_name') names.set(`${e.pid}:${e.tid}`, e.args.name);
   if (pid == null) { const main = [...names.entries()].find(([, n]) => n === 'CrRendererMain'); pid = main ? +main[0].split(':')[0] : null; }
+  if (args['save-traces'] === '1') {
+    mkdirSync(outDir, { recursive: true });
+    // Chrome traces the shared browser. Retain only our renderer process (including its workers),
+    // not unrelated tabs. Metadata keeps the process identifiable on later analysis.
+    writeFileSync(`${outDir}/${label}-${name}.trace.json.gz`, gzipSync(JSON.stringify({
+      traceEvents: ev.filter(e => e.pid === pid), metadata: { pageUrl, pagePid: pid },
+    })));
+  }
   let t0 = Infinity, t1 = -Infinity;
   const busy = {}; const gc = { minor: [], major: [] }; const mainEv = {};
   for (const e of ev) {
@@ -186,7 +237,7 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
   const m0 = await metrics(cdp);
   if (trace) await startTrace(cdp);
   await page.waitForTimeout(ms);
-  const tr = trace ? await stopTrace(cdp, page.url()).catch((e) => ({ error: String(e) })) : undefined;
+  const tr = trace ? await stopTrace(cdp, page.url(), name).catch((e) => ({ error: String(e) })) : undefined;
   const m1 = await metrics(cdp);
   const inPage = await page.evaluate(() => {
     const B = window.__bench; B.raf.on = false;
@@ -200,6 +251,7 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
       longTasks: lt.length, longTaskMs: lt.reduce((a, x) => a + x[1], 0), longTaskMax: lt.reduce((a, x) => Math.max(a, x[1]), 0),
       prof: s && { cpuAvg: s.cpuMs.avg, cpuP95: s.cpuMs.p95, sections: s.sections },
       gl: p ? { calls: p.stats.calls, tris: p.stats.triangles, programs: info.programs?.length ?? 0, geometries: info.memory.geometries, textures: info.memory.textures, canvas: `${p.renderer.domElement.width}x${p.renderer.domElement.height}`, scale: p.effectiveRenderScale, gpuMs: p.gpuMs, gpuName: p.gpuName, glError: p.renderer.getContext().getError() } : null,
+      journey: f && window.__journeyStart ? { elapsedSim: f.world.ut - window.__journeyStart, assist: f.assist?.status ?? null, body: f.world.active?.body, orbit: f.world.active ? f.world.orbitSummary(f.world.active) : null } : undefined,
       heapLimitMB: performance.memory ? performance.memory.jsHeapSizeLimit / 1e6 : null,
     };
   });
@@ -207,18 +259,19 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
   const avg = fr.reduce((a, b) => a + b, 0) / n;
   const d = (k) => m1[k] - m0[k];
   const out = {
-    fps: r2(1000 / avg), frameP50: r2(pct(fr, 0.5)), frameP95: r2(pct(fr, 0.95)), frameP99: r2(pct(fr, 0.99)), frameMax: r2(Math.max(0, ...fr)),
+    fps: fr.length ? r2(1000 / avg) : null, frames: fr.length, frameP50: r2(pct(fr, 0.5)), frameP95: r2(pct(fr, 0.95)), frameP99: r2(pct(fr, 0.99)), frameMax: r2(Math.max(0, ...fr)),
     hitches25: fr.filter((x) => x > 25).length, hitches50: fr.filter((x) => x > 50).length,
     cpuMs: inPage.prof ? r2(inPage.prof.cpuAvg) : null, cpuP95: inPage.prof ? r2(inPage.prof.cpuP95) : null,
     sections: inPage.prof ? Object.fromEntries(Object.entries(inPage.prof.sections).map(([k, v]) => [k, r2(v)])) : null,
     scriptMsPerFrame: r2((d('ScriptDuration') * 1000) / n), taskMsPerFrame: r2((d('TaskDuration') * 1000) / n),
     layoutsPerSec: r2(d('LayoutCount') / secs), styleRecalcsPerSec: r2(d('RecalcStyleCount') / secs),
     layoutMsPerSec: r2((d('LayoutDuration') * 1000) / secs), styleMsPerSec: r2((d('RecalcStyleDuration') * 1000) / secs),
+    sampleSeconds: r2(secs), longTasks: inPage.longTasks,
     longTasksPerMin: r2((inPage.longTasks / secs) * 60), longTaskMsPerMin: r2((inPage.longTaskMs / secs) * 60), longTaskMax: r2(inPage.longTaskMax),
     heapMB: r2(m1.JSHeapUsedSize / 1e6), heapGrowthMBPerMin: r2(((m1.JSHeapUsedSize - m0.JSHeapUsedSize) / 1e6 / secs) * 60),
     domNodes: m1.Nodes, listeners: m1.JSEventListeners,
     reactCommitsPerSec: r2(inPage.commits / secs), reactRendersPerSec: r2(inPage.fibers / secs),
-    workers: inPage.workers, gl: inPage.gl, trace: tr, ...extra,
+    journey: inPage.journey, workers: inPage.workers, gl: inPage.gl, trace: tr, ...extra,
   };
   results.cases[name] = { ...(results.cases[name] ?? {}), ...out };
   const sec = out.sections ? Object.entries(out.sections).filter(([, v]) => v >= 0.01).map(([k, v]) => `${k} ${v}`).join(' · ') : '';
@@ -233,11 +286,16 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
 
 async function flightCase(name, url, setup, settle = 3000, timing = true) {
   const { context, page, cdp } = await newPage();
+  log(`starting ${name}`);
   try {
     const t0 = Date.now();
     await page.goto(`${base}${url}`);
     await flightReady(page);
     const readyMs = Date.now() - t0;
+    if (args.nogpu === '1') await page.evaluate(() => {
+      window.__flight.pipeline.render = () => {}; window.__flight.pipeline.renderMap = () => {};
+      window.__flight.pipeline.renderer.render = () => {};
+    });
     const marks = timing ? await page.evaluate(() => Object.fromEntries([...performance.getEntriesByType('measure'), ...performance.getEntriesByType('mark')].filter((e) => e.name.startsWith('wsp:')).map((e) => [e.name, Math.round(e.startTime + e.duration)]))) : {};
     if (setup) await setup(page);
     await page.waitForTimeout(settle);
@@ -302,6 +360,21 @@ if (cases.includes('ascent')) {
   }, 1500);
   // Keep the measurement inside the ascent: at 4× the dense atmosphere passes in roughly 10–20 s.
 }
+if (cases.includes('journey')) {
+  await flightCase('journey', '/?flight=stock-meridian', async (page) => {
+    await page.evaluate(() => {
+      const f = window.__flight;
+      f.startAssist('orbit');
+      f.world.warp = { mode: 'physics', index: 3 };
+      window.__journeyStart = f.world.ut;
+      window.__game.set({ settings: { ...window.__game.get().settings, autoSaveInterval: 15 } });
+      // Include actual map entry/exit while guidance, staging and autosave continue.
+      setTimeout(() => f.toggleMap(), 15000);
+      setTimeout(() => f.toggleMap(), 18000);
+    });
+  }, 0);
+  // A bounded run is not automatically a successful orbit; retain its actual final state.
+}
 if (cases.includes('orbit')) await flightCase('orbit', '/?flight=stock-kestrel&scenario=orbit', undefined, settleMs);
 if (cases.includes('warp1k')) await flightCase('warp1k', '/?flight=stock-kestrel&scenario=highorbit', async (page) => { await page.evaluate(() => { window.__flight.world.warp = { mode: 'rails', index: 5 }; }); });
 if (cases.includes('warp100k')) await flightCase('warp100k', '/?flight=stock-kestrel&scenario=highorbit', async (page) => { await page.evaluate(() => { window.__flight.world.warp = { mode: 'rails', index: 7 }; }); });
@@ -311,6 +384,7 @@ if (cases.includes('saturn')) await flightCase('saturn', '/?mission=ring-skimmer
 
 if (cases.includes('editor')) {
   const { context, page, cdp } = await newPage();
+  log(`starting ${name}`);
   try {
     const t0 = Date.now();
     await page.goto(`${base}/?scene=editor&stock=stock-ringrunner-real`);
@@ -385,7 +459,7 @@ await browser.close().catch(() => {});
 
 // ---------------------------------------------------------------------------------------------------------
 mkdirSync(outDir, { recursive: true });
-const file = `${outDir}\\${label}-dpr${dpr}${throttle > 1 ? `-cpu${throttle}x` : ''}`;
+const file = `${outDir}/${label}-dpr${dpr}${throttle > 1 ? `-cpu${throttle}x` : ''}`;
 writeFileSync(`${file}.json`, JSON.stringify(results, null, 1));
 const rows = Object.entries(results.cases).filter(([, c]) => c.fps !== undefined);
 const secCols = ['sim', 'vessels', 'planets', 'map', 'render', 'telemetry', 'hud', 'navball'];

@@ -1,0 +1,3277 @@
+{
+  "label": "final-cpu-fixed",
+  "base": "http://localhost:5336",
+  "cpuThrottle": 4,
+  "dpr": 2,
+  "renderer": "WSL Chromium SwiftShader (software GPU)",
+  "paintMethod": "capture and event timestamp to second rAF; upper bounds on next paint opportunity",
+  "cases": {
+    "100part-symmetry": {
+      "samples": [
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 300.60000002384186,
+          "queuedMs": 6.100000023841858,
+          "eventToPaintMs": 306.7000000476837
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 70.29999995231628,
+          "queuedMs": 7.300000071525574,
+          "eventToPaintMs": 77.60000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 64.39999997615814,
+          "queuedMs": 5.5,
+          "eventToPaintMs": 69.89999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 45.89999997615814,
+          "queuedMs": 6,
+          "eventToPaintMs": 51.89999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 37.799999952316284,
+          "queuedMs": 700.5,
+          "eventToPaintMs": 738.2999999523163
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 26.600000023841858,
+          "queuedMs": 17.5,
+          "eventToPaintMs": 44.10000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 69.69999992847443,
+          "queuedMs": 642.7000000476837,
+          "eventToPaintMs": 712.3999999761581
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 38,
+          "queuedMs": 143.69999992847443,
+          "eventToPaintMs": 181.69999992847443
+        }
+      ],
+      "p75Ms": 69.69999992847443,
+      "p75EventToPaintMs": 306.7000000476837,
+      "p95FrameGapMs": 183.3000000000029,
+      "frames": 66
+    },
+    "100part-undo-redo": {
+      "samples": [
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 47.799999952316284,
+          "queuedMs": 24.5,
+          "eventToPaintMs": 72.29999995231628
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 66.60000002384186,
+          "queuedMs": 7.399999976158142,
+          "eventToPaintMs": 74
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 73.79999995231628,
+          "queuedMs": 8.200000047683716,
+          "eventToPaintMs": 82
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 69.29999995231628,
+          "queuedMs": 1.399999976158142,
+          "eventToPaintMs": 70.69999992847443
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 63.799999952316284,
+          "queuedMs": 2.3000000715255737,
+          "eventToPaintMs": 66.10000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 83.29999995231628,
+          "queuedMs": 7.700000047683716,
+          "eventToPaintMs": 91
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 84.19999992847443,
+          "queuedMs": 31.600000023841858,
+          "eventToPaintMs": 115.79999995231628
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 93,
+          "queuedMs": 7,
+          "eventToPaintMs": 100
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 88.70000004768372,
+          "queuedMs": 3,
+          "eventToPaintMs": 91.70000004768372
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 87.20000004768372,
+          "queuedMs": 0.10000002384185791,
+          "eventToPaintMs": 87.30000007152557
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 39.799999952316284,
+          "queuedMs": 17.600000023841858,
+          "eventToPaintMs": 57.39999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 47.800000071525574,
+          "queuedMs": 5.899999976158142,
+          "eventToPaintMs": 53.700000047683716
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 47.10000002384186,
+          "queuedMs": 3,
+          "eventToPaintMs": 50.10000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 46.10000002384186,
+          "queuedMs": 0.30000007152557373,
+          "eventToPaintMs": 46.40000009536743
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 44.40000009536743,
+          "queuedMs": 1,
+          "eventToPaintMs": 45.40000009536743
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 51.799999952316284,
+          "queuedMs": 23.200000047683716,
+          "eventToPaintMs": 75
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 65.79999995231628,
+          "queuedMs": 8.600000023841858,
+          "eventToPaintMs": 74.39999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 46.799999952316284,
+          "queuedMs": 2.100000023841858,
+          "eventToPaintMs": 48.89999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 41.89999997615814,
+          "queuedMs": 0.8999999761581421,
+          "eventToPaintMs": 42.799999952316284
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 58.39999997615814,
+          "queuedMs": 9.200000047683716,
+          "eventToPaintMs": 67.60000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 29.800000071525574,
+          "queuedMs": 15.799999952316284,
+          "eventToPaintMs": 45.60000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 37.09999990463257,
+          "queuedMs": 5.800000071525574,
+          "eventToPaintMs": 42.89999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 48.200000047683716,
+          "queuedMs": 0.5,
+          "eventToPaintMs": 48.700000047683716
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 65.39999997615814,
+          "queuedMs": 6.800000071525574,
+          "eventToPaintMs": 72.20000004768372
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 61.39999997615814,
+          "queuedMs": 0.3999999761581421,
+          "eventToPaintMs": 61.799999952316284
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 43.700000047683716,
+          "queuedMs": 27,
+          "eventToPaintMs": 70.70000004768372
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 58.5,
+          "queuedMs": 10.899999976158142,
+          "eventToPaintMs": 69.39999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 62.10000002384186,
+          "queuedMs": 7.100000023841858,
+          "eventToPaintMs": 69.20000004768372
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 74.5,
+          "queuedMs": 6.899999976158142,
+          "eventToPaintMs": 81.39999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 73.20000004768372,
+          "queuedMs": 0.5,
+          "eventToPaintMs": 73.70000004768372
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 56.10000002384186,
+          "queuedMs": 18.100000023841858,
+          "eventToPaintMs": 74.20000004768372
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 74.10000002384186,
+          "queuedMs": 9.899999976158142,
+          "eventToPaintMs": 84
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 59.299999952316284,
+          "queuedMs": 3.799999952316284,
+          "eventToPaintMs": 63.09999990463257
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 54.699999928474426,
+          "queuedMs": 4,
+          "eventToPaintMs": 58.699999928474426
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 70.70000004768372,
+          "queuedMs": 6.799999952316284,
+          "eventToPaintMs": 77.5
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 40.5,
+          "queuedMs": 23.600000023841858,
+          "eventToPaintMs": 64.10000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 48.10000002384186,
+          "queuedMs": 10.700000047683716,
+          "eventToPaintMs": 58.800000071525574
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 51.200000047683716,
+          "queuedMs": 0.5,
+          "eventToPaintMs": 51.700000047683716
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 53.799999952316284,
+          "queuedMs": 9.899999976158142,
+          "eventToPaintMs": 63.699999928474426
+        },
+        {
+          "name": "keydown",
+          "target": "",
+          "ms": 50.89999997615814,
+          "queuedMs": 0.7000000476837158,
+          "eventToPaintMs": 51.60000002384186
+        }
+      ],
+      "p75Ms": 69.29999995231628,
+      "p75EventToPaintMs": 74.39999997615814,
+      "p95FrameGapMs": 100,
+      "frames": 113
+    },
+    "resources-panel": {
+      "samples": [
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 376.7000000476837,
+          "queuedMs": 1.600000023841858,
+          "eventToPaintMs": 378.3000000715256
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 371,
+          "queuedMs": 7.200000047683716,
+          "eventToPaintMs": 378.2000000476837
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 43.799999952316284,
+          "queuedMs": 19.5,
+          "eventToPaintMs": 63.299999952316284
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 50.299999952316284,
+          "queuedMs": 26.5,
+          "eventToPaintMs": 76.79999995231628
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 50.799999952316284,
+          "queuedMs": 7.5,
+          "eventToPaintMs": 58.299999952316284
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 58.700000047683716,
+          "queuedMs": 5.399999976158142,
+          "eventToPaintMs": 64.10000002384186
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 51.60000002384186,
+          "queuedMs": 4.399999976158142,
+          "eventToPaintMs": 56
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 81.89999997615814,
+          "queuedMs": 3.5,
+          "eventToPaintMs": 85.39999997615814
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 56.89999997615814,
+          "queuedMs": 4.100000023841858,
+          "eventToPaintMs": 61
+        }
+      ],
+      "p75Ms": 81.89999997615814,
+      "p75EventToPaintMs": 85.39999997615814,
+      "p95FrameGapMs": 66.69999999999709,
+      "frames": 103
+    },
+    "settings-panel": {
+      "samples": [
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 96.39999997615814,
+          "queuedMs": 4.600000023841858,
+          "eventToPaintMs": 101
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 90.79999995231628,
+          "queuedMs": 10,
+          "eventToPaintMs": 100.79999995231628
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 21.100000023841858,
+          "queuedMs": 3.5999999046325684,
+          "eventToPaintMs": 24.699999928474426
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 79.40000009536743,
+          "queuedMs": 4.5,
+          "eventToPaintMs": 84.20000004768372
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 73.10000002384186,
+          "queuedMs": 11,
+          "eventToPaintMs": 84.10000002384186
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 21.799999952316284,
+          "queuedMs": 62.200000047683716,
+          "eventToPaintMs": 84
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 41,
+          "queuedMs": 3.299999952316284,
+          "eventToPaintMs": 44.299999952316284
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 27.899999976158142,
+          "queuedMs": 0.3999999761581421,
+          "eventToPaintMs": 28.299999952316284
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 97.89999997615814,
+          "queuedMs": 5.700000047683716,
+          "eventToPaintMs": 103.60000002384186
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 91.5,
+          "queuedMs": 11.799999952316284,
+          "eventToPaintMs": 103.29999995231628
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 24.700000047683716,
+          "queuedMs": 1.2999999523162842,
+          "eventToPaintMs": 26
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 54.39999997615814,
+          "queuedMs": 9.700000047683716,
+          "eventToPaintMs": 64.10000002384186
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 47.5,
+          "queuedMs": 16.399999976158142,
+          "eventToPaintMs": 63.89999997615814
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 22.100000023841858,
+          "queuedMs": 41.799999952316284,
+          "eventToPaintMs": 63.89999997615814
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 41,
+          "queuedMs": 8.5,
+          "eventToPaintMs": 49.5
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 31.799999952316284,
+          "queuedMs": 1,
+          "eventToPaintMs": 32.799999952316284
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 190.89999997615814,
+          "queuedMs": 4.899999976158142,
+          "eventToPaintMs": 195.79999995231628
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 187.89999997615814,
+          "queuedMs": 7.899999976158142,
+          "eventToPaintMs": 195.79999995231628
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 35.89999997615814,
+          "queuedMs": 0.2999999523162842,
+          "eventToPaintMs": 36.199999928474426
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 38.800000071525574,
+          "queuedMs": 5.199999928474426,
+          "eventToPaintMs": 44
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 34.800000071525574,
+          "queuedMs": 7.399999976158142,
+          "eventToPaintMs": 42.200000047683716
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 16.100000023841858,
+          "queuedMs": 25.899999976158142,
+          "eventToPaintMs": 42
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 39.300000071525574,
+          "queuedMs": 0.3999999761581421,
+          "eventToPaintMs": 39.700000047683716
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 29.299999952316284,
+          "queuedMs": 2.100000023841858,
+          "eventToPaintMs": 31.399999976158142
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 77.29999995231628,
+          "queuedMs": 2.600000023841858,
+          "eventToPaintMs": 79.89999997615814
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 74.79999995231628,
+          "queuedMs": 4.800000071525574,
+          "eventToPaintMs": 79.60000002384186
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 26.100000023841858,
+          "queuedMs": 1.7999999523162842,
+          "eventToPaintMs": 27.899999976158142
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 37.700000047683716,
+          "queuedMs": 5.399999976158142,
+          "eventToPaintMs": 43.10000002384186
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 36.700000047683716,
+          "queuedMs": 6.199999928474426,
+          "eventToPaintMs": 42.89999997615814
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 20,
+          "queuedMs": 22.800000071525574,
+          "eventToPaintMs": 42.800000071525574
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 21.799999952316284,
+          "queuedMs": 2.399999976158142,
+          "eventToPaintMs": 24.199999928474426
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 17.799999952316284,
+          "queuedMs": 0.2999999523162842,
+          "eventToPaintMs": 18.09999990463257
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 61.10000002384186,
+          "queuedMs": 7.299999952316284,
+          "eventToPaintMs": 68.39999997615814
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 59.200000047683716,
+          "queuedMs": 9.099999904632568,
+          "eventToPaintMs": 68.29999995231628
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 11.799999952316284,
+          "queuedMs": 2,
+          "eventToPaintMs": 13.799999952316284
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 20.700000047683716,
+          "queuedMs": 0.7999999523162842,
+          "eventToPaintMs": 21.5
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 19.799999952316284,
+          "queuedMs": 1.600000023841858,
+          "eventToPaintMs": 21.399999976158142
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 15.799999952316284,
+          "queuedMs": 5.600000023841858,
+          "eventToPaintMs": 21.399999976158142
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 37.39999997615814,
+          "queuedMs": 0.3999999761581421,
+          "eventToPaintMs": 37.799999952316284
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 15,
+          "queuedMs": 0.7000000476837158,
+          "eventToPaintMs": 15.700000047683716
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 70.09999990463257,
+          "queuedMs": 3,
+          "eventToPaintMs": 73.09999990463257
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 62.59999990463257,
+          "queuedMs": 10.400000095367432,
+          "eventToPaintMs": 73
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 15.599999904632568,
+          "queuedMs": 1.100000023841858,
+          "eventToPaintMs": 16.699999928474426
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 28.300000071525574,
+          "queuedMs": 2.6999999284744263,
+          "eventToPaintMs": 31
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 21.600000023841858,
+          "queuedMs": 9.299999952316284,
+          "eventToPaintMs": 30.899999976158142
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 12.200000047683716,
+          "queuedMs": 18.600000023841858,
+          "eventToPaintMs": 30.800000071525574
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 35.5,
+          "queuedMs": 3.100000023841858,
+          "eventToPaintMs": 38.60000002384186
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 23,
+          "queuedMs": 0.3999999761581421,
+          "eventToPaintMs": 23.399999976158142
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 172.60000002384186,
+          "queuedMs": 2.299999952316284,
+          "eventToPaintMs": 174.89999997615814
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 168.5,
+          "queuedMs": 6.299999952316284,
+          "eventToPaintMs": 174.79999995231628
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 47,
+          "queuedMs": 1.100000023841858,
+          "eventToPaintMs": 48.10000002384186
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 37.299999952316284,
+          "queuedMs": 16,
+          "eventToPaintMs": 53.299999952316284
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 32.39999997615814,
+          "queuedMs": 20.600000023841858,
+          "eventToPaintMs": 53
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 16.299999952316284,
+          "queuedMs": 36.700000047683716,
+          "eventToPaintMs": 53
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 35.799999952316284,
+          "queuedMs": 2.399999976158142,
+          "eventToPaintMs": 38.199999928474426
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 23,
+          "queuedMs": 2,
+          "eventToPaintMs": 25
+        },
+        {
+          "name": "pointerover",
+          "target": {},
+          "ms": 91.79999995231628,
+          "queuedMs": 4.300000071525574,
+          "eventToPaintMs": 96.10000002384186
+        },
+        {
+          "name": "pointerdown",
+          "target": {},
+          "ms": 90.89999997615814,
+          "queuedMs": 4.899999976158142,
+          "eventToPaintMs": 95.79999995231628
+        },
+        {
+          "name": "pointerover",
+          "target": "settings-backdrop",
+          "ms": 23.299999952316284,
+          "queuedMs": 0.30000007152557373,
+          "eventToPaintMs": 23.600000023841858
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 46.40000009536743,
+          "queuedMs": 5.799999952316284,
+          "eventToPaintMs": 53.10000002384186
+        },
+        {
+          "name": "pointerdown",
+          "target": "btn",
+          "ms": 39.200000047683716,
+          "queuedMs": 13.699999928474426,
+          "eventToPaintMs": 52.89999997615814
+        },
+        {
+          "name": "pointerover",
+          "target": "modal-backdrop",
+          "ms": 21.700000047683716,
+          "queuedMs": 30.899999976158142,
+          "eventToPaintMs": 52.60000002384186
+        },
+        {
+          "name": "keydown",
+          "target": "app-btn ",
+          "ms": 35.799999952316284,
+          "queuedMs": 3.100000023841858,
+          "eventToPaintMs": 38.89999997615814
+        },
+        {
+          "name": "pointerover",
+          "target": "",
+          "ms": 17.40000009536743,
+          "queuedMs": 1.0999999046325684,
+          "eventToPaintMs": 18.5
+        }
+      ],
+      "p75Ms": 61.10000002384186,
+      "p75EventToPaintMs": 73,
+      "p95FrameGapMs": 66.60000000000582,
+      "frames": 189
+    },
+    "menu-hover": {
+      "samples": [
+        {
+          "name": "pointerover",
+          "target": "btn primary",
+          "ms": 13.599999904632568,
+          "queuedMs": 12.400000095367432,
+          "eventToPaintMs": 26
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 11.100000023841858,
+          "queuedMs": 10.5,
+          "eventToPaintMs": 21.600000023841858
+        },
+        {
+          "name": "pointerover",
+          "target": "btn primary",
+          "ms": 328.3000000715256,
+          "queuedMs": 10.899999976158142,
+          "eventToPaintMs": 339.2000000476837
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 691.7000000476837,
+          "queuedMs": 10.899999976158142,
+          "eventToPaintMs": 702.6000000238419
+        },
+        {
+          "name": "pointerover",
+          "target": "btn primary",
+          "ms": 381.7999999523163,
+          "queuedMs": 20.800000071525574,
+          "eventToPaintMs": 402.60000002384186
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 10.899999976158142,
+          "queuedMs": 336.60000002384186,
+          "eventToPaintMs": 347.5
+        },
+        {
+          "name": "pointerover",
+          "target": "btn primary",
+          "ms": 13.099999904632568,
+          "queuedMs": 10,
+          "eventToPaintMs": 23.09999990463257
+        },
+        {
+          "name": "pointerover",
+          "target": "btn",
+          "ms": 75.09999990463257,
+          "queuedMs": 9.700000047683716,
+          "eventToPaintMs": 84.79999995231628
+        }
+      ],
+      "p75Ms": 328.3000000715256,
+      "p75EventToPaintMs": 347.5,
+      "p95FrameGapMs": 383.40000000000146,
+      "frames": 63
+    }
+  },
+  "errors": [],
+  "gpuDrawingSuppressed": true,
+  "preflight": "Pre-flight · 1 to review",
+  "partCount": 100,
+  "drag": {
+    "samples": [
+      {
+        "gap": -6.40000002384113,
+        "update": 4.799999952316284,
+        "render": 6.700000047683716
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.100000023841858,
+        "render": 13.799999952316284
+      },
+      {
+        "gap": 33.29999999999927,
+        "update": 0.6000000238418579,
+        "render": 0.8999999761581421
+      },
+      {
+        "gap": 16.80000000000291,
+        "update": 3,
+        "render": 7.400000095367432
+      },
+      {
+        "gap": 33.19999999999709,
+        "update": 3.5,
+        "render": 6.5
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 2.700000047683716,
+        "render": 4.399999976158142
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 2.899999976158142,
+        "render": 3.200000047683716
+      },
+      {
+        "gap": 33.400000000001455,
+        "update": 2.399999976158142,
+        "render": 4.5
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 3,
+        "render": 3.4000000953674316
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 0.3999999761581421,
+        "render": 0.7999999523162842
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.2999999523162842,
+        "render": 12
+      },
+      {
+        "gap": 33.29999999999927,
+        "update": 0.3999999761581421,
+        "render": 10.299999952316284
+      },
+      {
+        "gap": 16.80000000000291,
+        "update": 0.2999999523162842,
+        "render": 5.899999976158142
+      },
+      {
+        "gap": 33.29999999999927,
+        "update": 1.8000000715255737,
+        "render": 2.1999999284744263
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.40000009536743164,
+        "render": 5
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 3.899999976158142,
+        "render": 4
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 1.2999999523162842,
+        "render": 2.399999976158142
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.600000023841858,
+        "render": 2
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 2.0999999046325684,
+        "render": 2.3000000715255737
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.7000000476837158,
+        "render": 3.5
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 0.7999999523162842,
+        "render": 2.5
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 1.1999999284744263,
+        "render": 4.5
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.2000000476837158,
+        "render": 5.5
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 1.3000000715255737,
+        "render": 2.799999952316284
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 1.7999999523162842,
+        "render": 4.700000047683716
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 1.600000023841858,
+        "render": 3.799999952316284
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.6999999284744263,
+        "render": 3.700000047683716
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 1.1999999284744263,
+        "render": 2.5
+      },
+      {
+        "gap": 16.799999999999272,
+        "update": 1.6999999284744263,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1,
+        "render": 3.600000023841858
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 1.5,
+        "render": 3.399999976158142
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 1.7000000476837158,
+        "render": 2.799999952316284
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.9000000953674316,
+        "render": 2.399999976158142
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 1.0999999046325684,
+        "render": 2.3000000715255737
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.2000000476837158,
+        "render": 3
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 0.7000000476837158,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 1.2000000476837158,
+        "render": 2.799999952316284
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.8999999761581421,
+        "render": 3
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 1.3000000715255737,
+        "render": 2.1999999284744263
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 13.399999976158142,
+        "render": 3.1999999284744263
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 3.899999976158142,
+        "render": 3.100000023841858
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 2.399999976158142,
+        "render": 2.5
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 2.700000047683716,
+        "render": 1.6999999284744263
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 1.7999999523162842,
+        "render": 2
+      },
+      {
+        "gap": 16.5,
+        "update": 2.899999976158142,
+        "render": 2.5
+      },
+      {
+        "gap": 16.799999999999272,
+        "update": 3.600000023841858,
+        "render": 2.3000000715255737
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.100000023841858,
+        "render": 1
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 3.5,
+        "render": 1.3000000715255737
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 2.3000000715255737,
+        "render": 1.6999999284744263
+      },
+      {
+        "gap": 16.799999999999272,
+        "update": 2.5,
+        "render": 2
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 3.1999999284744263,
+        "render": 1.899999976158142
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 2.0999999046325684,
+        "render": 1.600000023841858
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.3000000715255737,
+        "render": 3
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 2.600000023841858,
+        "render": 3.1999999284744263
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 2.600000023841858,
+        "render": 2.399999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.399999976158142,
+        "render": 1.899999976158142
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 3.299999952316284,
+        "render": 3.200000047683716
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 3.700000047683716,
+        "render": 2.5999999046325684
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.899999976158142,
+        "render": 4.100000023841858
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 3.1999999284744263,
+        "render": 3.100000023841858
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 3.600000023841858,
+        "render": 2.8000000715255737
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.799999952316284,
+        "render": 3.100000023841858
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 2.8000000715255737,
+        "render": 2.299999952316284
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 2.600000023841858,
+        "render": 2.600000023841858
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.100000023841858,
+        "render": 2.6999999284744263
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 2.1999999284744263,
+        "render": 1.100000023841858
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 3.200000047683716,
+        "render": 1.7999999523162842
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.5999999046325684,
+        "render": 2.5
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 9.800000071525574,
+        "render": 2.799999952316284
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 5.400000095367432,
+        "render": 3
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 4.600000023841858,
+        "render": 2.5
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 3,
+        "render": 2.299999952316284
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 11.299999952316284,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 6.5,
+        "render": 3.5
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 3.600000023841858,
+        "render": 2.6999999284744263
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 4.899999976158142,
+        "render": 1.7000000476837158
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 3.6999999284744263,
+        "render": 2.399999976158142
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 4.600000023841858,
+        "render": 1.7999999523162842
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 2.9000000953674316,
+        "render": 1.5
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 3.200000047683716,
+        "render": 1.7999999523162842
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 2.6999999284744263,
+        "render": 1.7000000476837158
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 2.899999976158142,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.5,
+        "render": 1.8000000715255737
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 2.700000047683716,
+        "render": 1.7999999523162842
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 3.100000023841858,
+        "render": 2.5
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 3,
+        "render": 1
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 2.299999952316284,
+        "render": 2.399999976158142
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 3.3000000715255737,
+        "render": 2.299999952316284
+      },
+      {
+        "gap": 16.5,
+        "update": 1.8000000715255737,
+        "render": 2.5
+      },
+      {
+        "gap": 16.799999999999272,
+        "update": 2.799999952316284,
+        "render": 1.5
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 2,
+        "render": 1.3000000715255737
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.9000000953674316,
+        "render": 1.7999999523162842
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 2.9000000953674316,
+        "render": 2.5
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 3.100000023841858,
+        "render": 2.799999952316284
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.600000023841858,
+        "render": 2
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 2.399999976158142,
+        "render": 1.5
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 2.899999976158142,
+        "render": 3.100000023841858
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.399999976158142,
+        "render": 3
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 0.6000000238418579,
+        "render": 2.8000000715255737
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 1.9000000953674316,
+        "render": 2.5999999046325684
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1,
+        "render": 2.399999976158142
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 1.899999976158142,
+        "render": 3.1999999284744263
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 1.100000023841858,
+        "render": 3.899999976158142
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.1999999284744263,
+        "render": 2.600000023841858
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 1.399999976158142,
+        "render": 2.5
+      },
+      {
+        "gap": 16.799999999999272,
+        "update": 1.0999999046325684,
+        "render": 1.9000000953674316
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1,
+        "render": 2.1999999284744263
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 1.2000000476837158,
+        "render": 2.799999952316284
+      },
+      {
+        "gap": 16.700000000000728,
+        "update": 0.7999999523162842,
+        "render": 2.3000000715255737
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1,
+        "render": 2.5
+      },
+      {
+        "gap": 16.799999999999272,
+        "update": 1.4000000953674316,
+        "render": 2
+      },
+      {
+        "gap": 16.600000000002183,
+        "update": 0.8999999761581421,
+        "render": 2.299999952316284
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.100000023841858,
+        "render": 2.1999999284744263
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.1999999284744263,
+        "render": 4
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.5999999046325684,
+        "render": 2.5
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.600000023841858,
+        "render": 2.299999952316284
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 0.5,
+        "render": 2.200000047683716
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.399999976158142,
+        "render": 3
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.600000023841858,
+        "render": 2.899999976158142
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.3000000715255737,
+        "render": 2.5
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.100000023841858,
+        "render": 3.299999952316284
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.1999999284744263,
+        "render": 2.899999976158142
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 0.7000000476837158,
+        "render": 2.6999999284744263
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.3000000715255737,
+        "render": 2.399999976158142
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.2999999523162842,
+        "render": 2.5
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.0999999046325684,
+        "render": 2.3000000715255737
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.1999999284744263,
+        "render": 1.8000000715255737
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.2000000476837158,
+        "render": 2.5
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.899999976158142,
+        "render": 1.399999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.5,
+        "render": 2.200000047683716
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.3000000715255737,
+        "render": 1.7999999523162842
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.100000023841858,
+        "render": 2
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.10000002384185791,
+        "render": 2.1999999284744263
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1,
+        "render": 1.7000000476837158
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1,
+        "render": 1.5999999046325684
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.3999999761581421,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1,
+        "render": 1.5
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.2000000476837158,
+        "render": 1.7000000476837158
+      },
+      {
+        "gap": 16.80000000000291,
+        "update": 0.6000000238418579,
+        "render": 2.1999999284744263
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.6000000238418579,
+        "render": 2.799999952316284
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.9000000953674316,
+        "render": 2
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.6000000238418579,
+        "render": 3
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 0.9000000953674316,
+        "render": 2.1999999284744263
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.100000023841858,
+        "render": 1.1999999284744263
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1,
+        "render": 1.399999976158142
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 0.7999999523162842,
+        "render": 3.100000023841858
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.20000004768371582,
+        "render": 2.1999999284744263
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.2999999523162842,
+        "render": 2.4000000953674316
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 0.6000000238418579,
+        "render": 1.6999999284744263
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.7999999523162842,
+        "render": 1.9000000953674316
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.899999976158142,
+        "render": 1.4000000953674316
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 2.5,
+        "render": 1.399999976158142
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.5999999046325684,
+        "render": 1.8000000715255737
+      },
+      {
+        "gap": 16.80000000000291,
+        "update": 2.5,
+        "render": 1.6999999284744263
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.700000047683716,
+        "render": 1.5
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.7999999523162842,
+        "render": 2.600000023841858
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.9000000953674316,
+        "render": 2.6999999284744263
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 2.299999952316284,
+        "render": 1.600000023841858
+      },
+      {
+        "gap": 16.799999999995634,
+        "update": 2.200000047683716,
+        "render": 1.7999999523162842
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 3.0999999046325684,
+        "render": 1.3000000715255737
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 3.299999952316284,
+        "render": 3.700000047683716
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.700000047683716,
+        "render": 4.299999952316284
+      },
+      {
+        "gap": 16.80000000000291,
+        "update": 2.100000023841858,
+        "render": 2.5999999046325684
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2,
+        "render": 2.600000023841858
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.100000023841858,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.7999999523162842,
+        "render": 1.3000000715255737
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 2.5999999046325684,
+        "render": 2.3000000715255737
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 3.100000023841858,
+        "render": 2.6999999284744263
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.4000000953674316,
+        "render": 3
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 2.399999976158142,
+        "render": 2.899999976158142
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.200000047683716,
+        "render": 3.399999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.3000000715255737,
+        "render": 1.600000023841858
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 2.5,
+        "render": 1.899999976158142
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.5,
+        "render": 2.3000000715255737
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2,
+        "render": 2.0999999046325684
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.600000023841858,
+        "render": 2.700000047683716
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.899999976158142,
+        "render": 2.799999952316284
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.7999999523162842,
+        "render": 2.3000000715255737
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.899999976158142,
+        "render": 1.5
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.5,
+        "render": 1.100000023841858
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.7999999523162842,
+        "render": 2
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 3.3000000715255737,
+        "render": 2
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.5,
+        "render": 3.0999999046325684
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 3.3000000715255737,
+        "render": 1.6999999284744263
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 3,
+        "render": 1.7000000476837158
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 3.200000047683716,
+        "render": 1.600000023841858
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 3,
+        "render": 1.399999976158142
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 2.5,
+        "render": 2.299999952316284
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 3.299999952316284,
+        "render": 1
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.6999999284744263,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 3.3000000715255737,
+        "render": 1.600000023841858
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.8000000715255737,
+        "render": 2.5
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.3000000715255737,
+        "render": 0.8999999761581421
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 2.600000023841858,
+        "render": 2.399999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.5,
+        "render": 1.5
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.899999976158142,
+        "render": 1.3000000715255737
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 2.100000023841858,
+        "render": 1.8000000715255737
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.899999976158142,
+        "render": 3.100000023841858
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.5,
+        "render": 2.200000047683716
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 1.899999976158142,
+        "render": 1.8000000715255737
+      },
+      {
+        "gap": 16.799999999995634,
+        "update": 2.3000000715255737,
+        "render": 2.0999999046325684
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.100000023841858,
+        "render": 1.5
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 2.200000047683716,
+        "render": 1.1999999284744263
+      },
+      {
+        "gap": 16.799999999995634,
+        "update": 2.600000023841858,
+        "render": 1.6999999284744263
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.899999976158142,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 1.8000000715255737,
+        "render": 1.5999999046325684
+      },
+      {
+        "gap": 16.799999999995634,
+        "update": 2.399999976158142,
+        "render": 2.8000000715255737
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.899999976158142,
+        "render": 1.600000023841858
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.399999976158142,
+        "render": 2.899999976158142
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.5999999046325684,
+        "render": 2.4000000953674316
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.8999999761581421,
+        "render": 2.3000000715255737
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 1.100000023841858,
+        "render": 1.2999999523162842
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.100000023841858,
+        "render": 1.399999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.8999999761581421,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 1.2000000476837158,
+        "render": 2.200000047683716
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.100000023841858,
+        "render": 2.6999999284744263
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1,
+        "render": 1.6999999284744263
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.100000023841858,
+        "render": 1.7999999523162842
+      },
+      {
+        "gap": 16.799999999995634,
+        "update": 1,
+        "render": 1.600000023841858
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.100000023841858,
+        "render": 3
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 0.8999999761581421,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.8999999761581421,
+        "render": 1.899999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.8000000715255737,
+        "render": 2.5999999046325684
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 0.9000000953674316,
+        "render": 2.5
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.7999999523162842,
+        "render": 2.700000047683716
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.100000023841858,
+        "render": 3.799999952316284
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.100000023841858,
+        "render": 2.799999952316284
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1,
+        "render": 1.899999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1,
+        "render": 2.399999976158142
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 0.19999992847442627,
+        "render": 2.700000047683716
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.6000000238418579,
+        "render": 2.5999999046325684
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.9000000953674316,
+        "render": 2
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 1.1999999284744263,
+        "render": 2.200000047683716
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.6999999284744263,
+        "render": 2.3000000715255737
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.8999999761581421,
+        "render": 3
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 0.9000000953674316,
+        "render": 2.399999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.7999999523162842,
+        "render": 2.5
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.7000000476837158,
+        "render": 3.200000047683716
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 1.100000023841858,
+        "render": 2.799999952316284
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.5,
+        "render": 1.8000000715255737
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.6000000238418579,
+        "render": 2.5
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 0.7999999523162842,
+        "render": 2.5
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.20000004768371582,
+        "render": 2.200000047683716
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.7999999523162842,
+        "render": 2.200000047683716
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.2000000476837158,
+        "render": 1.899999976158142
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.9000000953674316,
+        "render": 3
+      },
+      {
+        "gap": 16.799999999995634,
+        "update": 0.7000000476837158,
+        "render": 2.0999999046325684
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 0.6000000238418579,
+        "render": 2.5
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.2999999523162842,
+        "render": 2.600000023841858
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.6000000238418579,
+        "render": 2.399999976158142
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.2000000476837158,
+        "render": 3
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.7000000476837158,
+        "render": 1.5999999046325684
+      },
+      {
+        "gap": 16.799999999995634,
+        "update": 0.7999999523162842,
+        "render": 1.899999976158142
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 0.6000000238418579,
+        "render": 2.3000000715255737
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.3999999761581421,
+        "render": 2.4000000953674316
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.19999992847442627,
+        "render": 3.700000047683716
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 0.8999999761581421,
+        "render": 1.600000023841858
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.100000023841858,
+        "render": 1.7000000476837158
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 0.8999999761581421,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.1999999284744263,
+        "render": 1.3000000715255737
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 0.8999999761581421,
+        "render": 1.6999999284744263
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.2000000476837158,
+        "render": 2.899999976158142
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 0.6000000238418579,
+        "render": 2.399999976158142
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.6999999284744263,
+        "render": 2.100000023841858
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.1999999284744263,
+        "render": 1.600000023841858
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.5,
+        "render": 1.600000023841858
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.399999976158142,
+        "render": 2
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.399999976158142,
+        "render": 2.200000047683716
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 2.299999952316284,
+        "render": 2.8000000715255737
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.299999952316284,
+        "render": 3.399999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.600000023841858,
+        "render": 2.299999952316284
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 2.100000023841858,
+        "render": 2.399999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.299999952316284,
+        "render": 1.399999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.5,
+        "render": 1.2999999523162842
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 2.3000000715255737,
+        "render": 1.5
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.1999999284744263,
+        "render": 1.5
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.399999976158142,
+        "render": 1.7000000476837158
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 2.299999952316284,
+        "render": 1.399999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.1999999284744263,
+        "render": 1.8000000715255737
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.2000000476837158,
+        "render": 2
+      },
+      {
+        "gap": 16.60000000000582,
+        "update": 1.2999999523162842,
+        "render": 1.899999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.5,
+        "render": 1.6999999284744263
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.7000000476837158,
+        "render": 1.7999999523162842
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 2.100000023841858,
+        "render": 2.299999952316284
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.899999976158142,
+        "render": 2.200000047683716
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.399999976158142,
+        "render": 2.200000047683716
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 2.3000000715255737,
+        "render": 1.899999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.399999976158142,
+        "render": 1.600000023841858
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.7999999523162842,
+        "render": 2.200000047683716
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 1.600000023841858,
+        "render": 1.7000000476837158
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 1.899999976158142,
+        "render": 1.7000000476837158
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 1.399999976158142,
+        "render": 1.600000023841858
+      },
+      {
+        "gap": 16.700000000004366,
+        "update": 2.700000047683716,
+        "render": 1.600000023841858
+      },
+      {
+        "gap": 16.599999999998545,
+        "update": 2.4000000953674316,
+        "render": 1.899999976158142
+      },
+      {
+        "gap": 16.69999999999709,
+        "update": 2.799999952316284,
+        "render": 2.600000023841858
+      }
+    ],
+    "fps": 59.28143712603063
+  },
+  "editorProfile": [
+    {
+      "phase": "mount",
+      "duration": 25.200000047683716,
+      "commitTime": 1270.8999999761581
+    },
+    {
+      "phase": "update",
+      "duration": 20.799999833106995,
+      "commitTime": 1339.1000000238419
+    },
+    {
+      "phase": "update",
+      "duration": 115.00000023841858,
+      "commitTime": 1704.1000000238419
+    },
+    {
+      "phase": "update",
+      "duration": 1.7999999523162842,
+      "commitTime": 12691.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 10.99999988079071,
+      "commitTime": 15180.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 5,
+      "commitTime": 15288
+    },
+    {
+      "phase": "update",
+      "duration": 3.8000000715255737,
+      "commitTime": 15448.399999976158
+    },
+    {
+      "phase": "update",
+      "duration": 5.4999998807907104,
+      "commitTime": 22305.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 7.699999928474426,
+      "commitTime": 22499.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 8.300000071525574,
+      "commitTime": 22604.399999976158
+    },
+    {
+      "phase": "update",
+      "duration": 7.299999952316284,
+      "commitTime": 22618.899999976158
+    },
+    {
+      "phase": "update",
+      "duration": 16.09999990463257,
+      "commitTime": 22687.5
+    },
+    {
+      "phase": "update",
+      "duration": 3.4999998807907104,
+      "commitTime": 22891
+    },
+    {
+      "phase": "update",
+      "duration": 5,
+      "commitTime": 23794.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 2.600000023841858,
+      "commitTime": 23851
+    },
+    {
+      "phase": "update",
+      "duration": 1.7000000476837158,
+      "commitTime": 23856.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 1,
+      "commitTime": 23988
+    },
+    {
+      "phase": "update",
+      "duration": 4.300000071525574,
+      "commitTime": 24814.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 2.0999999046325684,
+      "commitTime": 24949
+    },
+    {
+      "phase": "update",
+      "duration": 0.8999999761581421,
+      "commitTime": 24952
+    },
+    {
+      "phase": "update",
+      "duration": 4.599999904632568,
+      "commitTime": 25170.5
+    },
+    {
+      "phase": "update",
+      "duration": 2.799999952316284,
+      "commitTime": 25388
+    },
+    {
+      "phase": "update",
+      "duration": 1.5,
+      "commitTime": 25392.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 6.100000023841858,
+      "commitTime": 25993
+    },
+    {
+      "phase": "update",
+      "duration": 4.800000071525574,
+      "commitTime": 26057
+    },
+    {
+      "phase": "update",
+      "duration": 1.2999999523162842,
+      "commitTime": 26147.600000023842
+    },
+    {
+      "phase": "update",
+      "duration": 2.299999952316284,
+      "commitTime": 26237.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 7.5,
+      "commitTime": 26246
+    },
+    {
+      "phase": "update",
+      "duration": 0.7000000476837158,
+      "commitTime": 26284.899999976158
+    },
+    {
+      "phase": "update",
+      "duration": 8.5,
+      "commitTime": 26475
+    },
+    {
+      "phase": "update",
+      "duration": 4.400000095367432,
+      "commitTime": 26558.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 1.2999999523162842,
+      "commitTime": 26676.399999976158
+    },
+    {
+      "phase": "update",
+      "duration": 6.899999976158142,
+      "commitTime": 27425.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 7.300000071525574,
+      "commitTime": 27476
+    },
+    {
+      "phase": "update",
+      "duration": 4.200000047683716,
+      "commitTime": 27527.899999976158
+    },
+    {
+      "phase": "update",
+      "duration": 1.899999976158142,
+      "commitTime": 27601.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 1.399999976158142,
+      "commitTime": 27606.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.2999999523162842,
+      "commitTime": 27640.600000023842
+    },
+    {
+      "phase": "update",
+      "duration": 1.8000000715255737,
+      "commitTime": 27764.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 12.099999904632568,
+      "commitTime": 27830
+    },
+    {
+      "phase": "update",
+      "duration": 7.5,
+      "commitTime": 27926.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 3.1999999284744263,
+      "commitTime": 28214
+    },
+    {
+      "phase": "update",
+      "duration": 3.299999952316284,
+      "commitTime": 28253.899999976158
+    },
+    {
+      "phase": "update",
+      "duration": 4.0000001192092896,
+      "commitTime": 28321.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 6.599999904632568,
+      "commitTime": 28856.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 4.600000023841858,
+      "commitTime": 28924.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 4.5,
+      "commitTime": 29022
+    },
+    {
+      "phase": "update",
+      "duration": 2.899999976158142,
+      "commitTime": 29130.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 3.200000047683716,
+      "commitTime": 29135.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 2.899999976158142,
+      "commitTime": 29231
+    },
+    {
+      "phase": "update",
+      "duration": 8.299999952316284,
+      "commitTime": 29260.5
+    },
+    {
+      "phase": "update",
+      "duration": 5.100000023841858,
+      "commitTime": 29321.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 4.799999952316284,
+      "commitTime": 29413.5
+    },
+    {
+      "phase": "update",
+      "duration": 3.6999999284744263,
+      "commitTime": 29577.5
+    },
+    {
+      "phase": "update",
+      "duration": 4.100000023841858,
+      "commitTime": 29836.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 3.200000047683716,
+      "commitTime": 29893.5
+    },
+    {
+      "phase": "update",
+      "duration": 4.600000023841858,
+      "commitTime": 29973.399999976158
+    },
+    {
+      "phase": "update",
+      "duration": 7.100000023841858,
+      "commitTime": 30021.899999976158
+    },
+    {
+      "phase": "update",
+      "duration": 2.600000023841858,
+      "commitTime": 30028.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.5,
+      "commitTime": 30154.399999976158
+    },
+    {
+      "phase": "update",
+      "duration": 5.899999976158142,
+      "commitTime": 30805.5
+    },
+    {
+      "phase": "update",
+      "duration": 2.899999976158142,
+      "commitTime": 31226
+    },
+    {
+      "phase": "update",
+      "duration": 1,
+      "commitTime": 31229.700000047684
+    }
+  ],
+  "attachment": {
+    "before": 100,
+    "placed": 101,
+    "kind": "stack",
+    "callMs": 34.10000002384186
+  },
+  "flightProfile": [
+    {
+      "phase": "update",
+      "duration": 0.5,
+      "commitTime": 22119.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 22119.5
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 22270.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 3.5,
+      "commitTime": 22372.900000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0.20000004768371582,
+      "commitTime": 22431.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.5,
+      "commitTime": 22592
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 22752.600000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 22912.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 23072.900000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0.19999992847442627,
+      "commitTime": 23235.600000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0.9000000953674316,
+      "commitTime": 23394.400000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 23550.600000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0.2999999523162842,
+      "commitTime": 23565.400000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0.8000000715255737,
+      "commitTime": 23712.400000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 23871.400000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0.6000000238418579,
+      "commitTime": 24047.600000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 24192.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 24353.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.09999990463256836,
+      "commitTime": 24513.5
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 24670.900000095367
+    },
+    {
+      "phase": "update",
+      "duration": 6.199999928474426,
+      "commitTime": 24840.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 7.599999904632568,
+      "commitTime": 24875.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 24994.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 1.5,
+      "commitTime": 25017.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.3999999761581421,
+      "commitTime": 25152
+    },
+    {
+      "phase": "update",
+      "duration": 2.5999999046325684,
+      "commitTime": 25266
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 25317.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.6000000238418579,
+      "commitTime": 25359.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0.40000009536743164,
+      "commitTime": 25482.400000095367
+    },
+    {
+      "phase": "update",
+      "duration": 3.399999976158142,
+      "commitTime": 25612.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.20000004768371582,
+      "commitTime": 25636.900000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0.2999999523162842,
+      "commitTime": 25729.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 25793
+    },
+    {
+      "phase": "update",
+      "duration": 4.700000047683716,
+      "commitTime": 25848.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.5,
+      "commitTime": 25952.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 3.0999999046325684,
+      "commitTime": 25979.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 2.799999952316284,
+      "commitTime": 26120.5
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 26135.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 3.600000023841858,
+      "commitTime": 26251.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 26281
+    },
+    {
+      "phase": "update",
+      "duration": 2.299999952316284,
+      "commitTime": 26358.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 26431.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 2.3000000715255737,
+      "commitTime": 26478.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.6000000238418579,
+      "commitTime": 26611.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 26617.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 1.2999999523162842,
+      "commitTime": 26715.5
+    },
+    {
+      "phase": "update",
+      "duration": 0.2999999523162842,
+      "commitTime": 26751.900000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0.40000009536743164,
+      "commitTime": 26832.5
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 26911.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.2999999523162842,
+      "commitTime": 26968.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 5.799999952316284,
+      "commitTime": 27084.600000023842
+    },
+    {
+      "phase": "update",
+      "duration": 1.5999999046325684,
+      "commitTime": 27218.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 27240.900000095367
+    },
+    {
+      "phase": "update",
+      "duration": 2.0999999046325684,
+      "commitTime": 27313.600000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 27404.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.3999999761581421,
+      "commitTime": 27428.400000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0.3999999761581421,
+      "commitTime": 27525.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 27554.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 3.2000001668930054,
+      "commitTime": 27669.400000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 27725.5
+    },
+    {
+      "phase": "update",
+      "duration": 4.700000047683716,
+      "commitTime": 27764.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0.19999980926513672,
+      "commitTime": 27874.5
+    },
+    {
+      "phase": "update",
+      "duration": 1.2000000476837158,
+      "commitTime": 27920.200000047684
+    },
+    {
+      "phase": "update",
+      "duration": 0.5999999046325684,
+      "commitTime": 28026.5
+    },
+    {
+      "phase": "update",
+      "duration": 0.8999999761581421,
+      "commitTime": 28033.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 9.100000023841858,
+      "commitTime": 28167.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 28192.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 2.1999999284744263,
+      "commitTime": 28296.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 28351.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 4.700000047683716,
+      "commitTime": 28420.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 28512.400000095367
+    },
+    {
+      "phase": "update",
+      "duration": 6.5,
+      "commitTime": 28549.400000095367
+    },
+    {
+      "phase": "update",
+      "duration": 1.8000000715255737,
+      "commitTime": 28646.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 28672.900000095367
+    },
+    {
+      "phase": "update",
+      "duration": 1.399999976158142,
+      "commitTime": 28776.900000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0.6000000238418579,
+      "commitTime": 28832.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 1,
+      "commitTime": 28897.600000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0.10000002384185791,
+      "commitTime": 28993.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 3.5,
+      "commitTime": 29009.700000047684
+    },
+    {
+      "phase": "update",
+      "duration": 10.100000023841858,
+      "commitTime": 29169.900000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 29172.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 0.6000000238418579,
+      "commitTime": 29286.400000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0.7999999523162842,
+      "commitTime": 29312.300000071526
+    },
+    {
+      "phase": "update",
+      "duration": 3.799999952316284,
+      "commitTime": 29400.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 29474.400000095367
+    },
+    {
+      "phase": "update",
+      "duration": 0.5,
+      "commitTime": 29522
+    },
+    {
+      "phase": "update",
+      "duration": 1.899999976158142,
+      "commitTime": 29647.800000071526
+    },
+    {
+      "phase": "update",
+      "duration": 2.5,
+      "commitTime": 29769.5
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 29794
+    },
+    {
+      "phase": "update",
+      "duration": 6,
+      "commitTime": 29885.100000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0,
+      "commitTime": 29951.600000023842
+    },
+    {
+      "phase": "update",
+      "duration": 0.7000000476837158,
+      "commitTime": 30006.700000047684
+    }
+  ],
+  "dragSavedDuringMove": false,
+  "panelFloating": 1,
+  "finalPanelBounds": {
+    "x": 940,
+    "y": 184,
+    "width": 250,
+    "height": 154
+  },
+  "longTasks": [
+    93,
+    241,
+    316,
+    2619,
+    119,
+    2561,
+    97,
+    2014,
+    284,
+    71,
+    126,
+    574,
+    75,
+    106,
+    59,
+    54,
+    409,
+    107,
+    50,
+    58,
+    508,
+    373,
+    248,
+    350,
+    73,
+    63,
+    74,
+    52,
+    52,
+    68,
+    50,
+    1026,
+    278,
+    636,
+    71
+  ]
+}

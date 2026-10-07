@@ -579,11 +579,16 @@ export class PlanetRenderer {
     }
   }
 
-  /** True when no terrain work is pending (useful for screenshots/tests). */
-  get idle(): boolean {
+  /** Solid surface is ready for control. Cosmetic scatter continues streaming independently. */
+  get surfaceReady(): boolean {
     if (this.kind !== 'solid') return true;
     const bakeDone = (!this.terrain || !!this.farTexture) && this.imageryIdle;
-    return (!this.scatter?.group.visible || this.scatter.idle) && bakeDone && (!this.quadtree || this.stats.mode === 'far' || this.quadtree.idle);
+    return bakeDone && (!this.quadtree || this.stats.mode === 'far' || this.quadtree.idle);
+  }
+
+  /** Fully settled, including decoration (screenshots/tests can still wait for this). */
+  get idle(): boolean {
+    return this.surfaceReady && (!this.scatter?.group.visible || this.scatter.idle);
   }
 
   /**

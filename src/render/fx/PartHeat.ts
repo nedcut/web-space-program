@@ -8,6 +8,8 @@ export class PartHeat {
   private readonly slot = allocateThermalSlot();
   private nozzleTemperature = 290;
   private disposed = false;
+  private skinKelvin = -1;
+  private nozzleKelvin = -1;
   private readonly color = new THREE.Color();
   constructor(object: THREE.Object3D) {
     object.traverse(o => {
@@ -27,6 +29,10 @@ export class PartHeat {
     this.nozzleTemperature += (target - this.nozzleTemperature) * (1 - Math.exp(-Math.max(0, dt) / (burning ? 8 : 18)));
     for (let i = 0; i < 2; i++) {
       const t = Math.round(i ? Math.max(temperature, this.nozzleTemperature) : temperature);
+      // The lookup is already quantized to integer Kelvin. Reuse its exact radiance until that
+      // integer changes; nozzle heating/cooling above still advances at the original cadence.
+      if (i ? t === this.nozzleKelvin : t === this.skinKelvin) continue;
+      if (i) this.nozzleKelvin = t; else this.skinKelvin = t;
       blackbody(t, this.color);
       const strength = Math.min(12, Math.pow(Math.max(0, t - 700) / 850, 2));
       writeThermalSlot(this.slot ? this.slot + i : 0, this.color.multiplyScalar(strength));

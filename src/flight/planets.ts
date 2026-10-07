@@ -27,6 +27,8 @@ export interface PlanetLayer {
   sunTint?(point: Vec3, sunPos: Vec3): [number, number, number];
   /** True when the body's renderer has no pending terrain work (or it isn't rendered at all). */
   isIdle?(id: string): boolean;
+  /** Surface ready; decorative scatter need not hold flight controls behind a loading screen. */
+  isSurfaceReady?(id: string): boolean;
   dispose(): void;
 }
 
@@ -110,6 +112,9 @@ export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualit
           viewportHeight: u.viewportHeight,
         });
       }
+    },
+    isSurfaceReady(id) {
+      return renderers.get(id)?.surfaceReady ?? true;
     },
     isIdle(id) {
       return renderers.get(id)?.idle ?? true;

@@ -3,7 +3,7 @@
 _Last updated: 2026-10-06_
 
 ## Start here (for Ned)
-**Run it:** `npm install && npm run dev`, open http://localhost:5173. Pick **New Game → Sandbox → Standard** for the easiest start;
+**Run it:** `npm install && npm run play` (optimised production build, opens http://localhost:4173). `npm run dev` is for development only: it serves unbundled modules with React's debug build and is much slower to load and run. Pick **New Game → Sandbox → Standard** for the easiest start;
 the first flight shows a controls cheat sheet (Shift+F1 or the toolbar "?" brings it back). **Training** on the main menu has 8 guided lessons.
 
 **What exists:** the real solar system (Sun, 8 planets, Pluto, Ceres, 40+ moons, plus asteroids/comets like Vesta, Bennu,
@@ -833,3 +833,25 @@ Earlier GPU runs are labelled and archived separately so their revisions cannot 
 Final Ultra pad capture uses the requested Windows `cdp2.mjs` driver; after preparation it confirms the
 exact Ultra Earth grades, 48-quad terrain / 0.75 m spacing, hardware RTX rendering and GL error 0.
 All work is committed on `cx/gfxsettings`; the port-5327 dev/preview server is stopped on completion.
+
+## Loading and main-thread CPU (2026-10-07, cx/perfcpu)
+
+Implementation and repeatable production probes are committed incrementally in the assigned worktree. The editor profile attributes over four seconds to eagerly preparing the entire thumbnail catalogue; preparation now yields between parts and pauses on scene exit. Earth/application downloads overlap, distant flights omit hidden launch scenery, site transforms avoid a duplicate subtree traversal, map warm-up is sliced, and cosmetic scatter no longer blocks flight readiness. Thermal/link bookkeeping skips exact redundant work. Production before/after results and validation are recorded in docs/PERFORMANCE.md; hardware CPU throttling is unreliable on this shared Chrome, so synthetic WSL 4× diagnostics are kept distinct from RTX runs.
+
+Completed paired production measurements and retained page-scoped Chrome traces plus repeatable transition/flight drivers in `scripts/bench/`. Warm editor entry 4.664 → 0.804 s; launch 7.530 → 3.249 s; quickload 6.441 → 2.741 s; revert 6.399 → 2.722 s. A bounded 16 MiB immutable surface-pixel cache removes repeated worker bakes while keeping GPU disposal intact. Hardware steady-flight CPU is mostly unchanged; the full ascent trace still has two >50 ms tasks. Moon terminal descent has none in its ten-second trace. Hardware 2×/4× throttling stalls; WSL 4× no-raster diagnostics are explicitly separate, and no M-series/120 Hz or ≤4 ms-at-4× claim is made. All targets/limits and raw evidence are in `docs/PERFORMANCE.md` and `docs/performance/perfcpu/`.
+
+Final main merge was already up to date at `7bd6e4f9`; post-merge lint, TypeScript, all **112 files / 1,334 tests** (216.99 s), and production build pass. Ten determinism hashes match byte-for-byte; `src/sim` is unchanged. Dedicated preview port 5334 is stopped, and benchmark browser contexts are closed. Work stayed entirely in the assigned `cx/perfcpu` worktree and each implementation/evidence step was committed.
+### UI responsiveness — implementation (2026-10-07, cx/perfui)
+
+- Work isolated to `wsp-wt/perfui`. Read project architecture/decisions/performance guidance and merged main before measuring.
+- Production WSL Chromium, 4× CDP CPU throttle, 1470×920 CSS / DPR 2 baseline: catalogue search p75 1543 ms, hover 1334 ms, symmetry 1297 ms, pick/cancel 4600 ms; cold/warm first 18 thumbnails 25.6/15.1 s after editor entry. Software GPU, overlapping cold thumbnail work: these are diagnostic costs, not Apple frame-rate estimates.
+- Committed repeatable catalogue/large-craft/flight probes, opt-in production profiling, demand-driven persistent thumbnails, unchanged-craft/readout/attach-node reuse, cheaper panel compositing and ref/rAF HUD dragging. Editor cache invalidation tests and 38 focused editor tests pass. Final measurements/integration checks follow below.
+
+### UI responsiveness — measured follow-up
+
+- Found and removed two additional interaction stalls: 934 ms synchronous whole-craft soot on attach (now ~34 ms handler, exact cosmetic bake in idle batches), and 14 seconds serializing procedural texture canvases when cloning tinted symmetry ghosts (weak-map material bookkeeping fixes the clone path).
+- Preflight advisories now run in a worker; final browser probe shows completed checks and no page errors. Batched soot matches synchronous float32 colors exactly, retains clean templates and handles hall recentering. Lamp/tint and idle cancellation/serialization regression tests pass.
+- Final palette production capture p75: search 35 ms, hover 42 ms, scroll 57 ms, symmetry 84 ms, pick/cancel 74 ms. Timestamp-inclusive values: 36/56/63/99/85 ms. Warm first 18 thumbnails 15.1 s → 225 ms; cold 25.6 s → 14.3 s on software Chromium.
+- 100-part CPU-isolated held motion ~59 fps after removing the serialization stall, attach/undo correctness passes; HUD drag persists only on release and finishes as a floating panel at the expected location. Scene GPU drawing is suppressed in this diagnostic, so actual Apple/120 Hz FPS remains unverified.
+- Flight profiling after maxima vary 4.2–10.1 ms; not every strict target is established. Full-render software flight remains GPU-bound; cold backdrop/menu and input-queue outliers, unmeasured maneuver/tracking flows, and the failed shared-GPU attempt are explicitly documented in docs/PERFORMANCE.md.
+- Each implementation step is committed. Final lint (including architecture layering), TypeScript check and normal production build pass. Full Vitest: 113 files / 1,332 tests pass before the final `git merge main` and again afterward; merge was already up to date. Production preview stopped at completion.

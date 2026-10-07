@@ -1,0 +1,92 @@
+{
+ "label": "perfcpu-moon-after",
+ "base": "http://172.24.204.38:5334",
+ "local": false,
+ "noRaster": false,
+ "noSubmission": false,
+ "dpr": 2,
+ "throttle": 1,
+ "quality": "medium",
+ "seconds": 10,
+ "size": "1470x920",
+ "date": "2026-10-07T18:12:07.767Z",
+ "cases": {
+  "moon": {
+   "fps": 57.49,
+   "frames": 915,
+   "frameP50": 16.7,
+   "frameP95": 16.8,
+   "frameP99": 33.4,
+   "frameMax": 33.5,
+   "hitches25": 40,
+   "hitches50": 0,
+   "cpuMs": 3.81,
+   "cpuP95": 5.6,
+   "sections": {
+    "input": 0.06,
+    "sim": 0.28,
+    "vessels": 0.04,
+    "fx": 0.04,
+    "planets": 0.37,
+    "map": 0,
+    "render": 2.6,
+    "telemetry": 0.2,
+    "audio": 0.01,
+    "navball": 0.12,
+    "hud": 0.09
+   },
+   "scriptMsPerFrame": 3.82,
+   "taskMsPerFrame": 17.39,
+   "layoutsPerSec": 11.35,
+   "styleRecalcsPerSec": 13.67,
+   "layoutMsPerSec": 2.35,
+   "styleMsPerSec": 0.55,
+   "sampleSeconds": 15.95,
+   "longTasks": 0,
+   "longTasksPerMin": 0,
+   "longTaskMsPerMin": 0,
+   "longTaskMax": 0,
+   "heapMB": 41.92,
+   "heapGrowthMBPerMin": -35.52,
+   "domNodes": 559,
+   "listeners": 650,
+   "reactCommitsPerSec": 16.68,
+   "reactRendersPerSec": 493.51,
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 44,
+     "in": 44
+    }
+   },
+   "gl": {
+    "calls": 570,
+    "tris": 661513,
+    "programs": 74,
+    "geometries": 424,
+    "textures": 85,
+    "canvas": "2940x1840",
+    "scale": 1,
+    "gpuMs": 3.0380592450820356,
+    "gpuName": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+   },
+   "trace": {
+    "error": "SyntaxError: Unexpected non-whitespace character after JSON at position 134 (line 1 column 135)"
+   },
+   "readyMs": 4408,
+   "marks": {
+    "wsp:flight:construct": 1159,
+    "wsp:flight:shaderWarmup": 1995,
+    "wsp:flight:firstFrame": 2084,
+    "wsp:flight:construct:start": 1059,
+    "wsp:flight:ready": 3789
+   }
+  }
+ }
+}

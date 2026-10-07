@@ -43,6 +43,18 @@ export const SITE_LAYOUT = {
 const HIDE_DISTANCE = 200e3;
 const BODY = 'earth';
 
+/** Cheap visibility test before allocating the launch complex's geometry and textures. */
+export function launchSiteDistance(universe: SiteUniverse, origin: Vec3, t: number): number {
+  const up = latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon);
+  const terrain = universe.terrain(BODY);
+  const radius = universe.body(BODY).radius + Math.max(0, terrain.heightAt(up.x, up.y, up.z));
+  const fixed = { x: up.x * radius, y: up.y * radius, z: up.z * radius };
+  const offset = qRotate(universe.ephem.bodyRotation(BODY, t), fixed);
+  const center = universe.ephem.getBodyState(BODY, t).position;
+  return Math.hypot(center.x + offset.x - origin.x, center.y + offset.y - origin.y, center.z + offset.z - origin.z);
+}
+
+
 type Key =
   | 'sign' | 'concrete' | 'soot' | 'deck' | 'steel' | 'accent' | 'hazard' | 'grate' | 'white' | 'darkMetal' | 'cable'
   | 'cladding' | 'vabClad' | 'door' | 'windows' | 'apron' | 'crawler' | 'road' | 'roofDark' | 'lamp' | 'beacon' | 'runway';
@@ -206,6 +218,11 @@ export class LaunchSite {
     this.buildVegetation();
     this.buildPickables();
     this.flush();
+    // Mesh-local transforms are immutable; the dish animates its parent group. Avoid composing
+    // hundreds of unchanged local matrices on every frame (world transforms still follow Earth).
+    this.root.traverse(o => {
+      if ((o as THREE.Mesh).isMesh) { o.updateMatrix(); o.matrixAutoUpdate = false; }
+    });
   }
 
   // ------------------------------------------------------------------ terrain queries
@@ -1255,7 +1272,7 @@ export class LaunchSite {
     this.root.position.set(px, py, pz);
     this.root.quaternion.multiplyQuaternions(this.tmpQ, this.qLocal);
     this.root.updateMatrix();
-    this.root.updateMatrixWorld(true);
+    this.root.updateWorldMatrix(true, false);
     for (const { near, far } of this.vegetationLods) {
       const bound = near.boundingSphere!;
       this.lodCenter.copy(bound.center).applyMatrix4(this.root.matrixWorld);

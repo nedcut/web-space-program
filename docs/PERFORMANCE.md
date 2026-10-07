@@ -979,6 +979,7 @@ Ultra cold readiness in the final harness was about **30.3 s on the pad / 24.8 s
 terrain/texture resources make initial preparation and structural setting rebuilds noticeably slower;
 these startup durations are separate from the steady rendering measurements above.
 
+<<<<<<< HEAD
 ## Real Earth imagery (2026-10-07, op/earthgfx)
 
 Full tables, method and screenshots: [`docs/screenshots/earthgfx/README.md`](screenshots/earthgfx/README.md); raw
@@ -989,3 +990,266 @@ streaming peaks at 5.2 ms of main-thread time in one frame (High). Tools: `scrip
 views), `earthgfx-flightfam.mjs` (flight, per material family), `earthgfx-stalls.mjs` (frame intervals and long
 tasks while streaming), `earthgfx-texleak.mjs` (textures across 12 month swaps), `earthgfx-shots.mjs`. Wrap GPU
 runs in `flock /tmp/wsp-gpu.lock` — the harness is shared.
+=======
+## Loading and main-thread CPU — cx/perfcpu, 2026-10-07
+
+Baseline: `7bd6e4f9` (real Earth already integrated). Final loading implementation: `b4f9f3ec`.
+Production builds only; Medium, adaptive resolution off, 1470×920 CSS pixels at DPR 2.
+Hardware: shared Windows Chrome 154 / ANGLE D3D11 / RTX 3060 Ti / Ryzen 5600X.
+Every Windows browser run acquired `/tmp/wsp-gpu.lock`. These are single paired samples,
+not confidence intervals or measurements of the owner's M-series MacBook/120 Hz display.
+CDP CPU throttling at both 2× and 4× stalled the Windows renderer (including evaluation),
+so hardware results below use **1×**. Separate local Chromium/WSL **4×** diagnostics
+replace WebGL draw calls with no-ops; they retain three.js submission and software-driver
+overhead and cannot establish laptop FPS or the 4 ms hardware CPU target.
+
+### Loading results
+
+Milliseconds from the automated route/action to readiness. Cold means a fresh browser
+context; warm means a same-context reload with HTTP/IndexedDB caches, not retained JS
+modules. Service workers are blocked to keep the cache boundary reproducible. Restores
+within either sequence benefit from the new in-memory surface cache.
+
+| Transition | Cold before | Cold after | Warm before | Warm after |
+|---|---:|---:|---:|---:|
+| Navigation → interactive menu | 1,565 | 1,210 | 2,654 | 1,289 |
+| Menu → Space Center | 3,718 | 885 | 1,089 | 610 |
+| Space Center → editor | 4,984 | 856 | 4,664 | 804 |
+| Editor → controllable pad | 6,912 | 3,197 | 7,530 | 3,249 |
+| Flight → map | 156 | 105 | 144 | 94 |
+| Quickload | 6,519 | 2,763 | 6,441 | 2,741 |
+| Revert to launch | 6,613 | 2,925 | 6,399 | 2,722 |
+| Flight → tracking station | 612 | 312 | 521 | 332 |
+
+Menu readiness is the visible action plus two animation frames. Scene route probes exclude
+human dialog time; tracking uses the save/store route because flight has no direct tracking
+button. Launch/restore waits for a new controller, surface readiness, shader warm-up and
+loading overlay opacity zero, excluding its 550 ms DOM-removal fade. Map waits two frames.
+Raw predicates and complete long-task counts are in `scripts/bench/cpu-transitions.mjs`.
+The menu warm target and cold transition target were met in this sample; warm launch still
+misses 3 seconds by 249 ms. Loading is not hitch-free: the largest warm editor task fell
+from **4,219 to 356 ms**, and warm launch still has a 170 ms task.
+
+The editor V8 profile attributed approximately 4.3 seconds to eagerly preparing the entire
+thumbnail catalogue (including roughly 3.5 seconds of geometry/AO work). Preparation now
+builds one part per scheduled frame and pauses when the palette unmounts. The full catalogue
+no longer blocks entry or competes with launch. Other changes:
+
+- Overlap application loading, immutable Earth fetch and texture-cache decode; preserve the
+  Earth initialization barrier before scene creation.
+- Skip construction of hidden launch scenery in distant/Earth-orbit and lunar scenes; freeze
+  immutable local matrices and avoid a duplicate site subtree update.
+- Slice map shader warm-up, as already done for flight. Require baked surface/terrain for
+  readiness while cosmetic scatter streams afterward; screenshot `idle` still waits for it.
+- Cache immutable surface-bake pixels in the shared worker pool with a **16 MiB LRU limit**
+  and in-flight deduplication. Keep GPU textures scene-owned and disposable. Oversized bakes
+  bypass retention. Warm quickload/revert no longer repeat the identical worker bake.
+- Reuse exact integer-Kelvin radiance calculations and skip empty vessel-link indexing.
+
+### Steady flight pacing
+
+Trace-free paired 10-second captures (`perfcpu-pacing-{before,after}-dpr2.json`). CPU is the
+instrumented flight-loop average over its rolling sample, including render submission;
+frame percentiles are rAF intervals, not JS execution time. After captures predate only the
+surface-bake cache, which cannot hit in these fresh-context steady-flight cases.
+
+| Scene | CPU ms before → after | Frame p50/p95/p99 ms before → after | Long tasks before → after |
+|---|---:|---|---:|
+| Pad | 7.17 → 6.20 | 33.3/50/50 → 33.3/33.4/50 | 2 → 0 |
+| Ascent, physics 4× | 8.33 → 8.72 | 33.3/50/50.1 → 33.3/50/50.1 | 1 → 0 |
+| Orbit | 3.11 → 3.15 | 16.7/33.4/33.4 → 16.7/33.4/33.4 | 0 → 0 |
+| Rails warp 100,000× | 2.24 → 2.08 | 16.7/16.8/16.8 → 16.7/16.8/16.8 | 0 → 0 |
+| Map | 1.59 → 1.59 | 16.7/16.7/16.8 → 16.7/16.8/16.8 | 0 → 0 |
+| Moon terminal descent | 3.50 → 3.59 | 16.7/16.8/33.3 → 16.7/16.7/16.8 | 0 → 0 |
+
+There is **no demonstrated broad steady-flight CPU speedup**: most differences are noise.
+The primary win is removing large loading stalls. Ten seconds without long tasks does not
+prove hitch-free gameplay. The Moon case is terminal descent, not an Earth→Moon transfer
+or a complete SOI-crossing test. Inbound lazy site creation remains synchronous. First-use
+part geometry/shader compilation and scene constructors can still exceed 50 ms.
+
+### Reproduction and evidence
+
+From the assigned worktree, serve `npx vite build && npx vite preview --port 5334 --strictPort --host`.
+The wrappers below acquire the shared GPU lock internally (do not nest a second lock):
+
+```sh
+bash scripts/bench/cpu-transitions.sh http://<WSL-IP>:5334 my-transitions 1
+bash scripts/bench/cpu-flight.sh --base http://<WSL-IP>:5334 --label my-pacing --throttle 1 --trace 0 --cases pad,ascent,orbit,warp100k,map,moon --seconds 10 --settle 5000
+bash scripts/bench/cpu-flight.sh --base http://<WSL-IP>:5334 --label my-journey --throttle 1 --cases journey --seconds 120 --settle 3000
+bash scripts/bench/cpu-flight.sh --base http://<WSL-IP>:5334 --label my-moon --throttle 1 --cases moon --seconds 10 --settle 5000
+node scripts/bench/cpu-trace-report.mjs docs/performance/perfcpu/my-moon-moon.trace.json.gz
+node scripts/bench/gpu-bench.mjs --local 1 --cpu-only 1 --base http://localhost:5334 --label my-cpu --throttle 4 --cases pad,ascent,orbit,warp100k,map,moon --seconds 10 --settle 5000 --save-traces 1 --size 1470x920 --dpr 2
+```
+
+`journey` flies a stock Meridian with orbit assist at physics 4×, autosaves every 15 seconds,
+and opens/closes map during ascent. Trace exports retain only the benchmark renderer and
+its workers. Long traces are streamed to avoid V8's whole-string limit. Trace-enabled rAF
+samples include transfer/readout time and thus exceed the nominal recording period; use
+`--trace 0` for comparable pacing windows. Initial journey export attempts failed (errors
+retained in JSON); their interval summaries are diagnostic, not paired 120-second traces.
+The editor CPU profile, transition JSON, pacing JSON and compressed Chrome traces are under
+`docs/performance/perfcpu/`. Unzip `.trace.json.gz` before importing into Chrome Performance.
+
+Local 4× diagnostic CPU milliseconds (draw calls disabled, not rendered performance):
+
+| Scene | Before | After |
+|---|---:|---:|
+| Pad | 55.73 | 25.13 |
+| Ascent | 69.51 | 40.34 |
+| Orbit | 30.71 | 22.39 |
+| Warp 100,000× | 22.15 | 13.68 |
+| Map | 22.39 | 9.86 |
+| Moon descent | 25.83 | 28.23 |
+
+These highly amplified software-driver numbers vary substantially with host scheduling.
+They do not support a claim of a corresponding hardware speedup. The after ascent still
+recorded 63 long tasks over 12.55 seconds, and its maximum traced GC pause was 22.35 ms.
+The requested ≤4 ms at 4× is not demonstrated. Raw diagnostic rAF/GC data is retained for
+repeatability, but the hardware trace-free table is the flight pacing comparison.
+
+Final hardware trace evidence (`perfcpu-journey-traced-*`, `perfcpu-moon-traced-*`): the
+scripted ascent completed orbit assist at **81.32 × 85.07 km**. Its recorded trace contains
+**two** main-thread tasks >50 ms (75.27 and 74.15 ms). The first is dominated by native
+waiting around a Mojo reply, with essentially no nested JS; the second includes 43.60 ms
+of animation-frame work and 29.14 ms of compositor `Commit`. Trace main-thread occupancy
+is 78.09% Commit waiting and 21.78% other work; those inclusive event timings are not CPU
+utilization. Largest traced GC pause: **5.73 ms**. Moon descent has **zero** >50 ms tasks,
+with largest GC pause **2.82 ms**. The baseline short Moon trace has one 50.4 ms native-wait
+task; baseline short pad/ascent/orbit/map/high-warp traces have none. `trace-reports.json`
+contains task attribution without double-counting nested Chrome task wrappers.
+
+The earlier baseline journey observed 8 long tasks in 199.14 seconds, with frame
+p50/p95/p99 33.2/33.4/50 ms; the final journey observed 2 in 217.59 seconds, with
+16.7/33.4/33.4 ms. These differently extended readout windows are **not a controlled
+before/after comparison**. The baseline journey raw export failed; the shorter baseline
+ascent/Moon traces and successful final full ascent are retained. No claim is made that
+SOI transitions, every staging combination, or all allocation/GC hitches are solved.
+
+Validation after merging `main` (still `7bd6e4f9`): `npm run lint`, `npx tsc --noEmit`,
+`npx vitest run --maxWorkers=2` (**112 files / 1,334 tests**, 216.99 s), and `npm run build`
+all pass. All ten `scripts/bench/determinism.ts` hashes are byte-identical before/after
+(`determinism-{before,after}.txt`). No `src/sim` changes. The build retains its existing
+large-chunk warning. Port 5334 preview was stopped after measurements; no server remains.
+## UI responsiveness — 2026-10-07 (`cx/perfui`)
+
+Baseline application source: `7bd6e4f9`. Only `wsp-wt/perfui` was changed. Production Vite bundles,
+local WSL Playwright Chromium, 4× CDP CPU throttle, 1470×920 CSS / DPR 2, Low graphics. Chromium uses
+**SwiftShader**, so full-scene timings include a substantial software GPU bottleneck and do not estimate
+Apple/ProMotion performance. Eight repetitions per interaction. No timing assertions were added to CI.
+
+The probe records capture-event → second rAF, an upper bound on the next paint opportunity; final probes
+also record event timestamp → second rAF, including input queue delay. These are INP-style observations,
+not official INP, actual presentation timestamps, or completion times for deferred search results.
+Raw samples, frame gaps, failures and methodology: [UI evidence](performance/ui/README.md).
+
+| Catalogue interaction | Before capture p75 ms | After capture p75 ms | After timestamp p75 ms |
+|---|---:|---:|---:|
+| Search text feedback | 1543.4 | 35.3 | 36.3 |
+| Card hover / tooltip | 1334.1 | 42.1 | 55.6 |
+| List scroll | 397.7 | 56.9 | 63.4 |
+| Symmetry key | 1296.7 | 83.6 | 99.0 |
+| Pick / cancel | 4600.4 | 74.2 | 84.5 |
+| Held-pointer entry (few discrete events, not drag FPS) | 2263.5 | 107.8 | 112.8 |
+
+[Before](performance/ui/before.json), [after final palette](performance/ui/final-v2.json).
+The latter includes the shared IntersectionObserver, deferred result filtering and scene invalidation fix;
+it precedes the last refinement that waits 350 ms after input before submitting a thumbnail draw.
+Earlier intermediate captures remain under explicit `after` / `final` names; they are not substituted for
+this table. Initial thumbnail work overlaps the interaction sequence intentionally.
+
+| Thumbnail result, measured after editor hook exists | Before | After final palette |
+|---|---:|---:|
+| Cold first 18 images | 25,630 ms | 14,274 ms |
+| Warm first 18 images, same-context page reload | 15,122 ms | 225 ms |
+| Images generated by end of interaction sequence | 168 / 168 | 31 / 168 |
+
+Warm reload retains IndexedDB but resets module caches. The after count is deliberate viewport/scroll-margin
+loading, not missing images: invisible catalogue entries are requested as they approach the viewport.
+The timing excludes scene construction and eager baseline mesh generation before the editor hook exists.
+Cold image generation still takes seconds on this software renderer; a cold-start laptop speed claim is not made.
+
+The 100-part fixture extends Selene with 72 surface-attached Thimble tanks. It checks actual stack snapping,
+100 → 101 parts on attachment, and exact restoration to 100 on undo. The baseline detail run completed
+large-craft/flight samples, then failed at an ambiguous Settings locator; its completed samples remain in
+[baseline detail diagnostics](performance/ui/before-detail-failed.json). The locator was corrected.
+
+| Large-craft / flight evidence | Before | After | Scope |
+|---|---:|---:|---|
+| 100-part symmetry capture p75 | 6794.1 ms | 107.3 ms | Complete software-rendered scenes, intermediate after |
+| 100-part undo/redo capture p75 | 1930.7 ms | 165.3 ms | Complete software-rendered scenes, intermediate after |
+| 100-part attach handler | 933.5 ms | 34.1 ms | Direct handler CPU time; final exact soot is deferred |
+| Continuous held motion | 0.99 fps | 1.05 fps | Complete software-rendered scene; GPU bottleneck persists |
+| Corrected held motion | — | 59.28 fps | Final **CPU isolation**, scene GPU drawing suppressed |
+| Final 100-part undo/redo | — | 74.4 ms | Timestamp-to-paint p75, CPU isolation |
+| Final resources panel toggle | — | 85.4 ms | Timestamp-to-paint p75, CPU isolation |
+| Final settings open/close | — | 73.0 ms | Timestamp-to-paint p75, CPU isolation |
+
+Full-scene [intermediate after](performance/ui/after-detail.json) and
+[final CPU isolation](performance/ui/final-cpu-fixed.json) must not be treated as the same workload.
+Isolation replaces only editor scene draws and flight pipeline submission with no-ops; controls, picking,
+placement, React, physics and panel updates remain live. It is a diagnostic for the assigned UI/CPU work,
+not a promised in-game FPS result. The 14-second drag stall in the first isolated run came from
+`Object3D.clone()` JSON-serializing `userData.baseMat`, including texture canvases, when creating symmetry
+ghosts. Materials now live in weak maps, with lamp/tint behavior preserved. The regression test throws if
+cloning tries to serialize a material. A separate test verifies identical batched/synchronous soot colors,
+unchanged templates and correct results when the hall recenters between batches.
+
+**React:** production profiling builds record `Profiler.actualDuration`, render work associated with a
+commit, not DOM commit duration. Eight-second settled flight captures observed maxima **8.3 ms before**,
+**4.2 ms in the full-scene after**, and **7.6 / 10.1 ms** in two isolated after runs. Most work is well below
+these maxima. The strict “no commit over 8 ms” target is therefore **not consistently established**.
+Flight already publishes telemetry at 10 Hz, shares unchanged fields and memoizes staging; navball rendering
+runs independently. We did not replace this with a new 60 Hz React subscription.
+
+**Retained fixes:** visible-only, one-at-a-time idle thumbnails; async shader preparation / PNG encoding;
+optional persistent PNG cache keyed by the hashed production thumbnail chunk; per-card subscriptions,
+shared viewport observer, CSS containment and deferred search results; cached reference Earth and exact
+unchanged-craft readouts; cached attach nodes; unchanged tint traversal avoidance; visual-only scene
+invalidation and retained shadows for resource/staging changes; exact soot applied in cancellable idle
+batches; preflight fuel/Mach advisories in a worker with stale-result rejection and an idle fallback;
+nearly opaque panel gradients without live-canvas backdrop blur; ref/rAF panel dragging with one storage
+write on release, stable pointer capture and correct combined UI/HUD scale.
+
+The only shared-render changes are additive batched-soot support and weak-map lamp/tint bookkeeping.
+Flight soot still runs synchronously through the same math. No sim physics, shader shading, art values,
+resource quantization or stage/undo semantics changed. Preview caches are bounded or limited to the catalogue;
+renderer cleanup follows the project's shared-resource disposal helper. Storage failures fall back to generation.
+
+### Reproduction
+
+```sh
+npx vite build
+npx vite preview --port 5336 --strictPort --host
+# In another terminal in this same worktree:
+node scripts/bench/ui-bench.mjs after
+WSP_PROFILE=1 npx vite build
+node scripts/bench/ui-bench.mjs after-detail http://localhost:5336 detail
+node scripts/bench/ui-bench.mjs after-cpu http://localhost:5336 cpu
+# Read-only baseline overlay, with identical profiling instrumentation:
+WSP_UI_BASELINE=7bd6e4f9 WSP_PROFILE=1 npx vite build
+node scripts/bench/ui-bench.mjs before-detail http://localhost:5336 detail
+# Restore ordinary production when done:
+npm run build
+```
+
+`WSP_UI_BASELINE` overlays the ten original UI files from git without changing the checkout. Current shared
+soot/lamp helpers remain; synchronous soot math is unchanged. `scripts/bench/ui-paired.sh` runs the same
+catalogue/detail probes with Windows Node and Chrome CDP 9333; invoke it through
+`flock -w 60 /tmp/wsp-gpu.lock bash scripts/bench/ui-paired.sh` while the production preview is running.
+The attempted hardware run stopped before scene entry because its renderer did not respond to CDP
+navigation/evaluation. Only the probe-owned tab was closed, and the lock was released; no hardware result
+is claimed. The runner does not modify the shared Windows driver directory.
+
+**Limits:** not every target is met. Full flight/100-part GPU FPS is unverified on Apple hardware and remains
+poor under SwiftShader. Cold thumbnail/scene work still produces long tasks. Timestamp-inclusive symmetry
+in the isolated cold sequence reached 307 ms despite 70 ms after capture. Menu hover varied from 29 to
+328 ms across cold backdrop runs. Maneuver-node dragging, Tracking Station label updates and actual 120 Hz
+ProMotion presentation were not separately benchmarked. These results support the scoped fixes and retain
+unfavorable samples rather than claiming universal sub-100 ms interaction or 60/120 fps.
+
+
+**Final validation:** lint (including architecture layering), `npx tsc --noEmit`, ordinary `npm run build`,
+and the full `npx vitest run --maxWorkers=2` suite pass: 113 files / 1,332 tests. The final
+`git merge main` was already up to date; the complete test suite passed again afterward.
+>>>>>>> main
