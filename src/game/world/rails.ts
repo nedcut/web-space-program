@@ -135,7 +135,7 @@ export function advanceRails(this: World, internals: WorldInternals, target: num
         this.onEnteredSoi(wv);
         wv.orbit = stateToElements(this.universe.body(wv.body).gm, wv.body, pos, vel, ev.time);
         if (isActive) {
-          this.message(`Entered ${this.universe.body(wv.body).name}'s sphere of influence`);
+          this.message(`Entering ${this.universe.body(wv.body).name}'s sphere of influence`);
           target = ev.time;
         }
         const saveUt = this.ut;

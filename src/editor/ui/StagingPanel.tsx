@@ -1,5 +1,6 @@
+import { preflightChecks } from '../checks';
 import { Panel, Button } from '../../ui/components';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { EditorSession, SessionView } from '../session';
 import { CATALOG } from '../session';
 import { getThumbnail } from '../scene/thumbnails';
@@ -14,6 +15,7 @@ export function StagingPanel({ session, view }: { session: EditorSession; view: 
   useThumbnails();
   const [dragOver, setDragOver] = useState<number | 'new' | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
+  const checks = useMemo(() => preflightChecks(view.craft, CATALOG, view.stageStats.get(0)), [view.craft, view.stageStats]);
   const byUid = new Map(view.craft.parts.map((p) => [p.uid, p]));
   const stages = [...view.stages].reverse();
 
@@ -59,6 +61,12 @@ export function StagingPanel({ session, view }: { session: EditorSession; view: 
           </Button>
         </div>
       </div>
+      <details className="preflight-checks" open={checks.length > 0}>
+        <summary title="Advisory checks; you can still launch">Pre-flight · {checks.length ? `${checks.length} to review` : 'ready'}</summary>
+        <div className="preflight-list">{checks.map(c => <div key={c.id}>
+          <span>{c.text}</span>{c.uids.length > 0 && <button className="btn small" title="Highlight these parts in the craft" onClick={() => session.select(c.uids)}>Show me</button>}
+        </div>)}</div>
+      </details>
       <div className="vab-stage-list">
         {dragging !== null && (
           <div

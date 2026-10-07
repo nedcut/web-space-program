@@ -1,6 +1,5 @@
 import { PhotoCamera } from '../../render/core/PhotoCamera';
 import * as THREE from 'three';
-import { detachRenderer, noteDfgLut, releaseSharedTextures } from '../../render/releaseRenderer';
 import { game } from '../../game/store';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RenderPipeline, getQuality, type QualityId } from '../../render/core';
@@ -271,7 +270,7 @@ export class HubScene {
     sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 10; sc.far = 3000;
     sc.updateProjectionMatrix();
 
-    this.planets.update({ t, origin, camera: this.camera, sunPos, dt, focusBody: 'earth', viewportHeight: this.pipeline.drawingBufferHeight });
+    this.planets.update({ t, origin, camera: this.camera, sunPos, dt, focusBody: 'earth', viewportHeight: this.pipeline.lodViewportHeight });
     const camSim = add(origin, { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z });
     const eclipse = this.planets.sunVisibility?.(camSim, sunPos) ?? 1;
     const tint = this.planets.sunTint?.(camSim, sunPos) ?? [1, 1, 1];
@@ -308,8 +307,7 @@ export class HubScene {
   }
 
   dispose() {
-    noteDfgLut(this.pipeline.renderer, this.scene);
-    detachRenderer(this.scene);
+    this.pipeline.detach(this.scene);
     this.photo.dispose();
     cancelAnimationFrame(this.raf);
     this.disposers.forEach((d) => d());
@@ -318,8 +316,6 @@ export class HubScene {
     this.site.dispose();
     this.planets.dispose();
     this.pipeline.dispose();
-    releaseSharedTextures();
-    this.pipeline.renderer.forceContextLoss();
     this.pipeline.renderer.domElement.remove();
   }
 }

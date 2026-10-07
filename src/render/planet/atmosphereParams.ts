@@ -137,8 +137,28 @@ export const TRANSMITTANCE_LUT_SIZE = { width: 256, height: 64 };
  *   u = mu * 0.5 + 0.5,  v = sqrt((r − R) / (Ra − R))
  * Computed on the CPU once per body (≈16k texels × 48 steps) → HalfFloat texture.
  */
+/** LUT texels per atmosphere (identical inputs → identical table): scene reloads skip the ~30 ms rebuild. */
+const lutData = new Map<string, Uint16Array>();
+
 export function buildTransmittanceLUT(p: AtmosphereParams): THREE.DataTexture {
   const { width: W, height: H } = TRANSMITTANCE_LUT_SIZE;
+  const key = JSON.stringify(p);
+  let data = lutData.get(key);
+  if (!data) {
+    data = computeTransmittance(p, W, H);
+    lutData.set(key, data);
+  }
+  const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.HalfFloatType);
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function computeTransmittance(p: AtmosphereParams, W: number, H: number): Uint16Array {
   const data = new Uint16Array(W * H * 4);
   const R = p.planetRadius;
   const Ra = p.atmosphereRadius;
@@ -186,12 +206,5 @@ export function buildTransmittanceLUT(p: AtmosphereParams): THREE.DataTexture {
       data[k + 3] = THREE.DataUtils.toHalfFloat(1);
     }
   }
-  const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.HalfFloatType);
-  tex.magFilter = THREE.LinearFilter;
-  tex.minFilter = THREE.LinearFilter;
-  tex.wrapS = THREE.ClampToEdgeWrapping;
-  tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.colorSpace = THREE.NoColorSpace;
-  tex.needsUpdate = true;
-  return tex;
+  return data;
 }

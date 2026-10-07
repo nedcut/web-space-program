@@ -1,0 +1,5 @@
+| Scenario | fps before → after | p50 before → after | p99 before → after | hitch before → after | gpu before → after | calls before → after | cpu before → after | sim before → after | render before → after | planets before → after | telemetry before → after | hud before → after | script before → after | work before → after | lt before → after | gc before → after | gcMax before → after | heap before → after | layout before → after | react before → after |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| orbit | 40.24 → 42.96 | 25 → 16.7 | 33.4 → 33.4 | 245 → 215 | 6.44 → 4.38 | 525 → 429 | 6.15 → 4.99 | 0.31 → 0.29 | 4.62 → 3.67 | 0.57 → 0.43 | 0.09 → 0.08 | 0.13 → 0.11 | 6.02 → 5.1 | 24.68 → 23.31 | 0 → 0 | 1.63 → 1.79 | 2.15 → 3.62 | 52.89 → 44.81 | 4.24 → 4.27 | 345.42 → 349.88 |
+| pad | 38.51 → 46.04 | 25 → 16.7 | 33.4 → 33.4 | 268.5 → 178 | 7.37 → 4.71 | 888 → 621 | 7.43 → 5.31 | 0.15 → 0.13 | 5.71 → 3.93 | 1.04 → 0.74 | 0.08 → 0.07 | 0.12 → 0.1 | 7.75 → 5.36 | 30.69 → 25.86 | 0 → 0 | 1.34 → 1.36 | 1.67 → 2.55 | 61.15 → 52.1 | 7.83 → 8.06 | 323.67 → 327.59 |
+

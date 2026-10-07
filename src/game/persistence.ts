@@ -31,6 +31,7 @@ interface SavedVessel {
 }
 
 export interface SavedWorld {
+  seenTips?: string[];
   preciseGravity?: boolean;
   showLagrangePoints?: boolean;
   activatedAsteroids?: string[];
@@ -79,6 +80,7 @@ export function serializeWorld(world: World): SavedWorld {
   return {
     ...(world.preciseGravity ? { preciseGravity: true } : {}),
     ...(world.showLagrangePoints ? { showLagrangePoints: true } : {}),
+    seenTips: [...world.seenTips],
     flightlog: structuredClone(world.flightlog),
     latestReportId: world.latestReportId,
     commsSettings: { ...world.commsSettings },
@@ -105,6 +107,7 @@ export function serializeWorld(world: World): SavedWorld {
 export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>, universe?: Universe): World {
   if (data.version !== SAVE_VERSION) throw new Error(`Unsupported save version ${data.version}`);
   const world = new World(universe ?? new Universe(data.preset), catalog, data.ut, data.mode ?? 'sandbox');
+  world.seenTips = (data.seenTips ?? []).filter(id => typeof id === 'string');
   for (const id of data.activatedAsteroids ?? []) world.universe.activateAsteroid(id);
   world.preciseGravity = data.preciseGravity === true;
   world.showLagrangePoints = data.showLagrangePoints === true;

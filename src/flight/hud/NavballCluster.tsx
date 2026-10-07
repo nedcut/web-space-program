@@ -132,7 +132,7 @@ function BurnInfo({ burn }: { burn: NonNullable<Telemetry['maneuverBurn']> }) {
   // Start the burn half its duration before the node: count down to that moment too.
   const startIn = Number.isFinite(burn.burnTime) ? burn.timeToNode - burn.burnTime / 2 : Number.NaN;
   return (
-    <div className="nb-burn" aria-label="Maneuver burn">
+    <div className="nb-burn" aria-label="Maneuver burn" title="Remaining velocity change, estimated full-throttle burn duration, and time to the maneuver node">
       <div className="nb-burn-row">
         <span className="label">Δv</span>
         <span className="mono nb-burn-dv">{burn.dvRemaining.toFixed(1)} m/s</span>

@@ -4,6 +4,7 @@ import { STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { DEFAULT_START_UT } from '../src/game/store';
 import { Universe } from '../src/game/universe';
 import { stepWarp, warpRefusal, type WarpContext, type WarpState } from '../src/game/timewarp';
+import { placeInCircularOrbit } from '../src/game/scenarios';
 import { HOLD_DOWN_MAX, PHYSICS_DT, World, type WorldVessel } from '../src/game/world';
 import { bodyToWorld, neutralInput } from '../src/sim/vessel';
 import { qConj, qRotate } from '../src/util/quat';
@@ -131,7 +132,15 @@ describe('time warp refusals', () => {
     world.tick(PHYSICS_DT, neutralInput({ throttle: 1, stage: true }));
     for (let i = 0; i < 5; i++) world.changeWarp(1);
     expect(world.warp.mode).toBe('physics');
-    expect(world.messages.filter(m => /warp/i.test(m.text)).map(m => m.text)).toEqual(['Physics warp 2×: engines are firing', 'Physics warp is at its 4× maximum (engines are firing)']);
+    expect(world.messages.filter(m => /warp/i.test(m.text)).map(m => m.text)).toEqual([expect.stringMatching(/thrusting/)]);
+  });
+  it('World.changeWarp names the altitude needed in a low orbit', () => {
+    const world = mkWorld();
+    const wv = world.launch(craft('stock-kestrel'));
+    placeInCircularOrbit(world, wv, 'earth', 200_000);
+    for (let i = 0; i < 9; i++) world.changeWarp(1);
+    expect(world.warp).toEqual({ mode: 'rails', index: 6 });
+    expect(world.messages.map(m => m.text)).toContain('Cannot warp to 100k× below 389 km altitude');
   });
 });
 

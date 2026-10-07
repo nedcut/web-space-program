@@ -1,3 +1,4 @@
+import { enqueueNotification, whyCantWarp } from './cues';
 import { NumericalPrediction } from '../sim/orbit/numericalPrediction';
 import { LAGRANGE_PAIRS, lagrangePoints } from '../sim/orbit/lagrange';
 import { advancePackedHazards, advanceCrewDose } from './world/hazards';
@@ -188,6 +189,8 @@ export class World {
   ut: number;
   warp: WarpState = { mode: 'rails', index: 0 };
   nodes: ManeuverNode[] = [];
+  seenTips: string[] = [];
+  private recentMessages = new Map<string, number>();
   messages: WorldMessage[] = [];
   /** Navigation target: a vessel id or a body id (null = none). */
   targetId: string | null = null;
@@ -243,10 +246,10 @@ export class World {
   }
 
   message(text: string, level: WorldMessage['level'] = 'info', seconds = 4) {
-    // A repeat of a message still on screen (e.g. a held warp key) extends it instead of stacking copies.
-    const same = this.messages.find(m => m.text === text && m.level === level);
-    if (same) { same.expires = Math.max(same.expires, performance.now() + seconds * 1000); return; }
-    this.messages.push({ id: ++this.msgId, text, level, expires: performance.now() + seconds * 1000 });
+    const now = performance.now();
+    const next = enqueueNotification(this.messages, this.recentMessages, { id: ++this.msgId, text, level, expires: now + seconds * 1000 }, now);
+    this.messages = next.messages;
+    this.recentMessages = next.history;
   }
 
   /** Lowest point of the vessel along its own -Y axis, measured from the COM (positive number). */
@@ -468,9 +471,13 @@ export class World {
   changeWarp(delta: number) {
     const ctx = this.warpContext();
     const next = stepWarp(this.warp, delta, ctx);
-    // Say why a warp-up did not happen (or became physics warp) instead of silently ignoring the key.
-    const why = delta > 0 ? warpRefusal(this.warp, next, ctx) : null;
-    if (why) this.message(why.text, why.level, 2.5);
+    if (delta > 0) {
+      // Say why a warp-up did not happen: thrust/atmosphere (cues), else the altitude the next rate needs or the maximum.
+      const reason = whyCantWarp(ctx);
+      const why = reason ? null : warpRefusal(this.warp, next, ctx);
+      if (reason) this.message(reason, 'warn');
+      else if (why) this.message(why.text, why.level, 2.5);
+    }
     this.warp = next;
   }
 
@@ -761,7 +768,8 @@ export class World {
     if (e.type === 'hazardWarning') this.message(e.message, 'warn', 6);
     if (e.type === 'linkBroken') this.message('Structural brace broke!', 'bad', 4);
     if (e.type === 'structuralFailure') this.message('Structural failure — attachment broke!', 'bad', 4);
-    if (e.type === 'flameout') this.message('Flameout!', 'warn', 2);
+    if (e.type === 'stage') this.message(`Stage ${e.stage} activated`);
+    if (e.type === 'flameout') this.message('Engine flameout — check propellant and intake air', 'warn', 4);
     if (e.type === 'docked' || e.type === 'undocked') this.approachCache = null;
     if (e.type === 'partDestroyed') {
       const why = e.reason === 'pressure' ? 'collapsed under ambient pressure' : e.reason === 'overheat' ? 'overheated and exploded' : 'was destroyed on impact';

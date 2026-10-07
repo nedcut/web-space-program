@@ -31,11 +31,14 @@ export function withAerialPerspective<M extends THREE.Material>(mat: M, bodyId: 
         `{
           vec3 toCamA = cameraPosition - vAtmoWorld;
           float dA = max(length(toCamA), 1e-3);
-          gl_FragColor.rgb = applyAerialPerspective(gl_FragColor.rgb, -toCamA / dA, dA, ${steps});
+          // The per-segment integration is exact in a homogeneous medium, and over the site's short, nearly level
+          // rays the air barely changes: one or two segments match the full march while costing a fraction of it.
+          int stepsA = dA < 4000.0 ? 1 : dA < 20000.0 ? 2 : ${steps};
+          gl_FragColor.rgb = applyAerialPerspective(gl_FragColor.rgb, -toCamA / dA, dA, stepsA);
         }
         #include <tonemapping_fragment>`,
       );
   };
-  mat.customProgramCacheKey = () => `aerial:${bodyId}:${steps}`;
+  mat.customProgramCacheKey = () => `aerial2:${bodyId}:${steps}`;
   return mat;
 }

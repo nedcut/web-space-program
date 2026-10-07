@@ -50,7 +50,7 @@ export function TimeControl({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
           })}
         </div>
         <button type="button" className="tc-btn" onClick={() => cb.onWarp(1)} title={`Faster time warp (${bindingLabel('warpUp')})`}>▶</button>
-        <div className={`tc-rate mono ${physics ? 'physics' : ''}`}>{t.warpLabel}</div>
+        <div className={`tc-rate mono ${physics ? 'physics' : ''}`} title="Current time multiplier">{t.warpLabel}</div>
         <WarpToControl feel={t.feel} onWarpTo={cb.onWarpTo} onCancel={cb.onCancelWarpTo} />
       </div>
       <button type="button" className="tc-clock" onClick={swap} title={`${primary === 'met' ? `Universal time: ${ut}` : `Mission time: ${met}`} · click to swap`}>

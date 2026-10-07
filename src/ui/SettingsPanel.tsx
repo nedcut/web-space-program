@@ -92,7 +92,7 @@ export function SettingsPanel({ onClose, world }: { onClose: () => void; world?:
           {check('commsOverlay', 'Show comms links in map view')}
           {check('showFps', 'Show FPS / draw calls / triangles')}
           {check('launchCountdown', 'Launch countdown (3-2-1 before clamp release)')}
-          {check('flightHints', 'First-orbit flight hints')}
+          {check('flightHints', 'Contextual flight tips (once per save)')}
         </>}
         {tab === 'Accessibility' && <>{range('uiScale', 'UI scale', 0.8, 1.3, 0.05)}{check('highContrast', 'High-contrast HUD')}{check('reduceMotion', 'Reduce motion (camera effects / flicker)')}{range('cameraShake', 'Camera shake', 0, 1.5, 0.05)}{check('colourBlind', 'Colour-blind-friendly navball markers')}</>}
       </div>

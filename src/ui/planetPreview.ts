@@ -60,7 +60,7 @@ export function mountPlanetPreview(canvas: HTMLCanvasElement, id: string, preset
       const angle = cinematic ? elapsed * 0.008 : elapsed * 0.09;
       planet.update({ camera, origin: { x: 0, y: 0, z: 0 }, bodyPosition: position,
         bodyRotation: { x: 0, y: 0, z: Math.sin(angle / 2), w: Math.cos(angle / 2) },
-        sunPosition: { x: r * (cinematic ? -1000 : 1000), y: r * -700, z: r * 450 }, dt, viewportHeight: pipeline.drawingBufferHeight });
+        sunPosition: { x: r * (cinematic ? -1000 : 1000), y: r * -700, z: r * 450 }, dt, viewportHeight: pipeline.lodViewportHeight });
       planet.uniforms.uSunColor.value.set(4.6, 4.05, 3.15);
     });
     stars.update(camera, pipeline.pixelRatio);
@@ -77,9 +77,9 @@ export function mountPlanetPreview(canvas: HTMLCanvasElement, id: string, preset
     resize.disconnect();
     visibility.disconnect();
     canvas.removeEventListener('webglcontextlost', lost);
+    pipeline.detach(scene);
     planets.forEach(p => p.dispose());
     stars.dispose();
     pipeline.dispose();
-    pipeline.renderer.forceContextLoss();
   };
 }

@@ -1,0 +1,6 @@
+[
+ {"name":"no gpu timer","on":"(()=>{const p=__flight.pipeline;p._gt=p.gpuTimer;p.gpuTimer=null})()","off":"(()=>{const p=__flight.pipeline;p.gpuTimer=p._gt})()"},
+ {"name":"no render submit","on":"(()=>{const p=__flight.pipeline;p._r=p.render;p.render=()=>{}})()","off":"(()=>{const p=__flight.pipeline;p.render=p._r})()"},
+ {"name":"freeze planets update","on":"(()=>{const f=__flight;f._pu=f.planets.update;f.planets.update=()=>{}})()","off":"(()=>{const f=__flight;f.planets.update=f._pu})()"},
+ {"name":"render twice","on":"(()=>{const p=__flight.pipeline;p._r=p.render;p.render=function(s,c){p._r.call(p,s,c);p._r.call(p,s,c)}})()","off":"(()=>{const p=__flight.pipeline;p.render=p._r})()"}
+]

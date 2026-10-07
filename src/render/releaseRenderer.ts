@@ -75,6 +75,14 @@ function detach(objs: Set<Dispatcher>) {
 export function releaseRenderer(renderer: THREE.WebGLRenderer, root?: THREE.Object3D | null): void {
   noteDfgLut(renderer, root);
   if (root) detachRenderer(root);
+  finishRenderer(renderer);
+}
+
+/**
+ * Last step of a teardown whose scenes were already detached (`noteDfgLut` + `detachRenderer` before their
+ * contents were disposed): dispose the renderer, drop the shared DFG LUT and free the context now.
+ */
+export function finishRenderer(renderer: THREE.WebGLRenderer): void {
   renderer.dispose();
   releaseSharedTextures();
   renderer.forceContextLoss();

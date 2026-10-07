@@ -1,3 +1,5 @@
+import { stageExplanation } from './cues';
+import { actionAvailable, partActions } from '../sim/vessel/actions';
 import { CondensationFx } from '../render/fx/CondensationFx';
 import { flightRumble } from '../audio/design';
 import { FlightFx, isBurstEvent } from '../render/fx/FlightFx';
@@ -16,6 +18,7 @@ import { Universe } from '../game/universe';
 import { PHYSICS_DT, World, type WorldVessel } from '../game/world';
 import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
 import { RenderPipeline, getQuality, type QualityId } from '../render/core';
+import { compileInSlices } from '../render/core/compileInSlices';
 import type { ExtraOrbit } from '../render/map/MapView';
 import { MapView } from '../render/map/MapView';
 import { FlightMap } from './map/FlightMap';
@@ -38,7 +41,6 @@ import type { CraftDef } from '../sim/vessel/types';
 import { getTutorial } from '../tutorial/runtime';
 import { formatDistance, formatDuration, formatSpeed } from '../ui/format';
 import { frameProfiler as prof } from '../util/frameProfiler';
-import { detachRenderer, noteDfgLut, releaseSharedTextures } from '../render/releaseRenderer';
 import { shareUnchanged, snapshotEqual } from '../util/snapshotEqual';
 import { bindingLabel } from '../input/bindings';
 import { cross, dot, length, normalize, sub, type Vec3 } from '../util/vec3';
@@ -107,8 +109,8 @@ export class FlightController {
   sas: SasMode = 'off';
   /** Warp-to targets and the rails warp ramp. */
   readonly warpDriver = new WarpDriver();
-  /** First-orbit coaching hints (remembered per browser profile). */
-  readonly hints = new HintTracker();
+  /** Contextual coaching hints (remembered in the world save). */
+  readonly hints: HintTracker;
   /** Stage events on the active vessel (the HUD flashes when this changes). */
   stagedCount = 0;
   sasOn = false;
@@ -205,6 +207,7 @@ export class FlightController {
     }
     if (craft && !this.network) this.world.launch(craft);
     const universe = this.world.universe;
+    this.hints = new HintTracker(new Set(this.world.seenTips as import('./hints').HintId[]), seen => { this.world.seenTips = [...seen]; });
     this.input = new FlightInput();
 
     this.pipeline = new RenderPipeline({ quality: getQuality(quality), toneMapping: 'aces', exposure: 1 });
@@ -381,7 +384,7 @@ export class FlightController {
     if (this.network || getTutorial() || game.get().scenarioActive) return;
     try {
       saveWorldToStorage(slot, this.world);
-      if (slot === 'quicksave') this.world.message('Quicksaved (F9 to load)');
+      if (slot === 'quicksave') this.world.message(`Quicksaved (${bindingLabel('quickload')} to load)`);
     } catch (e) {
       this.world.message(`Save failed: ${(e as Error).message}`, 'bad');
     }
@@ -403,7 +406,7 @@ export class FlightController {
   cancelAssist(msg = 'Assist cancelled') { return assist.cancelAssist.call(this, this.systems, msg); }
 
   toggleSas() {
-    if (!this.world.canControl()) return;
+    if (!this.world.canControl()) return this.world.message('SAS command unavailable — check control source and probe signal', 'warn');
     this.sasOn = !this.sasOn;
     if (this.sasOn && this.sas === 'off') this.sas = 'stabilityAssist';
     if (this.hasBindings('sas')) this.fireGroup('sas', this.sasOn);
@@ -422,7 +425,12 @@ export class FlightController {
     if (!this.world.canControl() || !this.world.active || this.world.active.state.eva) return;
     this.pendingCommands.push(...commands);
   }
-  partAction(uid: number, action: PartActionId, experiment?: string) { this.command({ kind: 'part', uid, action, ...(experiment ? { experiment } : {}) }); }
+  partAction(uid: number, action: PartActionId, experiment?: string) {
+    const part = this.world.active?.state.cache.byUid.get(uid);
+    if (!this.world.canControl()) return this.world.message('Part action unavailable — no control source or probe signal', 'warn');
+    if (!part || !partActions(part.def).includes(action) || !actionAvailable(part, action)) return this.world.message('Part action unavailable — already activated, expended or unsupported', 'warn');
+    this.command({ kind: 'part', uid, action, ...(experiment ? { experiment } : {}) });
+  }
   setTweaks(uid: number, tweaks: FlightTweaks, symmetric = true) { this.command({ kind: 'tweak', uid, tweaks, symmetric }); }
   private hasBindings(group: ActionGroupId) {
     const v = this.world.active?.state;
@@ -566,6 +574,7 @@ export class FlightController {
   goEva(astronautId?: string) {
     if (this.paused) return;
     if (this.network) return this.network.action('eva', { astronautId });
+    if (this.world.active?.state.eva) return this.world.message('Already on EVA — approach the hatch to board', 'info');
     if (this.world.goEva(astronautId)) {
       this.cancelAssist();
       this.stagePending = false;
@@ -612,7 +621,6 @@ export class FlightController {
   }
 
   stage() {
-    if (!this.world.canControl()) return;
     this.requestStage();
   }
 
@@ -639,10 +647,14 @@ export class FlightController {
   /** Stage now, or start the optional launch countdown when the first stage would release the clamps. */
   private requestStage() {
     const wv = this.world.active;
+    if (!wv) return this.world.message('No active vessel to stage', 'warn');
     if (this.stageLocked) {
-      this.world.message(`Staging is locked · ${bindingLabel('stageLock')} to unlock`, 'warn', 2);
+      this.world.message(`Staging locked (${bindingLabel('stageLock')} to unlock)`, 'warn', 3);
       return;
     }
+    const explanation = stageExplanation(wv.state, false, this.world.canControl());
+    if (explanation) this.world.message(explanation, 'warn');
+    if (!this.world.canControl() || wv.state.eva || wv.state.nextStage < 0) return;
     if (this.countdown !== null) {
       // Stage again during the count: go now.
       this.countdown = null;
@@ -850,9 +862,11 @@ export class FlightController {
       this.map.setWarmup(true);
       const map = r.compileAsync(this.map.scene, this.map.camera);
       this.map.setWarmup(false);
-      r.setRenderTarget(this.pipeline.composer.readBuffer);
-      const flight = r.compileAsync(this.scene, this.cam.camera);
-      r.setRenderTarget(null);
+      // The flight scene has ~90 programs: build them a few ms per frame so the loading screen keeps animating.
+      const flight = compileInSlices(r, [this.scene], this.cam.camera, this.scene, {
+        renderTarget: this.pipeline.composer.readBuffer,
+        cancelled: () => this.warmup !== 'compiling',
+      });
       Promise.all([map, flight]).then(finish, finish);
       // Never hold the loading screen on a driver that does not report completion.
       this.warmupTimer = window.setTimeout(finish, 15000);
@@ -988,7 +1002,7 @@ export class FlightController {
     t0 = prof.now();
     if (wv.body === 'earth') this.site.update(origin, t);
     else this.site.hide();
-    this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.renderer.domElement.height });
+    this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.lodViewportHeight });
     const eclipse = this.planets.sunVisibility?.(origin, sunPos) ?? 1;
     const tint = this.planets.sunTint?.(origin, sunPos) ?? [1, 1, 1];
     const tmax = Math.max(1e-6, tint[0], tint[1], tint[2]);
@@ -1196,10 +1210,9 @@ export class FlightController {
   private groundTelemetry(wv: WorldVessel): Pick<Telemetry, 'gear' | 'brakes' | 'intakeAir'> { return telemetry.groundTelemetry.call(this, this.systems, wv); }
 
   dispose() {
-    noteDfgLut(this.pipeline.renderer, this.scene);
-    detachRenderer(this.scene);
-    detachRenderer(this.map.scene);
+    this.pipeline.detach(this.scene, this.map.scene);
     window.clearTimeout(this.warmupTimer);
+    this.warmup = 'done'; // stops a sliced shader warm-up still in progress
     this.photo.dispose();
     this.network?.close();
     cancelAnimationFrame(this.raf);
@@ -1220,8 +1233,6 @@ export class FlightController {
     this.labelHost.remove();
     this.fadeEl?.remove();
     this.pipeline.dispose();
-    releaseSharedTextures();
-    this.pipeline.renderer.forceContextLoss();
     this.pipeline.renderer.domElement.remove();
   }
 }
