@@ -1078,3 +1078,20 @@ samples include transfer/readout time and thus exceed the nominal recording peri
 retained in JSON); their interval summaries are diagnostic, not paired 120-second traces.
 The editor CPU profile, transition JSON, pacing JSON and compressed Chrome traces are under
 `docs/performance/perfcpu/`. Unzip `.trace.json.gz` before importing into Chrome Performance.
+
+Local 4× diagnostic CPU milliseconds (draw calls disabled, not rendered performance):
+
+| Scene | Before | After |
+|---|---:|---:|
+| Pad | 55.73 | 25.13 |
+| Ascent | 69.51 | 40.34 |
+| Orbit | 30.71 | 22.39 |
+| Warp 100,000× | 22.15 | 13.68 |
+| Map | 22.39 | 9.86 |
+| Moon descent | 25.83 | 28.23 |
+
+These highly amplified software-driver numbers vary substantially with host scheduling.
+They do not support a claim of a corresponding hardware speedup. The after ascent still
+recorded 63 long tasks over 12.55 seconds, and its maximum traced GC pause was 22.35 ms.
+The requested ≤4 ms at 4× is not demonstrated. Raw diagnostic rAF/GC data is retained for
+repeatability, but the hardware trace-free table is the flight pacing comparison.
