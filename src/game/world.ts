@@ -19,7 +19,7 @@ import { stepEva } from '../sim/vessel/eva';
 import { advanceISRU, isruMachinery } from '../sim/vessel/isru';
 import type { ControlInput, PartState, VesselCommand, VesselEvent, VesselState } from '../sim/vessel/runtime';
 import type { CraftDef, PartDef } from '../sim/vessel/types';
-import type { Quat } from '../util/quat';
+import { qRotate, type Quat } from '../util/quat';
 import { add, length, scale, sub, type Vec3 } from '../util/vec3';
 import { worldNetwork } from './comms';
 import { advanceTransmissions, evaluateProgression, recoverScience } from './science';
@@ -57,13 +57,15 @@ export interface WorldVessel {
   fixed?: { pos: Vec3; orient: Quat };
   /**
    * Prelaunch only: the launch stage has fired and the hold-down clamps keep the vessel at `fixed` while its
-   * engines spool up (seconds held, thrust at the previous step). See {@link HOLD_DOWN_MAX}.
+   * engines spool up (seconds held, thrust at the previous step, build-frame COM at the last pin). See
+   * {@link HOLD_DOWN_MAX}.
    */
-  holdDown?: { time: number; thrust: number };
+  holdDown?: { time: number; thrust: number; com: Vec3 };
 }
 
 /** Longest the hold-down clamps keep a vessel whose engines have not reached liftoff thrust, s. */
 export const HOLD_DOWN_MAX = 3;
+const startHoldDown = (wv: WorldVessel) => ({ time: 0, thrust: 0, com: { ...wv.state.com } });
 
 export interface WorldMessage {
   id: number;
@@ -348,7 +350,7 @@ export class World {
       if (wv.mode === 'rails' && wv.orbit) this.predictRailsEvent(wv);
       if ((wv.mode === 'landedRails' || wv.mode === 'prelaunch') && wv.fixed) this.syncFixed(wv, this.ut);
       // Saved mid hold-down (engines already lit on the pad): resume holding rather than freezing them.
-      if (wv.mode === 'prelaunch' && wv.state.parts.some(p => p.engine?.ignited)) wv.holdDown = { time: 0, thrust: 0 };
+      if (wv.mode === 'prelaunch' && wv.state.parts.some(p => p.engine?.ignited)) wv.holdDown = startHoldDown(wv);
     }
     this.trajectoryCache = null;
     this.approachCache = null;
@@ -668,7 +670,7 @@ export class World {
         }
         // Staging on the pad starts the hold-down: the vessel is simulated (engines ignite and spool) but pinned
         // to the pad until `releaseHoldDown` lets go, so it never sags onto the pad or hops at release.
-        if (isActive && vesselInput.stage && !wv.holdDown) wv.holdDown = { time: 0, thrust: 0 };
+        if (isActive && vesselInput.stage && !wv.holdDown) wv.holdDown = startHoldDown(wv);
         if (wv.holdDown) this.syncFixed(wv, t);
         else {
           advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, PHYSICS_DT);
@@ -777,6 +779,10 @@ export class World {
     const burning = wv.state.parts.some(p => p.engine?.ignited);
     const settled = hold.time > 0.3 && thrust <= hold.thrust * 1.002;
     hold.thrust = thrust;
+    // The clamps hold the structure, not the centre of mass: follow the COM as tanks drain or parts drop.
+    const fixed = wv.fixed!, com = wv.state.com;
+    fixed.pos = add(fixed.pos, qRotate(fixed.orient, sub(com, hold.com)));
+    hold.com = { ...com };
     if (thrust >= weight || !burning || ctrl.throttle <= 0 && thrust <= 0 || settled || hold.time >= HOLD_DOWN_MAX - 1e-9) {
       // Leave the vessel exactly where the clamps held it, moving with the pad.
       this.syncFixed(wv, t);
@@ -791,7 +797,7 @@ export class World {
   stageActive() {
     const wv = this.active;
     if (!wv || !this.canControl(wv.state) || wv.state.eva) return;
-    if (wv.mode === 'prelaunch') wv.holdDown ??= { time: 0, thrust: 0 };
+    if (wv.mode === 'prelaunch') wv.holdDown ??= startHoldDown(wv);
     else if (wv.mode !== 'physics') this.unpack(wv);
     const res = activateNextStage(wv.state);
     for (const nv of res.newVessels) this.vessels.set(nv.id, { state: nv, mode: 'physics', body: wv.body });
