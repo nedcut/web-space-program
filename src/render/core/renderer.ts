@@ -1,11 +1,10 @@
 import { PhotoEffectsPass } from './PhotoEffectsPass';
 import { UpscalePass } from './UpscalePass';
+import { FusedBloomPass, ToneMapPass } from './fusedBloom';
 import { AdaptiveQuality } from './adaptiveQuality';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
 import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
@@ -24,7 +23,7 @@ export interface RenderPipelineOptions {
 
 /**
  * HDR render pipeline:
- *   scene → HalfFloat RT (optional MSAA) → UnrealBloom → OutputPass (tonemap + sRGB) → SMAA/FXAA (optional)
+ *   scene → HalfFloat RT (optional MSAA) → bloom mips → tone map (+ bloom, sRGB) → 8-bit → SMAA/FXAA (optional)
  *   → edge-adaptive upscale to device resolution (when the internal resolution is below it)
  * Everything before the upscale runs at the internal resolution (device pixels × Retina scale × render scale ×
  * adaptive scale); the canvas keeps device resolution, so the image is reconstructed by `UpscalePass` rather than
@@ -35,7 +34,7 @@ export class RenderPipeline {
   readonly renderer: THREE.WebGLRenderer;
   composer!: EffectComposer;
   private renderPass!: RenderPass;
-  private bloomPass?: UnrealBloomPass;
+  private bloomPass?: FusedBloomPass;
   private fxaaPass?: FXAAPass;
   private smaaPass?: SMAAPass;
   private upscalePass!: UpscalePass;
@@ -145,10 +144,12 @@ export class RenderPipeline {
     composer.addPass(new OnHdr(this.renderPass, hdr));
     this.bloomPass = undefined;
     if (q.bloom.enabled) {
-      this.bloomPass = new UnrealBloomPass(new THREE.Vector2(this.width, this.height), q.bloom.strength, q.bloom.radius, q.bloom.threshold);
+      this.bloomPass = new FusedBloomPass(new THREE.Vector2(this.width, this.height), q.bloom.strength, q.bloom.radius, q.bloom.threshold);
       composer.addPass(new OnHdr(this.bloomPass, hdr));
     }
-    composer.addPass(new OnHdr(new OutputPass(), hdr));
+    const toneMap = new ToneMapPass();
+    toneMap.bloom = this.bloomPass ?? null;
+    composer.addPass(new OnHdr(toneMap, hdr));
     this.fxaaPass = undefined;
     this.smaaPass = undefined;
     if (q.aa === 'fxaa') {
@@ -319,6 +320,7 @@ class OnHdr extends Pass {
   }
   setSize(width: number, height: number): void { this.inner.setSize(width, height); }
   render(renderer: THREE.WebGLRenderer, writeBuffer: THREE.WebGLRenderTarget, _readBuffer: THREE.WebGLRenderTarget, deltaTime: number, maskActive: boolean): void {
+    if (!this.inner.enabled && !this.needsSwap) return; // e.g. bloom toggled off at runtime
     this.inner.renderToScreen = this.renderToScreen;
     this.inner.render(renderer, writeBuffer, this.hdr, deltaTime, maskActive);
   }

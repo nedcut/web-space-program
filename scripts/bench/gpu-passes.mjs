@@ -76,7 +76,8 @@ async function pageMeasure({ mode, families }) {
     const timer = p.gpuTimer; p.gpuTimer = null;
     for (const [i, pass] of p.composer.passes.entries()) {
       const render = pass.render;
-      const name = pass === p.renderPass ? 'scene' : pass === p.bloomPass ? 'bloom' : pass === p.smaaPass ? 'smaa' : pass === p.fxaaPass ? 'fxaa' : pass === p.photoEffects ? 'photo' : (pass.constructor?.name || 'pass') + '-' + i;
+      const x = pass.inner ?? pass; // pipeline wraps HDR-stage passes
+      const name = x === p.renderPass ? 'scene' : x === p.bloomPass ? 'bloom' : x === p.smaaPass ? 'smaa' : x === p.fxaaPass ? 'fxaa' : x === p.photoEffects ? 'photo' : x === p.upscalePass ? 'upscale' : x.isOutputPass ? 'tonemap' : (x.constructor?.name || 'pass') + '-' + i;
       originals.push([pass, render]);
       pass.render = function (...a) { poll(); const q = gl.createQuery(); gl.beginQuery(ext.TIME_ELAPSED_EXT, q); const r = render.apply(this, a); gl.endQuery(ext.TIME_ELAPSED_EXT); pending.push([q, name]); return r; };
     }
@@ -118,6 +119,7 @@ async function pageMeasure({ mode, families }) {
     const groups = {
       terrain: (m) => U(m).uRockColor, ocean: (m) => U(m).uSeabed, farSphere: (m) => U(m).uHasMap && U(m).uFallback,
       sky: (m) => U(m).uSunAngularRadius, clouds: (m) => U(m).uCamCCloud, volumes: (m) => U(m).uExtent, scatter: (m) => U(m).uCenters,
+      vegetation: (m) => key(m).includes('foliage'),
       siteAerial: (m) => key(m).includes('aerial'),
       partsPBR: (m) => m.isMeshStandardMaterial || m.isMeshPhysicalMaterial,
       plumes: (m) => U(m).uCoreAmp || U(m).uHaze || U(m).uDiaWidth,
