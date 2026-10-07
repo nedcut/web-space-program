@@ -3,7 +3,7 @@
 _Last updated: 2026-10-06_
 
 ## Start here (for Ned)
-**Run it:** `npm install && npm run dev`, open http://localhost:5173. Pick **New Game → Sandbox → Standard** for the easiest start;
+**Run it:** `npm install && npm run play` (optimised production build, opens http://localhost:4173). `npm run dev` is for development only: it serves unbundled modules with React's debug build and is much slower to load and run. Pick **New Game → Sandbox → Standard** for the easiest start;
 the first flight shows a controls cheat sheet (Shift+F1 or the toolbar "?" brings it back). **Training** on the main menu has 8 guided lessons.
 
 **What exists:** the real solar system (Sun, 8 planets, Pluto, Ceres, 40+ moons, plus asteroids/comets like Vesta, Bennu,
