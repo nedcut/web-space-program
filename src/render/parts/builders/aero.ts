@@ -116,7 +116,7 @@ function surface(def: PartDef, skin: THREE.Material, edge: THREE.Material, flapS
     }
     // titanium leading-edge strip
     const rl = p.t * 0.48;
-    const leG = rod([0, leR + inset - rl * 0.85, z0 - inset * 0.5], [0, leT + inset - rl * 0.85, z1 + inset * 0.5], rl, fine ? 10 : 6);
+    const leG = rod([0, leR + inset - rl * 0.85, z0], [0, leT + inset - rl * 0.85, z1 + inset * 0.5], rl, fine ? 10 : 6);
     holder.add(mk(leG, M.titanium(), 'leadingEdge'));
   }
   if (f > 0) {
