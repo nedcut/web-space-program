@@ -139,6 +139,22 @@ void computeAerial(vec3 worldPos) {
   if (uHasAtmo > 0.5 && seg.y > seg.x) integrateScattering(uCamRel, rd, seg.x, seg.y, AERIAL_STEPS * uStepScale, vAerialL, vAerialT);
 }
 `;
+/** Sky seen in the (mean) reflected direction of flat water: smooth across the surface, so per vertex. */
+const GLSL_SKY_REFL_VERT = /* glsl */ `
+varying vec3 vSkyRefl;
+void computeSkyRefl(vec3 worldPos, vec3 up) {
+  vSkyRefl = vec3(0.0);
+  if (uHasAtmo < 0.5) return;
+  vec3 rel = worldPos - uPlanetCenter;
+  vec3 V = normalize(cameraPosition - worldPos);
+  vec3 R = reflect(-V, up);
+  R = normalize(R + up * 0.17);
+  if (dot(R, up) < 0.03) R = normalize(R + up * (0.03 - dot(R, up)));
+  vec2 ta = raySphereC(dot(rel, R), dot(rel, rel) - uAtmoRadius * uAtmoRadius);
+  vec3 tr;
+  integrateScattering(rel, R, 0.0, max(ta.y, 0.0), OCEAN_QUALITY >= 3 ? 10 : 6, vSkyRefl, tr);
+}
+`;
 const GLSL_AERIAL_FRAG = /* glsl */ `
 varying vec3 vAerialL;
 varying vec3 vAerialT;
@@ -229,6 +245,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       varying vec3 vColor;
       varying vec3 vDetail;
       ${GLSL_AERIAL_VERT}
+      ${GLSL_SKY_REFL_VERT}
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vWorldPos = wp.xyz;
@@ -236,6 +253,10 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         vColor = aColor * aColor; // stored gamma-2 encoded
         vDetail = aDetail;
         computeAerial(wp.xyz);
+        #ifdef EARTH_IMAGERY
+          // Imagery water drawn by terrain must match the ocean mesh beside it.
+          computeSkyRefl(wp.xyz, normalize(wp.xyz - uPlanetCenter));
+        #endif
         gl_Position = projectionMatrix * viewMatrix * wp;
         ${GLSL_LOGDEPTH_VERT}
       }`,
@@ -251,6 +272,9 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       uniform float uDuneRipples;
       ${GLSL_AERIAL_FRAG}
       ${GLSL_SITE_SHADOW}
+      #ifdef EARTH_IMAGERY
+      varying vec3 vSkyRefl;
+      #endif
       varying vec3 vWorldPos;
       varying vec3 vNormalBF;
       varying vec3 vColor;
@@ -329,13 +353,13 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           float wImg = uEarthImagery * smoothstep(uEarthBlend.x, uEarthBlend.y, dist);
           float waterW = 0.0;
           if (wImg > 0.0) {
-            vec3 c = textureGrad(uEarthDay, eUV.uv, eUV.dx, eUV.dy).rgb;
+            vec3 c = earthTex(uEarthDay, eUV).rgb;
             vec3 img = earthAlbedo(c);
             #ifdef USE_DETAIL
               img *= 1.0 + hd * 0.6 * uDetailStrength;
             #endif
-            albedo = mix(albedo, img, wImg);
-            waterW = earthWater(textureGrad(uEarthWater, eUV.uv, eUV.dx, eUV.dy).r, c) * wImg;
+            waterW = earthWater(earthTex(uEarthWater, eUV).r, c) * wImg;
+            albedo = mix(albedo, mix(img, earthWaterAlbedo(c), waterW), wImg);
           }
         #endif
         vec3 col = shadeSurface(albedo, N, V, rel);
@@ -343,7 +367,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           // Coasts follow the imagery from altitude: water the terrain mesh still has above its datum.
           if (waterW > 0.0) {
             vec3 sunT = sunTransmittance(rel) * cloudShadow(rel);
-            vec3 water = shadeWater(albedo, up, up, V, rel, skyAmbient(rel, up) / ATMO_PI, coxMunkAlpha(seaWind(nDir, rel)), sunT);
+            vec3 water = shadeWater(albedo, up, up, V, rel, vSkyRefl, coxMunkAlpha(seaWind(nDir, rel)), sunT);
             col = mix(col, water, waterW);
           }
         #endif
@@ -448,8 +472,8 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
       varying float vDepth;
       varying vec3 vDetail;
       uniform mat3 uBodyRot;
-      varying vec3 vSkyRefl;
       ${GLSL_AERIAL_VERT}
+      ${GLSL_SKY_REFL_VERT}
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vWorldPos = wp.xyz;
@@ -457,19 +481,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         vDepth = aDepth;
         vDetail = aDetail;
         computeAerial(wp.xyz);
-        // Sky seen in the (mean) reflected direction: smooth across the surface, so per vertex.
-        vSkyRefl = vec3(0.0);
-        if (uHasAtmo > 0.5) {
-          vec3 rel = wp.xyz - uPlanetCenter;
-          vec3 up = normalize(uBodyRot * normal);
-          vec3 V = normalize(cameraPosition - wp.xyz);
-          vec3 R = reflect(-V, up);
-          R = normalize(R + up * 0.17);
-          if (dot(R, up) < 0.03) R = normalize(R + up * (0.03 - dot(R, up)));
-          vec2 ta = raySphereC(dot(rel, R), dot(rel, rel) - uAtmoRadius * uAtmoRadius);
-          vec3 tr;
-          integrateScattering(rel, R, 0.0, max(ta.y, 0.0), OCEAN_QUALITY >= 3 ? 10 : 6, vSkyRefl, tr);
-        }
+        computeSkyRefl(wp.xyz, normalize(uBodyRot * normal));
         gl_Position = projectionMatrix * viewMatrix * wp;
         ${GLSL_LOGDEPTH_VERT}
       }`,
@@ -513,6 +525,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
           shore = (n1 - 0.5) * 3.0 + (n2 - 0.5) * 1.0;
         }
         float depth = vDepth + shore;
+        float meshDepth = depth;
         vec3 rel = vWorldPos - uPlanetCenter;
         vec3 toCam = cameraPosition - vWorldPos;
         float dist = length(toCam);
@@ -523,8 +536,8 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
           vec3 dayC = vec3(0.0);
           float maskW = 1.0;
           if (wImg > 0.0) {
-            dayC = textureGrad(uEarthDay, eUV.uv, eUV.dx, eUV.dy).rgb;
-            maskW = earthWater(textureGrad(uEarthWater, eUV.uv, eUV.dx, eUV.dy).r, dayC);
+            dayC = earthTex(uEarthDay, eUV).rgb;
+            maskW = earthWater(earthTex(uEarthWater, eUV).r, dayC);
             depth = mix(depth, (maskW - 0.5) * 40.0, wImg);
           }
         #endif
@@ -581,14 +594,18 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         vec3 water = mix(uShallow, uDeep, depthT);
         #ifdef EARTH_IMAGERY
           // Shallow banks, river plumes and lakes carry their real colour from altitude.
-          if (wImg > 0.0) water = mix(water, earthAlbedo(dayC), wImg);
+          if (wImg > 0.0) water = mix(water, earthWaterAlbedo(dayC), wImg);
         #endif
         vec3 col = shadeWater(water, up, N, V, rel, vSkyRefl, alpha, sunT);
         vec3 lightIn = uSunColor * sunT * max(dot(up, L), 0.0) / ATMO_PI + skyAmbient(rel, up) / ATMO_PI;
-        vec3 bed = uSeabed * lightIn * exp(-depth * vec3(0.45, 0.12, 0.06));
-        col = mix(bed + vSkyRefl * F, col, smoothstep(0.0, 6.0, depth));
-        // foam at the very shoreline
-        col += lightIn * 0.4 * (1.0 - uHydrocarbon) * (1.0 - smoothstep(0.0, 0.6, depth)) * fade1;
+        // Seabed and surf follow the mesh's own shoreline; from altitude the imagery carries the shallows.
+        float shallowW = 1.0 - smoothstep(0.0, 6.0, max(meshDepth, 0.0));
+        #ifdef EARTH_IMAGERY
+          shallowW *= 1.0 - wImg;
+        #endif
+        vec3 bed = uSeabed * lightIn * exp(-max(meshDepth, 0.0) * vec3(0.45, 0.12, 0.06));
+        col = mix(col, bed + vSkyRefl * F, shallowW);
+        col += lightIn * 0.4 * (1.0 - uHydrocarbon) * (1.0 - smoothstep(0.0, 0.6, meshDepth)) * fade1;
         #ifdef EARTH_IMAGERY
           // Lit ships, platforms and coastal cities over water pixels of the light map.
           col += earthNightLights(eUV, dot(up, uSunDir), rel) * 0.6;
@@ -686,10 +703,10 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
         vec3 waterAlbedo = mix(vec3(0.01, 0.07, 0.075), vec3(0.002, 0.011, 0.03), 1.0 - exp(-(-h) / 18.0));
         #ifdef EARTH_IMAGERY
           if (uEarthImagery > 0.5) {
-            vec3 c = textureGrad(uEarthDay, eUV.uv, eUV.dx, eUV.dy).rgb;
+            vec3 c = earthTex(uEarthDay, eUV).rgb;
             albedo = earthAlbedo(c);
-            waterAlbedo = albedo;
-            waterW = earthWater(textureGrad(uEarthWater, eUV.uv, eUV.dx, eUV.dy).r, c);
+            waterAlbedo = earthWaterAlbedo(c);
+            waterW = earthWater(earthTex(uEarthWater, eUV).r, c);
             // The relief bump comes from the coarse bake: keep it off imagery water.
             N = normalize(mix(N, normalize(uBodyRot * n), waterW));
           }

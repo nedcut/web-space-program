@@ -6,7 +6,7 @@
 // Preview pages wait for window.__preview.ready; flight pages for __flight.sceneReady. Prints JSON per shot
 // (GPU ms from the pipeline timer, imagery level, readiness) and writes PNGs to outDir.
 import { chromium } from 'playwright-core';
-import { readFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 
 const [list, outDir = 'C:\\wsp-tools\\shots\\earthgfx'] = process.argv.slice(2);
 const shots = JSON.parse(readFileSync(list, 'utf8'));
@@ -41,7 +41,9 @@ for (const s of shots) {
     return { gpuMs: pipe ? +pipe.gpuMs.toFixed(2) : null, pr: pipe ? pipe.pixelRatio : null,
       imagery: planet && planet.imagery ? planet.imagery.levelId : null, mode: planet ? planet.stats.mode : null };
   })()`).catch(() => ({}));
-  await page.screenshot({ path: `${outDir}\\${s.name}.png`, scale: 'device' });
+  // CDP capture keeps the emulated device pixels (Playwright's screenshot would use CSS pixels).
+  const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+  writeFileSync(`${outDir}\\${s.name}.png`, Buffer.from(data, 'base64'));
   console.log(JSON.stringify({ name: s.name, ready: ok, secs: (Date.now() - t0) / 1000, ...info, errors: errors.slice(0, 5) }));
   await page.close();
 }

@@ -351,11 +351,44 @@ EarthUV earthUV(vec3 n) {
   return e;
 }
 /**
+ * Bicubic B-spline lookup from four bilinear taps (Sigg & Hadwiger 2005) while the texture is magnified, so a
+ * texel spread over several screen pixels reads as smooth relief instead of a bilinear staircase.
+ */
+vec4 earthTex(sampler2D t, EarthUV e) {
+  vec2 size = vec2(textureSize(t, 0));
+  vec2 fp = max(abs(e.dx) + abs(e.dy), vec2(1e-9)) * size;
+  if (max(fp.x, fp.y) > 0.7) return textureGrad(t, e.uv, e.dx, e.dy);
+  vec2 st = e.uv * size - 0.5;
+  vec2 i = floor(st), f = st - i;
+  vec2 w0 = (1.0 - f) * (1.0 - f) * (1.0 - f) / 6.0;
+  vec2 w1 = (4.0 - 6.0 * f * f + 3.0 * f * f * f) / 6.0;
+  vec2 w2 = (1.0 + 3.0 * f + 3.0 * f * f - 3.0 * f * f * f) / 6.0;
+  vec2 w3 = f * f * f / 6.0;
+  vec2 g0 = w0 + w1, g1 = w2 + w3;
+  vec2 h0 = (i - 0.5 + w1 / g0) / size, h1 = (i + 1.5 + w3 / g1) / size;
+  return g0.y * (g0.x * textureLod(t, vec2(h0.x, h0.y), 0.0) + g1.x * textureLod(t, vec2(h1.x, h0.y), 0.0))
+       + g1.y * (g0.x * textureLod(t, vec2(h0.x, h1.y), 0.0) + g1.x * textureLod(t, vec2(h1.x, h1.y), 0.0));
+}
+/**
  * Blue Marble colour → plausible surface reflectance. The published imagery is contrast-stretched for display:
  * forests are too dark and deserts too bright as albedo. This curve maps forest green to ≈ 0.05, bright desert
  * to ≈ 0.5 and fresh snow to ≈ 0.85 (linear), close to MODIS surface albedo.
  */
-vec3 earthAlbedo(vec3 c) { return pow(max(c, vec3(0.0)), vec3(0.62)) * (0.62 + 0.26 * c); }
+vec3 earthAlbedo(vec3 c) {
+  // The curve acts on luminance only, so hue and saturation (ochre deserts, green forest) are preserved.
+  float y = max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 1e-5);
+  float f = pow(y, 0.62) * (0.62 + 0.26 * y);
+  return min(c * (f / y), vec3(1.0));
+}
+/**
+ * Water-leaving reflectance. Blue Marble fills the open ocean with one flat colour (2, 5, 20); only what
+ * exceeds it is real signal (shallow banks, sediment, blooms). Taking the excess keeps compression noise in the
+ * dark fill from being amplified into visible blocks.
+ */
+vec3 earthWaterAlbedo(vec3 c) {
+  vec3 excess = max(c - vec3(0.0011, 0.0026, 0.0105), vec3(0.0));
+  return vec3(0.0035, 0.0105, 0.027) + earthAlbedo(excess) * 0.85;
+}
 /** Water fraction; bright pixels (snow on frozen lakes, sea ice, ice shelves) are never specular water. */
 float earthWater(float mask, vec3 c) {
   float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
