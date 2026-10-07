@@ -22,7 +22,16 @@ for (const [name,path] of cases.filter(([n]) => !process.argv[4] || process.argv
  if (name === 'pad') await page.evaluate(() => { window.__flight.cam.mode = 'chase'; });
  await new Promise(r=>setTimeout(r,5000));
  if (name === 'pad') {
-  await page.evaluate(() => { const c=window.__flight.cam; c.yaw=1.2; c.pitch=1.2; c.distance=110; });
+  await page.evaluate(() => {
+   // A stationary, site-relative chase pose avoids the undefined heading of a vertical pad craft.
+   const f=window.__flight,c=f.cam,s=f.site ?? f.launchSite;
+   if(!s) throw new Error('Launch site handle unavailable');
+   c.update=()=>{};
+   c.camera.position.set(-110,65,140).applyMatrix4(s.root.matrixWorld);
+   c.camera.up.set(0,1,0).applyQuaternion(s.root.quaternion);
+   const target=s.root.position.clone().add(c.camera.up.clone().multiplyScalar(12));
+   c.camera.lookAt(target);
+  });
   await new Promise(r=>setTimeout(r,3000));
  }
  if(await page.evaluate(() => !!document.querySelector('vite-error-overlay'))) throw new Error('Vite error overlay');

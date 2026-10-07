@@ -64,8 +64,9 @@ export async function openPage() {
    await send('Runtime.runIfWaitingForDebugger'); await send('Page.bringToFront');
   },
   close: async () => {
+   page.close();
    try { await browser.call('Target.disposeBrowserContext', { browserContextId }); }
-   finally { page.close(); browser.close(); }
+   finally { browser.close(); }
   },
  };
 }

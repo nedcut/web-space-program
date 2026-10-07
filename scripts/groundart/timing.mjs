@@ -15,6 +15,7 @@ for(let round=0;round<2;round++) for(const [side,base] of [['before',baseA],['af
    return {gpu:p.gpuName,canvas:[p.renderer.domElement.width,p.renderer.domElement.height],gpuMedianMs:samples[150],gpuP95Ms:samples[285],frameP95Ms:intervals[285],stats:p.stats,glError:p.renderer.getContext().getError()};
   });
   results.push({round,side,...result});console.log(JSON.stringify(results.at(-1)));
+  writeFileSync('C:/wsp-tools/bench/groundart-timing.json',JSON.stringify(results,null,2));
  } finally {await page.close();}
 }
 writeFileSync('C:/wsp-tools/bench/groundart-timing.json',JSON.stringify(results,null,2));

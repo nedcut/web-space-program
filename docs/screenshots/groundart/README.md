@@ -11,9 +11,11 @@ Original procedural art only. Captured in Windows Chrome/CDP 9333 on NVIDIA RTX 
 | Earth night side, 900 km | [Before](groundart-before-night.png) | [After](groundart-after-night.png) |
 | Moon surface, 8 m | [Before](groundart-before-moon.png) | [After](groundart-after-moon.png) |
 
+Additional inspected view: [assembly façade and roof](groundart-after-facade.png), plus shadows-off WebGL smoke check (error 0).
+
 Additional inspected view: [night pad and lit windows](groundart-after-night-site.png) (astronomical sun elevation −16°, night switch 1, window emission 1.8, WebGL error 0).
 
-Reproduce with Windows Node running `scripts/groundart/capture.mjs <before|after> <base-url> [comma-separated-views]`. The script contains the fixed view URLs and camera settings. Chase heading is velocity-relative, so its settling direction can vary slightly between captures. Copy the scripts beside the supplied Windows `playwright-core` harness; the page-specific CDP connection uses its WebSocket transport and closes only its own contexts. Serve development previews on port 5334; the production build only includes the main game entry, so its preview URLs do not work. Set the same settings before loading each scene. `night-site.mjs` checks astronomical night activation and captures the pad without the hub overlay.
+Reproduce with Windows Node running `scripts/groundart/capture.mjs <before|after> <base-url> [comma-separated-views]`. The script contains the fixed view URLs and camera settings. The pad uses a stationary chase pose frozen in the site frame so a vertical pre-launch craft’s undefined heading cannot rotate the comparison into a mast or tank. Copy the scripts beside the supplied Windows `playwright-core` harness; the page-specific CDP connection uses its WebSocket transport and closes only its own contexts. Serve development previews on port 5334; the production build only includes the main game entry, so its preview URLs do not work. Set the same settings before loading each scene. `night-site.mjs` checks astronomical night activation and captures the pad without the hub overlay.
 
 ## Review and iterations
 
