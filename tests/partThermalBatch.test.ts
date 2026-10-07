@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { PartHeat } from '../src/render/fx/PartHeat';
-import { thermalTexture } from '../src/render/fx/thermalSurface';
+import { thermalRadiance } from '../src/render/fx/thermalSurface';
 import { batchStaticParts, disposeStaticBatch } from '../src/render/vessel/staticBatch';
 import { VesselView } from '../src/render/vessel/VesselView';
 import { buildVessel } from '../src/sim/vessel';
@@ -10,7 +10,7 @@ import { PART_CATALOG } from '../src/data/parts';
 import type { PartState } from '../src/sim/vessel/runtime';
 
 const hot = { skinTemperature: [290, 290, 290, 1600, 290, 290] } as PartState;
-const radiance = (slot: number) => thermalTexture.image.data![slot * 4];
+const radiance = (slot: number) => thermalRadiance[slot * 3];
 
 describe('batched thermal surfaces', () => {
   it('keeps repeated parts in one instanced draw with independent radiance and a stable shader binding', () => {
@@ -29,6 +29,10 @@ describe('batched thermal surfaces', () => {
     ah.update(hot, 1);
     expect(radiance(slots.getX(0))).toBeGreaterThan(1);
     expect(radiance(slots.getX(1))).toBe(0);
+    const emission = mesh.geometry.getAttribute('wspHeatRadiance');
+    expect(emission).toBeInstanceOf(THREE.InstancedBufferAttribute);
+    expect(emission.getX(0)).toBeGreaterThan(1);
+    expect(emission.getX(1)).toBe(0);
     const instanced = mesh.material as THREE.Material;
     expect(instanced).not.toBe(a.material);
     expect(instanced.onBeforeCompile).toBe(a.material.onBeforeCompile);
@@ -54,6 +58,8 @@ describe('batched thermal surfaces', () => {
     expect(new Set(slots.array)).toEqual(new Set([slotA, slotB]));
     bh.update(hot, 1);
     expect(radiance(slotA)).toBe(0); expect(radiance(slotB)).toBeGreaterThan(1);
+    const emission = (batch.children[0] as THREE.Mesh).geometry.getAttribute('wspHeatRadiance');
+    for (let i = 0; i < slots.count; i++) expect(emission.getX(i)).toBe(slots.getX(i) === slotA ? 0 : radiance(slotB));
     disposeStaticBatch(batch); ah.dispose(); bh.dispose(); m.dispose();
   });
 

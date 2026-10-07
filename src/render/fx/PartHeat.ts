@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { PartState } from '../../sim/vessel/runtime';
 import { allocateThermalSlot, releaseThermalSlot, thermalGeometry, thermalMaterial, writeThermalSlot } from './thermalSurface';
 
-/** Per-part radiance in a shared lookup; materials and batching remain shared. */
+/** Per-part radiance in shared dynamic attributes; materials and batching remain shared. */
 export class PartHeat {
   private readonly geometries: THREE.BufferGeometry[] = [];
   private readonly slot = allocateThermalSlot();
