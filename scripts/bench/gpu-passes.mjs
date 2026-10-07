@@ -26,6 +26,8 @@ const shots = args.shots !== '0';
 // --eval <file.js>: evaluate an expression (may return a promise) after settling, instead of measuring.
 // --query <k=v&…>: extra URL parameters for every case (e.g. experiment flags).
 const extraQuery = args.query ?? '';
+// --pre <expression>: evaluated in the page after settling, before measuring (e.g. set a uniform).
+const preJs = args.pre ?? null;
 const evalSrc = args.eval ? readFileSync(args.eval, 'utf8') : null;
 const [vw, vh] = (args.size ?? '1470x920').split('x').map(Number);
 const outDir = args.out ?? 'C:\\wsp-tools\\bench\\perfgpu';
@@ -158,6 +160,7 @@ async function run(name, url, { setup, mode = 'flight', settle = settleMs } = {}
       // Keep the editor rendering continuously while measuring (camera orbit).
       await page.evaluate(() => { const v = window.__editor.view; window.__edSpin = setInterval(() => { v.gYaw = (v.gYaw ?? 0) + 0.002; }, 16); });
     }
+    if (preJs) { await page.evaluate(preJs); await page.waitForTimeout(500); }
     if (evalSrc) { const r = await page.evaluate(evalSrc); log(`== ${name}: ${JSON.stringify(r)}`); results.cases[name] = r; return; }
     const m = await page.evaluate(pageMeasure, { mode, families });
     if (mode === 'editor') await page.evaluate(() => clearInterval(window.__edSpin));

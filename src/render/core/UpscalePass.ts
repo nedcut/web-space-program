@@ -23,7 +23,7 @@ import { Pass, FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js'
  *    lobe is limited per pixel so no channel can clip (contrast-adaptive), reusing the taps already loaded. The
  *    detail it adds is interpolated bilinearly onto the reconstruction and the result clamped to the sharpened range.
  *
- * Footprints whose luma range is below ~2/255 per channel take a bilinear early-out: there is no edge to orient
+ * Footprints whose luma range is below ~4/255 per channel take a bilinear early-out: there is no edge to orient
  * and the sharpening would change them by less than a code value. This removes most of the cost over sky,
  * space and smooth terrain shading.
  *
@@ -38,7 +38,7 @@ export class UpscalePass extends Pass {
     /** 0 = no sharpening, 1 = strongest. */
     uSharpness: { value: 0.5 },
     /** Footprint luma range (0–2 scale) below which the pixel is interpolated bilinearly. */
-    uFlat: { value: 4 / 255 },
+    uFlat: { value: 8 / 255 },
   };
   private material = new THREE.ShaderMaterial({
     name: 'EdgeUpscale',
