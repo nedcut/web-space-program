@@ -82,8 +82,20 @@ export function fireDecoupler(all: VesselState[], duid: number, events: VesselEv
     applyImpulse(nv, J, point);
     applyImpulse(owner, scale(J, -1), point);
     events.push({ type: 'decouple', vesselId: owner.id, partUid: duid, newVesselId: nv.id });
+    cutDetachedEngines(nv);
     all.push(nv);
     created.push(nv);
+  }
+}
+
+/**
+ * A dropped piece loses its throttle command at once: liquid engines shut down instead of spooling down over a
+ * second and shoving the spent stage back into the vessel it just left (hot staging). Solid motors burn on.
+ */
+function cutDetachedEngines(piece: VesselState): void {
+  for (const p of piece.parts) {
+    const m = engineModule(p);
+    if (p.engine && m && !isSolidMotor(m)) p.engine.throttle = 0;
   }
 }
 

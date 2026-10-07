@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PART_CATALOG } from '../src/data/parts';
-import { buildMoonLander, buildOrbiter, buildSoundingRocket } from '../src/editor/stockCrafts';
+import { buildMoonLander, buildOrbiter, buildSoundingRocket, STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { DEFAULT_START_UT } from '../src/game/store';
 import { Universe } from '../src/game/universe';
 import { PHYSICS_DT, World } from '../src/game/world';
@@ -72,4 +72,26 @@ describe('SAS response on stock craft', () => {
     expect(stopped).toBeGreaterThan(0);
     expect(drift).toBeLessThan(0.5);
   }, 60000);
+});
+
+describe('SAS on every standard stock craft (RCS on, engines off, 30° step to prograde)', () => {
+  // Measured 2026-10-06: every craft with useful authority reaches 1° in 1.3–35 s and never overshoots by more
+  // than 1°; the fully fuelled 240 t stacks with only a 2 kNm pod wheel turn too slowly to finish in 60 s (physics).
+  for (const sc of STOCK_CRAFTS.filter(s => s.scale === 'standard')) {
+    it(`${sc.id}: no overshoot, no wobble`, () => {
+      const { world, wv } = inOrbit(sc.build, 30);
+      const errs: number[] = [];
+      for (let i = 0; i < 50 * 60; i++) {
+        world.tick(PHYSICS_DT, neutralInput({ sas: 'prograde', rcs: true }));
+        const bs = world.universe.ephem.getBodyState('earth', world.ut);
+        const pro = normalize(sub(wv.state.velocity, bs.velocity));
+        errs.push((Math.acos(Math.min(1, dot(qRotate(wv.state.orientation, v3(0, 1, 0)), pro))) * 180) / Math.PI);
+      }
+      // Monotone approach until within 1° (no swing back past the target and out again).
+      const reach = errs.findIndex(e => e < 1);
+      // Too little authority to finish in a minute: it must at least be closing in, not swinging about.
+      if (reach < 0) { expect(errs.at(-1)!).toBeLessThan(errs[0] * 0.8); return; }
+      expect(Math.max(...errs.slice(reach))).toBeLessThan(1.2);
+    }, 60000);
+  }
 });

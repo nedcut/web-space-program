@@ -49,11 +49,52 @@ export interface CameraFrame {
   rumble?: number;
   /** 1 on the ground: aim slightly below the vessel so it sits above the HUD's navball cluster. */
   groundFraming?: number;
+  /** Orbit/aim point relative to the scene origin (the vessel COM), e.g. from {@link PivotSmoother}. */
+  pivot?: THREE.Vector3;
+}
+
+/**
+ * Keeps the camera's orbit point continuous when the centre of mass jumps inside the vessel (staging, docking,
+ * a dropped part): the jump is fed in as an offset in the vessel's build frame — "where the old COM was on the
+ * vessel" — which then settles back onto the new COM along a critically damped curve (no snap, no overshoot).
+ */
+export class PivotSmoother {
+  /** Settle time constant, s (≈ 95 % settled after 4.7 τ). */
+  static readonly TAU = 0.3;
+  private id: string | undefined;
+  private com = { x: 0, y: 0, z: 0 };
+  /** Offset of the pivot from the COM (build frame) and its rate. */
+  readonly offset = { x: 0, y: 0, z: 0 };
+  private rate = { x: 0, y: 0, z: 0 };
+
+  /** Advance with the active vessel's id and build-frame COM; returns the build-frame offset. */
+  update(id: string, com: { x: number; y: number; z: number }, dt: number) {
+    const o = this.offset, r = this.rate;
+    if (id !== this.id) {
+      this.id = id;
+      o.x = o.y = o.z = r.x = r.y = r.z = 0;
+    } else {
+      o.x += this.com.x - com.x; o.y += this.com.y - com.y; o.z += this.com.z - com.z;
+    }
+    this.com.x = com.x; this.com.y = com.y; this.com.z = com.z;
+    const w = 1 / PivotSmoother.TAU;
+    // Exact step of the critically damped oscillator x'' = −2ωx' − ω²x.
+    const e = Math.exp(-w * dt);
+    for (const k of ['x', 'y', 'z'] as const) {
+      const x = o[k], v = r[k];
+      o[k] = (x + (v + w * x) * dt) * e;
+      r[k] = (v - (v + w * x) * w * dt) * e;
+      if (Math.abs(o[k]) < 1e-6 && Math.abs(r[k]) < 1e-6) o[k] = r[k] = 0;
+    }
+    return o;
+  }
 }
 
 /** Ease time constants (s). Short enough to feel direct, long enough to hide mouse/wheel quantisation. */
 const ORBIT_TAU = 0.07;
 const ZOOM_TAU = 0.14;
+/** The automatic reframe when staging shrinks the vessel eases slower than the wheel: a glide, not a snap-zoom. */
+const REFRAME_TAU = 0.6;
 const CHASE_TAU = 0.35;
 const MIN_PITCH = -1.5;
 const MAX_PITCH = 1.5;
@@ -146,10 +187,12 @@ export class FlightCamera {
   private distanceSet = false;
   get targetDistance() { return this.tDist; }
 
-  /** Ease to a new distance (vessel switch, staging, EVA). */
-  zoomTo(d: number) {
+  /** Ease to a new distance (vessel switch, staging, EVA); `tau` = ease time constant, s. */
+  zoomTo(d: number, tau = ZOOM_TAU) {
     this.tDist = Math.max(this.minDistance, Math.min(this.maxDistance, d));
+    this.zoomTau = tau;
   }
+  private zoomTau = ZOOM_TAU;
 
   /** Short decaying camera kick (staging, decoupling). */
   addKick(amount: number) {
@@ -164,7 +207,7 @@ export class FlightCamera {
     const rate = 1.8; // rad/s at full keyboard deflection
     this.tYaw += this.drive.yaw * rate * dt;
     this.tPitch += this.drive.pitch * rate * dt;
-    if (this.drive.zoom) this.tDist *= Math.exp(this.drive.zoom * 1.6 * dt);
+    if (this.drive.zoom) { this.tDist *= Math.exp(this.drive.zoom * 1.6 * dt); this.zoomTau = ZOOM_TAU; }
     if (!this.dragging) {
       this.tYaw += this.yawVel * dt;
       this.tPitch += this.pitchVel * dt;
@@ -231,7 +274,7 @@ export class FlightCamera {
     const ko = ease(dt, ORBIT_TAU);
     this.cYaw += (this.tYaw - this.cYaw) * ko;
     this.cPitch += (this.tPitch - this.cPitch) * ko;
-    this.cDist = Math.exp(Math.log(this.cDist) + (Math.log(this.tDist) - Math.log(this.cDist)) * ease(dt, ZOOM_TAU));
+    this.cDist = Math.exp(Math.log(this.cDist) + (Math.log(this.tDist) - Math.log(this.cDist)) * ease(dt, this.zoomTau));
 
     const yaw = this.cYaw + baseYaw;
     const pitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, this.cPitch + basePitch));
@@ -244,7 +287,7 @@ export class FlightCamera {
     this.terrainPush = 0;
     if (f.clearance) {
       const minClear = Math.max(0.6, this.cDist * 0.01);
-      const h = f.clearance(offset);
+      const h = f.clearance(f.pivot ? offset.clone().add(f.pivot) : offset);
       if (Number.isFinite(h) && h < minClear) {
         this.terrainPush = minClear - h;
         offset.addScaledVector(f.up, this.terrainPush);
@@ -259,9 +302,11 @@ export class FlightCamera {
     const liftTarget = Math.max(0, Math.min(1, f.groundFraming ?? 0));
     this.lift = this.lift < 0 ? liftTarget : this.lift + (liftTarget - this.lift) * ease(dt, 1.2);
     const aimDown = this.lift * Math.min(this.radius * 0.45, this.cDist * 0.15);
+    const px = f.pivot?.x ?? 0, py = f.pivot?.y ?? 0, pz = f.pivot?.z ?? 0;
     this.camera.position.copy(offset);
+    this.camera.position.x += px; this.camera.position.y += py; this.camera.position.z += pz;
     this.camera.up.copy(this.smoothedUp);
-    this.camera.lookAt(-f.up.x * aimDown, -f.up.y * aimDown, -f.up.z * aimDown);
+    this.camera.lookAt(px - f.up.x * aimDown, py - f.up.y * aimDown, pz - f.up.z * aimDown);
 
     // Rumble and kicks: small smooth rotations of the view (not translations, which read as the vessel moving).
     this.kick *= Math.exp(-dt / 0.22);
@@ -311,7 +356,7 @@ export class FlightCamera {
     }
     // Same vessel changed size (staging, docking): keep the same apparent size if it was framed closely.
     if (Math.abs(r - this.radius) > this.radius * 0.2) {
-      if (this.tDist < this.radius * 8) this.zoomTo(this.tDist * (r / this.radius));
+      if (this.tDist < this.radius * 8) this.zoomTo(this.tDist * (r / this.radius), REFRAME_TAU);
       this.radius = r;
     }
   }
@@ -359,6 +404,7 @@ export class FlightCamera {
       e.preventDefault();
       const delta = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
       this.tDist = Math.max(this.minDistance, Math.min(this.maxDistance, this.tDist * Math.exp(delta * 0.0012)));
+      this.zoomTau = ZOOM_TAU;
     };
     const ctx = (e: Event) => e.preventDefault();
     el.addEventListener('pointerdown', down);
@@ -373,5 +419,24 @@ export class FlightCamera {
       el.removeEventListener('wheel', wheel);
       el.removeEventListener('contextmenu', ctx);
     };
+  }
+}
+
+/**
+ * Camera kick for a hard touchdown: remembers the descent rate while flying and, on the frame the vessel
+ * reaches the ground, returns a kick that grows from 0 at 1.5 m/s to the maximum at 9 m/s.
+ */
+export class TouchdownKick {
+  private id: string | undefined;
+  private grounded = true;
+  private sink = 0;
+  /** `verticalSpeed` is the surface-relative vertical speed (m/s, negative = descending). */
+  update(id: string, grounded: boolean, verticalSpeed: number, _dt: number): number {
+    if (id !== this.id) { this.id = id; this.grounded = grounded; this.sink = 0; return 0; }
+    let kick = 0;
+    if (!grounded) this.sink = Math.max(0, -verticalSpeed);
+    else if (!this.grounded) kick = Math.max(0, Math.min(1, (this.sink - 1.5) / 7.5));
+    this.grounded = grounded;
+    return kick;
   }
 }

@@ -6,7 +6,7 @@ import { wheelContactPoint } from '../../sim/vessel/contact';
 import type { VesselState } from '../../sim/vessel/runtime';
 import { hullPoints } from '../../sim/vessel/shapes';
 import type { CraftDef } from '../../sim/vessel/types';
-import { qConj, qRotate, type Quat } from '../../util/quat';
+import { qConj, qFromAxisAngle, qMul, qRotate, type Quat } from '../../util/quat';
 import { add, cross, dot, length, normalize, scale, sub, v3, type Vec3 } from '../../util/vec3';
 import { recoverScience } from '../science';
 import { Universe } from '../universe';
@@ -50,6 +50,55 @@ export function restOffset(this: World, _internals: WorldInternals, v: VesselSta
     }
   }
   return best;
+}
+
+/**
+ * Static rest pose of a vessel standing on its deployed wheels (body +Z up): how far the COM sinks below the
+ * "tyres just touching" height and the small pitch/roll the springs settle at, solved so the spring forces carry
+ * the weight with no net moment about the COM. Spawning there means a plane does not drop onto its gear and
+ * rock when the flight loads. Null when the wheels cannot carry the vessel alone (it then settles under physics).
+ */
+export function wheelRestPose(v: VesselState, rest: number, gravity: number): { sink: number; pitch: number; roll: number } | null {
+  const wheels: { a: [number, number, number]; gap: number; k: number; travel: number }[] = [];
+  for (const p of v.parts) {
+    if (!p.wheel || p.wheel.deploy < 1) continue;
+    const g = wheelContactPoint(v, p);
+    const b = sub(add(g.center, scale(g.down, g.module.radius)), v.com);
+    // Penetration for COM sink s, pitch α (about +X) and roll β (about +Y): s − α·y + β·x − gap.
+    wheels.push({ a: [1, -b.y, b.x], gap: rest + b.z, k: g.module.spring, travel: g.module.travel });
+  }
+  if (wheels.length < 3) return null;
+  const W = v.mass * gravity;
+  const u = [0, 0, 0];
+  for (let it = 0; it < 60; it++) {
+    const r = [-W, 0, 0];
+    const J = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    for (const w of wheels) {
+      const pen = w.a[0] * u[0] + w.a[1] * u[1] + w.a[2] * u[2] - w.gap;
+      if (pen <= 0) continue;
+      const F = w.k * Math.min(pen, w.travel);
+      const k = pen < w.travel ? w.k : 0;
+      for (let i = 0; i < 3; i++) { r[i] += F * w.a[i]; for (let j = 0; j < 3; j++) J[i * 3 + j] += k * w.a[i] * w.a[j]; }
+    }
+    // Damped Newton; the regulariser keeps the step finite while fewer than three tyres touch.
+    const kSum = wheels.reduce((s, w) => s + w.k, 0);
+    for (let i = 0; i < 3; i++) J[i * 4] += kSum * 1e-6 + (i ? kSum * 1e-3 : 0);
+    const du = solve3(J, r);
+    if (!du) return null;
+    const step = Math.min(1, 0.05 / Math.max(1e-9, Math.abs(du[0]), Math.abs(du[1]), Math.abs(du[2])));
+    for (let i = 0; i < 3; i++) u[i] -= du[i] * step;
+    if (Math.abs(r[0]) < W * 1e-4 && Math.max(Math.abs(du[0]), Math.abs(du[1]), Math.abs(du[2])) < 1e-6) break;
+  }
+  // Only small, sane poses (a tail-sitter or tipping craft is left to the physics).
+  if (!(u[0] >= 0 && u[0] < 1 && Math.abs(u[1]) < 0.15 && Math.abs(u[2]) < 0.15)) return null;
+  return { sink: u[0], pitch: u[1], roll: u[2] };
+}
+
+function solve3(A: number[], b: number[]): number[] | null {
+  const det = (m: number[]) => m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
+  const d = det(A);
+  if (!Number.isFinite(d) || Math.abs(d) < 1e-30) return null;
+  return [0, 1, 2].map(c => det(A.map((x, i) => (i % 3 === c ? b[(i / 3) | 0] : x))) / d);
 }
 
 /**
@@ -120,7 +169,11 @@ export function launchRunway(this: World, internals: WorldInternals, craft: Craf
   if (this.mode === 'career') for (const p of state.parts) p.purchaseCost = p.def.cost;
   this.assignCrew(state);
   const rest = this.restOffset(state, v3(0, 0, -1));
-  const wv: WorldVessel = { state, mode: 'prelaunch', body: bodyId, fixed: { pos: scale(up, body.radius + terrainH + rest + 0.03), orient: orientFixed } };
+  // Start at the static rest pose on the gear (compressed springs), not dropped onto it.
+  const pose = wheelRestPose(state, rest, body.surfaceGravity);
+  const orient = pose ? qMul(orientFixed, qMul(qFromAxisAngle(v3(1, 0, 0), pose.pitch), qFromAxisAngle(v3(0, 1, 0), pose.roll))) : orientFixed;
+  const height = pose ? rest - pose.sink + 0.002 : rest + 0.03;
+  const wv: WorldVessel = { state, mode: 'prelaunch', body: bodyId, fixed: { pos: scale(up, body.radius + terrainH + height), orient } };
   internals.syncFixed(wv, this.ut);
   // Free on its wheels straight away (no clamps): physics from the first step.
   wv.mode = 'physics';

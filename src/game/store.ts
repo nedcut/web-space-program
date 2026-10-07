@@ -31,7 +31,12 @@ export interface Settings {
   launchCountdown: boolean;
   /** Contextual first-orbit hints in flight. */
   flightHints: boolean;
+  /** Camera shake strength (liftoff rumble, max-Q buffet, staging and touchdown kicks); 0 = off. */
+  cameraShake: number;
 }
+
+/** Effective camera shake multiplier (Reduce motion turns it off). */
+export const cameraShakeScale = (s: Pick<Settings, 'reduceMotion' | 'cameraShake'>) => (s.reduceMotion ? 0 : Math.max(0, Math.min(1.5, s.cameraShake ?? 1)));
 
 export interface GameState {
   /** Opt-in LAN mode; null keeps single-player behavior. Never persisted. */
@@ -60,7 +65,7 @@ export interface GameState {
 const SETTINGS_KEY = 'wsp.settings.v1';
 
 function loadSettings(): Settings {
-  const defaults: Settings = { quality: 'medium', masterVolume: 0.8, invertPitch: false, showFps: false, perfOverlay: false, adaptiveQuality: true, graphicsProfile: 0, shadows: true, bloom: true, clouds: true, scatter: true, renderScale: 1, musicVolume: 1, sfxVolume: 1, uiVolume: 1, gamepadEnabled: true, deadZone: 0.15, sensitivity: 1, inputSmoothing: 0, mouseFlight: false, units: 'metric', navballSize: 200, hudScale: 1, cameraFov: 60, autoSaveInterval: 60, uiScale: 1, highContrast: false, reduceMotion: false, colourBlind: false, launchCountdown: false, flightHints: true, commsEnabled: null, commsRestrictControl: null, commsOverlay: true };
+  const defaults: Settings = { quality: 'medium', masterVolume: 0.8, invertPitch: false, showFps: false, perfOverlay: false, adaptiveQuality: true, graphicsProfile: 0, shadows: true, bloom: true, clouds: true, scatter: true, renderScale: 1, musicVolume: 1, sfxVolume: 1, uiVolume: 1, gamepadEnabled: true, deadZone: 0.15, sensitivity: 1, inputSmoothing: 0, mouseFlight: false, units: 'metric', navballSize: 200, hudScale: 1, cameraFov: 60, autoSaveInterval: 60, uiScale: 1, highContrast: false, reduceMotion: false, colourBlind: false, launchCountdown: false, flightHints: true, cameraShake: 1, commsEnabled: null, commsRestrictControl: null, commsOverlay: true };
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SETTINGS_KEY) : null;
     return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;

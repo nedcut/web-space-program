@@ -64,6 +64,8 @@ export interface TargetTelemetry {
 /** Snapshot of telemetry pushed to the HUD ~10–20 times per second (not every frame). */
 export interface Telemetry {
   flightData: FlightData;
+  /** Control trim, null when centred; `held` while SAS is on (trim is then not applied). */
+  trim?: { pitch: number; yaw: number; roll: number; held: boolean } | null;
   crew: Astronaut[];
   noControl: boolean;
   eva: { fuel: number; canBoard: boolean; landed: boolean } | null;

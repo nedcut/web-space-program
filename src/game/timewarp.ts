@@ -22,10 +22,13 @@ export const warpLabel = (w: WarpState) => {
  * (capped at standard Earth's radius). Rails propagation resolves atmosphere, terrain and SOI events
  * independently of frame size; full-size planets must not force weeks of parking-orbit waits at 50×.
  */
+const RAILS_CLEARANCE = [0, 0, 0.005, 0.01, 0.02, 0.05, 0.1, 0.5, 2];
+const railsClearance = (bodyRadius: number) => RAILS_CLEARANCE.map((f) => f * Math.min(bodyRadius, 637100));
+
 export function maxRailsIndexAt(altitude: number, bodyRadius: number, atmosphereHeight: number): number {
   if (altitude < atmosphereHeight) return 0;
   const clearance = altitude - atmosphereHeight;
-  const limits = [0, 0, 0.005, 0.01, 0.02, 0.05, 0.1, 0.5, 2].map((f) => f * Math.min(bodyRadius, 637100));
+  const limits = railsClearance(bodyRadius);
   let idx = 0;
   for (let i = 0; i < limits.length; i++) if (clearance >= limits[i]) idx = i;
   return idx;
@@ -62,4 +65,24 @@ export function clampWarp(w: WarpState, ctx: WarpContext): WarpState {
   if (ctx.thrusting) return { mode: 'rails', index: 0 };
   const maxIdx = ctx.landed ? RAILS_WARP.length - 1 : maxRailsIndexAt(ctx.altitude, ctx.bodyRadius, ctx.atmosphereHeight);
   return w.index > maxIdx ? { mode: 'rails', index: maxIdx } : w;
+}
+
+const km = (m: number) => (m >= 10_000 ? `${Math.round(m / 1000).toLocaleString('en-US')} km` : `${(m / 1000).toFixed(1)} km`);
+
+/**
+ * Why a warp-up request (`delta` > 0) from `w` produced `next`, for the player: null when it went up as asked or
+ * there is nothing to explain. A switch to physics warp is reported too (it is a different kind of warp).
+ */
+export function warpRefusal(w: WarpState, next: WarpState, ctx: WarpContext): { text: string; level: 'info' | 'warn' } | null {
+  const reason = ctx.thrusting ? 'engines are firing' : ctx.inAtmosphere && !ctx.landed ? 'in the atmosphere' : null;
+  if (next.mode === 'physics') {
+    if (w.mode === 'physics' && next.index === w.index) return { text: `Physics warp is at its ${warpLabel(next)} maximum${reason ? ` (${reason})` : ''}`, level: 'warn' };
+    return w.mode === 'rails' ? { text: `Physics warp ${warpLabel(next)}: ${reason ?? 'rails warp unavailable'}`, level: 'info' } : null;
+  }
+  if (next.index > w.index || w.mode !== 'rails') return null;
+  if (next.index >= RAILS_WARP.length - 1) return { text: `Time warp is at its ${warpLabel(next)} maximum`, level: 'info' };
+  if (reason) return { text: `Cannot warp faster: ${reason}`, level: 'warn' };
+  const want = RAILS_WARP[next.index + 1];
+  const need = ctx.atmosphereHeight + railsClearance(ctx.bodyRadius)[next.index + 1];
+  return { text: `Cannot warp to ${want >= 1000 ? `${want / 1000}k` : want}× below ${km(need)} altitude`, level: 'warn' };
 }

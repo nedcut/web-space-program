@@ -33,10 +33,13 @@ describe('runway & aircraft', () => {
     const { world, wv, alt, att } = setup();
     expect(wv.mode).toBe('physics');
     const a0 = att();
-    expect(Math.abs(a0.pitch)).toBeLessThan(0.5);
+    // Spawned at the static rest pose on compressed gear: within ~1° of level, and it does not move from there.
+    expect(Math.abs(a0.pitch)).toBeLessThan(2);
     expect(Math.abs(a0.bank)).toBeLessThan(0.5);
     const alt0 = alt();
     for (let i = 0; i < 150; i++) world.tick(0.02, neutralInput({ brakes: true }));
+    expect(Math.abs(att().pitch - a0.pitch)).toBeLessThan(0.5);
+    expect(Math.abs(alt() - alt0)).toBeLessThan(0.01);
     expect(wv.state.situation).toBe('landed');
     expect(length(world.surfaceVelocity(wv))).toBeLessThan(0.05);
     expect(Math.abs(alt() - alt0)).toBeLessThan(0.3);

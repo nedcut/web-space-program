@@ -18,11 +18,11 @@ function launched() {
 }
 
 /** Render-frame positions of the vessel relative to Earth's centre (what makes the ground appear to move). */
-function framePath(world: World, hz: number, frames: number, interpolate: boolean) {
+function framePath(world: World, hz: number | ((i: number) => number), frames: number, interpolate: boolean) {
   const out: { x: number; y: number; z: number }[] = [];
   const wv = world.active!;
   for (let i = 0; i < frames; i++) {
-    world.tick(1 / hz, climbInput());
+    world.tick(typeof hz === 'number' ? 1 / hz : hz(i), climbInput());
     let t = world.ut;
     let restore = () => {};
     if (interpolate) ({ renderUt: t, restore } = world.renderHistory.apply(world.ut, PHYSICS_DT, world.renderAlpha, world.vessels.values(), world.universe.ephem));
@@ -61,7 +61,7 @@ describe('render interpolation between fixed physics steps', () => {
     expect(b.wv.state.angularVelocity).toEqual(a.wv.state.angularVelocity);
   }, 60000);
 
-  for (const hz of [60, 144]) {
+  for (const hz of [60, 120, 144]) {
     it(`advances evenly at ${hz} Hz (judder ratio)`, () => {
       const raw = judder(framePath(launched().world, hz, hz * 2, false));
       const smooth = judder(framePath(launched().world, hz, hz * 2, true));
@@ -71,6 +71,26 @@ describe('render interpolation between fixed physics steps', () => {
       expect(smooth).toBeLessThan(0.02);
     }, 60000);
   }
+
+  it('stays smooth with uneven frame times and in physics warp', () => {
+    // Seeded frame times between 6 and 22 ms (a browser with hitches); judge apparent speed = displacement / dt.
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const dts = Array.from({ length: 240 }, () => 0.006 + rnd() * 0.016);
+    const speedJudder = (path: { x: number; y: number; z: number }[], dt: (i: number) => number) => {
+      const v: number[] = [];
+      for (let i = 1; i < path.length; i++) v.push(Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y, path[i].z - path[i - 1].z) / dt(i));
+      const mean = v.reduce((a, b) => a + b, 0) / v.length;
+      return Math.max(...v.slice(1).map((x, i) => Math.abs(x - v[i]))) / mean;
+    };
+    const uneven = speedJudder(framePath(launched().world, i => dts[i], dts.length, true), i => dts[i]);
+    const w = launched().world;
+    w.warp = { mode: 'physics', index: 3 };
+    const warped = judder(framePath(w, 60, 120, true));
+    console.log(`uneven frame times: speed judder ${uneven.toFixed(4)}; 4× physics warp at 60 Hz: judder ${warped.toFixed(4)}`);
+    expect(uneven).toBeLessThan(0.03);
+    expect(warped).toBeLessThan(0.02);
+  }, 60000);
 
   it('renders at most one step behind and never in the future', () => {
     const { world } = launched();
