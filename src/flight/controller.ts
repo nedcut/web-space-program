@@ -23,7 +23,7 @@ import { compileInSlices } from '../render/core/compileInSlices';
 import type { ExtraOrbit } from '../render/map/MapView';
 import { MapView } from '../render/map/MapView';
 import { FlightMap } from './map/FlightMap';
-import { LaunchSite } from '../render/site/LaunchSite';
+import { LaunchSite, launchSiteDistance } from '../render/site/LaunchSite';
 import { Starfield } from '../render/sky/Starfield';
 import { SunGlare } from '../render/sky/SunGlare';
 import { FlagView } from '../render/vessel/FlagView';
@@ -152,7 +152,7 @@ export class FlightController {
   private sunLight = new THREE.DirectionalLight(0xffffff, 3.2);
   private ambient = new THREE.HemisphereLight(0x8899bb, 0x221a10, 0.12);
   private planets: PlanetLayer;
-  private site: LaunchSite;
+  private site: LaunchSite | null = null;
   private flags = new FlagView();
   private effects: FlightFx;
   private readonly condensation = new CondensationFx();
@@ -255,8 +255,6 @@ export class FlightController {
     this.scene.environmentIntensity = 1;
 
     this.planets = createPlanetLayer(this.scene, universe, quality);
-    this.site = new LaunchSite(universe, { vegetationDensity: q.siteVegetation });
-    this.scene.add(this.site.root);
 
     const labelHost = (this.labelHost = document.createElement('div'));
     Object.assign(labelHost.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
@@ -998,7 +996,7 @@ export class FlightController {
     // Sun light: directional, shadow frustum hugging the active vessel.
     const sd = new THREE.Vector3(sunDir.x, sunDir.y, sunDir.z);
     // Cover the tower, trench and low-sun ground shadows near the launch complex.
-    const nearSite = wv.body === 'earth' && this.site.root.position.length() < 600;
+    const nearSite = wv.body === 'earth' && !!this.site && this.site.root.position.length() < 600;
     const r = Math.max(nearSite ? 210 : 10, wv.state.cache.boundingRadius * 2.5);
     this.sunLight.position.copy(sd).multiplyScalar(r * 4);
     this.sunLight.target.position.set(0, 0, 0);
@@ -1015,8 +1013,14 @@ export class FlightController {
 
     updateSiteShadow(this.sunLight, this.pipeline.renderer.shadowMap.enabled && wv.body === 'earth');
     t0 = prof.now();
-    if (wv.body === 'earth') this.site.update(origin, t, camera.position);
-    else this.site.hide();
+    // A lunar flight or distant orbit must not construct and warm hundreds of hidden site meshes.
+    // Use the same body-fixed location as LaunchSite; a 50 km margin prepares inbound scenery early.
+    if (!this.site && wv.body === 'earth' && launchSiteDistance(u, origin, t) < 250e3) {
+      this.site = new LaunchSite(u, { vegetationDensity: getQuality(game.get().settings.quality).siteVegetation });
+      this.scene.add(this.site.root);
+    }
+    if (wv.body === 'earth') this.site?.update(origin, t, camera.position);
+    else this.site?.hide();
     this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.lodViewportHeight });
     const eclipse = this.planets.sunVisibility?.(origin, sunPos) ?? 1;
     const tint = this.planets.sunTint?.(origin, sunPos) ?? [1, 1, 1];
@@ -1235,7 +1239,7 @@ export class FlightController {
     this.input.dispose();
     for (const v of this.views.values()) v.dispose();
     this.planets.dispose();
-    this.site.dispose();
+    this.site?.dispose();
     this.map.dispose();
     this.stars.dispose();
     this.glare.dispose();
