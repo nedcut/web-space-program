@@ -822,3 +822,9 @@ Earlier GPU runs are labelled and archived separately so their revisions cannot 
 Final Ultra pad capture uses the requested Windows `cdp2.mjs` driver; after preparation it confirms the
 exact Ultra Earth grades, 48-quad terrain / 0.75 m spacing, hardware RTX rendering and GL error 0.
 All work is committed on `cx/gfxsettings`; the port-5327 dev/preview server is stopped on completion.
+
+### UI responsiveness — implementation (2026-10-07, cx/perfui)
+
+- Work isolated to `wsp-wt/perfui`. Read project architecture/decisions/performance guidance and merged main before measuring.
+- Production WSL Chromium, 4× CDP CPU throttle, 1470×920 CSS / DPR 2 baseline: catalogue search p75 1543 ms, hover 1334 ms, symmetry 1297 ms, pick/cancel 4600 ms; cold/warm first 18 thumbnails 25.6/15.1 s after editor entry. Software GPU, overlapping cold thumbnail work: these are diagnostic costs, not Apple frame-rate estimates.
+- Committed repeatable catalogue/large-craft/flight probes, opt-in production profiling, demand-driven persistent thumbnails, unchanged-craft/readout/attach-node reuse, cheaper panel compositing and ref/rAF HUD dragging. Editor cache invalidation tests and 38 focused editor tests pass. Final measurements/integration checks follow below.

@@ -134,7 +134,7 @@ try {
     results.finalPanelBounds=await page.locator('.app-win.floating').first().boundingBox();
     await page.evaluate(() => window.__game.set({scene:'menu'}));
     await page.waitForTimeout(1000);
-    await measure('menu-hover', async i => { await page.locator('.menu-panel button').nth(i%2).hover(); });
+    await measure('menu-hover', async i => { await page.locator('.menu-actions button').nth(i%2).hover(); });
     results.longTasks=await page.evaluate(() => window.__uiBench.longTasks);
   }
 
@@ -142,4 +142,4 @@ try {
   mkdirSync(out, { recursive: true });
   writeFileSync(new URL(`${label}.json`,out),JSON.stringify(results,null,2));
   console.log(JSON.stringify(results, (k,v) => ['samples','longTasks'].includes(k) ? undefined : v,null,2));
-} catch (e) { console.log(errors, await page.locator('body').innerText()); throw e; } finally { await browser.close(); }
+} catch (e) { console.log(errors, await page.locator('body').innerText()); results.failure=String(e); const out=new URL('../../docs/performance/ui/',import.meta.url); mkdirSync(out,{recursive:true}); writeFileSync(new URL(`${label}-failed.json`,out),JSON.stringify(results,null,2)); throw e; } finally { await context.close(); await browser.close(); }
