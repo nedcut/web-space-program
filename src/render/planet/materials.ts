@@ -1059,6 +1059,19 @@ export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloud
         float base = below ? mix(1.0, 0.38, smoothstep(0.25, 1.0, d)) : mix(1.0, 0.82, d * d);
         vec3 albedo = vec3(0.93);
         float lit = max(muS + 0.12, 0.0) / 1.12;
+        #if CLOUD_DETAIL >= 3
+          // Cloud-top relief: optically thick cores stand higher, so the density gradient tilts the top
+          // towards or away from the sun (visible at low sun near the terminator).
+          if (!below && t > 20000.0) {
+            vec3 t1 = normalize(cross(up, abs(up.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
+            vec3 t2 = cross(up, t1);
+            float d0 = texture(uCloudMap, uCloudRot * up, 1.5).r;
+            float d1 = texture(uCloudMap, uCloudRot * (up + t1 * 0.004), 1.5).r;
+            float d2 = texture(uCloudMap, uCloudRot * (up + t2 * 0.004), 1.5).r;
+            vec3 n = normalize(up - (t1 * (d1 - d0) + t2 * (d2 - d0)) * 1.2);
+            lit *= clamp((dot(n, uSunDir) + 0.12) / max(muS + 0.12, 0.08), 0.6, 1.4);
+          }
+        #endif
         vec3 col = albedo * uSunColor * sunT * shadow * phase * lit * base / ATMO_PI;
         col += albedo * skyAmbient(rel, up) / ATMO_PI * (below ? 1.0 : 1.25);
         float a = clamp(d * 1.2, 0.0, 0.98);
