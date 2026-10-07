@@ -771,3 +771,18 @@ Added original branched coastal vegetation with wind and fading LOD, warmer deta
 - Before/after (including a Selene lander on the Moon) are in `docs/screenshots/partsart3/` (see its README for crops, numbers and known limits).
 - Current main merged; lint, typecheck, **107 files / 1,296 tests** and the production build pass.
 
+
+## Adjustable graphics — cx/gfxsettings (2026-10-07)
+
+Implemented Ultra and visible Custom overrides, all requested advanced controls with cost explanations/tooltips,
+persistence and graphics-profile-2 migration. Earth knob coordination commit: `a54b3df2`
+(`GFXSETTINGS-KNOBS-READY`); Ultra values are included in `8d1a1c21`. GPU auto-detection remains conservative.
+Live pipeline controls and snapshot-preserving flight rebuilds are differentiated in the UI. 30/60/120/unlimited
+caps cover flight, Space Center, editor and tracking; adaptive resolution respects deliberate caps.
+
+Verified UI at 1024×768 and 800×768 (scrollable body, no horizontal overflow, every select accessible),
+Custom selection and stored overrides. Screenshots: `docs/screenshots/gfxsettings/`.
+Real RTX 3060 Ti / Windows Chrome CDP check passed 15 advanced changes plus four cap settings without
+browser or GL errors: `docs/performance/gfxsettings/live-controls.json`. Preset measurements and limits
+are documented in `docs/PERFORMANCE.md`. Ultra's larger bake exposed the old far-sphere threshold removing
+close-up terrain; the threshold is bounded and a regression test covers pad/orbit activation.
