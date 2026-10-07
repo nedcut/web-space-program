@@ -131,68 +131,79 @@ export interface SootOptions {
  * Safe to call repeatedly: previous soot is removed first.
  */
 export function bakeEngineSoot(parts: THREE.Object3D[], frame: THREE.Object3D, opts: SootOptions = {}): void {
+  prepareEngineSoot(parts, frame, opts)(parts);
+}
+
+/** Snapshot nozzle sources once; apply the same bake to subsets during editor idle turns. */
+export function prepareEngineSoot(parts: THREE.Object3D[], frame: THREE.Object3D, opts: SootOptions = {}): (targets: THREE.Object3D[]) => void {
   frame.updateMatrixWorld(true);
   const toFrame = new THREE.Matrix4().copy(frame.matrixWorld).invert();
   const src = sources(parts, toFrame);
   const x = new THREE.Vector3(), n = new THREE.Vector3();
-  for (const part of parts) {
-    const local = src.filter((s) => s.owner !== part);
-    part.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh) return;
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      if (!mats.every((m) => (m as THREE.MeshStandardMaterial).vertexColors && !m.transparent)) return;
-      restore(mesh);
-      const color = mesh.geometry.getAttribute('color') as THREE.BufferAttribute | undefined;
-      if (!local.length || !color || color.itemSize !== 3) return;
-      _m.multiplyMatrices(toFrame, mesh.matrixWorld);
-      if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
-      _s.copy(mesh.geometry.boundingSphere!).applyMatrix4(_m);
-      const near = local.filter((s) => bound(s, _s) > 0.025);
-      if (!near.length) return;
-      _n.getNormalMatrix(_m);
-      const pos = mesh.geometry.getAttribute('position');
-      const nor = mesh.geometry.getAttribute('normal');
-      const dark = new Float32Array(pos.count);
-      let any = false;
-      for (let i = 0; i < pos.count; i++) {
-        x.fromBufferAttribute(pos, i).applyMatrix4(_m);
-        if (nor) n.fromBufferAttribute(nor, i).applyMatrix3(_n).normalize();
-        else n.set(0, 0, 0);
-        let keep = 1;
-        for (const s of near) {
-          const k = sootAt(s, x, n);
-          if (k < 1e-3) continue;
-          // streaks: angular noise around the plume axis (sootAt leaves the radial offset in _q)
-          const phi = Math.atan2(_q.dot(s.w), _q.dot(s.u));
-          const st = 0.45 + 0.8 * streak(phi, 3) * (0.55 + 0.45 * streak(phi * 2.7, 7));
-          keep *= 1 - Math.min(1, s.amp * k * st);
+  return (targets) => {
+    // The hall can lift/recenter the craft between batches. Sources are craft-local.
+    frame.updateWorldMatrix(true, false);
+    toFrame.copy(frame.matrixWorld).invert();
+    for (const part of targets) {
+      part.updateWorldMatrix(false, true);
+      const local = src.filter((s) => s.owner !== part);
+      part.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh) return;
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        if (!mats.every((m) => (m as THREE.MeshStandardMaterial).vertexColors && !m.transparent)) return;
+        restore(mesh);
+        const color = mesh.geometry.getAttribute('color') as THREE.BufferAttribute | undefined;
+        if (!local.length || !color || color.itemSize !== 3) return;
+        _m.multiplyMatrices(toFrame, mesh.matrixWorld);
+        if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+        _s.copy(mesh.geometry.boundingSphere!).applyMatrix4(_m);
+        const near = local.filter((s) => bound(s, _s) > 0.025);
+        if (!near.length) return;
+        _n.getNormalMatrix(_m);
+        const pos = mesh.geometry.getAttribute('position');
+        const nor = mesh.geometry.getAttribute('normal');
+        const dark = new Float32Array(pos.count);
+        let any = false;
+        for (let i = 0; i < pos.count; i++) {
+          x.fromBufferAttribute(pos, i).applyMatrix4(_m);
+          if (nor) n.fromBufferAttribute(nor, i).applyMatrix3(_n).normalize();
+          else n.set(0, 0, 0);
+          let keep = 1;
+          for (const s of near) {
+            const k = sootAt(s, x, n);
+            if (k < 1e-3) continue;
+            // streaks: angular noise around the plume axis (sootAt leaves the radial offset in _q)
+            const phi = Math.atan2(_q.dot(s.w), _q.dot(s.u));
+            const st = 0.45 + 0.8 * streak(phi, 3) * (0.55 + 0.45 * streak(phi * 2.7, 7));
+            keep *= 1 - Math.min(1, s.amp * k * st);
+          }
+          const v = Math.min(0.9, 1 - keep);
+          dark[i] = v;
+          if (v > 0.06) any = true;
         }
-        const v = Math.min(0.9, 1 - keep);
-        dark[i] = v;
-        if (v > 0.06) any = true;
-      }
-      if (!any) return;
-      if (opts.cloneShared && !originals.has(mesh)) {
-        const clone = mesh.geometry.clone();
-        originals.set(mesh, mesh.geometry);
-        mesh.geometry = clone;
-      }
-      const g = mesh.geometry;
-      const attr = g.getAttribute('color') as THREE.BufferAttribute;
-      let base = baseColors.get(g);
-      if (!base) baseColors.set(g, (base = new Float32Array(attr.array as Float32Array)));
-      const arr = attr.array as Float32Array;
-      for (let i = 0; i < pos.count; i++) {
-        const v = dark[i];
-        arr[i * 3] = base[i * 3] * (1 - v * 0.93);
-        arr[i * 3 + 1] = base[i * 3 + 1] * (1 - v * 0.97);
-        arr[i * 3 + 2] = base[i * 3 + 2] * (1 - v);
-      }
-      attr.needsUpdate = true;
-      sooted.add(g);
-    });
-  }
+        if (!any) return;
+        if (opts.cloneShared && !originals.has(mesh)) {
+          const clone = mesh.geometry.clone();
+          originals.set(mesh, mesh.geometry);
+          mesh.geometry = clone;
+        }
+        const g = mesh.geometry;
+        const attr = g.getAttribute('color') as THREE.BufferAttribute;
+        let base = baseColors.get(g);
+        if (!base) baseColors.set(g, (base = new Float32Array(attr.array as Float32Array)));
+        const arr = attr.array as Float32Array;
+        for (let i = 0; i < pos.count; i++) {
+          const v = dark[i];
+          arr[i * 3] = base[i * 3] * (1 - v * 0.93);
+          arr[i * 3 + 1] = base[i * 3 + 1] * (1 - v * 0.97);
+          arr[i * 3 + 2] = base[i * 3 + 2] * (1 - v);
+        }
+        attr.needsUpdate = true;
+        sooted.add(g);
+      });
+    }
+  };
 }
 
 /** Drop soot clones made with `cloneShared` (call when an editor part leaves the scene). */

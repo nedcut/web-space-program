@@ -1,3 +1,4 @@
+import { enqueueIdle } from '../../util/idleQueue';
 import { LinkView } from '../../render/vessel/LinkView';
 import { isTyping, matches } from '../../input/bindings';
 import * as THREE from 'three';
@@ -13,7 +14,7 @@ import { surfaceTransform } from '../surface';
 import { createStudioEnvironment } from '../../render/core/studioEnv';
 import { buildHangar, HANGAR, type Hangar } from './hangar';
 import { createPartMesh } from './partMesh';
-import { bakeEngineSoot, releaseSoot, setLightAppearance, setPartDetail } from '../../render/parts';
+import { prepareEngineSoot, releaseSoot, setLightAppearance, setPartDetail } from '../../render/parts';
 
 const DEG = Math.PI / 180;
 const SNAP_PX = 64;
@@ -90,6 +91,7 @@ export class EditorView {
   private shiftZ = 0;
   private partObjs = new Map<number, { obj: THREE.Object3D; partId: string }>();
   private sootKey = '';
+  private cancelSoot: () => void = () => {};
   private raf = 0;
   private last = performance.now();
   private disposed = false;
@@ -311,7 +313,18 @@ export class EditorView {
     if (sootKey !== this.sootKey) {
       this.renderer.shadowMap.needsUpdate = true;
       this.sootKey = sootKey;
-      bakeEngineSoot([...this.partObjs.values()].map(e => e.obj), this.craftGroup, { cloneShared: true });
+      this.cancelSoot();
+      const parts = [...this.partObjs.values()].map(e => e.obj);
+      const apply = prepareEngineSoot(parts, this.craftGroup, { cloneShared: true });
+      let index = 0;
+      const batch = () => {
+        const start = performance.now();
+        do { if (index < parts.length) apply([parts[index++]]); } while (index < parts.length && performance.now() - start < 4);
+        // Soot only changes existing colours. Let the idle renderer present the update.
+        this.renderedKey = '';
+        if (index < parts.length) this.cancelSoot = enqueueIdle(batch);
+      };
+      this.cancelSoot = enqueueIdle(batch);
     }
 
     // Keep the craft's lowest point above the floor; shift the camera with it so the view doesn't jump.
@@ -952,6 +965,7 @@ export class EditorView {
     noteDfgLut(this.renderer, this.scene);
     detachRenderer(this.scene);
     this.disposed = true;
+    this.cancelSoot();
     for (const e of this.partObjs.values()) releaseSoot(e.obj);
     window.clearTimeout(this.longPress);
     cancelAnimationFrame(this.raf);
