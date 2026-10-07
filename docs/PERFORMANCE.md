@@ -978,3 +978,103 @@ Final merged-code validation: lint, `npx tsc --noEmit`, production build, and fu
 Ultra cold readiness in the final harness was about **30.3 s on the pad / 24.8 s in orbit**. Larger
 terrain/texture resources make initial preparation and structural setting rebuilds noticeably slower;
 these startup durations are separate from the steady rendering measurements above.
+
+## Loading and main-thread CPU — cx/perfcpu, 2026-10-07
+
+Baseline: `7bd6e4f9` (real Earth already integrated). Final loading implementation: `b4f9f3ec`.
+Production builds only; Medium, adaptive resolution off, 1470×920 CSS pixels at DPR 2.
+Hardware: shared Windows Chrome 154 / ANGLE D3D11 / RTX 3060 Ti / Ryzen 5600X.
+Every Windows browser run acquired `/tmp/wsp-gpu.lock`. These are single paired samples,
+not confidence intervals or measurements of the owner's M-series MacBook/120 Hz display.
+CDP CPU throttling at both 2× and 4× stalled the Windows renderer (including evaluation),
+so hardware results below use **1×**. Separate local Chromium/WSL **4×** diagnostics
+replace WebGL draw calls with no-ops; they retain three.js submission and software-driver
+overhead and cannot establish laptop FPS or the 4 ms hardware CPU target.
+
+### Loading results
+
+Milliseconds from the automated route/action to readiness. Cold means a fresh browser
+context; warm means a same-context reload with HTTP/IndexedDB caches, not retained JS
+modules. Service workers are blocked to keep the cache boundary reproducible. Restores
+within either sequence benefit from the new in-memory surface cache.
+
+| Transition | Cold before | Cold after | Warm before | Warm after |
+|---|---:|---:|---:|---:|
+| Navigation → interactive menu | 1,565 | 1,210 | 2,654 | 1,289 |
+| Menu → Space Center | 3,718 | 885 | 1,089 | 610 |
+| Space Center → editor | 4,984 | 856 | 4,664 | 804 |
+| Editor → controllable pad | 6,912 | 3,197 | 7,530 | 3,249 |
+| Flight → map | 156 | 105 | 144 | 94 |
+| Quickload | 6,519 | 2,763 | 6,441 | 2,741 |
+| Revert to launch | 6,613 | 2,925 | 6,399 | 2,722 |
+| Flight → tracking station | 612 | 312 | 521 | 332 |
+
+Menu readiness is the visible action plus two animation frames. Scene route probes exclude
+human dialog time; tracking uses the save/store route because flight has no direct tracking
+button. Launch/restore waits for a new controller, surface readiness, shader warm-up and
+loading overlay opacity zero, excluding its 550 ms DOM-removal fade. Map waits two frames.
+Raw predicates and complete long-task counts are in `scripts/bench/cpu-transitions.mjs`.
+The menu warm target and cold transition target were met in this sample; warm launch still
+misses 3 seconds by 249 ms. Loading is not hitch-free: the largest warm editor task fell
+from **4,219 to 356 ms**, and warm launch still has a 170 ms task.
+
+The editor V8 profile attributed approximately 4.3 seconds to eagerly preparing the entire
+thumbnail catalogue (including roughly 3.5 seconds of geometry/AO work). Preparation now
+builds one part per scheduled frame and pauses when the palette unmounts. The full catalogue
+no longer blocks entry or competes with launch. Other changes:
+
+- Overlap application loading, immutable Earth fetch and texture-cache decode; preserve the
+  Earth initialization barrier before scene creation.
+- Skip construction of hidden launch scenery in distant/Earth-orbit and lunar scenes; freeze
+  immutable local matrices and avoid a duplicate site subtree update.
+- Slice map shader warm-up, as already done for flight. Require baked surface/terrain for
+  readiness while cosmetic scatter streams afterward; screenshot `idle` still waits for it.
+- Cache immutable surface-bake pixels in the shared worker pool with a **16 MiB LRU limit**
+  and in-flight deduplication. Keep GPU textures scene-owned and disposable. Oversized bakes
+  bypass retention. Warm quickload/revert no longer repeat the identical worker bake.
+- Reuse exact integer-Kelvin radiance calculations and skip empty vessel-link indexing.
+
+### Steady flight pacing
+
+Trace-free paired 10-second captures (`perfcpu-pacing-{before,after}-dpr2.json`). CPU is the
+instrumented flight-loop average over its rolling sample, including render submission;
+frame percentiles are rAF intervals, not JS execution time. After captures predate only the
+surface-bake cache, which cannot hit in these fresh-context steady-flight cases.
+
+| Scene | CPU ms before → after | Frame p50/p95/p99 ms before → after | Long tasks before → after |
+|---|---:|---|---:|
+| Pad | 7.17 → 6.20 | 33.3/50/50 → 33.3/33.4/50 | 2 → 0 |
+| Ascent, physics 4× | 8.33 → 8.72 | 33.3/50/50.1 → 33.3/50/50.1 | 1 → 0 |
+| Orbit | 3.11 → 3.15 | 16.7/33.4/33.4 → 16.7/33.4/33.4 | 0 → 0 |
+| Rails warp 100,000× | 2.24 → 2.08 | 16.7/16.8/16.8 → 16.7/16.8/16.8 | 0 → 0 |
+| Map | 1.59 → 1.59 | 16.7/16.7/16.8 → 16.7/16.8/16.8 | 0 → 0 |
+| Moon terminal descent | 3.50 → 3.59 | 16.7/16.8/33.3 → 16.7/16.7/16.8 | 0 → 0 |
+
+There is **no demonstrated broad steady-flight CPU speedup**: most differences are noise.
+The primary win is removing large loading stalls. Ten seconds without long tasks does not
+prove hitch-free gameplay. The Moon case is terminal descent, not an Earth→Moon transfer
+or a complete SOI-crossing test. Inbound lazy site creation remains synchronous. First-use
+part geometry/shader compilation and scene constructors can still exceed 50 ms.
+
+### Reproduction and evidence
+
+From the assigned worktree, serve `npx vite build && npx vite preview --port 5334 --strictPort --host`.
+The wrappers below acquire the shared GPU lock internally (do not nest a second lock):
+
+```sh
+bash scripts/bench/cpu-transitions.sh http://<WSL-IP>:5334 my-transitions 1
+bash scripts/bench/cpu-flight.sh --base http://<WSL-IP>:5334 --label my-pacing --throttle 1 --trace 0 --cases pad,ascent,orbit,warp100k,map,moon --seconds 10 --settle 5000
+bash scripts/bench/cpu-flight.sh --base http://<WSL-IP>:5334 --label my-journey --throttle 1 --cases journey --seconds 120 --settle 3000
+bash scripts/bench/cpu-flight.sh --base http://<WSL-IP>:5334 --label my-moon --throttle 1 --cases moon --seconds 10 --settle 5000
+node scripts/bench/cpu-trace-report.mjs docs/performance/perfcpu/my-moon-moon.trace.json.gz
+node scripts/bench/gpu-bench.mjs --local 1 --cpu-only 1 --base http://localhost:5334 --label my-cpu --throttle 4 --cases pad,ascent,orbit,warp100k,map,moon --seconds 10 --settle 5000 --save-traces 1 --size 1470x920 --dpr 2
+```
+
+`journey` flies a stock Meridian with orbit assist at physics 4×, autosaves every 15 seconds,
+and opens/closes map during ascent. Trace exports retain only the benchmark renderer and
+its workers. Long traces are streamed to avoid V8's whole-string limit. Trace-enabled rAF
+samples include transfer/readout time and thus exceed the nominal recording period; use
+`--trace 0` for comparable pacing windows. Initial journey export attempts failed (errors
+retained in JSON); their interval summaries are diagnostic, not paired 120-second traces.
+The editor CPU profile, transition JSON, pacing JSON and compressed Chrome traces are under
+`docs/performance/perfcpu/`. Unzip `.trace.json.gz` before importing into Chrome Performance.
