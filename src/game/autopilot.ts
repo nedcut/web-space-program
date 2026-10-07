@@ -22,7 +22,7 @@ import { PHYSICS_DT } from './world';
 import { RAILS_WARP } from './timewarp';
 import type { ControlInput, VesselState } from '../sim/vessel/runtime';
 import type { EngineModule } from '../sim/vessel/types';
-import { neutralInput, G0 } from '../sim/vessel';
+import { neutralInput, G0, spoolDownTime } from '../sim/vessel';
 import type { ManeuverNode, Orbit } from '../sim/orbit/api';
 import {
   propagate,
@@ -490,7 +490,7 @@ export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeO
       for (const part of v.parts) {
         if (!part.engine?.ignited) continue;
         const m = part.def.modules[part.engine.moduleIndex] as EngineModule;
-        spoolTail += (part.engine.thrust * m.spoolTime) / v.mass;
+        spoolTail += (part.engine.thrust * spoolDownTime(m)) / v.mass;
       }
       if (along <= Math.max(0.02, spoolTail)) {
         ap.status = 'cutoff';

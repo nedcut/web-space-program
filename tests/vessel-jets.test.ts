@@ -107,6 +107,16 @@ describe('air-breathing engines', () => {
     expect(t1 / t10).toBeGreaterThan(0.2);
   });
 
+  it('spools down gradually when the throttle is cut (turbine inertia; rockets cut at once)', () => {
+    const { v, jet } = jetVessel({ intake: true, z: 1000, speed: 100 });
+    fly(v, 10);
+    const full = jet.engine!.thrust;
+    fly(v, 0.5, 0);
+    expect(jet.engine!.thrust / full).toBeGreaterThan(0.5);
+    fly(v, 10, 0);
+    expect(jet.engine!.thrust).toBe(0);
+  });
+
   it('loses thrust with altitude and flames out in near-vacuum', () => {
     const low = jetVessel({ intake: true, z: 0, speed: 200 });
     low.jet.engine!.throttle = 1;
