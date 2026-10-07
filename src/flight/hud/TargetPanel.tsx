@@ -12,7 +12,7 @@ export function TargetPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
         {tg ? `Target · ${tg.name}` : 'No target'}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <button style={{ flex: 1 }} className="btn small" onClick={() => setOpen((o) => !o)}>{open ? 'Close' : 'Set target'}</button>
+        <button title="Choose a vessel or celestial body to target" style={{ flex: 1 }} className="btn small" onClick={() => setOpen((o) => !o)}>{open ? 'Close' : 'Set target'}</button>
         {tg && <button className="btn small" title="Clear target" onClick={() => cb.onSetTarget(null)}>✕</button>}
       </div>
       {open && (
@@ -21,6 +21,7 @@ export function TargetPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
           {t.targetOptions.map((o) => (
             <button
               key={o.id}
+              title={`Target ${o.name}`}
               className="btn small"
               style={{ display: 'flex', justifyContent: 'space-between', gap: 8, textAlign: 'left' }}
               onClick={() => { cb.onSetTarget(o.id); setOpen(false); }}
@@ -46,7 +47,7 @@ export function TargetPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
           {tg.ports.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
               <span className="label" style={{ width: '100%' }}>Target port</span>
-              <button className={`btn small ${tg.portUid === null ? 'primary' : ''}`} onClick={() => cb.onSetTarget(tg.id, null)}>Vessel</button>
+              <button title="Target vessel center rather than a docking port" className={`btn small ${tg.portUid === null ? 'primary' : ''}`} onClick={() => cb.onSetTarget(tg.id, null)}>Vessel</button>
               {tg.ports.map((p, i) => (
                 <button key={p.uid} title={p.name} className={`btn small ${tg.portUid === p.uid ? 'primary' : ''}`} onClick={() => cb.onSetTarget(tg.id, p.uid)}>
                   Port {i + 1}
@@ -57,7 +58,7 @@ export function TargetPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
         </>
       )}
       <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
-        <button className={`btn small ${t.dockingMode ? 'primary' : ''}`} style={{ flex: 1 }} onClick={cb.onToggleDocking}>Docking mode</button>
+        <button title="Show port alignment and target-relative speed" className={`btn small ${t.dockingMode ? 'primary' : ''}`} style={{ flex: 1 }} onClick={cb.onToggleDocking}>Docking mode</button>
         {t.dockedPorts.map((p, i) => (
           <button key={p.uid} className="btn small danger" title={`Undock at ${p.name}`} onClick={() => cb.onUndock(p.uid)}>
             Undock{t.dockedPorts.length > 1 ? ` ${i + 1}` : ''}
@@ -70,7 +71,7 @@ export function TargetPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
 
 function Row({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12 }}>
+    <div title={`${label}: ${value}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12 }}>
       <span className="label">{label}</span>
       <span className="mono" style={{ color }}>{value}</span>
     </div>

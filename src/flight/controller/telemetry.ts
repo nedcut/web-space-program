@@ -238,10 +238,10 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   const settings = game.get().settings;
   const stored = cueStates.get(this);
   const previous = stored?.vessel === st.id ? stored : undefined;
-  const signal = w.canControl();
+  const signal = !w.commsSettings.enabled || w.connection(st).connected;
   const throttle = this.input.state.throttle > 0.05 && !st.eva ? throttleExplanation(st) : null;
   if (throttle && throttle !== previous?.throttle) w.message(throttle, 'warn');
-  if (previous?.signal && !signal) w.message('Control lost — check crew, probe signal and power', 'warn');
+  if (previous?.signal && !signal) w.message(w.canControl() ? 'Communications lost — crew retains local control' : 'Communications lost — probe commands unavailable; SAS holds attitude', 'warn');
   const torque = this.sasOn && !st.eva ? controlAuthority(st, neutralInput({ rcs: this.rcsOn }), w.universe.createEnvironment(() => wv.body, w.preciseGravity), w.ut) : null;
   const noTorque = !!torque && Math.hypot(torque.x, torque.y, torque.z) < 1e-6;
   if (noTorque && !previous?.sas) w.message('SAS has no torque — enable reaction wheels or RCS; fins need airflow and gimbals need thrust', 'warn', 6);

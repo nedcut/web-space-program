@@ -1,13 +1,14 @@
 /* Real-GPU acceptance: Windows Node, the user's Chrome CDP, own isolated context. */
-const { chromium } = require('C:/wsp-tools/drv/node_modules/playwright-core');
-const path = require('node:path');
+import { chromium } from 'file:///C:/wsp-tools/drv/node_modules/playwright-core/index.mjs';
+import path from 'node:path';
 (async () => {
   const browser = await chromium.connectOverCDP('http://127.0.0.1:9333');
   const context = await browser.newContext({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 2 });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  const shot = name => page.screenshot({ path: path.join(__dirname, '../docs/screenshots/cues', name + '.png') });
+  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  const shot = name => page.screenshot({ path: path.join(import.meta.dirname, '../docs/screenshots/cues', name + '.png') });
   try {
     await page.addInitScript(() => localStorage.setItem('wsp.help.seen.v1', '1'));
     await page.goto('http://localhost:5335/?flight=stock-kestrel');
@@ -50,5 +51,6 @@ const path = require('node:path');
     await shot('editor-checks');
     console.log('dpr', await page.evaluate(() => devicePixelRatio));
     console.log('errors', errors);
+    if (errors.length) throw Error('Unexpected browser errors');
   } finally { await context.close(); await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

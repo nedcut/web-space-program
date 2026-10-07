@@ -12,8 +12,8 @@ export function FlightDataPanel({ data, onClose }: { data: FlightData; onClose()
   const [configure, setConfigure] = useState(false);
   return <div className="panel flight-data">
     <div className="flight-data-title"><span className="label">Flight data</span>
-      <button className="btn small" onClick={() => setConfigure(!configure)} aria-label="Configure flight data">⚙</button>
-      <button className="btn small" onClick={onClose} aria-label="Close flight data">×</button></div>
+      <button className="btn small" onClick={() => setConfigure(!configure)} title="Choose which telemetry sections to show" aria-label="Configure flight data">⚙</button>
+      <button className="btn small" onClick={onClose} title="Close flight data" aria-label="Close flight data">×</button></div>
     {configure && <div className="flight-data-config">{data.map(s => <label key={s.title}>
       <input type="checkbox" checked={sections.includes(s.title)} onChange={e => {
         const next = e.target.checked ? [...sections, s.title] : sections.filter(x => x !== s.title);
@@ -22,7 +22,7 @@ export function FlightDataPanel({ data, onClose }: { data: FlightData; onClose()
       }} /> {s.title}</label>)}</div>}
     {data.filter(s => sections.includes(s.title)).map(s => <details key={s.title} open>
       <summary className="label">{s.title}</summary>
-      {s.rows.map(([label, value]) => <div className="flight-data-row" key={label}><span>{label}</span><span className="mono">{value}</span></div>)}
+      {s.rows.map(([label, value]) => <div className="flight-data-row" key={label} title={`${label}: ${value}`}><span>{label}</span><span className="mono">{value}</span></div>)}
     </details>)}
     <div className="flight-data-note">Impact: unpowered, no drag, current SOI. Burn: constant thrust and vertical descent. Orbit angles use the inertial reference plane.</div>
   </div>;
