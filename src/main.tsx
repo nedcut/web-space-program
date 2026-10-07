@@ -1,3 +1,4 @@
+import { storageBlocked, STORAGE_BLOCKED_NOTICE } from './ui/storageGuard';
 import { loadEarthData } from './game/earthLoader';
 import { createRoot } from 'react-dom/client';
 import { App } from './ui/App';
@@ -17,6 +18,7 @@ try { await loadEarthData(); } catch (error) {
 // Probing the GPU creates a throwaway WebGL context (~30 ms on the main thread): only when a re-tune is due.
 const graphicsNotice = game.get().settings.graphicsProfile >= GRAPHICS_PROFILE ? null : autoConfigureGraphics();
 if (graphicsNotice) game.set({ notice: graphicsNotice });
+if (storageBlocked) game.set({ notice: STORAGE_BLOCKED_NOTICE });
 
 // Dev shortcut: ?flight=<stock-craft-id>&scale=real jumps onto the pad in the selected universe.
 const params = new URLSearchParams(location.search);

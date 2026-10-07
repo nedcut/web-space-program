@@ -8,7 +8,7 @@ import { getScenarioRun, endScenario } from '../scenarios/runtime';
 export function CrashOverlay({ error, onRecover }: { error: Error; onRecover: () => void }) {
   const [copyStatus, setCopyStatus] = useState('Copy report');
   const [loadError, setLoadError] = useState('');
-  const canLoad = !game.get().multiplayer && !getTutorial() && !getScenarioRun() && hasSave('quicksave');
+  const canLoad = !game.get().multiplayer && !getTutorial() && !getScenarioRun() && safeHasQuicksave();
   const report = `Web Space Program runtime report\n${new Date().toISOString()}\n${navigator.userAgent}\nScene: ${game.get().scene}\n${error.stack ?? error.message}`;
   const home = () => {
     if (getTutorial()) endTutorial();
@@ -37,4 +37,9 @@ export function CrashOverlay({ error, onRecover }: { error: Error; onRecover: ()
       {loadError && <p>{loadError}</p>}
     </section>
   </div>;
+}
+
+/** The recovery screen must render even when storage itself is what failed. */
+function safeHasQuicksave(): boolean {
+  try { return hasSave('quicksave'); } catch { return false; }
 }
