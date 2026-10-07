@@ -1,5 +1,5 @@
 import { localId } from '../util/localId';
-import { game, loadLastCraft } from './store';
+import { game, loadLastCraft, reportSaveError } from './store';
 import { SLOTS_KEY, listSaveSlots, writeSaveSlot } from './saveSlots';
 import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { newProgression, type GameMode, type Progression } from '../sim/science/progression';
@@ -190,6 +190,17 @@ export function deleteSave(slot: string) {
   }
 }
 
+
+/** Never throws: a failed write (full or blocked storage) is reported as a notification and play/navigation continues. */
+export function trySaveWorld(slot: string, world: World, displayName?: string): boolean {
+  try {
+    saveWorldToStorage(slot, world, displayName);
+    return true;
+  } catch (e) {
+    reportSaveError(e);
+    return false;
+  }
+}
 
 /** Manual names cannot collide with the reserved autosave/quicksave channels. */
 export function saveNamedWorld(name: string, world: World) {

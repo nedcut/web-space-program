@@ -33,6 +33,7 @@ import { frameProfiler } from '../util/frameProfiler';
 import { ArrivalBanner } from './hud/FeelHud';
 import { situationBanner, type SituationBannerText } from './situation';
 import { pauseMenuVisible } from './modals';
+import { saveErrorText } from '../game/storageErrors';
 
 export default function FlightScene() {
   useRenderProfile();
@@ -430,7 +431,7 @@ export default function FlightScene() {
               )}
               {launched.current && <Button className="btn" onClick={revertToLaunch}>Revert to launch</Button>}
               {launched.current && <Button className="btn" onClick={revert}>Revert to editor</Button>}
-              {!lost && !getTutorial() && !getScenarioRun() && <Button className="btn" onClick={() => { const name = window.prompt('Save slot name', 'Mission save'); if (name?.trim() && ctrl.current) { try { saveNamedWorld(name, ctrl.current.world); ctrl.current.world.message('Mission saved.'); } catch (e) { ctrl.current.world.message((e as Error).message, 'bad'); } } }}>Save as…</Button>}
+              {!lost && !getTutorial() && !getScenarioRun() && <Button className="btn" onClick={() => { const name = window.prompt('Save slot name', 'Mission save'); if (name?.trim() && ctrl.current) { try { saveNamedWorld(name, ctrl.current.world); ctrl.current.world.message('Mission saved.'); } catch (e) { ctrl.current.world.message(saveErrorText(e), 'bad'); } } }}>Save as…</Button>}
               {!lost && !getTutorial() && !getScenarioRun() && <Button className="btn" onClick={() => ctrl.current?.quicksave()}>Quicksave <span className="kbd" style={{ marginLeft: 6 }}>F5</span></Button>}
               {!lost && !getTutorial() && !getScenarioRun() && hasSave('quicksave') && <Button className="btn" onClick={() => ctrl.current?.onQuickload?.()}>Quickload <span className="kbd" style={{ marginLeft: 6 }}>F9</span></Button>}
               <Button className="btn" onClick={() => setHelp(true)}>Controls <span className="kbd" style={{ marginLeft: 6 }}>{bindingLabel('help')}</span></Button>

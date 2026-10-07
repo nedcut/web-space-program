@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react';
 import type { ScalePresetId } from '../sim/bodies/scale';
 import type { CraftDef } from '../sim/vessel/types';
 import type { SavedWorld } from './persistence';
+import { saveFailure, type SaveFailure } from './storageErrors';
 
 export type Scene = 'scenarios' | 'flightlog' | 'pedia' | 'training' | 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking' | 'research' | 'missions';
 export type QualityPreset = 'low' | 'medium' | 'high';
@@ -60,6 +61,8 @@ export interface GameState {
   settings: Settings;
   /** One-shot message shown on the Space Center hub (e.g. recovery summary). */
   notice: string | null;
+  /** Latest failed save, shown as a non-blocking notification over every scene (`at` restarts its timer). */
+  saveError: (SaveFailure & { at: number }) | null;
 }
 
 const SETTINGS_KEY = 'wsp.settings.v1';
@@ -120,14 +123,22 @@ export const game = createStore<GameState>({
   launchPending: false,
   settings: loadSettings(),
   notice: null,
+  saveError: null,
 });
+
+/** Report a failed storage write without interrupting play or navigation. */
+export function reportSaveError(e: unknown) {
+  console.warn('Save failed', e);
+  game.set({ saveError: { ...saveFailure(e), at: Date.now() } });
+}
 
 export function updateSettings(patch: Partial<Settings>) {
   game.set((s) => ({ settings: { ...s.settings, ...patch } }));
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(game.get().settings));
-  } catch {
-    /* storage unavailable */
+  } catch (e) {
+    // Settings stay applied for this session.
+    reportSaveError(e);
   }
 }
 
@@ -159,8 +170,8 @@ game.subscribe(() => {
   try {
     // An explicit null records "this program's editor is empty" (absent = unknown).
     localStorage.setItem(programCraftKey(saveId), JSON.stringify(craft));
-  } catch {
-    /* storage unavailable */
+  } catch (e) {
+    reportSaveError(e);
   }
 });
 

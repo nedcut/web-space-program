@@ -60,6 +60,7 @@ import type { DockingTelemetry, Telemetry } from './hud/Hud';
 import type { NavballFrame, NavballMarker } from './hud/navball';
 import { FlightInput } from './input';
 import { actionAllowedWhileSuspended } from './modals';
+import { saveErrorText } from '../game/storageErrors';
 import { createPlanetLayer, type PlanetLayer } from './planets';
 
 
@@ -390,7 +391,7 @@ export class FlightController {
       saveWorldToStorage(slot, this.world);
       if (slot === 'quicksave') this.world.message(`Quicksaved (${bindingLabel('quickload')} to load)`);
     } catch (e) {
-      this.world.message(`Save failed: ${(e as Error).message}`, 'bad');
+      this.world.message(saveErrorText(e), 'bad');
     }
   }
 

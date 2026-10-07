@@ -14,6 +14,7 @@ import { useGame } from '../game/store';
 import { MainMenu } from './MainMenu';
 import { SpaceCenter } from './SpaceCenter';
 import { ErrorBoundary } from './ErrorBoundary';
+import { SaveErrorNotice } from './SaveErrorNotice';
 
 // Heavy 3D scenes are code-split so the menu loads instantly.
 const Scenarios = lazy(() => import('../scenarios/Scenarios'));
@@ -68,6 +69,7 @@ export function App() {
       {!photo.active && scene === 'flight' && <ScenarioPanel />}
       <PhotoPanel />
       </ErrorBoundary>
+      <SaveErrorNotice />
     </div>
   );
 }
