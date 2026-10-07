@@ -771,3 +771,5 @@ Added original branched coastal vegetation with wind and fading LOD, warmer deta
 - Before/after (including a Selene lander on the Moon) are in `docs/screenshots/partsart3/` (see its README for crops, numbers and known limits).
 - Current main merged; lint, typecheck, **107 files / 1,296 tests** and the production build pass.
 
+
+- **Zen startup fix (2026-10-07):** Reproduced New Game → Start leaving a blank page in the live Zen tab. The scene music switch threw because `AudioParam.cancelAndHoldAtTime` is unavailable. Added feature detection and a current-gain fallback using `cancelScheduledValues`/`setValueAtTime`. All 26 focused audio tests and typecheck pass; live Zen now opens Space Center and renders Vehicle Assembly.

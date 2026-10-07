@@ -149,3 +149,5 @@ Decisions made autonomously while the owner was away. Each can be revisited.
   - **The leg design was trimmed after the first paired run** (+0.33 ms, 1,079 draws). The braces became two-piece trunnion telescopes, the pad merged with its ribs and the pad bolts were dropped. The 600-pair acceptance is +0.20 ms against the +0.4 ms budget.
   - **Fine hardware is High-only.** A test now pins every part's Low triangle count at < 5k and ≤ High.
   - **Wing "NO STEP" stencils were dropped**: mirrored partners can only be rotated, so one wing of each pair would show them upside down.
+
+- **Zen music compatibility (2026-10-07):** Retain native `cancelAndHoldAtTime` when available; otherwise capture the current gain, cancel pending automation and anchor that value before the existing fade. This keeps scene transitions compatible with Firefox-based browsers without disabling music or changing browser settings.
