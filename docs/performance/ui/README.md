@@ -28,5 +28,5 @@ input-quiet thumbnail submission refinement. Later artifacts include both handle
 `event.timeStamp` → second rAF, retaining input-queue delay separately; early artifacts have only
 capture timing. `final-cpu-fixed.json` profiles the 100-part/flight workload with only editor/flight
 GPU draw submission suppressed; its ~59 fps is CPU isolation, not in-game performance.
-See [the performance report](../../PERFORMANCE.md#ui-responsiveness--production-interaction-probes)
+See [the performance report](../../PERFORMANCE.md#ui-responsiveness--2026-10-07-cxperfui)
 for the before/after tables, measurement limits and reproduction commands.
