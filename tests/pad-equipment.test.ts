@@ -51,6 +51,11 @@ describe('launch pad equipment', () => {
     };
     tip(0);
     const held = tip(5);
+    // A resting pad must not re-upload instances: every upload invalidates the cached shadow map.
+    const versions = () => eq.group.children.map((m) => (m as THREE.InstancedMesh).instanceMatrix.version);
+    const before = versions();
+    for (let t = 5; t < 6; t += 1 / 60) tip(t);
+    expect(versions()).toEqual(before);
     expect(Math.hypot(held.x, held.z)).toBeCloseTo(profile.holdR + 0.25, 0);
     expect(held.y).toBeCloseTo(profile.holdY, 0);
     // Per-frame steps (the equipment clamps long frame gaps).

@@ -12,7 +12,8 @@ import * as THREE from 'three';
  * - textures are layers of one 512² sRGB array, filled from the existing procedural canvases on the GPU
  *   (`copyTextureToTexture`, canvas → layer: no canvas read-back, which privacy modes blank).
  *
- * The site is drawn as two meshes with this material (shadow casters and ground-hugging non-casters) and
+ * The site is drawn as three meshes with this material (shadow casters near the pad, the rest of the casters,
+ * ground-hugging non-casters) and
  * the pad deck keeps its own 2048² texture.
  */
 export const SITE_LAYERS = [

@@ -46,6 +46,8 @@ export const SITE_LAYOUT = {
 } as const;
 
 const HIDE_DISTANCE = 200e3;
+/** Shadow casters within this radius of the pad (m) form the pad's caster mesh; the rest of the complex another. */
+const NEAR_CASTERS = 300;
 const BODY = 'earth';
 
 /** Cheap visibility test before allocating the launch complex's geometry and textures. */
@@ -187,7 +189,7 @@ export class LaunchSite {
   private readonly terrain: Terrain;
   private batches = new Map<Key, BatchDef>();
   /** Geometry awaiting `flush`: shadow casters, ground-hugging non-casters, and the pad deck. */
-  private pendingGeos = { cast: [] as THREE.BufferGeometry[], ground: [] as THREE.BufferGeometry[], deck: [] as THREE.BufferGeometry[] };
+  private pendingGeos = { cast: [] as THREE.BufferGeometry[], castFar: [] as THREE.BufferGeometry[], ground: [] as THREE.BufferGeometry[], deck: [] as THREE.BufferGeometry[] };
   private surfaceTextures: SiteTextureArray | null = null;
   private surfaceUniforms: SiteSurfaceUniforms | null = null;
   /** The merged site material (also used by the animated dish and pad equipment). */
@@ -400,7 +402,13 @@ export class LaunchSite {
       const c = geo.getAttribute('color') as THREE.BufferAttribute;
       for (let i = 0; i < c.count; i++) c.setXYZ(i, c.getX(i) * shade[i], c.getY(i) * shade[i], c.getZ(i) * shade[i]);
     }
-    (b.cast ? this.pendingGeos.cast : this.pendingGeos.ground).push(geo);
+    if (!b.cast) { this.pendingGeos.ground.push(geo); return; }
+    // Casters near the pad and the rest of the complex are separate meshes: the vessel-hugging shadow camera's
+    // cache only tracks casters inside its volume, and its rotation tolerance shrinks with a caster's reach —
+    // one site-wide caster (the assembly building is 1.2 km out) redrew the pad's shadow map every ~0.5 s.
+    geo.computeBoundingSphere();
+    const c = geo.boundingSphere!.center;
+    (Math.hypot(c.x, c.z) < NEAR_CASTERS ? this.pendingGeos.cast : this.pendingGeos.castFar).push(geo);
   }
 
   private addAll(key: Key, gs: THREE.BufferGeometry[], m?: THREE.Matrix4) {
@@ -419,6 +427,7 @@ export class LaunchSite {
     const fill = (renderer: THREE.WebGLRenderer) => this.surfaceTextures?.fill(renderer);
     for (const [name, list, mat, cast] of [
       ['main', this.pendingGeos.cast, this.siteMat!, true],
+      ['far', this.pendingGeos.castFar, this.siteMat!, true],
       ['ground', this.pendingGeos.ground, this.siteMat!, false],
       ['deck', this.pendingGeos.deck, this.deckMat!, false],
     ] as const) {

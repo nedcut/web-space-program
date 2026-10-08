@@ -274,7 +274,7 @@ export class PadEquipment {
   private set(mesh: THREE.InstancedMesh, i: number, m: THREE.Matrix4): void {
     const a = mesh.instanceMatrix.array as Float32Array, e = m.elements;
     let same = true;
-    for (let k = 0; k < 16; k++) if (Math.abs(a[i * 16 + k] - e[k]) > 1e-6) { same = false; break; }
+    for (let k = 0; k < 16; k++) if (a[i * 16 + k] !== Math.fround(e[k])) { same = false; break; }
     if (same) return;
     mesh.setMatrixAt(i, m);
     mesh.instanceMatrix.needsUpdate = true;
