@@ -4,7 +4,7 @@
  * cluster / bottom-right crew and view buttons.
  */
 .hud > * { pointer-events: none !important; }
-.hud-left > *:not(.hud-left-fill):not(.stg), .hud-top > *:not(.hud-messages), .hud-right > .app-bar, .app-stack > *, .crew-dock > *,
+.hud-left > *:not(.hud-left-fill):not(.hud-left-bottom), .hud-top > *:not(.hud-messages), .hud-right > .app-bar, .app-stack > *, .crew-dock > *,
 .hud-bottom > *, .hud > .app-win, .hud > .feel-hint { pointer-events: auto !important; }
 .hud .label { letter-spacing: .08em; font-size: 10px; }
 
@@ -236,3 +236,13 @@ html[data-ui-hidden='true'] :is(.tutorial-panel, .scenario-flight, .multiplayer-
 .quick-start-row { margin-bottom: 8px; }
 .quick-start p { color: var(--text-dim); line-height: 1.5; }
 @media (max-width: 1000px) { .hud-bottom { left: 125px; } .nb-burn { width: 120px; } }
+
+/* ------------------------------------------------------------ map view: maneuver planner in the left column */
+.hud-left-bottom { display: flex; flex-direction: column; justify-content: flex-end; min-height: 0; flex: 0 1 auto; pointer-events: none !important; }
+/* The navball cluster's G meter and SAS column reach ~215px up inside this column's width: keep the planner above. */
+.hud-left.map > .hud-left-bottom { min-height: 212px; }
+.hud-left > .panel.mp { flex: 0 100 auto; min-height: 150px; width: 100%; padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.mp-nodes { flex: 0 0 auto; max-height: 112px; overflow-y: auto; display: grid; gap: 4px; font-size: 12px; scrollbar-width: thin; }
+.mp-node { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; }
+.mp-scroll { flex: 0 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-right: -6px; padding-right: 6px; scrollbar-width: thin; }
+.mp-nodes + .mp-scroll { border-top: 1px solid var(--panel-border); padding-top: 8px; }

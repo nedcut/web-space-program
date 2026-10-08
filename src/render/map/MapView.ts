@@ -1,4 +1,4 @@
-import { smallBodyVisible } from './framing';
+import { patchDrawnNow, smallBodyVisible } from './framing';
 import { patchState } from '../../sim/orbit/numericalPrediction';
 import { createTerrain } from '../../sim/terrain';
 import { CometEffects } from '../planet/CometEffects';
@@ -294,6 +294,8 @@ export class MapView {
   yaw = 0.6;
   pitch = 0.5;
   distance = 2e7;
+  /** Counts the player's own zoom gestures, so automatic framing can stay out of a deliberate zoom. */
+  zoomCount = 0;
   resourceOverlayEnabled = false;
   /** Gesture callbacks (see MapHandlers). */
   handlers: MapHandlers = {};
@@ -389,35 +391,38 @@ export class MapView {
     return pick;
   }
 
+  private readonly parentOf = (id: string) => this.bodies.get(id)?.body.parent;
+
   /**
-   * Time at which a patch's central body is placed. Patches around the vessel's current body and its ancestors use
-   * now; a patch inside an encountered body (a moon, a destination planet) is drawn around where that body will be
-   * at the encounter, so the arc continues from the encounter point instead of jumping to today's position — unless
-   * that body is the camera focus, in which case its patches are drawn around it.
+   * Time at which a patch's central body is placed (see patchDrawnNow). A patch inside an encountered body (a moon,
+   * a destination planet, or a later return to the body being left) is drawn around where that body will be at the
+   * encounter, so the arc continues from the encounter point instead of jumping to today's position.
    */
   private patchFrameTime(u: MapUpdate, patch: TrajectoryPatch | undefined): number {
-    const first = u.vessel?.patches[0]?.orbit.body;
-    if (!patch || !first) return u.t;
-    // Focused on the encountered body itself: draw the flyby around the body as it is now (so the periapsis
-    // passes the sphere on screen), like a planner looking at the encounter from the target's point of view.
+    const patches = u.vessel?.patches;
+    if (!patch || !patches?.length) return u.t;
+    const k = patches.indexOf(patch);
+    if (k >= 0) return patchDrawnNow(patches, k, u.focusId, this.parentOf) ? u.t : Math.max(u.t, patch.startTime);
+    // A patch from an earlier prediction (a drag in progress): present frame if its body is a reference ancestor.
     if (patch.orbit.body === u.focusId) return u.t;
-    for (let id: string | undefined = first; id; id = this.bodies.get(id)?.body.parent) if (id === patch.orbit.body) return u.t;
+    for (let id: string | undefined = patches[0].orbit.body; id; id = this.parentOf(id)) if (id === patch.orbit.body) return u.t;
     return Math.max(u.t, patch.startTime);
   }
 
   /**
    * Heliocentric draw position of `body` at `time` in the vessel's frame: the body keeps its offset from the
-   * nearest reference ancestor (the vessel's current body or one of its parents) at that time, while the ancestor
-   * itself stays where it is now. A moon at encounter is drawn where it will be relative to its planet.
+   * nearest reference ancestor (one of the vessel's current body's parents, or that body itself for a moon of it)
+   * at that time, while the ancestor itself stays where it is now. A moon at encounter is drawn where it will be
+   * relative to its planet; a later return to the current body, where that body will be relative to its parent.
    */
   private framedBodyPosition(body: string, u: MapUpdate, time: number): Vec3 {
     const now = this.ephem.getBodyState(body, u.t).position;
     if (time === u.t) return now;
     const first = u.vessel?.patches[0]?.orbit.body;
     let anchor: string | undefined;
-    for (let id: string | undefined = body; id && !anchor; id = this.bodies.get(id)?.body.parent)
+    for (let id: string | undefined = this.parentOf(body); id && !anchor; id = this.bodies.get(id)?.body.parent)
       for (let ref: string | undefined = first; ref; ref = this.bodies.get(ref)?.body.parent) if (ref === id) { anchor = id; break; }
-    if (!anchor || anchor === body) return now;
+    if (!anchor) return now;
     const then = this.ephem.getBodyState(body, time).position, a0 = this.ephem.getBodyState(anchor, time).position, a1 = this.ephem.getBodyState(anchor, u.t).position;
     return { x: a1.x + then.x - a0.x, y: a1.y + then.y - a0.y, z: a1.z + then.z - a0.z };
   }
@@ -1584,6 +1589,7 @@ export class MapView {
       }
       const factor = wheelZoomFactor(e.deltaY, e.deltaMode, e.ctrlKey, el.clientHeight || 800);
       this.distance = Math.max(minDistance(), Math.min(5e13, this.distance * factor));
+      this.zoomCount++;
     };
     const menu = (e: Event) => e.preventDefault();
     const leave = () => { this.pointer.inside = false; if (!this.drag) this.setHover(NONE); };

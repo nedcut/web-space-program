@@ -303,7 +303,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
   return (
     <div className="overlay hud" style={{ width: `${100 / settings.hudScale}%`, height: `${100 / settings.hudScale}%`, transform: `scale(${settings.hudScale})`, transformOrigin: 'top left' }}>
       {/* Top-left: time warp and clocks; in map view the maneuver planner; docking indicator; staging at the bottom. */}
-      <div className="hud-left">
+      <div className={`hud-left${t.mapMode ? ' map' : ''}`}>
         <TimeControl t={t} cb={cb} />
         {dock?.onboarding}
         {engineeringStrip && !t.eva && t.engineering && <EngineeringStrip data={t.engineering} speed={speed} />}
@@ -312,10 +312,13 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
         {t.mapMode && dock?.maneuver}
         {t.dockingMode && !t.mapMode && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
         <div className="hud-left-fill" />
-        {!t.eva && t.stages.length > 0 && (
-          <StagingStack stages={t.stages} stage={t.stage} locked={t.stageLocked} imperial={imperial} canStage={canStage}
-            dockingMode={t.dockingMode} stageProgress={stageProgress} cb={stagingCb} />
-        )}
+        {/* In map view this block also keeps the planner above the navball cluster's SAS column. */}
+        <div className="hud-left-bottom">
+          {!t.eva && t.stages.length > 0 && (
+            <StagingStack stages={t.stages} stage={t.stage} locked={t.stageLocked} imperial={imperial} canStage={canStage}
+              dockingMode={t.dockingMode} stageProgress={stageProgress} cb={stagingCb} />
+          )}
+        </div>
       </div>
 
       {/* Top-centre: altimeter with status lamps, orbit strip, cautions and messages. */}

@@ -7,7 +7,9 @@ import { formatDuration } from '../../util/format';
 import { isTyping, matches } from '../../input/bindings';
 import { formatDistance, formatSpeed } from '../../util/format';
 import { length, sub, type Vec3 } from '../../util/vec3';
-import { orbitFrameDistance } from './framing';
+import type { TrajectoryPatch } from '../../sim/orbit/api';
+import { patchState } from '../../sim/orbit/numericalPrediction';
+import { AutoFramer, firstTransition, pathFrameDistance } from './framing';
 import { nodeSummary, patchAtNode } from './nodeInfo';
 
 export interface MapMenus {
@@ -32,6 +34,7 @@ export class FlightMap {
   menus: MapMenus = { node: null, context: null, info: null };
   private listeners = new Set<() => void>();
   private hinted = false;
+  private readonly autoFrame = new AutoFramer();
   private readonly keydown = (e: KeyboardEvent) => {
     const c = this.c;
     if (!c.mapMode || c.paused || e.repeat || isTyping(e.target)) return;
@@ -81,16 +84,24 @@ export class FlightMap {
 
   // ---------- Focus ----------
 
-  /** Focus position/identity for this frame; invalid focus falls back to the active vessel. */
-  focusFrame(active: WorldVessel, origin: Vec3): { position: Vec3; focusId: string; referenceBody: string } {
+  /**
+   * Focus position/identity for this frame; invalid focus falls back to the active vessel. `patches` is the path
+   * the map draws this frame (no prediction is started here).
+   */
+  focusFrame(active: WorldVessel, origin: Vec3, patches: readonly TrajectoryPatch[]): { position: Vec3; focusId: string; referenceBody: string } {
     const f = this.focus, w = this.world;
     if (f?.kind === 'body' && w.universe.bodies.has(f.id)) return { position: w.universe.ephem.getBodyState(f.id, w.ut).position, focusId: f.id, referenceBody: f.id };
     const v = f?.kind === 'vessel' && f.id !== w.activeId ? w.vessels.get(f.id) : undefined;
     if (v) return { position: v.state.position, focusId: `vessel:${v.state.id}`, referenceBody: v.body };
     if (f && !(f.kind === 'vessel' && f.id === w.activeId)) this.focus = null;
     const bodyState = w.universe.ephem.getBodyState(active.body, w.ut);
+    const thrusting = active.state.telemetry.thrust > 0;
+    // Following the vessel: frame the new primary after an SOI change, and an encounter/escape (or its loss on
+    // capture) as it appears on the flown path, unless the player has zoomed since.
+    const i = firstTransition(patches, active.body);
+    if (this.autoFrame.update(active.body, i >= 0 ? patches[i] : undefined, this.c.map.zoomCount, performance.now(), thrusting)) this.frameActive(patches);
     // The local body remains central; enlarge the frame only if a burn carries the vessel out of view.
-    if (active.state.telemetry.thrust > 0) {
+    if (thrusting) {
       const dx = origin.x - bodyState.position.x, dy = origin.y - bodyState.position.y, dz = origin.z - bodyState.position.z;
       this.c.map.distance = Math.max(this.c.map.distance, Math.sqrt(dx * dx + dy * dy + dz * dz) * 2.8);
     }
@@ -110,20 +121,39 @@ export class FlightMap {
       // A body the predicted path enters is framed by its SOI, so the flyby and its periapsis are in view.
       const encountered = Number.isFinite(b.soi) && w.trajectory().some(p => p.orbit.body === b.id) && b.id !== active?.body;
       map.distance = Math.max(b.radius * (b.kind === 'star' ? 8 : 5), this.minDistance() * 1.5, encountered ? b.soi * 1.8 : 0);
-    } else {
-      const v = obj ? w.vessels.get(obj.id) : active;
-      if (v) map.distance = orbitFrameDistance(w.universe.body(v.body).radius, length(w.relativeState(v).position), w.orbitOf(v));
-    }
+    } else if (obj) {
+      const v = w.vessels.get(obj.id);
+      if (v) map.distance = this.vesselFrameDistance(v);
+    } else this.frameActive(w.mapTrajectory());
     this.emit();
   }
 
+  /** Frame the active vessel's orbit and the first SOI change on its path (map opened, "Frame active orbit"). */
   frameOrbit() {
-    const w = this.world, v = w.active;
-    if (!v) return;
+    if (!this.world.active) return;
     this.focus = null;
+    this.frameActive(this.world.mapTrajectory());
+  }
+
+  private frameActive(patches: readonly TrajectoryPatch[]) {
+    const v = this.world.active;
+    if (!v) return;
+    const i = firstTransition(patches, v.body), transition = i >= 0 ? patches[i] : undefined;
+    this.c.map.distance = this.vesselFrameDistance(v, transition);
+    this.autoFrame.framed(v.body, transition, this.c.map.zoomCount, performance.now());
+  }
+
+  /** Local orbit of `v`, widened to include the SOI change ending patch `p` (an encounter or escape). */
+  private vesselFrameDistance(v: WorldVessel, p?: TrajectoryPatch): number {
+    const w = this.world, body = w.universe.body(v.body);
     let orbit;
     try { orbit = w.orbitOf(v); } catch { /* on the launch pad */ }
-    this.c.map.distance = orbitFrameDistance(w.universe.body(v.body).radius, length(w.relativeState(v).position), orbit);
+    let reach = 0;
+    if (p?.nextBody) {
+      const at = length(patchState(p, p.endTime).position);
+      reach = p.endReason === 'soiEnter' ? at + (w.universe.bodies.get(p.nextBody)?.soi ?? 0) : Math.max(at, Number.isFinite(body.soi) ? body.soi : 0);
+    }
+    return pathFrameDistance(body.radius, length(w.relativeState(v).position), orbit, reach);
   }
 
   /** Planning preserves the local orbit; the complete transfer overview is an explicit action. */
