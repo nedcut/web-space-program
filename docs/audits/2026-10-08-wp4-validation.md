@@ -103,13 +103,17 @@ Each directory contains `leo.png`, `mid-tli.png`, `moon.png`, `report.json`, raw
 and Chrome `video.mp4`. The after directories also contain `alarms.png`, `surface-marker.png` and `reentry-map.png`.
 `after-dpr2` and `after-firefox` also contain `surface-marker-visible.png`; the first re-entry flight point was
 outside the camera view, so a short local fall verifies the marker. The surface-track coordinate correction
-follows these captures and is being recaptured as `after-final-dpr2`.
+follows the paired captures; final-build Firefox recapture is saved in `after-final-firefox/` with the corrected
+map path/endpoint and visible flight marker. It reports zero errors, a 45-point line, 2,023 ms worker time,
+9 ms maximum chunk and 9 ms submission. Local map counts remain 20/34/20 and the custom alarm stops warp.
 
 Final recapture encountered Chrome protocol timeouts and then a concrete Windows `ENOSPC` failure. The drive
 had filled during shared runs. Removed only WP4's closed generated browser profiles and hash-verified duplicate
 JPEGs whose originals are retained in the Linux artifact directory, recovering about 528 MB. The driver now
 caps protocol waits at 30 s and omits duplicate video recording for final still captures. Earlier successful
-paired videos remain intact; the final worker-coordinate correction is being rechecked in Firefox.
+paired videos remain intact; the final worker-coordinate correction was successfully rechecked in Firefox
+after recovery. Failed recapture diagnostics are retained separately in `failed-recapture/`. Final Chrome
+recapture after that worker-only correction is incomplete; the earlier matching-DPR map/video evidence stands.
 
 ## Limits / review still required
 
