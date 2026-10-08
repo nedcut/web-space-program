@@ -1408,9 +1408,10 @@ export class LaunchSite {
     if (pad && local && pad.firing && Math.hypot(local.x, local.z) < 12) {
       const thrust = pad.state.telemetry.thrust;
       const height = Math.max(0, local.y);
-      strength = Math.min(1, Math.max(0, thrust) / 1.5e6 + (thrust > 0 ? 0.35 : 0)) * (1 - THREE.MathUtils.smoothstep(height, 40, 220));
+      // Standard-scale launchers make 0.1–2 MN: every one raises a real cloud, the big ones a heavier one.
+      strength = (thrust > 0 ? Math.min(1, 0.55 + thrust / 4e5) : 0) * (1 - THREE.MathUtils.smoothstep(height, 40, 220));
     }
-    this.steam.update(t, dt, strength, 1 - this.night.value);
+    this.steam.update(dt, strength, 1 - this.night.value);
   }
 
   /**

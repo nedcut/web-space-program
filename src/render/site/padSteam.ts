@@ -17,6 +17,8 @@ export class PadSteam {
   private credit = 0;
   private expires = -1;
   private seed = 12345;
+  /** Local clock (s): UT is ~1e9 s, far beyond float32 resolution for puff ages. */
+  private clock = 0;
 
   constructor(private readonly capacity: number, sunDir: { value: THREE.Vector3 }, private readonly trench: { halfWidth: number; open: number; end: number; hole: number }) {
     this.spawn = new Float32Array(capacity * 3);
@@ -45,7 +47,7 @@ export class PadSteam {
           float age = uTime - aParams.x;
           float life = age / max(0.001, aParams.y);
           float valid = step(0.0, age) * step(life, 1.0) * step(0.001, aParams.y);
-          // Quadratic drag (velocity decays over ~1.6 s) plus a slow buoyant rise.
+          // Drag (velocity decays over ~1.6 s) plus a slow buoyant rise.
           const float tau = 1.6;
           float k = tau * (1.0 - exp(-age / tau));
           vec3 p = aSpawn + aVelocity * k + vec3(0.0, 0.9 * age + 0.05 * age * age, 0.0);
@@ -92,10 +94,12 @@ export class PadSteam {
   private rnd(): number { this.seed = (this.seed * 1664525 + 1013904223) >>> 0; return this.seed / 4294967296; }
 
   /**
-   * Advance to sim time `t`. `strength` (0..1) scales the emission: engine thrust over the hole, fading as the
+   * Advance by `dt` seconds of sim time. `strength` (0..1) scales the emission: engine thrust over the hole, fading as the
    * vessel climbs. `daylight` (0..1) dims the steam at night.
    */
-  update(t: number, dt: number, strength: number, daylight: number): void {
+  update(dt: number, strength: number, daylight: number): void {
+    this.clock += dt;
+    const t = this.clock;
     const u = this.mesh.material.uniforms;
     u.uTime.value = t;
     u.uDay.value = daylight;
