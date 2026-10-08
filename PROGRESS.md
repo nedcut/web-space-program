@@ -33,7 +33,7 @@ wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLA
   The trench and hole are now scorched concrete and steel instead of a black void; buildings have ribbed cladding,
   window façades with sills and grime, textured roofs and darker bases.
 - **Cheaper, not dearer:** the whole complex now draws with one layered material (site draws per frame 22 + 11 shadow →
-  6 + 6, equipment included). GPU A/B vs main (RTX 3060 Ti, Medium, DPR 2) is in `docs/PERFORMANCE.md`.
+  5 + 3, equipment included). GPU A/B vs main (RTX 3060 Ti, Medium, DPR 2) is in `docs/PERFORMANCE.md`.
 - **Moon close-up:** small craters at three scales appear below ~3 km, so 3 km, 500 m and 50 m finally look different;
   rocks sit in the regolith with contact/cast shadows; your lander's shadow falls on the ground (also on Mars etc.); a
   radial dust sheet races out under the engine below ~100 m.
