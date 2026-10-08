@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { FlightController } from '../controller';
 import { qRotate } from '../../util/quat';
@@ -6,7 +6,7 @@ import { dot, length, sub } from '../../util/vec3';
 import { formatCountdown, formatDistance } from '../../util/format';
 
 /** DOM surface marker at 4 Hz; Float64 body rotation/subtraction precedes camera projection. */
-export function LandingMarker({ controller: c }: { controller: FlightController }) {
+export const LandingMarker = memo(function LandingMarker({ controller: c }: { controller: FlightController }) {
   const marker = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const projected = new THREE.Vector3();
@@ -35,4 +35,4 @@ export function LandingMarker({ controller: c }: { controller: FlightController 
     return () => clearInterval(timer);
   }, [c]);
   return <div ref={marker} aria-label="Predicted landing surface marker" style={{ position: 'absolute', display: 'none', transform: 'translate(-50%, -100%)', color: '#ffac66', background: '#07101bcc', padding: '4px 8px', borderRadius: 4, fontSize: 12, pointerEvents: 'none' }} />;
-}
+});

@@ -2,7 +2,7 @@ import { usePlanner } from './usePlanner';
 import type { TransferWindow as DepartureWindow } from '../../game/planning/windows';
 import { applyPlanningResult } from '../../game/planning/apply';
 import { TransferWindow } from './TransferWindow';
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import type { World } from '../../game/world';
 import { timeToApoapsis, timeToPeriapsis } from '../../sim/orbit';
 import { formatCountdown, formatDistance, formatDuration } from '../../ui/format';
@@ -19,8 +19,9 @@ function storedOpen(): boolean {
 /**
  * Collapsible "Maneuver planner" app shown in map view. Nodes are normally placed by clicking the orbit and shaped
  * with the map gizmo; this panel holds the planning tools (circularize, transfers, transfer windows) and a node list.
+ * Memoised: it refreshes on its own 4 Hz clock rather than with every HUD telemetry publication.
  */
-export function ManeuverPanel({ world, map }: { world: World; map?: FlightMap }) {
+export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world: World; map?: FlightMap }) {
   useRenderProfile();
   const [, force] = useState(0);
   const [open, setOpen] = useState(() => storedOpen() || !!getTutorial());
@@ -29,12 +30,11 @@ export function ManeuverPanel({ world, map }: { world: World; map?: FlightMap })
   const [transferTarget, setTransferTarget] = useState<string | null>(null);
   const [options, setOptions] = useState<{ target: string; windows: DepartureWindow[] } | null>(null);
 
-  // Node list readouts refresh at 4 Hz while the panel is open.
+  // Node list readouts (and the collapsed header's node count) refresh at 4 Hz.
   useEffect(() => {
-    if (!open) return;
     const id = window.setInterval(() => force((x) => (x + 1) % 1e6), 250);
     return () => window.clearInterval(id);
-  }, [open]);
+  }, []);
 
   const toggle = () => {
     setOpen(o => {
@@ -150,7 +150,7 @@ export function ManeuverPanel({ world, map }: { world: World; map?: FlightMap })
     </div>
     </>
   );
-}
+});
 
 /**
  * The departures the planner found for the last transfer: wait versus Δv, so the player can trade a long wait for

@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { memo, useEffect, useReducer, useRef, useState } from 'react';
 import type { FlightController } from '../controller';
 import type { ManeuverNode } from '../../sim/orbit/api';
 import { MapContextMenu, MapInfoCard, clampToParent } from '../../ui/map/MapContextMenu';
@@ -20,8 +20,11 @@ function useMapUi(ui: FlightMap, hz = 8) {
   useEffect(() => { const id = window.setInterval(bump, 1000 / hz); return () => window.clearInterval(id); }, [hz]);
 }
 
-/** Map-mode overlay: node menu, context menu, info card and the compact orbit readout. */
-export function MapOverlay({ controller: c }: { controller: FlightController }) {
+/**
+ * Map-mode overlay: node menu, context menu, info card and the compact orbit readout. Memoised: it refreshes on its
+ * own clock and menu events, not on every HUD telemetry publication.
+ */
+export const MapOverlay = memo(function MapOverlay({ controller: c }: { controller: FlightController }) {
   const ui = c.mapUi;
   useMapUi(ui);
   const { node: nodeId, context, info } = ui.menus;
@@ -37,7 +40,7 @@ export function MapOverlay({ controller: c }: { controller: FlightController }) 
       actions={ui.pointActions(context.point)} onAction={id => ui.runPoint(id, context.point!)} onClose={() => ui.closeMenus()} />}
     {info && <InfoCard controller={c} obj={info} />}
   </>;
-}
+});
 
 function InfoCard({ controller: c, obj }: { controller: FlightController; obj: MapObject }) {
   const w = c.world, close = () => c.mapUi.closeInfo();
@@ -78,8 +81,18 @@ function MapReadout({ controller: c }: { controller: FlightController }) {
       orbit = `${Number.isFinite(T) ? `Period ${formatDuration(T)}` : 'Escape trajectory'} · e ${o.e.toFixed(3)}`;
     }
   } catch { /* degenerate orbit */ }
+  const title = f ? `Viewing ${ui.name(f)}` : `Viewing ${body?.name ?? 'body'} · ${wv?.state.name ?? 'vessel'}`;
+  return <ReadoutView controller={c} title={title} path={path} orbit={orbit}
+    landing={ui.landing.enabled ? ui.landing.attitude : 'off'} status={ui.landing.status} />;
+}
+
+/** The readout's DOM, re-rendered only when one of its strings changes. */
+const ReadoutView = memo(function ReadoutView({ controller: c, title, path, orbit, landing, status }: {
+  controller: FlightController; title: string; path: string; orbit: string | null; landing: 'off' | 'hold' | 'retrograde'; status: string | null | undefined;
+}) {
+  const ui = c.mapUi;
   return <div className="panel map-readout" aria-label="Map focus">
-    <span className="title">{f ? `Viewing ${ui.name(f)}` : `Viewing ${body?.name ?? 'body'} · ${wv?.state.name ?? 'vessel'}`}</span>
+    <span className="title">{title}</span>
     {path && <span className="path">{path}</span>}
     {orbit && <span className="mono">{orbit}</span>}
     <button className="btn ghost small" onClick={() => {
@@ -87,13 +100,13 @@ function MapReadout({ controller: c }: { controller: FlightController }) {
       if (!l.enabled) { l.enabled = true; l.attitude = 'hold'; }
       else if (l.attitude === 'hold') l.attitude = 'retrograde';
       else l.enabled = false;
-    }}>Landing: {ui.landing.enabled ? ui.landing.attitude === 'hold' ? 'hold attitude' : 'surface retrograde' : 'off'}</button>
-    {ui.landing.enabled && <span className="hint">Unpowered · drag, heating, deployed chutes · no future staging</span>}
-    {ui.landing.status && <span role="status">{ui.landing.status}</span>}
+    }}>Landing: {landing === 'off' ? 'off' : landing === 'hold' ? 'hold attitude' : 'surface retrograde'}</button>
+    {landing !== 'off' && <span className="hint">Unpowered · drag, heating, deployed chutes · no future staging</span>}
+    {status && <span role="status">{status}</span>}
     <button className="btn ghost small" onClick={() => ui.frameOrbit()}>Frame active orbit</button>
     <span className="hint">{hints()}</span>
   </div>;
-}
+});
 
 function hints() {
   return `Click orbit: add node · Right-click: menu · Double-click: focus · ${bindingLabel('mapFocusNext')} / Shift+${bindingLabel('mapFocusNext')}: cycle focus · ${bindingLabel('mapFocusHome')}: back to vessel`;

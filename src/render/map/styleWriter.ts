@@ -15,7 +15,17 @@ export function setStyle(el: HTMLElement, key: StyleKey, value: string): void {
   el.style[key] = value;
 }
 
-/** `translate3d` to a CSS-pixel position, rounded to 0.1 px so sub-pixel jitter does not count as a change. */
+const positions = new WeakMap<HTMLElement, { x: number; y: number; suffix: string }>();
+
+/**
+ * `translate3d` to a CSS-pixel position, rounded to 0.1 px so sub-pixel jitter does not count as a change.
+ * The rounded numbers are compared first, so an unchanged label builds no string.
+ */
 export function setPosition(el: HTMLElement, x: number, y: number, suffix = ''): void {
-  setStyle(el, 'transform', `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0)${suffix}`);
+  const rx = Math.round(x * 10), ry = Math.round(y * 10);
+  let last = positions.get(el);
+  if (last && last.x === rx && last.y === ry && last.suffix === suffix) return;
+  if (!last) positions.set(el, (last = { x: 0, y: 0, suffix }));
+  last.x = rx; last.y = ry; last.suffix = suffix;
+  setStyle(el, 'transform', `translate3d(${(rx / 10).toFixed(1)}px,${(ry / 10).toFixed(1)}px,0)${suffix}`);
 }
