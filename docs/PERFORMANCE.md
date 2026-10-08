@@ -2005,13 +2005,17 @@ agents (load average > 30 at times), so read single pairs with caution. Earlier 
 11.71 → 8.17 and 11.21 → 11.06 ms. Screenshots of an orbit pair match (mean absolute difference 2–4/255, one second
 of simulation apart).
 
-Chrome (RTX 3060 Ti), `gpu-passes-ab.sh`, Medium, DPR 2, fenced GPU ms, 3 interleaved pairs (medians):
+Chrome (RTX 3060 Ti), `gpu-passes.mjs`, Medium, DPR 2, fenced GPU ms, final branch vs current main, two interleaved
+pairs (main → branch):
 
-| Case | main → branch |
-|---|---:|
-| Pad | 2.44 → 2.55 (+4%, scene pass 2.09 → 2.25) |
-| Ascent | 2.03 → 2.02 |
-| Orbit | 2.05 → 2.04 |
+| Case | pair 1 | pair 2 |
+|---|---:|---:|
+| Pad | 2.456 → 2.448 | 2.401 → 2.397 |
+| Ascent | 2.027 → 2.047 | 2.056 → 2.049 |
+| Orbit | 2.053 → 2.041 | 2.021 → 2.027 |
+
+Unchanged within noise and within the 2.5 ms Medium budget. (With the program-major sort, pad had been
+2.44 → 2.55; see change 4.)
 
 Chrome steady orbit CPU 2.4 → 2.35 ms, draws 139 → 130; imagery streaming finished in ~4 s after loading on both
 (texSubImage2D activity), no regression from the credit budget.
