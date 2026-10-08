@@ -982,7 +982,8 @@ export class FlightController {
     const camera = this.cam.camera;
     this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors, u.body(wv.body).surfaceGravity);
     this.effects.rcs(wv.state,this.rcsOn,this.input.state);
-    this.surfaceDust.update(wv.state, origin, bodyState.position, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, wv.body === 'earth' ? undefined : u.body(wv.body).surface.colors[1] ?? u.body(wv.body).surface.colors[0], this.sunDirScratch.set(sunDir.x, sunDir.y, sunDir.z), t, this.paused ? 0 : dt);
+    const groundAltitude = u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain;
+    this.surfaceDust.update(wv.state, origin, bodyState.position, groundAltitude, air.density, wv.body === 'earth' ? undefined : u.body(wv.body).surface.colors[1] ?? u.body(wv.body).surface.colors[0], this.sunDirScratch.set(sunDir.x, sunDir.y, sunDir.z), t, this.paused ? 0 : dt);
     if (!this.paused) this.effects.shake(camera, cameraShakeScale(game.get().settings) === 0);
     prof.add('fx', t0);
     if (this.network) {
@@ -1031,7 +1032,7 @@ export class FlightController {
 
     // Ground receivers sample the vessel's shadow map only while the ground is within its depth range (orbit
     // frames skip the per-fragment lookup entirely).
-    const shadowReachesGround = u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain < sc.far;
+    const shadowReachesGround = groundAltitude < sc.far;
     updateSiteShadow(this.sunLight, this.pipeline.renderer.shadowMap.enabled && shadowReachesGround);
     t0 = prof.now();
     // A lunar flight or distant orbit must not construct and warm hundreds of hidden site meshes.
