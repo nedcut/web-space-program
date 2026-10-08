@@ -38,8 +38,9 @@ No push or merge; the implementation builds on the transfer search and maneuver 
   rejection of a stale burn result, and disposal. Numerical anchor and map framing/filter tests pass.
 
 `npm run lint` (including simulation layering), `npm run typecheck`, and `npm run build` pass.
-Final `npx vitest run --maxWorkers=4`: **142 files, 1,446 tests passed, one skipped**, 254.35 s.
-Logs: `/tmp/wp4-{lint,typecheck,build}-current.log`, `/tmp/wp4-full-current.log`.
+Final `npx vitest run --maxWorkers=4`: **142 files, 1,446 tests passed, one skipped**, 190.98 s,
+including the final drag-path draw-order change. Logs: `/tmp/wp4-{lint,typecheck,build}-visual.log`,
+`/tmp/wp4-full-final.log`.
 
 ## Performance design and reproducibility
 
@@ -63,6 +64,27 @@ node --import tsx --import ./scripts/earth-data/register.ts scripts/wp4-planning
 `scripts/windows-firefox/wp4.mjs` records LEO, a short mid-injection burn and lunar orbit, plus the after-build
 alarm and re-entry flows. All real browser runs use ports 5441/5442 and `flock /tmp/wsp-gpu.lock`.
 Captures and traces stay outside git.
+
+## Real browser evidence
+
+Real Windows Chrome / RTX 3060 Ti, Medium, 1600×900 CSS: baseline DPR 2 and after DPR 1 captures completed
+with no page/console errors. The after-build camera focus equals the active body's Float64 position in LEO,
+mid-injection and lunar orbit. The live orbit remains visible and Bennu is absent in all three after images.
+The custom alarm records `held: true`, `warp: 0`. These are functional captures; comparison at matching DPR
+is still pending, so the different-DPR timings are not presented as a paired GPU improvement.
+
+The after re-entry worker produces an impact path (19,782 physics steps) in 1,661.3 ms off the main thread;
+the largest yielded chunk is **14.6 ms**, and first main-thread submission is **14.4 ms**. Safe-orbit scenes
+record no worker submission. All three steady map scenes retain 92 shader programs, matching the baseline.
+Calls are 32/46/32 before and 20/34/20 after for LEO/burn/Moon; filtering removes 12 draws.
+The capture records two **157/128 ms** application long tasks around the re-entry transition. Their causes
+are not proven by this probe; submission/chunk measurements alone do not establish a hitch-free app.
+
+Artifacts: `/home/nedcut/.t3/projects/wsp-traces/wp4/{before-dpr2,after-dpr1}/`.
+Each directory contains `leo.png`, `mid-tli.png`, `moon.png`, `report.json`, raw screencast frames with timestamps
+and `video.mp4`. The after directory also contains `alarms.png`, `surface-marker.png` and `reentry-map.png`.
+The first flight screenshot's landing point is outside the camera view; a near-surface visible-marker check
+was added to the driver. The final drag-line draw-order fix follows this first capture and is being recaptured.
 
 ## Limits / review still required
 
