@@ -25,6 +25,16 @@ interface PartVisual {
 }
 
 /**
+ * Frames a split/staged/destroyed layout must stay unchanged before it is re-batched. A crash removes parts over
+ * several frames and creates a view per fragment; batching each intermediate layout on its event frame stacked
+ * ~5–10 ms of geometry merging onto the impact. Until then the parts draw individually (the pre-batch path).
+ */
+const BATCH_SETTLE_FRAMES = 12;
+/** At most one deferred batch per this many ms across all views, so a burst of fragments does not batch at once. */
+const BATCH_SPACING_MS = 4;
+let lastDeferredBatch = -Infinity;
+
+/**
  * Renders one vessel. The group is placed at (vessel COM − floating origin) with the vessel's attitude; parts are
  * offset by −COM so the craft frame lines up with the simulation exactly.
  */
@@ -35,6 +45,8 @@ export class VesselView {
   private parts = new Map<number, PartVisual>();
   private lastTopology?: VesselState['cache'];
   private batch?: THREE.Group;
+  /** Frames until the deferred batch may run; 0 = batched (or nothing pending). */
+  private batchPending = 0;
   private stressOverlay = false;
   private links = new LinkView();
 
@@ -64,7 +76,8 @@ export class VesselView {
     this.root.add(this.inner, this.impostor);
     this.inner.add(this.links.root);
     this.impostor.visible = false;
-    this.rebuild();
+    // A split piece adopts already-drawn visuals: draw them unbatched until the breakup settles.
+    this.rebuild(this.parts.size > 0);
   }
 
   get id() {
@@ -95,8 +108,9 @@ export class VesselView {
     this.vessel = v;
   }
 
-  private rebuild() {
+  private rebuild(defer = false) {
     if (this.batch) disposeStaticBatch(this.batch);
+    this.batch = undefined;
     // Restore static leaves hidden by the previous batch before regrouping after staging/docking.
     for (const pv of this.parts.values()) pv.object.traverse(o => { if (o.userData.batchedVisible) { o.visible = true; o.matrixWorldAutoUpdate = true; delete o.userData.batchedVisible; } });
     let needsSoot = false;
@@ -136,9 +150,6 @@ export class VesselView {
       this.inner.add(obj);
       this.parts.set(p.uid, { state: p, heat, uid: p.uid, partId: p.partId, object: obj, plumes, surfaces, deploy: 0, static: false });
     }
-    const staticObjects: THREE.Object3D[] = [];
-    // Animated parts (engines, panels, pods with lamps...) still have mostly rigid meshes: batch those too.
-    const rigidObjects: THREE.Object3D[] = [];
     const staticKinds = new Set(['tank', 'adapter', 'girder', 'strut', 'noseCone', 'battery', 'reactionWheel', 'probeCore', 'heatShield', 'monoSphere', 'monoTorus', 'xenonTank', 'framework', 'habitat', 'rcsQuad', 'rcsPorts', 'instrument', 'decoupler', 'separator', 'radialDecoupler']);
     for (const p of this.vessel.parts) {
       const pv = this.parts.get(p.uid)!;
@@ -148,6 +159,8 @@ export class VesselView {
       pv.state = p;
       obj.position.set(p.position.x, p.position.y, p.position.z);
       obj.quaternion.set(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
+      // A previous batch froze static parts' local matrices; they draw individually until the next batch.
+      if (!obj.matrixAutoUpdate) obj.updateMatrix();
       pv.static = staticKinds.has(p.def.mesh);
       pv.lightKey = undefined;
       if (this.stressOverlay) {
@@ -156,25 +169,44 @@ export class VesselView {
       } else {
         for (const [mesh, material] of pv.surfaces) mesh.material = material;
       }
-      if (pv.static && !this.stressOverlay) staticObjects.push(obj);
-      else if (!this.stressOverlay && !this.vessel.eva) rigidObjects.push(obj);
     }
     // Soot follows the current engine layout (PartHeat already gave every part its own geometry copy).
     // Separation does not wash off accumulated staining. Only a new/moved layout needs a bake.
     if (needsSoot) bakeEngineSoot([...this.parts.values()].map(pv => pv.object), this.inner);
+    this.geometryKey = this.layoutKey();
+    this.lastTopology = this.vessel.cache;
+    this.batchPending = 0;
+    if (this.stressOverlay) return;
+    if (defer) this.batchPending = BATCH_SETTLE_FRAMES;
+    else this.batchParts();
+  }
+
+  private batchParts() {
+    this.batchPending = 0;
+    const staticObjects: THREE.Object3D[] = [];
+    // Animated parts (engines, panels, pods with lamps...) still have mostly rigid meshes: batch those too.
+    const rigidObjects: THREE.Object3D[] = [];
+    for (const p of this.vessel.parts) {
+      const pv = this.parts.get(p.uid);
+      if (!pv) continue;
+      if (pv.static) staticObjects.push(pv.object);
+      else if (!this.vessel.eva) rigidObjects.push(pv.object);
+    }
     this.batch = batchStaticParts([...staticObjects, ...rigidObjects], isAnimatedNode);
     this.inner.add(this.batch);
     for (const obj of staticObjects) obj.traverse(o => { o.matrixAutoUpdate = false; });
-    this.geometryKey = this.layoutKey();
-    this.lastTopology = this.vessel.cache;
   }
 
   update(origin: Vec3, time: number, ambientPressure: number, dt: number, distant = false) {
     const v = this.vessel;
     this.origin.copy(origin);
     if (v.cache !== this.lastTopology) {
-      if (this.geometryKey !== this.layoutKey()) this.rebuild();
+      if (this.geometryKey !== this.layoutKey()) this.rebuild(true);
       this.lastTopology = v.cache;
+    }
+    if (this.batchPending > 0 && --this.batchPending === 0) {
+      if (performance.now() - lastDeferredBatch < BATCH_SPACING_MS) this.batchPending = 1;
+      else { this.batchParts(); lastDeferredBatch = performance.now(); }
     }
     this.root.position.set(v.position.x - origin.x, v.position.y - origin.y, v.position.z - origin.z);
     this.root.quaternion.set(v.orientation.x, v.orientation.y, v.orientation.z, v.orientation.w);

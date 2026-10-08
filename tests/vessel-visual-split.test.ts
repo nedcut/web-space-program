@@ -25,3 +25,27 @@ it('moves split part visuals and their heat geometry once, without matching anot
   split.dispose();
   expect(dispose).toHaveBeenCalledOnce();
 });
+
+it('defers a split piece\'s static batch until the breakup settles, then batches it', () => {
+  const craft = STOCK_CRAFTS.find(c => c.id === 'stock-kestrel')!.build();
+  const vessel = buildVessel(craft, PART_CATALOG);
+  const view = new VesselView(vessel);
+  const instanced = (v: VesselView) => { let n = 0; v.root.traverse(o => { if (o instanceof THREE.InstancedMesh || o.userData.ownedGeometry) n++; }); return n; };
+  const hidden = (v: VesselView) => { let n = 0; v.root.traverse(o => { if (o.userData.batchedVisible) n++; }); return n; };
+  expect(hidden(view)).toBeGreaterThan(0); // initial build batches immediately
+  const part = vessel.parts.find(p => p.uid !== vessel.rootUid && p.def.modules.some(m => m.type === 'engine'))!;
+  const [piece] = splitVessel(vessel, [part.uid]);
+  const split = new VesselView(piece, [view]);
+  expect(instanced(split)).toBe(0);
+  expect(hidden(split)).toBe(0);
+  view.update({ x: 0, y: 0, z: 0 }, 0, 0, .02);
+  expect(hidden(view)).toBe(0); // the donor draws unbatched on the event frame too
+  // Frames 10 ms apart: deferred batches are spaced in wall time across views.
+  let clock = performance.now();
+  const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+  for (let i = 0; i < 40; i++) { clock += 10; split.update({ x: 0, y: 0, z: 0 }, 0, 0, .02); view.update({ x: 0, y: 0, z: 0 }, 0, 0, .02); }
+  now.mockRestore();
+  expect(hidden(split)).toBeGreaterThan(0);
+  expect(hidden(view)).toBeGreaterThan(0);
+  view.dispose(); split.dispose();
+});
