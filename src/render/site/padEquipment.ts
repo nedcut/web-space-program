@@ -141,7 +141,7 @@ export class PadEquipment {
   private clampGeometry(L: number): THREE.BufferGeometry {
     return this.merge([
       ['steel', box(L - 0.4, 0.38, 0.42, (L - 0.4) / 2, 0, 0)],
-      ['accent', box(L * 0.5, 0.12, 0.5, L * 0.3, 0.25, 0)],
+      ['darkMetal', box(L * 0.5, 0.12, 0.5, L * 0.3, 0.25, 0)],
       ['steel', new THREE.CylinderGeometry(0.34, 0.34, 1.0, 12).rotateX(Math.PI / 2)],
       // Claw: a shoe that bears on the aft skirt, with a hazard-striped lip.
       ['darkMetal', box(0.45, 0.95, 0.9, L - 0.22, -0.08, 0)],
