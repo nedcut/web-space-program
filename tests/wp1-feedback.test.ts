@@ -69,3 +69,15 @@ it('stops a live kick immediately when Reduce Motion or zero camera shake is sel
   expect(a.camera.position.distanceTo(b.camera.position)).toBe(0);
   expect(a.camera.quaternion.angleTo(b.camera.quaternion)).toBe(0);
 });
+
+it('bounces debris in the moving surface frame without damping the solar velocity', () => {
+  const pool=new DebrisPool(), geometry=new THREE.BoxGeometry();
+  const wind=new THREE.Vector3(30000,10000,0), down=wind.clone().add(new THREE.Vector3(0,-100,0)), origin=new THREE.Vector3();
+  pool.emit(geometry,origin,down,10,6);
+  const up=new THREE.Vector3(0,1,0), zero=new THREE.Vector3(), ground=wind.clone().multiplyScalar(.1);
+  pool.update(ground,.1,zero,ground,up,0,wind);
+  const before=pool.root.children[0].position.x;
+  pool.update(wind.clone().multiplyScalar(.2),.1,zero,wind.clone().multiplyScalar(.2),up,0,wind);
+  expect(Math.abs(pool.root.children[0].position.x-before)).toBeLessThan(10);
+  pool.dispose();geometry.dispose();
+});

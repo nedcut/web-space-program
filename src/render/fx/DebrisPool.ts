@@ -12,6 +12,7 @@ export class DebrisPool {
   }));
   private cursor = 0;
   private live = 0;
+  private updated = false;
   private seed = 821;
   constructor() {
     this.root.visible=false; this.root.matrixAutoUpdate=false; this.root.matrixWorldAutoUpdate=false;
@@ -32,7 +33,7 @@ export class DebrisPool {
       s.spin.set(this.random()-.5,this.random()-.5,this.random()-.5).multiplyScalar(8);
     }
   }
-  update(origin: Vec3, dt: number, gravity: THREE.Vector3, groundPosition: Vec3, up: THREE.Vector3, altitude: number) {
+  update(origin: Vec3, dt: number, gravity: THREE.Vector3, groundPosition: Vec3, up: THREE.Vector3, altitude: number, ambientVelocity?: Vec3) {
     if (!this.live) return;
     for (const s of this.slots) {
       if (s.remaining <= 0) continue;
@@ -42,16 +43,31 @@ export class DebrisPool {
       const h = (s.position.x-groundPosition.x)*up.x + (s.position.y-groundPosition.y)*up.y + (s.position.z-groundPosition.z)*up.z + altitude;
       if (h < .15) {
         s.position.addScaledVector(up,.15-h);
-        const vn = s.velocity.dot(up);
-        if (vn < 0) s.velocity.addScaledVector(up,-1.25*vn).multiplyScalar(.6);
+        const ax=ambientVelocity?.x ?? 0, ay=ambientVelocity?.y ?? 0, az=ambientVelocity?.z ?? 0;
+        const vn = (s.velocity.x-ax)*up.x + (s.velocity.y-ay)*up.y + (s.velocity.z-az)*up.z;
+        if (vn < 0) {
+          // Restitution/damping acts in the moving surface frame, never on Earth's solar velocity.
+          s.velocity.x-=ax; s.velocity.y-=ay; s.velocity.z-=az;
+          s.velocity.addScaledVector(up,-1.25*vn).multiplyScalar(.6);
+          s.velocity.x+=ax; s.velocity.y+=ay; s.velocity.z+=az;
+        }
       }
       s.mesh.position.set(s.position.x-origin.x,s.position.y-origin.y,s.position.z-origin.z);
       s.mesh.rotateX(s.spin.x*dt); s.mesh.rotateY(s.spin.y*dt); s.mesh.rotateZ(s.spin.z*dt);
     }
+    this.updated=true;
     this.root.visible=this.live>0;
     this.root.updateMatrixWorld(true);
   }
-  clear() { for (const s of this.slots) { s.remaining=0; s.mesh.visible=false; } this.live=0; this.root.visible=false; }
+  clear() { for (const s of this.slots) { s.remaining=0; s.mesh.visible=false; } this.live=0; this.updated=false; this.root.visible=false; }
+  /** Predict the live cloud centre for a loss camera, preserving Float64 until rebasing. */
+  focus(out: THREE.Vector3, ahead: number): boolean {
+    if (!this.live || !this.updated) return false;
+    out.set(0,0,0);
+    for (const s of this.slots) if (s.remaining > 0) out.add(s.position).addScaledVector(s.velocity,ahead);
+    out.multiplyScalar(1/this.live);
+    return true;
+  }
   get activeCount() { return this.live; }
   dispose() { this.placeholder.dispose(); this.material.dispose(); this.root.removeFromParent(); }
 }

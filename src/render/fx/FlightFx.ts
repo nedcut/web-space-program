@@ -196,7 +196,7 @@ export class FlightFx {
       this.pool.emit(this.point,this.velocity,this.clock,.25+this.random()*.5,.15+this.random()*.4,0,body==='titan'?fire:spark);
     }
     for (const uid of this.trails.keys()) if (!(v.cache.byUid.get(uid)?.engine?.thrust ?? 0)) this.trails.delete(uid);
-    this.debris.update(origin,step,this.gravity,v.position,this.up,altitude);
+    this.debris.update(origin,step,this.gravity,v.position,this.up,altitude,this.ambientVelocity);
     this.flash *= Math.exp(-step*8);
     this.flashPosition.addScaledVector(this.flashVelocity,step);
     const lit = this.flash>.001;

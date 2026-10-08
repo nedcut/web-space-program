@@ -103,7 +103,8 @@ export class ParticlePool {
 
   update(origin: Vec3, time: number, _pixelScale: number) {
     if (!this.initialized) return;
-    this.object.visible = time < this.expires;
+    if (time >= this.expires) { this.object.visible=false; this.initialized=false; return; }
+    this.object.visible = true;
     if (this.anchor.distanceToSquared(origin) > 1e8) {
       const x = this.anchor.x-origin.x, y = this.anchor.y-origin.y, z = this.anchor.z-origin.z;
       for (let i=0;i<this.capacity*3;i+=3) { this.positions[i]+=x; this.positions[i+1]+=y; this.positions[i+2]+=z; }

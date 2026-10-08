@@ -348,7 +348,7 @@ export default function FlightScene() {
     <div className="fullscreen">
       {/* The controller appends its canvas here; React overlays are later siblings so they stay on top. */}
       <div className="fullscreen" ref={host} />
-      {tele && c && !photo.active && !uiHidden && (
+      {tele && c && !lost && !photo.active && !uiHidden && (
         <Hud
           partScreen={partScreen}
           shortcutsEnabled={ready && !paused && !help && !showSettings}
@@ -458,7 +458,7 @@ export default function FlightScene() {
           )}
         </div>
       )}
-      {ready && banner && !photo.active && !help && !uiHidden && <ArrivalBanner banner={banner} />}
+      {ready && banner && !lost && !photo.active && !help && !uiHidden && <ArrivalBanner banner={banner} />}
       {(!ready || loaderMounted) && (
         <div className="loading-screen" style={ready ? { opacity: 0, pointerEvents: 'none' } : undefined}>
           <div style={{ textAlign: 'center' }}>

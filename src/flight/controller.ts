@@ -864,6 +864,12 @@ export class FlightController {
       const st = this.lossFocus.state;
       const span=this.world.ut-this.lossFocusUt; this.lossFocusUt=this.world.ut;
       st.position.x += st.velocity.x*span; st.position.y += st.velocity.y*span; st.position.z += st.velocity.z*span;
+      if (this.effects.debris.focus(this.effectPosition,span)) {
+        const k=1-Math.exp(-span/.25);
+        st.position.x+=(this.effectPosition.x-st.position.x)*k;
+        st.position.y+=(this.effectPosition.y-st.position.y)*k;
+        st.position.z+=(this.effectPosition.z-st.position.z)*k;
+      }
     }
     const renderVessel = this.world.active ?? this.lossFocus;
     if (renderVessel && this.warmup !== 'done') {

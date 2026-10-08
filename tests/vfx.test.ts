@@ -133,3 +133,15 @@ it('deposits continuous long-lived trail cells by surface-relative travel, ignor
   expect(fx.pool.object.geometry.attributes.velocity.getX(0)).toBe(30000);
   fx.dispose();
 });
+
+it('leaves an expired pool dormant until a new event establishes a fresh anchor', () => {
+  const pool=new ParticlePool(4), zero=new THREE.Vector3(), first=new THREE.Vector3(1.5e11,0,0);
+  pool.emit(first,zero,0,1,2,0,new THREE.Color());pool.update(first,2,1000);
+  const attribute=pool.object.geometry.attributes.spawnPosition, version=attribute.version;
+  pool.update(new THREE.Vector3(3e11,0,0),3,1000);
+  expect(attribute.version).toBe(version);expect(pool.object.visible).toBe(false);
+  const next=new THREE.Vector3(3e11,100,0);
+  pool.emit(next,zero,3,1,2,0,new THREE.Color());pool.update(next,3.1,1000);
+  expect(attribute.getX(1)).toBe(0);expect(pool.object.position.length()).toBe(0);expect(pool.object.visible).toBe(true);
+  pool.dispose();
+});
