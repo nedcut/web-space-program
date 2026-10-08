@@ -1,5 +1,8 @@
 # CLAUDE.md
 
+Read `/home/nedcut/.optmem/projects/web-space-program/INSTRUCTIONS.md` and follow
+the shared-memory workflow. Subagents skip memory and report to their parent.
+
 Read ARCHITECTURE.md (layering, coordinates, contracts) and DECISIONS.md before changing code.
 
 - Commands: `npm run dev`, `npm test`, `npm run typecheck`, `npm run build`.
