@@ -64,7 +64,7 @@ const fragment = /* glsl */ `
     col += uSunCol * (pow(sunAmt, 900.0) * 40.0 + pow(sunAmt, 40.0) * 0.6);
     // Above thin air: a faint cool fill from everywhere and a broad lobe around the Sun. Backlit hulls keep
     // their form (a grazing rim from the lobe, a readable shadow side from the fill) instead of going black.
-    col += uFill + uHalo * pow(sunAmt, 6.0);
+    col += uFill + uHalo * pow(sunAmt, 4.0);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -135,8 +135,8 @@ export class SkyEnvironment {
     u.uGround.value.setRGB(g[0] * 0.9, g[1] * 0.9, g[2] * 0.9);
     u.uSunCol.value.setRGB(1, 0.97, 0.9).multiplyScalar(p.daylight);
     const space = 1 - airVis;
-    u.uFill.value.setRGB(0.05, 0.055, 0.07).multiplyScalar(space * (0.15 + 0.85 * p.daylight));
-    u.uHalo.value.setRGB(1, 0.97, 0.9).multiplyScalar(0.7 * space * p.daylight);
+    u.uFill.value.setRGB(0.1, 0.11, 0.135).multiplyScalar(space * (0.15 + 0.85 * p.daylight));
+    u.uHalo.value.setRGB(1, 0.97, 0.9).multiplyScalar(1.3 * space * p.daylight);
     // Horizon dips as the planet shrinks below us: cos of the angle from up to the limb.
     u.uHorizonCos.value = -Math.cos(Math.min(Math.PI / 2, p.bodyAngle));
     const next = this.pmrem.fromScene(this.scene, 0, 0.1, 100, { size: 128 });
