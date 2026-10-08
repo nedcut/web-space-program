@@ -1,5 +1,4 @@
 import { SpeedModeTracker } from './speedMode';
-
 import { explosionDiameter, separationPunch, impactPunch } from '../render/fx/eventDesign';
 import { updateSiteShadow } from '../render/site/shadows';
 import { maxDrawingEdge } from '../render/core/drawingLimits';
