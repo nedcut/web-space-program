@@ -244,7 +244,8 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
 
   // Contact impulses.
   solveContacts(v, cp.contacts, loads, h, cp.impacts);
-  const cuts = overloadedJoints(v, loads, h, omegaBefore, result, aerodynamicStress(aero.dynamicPressure, airVelocityBody));
+  const crossflowStress = aerodynamicStress(aero.dynamicPressure, airVelocityBody);
+  const cuts = overloadedJoints(v, loads, h, omegaBefore, result, crossflowStress);
   const crashCuts = crashJointCuts(v, shocks);
   L = angularMomentum(v);
 
@@ -270,6 +271,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   v.telemetry.altitudeAGL = cp.altitudeAGL;
   v.telemetry.thrust = eng.thrust;
   v.telemetry.intakeAirRatio = eng.airRatio;
+  v.telemetry.crossflowStress = crossflowStress;
   for (const p of v.parts)
     if (p.wheel) {
       if (!p.wheel.inContact) p.wheel.rollSpeed *= Math.exp(-h / 4); // free wheel spinning down
