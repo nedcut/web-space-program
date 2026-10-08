@@ -852,6 +852,9 @@ export class FlightController {
     if (!this.network && wv && !this.world.active && !this.activeLost) {
       this.activeLost = true;
       this.mapMode = false;
+      // Keep the short debris replay readable even when the impact happened in physics warp.
+      this.warpDriver.cancel(this.world);
+      this.world.warp = { mode: 'rails', index: 0 };
       const air = this.world.surfaceVelocity(wv);
       this.lossFocus = { ...wv, state: { ...wv.state, parts: [],
         position: { ...wv.state.position }, velocity: {
