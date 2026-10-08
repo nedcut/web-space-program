@@ -129,8 +129,9 @@ export function assistFrame(world: World, assist: Autopilot, pilot: ControlInput
   // frame). A throttle override applies the pilot's throttle this same frame (e.g. an emergency cut).
   if (pilotThrottle) return end('pilot', 'Assist cancelled: manual control', true);
   if (pilot.pitch || pilot.yaw || pilot.roll) return end('pilot', 'Assist cancelled: manual control');
-  if (world.alarmClock.held && world.alarmClock.holdReason === 'other') return end('pilot', 'Assist paused at mission alarm; acknowledge and restart to continue');
   const step = assist.update(world);
+  // Alarms stop coasting automation; a burn/descent already in progress continues safely at 1×.
+  if (world.alarmClock.held && world.alarmClock.holdReason === 'other' && step.coastUntil !== undefined) return end('pilot', 'Assist paused at mission alarm; acknowledge and restart to continue');
   if (assist.error) return end('error', `Assist stopped: ${assist.error}`);
   if (assist.done) return end('done', `${assist.name}: complete`);
   const commands = [...(step.input.commands ?? []), ...(pilot.commands ?? [])];

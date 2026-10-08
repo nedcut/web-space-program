@@ -60,7 +60,7 @@ export class LandingPredictionDriver {
     // Safe orbits never start a worker or sample terrain. The ceiling includes all terrain on the body.
     const ceiling = body.radius + Math.max(body.atmosphere?.height ?? 0, body.surface?.relief ?? 0) + 1000;
     if (periapsisRadius(orbit) > ceiling) { this.clear(); this.status = ''; return; }
-    if (typeof Worker === 'undefined') { this.status = 'Landing prediction needs module workers'; this.failed = true; return; }
+    if (typeof Worker === 'undefined') { this.status = 'Landing prediction unavailable in this browser'; this.failed = true; return; }
     try {
       const submitStart = performance.now();
       if (!this.worker) {

@@ -117,3 +117,15 @@ it('stops unattended Tracking Station advancement at a persisted fleet alarm', (
   expect(world.ut).toBeCloseTo(time, 5);
   expect(world.alarmClock.held).toBe(true);
 });
+
+
+it('an alarm does not cut an ongoing powered assist burn', () => {
+  const { world, v } = orbitWorld();
+  world.alarmClock.add(v.state.id, 'Read instruments', world.ut);
+  world.alarmClock.fire(world);
+  const assist = { name: 'burn', status: '', done: false, update: () => ({ input: neutralInput({ throttle: .7 }) }) };
+  const frame = assistFrame(world, assist, neutralInput(), 1 / 60, { warped: false });
+  expect(frame.ended).toBeUndefined();
+  expect(frame.input.throttle).toBe(.7);
+  expect(world.warp.index).toBe(0);
+});

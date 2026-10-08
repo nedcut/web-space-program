@@ -87,7 +87,7 @@ function MapReadout({ controller: c }: { controller: FlightController }) {
       if (!l.enabled) { l.enabled = true; l.attitude = 'hold'; }
       else if (l.attitude === 'hold') l.attitude = 'retrograde';
       else l.enabled = false;
-    }}>Landing prediction: {ui.landing.enabled ? ui.landing.attitude === 'hold' ? 'hold attitude' : 'surface retrograde' : 'off'}</button>
+    }}>Landing: {ui.landing.enabled ? ui.landing.attitude === 'hold' ? 'hold attitude' : 'surface retrograde' : 'off'}</button>
     {ui.landing.enabled && <span className="hint">Unpowered · drag, heating, deployed chutes · no future staging</span>}
     {ui.landing.status && <span role="status">{ui.landing.status}</span>}
     <button className="btn ghost small" onClick={() => ui.frameOrbit()}>Frame active orbit</button>
