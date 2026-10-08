@@ -78,6 +78,18 @@ export class VesselView {
     return true;
   }
 
+  /** Event snapshot remains available after the authority removes a part. */
+  eventPart(uid: number) { return this.parts.get(uid)?.state; }
+
+  debrisGeometry(uid: number): THREE.BufferGeometry | undefined {
+    let geometry: THREE.BufferGeometry | undefined;
+    this.parts.get(uid)?.object.traverse(o => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh && !geometry && !mesh.name.includes('plume')) geometry = mesh.geometry;
+    });
+    return geometry;
+  }
+
   setVessel(v: VesselState) {
     this.vessel = v;
   }

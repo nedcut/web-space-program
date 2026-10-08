@@ -8,6 +8,10 @@ export class ParticlePool {
   private initialized = false;
   private cursor = 0;
   private expires = 0;
+  private dirtyStart = Infinity;
+  private dirtyEnd = -1;
+  private readonly uploadRanges = Array.from({ length: 5 }, () => ({ start: 0, count: 0 }));
+  private readonly attributeNames = ['spawnPosition','velocity','params','color','acceleration'] as const;
   private readonly positions: Float32Array;
   private readonly velocities: Float32Array;
   private readonly params: Float32Array;
@@ -94,11 +98,9 @@ export class ParticlePool {
     this.accelerations[j] = acceleration?.x ?? 0; this.accelerations[j+1] = acceleration?.y ?? 0; this.accelerations[j+2] = acceleration?.z ?? 0;
     this.params[k] = time; this.params[k+1] = life; this.params[k+2] = size; this.params[k+3] = growth;
     this.colors[j] = color.r; this.colors[j+1] = color.g; this.colors[j+2] = color.b;
-    for (const name of ['spawnPosition','velocity','params','color','acceleration']) {
-      const attr = this.object.geometry.attributes[name] as THREE.InstancedBufferAttribute;
-      attr.addUpdateRange(i*attr.itemSize,attr.itemSize); attr.needsUpdate = true;
-    }
+    this.dirtyStart=Math.min(this.dirtyStart,i); this.dirtyEnd=Math.max(this.dirtyEnd,i);
   }
+
   update(origin: Vec3, time: number, _pixelScale: number) {
     if (!this.initialized) return;
     this.object.visible = time < this.expires;
@@ -106,16 +108,22 @@ export class ParticlePool {
       const x = this.anchor.x-origin.x, y = this.anchor.y-origin.y, z = this.anchor.z-origin.z;
       for (let i=0;i<this.capacity*3;i+=3) { this.positions[i]+=x; this.positions[i+1]+=y; this.positions[i+2]+=z; }
       this.anchor.copy(origin);
-      const attr=this.object.geometry.attributes.spawnPosition as THREE.InstancedBufferAttribute;
-      attr.clearUpdateRanges(); attr.addUpdateRange(0,this.positions.length); attr.needsUpdate=true;
+      this.dirtyStart=0; this.dirtyEnd=this.capacity-1;
+    }
+    if (this.dirtyEnd >= 0) {
+      for (let n=0;n<this.attributeNames.length;n++) {
+        const attr=this.object.geometry.attributes[this.attributeNames[n]] as THREE.InstancedBufferAttribute;
+        const range=this.uploadRanges[n]; range.start=this.dirtyStart*attr.itemSize; range.count=(this.dirtyEnd-this.dirtyStart+1)*attr.itemSize;
+        attr.clearUpdateRanges(); attr.updateRanges.push(range); attr.needsUpdate=true;
+      }
+      this.dirtyStart=Infinity; this.dirtyEnd=-1;
     }
     this.object.position.set(this.anchor.x-origin.x,this.anchor.y-origin.y,this.anchor.z-origin.z);
     this.object.material.uniforms.time.value = time;
   }
   clear() {
     this.params.fill(0);
-    const attr=this.object.geometry.attributes.params as THREE.InstancedBufferAttribute;
-    attr.clearUpdateRanges(); attr.addUpdateRange(0,this.params.length); attr.needsUpdate=true;
+    this.dirtyStart=0; this.dirtyEnd=this.capacity-1;
     this.object.visible = false; this.initialized = false; this.cursor = 0; this.expires=0;
   }
   /** Terrain tangent soft intersection; deliberately avoids a second scene/depth pass. */

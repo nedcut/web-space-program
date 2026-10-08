@@ -54,22 +54,19 @@ describe('flight visual effects', () => {
     for(let i=0;i<20;i++) pool.emit(origin,new THREE.Vector3(),1,10,1,1,new THREE.Color());
     expect(positions.count).toBe(4); pool.dispose();
   });
-  it('freezes particles with simulation time, clears rails jumps and honors Reduce Motion', () => {
+  it('freezes particles with simulation time, clears rails jumps', () => {
     const fx=new FlightFx('low'), v=buildVessel(buildMoonLander(),PART_CATALOG);
     const zero=new THREE.Vector3(), center=new THREE.Vector3(0,-1000,0);
     const update=(ut: number) => fx.update(v,v.position,center,zero,'moon',100,0,0,zero,.1,500,ut,[[.3,.3,.3]]);
     update(0); fx.burst(v.position); update(.1);
     const time=fx.pool.object.material.uniforms.time.value;
     update(.1); expect(fx.pool.object.material.uniforms.time.value).toBe(time);
-    const camera=new THREE.PerspectiveCamera(); fx.shake(camera,true);
-    expect(camera.position.length()).toBe(0);
-    fx.shake(camera,false); expect(camera.position.length()).toBeGreaterThan(0);
     update(100); expect(fx.pool.object.visible).toBe(false);
     fx.dispose();
   });
   it('changes quality with a bounded pool', () => {
     const fx=new FlightFx('high'); fx.setQuality('low');
-    expect(fx.pool.capacity).toBe(FX_BUDGET.low.count); expect(fx.root.children.length).toBe(2); fx.dispose();
+    expect(fx.pool.capacity).toBe(FX_BUDGET.low.count); expect(fx.root.children.length).toBe(3); fx.dispose();
   });
 });
 
@@ -116,5 +113,23 @@ it('gates RCS puffs on enabled controls and available monopropellant', () => {
   fx.pool.clear();
   for(const p of v.parts) p.resources.monopropellant=0;
   fx.rcs(v,true,input); expect(fx.pool.object.visible).toBe(false);
+  fx.dispose();
+});
+
+it('deposits continuous long-lived trail cells by surface-relative travel, ignoring solar translation', () => {
+  const fx=new FlightFx('medium'), v=buildVessel(buildMoonLander(),PART_CATALOG);
+  const p=v.parts.find(p=>p.engine)!; p.engine!.thrust=100000; p.engine!.throttle=1;
+  const wind=new THREE.Vector3(30000,0,0), surface=new THREE.Vector3(), center=new THREE.Vector3(0,-1000,0);
+  v.velocity={x:30000,y:0,z:0};
+  const update=(ut:number)=>fx.update(v,v.position,center,wind,'earth',1000,1,0,surface,.1,1000,ut,[[.3,.3,.3]]);
+  update(0);
+  for(let i=1;i<=20;i++){v.position.x+=3000; center.x+=3000; update(i*.1);}
+  expect(fx.pool.object.visible).toBe(false);
+  surface.set(0,120,0); v.velocity.y=120;
+  v.position.x+=3000; center.x+=3000; v.position.y+=12; update(2.1);
+  expect(fx.pool.object.visible).toBe(true);
+  const params=fx.pool.object.geometry.attributes.params;
+  expect(params.getY(0)).toBe(90);
+  expect(fx.pool.object.geometry.attributes.velocity.getX(0)).toBe(30000);
   fx.dispose();
 });

@@ -433,3 +433,19 @@ it('plays warp and maneuver cues while physics sounds are suppressed on rails', 
     expect(cue).toHaveBeenLastCalledWith(false);
   } finally { audio.dispose(); vi.unstubAllGlobals(); }
 });
+
+it('reuses the event audio graphs through a destruction cascade and makes no sonic-boom voice for the pilot', async () => {
+  vi.useFakeTimers(); vi.stubGlobal('AudioContext',ContextDouble);
+  const audio=new GameAudio();
+  try {
+    audio.resume(); await Promise.resolve();
+    const baseline=audio.diagnostics();
+    for(let i=0;i<100;i++){audio.staging();audio.decouple(i%2?'solid':'decoupler');audio.fairing();audio.explosion(10);}
+    expect(audio.diagnostics()).toEqual(baseline);
+    vi.advanceTimersByTime(3000);
+    audio.update({...state,engines:[],mach:.99,rcsActive:0});
+    const before=audio.diagnostics().nodes;
+    audio.update({...state,engines:[],mach:1.01,rcsActive:0});
+    expect(audio.diagnostics().nodes).toBe(before);
+  } finally { audio.dispose(); vi.unstubAllGlobals(); vi.useRealTimers(); }
+});

@@ -17,8 +17,8 @@
 .medal-gold { color: #f0cf7b; } .medal-silver { color: #c7d8e8; } .medal-bronze { color: #daa77b; }
 .scenario-flight { position: absolute; right: 18px; top: 64px; width: min(360px, calc(100vw - 36px)); max-height: 65vh; overflow-y: auto; padding: 18px; z-index: 35; box-shadow: 0 8px 24px #0008; }
 .scenario-flight h2 { font-size: 21px; margin: 8px 0; } .scenario-flight p { font-size: 13px; }
-.scenario-debrief { position: absolute; left: 50%; top: 50%; right: auto; transform: translate(-50%, -50%); width: min(580px, calc(100vw - 36px)); max-height: 85vh; padding: 30px; z-index: 100; background: #101c2bf5; }
-@media (max-width: 740px) { .scenario-layout { grid-template-columns: 1fr; } .scenario-layout nav { grid-template-columns: 1fr 1fr; } .scenario-briefing { position: static; padding: 20px; } .scenario-flight { top: 52px; max-height: 40vh; width: 290px; } .scenario-debrief { top: 50%; max-height: 80vh; } }
+.scenario-debrief { position: absolute; left: auto; top: 64px; right: 18px; transform: none; width: min(300px, 28vw); max-height: 70vh; padding: 18px; z-index: 100; background: #101c2bf5; }
+@media (max-width: 740px) { .scenario-layout { grid-template-columns: 1fr; } .scenario-layout nav { grid-template-columns: 1fr 1fr; } .scenario-briefing { position: static; padding: 20px; } .scenario-flight { top: 52px; max-height: 40vh; width: 290px; } .scenario-debrief { top: 52px; max-height: 65vh; width: min(240px, 32vw); } }
 
 .scenario-card.selected { border-left: 3px solid var(--accent); }
 .scenario-card strong { font-size: 16px; font-weight: 600; }

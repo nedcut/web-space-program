@@ -1,3 +1,4 @@
+import { flightEndReady, scheduleFlightEnd } from './lossPresentation';
 import { CrashOverlay } from '../ui/CrashOverlay';
 import { Panel, Button } from '../ui/components';
 import { attachScenarioWorld, endScenario, getScenarioRun, startScenario } from '../scenarios/runtime';
@@ -49,6 +50,8 @@ export default function FlightScene() {
   pausedRef.current = paused;
   const [report, setReport] = useState(false);
   const [lost, setLost] = useState(false);
+  const [endReady, setEndReady] = useState(false);
+  const lostAt = useRef<number | null>(null);
   const lostRef = useRef(false);
   lostRef.current = lost;
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +105,7 @@ export default function FlightScene() {
     let readyTimer = 0;
     let bannerTimer = 0;
     let loaderTimer = 0;
+    let cancelFlightEnd: (() => void) | undefined;
     setLoaderMounted(true);
     setBanner(null);
 
@@ -133,11 +137,13 @@ export default function FlightScene() {
       cc.paused = pausedRef.current;
       cc.setModalOpen(helpRef.current);
       setLost(false);
+      setEndReady(false);
+      lostAt.current = null;
       setReport(false);
       cc.onActiveLost = () => {
+        lostAt.current = performance.now();
         setLost(true);
-        setReport(true);
-        setPaused(true);
+        cancelFlightEnd = scheduleFlightEnd(() => setEndReady(true));
       };
       game.set({ launchPending: false });
       const scenario = new URLSearchParams(location.search).get('scenario');
@@ -148,7 +154,7 @@ export default function FlightScene() {
         if (helpRef.current) return closeHelp();
         if (panelsRef.current.length && !pausedRef.current) return setPanels(p => p.slice(0, -1));
         if (settingsRef.current) return setShowSettings(false);
-        if (lostRef.current) return setPaused(true);
+        if (lostRef.current) return;
         setPaused((p) => !p);
       };
       cc.onQuickload = () => {
@@ -170,7 +176,7 @@ export default function FlightScene() {
         cc.cam.distance = Math.max(25, cc.world.active!.state.cache.boundingRadius * 4);
         if (mission.scenario.id === 'rendezvous') { cc.speedMode = 'target'; cc.dockingMode = true; }
       }
-      detachScenario = attachScenarioWorld(cc.world, () => { cc.paused = true; });
+      detachScenario = attachScenarioWorld(cc.world, () => { /* Keep landing/destruction visible behind the side card. */ });
       unsub = cc.subscribe(setTele);
       // Leaving the page mid-flight: autosave and ask for confirmation (Ctrl+W / Ctrl+R are throttle-adjacent).
       window.addEventListener('beforeunload', beforeUnload);
@@ -200,6 +206,7 @@ export default function FlightScene() {
       window.removeEventListener('beforeunload', beforeUnload);
       window.removeEventListener('pointerdown', resume);
       window.removeEventListener('keydown', resume);
+      cancelFlightEnd?.();
       detachScenario?.();
       unsub?.();
       c?.dispose();
@@ -215,12 +222,11 @@ export default function FlightScene() {
   }, [mountKey]);
 
   const awaitingTelemetry = tele === null;
-  const scenarioFinished = !!getScenarioRun()?.result;
   useEffect(() => {
-    if (ctrl.current) ctrl.current.paused = paused || photo.active || scenarioFinished;
-    audioRef.current?.setPaused(paused || photo.active || scenarioFinished);
+    if (ctrl.current) ctrl.current.paused = paused || photo.active;
+    audioRef.current?.setPaused(paused || photo.active);
     if (paused || photo.active) audioRef.current?.silenceFlight();
-  }, [paused, awaitingTelemetry, photo.active, scenarioFinished]);
+  }, [paused, awaitingTelemetry, photo.active]);
   // The Controls reference blocks flight input; closing it returns to whatever it covered (flight or the Pause menu).
   useLayoutEffect(() => {
     ctrl.current?.setModalOpen(help);
@@ -269,7 +275,7 @@ export default function FlightScene() {
         setUiHidden(h => !h);
       } else if (matches('flightResults', e)) {
         e.preventDefault();
-        if (!ctrl.current?.network) setResults(r => !r);
+        if (!ctrl.current?.network && flightEndReady(lostAt.current,performance.now())) setResults(r => !r);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -406,7 +412,14 @@ export default function FlightScene() {
           </Panel>
         </div>
       )}
-      {report && lost && !photo.active && ctrl.current && (() => {
+      {lost && endReady && !photo.active && !uiHidden && <Panel className="flight-ended-bar" style={{ position: 'absolute', left: 16, top: 72, padding: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', maxWidth: 'calc(100vw - 32px)', zIndex: 50 }}>
+        <strong>Flight ended</strong>
+        <Button className="btn small" onClick={revertToLaunch} disabled={!launched.current && !getScenarioRun() && !getTutorial()}>Revert</Button>
+        <Button className="btn small" onClick={recover} disabled={!canRecover}>Recover</Button>
+        <Button className="btn small" onClick={() => setReport(true)}>Report</Button>
+        <Button className="btn small" onClick={() => exitTo('spaceCenter')}>{getScenarioRun() ? 'Scenarios' : 'Space Center'}</Button>
+      </Panel>}
+      {report && endReady && lost && !photo.active && ctrl.current && (() => {
         const r = ctrl.current.world.flightlog.records.find(r => r.id === ctrl.current!.world.latestReportId);
         return r ? <div className="modal-backdrop"><Panel className="panel report-modal"><Button className="btn" onClick={() => setReport(false)}>Close report</Button><FlightReport record={r} /></Panel></div> : null;
       })()}

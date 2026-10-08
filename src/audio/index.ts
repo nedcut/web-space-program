@@ -64,6 +64,7 @@ export function transonicBuffeting(mach: number): number {
 }
 
 interface Layer { gain: GainNode; filter: BiquadFilterNode; source: AudioBufferSourceNode }
+interface EventVoice { body: Layer; snap?: Layer; thump?: { source: OscillatorNode; gain: GainNode }; timer?: ReturnType<typeof setTimeout>; connected: boolean }
 interface EngineVoice { previousThrust?: number; roar: Layer; rumble: Layer; crackle?: Layer; whine?: { source: OscillatorNode; gain: GainNode } }
 type NoiseKind = 'white' | 'pink' | 'brown' | 'crackle';
 // Includes persistent voices, theme buses, and temporary effect/music nodes.
@@ -86,11 +87,13 @@ export class GameAudio {
   private paused = false;
   private duck = 1;
   private previousSpeed = 0;
-  private previousMach?: number;
-  private nextBoom = 0;
   private nextCreak = 0;
   private previousControls?: { sas?: boolean; rcs?: boolean; warp: number; nodes: number; missions: number };
   private transientNodes = new Map<AudioScheduledSourceNode, AudioNode[]>();
+  private pyroCursor = 0;
+  private pyroVoices: EventVoice[] = [];
+  private explosionCursor = 0;
+  private explosionVoices: EventVoice[] = [];
   private spatial: { layer: Layer; pan: StereoPannerNode }[] = [];
   private master?: GainNode;
   private effects?: GainNode;
@@ -207,6 +210,13 @@ export class GameAudio {
       for (const kind of ['white', 'pink', 'brown', 'crackle'] as const) {
         this.buffers.set(kind, this.makeNoise(kind));
       }
+      for (let i=0;i<4;i++) {
+        const body = this.loop('white','lowpass',1800); body.gain.disconnect();
+        this.pyroVoices.push({ body, connected: false });
+        const rumble = this.loop('brown','lowpass',1400), snap = this.loop('white','lowpass',3000), thump = this.oscillatorLoop(65);
+        rumble.gain.disconnect(); snap.gain.disconnect(); thump.gain.disconnect();
+        this.explosionVoices.push({ body: rumble, snap, thump, connected: false });
+      }
       for (const type of Object.keys(TIMBRE) as EngineType[]) {
         const roar = this.loop(type === 'monoprop' ? 'white' : 'pink', 'lowpass', TIMBRE[type].cutoff);
         const rumble = this.loop('brown', 'lowpass', TIMBRE[type].rumble);
@@ -302,7 +312,6 @@ export class GameAudio {
       if (theme !== this.musicMode) { this.setMusic(theme); this.nextThemeChange = ctx.currentTime + 4; }
     }
     if (this.tension) this.target(this.tension.gain, this.musicMode === 'tense' ? 0.02 + 0.05 * Math.max(unit(state.reentryHeat), unit((state.gForce ?? 0) / 8), state.terrainDanger ? 1 : 0) : 0, 1);
-    if (this.previousVessel !== state.vesselId) this.previousMach = undefined;
     const air = atmosphere(state.ambientPressure);
     const colorAir = atmosphereColor(state.situation?.bodyId);
     let totalThrust = 0;
@@ -315,7 +324,7 @@ export class GameAudio {
     this.target(this.effects.gain, this.effectsMix * this.sfxVolume);
     this.target(this.effectsFilter.frequency, state.inMapView ? 650 : 700 + 17300 * air);
     for (const [type, voice] of this.voices) {
-      // thrustFraction is already a share of TOTAL vessel thrust; count must not multiply it.
+      // thrustFraction is absolute thrust / 3.3 MN; count must not multiply it.
       let thrust = 0, count = 0, size = 0;
       for (const engine of state.engines) if (engine.type === type && engine.count > 0) {
         thrust += unit(engine.thrustFraction); count += engine.count; size += (engine.size ?? 1) * engine.count;
@@ -351,11 +360,6 @@ export class GameAudio {
     }
     if (this.buffet) this.target(this.buffet.gain.gain, aero * (0.16 + transonicBuffeting(state.mach) * 0.55) + unit(state.launchRumble ?? 0) * distance * 0.28);
     if (this.plasma) this.target(this.plasma.gain.gain, unit(state.reentryHeat) * air * distance * 0.3);
-    if (state.timeWarp <= 1 && this.previousMach !== undefined && this.previousMach < 1 && state.mach >= 1 && air > 0.03 && ctx.currentTime >= this.nextBoom) {
-      this.burst(0.65, 0.24 * air * distance, 90, 'lowpass', 'brown');
-      this.nextBoom = ctx.currentTime + 8;
-    }
-    this.previousMach = state.mach;
     for (let i = 0; i < this.spatial.length; i++) {
       const voice = this.spatial[i], source = state.neighbors?.[i];
       const range = source ? Math.hypot(source.x, source.y, source.z) : 0;
@@ -372,19 +376,57 @@ export class GameAudio {
     this.updateMechanics(state, distance);
   }
 
-  staging(): void {
-    this.uiClick();
-    this.burst(0.2, 0.45, 1800, 'lowpass');
-    this.tone(95, 0.18, 0.22, 'triangle', 35);
+  staging(): void { this.pyro('stage'); }
+  decouple(kind: 'decoupler' | 'solid' = 'decoupler'): void { this.pyro(kind); }
+  private pyro(kind: 'stage' | 'decoupler' | 'solid' | 'fairing'): void {
+    const ctx = this.context;
+    if (!ctx || this.paused || this.hidden) return;
+    // Reuse continuous noise voices: event cascades do not allocate WebAudio graphs.
+    const voice = this.pyroVoices[this.pyroCursor++ % this.pyroVoices.length];
+    if (!voice) return;
+    const heavy = kind === 'solid', fairing = kind === 'fairing';
+    const now = ctx.currentTime, duration = heavy ? .65 : fairing ? .35 : .24;
+    this.connectEvent(voice,duration+.05);
+    const layer = voice.body;
+    layer.filter.frequency.setValueAtTime(heavy ? 450 : fairing ? 3200 : 1800,now);
+    layer.filter.frequency.exponentialRampToValueAtTime(80,now+duration);
+    layer.gain.gain.cancelScheduledValues(now);
+    layer.gain.gain.setValueAtTime(heavy ? .9 : fairing ? .5 : .7,now);
+    layer.gain.gain.exponentialRampToValueAtTime(.00001,now+duration);
   }
-  decouple(): void { this.burst(0.12, 0.2, 900, 'bandpass'); this.tone(160, 0.12, 0.15, 'triangle', 60); }
   explosion(size: number, distance = 0, pressure = 101325, throughHull = true): void {
     const scale = Math.sqrt(unit(positive(size) / 10));
     const attenuation = distanceGain(distance) * ((throughHull ? 0.12 : 0) + (throughHull ? 0.88 : 1) * atmosphere(pressure));
-    this.burst(0.4 + scale * 1.4, (0.15 + scale * 0.6) * attenuation, 1400, 'lowpass', 'brown');
-    this.burst(0.18, (0.1 + scale * 0.2) * attenuation, 3000, 'lowpass');
-    this.tone(65, 0.5 + scale, (0.1 + scale * 0.25) * attenuation, 'sine', 22);
+    const ctx = this.context;
+    if (!ctx || this.paused || this.hidden) return;
+    const voice = this.explosionVoices[this.explosionCursor++ % this.explosionVoices.length];
+    if (!voice?.snap || !voice.thump) return;
+    const duration = .5 + scale*1.4, now = ctx.currentTime;
+    this.connectEvent(voice,duration+.05);
+    voice.body.gain.gain.cancelScheduledValues(now); voice.snap.gain.gain.cancelScheduledValues(now); voice.thump.gain.gain.cancelScheduledValues(now);
+    this.envelope(voice.body.gain,now,duration,(.15+scale*.6)*attenuation);
+    this.envelope(voice.snap.gain,now,.18,(.1+scale*.2)*attenuation);
+    this.envelope(voice.thump.gain,now,.5+scale,(.1+scale*.25)*attenuation);
+    voice.thump.source.frequency.cancelScheduledValues(now);
+    voice.thump.source.frequency.setValueAtTime(65,now);
+    voice.thump.source.frequency.exponentialRampToValueAtTime(22,now+.5+scale);
   }
+  private connectEvent(voice: EventVoice, duration: number) {
+    if (voice.timer !== undefined) clearTimeout(voice.timer);
+    if (!voice.connected) {
+      voice.body.gain.connect(this.effects!); voice.snap?.gain.connect(this.effects!); voice.thump?.gain.connect(this.effects!);
+      voice.connected=true;
+    }
+    voice.timer=setTimeout(() => this.disconnectEvent(voice),duration*1000);
+  }
+  private disconnectEvent(voice: EventVoice) {
+    if (voice.timer !== undefined) clearTimeout(voice.timer);
+    voice.timer=undefined;
+    if (!voice.connected) return;
+    voice.body.gain.disconnect(); voice.snap?.gain.disconnect(); voice.thump?.gain.disconnect();
+    voice.connected=false;
+  }
+
   flameout(): void {
     const now = this.context?.currentTime ?? 0;
     if (now < (this.warningTimes.get('flameout') ?? -1)) return;
@@ -392,7 +434,7 @@ export class GameAudio {
     this.burst(0.35, 0.18, 750, 'bandpass', 'crackle');
     this.tone(95, 0.32, 0.08, 'triangle', 25);
   }
-  fairing(): void { this.burst(0.3, 0.16, 2600, 'highpass'); this.decouple(); }
+  fairing(): void { this.pyro('fairing'); }
   missionComplete(): void {
     for (let i = 0; i < 4; i++) this.tone(220 * 2 ** ([0, 7, 12, 16][i] / 12), 0.9, 0.045, 'sine', 220 * 2 ** ([0, 7, 12, 16][i] / 12), i * 0.18, true);
   }
@@ -455,16 +497,20 @@ export class GameAudio {
   }
 
   /** Used when leaving flight, keeping the shared menu/UI context alive. */
-  silenceFlight(): void {
+  silenceFlight(preserveEvents = false): void {
     // Transients must not survive a scene boundary. Persistent pools remain silent and bounded.
-    for (const [source, nodes] of this.transientNodes) if (!this.musicSources.has(source)) {
+    for (const [source, nodes] of this.transientNodes) if (!preserveEvents && !this.musicSources.has(source)) {
       const gain = nodes[nodes.length - 1] as GainNode;
       const now = this.context?.currentTime ?? 0;
       gain.gain.cancelScheduledValues(now); gain.gain.setTargetAtTime(0, now, 0.008);
       try { source.stop(now + 0.04); } catch { /* Already ended. */ }
     }
+    if (!preserveEvents) {
+      for (const voice of this.pyroVoices) this.disconnectEvent(voice);
+      for (const voice of this.explosionVoices) this.disconnectEvent(voice);
+    }
     for (const voice of this.spatial) this.target(voice.layer.gain.gain, 0);
-    this.previousMach = undefined; this.previousControls = undefined;
+    this.previousControls = undefined;
     this.duck = 1;
     if (this.musicGain) this.target(this.musicGain.gain, this.musicLevel(), 1);
 
@@ -492,9 +538,11 @@ export class GameAudio {
       source.onended = null;
       try { source.stop(); } catch { /* May already have ended. */ }
     }
+    for (const voice of this.pyroVoices) this.disconnectEvent(voice);
+    for (const voice of this.explosionVoices) this.disconnectEvent(voice);
     for (const node of this.nodes) node.disconnect();
     this.sources.clear(); this.nodes.clear(); this.musicSources.clear();
-    this.transientNodes.clear(); this.spatial.length = 0;
+    this.transientNodes.clear(); this.spatial.length = 0; this.pyroVoices.length = 0; this.explosionVoices.length = 0;
     this.buffers.clear(); this.voices.clear(); this.themeBuses.clear(); this.mechanics.clear();
     const ctx = this.context;
     this.context = undefined;

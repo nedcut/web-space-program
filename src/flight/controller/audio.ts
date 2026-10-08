@@ -1,5 +1,5 @@
 import type { MusicSituation } from '../../audio/situation';
-import { flightRumble } from '../../audio/design';
+import { flightRumble, thrustGain } from '../../audio/design';
 import { type WorldVessel } from '../../game/world';
 import { type AudioState, type EngineType } from '../../audio';
 import { length } from '../../util/vec3';
@@ -15,7 +15,10 @@ const cameraHistory = new WeakMap<FlightController, { distance: number; time: nu
 export function updateAudio(this: FlightController, internals: FlightControllerInternals, wv: WorldVessel | null): void {
   if (!internals.audio) return;
   internals.audio.setPaused(this.paused);
-  if (!wv || this.paused) { internals.audio.silenceFlight(); cameraHistory.delete(this); return; }
+  if (!wv || this.paused) {
+    if (this.paused || cameraHistory.has(this)) internals.audio.silenceFlight(!this.paused);
+    cameraHistory.delete(this); return;
+  }
   const st = wv.state;
   const now = performance.now() / 1000;
   let history = cameraHistory.get(this);
@@ -30,7 +33,7 @@ export function updateAudio(this: FlightController, internals: FlightControllerI
   }
   for (const e of history.engines) { e.thrustFraction = 0; e.count = 0; e.size = 0; }
   let fairings = 0, mechanismChanged = false;
-  let vac = 0, fuel = 0, capacity = 0, temperature = 0, wheelSpeed = 0;
+  let fuel = 0, capacity = 0, temperature = 0, wheelSpeed = 0;
 
   for (const p of st.parts) {
     temperature = Math.max(temperature, p.temperature / p.maxTemp);
@@ -48,7 +51,6 @@ export function updateAudio(this: FlightController, internals: FlightControllerI
     if (p.def.modules.some(m => m.type === 'fairing')) fairings++;
     const eng = p.def.modules.find(m => m.type === 'engine');
     if (!eng || eng.type !== 'engine') continue;
-    vac += eng.maxThrustVac;
     if (p.engine && p.engine.thrust > 0) {
       const type: EngineType = p.def.mesh === 'nuclearEngine' ? 'nuclear' : p.def.mesh === 'aerospike' ? 'aerospike' : eng.plume;
       const e = history.engines.find(e => e.type === type)!;
@@ -63,7 +65,7 @@ export function updateAudio(this: FlightController, internals: FlightControllerI
   const tm = st.telemetry;
   const radial = now > history.time ? (this.cam.distance - history.distance) / (now - history.time) : 0;
   history.distance = this.cam.distance; history.time = now;
-  for (const e of history.engines) { e.thrustFraction /= Math.max(1, vac); e.size! /= Math.max(1, e.count); }
+  for (const e of history.engines) { e.thrustFraction = thrustGain(e.thrustFraction) ** 2; e.size! /= Math.max(1, e.count); }
   if (history.fairings >= 0 && fairings < history.fairings) internals.audio.fairing();
   history.fairings = fairings;
   let stress = 0;
