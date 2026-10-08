@@ -1,4 +1,6 @@
 import { SpeedModeTracker } from './speedMode';
+
+import { explosionDiameter, separationPunch, impactPunch } from '../render/fx/eventDesign';
 import { updateSiteShadow } from '../render/site/shadows';
 import { maxDrawingEdge } from '../render/core/drawingLimits';
 import { ShadowMapCache } from '../render/core/shadowCache';
@@ -319,13 +321,30 @@ export class FlightController {
       const shake = cameraShakeScale(game.get().settings);
       if (e.vesselId === this.world.activeId && shake > 0) {
         if (e.type === 'stage') this.cam.addKick(0.35 * shake);
-        else if (e.type === 'decouple' || e.type === 'structuralFailure') this.cam.addKick(0.6 * shake);
+        else if (e.type === 'decouple' || e.type === 'structuralFailure') {
+          const part = this.views.get(e.vesselId)?.eventPart(e.partUid);
+          const separator = part?.def.modules.find(m => m.type === 'decoupler');
+          this.cam.addKick(separationPunch(separator?.type === 'decoupler' ? separator.ejectionImpulse * (part?.tweaks?.ejectionScale ?? 1) : 2000) * shake);
+        } else if (e.type === 'partDestroyed') {
+          const part = this.views.get(e.vesselId)?.eventPart(e.partUid);
+          const source = this.world.vessels.get(e.vesselId);
+          this.cam.addKick(impactPunch(part?.mass ?? 1000, source ? length(this.world.surfaceVelocity(source)) : 100) * shake);
+        }
       }
       if (isBurstEvent(e)) {
         const vessel = this.world.vessels.get(e.vesselId) ?? this.world.active;
         if (vessel) {
           if (!this.views.get(e.vesselId)?.partPosition(e.partUid, this.effectPosition)) this.effectPosition.copy(vessel.state.position);
-          this.effects.burst(this.effectPosition, e.type !== 'partDestroyed', vessel.state.velocity);
+          const view = this.views.get(e.vesselId);
+          const part = view?.eventPart(e.partUid);
+          const shape = part?.def.shape;
+          const diameter = shape?.kind === 'box' ? Math.max(shape.size.x,shape.size.z) : shape ? Math.max(shape.radiusTop,shape.radiusBottom)*2 : 2.5;
+          const propellant = part ? Math.max(0,part.mass-part.def.dryMass) : 0;
+          const size = explosionDiameter(part?.mass ?? 1000,propellant,diameter);
+          this.effects.burst(this.effectPosition, e.type !== 'partDestroyed', vessel.state.velocity,size);
+          const geometry = e.type === 'partDestroyed' ? view?.debrisGeometry(e.partUid) : undefined;
+          if (geometry) this.effects.debris.emit(geometry,this.effectPosition,vessel.state.velocity,size);
+
         }
       }
       if(e.type==='chute' && e.phase==='semi') {
@@ -344,9 +363,9 @@ export class FlightController {
         source.state.position.z - active.state.position.z - this.cam.camera.position.z) : this.cam.distance;
       if (e.type === 'flameout' && e.vesselId === this.world.activeId) this.audio.flameout();
       if (e.type === 'stage' && e.vesselId === this.world.activeId) this.audio.staging();
-      if (e.type === 'decouple' && e.vesselId === this.world.activeId) this.audio.decouple();
+      if (e.type === 'decouple' && e.vesselId === this.world.activeId) this.audio.decouple(this.world.vessels.get(e.newVesselId)?.state.parts.some(p => p.def.modules.some(m => m.type === 'engine' && m.plume === 'solid')) ? 'solid' : 'decoupler');
       if (e.type === 'structuralFailure') this.audio.explosion(0.3, eventDistance, active?.state.telemetry.staticPressure ?? 0, e.vesselId === this.world.activeId);
-      if (e.type === 'partDestroyed') this.audio.explosion(1, eventDistance, active?.state.telemetry.staticPressure ?? 0, e.vesselId === this.world.activeId);
+      if (e.type === 'partDestroyed') this.audio.explosion(Math.max(1,(this.views.get(e.vesselId)?.eventPart(e.partUid)?.mass ?? 1000)/500), eventDistance, active?.state.telemetry.staticPressure ?? 0, e.vesselId === this.world.activeId);
       if (e.vesselId === this.world.activeId && e.type === 'chute' && (e.phase === 'semi' || e.phase === 'full')) this.audio.chuteDeploy();
       if (e.type === 'docked' && (e.vesselId === this.world.activeId || e.otherId === this.world.activeId)) this.audio.docking();
       if (e.type === 'undocked' && e.vesselId === this.world.activeId) this.audio.decouple();
@@ -393,6 +412,8 @@ export class FlightController {
   onQuickload: (() => void) | null = null;
   /** Called once when the active vessel no longer exists (destroyed). */
   onActiveLost: (() => void) | null = null;
+  private lossFocus: WorldVessel | null = null;
+  private lossFocusUt = 0;
   private activeLost = false;
 
   quicksave(slot = 'quicksave') {
@@ -834,9 +855,30 @@ export class FlightController {
     prof.add('sim', t0);
     if (!this.network && wv && !this.world.active && !this.activeLost) {
       this.activeLost = true;
+      this.mapMode = false;
+      // Keep the short debris replay readable even when the impact happened in physics warp.
+      this.warpDriver.cancel(this.world);
+      this.world.warp = { mode: 'rails', index: 0 };
+      const air = this.world.surfaceVelocity(wv);
+      this.lossFocus = { ...wv, state: { ...wv.state, parts: [],
+        position: { ...wv.state.position }, velocity: {
+          x: wv.state.velocity.x-air.x, y: wv.state.velocity.y-air.y, z: wv.state.velocity.z-air.z,
+        } } };
+      this.lossFocusUt = this.world.ut;
       this.onActiveLost?.();
     }
-    const renderVessel = this.world.active;
+    if (!this.world.active && this.lossFocus && !this.paused) {
+      const st = this.lossFocus.state;
+      const span=this.world.ut-this.lossFocusUt; this.lossFocusUt=this.world.ut;
+      st.position.x += st.velocity.x*span; st.position.y += st.velocity.y*span; st.position.z += st.velocity.z*span;
+      if (this.effects.debris.focus(this.effectPosition,span)) {
+        const k=1-Math.exp(-span/.25);
+        st.position.x+=(this.effectPosition.x-st.position.x)*k;
+        st.position.y+=(this.effectPosition.y-st.position.y)*k;
+        st.position.z+=(this.effectPosition.z-st.position.z)*k;
+      }
+    }
+    const renderVessel = this.world.active ?? this.lossFocus;
     if (renderVessel && this.warmup !== 'done') {
       this.render(renderVessel, dt, false);
       if (this.warmup === 'pending') this.startWarmup(renderVessel);
@@ -847,7 +889,7 @@ export class FlightController {
       this.framesRendered++;
     }
     t0 = prof.now();
-    this.updateAudio(wv);
+    this.updateAudio(this.world.active);
     prof.add('audio', t0);
 
     t0 = prof.now();
@@ -905,7 +947,7 @@ export class FlightController {
   private render(wv: WorldVessel, dt: number, submit = true) {
     // Draw between the last two fixed physics steps so motion advances evenly at any display rate. The map
     // stays on exact state (its caches are keyed by simulation time); multiplayer has its own pose smoothing.
-    if (this.mapMode || this.network) return this.renderAt(wv, dt, this.world.ut, submit);
+    if (this.mapMode || this.network || !this.world.active) return this.renderAt(wv, dt, this.world.ut, submit);
     const w = this.world;
     const { renderUt, restore } = w.renderHistory.apply(w.ut, PHYSICS_DT, w.renderAlpha, w.vessels.values(), w.universe.ephem);
     try {
@@ -982,7 +1024,6 @@ export class FlightController {
     const camera = this.cam.camera;
     this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors, u.body(wv.body).surfaceGravity);
     this.effects.rcs(wv.state,this.rcsOn,this.input.state);
-    if (!this.paused) this.effects.shake(camera, cameraShakeScale(game.get().settings) === 0);
     prof.add('fx', t0);
     if (this.network) {
       const live = new Set<string>();
@@ -1175,6 +1216,7 @@ export class FlightController {
           }
         : undefined,
       rumble,
+      motionEnabled: shake > 0,
       groundFraming: flying ? 0 : 1,
     }, dt);
   }

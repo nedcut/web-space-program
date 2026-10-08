@@ -1,4 +1,5 @@
-import { useState, type PointerEvent } from 'react';
+import { scheduleFlightEnd } from '../flight/lossPresentation';
+import { useEffect, useState, type PointerEvent } from 'react';
 import { TOUR_MOONS } from './evaluation';
 import { endScenario, startScenario, useScenarioRun } from './runtime';
 import './scenarios.css';
@@ -6,7 +7,13 @@ export function ScenarioPanel() {
   const run = useScenarioRun();
   const [collapsed, setCollapsed] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  if (!run) return null;
+  const [failureReady,setFailureReady] = useState(false);
+  const failed = !!run?.result && !run.result.success;
+  useEffect(() => {
+    setFailureReady(false);
+    if (failed) return scheduleFlightEnd(() => setFailureReady(true));
+  }, [failed,run?.epoch]);
+  if (!run || (failed && !failureReady)) return null;
   const { state, result, scenario } = run;
   const observation = state.previous;
   const precision = observation?.precision;

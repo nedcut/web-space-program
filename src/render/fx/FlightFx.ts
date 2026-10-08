@@ -3,6 +3,8 @@ import type { VesselEvent, VesselState } from '../../sim/vessel/runtime';
 import type { Vec3 } from '../../util/vec3';
 import type { QualityId } from '../core/quality';
 import { rcsEnabled, rcsMask } from '../../sim/vessel/tweaks';
+import { DebrisPool } from './DebrisPool';
+import { trailCells } from './eventDesign';
 import { ParticlePool } from './ParticlePool';
 
 type BurstEvent = Extract<VesselEvent, { type: 'partDestroyed' | 'decouple' | 'structuralFailure' }>;
@@ -18,6 +20,8 @@ const spark = new THREE.Color(10,4,.6), dust = new THREE.Color();
 export class FlightFx {
   readonly root = new THREE.Group();
   pool: ParticlePool;
+  readonly debris = new DebrisPool();
+  private readonly trails = new Map<number, { position: THREE.Vector3; credit: number }>();
   /**
    * Burst flash. It stays visible at zero intensity between bursts: toggling visibility would change
    * the scene's light count, which is part of every shader key, and recompile all lit materials
@@ -27,7 +31,8 @@ export class FlightFx {
   private readonly point = new THREE.Vector3();
   private readonly velocity = new THREE.Vector3();
   private readonly up = new THREE.Vector3();
-  private readonly surfaceVelocity = new THREE.Vector3();
+  private readonly ambientVelocity = new THREE.Vector3();
+  private readonly trailStart = new THREE.Vector3();
   private readonly nozzle = new THREE.Vector3();
   private readonly engineRotation = new THREE.Quaternion();
   private readonly tangent = new THREE.Vector3();
@@ -50,7 +55,7 @@ export class FlightFx {
   private readonly lastOrigin = new THREE.Vector3();
   private seed = 193;
   constructor(private quality: QualityId) {
-    this.pool = new ParticlePool(FX_BUDGET[quality].count); this.root.add(this.pool.object, this.light);
+    this.pool = new ParticlePool(FX_BUDGET[quality].count); this.root.add(this.pool.object, this.light, this.debris.root);
   }
   private random() { this.seed = (Math.imul(this.seed,1664525)+1013904223)>>>0; return this.seed/4294967296; }
   setQuality(quality: QualityId) {
@@ -58,16 +63,16 @@ export class FlightFx {
     this.pool.dispose(); this.quality=quality;
     this.pool=new ParticlePool(FX_BUDGET[quality].count); this.root.add(this.pool.object);
   }
-  burst(position: Vec3, structural = false, inheritedVelocity?: Vec3) {
-    const count = Math.floor(FX_BUDGET[this.quality].rate * (structural ? .3 : 1));
+  burst(position: Vec3, structural = false, inheritedVelocity?: Vec3, diameter = 9) {
+    const count = Math.floor(FX_BUDGET[this.quality].rate * (structural ? .4 : 1));
     for(let i=0;i<count;i++) {
       this.velocity.set(this.random()-.5,this.random()-.5,this.random()-.5).multiplyScalar(structural ? 5 : i%3===2 ? 32 : i%3===1 ? 18 : 9);
       if(inheritedVelocity) this.velocity.add(inheritedVelocity);
       // Separation is a cold gas puff, not a small fuel explosion. No lingering smoke in vacuum.
       const cloud = structural || i%3===0;
       if(cloud && this.density<.01 && !structural) continue;
-      this.pool.emit(position,this.velocity,this.clock,structural?.45:cloud?5:i%3===1?1.2:2,
-        structural?.7:cloud?3:i%3===1?2.8:.18,cloud?1.1:0,structural?steam:cloud?smoke:i%3===1?fire:spark,
+      this.pool.emit(position,this.velocity,this.clock,structural?.7:cloud?8:i%3===1?1.1:2,
+        structural?2:cloud?diameter*.7:i%3===1?diameter:.18,structural?2:cloud?.25:0,structural?steam:cloud?smoke:i%3===1?fire:spark,
         cloud?undefined:this.gravity);
     }
     this.flashPosition.copy(position); this.flashVelocity.set(inheritedVelocity?.x ?? 0,inheritedVelocity?.y ?? 0,inheritedVelocity?.z ?? 0); this.flash = structural ? .15 : 1;
@@ -84,21 +89,21 @@ export class FlightFx {
     const teleported = this.lastUt !== undefined && this.lastOrigin.distanceToSquared(origin)>1e12;
     this.lastUt = simulationTime; this.lastOrigin.copy(origin);
     // Rails/teleports must not stretch old trails across interplanetary distances.
-    if(elapsed>1 || teleported) { this.pool.clear(); this.flash=0; }
+    if(elapsed>1 || teleported) { this.pool.clear(); this.debris.clear(); this.trails.clear(); this.flash=0; }
     const step = Math.min(1,elapsed); this.lastStep=step; this.clock += step;
     this.density = density;
     this.up.copy(v.position).sub(bodyPosition).normalize();
     this.gravity.copy(this.up).multiplyScalar(-gravity);
     this.rotation.set(v.orientation.x,v.orientation.y,v.orientation.z,v.orientation.w);
-    this.surfaceVelocity.copy(v.velocity).sub(airVelocity);
+    this.ambientVelocity.copy(v.velocity).sub(airVelocity);
     // On a stationary surface this includes body rotation as well as orbital translation.
-    if (!Number.isFinite(this.surfaceVelocity.x)) this.surfaceVelocity.copy(bodyVelocity);
+    if (!Number.isFinite(this.ambientVelocity.x)) this.ambientVelocity.copy(bodyVelocity);
     this.tangent.set(Math.abs(this.up.y)>.9 ? 1 : 0, Math.abs(this.up.y)>.9 ? 0 : 1,0).cross(this.up).normalize();
     this.bitangent.crossVectors(this.up,this.tangent);
     if(!teleported && elapsed<=1 && v.situation==='splashed' && this.situation==='flying') {
       for(let i=0;i<FX_BUDGET[this.quality].rate;i++) {
         const angle=this.random()*Math.PI*2;
-        this.velocity.copy(this.surfaceVelocity).addScaledVector(this.up,3+this.random()*7)
+        this.velocity.copy(v.velocity).addScaledVector(this.up,3+this.random()*7)
           .addScaledVector(this.tangent,Math.cos(angle)*8).addScaledVector(this.bitangent,Math.sin(angle)*8);
         this.pool.emit(v.position,this.velocity,this.clock,1.3,1,.6,steam,this.gravity);
       }
@@ -140,18 +145,38 @@ export class FlightFx {
       const nozzleAltitude = altitude + this.point.copy(this.nozzle).sub(v.position).dot(this.up);
       const reachesGround = downward>.25 && nozzleAltitude<35*downward && nozzleAltitude>-2;
       const strength = throttle * Math.max(0,1-nozzleAltitude/35);
+      let trail = this.trails.get(p.uid);
+      const fresh = !trail;
+      if (!trail) { trail = { position: this.nozzle.clone(), credit: 0 }; this.trails.set(p.uid,trail); }
+      // Measure travel in the air frame: solar translation alone is ~30 km/s even on the pad.
+      this.trailStart.copy(trail.position);
+      if (!fresh) this.trailStart.addScaledVector(this.ambientVelocity,step);
+      const travelled = this.trailStart.distanceTo(this.nozzle);
+      const scale=this.quality==='low' ? 4 : 1;
+      const spacing = Math.max(30*scale, Math.min(60*scale, Math.sqrt(p.engine.thrust/100000)*12));
+      trail.credit += travelled;
+      const cells = trailCells(trail.credit,spacing,24);
+      trail.credit = Math.min(spacing, trail.credit-cells*spacing);
+      for (let i=0;i<cells;i++) {
+        if (density <= .01 || jet || engine.plume === 'ion' || emitters > 1 || throttle <= 0) continue;
+        this.point.lerpVectors(this.trailStart,this.nozzle,(i+1)/cells).addScaledVector(this.exhaust,4);
+        // Deposit in the rotating air frame, not with the rocket's ascent velocity.
+        this.velocity.copy(this.ambientVelocity).addScaledVector(this.up,.4);
+        this.pool.emit(this.point,this.velocity,this.clock,90,spacing*2,.015,solid||engine.plume==='hydrolox'?steam:smoke);
+      }
+      trail.position.copy(this.nozzle);
       for(let i=0;i<count;i++) {
         // Combustion smoke belongs to an atmosphere. Clean fuels condense into pale vapour.
-        if(density>.01 && (solid || contrail || altitude<6000) && this.random()<throttle) {
+        if(density>.01 && (contrail || altitude<80) && this.random()<throttle) {
           this.point.copy(this.nozzle).addScaledVector(this.exhaust,solid?8:4);
-          this.velocity.copy(this.surfaceVelocity).addScaledVector(this.exhaust,solid?9:5).addScaledVector(this.up,2);
+          this.velocity.copy(this.ambientVelocity).addScaledVector(this.exhaust,solid?9:5).addScaledVector(this.up,2);
           this.velocity.addScaledVector(this.tangent,(this.random()-.5)*3).addScaledVector(this.bitangent,(this.random()-.5)*3);
           this.pool.emit(this.point,this.velocity,this.clock,contrail?18:solid?12:6,solid?3:1.8,.7,solid||engine.plume==='hydrolox'||contrail?steam:smoke);
         }
         if(reachesGround && this.random()<strength) {
           const angle=this.random()*Math.PI*2, speed=(density>.01?9:22)*( .4+.6*strength);
           this.point.copy(this.nozzle).addScaledVector(this.exhaust,Math.max(0,nozzleAltitude)/downward).addScaledVector(this.up,.4);
-          this.velocity.copy(this.surfaceVelocity).addScaledVector(this.up,density>.01?2.5:1.3);
+          this.velocity.copy(this.ambientVelocity).addScaledVector(this.up,density>.01?2.5:1.3);
           this.velocity.addScaledVector(this.tangent,Math.cos(angle)*speed).addScaledVector(this.bitangent,Math.sin(angle)*speed);
           this.pool.emit(this.point,this.velocity,this.clock,density>.01?7:1.6,density>.01?3.5:1.2,density>.01?.85:.35,density>.1?steam:dust,density>.01?undefined:this.gravity);
         }
@@ -160,7 +185,7 @@ export class FlightFx {
     if(altitude<6 && contact) {
       for(let i=0;i<count;i++) {
         this.point.copy(v.position).addScaledVector(this.up,-Math.max(0,altitude-1));
-        this.velocity.copy(this.surfaceVelocity).addScaledVector(this.up,1);
+        this.velocity.copy(this.ambientVelocity).addScaledVector(this.up,1);
         this.velocity.addScaledVector(this.tangent,(this.random()-.5)*8).addScaledVector(this.bitangent,(this.random()-.5)*8);
         // Only moving contact produces dust; parked vessels remain quiet.
         if(Math.hypot(airVelocity.x,airVelocity.y,airVelocity.z)>1) this.pool.emit(this.point,this.velocity,this.clock,3,2,.8,dust);
@@ -171,6 +196,8 @@ export class FlightFx {
       this.velocity.copy(v.velocity).addScaledVector(airVelocity,-.22);
       this.pool.emit(this.point,this.velocity,this.clock,.25+this.random()*.5,.15+this.random()*.4,0,body==='titan'?fire:spark);
     }
+    for (const uid of this.trails.keys()) if (!(v.cache.byUid.get(uid)?.engine?.thrust ?? 0)) this.trails.delete(uid);
+    this.debris.update(origin,step,this.gravity,v.position,this.up,altitude,this.ambientVelocity);
     this.flash *= Math.exp(-step*8);
     this.flashPosition.addScaledVector(this.flashVelocity,step);
     const lit = this.flash>.001;
@@ -215,10 +242,5 @@ export class FlightFx {
       }
     }
   }
-  shake(camera: THREE.Camera, reduceMotion: boolean) {
-    if(reduceMotion || this.flash<.01) return;
-    camera.position.x+=Math.sin(this.clock*91)*this.flash*.15;
-    camera.position.y+=Math.sin(this.clock*73)*this.flash*.12;
-  }
-  dispose() { this.pool.dispose(); this.light.dispose(); this.root.removeFromParent(); }
+  dispose() { this.debris.dispose(); this.pool.dispose(); this.light.dispose(); this.root.removeFromParent(); }
 }

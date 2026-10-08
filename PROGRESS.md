@@ -977,3 +977,11 @@ Firefox confirm local framing/filtering, alarm stops and worker markers, with ze
 Largest paired map GPU increase: **+0.094 ms**; 12 fewer map calls. Chrome transition long tasks remain recorded;
 M-series/120 Hz and independent video review remain unverified. Scope, assumptions and repeatable probes:
 [WP4 validation](docs/audits/2026-10-08-wp4-validation.md). Implementation: `f3720503`, `c8f9a133`, `b081ebe4`.
+
+## WP1 weight and payoff (2026-10-08, cx/wp1)
+
+- Added impulse/energy-scaled camera translation and rotation, original pooled pyro/explosion audio, absolute-thrust engine loudness, larger mass/propellant-scaled fireballs, and 32 pooled template fragments. Reduce Motion / camera-shake settings remain authoritative; the pilot no longer hears a self sonic boom.
+- Distance-based 90 s ascent smoke shares the existing Medium 512 slots (384 reserved for the column); vacuum plume brightness uses existing shaders. Dormant particle/debris pools skip work and draws; no new full-screen passes.
+- Loss follows the debris for 3.5 s, then offers a non-blocking Revert / Recover / Report bar. Reports open on request; mission/landing results dock on the side and leave flight running.
+- Implementation commits: `644bec0e`, `ddf91ea5`, `d859f105`, `680c71db`, `8cfa2540`, `eeaf3708`. Verification and remaining acceptance: `docs/performance/wp1-payoff.md`. No push or merge.
+- Lint, TypeScript, build and final Vitest pass (137 files / 1,427 passed / one skipped). Medium DPR 2 fenced GPU pad/ascent/orbit remains near parity with main: +0.021 / +0.037 / −0.033 ms. Before/after staging/crash videos, 10 km smoke and successful landing evidence are captured. Strict 50 ms event tasks, ordinary-playback 2.5 ms GPU timing and real Mac/120 Hz acceptance remain open; details and capture provenance are in the verification note.

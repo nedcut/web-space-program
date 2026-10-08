@@ -1,5 +1,6 @@
 import { LinkView } from './LinkView';
 import { PartHeat } from '../fx/PartHeat';
+import { thermalSources } from '../fx/thermalSurface';
 import { batchStaticParts, disposeStaticBatch, isAnimatedNode } from './staticBatch';
 import * as THREE from 'three';
 import type { VesselState, PartState } from '../../sim/vessel/runtime';
@@ -76,6 +77,18 @@ export class VesselView {
     if (!part) return false;
     part.object.getWorldPosition(out).add(this.origin);
     return true;
+  }
+
+  /** Event snapshot remains available after the authority removes a part. */
+  eventPart(uid: number) { return this.parts.get(uid)?.state; }
+
+  debrisGeometry(uid: number): THREE.BufferGeometry | undefined {
+    let geometry: THREE.BufferGeometry | undefined;
+    this.parts.get(uid)?.object.traverse(o => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh && !geometry && !mesh.name.includes('plume')) geometry = thermalSources.get(mesh.geometry)?.source ?? mesh.geometry;
+    });
+    return geometry;
   }
 
   setVessel(v: VesselState) {
