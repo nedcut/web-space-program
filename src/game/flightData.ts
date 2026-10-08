@@ -18,8 +18,10 @@ export function flightPredictions(w: World, v: WorldVessel) {
   const u = w.universe, orbit = w.orbitOf(v), b = u.body(v.body);
   const target = targetOrbitState(w, v);
   const crossings = target ? targetPlaneNodes(orbit, cross(target.position, target.velocity), w.ut) : [];
-  const soi = w.trajectory().find(p => p.orbit.body === v.body && (p.endReason === 'soiEnter' || p.endReason === 'soiExit'));
-  const impact = b.solidSurface && periapsisRadius(orbit) <= b.radius + Math.max(0, u.terrain(b.id).maxHeight) && v.state.situation !== 'landed' && v.mode !== 'prelaunch'
+  const canImpact = b.solidSurface && periapsisRadius(orbit) <= b.radius + Math.max(0, u.terrain(b.id).maxHeight) && v.state.situation !== 'landed' && v.mode !== 'prelaunch';
+  // The multi-body path only bounds a possible impact search. Safe orbits/flybys need no path here.
+  const soi = canImpact ? w.trajectory().find(p => p.orbit.body === v.body && (p.endReason === 'soiEnter' || p.endReason === 'soiExit')) : undefined;
+  const impact = canImpact
     ? ballisticImpact(orbit, w.ut, (p, t) => u.surfaceInfo(v.body, add(u.ephem.getBodyState(v.body, t).position, p), t).heightAboveTerrain,
       (p, t) => u.ephem.surfaceVelocity(v.body, p, t), Math.min(period(orbit), soi ? Math.max(0, soi.endTime - w.ut) : 86400)) : null;
   return { crossings, impact };

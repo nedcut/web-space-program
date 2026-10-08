@@ -1,0 +1,1356 @@
+{
+  "file": "cpu2-before-soi-4x-moon-soi.trace.json.gz",
+  "longTasks": 378,
+  "all": {
+    "self": [
+      [
+        "(program)",
+        16808.25
+      ],
+      [
+        "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+        297.8
+      ],
+      [
+        "src/sim/orbit/kepler.ts:7 finite",
+        297.66
+      ],
+      [
+        "src/sim/orbit/kepler.ts:94 planeVector",
+        213.05
+      ],
+      [
+        "node_modules/three/build/three.module.js:18407 setProgram",
+        202.22
+      ],
+      [
+        "bindVertexArray",
+        173.63
+      ],
+      [
+        "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+        170.03
+      ],
+      [
+        "node_modules/three/build/three.core.js:10570 multiplyMatrices",
+        139.57
+      ],
+      [
+        "src/sim/orbit/ephemeris.ts:65 at",
+        138.99
+      ],
+      [
+        "src/ui/inspector/Inspector.tsx:38 loop",
+        132.06
+      ],
+      [
+        "node_modules/three/build/three.module.js:6123 upload",
+        130.79
+      ],
+      [
+        "node_modules/three/build/three.module.js:17897 projectObject",
+        127.06
+      ]
+    ],
+    "inclusive": [
+      [
+        "(program)",
+        16808.25
+      ],
+      [
+        "src/flight/controller.ts:721 frame",
+        7131.02
+      ],
+      [
+        "src/flight/controller.ts:897 render",
+        4269.56
+      ],
+      [
+        "src/flight/controller.ts:910 renderAt",
+        4216.51
+      ],
+      [
+        "src/render/core/renderer.ts:230 render",
+        3819.48
+      ],
+      [
+        "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+        3790.7
+      ],
+      [
+        "node_modules/three/build/three.module.js:17674 Gu.render",
+        3729.96
+      ],
+      [
+        "src/render/core/renderer.ts:337 render",
+        3632.93
+      ],
+      [
+        "node_modules/three/examples/jsm/postprocessing/RenderPass.js:121 render",
+        3158.41
+      ],
+      [
+        "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+        2598.98
+      ],
+      [
+        "node_modules/three/build/three.module.js:18015 renderScene",
+        2294.15
+      ],
+      [
+        "node_modules/three/build/three.module.js:18165 renderObjects",
+        2252.18
+      ]
+    ]
+  },
+  "tasks": [
+    {
+      "ms": 156.591,
+      "ts": 825483265001,
+      "self": [
+        [
+          "(program)",
+          44.52
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          18.54
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          9.58
+        ],
+        [
+          "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+          8.65
+        ],
+        [
+          "(garbage collector)",
+          6.96
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          5.43
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          4.79
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:65 at",
+          4.46
+        ],
+        [
+          "src/sim/orbit/kepler.ts:87 qe",
+          4.39
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          4.26
+        ],
+        [
+          "src/sim/orbit/patched.ts:32 minimize",
+          2.71
+        ],
+        [
+          "node_modules/three/build/three.module.js:7357 getParameters",
+          1.62
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          102.74
+        ],
+        [
+          "src/flight/controller/telemetry.ts:150 telemetry",
+          71.94
+        ],
+        [
+          "src/flight/controller.ts:1233 telemetry",
+          71.94
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          63.87
+        ],
+        [
+          "src/game/world.ts:922 predict",
+          63.87
+        ],
+        [
+          "src/game/world.ts:906 trajectory",
+          63.87
+        ],
+        [
+          "src/game/flightData.ts:17 flightPredictions",
+          63.87
+        ],
+        [
+          "src/sim/orbit/kepler.ts:108 elementsToState",
+          47.13
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          46.6
+        ],
+        [
+          "(program)",
+          44.52
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          41.64
+        ],
+        [
+          "src/sim/orbit/kepler.ts:113 propagate",
+          32.39
+        ]
+      ]
+    },
+    {
+      "ms": 151.098,
+      "ts": 825477348490,
+      "self": [
+        [
+          "(program)",
+          47.23
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          21.93
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          11.16
+        ],
+        [
+          "(garbage collector)",
+          7.64
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:65 at",
+          7.08
+        ],
+        [
+          "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+          6.4
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          5.65
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          5.25
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          4.21
+        ],
+        [
+          "src/sim/orbit/kepler.ts:87 qe",
+          3.61
+        ],
+        [
+          "src/sim/orbit/patched.ts:32 minimize",
+          2.25
+        ],
+        [
+          "node_modules/three/build/three.module.js:18407 setProgram",
+          1.64
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          95.22
+        ],
+        [
+          "src/flight/controller/telemetry.ts:150 telemetry",
+          78.37
+        ],
+        [
+          "src/flight/controller.ts:1233 telemetry",
+          78.37
+        ],
+        [
+          "src/game/flightData.ts:17 flightPredictions",
+          75.79
+        ],
+        [
+          "src/game/world.ts:922 predict",
+          65.38
+        ],
+        [
+          "src/game/world.ts:906 trajectory",
+          65.38
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          64.85
+        ],
+        [
+          "src/sim/orbit/kepler.ts:108 elementsToState",
+          49.91
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          49.25
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          48.87
+        ],
+        [
+          "(program)",
+          47.23
+        ],
+        [
+          "src/sim/orbit/kepler.ts:113 propagate",
+          36.6
+        ]
+      ]
+    },
+    {
+      "ms": 136.506,
+      "ts": 825479493835,
+      "self": [
+        [
+          "(program)",
+          44.23
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          12.91
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          10.92
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:65 at",
+          7.17
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          7.03
+        ],
+        [
+          "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+          6.92
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          5.43
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          4.81
+        ],
+        [
+          "src/sim/orbit/patched.ts:32 minimize",
+          3.82
+        ],
+        [
+          "src/sim/orbit/patched.ts:111 ",
+          3.17
+        ],
+        [
+          "src/sim/orbit/kepler.ts:87 qe",
+          2.74
+        ],
+        [
+          "src/sim/terrain/noise.ts:72 noise",
+          1.11
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          90.29
+        ],
+        [
+          "src/flight/controller/telemetry.ts:150 telemetry",
+          71.28
+        ],
+        [
+          "src/flight/controller.ts:1233 telemetry",
+          71.28
+        ],
+        [
+          "src/game/flightData.ts:17 flightPredictions",
+          68.65
+        ],
+        [
+          "src/game/world.ts:922 predict",
+          61.71
+        ],
+        [
+          "src/game/world.ts:906 trajectory",
+          61.71
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          61.18
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          44.31
+        ],
+        [
+          "(program)",
+          44.23
+        ],
+        [
+          "src/sim/orbit/kepler.ts:108 elementsToState",
+          41.08
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          40.53
+        ],
+        [
+          "src/sim/orbit/kepler.ts:113 propagate",
+          31.71
+        ]
+      ]
+    },
+    {
+      "ms": 127.293,
+      "ts": 825489654015,
+      "self": [
+        [
+          "(program)",
+          40.22
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          16.27
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          12.57
+        ],
+        [
+          "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+          8.39
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          4.97
+        ],
+        [
+          "src/sim/orbit/patched.ts:84 sample",
+          4.91
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:65 at",
+          4.83
+        ],
+        [
+          "src/sim/orbit/kepler.ts:87 qe",
+          3.98
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          2.88
+        ],
+        [
+          "src/util/vec3.ts:16 sub",
+          2.27
+        ],
+        [
+          "node_modules/three/build/three.module.js:18407 setProgram",
+          1.68
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          1.67
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          85.66
+        ],
+        [
+          "src/flight/controller.ts:1233 telemetry",
+          68.56
+        ],
+        [
+          "src/flight/controller/telemetry.ts:150 telemetry",
+          68.22
+        ],
+        [
+          "src/game/world.ts:922 predict",
+          65.42
+        ],
+        [
+          "src/game/world.ts:906 trajectory",
+          65.42
+        ],
+        [
+          "src/game/flightData.ts:17 flightPredictions",
+          65.42
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          64.87
+        ],
+        [
+          "src/sim/orbit/patched.ts:84 sample",
+          59.18
+        ],
+        [
+          "src/sim/orbit/kepler.ts:108 elementsToState",
+          46.74
+        ],
+        [
+          "src/sim/orbit/kepler.ts:113 propagate",
+          46.74
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          46.19
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          43.72
+        ]
+      ]
+    },
+    {
+      "ms": 126.71,
+      "ts": 825481574932,
+      "self": [
+        [
+          "(program)",
+          39.81
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          15.03
+        ],
+        [
+          "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+          11.81
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          10.79
+        ],
+        [
+          "(garbage collector)",
+          7.67
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          7.52
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:65 at",
+          3.68
+        ],
+        [
+          "src/sim/orbit/kepler.ts:87 qe",
+          2.68
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          2.65
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          2.52
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          2.19
+        ],
+        [
+          "src/sim/orbit/patched.ts:32 minimize",
+          1.63
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          77.54
+        ],
+        [
+          "src/flight/controller/telemetry.ts:150 telemetry",
+          63.29
+        ],
+        [
+          "src/flight/controller.ts:1233 telemetry",
+          63.29
+        ],
+        [
+          "src/game/flightData.ts:17 flightPredictions",
+          62.25
+        ],
+        [
+          "src/game/world.ts:906 trajectory",
+          54.83
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          54.31
+        ],
+        [
+          "src/game/world.ts:922 predict",
+          54.31
+        ],
+        [
+          "src/sim/orbit/kepler.ts:108 elementsToState",
+          49.99
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          49.44
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          41.78
+        ],
+        [
+          "(program)",
+          39.81
+        ],
+        [
+          "src/sim/orbit/kepler.ts:113 propagate",
+          36.44
+        ]
+      ]
+    },
+    {
+      "ms": 124.421,
+      "ts": 825495927361,
+      "self": [
+        [
+          "(program)",
+          40.77
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          20.64
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          11.58
+        ],
+        [
+          "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+          7.34
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:65 at",
+          4.58
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          4.51
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          4.5
+        ],
+        [
+          "src/sim/orbit/patched.ts:84 sample",
+          3.36
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          2.91
+        ],
+        [
+          "src/sim/orbit/kepler.ts:87 qe",
+          1.67
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          1.58
+        ],
+        [
+          "node_modules/three/build/three.module.js:5118 setValueV1f",
+          1.26
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          81.92
+        ],
+        [
+          "src/flight/controller/telemetry.ts:150 telemetry",
+          66.09
+        ],
+        [
+          "src/flight/controller.ts:1233 telemetry",
+          66.09
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          64.48
+        ],
+        [
+          "src/game/world.ts:922 predict",
+          64.48
+        ],
+        [
+          "src/game/world.ts:906 trajectory",
+          64.48
+        ],
+        [
+          "src/game/flightData.ts:17 flightPredictions",
+          64.48
+        ],
+        [
+          "src/sim/orbit/patched.ts:84 sample",
+          59.88
+        ],
+        [
+          "src/sim/orbit/kepler.ts:108 elementsToState",
+          47.41
+        ],
+        [
+          "src/sim/orbit/kepler.ts:113 propagate",
+          46.88
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          46.28
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          44.97
+        ]
+      ]
+    },
+    {
+      "ms": 120.939,
+      "ts": 825485468242,
+      "self": [
+        [
+          "(program)",
+          39.88
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          15.25
+        ],
+        [
+          "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+          8.68
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          7.81
+        ],
+        [
+          "(garbage collector)",
+          5.36
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          5.36
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:65 at",
+          5.25
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          4.29
+        ],
+        [
+          "src/sim/orbit/kepler.ts:87 qe",
+          3.72
+        ],
+        [
+          "src/sim/orbit/patched.ts:111 ",
+          2.15
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          2.1
+        ],
+        [
+          "node_modules/three/build/three.module.js:18407 setProgram",
+          1.69
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          73.67
+        ],
+        [
+          "src/flight/controller/telemetry.ts:150 telemetry",
+          61.07
+        ],
+        [
+          "src/flight/controller.ts:1233 telemetry",
+          61.07
+        ],
+        [
+          "src/game/world.ts:922 predict",
+          58.4
+        ],
+        [
+          "src/game/world.ts:906 trajectory",
+          58.4
+        ],
+        [
+          "src/game/flightData.ts:17 flightPredictions",
+          58.4
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          56.78
+        ],
+        [
+          "(program)",
+          39.88
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          37.32
+        ],
+        [
+          "src/sim/orbit/kepler.ts:108 elementsToState",
+          36.14
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          35.11
+        ],
+        [
+          "src/sim/orbit/kepler.ts:113 propagate",
+          23.71
+        ]
+      ]
+    },
+    {
+      "ms": 120.305,
+      "ts": 825500021443,
+      "self": [
+        [
+          "(program)",
+          38.52
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          13.72
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          7.74
+        ],
+        [
+          "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+          7.25
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          6.79
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:65 at",
+          6.15
+        ],
+        [
+          "(garbage collector)",
+          5.27
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          4.98
+        ],
+        [
+          "src/sim/orbit/patched.ts:84 sample",
+          3.91
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          3.33
+        ],
+        [
+          "src/sim/orbit/kepler.ts:87 qe",
+          2.14
+        ],
+        [
+          "src/util/vec3.ts:16 sub",
+          1.14
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          74.9
+        ],
+        [
+          "src/flight/controller/telemetry.ts:150 telemetry",
+          60.58
+        ],
+        [
+          "src/flight/controller.ts:1233 telemetry",
+          60.58
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          58.87
+        ],
+        [
+          "src/game/world.ts:922 predict",
+          58.87
+        ],
+        [
+          "src/game/world.ts:906 trajectory",
+          58.87
+        ],
+        [
+          "src/game/flightData.ts:17 flightPredictions",
+          58.87
+        ],
+        [
+          "src/sim/orbit/patched.ts:84 sample",
+          52.74
+        ],
+        [
+          "(program)",
+          38.52
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          38.5
+        ],
+        [
+          "src/sim/orbit/kepler.ts:108 elementsToState",
+          35.31
+        ],
+        [
+          "src/sim/orbit/kepler.ts:113 propagate",
+          35.31
+        ]
+      ]
+    },
+    {
+      "ms": 117.137,
+      "ts": 825491809184,
+      "self": [
+        [
+          "(program)",
+          38.79
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          13.49
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          8.39
+        ],
+        [
+          "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+          7.83
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          5.54
+        ],
+        [
+          "src/sim/orbit/patched.ts:84 sample",
+          4.91
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          4.09
+        ],
+        [
+          "(garbage collector)",
+          3.86
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:65 at",
+          3.8
+        ],
+        [
+          "src/sim/orbit/kepler.ts:87 qe",
+          3.4
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          1.67
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          1.19
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          73.73
+        ],
+        [
+          "src/flight/controller/telemetry.ts:150 telemetry",
+          58.41
+        ],
+        [
+          "src/flight/controller.ts:1233 telemetry",
+          58.41
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          56.33
+        ],
+        [
+          "src/game/world.ts:922 predict",
+          56.33
+        ],
+        [
+          "src/game/world.ts:906 trajectory",
+          56.33
+        ],
+        [
+          "src/game/flightData.ts:17 flightPredictions",
+          56.33
+        ],
+        [
+          "src/sim/orbit/patched.ts:84 sample",
+          51.35
+        ],
+        [
+          "src/sim/orbit/kepler.ts:108 elementsToState",
+          39.72
+        ],
+        [
+          "src/sim/orbit/kepler.ts:113 propagate",
+          39.72
+        ],
+        [
+          "(program)",
+          38.79
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          38.65
+        ]
+      ]
+    },
+    {
+      "ms": 115.663,
+      "ts": 825487598885,
+      "self": [
+        [
+          "(program)",
+          41.8
+        ],
+        [
+          "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+          13.89
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          12.9
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          6.12
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          5.04
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          5
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:65 at",
+          4.58
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          4.01
+        ],
+        [
+          "src/sim/orbit/kepler.ts:87 qe",
+          3.35
+        ],
+        [
+          "src/sim/orbit/patched.ts:111 ",
+          1.14
+        ],
+        [
+          "(garbage collector)",
+          1.14
+        ],
+        [
+          "src/sim/orbit/patched.ts:32 minimize",
+          1.11
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          70.91
+        ],
+        [
+          "src/flight/controller/telemetry.ts:150 telemetry",
+          57.74
+        ],
+        [
+          "src/flight/controller.ts:1233 telemetry",
+          57.74
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          55.49
+        ],
+        [
+          "src/game/world.ts:922 predict",
+          55.49
+        ],
+        [
+          "src/game/world.ts:906 trajectory",
+          55.49
+        ],
+        [
+          "src/game/flightData.ts:17 flightPredictions",
+          55.49
+        ],
+        [
+          "(program)",
+          41.8
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          41.29
+        ],
+        [
+          "src/sim/orbit/kepler.ts:108 elementsToState",
+          41.29
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          33.8
+        ],
+        [
+          "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+          26.23
+        ]
+      ]
+    },
+    {
+      "ms": 113.315,
+      "ts": 825497977214,
+      "self": [
+        [
+          "(program)",
+          44.94
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          12.14
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          8.56
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          6.7
+        ],
+        [
+          "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+          5.58
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:65 at",
+          3.97
+        ],
+        [
+          "src/sim/orbit/patched.ts:84 sample",
+          3.37
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          3.32
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          2.95
+        ],
+        [
+          "src/sim/orbit/kepler.ts:87 qe",
+          2.76
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          1.67
+        ],
+        [
+          "src/sim/vessel/integrator.ts:180 substep",
+          1.14
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          66.98
+        ],
+        [
+          "src/flight/controller/telemetry.ts:150 telemetry",
+          53.76
+        ],
+        [
+          "src/flight/controller.ts:1233 telemetry",
+          53.76
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          52.62
+        ],
+        [
+          "src/game/world.ts:922 predict",
+          52.62
+        ],
+        [
+          "src/game/world.ts:906 trajectory",
+          52.62
+        ],
+        [
+          "src/game/flightData.ts:17 flightPredictions",
+          52.62
+        ],
+        [
+          "src/sim/orbit/patched.ts:84 sample",
+          46.48
+        ],
+        [
+          "(program)",
+          44.94
+        ],
+        [
+          "src/sim/orbit/kepler.ts:108 elementsToState",
+          36.82
+        ],
+        [
+          "src/sim/orbit/kepler.ts:113 propagate",
+          36.82
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          35.74
+        ]
+      ]
+    },
+    {
+      "ms": 111.76,
+      "ts": 825493893907,
+      "self": [
+        [
+          "(program)",
+          42.55
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          15.42
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          7.76
+        ],
+        [
+          "src/sim/orbit/kepler.ts:80 meanToEccentricAnomaly",
+          7.26
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          5.58
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:65 at",
+          4.92
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          2.78
+        ],
+        [
+          "node_modules/three/build/three.core.js:13067 updateMatrixWorld",
+          2.25
+        ],
+        [
+          "src/sim/orbit/patched.ts:84 sample",
+          2.21
+        ],
+        [
+          "bindVertexArray",
+          1.69
+        ],
+        [
+          "src/sim/orbit/kepler.ts:87 qe",
+          1.63
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          1.25
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          68.14
+        ],
+        [
+          "src/flight/controller/telemetry.ts:150 telemetry",
+          52.96
+        ],
+        [
+          "src/flight/controller.ts:1233 telemetry",
+          52.96
+        ],
+        [
+          "src/sim/orbit/patched.ts:52 predictTrajectory",
+          51.48
+        ],
+        [
+          "src/game/world.ts:922 predict",
+          51.48
+        ],
+        [
+          "src/game/world.ts:906 trajectory",
+          51.48
+        ],
+        [
+          "src/game/flightData.ts:17 flightPredictions",
+          51.48
+        ],
+        [
+          "src/sim/orbit/patched.ts:84 sample",
+          46.53
+        ],
+        [
+          "(program)",
+          42.55
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          38.18
+        ],
+        [
+          "src/sim/orbit/kepler.ts:108 elementsToState",
+          38.18
+        ],
+        [
+          "src/sim/orbit/kepler.ts:113 propagate",
+          38.18
+        ]
+      ]
+    }
+  ]
+}

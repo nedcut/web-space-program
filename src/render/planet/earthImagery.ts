@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { QualitySettings } from '../core/quality';
+import { decodeImagery, releaseImagery } from './imageryDecode';
+import type { ImageStrips as Strips } from './imageStrips';
 
 /**
  * Real Earth imagery (NASA Blue Marble Next Generation monthly colour, Black Marble night lights, the Blue
@@ -9,7 +11,8 @@ import type { QualitySettings } from '../core/quality';
  * procedural surface (`ready` stays false and shaders keep `uEarthImagery = 0`).
  *
  * Decoded images are shared between renderers by URL (reference counted); GPU textures belong to one renderer and
- * are filled in bounded strips, one per frame, so no upload stalls the main thread. Shaders sample them with
+ * are filled in small strips under a per-frame submission budget (individual driver calls can still stall).
+ * Shaders sample them with
  * `GLSL_EARTH_IMAGERY` (u = lon/2π + 0.5, v = 0.5 − lat/π, rows north → south, uploaded without a flip).
  */
 export type EarthTextureQuality = QualitySettings['earth']['textureQuality'];
@@ -69,10 +72,6 @@ async function fetchBlob(url: string, persistent: boolean): Promise<Blob> {
   return res.blob();
 }
 
-function decode(blob: Blob): Promise<ImageBitmap> {
-  return createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
-}
-
 let maxTexture = 0;
 /** MAX_TEXTURE_SIZE of this browser's WebGL2 (probed once; 8192 when unknown). */
 function maxTextureSize(): number {
@@ -91,13 +90,13 @@ function maxTextureSize(): number {
 }
 
 type Kind = 'day' | 'water' | 'night' | 'clouds';
+/** One unit of GPU streaming work; `heavy` units (allocation, mips, first render-target use) only start a frame. */
+type Job = ((renderer: THREE.WebGLRenderer) => boolean) & { heavy?: () => boolean };
 
-/** A decoded image cut into row strips. Decoding and cutting run in the browser's image decoder, off the frame. */
-interface Strips { width: number; height: number; strips: { y: number; bitmap: ImageBitmap }[] }
 interface Entry { refs: number; promise: Promise<Strips> }
 const decoded = new Map<string, Entry>();
-/** Bytes per strip upload: a few ms of texSubImage2D even on integrated GPUs (main-thread stalls stay < 16 ms). */
-const STRIP_BYTES = 4 << 20;
+/** Keep individual uploads small; the frame budget cannot interrupt a driver call. */
+const STRIP_BYTES = 1 << 20;
 
 /** URLs of a level's file(s) for one kind: several west→east tiles where the pattern has `{T}`. */
 function urlsOf(level: ManifestLevel, kind: Kind, month: number): string[] {
@@ -111,15 +110,7 @@ function urlsOf(level: ManifestLevel, kind: Kind, month: number): string[] {
 function acquireStrips(url: string): { key: string; promise: Promise<Strips> } {
   let entry = decoded.get(url);
   if (!entry) {
-    const promise = fetchBlob(url, url.includes('/packs/')).then(decode).then(async (full) => {
-      const w = full.width, h = full.height;
-      const rows = Math.max(16, Math.min(h, Math.floor(STRIP_BYTES / (w * 4))));
-      const ys: number[] = [];
-      for (let y = 0; y < h; y += rows) ys.push(y);
-      const strips = await Promise.all(ys.map(async (y) => ({ y, bitmap: await createImageBitmap(full, 0, y, w, Math.min(rows, h - y), { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }) })));
-      full.close();
-      return { width: w, height: h, strips };
-    });
+    const promise = fetchBlob(url, url.includes('/packs/')).then(blob => decodeImagery(blob, STRIP_BYTES));
     entry = { refs: 0, promise };
     decoded.set(url, entry);
     promise.catch(() => { if (decoded.get(url) === entry) decoded.delete(url); });
@@ -132,7 +123,7 @@ function releaseStrips(key: string): void {
   const entry = decoded.get(key);
   if (!entry || --entry.refs > 0) return;
   decoded.delete(key);
-  void entry.promise.then((s) => s.strips.forEach((x) => x.bitmap.close()), () => {});
+  void entry.promise.then(releaseImagery, () => {});
 }
 
 /** Preallocated texture filled one strip per `step()` through texSubImage2D (three's copyTextureToTexture). */
@@ -159,6 +150,8 @@ class StripUpload {
     this.texture = t;
   }
   get done(): boolean { return this.next >= this.src.strips.length; }
+  /** The next step allocates storage or regenerates mips: driver work the frame budget cannot predict. */
+  get heavy(): boolean { return this.next < 0 || (!!this.texture.userData.mips && this.next === this.src.strips.length - 1); }
   /** Allocate, then upload one strip per call; the last strip regenerates the mip chain. */
   step(renderer: THREE.WebGLRenderer): boolean {
     if (this.done) return true;
@@ -194,7 +187,7 @@ void main() {
   gl_FragColor = vec4(texture2D(uDay, local).rgb, texture2D(uWater, global).r);
 }`;
 /** Pixels merged per frame (a fraction of a millisecond of GPU time). */
-const MERGE_PIXELS = 8 << 20;
+const MERGE_PIXELS = 1 << 20;
 
 /** Month index 0–11 for the Sun's ecliptic longitude seen from Earth (seasons follow the orbit, not UT). */
 export function seasonMonth(sunEclipticLongitude: number): number {
@@ -251,7 +244,7 @@ export class EarthImagery {
   private shown: { level: ManifestLevel; month: number; rt: THREE.WebGLRenderTarget; night: THREE.Texture | null } | null = null;
   private loading = false;
   /** GPU work for the next level/month: one unit per frame; null when idle. */
-  private jobs: ((renderer: THREE.WebGLRenderer) => boolean)[] | null = null;
+  private jobs: Job[] | null = null;
   private wantedMonth = -1;
   private disposed = false;
   private settled = false;
@@ -344,8 +337,8 @@ export class EarthImagery {
   }
 
   /** Upload water and lights, then per tile: upload colour strips and merge them into the target in strips. */
-  private buildJobs(level: ManifestLevel, month: number, day: Strips[], water: Strips, night: Strips | null): ((r: THREE.WebGLRenderer) => boolean)[] {
-    const jobs: ((r: THREE.WebGLRenderer) => boolean)[] = [];
+  private buildJobs(level: ManifestLevel, month: number, day: Strips[], water: Strips, night: Strips | null): Job[] {
+    const jobs: Job[] = [];
     const waterUp = new StripUpload(water, 'water');
     const nightUp = night ? new StripUpload(night, 'night') : null;
     this.pendingTextures = [waterUp.texture, ...(nightUp ? [nightUp.texture] : [])];
@@ -358,22 +351,23 @@ export class EarthImagery {
     });
     rt.texture.name = `earth:day+water:${level.id}`;
     this.pendingTarget = rt;
-    jobs.push((r) => waterUp.step(r));
-    if (nightUp) jobs.push((r) => nightUp.step(r));
+    jobs.push(Object.assign((r: THREE.WebGLRenderer) => waterUp.step(r), { heavy: () => waterUp.heavy }));
+    if (nightUp) jobs.push(Object.assign((r: THREE.WebGLRenderer) => nightUp.step(r), { heavy: () => nightUp.heavy }));
     const tw = level.width / day.length;
     const rows = Math.max(64, Math.min(level.height, Math.floor(MERGE_PIXELS / tw)));
     day.forEach((tile, t) => {
       const up = new StripUpload(tile, 'day');
-      jobs.push((r) => up.step(r));
+      this.pendingTextures.push(up.texture);
+      jobs.push(Object.assign((r: THREE.WebGLRenderer) => up.step(r), { heavy: () => up.heavy }));
       let y = 0;
-      jobs.push((r) => {
+      jobs.push(Object.assign((r: THREE.WebGLRenderer) => {
         const last = t === day.length - 1 && y + rows >= level.height;
         this.mergeStrip(r, rt, up.texture, waterUp.texture, t, day.length, y, Math.min(rows, level.height - y), last);
         y += rows;
         if (y < level.height) return false;
         up.texture.dispose(); // this tile is merged; its source upload is no longer needed
         return true;
-      });
+      }, { heavy: () => y === 0 || (t === day.length - 1 && y + rows >= level.height) }));
     });
     jobs.push(() => {
       // Swap in the merged texture; keep only the lights.
@@ -398,27 +392,45 @@ export class EarthImagery {
   }
 
   /**
-   * Bounded GPU work per frame: allocations, strip uploads and merge strips until ~3 ms of main-thread time
-   * (each unit is ≤ 4 MB / 8 Mpx, so even the first unit stays far below a frame).
+   * Stream for about 6% of the measured frame interval, 1–3 ms: a slow (or throttled) machine gets the same number
+   * of frames' worth of work, so streaming time does not grow as the frame rate drops, while 120 Hz frames spend
+   * about a millisecond. The next unit starts only if its predicted cost fits (one unit always runs). A single
+   * allocation or mip generation can still exceed the budget; diagnostics retain the actual maximum.
    */
+  private lastStep = 0;
+  private frameMs = 16.7;
+  private unitMs = 0.5;
   step(renderer: THREE.WebGLRenderer): void {
     if (this.disposed) return;
-    const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
-    const budget = () => typeof performance === 'undefined' || performance.now() - t0 < 3;
-    while (this.cloudJob && budget()) {
-      this.stats.units++;
-      if (this.cloudJob.step(renderer)) {
+    const timed = typeof performance !== 'undefined';
+    const t0 = timed ? performance.now() : 0;
+    if (this.lastStep) this.frameMs += (Math.min(100, Math.max(4, t0 - this.lastStep)) - this.frameMs) * 0.2;
+    this.lastStep = t0;
+    const limit = Math.min(3, Math.max(1, this.frameMs * 0.06));
+    let units = 0;
+    const budget = (heavy = false) => !timed || units === 0 || (!heavy && performance.now() - t0 + this.unitMs <= limit);
+    /** Run one unit and fold its duration into the estimate used to admit the next one. */
+    const unit = (work: () => boolean): boolean => {
+      const start = timed ? performance.now() : 0;
+      const done = work();
+      if (timed) this.unitMs += (performance.now() - start - this.unitMs) * 0.25;
+      this.stats.units++; units++;
+      return done;
+    };
+    // Put the bundled surface preview on screen before spending frames on the cloud source.
+    while (this.jobs && budget(this.jobs[0].heavy?.())) {
+      const jobs = this.jobs;
+      if (unit(() => jobs[0](renderer))) jobs.shift();
+      if (!jobs.length) { this.jobs = null; this.pump(); }
+    }
+    while (this.cloudJob && budget(this.cloudJob.heavy)) {
+      const job = this.cloudJob;
+      if (unit(() => job.step(renderer))) {
         this.cloudSource = this.cloudJob.texture;
         this.cloudSourceSettled = true;
         this.cloudJob = null;
         if (this.cloudKey) { releaseStrips(this.cloudKey); this.cloudKey = null; }
       }
-    }
-    while (this.jobs && budget()) {
-      const jobs = this.jobs;
-      this.stats.units++;
-      if (jobs[0](renderer)) jobs.shift();
-      if (!jobs.length) { this.jobs = null; this.pump(); }
     }
     if (typeof performance !== 'undefined') this.stats.maxFrameMs = Math.max(this.stats.maxFrameMs, performance.now() - t0);
   }

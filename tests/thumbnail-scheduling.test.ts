@@ -11,6 +11,7 @@ vi.mock('../src/editor/scene/thumbnailCache', () => ({
 vi.mock('three', async (importOriginal) => {
   const THREE = await importOriginal<typeof import('three')>();
   class FakeRenderer {
+    debug = { checkShaderErrors: true };
     domElement = { toBlob: (cb: (b: Blob) => void) => cb(new Blob()) };
     setPixelRatio() {} setSize() {} setClearColor() {} render() {} dispose() {} forceContextLoss() {}
     compileAsync() { return Promise.resolve(); }

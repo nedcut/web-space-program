@@ -6,6 +6,7 @@ import { updateSettings, useGame, type Settings } from '../game/store';
 import { actionLabel, conflicts, defaultBindings, getBindings, keyChord, saveBindings, subscribeBindings, type Action } from '../input/bindings';
 import { AdvancedGraphicsPanel } from './AdvancedGraphics';
 import { presetSettings } from '../render/core/quality';
+import { graphicsLabel } from './graphicsLabels';
 
 const TABS = ['Graphics', 'Audio', 'Controls', 'Gameplay', 'Accessibility'] as const;
 export function SettingsPanel({ onClose, world }: { onClose: () => void; world?: World }) {
@@ -61,8 +62,8 @@ export function SettingsPanel({ onClose, world }: { onClose: () => void; world?:
       <div role="tabpanel" id="settings-content" aria-label={tab} className="settings-content">
         {tab === 'Graphics' && <>
           <label className="setting-row"><span>Quality preset</span><select aria-label="Quality preset" value={settings.graphicsCustom ? 'custom' : settings.quality} onChange={e => { if (e.target.value !== 'custom') updateSettings(presetSettings(e.target.value as Settings['quality'])); }}>
-            {['low', 'medium', 'high', 'ultra'].map(v => <option key={v} value={v}>{v}</option>)}
-            {settings.graphicsCustom && <option value="custom">Custom (based on {settings.quality})</option>}
+            {['low', 'medium', 'high', 'ultra'].map(v => <option key={v} value={v}>{graphicsLabel(v)}</option>)}
+            {settings.graphicsCustom && <option value="custom">Custom (based on {graphicsLabel(settings.quality)})</option>}
           </select></label>
           <p className="settings-note">Low suits older integrated GPUs; Medium suits current laptops. Ultra is an opt-in for strong desktop GPUs and uses more memory.</p>
           <AdvancedGraphicsPanel settings={settings} />

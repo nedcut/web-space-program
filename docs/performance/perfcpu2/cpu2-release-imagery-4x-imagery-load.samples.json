@@ -1,0 +1,1356 @@
+{
+  "file": "cpu2-release-imagery-4x-imagery-load.trace.json.gz",
+  "longTasks": 66,
+  "all": {
+    "self": [
+      [
+        "(program)",
+        3682.32
+      ],
+      [
+        "texSubImage2D",
+        1126.95
+      ],
+      [
+        "src/render/parts/ao.ts:129 ",
+        244.66
+      ],
+      [
+        "getProgramParameter",
+        193.15
+      ],
+      [
+        "getContext",
+        165.2
+      ],
+      [
+        "(garbage collector)",
+        116.81
+      ],
+      [
+        "shaderSource",
+        110.78
+      ],
+      [
+        "measureText",
+        106.8
+      ],
+      [
+        "src/audio/index.ts:175 initialize",
+        93.08
+      ],
+      [
+        "node_modules/three/build/three.module.js:6373 replaceLightNums",
+        91.25
+      ],
+      [
+        "node_modules/three/build/three.core.js:10570 multiplyMatrices",
+        90.8
+      ],
+      [
+        "(idle)",
+        88.69
+      ]
+    ],
+    "inclusive": [
+      [
+        "(program)",
+        3682.32
+      ],
+      [
+        "node_modules/three/build/three.module.js:17674 Gu.render",
+        2484.73
+      ],
+      [
+        "src/flight/controller.ts:721 frame",
+        2190.65
+      ],
+      [
+        "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+        1978.78
+      ],
+      [
+        "node_modules/three/build/three.module.js:18015 renderScene",
+        1978.18
+      ],
+      [
+        "node_modules/three/build/three.module.js:18165 renderObjects",
+        1970.86
+      ],
+      [
+        "node_modules/three/build/three.module.js:18192 renderObject",
+        1942.87
+      ],
+      [
+        "node_modules/scheduler/cjs/scheduler.production.js:121 performWorkUntilDeadline",
+        1851.89
+      ],
+      [
+        "node_modules/react-dom/cjs/react-dom-client.production.js:13229 flushPassiveEffects",
+        1673.28
+      ],
+      [
+        "node_modules/react-dom/cjs/react-dom-client.production.js:12935 ",
+        1648.68
+      ],
+      [
+        "node_modules/three/build/three.module.js:18407 setProgram",
+        1626.59
+      ],
+      [
+        "src/flight/controller.ts:897 render",
+        1605.26
+      ]
+    ]
+  },
+  "tasks": [
+    {
+      "ms": 1624.799,
+      "ts": 828259895606,
+      "self": [
+        [
+          "texSubImage2D",
+          649.31
+        ],
+        [
+          "getContext",
+          146.89
+        ],
+        [
+          "src/editor/scene/hangar.ts:93 floorTexture",
+          76.18
+        ],
+        [
+          "getProgramParameter",
+          61.99
+        ],
+        [
+          "loseContext",
+          58.95
+        ],
+        [
+          "drawImage",
+          47.15
+        ],
+        [
+          "(garbage collector)",
+          40.88
+        ],
+        [
+          "fillRect",
+          32.7
+        ],
+        [
+          "fillText",
+          29.11
+        ],
+        [
+          "src/editor/scene/hangar.ts:423 buildHangar",
+          24.62
+        ],
+        [
+          "node_modules/three/build/three.module.js:2164 releaseStatesOfProgram",
+          19.69
+        ],
+        [
+          "node_modules/three/build/three.core.js:12689 remove",
+          19.2
+        ]
+      ],
+      "inclusive": [
+        [
+          "node_modules/react-dom/cjs/react-dom-client.production.js:13229 flushPassiveEffects",
+          1577.1
+        ],
+        [
+          "node_modules/react-dom/cjs/react-dom-client.production.js:12935 ",
+          1577.1
+        ],
+        [
+          "node_modules/scheduler/cjs/scheduler.production.js:121 performWorkUntilDeadline",
+          1577.1
+        ],
+        [
+          "node_modules/react-dom/cjs/react-dom-client.production.js:11411 commitPassiveMountOnFiber",
+          1369.75
+        ],
+        [
+          "node_modules/react-dom/cjs/react-dom-client.production.js:11392 recursivelyTraversePassiveMountEffects",
+          1369.75
+        ],
+        [
+          "node_modules/react-dom/cjs/react-dom-client.production.js:9011 commitHookEffectListMount",
+          1368.67
+        ],
+        [
+          "src/editor/EditorScene.tsx:33 ",
+          1364.83
+        ],
+        [
+          "src/editor/scene/EditorView.ts:145 zn",
+          1364.27
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          846.98
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          823.09
+        ],
+        [
+          "node_modules/three/build/three.module.js:18015 renderScene",
+          822.19
+        ],
+        [
+          "node_modules/three/build/three.module.js:18165 renderObjects",
+          820.32
+        ]
+      ]
+    },
+    {
+      "ms": 869.086,
+      "ts": 828261898708,
+      "self": [
+        [
+          "src/render/parts/ao.ts:129 ",
+          244.66
+        ],
+        [
+          "measureText",
+          98.65
+        ],
+        [
+          "src/render/parts/ao.ts:98 mark",
+          79.07
+        ],
+        [
+          "src/render/parts/ao.ts:104 ",
+          46.42
+        ],
+        [
+          "node_modules/three/build/three.core.js:5997 fromBufferAttribute",
+          17.17
+        ],
+        [
+          "node_modules/three/build/three.core.js:17950 Z",
+          15.65
+        ],
+        [
+          "src/render/parts/ao.ts:83 bakeGroup",
+          13.04
+        ],
+        [
+          "src/render/parts/geom.ts:67 lathe",
+          12.16
+        ],
+        [
+          "(idle)",
+          10.57
+        ],
+        [
+          "node_modules/three/build/three.core.js:17333 getX",
+          9.96
+        ],
+        [
+          "save",
+          9.34
+        ],
+        [
+          "src/render/parts/builders/command.ts:211 buildLantern",
+          8.84
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/editor/EditorScene.tsx:37 a",
+          841.86
+        ],
+        [
+          "",
+          841.86
+        ],
+        [
+          "evaluate",
+          841.86
+        ],
+        [
+          "src/editor/session.ts:232 load",
+          829.58
+        ],
+        [
+          "src/editor/session.ts:160 refresh",
+          826.85
+        ],
+        [
+          "src/editor/scene/EditorView.ts:261 sync",
+          803.79
+        ],
+        [
+          "src/editor/scene/EditorView.ts:228 ",
+          803.79
+        ],
+        [
+          "src/editor/session.ts:184 ",
+          803.79
+        ],
+        [
+          "src/editor/scene/EditorView.ts:306 syncCraft",
+          803.6
+        ],
+        [
+          "src/editor/scene/partMesh.ts:62 createPartMesh",
+          795.25
+        ],
+        [
+          "src/render/parts/index.ts:126 buildPartMesh",
+          788.8
+        ],
+        [
+          "src/render/parts/ao.ts:37 bakePartAO",
+          432.95
+        ]
+      ]
+    },
+    {
+      "ms": 794.819,
+      "ts": 828265188957,
+      "self": [
+        [
+          "(program)",
+          92.6
+        ],
+        [
+          "src/render/site/LaunchSite.ts:1058 blocked",
+          70.39
+        ],
+        [
+          "src/render/planet/atmosphereParams.ts:161 computeTransmittance",
+          66.45
+        ],
+        [
+          "node_modules/three/build/three.core.js:11302 toArray",
+          30.11
+        ],
+        [
+          "node_modules/three/build/three.core.js:36844 e",
+          25.82
+        ],
+        [
+          "node_modules/three/build/three.core.js:17950 Z",
+          20.67
+        ],
+        [
+          "node_modules/three/build/three.core.js:19486 convertBufferAttribute",
+          18.76
+        ],
+        [
+          "src/render/parts/soot.ts:150 ",
+          12.56
+        ],
+        [
+          "(garbage collector)",
+          11.92
+        ],
+        [
+          "node_modules/three/build/three.core.js:16944 Sn",
+          10.22
+        ],
+        [
+          "src/sim/terrain/noise.ts:72 noise",
+          10.2
+        ],
+        [
+          "src/render/map/MapView.ts:787 update",
+          8.25
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          684.31
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          539.48
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          537.3
+        ],
+        [
+          "src/render/site/LaunchSite.ts:195 Tt",
+          270.46
+        ],
+        [
+          "src/render/planet/PlanetRenderer.ts:150 Ar",
+          201.77
+        ],
+        [
+          "src/flight/planets.ts:75 update",
+          138.63
+        ],
+        [
+          "src/render/site/LaunchSite.ts:1073 buildVegetation",
+          132.17
+        ],
+        [
+          "src/flight/controller.ts:861 startWarmup",
+          126.4
+        ],
+        [
+          "src/flight/planets.ts:53 m",
+          123.89
+        ],
+        [
+          "src/flight/controller.ts:1064 updateMapScene",
+          104.03
+        ],
+        [
+          "src/render/planet/PlanetRenderer.ts:249 buildSolid",
+          101.2
+        ],
+        [
+          "src/render/map/MapView.ts:787 update",
+          96.42
+        ]
+      ]
+    },
+    {
+      "ms": 444.78,
+      "ts": 828264744163,
+      "self": [
+        [
+          "node_modules/three/build/three.core.js:36844 e",
+          47.63
+        ],
+        [
+          "src/render/map/MapView.ts:608 pn",
+          36.33
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          20.52
+        ],
+        [
+          "src/render/sky/Starfield.ts:30 y",
+          16.21
+        ],
+        [
+          "node_modules/three/build/three.core.js:17950 Z",
+          15.97
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          14.3
+        ],
+        [
+          "src/sim/orbit/kepler.ts:22 solveKepler",
+          12.33
+        ],
+        [
+          "src/flight/controller.ts:198 ka",
+          10.74
+        ],
+        [
+          "src/sim/orbit/kepler.ts:70 eccentricToTrueAnomaly",
+          9.95
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          9.93
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          9.27
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:65 at",
+          7.27
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/FlightScene.tsx:109 start",
+          433.54
+        ],
+        [
+          "src/flight/controller.ts:198 ka",
+          431.12
+        ],
+        [
+          "src/render/map/MapView.ts:608 pn",
+          329.31
+        ],
+        [
+          "src/render/map/conicSampling.ts:32 adaptiveSamples",
+          116.43
+        ],
+        [
+          "src/render/map/MapView.ts:685 ",
+          106.13
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:69 getRelativeState",
+          102.96
+        ],
+        [
+          "node_modules/three/build/three.core.js:36844 e",
+          78.24
+        ],
+        [
+          "src/sim/orbit/kepler.ts:108 elementsToState",
+          77.48
+        ],
+        [
+          "src/sim/orbit/kepler.ts:113 propagate",
+          77.48
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          76.37
+        ],
+        [
+          "src/render/map/conicSampling.ts:38 refine",
+          60.58
+        ],
+        [
+          "src/render/map/MapView.ts:724 makeLine",
+          38.33
+        ]
+      ]
+    },
+    {
+      "ms": 266.443,
+      "ts": 828262768400,
+      "self": [
+        [
+          "getProgramParameter",
+          63.25
+        ],
+        [
+          "texSubImage2D",
+          49.39
+        ],
+        [
+          "(program)",
+          43.09
+        ],
+        [
+          "src/editor/scene/EditorView.ts:963 updateNodePresentation",
+          26.3
+        ],
+        [
+          "shaderSource",
+          14.75
+        ],
+        [
+          "node_modules/three/build/three.module.js:6373 replaceLightNums",
+          10.4
+        ],
+        [
+          "node_modules/three/build/three.module.js:6406 resolveIncludes",
+          4.32
+        ],
+        [
+          "node_modules/three/build/three.module.js:6443 unrollLoops",
+          3.27
+        ],
+        [
+          "node_modules/three/build/three.module.js:7357 getParameters",
+          2.75
+        ],
+        [
+          "getUniformLocation",
+          2.45
+        ],
+        [
+          "node_modules/three/build/three.module.js:18407 setProgram",
+          2.21
+        ],
+        [
+          "(garbage collector)",
+          2.18
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/editor/scene/EditorView.ts:910 loop",
+          220.77
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          194.47
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          186.24
+        ],
+        [
+          "node_modules/three/build/three.module.js:18192 renderObject",
+          181.86
+        ],
+        [
+          "node_modules/three/build/three.module.js:18165 renderObjects",
+          181.86
+        ],
+        [
+          "node_modules/three/build/three.module.js:18015 renderScene",
+          181.86
+        ],
+        [
+          "node_modules/three/build/three.module.js:18407 setProgram",
+          175.99
+        ],
+        [
+          "node_modules/three/build/three.module.js:6064 Cl",
+          68.39
+        ],
+        [
+          "node_modules/three/build/three.module.js:7022 onFirstUse",
+          68.39
+        ],
+        [
+          "node_modules/three/build/three.module.js:7121 getUniforms",
+          68.39
+        ],
+        [
+          "getProgramParameter",
+          63.25
+        ],
+        [
+          "node_modules/three/build/three.module.js:6123 upload",
+          52.84
+        ]
+      ]
+    },
+    {
+      "ms": 247.114,
+      "ts": 828268036025,
+      "self": [
+        [
+          "(program)",
+          66.12
+        ],
+        [
+          "getProgramParameter",
+          48.2
+        ],
+        [
+          "bufferData",
+          21.29
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          6.2
+        ],
+        [
+          "bindBuffer",
+          5.77
+        ],
+        [
+          "node_modules/three/build/three.module.js:66 createBuffer",
+          4.66
+        ],
+        [
+          "shaderSource",
+          4
+        ],
+        [
+          "createVertexArray",
+          3.47
+        ],
+        [
+          "node_modules/three/build/three.module.js:18407 setProgram",
+          3.26
+        ],
+        [
+          "texSubImage2D",
+          3.24
+        ],
+        [
+          "node_modules/three/build/three.module.js:18224 getProgram",
+          2.8
+        ],
+        [
+          "node_modules/three/build/three.module.js:7357 getParameters",
+          2.79
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          178.06
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          173.56
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          173.56
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+          170.84
+        ],
+        [
+          "src/render/core/renderer.ts:244 render",
+          170.84
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          166.99
+        ],
+        [
+          "src/render/core/renderer.ts:351 render",
+          154.49
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          117.23
+        ],
+        [
+          "node_modules/three/build/three.module.js:18192 renderObject",
+          106.43
+        ],
+        [
+          "node_modules/three/build/three.module.js:18165 renderObjects",
+          106.43
+        ],
+        [
+          "node_modules/three/build/three.module.js:18015 renderScene",
+          106.43
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/RenderPass.js:121 render",
+          106.01
+        ]
+      ]
+    },
+    {
+      "ms": 232.503,
+      "ts": 828264383137,
+      "self": [
+        [
+          "src/audio/index.ts:175 initialize",
+          93.08
+        ],
+        [
+          "src/audio/index.ts:534 makeImpulse",
+          43.51
+        ],
+        [
+          "(program)",
+          25.51
+        ],
+        [
+          "src/audio/index.ts:512 makeNoise",
+          23.9
+        ],
+        [
+          "src/audio/index.ts:161 name",
+          15.97
+        ],
+        [
+          "src/audio/index.ts:548 loop",
+          8.29
+        ],
+        [
+          "(garbage collector)",
+          3.4
+        ],
+        [
+          "elementsFromPoint",
+          3.31
+        ],
+        [
+          "src/audio/index.ts:608 oscillatorLoop",
+          3.27
+        ],
+        [
+          "node_modules/react-dom/cjs/react-dom-client.production.js:13931 ",
+          1.12
+        ],
+        [
+          "node_modules/react-dom/cjs/react-dom-client.production.js:11123 recursivelyTraverseDisappearLayoutEffects",
+          1.09
+        ],
+        [
+          "node_modules/react-dom/cjs/react-dom-client.production.js:4627 renderWithHooks",
+          1.09
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/audio/index.ts:161 name",
+          189.35
+        ],
+        [
+          "src/audio/ui.ts:25 resume",
+          188.25
+        ],
+        [
+          "src/audio/index.ts:266 resume",
+          187.71
+        ],
+        [
+          "src/audio/index.ts:175 initialize",
+          183.59
+        ],
+        [
+          "src/audio/index.ts:534 makeImpulse",
+          43.51
+        ],
+        [
+          "(program)",
+          25.51
+        ],
+        [
+          "src/audio/index.ts:512 makeNoise",
+          23.9
+        ],
+        [
+          "src/audio/index.ts:548 loop",
+          8.29
+        ],
+        [
+          "node_modules/react-dom/cjs/react-dom-client.production.js:12069 performWorkOnRoot",
+          5.46
+        ],
+        [
+          "node_modules/react-dom/cjs/react-dom-client.production.js:13574 performSyncWorkOnRoot",
+          5.46
+        ],
+        [
+          "node_modules/react-dom/cjs/react-dom-client.production.js:13408 flushSyncWorkAcrossRoots_impl",
+          5.46
+        ],
+        [
+          "node_modules/react-dom/cjs/react-dom-client.production.js:13456 processRootScheduleInMicrotask",
+          5.46
+        ]
+      ]
+    },
+    {
+      "ms": 217.936,
+      "ts": 828259677486,
+      "self": [
+        [
+          "(program)",
+          200.12
+        ],
+        [
+          "node_modules/three/build/three.core.js:10570 multiplyMatrices",
+          3.31
+        ],
+        [
+          "node_modules/three/build/three.module.js:9569 renderObject",
+          1.1
+        ],
+        [
+          "node_modules/three/build/three.core.js:13067 updateMatrixWorld",
+          1.09
+        ],
+        [
+          "node_modules/three/build/three.module.js:242 update",
+          1.09
+        ],
+        [
+          "texSubImage2D",
+          1.08
+        ],
+        [
+          "node_modules/three/build/three.module.js:1680 getBindingState",
+          0.65
+        ],
+        [
+          "src/render/planet/quadtree.ts:117 l",
+          0.56
+        ],
+        [
+          "node_modules/three/build/three.module.js:17897 projectObject",
+          0.56
+        ],
+        [
+          "node_modules/three/build/three.module.js:5159 setValueV3f",
+          0.56
+        ],
+        [
+          "node_modules/three/build/three.core.js:14294 setRGB",
+          0.55
+        ],
+        [
+          "src/render/planet/quadtree.ts:317 n",
+          0.55
+        ]
+      ],
+      "inclusive": [
+        [
+          "(program)",
+          200.12
+        ],
+        [
+          "src/ui/hub/HubScene.ts:286 render",
+          17.63
+        ],
+        [
+          "src/ui/hub/HubScene.ts:240 frame",
+          17.63
+        ],
+        [
+          "src/render/core/renderer.ts:244 render",
+          14.9
+        ],
+        [
+          "src/render/core/renderer.ts:351 render",
+          14.35
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+          14.35
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          13.8
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/RenderPass.js:121 render",
+          13.27
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          5.57
+        ],
+        [
+          "node_modules/three/build/three.module.js:18192 renderObject",
+          4.92
+        ],
+        [
+          "node_modules/three/build/three.module.js:18165 renderObjects",
+          4.92
+        ],
+        [
+          "node_modules/three/build/three.module.js:18015 renderScene",
+          4.92
+        ]
+      ]
+    },
+    {
+      "ms": 209.854,
+      "ts": 828263385079,
+      "self": [
+        [
+          "isElementHiddenForAria",
+          51.98
+        ],
+        [
+          "getCSSContent",
+          32.76
+        ],
+        [
+          "getTextAlternativeInternal",
+          23.01
+        ],
+        [
+          "innerAccumulatedElementText",
+          12.16
+        ],
+        [
+          "getComputedStyle",
+          9.29
+        ],
+        [
+          "query",
+          8.88
+        ],
+        [
+          "belongsToDisplayNoneOrAriaHiddenOrNonSlotted",
+          6.12
+        ],
+        [
+          "computeAccessibleNameComposite",
+          6.08
+        ],
+        [
+          "visit",
+          5.65
+        ],
+        [
+          "getElementComputedStyle",
+          5.51
+        ],
+        [
+          "",
+          5.42
+        ],
+        [
+          "computeElementStyleVisibilityVisible",
+          4.65
+        ]
+      ],
+      "inclusive": [
+        [
+          "evaluate",
+          208.53
+        ],
+        [
+          "",
+          208.53
+        ],
+        [
+          "querySelectorAll",
+          202.03
+        ],
+        [
+          "queryAll",
+          201.47
+        ],
+        [
+          "_queryEngineAll",
+          201.47
+        ],
+        [
+          "queryRole",
+          198.7
+        ],
+        [
+          "query",
+          197.6
+        ],
+        [
+          "match",
+          188.72
+        ],
+        [
+          "getElementAccessibleNameText",
+          115.89
+        ],
+        [
+          "computeAccessibleNameComposite",
+          114.79
+        ],
+        [
+          "getTextAlternativeInternal",
+          106.49
+        ],
+        [
+          "innerAccumulatedElementText",
+          87.74
+        ]
+      ]
+    },
+    {
+      "ms": 201.385,
+      "ts": 828266198806,
+      "self": [
+        [
+          "(program)",
+          167.42
+        ],
+        [
+          "node_modules/three/build/three.module.js:7357 getParameters",
+          2.14
+        ],
+        [
+          "shaderSource",
+          2.12
+        ],
+        [
+          "node_modules/three/build/three.module.js:6373 replaceLightNums",
+          1.62
+        ],
+        [
+          "src/render/map/OrbitStyle.ts:59 e.onBeforeCompile",
+          1.61
+        ],
+        [
+          "node_modules/three/build/three.core.js:12994 traverseVisible",
+          1.11
+        ],
+        [
+          "node_modules/three/build/three.module.js:17561 checkMaterialsReady",
+          1.08
+        ],
+        [
+          "node_modules/three/build/three.module.js:17395 prepareMaterial",
+          1.08
+        ],
+        [
+          "src/sim/vessel/resources.ts:135 flowGroups",
+          1.08
+        ],
+        [
+          "src/game/universe.ts:218 sun",
+          1.07
+        ],
+        [
+          "src/game/world.ts:498 tick",
+          1.07
+        ],
+        [
+          "node_modules/three/build/three.module.js:17552 Gu.compileAsync",
+          1.05
+        ]
+      ],
+      "inclusive": [
+        [
+          "(program)",
+          167.42
+        ],
+        [
+          "src/render/core/compileInSlices.ts:63 compileInSlices",
+          16.77
+        ],
+        [
+          "src/flight/controller.ts:721 frame",
+          16.47
+        ],
+        [
+          "node_modules/three/build/three.module.js:17552 Gu.compileAsync",
+          16.23
+        ],
+        [
+          "node_modules/three/build/three.module.js:17433 Gu.compile",
+          14.1
+        ],
+        [
+          "node_modules/three/build/three.module.js:17395 prepareMaterial",
+          11.89
+        ],
+        [
+          "node_modules/three/build/three.module.js:17497 ",
+          11.89
+        ],
+        [
+          "node_modules/three/build/three.core.js:12972 traverse",
+          11.89
+        ],
+        [
+          "src/game/world.ts:498 tick",
+          11.84
+        ],
+        [
+          "node_modules/three/build/three.module.js:18224 getProgram",
+          10.81
+        ],
+        [
+          "src/game/world.ts:643 physicsStep",
+          10.77
+        ],
+        [
+          "src/sim/vessel/integrator.ts:180 substep",
+          8.11
+        ]
+      ]
+    },
+    {
+      "ms": 146.796,
+      "ts": 828266500650,
+      "self": [
+        [
+          "texSubImage2D",
+          40.4
+        ],
+        [
+          "(program)",
+          26.76
+        ],
+        [
+          "measureText",
+          7.59
+        ],
+        [
+          "shaderSource",
+          5.91
+        ],
+        [
+          "getProgramInfoLog",
+          5.51
+        ],
+        [
+          "node_modules/three/build/three.module.js:6373 replaceLightNums",
+          4.33
+        ],
+        [
+          "(garbage collector)",
+          3.37
+        ],
+        [
+          "node_modules/three/build/three.module.js:18224 getProgram",
+          3.31
+        ],
+        [
+          "node_modules/three/build/three.module.js:7357 getParameters",
+          2.63
+        ],
+        [
+          "src/flight/hud/navball.ts:179 update",
+          2.18
+        ],
+        [
+          "getExtension",
+          2.13
+        ],
+        [
+          "node_modules/three/build/three.module.js:7909 getUniforms",
+          1.79
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/hud/Hud.tsx:188 loop",
+          73.56
+        ],
+        [
+          "src/flight/hud/navball.ts:179 update",
+          70.78
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          59.85
+        ],
+        [
+          "node_modules/three/build/three.module.js:18015 renderScene",
+          57.23
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          57.15
+        ],
+        [
+          "node_modules/three/build/three.module.js:18192 renderObject",
+          57.15
+        ],
+        [
+          "node_modules/three/build/three.module.js:18165 renderObjects",
+          57.15
+        ],
+        [
+          "node_modules/three/build/three.module.js:18407 setProgram",
+          56.63
+        ],
+        [
+          "node_modules/three/build/three.module.js:11918 uploadTexture",
+          43.12
+        ],
+        [
+          "node_modules/three/build/three.module.js:11571 setTexture2D",
+          43.12
+        ],
+        [
+          "node_modules/three/build/three.module.js:5514 setValueT1",
+          43.12
+        ],
+        [
+          "node_modules/three/build/three.module.js:6123 upload",
+          43.12
+        ]
+      ]
+    },
+    {
+      "ms": 123.131,
+      "ts": 828264111418,
+      "self": [
+        [
+          "texSubImage2D",
+          108.43
+        ],
+        [
+          "toBlob",
+          2.48
+        ],
+        [
+          "bufferData",
+          2.1
+        ],
+        [
+          "node_modules/three/build/three.module.js:18407 setProgram",
+          1.12
+        ],
+        [
+          "getParameter",
+          1.12
+        ],
+        [
+          "node_modules/three/build/three.module.js:7703 getProgramCacheKey",
+          1.05
+        ],
+        [
+          "node_modules/three/build/three.module.js:10515 setPolygonOffset",
+          0.75
+        ],
+        [
+          "node_modules/three/build/three.module.js:11729 initTexture",
+          0.63
+        ],
+        [
+          "node_modules/three/build/three.module.js:6002 addUniform",
+          0.57
+        ],
+        [
+          "node_modules/three/build/three.module.js:10573 bindTexture",
+          0.56
+        ],
+        [
+          "drawElements",
+          0.56
+        ],
+        [
+          "node_modules/three/build/three.module.js:15014 refreshTransformUniform",
+          0.55
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/editor/scene/thumbnails.ts:118 renderOne",
+          122.65
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          119.63
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          118.54
+        ],
+        [
+          "node_modules/three/build/three.module.js:18192 renderObject",
+          118.54
+        ],
+        [
+          "node_modules/three/build/three.module.js:18165 renderObjects",
+          118.54
+        ],
+        [
+          "node_modules/three/build/three.module.js:18015 renderScene",
+          118.54
+        ],
+        [
+          "node_modules/three/build/three.module.js:18407 setProgram",
+          115.66
+        ],
+        [
+          "node_modules/three/build/three.module.js:11918 uploadTexture",
+          110.74
+        ],
+        [
+          "node_modules/three/build/three.module.js:11571 setTexture2D",
+          110.74
+        ],
+        [
+          "node_modules/three/build/three.module.js:5514 setValueT1",
+          110.74
+        ],
+        [
+          "node_modules/three/build/three.module.js:6123 upload",
+          110.74
+        ],
+        [
+          "texSubImage2D",
+          108.43
+        ]
+      ]
+    }
+  ]
+}

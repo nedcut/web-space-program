@@ -146,6 +146,7 @@ export class EditorView {
     const quality = game.get().settings.quality;
     setPartDetail(getQuality(quality).partDetail);
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this.renderer.debug.checkShaderErrors = !!import.meta.env?.DEV;
     const dpr = window.devicePixelRatio || 1;
     this.pixelRatio = Math.min(dpr, getQuality(quality).maxPixelRatio) * game.get().settings.renderScale;
     this.renderer.setPixelRatio(this.pixelRatio);

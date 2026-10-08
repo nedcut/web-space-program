@@ -42,6 +42,14 @@ export interface SelectContext {
 }
 
 const GEOM_ERROR_FACTOR = 0.3;
+/** View key: body-fixed camera position (3), orientation quaternion (4), screen factor, projection x/y/z scale. */
+export const VIEW_KEY = 11;
+function sameView(a: Float64Array, b: ArrayLike<number>): boolean {
+  // 1 cm and ~1e-6 rad cannot change a chunk's screen error or frustum test measurably.
+  if (Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) > 0.01) return false;
+  for (let i = 3; i < 7; i++) if (Math.abs(a[i] - b[i]) > 1e-6) return false;
+  return a[7] === b[7] && a[8] === b[8] && a[9] === b[9] && a[10] === b[10];
+}
 
 export class ChunkNode {
   readonly id: string;
@@ -87,6 +95,8 @@ export class Quadtree {
     this.opts = opts;
     this.roots = [0, 1, 2, 3, 4, 5].map((face) => new ChunkNode({ face, level: 0, ix: 0, iy: 0 }, opts.radius));
     this.group.name = 'terrain-quadtree';
+    // Identity container. Chunks update their own matrices when placed; hidden cached chunks are left alone.
+    this.group.matrixAutoUpdate = false;
     const vertices = (opts.res + 1) ** 2 + 4 * (opts.res + 1);
     const indices = (opts.res ** 2 + 4 * opts.res) * 6;
     if (opts.batch) {
@@ -120,8 +130,22 @@ export class Quadtree {
     this.roots.forEach(visit);
   }
 
-  /** Choose the set of chunks to draw this frame; queue missing builds. */
-  select(ctx: SelectContext): ChunkNode[] {
+  /** Bumped whenever a chunk is attached or disposed: a selection is only reusable while this is unchanged. */
+  private version = 0;
+  private selectedVersion = -1;
+  private readonly lastView = new Float64Array(VIEW_KEY);
+  private reused = false;
+
+  /**
+   * Choose the set of chunks to draw this frame; queue missing builds. With `view` (body-fixed camera position,
+   * orientation and projection; see PlanetRenderer), an unchanged view over unchanged chunks reuses the previous
+   * selection: a craft waiting on the pad would otherwise re-walk the same tree every frame.
+   */
+  select(ctx: SelectContext, view?: ArrayLike<number>): ChunkNode[] {
+    this.reused = !!view && this.selectedVersion === this.version && sameView(this.lastView, view);
+    if (this.reused) return this.selected;
+    if (view) { for (let i = 0; i < VIEW_KEY; i++) this.lastView[i] = view[i]; this.selectedVersion = this.version; }
+    else this.selectedVersion = -1;
     const R = this.opts.radius;
     const cx = ctx.camBF.x, cy = ctx.camBF.y, cz = ctx.camBF.z;
     const camDist = Math.sqrt(cx * cx + cy * cy + cz * cz);
@@ -277,6 +301,7 @@ export class Quadtree {
       if (!this.oceanBatch) this.group.add(om);
     }
     node.state = 'ready';
+    this.version++;
     this.meshCount++;
     this.stats.builtTotal++;
     this.stats.lastBuildMs = data.buildMs;
@@ -340,7 +365,8 @@ export class Quadtree {
 
   /** LRU eviction of meshes not used recently (never roots). */
   evict(frame: number): void {
-    if (this.meshCount <= this.opts.cacheSize) return;
+    // A reused selection did not refresh `lastUsed`; nothing new was built either, so there is nothing to evict.
+    if (this.reused || this.meshCount <= this.opts.cacheSize) return;
     const candidates: ChunkNode[] = [];
     const visit = (n: ChunkNode) => {
       if (n.key.level > 0 && n.state === 'ready' && frame - n.lastUsed > 30) candidates.push(n);
@@ -374,6 +400,7 @@ export class Quadtree {
       m.geometry.dispose();
     }
     if (n.mesh) this.meshCount--;
+    this.version++;
     n.mesh = null;
     n.oceanMesh = null;
     n.data = null;

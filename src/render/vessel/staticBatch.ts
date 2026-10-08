@@ -4,12 +4,25 @@ import { instancedVariant } from '../core/materialVariants';
 import { thermalGeometry, thermalSources } from '../fx/thermalSurface';
 import { isSooted } from '../parts/soot';
 
-/** Batch only opaque static leaves. Inputs retain their shared template resources. */
-export function batchStaticParts(objects: THREE.Object3D[]): THREE.Group {
+/**
+ * Nodes that flight animates or restyles every frame (VesselView.animatePart and its helpers): engine gimbals and
+ * exhaust anchors, deployables, landing-gear joints, control surfaces, lamp lenses (per-part material) and EVA limbs.
+ * Everything else in a part is rigid relative to the part, which is rigid relative to the vessel between rebuilds.
+ */
+const ANIMATED_NODE = /^(gimbal|exhaustAnchor|controlSurface|gearSlide|gearSteer|gearWheel|gearLinkU|gearLinkL|braceStage|lightLens|arm-?1|leg-?1|evaPuff-?1)$/;
+export function isAnimatedNode(o: THREE.Object3D): boolean {
+  return ANIMATED_NODE.test(o.name) || !!o.userData.deploy;
+}
+
+/**
+ * Batch opaque static leaves. Inputs retain their shared template resources. With `skip`, a matching node and its
+ * subtree stay individually drawn (used to batch the rigid remainder of animated parts).
+ */
+export function batchStaticParts(objects: THREE.Object3D[], skip?: (o: THREE.Object3D) => boolean): THREE.Group {
   const result = new THREE.Group();
   const buckets = new Map<THREE.Material, Map<THREE.BufferGeometry, { matrix: THREE.Matrix4; slot?: number }[]>>();
   const visit = (o: THREE.Object3D, parent: THREE.Matrix4) => {
-    if (!o.visible) return;
+    if (!o.visible || skip?.(o)) return;
     o.updateMatrix();
     const matrix = new THREE.Matrix4().multiplyMatrices(parent, o.matrix);
     if (o instanceof THREE.Mesh && !Array.isArray(o.material) && !o.material.transparent && o.children.length === 0) {
@@ -23,6 +36,8 @@ export function batchStaticParts(objects: THREE.Object3D[]): THREE.Group {
       transforms.push({ matrix, slot: thermal?.slot });
       o.userData.batchedVisible = true;
       o.visible = false;
+      // Hidden for good: skip its per-frame world-matrix update (the vessel root moves every frame).
+      o.matrixWorldAutoUpdate = false;
     }
     for (const child of o.children) visit(child, matrix);
   };

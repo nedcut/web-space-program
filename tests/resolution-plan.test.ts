@@ -54,3 +54,35 @@ describe('resolution plan', () => {
     expect(resolutionPlan(2, QUALITY_PRESETS.medium, 0.5, true, 920)).toEqual({ internal: 2, output: 2, upscaling: false, lod: 2, device: 2 });
   });
 });
+
+it('map toggles preserve flight attachments; a resize in map mode is applied on return', async () => {
+  const { RenderPipeline } = await import('../src/render/core/renderer');
+  const { Vector2 } = await import('three');
+  const { vi } = await import('vitest');
+  let ratio = 2;
+  const size = new Vector2(1470, 920);
+  // Exercise the real sizing methods without requiring a WebGL context.
+  const p = Object.assign(Object.create(RenderPipeline.prototype), {
+    width: 1470, height: 920, canvasSize: new Vector2(), mapHiRes: false,
+    postWidth: 1470, postHeight: 920, postRatio: 1.4,
+    computePlan() { return resolutionPlan(2, QUALITY_PRESETS.medium, 1, this.mapHiRes, 920); },
+    renderer: {
+      getSize: (out: InstanceType<typeof Vector2>) => out.copy(size), getPixelRatio: () => ratio,
+      setPixelRatio: vi.fn((r: number) => { ratio = r; }),
+      setSize: vi.fn((w: number, h: number) => size.set(w, h)),
+    },
+    composer: { setSize: vi.fn(), setPixelRatio: vi.fn() },
+    hdrTarget: { setSize: vi.fn() }, upscalePass: { enabled: true },
+  });
+  p.setMapMode(true); p.setMapMode(false);
+  expect(p.composer.setSize).not.toHaveBeenCalled();
+  expect(p.hdrTarget.setSize).not.toHaveBeenCalled();
+  expect(p.renderer.setSize).not.toHaveBeenCalled();
+  expect(p.renderer.setPixelRatio).not.toHaveBeenCalled();
+  p.setMapMode(true); p.setSize(1200, 800);
+  expect(p.renderer.setSize).toHaveBeenCalledWith(1200, 800, false);
+  expect(p.composer.setSize).not.toHaveBeenCalled();
+  p.setMapMode(false);
+  expect(p.composer.setSize).toHaveBeenCalledWith(1200, 800);
+  expect(p.hdrTarget.setSize).toHaveBeenCalledWith(1680, 1120);
+});

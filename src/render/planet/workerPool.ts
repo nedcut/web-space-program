@@ -71,8 +71,12 @@ export class TerrainWorkerPool {
     this.terrains.set(key, terrain);
     if (this.registered.has(key)) return;
     this.registered.set(key, { body, minWavelength });
-    if (body.surface.preset === 'earth' && !this.earthSent) {
-      for (const w of this.workers) w.postMessage({ type: 'earthData', buffer: earthData().buffer });
+    if (this.workers.length && body.surface.preset === 'earth' && !this.earthSent) {
+      const buffer = earthData().buffer;
+      // Blob structured cloning shares its immutable backing store. Materialise ArrayBuffers in the
+      // workers instead of synchronously copying the 16 MiB grid once per worker on the render thread.
+      const source = buffer instanceof ArrayBuffer ? { blob: new Blob([buffer]) } : { buffer };
+      for (const w of this.workers) w.postMessage({ type: 'earthData', ...source });
       this.earthSent = true;
     }
     for (const w of this.workers) w.postMessage({ type: 'init', key, body, minWavelength });

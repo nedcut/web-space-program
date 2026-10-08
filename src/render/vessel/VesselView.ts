@@ -1,6 +1,6 @@
 import { LinkView } from './LinkView';
 import { PartHeat } from '../fx/PartHeat';
-import { batchStaticParts, disposeStaticBatch } from './staticBatch';
+import { batchStaticParts, disposeStaticBatch, isAnimatedNode } from './staticBatch';
 import * as THREE from 'three';
 import type { VesselState, PartState } from '../../sim/vessel/runtime';
 import type { EngineModule } from '../../sim/vessel/types';
@@ -9,6 +9,7 @@ import { qRotate } from '../../util/quat';
 import type { Vec3 } from '../../util/vec3';
 
 interface PartVisual {
+  state: PartState;
   heat: PartHeat;
   uid: number;
   object: THREE.Object3D;
@@ -18,6 +19,8 @@ interface PartVisual {
   partId: string;
   surfaces: Map<THREE.Mesh, THREE.Material | THREE.Material[]>;
   stressMaterial?: THREE.MeshBasicMaterial;
+  /** Lamp state last applied (a rebuild restores template materials, so it clears this). */
+  lightKey?: string;
 }
 
 /**
@@ -46,7 +49,17 @@ export class VesselView {
   }
   private readonly impostor = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3)), new THREE.PointsMaterial({ color: 0xbcc9d8, size: 3, sizeAttenuation: false }));
 
-  constructor(private vessel: VesselState) {
+  constructor(private vessel: VesselState, donors?: Iterable<VesselView>) {
+    // Splits preserve PartState identity. Move the existing visuals (including thermal state, plumes and
+    // soot) before the donor rebuild removes them; never match unrelated vessels by their local UID.
+    if (donors) for (const donor of donors) for (const p of vessel.parts) {
+      const pv = donor.parts.get(p.uid);
+      if (pv?.state !== p) continue;
+      donor.parts.delete(p.uid);
+      donor.lastTopology = undefined;
+      this.parts.set(p.uid, pv);
+      this.inner.add(pv.object);
+    }
     this.root.add(this.inner, this.impostor);
     this.inner.add(this.links.root);
     this.impostor.visible = false;
@@ -72,7 +85,8 @@ export class VesselView {
   private rebuild() {
     if (this.batch) disposeStaticBatch(this.batch);
     // Restore static leaves hidden by the previous batch before regrouping after staging/docking.
-    for (const pv of this.parts.values()) pv.object.traverse(o => { if (o.userData.batchedVisible) { o.visible = true; delete o.userData.batchedVisible; } });
+    for (const pv of this.parts.values()) pv.object.traverse(o => { if (o.userData.batchedVisible) { o.visible = true; o.matrixWorldAutoUpdate = true; delete o.userData.batchedVisible; } });
+    let needsSoot = false;
     const alive = new Set(this.vessel.parts.map((p) => p.uid));
     for (const [uid, pv] of this.parts) {
       if (!alive.has(uid) || this.vessel.cache.byUid.get(uid)?.partId !== pv.partId) {
@@ -85,6 +99,7 @@ export class VesselView {
     }
     for (const p of this.vessel.parts) {
       if (this.parts.has(p.uid)) continue;
+      needsSoot = true;
       const obj = buildPartMesh(p.def);
       const heat = new PartHeat(obj);
       const surfaces = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
@@ -106,16 +121,22 @@ export class VesselView {
         }
       }
       this.inner.add(obj);
-      this.parts.set(p.uid, { heat, uid: p.uid, partId: p.partId, object: obj, plumes, surfaces, deploy: 0, static: false });
+      this.parts.set(p.uid, { state: p, heat, uid: p.uid, partId: p.partId, object: obj, plumes, surfaces, deploy: 0, static: false });
     }
     const staticObjects: THREE.Object3D[] = [];
+    // Animated parts (engines, panels, pods with lamps...) still have mostly rigid meshes: batch those too.
+    const rigidObjects: THREE.Object3D[] = [];
     const staticKinds = new Set(['tank', 'adapter', 'girder', 'strut', 'noseCone', 'battery', 'reactionWheel', 'probeCore', 'heatShield', 'monoSphere', 'monoTorus', 'xenonTank', 'framework', 'habitat', 'rcsQuad', 'rcsPorts', 'instrument', 'decoupler', 'separator', 'radialDecoupler']);
     for (const p of this.vessel.parts) {
-      const obj = this.parts.get(p.uid)!.object;
+      const pv = this.parts.get(p.uid)!;
+      const obj = pv.object;
+      needsSoot ||= obj.position.x !== p.position.x || obj.position.y !== p.position.y || obj.position.z !== p.position.z
+        || obj.quaternion.x !== p.rotation.x || obj.quaternion.y !== p.rotation.y || obj.quaternion.z !== p.rotation.z || obj.quaternion.w !== p.rotation.w;
+      pv.state = p;
       obj.position.set(p.position.x, p.position.y, p.position.z);
       obj.quaternion.set(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
-      const pv = this.parts.get(p.uid)!;
       pv.static = staticKinds.has(p.def.mesh);
+      pv.lightKey = undefined;
       if (this.stressOverlay) {
         pv.stressMaterial ??= new THREE.MeshBasicMaterial({ color: 0x44cc55 });
         for (const mesh of pv.surfaces.keys()) mesh.material = pv.stressMaterial;
@@ -123,10 +144,12 @@ export class VesselView {
         for (const [mesh, material] of pv.surfaces) mesh.material = material;
       }
       if (pv.static && !this.stressOverlay) staticObjects.push(obj);
+      else if (!this.stressOverlay && !this.vessel.eva) rigidObjects.push(obj);
     }
     // Soot follows the current engine layout (PartHeat already gave every part its own geometry copy).
-    bakeEngineSoot([...this.parts.values()].map(pv => pv.object), this.inner);
-    this.batch = batchStaticParts(staticObjects);
+    // Separation does not wash off accumulated staining. Only a new/moved layout needs a bake.
+    if (needsSoot) bakeEngineSoot([...this.parts.values()].map(pv => pv.object), this.inner);
+    this.batch = batchStaticParts([...staticObjects, ...rigidObjects], isAnimatedNode);
     this.inner.add(this.batch);
     for (const obj of staticObjects) obj.traverse(o => { o.matrixAutoUpdate = false; });
     this.geometryKey = this.layoutKey();
@@ -174,7 +197,10 @@ export class VesselView {
         puff.scale.setScalar(0.8 + 0.2 * Math.sin(time * 41 + side));
       }
     }
-    if (!this.stressOverlay && p.def.modules.some(m => m.type === 'light')) setLightAppearance(pv.object, p.tweaks?.lightOn !== false, p.tweaks?.lightColor);
+    if (!this.stressOverlay && p.def.modules.some(m => m.type === 'light')) {
+      const on = p.tweaks?.lightOn !== false, key = `${on}:${p.tweaks?.lightColor ?? ''}`;
+      if (pv.lightKey !== key) { pv.lightKey = key; setLightAppearance(pv.object, on, p.tweaks?.lightColor); }
+    }
     if (p.engine) {
       const thr = p.engine.ignited && !p.engine.flamedOut ? p.engine.throttle : 0;
       for (const pl of pv.plumes) pl.update({ throttle: thr, ambientPressure, time });

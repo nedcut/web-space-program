@@ -1,0 +1,2 @@
+{"readyMs":9156,"framesAfter":1418,"over33":93,"over50":1,"p50":16.7,"maxFrame":50.1,"longTasksBefore":13,"longTasksAfter":1,"maxLongTaskAfter":51,"imagery":{"level":"8k","units":166,"maxFrameMs":4.7}}
+{"readyMs":8850,"framesAfter":1412,"over33":95,"over50":1,"p50":16.7,"maxFrame":50.1,"longTasksBefore":13,"longTasksAfter":0,"maxLongTaskAfter":0,"imagery":{"level":"8k","units":657,"maxFrameMs":2.2}}

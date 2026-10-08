@@ -1,0 +1,5 @@
+
+> web-space-program@0.1.0 lint
+> eslint . --max-warnings=0 && node scripts/check-layering.mjs
+
+Simulation layering verified across 70 modules (static bodies facade exception documented).

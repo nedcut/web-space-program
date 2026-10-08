@@ -53,6 +53,10 @@ export class RenderPipeline {
   // run PMREM baking before their first resize, so the initial default framebuffer must be valid.
   private width = 64;
   private height = 64;
+  private readonly canvasSize = new THREE.Vector2();
+  private postWidth = 0;
+  private postHeight = 0;
+  private postRatio = 0;
 
   constructor(opts: RenderPipelineOptions) {
     this.quality = opts.quality;
@@ -178,6 +182,7 @@ export class RenderPipeline {
     this.upscalePass.sharpness = q.upscale.sharpness;
     composer.addPass(this.upscalePass);
     this.composer = composer;
+    this.postRatio = 0;
     this.setSize(this.width, this.height);
   }
 
@@ -192,13 +197,22 @@ export class RenderPipeline {
     this.height = Math.max(1, Math.floor(height));
     const plan = (this.cachedPlan = this.computePlan()), pr = plan.internal;
     this.upscalePass.enabled = plan.upscaling;
-    this.renderer.setPixelRatio(plan.output);
-    this.renderer.setSize(this.width, this.height, false);
+    // setPixelRatio also calls setSize; even unchanged canvas dimensions clear its backing store.
+    this.renderer.getSize(this.canvasSize);
+    if (this.renderer.getPixelRatio() !== plan.output) this.renderer.setPixelRatio(plan.output);
+    if (this.canvasSize.x !== this.width || this.canvasSize.y !== this.height) this.renderer.setSize(this.width, this.height, false);
+    // Map rendering bypasses the composer. Keep flight targets resident at their existing size:
+    // opening/closing the map must not discard every HDR/bloom/AA attachment twice.
+    if (this.mapHiRes) return;
+    if (this.postWidth === this.width && this.postHeight === this.height && this.postRatio === pr) return;
     this.composer.setPixelRatio(pr);
     this.composer.setSize(this.width, this.height);
     this.hdrTarget?.setSize(Math.round(this.width * pr), Math.round(this.height * pr));
     this.fxaaPass?.setSize(this.width * pr, this.height * pr);
     this.smaaPass?.setSize(this.width * pr, this.height * pr);
+    this.postWidth = this.width;
+    this.postHeight = this.height;
+    this.postRatio = pr;
   }
 
   /**

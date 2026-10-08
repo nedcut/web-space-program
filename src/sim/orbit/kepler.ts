@@ -136,7 +136,9 @@ export function stateToElements(mu: number, body: string, r: Vec3, v: Vec3, t: n
   if (Math.abs(energy) < 4 * Number.EPSILON * mu / R) { e = 1; a = Infinity; }
   if (!Number.isFinite(argPe)) argPe = 0;
   if (!Number.isFinite(nu)) nu = 0;
-  const m0 = trueToMeanAnomaly(nu, e);
+  // Hyperbolic anomaly from the state (e·sinh F = r·v / √(μ|a|)) rather than from ν: near-radial paths have ν
+  // within rounding of an asymptote, where 1 + e·cos ν loses its sign and the conversion would be undefined.
+  const m0 = e > 1 ? eccentricToMeanAnomaly(Math.asinh(dot(r, v) / (e * Math.sqrt(mu * Math.abs(a)))), e) : trueToMeanAnomaly(nu, e);
   const nearParabolic = Math.abs(e - 1) < 1e-5;
   return { body, mu, a, e, i, lan, argPe, m0: e < 1 && !nearParabolic ? wrapAngle(m0) : m0, epoch: t, p, ...(nearParabolic ? { stateAtEpoch } : {}) };
 }

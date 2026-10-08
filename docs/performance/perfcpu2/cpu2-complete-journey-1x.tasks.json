@@ -1,0 +1,57 @@
+{
+  "file": "docs/performance/perfcpu2/cpu2-complete-journey-1x-journey.trace.json.gz",
+  "pid": 55204,
+  "longTasks": 2,
+  "longest": [
+    {
+      "ms": 55.072,
+      "work": [
+        [
+          "ThreadControllerImpl::RunTask",
+          55.031
+        ],
+        [
+          "Commit",
+          40.431
+        ],
+        [
+          "FireAnimationFrame",
+          14.034
+        ],
+        [
+          "v8.callFunction",
+          14.025
+        ],
+        [
+          "FunctionCall",
+          13.988
+        ]
+      ]
+    },
+    {
+      "ms": 52.256,
+      "work": [
+        [
+          "ThreadControllerImpl::RunTask",
+          52.216
+        ],
+        [
+          "Commit",
+          33.946
+        ],
+        [
+          "FireAnimationFrame",
+          17.814
+        ],
+        [
+          "v8.callFunction",
+          17.798
+        ],
+        [
+          "FunctionCall",
+          17.592
+        ]
+      ]
+    }
+  ]
+}

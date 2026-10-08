@@ -1,0 +1,3 @@
+{"label":"main","rate":"4","indexBytes":377252,"storedAutos":8,"results":[{"sync":12.5,"idleTasks":[]},{"sync":14.1,"idleTasks":[]},{"sync":13.4,"idleTasks":[]},{"sync":15.3,"idleTasks":[]}]}
+{"label":"r1","rate":"4","indexBytes":377063,"storedAutos":8,"results":[{"sync":12.8,"idleTasks":[]},{"sync":14.2,"idleTasks":[]},{"sync":12.9,"idleTasks":[]},{"sync":14.6,"idleTasks":[]}]}
+{"label":"final","rate":"4","indexBytes":376848,"storedAutos":8,"results":[{"sync":2,"idleTasks":[10.93,0.62]},{"sync":1.9,"idleTasks":[4.04,0.98]},{"sync":1.6,"idleTasks":[3.67,0.63]},{"sync":1.7,"idleTasks":[12.96,0.64]}]}

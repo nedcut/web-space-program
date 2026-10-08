@@ -1,6 +1,6 @@
 import { localId } from '../util/localId';
 import { game, loadLastCraft, reportSaveError } from './store';
-import { SLOTS_KEY, listSaveSlots, writeSaveSlot } from './saveSlots';
+import { SLOTS_KEY, commitSaveSlot, deferSaveWrite, flushSaveWrites, listSaveSlots, saveSlotJson, type SaveSlot } from './saveSlots';
 import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { newProgression, type GameMode, type Progression } from '../sim/science/progression';
 import type { Astronaut, PlantedFlag } from '../sim/crew/crew';
@@ -73,7 +73,8 @@ export function serializeWorld(world: World): SavedWorld {
       },
       mode: wv.mode,
       body: wv.body,
-      orbit: wv.orbit ? { ...wv.orbit } : undefined,
+      // Deep: deferred autosaves serialise this snapshot after the world has moved on.
+      orbit: wv.orbit ? structuredClone(wv.orbit) : undefined,
       fixed: wv.fixed ? structuredClone(wv.fixed) : undefined,
     });
   }
@@ -144,27 +145,56 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
 
 const KEY_PREFIX = 'wsp.world.v1.';
 
-export function saveWorldToStorage(slot: string, world: World, displayName?: string) {
-  // Preserve pre-slot programs before replacing the legacy compatibility keys.
-  if (localStorage.getItem(SLOTS_KEY) === null) for (const legacyName of ['autosave', 'quicksave']) {
-    const raw = localStorage.getItem(KEY_PREFIX + legacyName);
-    if (raw) {
-      try {
-        const legacy = JSON.parse(raw) as { savedAt: number; data: SavedWorld };
-        if (legacy.data?.version === SAVE_VERSION) writeSaveSlot({ id: `legacy-program:${legacyName}`, programId: 'legacy-program', name: legacyName === 'autosave' ? 'Autosave' : 'Quicksave', kind: legacyName === 'autosave' ? 'auto' : 'manual', ...legacy });
-      } catch { /* A corrupt old save must not prevent a new program from saving. */ }
-    }
-  }
+export interface SaveOptions {
+  /**
+   * Snapshot now, then serialise and write on later idle tasks (flight autosave: no frame pays for persistence).
+   * Errors go to `onError`; readers and other saves flush the queue first, so order and visibility are unchanged.
+   */
+  defer?: boolean;
+  onError?: (e: unknown) => void;
+}
+
+export function saveWorldToStorage(slot: string, world: World, displayName?: string, options: SaveOptions = {}) {
+  // The snapshot and slot identity are taken synchronously: the world and store keep changing afterwards.
   const data = serializeWorld(world), savedAt = Date.now();
   const programId = game.get().saveId ?? 'legacy-program';
   // The editor draft travels with the program save so Load restores this program's craft.
   const craft = game.get().trainingActive || game.get().scenarioActive ? loadLastCraft(programId) : game.get().craft;
-  writeSaveSlot({ id: slot === 'autosave' ? localId() : `${programId}:${slot}`, programId, name: displayName ?? (slot === 'autosave' ? 'Autosave' : slot === 'quicksave' ? 'Quicksave' : slot), kind: slot === 'autosave' ? 'auto' : 'manual', savedAt, data, craft });
-  localStorage.setItem(KEY_PREFIX + slot, JSON.stringify({ savedAt, data }));
+  const saved: SaveSlot = { id: slot === 'autosave' ? localId() : `${programId}:${slot}`, programId, name: displayName ?? (slot === 'autosave' ? 'Autosave' : slot === 'quicksave' ? 'Quicksave' : slot), kind: slot === 'autosave' ? 'auto' : 'manual', savedAt, data, craft };
+  let dataJson = '', failed = false;
+  const steps = [
+    () => { dataJson = JSON.stringify(data); },
+    () => {
+      // Preserve pre-slot programs before replacing the legacy compatibility keys.
+      if (localStorage.getItem(SLOTS_KEY) === null) for (const legacyName of ['autosave', 'quicksave']) {
+        const raw = localStorage.getItem(KEY_PREFIX + legacyName);
+        if (raw) {
+          try {
+            const legacy = JSON.parse(raw) as { savedAt: number; data: SavedWorld };
+            const old: SaveSlot = { id: `legacy-program:${legacyName}`, programId: 'legacy-program', name: legacyName === 'autosave' ? 'Autosave' : 'Quicksave', kind: legacyName === 'autosave' ? 'auto' : 'manual', ...legacy };
+            if (legacy.data?.version === SAVE_VERSION) commitSaveSlot(old, localStorage, saveSlotJson(old));
+          } catch { /* A corrupt old save must not prevent a new program from saving. */ }
+        }
+      }
+      commitSaveSlot(saved, localStorage, saveSlotJson(saved, dataJson));
+    },
+    // Same text as JSON.stringify({ savedAt, data }), without serialising the world twice.
+    () => localStorage.setItem(KEY_PREFIX + slot, `{"savedAt":${JSON.stringify(savedAt)},"data":${dataJson}}`),
+  ];
+  if (!options.defer) {
+    flushSaveWrites();
+    for (const step of steps) step();
+    return;
+  }
+  for (const step of steps) deferSaveWrite(() => {
+    if (failed) return;
+    try { step(); } catch (e) { failed = true; (options.onError ?? reportSaveError)(e); }
+  });
 }
 
 export function loadWorldFromStorage(slot: string): { savedAt: number; data: SavedWorld } | null {
   try {
+    flushSaveWrites();
     const programId = game.get().saveId ?? 'legacy-program';
     const saved = listSaveSlots().find(x => x.programId === programId && (slot === 'autosave' ? x.kind === 'auto' : x.id === `${programId}:${slot}`));
     if (saved) return { savedAt: saved.savedAt, data: saved.data };

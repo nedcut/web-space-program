@@ -1,0 +1,12 @@
+{
+  "base": "http://172.24.204.38:5350",
+  "label": "cpu2-before-flight-4x",
+  "rate": 4,
+  "mode": "flight",
+  "quality": "medium",
+  "date": "2026-10-08T01:23:13.436Z",
+  "windows": [],
+  "errors": [
+    "TimeoutError: page.waitForFunction: Timeout 90000ms exceeded."
+  ]
+}

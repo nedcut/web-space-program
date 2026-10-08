@@ -1,0 +1,207 @@
+{
+  "file": "docs/performance/perfcpu2/cpu2-final-imagery-high-4x-imagery-stream.trace.json.gz",
+  "pid": 29916,
+  "longTasks": 362,
+  "longest": [
+    {
+      "ms": 110.996,
+      "work": [
+        [
+          "ThreadControllerImpl::RunTask",
+          110.969
+        ],
+        [
+          "Commit",
+          64.832
+        ],
+        [
+          "FireAnimationFrame",
+          43.911
+        ],
+        [
+          "v8.callFunction",
+          43.902
+        ],
+        [
+          "FunctionCall",
+          43.885
+        ]
+      ]
+    },
+    {
+      "ms": 97.006,
+      "work": [
+        [
+          "ThreadControllerImpl::RunTask",
+          96.821
+        ],
+        [
+          "FireAnimationFrame",
+          50.7
+        ],
+        [
+          "v8.callFunction",
+          50.691
+        ],
+        [
+          "FunctionCall",
+          50.473
+        ],
+        [
+          "Commit",
+          43.673
+        ]
+      ]
+    },
+    {
+      "ms": 96.82,
+      "work": [
+        [
+          "ThreadControllerImpl::RunTask",
+          96.791
+        ],
+        [
+          "Commit",
+          51.423
+        ],
+        [
+          "FireAnimationFrame",
+          41.683
+        ],
+        [
+          "v8.callFunction",
+          41.673
+        ],
+        [
+          "FunctionCall",
+          41.661
+        ]
+      ]
+    },
+    {
+      "ms": 95.212,
+      "work": [
+        [
+          "ThreadControllerImpl::RunTask",
+          95.028
+        ],
+        [
+          "Commit",
+          57.847
+        ],
+        [
+          "FireAnimationFrame",
+          34.685
+        ],
+        [
+          "v8.callFunction",
+          34.677
+        ],
+        [
+          "FunctionCall",
+          33.055
+        ]
+      ]
+    },
+    {
+      "ms": 89.064,
+      "work": [
+        [
+          "ThreadControllerImpl::RunTask",
+          88.881
+        ],
+        [
+          "FireAnimationFrame",
+          44.661
+        ],
+        [
+          "v8.callFunction",
+          44.652
+        ],
+        [
+          "FunctionCall",
+          44.619
+        ],
+        [
+          "Commit",
+          42.343
+        ]
+      ]
+    },
+    {
+      "ms": 87.187,
+      "work": [
+        [
+          "ThreadControllerImpl::RunTask",
+          86.988
+        ],
+        [
+          "Commit",
+          43.379
+        ],
+        [
+          "FireAnimationFrame",
+          41.677
+        ],
+        [
+          "v8.callFunction",
+          41.51
+        ],
+        [
+          "FunctionCall",
+          41.496
+        ]
+      ]
+    },
+    {
+      "ms": 87.011,
+      "work": [
+        [
+          "ThreadControllerImpl::RunTask",
+          86.826
+        ],
+        [
+          "FireAnimationFrame",
+          49.34
+        ],
+        [
+          "v8.callFunction",
+          49.33
+        ],
+        [
+          "FunctionCall",
+          49.125
+        ],
+        [
+          "Commit",
+          34.446
+        ]
+      ]
+    },
+    {
+      "ms": 85.643,
+      "work": [
+        [
+          "ThreadControllerImpl::RunTask",
+          85.232
+        ],
+        [
+          "Commit",
+          56.124
+        ],
+        [
+          "FireAnimationFrame",
+          28.086
+        ],
+        [
+          "v8.callFunction",
+          28.076
+        ],
+        [
+          "FunctionCall",
+          27.975
+        ]
+      ]
+    }
+  ]
+}

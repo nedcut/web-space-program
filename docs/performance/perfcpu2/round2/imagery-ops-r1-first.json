@@ -1,0 +1,93 @@
+{
+ "url": "http://172.24.204.38:5351",
+ "rate": "4",
+ "secs": 52.332,
+ "ready": [
+  {
+   "level": "8k",
+   "units": 657,
+   "maxFrameMs": 5.300000071525574
+  }
+ ],
+ "ops": [
+  {
+   "op": "init  2048x2048 mips=true",
+   "ms": 49.4,
+   "at": 17869
+  },
+  {
+   "op": "init decalAtlas 2048x2048 mips=true",
+   "ms": 47.9,
+   "at": 17640
+  },
+  {
+   "op": "init  2048x1024 mips=true",
+   "ms": 10.7,
+   "at": 17344
+  },
+  {
+   "op": "init  1024x512 mips=true",
+   "ms": 6.9,
+   "at": 17735
+  },
+  {
+   "op": "init  1024x640 mips=true",
+   "ms": 6.7,
+   "at": 17743
+  },
+  {
+   "op": "init  1024x512 mips=true",
+   "ms": 6.7,
+   "at": 17840
+  },
+  {
+   "op": "init  1024x640 mips=true",
+   "ms": 6.6,
+   "at": 17771
+  },
+  {
+   "op": "init  512x1024 mips=true",
+   "ms": 6.2,
+   "at": 17798
+  },
+  {
+   "op": "init  512x1024 mips=true",
+   "ms": 6,
+   "at": 17946
+  },
+  {
+   "op": "init  1024x512 mips=true",
+   "ms": 5.9,
+   "at": 17765
+  },
+  {
+   "op": "init  512x1024 mips=true",
+   "ms": 5.9,
+   "at": 17793
+  },
+  {
+   "op": "merge-render ",
+   "ms": 5.3,
+   "at": 52069
+  },
+  {
+   "op": "merge-render ",
+   "ms": 4.3,
+   "at": 18279
+  },
+  {
+   "op": "init  512x512 mips=true",
+   "ms": 4,
+   "at": 17846
+  },
+  {
+   "op": "init foil.normal 512x512 mips=true",
+   "ms": 3.6,
+   "at": 17713
+  }
+ ],
+ "n": 19,
+ "lt": 525,
+ "ltMax": 1315
+}
+exit 0

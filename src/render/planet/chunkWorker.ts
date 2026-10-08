@@ -16,16 +16,27 @@ import { bakeEquirect } from './bake';
 const terrains = new Map<string, Terrain>();
 
 type InMsg =
-  | { type: 'earthData'; buffer: ArrayBufferLike }
+  | { type: 'earthData'; buffer: ArrayBufferLike; blob?: never }
+  | { type: 'earthData'; blob: Blob; buffer?: never }
   | { type: 'init'; key: string; body: BodyDef; minWavelength: number }
   | { type: 'build'; id: number; key: string; params: ChunkBuildParams }
   | { type: 'bake'; id: number; key: string; width: number };
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
-ctx.onmessage = (ev: MessageEvent<InMsg>) => {
+let earthReady: Promise<unknown> = Promise.resolve();
+ctx.onmessage = async (ev: MessageEvent<InMsg>) => {
   const msg = ev.data;
-  if (msg.type === 'earthData') { installEarthData(msg.buffer); return; }
+  if (msg.type === 'earthData') {
+    earthReady = msg.blob ? msg.blob.arrayBuffer().then(installEarthData) : Promise.resolve(installEarthData(msg.buffer));
+    // Requests below report decode failures with their request ID.
+    void earthReady.catch(() => {});
+    return;
+  }
+  try { await earthReady; } catch (error) {
+    if ('id' in msg) ctx.postMessage({ type: 'error', id: msg.id, error: String(error) });
+    return;
+  }
   if (msg.type === 'init') {
     terrains.set(msg.key, createTerrain(msg.body, { minWavelength: msg.minWavelength }));
     return;

@@ -4,11 +4,11 @@ import { RECIPES, generate, type Channel, type TexData } from './texgen/recipes'
 /**
  * Procedural part texture library (main thread).
  *
- * `texSet(key)` returns DataTextures immediately, filled with a flat placeholder of the final size.
+ * `texSet(key)` returns DataTextures immediately, filled with a single flat placeholder texel.
  * The real images are produced off the main thread by a small worker pool (see texgen/worker.ts),
  * which first consults an IndexedDB cache keyed by recipe + TEX_VERSION, so after the first visit
- * textures appear almost instantly and cost no CPU. When images arrive they are copied into the
- * existing texture buffers, so every material/clone sharing them updates in place.
+ * textures appear almost instantly and cost no CPU. When images arrive their transferred buffers replace the
+ * shared texture image, so every material/clone sharing them updates in place.
  *
  * Headless (Node tests / server) returns empty sets; materials then use their flat parameters.
  */
@@ -65,8 +65,14 @@ function apply(key: string, size: number, buffers: Partial<Record<Channel, Array
   if (!set) return;
   for (const [ch, buf] of Object.entries(buffers) as [Channel, ArrayBuffer][]) {
     const t = set[SLOT[ch]] as THREE.DataTexture | undefined;
-    if (!t || t.image.width !== size) continue;
-    (t.image.data as Uint8Array).set(new Uint8Array(buf));
+    if (!t || size !== RECIPES[key].size || buf.byteLength !== size * size * 4) continue;
+    // WebGL immutable storage cannot grow from 1×1. Release every sampler variant before changing
+    // the shared Source; material references survive and the next draw allocates the final dimensions.
+    if (t.image.width !== size || t.image.height !== size) {
+      for (const user of users.get(key) ?? []) if (user.source === t.source) user.dispose();
+    }
+    // Repeat clones share Source, so replacing its data updates every material without a main-thread copy.
+    t.source.data = { data: new Uint8Array(buf), width: size, height: size };
   }
   for (const t of users.get(key) ?? []) t.needsUpdate = true;
 }
@@ -149,7 +155,7 @@ export function texSet(key: keyof typeof RECIPES & string): TexSet {
   s = {};
   const list: THREE.Texture[] = [];
   for (const ch of r.channels) {
-    const t = makeTexture(placeholder(key, ch, r.size), r.size, ch === 'albedo' || ch === 'emissive');
+    const t = makeTexture(placeholder(key, ch, 1), 1, ch === 'albedo' || ch === 'emissive');
     t.name = `${key}.${ch}`;
     s[SLOT[ch]] = t;
     list.push(t);

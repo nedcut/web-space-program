@@ -81,6 +81,7 @@ function setup() {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = SIZE;
   renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
+  renderer.debug.checkShaderErrors = !!import.meta.env?.DEV;
   renderer.setPixelRatio(1);
   renderer.setSize(SIZE, SIZE, false);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -179,6 +180,7 @@ async function pump() {
 /** Live encyclopedia thumbnail, using the same mesh, framing and lighting as catalogue thumbnails. */
 export function mountPartTurntable(canvas: HTMLCanvasElement, def: PartDef, reducedMotion: () => boolean) {
   const r = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  r.debug.checkShaderErrors = !!import.meta.env?.DEV;
   r.setPixelRatio(1);
   r.toneMapping = THREE.ACESFilmicToneMapping;
   r.toneMappingExposure = 1.15;

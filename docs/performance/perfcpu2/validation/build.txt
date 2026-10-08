@@ -1,0 +1,98 @@
+
+> web-space-program@0.1.0 build
+> tsc --noEmit && vite build
+
+vite v8.3.2 building client environment for production...
+transforming...
+✓ 416 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/registerSW.js                              0.13 kB
+dist/manifest.webmanifest                       0.23 kB
+dist/assets/imageryDecode.worker-DBeBXofm.js    0.77 kB
+dist/index.html                                 2.30 kB │ gzip:   0.75 kB
+dist/assets/worker-BWwLobsl.js                 17.04 kB
+dist/assets/chunkWorker-zKV3BG4y.js            29.85 kB
+dist/assets/preflight.worker-0UpYvQhW.js       86.21 kB
+dist/assets/planner.worker-DtAgN0jq.js         95.55 kB
+dist/assets/MainMenu-wSFLt_B6.css               0.99 kB │ gzip:   0.48 kB
+dist/assets/TrackingStation-BvVcACxk.css        1.97 kB │ gzip:   0.69 kB
+dist/assets/MapContextMenu-Zt5BkZ_o.css         2.11 kB │ gzip:   0.78 kB
+dist/assets/FlightLog-BU9v2tKg.css              2.16 kB │ gzip:   0.78 kB
+dist/assets/Spacepedia-BYR1Yejm.css             2.50 kB │ gzip:   0.90 kB
+dist/assets/scenarios-d7vijLPX.css              3.07 kB │ gzip:   1.10 kB
+dist/assets/progression-CzDYDHUU.css            3.08 kB │ gzip:   1.06 kB
+dist/assets/resources-IMZAO1i0.css              3.88 kB │ gzip:   1.24 kB
+dist/assets/EditorScene-BU_orKWC.css           17.08 kB │ gzip:   3.97 kB
+dist/assets/App-BxuFVR45.css                   17.58 kB │ gzip:   4.95 kB
+dist/assets/FlightScene-wD2Nh9_a.css           19.59 kB │ gzip:   4.62 kB
+dist/assets/runtime-DEtxbi5p.js                 0.06 kB │ gzip:   0.08 kB
+dist/assets/stockCrafts-DahI98_2.js             0.07 kB │ gzip:   0.08 kB
+dist/assets/planetPreview-DQsn0nMB.js           0.08 kB │ gzip:   0.08 kB
+dist/assets/FlightLog-BSfYZTML.js               0.12 kB │ gzip:   0.11 kB
+dist/assets/jsx-runtime-D6e7ANta.js             0.42 kB │ gzip:   0.30 kB
+dist/assets/program-C7iTih8w.js                 0.42 kB │ gzip:   0.28 kB
+dist/assets/photoMode-w7nv7j_K.js               0.67 kB │ gzip:   0.40 kB
+dist/assets/format-CHcaVk_B.js                  1.01 kB │ gzip:   0.54 kB
+dist/assets/preload-helper-DjzSQ1t3.js          1.38 kB │ gzip:   0.75 kB
+dist/assets/vec3-DydKxEGt.js                    1.41 kB │ gzip:   0.60 kB
+dist/assets/lambert-9ltsS5Aw.js                 1.67 kB │ gzip:   0.92 kB
+dist/assets/scenarios-CQfLtkhX.js               1.72 kB │ gzip:   0.82 kB
+dist/assets/handler-C8o5XZ-d.js                 1.73 kB │ gzip:   0.87 kB
+dist/assets/LinkView-CrfI5vy6.js                1.98 kB │ gzip:   0.91 kB
+dist/assets/CometEffects-ScouC50L.js            1.99 kB │ gzip:   1.04 kB
+dist/assets/components-DNy3N2mm.js              2.12 kB │ gzip:   0.89 kB
+dist/assets/ErrorBoundary-Lz0yB8L4.js           2.16 kB │ gzip:   0.97 kB
+dist/assets/planetPreview-Be1CGtDL.js           2.18 kB │ gzip:   1.26 kB
+dist/assets/CrashOverlay-BWSiGUld.js            2.26 kB │ gzip:   1.13 kB
+dist/assets/textureCache-fLYkRZKS.js            2.26 kB │ gzip:   1.13 kB
+dist/assets/Scenarios-Cid3nYTM.js               3.11 kB │ gzip:   1.32 kB
+dist/assets/react-dom-Bc186nXq.js               3.86 kB │ gzip:   1.40 kB
+dist/assets/Icon-CB94FxWh.js                    4.03 kB │ gzip:   1.62 kB
+dist/assets/Missions-Cexm5HAQ.js                4.13 kB │ gzip:   1.52 kB
+dist/assets/technology-BrcB1K68.js              4.28 kB │ gzip:   1.99 kB
+dist/assets/orbit-CzMqWVua.js                   4.34 kB │ gzip:   2.07 kB
+dist/assets/Research-oD7De_qC.js                4.62 kB │ gzip:   1.82 kB
+dist/assets/bindings-DaG0mzAE.js                5.55 kB │ gzip:   2.41 kB
+dist/assets/FlightLog-BxYRZjph.js               5.92 kB │ gzip:   2.31 kB
+dist/assets/persistence-os0JKW0K.js             5.92 kB │ gzip:   2.32 kB
+dist/assets/quality-CUtxVs3r.js                 6.31 kB │ gzip:   2.15 kB
+dist/assets/Starfield-BUKtsFw1.js               6.84 kB │ gzip:   2.74 kB
+dist/assets/resources-B0ox9dap.js               7.81 kB │ gzip:   2.96 kB
+dist/assets/thumbnails-Bvf57hp8.js              9.52 kB │ gzip:   4.20 kB
+dist/assets/HubScene-DA9MIN5i.js               10.77 kB │ gzip:   4.31 kB
+dist/assets/runtime-CN8eXHvq.js                12.02 kB │ gzip:   4.98 kB
+dist/assets/TrackingStation-DjSViiBB.js        13.03 kB │ gzip:   4.65 kB
+dist/assets/landmarks-Bb3W6dyU.js              13.82 kB │ gzip:   5.69 kB
+dist/assets/transfers-BRjVdB5M.js              17.23 kB │ gzip:   6.97 kB
+dist/assets/App-BbGxqmJp.js                    18.40 kB │ gzip:   6.59 kB
+dist/assets/runtime-WOj3P2lT.js                19.00 kB │ gzip:   7.88 kB
+dist/assets/Spacepedia-DiaYpH-P.js             19.22 kB │ gzip:   7.64 kB
+dist/assets/stockCrafts-BRtGiCL_.js            41.87 kB │ gzip:  12.72 kB
+dist/assets/actions-R1g2DKHm.js                43.63 kB │ gzip:  15.46 kB
+dist/assets/parts-CYg90Lh_.js                  55.44 kB │ gzip:  18.14 kB
+dist/assets/MainMenu-Y45OdYnu.js               59.42 kB │ gzip:  20.40 kB
+dist/assets/planets-G623qsAV.js                69.22 kB │ gzip:  25.31 kB
+dist/assets/universe-B7cV0xko.js               71.57 kB │ gzip:  27.84 kB
+dist/assets/MapContextMenu-B0y3ni-_.js         87.10 kB │ gzip:  28.84 kB
+dist/assets/EditorScene-BvlcNV-i.js           103.06 kB │ gzip:  33.81 kB
+dist/assets/world-9jUZTVe-.js                 125.49 kB │ gzip:  42.84 kB
+dist/assets/parts-W4O78ddW.js                 154.20 kB │ gzip:  55.19 kB
+dist/assets/index-CDeuoAhq.js                 211.04 kB │ gzip:  66.76 kB
+dist/assets/PlanetRenderer-DeQpq3CR.js        255.38 kB │ gzip: 100.47 kB
+dist/assets/FlightScene-BakupaK4.js           259.14 kB │ gzip:  86.82 kB
+dist/assets/BufferGeometryUtils-Dp5TMeCO.js   606.56 kB │ gzip: 152.73 kB
+
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 977ms
+
+PWA v1.3.0
+mode      generateSW
+precache  109 entries (31844.43 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-9c191d2f.js

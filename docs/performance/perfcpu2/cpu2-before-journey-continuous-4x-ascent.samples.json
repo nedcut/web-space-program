@@ -1,0 +1,1356 @@
+{
+  "file": "cpu2-before-journey-continuous-4x-ascent.trace.json.gz",
+  "longTasks": 2017,
+  "all": {
+    "self": [
+      [
+        "(program)",
+        74118.06
+      ],
+      [
+        "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+        2154.63
+      ],
+      [
+        "src/ui/inspector/Inspector.tsx:38 loop",
+        2094.83
+      ],
+      [
+        "node_modules/three/build/three.core.js:10570 multiplyMatrices",
+        2037.88
+      ],
+      [
+        "bindVertexArray",
+        1989.36
+      ],
+      [
+        "node_modules/three/build/three.module.js:17897 projectObject",
+        1778.59
+      ],
+      [
+        "node_modules/three/build/three.core.js:13067 updateMatrixWorld",
+        1625.44
+      ],
+      [
+        "node_modules/three/build/three.module.js:1680 getBindingState",
+        1524.11
+      ],
+      [
+        "node_modules/three/build/three.module.js:18407 setProgram",
+        1442.93
+      ],
+      [
+        "src/sim/orbit/kepler.ts:7 finite",
+        1145.71
+      ],
+      [
+        "src/render/planet/quadtree.ts:117 l",
+        1134.53
+      ],
+      [
+        "node_modules/three/build/three.module.js:6123 upload",
+        978.73
+      ]
+    ],
+    "inclusive": [
+      [
+        "(program)",
+        74118.06
+      ],
+      [
+        "src/flight/controller.ts:721 frame",
+        50841.49
+      ],
+      [
+        "src/flight/controller.ts:897 render",
+        33586.05
+      ],
+      [
+        "src/flight/controller.ts:910 renderAt",
+        33400.55
+      ],
+      [
+        "src/render/core/renderer.ts:230 render",
+        29174.25
+      ],
+      [
+        "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+        29076.91
+      ],
+      [
+        "node_modules/three/build/three.module.js:17674 Gu.render",
+        28938.32
+      ],
+      [
+        "src/render/core/renderer.ts:337 render",
+        28577.69
+      ],
+      [
+        "node_modules/three/examples/jsm/postprocessing/RenderPass.js:121 render",
+        26850.53
+      ],
+      [
+        "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+        18095.12
+      ],
+      [
+        "node_modules/three/build/three.module.js:18015 renderScene",
+        17192.6
+      ],
+      [
+        "node_modules/three/build/three.module.js:18165 renderObjects",
+        17058.12
+      ]
+    ]
+  },
+  "tasks": [
+    {
+      "ms": 208.133,
+      "ts": 826331475547,
+      "self": [
+        [
+          "(program)",
+          35.72
+        ],
+        [
+          "src/render/parts/soot.ts:71 n",
+          11.51
+        ],
+        [
+          "src/render/parts/soot.ts:70 streak",
+          11.15
+        ],
+        [
+          "src/render/parts/soot.ts:81 sootAt",
+          8.83
+        ],
+        [
+          "node_modules/three/build/three.core.js:5244 applyMatrix4",
+          6.04
+        ],
+        [
+          "node_modules/three/build/three.core.js:17116 copy",
+          5.42
+        ],
+        [
+          "node_modules/three/build/three.core.js:5563 length",
+          5.01
+        ],
+        [
+          "src/render/parts/soot.ts:150 ",
+          4.98
+        ],
+        [
+          "node_modules/three/examples/jsm/utils/BufferGeometryUtils.js:330 mergeAttributes",
+          3.91
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:80 getBodyState",
+          3.83
+        ],
+        [
+          "bufferData",
+          2.79
+        ],
+        [
+          "node_modules/three/build/three.core.js:5211 applyMatrix3",
+          2.77
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          171.45
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          128.46
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          128.24
+        ],
+        [
+          "src/render/vessel/VesselView.ts:72 rebuild",
+          99.33
+        ],
+        [
+          "src/render/vessel/VesselView.ts:136 update",
+          67.52
+        ],
+        [
+          "node_modules/three/build/three.core.js:12972 traverse",
+          64.63
+        ],
+        [
+          "src/render/parts/soot.ts:143 ",
+          55.83
+        ],
+        [
+          "src/render/parts/soot.ts:133 bakeEngineSoot",
+          55.83
+        ],
+        [
+          "src/render/parts/soot.ts:150 ",
+          53.6
+        ],
+        [
+          "(program)",
+          35.72
+        ],
+        [
+          "src/game/world.ts:498 tick",
+          34.47
+        ],
+        [
+          "src/render/vessel/VesselView.ts:49 Wt",
+          34.09
+        ]
+      ]
+    },
+    {
+      "ms": 173.677,
+      "ts": 826306745755,
+      "self": [
+        [
+          "(program)",
+          32.07
+        ],
+        [
+          "src/sim/vessel/integrator.ts:180 substep",
+          17.62
+        ],
+        [
+          "src/game/universe.ts:55 activateNearbyAsteroids",
+          4.71
+        ],
+        [
+          "src/sim/vessel/structure.ts:83 evaluateJointLoads",
+          3.73
+        ],
+        [
+          "src/sim/vessel/structure.ts:130 overloadedJoints",
+          3.07
+        ],
+        [
+          "node_modules/three/build/three.module.js:17897 projectObject",
+          2.82
+        ],
+        [
+          "src/util/quat.ts:35 qRotate",
+          2.67
+        ],
+        [
+          "src/audio/index.ts:594 tone",
+          2.63
+        ],
+        [
+          "src/sim/vessel/contact.ts:134 gatherContacts",
+          2.62
+        ],
+        [
+          "src/sim/vessel/heating.ts:113 stepThermal",
+          2.23
+        ],
+        [
+          "node_modules/three/build/three.module.js:1759 needsUpdate",
+          2.18
+        ],
+        [
+          "node_modules/three/build/three.module.js:6107 setValue",
+          2.17
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          139.67
+        ],
+        [
+          "src/game/world.ts:498 tick",
+          89.76
+        ],
+        [
+          "src/game/world.ts:643 physicsStep",
+          88.66
+        ],
+        [
+          "src/sim/vessel/integrator.ts:115 stepVessel",
+          69.17
+        ],
+        [
+          "src/sim/vessel/integrator.ts:180 substep",
+          64.44
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          36.56
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          36.56
+        ],
+        [
+          "(program)",
+          32.07
+        ],
+        [
+          "src/render/core/renderer.ts:230 render",
+          30.08
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          29.56
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+          29.56
+        ],
+        [
+          "src/render/core/renderer.ts:337 render",
+          28.49
+        ]
+      ]
+    },
+    {
+      "ms": 140.422,
+      "ts": 826306928781,
+      "self": [
+        [
+          "(program)",
+          39.16
+        ],
+        [
+          "src/ui/inspector/Inspector.tsx:38 loop",
+          10.23
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          9.65
+        ],
+        [
+          "src/render/planet/quadtree.ts:297 placeMesh",
+          3.85
+        ],
+        [
+          "src/sim/vessel/integrator.ts:180 substep",
+          3.26
+        ],
+        [
+          "src/flight/hud/navball.ts:179 update",
+          2.69
+        ],
+        [
+          "src/sim/vessel/mat3.ts:9 m3MulVec",
+          2.67
+        ],
+        [
+          "node_modules/three/build/three.module.js:1759 needsUpdate",
+          2.58
+        ],
+        [
+          "src/util/quat.ts:35 qRotate",
+          2.18
+        ],
+        [
+          "node_modules/three/build/three.module.js:5078 copyArray",
+          2.17
+        ],
+        [
+          "src/util/vec3.ts:16 sub",
+          2.16
+        ],
+        [
+          "src/sim/vessel/heating.ts:113 stepThermal",
+          2.13
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          87.45
+        ],
+        [
+          "src/game/world.ts:498 tick",
+          46.2
+        ],
+        [
+          "src/game/world.ts:643 physicsStep",
+          45.65
+        ],
+        [
+          "(program)",
+          39.16
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          38.59
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          38.59
+        ],
+        [
+          "src/sim/vessel/integrator.ts:115 stepVessel",
+          38.13
+        ],
+        [
+          "src/sim/vessel/integrator.ts:180 substep",
+          36.54
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+          30.48
+        ],
+        [
+          "src/render/core/renderer.ts:230 render",
+          30.48
+        ],
+        [
+          "src/render/core/renderer.ts:337 render",
+          29.93
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          28.86
+        ]
+      ]
+    },
+    {
+      "ms": 127.795,
+      "ts": 826307073725,
+      "self": [
+        [
+          "(program)",
+          38.8
+        ],
+        [
+          "src/util/quat.ts:35 qRotate",
+          8.04
+        ],
+        [
+          "src/sim/vessel/integrator.ts:180 substep",
+          4.84
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          3.77
+        ],
+        [
+          "(garbage collector)",
+          2.65
+        ],
+        [
+          "src/util/vec3.ts:16 sub",
+          2.21
+        ],
+        [
+          "node_modules/three/build/three.core.js:13067 updateMatrixWorld",
+          2.17
+        ],
+        [
+          "node_modules/three/build/three.module.js:1759 needsUpdate",
+          2.12
+        ],
+        [
+          "src/sim/crew/crew.ts:24 ",
+          2.12
+        ],
+        [
+          "src/game/universe.ts:55 activateNearbyAsteroids",
+          2.11
+        ],
+        [
+          "node_modules/three/build/three.module.js:6123 upload",
+          1.63
+        ],
+        [
+          "src/sim/terrain/geo.ts:25 angleTo",
+          1.61
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          85.62
+        ],
+        [
+          "src/game/world.ts:643 physicsStep",
+          45.55
+        ],
+        [
+          "src/game/world.ts:498 tick",
+          45.55
+        ],
+        [
+          "(program)",
+          38.8
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          33.26
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          33.26
+        ],
+        [
+          "src/sim/vessel/integrator.ts:115 stepVessel",
+          31.77
+        ],
+        [
+          "src/sim/vessel/integrator.ts:180 substep",
+          30.68
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          28.72
+        ],
+        [
+          "src/render/core/renderer.ts:337 render",
+          28.45
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+          28.45
+        ],
+        [
+          "src/render/core/renderer.ts:230 render",
+          28.45
+        ]
+      ]
+    },
+    {
+      "ms": 119.041,
+      "ts": 826367139646,
+      "self": [
+        [
+          "(program)",
+          35.38
+        ],
+        [
+          "src/game/saveSlots.ts:19 writeSaveSlot",
+          21.49
+        ],
+        [
+          "setItem",
+          13.74
+        ],
+        [
+          "src/game/saveSlots.ts:11 listSaveSlots",
+          7.19
+        ],
+        [
+          "src/game/persistence.ts:147 saveWorldToStorage",
+          6.1
+        ],
+        [
+          "src/game/persistence.ts:60 serializeWorld",
+          4.38
+        ],
+        [
+          "src/render/planet/quadtree.ts:117 l",
+          2.21
+        ],
+        [
+          "node_modules/three/build/three.module.js:1680 getBindingState",
+          2.2
+        ],
+        [
+          "node_modules/three/build/three.core.js:13067 updateMatrixWorld",
+          1.64
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          1.12
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          1.11
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          1.11
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          83.21
+        ],
+        [
+          "src/game/persistence.ts:147 saveWorldToStorage",
+          54
+        ],
+        [
+          "src/flight/controller.ts:393 quicksave",
+          54
+        ],
+        [
+          "src/game/saveSlots.ts:19 writeSaveSlot",
+          40.78
+        ],
+        [
+          "(program)",
+          35.38
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          18.79
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          18.79
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+          14.88
+        ],
+        [
+          "src/render/core/renderer.ts:230 render",
+          14.88
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          14.69
+        ],
+        [
+          "src/render/core/renderer.ts:337 render",
+          14.35
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/RenderPass.js:121 render",
+          13.79
+        ]
+      ]
+    },
+    {
+      "ms": 115.263,
+      "ts": 826427315798,
+      "self": [
+        [
+          "(program)",
+          33.75
+        ],
+        [
+          "src/game/saveSlots.ts:19 writeSaveSlot",
+          22.58
+        ],
+        [
+          "setItem",
+          14.34
+        ],
+        [
+          "src/game/saveSlots.ts:11 listSaveSlots",
+          8.24
+        ],
+        [
+          "src/game/persistence.ts:147 saveWorldToStorage",
+          7.72
+        ],
+        [
+          "src/game/persistence.ts:60 serializeWorld",
+          6.04
+        ],
+        [
+          "src/ui/inspector/Inspector.tsx:38 loop",
+          2.2
+        ],
+        [
+          "node_modules/three/build/three.module.js:18407 setProgram",
+          1.68
+        ],
+        [
+          "node_modules/three/build/three.module.js:1680 getBindingState",
+          1.64
+        ],
+        [
+          "node_modules/three/build/three.core.js:13067 updateMatrixWorld",
+          1.63
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          1.12
+        ],
+        [
+          "src/game/world.ts:169 recordFlight",
+          1.11
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          78.25
+        ],
+        [
+          "src/game/persistence.ts:147 saveWorldToStorage",
+          60.64
+        ],
+        [
+          "src/flight/controller.ts:393 quicksave",
+          60.64
+        ],
+        [
+          "src/game/saveSlots.ts:19 writeSaveSlot",
+          42.42
+        ],
+        [
+          "(program)",
+          33.75
+        ],
+        [
+          "setItem",
+          14.34
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          13.81
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          13.81
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          12.16
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+          12.16
+        ],
+        [
+          "src/render/core/renderer.ts:230 render",
+          12.16
+        ],
+        [
+          "src/render/core/renderer.ts:337 render",
+          11.56
+        ]
+      ]
+    },
+    {
+      "ms": 113.131,
+      "ts": 826382199461,
+      "self": [
+        [
+          "(program)",
+          33.52
+        ],
+        [
+          "src/game/saveSlots.ts:19 writeSaveSlot",
+          18.79
+        ],
+        [
+          "setItem",
+          13.19
+        ],
+        [
+          "src/game/saveSlots.ts:11 listSaveSlots",
+          8.25
+        ],
+        [
+          "src/game/persistence.ts:147 saveWorldToStorage",
+          6.73
+        ],
+        [
+          "src/game/persistence.ts:60 serializeWorld",
+          3.93
+        ],
+        [
+          "bindVertexArray",
+          3.28
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          1.66
+        ],
+        [
+          "node_modules/three/build/three.module.js:15139 refreshUniformsCommon",
+          1.17
+        ],
+        [
+          "src/sim/orbit/soi.ts:6 findDominantBody",
+          1.13
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:80 getBodyState",
+          1.13
+        ],
+        [
+          "node_modules/three/build/three.module.js:1759 needsUpdate",
+          1.11
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          78.42
+        ],
+        [
+          "src/game/persistence.ts:147 saveWorldToStorage",
+          53.09
+        ],
+        [
+          "src/flight/controller.ts:393 quicksave",
+          53.09
+        ],
+        [
+          "src/game/saveSlots.ts:19 writeSaveSlot",
+          37.44
+        ],
+        [
+          "(program)",
+          33.52
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          16.55
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          16.55
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          14.91
+        ],
+        [
+          "src/render/core/renderer.ts:337 render",
+          14.91
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+          14.91
+        ],
+        [
+          "src/render/core/renderer.ts:230 render",
+          14.91
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/RenderPass.js:121 render",
+          14.35
+        ]
+      ]
+    },
+    {
+      "ms": 110.952,
+      "ts": 826412284788,
+      "self": [
+        [
+          "(program)",
+          33.51
+        ],
+        [
+          "src/game/saveSlots.ts:19 writeSaveSlot",
+          22.04
+        ],
+        [
+          "setItem",
+          13.87
+        ],
+        [
+          "src/game/persistence.ts:147 saveWorldToStorage",
+          8.3
+        ],
+        [
+          "src/game/saveSlots.ts:11 listSaveSlots",
+          7.22
+        ],
+        [
+          "src/game/persistence.ts:60 serializeWorld",
+          4.96
+        ],
+        [
+          "src/ui/inspector/Inspector.tsx:38 loop",
+          1.6
+        ],
+        [
+          "src/sim/orbit/ephemeris.ts:80 getBodyState",
+          1.11
+        ],
+        [
+          "node_modules/three/build/three.module.js:9569 renderObject",
+          1.1
+        ],
+        [
+          "node_modules/three/build/three.module.js:1680 getBindingState",
+          1.09
+        ],
+        [
+          "node_modules/three/build/three.core.js:10570 multiplyMatrices",
+          1.08
+        ],
+        [
+          "node_modules/three/build/three.module.js:5284 setValueM4",
+          0.6
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          75
+        ],
+        [
+          "src/game/persistence.ts:147 saveWorldToStorage",
+          57.49
+        ],
+        [
+          "src/flight/controller.ts:393 quicksave",
+          57.49
+        ],
+        [
+          "src/game/saveSlots.ts:19 writeSaveSlot",
+          40.34
+        ],
+        [
+          "(program)",
+          33.51
+        ],
+        [
+          "setItem",
+          13.87
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          13.76
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          13.21
+        ],
+        [
+          "src/render/core/renderer.ts:337 render",
+          11.53
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+          11.53
+        ],
+        [
+          "src/render/core/renderer.ts:230 render",
+          11.53
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/RenderPass.js:121 render",
+          10.99
+        ]
+      ]
+    },
+    {
+      "ms": 110.147,
+      "ts": 826397264583,
+      "self": [
+        [
+          "(program)",
+          36.34
+        ],
+        [
+          "src/game/saveSlots.ts:19 writeSaveSlot",
+          20.39
+        ],
+        [
+          "setItem",
+          12.69
+        ],
+        [
+          "src/game/saveSlots.ts:11 listSaveSlots",
+          7.18
+        ],
+        [
+          "src/game/persistence.ts:147 saveWorldToStorage",
+          6.71
+        ],
+        [
+          "src/game/persistence.ts:60 serializeWorld",
+          4.92
+        ],
+        [
+          "src/ui/inspector/Inspector.tsx:38 loop",
+          2.27
+        ],
+        [
+          "node_modules/three/build/three.core.js:10570 multiplyMatrices",
+          2.19
+        ],
+        [
+          "src/render/planet/CometEffects.ts:47 ",
+          0.61
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          0.57
+        ],
+        [
+          "src/game/universe.ts:218 sun",
+          0.57
+        ],
+        [
+          "src/render/core/fusedBloom.ts:40 render",
+          0.57
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          70.53
+        ],
+        [
+          "src/flight/controller.ts:393 quicksave",
+          53
+        ],
+        [
+          "src/game/persistence.ts:147 saveWorldToStorage",
+          52.44
+        ],
+        [
+          "src/game/saveSlots.ts:19 writeSaveSlot",
+          38.06
+        ],
+        [
+          "(program)",
+          36.34
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          14.39
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          13.83
+        ],
+        [
+          "setItem",
+          12.69
+        ],
+        [
+          "src/render/core/renderer.ts:337 render",
+          12.12
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+          12.12
+        ],
+        [
+          "src/render/core/renderer.ts:230 render",
+          12.12
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          11.55
+        ]
+      ]
+    },
+    {
+      "ms": 104.208,
+      "ts": 826337085274,
+      "self": [
+        [
+          "(program)",
+          35.28
+        ],
+        [
+          "setItem",
+          8.29
+        ],
+        [
+          "src/sim/vessel/heating.ts:113 stepThermal",
+          6.08
+        ],
+        [
+          "src/game/persistence.ts:60 serializeWorld",
+          5.45
+        ],
+        [
+          "src/game/persistence.ts:147 saveWorldToStorage",
+          3.86
+        ],
+        [
+          "src/game/saveSlots.ts:19 writeSaveSlot",
+          3.86
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          2.77
+        ],
+        [
+          "src/ui/inspector/Inspector.tsx:38 loop",
+          2.2
+        ],
+        [
+          "src/game/saveSlots.ts:11 listSaveSlots",
+          2.18
+        ],
+        [
+          "src/sim/vessel/engines.ts:90 produceIntakeAir",
+          1.68
+        ],
+        [
+          "src/sim/vessel/integrator.ts:180 substep",
+          1.64
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          1.6
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          65.92
+        ],
+        [
+          "(program)",
+          35.28
+        ],
+        [
+          "src/game/world.ts:643 physicsStep",
+          25.47
+        ],
+        [
+          "src/game/world.ts:498 tick",
+          25.47
+        ],
+        [
+          "src/game/persistence.ts:147 saveWorldToStorage",
+          24.72
+        ],
+        [
+          "src/flight/controller.ts:393 quicksave",
+          24.72
+        ],
+        [
+          "src/sim/vessel/integrator.ts:115 stepVessel",
+          14.93
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          14.81
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          14.81
+        ],
+        [
+          "src/sim/vessel/integrator.ts:180 substep",
+          13.27
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+          12.64
+        ],
+        [
+          "src/render/core/renderer.ts:230 render",
+          12.64
+        ]
+      ]
+    },
+    {
+      "ms": 103.733,
+      "ts": 826311657558,
+      "self": [
+        [
+          "(program)",
+          35.42
+        ],
+        [
+          "node_modules/three/build/three.module.js:6123 upload",
+          3.3
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          2.67
+        ],
+        [
+          "node_modules/three/build/three.core.js:10570 multiplyMatrices",
+          2.24
+        ],
+        [
+          "src/sim/vessel/heating.ts:113 stepThermal",
+          2.2
+        ],
+        [
+          "node_modules/three/build/three.module.js:17897 projectObject",
+          2.18
+        ],
+        [
+          "src/sim/vessel/assembly.ts:154 rebuildTopology",
+          1.62
+        ],
+        [
+          "bindVertexArray",
+          1.61
+        ],
+        [
+          "node_modules/three/build/three.module.js:5159 setValueV3f",
+          1.61
+        ],
+        [
+          "getProgramParameter",
+          1.59
+        ],
+        [
+          "node_modules/three/build/three.module.js:9569 renderObject",
+          1.58
+        ],
+        [
+          "src/render/site/vegetationBands.ts:6 packBand",
+          1.37
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          67.22
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          45.74
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          45.18
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          38.77
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+          37.63
+        ],
+        [
+          "src/render/core/renderer.ts:230 render",
+          37.63
+        ],
+        [
+          "src/render/core/renderer.ts:337 render",
+          37.08
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/RenderPass.js:121 render",
+          35.46
+        ],
+        [
+          "(program)",
+          35.42
+        ],
+        [
+          "node_modules/three/build/three.module.js:17233 Gu.renderBufferDirect",
+          24.23
+        ],
+        [
+          "node_modules/three/build/three.module.js:18015 renderScene",
+          23.87
+        ],
+        [
+          "node_modules/three/build/three.module.js:18165 renderObjects",
+          22.75
+        ]
+      ]
+    },
+    {
+      "ms": 103.411,
+      "ts": 826336654127,
+      "self": [
+        [
+          "(program)",
+          32.59
+        ],
+        [
+          "(garbage collector)",
+          19.73
+        ],
+        [
+          "src/util/vec3.ts:14 v3",
+          3.85
+        ],
+        [
+          "src/sim/orbit/kepler.ts:7 finite",
+          2.73
+        ],
+        [
+          "node_modules/three/build/three.core.js:13067 updateMatrixWorld",
+          2.18
+        ],
+        [
+          "node_modules/three/build/three.module.js:17897 projectObject",
+          1.78
+        ],
+        [
+          "src/sim/orbit/kepler.ts:94 planeVector",
+          1.66
+        ],
+        [
+          "src/render/planet/quadtree.ts:117 l",
+          1.64
+        ],
+        [
+          "node_modules/three/build/three.module.js:18407 setProgram",
+          1.63
+        ],
+        [
+          "src/sim/orbit/kepler.ts:99 analyticState",
+          1.22
+        ],
+        [
+          "node_modules/three/build/three.module.js:5078 copyArray",
+          1.15
+        ],
+        [
+          "src/sim/vessel/integrator.ts:115 stepVessel",
+          1.12
+        ]
+      ],
+      "inclusive": [
+        [
+          "src/flight/controller.ts:721 frame",
+          49.96
+        ],
+        [
+          "(program)",
+          32.59
+        ],
+        [
+          "src/game/world.ts:643 physicsStep",
+          21.69
+        ],
+        [
+          "src/game/world.ts:498 tick",
+          21.69
+        ],
+        [
+          "(garbage collector)",
+          19.73
+        ],
+        [
+          "src/flight/controller.ts:897 render",
+          19.34
+        ],
+        [
+          "src/flight/controller.ts:910 renderAt",
+          18.73
+        ],
+        [
+          "node_modules/three/build/three.module.js:17674 Gu.render",
+          15.33
+        ],
+        [
+          "src/sim/vessel/integrator.ts:115 stepVessel",
+          15.01
+        ],
+        [
+          "src/render/core/renderer.ts:337 render",
+          14.79
+        ],
+        [
+          "node_modules/three/examples/jsm/postprocessing/EffectComposer.js:214 render",
+          14.79
+        ],
+        [
+          "src/render/core/renderer.ts:230 render",
+          14.79
+        ]
+      ]
+    }
+  ]
+}

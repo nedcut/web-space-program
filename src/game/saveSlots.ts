@@ -8,22 +8,95 @@ import { validateCraft } from './craftSharing';
 export interface SaveSlot { id: string; programId: string; name: string; kind: 'manual' | 'auto'; savedAt: number; data: SavedWorld; craft?: CraftDef | null }
 export const SLOTS_KEY = 'wsp.save-slots.v1';
 type SlotStorage = Pick<Storage, 'getItem' | 'setItem'>;
+
+/**
+ * Writes queued by `deferSaveWrite` (flight autosaves). They run in order on later idle tasks so persistence never
+ * shares a frame with rendering; every read or write of saves flushes them first, as does hiding the page.
+ */
+const pending: (() => void)[] = [];
+let scheduled = false;
+export function deferSaveWrite(step: () => void): void {
+  pending.push(step);
+  if (scheduled) return;
+  scheduled = true;
+  const run = () => {
+    scheduled = false;
+    // One step per task: each is a single stringify/assembly/storage write.
+    const next = pending.shift();
+    if (next) next();
+    if (pending.length && !scheduled) { scheduled = true; later(run); }
+  };
+  later(run);
+}
+/** Complete queued save writes now (before a read, another write, or the page going away). */
+export function flushSaveWrites(): void {
+  // A timer still scheduled finds the queue empty; later writes schedule afresh. Steps stay FIFO either way.
+  scheduled = false;
+  while (pending.length) pending.shift()!();
+}
+const later = (f: () => void) => {
+  const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  if (idle) idle(f, { timeout: 1000 }); else setTimeout(f, 0);
+};
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  const flush = () => { try { flushSaveWrites(); } catch { /* reported by the queued step */ } };
+  window.addEventListener('pagehide', flush);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+}
+
+/**
+ * The last index read or written, with each slot's JSON. While storage still holds exactly that text, a write
+ * stringifies only the new slot instead of parsing and re-serialising every program's saves.
+ */
+interface IndexEntry { meta: Pick<SaveSlot, 'id' | 'programId' | 'kind' | 'savedAt'>; json: string }
+let indexCache: { storage: SlotStorage; raw: string; entries: IndexEntry[] } | null = null;
+function readIndex(storage: SlotStorage): IndexEntry[] {
+  const raw = storage.getItem(SLOTS_KEY);
+  if (!raw) return [];
+  if (indexCache?.storage === storage && indexCache.raw === raw) return indexCache.entries;
+  const data: unknown = JSON.parse(raw);
+  if (!Array.isArray(data)) throw new Error('Save slot index is invalid.');
+  const entries = (data as SaveSlot[]).map(s => ({ meta: { id: s.id, programId: s.programId, kind: s.kind, savedAt: s.savedAt }, json: JSON.stringify(s) }));
+  indexCache = { storage, raw, entries };
+  return entries;
+}
+function writeIndex(storage: SlotStorage, entries: IndexEntry[]): void {
+  const raw = `[${entries.map(e => e.json).join(',')}]`;
+  storage.setItem(SLOTS_KEY, raw);
+  indexCache = { storage, raw, entries };
+}
+const byNewest = (a: IndexEntry, b: IndexEntry) => b.meta.savedAt - a.meta.savedAt;
+
 export function listSaveSlots(storage: SlotStorage = localStorage): SaveSlot[] {
+  if (storage === globalThis.localStorage) flushSaveWrites();
   const raw = storage.getItem(SLOTS_KEY);
   if (!raw) return [];
   const data: unknown = JSON.parse(raw);
   if (!Array.isArray(data)) throw new Error('Save slot index is invalid.');
   return (data as SaveSlot[]).sort((a, b) => b.savedAt - a.savedAt);
 }
-/** Newest three autosaves are retained independently for every program. */
-export function writeSaveSlot(slot: SaveSlot, storage: SlotStorage = localStorage): void {
-  const all = listSaveSlots(storage).filter(x => x.id !== slot.id);
-  all.push(slot);
-  const autos = all.filter(x => x.programId === slot.programId && x.kind === 'auto').sort((a, b) => b.savedAt - a.savedAt || all.indexOf(b) - all.indexOf(a));
-  const discarded = new Set(autos.slice(3).map(x => x.id));
-  storage.setItem(SLOTS_KEY, JSON.stringify(all.filter(x => !discarded.has(x.id))));
+/** JSON for a slot; `dataJson` reuses an already serialised world. */
+export function saveSlotJson(slot: SaveSlot, dataJson = JSON.stringify(slot.data)): string {
+  const head = JSON.stringify({ ...slot, data: undefined });
+  return `${head.slice(0, -1)}${head.length > 2 ? ',' : ''}"data":${dataJson}}`;
 }
-export function removeSaveSlot(id: string, storage: SlotStorage = localStorage) { storage.setItem(SLOTS_KEY, JSON.stringify(listSaveSlots(storage).filter(x => x.id !== id))); }
+/** Newest three autosaves are retained independently for every program. */
+export function writeSaveSlot(slot: SaveSlot, storage: SlotStorage = localStorage, json = saveSlotJson(slot)): void {
+  if (storage === globalThis.localStorage) flushSaveWrites();
+  commitSaveSlot(slot, storage, json);
+}
+/** `writeSaveSlot` without flushing the queue: for a queued step that is itself being flushed. */
+export function commitSaveSlot(slot: SaveSlot, storage: SlotStorage, json: string): void {
+  const all = [...readIndex(storage)].sort(byNewest).filter(x => x.meta.id !== slot.id);
+  all.push({ meta: { id: slot.id, programId: slot.programId, kind: slot.kind, savedAt: slot.savedAt }, json });
+  const autos = all.filter(x => x.meta.programId === slot.programId && x.meta.kind === 'auto').sort((a, b) => byNewest(a, b) || all.indexOf(b) - all.indexOf(a));
+  const discarded = new Set(autos.slice(3).map(x => x.meta.id));
+  writeIndex(storage, all.filter(x => !discarded.has(x.meta.id)));
+}
+export function removeSaveSlot(id: string, storage: SlotStorage = localStorage) {
+  if (storage === globalThis.localStorage) flushSaveWrites();
+  writeIndex(storage, [...readIndex(storage)].sort(byNewest).filter(x => x.meta.id !== id));
+}
 export function exportSaveSlot(slot: SaveSlot): string { return JSON.stringify({ format: 'wsp-save', version: 1, slot }); }
 export function importSaveSlot(text: string): SaveSlot {
   if (text.length > 20_000_000) throw new Error('Save file exceeds 20 MB.');

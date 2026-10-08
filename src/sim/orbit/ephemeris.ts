@@ -14,6 +14,8 @@ export interface Ephemeris {
   surfaceVelocity(id: string, posInertialRelBody: Vec3, t: number): Vec3;
 }
 const X = v3(1, 0, 0), Z = v3(0, 0, 1);
+/** Distinct recent times cached by an ephemeris. */
+const EPHEMERIS_SLOTS = 4;
 const obliquity = 23.4392911 * Math.PI / 180;
 
 /**
@@ -59,12 +61,25 @@ export function createEphemeris(bodies: Map<string, Body>): Ephemeris {
     }
     return orbit;
   }
+  // A frame alternates between a few times (physics steps, interpolated render time, HUD/audio at world time).
+  // One cache per recent time keeps those interleaved queries from discarding each other's Kepler solves.
+  interface Slot { t: number; absolute: Map<string, StateVector>; relative: Map<string, StateVector>; rotations: Map<string, Quat> }
+  const slots: Slot[] = [];
+  let absolute = new Map<string, StateVector>(), relative = new Map<string, StateVector>(), rotations = new Map<string, Quat>();
   let lastT = NaN;
-  const absolute = new Map<string, StateVector>(), relative = new Map<string, StateVector>(), rotations = new Map<string, Quat>();
   const visiting = new Set<string>();
   function at(t: number): void {
+    if (t === lastT) return;
     if (!Number.isFinite(t)) throw new RangeError('Finite ephemeris time required');
-    if (t !== lastT) { lastT = t; absolute.clear(); relative.clear(); rotations.clear(); }
+    let i = slots.findIndex(s => s.t === t);
+    let slot: Slot;
+    if (i >= 0) slot = slots[i];
+    else if (slots.length < EPHEMERIS_SLOTS) { slot = { t, absolute: new Map(), relative: new Map(), rotations: new Map() }; slots.push(slot); i = slots.length - 1; }
+    else { i = slots.length - 1; slot = slots[i]; slot.t = t; slot.absolute.clear(); slot.relative.clear(); slot.rotations.clear(); }
+    // Most recently used first; the least recently used slot is recycled.
+    for (let j = i; j > 0; j--) slots[j] = slots[j - 1];
+    slots[0] = slot;
+    lastT = t; absolute = slot.absolute; relative = slot.relative; rotations = slot.rotations;
   }
   function getRelativeState(id: string, t: number): StateVector {
     at(t); const cached = relative.get(id); if (cached) return cached;

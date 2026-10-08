@@ -1,4 +1,5 @@
 import { game, updateSettings, type Settings } from '../game/store';
+import { graphicsLabel } from './graphicsLabels';
 import { getQuality, UPSCALE_LEVELS, type AdvancedGraphics, type QualityId, type UpscaleLevel } from '../render/core/quality';
 
 const levels: QualityId[] = ['low', 'medium', 'high', 'ultra'];
@@ -11,7 +12,7 @@ export function AdvancedGraphicsPanel({ settings }: { settings: Settings }) {
   const set = <K extends keyof AdvancedGraphics>(key: K, value: AdvancedGraphics[K]) =>
     updateSettings({ graphicsCustom: true, advancedGraphics: { ...game.get().settings.advancedGraphics, [key]: value } });
   const select = <K extends keyof AdvancedGraphics>(key: K, label: string, hint: string, value: string | number, options: readonly (string | number)[]) =>
-    <label className="setting-row" title={hint} key={key}><span>{label}<small className="graphics-hint">{hint}</small></span><select aria-label={label} value={value} onChange={e => set(key, (key === 'maxPixelRatio' ? +e.target.value : e.target.value) as AdvancedGraphics[K])}>{options.map(v => <option key={v} value={v}>{v === 'msaa+smaa' ? 'MSAA + SMAA' : String(v)}</option>)}</select></label>;
+    <label className="setting-row" title={hint} key={key}><span>{label}<small className="graphics-hint">{hint}</small></span><select aria-label={label} value={value} onChange={e => set(key, (key === 'maxPixelRatio' ? +e.target.value : e.target.value) as AdvancedGraphics[K])}>{options.map(v => <option key={v} value={v}>{graphicsLabel(v)}</option>)}</select></label>;
   const toggle = (label: string, hint: string, checked: boolean, onChange: (v: boolean) => void) =>
     <label className="setting-row" title={hint}><span>{label}<small className="graphics-hint">{hint}</small></span><input aria-label={label} type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} /></label>;
   return <details className="advanced-graphics" open><summary>Advanced graphics</summary>
@@ -33,7 +34,7 @@ export function AdvancedGraphicsPanel({ settings }: { settings: Settings }) {
     {select('starQuality', 'Stars / Milky Way', 'More stars; off also hides the Milky Way. Costs geometry and a sky texture. Rebuild.', settings.advancedGraphics.starQuality ?? settings.quality, ['off', ...levels])}
     {select('particleQuality', 'Particle effects', 'Low/Medium/High/Ultra pools: 128/512/1024/2048 particles. More smoke and sparks cost GPU time.', q.particleQuality, levels)}
     {select('partDetail', 'Part detail', 'High adds tessellation and fine hardware. Costs geometry and memory. Rebuild.', q.partDetail, ['low', 'high'])}
-    <label className="setting-row" title="Limits rendering cadence. Unlimited follows your display, including 120 Hz ProMotion."><span>Frame-rate cap<small className="graphics-hint">Lower caps reduce power use. Unlimited follows display refresh.</small></span><select aria-label="Frame-rate cap" value={settings.frameRateCap} onChange={e => updateSettings({ frameRateCap: +e.target.value as Settings['frameRateCap'], graphicsCustom: true })}>{[30, 60, 120, 0].map(v => <option key={v} value={v}>{v || 'unlimited'}</option>)}</select></label>
+    <label className="setting-row" title="Limits rendering cadence. Unlimited follows your display, including 120 Hz ProMotion."><span>Frame-rate cap<small className="graphics-hint">Lower caps reduce power use. Unlimited follows display refresh.</small></span><select aria-label="Frame-rate cap" value={settings.frameRateCap} onChange={e => updateSettings({ frameRateCap: +e.target.value as Settings['frameRateCap'], graphicsCustom: true })}>{[30, 60, 120, 0].map(v => <option key={v} value={v}>{v || 'Unlimited'}</option>)}</select></label>
     {toggle('Adaptive resolution', 'Lowers 3D resolution under GPU pressure and restores it with headroom.', settings.adaptiveQuality, v => updateSettings({ adaptiveQuality: v, graphicsCustom: true }))}
   </details>;
 }

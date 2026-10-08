@@ -33,7 +33,9 @@ export function InspectorLayer({ panels, anchor, content, onClose, onPin, insets
   anchorRef.current = anchor;
   const insetsRef = useRef(insets);
   insetsRef.current = insets;
+  const hasPanels = panels.length > 0;
   useEffect(() => {
+    if (!hasPanels) { svg.current?.firstElementChild?.setAttribute('d', ''); return; }
     let raf = 0;
     const loop = () => {
       raf = requestAnimationFrame(loop);
@@ -85,7 +87,7 @@ export function InspectorLayer({ panels, anchor, content, onClose, onPin, insets
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [hasPanels]);
 
   const drag = (uid: number) => (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;

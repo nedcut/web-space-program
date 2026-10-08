@@ -1,0 +1,639 @@
+{
+  "label": "r2-probe-4x",
+  "rate": 4,
+  "quality": "medium",
+  "secs": 8,
+  "date": "2026-10-08T03:20:28.159Z",
+  "runs": [
+    {
+      "build": "main",
+      "url": "http://172.24.204.38:5350",
+      "rep": 0,
+      "windows": [
+        {
+          "ms": 8069.900000095367,
+          "frames": 125,
+          "frameP50": 66.69999999999709,
+          "frameP95": 66.80000000000291,
+          "frameMax": 83.5,
+          "longTasks": 125,
+          "longTaskMax": 79,
+          "cpu": {
+            "avg": 30.43968253476279,
+            "p95": 35,
+            "max": 41.299999952316284
+          },
+          "sections": {
+            "input": 0.2658730073580666,
+            "sim": 0.9777777819406419,
+            "vessels": 0.14444444482288663,
+            "fx": 0.23730158900457715,
+            "planets": 3.0396825396825395,
+            "map": 0,
+            "render": 22.92857142573311,
+            "telemetry": 0.6952380916428944,
+            "audio": 0.5865079372648209,
+            "navball": 0.540476193503728,
+            "hud": 0.9150793675392394
+          },
+          "profFrames": 126,
+          "draws": 813,
+          "triangles": 2350177,
+          "objects": 1534,
+          "visible": 784,
+          "images": [
+            {
+              "level": "8k",
+              "ready": true,
+              "units": 166,
+              "maxFrameMs": 7.299999952316284
+            }
+          ],
+          "state": {
+            "body": "earth",
+            "alt": 318984.40970439796,
+            "stage": 4,
+            "situation": "flying"
+          },
+          "name": "pad",
+          "scriptMsPerFrame": 31.710303999999994,
+          "taskMsPerFrame": 65.08492000000001,
+          "profile": "C:/wsp-tools/bench/r2-probe-4x-main-r0-pad.cpuprofile"
+        },
+        {
+          "ms": 8069.799999952316,
+          "frames": 114,
+          "frameP50": 66.69999999999709,
+          "frameP95": 83.40000000000146,
+          "frameMax": 83.5,
+          "longTasks": 114,
+          "longTaskMax": 82,
+          "cpu": {
+            "avg": 34.813913032282954,
+            "p95": 41.300000071525574,
+            "max": 46.200000047683716
+          },
+          "sections": {
+            "input": 0.3739130341488382,
+            "sim": 3.160000002902487,
+            "vessels": 0.2356521824131841,
+            "fx": 0.2730434666509214,
+            "planets": 3.204347837489584,
+            "map": 0,
+            "render": 22.73391303912453,
+            "telemetry": 1.9113043494846509,
+            "audio": 0.7382608641748843,
+            "navball": 0.8147826091102932,
+            "hud": 1.2895652159400608
+          },
+          "profFrames": 115,
+          "draws": 735,
+          "triangles": 1627207,
+          "objects": 1446,
+          "visible": 718,
+          "images": [
+            {
+              "level": "8k",
+              "ready": true,
+              "units": 166,
+              "maxFrameMs": 7.299999952316284
+            }
+          ],
+          "state": {
+            "body": "earth",
+            "alt": 319315.85676664877,
+            "stage": 3,
+            "situation": "flying"
+          },
+          "name": "ascent",
+          "scriptMsPerFrame": 36.042842105263155,
+          "taskMsPerFrame": 71.27374561403505,
+          "profile": "C:/wsp-tools/bench/r2-probe-4x-main-r0-ascent.cpuprofile"
+        },
+        {
+          "ms": 8056.399999976158,
+          "frames": 151,
+          "frameP50": 50,
+          "frameP95": 66.69999999999709,
+          "frameMax": 66.80000000000291,
+          "longTasks": 82,
+          "longTaskMax": 67,
+          "cpu": {
+            "avg": 19.73289473668525,
+            "p95": 24.09999990463257,
+            "max": 29.600000023841858
+          },
+          "sections": {
+            "input": 0.28223685371248347,
+            "sim": 1.9999999968629134,
+            "vessels": 0.16578946850801768,
+            "fx": 0.30197369581774663,
+            "planets": 1.1973684108571003,
+            "map": 0,
+            "render": 13.234210527256915,
+            "telemetry": 0.6276315764376992,
+            "audio": 0.5276315831824353,
+            "navball": 0.5394736802891681,
+            "hud": 0.782894735273562
+          },
+          "profFrames": 152,
+          "draws": 436,
+          "triangles": 562462,
+          "objects": 1483,
+          "visible": 378,
+          "images": [
+            {
+              "level": "8k",
+              "ready": true,
+              "units": 166,
+              "maxFrameMs": 7.299999952316284
+            }
+          ],
+          "state": {
+            "body": "earth",
+            "alt": 787400.847995046,
+            "stage": 3,
+            "situation": "flying"
+          },
+          "name": "orbit",
+          "scriptMsPerFrame": 20.488774834437084,
+          "taskMsPerFrame": 53.56016556291389,
+          "profile": "C:/wsp-tools/bench/r2-probe-4x-main-r0-orbit.cpuprofile"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "build": "r1",
+      "url": "http://172.24.204.38:5351",
+      "rep": 0,
+      "windows": [
+        {
+          "ms": 8051.899999976158,
+          "frames": 128,
+          "frameP50": 66.59999999999854,
+          "frameP95": 83.29999999999563,
+          "frameMax": 83.30000000000291,
+          "longTasks": 129,
+          "longTaskMax": 82,
+          "cpu": {
+            "avg": 29.053488387617953,
+            "p95": 35,
+            "max": 43.10000002384186
+          },
+          "sections": {
+            "input": 0.23565892286078874,
+            "sim": 0.9193798414496488,
+            "vessels": 0.14186046659484391,
+            "fx": 0.138759688813557,
+            "planets": 3.5449612417886422,
+            "map": 0,
+            "render": 21.492248062939606,
+            "telemetry": 0.6162790716156479,
+            "audio": 0.6186046517172525,
+            "navball": 0.4426356609477553,
+            "hud": 0.8232558170954386
+          },
+          "profFrames": 129,
+          "draws": 813,
+          "triangles": 2350177,
+          "objects": 1534,
+          "visible": 784,
+          "images": [
+            {
+              "level": "8k",
+              "ready": true,
+              "units": 657,
+              "maxFrameMs": 5.699999928474426
+            }
+          ],
+          "state": {
+            "body": "earth",
+            "alt": 318984.4097046764,
+            "stage": 4,
+            "situation": "flying"
+          },
+          "name": "pad",
+          "scriptMsPerFrame": 30.277507812499994,
+          "taskMsPerFrame": 63.39976562499999,
+          "profile": "C:/wsp-tools/bench/r2-probe-4x-r1-r0-pad.cpuprofile"
+        },
+        {
+          "ms": 8059.700000047684,
+          "frames": 114,
+          "frameP50": 66.69999999999709,
+          "frameP95": 83.40000000000873,
+          "frameMax": 99.90000000000873,
+          "longTasks": 114,
+          "longTaskMax": 93,
+          "cpu": {
+            "avg": 34.24260869544485,
+            "p95": 40.700000047683716,
+            "max": 55.699999928474426
+          },
+          "sections": {
+            "input": 0.38086956687595536,
+            "sim": 3.344347826294277,
+            "vessels": 0.21304348448048469,
+            "fx": 0.3321739124215167,
+            "planets": 3.42521739213363,
+            "map": 0,
+            "render": 21.766956514897554,
+            "telemetry": 2.020869570193083,
+            "audio": 0.6808695627295452,
+            "navball": 0.781739126081052,
+            "hud": 1.1913043488626895
+          },
+          "profFrames": 115,
+          "draws": 734,
+          "triangles": 1624473,
+          "objects": 1450,
+          "visible": 717,
+          "images": [
+            {
+              "level": "8k",
+              "ready": true,
+              "units": 657,
+              "maxFrameMs": 5.699999928474426
+            }
+          ],
+          "state": {
+            "body": "earth",
+            "alt": 319313.85537135,
+            "stage": 3,
+            "situation": "flying"
+          },
+          "name": "ascent",
+          "scriptMsPerFrame": 35.44806140350877,
+          "taskMsPerFrame": 71.14250000000006,
+          "profile": "C:/wsp-tools/bench/r2-probe-4x-r1-r0-ascent.cpuprofile"
+        },
+        {
+          "ms": 8058,
+          "frames": 154,
+          "frameP50": 50,
+          "frameP95": 66.69999999999709,
+          "frameMax": 66.80000000000291,
+          "longTasks": 67,
+          "longTaskMax": 64,
+          "cpu": {
+            "avg": 19.138064515975213,
+            "p95": 23.700000047683716,
+            "max": 29
+          },
+          "sections": {
+            "input": 0.27290322319153815,
+            "sim": 1.9754838735826554,
+            "vessels": 0.15935483363366895,
+            "fx": 0.276774194932753,
+            "planets": 1.2122580643623106,
+            "map": 0,
+            "render": 12.823870961127742,
+            "telemetry": 0.5993548408631355,
+            "audio": 0.4645161336468112,
+            "navball": 0.5864516127494074,
+            "hud": 0.675483872044471
+          },
+          "profFrames": 155,
+          "draws": 439,
+          "triangles": 566170,
+          "objects": 1479,
+          "visible": 379,
+          "images": [
+            {
+              "level": "8k",
+              "ready": true,
+              "units": 657,
+              "maxFrameMs": 5.699999928474426
+            }
+          ],
+          "state": {
+            "body": "earth",
+            "alt": 787400.8337621371,
+            "stage": 3,
+            "situation": "flying"
+          },
+          "name": "orbit",
+          "scriptMsPerFrame": 19.76424675324672,
+          "taskMsPerFrame": 52.53931818181817,
+          "profile": "C:/wsp-tools/bench/r2-probe-4x-r1-r0-orbit.cpuprofile"
+        }
+      ],
+      "errors": []
+    }
+  ],
+  "summary": {
+    "main:pad": [
+      {
+        "ms": 8069.900000095367,
+        "frames": 125,
+        "frameP50": 66.69999999999709,
+        "frameP95": 66.80000000000291,
+        "frameMax": 83.5,
+        "longTasks": 125,
+        "longTaskMax": 79,
+        "cpu": {
+          "avg": 30.43968253476279,
+          "p95": 35,
+          "max": 41.299999952316284
+        },
+        "sections": {
+          "input": 0.2658730073580666,
+          "sim": 0.9777777819406419,
+          "vessels": 0.14444444482288663,
+          "fx": 0.23730158900457715,
+          "planets": 3.0396825396825395,
+          "map": 0,
+          "render": 22.92857142573311,
+          "telemetry": 0.6952380916428944,
+          "audio": 0.5865079372648209,
+          "navball": 0.540476193503728,
+          "hud": 0.9150793675392394
+        },
+        "profFrames": 126,
+        "draws": 813,
+        "triangles": 2350177,
+        "objects": 1534,
+        "visible": 784,
+        "images": [
+          {
+            "level": "8k",
+            "ready": true,
+            "units": 166,
+            "maxFrameMs": 7.299999952316284
+          }
+        ],
+        "state": {
+          "body": "earth",
+          "alt": 318984.40970439796,
+          "stage": 4,
+          "situation": "flying"
+        },
+        "name": "pad",
+        "scriptMsPerFrame": 31.710303999999994,
+        "taskMsPerFrame": 65.08492000000001,
+        "profile": "C:/wsp-tools/bench/r2-probe-4x-main-r0-pad.cpuprofile"
+      }
+    ],
+    "main:ascent": [
+      {
+        "ms": 8069.799999952316,
+        "frames": 114,
+        "frameP50": 66.69999999999709,
+        "frameP95": 83.40000000000146,
+        "frameMax": 83.5,
+        "longTasks": 114,
+        "longTaskMax": 82,
+        "cpu": {
+          "avg": 34.813913032282954,
+          "p95": 41.300000071525574,
+          "max": 46.200000047683716
+        },
+        "sections": {
+          "input": 0.3739130341488382,
+          "sim": 3.160000002902487,
+          "vessels": 0.2356521824131841,
+          "fx": 0.2730434666509214,
+          "planets": 3.204347837489584,
+          "map": 0,
+          "render": 22.73391303912453,
+          "telemetry": 1.9113043494846509,
+          "audio": 0.7382608641748843,
+          "navball": 0.8147826091102932,
+          "hud": 1.2895652159400608
+        },
+        "profFrames": 115,
+        "draws": 735,
+        "triangles": 1627207,
+        "objects": 1446,
+        "visible": 718,
+        "images": [
+          {
+            "level": "8k",
+            "ready": true,
+            "units": 166,
+            "maxFrameMs": 7.299999952316284
+          }
+        ],
+        "state": {
+          "body": "earth",
+          "alt": 319315.85676664877,
+          "stage": 3,
+          "situation": "flying"
+        },
+        "name": "ascent",
+        "scriptMsPerFrame": 36.042842105263155,
+        "taskMsPerFrame": 71.27374561403505,
+        "profile": "C:/wsp-tools/bench/r2-probe-4x-main-r0-ascent.cpuprofile"
+      }
+    ],
+    "main:orbit": [
+      {
+        "ms": 8056.399999976158,
+        "frames": 151,
+        "frameP50": 50,
+        "frameP95": 66.69999999999709,
+        "frameMax": 66.80000000000291,
+        "longTasks": 82,
+        "longTaskMax": 67,
+        "cpu": {
+          "avg": 19.73289473668525,
+          "p95": 24.09999990463257,
+          "max": 29.600000023841858
+        },
+        "sections": {
+          "input": 0.28223685371248347,
+          "sim": 1.9999999968629134,
+          "vessels": 0.16578946850801768,
+          "fx": 0.30197369581774663,
+          "planets": 1.1973684108571003,
+          "map": 0,
+          "render": 13.234210527256915,
+          "telemetry": 0.6276315764376992,
+          "audio": 0.5276315831824353,
+          "navball": 0.5394736802891681,
+          "hud": 0.782894735273562
+        },
+        "profFrames": 152,
+        "draws": 436,
+        "triangles": 562462,
+        "objects": 1483,
+        "visible": 378,
+        "images": [
+          {
+            "level": "8k",
+            "ready": true,
+            "units": 166,
+            "maxFrameMs": 7.299999952316284
+          }
+        ],
+        "state": {
+          "body": "earth",
+          "alt": 787400.847995046,
+          "stage": 3,
+          "situation": "flying"
+        },
+        "name": "orbit",
+        "scriptMsPerFrame": 20.488774834437084,
+        "taskMsPerFrame": 53.56016556291389,
+        "profile": "C:/wsp-tools/bench/r2-probe-4x-main-r0-orbit.cpuprofile"
+      }
+    ],
+    "r1:pad": [
+      {
+        "ms": 8051.899999976158,
+        "frames": 128,
+        "frameP50": 66.59999999999854,
+        "frameP95": 83.29999999999563,
+        "frameMax": 83.30000000000291,
+        "longTasks": 129,
+        "longTaskMax": 82,
+        "cpu": {
+          "avg": 29.053488387617953,
+          "p95": 35,
+          "max": 43.10000002384186
+        },
+        "sections": {
+          "input": 0.23565892286078874,
+          "sim": 0.9193798414496488,
+          "vessels": 0.14186046659484391,
+          "fx": 0.138759688813557,
+          "planets": 3.5449612417886422,
+          "map": 0,
+          "render": 21.492248062939606,
+          "telemetry": 0.6162790716156479,
+          "audio": 0.6186046517172525,
+          "navball": 0.4426356609477553,
+          "hud": 0.8232558170954386
+        },
+        "profFrames": 129,
+        "draws": 813,
+        "triangles": 2350177,
+        "objects": 1534,
+        "visible": 784,
+        "images": [
+          {
+            "level": "8k",
+            "ready": true,
+            "units": 657,
+            "maxFrameMs": 5.699999928474426
+          }
+        ],
+        "state": {
+          "body": "earth",
+          "alt": 318984.4097046764,
+          "stage": 4,
+          "situation": "flying"
+        },
+        "name": "pad",
+        "scriptMsPerFrame": 30.277507812499994,
+        "taskMsPerFrame": 63.39976562499999,
+        "profile": "C:/wsp-tools/bench/r2-probe-4x-r1-r0-pad.cpuprofile"
+      }
+    ],
+    "r1:ascent": [
+      {
+        "ms": 8059.700000047684,
+        "frames": 114,
+        "frameP50": 66.69999999999709,
+        "frameP95": 83.40000000000873,
+        "frameMax": 99.90000000000873,
+        "longTasks": 114,
+        "longTaskMax": 93,
+        "cpu": {
+          "avg": 34.24260869544485,
+          "p95": 40.700000047683716,
+          "max": 55.699999928474426
+        },
+        "sections": {
+          "input": 0.38086956687595536,
+          "sim": 3.344347826294277,
+          "vessels": 0.21304348448048469,
+          "fx": 0.3321739124215167,
+          "planets": 3.42521739213363,
+          "map": 0,
+          "render": 21.766956514897554,
+          "telemetry": 2.020869570193083,
+          "audio": 0.6808695627295452,
+          "navball": 0.781739126081052,
+          "hud": 1.1913043488626895
+        },
+        "profFrames": 115,
+        "draws": 734,
+        "triangles": 1624473,
+        "objects": 1450,
+        "visible": 717,
+        "images": [
+          {
+            "level": "8k",
+            "ready": true,
+            "units": 657,
+            "maxFrameMs": 5.699999928474426
+          }
+        ],
+        "state": {
+          "body": "earth",
+          "alt": 319313.85537135,
+          "stage": 3,
+          "situation": "flying"
+        },
+        "name": "ascent",
+        "scriptMsPerFrame": 35.44806140350877,
+        "taskMsPerFrame": 71.14250000000006,
+        "profile": "C:/wsp-tools/bench/r2-probe-4x-r1-r0-ascent.cpuprofile"
+      }
+    ],
+    "r1:orbit": [
+      {
+        "ms": 8058,
+        "frames": 154,
+        "frameP50": 50,
+        "frameP95": 66.69999999999709,
+        "frameMax": 66.80000000000291,
+        "longTasks": 67,
+        "longTaskMax": 64,
+        "cpu": {
+          "avg": 19.138064515975213,
+          "p95": 23.700000047683716,
+          "max": 29
+        },
+        "sections": {
+          "input": 0.27290322319153815,
+          "sim": 1.9754838735826554,
+          "vessels": 0.15935483363366895,
+          "fx": 0.276774194932753,
+          "planets": 1.2122580643623106,
+          "map": 0,
+          "render": 12.823870961127742,
+          "telemetry": 0.5993548408631355,
+          "audio": 0.4645161336468112,
+          "navball": 0.5864516127494074,
+          "hud": 0.675483872044471
+        },
+        "profFrames": 155,
+        "draws": 439,
+        "triangles": 566170,
+        "objects": 1479,
+        "visible": 379,
+        "images": [
+          {
+            "level": "8k",
+            "ready": true,
+            "units": 657,
+            "maxFrameMs": 5.699999928474426
+          }
+        ],
+        "state": {
+          "body": "earth",
+          "alt": 787400.8337621371,
+          "stage": 3,
+          "situation": "flying"
+        },
+        "name": "orbit",
+        "scriptMsPerFrame": 19.76424675324672,
+        "taskMsPerFrame": 52.53931818181817,
+        "profile": "C:/wsp-tools/bench/r2-probe-4x-r1-r0-orbit.cpuprofile"
+      }
+    ]
+  }
+}

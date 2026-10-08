@@ -26,6 +26,32 @@ map and in the Ring Skimmer mission — `docs/PERFORMANCE.md` ("What to measure 
 Graphics are auto-tuned once per device (weak GPUs start on Low; adaptive resolution is on). Then tell me what feels
 wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
 
+## CPU pass 2 (2026-10-07, cx/perfcpu2)
+
+Targeted CPU work is committed, with production before/after traces on Windows Chrome at 4×
+CPU throttle. **The requested 4 ms CPU frame budget and no tasks over 50 ms are not achieved.**
+This is not yet validated on an Apple M-series MacBook or a 120 Hz display.
+
+- Staging reuses the detached hardware's existing visuals/soot. The identified separation task
+  fell from 208 to 129 ms; accelerated liftoff physics and recurring render submission remain costly.
+- Map toggles retain flight render targets and avoid resetting an unchanged canvas. Warm map
+  open/close maxima fell from 85/100 to 65/85 ms. Retaining the targets consumes memory in map view.
+- Earth decoding/cropping and bitmap cleanup move to a worker; transfers and uploads are smaller.
+  High's unthrottled streaming peak fell from 4.7 to 2.2 ms in the trace-free pair. The final 4×
+  capture still has a 57.5 ms cumulative native-step outlier and needs 31.6 seconds of additional
+  traced streaming wait. The prior claim that imagery always streams without hitches is not supported.
+- The HUD skips unused multi-body impact paths for safe orbits/flybys. The isolated Moon crossing
+  maximum fell from 156 to 106 ms. Required impact and warp-target queries remain synchronous.
+- Bitmap cleanup no longer runs on the main thread; the worst final ascent task is 208 → 165 ms.
+  Autosaves still add 56–68 ms of synchronous persistence work, and settled Medium flight CPU
+  remains 19.1 ms/frame at 4× (High: 28.6 ms), well above target.
+- Graphics dropdowns now display Low, Medium, High, Ultra, Off, FXAA, SMAA and Unlimited.
+
+All final checks pass: lint, TypeScript, 131 test files (1397 passed, one skipped), production build,
+and two trace-parser tests. The full measurements, limitations and remaining work are in
+[CPU pass 2](docs/PERFORMANCE.md#cpu-pass-2-2026-10-07-cxperfcpu2), with revision-indexed evidence in
+[the capture directory](docs/performance/perfcpu2/README.md). No simulation code changed.
+
 ## Real Earth from orbit (2026-10-07, op/earthgfx)
 
 Earth now wears real NASA imagery: monthly Blue Marble colour with sea ice, Black Marble city lights on the night

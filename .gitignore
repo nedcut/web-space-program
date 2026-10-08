@@ -14,3 +14,6 @@ dist-prof
 public/earth/imagery/packs/16k/
 # Downloaded Earth source grid (regenerate with scripts/earth-data/build.mjs)
 scripts/earth-data/.cache/
+
+# Paired production CPU benchmark builds.
+dist-cpu-*/

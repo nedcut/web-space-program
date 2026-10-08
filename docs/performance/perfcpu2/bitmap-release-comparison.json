@@ -1,0 +1,12 @@
+{
+  "before": "cbf6d24b",
+  "after": "b91881a1",
+  "window": "continuous ascent",
+  "beforeCloseSelfSamples": 193,
+  "afterCloseSelfSamples": 0,
+  "beforeCloseApproxSelfMs": 105.44,
+  "afterCloseApproxSelfMs": 0,
+  "largestBeforeCloseTaskMs": 152.735,
+  "largestBeforeCloseSampledSelfMs": 80.04,
+  "note": "Renderer main profile only; sampled attribution, not exact duration. Source traces and source-mapped summaries retained."
+}

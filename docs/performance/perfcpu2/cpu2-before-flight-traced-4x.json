@@ -1,0 +1,14 @@
+{
+  "base": "http://172.24.204.38:5350",
+  "label": "cpu2-before-flight-traced-4x",
+  "rate": 4,
+  "mode": "flight",
+  "quality": "medium",
+  "date": "2026-10-08T01:37:11.615Z",
+  "windows": [],
+  "errors": [
+    "Error: Driver timeout after 120000 ms",
+    "Error: Driver timeout after 15000 ms"
+  ],
+  "failureState": "renderer unresponsive"
+}

@@ -25,7 +25,7 @@ import {
   createSunMaterial,
   type GasGiantStyle,
 } from './materials';
-import { Quadtree } from './quadtree';
+import { Quadtree, VIEW_KEY } from './quadtree';
 import { TerrainWorkerPool } from './workerPool';
 import { buildRingProfile } from './textures';
 import { RingParticles } from './RingParticles';
@@ -93,6 +93,9 @@ export function wantsTerrainLod(radius: number, cameraDistance: number, projecte
 export class PlanetRenderer {
   private surfaceFeatures?: SurfaceFeatures;
   readonly root = new THREE.Group();
+  private readonly viewKey = new Float64Array(VIEW_KEY);
+  private readonly viewQuat = new THREE.Quaternion();
+  private readonly camQuat = new THREE.Quaternion();
   readonly body: BodyDef;
   readonly kind: PlanetKind;
   readonly terrain: Terrain | null;
@@ -158,6 +161,8 @@ export class PlanetRenderer {
     this.sunIlluminance = opts.sunIlluminance ?? 4;
     this.sunRadiance = opts.sunRadiance ?? 60;
     this.root.name = `planet:${body.id}`;
+    // Identity container: placed children update themselves; do not force every cached chunk each frame.
+    this.root.matrixAutoUpdate = false;
     this.terrainKey = `${JSON.stringify(body)}:${opts.terrainMinWavelength ?? 6}`;
     const preset = body.surface?.preset ?? 'rocky';
     this.kind = body.kind === 'star' || preset === 'star' ? 'star' : !body.solidSurface || preset === 'gasGiant' || preset === 'iceGiant' ? 'gas' : 'solid';
@@ -563,7 +568,11 @@ export class PlanetRenderer {
         this.tmpS.radius = r;
         return this.frustum.intersectsSphere(this.tmpS);
       };
-      qt.select({ camBF: { x: camBFx, y: camBFy, z: camBFz }, screenFactor: sf, maxScreenError: this.quality.terrain.maxScreenError, inFrustum, frame: this.frame });
+      // Camera orientation in the body frame: the frustum test is unchanged while it and the position hold still.
+      const q = this.viewQuat.copy(inv).multiply(cam.getWorldQuaternion(this.camQuat));
+      const v = this.viewKey, pm = cam.projectionMatrix.elements;
+      v[0] = camBFx; v[1] = camBFy; v[2] = camBFz; v[3] = q.x; v[4] = q.y; v[5] = q.z; v[6] = q.w; v[7] = sf; v[8] = pm[0]; v[9] = pm[5]; v[10] = pm[10];
+      qt.select({ camBF: { x: camBFx, y: camBFy, z: camBFz }, screenFactor: sf, maxScreenError: this.quality.terrain.maxScreenError, inFrustum, frame: this.frame }, v);
       qt.pump();
       if (qt.rootsReady) {
         qt.place(bx, by, bz, this.rotQ, this.rotM);

@@ -1,5 +1,6 @@
 import { updateSiteShadow } from '../render/site/shadows';
 import { maxDrawingEdge } from '../render/core/drawingLimits';
+import { ShadowMapCache } from '../render/core/shadowCache';
 import { stageExplanation } from './cues';
 import { actionAvailable, partActions } from '../sim/vessel/actions';
 import { CondensationFx } from '../render/fx/CondensationFx';
@@ -99,7 +100,9 @@ export class FlightController {
   private playerLabels = new Map<string, HTMLDivElement>();
   readonly input: FlightInput;
   readonly pipeline: RenderPipeline;
-  readonly scene = new THREE.Scene();
+  readonly scene = flightScene();
+  /** Skips the sun's depth pass while every caster and the light are unchanged (pad, attitude hold, pause). */
+  private readonly shadowCache = new ShadowMapCache();
   readonly cam = new FlightCamera();
   readonly map: MapView;
   /** Map focus, menus and maneuver-node commands. */
@@ -393,7 +396,9 @@ export class FlightController {
   quicksave(slot = 'quicksave') {
     if (this.network || getTutorial() || game.get().scenarioActive) return;
     try {
-      saveWorldToStorage(slot, this.world);
+      // Periodic autosaves snapshot now and write on idle tasks; a quicksave the player asked for writes immediately.
+      const autosave = slot === 'autosave';
+      saveWorldToStorage(slot, this.world, undefined, autosave ? { defer: true, onError: e => this.world.message(saveErrorText(e), 'bad') } : {});
       if (slot === 'quicksave') this.world.message(`Quicksaved (${bindingLabel('quickload')} to load)`);
     } catch (e) {
       this.world.message(saveErrorText(e), 'bad');
@@ -928,16 +933,16 @@ export class FlightController {
       return;
     }
 
-    // Vessels
+    // Create split-vessel views before any donor is updated/disposed, so they can adopt its visuals.
+    for (const v of this.world.vessels.values()) if (!this.views.has(v.state.id)) {
+      const view = new VesselView(v.state, this.views.values());
+      this.views.set(v.state.id, view);
+      this.scene.add(view.root);
+    }
     const seen = new Set<string>();
     for (const v of this.world.vessels.values()) {
       seen.add(v.state.id);
-      let view = this.views.get(v.state.id);
-      if (!view) {
-        view = new VesselView(v.state);
-        this.views.set(v.state.id, view);
-        this.scene.add(view.root);
-      }
+      const view = this.views.get(v.state.id)!;
       view.setVessel(v.state);
       const debris = v !== wv && !v.state.parts.some(p => p.def.modules.some(m => m.type === 'command'));
       const distant = debris && length(sub(v.state.position, origin)) > 2000;
@@ -1056,7 +1061,12 @@ export class FlightController {
     this.glare.update(camera, sd, eclipse);
     prof.add('planets', t0);
     t0 = prof.now();
-    if (submit) this.pipeline.render(this.scene, camera);
+    // The scene opts out of the renderer's automatic pass (see flightScene): update once, then decide shadows.
+    this.scene.updateMatrixWorld();
+    if (submit) {
+      this.shadowCache.update(this.scene, this.sunLight, this.pipeline.renderer.shadowMap.enabled);
+      this.pipeline.render(this.scene, camera);
+    }
     prof.add('render', t0);
   }
 
@@ -1261,4 +1271,16 @@ export class FlightController {
     this.pipeline.dispose();
     this.pipeline.renderer.domElement.remove();
   }
+}
+
+/**
+ * The flight scene root never moves. Left on automatic updates, its per-frame `updateMatrix()` forces a world-matrix
+ * multiply on every descendant, including hundreds of hidden cached terrain chunks. Subtrees that do move still
+ * update themselves. The controller updates matrices once per frame before rendering.
+ */
+function flightScene(): THREE.Scene {
+  const scene = new THREE.Scene();
+  scene.matrixAutoUpdate = false;
+  scene.matrixWorldAutoUpdate = false;
+  return scene;
 }

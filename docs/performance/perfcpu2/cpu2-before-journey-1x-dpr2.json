@@ -1,0 +1,149 @@
+{
+ "label": "cpu2-before-journey-1x",
+ "base": "http://172.24.204.38:5350",
+ "local": false,
+ "noRaster": false,
+ "noSubmission": false,
+ "dpr": 2,
+ "throttle": 1,
+ "quality": "medium",
+ "seconds": 120,
+ "size": "1470x920",
+ "date": "2026-10-08T02:29:19.665Z",
+ "cases": {
+  "journey": {
+   "fps": 47.58,
+   "frames": 10147,
+   "frameP50": 16.7,
+   "frameP95": 33.4,
+   "frameP99": 33.5,
+   "frameMax": 100,
+   "hitches25": 2547,
+   "hitches50": 20,
+   "cpuMs": 4.69,
+   "cpuP95": 6.4,
+   "sections": {
+    "input": 0.17,
+    "sim": 0.28,
+    "vessels": 0.03,
+    "fx": 0.04,
+    "planets": 0.37,
+    "map": 0,
+    "render": 3.43,
+    "telemetry": 0.07,
+    "audio": 0.02,
+    "navball": 0.16,
+    "hud": 0.1
+   },
+   "scriptMsPerFrame": 4.4,
+   "taskMsPerFrame": 20.93,
+   "layoutsPerSec": 6.93,
+   "styleRecalcsPerSec": 6.77,
+   "layoutMsPerSec": 2.68,
+   "styleMsPerSec": 0.45,
+   "sampleSeconds": 213.33,
+   "longTasks": 14,
+   "longTasksPerMin": 3.94,
+   "longTaskMsPerMin": 206.16,
+   "longTaskMax": 62,
+   "heapMB": 58.9,
+   "heapGrowthMBPerMin": 4.87,
+   "domNodes": 565,
+   "listeners": 2144,
+   "reactCommitsPerSec": 13.01,
+   "reactRendersPerSec": 376.16,
+   "journey": {
+    "elapsedSim": 362.24114739894867,
+    "assist": null,
+    "body": "earth",
+    "orbit": {
+     "orbit": {
+      "body": "earth",
+      "mu": 3986004355070,
+      "a": 720084.963465284,
+      "e": 0.001129893195383515,
+      "i": 0.8157949571743242,
+      "lan": 2.615673917076266,
+      "argPe": 0.3996146054328994,
+      "m0": 1.4068322826536155,
+      "epoch": 964051566.821143,
+      "p": 720084.0441625988
+     },
+     "ap": 83797.74256560113,
+     "pe": 82170.5043649663,
+     "timeToAp": 530.9409486463206,
+     "timeToPe": 1492.457139413998
+    }
+   },
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 572,
+     "in": 572
+    }
+   },
+   "gl": {
+    "calls": 357,
+    "tris": 540210,
+    "programs": 88,
+    "geometries": 1052,
+    "textures": 113,
+    "canvas": "2940x1840",
+    "scale": 0.7,
+    "gpuMs": 2.0824172434508115,
+    "gpuName": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Ti (0x00002486) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "glError": 0
+   },
+   "trace": {
+    "spanMs": 120008.14,
+    "workerThreads": 5,
+    "mainTop": {
+     "Commit": 756.2,
+     "v8.callFunction": 221.66,
+     "FunctionCall": 219.65,
+     "FireAnimationFrame": 214.84,
+     "SimpleWatcher::OnHandleReady": 6.78,
+     "Layout": 3.76,
+     "PrePaint": 3.21,
+     "Paint": 3.06,
+     "Layerize": 1.44,
+     "MinorGC": 1.32,
+     "V8.GCScavenger": 1.29,
+     "V8.GC_SCAVENGER": 1.27
+    },
+    "busyPct": {
+     "workers": 0.46,
+     "PerfettoTrace": 0.02,
+     "Chrome_ChildIOThread": 0.69,
+     "Compositor": 1.4,
+     "CrRendererMain": 99.4,
+     "ThreadPoolServiceThread": 0,
+     "MemoryInfra": 0
+    },
+    "mainWorkPct": 23.78,
+    "commitWaitPct": 75.62,
+    "gc": {
+     "minorCount": 198,
+     "minorMs": 310.07,
+     "majorCount": 36,
+     "majorMs": 120.04,
+     "maxPauseMs": 4.78,
+     "msPerSec": 3.58
+    }
+   },
+   "readyMs": 6573,
+   "marks": {
+    "wsp:flight:construct": 1343,
+    "wsp:flight:shaderWarmup": 2610,
+    "wsp:flight:firstFrame": 2717,
+    "wsp:flight:construct:start": 1224,
+    "wsp:flight:ready": 5977
+   }
+  }
+ }
+}

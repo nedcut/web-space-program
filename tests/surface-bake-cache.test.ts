@@ -43,3 +43,30 @@ describe('surface bake CPU cache', () => {
     await expect(pool.bake('moon', 16)).rejects.toThrow('disposed');
   });
 });
+
+it('sends one immutable Earth Blob to all workers without detaching the simulation grid', async () => {
+  class MockWorker {
+    static created: MockWorker[] = [];
+    postMessage = vi.fn(); terminate = vi.fn();
+    constructor() { MockWorker.created.push(this); }
+  }
+  vi.stubGlobal('Worker', MockWorker);
+  vi.stubGlobal('navigator', { hardwareConcurrency: 8 });
+  try {
+    const { earthData } = await import('../src/sim/terrain/earthData');
+    const body = createUniverse('standard').get('earth')!;
+    const pool = new TerrainWorkerPool(3);
+    pool.register('earth', body, createTerrain(body), 6);
+    const first = MockWorker.created[0].postMessage.mock.calls[0][0];
+    expect(first.type).toBe('earthData');
+    expect(first.blob).toBeInstanceOf(Blob);
+    expect(first.blob.size).toBe(earthData().buffer.byteLength);
+    for (const worker of MockWorker.created) {
+      expect(worker.postMessage.mock.calls[0][0].blob).toBe(first.blob);
+      expect(worker.postMessage.mock.calls[1][0]).toMatchObject({ type: 'init', key: 'earth' });
+    }
+    const bytes = await first.blob.arrayBuffer();
+    expect(Buffer.from(bytes).equals(Buffer.from(earthData().buffer))).toBe(true);
+    pool.dispose();
+  } finally { vi.unstubAllGlobals(); }
+});

@@ -1465,3 +1465,449 @@ Final checks on the unchanged candidate source: `npm run lint`, `npx tsc --noEmi
 ## Remaining work
 
 The pad needs at least another 0.012 ms median reduction to cross the strict target, and a larger reduction for useful headroom. Its remaining PBR/vegetation work and ~0.8 ms post chain are worth investigating next; the current sky bound is deliberately conservative. Reversed float depth remains an architectural follow-up, as recorded in the previous pass. Ultra’s continuing pad/orbit/map terrain builds deserve a separate cache/streaming investigation. Real Apple/Safari timing, multi-draw support/performance, and sustained 120 Hz behavior are unmeasured. Sunset/night, thick haze, distant views and other bodies retain safeguards but are outside this five-scene timing matrix. No claim of Mac frame rate is made from RTX scaling alone.
+## CPU pass 2 (2026-10-07, cx/perfcpu2)
+
+This pass removes specific main-thread work, but **does not meet the no-task-over-50-ms or
+4-ms-at-4× flight targets**. Do not interpret the Windows results as an Apple M-series / 120 Hz
+certification. The final fully textured High orbit comparison still spends about 27–29 ms/frame in the
+flight profiler at 4× CPU throttle; renderer submission is the largest section.
+
+### Method and artifacts
+
+- Production baseline: `49e6b30e`. Initial implementation: `0e719a71` (its final comment/test-mock
+  change has no runtime effect), on 5352. `cbf6d24b` adds the impact-query guard, on 5353;
+  `b91881a1` adds the final bitmap-release follow-up, on 5354. Tables identify their revisions.
+  Baseline served on 5350; all captures use immutable, sourcemapped production builds.
+- Windows Chrome over CDP 9333, hardware RTX 3060 Ti, Ryzen 5600X; 1470×920 CSS, DPR 2. Medium
+  unless marked High; adaptive quality disabled, audio muted, standard universe scale. These
+  captures include real GPU submission. CDP CPU throttle is 4× unless explicitly labelled 1×.
+- Results are single matched runs, not confidence intervals; cache/driver/native-wait variance remains.
+  Every Chrome job holds `/tmp/wsp-gpu.lock`. `scripts/bench/cpu-pass2.sh` adds page-scoped sampled
+  traces for cold/warm Space Center → editor → launch → map → save/restore and for ascent, warp,
+  and an actual inbound Moon SOI crossing. The flight journey uses the same 4× **physics warp**
+  as `cpu-flight.sh`; that setting is independent of CDP's 4× CPU throttle. Autosave is enabled
+  every 15 seconds during the journey. Final orbit measurements return to 1× physics.
+- Long-task columns use the browser PerformanceObserver, in milliseconds. They include ordinary
+  flight frames during each window, not just the named action's synchronous handler. Window
+  duration includes explicit settling waits and must not be called input latency. CPU columns
+  use the app's frame profiler (the last 240 frames, not a whole-ascent average); loading windows
+  that show zero are not valid steady CPU samples. Long tasks and rAF intervals cover the full window.
+- Trace draining is outside each marked measurement window. Simulation/streaming can continue
+  between windows, so imagery maxima are cumulative and streaming-wait durations exclude those
+  gaps. `cpu-trace-report.mjs` reports outer trace tasks; `cpu-trace-samples.mjs` attributes V8
+  samples to the matching build's source maps. Sampled inclusive durations are attribution aids,
+  not precise function timings. It correlates profile IDs across sampling threads and caps
+  individual sample weights to avoid assigning unsampled native waits to JavaScript.
+- Raw JSON, selected compressed traces and imagery screenshots are in `docs/performance/perfcpu2/`;
+  its README maps capture labels to revisions. Superseded diagnostics retain summaries only.
+  Direct-to-editor/direct-flight 4× attempts stalled the renderer and are retained as failed
+  captures. Going through Space Center completed; failures do not count as performance samples.
+  `cpu2-after-*` is an intermediate, rejected streaming schedule that left imagery absent too
+  long. `cpu2-final-transitions-4x` partly overlapped the first test run on the host and is
+  diagnostic only; the later `cpu2-pair-*` transition runs are the comparison pair.
+
+### Changes and attribution
+
+- **Staging:** detached vessels adopt existing part visuals by `PartState` identity before the
+  donor view rebuilds. This avoids re-creating thermal geometry/plumes and repeating a whole
+  assembly soot bake for hardware that already exists. Existing soot remains after separation;
+  new/moved layouts still bake. A disposal/identity regression test also supplies an unrelated
+  identical craft, so local part UID collisions cannot transfer another craft's mesh.
+- **Map entry/exit:** keep flight HDR/bloom/AA attachments resident while drawing the map directly
+  to the canvas. Skip unchanged canvas sizing; resize flight attachments on return only when
+  resolution changed. This trades retained GPU memory for avoiding repeated allocation.
+- **Earth streaming:** decode and crop in a dedicated idle-terminated worker, transfer ImageBitmap
+  strips, and yield between crops in the compatibility fallback. Before, `createImageBitmap`
+  appeared as hundreds of milliseconds of main-thread sampling across the cold hub trace,
+  despite returning promises. Uploads are now 1 MiB, merges 1 Mpx, at most four operations under
+  a 0.75 ms soft budget. Driver allocations/mipmap generation are indivisible and can exceed it.
+  The bundled surface has priority over clouds; existing surface imagery remains during upgrades.
+- **Other texture/worker setup:** one-texel part placeholders replace eager full-size buffers;
+  final worker pixels are adopted without a copy, preserving repeat-clone Sources. GPU storage
+  is explicitly released before dimensions change. Terrain workers receive one immutable Blob
+  and materialise Earth grid copies off the main thread, with an initialization barrier.
+- **UI/shaders:** the empty inspector no longer schedules rAF or reads layout every frame.
+  Production editor and thumbnail renderers omit synchronous shader info-log checks, matching
+  flight; development retains diagnostics. Settings/Advanced Graphics display Low/Medium/High/
+  Ultra, Off, FXAA, SMAA, MSAA + SMAA and Unlimited, without changing saved values. Chrome's
+  captured option text verifies the labels.
+- **HUD impact queries (final follow-up):** a safe orbit/flyby returns no impact, yet previously
+  asked for a six-patch trajectory first. The Moon traces attributed 60–70 ms of repeated sampled
+  main-thread work to that unused path. Move the trajectory query behind the existing impact
+  possibility test; suborbital impacts still use the SOI-limited horizon. Tests cover a safe orbit,
+  hyperbolic flyby, and a real terrain impact. Map prediction remains on demand; its incidental
+  cache warming by the closed-map HUD is removed.
+- **Still expensive:** cold site canvas textures/scene construction, first render texture
+  allocation, three.js material/draw submission, and native GPU/IPC waits. The baseline cold hub
+  samples attribute roughly 1.7 s inclusive to launch-site construction and 195 ms self to Earth
+  worker registration. Editor scene creation/texture upload and thumbnail rendering remain
+  substantial. HUD telemetry outside the unnecessary path query is smaller than rendering. The final continuous
+  trace also isolates synchronous autosave persistence; see the remaining-work section below.
+
+### Initial surface-ready High orbit comparison, production 4×
+
+| Measurement | Before | After |
+|---|---:|---:|
+| Imagery cumulative main-thread step peak | 7.1 ms | 5.4 ms |
+| Additional traced wait for 8k after load/trace drain | 2.77 s | 23.06 s |
+| Following 8-second CPU average | 25.83 ms | 25.33 ms |
+| Following 8-second long-task maximum | 86 ms | 80 ms |
+| Following 8-second long-task count | 131 | 133 |
+
+Both report 8k surface ready, GL error 0, and no page/console errors; the screenshot was inspected.
+This first pair did not wait for the cloud source, so it is not a fully settled comparison.
+The smaller steps spread streaming over more frames, a material trade-off on a throttled renderer.
+The CPU result is essentially unchanged, not a claimed large frame-rate gain. Other transition
+captures still show imagery step outliers above 50 ms; the soft budget is **not** a hard bound.
+
+### Final fully loaded High imagery pair, production 4×
+
+`cpu2-before-imagery-release-4x` → `cpu2-release-imagery-4x` compares `49e6b30e` with
+`b91881a1` under one Chrome lock. This pair waits for both the 8k surface and cloud source,
+then allows three seconds for baking before the eight-second steady window. Both runs have
+GL error 0 and no page/console errors; the final screenshot has the expected surface/clouds.
+
+| Measurement | Before | Final |
+|---|---:|---:|
+| Cumulative imagery step maximum | 8.8 ms | 57.5 ms |
+| Traced streaming wait after load/drain | 3.27 s | 31.57 s |
+| Streaming-window long-task maximum | 113 ms | 100 ms |
+| Settled flight CPU average / p95 | 27.37 / 32.10 ms | 28.64 / 34.20 ms |
+| Settled long-task maximum / count | 79 ms / 126 | 81 ms / 123 |
+
+This is **not a steady CPU improvement**. A smaller upload budget cannot preempt native
+allocation/mipmap calls, and the measured 57.5 ms cumulative outlier remains unresolved. It
+was not located within the exported streaming window, so its exact native cause is not established.
+An earlier fully loaded pair (`cpu2-before-imagery-complete-4x` → `cpu2-complete-imagery-4x`)
+also recorded cumulative step outliers, 54.6 → 59.3 ms; the initial 7.1 → 5.4 ms result is not a
+reliable worst-case bound. Full imagery arrives much later at 4× throttle. The unthrottled
+trace-free result below demonstrates a smaller typical measured peak on this machine, not a
+promise that streaming never hitches.
+
+### Clean cold/warm transition pair, production 4×
+
+These paired runs hold the Chrome lock across before and after. They compare `49e6b30e` with
+`0e719a71`; the later safe-orbit HUD guard does not affect the pad sequence. Values are maximum
+observed long tasks; no row is a claim that every task for that action improved.
+
+| Window | Cold before → after (ms) | Warm before → after (ms) |
+|---|---:|---:|
+| Space Center first load | 2322 → 1518 | 523 → 522 |
+| Editor entry | 1290 → 1333 | 1189 → 1215 |
+| Launch | 690 → 714 | 643 → 611 |
+| Map open | 87 → 79 | 85 → 65 |
+| Map close | 99 → 86 | 100 → 85 |
+| Quicksave window | 65 → 77 | 73 → 77 |
+| Quickload | 619 → 525 | 528 → 524 |
+
+Frame gaps tell the same mixed story: cold hub maximum rAF gap 3383 → 2150 ms, editor
+1383 → 1433 ms, launch 1083 → 1167 ms, and quickload 967 → 867 ms. The complete window
+rAF p95/p99/max and long-task counts are indexed in `perfcpu2/comparison.csv`.
+
+Editor-entry maxima are essentially unchanged/slightly worse. Quicksave-window maxima are ordinary
+render frames, not evidence that serialization itself takes 77 ms. Warm launch ready-window duration
+was 10.07 → 8.29 s and quickload 8.72 → 7.29 s, but the after build still has no imagery level at that
+instant versus before's 4k. **Do not call those readiness reductions equivalent-visual loading wins.**
+By map open the after build has 4k; by map close the baseline has 8k while after still has 4k. Thus
+map-window CPU averages also cannot establish settled-flight gains. The map sizing regression test
+independently verifies that toggling does not reallocate flight attachments and that a real resize
+while in map mode is applied when returning.
+
+### Moon SOI query follow-up, production 4×
+
+The matched Kestrel flyby fixture starts 20 km outside the Moon's SOI, moving inward at 1500 m/s
+with 250 m/s transverse velocity. It crosses through `World.tick`, rather than assigning `body`
+to Moon. Both runs finish with body `moon`, GL error 0 and no page/console errors.
+
+| 25-second crossing window | Before (`cpu2-before-soi-4x`) | Final (`cpu2-complete-soi-4x`) |
+|---|---:|---:|
+| Maximum long task | 156 ms | 106 ms |
+| Long-task count | 378 | 92 |
+| Trailing flight CPU average | 19.60 ms | 12.82 ms |
+| Trailing flight CPU p95 | 25.10 ms | 15.80 ms |
+| Trailing telemetry section average | 2.67 ms | 1.46 ms |
+
+Source-mapped samples establish removal of unnecessary repeated impact-path queries once the
+Moon-frame orbit cannot intersect the surface. They do not establish that every millisecond of
+the total average reduction is caused by that guard: render submission also varied between runs.
+The remaining 102–106 ms tasks include required pre-crossing Earth impact queries and a later
+`warpTargets` trajectory refresh. Those still spend about 46–50 ms sampled in prediction before
+adding the rest of the frame/native overhead. Moving or incrementally evaluating those necessary
+queries remains work for a subsequent pass.
+
+An initially near-radial fixture exposed `True anomaly outside hyperbolic asymptotes`
+through optional prediction and unmounted the flight scene. Its JSON/error trace is retained as a
+failed diagnostic (`cpu2-before-journey-4x`); it is not treated as a normal SOI timing. The nonzero
+impact-parameter fixture avoids that degeneracy. This pass does not repair that pre-existing
+numerical edge case.
+
+### Continuous ascent and complete flight, production 4× pair before bitmap cleanup
+
+`cpu2-before-journey-continuous-4x` → `cpu2-complete-journey-4x` uses Meridian, orbit assist,
+15-second autosave, and 4× physics warp for ascent. Each ascent is **one continuous trace**,
+including liftoff and both automatic stage transitions; its total duration is 131.61 → 131.73 s.
+Both finish the assist in an orbit with periapsis about 82.2 km. The orbit window returns to 1×
+physics, then the fixture tests 100,000× rails warp, returning to physics, and Moon SOI entry.
+All final windows report GL error 0, with no page/console errors.
+
+| Window / identified event | Maximum long task before → `cbf6d24b` (ms) |
+|---|---:|
+| Pad, after loading | 105 → 84 |
+| Liftoff / first accelerated physics frame | 173 → 189 |
+| First stage separation | 208 → 122 |
+| Following upper-stage activation | 86 → 76 |
+| Whole ascent (all tasks, not just staging) | 208 → 189 |
+| Orbit, 1× physics | 124 → 131 |
+| Rails warp up | 131 → 125 |
+| Return to physics | 85 → 65 |
+| Moon crossing after high warp | 125 → 132 |
+
+Stage events are located by the recorded stage-transition marks and the preceding main task,
+not by choosing an arbitrary short interval. The baseline separation trace attributes about
+99 ms inclusive to `VesselView.rebuild`, including 56 ms in `bakeEngineSoot`. Reusing the visuals
+removes that repeat bake. The worst liftoff frame is mostly accelerated physics; it did not improve.
+The complete ascent still has 2016 → 2000 observed long tasks. The trailing orbit CPU average is
+19.87 → 19.00 ms (p95 23.40 → 22.00), well above the requested 4 ms. These results distinguish a
+specific staging improvement from the unresolved recurring cost of flight.
+
+The post-warp Moon case and the isolated Kestrel Moon case have different craft, epoch and paths.
+Both are reported: the improved isolated query result must not conceal the 125 → 132 ms maximum
+in the complete journey. Necessary path/warp-target prediction remains synchronous.
+
+### Final bitmap-release follow-up, production 4×
+
+The preceding ascent exposed a **152.7 ms** task with **80.0 ms sampled in ImageBitmap.close**:
+smaller upload strips had multiplied the synchronous closes performed when releasing a level.
+`b91881a1` transfers the final-owned bitmaps back to the decode worker for release, recreating
+that worker if idle termination already occurred. The compatibility fallback closes one bitmap
+per timer task. Ownership and fallback behavior have regression tests.
+
+`cpu2-release-journey-4x` repeats the complete continuous journey after that fix. It reaches
+orbit, completes both warp transitions and enters the Moon SOI with GL error 0 and no page/console
+errors. Main-thread `close` samples across ascent fall from **193 samples / approximately
+105 ms sampled self time to zero**; no repeated bitmap-close task appears in the final trace.
+That removes the identified cleanup cause, not all other tasks occurring while imagery streams.
+
+| Window / event | Baseline `49e6b30e` → final `b91881a1` maximum task (ms) |
+|---|---:|
+| Pad | 105 → 84 |
+| Liftoff / first accelerated physics frame | 173 → 165 |
+| First stage separation | 208 → 129 |
+| Following upper-stage activation | 86 → 76 |
+| Whole ascent | 208 → 165 |
+| Orbit, 1× physics | 124 → 128 |
+| Rails warp up | 131 → 145 |
+| Return to physics | 85 → 77 |
+| Moon crossing after high warp | 125 → 134 |
+
+Ascent duration is 131.61 → 131.77 seconds, long-task count 2016 → 2005, and the orbit's trailing
+CPU average 19.87 → 19.11 ms (p95 23.40 → 22.20). The final liftoff maximum contains about
+80 ms sampled under `World.tick`; staging no longer contains the repeated soot bake. This is
+still far from the requested steady flight budget. Final ascent rAF maximum is 183.4 ms.
+
+The longest final autosave task is **136.9 ms**, with **68.4 ms sampled under
+saveWorldToStorage** (about 48 ms under slot-index rewriting, including JSON/storage work).
+Other periodic saves spend 56–64 ms in that path. The small pad quicksave window did not reveal
+this accumulated multi-slot cost. Async serialization/storage with ordering and failure guarantees
+remains necessary; no save format or persistence contract was changed in this pass.
+
+### Unthrottled hardware corroboration (not the 4× target)
+
+The trace-free `earthgfx-stalls.mjs` pair uses High/DPR 2 for 30 seconds after flight readiness.
+Baseline → `cbf6d24b`: imagery step peak **4.7 → 2.2 ms**, post-ready long tasks **1 → 0**
+(maximum 51 → 0 ms). Both finish at 8k. Ready time is 9.16 → 8.85 s; rAF maxima are 50.1 ms
+in both. `earth-stalls-1x-pair.jsonl` preserves both complete outputs. The probe now uses an isolated
+context, blocks service workers, sets options before navigation, and closes the context on failure;
+the old shared-context/favicon setup raced navigation and its failure log is retained.
+
+The existing `cpu-flight.sh` 120-second journey pair also reaches orbit in both builds:
+
+| 1× CDP CPU, 4× physics journey | Before | `cbf6d24b` |
+|---|---:|---:|
+| Observed long tasks | 14 | 2 |
+| Maximum long task | 62 ms | 55 ms |
+| Trailing flight CPU average / p95 | 4.69 / 6.40 ms | 3.16 / 4.10 ms |
+| rAF p99 / maximum | 33.5 / 100.0 ms | 33.4 / 66.7 ms |
+
+That older driver's rAF/PerformanceObserver readout includes trace draining: reported intervals
+are 213.33 and 188.04 seconds, while each raw trace covers the requested 120-second flight window.
+Do not treat the raw counts or FPS as equal-duration trace-free results. The two after trace tasks
+are **55.072 ms (40.431 ms Commit wait + 14.034 ms animation callback)** and **52.256 ms
+(33.946 ms Commit wait + 17.814 ms animation callback)**. They are largely compositor waiting,
+not a claim of two 55 ms JavaScript computations. GPU/shader integration and Apple validation remain
+necessary; these tasks were not eliminated by this CPU pass.
+
+### Remaining work and verification
+
+- The final High load trace still has a **1625 ms** editor mount task (649 ms sampled in
+  `texSubImage2D`), an **869 ms** craft-load task dominated by part AO, and an **795 ms** first
+  flight-frame task with launch-site/planet construction. These are loading costs, not steady CPU.
+- First trusted input still initializes audio synchronously even at master volume zero:
+  **233 ms** in that load capture, with about 184 ms sampled under audio initialization. The
+  navball's first render also contributes to a **147 ms** HUD task (about 71 ms sampled under
+  navball update, including texture upload). Neither path is rewritten here.
+- Normal 4× flight has many frames over 50 ms: render submission/native waiting and accelerated
+  physics need larger structural changes. The staging visual fix is not a general frame-budget fix.
+- Periodic autosaves still parse/stringify the full slot collection and synchronously write
+  localStorage. Their final trace attribution is 56–68 ms under persistence; this is a real CPU
+  hitch, separate from compositor waiting. Save ordering/durability must survive a future async path.
+- Required impact and warp-target predictions still run synchronously. Near-radial optional
+  prediction can throw; the separate numerical fix is unfinished.
+- Native texture allocation/mipmap operations remain indivisible, and imagery streaming takes
+  longer at 4×. Worker strip disposal addresses one measured release hitch, not all GL stalls.
+- Integrate the parallel GPU work, then repeat on the owner's Apple M-series machine at 120 Hz.
+  Windows compositor waits and CPU-throttle results cannot certify Mac smoothness.
+
+Final runtime revision `b91881a1` passes `npm run lint`, `npx tsc --noEmit`,
+`npx vitest run --maxWorkers=3` (**131 files; 1397 passed, 1 skipped**), and `npm run build`.
+The trace-stream parser's Node tests also pass (2). New tests exercise detached-visual ownership,
+map target sizing, shared part-texture Sources, worker grid delivery, image strips/disposal, and
+safe-orbit/flyby/suborbital prediction behavior. Logs are in `perfcpu2/validation/`.
+
+### Round 2: steady frame, imagery budget, autosave, near-radial (2026-10-08)
+
+Round 2 targets the recurring per-frame cost rather than one-off hitches. Revisions: main `49e6b30e` (5350),
+round 1 `079e0a7b` (5351), round 2 final `d8f0b01c` (5353). Same Windows Chrome / RTX 3060 Ti / Ryzen 5600X
+host, 1470×920 DPR 2, Medium, adaptive quality off, production sourcemapped builds, one Chrome lock per run.
+Evidence: `docs/performance/perfcpu2/round2/`. **The 4 ms at 4× target is still not met**; see the end.
+
+#### Where the frame went
+
+`scripts/bench/cpu-steady.sh` (new) enters through Space Center → editor → Meridian → launch, waits for
+imagery, then measures 8 s windows: pad, assisted ascent 8 s after liftoff, and a circular orbit
+(`devScenario('orbit')`, 1× physics). Builds are interleaved and the order alternates per repetition;
+`STEADY_PROFILE=1` adds a CDP CPU profile per window, attributed by `cpu-profile-report.mjs`
+(`CALLERS=` gives a caller split). `cpu2-draws.mjs` counts draws per scene subtree.
+
+Round 1's orbit spent ~14.5 of 17.7 ms/frame (4×) inside three.js render submission. The cause was draw
+count, not shader cost: **pad 813, ascent 735, orbit 436 draws**. Per frame on the pad there were ~440 Earth
+terrain chunks plus ~90 ocean meshes (about 40 chunks per quadtree level, L6–L14), ~115 vessel meshes plus
+113 in the shadow pass, and ~70 launch-site draws. Each draw costs ~30 µs at 4× (≈7 µs real) in
+`renderBufferDirect`/`setProgram`/VAO binding. Material sorting was already optimal (71 material switches for
+71 materials on the pad). Every frame the scene's own `updateMatrix()` also forced a world-matrix multiply on
+all ~1500 objects, including ~700 hidden cached chunks.
+
+#### Changes (in commit order)
+
+- **Terrain chunk size** (`c9522354`): `chunkResolution` doubled on every preset; selection still keys on vertex
+  spacing, so screen error stays within target with one fewer level. Pad terrain 535 → ~200 draws.
+- **Static containers + shadow cache** (`e3f9cd65`): flight scene, planet roots and quadtree groups no longer
+  force descendant matrix updates; the controller updates matrices once per frame. `ShadowMapCache` redraws the
+  sun's depth map only when an in-volume caster, the light or the map changed by more than ¼ texel. Pad skipped
+  472 of 523 shadow passes, coasting orbit ~95%; ascent still redraws every frame (rotating vessel).
+- **Ephemeris time slots** (`5043ade1`): four LRU time slots; render/physics/world time no longer evict each
+  other's Kepler solves (`bodyRotation` alone was 0.9 ms/frame at 4× in orbit).
+- **Rigid batching of animated parts** (`72ce768f`): only gimbals, deployables, gear joints, exhaust anchors, lamp
+  lenses and EVA limbs stay individual. Meridian vessel draws ~115 → ~82.
+- **Near-radial conics** (`38ce1010`), **autosave** (`831777a3`), **imagery budget** (`0441a5d1`): below.
+- **Small per-frame items** (`3f1c9abd`, `d8f0b01c`): hidden batched leaves skip matrixWorld; lamp appearance
+  applies on change; the quadtree reuses its selection while the body-fixed view and chunk set are unchanged.
+
+Screenshots of pad, close-up engines, ascent and orbit match round 1 (`scripts/bench/cpu2-shots.mjs`);
+no page errors.
+
+#### Steady frame, production 4× CPU throttle
+
+Two interleaved repetitions each (`r2-steady-4x.json`); app frame profiler, mean of per-run averages.
+
+| Window | main | round 1 | round 2 | round 1 → 2 |
+|---|---:|---:|---:|---:|
+| Pad CPU avg / p95 (ms) | 28.5 / 32.8 | 28.2 / 33.4 | **18.0 / 21.3** | −36% |
+| Ascent CPU avg / p95 (ms) | 32.4 / 37.3 | 31.7 / 37.2 | **24.0 / 28.2** | −24% |
+| Orbit CPU avg / p95 (ms) | 18.3 / 21.7 | 17.5 / 20.1 | **12.7 / 15.1** | −27% |
+| Pad / ascent / orbit fps (4×) | 16.3 / 14.9 / 19.7 | 16.3 / 15.0 / 20.1 | 19.5 / 17.0 / 22.1 | |
+| Orbit long tasks > 50 ms per 8 s | 47 | 30 | 8 | |
+| Main-pass + shadow draws, sampled frame (pad / ascent / orbit) | 814 / 739 / 431 | 813 / 739 / 436 | 458 / 425 / 188 | |
+
+`task/f` (CDP TaskDuration per frame, which includes GPU-process waits) falls less: orbit 51 → 46 ms.
+The remainder is native command submission/compositor time that scales with draws and passes.
+
+#### Steady frame, production unthrottled (1×)
+
+Two interleaved repetitions (`r2-steady-1x.json`). The display is 60 Hz, so all builds hold ~59 fps and the
+rAF interval cannot show the saving; CPU per frame is the relevant figure for a 120 Hz Mac.
+
+| Window | main | round 1 | round 2 |
+|---|---:|---:|---:|
+| Pad CPU avg / p95 (ms) | 4.83 / 5.90 | 4.81 / 5.85 | **3.03 / 3.70** |
+| Ascent CPU avg / p95 (ms) | 4.91 / 6.15 | 4.94 / 6.10 | **3.69 / 4.70** |
+| Orbit CPU avg / p95 (ms) | 3.10 / 4.00 | 3.09 / 3.80 | **2.21 / 2.75** |
+| Long tasks > 50 ms | 0 | 0 | 0 |
+
+At 120 Hz (8.3 ms) these leave 4.6–6.1 ms for GPU/compositor work instead of 3.4–5.2 ms. The ratio between
+4× and 1× is ~6×, not 4×: CDP throttling also slows native submission work.
+
+#### Imagery regression (c)
+
+The regression was throughput, not a single stall. Total upload work was unchanged (main 567 ms in 164 × 4 MiB
+ops; round 1 636 ms in 655 × 1 MiB), but round 1's fixed 0.75 ms budget admitted one unit per frame once the
+CPU was slow, so the 8k stream took 34.8 s at 4× against main's 10.0 s. Round 2 spends ~6% of the measured frame
+interval (1–3 ms), admits a unit only if its predicted cost fits, and starts allocation/mip-generation units only
+at the start of a frame. Worker decoding and 1 MiB strips stay.
+
+| High, 8k | main | round 1 | round 2 |
+|---|---:|---:|---:|
+| 4× stream span | 10.0 s | 34.8 s | **12.7–13.5 s** |
+| 4× worst imagery `step()` | 7.7 ms | 5.3 ms | 6.0–6.5 ms |
+| 1× worst imagery `step()`, 3 runs | 15.8 / 5.2 / 5.2 ms | 2.5 / 2.0 / 1.5 ms | 3.8 / 2.7 / 3.2 ms |
+| 1× long tasks after ready | 0 | 0 | 0 |
+
+The round-1 57.5 ms "cumulative imagery maximum" did not reproduce in eight runs. The only >40 ms operations
+near imagery were part-texture allocations at load (decal atlas 2048², ~48 ms at 4×). Round 2 keeps most of
+the unthrottled gain (about 1 ms worse than round 1, still below main) and recovers most of the streaming time.
+Full tables: `round2/imagery-4x-1x.md`.
+
+#### Autosave (b)
+
+Measured with `cpu2-autosave.mjs`: Meridian after 20 s of ascent, ten slots across three programs (377 KB index),
+4×, four autosaves per build, Chrome trace for the following idle callbacks.
+
+| 4× | main | round 1 | round 2 |
+|---|---:|---:|---:|
+| Synchronous in-frame autosave | 12.5–15.3 ms | 12.8–14.6 ms | **1.6–2.0 ms** |
+| Largest follow-up idle task | — | — | 3.7–13.0 ms |
+
+The synchronous part is now the snapshot (`serializeWorld`). Stringify, slot-index write and legacy-key write run
+as separate idle tasks. The index caches each slot's JSON while storage holds the text it wrote, so a write
+stringifies only the new slot (Node, ~0.7–0.8 MB index of 75 KB slots: 6.7 → 1.2 ms per write, including
+the new slot's stringify; the first write after load or an outside change still parses everything).
+The largest idle task (≤ 13 ms at 4×, ≈ 3 ms real) is one stringify or `setItem` and grows with save size; the
+journey traces' 56–68 ms (long flight logs) should shrink proportionally but were not re-run.
+Readers, other saves and `pagehide` flush the queue; format and keys are unchanged (tests compare against the old
+algorithm, check outside edits, ordering, flush-before-read and single error reporting).
+
+#### Near-radial prediction (e)
+
+A straight inbound Moon approach (zero or 1e-6 m/s transverse speed) threw `True anomaly outside hyperbolic
+asymptotes` from `stateToElements` (via `World.orbitOf` in HUD predictions) at the SOI crossing. The hyperbolic
+mean anomaly now comes from the state, e·sinh F = r·v / √(μ|a|). `tests/near-radial.test.ts` fails before the fix
+and passes after, covering the World crossing with HUD, map and warp-target predictions and element round trips.
+
+#### Still open
+
+- **4 ms at 4× is not met** (orbit 12.7, pad 18.0, ascent 24.0). What remains is mostly per-draw three.js
+  overhead: the pad still draws ~350 objects in the main pass (≈200 terrain/ocean, ≈80 vessel, ≈45 site
+  materials). Getting further needs structural work: multi-draw/`BatchedMesh` terrain with batching-aware
+  shaders (the parallel GPU branch owns those), a site material atlas, or caching the static parts of the
+  frame. Ascent also redraws the shadow map every frame.
+- Physics (~2.7 ms/frame at 4× in ascent), packed/prelaunch hazard stepping and the 10 Hz stage-Δv/prediction
+  telemetry tick (~1 ms real) were left alone: reducing them would change simulation or readout results.
+- React HUD reconciliation is ~1.5 ms/frame at 4× (≈0.4 ms real), spread thinly across components.
+- Accelerated physics at liftoff, required warp-target/impact predictions and load-time construction/upload
+  (round-1 items d) were not reworked in this round.
+- Apple M-series / 120 Hz validation is still required; these are Windows and CDP-throttle numbers.
+
+Validation at `d8f0b01c`: `npm run lint`, `npx tsc --noEmit`, `npx vitest run --maxWorkers=3`
+(**134 files; 1408 passed, 1 skipped**) and `npm run build` pass.
+
+## GPU check after merging CPU pass 2 onto GPU pass 2 (2026-10-08)
+
+CPU pass 2 doubles terrain chunk resolution (fewer, larger chunks: fewer draws, more triangles), so the merged build was re-measured against main after GPU pass 2 (`d6362301`) with `gpu-passes-ab.sh`, Medium, DPR 2, three interleaved pairs, production builds:
+
+| Scene | Fenced GPU ms main → merged | Triangles main → merged |
+|---|---:|---:|
+| Pad | 2.49 → 2.44 | 2.29 M → 2.25 M |
+| Ascent | 1.97 → 2.02 | 0.75 M → 1.12 M |
+| Orbit | 1.98 → 2.05 | 0.68 M → 1.05 M |
+
+All scenes stay within the ≤2.5 ms Medium budget; the +0.05 ms in ascent/orbit is the extra terrain vertices. Apple tile GPUs may weigh vertex work more than the RTX; revisit chunk resolution if the owner's F8 report shows vertex-bound frames. Raw CPU traces and full-size imagery screenshots for CPU pass 2 (~160 MB) are archived outside the repository.

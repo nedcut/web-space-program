@@ -1,0 +1,78 @@
+
+ RUN  v5.0.3 /home/nedcut/.t3/projects/wsp-wt/perfcpu2
+
+[ascent] T+615s body=earth alt=201.67km ap=250.2km pe=-569.3km dv=9593m/s mass=101037kg stage=5 sit=flying
+[circularize] T+1036s body=earth alt=250.15km ap=250.4km pe=250.1km dv=260m/s mass=95248kg stage=5 sit=flying
+[TLI] T+765675s body=earth alt=298.39km ap=372945.2km pe=238.7km dv=3145m/s mass=46700kg stage=5 sit=flying
+[MCC] T+767476s body=earth alt=8332.20km ap=373339.2km pe=238.8km dv=0m/s mass=46698kg stage=5 sit=flying
+[late MCC] T+1079434s body=earth alt=357386.85km ap=373349.9km pe=243.9km dv=0m/s mass=46697kg stage=5 sit=flying
+[final MCC] T+1186391s body=earth alt=373346.26km ap=373349.7km pe=238.6km dv=0m/s mass=46695kg stage=5 sit=flying
+[coast] T+1213130s body=moon alt=64445.50km ap=infkm pe=30.0km dv=0m/s mass=46695kg stage=5 sit=flying
+[capture] T+1275153s body=moon alt=30.43km ap=34.0km pe=26.1km dv=843m/s mass=23076kg stage=3 sit=flying
+[landing] T+1276343s body=moon alt=1.02km ap=1.0km pe=-1737.4km dv=1783m/s mass=15406kg stage=3 sit=landed
+[lunar ascent] T+1287390s body=moon alt=28.13km ap=31.7km pe=-171.6km dv=1851m/s mass=4227kg stage=1 sit=flying
+[lunar orbit] T+1287669s body=moon alt=31.67km ap=31.7km pe=31.7km dv=52m/s mass=4159kg stage=1 sit=flying
+[TEI] T+1767081s body=moon alt=32.74km ap=infkm pe=31.6km dv=826m/s mass=3202kg stage=1 sit=flying
+[Earth SOI] T+1831619s body=earth alt=362542.02km ap=362543.2km pe=33.7km dv=0m/s mass=3202kg stage=1 sit=flying
+[Earth touchdown] T+2236931s body=earth alt=0.00km ap=0.0km pe=-6361.0km dv=0m/s mass=1484kg stage=-1 sit=splashed
+[ascent] T+615s body=earth alt=201.67km ap=250.2km pe=-569.3km dv=9593m/s mass=101037kg stage=5 sit=flying
+[circularize] T+1036s body=earth alt=250.15km ap=250.4km pe=250.1km dv=260m/s mass=95248kg stage=5 sit=flying
+  TLI plan: node in 764526s dv=3119.3 encounter T+1213652 pe=30.0km
+[TLI] T+765675s body=earth alt=298.39km ap=372945.2km pe=238.7km dv=3145m/s mass=46700kg stage=5 sit=flying
+  MCC plan: dv=0.15 pe=30.0km
+[MCC] T+767476s body=earth alt=8332.20km ap=373339.2km pe=238.8km dv=0m/s mass=46698kg stage=5 sit=flying
+[late MCC] T+1079434s body=earth alt=357386.85km ap=373349.9km pe=243.9km dv=0m/s mass=46697kg stage=5 sit=flying
+[final MCC] T+1186391s body=earth alt=373346.26km ap=373349.7km pe=238.6km dv=0m/s mass=46695kg stage=5 sit=flying
+[coast] T+1213130s body=moon alt=64445.50km ap=infkm pe=30.0km dv=0m/s mass=46695kg stage=5 sit=flying
+[capture] T+1275153s body=moon alt=30.43km ap=34.0km pe=26.1km dv=843m/s mass=23076kg stage=3 sit=flying
+[landing] T+1276343s body=moon alt=1.02km ap=1.0km pe=-1737.4km dv=1783m/s mass=15406kg stage=3 sit=landed
+  touchdown speed=1.88 m/s, upright cos=1.000, ground slope=0.8°, site lat=-23.17° lon=86.34°
+  after 3 h of surface warp: moved 0.33 m, sit=landed
+[lunar ascent] T+1287390s body=moon alt=28.13km ap=31.7km pe=-171.6km dv=1851m/s mass=4227kg stage=1 sit=flying
+[lunar orbit] T+1287669s body=moon alt=31.67km ap=31.7km pe=31.7km dv=52m/s mass=4159kg stage=1 sit=flying
+  TEI plan: node in 479380s dv=825.9 SOI exit T+1831618 Earth pe=34.9km
+[TEI] T+1767081s body=moon alt=32.74km ap=infkm pe=31.6km dv=826m/s mass=3202kg stage=1 sit=flying
+[Earth SOI] T+1831619s body=earth alt=362542.02km ap=362543.2km pe=33.7km dv=0m/s mass=3202kg stage=1 sit=flying
+{"type":"partDestroyed","vesselId":"vmuyxt8qn","partUid":4,"reason":"overheat"}
+[Earth touchdown] T+2236931s body=earth alt=0.00km ap=0.0km pe=-6361.0km dv=0m/s mass=1484kg stage=-1 sit=splashed
+[ascent] T+280s body=earth alt=99.47km ap=179.1km pe=-221.0km dv=5294m/s mass=76659kg stage=7 sit=flying
+[circularize] T+762s body=earth alt=179.08km ap=179.2km pe=179.1km dv=218m/s mass=54824kg stage=5 sit=flying
+[TLI] T+4065s body=earth alt=310.37km ap=127061.3km pe=160.7km dv=1798m/s mass=36480kg stage=5 sit=flying
+[MCC] T+5865s body=earth alt=5248.40km ap=127889.6km pe=161.3km dv=1m/s mass=36475kg stage=5 sit=flying
+[late MCC] T+5865s body=earth alt=5248.40km ap=127889.6km pe=161.3km dv=0m/s mass=36475kg stage=5 sit=flying
+[final MCC] T+5865s body=earth alt=5248.40km ap=127889.6km pe=161.3km dv=0m/s mass=36475kg stage=5 sit=flying
+[coast] T+184331s body=moon alt=20622.55km ap=infkm pe=31.8km dv=0m/s mass=36475kg stage=5 sit=flying
+[capture] T+223713s body=moon alt=31.90km ap=32.0km pe=31.5km dv=446m/s mass=32967kg stage=5 sit=flying
+Ringrunner Real: parking 220.00 × 220.04 km; remaining Δv 8726.2 m/s, Saturn departure 7562.7 m/s + 500 m/s reserve; wait 16.8 days, flight 1491.8 days; peak flight joint load 82.6%
+[landing] T+224808s body=moon alt=-0.06km ap=-0.1km pe=-556.0km dv=1094m/s mass=19813kg stage=3 sit=landed
+[lunar ascent] T+235800s body=moon alt=25.78km ap=41.9km pe=-51.2km dv=1167m/s mass=5249kg stage=1 sit=flying
+[lunar orbit] T+236338s body=moon alt=41.91km ap=41.9km pe=41.9km dv=40m/s mass=5184kg stage=1 sit=flying
+[TEI] T+237259s body=moon alt=42.36km ap=infkm pe=41.9km dv=438m/s mass=4512kg stage=1 sit=flying
+[Earth SOI] T+277554s body=earth alt=119937.99km ap=127125.9km pe=35.9km dv=0m/s mass=4512kg stage=1 sit=flying
+[Earth touchdown] T+461725s body=earth alt=0.00km ap=0.0km pe=-2035.6km dv=0m/s mass=1535kg stage=-1 sit=splashed
+[ascent] T+280s body=earth alt=99.47km ap=179.1km pe=-221.0km dv=5294m/s mass=76659kg stage=7 sit=flying
+[circularize] T+762s body=earth alt=179.08km ap=179.2km pe=179.1km dv=218m/s mass=54824kg stage=5 sit=flying
+  TLI plan: node in 3110s dv=1725.5 encounter T+186979 pe=30.0km
+[TLI] T+4065s body=earth alt=310.37km ap=127061.3km pe=160.7km dv=1798m/s mass=36480kg stage=5 sit=flying
+  MCC plan: dv=0.61 pe=30.0km
+[MCC] T+5865s body=earth alt=5248.40km ap=127889.6km pe=161.3km dv=1m/s mass=36475kg stage=5 sit=flying
+[late MCC] T+5865s body=earth alt=5248.40km ap=127889.6km pe=161.3km dv=0m/s mass=36475kg stage=5 sit=flying
+[final MCC] T+5865s body=earth alt=5248.40km ap=127889.6km pe=161.3km dv=0m/s mass=36475kg stage=5 sit=flying
+[coast] T+184331s body=moon alt=20622.55km ap=infkm pe=31.8km dv=0m/s mass=36475kg stage=5 sit=flying
+[capture] T+223713s body=moon alt=31.90km ap=32.0km pe=31.5km dv=446m/s mass=32967kg stage=5 sit=flying
+[landing] T+224808s body=moon alt=-0.06km ap=-0.1km pe=-556.0km dv=1094m/s mass=19813kg stage=3 sit=landed
+  touchdown speed=1.61 m/s, upright cos=0.998, ground slope=3.7°, site lat=40.12° lon=159.60°
+  after 3 h of surface warp: moved 0.21 m, sit=landed
+[lunar ascent] T+235800s body=moon alt=25.78km ap=41.9km pe=-51.2km dv=1167m/s mass=5249kg stage=1 sit=flying
+[lunar orbit] T+236338s body=moon alt=41.91km ap=41.9km pe=41.9km dv=40m/s mass=5184kg stage=1 sit=flying
+  TEI plan: node in 896s dv=438.3 SOI exit T+277552 Earth pe=35.0km
+[TEI] T+237259s body=moon alt=42.36km ap=infkm pe=41.9km dv=438m/s mass=4512kg stage=1 sit=flying
+[Earth SOI] T+277554s body=earth alt=119937.99km ap=127125.9km pe=35.9km dv=0m/s mass=4512kg stage=1 sit=flying
+[Earth touchdown] T+461725s body=earth alt=0.00km ap=0.0km pe=-2035.6km dv=0m/s mass=1535kg stage=-1 sit=splashed
+challenging: T+631s, 153.97 × 153.97 km, 5176 kg
+real: T+947s, 220.05 × 220.06 km, 4262 kg
+
+ Test Files  131 passed (131)
+      Tests  1397 passed | 1 skipped (1398)
+   Start at  22:48:40
+   Duration  213.26s (tests 96%, import 2%, transform 1%, setup 1%)

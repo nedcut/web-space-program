@@ -5,12 +5,12 @@
 import { chromium } from 'playwright-core';
 const [base, quality = 'high', seconds = '20', dpr = '2'] = process.argv.slice(2);
 const browser = await chromium.connectOverCDP('http://127.0.0.1:9333');
-const ctx = browser.contexts()[0];
+const ctx = await browser.newContext({ serviceWorkers: 'block' });
+try {
 const page = await ctx.newPage();
 const cdp = await ctx.newCDPSession(page);
 await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1470, height: 920, deviceScaleFactor: +dpr, mobile: false });
-await page.goto(base + '/favicon.ico').catch(() => {});
-await page.evaluate((q) => localStorage.setItem('wsp.settings.v1', JSON.stringify({ quality: q, shadows: true, bloom: true, clouds: true, scatter: true, renderScale: 1, adaptiveQuality: false, graphicsProfile: 99, autoSaveInterval: 0, masterVolume: 0 })), quality);
+await page.addInitScript((q) => localStorage.setItem('wsp.settings.v1', JSON.stringify({ quality: q, shadows: true, bloom: true, clouds: true, scatter: true, renderScale: 1, adaptiveQuality: false, graphicsProfile: 99, autoSaveInterval: 0, masterVolume: 0 })), quality);
 await page.addInitScript(() => {
   const w = window; w.__stall = { tasks: [], frames: [], readyAt: 0 };
   new PerformanceObserver((l) => { for (const e of l.getEntries()) w.__stall.tasks.push([e.startTime, e.duration]); }).observe({ type: 'longtask', buffered: true });
@@ -31,4 +31,4 @@ console.log(JSON.stringify(await page.evaluate(() => {
     longTasksBefore: s.tasks.filter(([t]) => t <= r).length, longTasksAfter: tasksAfter.length, maxLongTaskAfter: Math.round(Math.max(0, ...tasksAfter.map(([, d]) => d))),
     imagery: (() => { let im = null; window.__flight.scene.traverse((o) => { if (o.userData && o.userData.imagery) im = o.userData.imagery; }); return im ? { level: im.levelId, ...im.stats, maxFrameMs: +im.stats.maxFrameMs.toFixed(1) } : null; })() };
 })));
-await page.close(); await browser.close();
+} finally { await ctx.close(); await browser.close(); }
