@@ -6,6 +6,10 @@ import { DebrisPool } from '../src/render/fx/DebrisPool';
 import { FlightCamera } from '../src/flight/camera';
 import { thrustGain } from '../src/audio/design';
 import { engineLoudness } from '../src/audio';
+import { VesselView } from '../src/render/vessel/VesselView';
+import { buildVessel } from '../src/sim/vessel';
+import { buildTender } from '../src/editor/stockCrafts';
+import { PART_CATALOG } from '../src/data/parts';
 
 describe('weight and payoff', () => {
   it('does not reveal the end bar or allow a report in the first 3.5 seconds; cleanup cancels it', () => {
@@ -89,4 +93,12 @@ it('retains large fragments when small destroyed parts arrive last in a cascade'
   expect(pool.activeCount).toBe(32);
   expect(pool.root.children.filter(o=>(o as THREE.Mesh).geometry===big)).toHaveLength(6);
   pool.dispose();big.dispose();small.dispose();
+});
+
+it('borrows the retained template rather than the thermal geometry disposed on vessel loss', () => {
+  const vessel=buildVessel(buildTender(),PART_CATALOG), view=new VesselView(vessel);
+  const geometry=view.debrisGeometry(vessel.parts[0].uid)!, disposed=vi.fn();
+  geometry.addEventListener('dispose',disposed);
+  view.dispose();expect(disposed).not.toHaveBeenCalled();
+  geometry.removeEventListener('dispose',disposed);
 });
