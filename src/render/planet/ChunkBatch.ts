@@ -253,8 +253,11 @@ export class ChunkBatch {
     this.gl.deleteBuffer(b.index);
   }
 
-  /** New attribute objects so three rebinds its vertex arrays to the new buffers. */
-  private bindGeometry(): void {
+  /**
+   * New attribute objects so three rebinds its vertex arrays to the new buffers. After a context restore the old
+   * geometry belongs to the lost context's bookkeeping: drop it without dispose (nothing left to delete).
+   */
+  private bindGeometry(disposeOld = true): void {
     const bufs = this.bufs!, cap = bufs.capacity, old = this.mesh.geometry;
     const g = ChunkBatch.emptyGeometry();
     this.attrs!.forEach((at, a) => g.setAttribute(at.name,
@@ -263,7 +266,7 @@ export class ChunkBatch {
     // three deletes GL buffers of a disposed geometry's GLBufferAttributes; the old ones are already gone.
     for (const name in old.attributes) old.deleteAttribute(name);
     old.setIndex(null);
-    old.dispose();
+    if (disposeOld) old.dispose();
     this.mesh.geometry = g;
     this.gpuBytes = cap * (this.vertices * this.attrs!.reduce((s, at) => s + at.itemSize * at.bytes, 0) + this.indices * 4);
   }
@@ -334,7 +337,7 @@ export class ChunkBatch {
       index: this.createBuffer(cap * I * 4, true),
       capacity: cap,
     };
-    this.bindGeometry();
+    this.bindGeometry(false);
     this.makeTextures(cap);
     for (const src of live) this.place(src, true);
   }
