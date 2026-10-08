@@ -3,6 +3,7 @@ import { clampPixelRatio, maxDrawingEdge } from './drawingLimits';
 import { UpscalePass } from './UpscalePass';
 import { FusedBloomPass, ToneMapPass } from './fusedBloom';
 import { AdaptiveQuality } from './adaptiveQuality';
+import { ArrayUniformCache } from './uniformCache';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -46,6 +47,7 @@ export class RenderPipeline {
   private quality: QualitySettings;
   private adaptive = new AdaptiveQuality();
   private gpuTimer: GpuTimer | null;
+  private readonly arrayUniforms = new ArrayUniformCache();
   /** Smoothed GPU time per frame (ms) from timer queries; NaN when the browser does not expose them. */
   gpuMs = NaN;
   readonly stats = { calls: 0, triangles: 0, points: 0, programs: 0, textures: 0, geometries: 0 };
@@ -79,6 +81,7 @@ export class RenderPipeline {
     // up front keeps shader keys stable, so programs compiled during warm-up are reused.
     r.shadowMap.type = THREE.PCFShadowMap;
     r.setClearColor(0x000000, 1);
+    r.setOpaqueSort(programMajorSort(r));
     // Shader info-log queries force a synchronous compile wait; production builds skip them.
     r.debug.checkShaderErrors = !!import.meta.env?.DEV;
     this.gpuTimer = GpuTimer.create(r.getContext());
@@ -246,6 +249,7 @@ export class RenderPipeline {
     this.renderPass.scene = scene;
     this.renderPass.camera = camera;
     this.renderer.info.reset();
+    this.arrayUniforms.sync(this.renderer.info.programs);
     this.gpuTimer?.begin();
     this.composer.render();
     this.gpuTimer?.end();
@@ -256,6 +260,7 @@ export class RenderPipeline {
   /** Direct (non-composited) render used by the map view. */
   renderMap(scene: THREE.Scene, camera: THREE.Camera): void {
     this.renderer.info.reset();
+    this.arrayUniforms.sync(this.renderer.info.programs);
     this.renderer.setRenderTarget(null);
     this.gpuTimer?.begin();
     this.renderer.render(scene, camera);
@@ -333,6 +338,22 @@ export function resolutionPlan(dpr: number, q: Pick<QualitySettings, 'maxPixelRa
   const internal = Math.max(1 / Math.max(1, minCssSide), device * scale);
   const upscaling = edge && scale < 0.98;
   return { internal, output: upscaling ? device : internal, upscaling, lod: internal / retina, device };
+}
+
+interface OpaqueItem { id: number; groupOrder: number; renderOrder: number; z: number; material: THREE.Material & { id: number } }
+
+/**
+ * three sorts opaque draws by material, then depth. Grouping materials by their compiled program first lets
+ * materials that share a shader (most part and launch-site materials) follow each other: the program, camera and
+ * light uniforms and the shared environment/shadow textures stay bound across them. Each of those is a call into
+ * the GPU process in Firefox. Depth order within a material is unchanged.
+ */
+function programMajorSort(renderer: THREE.WebGLRenderer): (a: OpaqueItem, b: OpaqueItem) => number {
+  const properties = renderer.properties;
+  const program = (m: THREE.Material) => (properties.get(m) as { currentProgram?: { id: number } }).currentProgram?.id ?? 0;
+  return (a, b) => a.groupOrder - b.groupOrder || a.renderOrder - b.renderOrder
+    || (a.material === b.material ? 0 : program(a.material) - program(b.material) || a.material.id - b.material.id)
+    || a.z - b.z || a.id - b.id;
 }
 
 interface SmaaTargets { _edgesRT: THREE.WebGLRenderTarget; _weightsRT: THREE.WebGLRenderTarget }
