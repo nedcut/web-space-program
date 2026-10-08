@@ -1,3 +1,4 @@
+import { landingReadout } from './landingReadout';
 /**
  * Caution & warning logic for the flight HUD: a short, prioritised list of things that need the pilot's
  * attention *now* (overheating, crushing g-load, ground rushing up, flameout, no control...). Pure and
@@ -29,6 +30,10 @@ export interface AlertInput {
   agl: number;
   verticalSpeed: number;
   horizontalSpeed: number;
+  /** Local gravity and maximum upward acceleration from fuelled, ignited engines. */
+  gravity?: number;
+  brakingAcceleration?: number;
+  brakingFuelSeconds?: number;
   /** Any parachute semi/fully deployed. */
   chutes: boolean;
   /** Landing gear state (null: vessel has none). */
@@ -55,9 +60,10 @@ export function alertConditions(i: AlertInput): FlightAlert[] {
   if (i.gForce >= 9) out.push({ id: 'g', level: 'bad', text: `G-LOAD ${i.gForce.toFixed(1)} g` });
   else if (i.gForce >= 6) out.push({ id: 'g', level: 'warn', text: `HIGH G ${i.gForce.toFixed(1)} g` });
   if (i.flying && Number.isFinite(i.agl) && i.verticalSpeed < -12 && i.agl > 0 && !i.eva) {
-    const tti = i.agl / -i.verticalSpeed;
-    if (tti < 6) out.push({ id: 'terrain', level: 'bad', text: `TERRAIN · ${tti.toFixed(1)} s` });
-    else if (tti < 15 && i.agl < 5000) out.push({ id: 'terrain', level: 'warn', text: `SINK RATE · ${tti.toFixed(0)} s to ground` });
+    const braking = landingReadout(i.agl, i.verticalSpeed, i.gravity ?? 0, i.brakingAcceleration ?? 0, i.brakingFuelSeconds);
+    const tti = braking.impactTime;
+    if (!braking.canStop && tti < 6) out.push({ id: 'terrain', level: 'bad', text: `TERRAIN · ${tti.toFixed(1)} s` });
+    else if (!braking.canStop && tti < 15 && i.agl < 5000) out.push({ id: 'terrain', level: 'warn', text: `SINK RATE · ${tti.toFixed(0)} s to ground` });
   }
   if (i.flying && i.gear === 'up' && i.agl < 300 && i.verticalSpeed < -1 && i.verticalSpeed > -60 && i.horizontalSpeed < 120 && !i.chutes) {
     out.push({ id: 'gear', level: 'warn', text: 'GEAR UP' });
@@ -73,6 +79,8 @@ export class AlertTracker {
   private live = new Map<string, { alert: FlightAlert; until: number }>();
 
   update(input: AlertInput, now: number): FlightAlert[] {
+    // A recovered stopping margin / touchdown clears terrain immediately, not 1.2 seconds later.
+    if (!input.flying || landingReadout(input.agl, input.verticalSpeed, input.gravity ?? 0, input.brakingAcceleration ?? 0, input.brakingFuelSeconds).canStop) this.live.delete('terrain');
     for (const a of alertConditions(input)) this.live.set(a.id, { alert: a, until: now + HOLD });
     const out: FlightAlert[] = [];
     for (const [id, e] of this.live) {

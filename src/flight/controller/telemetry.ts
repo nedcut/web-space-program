@@ -1,4 +1,6 @@
-import { throttleExplanation } from '../cues';
+import { hudStages } from './stages';
+import { suicideBurn } from '../../sim/orbit/readouts';
+import { flightMessages, ThrottleCueTracker, throttleExplanation } from '../cues';
 import { controlAuthority } from '../../sim/vessel/integrator';
 import { neutralInput } from '../../sim/vessel/runtime';
 import { RESOURCES } from '../../data/resources';
@@ -12,45 +14,26 @@ import { bindingLabel } from '../../input/bindings';
 import { qRotate } from '../../util/quat';
 import { dot, length, negate, sub, v3 } from '../../util/vec3';
 import type { FlightController } from '../controller';
-import type { DockingTelemetry, HudStage, Telemetry } from '../hud/Hud';
+import type { DockingTelemetry, Telemetry } from '../hud/Hud';
 import type { FlightControllerInternals } from './internals';
 
 import { AlertTracker } from '../alerts';
 import { BurnTracker } from './burn';
-import { availableResource, flowGroups } from '../../sim/vessel/resources';
-import type { PartState } from '../../sim/vessel/runtime';
-import type { EngineModule, ResourceId } from '../../sim/vessel/types';
 import { cross, normalize } from '../../util/vec3';
 import { warpTargets } from './warp';
 import { game } from '../../game/store';
 import { getTutorial } from '../../tutorial/runtime';
 
-const cueStates = new WeakMap<FlightController, { vessel: string; body: string; signal: boolean; throttle: string | null; sas: boolean; soi: boolean; orbit: boolean; situation: string }>();
+const cueStates = new WeakMap<FlightController, { vessel: string; body: string; signal: boolean; throttle: string | null; sas: boolean; soi: boolean; orbit: boolean; situation: string; staged: number }>();
+const throttleTrackers = new WeakMap<FlightController, ThrottleCueTracker>();
 const alertTrackers = new WeakMap<FlightController, AlertTracker>();
 const burnTrackers = new WeakMap<FlightController, BurnTracker>();
-
-/** Fraction of an engine's first propellant still reachable through its feed groups (null: none tracked). */
-function engineFuelFraction(st: WorldVessel['state'], p: PartState): number | undefined {
-  const m = p.def.modules.find((x): x is EngineModule => x.type === 'engine');
-  const res = m && (Object.keys(m.propellants) as ResourceId[]).find(r => r !== 'electricCharge' && r !== 'intakeAir');
-  if (!res) return undefined;
-  let cap = 0;
-  for (const g of flowGroups(st, p.uid, res)) for (const uid of g) cap += st.cache.byUid.get(uid)?.maxResources[res] ?? 0;
-  return cap > 0 ? Math.max(0, Math.min(1, availableResource(st, p.uid, res) / cap)) : undefined;
-}
 
 /** Highest rails warp index allowed right now (0 = rails warp refused: thrusting or in atmosphere). */
 function railsWarpLimit(w: FlightController['world']): number {
   const c = w.warpContext();
   if (c.thrusting || (c.inAtmosphere && !c.landed)) return 0;
   return c.landed ? RAILS_WARP.length - 1 : maxRailsIndexAt(c.altitude, c.bodyRadius, c.atmosphereHeight);
-}
-
-/** Hottest skin/core temperature as a fraction of the part's limit. */
-function heatFraction(p: PartState): number {
-  let f = p.temperature / p.maxTemp;
-  for (const t of p.skinTemperature) f = Math.max(f, t / p.maxTemp);
-  return f;
 }
 
 /** Active and target docking ports for the docking indicator (target port if selected, else the closest pair). */
@@ -169,34 +152,13 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     }
   }
   const pressure = st.telemetry.staticPressure;
-  let dvs: StageDeltaV[] = [];
+  let dvs: StageDeltaV[];
   try {
     dvs = cachedStageDeltaV(st, pressure, b.surfaceGravity);
   } catch {
     dvs = [];
   }
-  const stageMap = new Map<number, HudStage>();
-  for (const p of st.parts) {
-    // Engines that are already burning are listed as the current ("burning") stage so its Δv stays visible.
-    const burning = p.activated && !!p.engine?.ignited;
-    if (p.stage === undefined || (p.activated && !burning)) continue;
-    const types = p.def.modules.map((m) => m.type);
-    const engine = p.def.modules.find((m): m is EngineModule => m.type === 'engine');
-    const icon: HudStage['parts'][number]['icon'] = engine ? (engine.plume === 'solid' ? 'solid' : 'engine') : types.includes('decoupler') ? 'decoupler'
-      : types.includes('parachute') ? 'chute' : types.includes('fairing') ? 'fairing' : types.includes('dockingPort') ? 'port' : types.includes('science') ? 'science' : 'other';
-    const idx = burning ? st.nextStage + 1 : p.stage;
-    const s = stageMap.get(idx) ?? { index: idx, parts: [], deltaV: 0 };
-    const fuel = engine ? engineFuelFraction(st, p) : undefined;
-    const heat = heatFraction(p);
-    s.parts.push({ uid: p.uid, name: p.def.name, icon, active: p.activated,
-      ...(fuel === undefined ? {} : { fuelFrac: Math.round(fuel * 100) / 100 }), ...(heat > 0.5 ? { heatFrac: Math.round(heat * 50) / 50 } : {}) });
-    stageMap.set(idx, s);
-  }
-  const stages = [...stageMap.values()].sort((a, b2) => b2.index - a.index);
-  stages.forEach((s) => {
-    const d = dvs.find((x) => x.stage === s.index);
-    s.deltaV = d?.dv ?? 0;
-  });
+  const stages = hudStages(st, dvs);
 
   internals.predictions = flightPredictions(w, wv);
   const ground = internals.groundTelemetry(wv);
@@ -216,6 +178,10 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   let tracker = alertTrackers.get(this);
   if (!tracker) alertTrackers.set(this, (tracker = new AlertTracker()));
   const flying = st.situation === 'flying' && wv.mode !== 'prelaunch';
+  const currentStage = ignited ? dvs.find(d => d.stage === st.nextStage + 1) : undefined;
+  const gravity = b.gm / (info.r * info.r);
+  const upward = dot(qRotate(st.orientation, v3(0, 1, 0)), normalize(rs.position));
+  const brakingAcceleration = (currentStage?.thrust ?? 0) / st.mass * Math.max(0, upward);
   const noControl = !w.canControl(st) || (!!this.network && this.network.ownId !== st.id);
   const alerts = tracker.update({
     noControl,
@@ -226,6 +192,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     gForce: st.telemetry.gForce,
     agl: info.heightAboveTerrain,
     verticalSpeed: vs,
+    gravity, brakingAcceleration, brakingFuelSeconds: currentStage?.burnTime ?? 0,
     horizontalSpeed: Math.sqrt(Math.max(0, surfaceSpeed * surfaceSpeed - vs * vs)),
     chutes: st.parts.some((p) => p.chute?.phase === 'semi' || p.chute?.phase === 'full'),
     gear: ground.gear,
@@ -240,7 +207,11 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   const previous = stored?.vessel === st.id ? stored : undefined;
   const signal = !w.commsSettings.enabled || w.connection(st).connected;
   const throttle = this.input.state.throttle > 0.05 && !st.eva ? throttleExplanation(st) : null;
-  if (throttle && throttle !== previous?.throttle) w.message(throttle, 'warn');
+  const staged = !!previous && previous.staged !== this.stagedCount;
+  let throttleTracker = throttleTrackers.get(this);
+  if (!throttleTracker || !previous) throttleTrackers.set(this, (throttleTracker = new ThrottleCueTracker()));
+  const throttleCue = throttleTracker.update(throttle, performance.now() / 1000, staged);
+  if (throttleCue) w.message(throttleCue, 'warn');
   if (previous?.signal && !signal) w.message(w.canControl() ? 'Communications lost — crew retains local control' : 'Communications lost — probe commands unavailable; SAS holds attitude', 'warn');
   const torque = this.sasOn && !st.eva ? controlAuthority(st, neutralInput({ rcs: this.rcsOn }), w.universe.createEnvironment(() => wv.body, w.preciseGravity), w.ut) : null;
   const noTorque = !!torque && Math.hypot(torque.x, torque.y, torque.z) < 1e-6;
@@ -251,11 +222,12 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   if (previous && !previous.orbit && orbit) w.message(`Orbit achieved around ${b.name}`);
   if (previous && previous.situation === 'flying' && st.situation !== 'flying') w.message(st.situation === 'splashed' ? `Splashed down on ${b.name}` : `Landed on ${b.name}`);
   const soi = changedBody || (previous?.soi ?? false);
-  cueStates.set(this, { vessel: st.id, body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation });
+  cueStates.set(this, { vessel: st.id, body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation, staged: this.stagedCount });
   const hint = this.hints.update({
     enabled: settings.flightHints && !this.network && !getTutorial() && !game.get().scenarioActive && !this.assist,
+    bodyId: b.id, bodyName: b.name, terrainHeight: u.terrain(b.id).maxHeight, boundOrbit: orb.orbit.e < 1, verticalSpeed: vs,
     map: this.mapMode, node: w.nodes.length > 0, soi, eva: !!st.eva,
-    landing: flying && info.altitude < 10000 && vs < -20,
+    landing: flying && info.heightAboveTerrain < 10000 && vs < -20 && ignited && !st.parts.some(p => p.chute?.phase === 'semi' || p.chute?.phase === 'full'),
     flying,
     altitude: info.altitude,
     surfaceSpeed,
@@ -273,6 +245,8 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   // Mission elapsed time from liftoff (the first 'launch' record event), like a mission clock.
   const record = w.flightlog.records.find(r => r.vesselId === st.id && !r.outcome);
   const launchEvent = record?.events.find(e => e.kind === 'launch');
+  const propulsionStage = ignited ? currentStage : dvs.find(d => d.thrust > 0);
+  const suicide = flying && vs < -1 && internals.predictions.impact ? suicideBurn(info.heightAboveTerrain, vs, gravity, (propulsionStage?.thrust ?? 0) / st.mass) : null;
   const met = record?.launched ? Math.max(0, w.ut - record.start - (launchEvent?.time ?? 0)) : null; // event times are record-relative
   // Inclination against the body's equator (the HUD's orbit strip), not the inertial reference plane.
   const h = cross(rs.position, rs.velocity);
@@ -284,6 +258,12 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
       // HUD snapshots are compared field by field: quantize so an idle coast does not re-render React.
       dvRemaining: Math.round(maneuverBurn.dvRemaining * 10) / 10,
       burnTime: Number.isFinite(maneuverBurn.burnTime) ? Math.round(maneuverBurn.burnTime * 10) / 10 : maneuverBurn.burnTime,
+    },
+    engineering: {
+      stageDeltaV: propulsionStage?.dv ?? 0,
+      twr: (propulsionStage?.thrust ?? 0) / st.mass / gravity,
+      burnCountdown: suicide ? (suicide.overdue ? 0 : suicide.countdown) : null,
+      impactTime: internals.predictions.impact ? Math.max(0, internals.predictions.impact.time - w.ut) : null,
     },
     met,
     inclination,
@@ -298,6 +278,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     altitudeAsl: info.altitude,
     altitudeTerrain: info.heightAboveTerrain,
     speedMode: this.speedMode,
+    speedAutomatic: this.speedReference.selection === 'auto',
     speed,
     verticalSpeed: vs,
     apoapsis: orb.ap,
@@ -324,7 +305,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     resources: [...totals.entries()]
       .filter(([id, e]) => e.max > 0 && id !== 'intakeAir')
       .map(([id, e]) => ({ id, name: RESOURCES[id as keyof typeof RESOURCES]?.name ?? id, amount: e.amount, max: e.max, color: RESOURCE_COLORS[id] ?? '#aaa' })),
-    messages: w.messages.map((m) => ({ id: m.id, text: m.text, level: m.level })),
+    messages: flightMessages(w.messages, throttle, staged).map((m) => ({ id: m.id, text: m.text, level: m.level })),
     mapMode: this.mapMode,
     onSurface: wv.mode === 'prelaunch' || st.situation === 'landed' || st.situation === 'splashed',
     assist: this.assist ? { name: this.assist.name, status: this.assist.status } : null,

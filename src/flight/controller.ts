@@ -1,3 +1,4 @@
+import { SpeedModeTracker } from './speedMode';
 import { updateSiteShadow } from '../render/site/shadows';
 import { maxDrawingEdge } from '../render/core/drawingLimits';
 import { ShadowMapCache } from '../render/core/shadowCache';
@@ -129,7 +130,9 @@ export class FlightController {
   stagedCount = 0;
   sasOn = false;
   rcsOn = false;
-  speedMode: Telemetry['speedMode'] = 'surface';
+  readonly speedReference = new SpeedModeTracker();
+  get speedMode(): Telemetry['speedMode'] { return this.speedReference.mode; }
+  set speedMode(mode: Telemetry['speedMode']) { this.speedReference.select(mode); }
   /** Docking mode: HUD shows the port alignment indicator for the targeted docking port. */
   dockingMode = false;
   /** Stage lock (Alt+L): staging requests are refused so a stray Space cannot fire the next stage. */
@@ -298,7 +301,6 @@ export class FlightController {
           case 'warpStop': this.warpDriver.cancel(this.world); if (this.network) this.network.send({ v: 1, type: 'warp', rate: 1 }); else this.world.warp = { mode: 'rails', index: 0 }; break;
           case 'menu': this.onExit?.(); break;
           case 'focusNext': case 'focusPrev': this.switchVessel(a === 'focusNext' ? 1 : -1); break;
-          case 'iva': this.world.message('Interior view is not available in this version', 'info', 2.5); break;
           case 'stageLock': this.toggleStageLock(); break;
           case 'sasHold': if (this.world.canControl()) { this.toggleSas(); this.sasHeld = true; } break;
           case 'sasHoldRelease': if (this.sasHeld) { this.sasHeld = false; this.toggleSas(); } break;
@@ -363,7 +365,7 @@ export class FlightController {
     if (id === null) {
       if (this.world.targetId) this.world.message('Target cleared');
       this.world.setTarget(null);
-      if (this.speedMode === 'target') this.speedMode = 'orbit';
+      if (this.speedMode === 'target') this.speedReference.select('auto');
       return;
     }
     if (this.world.setTarget(id, portUid)) {
@@ -372,9 +374,9 @@ export class FlightController {
     }
   }
 
-  /** Speed display: surface -> orbit -> target (when a target is set) -> surface. */
+  /** Explicit override cycle: Auto -> Surface -> Orbit -> Target (if set) -> Auto. */
   cycleSpeedMode() {
-    this.speedMode = this.speedMode === 'surface' ? 'orbit' : this.speedMode === 'orbit' && this.world.targetId ? 'target' : 'surface';
+    this.speedReference.cycle(!!this.world.targetId);
   }
 
   toggleDockingMode() {
@@ -782,12 +784,13 @@ export class FlightController {
     const maneuverDir = this.maneuverDirection();
     if (!this.world.targetId) {
       // Target gone (docked, destroyed, cleared): leave target-relative modes.
-      if (this.speedMode === 'target') this.speedMode = 'orbit';
+      if (this.speedMode === 'target') this.speedReference.select('auto');
       if (this.sas === 'target' || this.sas === 'antiTarget') this.sas = 'stabilityAssist';
     }
     // Node executed or deleted: a maneuver hold with nothing to point at would only damp rotation (and read as
     // "SAS does nothing"), so fall back to holding attitude like the target modes above.
     if (this.sas === 'maneuver' && !this.world.nodes.length) this.sas = 'stabilityAssist';
+    if (wv) this.speedReference.updateWorld(this.world, wv);
     const targetState = this.world.targetState();
     // Trim offsets the controls only while SAS is off: SAS would otherwise read it as the pilot steering.
     const trim = this.sasOn || wv?.state.eva ? { pitch: 0, yaw: 0, roll: 0 } : this.input.trim;

@@ -9,8 +9,14 @@ import { bindingText } from '../input/bindings';
 export type HintId = 'turn' | 'coast' | 'circularize' | 'orbit' | 'map' | 'node' | 'soi' | 'landing' | 'eva';
 
 export interface HintInput {
-  /** Hints only make sense for a free single-player flight from the home planet. */
+  /** Context coaching is offered in free single-player flight. */
   enabled: boolean;
+  bodyId?: string;
+  bodyName?: string;
+  /** Highest possible terrain, and whether the osculating orbit is bound. */
+  terrainHeight?: number;
+  boundOrbit?: boolean;
+  verticalSpeed?: number;
   map?: boolean;
   node?: boolean;
   soi?: boolean;
@@ -39,21 +45,23 @@ const TEXT: Record<HintId, string> = {
   soi: 'New sphere of influence: your orbit is now measured around this body. Check periapsis in the map before accelerating time.',
   landing: 'Powered landing: point Retrograde and slow down before the ground arrives. Start your braking burn early; the Flight assist landing program can help.',
   eva: 'Outside the cabin: use {pitchUp}/{pitchDown} to move, {toggleRcs} for the jetpack. Approach the hatch slowly and press {board} to board.',
-  turn: 'Gravity turn: tap {yawRight} to tip the nose about 10° east (heading 90°), then pick the Prograde SAS mode (left of the navball) so SAS follows the prograde marker as the rocket arcs over.',
+  turn: 'Gravity turn: gently tip about 5–10° east (heading 90°) with {yawRight}. Watch the attitude settle before adding more input.',
   coast: 'Apoapsis is above the atmosphere. Cut the throttle ({throttleCut}) and coast up — the ⇥ button next to time warp (top-left) can take you straight to apoapsis.',
   circularize: 'Approaching apoapsis: hold Prograde in SAS and burn ({throttleFull}) until the periapsis climbs above the atmosphere.',
-  orbit: 'You are in orbit! Open the map ({map}) to plan your next maneuver — the Moon is a short hop away.',
+  orbit: 'Orbit around {body}. Open the map ({map}) to plan your next maneuver.',
 };
 
 /** The single most relevant hint for this moment, or null. */
 export function hintFor(i: HintInput, seen: ReadonlySet<HintId>): Hint | null {
   if (!i.enabled) return null;
   const atmo = i.atmosphereHeight;
-  const pick = (id: HintId): Hint | null => (seen.has(id) ? null : { id, text: bindingText(TEXT[id]) });
+  const pick = (id: HintId): Hint | null => (seen.has(id) ? null : { id, text: bindingText(TEXT[id].replace('{body}', i.bodyName ?? 'Earth')) });
   for (const id of ['eva', 'soi', 'node', 'map', 'landing'] as const) if (i[id] && !seen.has(id)) return pick(id);
   if (!i.flying) return null;
-  if (i.periapsis > atmo) return pick('orbit');
-  if (i.apoapsis < atmo && i.altitude < atmo * 0.25 && i.surfaceSpeed > 50 && i.surfaceSpeed < 300) return pick('turn');
+  if (i.boundOrbit !== false && i.periapsis > Math.max(atmo, i.terrainHeight ?? 0)) return pick('orbit');
+  // Earth ascent coaching is never offered for a lunar orbit, descent or airless launch.
+  if ((i.bodyId ?? 'earth') !== 'earth' || atmo <= 0 || (i.verticalSpeed ?? 1) <= 0) return null;
+  if (i.apoapsis < atmo && i.altitude < atmo * 0.25 && i.surfaceSpeed >= 50 && i.surfaceSpeed <= 100 && i.throttle > 0 && i.hasThrust) return pick('turn');
   if (i.apoapsis > atmo + 5000 && i.throttle > 0 && i.altitude < atmo) return pick('coast');
   if (i.apoapsis > atmo && i.altitude > atmo * 0.9 && i.timeToAp < 90 && i.hasThrust) return pick('circularize');
   return null;

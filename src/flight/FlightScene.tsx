@@ -21,7 +21,7 @@ import { getGameAudio } from '../audio/ui';
 import { ManeuverPanel } from './hud/ManeuverPanel';
 import { MapOverlay } from './map/MapOverlay';
 import { AssistPanel } from './hud/AssistPanel';
-import { HelpOverlay, helpSeen, markHelpSeen } from './hud/HelpOverlay';
+import { HelpOverlay, QuickStartCard, helpSeen, markHelpSeen } from './hud/HelpOverlay';
 import { SettingsPanel } from '../ui/MainMenu';
 import type { CraftDef } from '../sim/vessel/types';
 import { bindingLabel, isTyping, matches } from '../input/bindings';
@@ -57,6 +57,7 @@ export default function FlightScene() {
   const [loaderMounted, setLoaderMounted] = useState(true);
   const [banner, setBanner] = useState<SituationBannerText | null>(null);
   const [help, setHelp] = useState(false);
+  const [quickStart, setQuickStart] = useState(false);
   /** F2: hide every HUD element except world-space labels. */
   const [uiHidden, setUiHidden] = useState(false);
   /** F3: the active flight's report (does not pause). */
@@ -183,7 +184,7 @@ export default function FlightScene() {
         setBanner(situationBanner(cc.world));
         bannerTimer = window.setTimeout(() => setBanner(null), 4300);
         loaderTimer = window.setTimeout(() => setLoaderMounted(false), 550);
-        if (!cc.network && !getTutorial() && !getScenarioRun() && !helpSeen()) setHelp(true);
+        if (!cc.network && !getTutorial() && !getScenarioRun() && !helpSeen()) setQuickStart(true);
       }, 200);
     };
     let timer = 0;
@@ -214,6 +215,10 @@ export default function FlightScene() {
     };
   }, [mountKey]);
 
+  const onSurface = tele?.onSurface;
+  useEffect(() => {
+    if (quickStart && onSurface === false) { markHelpSeen(); setQuickStart(false); }
+  }, [quickStart, onSurface]);
   const awaitingTelemetry = tele === null;
   const scenarioFinished = !!getScenarioRun()?.result;
   useEffect(() => {
@@ -352,6 +357,7 @@ export default function FlightScene() {
           t={tele}
           navball={<NavballView getFrame={navball} />}
           dock={multiplayer ? undefined : {
+            onboarding: quickStart && ready && !help && !paused && tele.onSurface ? <QuickStartCard onClose={() => { markHelpSeen(); setQuickStart(false); }} onHelp={() => { markHelpSeen(); setQuickStart(false); setHelp(true); }} /> : undefined,
             assist: !tele.eva && !tele.noControl ? <AssistPanel active={tele.assist} onStart={(id) => ctrl.current?.startAssist(id)} onCancel={() => ctrl.current?.cancelAssist()} /> : undefined,
             assistActive: !!tele.assist,
             signal: c.world.commsSettings.enabled ? <SignalPanel world={c.world} /> : undefined,

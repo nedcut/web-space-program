@@ -49,7 +49,7 @@ describe('classic flight layout (bindings layout 2)', () => {
     const b = defaultBindings();
     expect(b.toggleLights).toEqual(['KeyU']);
     expect(b.eva).toEqual(['KeyO']);
-    expect(b.iva).toEqual(['KeyC']);
+    expect('iva' in b).toBe(false); // Unimplemented cabin view is not exposed as a bindable action.
     expect(b.screenshot).toEqual(['F1']);
     expect(b.hideUi).toEqual(['F2']);
     expect(b.flightResults).toEqual(['F3']);
