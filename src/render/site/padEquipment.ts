@@ -110,6 +110,7 @@ export class PadEquipment {
   private readonly e = new THREE.Euler();
   private readonly p = new THREE.Vector3();
   private readonly one = new THREE.Vector3(1, 1, 1);
+  private readonly slideM = new THREE.Matrix4();
 
   constructor(material: THREE.Material, paint: PaintFn) {
     this.paint = paint;
@@ -139,12 +140,12 @@ export class PadEquipment {
   /** Clamp arm of length L along +X from its hinge (origin), claw at the tip. */
   private clampGeometry(L: number): THREE.BufferGeometry {
     return this.merge([
-      ['accent', box(L - 0.4, 0.55, 0.7, (L - 0.4) / 2, 0, 0)],
-      ['steel', box(L * 0.55, 0.2, 0.9, L * 0.35, 0.36, 0)],
-      ['steel', new THREE.CylinderGeometry(0.42, 0.42, 1.25, 12).rotateX(Math.PI / 2)],
+      ['steel', box(L - 0.4, 0.38, 0.42, (L - 0.4) / 2, 0, 0)],
+      ['accent', box(L * 0.5, 0.12, 0.5, L * 0.3, 0.25, 0)],
+      ['steel', new THREE.CylinderGeometry(0.34, 0.34, 1.0, 12).rotateX(Math.PI / 2)],
       // Claw: a shoe that bears on the aft skirt, with a hazard-striped lip.
-      ['darkMetal', box(0.5, 1.15, 1.25, L - 0.25, -0.1, 0)],
-      ['hazard', box(0.12, 0.25, 1.3, L - 0.45, 0.42, 0)],
+      ['darkMetal', box(0.45, 0.95, 0.9, L - 0.22, -0.08, 0)],
+      ['hazard', box(0.12, 0.2, 0.95, L - 0.42, 0.34, 0)],
     ]);
   }
 
@@ -247,9 +248,8 @@ export class PadEquipment {
       this.e.set(0, heading, pitch, 'YZX');
       this.q.setFromEuler(this.e);
       this.p.set(sx * CLAMP.corner, CLAMP.hingeY, sz * CLAMP.corner);
-      this.clamps.setMatrixAt(i++, this.m.compose(this.p, this.q, this.one));
+      this.set(this.clamps, i++, this.m.compose(this.p, this.q, this.one));
     }
-    this.clamps.instanceMatrix.needsUpdate = true;
     // Arms: hoods slide home over 0.8 s, then the arm swings 85° north over 2.4 s.
     const t = this.armT;
     ARMS.levels.forEach((y, k) => {
@@ -260,13 +260,24 @@ export class PadEquipment {
       this.q.setFromAxisAngle(this.p.set(0, 1, 0), yaw);
       this.p.set(ARMS.x0, y, ARMS.z);
       this.m.compose(this.p, this.q, this.one);
-      this.arms.setMatrixAt(k, this.m);
+      this.set(this.arms, k, this.m);
       const hx = this.hoodX[k] + (ARMS.reach - 0.6 - this.hoodX[k]) * slide;
-      this.m.multiply(new THREE.Matrix4().makeTranslation(hx, 0, 0));
-      this.hoods.setMatrixAt(k, this.m);
+      this.m.multiply(this.slideM.makeTranslation(hx, 0, 0));
+      this.set(this.hoods, k, this.m);
     });
-    this.arms.instanceMatrix.needsUpdate = true;
-    this.hoods.instanceMatrix.needsUpdate = true;
+  }
+
+  /**
+   * Write an instance matrix only when it changes: an instance upload marks the shadow-map cache dirty (a full
+   * depth pass), so a resting pad must not touch its buffers.
+   */
+  private set(mesh: THREE.InstancedMesh, i: number, m: THREE.Matrix4): void {
+    const a = mesh.instanceMatrix.array as Float32Array, e = m.elements;
+    let same = true;
+    for (let k = 0; k < 16; k++) if (Math.abs(a[i * 16 + k] - e[k]) > 1e-6) { same = false; break; }
+    if (same) return;
+    mesh.setMatrixAt(i, m);
+    mesh.instanceMatrix.needsUpdate = true;
   }
 
   dispose(): void {

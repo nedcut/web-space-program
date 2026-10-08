@@ -19,6 +19,7 @@ const dpr = +(args.dpr ?? 1);
 const shotDir = args.shotdir ?? 'C:\\wsp-tools\\shots\\wp5';
 mkdirSync(shotDir, { recursive: true });
 const PRESETS = {
+  liftoffTrench: { url: '/?flight=stock-meridian', setup: async (p) => { await p.evaluate(cam(Math.PI * 1.05, 0.35, 120)); await p.waitForTimeout(3000); await stage(p); }, wait: 5000 },
   low: { shadows: false, bloom: false, clouds: false, renderScale: 0.5 },
   medium: { shadows: true, bloom: true, clouds: true, renderScale: 1 },
   high: { shadows: true, bloom: true, clouds: true, renderScale: 1 },
