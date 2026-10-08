@@ -12,7 +12,7 @@ import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { EVA_PART } from '../data/eva';
 import { defaultCommsSettings, NO_SIGNAL, type CommsSettings, type Network } from '../sim/comms/network';
 import { hasControl, type Astronaut, type PlantedFlag } from '../sim/crew/crew';
-import { maneuverToInertialDv, period, predictTrajectory, propagate, stateToElements, trajectoryClosestApproach, type TrajectoryApproach } from '../sim/orbit';
+import { maneuverToInertialDv, period, predictTrajectory, propagate, stateAfterManeuver, stateToElements, trajectoryClosestApproach, validAnchor, type TrajectoryApproach } from '../sim/orbit';
 import type { ManeuverNode, Orbit, StateVector, TrajectoryPatch } from '../sim/orbit/api';
 import { newProgression, type GameMode, type ProgressEvent } from '../sim/science/progression';
 import { activateNextStage, applyVesselCommands, expandCommands, MAX_COMMANDS, neutralInput, portInfo, recomputeMassProperties, setGear, stepVessel, WORLD_ACTIONS } from '../sim/vessel';
@@ -30,6 +30,7 @@ import * as crew from './world/crew';
 import * as docking from './world/docking';
 import type { TrajectoryCache, WorldInternals } from './world/internals';
 import * as launch from './world/launch';
+import { NodeAnchors } from './world/nodeAnchors';
 import * as progression from './world/progression';
 import * as rails from './world/rails';
 import * as readouts from './world/readouts';
@@ -197,6 +198,7 @@ export class World {
   ut: number;
   warp: WarpState = { mode: 'rails', index: 0 };
   nodes: ManeuverNode[] = [];
+  private readonly nodeAnchors = new NodeAnchors();
   seenTips: string[] = [];
   private recentMessages = new Map<string, number>();
   messages: WorldMessage[] = [];
@@ -455,7 +457,7 @@ export class World {
     if (!wv || !this.targetId || wv.mode === 'prelaunch' || this.targetKind() === null) return null;
     const patches = this.trajectory();
     if (!patches.length) return null;
-    const key = `${this.targetId}|${patches.length}|${patches[0].startTime}|${this.nodes.map((n) => `${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}`).join(',')}`;
+    const key = `${this.targetId}|${patches.length}|${patches[0].startTime}|${patches[1]?.startTime}|${this.nodes.map((n) => `${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}`).join(',')}`;
     if (this.approachCache && this.approachCache.key === key) return this.approachCache.value;
     let value: TrajectoryApproach | null;
     try {
@@ -846,8 +848,11 @@ export class World {
   }
 
   private applyPassedNodes() {
-    // Nodes are not auto-executed; they are removed once their time has passed by more than the burn window.
-    this.nodes = this.nodes.filter((n) => n.time > this.ut - 600);
+    // Nodes are not auto-executed; they are removed once their time has passed by more than the burn window,
+    // except a burn in progress (its plan is frozen, see NodeAnchors).
+    this.nodeAnchors.update(this);
+    const burning = (this.active?.state.telemetry.thrust ?? 0) > 0;
+    this.nodes = this.nodes.filter((n) => n.time > this.ut - 600 || (burning && !!n.anchor));
   }
 
   private numericalCache: { key: string; time: number; thrusting: boolean; prediction: NumericalPrediction; display?: NumericalPrediction } | null = null;
@@ -906,7 +911,7 @@ export class World {
   trajectory(): TrajectoryPatch[] {
     const wv = this.active;
     if (!wv || wv.mode === 'prelaunch') return [];
-    const key = this.nodes.map((n) => `${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}`).join(',') + wv.body;
+    const key = this.nodes.map((n) => `${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}${validAnchor(n, wv.body) ? '*' : ''}`).join(',') + wv.body;
     const thrusting = wv.state.telemetry.thrust > 0;
     const maxAge = thrusting ? 0.2 : 2;
     // A path computed under thrust is stale the moment the engines stop: refresh at once instead of keeping it
@@ -954,9 +959,12 @@ export class World {
     const o = stateToElements(this.universe.body(wv.body).gm, wv.body, rs.position, rs.velocity, this.ut);
     const upcoming = this.nodes.filter((n) => n.time >= this.ut).sort((a, b) => a.time - b.time);
     let after = o;
+    // A burn in progress continues on its frozen plan, not on the live orbit.
+    const burning = this.nodes.filter((n) => n.time < this.ut && validAnchor(n, wv.body)).sort((a, b) => b.time - a.time)[0];
+    if (burning) after = stateToElements(o.mu, o.body, burning.anchor!.position, burning.anchor!.velocity, burning.time);
     for (const n of upcoming) {
-      const s = propagate(after, n.time);
-      after = stateToElements(after.mu, after.body, s.position, add(s.velocity, maneuverToInertialDv(s, n)), n.time);
+      const s = propagate(after, n.time), post = stateAfterManeuver(s, after.body, n);
+      after = stateToElements(after.mu, after.body, post.position, post.velocity, n.time);
     }
     const lastNode = upcoming.length ? upcoming[upcoming.length - 1].time - this.ut : 0;
     const Tafter = period(after);

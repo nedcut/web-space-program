@@ -1,4 +1,4 @@
-import { maneuverToInertialDv } from '../../sim/orbit';
+import { remainingManeuverDv } from '../../sim/orbit';
 import { qRotate } from '../../util/quat';
 import { cross, length, negate, normalize, sub, v3, type Vec3 } from '../../util/vec3';
 import type { FlightController } from '../controller';
@@ -49,9 +49,14 @@ export function maneuverDirection(this: FlightController, _internals: FlightCont
   const wv = this.world.active;
   const node = this.world.nodes[0];
   if (!wv || !node) return null;
-  const rs = this.world.relativeState(wv);
-  const dv = maneuverToInertialDv(rs, node);
-  return length(dv) > 0 ? normalize(dv) : null;
+  // The Δv still to burn, in the inertial frame of the node's own point: constant between the plan and the burn, and
+  // it turns toward what is left (not the whole node) as the burn progresses.
+  try {
+    const dv = remainingManeuverDv(this.world.orbitOf(wv), node);
+    return length(dv) > 0 ? normalize(dv) : null;
+  } catch {
+    return null;
+  }
 }
 
 
