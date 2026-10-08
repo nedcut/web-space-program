@@ -60,6 +60,14 @@ async function pageMeasure({ mode, families }) {
   const renderer = p ? p.renderer : ed.renderer;
   const gl = renderer.getContext();
   const out = { mode };
+  if (f) {
+    const planets = [];
+    f.scene.traverse((o) => {
+      const planet = o.userData.planet;
+      if (planet) planets.push({ body: planet.body.id, idle: planet.idle, stats: { ...planet.stats }, imagery: o.userData.imagery?.levelId });
+    });
+    out.sceneState = { paused: f.paused, ut: f.world.ut, planets };
+  }
   // Loop pacing over 4 s.
   out.loopFps = await new Promise((res) => { let n = 0; const t0 = performance.now(); const tick = () => { n++; if (performance.now() - t0 < 4000) requestAnimationFrame(tick); else res(r2((n * 1000) / (performance.now() - t0))); }; requestAnimationFrame(tick); });
   if (p) { out.loopGpuMs = r2(p.gpuMs); out.canvas = [renderer.domElement.width, renderer.domElement.height]; out.pixelRatio = r2(p.pixelRatio); out.stats = { ...p.stats }; }

@@ -12,8 +12,8 @@ for r in $(seq "$reps"); do
     shots=0; [ "$r" = 1 ] && shots=1
     # shellcheck disable=SC2086
     flock /tmp/wsp-gpu.lock bash -c '
-      "$0" --base "$1" --label "$2-A-$4-r$5" --cases "$4" --shots "$6" ${@:7} ${AB_A_ARGS:-} | grep -E "^==|^!!"
-      "$0" --base "$3" --label "$2-B-$4-r$5" --cases "$4" --shots "$6" ${@:7} ${AB_B_ARGS:-} | grep -E "^==|^!!"
+      "$0" --base "$1" --label "$2-A-$4-r$5" --cases "$4" --shots "$6" "${@:7}" ${AB_A_ARGS:-} | grep -E "^==|^!!"
+      "$0" --base "$3" --label "$2-B-$4-r$5" --cases "$4" --shots "$6" "${@:7}" ${AB_B_ARGS:-} | grep -E "^==|^!!"
       true' "$here/gpu-passes.sh" "$A" "ab-$name" "$B" "$c" "$r" "$shots" "$@"
 
   done
