@@ -190,7 +190,6 @@ Earth terrain requires the immutable ETOPO grid before the first `createTerrain(
 
 The sim decoder/sampler (`sim/terrain/earthData.ts`) accepts ArrayBuffer/SharedArrayBuffer and has no host I/O, DOM, or three.js dependency. The base int16 grid is 16 MiB; interpolation and relief/detail math remain float64. Terrain workers share the buffer when the browser is cross-origin isolated, otherwise each gets one copy. PWA precaches the binary. Projection/pixel-centre conventions, hashes and licensing live under `public/earth/`; deterministic generation lives under `scripts/earth-data/`. Legacy science biome strings remain stable identifiers; new observations use geographic cover classes while old archives/onboard data/contracts retain their keys.
 
-<<<<<<< HEAD
 ## Earth imagery (render only)
 
 `render/planet/earthImagery.ts` loads NASA imagery built by `scripts/earth-imagery/` (`public/earth/imagery/`,
@@ -203,7 +202,7 @@ behind the `EARTH_IMAGERY` define (uniforms only change when data arrives — no
 `EARTH_RICH` (High/Ultra) adds bicubic magnification and marched coast reflections. Terrain hands colour over to
 the imagery with distance (`uEarthBlend`, texel-size driven); from altitude coastlines follow the imagery mask on
 both the ocean and terrain meshes. The cloud cube map bakes from the real cloud composite when available.
-=======
+
 Editor preflight advisories run in `editor/preflight.worker.ts` against plain craft/stage data and the static
 part catalogue. Superseding an edit terminates the previous worker; the UI never displays old-craft checks.
 Unsupported/failed workers use a cancellable idle fallback. This worker needs no Universe or Earth-grid setup.
@@ -212,4 +211,3 @@ waits for quiet input. `editor/scene/thumbnailCache.ts` stores optional PNG blob
 production chunk URL invalidates art revisions. Editor-only soot uses `prepareEngineSoot` to apply exact
 colors in idle batches; flight retains the synchronous wrapper. Material references must not be stored in
 Object3D `userData`, since three.js clones JSON-serialize it (including procedural texture canvases).
->>>>>>> main
