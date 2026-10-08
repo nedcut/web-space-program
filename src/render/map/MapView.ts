@@ -204,6 +204,8 @@ interface BodyVisual {
   labelBox: LabelBox;
   iconBox: LabelBox;
   familyColor: number;
+  /** Orbit-line highlight last written (bit 0 hovered, bit 1 targeted; -1 forces a write). */
+  lineStyle: number;
 }
 
 /** A marker drawn this frame (pooled). */
@@ -213,7 +215,11 @@ interface ShownMarker {
   /** Body placement time (encounter patches); undefined = now. */
   frameTime?: number;
 }
-interface MarkerElement { root: HTMLDivElement; dot: HTMLDivElement; text: HTMLDivElement; box: LabelBox; content: string; color: string; glyph: string }
+interface MarkerElement {
+  root: HTMLDivElement; dot: HTMLDivElement; text: HTMLDivElement; box: LabelBox; content: string; color: string; glyph: string;
+  /** Caption placement box, re-measured only when its text changes. */
+  caption: LabelBox; measured: string; lines: number;
+}
 
 /** Hover-sampled trajectory polyline (body-relative positions, float64). */
 interface TrajectoryPoly { body: string; patch: number; times: Float64Array; points: Float64Array; count: number }
@@ -350,6 +356,9 @@ export class MapView {
   private element: HTMLElement | null = null;
   private labels: HTMLDivElement;
   private materials: LineMaterial[] = [];
+  /** Viewport (CSS px) last written to every line material's `resolution`. */
+  private resolutionWidth = 1;
+  private resolutionHeight = 1;
   private sunLight = new THREE.PointLight(0xffffff, 3, 0, 0);
   private extraOrbits: ExtraOrbit[] = [];
   private extras = new Map<string, { icon: THREE.Sprite; line?: Line2; orbit?: Orbit; targeted: boolean }>();
@@ -494,6 +503,7 @@ export class MapView {
     this.field?.select(t?.kind === 'body' ? t.id : null);
     if (this.highlightedBody) {
       const { vis, color, width } = this.highlightedBody;
+      vis.lineStyle = -1;
       if (vis.orbitLine) {
         vis.orbitLine.material.color.setHex(color);
         vis.orbitLine.material.linewidth = width;
@@ -503,6 +513,7 @@ export class MapView {
     if (t?.kind === 'body') {
       const vis = this.bodies.get(t.id);
       if (vis?.orbitLine) {
+        vis.lineStyle = -1;
         this.highlightedBody = { vis, color: vis.orbitLine.material.color.getHex(), width: vis.orbitLine.material.linewidth };
         vis.orbitLine.material.color.setHex(TARGET_COLOR);
         vis.orbitLine.material.linewidth = WIDTH.highlight;
@@ -544,9 +555,9 @@ export class MapView {
     const ray = new THREE.Raycaster();
     const ndc = new THREE.Vector2(x / u.viewport.width * 2 - 1, 1 - y / u.viewport.height * 2);
     ray.setFromCamera(ndc, this.camera);
-    this.scene.updateMatrixWorld(true);
     const spheres: THREE.Object3D[] = [], ids: string[] = [];
-    for (const [id, vis] of this.bodies) if (vis.sphere.userData.mapVisible && !vis.icon.visible) { spheres.push(vis.sphere); ids.push(id); }
+    for (const [id, vis] of this.bodies) if (vis.sphere.userData.mapVisible && !vis.icon.visible) { vis.sphere.updateMatrix(); spheres.push(vis.sphere); ids.push(id); }
+    this.scene.updateMatrixWorld(true);
     const sphere = ray.intersectObjects(spheres, false)[0]?.object;
     if (sphere) return { kind: 'body', id: ids[spheres.indexOf(sphere)] };
     const asteroid = this.field?.pick(ndc.x, ndc.y, this.camera);
@@ -680,7 +691,9 @@ export class MapView {
       Object.assign(label.style, { position: 'absolute', left: '0', top: '0', font: '500 12.5px system-ui, sans-serif', color: '#d8e2ef', textShadow: LABEL_SHADOW, whiteSpace: 'nowrap', letterSpacing: '.02em' });
       this.labels.appendChild(label);
       sphere.visible = false;
-      const vis: BodyVisual = { body: b, sphere, icon, label, familyColor: familyColor(b, bodies),
+      // Only resolved (drawn) spheres need a current matrix; picking refreshes the rest on demand.
+      sphere.matrixAutoUpdate = false;
+      const vis: BodyVisual = { body: b, sphere, icon, label, familyColor: familyColor(b, bodies), lineStyle: -1,
         labelBox: { x: 0, y: 0, width: b.name.length * 7 + 8, height: 18 }, iconBox: { x: 0, y: 0, width: 14, height: 14 } };
       if (b.orbit && b.parent) {
         const parent = bodies.get(b.parent)!;
@@ -733,6 +746,7 @@ export class MapView {
     const geom = new LineGeometry();
     geom.setPositions(pos);
     const mat = new LineMaterial({ color, linewidth: width, transparent: true, opacity, depthWrite: false });
+    mat.resolution.set(this.resolutionWidth, this.resolutionHeight);
     this.orbitStyle.configure(mat, look);
     this.materials.push(mat);
     const line = new Line2(geom, mat);
@@ -837,7 +851,6 @@ export class MapView {
         this.landingPosition.y = bodyPosition.y + anchor.y;
         this.landingPosition.z = bodyPosition.z + anchor.z;
         this.place(this.landingLine, this.landingPosition, focus);
-        this.landingLine.material.resolution.set(u.viewport.width, u.viewport.height);
       }
     }
     if (this.field) { const visible = u.referenceBody === this.sunId; this.field.setVisible(visible); if (visible) this.field.update(t, focus); }
@@ -872,7 +885,11 @@ export class MapView {
       this.commsLines.geometry.setDrawRange(0, count);
       this.commsLines.frustumCulled = false;
     }
-    for (const m of this.materials) m.resolution.set(u.viewport.width, u.viewport.height);
+    // Line materials take the viewport at creation (makeLine); existing ones only need it again on resize.
+    if (u.viewport.width !== this.resolutionWidth || u.viewport.height !== this.resolutionHeight) {
+      this.resolutionWidth = u.viewport.width; this.resolutionHeight = u.viewport.height;
+      for (const m of this.materials) m.resolution.set(this.resolutionWidth, this.resolutionHeight);
+    }
     this.camera.aspect = u.viewport.width / u.viewport.height;
 
     // Camera around focus (focus is at the scene origin).
@@ -909,15 +926,13 @@ export class MapView {
       const pos = this.ephem.getBodyState(vis.body.id, t).position;
       this.place(vis.sphere, pos, focus);
       this.place(vis.icon, pos, focus);
-      const rotation = this.ephem.bodyRotation(vis.body.id, t);
-      vis.sphere.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
-      if (vis.body.surface.preset !== 'irregular') vis.sphere.rotateX(Math.PI / 2);
-      if (vis.orbitLine && vis.body.parent) this.place(vis.orbitLine, this.ephem.getBodyState(vis.body.parent, t).position, focus);
+      const parent = vis.body.parent ? this.bodies.get(vis.body.parent) : undefined;
+      const parentPosition = parent ? this.ephem.getBodyState(parent.body.id, t).position : undefined;
+      if (vis.orbitLine && parentPosition) this.place(vis.orbitLine, parentPosition, focus);
       const dist = vis.sphere.position.distanceTo(this.camera.position);
       const angular = vis.body.radius / Math.max(dist, 1);
-      const orbitPx = vis.body.orbit ? vis.body.orbit.a / Math.max(dist, 1) * h / (2*Math.tan(this.camera.fov*Math.PI/360)) : 1e9;
-      const parent = vis.body.parent ? this.bodies.get(vis.body.parent) : undefined;
-      const parentDistance = parent ? Math.hypot(this.camera.position.x-(this.ephem.getBodyState(parent.body.id,t).position.x-focus.x), this.camera.position.y-(this.ephem.getBodyState(parent.body.id,t).position.y-focus.y), this.camera.position.z-(this.ephem.getBodyState(parent.body.id,t).position.z-focus.z)) : 0;
+      const orbitPx = vis.body.orbit ? vis.body.orbit.a / Math.max(dist, 1) * pxPerWorld1 : 1e9;
+      const parentDistance = parentPosition ? Math.hypot(this.camera.position.x-(parentPosition.x-focus.x), this.camera.position.y-(parentPosition.y-focus.y), this.camera.position.z-(parentPosition.z-focus.z)) : 0;
       // Moons appear as soon as their orbit is a legible ring (sooner around the body being looked at), so the
       // Moon's orbit stays visible while planning a transfer from far out; tiny rings fade in rather than pop.
       const nearParent = !!parent && (parent.body.id === u.referenceBody || parent.body.id === identity || parentDistance < parent.body.soi * 40);
@@ -926,6 +941,13 @@ export class MapView {
       const ringFade = vis.body.kind === 'moon' && vis.body.id !== identity ? Math.min(1, (orbitPx - moonMin) / (moonMin * 1.5)) : 1;
       vis.sphere.userData.mapVisible = visible;
       const resolved = visible && angular*h > 1.5;
+      // Orientation only matters for a sphere that is drawn (or about to be, below).
+      const rotation = resolved ? this.ephem.bodyRotation(vis.body.id, t) : undefined;
+      if (rotation) {
+        vis.sphere.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+        if (vis.body.surface.preset !== 'irregular') vis.sphere.rotateX(Math.PI / 2);
+        vis.sphere.updateMatrix();
+      }
       if (resolved && !vis.renderer) {
         const quality = { ...QUALITY_PRESETS.low, bakedTextureWidth: this.quality.bakedTextureWidth };
         const sunRadius = this.bodies.get(this.sunId)!.body.radius;
@@ -954,7 +976,7 @@ export class MapView {
       vis.sphere.visible = resolved && resource;
       if (vis.renderer) {
         vis.renderer.root.visible = resolved && !resource;
-        if (resolved) { params.bodyPosition = pos; params.bodyRotation = rotation; vis.renderer.update(params); }
+        if (rotation) { params.bodyPosition = pos; params.bodyRotation = rotation; vis.renderer.update(params); }
       }
       if (resolved && occluderCount < 12) this.orbitStyle.occluders[occluderCount++].set(vis.sphere.position.x, vis.sphere.position.y, vis.sphere.position.z, vis.body.radius);
       vis.icon.visible = visible && angular < .009;
@@ -962,8 +984,12 @@ export class MapView {
       if (vis.orbitLine) {
         vis.orbitLine.visible = visible;
         const hovered = this.hoverBody === vis, targeted = this.target?.kind === 'body' && this.target.id === vis.body.id;
-        vis.orbitLine.material.color.setHex(targeted ? TARGET_COLOR : vis.familyColor);
-        vis.orbitLine.material.linewidth = hovered || targeted ? WIDTH.highlight : vis.body.kind === 'moon' ? WIDTH.moon : WIDTH.planet;
+        const style = (hovered ? 1 : 0) | (targeted ? 2 : 0);
+        if (style !== vis.lineStyle) {
+          vis.lineStyle = style;
+          vis.orbitLine.material.color.setHex(targeted ? TARGET_COLOR : vis.familyColor);
+          vis.orbitLine.material.linewidth = hovered || targeted ? WIDTH.highlight : vis.body.kind === 'moon' ? WIDTH.moon : WIDTH.planet;
+        }
         vis.orbitLine.material.opacity = (hovered || targeted ? .95 : .62) * Math.max(0, ringFade);
         // An orbit far larger than the screen (e.g. the focused planet's path round the Sun) is faint and fades
         // towards the screen edges instead of slicing across the view as a straight line.
@@ -1006,7 +1032,6 @@ export class MapView {
     this.breadcrumb.style.display = focusBody && this.showBreadcrumb ? 'block' : 'none';
 
     this.updateExtras(u);
-    for (const m of this.materials) m.resolution.set(u.viewport.width, u.viewport.height);
 
     // Vessel
     this.vesselIcon.visible = !!u.vessel;
@@ -1252,7 +1277,7 @@ export class MapView {
     Object.assign(text.style, { position: 'absolute', left: `${GLYPH_PX / 2 + 3}px`, top: '-9px', font: '600 12px system-ui, sans-serif', whiteSpace: 'pre', textShadow: LABEL_SHADOW, lineHeight: '17px', letterSpacing: '.02em' });
     root.appendChild(dot); root.appendChild(text);
     this.labels.appendChild(root);
-    el = { root, dot, text, box: { x: 0, y: 0, width: 0, height: 17 }, content: '', color: '', glyph: '' };
+    el = { root, dot, text, box: { x: 0, y: 0, width: 0, height: 17 }, content: '', color: '', glyph: '', caption: { x: 0, y: 0, width: 0, height: 0 }, measured: '', lines: 0 };
     this.markerEls[i] = el;
     return el;
   }
@@ -1330,8 +1355,19 @@ export class MapView {
       if (Number.isNaN(el.box.x) || (pinned ? 3 : m.priority) !== pass || m.dotOnly && !pinned) continue;
       const content = pinned ? this.markerDetailText(m, u.t) : m.caption;
       if (!content) continue;
-      const lines = content.split('\n');
-      const box = { x: el.box.x + GLYPH_PX / 2 + 3, y: el.box.y - 9, width: Math.max(...lines.map(l => l.length)) * 7 + 12, height: lines.length * 17 + (pinned ? 6 : 0) };
+      const box = el.caption;
+      if (el.measured !== content) {
+        el.measured = content;
+        let lines = 0, longest = 0;
+        for (let start = 0; start <= content.length; lines++) {
+          let end = content.indexOf('\n', start);
+          if (end < 0) end = content.length;
+          longest = Math.max(longest, end - start);
+          start = end + 1;
+        }
+        box.width = longest * 7 + 12; el.lines = lines;
+      }
+      box.x = el.box.x + GLYPH_PX / 2 + 3; box.y = el.box.y - 9; box.height = el.lines * 17 + (pinned ? 6 : 0);
       if (!pinned && !placeLabel(box, this.labelBoxes, labelCount)) continue;
       this.labelBoxes[labelCount++] = box;
       captioned[i] = true;

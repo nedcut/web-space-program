@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { memo, type ReactElement } from 'react';
 
 /**
  * Original HUD glyphs. SAS mode glyphs reproduce the navball marker shapes drawn in `navball.ts` (same geometry on
@@ -39,13 +39,14 @@ const SAS: Record<SasGlyph, ReactElement> = {
   maneuver: <><circle cx="16" cy="16" r="7" strokeWidth="2.6" /><path d="M16 9V3M10 19.5l-5.5 3.5M22 19.5l5.5 3.5" strokeWidth="2.6" /></>,
 };
 
-export function SasIcon({ mode, size = 22, color }: { mode: SasGlyph; size?: number; color?: string }) {
+/** Glyphs are memoised: the HUD re-renders with every telemetry publication, their props rarely change. */
+export const SasIcon = memo(function SasIcon({ mode, size = 22, color }: { mode: SasGlyph; size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       {SAS[mode]}
     </svg>
   );
-}
+});
 
 export type AppGlyph = 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms' | 'orbit' | 'settings' | 'help' | 'map' | 'camera' | 'stage' | 'lock' | 'unlock' | 'docking' | 'menu';
 
@@ -73,13 +74,13 @@ const APP: Record<AppGlyph, ReactElement> = {
   menu: <path d="M4 6h16M4 12h16M4 18h16" />,
 };
 
-export function AppIcon({ name, size = 18 }: { name: AppGlyph; size?: number }) {
+export const AppIcon = memo(function AppIcon({ name, size = 18 }: { name: AppGlyph; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       {APP[name]}
     </svg>
   );
-}
+});
 
 export type StagePartGlyph = 'engine' | 'solid' | 'decoupler' | 'chute' | 'fairing' | 'port' | 'science' | 'other';
 

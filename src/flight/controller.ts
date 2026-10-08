@@ -738,9 +738,13 @@ export class FlightController {
     return () => this.telemetryListeners.delete(fn);
   }
 
+  /** Host size (CSS px) from the resize observer: the map reads it every frame without forcing a layout. */
+  private readonly viewport = { width: 1, height: 1 };
+
   private resize() {
     const w = this.host.clientWidth || 1;
     const h = this.host.clientHeight || 1;
+    this.viewport.width = w; this.viewport.height = h;
     this.pipeline.setSize(w, h);
     this.cam.setAspect(w / h);
   }
@@ -1141,7 +1145,7 @@ export class FlightController {
         ...(!this.world.preciseGravity && this.predictions.impact && !impactOnPath ? [{ key: 'impact', body: wv.body, position: this.predictions.impact.position, label: 'Impact', color: '#ff6b6b', time: this.predictions.impact.time,
           detail: `Impact (terrain)\nT−${formatDuration(this.predictions.impact.time - t)}\n${formatSpeed(this.predictions.impact.speed)}` }] : []),
       ],
-      viewport: { width: this.host.clientWidth, height: this.host.clientHeight },
+      viewport: this.viewport,
     });
   }
 

@@ -24,7 +24,8 @@ export function FlightInspector({ controller: c, panels, setPanels }: { controll
       const v = c.world.active?.state;
       if (c.world.activeId !== vesselId.current) { vesselId.current = c.world.activeId; setPanels(() => []); return; }
       setPanels(p => (p.some(x => !v?.cache.byUid.has(x.uid)) ? p.filter(x => v?.cache.byUid.has(x.uid)) : p));
-      refresh(n => n + 1);
+      // Nothing to show in map view; the HUD's telemetry re-render restores the panels when it closes.
+      if (!c.mapMode) refresh(n => n + 1);
     }, 160);
     return () => window.clearInterval(id);
   }, [c, setPanels]);
