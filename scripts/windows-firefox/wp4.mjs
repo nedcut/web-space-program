@@ -52,7 +52,8 @@ try {
       bennuVisible: [...document.querySelectorAll('*')].some(e => e.children.length === 0 && e.textContent === 'Bennu' && getComputedStyle(e).display !== 'none'),
       programs: c.pipeline.renderer.info.programs.length, landing: c.mapUi.landing?.result ? { outcome: c.mapUi.landing.result.outcome,
         computeMs: c.mapUi.landing.result.computeMs, maxChunkMs: c.mapUi.landing.result.maxChunkMs, steps: c.mapUi.landing.result.steps } : null,
-      submitMs: c.mapUi.landing?.maxSubmitMs, viewport: [innerWidth, innerHeight, devicePixelRatio] };
+      submitMs: c.mapUi.landing?.maxSubmitMs, submitAtMs: c.mapUi.landing?.lastRequest,
+      viewport: [innerWidth, innerHeight, devicePixelRatio] };
   }, label);
   scenes.push(await snapshot('leo'));
   // A short mid-injection segment exercises the live/anchored orbit without occupying the shared GPU for a full mission.
@@ -86,8 +87,27 @@ try {
     await delay(1000);
     scenes.push(await snapshot('reentry'));
     await page.screenshot({ path: `${directory}/surface-marker.png` });
-    await page.evaluate(() => { window.__flight.toggleMap(); }); await delay(1200);
+    await page.evaluate(() => {
+      const c = window.__flight; c.toggleMap();
+      const points = c.mapUi.landing.result.points, p = points[Math.floor(points.length / 2)];
+      c.map.yaw = Math.atan2(p.y, p.x); c.map.pitch = Math.atan2(p.z, Math.hypot(p.x, p.y));
+    }); await delay(1200);
     await page.screenshot({ path: `${directory}/reentry-map.png` });
+    scenes.push(await page.evaluate(() => {
+      const m = window.__flight.map;
+      return { label: 'landing-line', visible: m.landingLine?.visible, points: m.landingData?.points.length };
+    }));
+    // A short local fall puts the landing point on the visible side, so the flight marker can be asserted.
+    await page.evaluate(() => {
+      const c = window.__flight; c.toggleMap(); c.devScenario('sea'); c.mapUi.landing.attitude = 'hold';
+      c.cam.mode = 'auto'; c.cam.pitch = 1.2; c.cam.distance = 25;
+    });
+    await page.waitForFunction(() => {
+      const el = document.querySelector('[aria-label="Predicted landing surface marker"]');
+      return el && getComputedStyle(el).display !== 'none';
+    }, { timeout: 15000 });
+    await page.screenshot({ path: `${directory}/surface-marker-visible.png` });
+    scenes.push({ label: 'flight-marker', visible: true });
   }
   if (session) await session.send('Page.stopScreencast');
   longTasks.push(...await page.evaluate(() => window.__wp4Long));

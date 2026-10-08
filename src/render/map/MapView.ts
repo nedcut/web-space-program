@@ -816,7 +816,10 @@ export class MapView {
       if (landing && landing.points.length > 1) {
         this.landingAnchor = landing.points[0];
         const points = landing.points.map(p => sub(p, this.landingAnchor!));
-        if (!this.landingLine) this.landingLine = this.makeLine(points, 0xffac66, WIDTH.active, .95, TRAJECTORY_LOOK);
+        if (!this.landingLine) {
+          this.landingLine = this.makeLine(points, 0xffac66, WIDTH.active, .95, TRAJECTORY_LOOK);
+          this.landingLine.renderOrder = 4; // Keep the drag path legible where it overlaps the live conic.
+        }
         else {
           const coords: number[] = [];
           for (const p of points) coords.push(p.x, p.y, p.z);
