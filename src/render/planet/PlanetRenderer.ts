@@ -333,6 +333,7 @@ export class PlanetRenderer {
       maxInFlight: q.terrain.maxInFlight,
       buildBudgetMs: q.terrain.buildBudgetMs,
       cacheSize: q.terrain.cacheSize,
+      cacheBytes: q.terrain.cacheMB * 1048576,
       batch: opts.batchTerrain,
     });
     this.root.add(this.quadtree.group);
@@ -588,7 +589,7 @@ export class PlanetRenderer {
       Object.assign(this.stats, { chunks: qt.stats.selected, meshes: qt.stats.meshes, inflight: qt.stats.inflight, queued: qt.stats.queued });
     } else {
       qt?.hideAll();
-      if (qt) qt.pump();
+      if (qt) { qt.pump(); qt.evict(this.frame, true); }
       this.farSphere!.visible = true;
       placeWhole(this.farSphere!, R);
       this.stats.mode = 'far';

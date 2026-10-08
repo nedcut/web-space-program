@@ -25,7 +25,10 @@ export interface QuadtreeOptions {
   oceanMaterial?: THREE.Material;
   maxInFlight: number;
   buildBudgetMs: number;
+  /** Max chunk meshes (land + ocean) per planet before LRU eviction of stale chunks. */
   cacheSize: number;
+  /** Max CPU bytes of stale chunk data (land + ocean; not drawn or needed recently) kept for reuse. */
+  cacheBytes: number;
   /** Enable only when the host renderer supports WEBGL_multi_draw. */
   batch?: boolean;
 }
@@ -42,6 +45,18 @@ export interface SelectContext {
 }
 
 const GEOM_ERROR_FACTOR = 0.3;
+/** A chunk not visited by the selection walk for this many frames may be evicted. */
+const STALE_FRAMES = 30;
+/** Evictions per check: bounds the main-thread cost when a large cache becomes stale at once. */
+const MAX_EVICTIONS = 64;
+
+/** CPU bytes held by a chunk's land and ocean arrays (the index pattern is shared). */
+function chunkBytes(d: ChunkData): number {
+  let b = d.positions.byteLength + d.normals.byteLength + d.colors.byteLength + d.detail.byteLength;
+  const o = d.ocean;
+  if (o) b += o.positions.byteLength + o.normals.byteLength + o.depth.byteLength + o.detail.byteLength;
+  return b;
+}
 /** View key: body-fixed camera position (3), orientation quaternion (4), screen factor, projection x/y/z scale. */
 export const VIEW_KEY = 11;
 function sameView(a: Float64Array, b: ArrayLike<number>): boolean {
@@ -84,6 +99,10 @@ export class Quadtree {
   private completed: { node: ChunkNode; data: ChunkData }[] = [];
   private inflight = 0;
   private meshCount = 0;
+  private bytes = 0;
+  /** Frame of the last full selection walk (a reused selection does not refresh `lastUsed`). */
+  private walkFrame = 0;
+  private evictFrame = -Infinity;
   readonly selected: ChunkNode[] = [];
   private prevSelected = new Set<ChunkNode>();
   private nextSelected = new Set<ChunkNode>();
@@ -91,7 +110,7 @@ export class Quadtree {
   private readonly oceanBatch?: ChunkBatch;
   /** One index buffer (CPU and GPU) for every land and ocean chunk: they share the grid + skirt pattern. */
   private readonly index: THREE.BufferAttribute;
-  stats = { selected: 0, meshes: 0, inflight: 0, queued: 0, builtTotal: 0, lastBuildMs: 0 };
+  stats = { selected: 0, meshes: 0, cacheMB: 0, inflight: 0, queued: 0, builtTotal: 0, lastBuildMs: 0 };
 
   constructor(opts: QuadtreeOptions) {
     this.opts = opts;
@@ -147,6 +166,9 @@ export class Quadtree {
   select(ctx: SelectContext, view?: ArrayLike<number>): ChunkNode[] {
     this.reused = !!view && this.selectedVersion === this.version && sameView(this.lastView, view);
     if (this.reused) return this.selected;
+    // The previous walk's chunks stayed in use while its selection was reused: their age starts now, not then.
+    if (ctx.frame - 1 > this.walkFrame) this.touch(this.walkFrame, ctx.frame - 1);
+    this.walkFrame = ctx.frame;
     if (view) { for (let i = 0; i < VIEW_KEY; i++) this.lastView[i] = view[i]; this.selectedVersion = this.version; }
     else this.selectedVersion = -1;
     const R = this.opts.radius;
@@ -218,6 +240,14 @@ export class Quadtree {
     };
     for (const r of this.roots) visit(r);
     return this.selected;
+  }
+
+  private touch(from: number, to: number): void {
+    const visit = (n: ChunkNode): void => {
+      if (n.lastUsed === from) n.lastUsed = to;
+      n.children?.forEach(visit);
+    };
+    this.roots.forEach(visit);
   }
 
   private want(n: ChunkNode, priority: number, level: number): void {
@@ -302,10 +332,12 @@ export class Quadtree {
       om.matrixAutoUpdate = false;
       node.oceanMesh = om;
       if (!this.oceanBatch) this.group.add(om);
+      this.meshCount++;
     }
     node.state = 'ready';
     this.version++;
     this.meshCount++;
+    this.bytes += chunkBytes(data);
     this.stats.builtTotal++;
     this.stats.lastBuildMs = data.buildMs;
   }
@@ -345,6 +377,7 @@ export class Quadtree {
     this.prevSelected = now;
     this.stats.selected = this.selected.length;
     this.stats.meshes = this.meshCount;
+    this.stats.cacheMB = this.bytes / 1048576;
   }
 
   private placeMesh(m: THREE.Mesh, x: number, y: number, z: number, rot: THREE.Quaternion): boolean {
@@ -366,29 +399,47 @@ export class Quadtree {
     this.prevSelected.clear();
   }
 
-  /** LRU eviction of meshes not used recently (never roots). */
-  evict(frame: number): void {
-    // A reused selection did not refresh `lastUsed`; nothing new was built either, so there is nothing to evict.
-    if (this.reused || this.meshCount <= this.opts.cacheSize) return;
+  /**
+   * LRU eviction of stale chunks (never roots) while the cache exceeds its mesh count or stale-byte budget.
+   * A reused selection did not refresh `lastUsed`, but its chunks are exactly those visited by the last walk, so
+   * they stay; any other chunk not visited for STALE_FRAMES is stale. `hidden`: the planet drew no near terrain
+   * this frame (far LOD), so chunks of the last walk go stale too.
+   */
+  evict(frame: number, hidden = false): void {
+    const o = this.opts;
+    if (this.meshCount <= o.cacheSize && this.bytes <= o.cacheBytes) return;
+    // Staleness changes no faster than STALE_FRAMES; checking a few times per window is enough.
+    if (frame - this.evictFrame < 8) return;
+    this.evictFrame = frame;
     const candidates: ChunkNode[] = [];
+    let staleBytes = 0;
     const visit = (n: ChunkNode) => {
-      if (n.key.level > 0 && n.state === 'ready' && frame - n.lastUsed > 30) candidates.push(n);
+      if (n.key.level > 0 && n.state === 'ready' && frame - n.lastUsed > STALE_FRAMES && (hidden || n.lastUsed !== this.walkFrame)) {
+        candidates.push(n);
+        staleBytes += chunkBytes(n.data!);
+      }
       n.children?.forEach(visit);
     };
     this.roots.forEach(visit);
+    let excessMeshes = this.meshCount > o.cacheSize ? this.meshCount - Math.floor(o.cacheSize * 0.9) : 0;
+    let excessBytes = staleBytes > o.cacheBytes ? staleBytes - o.cacheBytes * 0.9 : 0;
+    if (excessMeshes <= 0 && excessBytes <= 0) return;
+    // Least recently used first, finest first among equals.
     candidates.sort((a, b) => a.lastUsed - b.lastUsed || b.key.level - a.key.level);
-    let excess = this.meshCount - Math.floor(this.opts.cacheSize * 0.9);
+    let evicted = 0;
     for (const n of candidates) {
-      if (excess <= 0) break;
+      if ((excessMeshes <= 0 && excessBytes <= 0) || evicted === MAX_EVICTIONS) break;
+      excessMeshes -= (n.mesh ? 1 : 0) + (n.oceanMesh ? 1 : 0);
+      excessBytes -= chunkBytes(n.data!);
       this.disposeNode(n, false, true);
-      excess--;
+      evicted++;
     }
     // Drop child arrays whose subtree holds nothing.
     const prune = (n: ChunkNode): boolean => {
       if (!n.children) return n.state === 'none';
       let empty = true;
       for (const c of n.children) if (!prune(c)) empty = false;
-      if (empty && frame - n.lastUsed > 30) n.children = null;
+      if (empty && frame - n.lastUsed > STALE_FRAMES && (hidden || n.lastUsed !== this.walkFrame)) n.children = null;
       return empty && n.state === 'none';
     };
     this.roots.forEach(prune);
@@ -405,6 +456,8 @@ export class Quadtree {
       m.geometry.dispose();
     }
     if (n.mesh) this.meshCount--;
+    if (n.oceanMesh) this.meshCount--;
+    if (n.data) this.bytes -= chunkBytes(n.data);
     this.version++;
     n.mesh = null;
     n.oceanMesh = null;
