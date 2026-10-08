@@ -2,6 +2,7 @@ import { acquireSurfaceBake } from './sharedBake';
 import { SurfaceFeatures } from './SurfaceFeatures';
 import * as THREE from 'three';
 import { CloudMap } from './cloudMap';
+import { skyOcclusionRadius } from './skyOcclusion';
 import type { BodyDef } from '../../sim/bodies/types';
 import type { Terrain } from '../../sim/terrain/api';
 import { SCALE_PRESETS, type ScaleConfig } from '../../sim/bodies/scale';
@@ -579,6 +580,24 @@ export class PlanetRenderer {
       this.farSphere!.visible = true;
       placeWhole(this.farSphere!, R);
       this.stats.mode = 'far';
+    }
+    // Earth has a complete opaque terrain/far-sphere surface. Cutouts have a
+    // trench floor far above its global minimum. Keep the inner sphere below the
+    // lowest terrain AND triangle sag; the visible horizon/negative land remains untouched.
+    if (this.sky && this.body.id === 'earth') {
+      let angle = 2 * Math.PI / this.quality.sphereSegments;
+      if (this.stats.mode === 'near' && qt?.selected.length) {
+        let level = Infinity;
+        for (const n of qt.selected) level = Math.min(level, n.key.level);
+        // Cube-face step incl. diagonal/stretch: a conservative cone, not the mean arc length.
+        angle = 4 / (this.quality.terrain.chunkResolution * 2 ** level);
+      }
+      const inner = skyOcclusionRadius(R, this.terrain?.minHeight ?? 0, angle);
+      const mat = this.sky.material as THREE.ShaderMaterial;
+      mat.uniforms.uSkyGroundC.value = (camDist - inner) * (camDist + inner);
+      // Distant Float32 ray discriminants lose precision; those tiny discs do
+      // not warrant this shortcut. Keep their original atmospheric shader.
+      mat.uniforms.uSkyGroundEnabled.value = camDist > inner && camDist < 2 * R ? 1 : 0;
     }
   }
 

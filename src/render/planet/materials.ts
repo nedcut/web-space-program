@@ -997,6 +997,8 @@ export function createSkyMaterial(u: PlanetUniforms, q: QualitySettings): THREE.
       ...u,
       uSunAngularRadius: { value: 0.0047 },
       uSunRadiance: { value: 2000 },
+      uSkyGroundC: { value: 0 },
+      uSkyGroundEnabled: { value: 0 },
     },
     vertexShader: /* glsl */ `
       ${GLSL_LOGDEPTH_VERT_PARS}
@@ -1012,11 +1014,16 @@ export function createSkyMaterial(u: PlanetUniforms, q: QualitySettings): THREE.
       ${baseHeader()}
       uniform float uSunAngularRadius;
       uniform float uSunRadiance;
+      uniform float uSkyGroundC;
+      uniform float uSkyGroundEnabled;
       varying vec3 vWorldPos;
       void main() {
         ${GLSL_LOGDEPTH_FRAG}
         vec3 rd = normalize(vWorldPos - cameraPosition);
         float b = dot(uCamRel, rd);
+        // Log-depth writes defeat early-Z. This inner sphere is wholly inside
+        // Earth's opaque surface (including mesh sag), so these rays cannot show sky.
+        if (uSkyGroundEnabled > 0.5 && b < 0.0 && b * b > uSkyGroundC) discard;
         vec2 ta = raySphereC(b, uCamCAtm);
         if (ta.y < 0.0) discard;
         float t0 = max(ta.x, 0.0);
