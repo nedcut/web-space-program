@@ -64,6 +64,28 @@ const fragment = /* glsl */ `
   }
 `;
 
+type TargetAllocator = { _allocateTargets?: () => THREE.WebGLRenderTarget };
+
+/**
+ * `PMREMGenerator.fromScene` allocates a new cube-UV target on every call. Re-bakes (up to once a second while air
+ * density changes during ascent and re-entry) instead render into the previous target: no GPU allocation and
+ * deletion (a stall in Firefox's GPU process), and `scene.environment` keeps its texture, so three does not
+ * re-resolve the program of every PBR material on the bake frame. The size is fixed, so three's ping-pong target
+ * and blur meshes stay valid. Falls back to a fresh target if three's private allocator is ever renamed.
+ */
+function bakeInto(pmrem: THREE.PMREMGenerator, scene: THREE.Scene, previous: THREE.WebGLRenderTarget | null): THREE.WebGLRenderTarget {
+  const generator = pmrem as unknown as TargetAllocator;
+  const reusable = !!previous && typeof generator._allocateTargets === 'function';
+  if (reusable) generator._allocateTargets = () => previous!;
+  try {
+    const next = pmrem.fromScene(scene, 0, 0.1, 100, { size: 128 });
+    if (next !== previous) previous?.dispose();
+    return next;
+  } finally {
+    if (reusable) delete generator._allocateTargets;
+  }
+}
+
 export class SkyEnvironment {
   private readonly pmrem: THREE.PMREMGenerator;
   private readonly scene = new THREE.Scene();
@@ -129,9 +151,7 @@ export class SkyEnvironment {
     u.uSunCol.value.setRGB(1, 0.97, 0.9).multiplyScalar(p.daylight);
     // Horizon dips as the planet shrinks below us: cos of the angle from up to the limb.
     u.uHorizonCos.value = -Math.cos(Math.min(Math.PI / 2, p.bodyAngle));
-    const next = this.pmrem.fromScene(this.scene, 0, 0.1, 100, { size: 128 });
-    this.rt?.dispose();
-    this.rt = next;
+    this.rt = bakeInto(this.pmrem, this.scene, this.rt);
   }
 
   dispose() {
