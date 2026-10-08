@@ -4,6 +4,7 @@ import { neutralInput, rebuildTopology } from '../../sim/vessel';
 import { stepVessel } from '../../sim/vessel/integrator';
 import { predictTrajectory, propagate, stateToElements } from '../../sim/orbit';
 import { add, length, sub, type Vec3 } from '../../util/vec3';
+import { qRotate } from '../../util/quat';
 
 /** Cache/definitions are reconstructed in the worker, never cloned per frame. */
 export type LandingVessel = Omit<VesselState, 'cache'>;
@@ -20,7 +21,7 @@ export interface LandingPrediction {
   vesselId: string;
   body: string;
   start: number;
-  /** Body-relative Float64 points. */
+  /** Float64 surface track, body-relative in the body's orientation at `start`. */
   points: Vec3[];
   times: number[];
   impact: { time: number; position: Vec3; fixedPosition: Vec3; speed: number } | null;
@@ -50,8 +51,11 @@ export function* landingPrediction(universe: Universe, ut: number, request: Land
   const finish = () => { account(); return result; };
   const end = ut + Math.min(7200, Math.max(1, request.horizon ?? 3600));
   const start = ut;
+  const mapRotation = { ...universe.ephem.bodyRotation(body.id, start) };
   const record = () => {
-    result.points.push(sub(v.position, universe.ephem.getBodyState(body.id, ut).position));
+    const relative = sub(v.position, universe.ephem.getBodyState(body.id, ut).position);
+    // The map globe shows the present surface: undo each sample's future rotation before drawing its ground track.
+    result.points.push(qRotate(mapRotation, universe.ephem.toBodyFixed(body.id, relative, ut)));
     result.times.push(ut);
   };
   record();

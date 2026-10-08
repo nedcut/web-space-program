@@ -957,6 +957,8 @@ when an alarm fires; coast/warp-to drivers respect the stop. Controller integrat
 
 Lint/typecheck/build pass; final Vitest: **142 files / 1,446 passed / one skipped**. Seeded 120 km re-entry
 misses actual splashdown by **0.9 m**; the three-phase stock-Selene executor acceptance tests pass. One million
-steady alarm sync/check pairs average **0.000047 ms** with 200 alarms. Real browser captures are still being
-validated behind the shared GPU queue; no M-series/120 Hz claim. Scope, assumptions and repeatable probes:
+steady alarm sync/check pairs average **0.000047 ms** with 200 alarms. Paired real Chrome DPR 1/2 maps and real
+Firefox confirm local framing/filtering, alarm stops and worker markers, with zero page/console errors.
+Largest paired map GPU increase: **+0.094 ms**; 12 fewer map calls. Chrome transition long tasks remain recorded;
+M-series/120 Hz and independent video review remain unverified. Scope, assumptions and repeatable probes:
 [WP4 validation](docs/audits/2026-10-08-wp4-validation.md). Implementation: `f3720503`, `c8f9a133`, `b081ebe4`.

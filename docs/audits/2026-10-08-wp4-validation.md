@@ -38,8 +38,8 @@ No push or merge; the implementation builds on the transfer search and maneuver 
   rejection of a stale burn result, and disposal. Numerical anchor and map framing/filter tests pass.
 
 `npm run lint` (including simulation layering), `npm run typecheck`, and `npm run build` pass.
-Final `npx vitest run --maxWorkers=4`: **142 files, 1,446 tests passed, one skipped**, 184.99 s,
-including the final draw-order/allocation changes. Logs: `/tmp/wp4-{lint,typecheck,build}-final.log`,
+Final `npx vitest run --maxWorkers=4`: **142 files, 1,446 tests passed, one skipped**, 215.77 s,
+including surface-track rotation, draw order and allocation changes. Logs: `/tmp/wp4-{lint,typecheck,build}-final.log`,
 `/tmp/wp4-full-final.log`.
 
 ## Performance design and reproducibility
@@ -67,24 +67,43 @@ Captures and traces stay outside git.
 
 ## Real browser evidence
 
-Real Windows Chrome / RTX 3060 Ti, Medium, 1600×900 CSS: baseline DPR 2 and after DPR 1 captures completed
+Real Windows Chrome / RTX 3060 Ti, Medium, 1600×900 CSS: before/after captures at DPR 1 and 2 completed
 with no page/console errors. The after-build camera focus equals the active body's Float64 position in LEO,
 mid-injection and lunar orbit. The live orbit remains visible and Bennu is absent in all three after images.
-The custom alarm records `held: true`, `warp: 0`. These are functional captures; comparison at matching DPR
-is still pending, so the different-DPR timings are not presented as a paired GPU improvement.
+The custom alarm records `held: true`, `warp: 0`. Single-pair smoothed GPU timer samples, ms:
+
+| DPR | Scene | Before | After | Difference |
+|---|---|---:|---:|---:|
+| 1 | LEO | 0.130 | 0.143 | +0.013 |
+| 1 | Mid-injection | 0.151 | 0.163 | +0.012 |
+| 1 | Lunar orbit | 0.058 | 0.043 | −0.015 |
+| 2 | LEO | 0.352 | 0.445 | +0.093 |
+| 2 | Mid-injection | 0.390 | 0.474 | +0.084 |
+| 2 | Lunar orbit | 0.116 | 0.111 | −0.005 |
+
+The observed maximum increase is below +0.5 ms. This is one pair per DPR, with intentionally different framing
+and shared-host timing variation, rather than a fenced multi-pair benchmark. CPU means vary between the pairs
+(DPR 1 slightly higher, DPR 2 lower); no general CPU/frame-pacing improvement is claimed.
 
 The after re-entry worker produces an impact path (19,782 physics steps) in 1,661.3 ms off the main thread;
 the largest yielded chunk is **14.6 ms**, and first main-thread submission is **14.4 ms**. Safe-orbit scenes
-record no worker submission. All three steady map scenes retain 92 shader programs, matching the baseline.
+record no worker submission. DPR 2 steady map scenes retain 92 shader programs on both builds; DPR 1 counts
+are 91 before / 92 after. Counts alone do not establish shader compilation timing.
 Calls are 32/46/32 before and 20/34/20 after for LEO/burn/Moon; filtering removes 12 draws.
-The capture records two **157/128 ms** application long tasks around the re-entry transition. Their causes
+The DPR 1 capture records **157/128 ms** application long tasks; DPR 2 records **107/71/61 ms**. Their causes
 are not proven by this probe; submission/chunk measurements alone do not establish a hitch-free app.
 
-Artifacts: `/home/nedcut/.t3/projects/wsp-traces/wp4/{before-dpr2,after-dpr1}/`.
+Real Windows Firefox: 1600×905 CSS, DPR 1; all three local-map scenes are centred with no Bennu, the alarm stops
+warp, a 45-point landing line is visible, and the near-surface flight marker is visible. No page/console errors.
+Worker prediction: 2,065 ms total, 8 ms maximum chunk and 8 ms submission. GPU timings are unavailable in this
+Firefox probe; its Long Tasks API is unsupported, so an empty long-task list is not a no-hitch claim.
+
+Artifacts: `/home/nedcut/.t3/projects/wsp-traces/wp4/{before-dpr1,before-dpr2,after-dpr1,after-dpr2,after-firefox}/`.
 Each directory contains `leo.png`, `mid-tli.png`, `moon.png`, `report.json`, raw screencast frames with timestamps
-and `video.mp4`. The after directory also contains `alarms.png`, `surface-marker.png` and `reentry-map.png`.
-The first flight screenshot's landing point is outside the camera view; a near-surface visible-marker check
-was added to the driver. The final drag-line draw-order fix follows this first capture and is being recaptured.
+and Chrome `video.mp4`. The after directories also contain `alarms.png`, `surface-marker.png` and `reentry-map.png`.
+`after-dpr2` and `after-firefox` also contain `surface-marker-visible.png`; the first re-entry flight point was
+outside the camera view, so a short local fall verifies the marker. The surface-track coordinate correction
+follows these captures and is being recaptured as `after-final-dpr2`.
 
 ## Limits / review still required
 

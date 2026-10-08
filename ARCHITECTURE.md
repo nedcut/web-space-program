@@ -233,7 +233,9 @@ and horizon/escape/breakup results remain visibly partial. Accurate landing pres
 to one lazy persistent worker. The Earth grid crosses once per worker lifetime. Pending/result identity checks
 reject changes of vessel, SOI, stage, part count, attitude model, thrust or expiry; unavailable workers disable
 automatic prediction rather than run physics in the animation loop. Map geometry changes only when a result
-arrives; coordinates are rebased around a body-relative Float64 anchor before Float32 upload. The flight surface
+arrives; samples undo their future body rotation and draw a surface track in the body's orientation at prediction
+start. The cached map marker uses that same endpoint. Coordinates are rebased around a body-relative Float64
+anchor before Float32 upload. The flight surface
 marker rotates the predicted body-fixed touchdown site to the current UT and projects at 4 Hz.
 
 Numerical map prediction now resumes an anchored node from its frozen post-burn state, including after node

@@ -266,6 +266,10 @@ Decisions made autonomously while the owner was away. Each can be revisited.
   and one Earth-grid copy in a persistent worker. Unsupported workers disable the automatic feature. Use cached
   markers/results and rebuild one map line only on new results; the flight surface marker updates at 4 Hz.
   Draw the drag path above the live conic where they overlap, so both the prediction and its divergence remain readable.
+  Map samples undo future surface rotation and draw the ground track in the body's orientation at prediction start;
+  the cached landing marker uses that same endpoint. Physics keeps the future inertial impact and body-fixed site.
+  This avoids kilometres of geographic error; the cached map refreshes every 5 s, while the flight marker rotates
+  the fixed site to current UT at 4 Hz. No extra frame-loop geometry updates or vector allocations.
 - **Precise-gravity anchors.** Numerical paths now start the planned patch from `validAnchor`'s Float64 post-burn
   position/velocity at node time, even when the live prediction starts after that time. Preserve the live conic
   and add the anchor-presence flag to the numerical cache key. No changes to gravity integration/planner math.

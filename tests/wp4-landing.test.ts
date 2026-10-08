@@ -41,6 +41,10 @@ it('predicts a seeded 120 km reentry splashdown within 5 km of the actual drag-i
   expect(result.impact).not.toBeNull();
   expect(yields).toBeGreaterThan(5);
   expect(result.points.length).toBeLessThan(440);
+  const mappedSite = world.universe.ephem.toBodyFixed('earth', result.points[result.points.length - 1], result.start);
+  expect(length(sub(mappedSite, result.impact!.fixedPosition))).toBeLessThan(1e-6);
+  // Future body rotation would move the geographic marker by kilometres; the surface track must undo it.
+  expect(length(sub(result.points[result.points.length - 1], result.impact!.position))).toBeGreaterThan(5000);
   const input = neutralInput({ sas: 'retrograde', sasReference: 'surface' });
   let steps = 0;
   while (vessel.state.situation === 'flying' && !vessel.state.destroyed && steps++ < 90000) world.tick(.02, input);

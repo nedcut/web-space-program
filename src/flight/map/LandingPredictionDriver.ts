@@ -73,7 +73,7 @@ export class LandingPredictionDriver {
               this.result = e.data.result as LandingPrediction;
               this.accepted = this.pending;
               const r = this.result, impact = r.impact;
-              this.markers = impact ? [{ key: 'aero-impact', body: r.body, position: impact.position, label: 'Predicted landing', color: '#ffac66', time: impact.time,
+              this.markers = impact ? [{ key: 'aero-impact', body: r.body, position: r.points[r.points.length - 1], label: 'Predicted landing', color: '#ffac66', time: impact.time,
                 detail: `Unpowered · drag + heating · ${r.attitude === 'hold' ? 'hold attitude' : 'surface retrograde'}\n${formatSpeed(impact.speed)} · no future staging` }] : EMPTY_MARKERS;
               this.status = this.result.outcome === 'breakup' ? 'Predicted breakup before landing' : this.result.outcome === 'horizon' ? 'Partial prediction · horizon reached' : '';
             }
