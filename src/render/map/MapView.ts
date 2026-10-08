@@ -302,6 +302,7 @@ export class MapView {
   private landingLine?: Line2;
   private landingData?: MapUpdate['landing'];
   private landingAnchor?: Vec3;
+  private landingPosition: Vec3 = { x: 0, y: 0, z: 0 };
   private vesselIcon: THREE.Sprite;
   private nodeIcons: THREE.Sprite[] = [];
   private nodeScreen = new Map<number, MapPoint>();
@@ -831,7 +832,11 @@ export class MapView {
     if (this.landingLine) {
       this.landingLine.visible = !!landing && landing.points.length > 1;
       if (landing && this.landingAnchor) {
-        this.place(this.landingLine, add(this.ephem.getBodyState(landing.body, t).position, this.landingAnchor), focus);
+        const bodyPosition = this.ephem.getBodyState(landing.body, t).position, anchor = this.landingAnchor;
+        this.landingPosition.x = bodyPosition.x + anchor.x;
+        this.landingPosition.y = bodyPosition.y + anchor.y;
+        this.landingPosition.z = bodyPosition.z + anchor.z;
+        this.place(this.landingLine, this.landingPosition, focus);
         this.landingLine.material.resolution.set(u.viewport.width, u.viewport.height);
       }
     }

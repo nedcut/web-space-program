@@ -38,8 +38,8 @@ No push or merge; the implementation builds on the transfer search and maneuver 
   rejection of a stale burn result, and disposal. Numerical anchor and map framing/filter tests pass.
 
 `npm run lint` (including simulation layering), `npm run typecheck`, and `npm run build` pass.
-Final `npx vitest run --maxWorkers=4`: **142 files, 1,446 tests passed, one skipped**, 190.98 s,
-including the final drag-path draw-order change. Logs: `/tmp/wp4-{lint,typecheck,build}-visual.log`,
+Final `npx vitest run --maxWorkers=4`: **142 files, 1,446 tests passed, one skipped**, 184.99 s,
+including the final draw-order/allocation changes. Logs: `/tmp/wp4-{lint,typecheck,build}-final.log`,
 `/tmp/wp4-full-final.log`.
 
 ## Performance design and reproducibility
@@ -89,7 +89,7 @@ was added to the driver. The final drag-line draw-order fix follows this first c
 ## Limits / review still required
 
 - Prediction assumes no future burn, staging or chute-arm command. Changed thrust, vessel, body, stage or
-  attitude invalidates displayed results. A bounded horizon/escape/breakup returns a partial path, not an
+  prediction model invalidates displayed results. A bounded horizon/escape/breakup returns a partial path, not an
   invented landing. There is no future control-program optimizer or uncertainty corridor.
 - Alarm storage is bounded to 200 entries. SOI reminders follow the existing cached prediction and are updated
   when the plan changes; they are not an independent continuous fleet trajectory search.

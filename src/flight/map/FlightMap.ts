@@ -90,7 +90,10 @@ export class FlightMap {
     if (f && !(f.kind === 'vessel' && f.id === w.activeId)) this.focus = null;
     const bodyState = w.universe.ephem.getBodyState(active.body, w.ut);
     // The local body remains central; enlarge the frame only if a burn carries the vessel out of view.
-    if (active.state.telemetry.thrust > 0) this.c.map.distance = Math.max(this.c.map.distance, length(sub(origin, bodyState.position)) * 2.8);
+    if (active.state.telemetry.thrust > 0) {
+      const dx = origin.x - bodyState.position.x, dy = origin.y - bodyState.position.y, dz = origin.z - bodyState.position.z;
+      this.c.map.distance = Math.max(this.c.map.distance, Math.sqrt(dx * dx + dy * dy + dz * dz) * 2.8);
+    }
     return { position: bodyState.position, focusId: active.body, referenceBody: active.body };
   }
 
