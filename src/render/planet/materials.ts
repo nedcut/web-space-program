@@ -136,13 +136,30 @@ ${GLSL_ATMOSPHERE}
 varying vec3 vAerialL;
 varying vec3 vAerialT;
 void computeAerial(vec3 worldPos) {
+  vAerialL = vec3(0.0);
+  vAerialT = vec3(1.0);
+  if (uHasAtmo < 0.5) return;
   vec3 toCam = cameraPosition - worldPos;
   float dist = length(toCam);
   vec3 rd = -toCam / max(dist, 1e-3);
-  vAerialL = vec3(0.0);
-  vAerialT = vec3(1.0);
   vec2 seg = cameraAtmoSegment(rd, dist);
-  if (uHasAtmo > 0.5 && seg.y > seg.x) integrateScattering(uCamRel, rd, seg.x, seg.y, AERIAL_STEPS * uStepScale, vAerialL, vAerialT);
+  if (seg.y > seg.x) {
+    int steps = AERIAL_STEPS * uStepScale;
+    // Nearly level, short rays cross almost homogeneous air: the segment's exponential
+    // integration is exact at constant density. Include the chord's sag so a long
+    // horizon ray cannot take the shortcut just because its endpoints have equal height.
+    float span = abs(length(worldPos - uPlanetCenter) - length(uCamRel))
+               + dist * dist / (8.0 * uPlanetRadius);
+    #ifdef ADAPTIVE_AERIAL
+    // Keep the full budget around sunset/night, where sunlight varies sharply
+    // even along level rays, and on the richer atmosphere presets.
+    if (uStepScale == 1 && dot(uCamRel, uSunDir) > 0.1 * length(uCamRel)) {
+      if (span < uHm * 0.2) steps = 1;
+      else if (span < uHm * 0.6) steps = min(steps, 2);
+    }
+    #endif
+    integrateScattering(uCamRel, rd, seg.x, seg.y, steps, vAerialL, vAerialT);
+  }
 }
 `;
 /** Sky seen in the (mean) reflected direction of flat water: smooth across the surface, so per vertex. */
@@ -184,6 +201,7 @@ const OCEAN_LEVEL = { low: 0, medium: 1, high: 2, ultra: 3 } as const;
 
 function defines(q: QualitySettings, u?: PlanetUniforms): Record<string, string | number> {
   return { AERIAL_STEPS: q.atmosphere.aerialSteps, VIEW_STEPS: q.atmosphere.viewSteps, DETAIL_OCTAVES: q.planetDetails.gasOctaves,
+    ...(q.atmosphere.aerialSteps <= 6 ? { ADAPTIVE_AERIAL: 1 } : {}),
     OCEAN_QUALITY: OCEAN_LEVEL[q.earth.oceanQuality],
     ...(u && cloudShadowed.has(u) ? { CLOUD_SHADOWS: 1 } : {}) };
 }
