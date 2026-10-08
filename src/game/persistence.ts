@@ -31,6 +31,7 @@ interface SavedVessel {
 }
 
 export interface SavedWorld {
+  alarms?: import('./alarms').MissionAlarm[];
   seenTips?: string[];
   preciseGravity?: boolean;
   showLagrangePoints?: boolean;
@@ -81,6 +82,7 @@ export function serializeWorld(world: World): SavedWorld {
   return {
     ...(world.preciseGravity ? { preciseGravity: true } : {}),
     ...(world.showLagrangePoints ? { showLagrangePoints: true } : {}),
+    alarms: structuredClone(world.alarmClock.alarms),
     seenTips: [...world.seenTips],
     flightlog: structuredClone(world.flightlog),
     latestReportId: world.latestReportId,
@@ -108,6 +110,7 @@ export function serializeWorld(world: World): SavedWorld {
 export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>, universe?: Universe): World {
   if (data.version !== SAVE_VERSION) throw new Error(`Unsupported save version ${data.version}`);
   const world = new World(universe ?? new Universe(data.preset), catalog, data.ut, data.mode ?? 'sandbox');
+  world.alarmClock.restore(data.alarms ?? []);
   world.seenTips = (data.seenTips ?? []).filter(id => typeof id === 'string');
   for (const id of data.activatedAsteroids ?? []) world.universe.activateAsteroid(id);
   world.preciseGravity = data.preciseGravity === true;

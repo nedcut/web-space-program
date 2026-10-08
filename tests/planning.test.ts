@@ -40,7 +40,7 @@ it.each(['moon', 'saturn'])('round-trips %s through structured-cloned worker mes
   await handle(structuredClone(request));
   const event = events.find(e => e.type === 'result');
   expect(event?.type).toBe('result');
-  if (event?.type !== 'result' || !event.result || Array.isArray(event.result)) throw new Error('Expected a transfer');
+  if (event?.type !== 'result' || !event.result || Array.isArray(event.result) || !('node' in event.result)) throw new Error('Expected a transfer');
   const synchronous = target === 'moon' ? planTransferToBody(world, target) : planInterplanetaryTransfer(world, target, { periapsisAltitude: 1200000 });
   expect(synchronous).not.toBeNull();
   // IDs belong to the receiving World; every physical result is bit-identical.

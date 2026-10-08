@@ -21,6 +21,8 @@ export function startAssist(this: FlightController, _internals: FlightController
 
 export function cancelAssist(this: FlightController, internals: FlightControllerInternals, msg = 'Assist cancelled'): void {
   if (!this.assist) return;
+  const restore = this.assist.release?.() ?? [];
+  if (restore.length) this.command(...restore);
   this.assist = null;
   // Never hand back a vessel packed on rails: it would ignore throttle, attitude and SAS until warp changes.
   if (this.world.warp.mode === 'rails' && this.world.warp.index > 0) this.world.warp = { mode: 'rails', index: 0 };

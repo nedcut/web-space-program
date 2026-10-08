@@ -561,7 +561,7 @@ export class FlightController {
       const wv = this.world.active;
       if (wv) {
         const r = this.world.universe.body(wv.body).radius;
-        this.map.distance = r * 4;
+        this.mapUi.frameOrbit();
         // Pull back from just above the vessel's body so the switch reads as zooming out, not a cut.
         if (!game.get().settings.reduceMotion) this.map.animateFrom(r * 1.6);
       }
@@ -1088,10 +1088,12 @@ export class FlightController {
       focus: focus.position,
       focusId: focus.focusId,
       referenceBody: focus.referenceBody,
+      landing: this.mapUi.landing.displayResult ?? undefined,
       comms: this.world.commsSettings.enabled && game.get().settings.commsOverlay ? this.world.comms : undefined,
       vessel: { id: wv.state.id, position: origin, patches, nodes: this.world.nodes },
       markers: [
         ...this.world.mapGravityMarkers(),
+        ...this.mapUi.landing.displayMarkers,
         ...(this.world.preciseGravity ? [] : this.predictions.crossings).map(c => ({ key: c.kind, body: wv.body, position: c.position, label: c.kind, color: '#d066ff', time: c.time,
           detail: `${c.kind === 'AN' ? 'Ascending' : 'Descending'} node (target plane)${incText}\nT−${formatDuration(c.time - t)}` })),
         ...(!this.world.preciseGravity && this.predictions.impact && !impactOnPath ? [{ key: 'impact', body: wv.body, position: this.predictions.impact.position, label: 'Impact', color: '#ff6b6b', time: this.predictions.impact.time,

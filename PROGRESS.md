@@ -960,3 +960,20 @@ From the veteran gap audit (item 2 and 11). What changed in the Vehicle Assembly
 - **Verified:** new Vitest suites (`editor-wp2*`): booster staging, manual order surviving a nose cone and new engines, set pick-up/re-place, Alt-copy, subassemblies, offsets/rotations incl. mirror pairs, re-root, fairing fit/shielding/heating/jettison, couplers feeding every engine, Selene Moon TWR, session undo/redo. Production build driven on the real GPU (Windows Chrome over CDP) and headless Chromium: scripted build (payload, fairing, two stages, four boosters), copy, set pick-up, both gizmos, Moon readouts, stage drag, subassembly save, delete-undo, pinch/pan, couplers. Screenshots archived outside git at `~/.t3/projects/wsp-traces/wp2/`.
 - **Performance (RTX 3060 Ti, Windows Chrome, production builds, main vs this branch interleaved, 12 warm entries each, two sessions):** editor entry median 638 → 661 ms and 724 → 705 ms (parity, noise from a shared machine); orbiting the Selene stack 4.5 vs 4.4 ms editor CPU per frame, 330 draw calls in both. The gizmo is built on first use; drags move meshes only and commit once. Scripts: `scripts/wp2/`.
 - **Left / caveats:** no visual-only clamshell split (the fairing ring leaves with the shell, leaving a ring-height gap); no fairing "draw your own" profile; no 1.875 m size or procedural tanks; no per-stage body picker; Firefox and real Mac trackpads not driven (pinch/pan verified with synthetic Ctrl+wheel/deltaX events).
+
+
+## 2026-10-08 — WP4: Mission planning (`cx/wp4`)
+
+Implemented body-centred active-orbit framing/filtering, persistent fleet custom/node/SOI alarms with warp stops,
+and worker-based drag/heating/chute landing paths with map/flight impact markers. Preserved the existing worker
+transfer-window search and staging/burn-leading executor, clarified its next-orbit option, restored limiters on
+explicit cancellation, and extended frozen maneuver anchors to numerical maps. Powered assists continue at 1×
+when an alarm fires; coast/warp-to drivers respect the stop. Controller integration stays small.
+
+Lint/typecheck/build pass; final Vitest: **142 files / 1,446 passed / one skipped**. Seeded 120 km re-entry
+misses actual splashdown by **0.9 m**; the three-phase stock-Selene executor acceptance tests pass. One million
+steady alarm sync/check pairs average **0.000047 ms** with 200 alarms. Paired real Chrome DPR 1/2 maps and real
+Firefox confirm local framing/filtering, alarm stops and worker markers, with zero page/console errors.
+Largest paired map GPU increase: **+0.094 ms**; 12 fewer map calls. Chrome transition long tasks remain recorded;
+M-series/120 Hz and independent video review remain unverified. Scope, assumptions and repeatable probes:
+[WP4 validation](docs/audits/2026-10-08-wp4-validation.md). Implementation: `f3720503`, `c8f9a133`, `b081ebe4`.

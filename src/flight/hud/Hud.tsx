@@ -205,6 +205,8 @@ export function NavballView({ getFrame }: { getFrame: () => { frame: NavballFram
 
 /** App windows supplied by the flight scene (they need the World / controller, not just telemetry). */
 export interface HudDockSlots {
+  alarms?: ReactNode;
+  alarmActive?: boolean;
   onboarding?: ReactNode;
   /** Flight-assist panel (null when assist is unavailable, e.g. EVA / no control). */
   assist?: ReactNode;
@@ -280,6 +282,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
     { id: 'flightData', title: `Flight data (${bindingLabel('flightData')})`, icon: 'flightData', width: 290, content: <FlightDataPanel data={t.flightData} onClose={() => apps.close('flightData')} /> },
     { id: 'science', title: 'Science', icon: 'science', content: dock?.science ?? null },
     { id: 'crew', title: t.eva ? 'EVA' : `Crew (${t.crew.length})`, icon: 'crew', badge: t.noControl ? 'warn' : null, content: <CrewPanel t={t} cb={cb} /> },
+    { id: 'alarms', title: 'Mission alarms', icon: 'flightData', badge: dock?.alarmActive ? 'warn' : null, content: dock?.alarms ?? null },
     { id: 'assist', title: 'Flight assist', icon: 'assist', badge: dock?.assistActive ? 'on' : null, content: dock?.assist ?? null },
     { id: 'target', title: 'Target & docking', icon: 'target', badge: t.target ? 'target' : null, width: 260, content: <TargetPanel t={t} cb={cb} /> },
     { id: 'comms', title: 'Communications', icon: 'comms', content: dock?.signal ?? null },

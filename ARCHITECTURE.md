@@ -218,3 +218,32 @@ waits for quiet input. `editor/scene/thumbnailCache.ts` stores optional PNG blob
 production chunk URL invalidates art revisions. Editor-only soot uses `prepareEngineSoot` to apply exact
 colors in idle batches; flight retains the synchronous wrapper. Material references must not be stored in
 Object3D `userData`, since three.js clones JSON-serialize it (including procedural texture canvases).
+
+## Mission alarms and landing prediction
+
+`game/alarms.ts` owns the persisted, bounded fleet alarm list and cached next deadline. `World.tick` and
+unattended `advanceRailsTo` clamp rails advancement to that deadline, and physics checks it after each
+50 Hz step. Automatic node alarms follow edits; SOI alarms reuse already computed patched-conic paths
+and packed-vessel events. The clock never starts a trajectory search. UI warp-to/assist drivers respect
+an alarm hold; an explicit new warp command acknowledges it.
+
+The existing planner protocol also accepts `landing`. `game/planning/landing.ts` coasts analytically above
+the force/contact domain, then runs the real headless vessel integrator at 50 Hz with zero throttle, hold
+or surface-retrograde SAS, drag, heating, armed/deployed chutes and terrain/contact. It yields after at most
+100 steps or an 8 ms soft work budget. It predicts the active root vessel only, not detached debris; future
+staging/control changes are not assumed. The atmospheric segment is bounded to two hours / 360,000 steps,
+and horizon/escape/breakup results remain visibly partial. Accurate landing presumes the stated control model.
+
+`flight/map/LandingPredictionDriver` samples eligibility at 1 Hz and submits at most every five real seconds
+to one lazy persistent worker. The Earth grid crosses once per worker lifetime. Pending/result identity checks
+reject changes of vessel, SOI, stage, part count, attitude model, thrust or expiry; unavailable workers disable
+automatic prediction rather than run physics in the animation loop. Map geometry changes only when a result
+arrives; samples undo their future body rotation and draw a surface track in the body's orientation at prediction
+start. The cached map marker uses that same endpoint. Coordinates are rebased around a body-relative Float64
+anchor before Float32 upload. The flight surface
+marker rotates the predicted body-fixed touchdown site to the current UT and projects at 4 Hz.
+
+Numerical map prediction now resumes an anchored node from its frozen post-burn state, including after node
+time; its live zero-length patch remains a conic beside the numerical plan. Planners continue to use patched
+conics. The local flight map defaults to the active body and orbit, with an explicit whole-transfer overview.
+>>>>>>> cx/wp4
