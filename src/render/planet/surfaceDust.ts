@@ -98,7 +98,8 @@ export class SurfaceDust {
     m.uRadius.value = Math.min(90, 8 + 1.1 * h + 14 * Math.min(1.5, k));
     m.uStrength.value = this.strength;
     m.uTime.value = time % 1000;
-    (m.uColor.value as THREE.Color).setRGB(...((color ?? [0.45, 0.43, 0.4]) as [number, number, number])).multiplyScalar(0.9);
+    if (color) (m.uColor.value as THREE.Color).setRGB(color[0] * 0.9, color[1] * 0.9, color[2] * 0.9);
+    else (m.uColor.value as THREE.Color).setRGB(0.405, 0.387, 0.36);
     (m.uSunDir.value as THREE.Vector3).copy(sunDir);
     (m.uUp.value as THREE.Vector3).copy(this.up);
   }

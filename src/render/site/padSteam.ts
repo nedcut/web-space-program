@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { GLSL_LOGDEPTH_FRAG, GLSL_LOGDEPTH_FRAG_PARS, GLSL_LOGDEPTH_VERT, GLSL_LOGDEPTH_VERT_PARS } from '../core/glsl';
 
+const STEAM_ATTRIBUTES = ['aSpawn', 'aVelocity', 'aParams'] as const;
+
 /**
  * Deluge steam at the launch pad: when engines fire over the flame hole, the deflector turns the exhaust and
  * flashing deluge water north along the trench. Billows boil out of the open trench and roll off its exit apron;
@@ -19,6 +21,7 @@ export class PadSteam {
   private seed = 12345;
   /** Local clock (s): UT is ~1e9 s, far beyond float32 resolution for puff ages. */
   private clock = 0;
+  private readonly ranges = STEAM_ATTRIBUTES.map(() => ({ start: 0, count: 0 }));
 
   constructor(private readonly capacity: number, sunDir: { value: THREE.Vector3 }, private readonly trench: { halfWidth: number; open: number; end: number; hole: number }) {
     this.spawn = new Float32Array(capacity * 3);
@@ -107,6 +110,7 @@ export class PadSteam {
     if (strength > 0.01 && dt > 0) {
       this.credit = Math.min(8, this.credit + dt * 34 * strength);
       const T = this.trench;
+      let dirtyStart = Infinity, dirtyEnd = -1;
       while (this.credit >= 1) {
         this.credit -= 1;
         const kind = this.rnd();
@@ -133,10 +137,15 @@ export class PadSteam {
         this.velocity[j] = vx; this.velocity[j + 1] = vy; this.velocity[j + 2] = vz;
         this.params[k] = t + this.rnd() * dt; this.params[k + 1] = life; this.params[k + 2] = size; this.params[k + 3] = growth;
         this.expires = Math.max(this.expires, t + life + 0.5);
-        for (const name of ['aSpawn', 'aVelocity', 'aParams']) {
-          const attr = this.mesh.geometry.getAttribute(name) as THREE.InstancedBufferAttribute;
-          attr.addUpdateRange(i * attr.itemSize, attr.itemSize);
-          attr.needsUpdate = true;
+        dirtyStart = Math.min(dirtyStart, i); dirtyEnd = Math.max(dirtyEnd, i);
+      }
+      // One reused upload range per attribute (a wrap in the ring uploads the span between).
+      if (dirtyEnd >= 0) {
+        for (let n = 0; n < STEAM_ATTRIBUTES.length; n++) {
+          const attr = this.mesh.geometry.getAttribute(STEAM_ATTRIBUTES[n]) as THREE.InstancedBufferAttribute;
+          const range = this.ranges[n];
+          range.start = dirtyStart * attr.itemSize; range.count = (dirtyEnd - dirtyStart + 1) * attr.itemSize;
+          attr.clearUpdateRanges(); attr.updateRanges.push(range); attr.needsUpdate = true;
         }
       }
     }

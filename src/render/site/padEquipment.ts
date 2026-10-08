@@ -245,18 +245,18 @@ export class PadEquipment {
     const fall = this.clampT < 0 ? 0 : smooth(this.clampT / 0.9) * smooth(this.clampT / 0.9);
     const stowPitch = Math.PI * 0.86;
     const pitch = this.clampLength > 0 ? this.clampPitch + (stowPitch - this.clampPitch) * (engaged ? 0 : fall) : stowPitch;
-    let i = 0;
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    for (let i = 0; i < 4; i++) {
+      const sx = i < 2 ? -1 : 1, sz = i % 2 ? 1 : -1;
       const heading = Math.atan2(sz, -sx);
       this.e.set(0, heading, pitch, 'YZX');
       this.q.setFromEuler(this.e);
       this.p.set(sx * CLAMP.corner, CLAMP.hingeY, sz * CLAMP.corner);
-      this.set(this.clamps, i++, this.m.compose(this.p, this.q, this.one));
+      this.set(this.clamps, i, this.m.compose(this.p, this.q, this.one));
     }
     // Arms: hoods slide home over 0.8 s, then the arm swings 85° north over 2.4 s.
     const t = this.armT;
-    ARMS.levels.forEach((y, k) => {
-      const used = this.armUse[k];
+    for (let k = 0; k < ARMS.levels.length; k++) {
+      const y = ARMS.levels[k], used = this.armUse[k];
       const slide = !used ? 1 : t < 0 ? 0 : smooth(t / 0.8);
       const swing = !used ? 1 : t < 0 ? 0 : smooth((t - 0.6) / 2.4);
       const yaw = swing * (85 * Math.PI) / 180;
@@ -267,7 +267,7 @@ export class PadEquipment {
       const hx = this.hoodX[k] + (ARMS.reach - 0.6 - this.hoodX[k]) * slide;
       this.m.multiply(this.slideM.makeTranslation(hx, 0, 0));
       this.set(this.hoods, k, this.m);
-    });
+    }
   }
 
   /**
