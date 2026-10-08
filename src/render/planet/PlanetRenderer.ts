@@ -1,4 +1,5 @@
 import { acquireSurfaceBake } from './sharedBake';
+import { releasePixels } from '../texturePixels';
 import { SurfaceFeatures } from './SurfaceFeatures';
 import * as THREE from 'three';
 import { CloudMap } from './cloudMap';
@@ -143,6 +144,7 @@ export class PlanetRenderer {
   private sunIlluminance: number;
   private sunRadiance: number;
   private readonly terrainKey: string;
+  private readonly hostRenderer?: THREE.WebGLRenderer;
   private readonly frustum = new THREE.Frustum();
   private readonly tmpM4 = new THREE.Matrix4();
   private readonly inverseRotation = new THREE.Quaternion();
@@ -162,6 +164,7 @@ export class PlanetRenderer {
     this.scale = opts.scale ?? SCALE_PRESETS.standard;
     this.sunIlluminance = opts.sunIlluminance ?? 4;
     this.sunRadiance = opts.sunRadiance ?? 60;
+    this.hostRenderer = opts.renderer;
     this.root.name = `planet:${body.id}`;
     // Identity container: placed children update themselves; do not force every cached chunk each frame.
     this.root.matrixAutoUpdate = false;
@@ -556,6 +559,9 @@ export class PlanetRenderer {
         }
       }).catch(() => { if (!this.disposed) { this.surfaceBake?.release(); this.surfaceBake = undefined; this.bakeRequested = false; } });
     }
+
+    // The far-LOD bake lives on the GPU once drawn: drop its CPU pixels (32 MB per body at Ultra).
+    if (this.farTexture?.source.dataReady && this.hostRenderer) releasePixels(this.farTexture, this.hostRenderer);
 
     const qt = this.quadtree;
     // Flat, colorful moons need texture resolution, not geometric refinement: retain the bake longer.

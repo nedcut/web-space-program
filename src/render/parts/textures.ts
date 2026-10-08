@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RECIPES, generate, type Channel, type TexData } from './texgen/recipes';
+import { makeReleasable, releasePixels, watchPixels } from '../texturePixels';
 
 /**
  * Procedural part texture library (main thread).
@@ -11,6 +12,9 @@ import { RECIPES, generate, type Channel, type TexData } from './texgen/recipes'
  * shared texture image, so every material/clone sharing them updates in place.
  *
  * Headless (Node tests / server) returns empty sets; materials then use their flat parameters.
+ *
+ * Flight drops the CPU pixels its renderer has uploaded (`releasePartTexturePixels`) and puts placeholders back
+ * when it ends (`restorePartTexturePixels`), so other renderers (editor, thumbnails) reload them as on a first visit.
  */
 
 export interface TexSet {
@@ -73,6 +77,7 @@ function apply(key: string, size: number, buffers: Partial<Record<Channel, Array
     }
     // Repeat clones share Source, so replacing its data updates every material without a main-thread copy.
     t.source.data = { data: new Uint8Array(buf), width: size, height: size };
+    t.source.dataReady = true;
   }
   for (const t of users.get(key) ?? []) t.needsUpdate = true;
 }
@@ -157,6 +162,8 @@ export function texSet(key: keyof typeof RECIPES & string): TexSet {
   for (const ch of r.channels) {
     const t = makeTexture(placeholder(key, ch, 1), 1, ch === 'albedo' || ch === 'emissive');
     t.name = `${key}.${ch}`;
+    // An upload after the pixels were dropped (restored context, new sampler variant) reloads the recipe.
+    makeReleasable(t, () => { if (!pending.has(key)) request(key); return Promise.resolve(null); });
     s[SLOT[ch]] = t;
     list.push(t);
   }
@@ -177,6 +184,7 @@ export function repeated(t: THREE.Texture | undefined, n: number): THREE.Texture
     c = t.clone();
     c.repeat.set(n, n);
     c.needsUpdate = true;
+    watchPixels(c);
     clones.set(k, c);
     const key = t.name.split('.')[0];
     users.get(key)?.push(c);
@@ -188,6 +196,34 @@ export function repeated(t: THREE.Texture | undefined, n: number): THREE.Texture
 export function partTexturesReady(): Promise<void> {
   if (pending.size === 0) return Promise.resolve();
   return new Promise((r) => waiters.push(r));
+}
+
+/** Drop the CPU pixels of every part texture `renderer` has uploaded. Returns the bytes freed. */
+export function releasePartTexturePixels(renderer: THREE.WebGLRenderer): number {
+  let bytes = 0;
+  for (const set of sets.values()) for (const t of Object.values(set) as THREE.Texture[]) bytes += releasePixels(t, renderer);
+  return bytes;
+}
+
+/**
+ * The renderer that held dropped pixels is gone: show flat placeholders again and reload the images (worker +
+ * IndexedDB cache), exactly as on a first visit. `partTexturesReady` waits for them.
+ */
+export function restorePartTexturePixels(): void {
+  for (const [key, set] of sets) {
+    let dropped = false;
+    for (const [slot, t] of Object.entries(set) as [keyof TexSet, THREE.Texture][]) {
+      if (t.source.dataReady) continue;
+      dropped = true;
+      const ch = (Object.keys(SLOT) as Channel[]).find((c) => SLOT[c] === slot)!;
+      for (const user of users.get(key) ?? []) if (user.source === t.source) user.dispose();
+      t.source.data = { data: placeholder(key, ch, 1), width: 1, height: 1 };
+      t.source.dataReady = true;
+    }
+    if (!dropped) continue;
+    for (const t of users.get(key) ?? []) t.needsUpdate = true;
+    if (!pending.has(key)) request(key);
+  }
 }
 
 export function disposeTextures() {
