@@ -213,6 +213,7 @@ export class LaunchSite {
   private steam: PadSteam | null = null;
   private steamT = NaN;
   private readonly vesselLocal = new THREE.Vector3();
+  private readonly equipmentVessel = { state: null as unknown as VesselState, com: this.vesselLocal, held: false, firing: false };
   private highlighted: SiteObjectId | null = null;
   private readonly tmpQ = new THREE.Quaternion();
   private readonly tmpM = new THREE.Matrix4();
@@ -1409,7 +1410,9 @@ export class LaunchSite {
       const p = pad.state.position;
       local = this.vesselLocal.set(p.x - origin.x, p.y - origin.y, p.z - origin.z).applyMatrix4(this.tmpM.copy(this.root.matrixWorld).invert());
     }
-    this.equipment?.update(t, pad && local ? { state: pad.state, com: local, held: pad.held, firing: pad.firing } : null);
+    const ev = this.equipmentVessel;
+    if (pad) { ev.state = pad.state; ev.held = pad.held; ev.firing = pad.firing; }
+    this.equipment?.update(t, pad ? ev : null);
     if (!this.steam) return;
     const dt = Number.isFinite(this.steamT) ? Math.min(0.1, Math.max(0, t - this.steamT)) : 0;
     this.steamT = t;

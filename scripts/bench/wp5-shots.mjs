@@ -19,7 +19,6 @@ const dpr = +(args.dpr ?? 1);
 const shotDir = args.shotdir ?? 'C:\\wsp-tools\\shots\\wp5';
 mkdirSync(shotDir, { recursive: true });
 const PRESETS = {
-  liftoffTrench: { url: '/?flight=stock-meridian', setup: async (p) => { await p.evaluate(cam(Math.PI * 1.05, 0.35, 120)); await p.waitForTimeout(3000); await stage(p); }, wait: 5000 },
   low: { shadows: false, bloom: false, clouds: false, renderScale: 0.5 },
   medium: { shadows: true, bloom: true, clouds: true, renderScale: 1 },
   high: { shadows: true, bloom: true, clouds: true, renderScale: 1 },
@@ -46,6 +45,7 @@ const CASES = {
   pad: { url: '/?flight=stock-meridian', setup: async (p) => { await p.evaluate(cam(Math.PI * 0.8, 0.12, 70)); }, wait: 6000 },
   padTrench: { url: '/?flight=stock-kestrel', setup: async (p) => { await p.evaluate(cam(Math.PI * 1.05, 0.5, 55)); }, wait: 6000 },
   liftoff: { url: '/?flight=stock-meridian', setup: async (p) => { await p.evaluate(cam(Math.PI * 0.8, 0.12, 90)); await p.waitForTimeout(3000); await stage(p); }, wait: 4500 },
+  liftoffTrench: { url: '/?flight=stock-meridian', setup: async (p) => { await p.evaluate(cam(Math.PI * 1.05, 0.35, 120)); await p.waitForTimeout(3000); await stage(p); }, wait: 5000 },
   low: { url: '/?flight=stock-meridian', setup: async (p) => { await p.evaluate(cam(Math.PI * 0.8, 0.2, 120)); await p.waitForTimeout(3000); await stage(p); await p.waitForTimeout(9000); await p.evaluate(cam(Math.PI * 0.8, 0.55, 220)); }, wait: 2500 },
   moon3k: { url: '/?mission=suicide-burn', setup: async (p) => { await p.evaluate(cam(Math.PI * 0.75, 0.35, 30)); }, wait: 2500 },
   moon500: { url: '/?mission=suicide-burn', setup: async (p) => { await p.evaluate(() => { window.__flight.input.state.throttle = 0; }); await p.evaluate(cam(Math.PI * 0.75, 0.45, 30)); await p.waitForFunction(() => { const f = window.__flight; return f.world.universe.surfaceInfo(f.world.active.body, f.world.active.state.position, f.world.ut).heightAboveTerrain < 700; }, null, { timeout: 120000, polling: 50 }); await p.evaluate(() => { window.__flight.input.state.throttle = 1; }); }, wait: 300 },

@@ -28,7 +28,7 @@ import { compileInSlices } from '../render/core/compileInSlices';
 import type { ExtraOrbit } from '../render/map/MapView';
 import { MapView } from '../render/map/MapView';
 import { FlightMap } from './map/FlightMap';
-import { LaunchSite, launchSiteDistance } from '../render/site/LaunchSite';
+import { LaunchSite, launchSiteDistance, type PadVessel } from '../render/site/LaunchSite';
 import { Starfield } from '../render/sky/Starfield';
 import { SunGlare } from '../render/sky/SunGlare';
 import { FlagView } from '../render/vessel/FlagView';
@@ -40,7 +40,7 @@ import type { Orbit } from '../sim/orbit/api';
 import type { GameMode } from '../sim/science/progression';
 import { gearState, groupBindings, lightOn, neutralInput, type PortInfo } from '../sim/vessel';
 import type { ActionGroupId, PartActionId } from '../sim/vessel/types';
-import type { FlightTweaks, SasMode, VesselCommand } from '../sim/vessel/runtime';
+import type { FlightTweaks, SasMode, VesselCommand, VesselState } from '../sim/vessel/runtime';
 import { pickPartAlongRay, partWorldPosition } from './partPick';
 import { stagnationHeatFlux } from '../sim/vessel/heating';
 import type { CraftDef } from '../sim/vessel/types';
@@ -167,6 +167,8 @@ export class FlightController {
   private readonly condensation = new CondensationFx();
   private readonly surfaceDust = new SurfaceDust();
   private readonly sunDirScratch = new THREE.Vector3();
+  /** Reused argument for the launch site's pad equipment (no per-frame object). */
+  private readonly padVessel: PadVessel = { state: null as unknown as VesselState, held: false, firing: false };
   private readonly effectPosition = new THREE.Vector3();
   private reentry = new ReentryFx();
   private reentryHeat = 0;
@@ -1085,8 +1087,11 @@ export class FlightController {
       this.site = new LaunchSite(u, { vegetationDensity: sq.siteVegetation, steamParticles: { low: 40, medium: 96, high: 160, ultra: 200 }[sq.particleQuality] });
       this.scene.add(this.site.root);
     }
-    if (wv.body === 'earth') this.site?.update(origin, t, camera.position, { state: wv.state, held: wv.mode === 'prelaunch', firing: wv.mode !== 'prelaunch' || !!wv.holdDown });
-    else this.site?.hide();
+    if (wv.body === 'earth' && this.site) {
+      const pv = this.padVessel;
+      pv.state = wv.state; pv.held = wv.mode === 'prelaunch'; pv.firing = wv.mode !== 'prelaunch' || !!wv.holdDown;
+      this.site.update(origin, t, camera.position, pv);
+    } else this.site?.hide();
     this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.lodViewportHeight });
     const eclipse = this.planets.sunVisibility?.(origin, sunPos) ?? 1;
     const tint = this.planets.sunTint?.(origin, sunPos) ?? [1, 1, 1];
