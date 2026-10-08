@@ -42,6 +42,7 @@ import type { ActionGroupId, PartActionId } from '../sim/vessel/types';
 import type { FlightTweaks, SasMode, VesselCommand } from '../sim/vessel/runtime';
 import { pickPartAlongRay, partWorldPosition } from './partPick';
 import { stagnationHeatFlux } from '../sim/vessel/heating';
+import { fairingShellMass } from '../sim/vessel/fairing';
 import type { CraftDef } from '../sim/vessel/types';
 import { getTutorial } from '../tutorial/runtime';
 import { formatDistance, formatDuration, formatSpeed } from '../ui/format';
@@ -345,6 +346,20 @@ export class FlightController {
           const geometry = e.type === 'partDestroyed' ? view?.debrisGeometry(e.partUid) : undefined;
           if (geometry) this.effects.debris.emit(geometry,this.effectPosition,vessel.state.velocity,size);
 
+        }
+      }
+      if (e.type === 'fairingJettison') {
+        const vessel = this.world.vessels.get(e.vesselId);
+        const part = this.views.get(e.vesselId)?.eventPart(e.partUid);
+        const fairing = part?.def.modules.find(m => m.type === 'fairing');
+        if (vessel && part && fairing?.type === 'fairing') {
+          const shellMass = fairingShellMass(part.def, part.tweaks);
+          this.views.get(e.vesselId)!.fairingPanels(e.partUid, (panel, position, quaternion) => {
+            // Separation speed of each panel from the module's ejection impulse.
+            const panelMass = shellMass * (panel.userData.fairingPanel.span as number) / (2 * Math.PI);
+            const kick = Math.min(6, Math.max(1, fairing.ejectionImpulse / Math.max(1, panelMass)));
+            this.effects.fairingPanels.emit(panel, position, quaternion, vessel.state.velocity, kick);
+          });
         }
       }
       if(e.type==='chute' && e.phase==='semi') {
