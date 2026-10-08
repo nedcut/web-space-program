@@ -157,3 +157,14 @@ it('cancels the async fallback from a streamed row and leaves the live nodes int
   expect(rows).toEqual([0]);
   expect(world.nodes).toEqual(snapshot.nodes);
 });
+
+it('hands the Earth grid to workers as a shared Blob, not a 16 MiB clone', async () => {
+  const { earthDataMessage } = await import('../src/game/earthLoader');
+  const { earthData } = await import('../src/sim/terrain/earthData');
+  const first = earthDataMessage(), second = earthDataMessage();
+  if (earthData().buffer instanceof ArrayBuffer) {
+    expect(first.blob).toBeInstanceOf(Blob);
+    expect(first.blob!.size).toBe(earthData().buffer.byteLength);
+    expect(second.blob).toBe(first.blob);
+  } else expect(first.buffer).toBe(earthData().buffer);
+});

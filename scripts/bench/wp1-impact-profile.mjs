@@ -19,7 +19,8 @@ async function load(query='') {
   await page.waitForFunction(()=>window.__flight && !document.querySelector('.loading-screen'),null,{timeout:120000});
   await page.bringToFront(); await page.mouse.click(10,10); await page.waitForTimeout(3000);
   await page.evaluate(()=>{
-    window.__wp1={lost:null,bar:null,tasks:[]};
+    window.__wp1={lost:null,bar:null,tasks:[],gaps:[]};
+    let prev=performance.now();const tick=t=>{if(t-prev>20)window.__wp1.gaps.push({start:prev,duration:+(t-prev).toFixed(1)});prev=t;requestAnimationFrame(tick);};requestAnimationFrame(tick);
     new PerformanceObserver(list=>window.__wp1.tasks.push(...list.getEntries().map(e=>({start:e.startTime,duration:e.duration})))).observe({type:'longtask'});
     const f=window.__flight, old=f.onActiveLost;
     f.onActiveLost=()=>{window.__wp1.lost=performance.now(); old?.();};
@@ -40,9 +41,9 @@ async function prepareCrash() {
 }
 try {
   await load();await prepareCrash();await page.waitForTimeout(400);
-  const cdp=await context.newCDPSession(page);await cdp.send('Performance.enable');await cdp.send('Profiler.enable');await cdp.send('Profiler.start');
+  const cdp=await context.newCDPSession(page);await cdp.send('Performance.enable');await cdp.send('Profiler.enable');await cdp.send('Profiler.setSamplingInterval',{interval:200});await cdp.send('Profiler.start');
   report.metrics=(await cdp.send('Performance.getMetrics')).metrics;
-  await page.evaluate(()=>{window.__wp1.tasks=[];window.__flight.paused=false;});await page.waitForTimeout(280);
+  await page.evaluate(()=>{window.__wp1.tasks=[];window.__wp1.gaps=[];window.__flight.paused=false;});await page.waitForTimeout(280);
   report.fragments=await page.evaluate(()=>{
     const f=window.__flight,camera=f.cam.camera,V=camera.position.constructor,point=new V();let visible=0;
     for(const mesh of f.effects.debris.root.children){
@@ -54,8 +55,8 @@ try {
     return {live:f.effects.debris.activeCount,visibleAtLeast4px:visible};
   });
   await page.waitForTimeout(4220);
-  writeFileSync(`${out}/after-impact.cpuprofile`,JSON.stringify((await cdp.send('Profiler.stop')).profile));await cdp.detach();
+  writeFileSync(`${out}/${label}-impact.cpuprofile`,JSON.stringify((await cdp.send('Profiler.stop')).profile));await cdp.detach();
   report.impact=await page.evaluate(()=>window.__wp1);
 } finally {
-  writeFileSync(`${out}/impact-profile.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));await context.close();await browser.close();
+  writeFileSync(`${out}/${label}-impact-profile.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));await context.close();await browser.close();
 }

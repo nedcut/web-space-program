@@ -1,4 +1,4 @@
-import { earthData } from '../../sim/terrain/earthData';
+import { earthDataMessage } from '../earthLoader';
 import type { World } from '../world';
 import type { PlannerEvent, PlanningOperation, PlanningOperations, PlanningProgress, PlanningRequest, PlanningSnapshot } from './protocol';
 
@@ -47,7 +47,7 @@ export function requestPlan<K extends PlanningOperation>(operation: K, snapshot:
         worker.onmessage = (event: MessageEvent<PlannerEvent>) => receive(event.data);
         worker.onerror = event => receive({ type: 'error', id, name: 'Error', message: event.message || 'Planning worker failed' });
         worker.onmessageerror = () => receive({ type: 'error', id, name: 'Error', message: 'Invalid planning worker response' });
-        worker.postMessage({ type: 'earthData', buffer: earthData().buffer });
+        worker.postMessage({ type: 'earthData', ...earthDataMessage() });
         worker.postMessage(request);
       } else {
         // Isolate the fallback just like structured clone in postMessage.
