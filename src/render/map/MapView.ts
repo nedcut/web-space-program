@@ -107,7 +107,7 @@ export interface MapPick { kind: 'body' | 'vessel'; id: string }
 /** CSS pixels relative to the map's element. */
 export interface MapPoint { x: number; y: number }
 
-/** Callbacks from map gestures. Absent handlers disable the gesture (e.g. node editing in the Tracking Station). */
+/** Callbacks from map gestures. Absent handlers disable the gesture (e.g. node editing in Fleet Tracking). */
 export interface MapHandlers {
   /** Click on the active trajectory: add a maneuver node at `time`. Enables ghost nodes and the gizmo. */
   placeNode?(time: number): void;

@@ -24,7 +24,7 @@ export function SpaceCenter() {
   const [settings, setSettings] = useState(false);
 
   const tiles = [
-    { id: 'editor', title: 'Vehicle Assembly', desc: 'Design and build rockets', onClick: () => game.set({ scene: 'editor' }) },
+    { id: 'editor', title: 'Integration Hall', desc: 'Design and build rockets', onClick: () => game.set({ scene: 'editor' }) },
     {
       id: 'launch',
       title: craft?.type === 'SPH' ? 'Runway' : 'Launch Pad',
@@ -38,8 +38,8 @@ export function SpaceCenter() {
       },
     },
     { id: 'flightlog', title: 'Flight log', desc: 'Flight reports, history and achievements', onClick: () => game.set({ scene: 'flightlog' }) },
-    { id: 'tracking', title: 'Tracking Station', desc: 'Track vessels and explore the solar system', onClick: () => game.set({ scene: 'tracking' }) },
-    ...(mode !== 'sandbox' ? [{ id: 'research', title: 'Research & Development', desc: `${(p?.science ?? 0).toFixed(1)} science · Explore the technology tree`, onClick: () => game.set({ scene: 'research' }) }] : []),
+    { id: 'tracking', title: 'Fleet Tracking', desc: 'Track vessels and explore the solar system', onClick: () => game.set({ scene: 'tracking' }) },
+    ...(mode !== 'sandbox' ? [{ id: 'research', title: 'Research Lab', desc: `${(p?.science ?? 0).toFixed(1)} science · Explore the technology tree`, onClick: () => game.set({ scene: 'research' }) }] : []),
     ...(mode === 'career' ? [{ id: 'missions', title: 'Mission Control', desc: 'Commission expeditions and track contracts', onClick: () => game.set({ scene: 'missions' }) }] : []),
   ];
 

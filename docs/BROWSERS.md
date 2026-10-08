@@ -5,8 +5,8 @@ Safari/WebKit, what was fixed, and how to re-check.
 
 ## Requirements
 
-- **WebGL 2** (hard requirement). Without it the menus still work; the Vehicle Assembly, flight and the
-  Tracking Station show a "3D graphics are unavailable" screen with fixes (current browser, hardware acceleration,
+- **WebGL 2** (hard requirement). Without it the menus still work; the Integration Hall, flight and
+  Fleet Tracking show a "3D graphics are unavailable" screen with fixes (current browser, hardware acceleration,
   `about:support` / `chrome://gpu`), and the main menu shows a warning. See `src/ui/browserSupport.ts`.
 - Module workers, top-level `await` and ES2022: Firefox 115+, Safari 16.4+, Chrome/Edge 111+.
 - Optional: Web Audio, IndexedDB, `localStorage`, GPU timer queries. Each fails safe (see below).
@@ -37,7 +37,7 @@ Safari/WebKit, what was fixed, and how to re-check.
   On this PC Firefox's hardware vsync source runs at 30 Hz even on an empty page; the numbers above use
   `layout.frame_rate = 60`. This is an environment quirk, not the game.
 - **Full flow on real Windows Firefox**: menu → New Game → editor (mouse orbit/wheel) → Launch → stage (Space/Z) →
-  camera drag/wheel → orbit → map (M, wheel) → quicksave/quickload (F5/F9) → Space Center → Tracking Station →
+  camera drag/wheel → orbit → map (M, wheel) → quicksave/quickload (F5/F9) → Space Center → Fleet Tracking →
   main menu → Continue/Load; no console errors.
 - **Playwright Firefox 155 (Linux, llvmpipe), WebKit 26.6 (Safari proxy), Chromium**: `browser-smoke.mjs` passes,
   including Firefox with `privacy.resistFingerprinting` at Medium.
@@ -54,7 +54,7 @@ node scripts/browser-smoke.mjs --browsers firefox --quality medium \
   --firefox-prefs '{"privacy.resistFingerprinting":true}' --verbose     # hardened Firefox
 ```
 
-It clicks through menu → New Game (Sandbox) → Vehicle Assembly → Launch → stage, then
+It clicks through menu → New Game (Sandbox) → Integration Hall → Launch → stage, then
 `?flight=stock-meridian&scenario=orbit` → map view, and fails on page errors, unhandled rejections, console errors,
 failed requests, WebGL error warnings, programs that did not link (queried directly, so production builds where three
 skips shader checks are covered) and audio fail-safe warnings. Headless Firefox has no WebGL on Linux, so without a

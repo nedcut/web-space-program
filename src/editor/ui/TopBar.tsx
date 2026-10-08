@@ -7,6 +7,7 @@ import { PART_CATALOG } from '../../data/parts';
 import type { EditorSession, SessionView } from '../session';
 import { Icon } from './icons';
 import { fmtDv, fmtKg } from './partInfo';
+import { CRAFT_TYPE_LABELS } from '../craftTypeLabels';
 
 export function TopBar({ session, view, onLoad, onNew, onImport }: { session: EditorSession; view: SessionView; onLoad(): void; onNew(): void; onImport(): void }) {
   const [share, setShare] = useState('');
@@ -37,8 +38,9 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
   return (
     <Panel className="vab-topbar panel">
       <div className="vab-brand vab-mode" role="group" aria-label="Building mode">
-        <Button className={`vab-brand-mark ${view.craftType === 'VAB' ? 'on' : ''}`} title="Vehicle Assembly: build vertically, launch from the pad" onClick={() => session.setCraftType('VAB')}>VAB</Button>
-        <Button className={`vab-brand-mark ${view.craftType === 'SPH' ? 'on' : ''}`} title="Spaceplane Hangar: build horizontally, launch from the runway" onClick={() => session.setCraftType('SPH')}>SPH</Button>
+        {(['VAB', 'SPH'] as const).map(type => (
+          <Button key={type} className={`vab-brand-mark ${view.craftType === type ? 'on' : ''}`} title={`${CRAFT_TYPE_LABELS[type].long}: ${CRAFT_TYPE_LABELS[type].hint}`} onClick={() => session.setCraftType(type)}>{CRAFT_TYPE_LABELS[type].short}</Button>
+        ))}
       </div>
       <input
         className="vab-name"

@@ -5,7 +5,7 @@
 //   node scripts/browser-smoke.mjs [--base http://localhost:5328] [--browsers chromium,firefox,webkit]
 //        [--shots docs/screenshots/firefox] [--quality low] [--headed] [--firefox-prefs '{"privacy.resistFingerprinting":true}'] [--verbose]
 //
-// Per browser: main menu → New Game (Sandbox) → Space Center → Vehicle Assembly → Launch → stage; then
+// Per browser: main menu → New Game (Sandbox) → Space Center → Integration Hall → Launch → stage; then
 // `?flight=stock-meridian&scenario=orbit` → map view → back. It clicks real buttons (audio unlocks the way
 // it does for players) and fails on page errors, unhandled rejections, console errors, failed requests,
 // unlinked WebGL programs (checked directly, so production builds without three's shader checks are covered)
@@ -103,10 +103,10 @@ async function run(name) {
     await step('main menu', async () => { await page.goto(`${base}/`); await button(/^New Game/).waitFor(); await page.waitForTimeout(3000); await shot('menu'); });
     await step('new sandbox program → Space Center', async () => {
       await button(/^New Game/).click(); await button(/^Sandbox/).click(); await button(/^Start/).click();
-      await button(/Vehicle Assembly/).waitFor(); await page.waitForTimeout(2000); await shot('hub');
+      await button(/Integration Hall/).waitFor(); await page.waitForTimeout(2000); await shot('hub');
     });
-    await step('Vehicle Assembly', async () => {
-      await button(/Vehicle Assembly/).click(); await page.waitForFunction(() => window.__editor);
+    await step('Integration Hall', async () => {
+      await button(/Integration Hall/).click(); await page.waitForFunction(() => window.__editor);
       await page.evaluate(() => window.__editor.loadStock('kestrel')); await page.waitForTimeout(2000); await shot('editor');
     });
     await step('launch and stage', async () => {

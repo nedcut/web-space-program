@@ -1,4 +1,4 @@
-/* Vehicle Assembly editor UI */
+/* Integration Hall editor UI */
 .vab-root { background: #0d1117; overflow: hidden; color: var(--text); }
 .vab-canvas { z-index: 0; }
 .vab-vignette { z-index: 1; pointer-events: none; background: radial-gradient(ellipse 75% 70% at 50% 48%, transparent 55%, rgba(4, 7, 12, 0.55) 100%); }
@@ -17,7 +17,7 @@
   background: linear-gradient(180deg, #7fd6ff, #3aa9e6);
 }
 .vab-mode { display: flex; gap: 4px; }
-.vab-mode .vab-brand-mark { border: none; cursor: pointer; opacity: 0.45; filter: saturate(0.4); font-family: inherit; }
+.vab-mode .vab-brand-mark { border: none; cursor: pointer; opacity: 0.45; filter: saturate(0.4); font-family: inherit; letter-spacing: 0.06em; padding: 0 12px; }
 .vab-mode .vab-brand-mark.on { opacity: 1; filter: none; }
 .vab-ibtn.on.col { color: #3fa9ff; background: rgba(63, 169, 255, 0.14); border-color: rgba(63, 169, 255, 0.45); }
 .vab-name {
@@ -248,7 +248,7 @@
   .vab-topbar { gap: 6px; padding: 0 6px; }
   .vab-topbar .vab-name { width: 140px; }
   .vab-stats { display: none; }
-  .vab-mode .vab-brand-mark { padding: 0 7px; letter-spacing: 0.08em; }
+  .vab-mode .vab-brand-mark { padding: 0 7px; letter-spacing: 0.02em; }
   .vab-launch { padding: 0 12px; }
 }
 .vab-stock-locked { font-size: 10.5px; color: var(--warn); margin-top: 4px; }

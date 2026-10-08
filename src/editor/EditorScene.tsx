@@ -20,7 +20,7 @@ declare global {
   }
 }
 
-/** Vehicle Assembly Building scene. */
+/** Integration hall scene. */
 export default function EditorScene() {
   const [session] = useState(() => new EditorSession(game.get().craft));
   const view = useSyncExternalStore(session.subscribe, session.getSnapshot);
@@ -126,7 +126,7 @@ export default function EditorScene() {
       </div>
       {!view.craft.parts.length && !held && (
         <div className="vab-welcome panel">
-          <div className="label">Vehicle Assembly</div>
+          <div className="label">Integration Hall</div>
           <div className="vab-welcome-title">Start with a command pod or probe core</div>
           <div className="vab-welcome-text">Pick a part from the list on the left — the first part becomes the root of your vehicle. Or open a stock design.</div>
           <button className="btn small" onClick={() => setShowLoad(true)}>Browse stock vehicles</button>

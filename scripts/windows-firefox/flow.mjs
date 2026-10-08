@@ -39,7 +39,7 @@ try {
   await page.goto(base, { waitUntil: 'load', timeout: 120000 });
   await step('menu', async () => { await waitFor(() => document.body.innerText.includes('New Game')); await sleep(3000); await shot('menu'); return { gfx: await page.evaluate(() => JSON.parse(localStorage.getItem('wsp.settings.v1') || '{}').quality) }; });
   await step('new sandbox', async () => { await clickText(/^New Game/); await clickText(/^Sandbox/); await clickText(/^Start/); await waitFor(() => /SPACE CENTER/i.test(document.body.innerText), 60000, 'hub'); await sleep(3000); await shot('hub'); });
-  await step('editor', async () => { await clickText(/Vehicle Assembly/); await waitFor(() => window.__editor, 90000, 'editor'); await sleep(2000);
+  await step('editor', async () => { await clickText(/Integration Hall/); await waitFor(() => window.__editor, 90000, 'editor'); await sleep(2000);
     await page.evaluate(() => window.__editor.loadStock('meridian')); await sleep(4000); await shot('editor');
     // Mouse orbit + wheel in editor
     await page.mouse.move(800, 450); await page.mouse.down({ button: 'right' }); await page.mouse.move(900, 420, { steps: 8 }); await page.mouse.up({ button: 'right' });
@@ -71,13 +71,13 @@ try {
     return { ut1, ut2: await page.evaluate(() => window.__flight?.world.ut), text: await page.evaluate(() => document.body.innerText.match(/(Quick\w+[^\n]*)/i)?.[1]) }; });
     await step('space center → tracking', async () => { await page.keyboard.press('Escape'); await sleep(800); await shot('pause'); await clickText(/^Space Center$/); await sleep(4000); await shot('after-exit');
     if (await page.evaluate(() => /Flight log/.test(document.body.innerText))) await clickText(/^Space Center$/);
-    await waitFor(() => /Vehicle Assembly/.test(document.body.innerText), 60000, 'hub');
-    await sleep(2000); await clickText(/Tracking Station/); await sleep(10000); await shot('tracking');
+    await waitFor(() => /Integration Hall/.test(document.body.innerText), 60000, 'hub');
+    await sleep(2000); await clickText(/Fleet Tracking/); await sleep(10000); await shot('tracking');
     // Focus a vessel / body via the list, then zoom the map with the wheel
     await page.mouse.move(800, 450); for (let i = 0; i < 4; i++) { await page.mouse.wheel({ deltaY: -100 }); await sleep(50); } await sleep(1500); await shot('tracking-zoom');
     return { fps: await fps(4000), text: await page.evaluate(() => document.body.innerText.slice(0, 300)) }; });
   await step('back to menu + continue', async () => { await clickText(/Space Center|Exit|Back/); await sleep(3000); await clickText(/^Main menu$/); await sleep(2000); await clickText(/^Continue/); await sleep(2000); await clickText(/^Load$/); await sleep(3000);
-    await waitFor(() => /Vehicle Assembly/.test(document.body.innerText), 60000, 'hub after continue'); await shot('continue'); });
+    await waitFor(() => /Integration Hall/.test(document.body.innerText), 60000, 'hub after continue'); await shot('continue'); });
 } catch (e) { console.log('DRIVER ERROR', e); }
 console.log('ERRORS', JSON.stringify(errors, null, 1));
 await browser.close();
