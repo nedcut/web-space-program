@@ -73,7 +73,7 @@ type TargetAllocator = { _allocateTargets?: () => THREE.WebGLRenderTarget };
  * re-resolve the program of every PBR material on the bake frame. The size is fixed, so three's ping-pong target
  * and blur meshes stay valid. Falls back to a fresh target if three's private allocator is ever renamed.
  */
-function bakeInto(pmrem: THREE.PMREMGenerator, scene: THREE.Scene, previous: THREE.WebGLRenderTarget | null): THREE.WebGLRenderTarget {
+export function bakeInto(pmrem: THREE.PMREMGenerator, scene: THREE.Scene, previous: THREE.WebGLRenderTarget | null): THREE.WebGLRenderTarget {
   const generator = pmrem as unknown as TargetAllocator;
   const reusable = !!previous && typeof generator._allocateTargets === 'function';
   if (reusable) generator._allocateTargets = () => previous!;
