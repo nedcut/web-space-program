@@ -12,6 +12,8 @@ export const siteShadowUniforms = {
   uSiteShadowMatrix: { value: new THREE.Matrix4() },
   uSiteShadowTexel: { value: new THREE.Vector2(1 / 1024, 1 / 1024) },
   uSiteShadowEnabled: { value: 0 },
+  /** Receiver depth bias in shadow-map depth units (≈ 0.3 m over the light camera's depth range). */
+  uSiteShadowBias: { value: 0.00015 },
 };
 export function updateSiteShadow(light: THREE.DirectionalLight, enabled: boolean): void {
   const s = light.shadow;
@@ -20,12 +22,15 @@ export function updateSiteShadow(light: THREE.DirectionalLight, enabled: boolean
   // Keep the live matrix reference: three updates it when rendering the shadow pass.
   siteShadowUniforms.uSiteShadowMatrix.value = s.matrix;
   siteShadowUniforms.uSiteShadowTexel.value.set(1 / s.mapSize.x, 1 / s.mapSize.y);
+  const cam = s.camera as THREE.OrthographicCamera;
+  siteShadowUniforms.uSiteShadowBias.value = 0.3 / Math.max(1, cam.far - cam.near);
 }
 export const GLSL_SITE_SHADOW = /* glsl */ `
 uniform highp sampler2DShadow uSiteShadowMap;
 uniform mat4 uSiteShadowMatrix;
 uniform vec2 uSiteShadowTexel;
 uniform float uSiteShadowEnabled;
+uniform float uSiteShadowBias;
 float siteShadow(vec3 world) {
   if (uSiteShadowEnabled < 0.5) return 1.0;
   vec4 p = uSiteShadowMatrix * vec4(world, 1.0);
@@ -33,7 +38,7 @@ float siteShadow(vec3 world) {
   if (min(min(q.x, q.y), q.z) <= 0.0 || max(max(q.x, q.y), q.z) >= 1.0) return 1.0;
   float visibility = 0.0;
   for (int x = 0; x < 2; x++) for (int y = 0; y < 2; y++) {
-    visibility += texture(uSiteShadowMap, vec3(q.xy + (vec2(float(x), float(y)) - 0.5) * uSiteShadowTexel, q.z - 0.00015));
+    visibility += texture(uSiteShadowMap, vec3(q.xy + (vec2(float(x), float(y)) - 0.5) * uSiteShadowTexel, q.z - uSiteShadowBias));
   }
   return visibility * 0.25;
 }

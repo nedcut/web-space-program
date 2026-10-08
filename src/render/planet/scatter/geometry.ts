@@ -1,19 +1,46 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-/** Original, faceted silhouettes; the bottom of every asset is y=0. */
+/**
+ * Original, faceted silhouettes; the bottom of every asset is y=0. Rocks are sunk 18 % of their height (the
+ * placement puts y=0 on the terrain, which is flat only at the instance origin) and carry a vertex-colour
+ * occlusion term that darkens their buried flanks, so they read as embedded rather than resting on a point.
+ */
 export function rockGeometry(variant: number): THREE.BufferGeometry {
-  const g = new THREE.IcosahedronGeometry(1, variant === 2 ? 1 : 0);
+  // Small pebbles (variant 0) stay at 20 faces; the larger variants get 80.
+  const g = new THREE.IcosahedronGeometry(1, variant === 0 ? 0 : 1);
   const p = g.getAttribute('position');
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const r = 0.82 + 0.18 * Math.sin(x * 13 + y * 7 + z * 17 + variant * 3);
-    p.setXYZ(i, x * r, (y * r + 1) * (0.42 + variant * 0.08), z * r * (0.8 + variant * 0.12));
+    const r = 0.8 + 0.12 * Math.sin(x * 13 + y * 7 + z * 17 + variant * 3) + 0.08 * Math.sin(x * 5 - z * 9 + variant);
+    // Flatter tops and bases: blocky ejecta fragments rather than gems.
+    const yy = Math.sign(y) * Math.pow(Math.abs(y), 0.75);
+    p.setXYZ(i, x * r, (yy * r + 1) * (0.42 + variant * 0.08), z * r * (0.8 + variant * 0.12));
   }
   g.computeBoundingBox();
-  g.translate(0, -g.boundingBox!.min.y, 0);
-  g.computeVertexNormals(); return g;
+  const h = g.boundingBox!.max.y - g.boundingBox!.min.y;
+  g.translate(0, -g.boundingBox!.min.y - 0.18 * h, 0);
+  const flat = g.index ? g.toNonIndexed() : g;
+  if (flat !== g) g.dispose();
+  flat.computeVertexNormals();
+  const q = flat.getAttribute('position');
+  const color = new Float32Array(q.count * 3);
+  for (let i = 0; i < q.count; i++) {
+    const t = Math.min(1, Math.max(0, (q.getY(i) + 0.05) / (0.45 * h)));
+    color.fill(0.42 + 0.58 * t * t * (3 - 2 * t), i * 3, i * 3 + 3);
+  }
+  flat.setAttribute('color', new THREE.BufferAttribute(color, 3));
+  return flat;
 }
+
+/** Unit disc (radius 1, y = 0) for the rocks' contact/cast shadow blobs; `uv` keeps the undistorted position. */
+export function shadowBlobGeometry(): THREE.BufferGeometry {
+  const g = new THREE.CircleGeometry(1, 14).rotateX(-Math.PI / 2);
+  const p = g.getAttribute('position'), uv = g.getAttribute('uv');
+  for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i), p.getZ(i));
+  return g;
+}
+
 export function plantGeometry(kind: 'grass' | 'bush' | 'tree'): THREE.BufferGeometry {
   if (kind === 'grass') {
     const verts: number[] = [];

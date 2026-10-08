@@ -308,6 +308,8 @@ export class PlanetRenderer {
       duneRipples: preset === 'mars',
       detailStrength: preset === 'earth' ? 1 : preset === 'mars' ? 1.5 : 1.0,
       cutout: terrainCutout(this.body.id),
+      craters: preset === 'lunar' || preset === 'mercury' || preset === 'rocky',
+      surfaceShadows: preset !== 'earth' && this.body.id !== 'earth',
     });
     this.materials.push(terrainMat);
     let oceanMat: THREE.ShaderMaterial | undefined;

@@ -3,12 +3,14 @@ import type { BodyDef } from '../../../sim/bodies/types';
 import type { Terrain } from '../../../sim/terrain/api';
 import type { QualitySettings } from '../../core/quality';
 import type { PlanetUniforms } from '../uniforms';
-import { createScatterMaterial } from '../materials';
+import { createScatterMaterial, createRockShadowMaterial } from '../materials';
 import { CELL_SIZE, direction, nearbyCells, randomFor, surfaceClass, type Cell } from './grid';
-import { plantGeometry, rockGeometry } from './geometry';
+import { plantGeometry, rockGeometry, shadowBlobGeometry } from './geometry';
 
 const CAPACITY = 2048;
-interface Batch { mesh: THREE.InstancedMesh; perCell: number; kind: 'rock' | 'grass' | 'bush' | 'tree' }
+/** Visible rock height above the ground per unit instance scale, for each rock variant (see rockGeometry). */
+const ROCK_HEIGHT = [0.69, 0.82, 0.95];
+interface Batch { mesh: THREE.InstancedMesh; perCell: number; kind: 'rock' | 'grass' | 'bush' | 'tree'; blob?: THREE.InstancedMesh }
 interface Resident { cell: Cell; slot: number }
 /** Stable cube-face cells. GPU instance translations are cell-local, never planet-scale. */
 export class SurfaceScatter {
@@ -40,28 +42,42 @@ export class SurfaceScatter {
     const palette = body.id === 'earth'
       ? [[0.13, 0.12, 0.10], [0.16, 0.145, 0.125], [0.20, 0.19, 0.17]]
       : body.surface?.colors ?? [[0.2, 0.2, 0.2]];
-    for (let i = 0; i < 3; i++) this.addBatch(rockGeometry(i), 'rock', 16, palette[Math.min(i, palette.length - 1)], quality, u);
+    for (let i = 0; i < 3; i++) this.addBatch(rockGeometry(i), 'rock', 16, palette[Math.min(i, palette.length - 1)], quality, u, ROCK_HEIGHT[i]);
     if (body.id === 'earth' && this.settings.vegetation) {
       this.addBatch(plantGeometry('grass'), 'grass', 64, [0.10, 0.19, 0.035], quality, u);
       this.addBatch(plantGeometry('bush'), 'bush', 4, [0.035, 0.10, 0.02], quality, u);
       this.addBatch(plantGeometry('tree'), 'tree', 2, [0.025, 0.07, 0.018], quality, u);
     }
   }
-  private addBatch(g: THREE.BufferGeometry, kind: Batch['kind'], perCell: number, color: number[], quality: QualitySettings, u: PlanetUniforms): void {
+  private addBatch(g: THREE.BufferGeometry, kind: Batch['kind'], perCell: number, color: number[], quality: QualitySettings, u: PlanetUniforms, rockHeight = 0): void {
     const ids = new Float32Array(CAPACITY * perCell);
     for (let i = 0; i < ids.length; i++) ids[i] = Math.floor(i / perCell);
     if (!g.getAttribute('color')) {
       const tint = new Float32Array(g.getAttribute('position').count * 3).fill(1);
       g.setAttribute('color', new THREE.BufferAttribute(tint, 3));
     }
-    g.setAttribute('aCell', new THREE.InstancedBufferAttribute(ids, 1));
-    const material = createScatterMaterial(u, quality, this.centerTexture, color, kind !== 'rock', this.settings.radius);
+    const airless = !this.body.atmosphere;
+    const cells = new THREE.InstancedBufferAttribute(ids, 1);
+    g.setAttribute('aCell', cells);
+    const material = createScatterMaterial(u, quality, this.centerTexture, color, kind !== 'rock', this.settings.radius, airless && kind === 'rock');
     const mesh = new THREE.InstancedMesh(g, material, ids.length);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     for (let i = 0; i < ids.length; i++) mesh.setMatrixAt(i, this.zero);
     mesh.frustumCulled = false;
     mesh.name = `scatter:${kind}:${this.batches.length}`;
-    this.batches.push({ mesh, perCell, kind }); this.group.add(mesh);
+    let blob: THREE.InstancedMesh | undefined;
+    if (kind === 'rock') {
+      // Contact + cast shadow on the ground, sharing the rocks' instance data (one more draw per rock batch).
+      const bg = shadowBlobGeometry();
+      bg.setAttribute('aCell', cells);
+      blob = new THREE.InstancedMesh(bg, createRockShadowMaterial(u, this.centerTexture, this.settings.radius, rockHeight, airless ? 0.78 : 0.5), ids.length);
+      blob.instanceMatrix = mesh.instanceMatrix;
+      blob.frustumCulled = false;
+      blob.renderOrder = -1;
+      blob.name = `scatter:rockShadow:${this.batches.length}`;
+      this.group.add(blob);
+    }
+    this.batches.push({ mesh, perCell, kind, blob }); this.group.add(mesh);
   }
   get idle(): boolean { return this.pending.length === 0 && !this.active; }
 
@@ -111,6 +127,7 @@ export class SurfaceScatter {
     for (const r of this.cells.values()) maxSlot = Math.max(maxSlot, r.slot);
     for (const b of this.batches) {
       b.mesh.count = (maxSlot + 1) * b.perCell;
+      if (b.blob) b.blob.count = b.mesh.count;
       if (b.mesh.instanceMatrix.updateRanges.length) b.mesh.instanceMatrix.needsUpdate = true;
     }
     this.stats.cells = this.cells.size; this.stats.queued = this.pending.length + (this.active ? 1 : 0);
@@ -154,7 +171,9 @@ export class SurfaceScatter {
     }
   }
   dispose(): void {
-    for (const b of this.batches) { b.mesh.dispose(); b.mesh.geometry.dispose(); (b.mesh.material as THREE.Material).dispose(); }
+    for (const b of this.batches) {
+      for (const m of b.blob ? [b.mesh, b.blob] : [b.mesh]) { m.dispose(); m.geometry.dispose(); (m.material as THREE.Material).dispose(); }
+    }
     this.centerTexture.dispose(); this.group.removeFromParent(); this.cells.clear();
   }
 }

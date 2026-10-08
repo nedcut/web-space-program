@@ -7,6 +7,7 @@ import { siteShadowUniforms, GLSL_SITE_SHADOW } from '../site/shadows';
 import { getDetailTexture } from './textures';
 import { GLSL_CUTOUT, type TerrainCutoutUniforms } from './cutout';
 import { GLSL_EARTH_IMAGERY, type EarthImageryUniforms } from './earthImagery';
+import { GLSL_CRATERS } from './craters';
 
 /** Surface lighting shared by terrain / far sphere: Lambert ↔ Lommel–Seeliger (airless regolith). */
 const GLSL_SHADE = /* glsl */ `
@@ -37,6 +38,8 @@ vec3 earthEmission(vec3 n, float height, float sunAltitude) {
 }
 uniform float uAirless;
 uniform float uAmbientFloor;
+// Direct-sun visibility from the vessel shadow map (SURFACE_SHADOWS materials set it before shading).
+float gSurfaceShadow = 1.0;
 vec3 shadeSurface(vec3 albedo, vec3 N, vec3 V, vec3 rel) {
   vec3 L = uSunDir;
   float mu0 = max(dot(N, L), 0.0);
@@ -46,7 +49,7 @@ vec3 shadeSurface(vec3 albedo, vec3 N, vec3 V, vec3 rel) {
   vec3 up = normalize(rel);
   float geo = smoothstep(-0.03, 0.03, dot(up, L));
   vec3 sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(geo)) * ringShadow(rel) * cloudShadow(rel);
-  vec3 direct = uSunColor * sunT * f;
+  vec3 direct = uSunColor * sunT * f * gSurfaceShadow;
   vec3 amb = skyAmbient(rel, N) / ATMO_PI;
   vec3 planetshine = uPlanetshineColor * max(dot(N, uPlanetshineDir), 0.0) / ATMO_PI;
   return albedo * (direct + amb + planetshine + uAmbientFloor);
@@ -253,12 +256,17 @@ export interface TerrainMaterialOptions {
   /** Optional ground cutouts (launch pad / flame trench) where terrain fragments are discarded. */
   cutout?: TerrainCutoutUniforms;
   duneRipples?: boolean;
+  /** Procedural small-crater relief close up (airless bodies). */
+  craters?: boolean;
+  /** Receive the vessel's shadow from the solar shadow map (bodies other than Earth, whose terrain already does). */
+  surfaceShadows?: boolean;
 }
 
 export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: TerrainMaterialOptions): THREE.ShaderMaterial {
   const img = imagery(u, q);
   return new THREE.ShaderMaterial({
-    defines: { ...defines(q, u), ...img.defines, ...(o.detail ? { USE_DETAIL: 1 } : {}), ...(o.cutout ? { USE_CUTOUT: 1 } : {}) },
+    defines: { ...defines(q, u), ...img.defines, ...(o.detail ? { USE_DETAIL: 1 } : {}), ...(o.cutout ? { USE_CUTOUT: 1 } : {}),
+      ...(o.craters && o.detail ? { CRATER_DETAIL: 1 } : {}), ...(o.surfaceShadows ? { SURFACE_SHADOWS: 1 } : {}) },
     uniforms: {
       ...u,
       ...img.uniforms,
@@ -356,6 +364,9 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       #ifdef USE_CUTOUT
       ${GLSL_CUTOUT}
       #endif
+      #ifdef CRATER_DETAIL
+      ${GLSL_CRATERS}
+      #endif
 
       vec4 triSample(vec3 p, vec3 w, float scale) {
         vec4 a = texture2D(uDetailTex, p.yz / scale);
@@ -443,6 +454,15 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           nBF = normalize(nBF - gt * 1.6 * uDetailStrength);
           N = normalize(uBodyRot * nBF);
         #endif
+        #ifdef CRATER_DETAIL
+          if (dist < 3200.0) {
+            vec3 cw = pow(abs(nBF), vec3(8.0)); cw /= (cw.x + cw.y + cw.z);
+            vec4 cd = craterDetail(transpose(uBodyRot) * rel, cw, dist);
+            nBF = normalize(nBF - (cd.xyz - dot(cd.xyz, nBF) * nBF));
+            N = normalize(uBodyRot * nBF);
+            albedo *= cd.w;
+          }
+        #endif
         albedo = mix(albedo, uRockColor * (0.85 + 0.3 * albedo / max(max(albedo.r, albedo.g), 0.05)), rockT);
         #ifdef EARTH_IMAGERY
           // Imagery owns the colour wherever a texel is small on screen; the close-up palette takes over below.
@@ -461,6 +481,9 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             waterW = earthCoast(earthWater(dayW.a, c), eUV) * wImg;
             albedo = mix(albedo, mix(img, earthWaterAlbedo(c), waterW), wImg);
           }
+        #endif
+        #ifdef SURFACE_SHADOWS
+          gSurfaceShadow = siteShadow(vWorldPos);
         #endif
         vec3 col = shadeSurface(albedo, N, V, rel);
         #ifdef EARTH_IMAGERY
@@ -498,10 +521,10 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
 }
 
 /** Instanced cell-local assets, using the same solar lighting and aerial perspective as terrain. */
-export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, centers: THREE.DataTexture, color: number[], plant: boolean, radius: number): THREE.ShaderMaterial {
+export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, centers: THREE.DataTexture, color: number[], plant: boolean, radius: number, surfaceShadows = false): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    defines: { ...defines(q, u), ...(plant ? { PLANT_WIND: 1 } : {}) },
-    uniforms: { ...u, uCenters: { value: centers }, uColor: { value: new THREE.Vector3(...color) }, uAirless: { value: plant ? 0 : 0.65 }, uAmbientFloor: { value: 0.004 }, uRange: { value: radius } },
+    defines: { ...defines(q, u), ...(plant ? { PLANT_WIND: 1 } : {}), ...(surfaceShadows ? { SURFACE_SHADOWS: 1 } : {}) },
+    uniforms: { ...u, ...(surfaceShadows ? siteShadowUniforms : {}), uCenters: { value: centers }, uColor: { value: new THREE.Vector3(...color) }, uAirless: { value: plant ? 0 : 0.65 }, uAmbientFloor: { value: 0.004 }, uRange: { value: radius } },
     side: plant ? THREE.DoubleSide : THREE.FrontSide,
     vertexShader: /* glsl */ `
       ${GLSL_LOGDEPTH_VERT_PARS}
@@ -538,6 +561,9 @@ export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, cen
       uniform float uRange;
       varying vec3 vWorldPos;
       varying vec3 vNormal;
+      #ifdef SURFACE_SHADOWS
+      ${GLSL_SITE_SHADOW}
+      #endif
       void main() {
         ${GLSL_LOGDEPTH_FRAG}
         vec3 delta = cameraPosition - vWorldPos;
@@ -548,9 +574,68 @@ export function createScatterMaterial(u: PlanetUniforms, q: QualitySettings, cen
         if (grain > fade) discard;
         vec3 V = delta / max(dist, 0.001);
         vec3 N = normalize(vNormal) * (gl_FrontFacing ? 1.0 : -1.0);
+        #ifdef SURFACE_SHADOWS
+          gSurfaceShadow = siteShadow(vWorldPos);
+        #endif
         vec3 col = shadeSurface(uColor * vTint, N, V, vWorldPos - uPlanetCenter);
         col = applyAerialPerspective(col, -V, dist, AERIAL_STEPS * uStepScale);
         gl_FragColor = vec4(col, 1.0);
+      }`,
+  });
+}
+
+/**
+ * Ground shadow of each scatter rock: a contact darkening under the rock stretched into a cast shadow away from
+ * the Sun (length = rock height / tan(solar elevation), capped). Drawn as a multiplicative decal over the
+ * terrain with the rocks' own instance data, so rocks read as sitting on the ground at any sun angle without a
+ * shadow-map pass over thousands of instances.
+ */
+export function createRockShadowMaterial(u: PlanetUniforms, centers: THREE.DataTexture, radius: number, rockHeight: number, strength: number): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.AddEquation,
+    blendSrc: THREE.DstColorFactor,
+    blendDst: THREE.ZeroFactor,
+    uniforms: { uSunDir: u.uSunDir, uCenters: { value: centers }, uRange: { value: radius }, uRockHeight: { value: rockHeight }, uStrength: { value: strength } },
+    vertexShader: /* glsl */ `
+      ${GLSL_LOGDEPTH_VERT_PARS}
+      uniform sampler2D uCenters;
+      uniform vec3 uSunDir;
+      uniform float uRange, uRockHeight, uStrength;
+      attribute float aCell;
+      varying vec2 vDisc;
+      varying float vStrength;
+      void main() {
+        vec3 centre = texture2D(uCenters, vec2((aCell + 0.5) / 2048.0, 0.5)).xyz;
+        mat3 basis = mat3(instanceMatrix);
+        float sx = length(basis[0]), sy = length(basis[1]);
+        vStrength = 0.0;
+        vDisc = uv;
+        if (sx < 1e-6) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+        mat3 rot = mat3(basis[0] / sx, basis[1] / sy, normalize(basis[2]));
+        vec3 sunL = transpose(rot) * (transpose(mat3(modelMatrix)) * uSunDir);
+        float horizontal = length(sunL.xz);
+        vec2 away = -sunL.xz / max(horizontal, 1e-4);
+        float tanE = max(sunL.y, 0.02) / max(horizontal, 1e-3);
+        float len = min(uRockHeight * sy / tanE, 7.0 * sx) * step(0.0, sunL.y);
+        vec2 q = uv * sx * 1.05 + away * max(0.0, dot(uv, away)) * len;
+        vec3 local = rot * vec3(q.x, 0.03 + 0.15 * length(q), q.y) + instanceMatrix[3].xyz;
+        vec4 wp = modelMatrix * vec4(local + centre, 1.0);
+        float dist = length(cameraPosition - wp.xyz);
+        vStrength = uStrength * (1.0 - smoothstep(uRange * 0.65, uRange, dist)) * smoothstep(-0.02, 0.05, sunL.y);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+        ${GLSL_LOGDEPTH_VERT}
+      }`,
+    fragmentShader: /* glsl */ `
+      ${GLSL_LOGDEPTH_FRAG_PARS}
+      varying vec2 vDisc;
+      varying float vStrength;
+      void main() {
+        ${GLSL_LOGDEPTH_FRAG}
+        float a = (1.0 - smoothstep(0.3, 1.0, length(vDisc))) * vStrength;
+        gl_FragColor = vec4(vec3(1.0 - a), 1.0);
       }`,
   });
 }

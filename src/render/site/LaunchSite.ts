@@ -12,7 +12,11 @@ import { clearSiteShadow } from './shadows';
 import { livePlanetUniforms } from '../planet/uniforms';
 import { coastalTreeGeometry, smoothSphereNormals } from '../planet/scatter/geometry';
 import { packBand } from './vegetationBands';
+import { PadEquipment, CLAMP } from './padEquipment';
+import { PadSteam } from './padSteam';
+import type { VesselState } from '../../sim/vessel/runtime';
 import { instancedVariant } from '../core/materialVariants';
+import { paintSurface, SiteTextureArray, siteSurfaceUniforms, withSiteSurfaces, type SiteLayer, type SiteSurface, type SiteSurfaceUniforms } from './siteSurfaces';
 
 /** What LaunchSite needs from the game Universe (structural, keeps render → game imports out). */
 export interface SiteUniverse {
@@ -58,14 +62,15 @@ export function launchSiteDistance(universe: SiteUniverse, origin: Vec3, t: numb
 
 type Key =
   | 'sign' | 'concrete' | 'soot' | 'deck' | 'steel' | 'accent' | 'hazard' | 'grate' | 'white' | 'darkMetal' | 'cable'
-  | 'cladding' | 'vabClad' | 'door' | 'windows' | 'apron' | 'crawler' | 'road' | 'roofDark' | 'lamp' | 'beacon' | 'runway';
+  | 'cladding' | 'vabClad' | 'door' | 'windows' | 'apron' | 'crawler' | 'road' | 'roofDark' | 'lamp' | 'beacon' | 'runway'
+  | 'logo' | 'flag' | 'runway09' | 'runway27';
 
 interface BatchDef {
-  mat: THREE.Material;
+  /** Per-vertex look (texture layer, tint, roughness/metalness, emission); `deck` uses its own material. */
+  surface: SiteSurface;
   /** Box-projected UV tile size in metres (u, v); null = keep geometry UVs. */
   tile: [number, number] | null;
   cast: boolean;
-  receive: boolean;
 }
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -155,6 +160,17 @@ function quad(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vec
 export interface LaunchSiteOptions {
   /** Fraction of scrub/pine instances to keep (quality presets thin vegetation on Low). Default 1. */
   vegetationDensity?: number;
+  /** Steam puffs in the pad's deluge cloud (0 = none). Default 96. */
+  steamParticles?: number;
+}
+
+/** The active vessel, for the pad equipment and the deluge steam (flight only). */
+export interface PadVessel {
+  state: VesselState;
+  /** Held by the hold-down clamps (prelaunch). */
+  held: boolean;
+  /** The launch stage has fired (engines spooling against the clamps, or flying). */
+  firing: boolean;
 }
 
 export class LaunchSite {
@@ -169,7 +185,14 @@ export class LaunchSite {
   private readonly U: Vec3;
   private readonly S: Vec3;
   private readonly terrain: Terrain;
-  private batches = new Map<Key, { def: BatchDef; geos: THREE.BufferGeometry[] }>();
+  private batches = new Map<Key, BatchDef>();
+  /** Geometry awaiting `flush`: shadow casters, ground-hugging non-casters, and the pad deck. */
+  private pendingGeos = { cast: [] as THREE.BufferGeometry[], ground: [] as THREE.BufferGeometry[], deck: [] as THREE.BufferGeometry[] };
+  private surfaceTextures: SiteTextureArray | null = null;
+  private surfaceUniforms: SiteSurfaceUniforms | null = null;
+  /** The merged site material (also used by the animated dish and pad equipment). */
+  private siteMat: THREE.MeshStandardMaterial | null = null;
+  private deckMat: THREE.Material | null = null;
   private disposables: { dispose(): void }[] = [];
   private dish: THREE.Group | null = null;
   private readonly planetUniforms = livePlanetUniforms(BODY);
@@ -183,11 +206,11 @@ export class LaunchSite {
   private readonly vegCamera = new THREE.Vector3(Infinity, 0, 0);
   private readonly lodCenter = new THREE.Vector3();
   private wind = { value: 0 };
-  private windowMat: THREE.MeshStandardMaterial | null = null;
-  private lampMat: THREE.MeshBasicMaterial | null = null;
-  private beaconMat: THREE.MeshBasicMaterial | null = null;
   private highlightRing: THREE.Mesh | null = null;
-  private vabMaterials: THREE.MeshStandardMaterial[] = [];
+  private equipment: PadEquipment | null = null;
+  private steam: PadSteam | null = null;
+  private steamT = NaN;
+  private readonly vesselLocal = new THREE.Vector3();
   private highlighted: SiteObjectId | null = null;
   private readonly tmpQ = new THREE.Quaternion();
   private readonly tmpM = new THREE.Matrix4();
@@ -224,6 +247,7 @@ export class LaunchSite {
     this.buildVegetation();
     this.buildPickables();
     this.flush();
+    this.buildPadEquipment();
     // Mesh-local transforms are immutable; the dish animates its parent group. Avoid composing
     // hundreds of unchanged local matrices on every frame (world transforms still follow Earth).
     this.root.traverse(o => {
@@ -293,39 +317,60 @@ export class LaunchSite {
       mat.customProgramCacheKey = () => 'site-worklight-v1';
       return this.track(mat);
     };
-    const concreteTex = t(TX.concreteTexture(3));
-    const apronTex = t(TX.concreteTexture(9, '#a6a39b'));
-    const claddingTex = t(TX.claddingTexture());
-    const def = (mat: THREE.Material, tile: [number, number] | null, cast = true, receive = true): BatchDef => ({ mat, tile, cast, receive });
-    const B: Record<Key, BatchDef> = {
-      sign: def(std({ map: t(TX.facilitySignsTexture()), roughness: 0.75 }), null, false),
-      concrete: def(std({ map: concreteTex, color: 0xbdb9b1, roughness: 0.88, metalness: 0 }), [8, 8]),
-      soot: def(std({ map: t(TX.sootTexture()), roughness: 0.95, metalness: 0 }), [8, 8], false),
-      deck: def(std({ map: t(TX.padDeckTexture(SITE_LAYOUT.holeHalf, SITE_LAYOUT.trenchHalf)), color: 0xc4c2bc, roughness: 0.85, metalness: 0 }), null, false),
-      steel: def(std({ color: 0x8f969d, roughness: 0.5, metalness: 0.75 }), null),
-      accent: def(std({ color: 0x1f5f8a, roughness: 0.5, metalness: 0.45 }), null),
-      hazard: def(std({ color: 0xd9a72a, roughness: 0.55, metalness: 0.2 }), null),
-      grate: def(std({ color: 0x4d545c, roughness: 0.75, metalness: 0.6 }), null),
-      white: def(std({ color: 0xe4e4df, roughness: 0.62, metalness: 0.05 }), null),
-      darkMetal: def(std({ color: 0x2b2826, roughness: 0.8, metalness: 0.6 }), null, false),
-      cable: def(std({ color: 0x2a2b2e, roughness: 0.6, metalness: 0.4 }), null, false, false),
-      cladding: def(std({ map: claddingTex, color: 0xe1ddd0, roughness: 0.76, metalness: 0.12 }), [4, 8]),
-      vabClad: def(std({ map: claddingTex, color: 0xe1ddd0, roughness: 0.76, metalness: 0.12 }), [4, 8]),
-      door: def(std({ map: t(TX.vabDoorTexture()), roughness: 0.5, metalness: 0.5 }), null),
-      windows: def(std({ map: t(TX.windowsTexture()), emissiveMap: t(TX.windowLightTexture()), emissive: 0xffce88, emissiveIntensity: 0, roughness: 0.4, metalness: 0.2 }), [12, 4]),
-      apron: def(std({ map: apronTex, color: 0xb4b2ac, roughness: 0.9, metalness: 0 }), [8, 8], false),
-      crawler: def(std({ map: t(TX.roadTexture(true)), roughness: 0.92, metalness: 0 }), null, false),
-      road: def(std({ map: t(TX.roadTexture(false)), roughness: 0.85, metalness: 0 }), null, false),
-      roofDark: def(std({ color: 0x3c3f44, roughness: 0.85, metalness: 0.2 }), null),
-      lamp: def(this.track(new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.9, 0.74).multiplyScalar(3.2) })), null, false, false),
-      beacon: def(this.track(new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.08, 0.04).multiplyScalar(8) })), null, false, false),
-      runway: def(std({ map: t(TX.runwayTexture()), roughness: 0.9, metalness: 0 }), null, false),
+    const canvas = (x: THREE.Texture) => { this.track(x); return x.image as HTMLCanvasElement; };
+    const layers: Record<SiteLayer, HTMLCanvasElement> = {
+      concrete: canvas(TX.concreteTexture(3)),
+      apron: canvas(TX.concreteTexture(9, '#a6a39b')),
+      soot: canvas(TX.sootTexture()),
+      cladding: canvas(TX.claddingTexture()),
+      door: canvas(TX.vabDoorTexture()),
+      windows: canvas(TX.windowsTexture()),
+      windowLight: canvas(TX.windowLightTexture()),
+      crawler: canvas(TX.roadTexture(true)),
+      road: canvas(TX.roadTexture(false)),
+      runway: canvas(TX.runwayTexture()),
+      signs: canvas(TX.facilitySignsTexture()),
+      logo: canvas(TX.logoTexture()),
+      flag: canvas(TX.flagTexture()),
+      runway09: canvas(TX.runwayEndTexture('09')),
+      runway27: canvas(TX.runwayEndTexture('27')),
+      grating: canvas(TX.gratingTexture()),
     };
-    this.windowMat = B.windows.mat as THREE.MeshStandardMaterial;
-    this.lampMat = B.lamp.mat as THREE.MeshBasicMaterial;
-    this.beaconMat = B.beacon.mat as THREE.MeshBasicMaterial;
-    this.vabMaterials = [B.vabClad.mat as THREE.MeshStandardMaterial, B.door.mat as THREE.MeshStandardMaterial];
-    for (const k of Object.keys(B) as Key[]) this.batches.set(k, { def: B[k], geos: [] });
+    this.surfaceTextures = this.track(new SiteTextureArray(layers));
+    this.surfaceUniforms = siteSurfaceUniforms(this.surfaceTextures.texture);
+    this.siteMat = withSiteSurfaces(std({ color: 0xffffff, roughness: 1, metalness: 1 }), this.surfaceUniforms);
+    this.deckMat = std({ map: t(TX.padDeckTexture(SITE_LAYOUT.holeHalf, SITE_LAYOUT.trenchHalf)), color: 0xc4c2bc, roughness: 0.85, metalness: 0 });
+    const def = (layer: SiteLayer | null, color: number, roughness: number, metalness: number, tile: [number, number] | null, cast = true, extra: Partial<SiteSurface> = {}): BatchDef =>
+      ({ surface: { layer, color, roughness, metalness, ...extra }, tile, cast });
+    const B: Record<Key, BatchDef> = {
+      sign: def('signs', 0xffffff, 0.75, 0, null, false),
+      concrete: def('concrete', 0xbdb9b1, 0.88, 0, [8, 8]),
+      soot: def('soot', 0xffffff, 0.95, 0, [8, 8], false),
+      deck: def(null, 0xffffff, 1, 0, null, false),
+      steel: def(null, 0x8f969d, 0.5, 0.75, null),
+      accent: def(null, 0x1f5f8a, 0.5, 0.45, null),
+      hazard: def(null, 0xd9a72a, 0.55, 0.2, null),
+      grate: def('grating', 0xffffff, 0.75, 0.6, [2, 2]),
+      white: def(null, 0xe4e4df, 0.62, 0.05, null),
+      darkMetal: def(null, 0x4a4643, 0.62, 0.6, null, false),
+      cable: def(null, 0x2a2b2e, 0.6, 0.4, null, false),
+      cladding: def('cladding', 0xe1ddd0, 0.76, 0.12, [4, 8]),
+      vabClad: def('cladding', 0xe1ddd0, 0.76, 0.12, [4, 8], true, { vab: true }),
+      door: def('door', 0xffffff, 0.5, 0.5, null, true, { vab: true }),
+      windows: def('windows', 0xffffff, 0.4, 0.2, [12, 4], true, { emissive: 1 }),
+      apron: def('apron', 0xb4b2ac, 0.9, 0, [8, 8], false),
+      crawler: def('crawler', 0xffffff, 0.92, 0, null, false),
+      road: def('road', 0xffffff, 0.85, 0, null, false),
+      roofDark: def('apron', 0x5d6066, 0.9, 0.1, [6, 6]),
+      lamp: def(null, 0x202020, 0.6, 0, null, false, { emissive: 2 }),
+      beacon: def(null, 0x200404, 0.6, 0, null, false, { emissive: 3 }),
+      runway: def('runway', 0xffffff, 0.9, 0, null, false),
+      logo: def('logo', 0xffffff, 0.7, 0.1, null, false, { vab: true }),
+      flag: def('flag', 0xffffff, 0.7, 0.1, null, false, { vab: true }),
+      runway09: def('runway09', 0xffffff, 0.85, 0, null, false),
+      runway27: def('runway27', 0xffffff, 0.85, 0, null, false),
+    };
+    for (const k of Object.keys(B) as Key[]) this.batches.set(k, B[k]);
   }
 
   /** Add geometry (object space) to a batch, optionally transformed by `m` (object → local pad frame). */
@@ -333,30 +378,47 @@ export class LaunchSite {
     const b = this.batches.get(key)!;
     let geo = toNonIndexed(g);
     if (!geo.getAttribute('normal')) geo.computeVertexNormals();
-    if (b.def.tile) projectUV(geo, b.def.tile[0], b.def.tile[1]);
+    if (b.tile) projectUV(geo, b.tile[0], b.tile[1]);
     else if (!geo.getAttribute('uv')) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.getAttribute('position').count * 2), 2));
     // Keep only the attributes every batch member shares.
     for (const name of Object.keys(geo.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'uv') geo.deleteAttribute(name);
     geo.clearGroups();
     if (m) geo = geo.applyMatrix4(m);
-    b.geos.push(geo);
+    if (key === 'deck') { this.pendingGeos.deck.push(geo); return; }
+    paintSurface(geo, b.surface);
+    (b.cast ? this.pendingGeos.cast : this.pendingGeos.ground).push(geo);
   }
 
   private addAll(key: Key, gs: THREE.BufferGeometry[], m?: THREE.Matrix4) {
     for (const g of gs) this.add(key, g, m);
   }
 
+  /** Surface attributes for geometry that is drawn with the site material outside the static batches. */
+  private painted(key: Key, g: THREE.BufferGeometry): THREE.BufferGeometry {
+    const geo = toNonIndexed(g);
+    if (!geo.getAttribute('uv')) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.getAttribute('position').count * 2), 2));
+    paintSurface(geo, this.batches.get(key)!.surface);
+    return geo;
+  }
+
   private flush() {
-    for (const [key, b] of this.batches) {
-      if (!b.geos.length) continue;
-      const merged = this.track(mergeGeometries(b.geos, false)!);
-      b.geos.forEach((g) => g.dispose());
-      b.geos = [];
+    const fill = (renderer: THREE.WebGLRenderer) => this.surfaceTextures?.fill(renderer);
+    for (const [name, list, mat, cast] of [
+      ['main', this.pendingGeos.cast, this.siteMat!, true],
+      ['ground', this.pendingGeos.ground, this.siteMat!, false],
+      ['deck', this.pendingGeos.deck, this.deckMat!, false],
+    ] as const) {
+      if (!list.length) continue;
+      const merged = this.track(mergeGeometries(list, false)!);
+      list.forEach((g) => g.dispose());
+      list.length = 0;
       merged.computeBoundingSphere();
-      const mesh = new THREE.Mesh(merged, b.def.mat);
-      mesh.name = `site:${key}`;
-      mesh.castShadow = b.def.cast;
-      mesh.receiveShadow = b.def.receive;
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.name = `site:${name}`;
+      mesh.castShadow = cast;
+      mesh.receiveShadow = true;
+      // The layered texture is filled from the canvases on first draw (it needs the renderer).
+      if (mat === this.siteMat) mesh.onBeforeRender = fill;
       this.root.add(mesh);
     }
   }
@@ -463,12 +525,19 @@ export class LaunchSite {
     // Water deluge pipes along the hole rim.
     for (const sx of [-1, 1]) this.add('steel', new THREE.CylinderGeometry(0.18, 0.18, 2 * H, 8).rotateX(Math.PI / 2).translate(sx * (H - 0.3), -0.45, 0));
 
-    // Launch mount: four hold-down posts at the hole corners (outside a 4 m radius vehicle) + rails.
+    // Hold-down clamp pedestals at the hole corners (the clamp arms are `PadEquipment`): base plate, column,
+    // hinge yoke and an actuator housing on the outboard face.
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const x = sx * (H + 1.6), z = sz * (H + 1.6);
-      this.add('steel', boxY(1.4, 1.4, x, z, 0, 0.9));
-      this.add('accent', boxY(1.6, 1.6, x, z, 0, 0.18));
-      this.add('darkMetal', boxY(0.6, 0.6, x - sx * 0.45, z - sz * 0.45, 0.9, 1.25));
+      const x = sx * CLAMP.corner, z = sz * CLAMP.corner, hy = CLAMP.hingeY;
+      this.add('accent', boxY(2.2, 2.2, x, z, 0, 0.22));
+      this.add('steel', boxY(1.3, 1.3, x + sx * 0.35, z + sz * 0.35, 0.22, hy - 0.35));
+      for (const s of [-1, 1]) {
+        // Yoke cheeks either side of the arm's hinge drum (the arm swings in the pedestal's diagonal plane).
+        const ox = -sz * s * 0.75 / Math.SQRT2, oz = sx * s * 0.75 / Math.SQRT2;
+        this.add('steel', boxY(0.35, 0.35, x + ox, z + oz, hy - 0.5, hy + 0.55));
+      }
+      this.add('darkMetal', boxY(0.7, 0.7, x + sx * 0.95, z + sz * 0.95, 0.22, 1.6));
+      this.add('hazard', boxY(1.36, 1.36, x + sx * 0.35, z + sz * 0.35, hy - 0.62, hy - 0.4));
     }
     // Ground-level cable trays / service boxes on the deck (west side, toward the tower).
     this.add('grate', boxY(6, 1.2, -10.5, 4.5, 0, 0.5));
@@ -559,30 +628,11 @@ export class LaunchSite {
     // Lightning rod on top.
     steel.push(new THREE.CylinderGeometry(0.08, 0.2, 10, 6).translate(tx, H + 8.4, tz));
 
-    // Umbilical / access arms reaching toward the pad (end ≥ 4.6 m from the vehicle axis).
-    for (const y of [20, 33]) {
-      const x0 = tx + h, x1 = -4.6 - 1.2;
-      const w = 0.9, hh = 1.0;
-      const chords: [number, number][] = [[-w, -hh], [w, -hh], [-w, hh], [w, hh]];
-      for (const [cz, cy] of chords) accent.push(strut(V(x0, y + cy, tz + cz), V(x1, y + cy, tz + cz), 0.2));
-      const n = 6;
-      for (let i = 0; i <= n; i++) {
-        const x = x0 + ((x1 - x0) * i) / n;
-        accent.push(strut(V(x, y - hh, tz - w), V(x, y + hh, tz - w), 0.12));
-        accent.push(strut(V(x, y - hh, tz + w), V(x, y + hh, tz + w), 0.12));
-        accent.push(strut(V(x, y + hh, tz - w), V(x, y + hh, tz + w), 0.12));
-        if (i < n) {
-          const xn = x0 + ((x1 - x0) * (i + 1)) / n;
-          accent.push(strut(V(x, y - hh, tz - w), V(xn, y + hh, tz - w), 0.1));
-          accent.push(strut(V(x, y - hh, tz + w), V(xn, y + hh, tz + w), 0.1));
-        }
-      }
-      grate.push(box(x1 - x0, 0.15, 2 * w, (x0 + x1) / 2, y - hh, tz));
-      // Swing-arm hood at the end.
-      steel.push(box(1.2, 2.6, 2.6, x1 + 0.6, y, tz));
-      this.add('cable', new THREE.CylinderGeometry(0.15, 0.15, x1 - x0, 6).rotateZ(Math.PI / 2).translate((x0 + x1) / 2, y - hh - 0.3, tz + 0.5));
-      // Hinge drum on the tower face.
-      steel.push(new THREE.CylinderGeometry(0.6, 0.6, 2.6, 10).translate(x0 + 0.3, y, tz));
+    // Swing-arm hinge brackets on the tower face (the arms themselves are `PadEquipment`).
+    for (const y of [8.5, 20, 33]) {
+      steel.push(box(0.5, 3.4, 1.6, tx + h + 0.25, y, tz));
+      accent.push(box(0.6, 0.3, 2.0, tx + h + 0.3, y + 1.6, tz));
+      accent.push(box(0.6, 0.3, 2.0, tx + h + 0.3, y - 1.6, tz));
     }
     this.addAll('steel', steel);
     this.addAll('accent', accent);
@@ -829,22 +879,15 @@ export class LaunchSite {
       return [v.x, v.z] as [number, number];
     }), 0.05);
 
-    // Painted wordmark + flag decals (separate transparent materials).
-    const decal = (texture: THREE.Texture, ww: number, hh: number, lx: number, ly: number, lz: number, rotY: number) => {
-      const mat = this.track(withAerialPerspective(new THREE.MeshStandardMaterial({ map: this.track(texture), transparent: true, roughness: 0.7, metalness: 0.1, depthWrite: false }), BODY));
-      this.vabMaterials.push(mat);
-      const g = this.track(new THREE.PlaneGeometry(ww, hh));
-      const mesh = new THREE.Mesh(g, mat);
+    // Painted wordmark + flag decals (alpha-cut layers of the site material).
+    const decal = (key: 'logo' | 'flag', ww: number, hh: number, lx: number, ly: number, lz: number, rotY: number) => {
       const om = new THREE.Matrix4().makeRotationY(rotY).setPosition(lx, ly, lz);
-      mesh.applyMatrix4(om.premultiply(m));
-      mesh.renderOrder = 1;
-      mesh.name = 'site:decal';
-      this.root.add(mesh);
+      this.add(key, new THREE.PlaneGeometry(ww, hh), om.premultiply(m));
     };
-    decal(TX.logoTexture(), 52, 26, -36, 84, hd + 0.08, 0);
-    decal(TX.flagTexture(), 40, 25, -36, 44, hd + 0.08, 0);
-    decal(TX.logoTexture(), 70, 35, hw + 0.08, 80, 0, Math.PI / 2);
-    decal(TX.flagTexture(), 44, 27.5, -30, 76, -hd - 0.08, Math.PI);
+    decal('logo', 52, 26, -36, 84, hd + 0.08, 0);
+    decal('flag', 40, 25, -36, 44, hd + 0.08, 0);
+    decal('logo', 70, 35, hw + 0.08, 80, 0, Math.PI / 2);
+    decal('flag', 44, 27.5, -30, 76, -hd - 0.08, Math.PI);
   }
   private vabFrame = new THREE.Matrix4();
 
@@ -949,7 +992,7 @@ export class LaunchSite {
     // Taxiway from the service road to the runway's north edge.
     const tx = R.x + 300, tz = R.z - R.width / 2 - 2;
     this.road('road', [[300, 700], [tx, tz - 40], [tx, tz]], 18, 0.14, 24);
-    // End-zone markings (separate decal meshes, one texture per designator).
+    // End-zone markings (alpha-cut layers, one per designator).
     const end = (cx: number, cz: number, dx: number, dz: number, label: string) => {
       const len = 120, n = 6;
       const lx = dz, lz = -dx; // left of the direction of travel
@@ -967,7 +1010,7 @@ export class LaunchSite {
           idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
         }
       }
-      const g = this.track(new THREE.BufferGeometry());
+      const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
       g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
       g.setIndex(idx);
@@ -977,15 +1020,7 @@ export class LaunchSite {
         g.setIndex(idx);
         g.computeVertexNormals();
       }
-      const mat = this.track(withAerialPerspective(new THREE.MeshStandardMaterial({
-        map: this.track(TX.runwayEndTexture(label)), transparent: true, depthWrite: false, roughness: 0.85, metalness: 0,
-        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-      }), BODY));
-      const mesh = new THREE.Mesh(g, mat);
-      mesh.name = `site:runway-${label}`;
-      mesh.renderOrder = 1;
-      mesh.receiveShadow = true;
-      this.root.add(mesh);
+      this.add(label === '09' ? 'runway09' : 'runway27', g);
     };
     end(ax, az, R.dirX, R.dirZ, '09');
     end(bx, bz, -R.dirX, -R.dirZ, '27');
@@ -1011,11 +1046,9 @@ export class LaunchSite {
     const dish = new THREE.Group();
     dish.name = 'site:dish';
     dish.position.setFromMatrixPosition(m).add(V(0, 8, 0));
-    const white = this.batches.get('white')!.def.mat;
-    const steel = this.batches.get('steel')!.def.mat;
     // Azimuth turntable + yoke
     const yokeParts = [box(6, 1.2, 6, 0, 0.6, 0), box(0.8, 6, 2, -4.2, 3.8, 0), box(0.8, 6, 2, 4.2, 3.8, 0)];
-    const yoke = new THREE.Mesh(this.track(mergeGeometries(yokeParts.map(toNonIndexed))!), steel);
+    const yoke = new THREE.Mesh(this.track(mergeGeometries(yokeParts.map((g) => this.painted('steel', g)))!), this.siteMat!);
     yoke.castShadow = yoke.receiveShadow = true;
     dish.add(yoke);
     // Reflector (paraboloid), feed and struts on an elevation axis.
@@ -1036,8 +1069,7 @@ export class LaunchSite {
     }
     parts.push(new THREE.CylinderGeometry(0.5, 0.7, 1.4, 10).translate(0, f - 1.2, 0));
     parts.push(box(3, 2, 3, 0, -2.0, 0));
-    const reflMat = this.track(withAerialPerspective((white as THREE.MeshStandardMaterial).clone(), BODY));
-    reflMat.side = THREE.DoubleSide;
+    const reflMat = this.track(withAerialPerspective(new THREE.MeshStandardMaterial({ color: 0xe4e4df, roughness: 0.62, metalness: 0.05, side: THREE.DoubleSide }), BODY));
     const rm = new THREE.Mesh(this.track(mergeGeometries(parts.map(toNonIndexed).map((g) => (g.deleteAttribute('uv'), g)))!), reflMat);
     rm.castShadow = rm.receiveShadow = true;
     elev.add(rm);
@@ -1236,26 +1268,33 @@ export class LaunchSite {
       const p = door.clone().multiplyScalar(1 - t).add(dir.clone().multiplyScalar(60 * t));
       for (const side of [-1, 1]) spots.push({ x: p.x + side * dir.z * 26, z: p.z - side * dir.x * 26, face: Math.atan2(-side * dir.z, side * dir.x) });
     }
-    const n = spots.length;
-    const poleGeo = this.track(new THREE.CylinderGeometry(0.16, 0.28, 18, 6).translate(0, 9, 0));
-    const headGeo = this.track(new THREE.BoxGeometry(2.2, 0.7, 0.5).translate(0, 18.2, 0.3));
-    // Instanced variants: the batch materials are also drawn by plain meshes (see materialVariants).
-    const poles = new THREE.InstancedMesh(poleGeo, instancedVariant(this.batches.get('steel')!.def.mat), n);
-    const heads = new THREE.InstancedMesh(headGeo, instancedVariant(this.batches.get('lamp')!.def.mat), n);
-    spots.forEach((s, i) => {
+    // Static: merged into the site batches like every other fixture.
+    const poleGeo = new THREE.CylinderGeometry(0.16, 0.28, 18, 6).translate(0, 9, 0);
+    const headGeo = new THREE.BoxGeometry(2.2, 0.7, 0.5).translate(0, 18.2, 0.3);
+    for (const s of spots) {
       const m = this.frameAt(s.x, s.z, s.face);
-      poles.setMatrixAt(i, m);
-      heads.setMatrixAt(i, m);
-    });
-    poles.castShadow = true;
-    poles.name = 'site:poles';
-    heads.name = 'site:lamps';
-    poles.computeBoundingSphere();
-    heads.computeBoundingSphere();
-    this.root.add(poles, heads);
+      this.add('steel', poleGeo.clone(), m);
+      this.add('lamp', headGeo.clone(), m);
+    }
+    poleGeo.dispose(); headGeo.dispose();
     // Aviation beacons on mast and tower tops.
     const tw = SITE_LAYOUT.tower;
     this.add('beacon', new THREE.SphereGeometry(0.4, 8, 6).translate(tw.x, tw.height + 3.9, tw.z));
+  }
+
+  // ------------------------------------------------------------------ moving pad equipment and deluge steam
+
+  private buildPadEquipment() {
+    const mat = instancedVariant(this.siteMat!);
+    this.equipment = new PadEquipment(mat, (key, g) => this.painted(key, g));
+    for (const m of this.equipment.group.children) (m as THREE.Mesh).onBeforeRender = (renderer) => this.surfaceTextures?.fill(renderer);
+    this.root.add(this.equipment.group);
+    const n = this.options.steamParticles ?? 96;
+    if (n > 0) {
+      const L = SITE_LAYOUT;
+      this.steam = new PadSteam(n, this.planetUniforms.uSunDir, { halfWidth: L.trenchHalf, open: -L.padHalf - 2, end: L.trenchEnd, hole: L.holeHalf });
+      this.root.add(this.steam.mesh);
+    }
   }
 
   // ------------------------------------------------------------------ interaction
@@ -1286,10 +1325,7 @@ export class LaunchSite {
     if (id === this.highlighted) return;
     this.highlighted = id;
     if (this.highlightRing) this.highlightRing.visible = id === 'pad';
-    for (const m of this.vabMaterials) {
-      m.emissive.set(id === 'vab' ? 0x2a6fa8 : 0x000000);
-      m.emissiveIntensity = id === 'vab' ? 0.55 : 0;
-    }
+    if (this.surfaceUniforms) this.surfaceUniforms.uVabGlow.value.set(id === 'vab' ? 0x2a6fa8 : 0x000000).multiplyScalar(id === 'vab' ? 0.55 : 0);
   }
 
   // ------------------------------------------------------------------ per frame
@@ -1298,7 +1334,7 @@ export class LaunchSite {
    * Place the site for the floating origin `origin` (float64 inertial) at sim time `t`, and update the terrain
    * cutout. Hidden beyond 200 km.
    */
-  update(origin: Vec3, t: number, cameraPosition?: THREE.Vector3) {
+  update(origin: Vec3, t: number, cameraPosition?: THREE.Vector3, pad?: PadVessel | null) {
     const eph = this.universe.ephem;
     const bp = eph.getBodyState(BODY, t).position;
     const q = eph.bodyRotation(BODY, t);
@@ -1327,16 +1363,37 @@ export class LaunchSite {
     const up = this.sunUp.set(0, 1, 0).applyQuaternion(this.root.quaternion);
     this.night.value = 1 - THREE.MathUtils.smoothstep(up.dot(solar), -0.06, 0.12);
     this.wind.value = t % 4096;
-    if (this.windowMat) this.windowMat.emissiveIntensity = this.night.value * 1.8;
-    if (this.lampMat) {
-      this.lampMat.color.setRGB(1, 0.82, 0.56).multiplyScalar(0.6 + 3.4 * this.night.value);
-      instancedVariant(this.lampMat).color.copy(this.lampMat.color);
+    const su = this.surfaceUniforms;
+    if (su) {
+      su.uWindowGlow.value.set(0xffce88).multiplyScalar(this.night.value * 1.8);
+      su.uLampColor.value.setRGB(1, 0.82, 0.56).multiplyScalar(0.6 + 3.4 * this.night.value);
     }
     if (this.dish) this.dish.rotation.y = (t * 0.02) % (Math.PI * 2);
-    if (this.beaconMat) {
+    this.updatePad(origin, t, pad ?? null);
+    if (su) {
       const on = Math.sin(t * Math.PI * 1.2) > 0.2 ? 8 : 0.4;
-      this.beaconMat.color.setRGB(on, on * 0.08, on * 0.04);
+      su.uBeaconColor.value.setRGB(on, on * 0.08, on * 0.04);
     }
+  }
+
+  /** Clamps, swing arms and deluge steam follow the active vessel while it is on (or just above) the pad. */
+  private updatePad(origin: Vec3, t: number, pad: PadVessel | null) {
+    let local: THREE.Vector3 | null = null;
+    if (pad) {
+      const p = pad.state.position;
+      local = this.vesselLocal.set(p.x - origin.x, p.y - origin.y, p.z - origin.z).applyMatrix4(this.tmpM.copy(this.root.matrixWorld).invert());
+    }
+    this.equipment?.update(t, pad && local ? { state: pad.state, com: local, held: pad.held, firing: pad.firing } : null);
+    if (!this.steam) return;
+    const dt = Number.isFinite(this.steamT) ? Math.min(0.1, Math.max(0, t - this.steamT)) : 0;
+    this.steamT = t;
+    let strength = 0;
+    if (pad && local && pad.firing && Math.hypot(local.x, local.z) < 12) {
+      const thrust = pad.state.telemetry.thrust;
+      const height = Math.max(0, local.y);
+      strength = Math.min(1, Math.max(0, thrust) / 1.5e6 + (thrust > 0 ? 0.35 : 0)) * (1 - THREE.MathUtils.smoothstep(height, 40, 220));
+    }
+    this.steam.update(t, dt, strength, 1 - this.night.value);
   }
 
   /**
@@ -1376,6 +1433,8 @@ export class LaunchSite {
   }
 
   dispose() {
+    this.equipment?.dispose();
+    this.steam?.dispose();
     clearSiteShadow();
     terrainCutout(BODY).uCutParams.value.w = 0;
     this.root.removeFromParent();

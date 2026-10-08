@@ -91,19 +91,45 @@ function concreteTextureImpl(seed = 1, base = '#9c9a94', joints = true): THREE.C
   return tex(c);
 }
 
-/** Blackened, soot-streaked concrete for the flame trench (tile 8 m). */
+/** Scorched concrete for the flame trench (tile 8 m): sooted at the top of each tile, washed paler below. */
 function sootTextureImpl(): THREE.CanvasTexture {
   const S = 512;
   const { c, g } = canvas(S, S);
   const r = rng(77);
-  g.fillStyle = '#4a4741';
+  g.fillStyle = '#77736a';
   g.fillRect(0, 0, S, S);
-  blotches(g, S, 300, r, 10, 80, (r) => `rgba(${10 + r() * 20},${10 + r() * 15},${8 + r() * 10},${0.06 + r() * 0.1})`);
-  for (let i = 0; i < 120; i++) {
-    g.fillStyle = `rgba(15,12,10,${0.05 + r() * 0.1})`;
-    g.fillRect(r() * S, 0, 2 + r() * 10, S);
+  blotches(g, S, 260, r, 10, 80, (r) => `rgba(${20 + r() * 25},${18 + r() * 20},${14 + r() * 14},${0.08 + r() * 0.12})`);
+  // Vertical soot runs and paler water-washed streaks (the deluge runs down the walls).
+  for (let i = 0; i < 140; i++) {
+    const x = r() * S, w = 2 + r() * 12, len = S * (0.3 + r() * 0.7);
+    const grd = g.createLinearGradient(0, 0, 0, len);
+    const dark = r() < 0.7;
+    grd.addColorStop(0, dark ? `rgba(16,13,10,${0.12 + r() * 0.2})` : `rgba(190,186,176,${0.06 + r() * 0.08})`);
+    grd.addColorStop(1, 'rgba(16,13,10,0)');
+    g.fillStyle = grd;
+    g.fillRect(x, 0, w, len);
   }
-  speckle(g, S, 5000, r, 0.1);
+  // Formwork joints every 2 m.
+  g.fillStyle = 'rgba(30,28,25,0.35)';
+  for (let y = 0; y < S; y += S / 4) g.fillRect(0, y, S, 2);
+  speckle(g, S, 6000, r, 0.12);
+  return tex(c);
+}
+
+/** Bar grating for platforms, walkways and swing-arm decks (tile 2 m). */
+function gratingTextureImpl(): THREE.CanvasTexture {
+  const S = 512;
+  const { c, g } = canvas(S, S);
+  const r = rng(29);
+  g.fillStyle = '#23272b';
+  g.fillRect(0, 0, S, S);
+  // Bearing bars every 4 cm, cross rods every 10 cm, a heavier frame every metre.
+  for (let x = 0; x < S; x += 10) { g.fillStyle = '#7d858c'; g.fillRect(x, 0, 4, S); g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(x, 0, 1, S); }
+  for (let y = 0; y < S; y += 26) { g.fillStyle = '#69717a'; g.fillRect(0, y, S, 3); }
+  g.fillStyle = '#596067';
+  for (const p of [0, S / 2]) { g.fillRect(p, 0, 10, S); g.fillRect(0, p, S, 10); }
+  blotches(g, S, 60, r, 8, 60, (r) => `rgba(${70 + r() * 40},${45 + r() * 20},${25 + r() * 10},${0.05 + r() * 0.08})`);
+  speckle(g, S, 3000, r, 0.1);
   return tex(c);
 }
 
@@ -330,23 +356,38 @@ function claddingTextureImpl(): THREE.CanvasTexture {
   const { c, g } = canvas(256, 512);
   g.fillStyle = '#c3c1b4';
   g.fillRect(0, 0, 256, 512);
+  // Trapezoidal ribs every 0.5 m: a lit face, a shadowed face and a flat pan.
   for (let x = 0; x < 256; x += 32) {
     const grd = g.createLinearGradient(x, 0, x + 32, 0);
-    grd.addColorStop(0, '#94998f');
-    grd.addColorStop(0.2, '#d3d0c4');
-    grd.addColorStop(0.35, '#bfbdaf');
-    grd.addColorStop(0.8, '#aaa99f');
-    grd.addColorStop(1, '#8c9087');
+    grd.addColorStop(0, '#7f857c');
+    grd.addColorStop(0.12, '#e2dfd3');
+    grd.addColorStop(0.24, '#cfccbf');
+    grd.addColorStop(0.7, '#b9b7aa');
+    grd.addColorStop(0.86, '#9fa197');
+    grd.addColorStop(1, '#6f756d');
     g.fillStyle = grd;
     g.fillRect(x, 0, 32, 512);
   }
-  g.fillStyle = 'rgba(30,32,36,0.4)';
-  g.fillRect(0, 0, 256, 3);
+  // Sheet end laps (8 m sheets, one per tile) with their fastener rows.
+  g.fillStyle = 'rgba(30,32,36,0.55)';
+  g.fillRect(0, 0, 256, 4);
+  g.fillStyle = 'rgba(40,42,46,0.6)';
+  for (let x = 6; x < 256; x += 16) { g.fillRect(x, 10, 2, 2); g.fillRect(x, 500, 2, 2); }
   const r = rng(13);
-  for (let i = 0; i < 160; i++) {
-    g.fillStyle = `rgba(40,42,46,${r() * 0.06})`;
-    g.fillRect(r() * 256, r() * 512, 2 + r() * 14, 20 + r() * 120);
+  // Rain-washed grime from fasteners and laps, heavier toward the bottom of each sheet.
+  for (let i = 0; i < 220; i++) {
+    const x = r() * 256, y = r() * 512, h = 30 + r() * 160;
+    const grd = g.createLinearGradient(0, y, 0, y + h);
+    grd.addColorStop(0, `rgba(48,46,42,${0.04 + r() * 0.1})`);
+    grd.addColorStop(1, 'rgba(48,46,42,0)');
+    g.fillStyle = grd;
+    g.fillRect(x, y, 2 + r() * 10, h);
   }
+  const base = g.createLinearGradient(0, 380, 0, 512);
+  base.addColorStop(0, 'rgba(70,64,52,0)');
+  base.addColorStop(1, 'rgba(70,64,52,0.22)');
+  g.fillStyle = base;
+  g.fillRect(0, 380, 256, 132);
   return tex(c);
 }
 
@@ -432,27 +473,45 @@ function flagTextureImpl(): THREE.CanvasTexture {
   return tex(c, true, false);
 }
 
-/** Office façade: window bands on concrete, tile 12 m × 4 m (one storey). */
+/** Office façade: window bands on precast concrete, tile 12 m × 4 m (one storey). */
 function windowsTextureImpl(): THREE.CanvasTexture {
   const W = 512, H = 256;
   const { c, g } = canvas(W, H);
   const r = rng(41);
-  g.fillStyle = '#c4c2bb';
+  g.fillStyle = '#c9c6bd';
   g.fillRect(0, 0, W, H);
+  blotches(g, W, 40, r, 6, 30, (r) => `rgba(${120 + r() * 60},${118 + r() * 60},${110 + r() * 60},${0.05 + r() * 0.06})`);
   speckle(g, W, 2500, r, 0.08);
+  // Precast panel joints (every 3 m) and the floor-slab joint.
+  g.fillStyle = 'rgba(70,68,62,0.55)';
+  for (let x = 0; x < W; x += W / 4) g.fillRect(x, 0, 2, H);
+  g.fillRect(0, H * 0.92, W, 3);
   const n = 6;
   for (let i = 0; i < n; i++) {
     const x = (i / n) * W + 8, w = W / n - 16;
+    // Recessed reveal (shadowed head and jamb), then the glazing.
+    g.fillStyle = '#5c5a55';
+    g.fillRect(x - 3, H * 0.3 - 4, w + 6, H * 0.45 + 6);
     const grd = g.createLinearGradient(0, H * 0.3, 0, H * 0.75);
     const lit = r() < 0.3;
-    grd.addColorStop(0, lit ? '#6d8199' : '#2b3a4c');
-    grd.addColorStop(1, lit ? '#4d5f75' : '#1a2430');
+    grd.addColorStop(0, lit ? '#7891ad' : '#33465d');
+    grd.addColorStop(1, lit ? '#4d5f75' : '#18212c');
     g.fillStyle = grd;
     g.fillRect(x, H * 0.3, w, H * 0.45);
-    g.fillStyle = 'rgba(200,215,230,0.15)';
+    // Sky reflection band and blinds in some panes.
+    g.fillStyle = 'rgba(205,220,236,0.2)';
     g.fillRect(x, H * 0.3, w * 0.35, H * 0.45);
+    if (r() < 0.4) { g.fillStyle = 'rgba(214,206,186,0.55)'; g.fillRect(x, H * 0.3, w, H * (0.08 + r() * 0.2)); }
     g.fillStyle = '#55595f';
     g.fillRect(x + w / 2 - 2, H * 0.3, 4, H * 0.45);
+    // Sill with a dirt run below it.
+    g.fillStyle = '#e1ded6';
+    g.fillRect(x - 5, H * 0.75, w + 10, 5);
+    const run = g.createLinearGradient(0, H * 0.75 + 5, 0, H);
+    run.addColorStop(0, 'rgba(60,58,52,0.25)');
+    run.addColorStop(1, 'rgba(60,58,52,0)');
+    g.fillStyle = run;
+    for (let k = 0; k < 5; k++) g.fillRect(x + r() * w, H * 0.75 + 5, 2 + r() * 6, H * 0.25);
   }
   g.fillStyle = 'rgba(60,60,60,0.35)';
   g.fillRect(0, H - 6, W, 6);
@@ -496,6 +555,7 @@ export const vabDoorTexture = cachedSite('vabDoorTexture', vabDoorTextureImpl);
 export const logoTexture = cachedSite('logoTexture', logoTextureImpl);
 export const flagTexture = cachedSite('flagTexture', flagTextureImpl);
 export const windowsTexture = cachedSite('windowsTexture', windowsTextureImpl);
+export const gratingTexture = cachedSite('gratingTexture', gratingTextureImpl);
 
 /** Only occupied window panes emit; walls and mullions stay dark. Cached with all site canvases. */
 function windowLightTextureImpl(): THREE.CanvasTexture {
