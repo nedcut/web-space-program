@@ -154,6 +154,9 @@
 .stg-mult { position: absolute; right: 2px; bottom: 0; font: 9px var(--mono); color: var(--text); }
 .stg-total { align-self: flex-start; font-size: 11px; padding: 2px 8px; border-radius: var(--radius-sm); background: #040b14c0; border: 1px solid var(--panel-border); }
 .stg-total .mono { color: var(--accent-2); }
+.stg-basis { font: 9px var(--mono); letter-spacing: .06em; color: var(--text-dim); }
+.stg-vac { font-size: 10px; opacity: .75; }
+.stg-vac .mono { color: var(--text-dim); }
 
 /* ------------------------------------------------------------ bottom-centre: navball cluster */
 .nb-cluster { position: relative; display: flex; align-items: flex-end; gap: 8px; padding: 0 16px 6px; }

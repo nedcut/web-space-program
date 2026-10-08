@@ -22,6 +22,22 @@ function heatFraction(p: PartState): number {
   return f;
 }
 
+/** Which pressure the flight Δv readout was computed at: sea level (ASL), partial atmosphere (ATM) or vacuum (VAC). */
+export type DvBasis = 'asl' | 'atm' | 'vac';
+
+/** Basis for the readout at `pressure` (Pa) on a body whose sea-level pressure is `surfacePressure` (0 when airless). */
+export function dvBasis(pressure: number, surfacePressure: number): DvBasis {
+  if (!(pressure > 1) || !(surfacePressure > 0)) return 'vac';
+  return pressure >= 0.9 * surfacePressure ? 'asl' : 'atm';
+}
+
+/** Vacuum Δv of the stages the HUD lists (the same stage set as `hudStages`), so it can sit beside the current-pressure total. */
+export function totalVacuumDv(stages: HudStage[], vacuum: StageDeltaV[]): number {
+  let total = 0;
+  for (const s of stages) total += vacuum.find((d) => d.stage === s.index)?.dv ?? 0;
+  return total;
+}
+
 /** Group the displayed hardware by the same stage IDs as the burn estimator. */
 export function hudStages(st: VesselState, dvs: StageDeltaV[]): HudStage[] {
   const stageMap = new Map<number, HudStage>();

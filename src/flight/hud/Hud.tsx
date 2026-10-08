@@ -98,6 +98,9 @@ export interface Telemetry {
   rcsOn: boolean;
   stage: number;
   stages: HudStage[];
+  /** Pressure the staging Δv figures are computed at, and the same stages' total in vacuum. */
+  dvAt: 'asl' | 'atm' | 'vac';
+  totalDvVac: number;
   resources: { id: string; name: string; amount: number; max: number; color: string }[];
   messages: { id: number; text: string; level: 'info' | 'warn' | 'bad' }[];
   mapMode: boolean;
@@ -313,7 +316,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
         {t.dockingMode && !t.mapMode && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
         <div className="hud-left-fill" />
         {!t.eva && t.stages.length > 0 && (
-          <StagingStack stages={t.stages} stage={t.stage} locked={t.stageLocked} imperial={imperial} canStage={canStage}
+          <StagingStack stages={t.stages} dvAt={t.dvAt} totalDvVac={t.totalDvVac} stage={t.stage} locked={t.stageLocked} imperial={imperial} canStage={canStage}
             dockingMode={t.dockingMode} stageProgress={stageProgress} cb={stagingCb} />
         )}
       </div>

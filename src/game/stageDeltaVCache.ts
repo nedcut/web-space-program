@@ -1,7 +1,9 @@
 import type { VesselState } from '../sim/vessel/runtime';
 import { computeStageDeltaV, type StageDeltaV } from '../sim/vessel/staging';
 
-const cache = new WeakMap<VesselState, { topology: VesselState['cache']; key: string; value: StageDeltaV[] }>();
+type Entry = { topology: VesselState['cache']; key: string; value: StageDeltaV[] };
+// Separate slots for vacuum and in-atmosphere readouts: the HUD reads both each tick, so one slot would thrash.
+const caches = { vac: new WeakMap<VesselState, Entry>(), atm: new WeakMap<VesselState, Entry>() };
 /** Exact readout cache. Definitions/resource densities are immutable; rebuildTopology replaces cache.
  * No rounding: burning, staging, crew transfer and pressure changes invalidate immediately.
  * EC is massless and only affects the burn simulation when an engine consumes it. */
@@ -12,6 +14,7 @@ export function cachedStageDeltaV(v: VesselState, pressure: number, gravity: num
     p.engine?.moduleIndex, p.engine?.ignited, p.engine?.ignitionsLeft,
     Object.entries(p.resources).filter(([id]) => usesCharge || id !== 'electricCharge'),
   ])]);
+  const cache = pressure > 0 ? caches.atm : caches.vac;
   const hit = cache.get(v);
   if (hit?.topology === v.cache && hit.key === key) return hit.value;
   const value = computeStageDeltaV(v, pressure, gravity);
