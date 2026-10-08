@@ -38,8 +38,10 @@ import { EarthImagery, seasonMonth } from './earthImagery';
 export interface PlanetRendererOptions {
   /** Portraits bake surface detail without allocating close-up terrain. */
   farOnly?: boolean;
-  /** Host renderer supports WEBGL_multi_draw; otherwise retain ordinary chunk meshes. */
+  /** Draw visible terrain chunks as one batch per planet (needs `renderer`); otherwise ordinary chunk meshes. */
   batchTerrain?: boolean;
+  /** Host renderer: the terrain batch owns GPU buffers on its context. */
+  renderer?: THREE.WebGLRenderer;
   /** Map uniforms must not replace the live flight lighting registry. */
   registerUniforms?: boolean;
   quality: QualitySettings;
@@ -334,7 +336,7 @@ export class PlanetRenderer {
       buildBudgetMs: q.terrain.buildBudgetMs,
       cacheSize: q.terrain.cacheSize,
       cacheBytes: q.terrain.cacheMB * 1048576,
-      batch: opts.batchTerrain,
+      batch: opts.batchTerrain && opts.renderer ? opts.renderer.getContext() as WebGL2RenderingContext : undefined,
     });
     this.root.add(this.quadtree.group);
     if (terrain) { this.surfaceFeatures = new SurfaceFeatures(this.body, terrain); this.root.add(this.surfaceFeatures.group); }

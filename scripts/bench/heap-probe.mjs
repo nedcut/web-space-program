@@ -39,7 +39,7 @@ const terrainInfo = () => page.evaluate(() => {
   const rows = [];
   window.__flight.scene.traverse((o) => {
     const pl = o.userData?.planet; const qt = pl?.quadtree; if (!qt) return;
-    const batch = (b) => b ? { capacity: b.mesh.maxInstanceCount, live: b.slots.size, free: b.free.length, count: b.count } : null;
+    const batch = (b) => b ? { capacity: b.capacity ?? b.mesh.maxInstanceCount, live: b.slots.size, free: b.free.length, count: b.count, gpuMB: b.gpuBytes != null ? Math.round(b.gpuBytes / 1048576) : undefined } : null;
     rows.push({ body: pl.body?.id, stats: { ...qt.stats }, res: qt.opts.res, land: batch(qt.terrainBatch), ocean: batch(qt.oceanBatch) });
   });
   return rows;

@@ -29,8 +29,8 @@ export interface QuadtreeOptions {
   cacheSize: number;
   /** Max CPU bytes of stale chunk data (land + ocean; not drawn or needed recently) kept for reuse. */
   cacheBytes: number;
-  /** Enable only when the host renderer supports WEBGL_multi_draw. */
-  batch?: boolean;
+  /** Draw visible chunks as one batch on this context (see ChunkBatch); otherwise one mesh per chunk. */
+  batch?: WebGL2RenderingContext;
 }
 
 export interface SelectContext {
@@ -122,11 +122,11 @@ export class Quadtree {
     const vertices = (opts.res + 1) ** 2 + 4 * (opts.res + 1);
     const indices = (opts.res ** 2 + 4 * opts.res) * 6;
     if (opts.batch) {
-      this.terrainBatch = new ChunkBatch(opts.terrainMaterial, vertices, indices);
+      this.terrainBatch = new ChunkBatch(opts.terrainMaterial, opts.batch, vertices, indices);
       this.group.add(this.terrainBatch.mesh);
     }
     if (opts.batch && opts.oceanMaterial) {
-      this.oceanBatch = new ChunkBatch(opts.oceanMaterial, vertices, indices);
+      this.oceanBatch = new ChunkBatch(opts.oceanMaterial, opts.batch, vertices, indices);
       this.group.add(this.oceanBatch.mesh);
     }
   }
@@ -375,6 +375,8 @@ export class Quadtree {
     }
     this.nextSelected = this.prevSelected;
     this.prevSelected = now;
+    this.terrainBatch?.maintain();
+    this.oceanBatch?.maintain();
     this.stats.selected = this.selected.length;
     this.stats.meshes = this.meshCount;
     this.stats.cacheMB = this.bytes / 1048576;
@@ -397,6 +399,8 @@ export class Quadtree {
       if (n.oceanMesh) this.oceanBatch?.release(n.oceanMesh);
     }
     this.prevSelected.clear();
+    this.terrainBatch?.maintain();
+    this.oceanBatch?.maintain();
   }
 
   /**
