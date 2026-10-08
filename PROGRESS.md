@@ -946,3 +946,17 @@ Implemented automatic Surface/Orbit/nearby-vessel Target reference with manual o
 Validation: lint/typecheck/build passed; 60 focused tests passed. Full Vitest: 1,423 passed, one skipped, one existing Saturn full-burn timeout under shared load; that file passed on rerun (41 tests across Saturn/WP3/input). Assisted lunar descent lands below 3 m/s without terrain cautions; ballistic fall warns. Real Windows Chrome/RTX captures cover pad, ascent, 150 km orbit, lunar orbit and powered approach at DPR 1/2; browser assertions verify first-flight input, two-message liftoff, a 50.1 m/s turn hint and manual/Target mode behavior.
 
 Completed paired HUD React means: DPR 1 **0.087 → 0.087 ms/frame**; DPR 2 pad/orbit **0.104 → 0.113** (optional strip: 0.084 / 0.117). Raw scene/fps variation, the higher powered-approach capture and the incomplete DPR 2 lunar benchmark tail are retained and explained in [WP3 evidence](docs/screenshots/wp3/README.md). Largest observed completed-case GPU increase +0.39 ms. Parent/owner still needs independent video review and M-series/120 Hz verification; no Apple performance claim. Implementation commit: `ade910df`.
+
+## 2026-10-08 — WP4: Mission planning (`cx/wp4`)
+
+Implemented body-centred active-orbit framing/filtering, persistent fleet custom/node/SOI alarms with warp stops,
+and worker-based drag/heating/chute landing paths with map/flight impact markers. Preserved the existing worker
+transfer-window search and staging/burn-leading executor, clarified its next-orbit option, restored limiters on
+explicit cancellation, and extended frozen maneuver anchors to numerical maps. Powered assists continue at 1×
+when an alarm fires; coast/warp-to drivers respect the stop. Controller integration stays small.
+
+Lint/typecheck/build pass; final Vitest: **142 files / 1,446 passed / one skipped**. Seeded 120 km re-entry
+misses actual splashdown by **0.9 m**; the three-phase stock-Selene executor acceptance tests pass. One million
+steady alarm sync/check pairs average **0.000047 ms** with 200 alarms. Real browser captures are still being
+validated behind the shared GPU queue; no M-series/120 Hz claim. Scope, assumptions and repeatable probes:
+[WP4 validation](docs/audits/2026-10-08-wp4-validation.md). Implementation: `f3720503`, `c8f9a133`, `b081ebe4`.
