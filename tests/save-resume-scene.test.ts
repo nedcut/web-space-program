@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_START_UT, game, launchableCraft } from '../src/game/store';
-import { loadWorldFromStorage, resumeSave, saveWorldToStorage, serializeWorld } from '../src/game/persistence';
+import { deserializeWorld, loadWorldFromStorage, resumeSave, saveWorldToStorage, serializeWorld } from '../src/game/persistence';
 import { flushSaveWrites, latestSaveSlot, listSaveSlots, sceneForSave, type SaveSlot } from '../src/game/saveSlots';
 import { World } from '../src/game/world';
 import { Universe } from '../src/game/universe';
@@ -72,8 +72,17 @@ describe('loading a save resumes the scene it was made in', () => {
     placeInCircularOrbit(w, w.launch(pod), 'moon', 15000);
     const eva = w.goEva()!;
     saveWorldToStorage('quicksave', w);
-    const data = loadWorldFromStorage('quicksave')!.data;
-    expect(data.activeId).toBe(eva.state.id);
+    // F9 reads the slot back directly...
+    expect(loadWorldFromStorage('quicksave')!.data.activeId).toBe(eva.state.id);
+    // ...and Load from the menu enters the flight with the astronaut, not the empty ship, as the active vessel.
+    game.set({ scene: 'menu', resumeWorld: null });
+    resumeSave(listSaveSlots().find(s => s.name === 'Quicksave')!);
+    const resumed = game.get();
+    expect(resumed.scene).toBe('flight');
+    expect(resumed.resumeWorld?.activeId).toBe(eva.state.id);
+    const loaded = deserializeWorld(JSON.parse(JSON.stringify(resumed.resumeWorld)), PART_CATALOG);
+    expect(loaded.active?.state.eva?.astronautId).toBe(eva.state.eva!.astronautId);
+    expect(loaded.canControl()).toBe(true);
   });
 });
 
