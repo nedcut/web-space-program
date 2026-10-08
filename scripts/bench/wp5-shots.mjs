@@ -54,6 +54,8 @@ const CASES = {
   moonTop: { url: '/?mission=suicide-burn', setup: async (p) => { await p.evaluate(cam(Math.PI * 0.75, 1.4, 45)); await p.evaluate(() => { const f = window.__flight; window.__wp5land = setInterval(() => { const w = f.world, v = w.active.state, b = w.universe.ephem.getBodyState(w.active.body, w.ut); const r = [v.position.x - b.position.x, v.position.y - b.position.y, v.position.z - b.position.z], l = Math.hypot(...r); const vs = ((v.velocity.x - b.velocity.x) * r[0] + (v.velocity.y - b.velocity.y) * r[1] + (v.velocity.z - b.velocity.z) * r[2]) / l; const h = w.universe.surfaceInfo(w.active.body, v.position, w.ut).heightAboveTerrain; const target = -Math.min(40, Math.max(3, h * 0.12)); f.input.state.throttle = h > 1500 ? 0 : Math.max(0, Math.min(1, 0.35 + (target - vs) * 0.25)); }, 50); }); await p.waitForFunction(() => { const f = window.__flight; return f.world.universe.surfaceInfo(f.world.active.body, f.world.active.state.position, f.world.ut).heightAboveTerrain < 60; }, null, { timeout: 180000, polling: 50 }); }, wait: 200 },
   // 150 km orbit, looking down past the vessel at the coast below (stair-stepped coastline check).
   orbitDown: { url: '/?flight=stock-meridian&scenario=orbit', setup: async (p) => { await p.evaluate(cam(Math.PI * 0.5, 1.35, 60)); }, wait: 9000 },
+  // Planet preview (same Earth materials as flight): 150 km over Florida looking down at the coast.
+  coast: { url: '/planet-preview.html?body=earth&alt=150000&lat=26.5&lon=-80.6&head=0&pitch=-55&hour=13&ui=0', preview: true, setup: async () => {}, wait: 9000 },
   // Camera → vessel → Sun, with the Sun ~25° off the view axis (the vessel is backlit, glare stays off-centre).
   backlit: { url: '/?flight=stock-kestrel&scenario=orbit', setup: async (p) => { await p.evaluate(async () => {
     const f = window.__flight, c = f.cam, frame = () => new Promise((r) => requestAnimationFrame(r));
@@ -81,6 +83,14 @@ for (const name of cases) {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 300)); });
   try {
     await page.goto(base + def.url);
+    if (def.preview) {
+      await page.waitForFunction(() => window.__preview?.ready, null, { timeout: 120000, polling: 200 });
+      await page.waitForTimeout(def.wait);
+      await page.screenshot({ path: `${shotDir}\\${label}-${name}.png` });
+      out.cases[name] = { errors: errors.slice(0, 5) };
+      console.log(`== ${name}: preview ${JSON.stringify(errors.slice(0, 3))}`);
+      continue;
+    }
     await page.waitForFunction(() => !!window.__flight && !document.querySelector('.loading-screen'), null, { timeout: 120000, polling: 200 });
     await page.waitForTimeout(4000);
     await def.setup(page);
