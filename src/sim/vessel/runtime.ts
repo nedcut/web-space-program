@@ -243,6 +243,8 @@ export interface VesselTelemetry {
   thrust: number;
   /** Intake air supply / demand of air-breathing engines (1 = fully fed; NaN = no jets running). */
   intakeAirRatio: number;
+  /** Normalized crossflow exposure (see `aerodynamicStress`): 0 clear, 0.49–0.99 warn-only band, ≥ 1 inside the breakup envelope. */
+  crossflowStress: number;
   /** Last commanded control vector after SAS (pitch, yaw, roll). */
   control: { pitch: number; yaw: number; roll: number };
 }

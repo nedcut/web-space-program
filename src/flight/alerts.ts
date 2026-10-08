@@ -46,6 +46,8 @@ export interface AlertInput {
   flameout: boolean;
   /** Electric charge stored / capacity (NaN: no storage). */
   power: number;
+  /** Normalized crossflow exposure: > 0 in the warn band, ≥ 1 inside the breakup envelope. */
+  structuralStress?: number;
 }
 
 /** Seconds an alert lingers after its condition clears. */
@@ -68,6 +70,9 @@ export function alertConditions(i: AlertInput): FlightAlert[] {
   if (i.flying && i.gear === 'up' && i.agl < 300 && i.verticalSpeed < -1 && i.verticalSpeed > -60 && i.horizontalSpeed < 120 && !i.chutes) {
     out.push({ id: 'gear', level: 'warn', text: 'GEAR UP' });
   }
+  const stress = i.structuralStress ?? 0;
+  if (i.flying && stress >= 1) out.push({ id: 'structure', level: 'bad', text: 'STRUCTURAL · BREAKUP · REDUCE ANGLE' });
+  else if (i.flying && stress > 0) out.push({ id: 'structure', level: 'warn', text: 'STRUCTURAL · SIDE LOAD' });
   if (i.flameout) out.push({ id: 'fuel', level: 'bad', text: 'FLAMEOUT' });
   else if (i.thrusting && Number.isFinite(i.stageBurnTime) && i.stageBurnTime < 10) out.push({ id: 'fuel', level: 'warn', text: `STAGE FUEL · ${Math.max(0, i.stageBurnTime).toFixed(0)} s` });
   if (Number.isFinite(i.power) && i.power < 0.05 && !i.eva) out.push({ id: 'power', level: i.power <= 0.001 ? 'bad' : 'warn', text: i.power <= 0.001 ? 'NO POWER' : 'LOW POWER' });
