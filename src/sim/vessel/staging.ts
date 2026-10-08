@@ -157,6 +157,8 @@ export interface StageDeltaV {
   thrustVac: number;
   thrustAsl: number;
   thrust: number;
+  /** Lowest steady vacuum thrust at the start of the stage: every engine at its minimum throttle (solids at full), N. */
+  minThrustVac: number;
   /** Thrust-to-weight at the requested pressure and gravity, at start and end of the stage. */
   twrStart: number;
   twrEnd: number;
@@ -168,7 +170,7 @@ function burnSimulation(sim: VesselState, stage: number, pressure: number, gravi
   const startMass = sim.mass;
   const r: StageDeltaV = {
     stage, dvVac: 0, dvAsl: 0, dv: 0, burnTime: 0, startMass, endMass: startMass,
-    thrustVac: 0, thrustAsl: 0, thrust: 0, twrStart: 0, twrEnd: 0, isp: 0,
+    thrustVac: 0, thrustAsl: 0, thrust: 0, minThrustVac: 0, twrStart: 0, twrEnd: 0, isp: 0,
   };
   let first = true;
   let lastThrust = 0;
@@ -188,12 +190,13 @@ function burnSimulation(sim: VesselState, stage: number, pressure: number, gravi
     if (active.length === 0) break;
     const eps = 1e-6;
     const ledgers = new Map<ResourceId, DrawLedger>();
-    let mdot = 0, fVac = 0, fAsl = 0, fP = 0;
+    let mdot = 0, fVac = 0, fAsl = 0, fP = 0, fMin = 0;
     for (const p of active) {
       const m = engineModule(p)!;
       const md = maxMassFlow(m) * thrustLimit(p);
       mdot += md;
       fVac += md * m.ispVac * G0;
+      fMin += md * m.ispVac * G0 * (m.throttleable && !isSolidMotor(m) ? m.minThrottle : 1);
       fAsl += md * ispAtPressure(m, 101325) * G0;
       fP += md * ispAtPressure(m, pressure) * G0;
       const need = propellantNeed(m, sim.resourceDefs, md);
@@ -218,6 +221,7 @@ function burnSimulation(sim: VesselState, stage: number, pressure: number, gravi
       r.thrustVac = fVac;
       r.thrustAsl = fAsl;
       r.thrust = fP;
+      r.minThrustVac = fMin;
       r.twrStart = fP / (startMass * gravity);
       first = false;
     }

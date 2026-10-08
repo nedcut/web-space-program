@@ -10,8 +10,10 @@ export function startAssist(this: FlightController, _internals: FlightController
   if (!this.world.active || this.world.active.state.eva || !this.world.canControl()) return;
   try {
     this.assist = createAssist(id, this.world);
-    // The program owns time warp from here on: drop any "warp to" so the two never fight.
+    // The program owns time warp from here on: drop any "warp to" so the two never fight. Starting it answers any
+    // alarm already holding warp, as changing warp by hand does.
     this.warpDriver.cancel(this.world);
+    this.world.alarmClock.acknowledge();
     this.world.message(`Assist: ${this.assist.name}`);
   } catch (e) {
     this.world.message((e as Error).message, 'warn');

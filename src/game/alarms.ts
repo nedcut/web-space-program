@@ -20,6 +20,10 @@ export class AlarmClock {
   holdReason: 'node' | 'other' | null = null;
   private nodeCount = -1;
   private nodeOwner: string | null = null;
+  /** The node list last reconciled: planners replace it wholesale (`nodes = []`, then a new node: same count). */
+  private nodeList: unknown = null;
+  /** Nodes a flight assist is flying (`vessel:node id`): the program needs no reminder, so they raise no alarm. */
+  private quiet = new Set<string>();
   private serial = 0;
   private deadline = Infinity;
   private nodeRecords = new Map<ManeuverNode, { vessel: string; time: number }>();
@@ -46,8 +50,19 @@ export class AlarmClock {
   restore(alarms: MissionAlarm[]) {
     this.alarms = structuredClone(alarms).filter(a => typeof a.id === 'string' && typeof a.vesselId === 'string' && Number.isFinite(a.time)).slice(0, 200);
     this.serial = this.alarms.length;
-    this.nodeCount = -1; this.nodeOwner = null;
+    this.nodeCount = -1; this.nodeOwner = null; this.nodeList = null; this.quiet.clear();
     this.nodeRecords.clear(); this.soiRecords.clear(); this.reschedule();
+  }
+  /** A flight assist flies this node: drop its alarm and raise none while it is quiet. */
+  quietNode(vesselId: string, node: ManeuverNode) {
+    this.quiet.add(`${vesselId}:${node.id}`);
+    this.alarms = this.alarms.filter(a => !(a.kind === 'node' && a.vesselId === vesselId && a.source === String(node.id)));
+    this.nodeRecords.delete(node);
+    this.reschedule();
+  }
+  /** The assist let go of the node (cancelled or failed): it gets its reminder back on the next sync. */
+  unquietNode(vesselId: string, node: ManeuverNode) {
+    if (this.quiet.delete(`${vesselId}:${node.id}`)) this.nodeRecords.delete(node);
   }
   private automatic(vesselId: string, kind: 'node' | 'soi', source: string, label: string, time: number, now: number) {
     let a = this.alarms.find(a => a.vesselId === vesselId && a.kind === kind && a.source === source);
@@ -68,17 +83,19 @@ export class AlarmClock {
         const n = world.nodes[i];
         const record = this.nodeRecords.get(n);
         if (!record || record.vessel !== v.state.id || record.time !== n.time) {
-          this.automatic(v.state.id, 'node', String(n.id), 'Maneuver · node in 30 s', n.time - 30, world.ut);
+          if (!this.quiet.has(`${v.state.id}:${n.id}`)) this.automatic(v.state.id, 'node', String(n.id), 'Maneuver · node in 30 s', n.time - 30, world.ut);
           this.nodeRecords.set(n, { vessel: v.state.id, time: n.time });
         }
       }
-      if (this.nodeCount !== world.nodes.length || this.nodeOwner !== v.state.id) {
-        this.nodeCount = world.nodes.length; this.nodeOwner = v.state.id;
+      if (this.nodeCount !== world.nodes.length || this.nodeOwner !== v.state.id || this.nodeList !== world.nodes) {
+        this.nodeCount = world.nodes.length; this.nodeOwner = v.state.id; this.nodeList = world.nodes;
         for (const [n, record] of this.nodeRecords) if (record.vessel === v.state.id && !world.nodes.includes(n)) this.nodeRecords.delete(n);
-        // Drop deleted nodes only for their owner; switching vessels preserves the fleet's alarms.
+        for (const key of this.quiet) if (key.startsWith(`${v.state.id}:`) && !world.nodes.some(n => key === `${v.state.id}:${n.id}`)) this.quiet.delete(key);
+        // Drop deleted or completed nodes' alarms (fired ones too) only for their owner; switching vessels preserves
+        // the fleet's alarms.
         for (let i = this.alarms.length - 1; i >= 0; i--) {
           const a = this.alarms[i];
-          if (a.kind === 'node' && a.vesselId === v.state.id && !a.fired && !world.nodes.some(n => n.id === Number(a.source))) { this.alarms.splice(i, 1); this.reschedule(); }
+          if (a.kind === 'node' && a.vesselId === v.state.id && !world.nodes.some(n => n.id === Number(a.source))) { this.alarms.splice(i, 1); this.reschedule(); }
         }
       }
     }

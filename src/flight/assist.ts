@@ -40,7 +40,8 @@ class Sequence implements Autopilot {
     while (!this.current || this.current.done) {
       if (this.i >= this.stages.length) {
         this.done = true;
-        this.status = 'complete';
+        // Keep the last stage's own result ("landed · touchdown 1.4 m/s", "Done · 0.2 m/s off the plan").
+        this.status = this.current?.status ?? 'complete';
         return { input: neutralInput({ sas: 'stabilityAssist' }) };
       }
       try {
@@ -130,10 +131,13 @@ export function assistFrame(world: World, assist: Autopilot, pilot: ControlInput
   if (pilotThrottle) return end('pilot', 'Assist cancelled: manual control', true);
   if (pilot.pitch || pilot.yaw || pilot.roll) return end('pilot', 'Assist cancelled: manual control');
   const step = assist.update(world);
-  // Alarms stop coasting automation; a burn/descent already in progress continues safely at 1×.
+  // A node alarm is the pilot's reminder to fly the burn; the program is flying, so it must not pin warp at 1× (an
+  // unacknowledged hold from an earlier node used to keep every later coast at 1×).
+  if (world.alarmClock.held && world.alarmClock.holdReason === 'node') world.alarmClock.acknowledge();
+  // Mission alarms stop coasting automation; a burn/descent already in progress continues safely at 1×.
   if (world.alarmClock.held && world.alarmClock.holdReason === 'other' && step.coastUntil !== undefined) return end('pilot', 'Assist paused at mission alarm; acknowledge and restart to continue');
   if (assist.error) return end('error', `Assist stopped: ${assist.error}`);
-  if (assist.done) return end('done', `${assist.name}: complete`);
+  if (assist.done) return end('done', `${assist.name}: ${assist.status || 'complete'}`);
   const commands = [...(step.input.commands ?? []), ...(pilot.commands ?? [])];
   const input: ControlInput = {
     ...step.input,
