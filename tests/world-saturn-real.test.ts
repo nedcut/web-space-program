@@ -6,37 +6,18 @@ import { PART_CATALOG } from '../src/data/parts';
 import { buildRealRingrunner } from '../src/editor/stockCrafts';
 import { DEFAULT_START_UT } from '../src/game/store';
 import { ascentGuidance, executeNode, planCircularization, runAutopilot } from '../src/game/autopilot';
-import { activateStage, computeStageDeltaV, neutralInput, setGear } from '../src/sim/vessel';
+import { computeStageDeltaV } from '../src/sim/vessel';
 import { planInterplanetaryTransfer } from '../src/game/interplanetary';
-import { placeInCircularOrbit } from '../src/game/scenarios';
+import { burnEngineDry, launchRingrunnerUpperStages } from './helpers/ringrunner-upper';
 
-// Burn both retained upper stages dry in deep space. This covers their highest acceleration and
+// Burn the retained chemical upper stage dry in deep space. This covers its highest acceleration and
 // verifies that the internal engine mounts actually feed from the tanks, without a multi-year cruise.
-it('Ringrunner Real retains every upper-stage attachment through complete chemical and nuclear burns', () => {
-  const world = new World(new Universe('real'), PART_CATALOG, DEFAULT_START_UT);
-  requireIntactFlight(world);
-  const vessel = world.launch(buildRealRingrunner());
-  activateStage(vessel.state, 3); // Discard the Earth delivery stack for this propulsion regression.
-  vessel.state.nextStage = 2;
-  placeInCircularOrbit(world, vessel, 'sun', 1e13);
-  setGear(vessel.state, true); // Open both engine interstages.
-  for (const engineId of ['eng-foehn', 'eng-hearth']) {
-    if (engineId === 'eng-hearth') world.tick(0.02, neutralInput({ stage: true }));
-    const engine = vessel.state.parts.find(p => p.partId === engineId)!;
-    const initialFuel = vessel.state.parts.reduce((sum, p) => sum + (p.resources.liquidFuel ?? 0), 0);
-    const parts = vessel.state.parts.length;
-    world.tick(0.02, neutralInput({ stage: true, throttle: 1 }));
-    for (let i = 0; i < 60000 && !engine.engine!.flamedOut; i++) {
-      world.tick(0.2, neutralInput({ throttle: 1, sas: 'stabilityAssist' }));
-      for (const load of vessel.state.cache.jointLoads?.values() ?? []) expect(load.fraction).toBeLessThanOrEqual(1);
-    }
-    expect(engine.engine!.flamedOut, engineId).toBe(true);
-    expect(vessel.state.parts).toHaveLength(parts);
-    const fuel = vessel.state.parts.reduce((sum, p) => sum + (p.resources.liquidFuel ?? 0), 0);
-    expect(initialFuel - fuel).toBeGreaterThan(initialFuel * 0.2);
-    if (engineId === 'eng-hearth') expect(fuel).toBeLessThan(1e-6);
-  }
-}, 180000);
+// The nuclear burn (the longest single run) lives in world-saturn-real-nuclear.test.ts so the two run in
+// parallel workers instead of back to back.
+it('Ringrunner Real retains every upper-stage attachment through a complete chemical burn', () => {
+  const { world, vessel } = launchRingrunnerUpperStages(2);
+  burnEngineDry(world, vessel, 'eng-foehn', false);
+}, 600_000); // ~12 s unloaded; headroom for concurrent worktree test runs.
 
 // A full nuclear departure/cruise exceeds three minutes on the shared machine. Fly the actual
 // stock launcher to orbit, then verify an encounter and its remaining fuel budget with the planner.
@@ -80,4 +61,4 @@ it('Ringrunner Real reaches Earth orbit and budgets a planned Saturn flyby', () 
     `remaining Δv ${budget.toFixed(1)} m/s, Saturn departure ${transfer!.dv.toFixed(1)} m/s + 500 m/s reserve; ` +
     `wait ${((transfer!.node.time - world.ut) / 86400).toFixed(1)} days, flight ${(transfer!.timeOfFlight / 86400).toFixed(1)} days; ` +
     `peak flight joint load ${(peakJointLoad * 100).toFixed(1)}%\n`);
-}, 180000);
+}, 600_000); // ~25 s unloaded; headroom for concurrent worktree test runs.
