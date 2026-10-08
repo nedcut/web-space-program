@@ -183,6 +183,15 @@ varying vec3 vAerialL;
 varying vec3 vAerialT;
 `;
 
+/** The chunk matrix is a floating-origin transform, exactly as on an ordinary Mesh. */
+const GLSL_CHUNK_POSITION = /* glsl */ `
+  vec4 localPosition = vec4(position, 1.0);
+  #ifdef USE_BATCHING
+    localPosition = getBatchingMatrix(getIndirectIndex(gl_DrawID)) * localPosition;
+  #endif
+  vec4 wp = modelMatrix * localPosition;
+`;
+
 function baseHeader(): string {
   return GLSL_ATMOSPHERE + GLSL_RING_SHADOW + GLSL_CLOUD_SHADOW + GLSL_WATER + GLSL_IMAGERY_DECL;
 }
@@ -266,6 +275,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
     vertexShader: /* glsl */ `
       ${GLSL_LOGDEPTH_VERT_PARS}
       attribute vec3 aColor;
+      #include <batching_pars_vertex>
       attribute vec3 aDetail;
       varying vec3 vWorldPos;
       varying vec3 vNormalBF;
@@ -282,7 +292,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       varying float vCovered;
       #endif
       void main() {
-        vec4 wp = modelMatrix * vec4(position, 1.0);
+        ${GLSL_CHUNK_POSITION}
         vWorldPos = wp.xyz;
         vNormalBF = normal;
         vColor = aColor * aColor; // stored gamma-2 encoded
@@ -552,6 +562,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
     vertexShader: /* glsl */ `
       ${GLSL_LOGDEPTH_VERT_PARS}
       attribute float aDepth;
+      #include <batching_pars_vertex>
       attribute vec3 aDetail;
       varying vec3 vWorldPos;
       varying vec3 vUpBF;
@@ -565,7 +576,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
       ${GLSL_AERIAL_VERT}
       ${GLSL_SKY_REFL_VERT}
       void main() {
-        vec4 wp = modelMatrix * vec4(position, 1.0);
+        ${GLSL_CHUNK_POSITION}
         vWorldPos = wp.xyz;
         vUpBF = normal;
         vDepth = aDepth;

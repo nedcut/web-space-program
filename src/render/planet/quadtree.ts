@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { chunkBounds, chunkEdgeLength, chunkId, faceToSphere, type ChunkData, type ChunkKey } from './chunkBuilder';
 import type { TerrainWorkerPool } from './workerPool';
+import { ChunkBatch } from './ChunkBatch';
 
 /**
  * Cube-sphere quadtree LOD.
@@ -25,6 +26,8 @@ export interface QuadtreeOptions {
   maxInFlight: number;
   buildBudgetMs: number;
   cacheSize: number;
+  /** Enable only when the host renderer supports WEBGL_multi_draw. */
+  batch?: boolean;
 }
 
 export interface SelectContext {
@@ -76,12 +79,24 @@ export class Quadtree {
   readonly selected: ChunkNode[] = [];
   private prevSelected = new Set<ChunkNode>();
   private nextSelected = new Set<ChunkNode>();
+  private readonly terrainBatch?: ChunkBatch;
+  private readonly oceanBatch?: ChunkBatch;
   stats = { selected: 0, meshes: 0, inflight: 0, queued: 0, builtTotal: 0, lastBuildMs: 0 };
 
   constructor(opts: QuadtreeOptions) {
     this.opts = opts;
     this.roots = [0, 1, 2, 3, 4, 5].map((face) => new ChunkNode({ face, level: 0, ix: 0, iy: 0 }, opts.radius));
     this.group.name = 'terrain-quadtree';
+    const vertices = (opts.res + 1) ** 2 + 4 * (opts.res + 1);
+    const indices = (opts.res ** 2 + 4 * opts.res) * 6;
+    if (opts.batch) {
+      this.terrainBatch = new ChunkBatch(opts.terrainMaterial, vertices, indices);
+      this.group.add(this.terrainBatch.mesh);
+    }
+    if (opts.batch && opts.oceanMaterial) {
+      this.oceanBatch = new ChunkBatch(opts.oceanMaterial, vertices, indices);
+      this.group.add(this.oceanBatch.mesh);
+    }
   }
 
   get rootsReady(): boolean {
@@ -95,6 +110,8 @@ export class Quadtree {
   setMaterials(terrain: THREE.Material, ocean?: THREE.Material): void {
     this.opts.terrainMaterial = terrain;
     this.opts.oceanMaterial = ocean;
+    if (this.terrainBatch) this.terrainBatch.mesh.material = terrain;
+    if (this.oceanBatch && ocean) this.oceanBatch.mesh.material = ocean;
     const visit = (n: ChunkNode) => {
       if (n.mesh) n.mesh.material = terrain;
       if (n.oceanMesh && ocean) n.oceanMesh.material = ocean;
@@ -244,7 +261,7 @@ export class Quadtree {
     m.matrixAutoUpdate = false;
     m.name = node.id;
     node.mesh = m;
-    this.group.add(m);
+    if (!this.terrainBatch) this.group.add(m);
     if (data.ocean && this.opts.oceanMaterial) {
       const og = new THREE.BufferGeometry();
       og.setAttribute('position', new THREE.BufferAttribute(data.ocean.positions, 3));
@@ -257,7 +274,7 @@ export class Quadtree {
       om.visible = false;
       om.matrixAutoUpdate = false;
       node.oceanMesh = om;
-      this.group.add(om);
+      if (!this.oceanBatch) this.group.add(om);
     }
     node.state = 'ready';
     this.meshCount++;
@@ -278,6 +295,8 @@ export class Quadtree {
       if (!now.has(n)) {
         if (n.mesh) n.mesh.visible = false;
         if (n.oceanMesh) n.oceanMesh.visible = false;
+        if (n.mesh) this.terrainBatch?.release(n.mesh);
+        if (n.oceanMesh) this.oceanBatch?.release(n.oceanMesh);
       }
     }
     for (const n of this.selected) {
@@ -285,8 +304,14 @@ export class Quadtree {
       const px = bodyRenderX + e[0] * x + e[3] * y + e[6] * z;
       const py = bodyRenderY + e[1] * x + e[4] * y + e[7] * z;
       const pz = bodyRenderZ + e[2] * x + e[5] * y + e[8] * z;
-      if (n.mesh) this.placeMesh(n.mesh, px, py, pz, rot);
-      if (n.oceanMesh) this.placeMesh(n.oceanMesh, px, py, pz, rot);
+      if (n.mesh) {
+        const changed = this.placeMesh(n.mesh, px, py, pz, rot);
+        this.terrainBatch?.place(n.mesh, changed);
+      }
+      if (n.oceanMesh) {
+        const changed = this.placeMesh(n.oceanMesh, px, py, pz, rot);
+        this.oceanBatch?.place(n.oceanMesh, changed);
+      }
     }
     this.nextSelected = this.prevSelected;
     this.prevSelected = now;
@@ -294,18 +319,21 @@ export class Quadtree {
     this.stats.meshes = this.meshCount;
   }
 
-  private placeMesh(m: THREE.Mesh, x: number, y: number, z: number, rot: THREE.Quaternion): void {
+  private placeMesh(m: THREE.Mesh, x: number, y: number, z: number, rot: THREE.Quaternion): boolean {
     m.visible = true;
-    if (m.position.x === x && m.position.y === y && m.position.z === z && m.quaternion.equals(rot)) return;
+    if (m.position.x === x && m.position.y === y && m.position.z === z && m.quaternion.equals(rot)) return false;
     m.position.set(x, y, z);
     m.quaternion.copy(rot);
     m.updateMatrix();
+    return true;
   }
 
   hideAll(): void {
     for (const n of this.prevSelected) {
       if (n.mesh) n.mesh.visible = false;
       if (n.oceanMesh) n.oceanMesh.visible = false;
+      if (n.mesh) this.terrainBatch?.release(n.mesh);
+      if (n.oceanMesh) this.oceanBatch?.release(n.oceanMesh);
     }
     this.prevSelected.clear();
   }
@@ -340,6 +368,8 @@ export class Quadtree {
   private disposeNode(n: ChunkNode, recursive: boolean): void {
     for (const m of [n.mesh, n.oceanMesh]) {
       if (!m) continue;
+      this.terrainBatch?.release(m);
+      this.oceanBatch?.release(m);
       this.group.remove(m);
       m.geometry.dispose();
     }
@@ -354,5 +384,7 @@ export class Quadtree {
 
   dispose(): void {
     for (const r of this.roots) this.disposeNode(r, true);
+    this.terrainBatch?.dispose();
+    this.oceanBatch?.dispose();
   }
 }

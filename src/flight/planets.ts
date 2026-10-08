@@ -40,8 +40,9 @@ const DESTROY_ANGLE = 2e-4;
  * Manages PlanetRenderers for the flight scene: the Sun always, plus any body large enough on screen.
  * Renderers use the same deterministic terrain instances as the physics, so what you see is what you land on.
  */
-export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualityId: QualityId): PlanetLayer {
+export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualityId: QualityId, renderer?: THREE.WebGLRenderer): PlanetLayer {
   const quality = getQuality(qualityId);
+  const batchTerrain = qualityId !== 'low' && !!renderer?.extensions.has('WEBGL_multi_draw');
   const scale = SCALE_PRESETS[universe.preset];
   const renderers = new Map<string, PlanetRenderer>();
   const comets = new Map([...universe.bodies.values()].filter(b => b.kind === 'comet').map(b => {
@@ -53,7 +54,7 @@ export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualit
   const make = (id: string) => {
     const b = universe.body(id);
     const terrain = b.solidSurface ? universe.terrain(id) : null;
-    const pr = new PlanetRenderer(b, terrain, { quality, scale });
+    const pr = new PlanetRenderer(b, terrain, { quality, scale, batchTerrain });
     scene.add(pr.root);
     renderers.set(id, pr);
     return pr;

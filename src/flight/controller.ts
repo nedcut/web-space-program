@@ -256,7 +256,7 @@ export class FlightController {
     this.skyEnv = new SkyEnvironment(this.pipeline.renderer);
     this.scene.environmentIntensity = 1;
 
-    this.planets = createPlanetLayer(this.scene, universe, quality);
+    this.planets = createPlanetLayer(this.scene, universe, quality, this.pipeline.renderer);
 
     const labelHost = (this.labelHost = document.createElement('div'));
     Object.assign(labelHost.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
