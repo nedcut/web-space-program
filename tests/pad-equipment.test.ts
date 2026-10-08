@@ -41,18 +41,16 @@ describe('launch pad equipment', () => {
     const { state, com } = onPad(buildOrbiter());
     const profile = padVesselProfile(state, com)!;
     const eq = new PadEquipment(new THREE.MeshBasicMaterial(), paint);
-    const clamps = eq.group.getObjectByName('site:clamps') as THREE.InstancedMesh;
     const tip = (t: number) => {
       eq.update(t, { state, com, held: t < 10, firing: t >= 9 });
-      const m = new THREE.Matrix4(); clamps.getMatrixAt(0, m);
-      // The claw sits at the far end of the arm (its length is the arm's +X extent).
-      clamps.geometry.computeBoundingBox();
-      return new THREE.Vector3(clamps.geometry.boundingBox!.max.x - 0.1, 0, 0).applyMatrix4(m);
+      // The claw sits at the far end of the arm (arm length along its +X).
+      const L = Math.hypot(CLAMP.corner * Math.SQRT2 - (profile.holdR + 0.25), profile.holdY - CLAMP.hingeY);
+      return new THREE.Vector3(L - 0.1, 0, 0).applyMatrix4(eq.pieceMatrix(0));
     };
     tip(0);
     const held = tip(5);
     // A resting pad must not re-upload instances: every upload invalidates the cached shadow map.
-    const versions = () => eq.group.children.map((m) => (m as THREE.InstancedMesh).instanceMatrix.version);
+    const versions = () => ['position', 'normal'].map((n) => (eq.mesh.geometry.getAttribute(n) as THREE.BufferAttribute).version);
     const before = versions();
     for (let t = 5; t < 6; t += 1 / 60) tip(t);
     expect(versions()).toEqual(before);

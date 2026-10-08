@@ -2,12 +2,14 @@ import * as THREE from 'three';
 import type { VesselState } from '../../sim/vessel/runtime';
 
 /**
- * Moving launch-pad equipment, drawn with the site material as three instanced meshes (one draw each):
+ * Moving launch-pad equipment, drawn with the site material as one mesh (one draw, the site's own program):
  * - four hold-down clamp arms, hinged on pedestals at the flame-hole corners, that reach in to the vessel's aft
  *   skirt while it is held and fall back when the clamps release;
  * - service-tower swing arms that stand at the vessel while it is on the pad and swing clear at ignition;
  * - telescoping umbilical hoods that slide out of each arm to the vessel's skin and retract first.
- * All geometry is in the pad frame (metres: +X east, +Y up, +Z south), like the rest of the site.
+ * All geometry is in the pad frame (metres: +X east, +Y up, +Z south), like the rest of the site. The ten pieces
+ * (4 clamps, 3 arms, 3 hoods) are posed on the CPU into one vertex buffer, and only while one of them moves
+ * (a few seconds around liftoff): three instanced meshes cost an extra program and ~0.06 ms on the pad.
  */
 
 /** Pad-frame vertical profile of a vessel standing on the pad (y relative to the deck). */
@@ -91,9 +93,13 @@ function smooth(t: number): number { const x = Math.min(1, Math.max(0, t)); retu
 
 export class PadEquipment {
   readonly group = new THREE.Group();
-  private clamps: THREE.InstancedMesh;
-  private arms: THREE.InstancedMesh;
-  private hoods: THREE.InstancedMesh;
+  readonly mesh: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
+  private clampGeo: THREE.BufferGeometry;
+  private readonly armGeo: THREE.BufferGeometry;
+  private readonly hoodGeo: THREE.BufferGeometry;
+  /** Per piece: object-space source geometry, first vertex in the merged buffer, last pose (float32). */
+  private pieces: { src: THREE.BufferGeometry; first: number; pose: Float32Array }[] = [];
+  private posed = false;
   private readonly paint: PaintFn;
   private clampLength = -1;
   private clampPitch = 0;
@@ -111,26 +117,41 @@ export class PadEquipment {
   private readonly p = new THREE.Vector3();
   private readonly one = new THREE.Vector3(1, 1, 1);
   private readonly slideM = new THREE.Matrix4();
+  private readonly nm = new THREE.Matrix3();
+  private readonly v = new THREE.Vector3();
 
   constructor(material: THREE.Material, paint: PaintFn) {
     this.paint = paint;
     this.group.name = 'site:padEquipment';
-    this.clamps = this.instanced(this.clampGeometry(6), material, 4, 'site:clamps');
-    this.arms = this.instanced(this.armGeometry(), material, ARMS.levels.length, 'site:swingArms');
-    this.hoods = this.instanced(this.hoodGeometry(), material, ARMS.levels.length, 'site:hoods');
+    this.clampGeo = this.clampGeometry(6);
+    this.armGeo = this.armGeometry();
+    this.hoodGeo = this.hoodGeometry();
+    this.mesh = new THREE.Mesh(this.assemble(), material);
+    this.mesh.name = 'site:equipment';
+    this.mesh.castShadow = this.mesh.receiveShadow = true;
+    this.group.add(this.mesh);
     this.pose(0);
   }
 
-  private instanced(g: THREE.BufferGeometry, mat: THREE.Material, n: number, name: string) {
-    const mesh = new THREE.InstancedMesh(g, mat, n);
-    mesh.name = name;
-    mesh.castShadow = mesh.receiveShadow = true;
-    // Fixed bounds covering every pose (arms swung or extended, clamps engaged or stowed): culled away from the
-    // pad, and outside the vessel's shadow volume in flight (an unculled caster that moves relative to the
-    // vessel — the whole site does, in orbit — would redraw the shadow map every frame).
-    mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(-4, 17, 0), 30);
-    this.group.add(mesh);
-    return mesh;
+  /**
+   * One buffer for every piece: static attributes copied once, positions/normals written by `pose`. Fixed bounds
+   * cover every pose (arms swung or extended, clamps engaged or stowed): the mesh is culled away from the pad and
+   * stays outside the vessel's shadow volume in flight (an unculled caster that moves relative to the vessel — the
+   * whole site does, in orbit — would redraw the shadow map every frame).
+   */
+  private assemble(): THREE.BufferGeometry {
+    const srcs = [...Array(4).fill(this.clampGeo), ...ARMS.levels.map(() => this.armGeo), ...ARMS.levels.map(() => this.hoodGeo)] as THREE.BufferGeometry[];
+    const total = srcs.reduce((n, g) => n + g.getAttribute('position').count, 0);
+    const out = new THREE.BufferGeometry();
+    let first = 0;
+    this.pieces = srcs.map((src) => { const p = { src, first, pose: new Float32Array(16).fill(NaN) }; first += src.getAttribute('position').count; return p; });
+    for (const name of Object.keys(this.clampGeo.attributes)) {
+      const size = this.clampGeo.getAttribute(name).itemSize, arr = new Float32Array(total * size);
+      if (name !== 'position' && name !== 'normal') for (const p of this.pieces) arr.set(p.src.getAttribute(name).array as Float32Array, p.first * size);
+      out.setAttribute(name, new THREE.BufferAttribute(arr, size));
+    }
+    out.boundingSphere = new THREE.Sphere(new THREE.Vector3(-4, 17, 0), 30);
+    return out;
   }
 
   private merge(parts: [Parameters<PaintFn>[0], THREE.BufferGeometry][]): THREE.BufferGeometry {
@@ -223,8 +244,10 @@ export class PadEquipment {
       if (run > 0.6 && L < 16) {
         this.clampPitch = Math.atan2(rise, run);
         if (Math.abs(L - this.clampLength) > 0.05) {
-          this.clamps.geometry.dispose();
-          this.clamps.geometry = this.clampGeometry(L);
+          this.clampGeo.dispose();
+          this.clampGeo = this.clampGeometry(L);
+          this.mesh.geometry.dispose();
+          this.mesh.geometry = this.assemble();
           this.clampLength = L;
         }
       } else this.clampLength = 0;
@@ -251,7 +274,7 @@ export class PadEquipment {
       this.e.set(0, heading, pitch, 'YZX');
       this.q.setFromEuler(this.e);
       this.p.set(sx * CLAMP.corner, CLAMP.hingeY, sz * CLAMP.corner);
-      this.set(this.clamps, i, this.m.compose(this.p, this.q, this.one));
+      this.set(i, this.m.compose(this.p, this.q, this.one));
     }
     // Arms: hoods slide home over 0.8 s, then the arm swings 85° north over 2.4 s.
     const t = this.armT;
@@ -263,28 +286,44 @@ export class PadEquipment {
       this.q.setFromAxisAngle(this.p.set(0, 1, 0), yaw);
       this.p.set(ARMS.x0, y, ARMS.z);
       this.m.compose(this.p, this.q, this.one);
-      this.set(this.arms, k, this.m);
+      this.set(4 + k, this.m);
       const hx = this.hoodX[k] + (ARMS.reach - 0.6 - this.hoodX[k]) * slide;
       this.m.multiply(this.slideM.makeTranslation(hx, 0, 0));
-      this.set(this.hoods, k, this.m);
+      this.set(4 + ARMS.levels.length + k, this.m);
+    }
+    if (this.posed) {
+      const g = this.mesh.geometry;
+      g.getAttribute('position').needsUpdate = true;
+      g.getAttribute('normal').needsUpdate = true;
+      this.posed = false;
     }
   }
 
+  /** Pose of piece `i` (pad frame), e.g. clamp arms 0–3. */
+  pieceMatrix(i: number, target = new THREE.Matrix4()): THREE.Matrix4 { return target.fromArray(this.pieces[i].pose); }
+
   /**
-   * Write an instance matrix only when it changes: an instance upload marks the shadow-map cache dirty (a full
-   * depth pass), so a resting pad must not touch its buffers.
+   * Re-pose a piece only when its matrix changes: a vertex upload marks the shadow-map cache dirty (a full depth
+   * pass), so a resting pad must not touch its buffers.
    */
-  private set(mesh: THREE.InstancedMesh, i: number, m: THREE.Matrix4): void {
-    const a = mesh.instanceMatrix.array as Float32Array, e = m.elements;
+  private set(i: number, m: THREE.Matrix4): void {
+    const piece = this.pieces[i], e = m.elements;
     let same = true;
-    for (let k = 0; k < 16; k++) if (a[i * 16 + k] !== Math.fround(e[k])) { same = false; break; }
+    for (let k = 0; k < 16; k++) if (piece.pose[k] !== Math.fround(e[k])) { same = false; break; }
     if (same) return;
-    mesh.setMatrixAt(i, m);
-    mesh.instanceMatrix.needsUpdate = true;
+    piece.pose.set(e);
+    const g = this.mesh.geometry, pos = g.getAttribute('position') as THREE.BufferAttribute, nor = g.getAttribute('normal') as THREE.BufferAttribute;
+    const sp = piece.src.getAttribute('position'), sn = piece.src.getAttribute('normal');
+    this.nm.getNormalMatrix(m);
+    for (let j = 0; j < sp.count; j++) {
+      this.v.fromBufferAttribute(sp, j).applyMatrix4(m); pos.setXYZ(piece.first + j, this.v.x, this.v.y, this.v.z);
+      this.v.fromBufferAttribute(sn, j).applyMatrix3(this.nm).normalize(); nor.setXYZ(piece.first + j, this.v.x, this.v.y, this.v.z);
+    }
+    this.posed = true;
   }
 
   dispose(): void {
-    for (const m of [this.clamps, this.arms, this.hoods]) { m.geometry.dispose(); m.dispose(); }
+    for (const g of [this.mesh.geometry, this.clampGeo, this.armGeo, this.hoodGeo]) g.dispose();
     this.group.removeFromParent();
   }
 }

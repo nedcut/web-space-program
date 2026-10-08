@@ -15,7 +15,6 @@ import { packBand } from './vegetationBands';
 import { PadEquipment, CLAMP } from './padEquipment';
 import { PadSteam } from './padSteam';
 import type { VesselState } from '../../sim/vessel/runtime';
-import { instancedVariant } from '../core/materialVariants';
 import { paintSurface, SiteTextureArray, siteSurfaceUniforms, withSiteSurfaces, type SiteLayer, type SiteSurface, type SiteSurfaceUniforms } from './siteSurfaces';
 
 /** What LaunchSite needs from the game Universe (structural, keeps render → game imports out). */
@@ -1312,8 +1311,7 @@ export class LaunchSite {
   // ------------------------------------------------------------------ moving pad equipment and deluge steam
 
   private buildPadEquipment() {
-    const mat = instancedVariant(this.siteMat!);
-    this.equipment = new PadEquipment(mat, (key, g) => this.painted(key, g));
+    this.equipment = new PadEquipment(this.siteMat!, (key, g) => this.painted(key, g));
     for (const m of this.equipment.group.children) (m as THREE.Mesh).onBeforeRender = (renderer) => this.surfaceTextures?.fill(renderer);
     this.root.add(this.equipment.group);
     const n = this.options.steamParticles ?? 96;
