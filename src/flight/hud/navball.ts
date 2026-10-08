@@ -106,6 +106,8 @@ function buildTexture(): THREE.CanvasTexture {
   return tex;
 }
 
+const DRAW_TOLERANCE = 2e-4;
+
 export class Navball {
   readonly element: HTMLDivElement;
   private renderer: THREE.WebGLRenderer;
@@ -157,14 +159,19 @@ export class Navball {
     return new THREE.Vector3(-dot(d, f.north), dot(d, f.up), dot(d, f.east));
   }
 
-  /** True when nothing visible changed since the last draw (common on the pad / while coasting). */
+  /**
+   * True when nothing visible changed since the last draw (common on the pad / while coasting). Axes and markers
+   * are unit vectors: a change below DRAW_TOLERANCE turns the ball by under 0.1 device px at its rim, so a coasting
+   * orbit (≈1e-3 rad/s) redraws a few times per second instead of every frame. Each redraw is a second WebGL
+   * context and a 2D canvas to present, which is costly in Firefox.
+   */
   private unchanged(frame: NavballFrame, markers: NavballMarker[], colourBlind: boolean): boolean {
     const n = 16 + markers.length * 4;
     let key = this.lastKey;
     const same = key.length === n && colourBlind === this.lastColourBlind;
     if (key.length !== n) key = this.lastKey = new Float64Array(n);
     let changed = !same;
-    const put = (i: number, v: number) => { if (Math.abs(key[i] - v) > 1e-6) { key[i] = v; changed = true; } };
+    const put = (i: number, v: number) => { if (Math.abs(key[i] - v) > DRAW_TOLERANCE) { key[i] = v; changed = true; } };
     const vecs = [frame.east, frame.north, frame.up, frame.forward, frame.top];
     for (let k = 0; k < 5; k++) { put(k * 3, vecs[k].x); put(k * 3 + 1, vecs[k].y); put(k * 3 + 2, vecs[k].z); }
     put(15, markers.length);
