@@ -60,7 +60,8 @@ vec3 phaseMie(float c) {
   vec3 g = uMieG;
   vec3 g2 = g * g;
   vec3 num = 3.0 * (1.0 - g2) * (1.0 + c * c);
-  vec3 den = 8.0 * ATMO_PI * (2.0 + g2) * pow(max(1.0 + g2 - 2.0 * g * c, vec3(1e-4)), vec3(1.5));
+  vec3 base = max(1.0 + g2 - 2.0 * g * c, vec3(1e-4));
+  vec3 den = 8.0 * ATMO_PI * (2.0 + g2) * (base * sqrt(base));
   return num / den;
 }
 

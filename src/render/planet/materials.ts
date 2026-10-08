@@ -369,6 +369,16 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         vec2 c = texture2D(uDetailTex, p.xy / scale).gb - 0.5;
         return vec3(0.0, a.x, a.y) * w.x + vec3(b.y, 0.0, b.x) * w.y + vec3(c.x, c.y, 0.0) * w.z;
       }
+      // Colour/coverage and slope use the same triplanar coordinates. Share
+      // their fetches while preserving the original cyclic accumulation order.
+      vec4 triSampleGrad(vec3 p, vec3 w, float scale, bool cyclic, out vec3 grad) {
+        vec4 a = texture2D(uDetailTex, p.yz / scale);
+        vec4 b = texture2D(uDetailTex, p.zx / scale);
+        vec4 c = texture2D(uDetailTex, p.xy / scale);
+        vec2 ga = a.gb - 0.5, gb = b.gb - 0.5, gc = c.gb - 0.5;
+        grad = vec3(0.0, ga.x, ga.y) * w.x + vec3(gb.y, 0.0, gb.x) * w.y + vec3(gc.x, gc.y, 0.0) * w.z;
+        return cyclic ? b * w.y + c * w.z + a * w.x : a * w.x + b * w.y + c * w.z;
+      }
 
       void main() {
         ${GLSL_LOGDEPTH_FRAG}
@@ -409,10 +419,11 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           float hd = 0.0;
           float cover = 0.5;
           vec3 g = vec3(0.0);
-          // Three octaves; the large one uses the decorrelated A channel (+swizzle) to hide tiling.
-          if (f3 > 0.0) { vec4 s = triSample(vDetail.zxy, w.zxy, 1024.0); vec4 s2 = triSample(vDetail, w, 256.0); cover = s.a * 0.6 + s2.a * 0.4; hd += ((s.a - 0.5) * 0.7 + (s2.a - 0.5) * 0.5) * f3; g += triGrad(vDetail, w, 256.0) * f3 * 0.35; }
-          if (f2 > 0.0) { vec4 s = triSample(vDetail.yzx, w.yzx, 32.0); hd += (s.r - 0.5) * f2 * 0.6; g += triGrad(vDetail, w, 32.0) * f2 * 0.6; }
-          if (f1 > 0.0) { vec4 s = triSample(vDetail, w, 4.0); hd += (s.r - 0.5) * f1 * 0.5; g += triGrad(vDetail, w, 4.0) * f1; }
+          // Three octaves; the large one uses the decorrelated A channel to hide tiling.
+          vec3 grad;
+          if (f3 > 0.0) { vec4 s = triSample(vDetail.zxy, w.zxy, 1024.0); vec4 s2 = triSampleGrad(vDetail, w, 256.0, false, grad); cover = s.a * 0.6 + s2.a * 0.4; hd += ((s.a - 0.5) * 0.7 + (s2.a - 0.5) * 0.5) * f3; g += grad * f3 * 0.35; }
+          if (f2 > 0.0) { vec4 s = triSampleGrad(vDetail, w, 32.0, true, grad); hd += (s.r - 0.5) * f2 * 0.6; g += grad * f2 * 0.6; }
+          if (f1 > 0.0) { vec4 s = triSampleGrad(vDetail, w, 4.0, false, grad); hd += (s.r - 0.5) * f1 * 0.5; g += grad * f1; }
           float microFade = 1.0 - smoothstep(15.0, 100.0, dist);
           if (microFade > 0.0) g += triGrad(vDetail, w, 0.5) * microFade * 0.35;
           // Shallow wind ripples, projected into the tangent plane below; no collision relief.
@@ -1108,6 +1119,11 @@ export function createCloudMaterial(u: PlanetUniforms, q: QualitySettings, cloud
         float f1 = near * (1.0 - smoothstep(0.12, 0.4, footprint));
         float f2 = near * (1.0 - smoothstep(0.12, 0.4, footprint * 3.0));
         float f3 = near * (1.0 - smoothstep(0.12, 0.4, footprint * 9.0));
+        #if CLOUD_DETAIL == 2
+          // Detail multiplies coverage; zero remains zero. Keep derivatives
+          // above this branch so neighboring cloud edges retain their footprint.
+          if (d <= 0.0) return 0.0;
+        #endif
         float n = 0.0;
         if (f1 > 0.0) n += snoise(p) * 0.24 * f1;
         #if CLOUD_DETAIL >= 2
