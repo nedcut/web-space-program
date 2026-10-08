@@ -77,23 +77,6 @@ export function WarpToControl({ feel, onWarpTo, onCancel }: { feel: FeelTelemetr
   );
 }
 
-/** Brief "STAGE n" flash when a stage fires (static under Reduce motion via the global rule). */
-export function StageFlash({ count, stage }: { count: number; stage: number }) {
-  const [shown, setShown] = useState<{ key: number; stage: number } | null>(null);
-  const first = useRef(count);
-  // Read the stage only at the moment of the flash.
-  const stageRef = useRef(stage);
-  useEffect(() => { stageRef.current = stage; }, [stage]);
-  useEffect(() => {
-    if (count === first.current) return;
-    setShown({ key: count, stage: stageRef.current + 1 });
-    const id = window.setTimeout(() => setShown(null), 1100);
-    return () => window.clearTimeout(id);
-  }, [count]);
-  if (!shown) return null;
-  return <div key={shown.key} className="feel-stage-flash" aria-hidden>STAGE {shown.stage}</div>;
-}
-
 export function Countdown({ value }: { value: number | null }) {
   if (value === null) return null;
   return (
@@ -104,10 +87,10 @@ export function Countdown({ value }: { value: number | null }) {
   );
 }
 
-export function FlightHint({ hint, onDismiss, navballSize = 200 }: { hint: Hint | null; onDismiss?: () => void; navballSize?: number }) {
+export function FlightHint({ hint, onDismiss }: { hint: Hint | null; onDismiss?: () => void }) {
   if (!hint) return null;
   return (
-    <Panel className="feel-hint" role="note" style={{ bottom: navballSize + 92 }}>
+    <Panel className="feel-hint" role="note">
       <span style={{ flex: 1 }}>{hint.text}</span>
       <Button className="btn small ghost" onClick={onDismiss} title="Hide this hint">✕</Button>
     </Panel>

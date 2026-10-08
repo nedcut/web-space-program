@@ -21,7 +21,7 @@ const world = () => { const w = new World(new Universe('standard'), PART_CATALOG
 afterEach(() => { game.set(original); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('saving with full storage never crashes navigation', () => {
-  it('Tracking Station Back/Fly still navigates and shows a storage-full notification', () => {
+  it('Fleet Tracking Back/Fly still navigates and shows a storage-full notification', () => {
     fullStorage();
     game.set({ saveId: 'sandbox-full', scene: 'tracking', saveError: null });
     const w = world();

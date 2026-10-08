@@ -35,7 +35,7 @@ export function NavballCluster({ t, cb, navball, precision, speed }: { t: Teleme
           : moving);
   const pad = 14;
   const wrap = size + pad * 2;
-  const speedLabel = t.speedMode === 'surface' && t.dynamicPressure > 50 ? 'Airspeed' : SPEED_LABEL[t.speedMode];
+  const speedLabel = SPEED_LABEL[t.speedMode];
   return (
     <div className="nb-cluster" style={{ ['--nb-size' as string]: `${size}px` }}>
       <div className="nb-housing panel" aria-hidden />
@@ -67,8 +67,8 @@ export function NavballCluster({ t, cb, navball, precision, speed }: { t: Teleme
         </div>
       )}
       <div className="nb-ball" style={{ width: wrap, height: wrap }}>
-        <button type="button" className="nb-speed" onClick={cb.onSpeedMode} title="Speed display: click to cycle Surface / Orbit / Target">
-          <span className="nb-speed-mode">{speedLabel}</span>
+        <button type="button" className="nb-speed" onClick={cb.onSpeedMode} title="Speed and SAS reference: click to cycle Auto / Surface / Orbit / Target (when selected)">
+          <span className="nb-speed-mode">{speedLabel}{t.speedAutomatic && <small> AUTO</small>}</span>
           <span className="nb-speed-value">{speed(t.speed)}</span>
         </button>
         {controls && <ThrottleArc value={t.throttle} size={wrap} />}

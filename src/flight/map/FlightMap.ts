@@ -1,3 +1,4 @@
+import { LandingPredictionDriver } from './LandingPredictionDriver';
 import type { FlightController } from '../controller';
 import type { WorldVessel } from '../../game/world';
 import type { MapPick, MapPoint } from '../../render/map/MapView';
@@ -6,6 +7,7 @@ import { formatDuration } from '../../util/format';
 import { isTyping, matches } from '../../input/bindings';
 import { formatDistance, formatSpeed } from '../../util/format';
 import { length, sub, type Vec3 } from '../../util/vec3';
+import { orbitFrameDistance } from './framing';
 import { nodeSummary, patchAtNode } from './nodeInfo';
 
 export interface MapMenus {
@@ -24,8 +26,9 @@ const FOCUS_KINDS = new Set(['star', 'planet', 'dwarf', 'moon']);
  * menu actions and maneuver-node commands. `world.nodes` stays the single source of truth for maneuvers.
  */
 export class FlightMap {
-  /** Focused object; null follows the active vessel. */
+  /** Focused object; null frames the active vessel around its body. */
   focus: MapObject | null = null;
+  readonly landing: LandingPredictionDriver;
   menus: MapMenus = { node: null, context: null, info: null };
   private listeners = new Set<() => void>();
   private hinted = false;
@@ -38,6 +41,7 @@ export class FlightMap {
   };
 
   constructor(private c: FlightController) {
+    this.landing = new LandingPredictionDriver(c);
     c.map.handlers = {
       placeNode: (time) => this.placeNode(time),
       nodesChanged: () => this.sortNodes(),
@@ -52,7 +56,7 @@ export class FlightMap {
     window.addEventListener('keydown', this.keydown);
   }
 
-  dispose() { window.removeEventListener('keydown', this.keydown); this.listeners.clear(); }
+  dispose() { this.landing.dispose(); window.removeEventListener('keydown', this.keydown); this.listeners.clear(); }
 
   subscribe(fn: () => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
   private emit() { this.listeners.forEach(fn => fn()); }
@@ -68,6 +72,7 @@ export class FlightMap {
   /** Map opened or closed: follow the active vessel again and drop menus. */
   reset() {
     this.focus = null;
+    this.frameOrbit();
     this.menus = { node: null, context: null, info: null };
     this.emit();
   }
@@ -83,7 +88,13 @@ export class FlightMap {
     const v = f?.kind === 'vessel' && f.id !== w.activeId ? w.vessels.get(f.id) : undefined;
     if (v) return { position: v.state.position, focusId: `vessel:${v.state.id}`, referenceBody: v.body };
     if (f && !(f.kind === 'vessel' && f.id === w.activeId)) this.focus = null;
-    return { position: origin, focusId: `vessel:${active.state.id}`, referenceBody: active.body };
+    const bodyState = w.universe.ephem.getBodyState(active.body, w.ut);
+    // The local body remains central; enlarge the frame only if a burn carries the vessel out of view.
+    if (active.state.telemetry.thrust > 0) {
+      const dx = origin.x - bodyState.position.x, dy = origin.y - bodyState.position.y, dz = origin.z - bodyState.position.z;
+      this.c.map.distance = Math.max(this.c.map.distance, Math.sqrt(dx * dx + dy * dy + dz * dz) * 2.8);
+    }
+    return { position: bodyState.position, focusId: active.body, referenceBody: active.body };
   }
 
   /** Change focus (null = active vessel) and frame the new object. */
@@ -101,22 +112,29 @@ export class FlightMap {
       map.distance = Math.max(b.radius * (b.kind === 'star' ? 8 : 5), this.minDistance() * 1.5, encountered ? b.soi * 1.8 : 0);
     } else {
       const v = obj ? w.vessels.get(obj.id) : active;
-      if (v) map.distance = w.universe.body(v.body).radius * 4;
+      if (v) map.distance = orbitFrameDistance(w.universe.body(v.body).radius, length(w.relativeState(v).position), w.orbitOf(v));
     }
     this.emit();
   }
 
-  /**
-   * Follow the active vessel and zoom out far enough to see a planned transfer to `targetId`: its whole orbit
-   * around the vessel's body (moon targets), so the encounter, the target's SOI and periapsis are on screen.
-   */
-  frameTransfer(targetId: string) {
+  frameOrbit() {
+    const w = this.world, v = w.active;
+    if (!v) return;
+    this.focus = null;
+    let orbit;
+    try { orbit = w.orbitOf(v); } catch { /* on the launch pad */ }
+    this.c.map.distance = orbitFrameDistance(w.universe.body(v.body).radius, length(w.relativeState(v).position), orbit);
+  }
+
+  /** Planning preserves the local orbit; the complete transfer overview is an explicit action. */
+  frameTransfer(_targetId: string) { this.frameOrbit(); this.emit(); }
+
+  frameTransferOverview(targetId: string) {
     const w = this.world, active = w.active, target = w.universe.bodies.get(targetId);
     if (!active || !target?.orbit) return;
-    this.focus = null;
-    const local = target.parent === active.body;
-    const reach = local ? target.orbit.a * (1 + target.orbit.e) + target.soi : Math.max(w.universe.body(active.body).soi, target.radius * 5);
-    this.c.map.distance = Math.max(this.c.map.distance, reach * 2.6);
+    this.focus = { kind: 'body', id: active.body };
+    const reach = target.parent === active.body ? target.orbit.a * (1 + target.orbit.e) + target.soi : w.universe.body(active.body).soi;
+    this.c.map.distance = Math.max(w.universe.body(active.body).radius * 4, reach * 2.6);
     this.emit();
   }
 
@@ -124,7 +142,7 @@ export class FlightMap {
   minDistance(): number {
     const w = this.world, f = this.focus;
     if (f?.kind === 'body' && w.universe.bodies.has(f.id)) return w.universe.body(f.id).radius * 1.15;
-    return 1500;
+    return w.active ? w.universe.body(w.active.body).radius * 1.15 : 1500;
   }
 
   /** Focus objects in Tab order. */

@@ -7,7 +7,7 @@ import type { HudCallbacks, Telemetry } from './Hud';
 
 const MAX_CARDS = 4;
 
-/** Bottom-right: crew portrait cards (EVA per astronaut, interior view placeholder) with MAP and camera buttons. */
+/** Bottom-right: crew portrait cards (EVA per astronaut) with MAP and camera buttons. */
 export interface CrewCardsProps {
   crew: Telemetry['crew'];
   eva: Telemetry['eva'];
@@ -60,7 +60,6 @@ export const CrewCards = memo(function CrewCards({ crew, eva, mapMode, noControl
                 <div className="crew-name" title={`Courage ${p.courage} · Skill ${p.skill}`}>{p.name}</div>
                 <div className="crew-actions">
                   <button type="button" className="btn small" onClick={() => cb.onEva(p.id)} title={`Go on EVA (${key('eva')})`}>EVA</button>
-                  <button type="button" className="btn small" disabled title={`Interior view is not available yet (${key('iva')})`}>IVA</button>
                 </div>
               </div>
             </article>

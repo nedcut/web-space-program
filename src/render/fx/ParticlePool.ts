@@ -7,13 +7,20 @@ export class ParticlePool {
   private readonly anchor = new THREE.Vector3();
   private initialized = false;
   private cursor = 0;
+  private trailCursor = 0;
+  private readonly burstCapacity: number;
   private expires = 0;
+  private dirtyStart = Infinity;
+  private dirtyEnd = -1;
+  private readonly uploadRanges = Array.from({ length: 5 }, () => ({ start: 0, count: 0 }));
+  private readonly attributeNames = ['spawnPosition','velocity','params','color','acceleration'] as const;
   private readonly positions: Float32Array;
   private readonly velocities: Float32Array;
   private readonly params: Float32Array;
   private readonly colors: Float32Array;
   private readonly accelerations: Float32Array;
   constructor(readonly capacity: number) {
+    this.burstCapacity=capacity<128 ? capacity : Math.floor(capacity/4);
     this.positions = new Float32Array(capacity * 3);
     this.velocities = new Float32Array(capacity * 3);
     this.params = new Float32Array(capacity * 4);
@@ -88,35 +95,44 @@ export class ParticlePool {
     if (!this.initialized) { this.anchor.copy(position); this.initialized = true; }
     this.expires = Math.max(this.expires,time+life);
     this.object.visible = true;
-    const i = this.cursor++ % this.capacity, j = i * 3, k = i * 4;
+    // Short sparks / pad dust must not overwrite the column back to the ground.
+    const i = life>=30 && this.capacity>this.burstCapacity
+      ? this.burstCapacity + this.trailCursor++ % (this.capacity-this.burstCapacity)
+      : this.cursor++ % this.burstCapacity;
+    const j = i * 3, k = i * 4;
     this.positions[j] = position.x - this.anchor.x; this.positions[j+1] = position.y - this.anchor.y; this.positions[j+2] = position.z - this.anchor.z;
     this.velocities[j] = velocity.x; this.velocities[j+1] = velocity.y; this.velocities[j+2] = velocity.z;
     this.accelerations[j] = acceleration?.x ?? 0; this.accelerations[j+1] = acceleration?.y ?? 0; this.accelerations[j+2] = acceleration?.z ?? 0;
     this.params[k] = time; this.params[k+1] = life; this.params[k+2] = size; this.params[k+3] = growth;
     this.colors[j] = color.r; this.colors[j+1] = color.g; this.colors[j+2] = color.b;
-    for (const name of ['spawnPosition','velocity','params','color','acceleration']) {
-      const attr = this.object.geometry.attributes[name] as THREE.InstancedBufferAttribute;
-      attr.addUpdateRange(i*attr.itemSize,attr.itemSize); attr.needsUpdate = true;
-    }
+    this.dirtyStart=Math.min(this.dirtyStart,i); this.dirtyEnd=Math.max(this.dirtyEnd,i);
   }
+
   update(origin: Vec3, time: number, _pixelScale: number) {
     if (!this.initialized) return;
-    this.object.visible = time < this.expires;
+    if (time >= this.expires) { this.object.visible=false; this.initialized=false; return; }
+    this.object.visible = true;
     if (this.anchor.distanceToSquared(origin) > 1e8) {
       const x = this.anchor.x-origin.x, y = this.anchor.y-origin.y, z = this.anchor.z-origin.z;
       for (let i=0;i<this.capacity*3;i+=3) { this.positions[i]+=x; this.positions[i+1]+=y; this.positions[i+2]+=z; }
       this.anchor.copy(origin);
-      const attr=this.object.geometry.attributes.spawnPosition as THREE.InstancedBufferAttribute;
-      attr.clearUpdateRanges(); attr.addUpdateRange(0,this.positions.length); attr.needsUpdate=true;
+      this.dirtyStart=0; this.dirtyEnd=this.capacity-1;
+    }
+    if (this.dirtyEnd >= 0) {
+      for (let n=0;n<this.attributeNames.length;n++) {
+        const attr=this.object.geometry.attributes[this.attributeNames[n]] as THREE.InstancedBufferAttribute;
+        const range=this.uploadRanges[n]; range.start=this.dirtyStart*attr.itemSize; range.count=(this.dirtyEnd-this.dirtyStart+1)*attr.itemSize;
+        attr.clearUpdateRanges(); attr.updateRanges.push(range); attr.needsUpdate=true;
+      }
+      this.dirtyStart=Infinity; this.dirtyEnd=-1;
     }
     this.object.position.set(this.anchor.x-origin.x,this.anchor.y-origin.y,this.anchor.z-origin.z);
     this.object.material.uniforms.time.value = time;
   }
   clear() {
     this.params.fill(0);
-    const attr=this.object.geometry.attributes.params as THREE.InstancedBufferAttribute;
-    attr.clearUpdateRanges(); attr.addUpdateRange(0,this.params.length); attr.needsUpdate=true;
-    this.object.visible = false; this.initialized = false; this.cursor = 0; this.expires=0;
+    this.dirtyStart=0; this.dirtyEnd=this.capacity-1;
+    this.object.visible = false; this.initialized = false; this.cursor = 0; this.trailCursor=0; this.expires=0;
   }
   /** Terrain tangent soft intersection; deliberately avoids a second scene/depth pass. */
   ground(position: Vec3, normal: THREE.Vector3, altitude: number) {

@@ -47,6 +47,8 @@ export interface CameraFrame {
   clearance?: (scenePoint: THREE.Vector3) => number;
   /** Continuous rumble 0..1 (already zero when reduce-motion is on). */
   rumble?: number;
+  /** Suppress an in-progress event immediately when accessibility settings change. */
+  motionEnabled?: boolean;
   /** 1 on the ground: aim slightly below the vessel so it sits above the HUD's navball cluster. */
   groundFraming?: number;
   /** Orbit/aim point relative to the scene origin (the vessel COM), e.g. from {@link PivotSmoother}. */
@@ -196,7 +198,7 @@ export class FlightCamera {
 
   /** Short decaying camera kick (staging, decoupling). */
   addKick(amount: number) {
-    this.kick = Math.min(1, this.kick + amount);
+    this.kick = Math.min(2.25, this.kick + amount);
   }
 
   update(f: CameraFrame, dt: number) {
@@ -308,17 +310,17 @@ export class FlightCamera {
     this.camera.up.copy(this.smoothedUp);
     this.camera.lookAt(px - f.up.x * aimDown, py - f.up.y * aimDown, pz - f.up.z * aimDown);
 
-    // Rumble and kicks: small smooth rotations of the view (not translations, which read as the vessel moving).
-    this.kick *= Math.exp(-dt / 0.22);
-    const shake = Math.min(1, (f.rumble ?? 0) + this.kick);
-    if (shake > 1e-3) {
+    // A directional impulse plus damped vibration: the first event frame always reads as a punch.
+    if (f.motionEnabled === false) this.kick = 0;
+    const shake = f.motionEnabled === false ? 0 : f.rumble ?? 0;
+    if (shake > 1e-3 || this.kick > 1e-3) {
       const t = this.time;
-      const n1 = Math.sin(t * 37.1) * 0.6 + Math.sin(t * 61.7 + 1.3) * 0.4;
-      const n2 = Math.sin(t * 43.3 + 0.7) * 0.6 + Math.sin(t * 71.9 + 2.1) * 0.4;
-      const amp = 0.006 * shake;
-      this.camera.rotateX(n1 * amp);
-      this.camera.rotateY(n2 * amp);
+      this.camera.rotateX(this.kick * .025 + Math.sin(t*37.1)*shake*.014);
+      this.camera.rotateY(this.kick * -.012 + Math.sin(t*43.3)*shake*.012);
+      this.camera.translateY(this.kick * .28 + Math.sin(t*43.3)*shake*.08);
+      this.camera.translateX(this.kick * -.18);
     }
+    this.kick *= Math.exp(-dt / .32);
 
     this.camera.near = Math.max(0.05, this.cDist * 0.005);
     this.camera.updateProjectionMatrix();

@@ -5,7 +5,9 @@ import { newProgression } from '../../sim/science/progression';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { PART_DEFS } from '../../data/parts';
 import type { PartCategory, PartDef } from '../../sim/vessel/types';
-import type { EditorSession, SessionView } from '../session';
+import { CATALOG, type EditorSession, type SessionView } from '../session';
+import { deleteSubassembly, listSubassemblies, saveSubassembly, subscribeSubassemblies, type SavedSubassembly } from '../subassemblies';
+import type { Subassembly } from '../core';
 import { getThumbnail, requestThumbnails, subscribeThumbnails, thumbnailVersion } from '../scene/thumbnails';
 import { Icon } from './icons';
 import { CATEGORY_TABS, RESOURCE_SHORT, fmtKN, fmtKg, sizeLabel, wetMass } from './partInfo';
@@ -18,7 +20,7 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
   const mode = useGame(s => s.mode);
   const saved = useGame(s => s.resumeWorld);
   const available = useMemo(() => PART_DEFS.filter(p => partUnlocked(p.id, mode, saved?.progression ?? newProgression())), [mode, saved]);
-  const [tab, setTab] = useState<PartCategory | 'all'>('all');
+  const [tab, setTab] = useState<PartCategory | 'all' | 'subassemblies'>('all');
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
   const observer = useRef<IntersectionObserver | null>(null);
@@ -59,13 +61,16 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
   const pick = useCallback((id: string) => { if (!heldAtDown.current) session.pickNew(id); }, [session]);
 
   const holding = !!view.held;
+  const saving = tab === 'subassemblies' && view.held?.kind === 'assembly';
 
   return (
     <div
-      className={`vab-palette panel ${holding ? 'discard' : ''}`}
+      className={`vab-palette panel ${holding ? (saving ? 'save' : 'discard') : ''}`}
       onPointerDownCapture={() => (heldAtDown.current = !!session.getSnapshot().held)}
       onPointerUp={() => {
-        if (heldAtDown.current) session.deleteHeld();
+        if (!heldAtDown.current) return;
+        if (saving) { storeSubassembly(session, session.subassemblyFrom()); session.cancelHeld(); }
+        else session.deleteHeld();
       }}
     >
       <div className="vab-tabs">
@@ -74,8 +79,11 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
             <Icon name={t.id} size={19} />
           </Button>
         ))}
+        <Button className={`vab-tab ${tab === 'subassemblies' ? 'on' : ''}`} title="Subassemblies: saved part groups" onClick={() => setTab('subassemblies')}>
+          <SubassemblyGlyph />
+        </Button>
       </div>
-      <div className="vab-palette-main">
+      {tab === 'subassemblies' ? <SubassemblyDrawer session={session} view={view} /> : <div className="vab-palette-main">
         <div className="vab-palette-head">
           <div className="label">{CATEGORY_TABS.find((t) => t.id === tab)?.label}</div>
           <div className="vab-search">
@@ -87,14 +95,79 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
           {parts.map(d => <PartCard key={d.id} def={d} selected={view.held?.kind === 'new' && view.held.partId === d.id} enter={enter} leave={leave} pick={pick} watch={watch} />)}
           {!parts.length && <div className="vab-empty">No parts match “{query}”.</div>}
         </div>
-      </div>
+      </div>}
       {holding && (
         <div className="vab-discard">
-          <Icon name="trash" size={28} />
-          <div>Drop here to discard</div>
+          {saving ? <SubassemblyGlyph size={28} /> : <Icon name="trash" size={28} />}
+          <div>{saving ? 'Drop here to save as a subassembly' : 'Drop here to discard'}</div>
         </div>
       )}
       {hover && !holding && <PartTooltip def={hover.def} y={hover.y} />}
+    </div>
+  );
+}
+
+function SubassemblyGlyph({ size = 19 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinejoin="round">
+      <path d="M9 3h6v5H9zM5 11h6v5H5zM13 11h6v5h-6zM8 19h8v2H8z" />
+      <path d="M12 8v3M8 16v3m8-3v3" />
+    </svg>
+  );
+}
+
+function subassemblyName(sub: Subassembly): string {
+  const root = sub.parts.find(p => p.uid === sub.rootUid);
+  const base = `${CATALOG.get(root?.partId ?? '')?.name ?? 'Assembly'}${sub.parts.length > 1 ? ` +${sub.parts.length - 1}` : ''}`;
+  const taken = new Set(listSubassemblies(CATALOG).map(s => s.name));
+  let name = base;
+  for (let i = 2; taken.has(name); i++) name = `${base} (${i})`;
+  return name;
+}
+
+function storeSubassembly(session: EditorSession, sub: Subassembly | null, name?: string) {
+  if (!sub) return session.toast('Pick up an assembly or select a part first', 'warn');
+  try {
+    const saved = saveSubassembly(name ?? subassemblyName(sub), sub, CATALOG);
+    session.toast(`Saved subassembly “${saved.name}”`, 'good');
+  } catch {
+    session.toast('Could not save the subassembly: browser storage is full or unavailable', 'bad');
+  }
+}
+
+/** Saved part groups: click to hold one, drop a held assembly on the drawer (or use Save) to add one. */
+function SubassemblyDrawer({ session, view }: { session: EditorSession; view: SessionView }) {
+  const list = useSyncExternalStore(subscribeSubassemblies, () => listSubassemblies(CATALOG));
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const selected = view.selectedUids.length ? view.craft.parts.find(p => p.uid === view.selectedUids[0]) : undefined;
+  return (
+    <div className="vab-palette-main vab-subs">
+      <div className="vab-palette-head">
+        <div className="label">Subassemblies</div>
+        <Button className="btn small" disabled={!selected} title={selected ? 'Save the selected part and everything attached below it' : 'Select a part (offset tool, staging list or right-click) to save it with its attachments'}
+          onClick={() => storeSubassembly(session, session.subassemblyFrom(selected?.uid))}>
+          Save {selected ? `“${CATALOG.get(selected.partId)?.name}”` : 'selection'}
+        </Button>
+      </div>
+      <div className="vab-sub-list">
+        {list.map((s: SavedSubassembly) => (
+          <div key={s.id} className="vab-sub">
+            {renaming === s.id ? (
+              <input autoFocus defaultValue={s.name} maxLength={80} className="vab-sub-rename"
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenaming(null); }}
+                onBlur={(e) => { const name = e.target.value.trim(); if (name && name !== s.name) { saveSubassembly(name, s, CATALOG); deleteSubassembly(s.id, CATALOG); } setRenaming(null); }} />
+            ) : (
+              <button type="button" className="vab-sub-pick" title="Pick up this subassembly" onClick={() => session.pickSubassembly(s)} onDoubleClick={() => setRenaming(s.id)}>
+                <span className="vab-sub-name">{s.name}</span>
+                <span className="vab-sub-meta mono">{s.parts.length} part{s.parts.length === 1 ? '' : 's'}</span>
+              </button>
+            )}
+            <button type="button" className="vab-sub-btn" title="Rename" onClick={() => setRenaming(s.id)}>✎</button>
+            <button type="button" className="vab-sub-btn" title="Delete subassembly" onClick={() => deleteSubassembly(s.id, CATALOG)}>×</button>
+          </div>
+        ))}
+        {!list.length && <div className="vab-empty">Pick up part of your craft and drop it here, or select a part and press Save. Saved groups keep their symmetry, settings and fuel, and work in every craft.</div>}
+      </div>
     </div>
   );
 }

@@ -79,9 +79,18 @@ function MapReadout({ controller: c }: { controller: FlightController }) {
     }
   } catch { /* degenerate orbit */ }
   return <div className="panel map-readout" aria-label="Map focus">
-    <span className="title">{f ? `Viewing ${ui.name(f)}` : `Viewing ${wv?.state.name ?? 'vessel'}`}</span>
+    <span className="title">{f ? `Viewing ${ui.name(f)}` : `Viewing ${body?.name ?? 'body'} · ${wv?.state.name ?? 'vessel'}`}</span>
     {path && <span className="path">{path}</span>}
     {orbit && <span className="mono">{orbit}</span>}
+    <button className="btn ghost small" onClick={() => {
+      const l = ui.landing;
+      if (!l.enabled) { l.enabled = true; l.attitude = 'hold'; }
+      else if (l.attitude === 'hold') l.attitude = 'retrograde';
+      else l.enabled = false;
+    }}>Landing: {ui.landing.enabled ? ui.landing.attitude === 'hold' ? 'hold attitude' : 'surface retrograde' : 'off'}</button>
+    {ui.landing.enabled && <span className="hint">Unpowered · drag, heating, deployed chutes · no future staging</span>}
+    {ui.landing.status && <span role="status">{ui.landing.status}</span>}
+    <button className="btn ghost small" onClick={() => ui.frameOrbit()}>Frame active orbit</button>
     <span className="hint">{hints()}</span>
   </div>;
 }

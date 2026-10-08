@@ -1,0 +1,28 @@
+{
+  "label": "before",
+  "base": "http://172.24.204.38:5382",
+  "errors": [],
+  "staging": {
+    "frames": 134,
+    "tasks": [
+      {
+        "start": 13540.899999976158,
+        "duration": 72
+      }
+    ],
+    "programs": 92
+  },
+  "crashPeak": {
+    "programs": 94,
+    "active": false
+  },
+  "crash": {
+    "frames": 55,
+    "lost": 12341,
+    "bar": null,
+    "tasks": [],
+    "barDelay": -12341,
+    "paused": true,
+    "active": false
+  }
+}

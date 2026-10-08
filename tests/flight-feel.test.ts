@@ -115,7 +115,7 @@ describe('time warp feel', () => {
 });
 
 describe('first-orbit hints', () => {
-  const base: HintInput = { enabled: true, flying: true, altitude: 2000, surfaceSpeed: 120, apoapsis: 3000, periapsis: -600000, timeToAp: 30, atmosphereHeight: 70000, throttle: 1, hasThrust: true };
+  const base: HintInput = { enabled: true, flying: true, altitude: 2000, surfaceSpeed: 75, apoapsis: 3000, periapsis: -600000, timeToAp: 30, atmosphereHeight: 70000, throttle: 1, hasThrust: true };
   const id = (i: Partial<HintInput>, seen: HintId[] = []) => hintFor({ ...base, ...i }, new Set(seen))?.id ?? null;
   it('walks through turn → coast → circularise → orbit', () => {
     expect(id({})).toBe('turn');

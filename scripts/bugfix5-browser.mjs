@@ -2,7 +2,7 @@
 //   node scripts/bugfix5-browser.mjs toolbar [suffix]   editor toolbar screenshots at 1024×768 and 800×700 (+ 760 check)
 //   node scripts/bugfix5-browser.mjs draft              program A (Kestrel) / program B (Swift Jet) → load A restores Kestrel
 //   node scripts/bugfix5-browser.mjs controls           Controls overlay blocks flight input; from Pause it stays paused
-//   node scripts/bugfix5-browser.mjs quota              full storage: Tracking Station Back/Fly navigate with a notice
+//   node scripts/bugfix5-browser.mjs quota              full storage: Fleet Tracking Back/Fly navigate with a notice
 import { chromium } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 const base = process.env.WSP_URL ?? 'http://localhost:5321/';

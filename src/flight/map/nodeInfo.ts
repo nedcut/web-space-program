@@ -49,7 +49,9 @@ export function nodeSummary(world: World, node: ManeuverNode): NodeSummary {
   const patches = world.trajectory();
   const dv = Math.hypot(node.prograde, node.normal, node.radial);
   const before = patchAtNode(patches, node);
-  const after = patches.find((p) => p.startTime >= node.time - 1e-3) ?? patches[patches.length - 1];
+  // A burn in progress leads with a zero-length patch of the current orbit (starting after the node): the plan is the
+  // patch that starts at the node itself.
+  const after = patches.find((p) => Math.abs(p.startTime - node.time) < 1e-3) ?? patches.find((p) => p.startTime >= node.time - 1e-3) ?? patches[patches.length - 1];
   const body = after?.orbit.body ?? world.active?.body ?? world.universe.sunId;
   const radius = world.universe.body(body).radius;
   const index = after ? patches.indexOf(after) : patches.length;

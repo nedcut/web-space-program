@@ -10,13 +10,14 @@ import { getQuality } from '../../render/core/quality';
 import type { PartInstance } from '../../sim/vessel/types';
 import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../../util/quat';
 import { add, sub, v3, type Vec3 } from '../../util/vec3';
-import { alignNodes, freeAttachNodes, mirrorPosition, mirrorRotation, type WorldAttachNode } from '../core';
+import { alignNodes, counterpartMaps, freeAttachNodes, mirrorPosition, mirrorRotation, partPivot, snapAngle, transformedParts, type PartTransform, type WorldAttachNode } from '../core';
+import { axisVector, TransformGizmo, type GizmoHandle } from './gizmo';
 import { CATALOG, type EditorSession, type Placement, type SessionView } from '../session';
 import { surfaceTransform } from '../surface';
 import { createStudioEnvironment } from '../../render/core/studioEnv';
 import { buildHangar, HANGAR, type Hangar } from './hangar';
-import { createPartMesh } from './partMesh';
-import { prepareEngineSoot, releaseSoot, setLightAppearance, setPartDetail } from '../../render/parts';
+import { createPartMesh, variantKey } from './partMesh';
+import { partMeshParams, prepareEngineSoot, releaseSoot, setLightAppearance, setPartDetail } from '../../render/parts';
 
 const DEG = Math.PI / 180;
 const SNAP_PX = 64;
@@ -27,6 +28,10 @@ const KEY_OFFSET = { x: 26, y: 30, z: 17 } as const;
 const toV = (v: Vec3, out = new THREE.Vector3()) => out.set(v.x, v.y, v.z);
 const toQ = (q: Quat, out = new THREE.Quaternion()) => out.set(q.x, q.y, q.z, q.w);
 const fromV = (v: THREE.Vector3): Vec3 => v3(v.x, v.y, v.z);
+/** macOS: Ctrl+click is the secondary click; Option is Alt. */
+export const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+/** Horizontal pan limit around the hall's turntable, m. */
+const PAN_LIMIT = 22;
 
 const tintCaches = new Map<string, WeakMap<THREE.Material, THREE.Material>>();
 function tinted(m: THREE.Material, key: string, color: number, intensity: number): THREE.Material {
@@ -90,7 +95,7 @@ export class EditorView {
   /** Horizontal building (SPH): the craft frame is turned so craft +Y (nose) points along world -Z, +Z up. */
   private horizontal = false;
   private shiftZ = 0;
-  private partObjs = new Map<number, { obj: THREE.Object3D; partId: string }>();
+  private partObjs = new Map<number, { obj: THREE.Object3D; partId: string; variant: string }>();
   private sootKey = '';
   private lightKey = '';
   private visualKey = '';
@@ -102,15 +107,27 @@ export class EditorView {
   private unsub: () => void;
   private ro: ResizeObserver;
 
-  // Camera rig (orbit around craft axis x=z=0)
+  // Camera rig (orbit around a target on or near the craft axis; pan moves the target horizontally)
   private yaw = 0.55; private pitch = 0.18; private dist = 18; private targetY = 6;
   private gYaw = 0.55; private gPitch = 0.18; private gDist = 18; private gTargetY = 6;
+  private panX = 0; private panZ = 0; private gPanX = 0; private gPanZ = 0;
+  private readonly target = new THREE.Vector3();
+  private readonly camPos = new THREE.Vector3();
+  // Offset/rotate tools
+  /** Built on first use (keeps editor entry lean). */
+  private gizmo: TransformGizmo | null = null;
+  private gizmoHover: GizmoHandle | null = null;
+  private gizmoDrag: {
+    handle: GizmoHandle | null; uid: number; x0: number; y0: number; pivot: Vec3; anchor: Vec3; symmetric: boolean;
+    base: PartInstance[]; t: PartTransform; plane?: THREE.Plane; start?: Vec3; key: string;
+  } | null = null;
+  private gizmoGesture = 0;
 
   // Interaction
   private mouse = new THREE.Vector2(-10, -10);
   private mousePx = { x: 0, y: 0 };
   private mouseInside = false;
-  private drag: { button: number; x: number; y: number; moved: boolean; id: number } | null = null;
+  private drag: { button: number; x: number; y: number; moved: boolean; id: number; pan: boolean } | null = null;
   private altDown = false;
   private raycaster = new THREE.Raycaster();
   private placement: Placement | null = null;
@@ -245,7 +262,8 @@ export class EditorView {
     this.gDist = THREE.MathUtils.clamp(Math.max(needV, needH, 7) * 1.12 + w / 2, 5, 60);
     // Nudge up a little: the top bar covers part of the viewport.
     this.gTargetY = centreY + h * 0.03;
-    if (instant) { this.dist = this.gDist; this.targetY = this.gTargetY; }
+    this.gPanX = 0; this.gPanZ = 0;
+    if (instant) { this.dist = this.gDist; this.targetY = this.gTargetY; this.panX = this.gPanX; this.panZ = this.gPanZ; }
   }
 
   /** Dev hook: set the orbit camera directly (radians / metres; targetY relative to the floor). */
@@ -290,13 +308,14 @@ export class EditorView {
     this.selectSet = new Set(snap.selectedUids);
     this.groupSet = new Set(snap.mode === 'actions' ? snap.groupUids : []);
     this.applyHighlights();
+    if (!this.gizmoDrag) this.placeGizmo(snap);
     this.com.visible = snap.showCoM && snap.stats.partCount > 0;
     this.cot.visible = snap.showCoT && !!snap.stats.centreOfThrust;
     this.col.visible = snap.showCoL && !!snap.stats.centreOfLift;
     // Names, toasts, inspector panels and symmetry without a held part only affect React.
     const visualKey = [this.sootKey, this.lightKey, heldSig, snap.held ? snap.symmetryMode : '', snap.craftType,
       snap.highlightUids.join(','), snap.selectedUids.join(','), snap.hoverUid,
-      snap.mode === 'actions' ? snap.groupUids.join(',') : '',
+      snap.mode === 'actions' ? snap.groupUids.join(',') : '', snap.tool, snap.gizmoUid,
       snap.showCoM ? JSON.stringify(snap.stats.centreOfMass) : '',
       snap.showCoT ? JSON.stringify(snap.stats.centreOfThrust) : '',
       snap.showCoL ? JSON.stringify(snap.stats.centreOfLift) : ''].join('|');
@@ -310,11 +329,13 @@ export class EditorView {
     for (const p of snap.craft.parts) {
       seen.add(p.uid);
       let entry = this.partObjs.get(p.uid);
-      if (!entry || entry.partId !== p.partId) {
+      const def = CATALOG.get(p.partId)!;
+      const params = partMeshParams(def, p.tweaks), variant = variantKey(params);
+      if (!entry || entry.partId !== p.partId || entry.variant !== variant) {
         if (entry) { releaseSoot(entry.obj); this.craftGroup.remove(entry.obj); }
-        const obj = createPartMesh(CATALOG.get(p.partId)!);
+        const obj = createPartMesh(def, params);
         obj.userData.uid = p.uid;
-        entry = { obj, partId: p.partId };
+        entry = { obj, partId: p.partId, variant };
         this.partObjs.set(p.uid, entry);
         this.craftGroup.add(obj);
       }
@@ -378,6 +399,105 @@ export class EditorView {
     this.prevPartCount = snap.craft.parts.length;
   }
 
+  // ------------------------------------------------------------------ offset / rotate gizmo
+  private placeGizmo(snap: SessionView) {
+    const part = snap.gizmoUid === null || snap.held || snap.mode !== 'build' ? undefined : snap.craft.parts.find(p => p.uid === snap.gizmoUid);
+    if (!part || (snap.tool !== 'offset' && snap.tool !== 'rotate')) { this.gizmo?.show(null); return; }
+    const at = snap.tool === 'rotate' ? partPivot(part, CATALOG) : part.position;
+    if (!this.gizmo) { this.gizmo = new TransformGizmo(); this.craftGroup.add(this.gizmo.group); }
+    this.gizmo.show(snap.tool, at.x, at.y, at.z);
+  }
+
+  private startGizmoDrag(e: PointerEvent): boolean {
+    const snap = this.session.getSnapshot();
+    if (snap.held || snap.mode !== 'build' || (snap.tool !== 'offset' && snap.tool !== 'rotate') || snap.gizmoUid === null) return false;
+    const part = snap.craft.parts.find(p => p.uid === snap.gizmoUid);
+    if (!part) return false;
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    let handle = this.gizmo?.pick(this.raycaster) ?? null;
+    // Offset tool: dragging the part itself moves it in the view plane.
+    if (!handle && (snap.tool !== 'offset' || this.pickPart()?.uid !== part.uid)) return false;
+    if (!handle) handle = null;
+    const pivot = snap.tool === 'rotate' ? partPivot(part, CATALOG) : part.position;
+    const drag: NonNullable<EditorView['gizmoDrag']> = { handle, uid: part.uid, x0: this.mousePx.x, y0: this.mousePx.y, pivot, anchor: pivot,
+      symmetric: !e.altKey, base: snap.craft.parts, t: {}, key: `gizmo:${++this.gizmoGesture}` };
+    if (!handle) {
+      const normal = this.camera.getWorldDirection(new THREE.Vector3()).negate();
+      const pw = this.craftGroup.localToWorld(toV(pivot));
+      drag.plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, pw);
+      const hit = new THREE.Vector3();
+      if (!this.raycaster.ray.intersectPlane(drag.plane, hit)) return false;
+      drag.start = fromV(this.craftGroup.worldToLocal(hit));
+    }
+    this.gizmoDrag = drag;
+    return true;
+  }
+
+  private updateGizmoDrag(e: PointerEvent) {
+    const g = this.gizmoDrag!;
+    const snap = this.session.getSnapshot();
+    const fine = e.shiftKey, snapOn = snap.angleSnap;
+    const step = fine ? 0.01 : 0.05;
+    const round = (x: number) => (snapOn ? Math.round(x / step) * step : x);
+    if (!g.handle) {
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+      const hit = new THREE.Vector3();
+      if (!g.plane || !g.start || !this.raycaster.ray.intersectPlane(g.plane, hit)) return;
+      const d = sub(fromV(this.craftGroup.worldToLocal(hit)), g.start);
+      g.t = { offset: v3(round(d.x), round(d.y), round(d.z)) };
+    } else if (g.handle.kind === 'offset') {
+      const a = axisVector(g.handle.axis);
+      const sp = new THREE.Vector2(), sa = new THREE.Vector2();
+      if (!this.toScreen(g.pivot, sp) || !this.toScreen(add(g.pivot, a), sa)) return;
+      const sx = sa.x - sp.x, sy = sa.y - sp.y, len2 = sx * sx + sy * sy;
+      const amount = len2 < 4 ? 0 : ((this.mousePx.x - g.x0) * sx + (this.mousePx.y - g.y0) * sy) / len2;
+      const k = round(amount);
+      g.t = { offset: v3(a.x * k, a.y * k, a.z * k) };
+    } else {
+      const a = axisVector(g.handle.axis);
+      const sp = new THREE.Vector2();
+      if (!this.toScreen(g.pivot, sp)) return;
+      const a0 = Math.atan2(-(g.y0 - sp.y), g.x0 - sp.x), a1 = Math.atan2(-(this.mousePx.y - sp.y), this.mousePx.x - sp.x);
+      let delta = a1 - a0;
+      while (delta > Math.PI) delta -= 2 * Math.PI;
+      while (delta < -Math.PI) delta += 2 * Math.PI;
+      // A ring whose axis faces the camera turns counter-clockwise on screen for a positive angle.
+      const axisWorld = toV(a).applyQuaternion(this.craftGroup.quaternion);
+      const toCamera = this.camera.position.clone().sub(this.craftGroup.localToWorld(toV(g.pivot)));
+      const theta = axisWorld.dot(toCamera) >= 0 ? delta : -delta;
+      g.t = { rotation: qFromAxisAngle(a, snapOn ? snapAngle(theta, (fine ? 5 : 15) * DEG) : theta) };
+    }
+    this.previewTransform(g);
+  }
+
+  /** Move part meshes (and the gizmo) to a gesture's result without touching the editor. */
+  private previewTransform(g: NonNullable<EditorView['gizmoDrag']>) {
+    const changed = transformedParts(g.base, CATALOG, g.uid, g.t, g.symmetric);
+    for (const [uid, p] of changed) {
+      const e = this.partObjs.get(uid);
+      if (!e) continue;
+      toV(p.position, e.obj.position);
+      toQ(p.rotation, e.obj.quaternion);
+    }
+    this.links.update(g.base.map(p => changed.get(p.uid) ?? p));
+    const moved = changed.get(g.uid);
+    if (moved && this.gizmo?.visible) {
+      const at = this.session.getSnapshot().tool === 'rotate' ? g.pivot : moved.position;
+      this.gizmo!.group.position.set(at.x, at.y, at.z);
+    }
+    this.renderer.shadowMap.needsUpdate = true;
+    this.visualVersion++;
+  }
+
+  private endGizmoDrag(commit: boolean) {
+    const g = this.gizmoDrag;
+    this.gizmoDrag = null;
+    if (!g) return;
+    const moved = (g.t.offset && Math.hypot(g.t.offset.x, g.t.offset.y, g.t.offset.z) > 1e-9) || (g.t.rotation && Math.abs(g.t.rotation.w) < 1 - 1e-12);
+    if (commit && moved) this.session.transformPart(g.uid, g.t, g.symmetric, g.key);
+    else { this.lastCraft = null; this.sync(); }
+  }
+
   // ------------------------------------------------------------------ held assembly
   private buildHeld() {
     delete this.heldGroup.userData.editorTint;
@@ -385,7 +505,8 @@ export class EditorView {
     this.ghostGroup.clear();
     this.ghostCount = 0;
     for (const p of this.heldParts) {
-      const obj = createPartMesh(CATALOG.get(p.partId)!);
+      const def = CATALOG.get(p.partId)!;
+      const obj = createPartMesh(def, partMeshParams(def, p.tweaks));
       obj.userData.heldUid = p.uid;
       this.heldMeshes.add(obj);
     }
@@ -470,7 +591,7 @@ export class EditorView {
         T = add(qRotate(t.rotation, C), t.position);
         placement = { kind: 'stack', parentUid: best.parent.uid, parentNode: best.parent.id, childUid: best.child.uid, childNode: best.child.id };
         this.snapKey = `${best.parent.uid}:${best.parent.id}`;
-        if (snap.held.kind === 'new') ghosts = this.counterpartGhosts(best.parent.uid, D, T, false);
+        ghosts = this.counterpartGhosts(best.parent.uid, D, T, false);
       } else if (rootDef.surfaceAttachable && !this.altDown && this.mouseInside) {
         // 2) Surface attachment by raycast.
         const hit = this.surfaceHit();
@@ -482,7 +603,7 @@ export class EditorView {
           D = qNormalize(qMul(t.rotation, qConj(root.rotation)));
           T = sub(t.position, qRotate(D, root.position));
           placement = { kind: 'surface', parentUid: hit.uid, position: t.position, rotation: t.rotation, point: hit.point, normal: hit.normal };
-          if (snap.held.kind === 'new') ghosts = this.counterpartGhosts(hit.uid, D, T, true);
+          ghosts = this.counterpartGhosts(hit.uid, D, T, true);
         }
       }
     }
@@ -567,12 +688,12 @@ export class EditorView {
   /** Cursor position on the vertical plane through the craft axis, facing the camera (craft frame). */
   private cursorCraftPoint(): Vec3 {
     this.raycaster.setFromCamera(this.mouse, this.camera);
-    const n = new THREE.Vector3().subVectors(this.camera.position, new THREE.Vector3(0, this.targetY, 0)).setY(0);
+    const n = new THREE.Vector3().subVectors(this.camera.position, this.target).setY(0);
     if (n.lengthSq() < 1e-6) n.set(0, 0, 1);
     n.normalize();
-    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(n, new THREE.Vector3(0, 0, 0));
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(n, new THREE.Vector3(this.target.x, 0, this.target.z));
     const hit = new THREE.Vector3();
-    if (!this.raycaster.ray.intersectPlane(plane, hit)) hit.set(0, this.targetY, 0);
+    if (!this.raycaster.ray.intersectPlane(plane, hit)) hit.copy(this.target);
     this.craftGroup.worldToLocal(hit);
     return fromV(hit);
   }
@@ -664,12 +785,18 @@ export class EditorView {
     let set = new Set<number>();
     let uid: number | null = null;
     if (!snap.held && this.mouseInside && !this.drag) {
-      const p = this.pickPart();
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+      const handle = this.gizmo?.pick(this.raycaster) ?? null;
+      if (this.gizmo?.setHot(handle)) this.visualVersion++;
+      this.gizmoHover = handle;
+      const p = handle ? null : this.pickPart();
       if (p) {
         uid = p.uid;
         // Highlight what a click would pick up: the part and its subtree (just the part in action-group mode).
         set = new Set([uid]);
-        let grew = snap.mode === 'build';
+        // Place/offset/rotate act on the whole symmetric set: highlight every counterpart too.
+        if (snap.mode === 'build' && snap.tool !== 'reroot') for (const c of counterpartMaps(snap.craft.parts, uid, !this.altDown || snap.tool !== 'place')) set.add(c.part.uid);
+        let grew = snap.mode === 'build' && snap.tool !== 'reroot';
         while (grew) {
           grew = false;
           for (const q of snap.craft.parts) if (q.parent !== undefined && set.has(q.parent) && !set.has(q.uid)) { set.add(q.uid); grew = true; }
@@ -744,8 +871,11 @@ export class EditorView {
     this.updateMouse(e);
     this.mouseInside = true;
     this.renderer.domElement.setPointerCapture(e.pointerId);
-    this.drag = { button: e.button, x: e.clientX, y: e.clientY, moved: false, id: e.pointerId };
-    if (e.button === 1) e.preventDefault();
+    // macOS: Ctrl+click is the secondary (right) click.
+    const button = e.button === 0 && e.ctrlKey && IS_MAC ? 2 : e.button;
+    this.drag = { button, x: e.clientX, y: e.clientY, moved: false, id: e.pointerId, pan: button === 1 || (button === 0 && e.shiftKey && !this.session.getSnapshot().held) };
+    if (button === 1) e.preventDefault();
+    if (button === 0 && !this.drag.pan && this.startGizmoDrag(e)) return;
     window.clearTimeout(this.longPress);
     if (e.pointerType === 'touch') {
       // Touch long-press opens the part inspector (right-click equivalent).
@@ -767,14 +897,16 @@ export class EditorView {
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
     if (!d.moved && Math.hypot(dx, dy) > 4) d.moved = true;
     if (!d.moved) return;
+    if (this.gizmoDrag) { this.updateGizmoDrag(e); return; }
     d.x = e.clientX; d.y = e.clientY;
     const h = this.renderer.domElement.clientHeight || 1;
-    if (d.button === 2 || (d.button === 0 && !this.session.getSnapshot().held)) {
-      this.gYaw -= dx * 0.006;
-      this.gPitch = THREE.MathUtils.clamp(this.gPitch + dy * 0.005, -0.35, 1.35);
-    } else if (d.button === 1) {
+    if (d.pan) {
+      this.pan(-(dx / h) * this.dist * 1.1);
       this.gTargetY += (dy / h) * this.dist * 1.1;
       this.clampTarget();
+    } else if (d.button === 2 || (d.button === 0 && !this.session.getSnapshot().held)) {
+      this.gYaw -= dx * 0.006;
+      this.gPitch = THREE.MathUtils.clamp(this.gPitch + dy * 0.005, -0.35, 1.35);
     }
   };
 
@@ -784,20 +916,29 @@ export class EditorView {
     this.drag = null;
     try { this.renderer.domElement.releasePointerCapture(e.pointerId); } catch { /* not captured */ }
     window.clearTimeout(this.longPress);
+    if (this.gizmoDrag) { this.endGizmoDrag(!!d?.moved); return; }
     if (d && !d.moved && d.button === 2 && !this.session.getSnapshot().held) {
       const pick = this.pickPart();
       if (pick) this.session.openPanel(pick.uid);
       return;
     }
-    if (!d || d.moved || d.button !== 0) return;
-    this.click();
+    if (!d || d.moved || d.button !== 0 || d.pan) return;
+    this.click(e.altKey);
   };
 
   private onPointerLeave = () => {
     if (!this.drag) this.mouseInside = false;
   };
 
-  private click() {
+  /** Move the camera target sideways (screen right is positive), within the hall. */
+  private pan(amount: number) {
+    this.gPanX += Math.cos(this.yaw) * amount;
+    this.gPanZ -= Math.sin(this.yaw) * amount;
+    const r = Math.hypot(this.gPanX, this.gPanZ);
+    if (r > PAN_LIMIT) { this.gPanX *= PAN_LIMIT / r; this.gPanZ *= PAN_LIMIT / r; }
+  }
+
+  private click(alt = false) {
     const snap = this.session.getSnapshot();
     if (this.session.isLinkPlacement()) {
       const hit = this.surfaceHit();
@@ -816,9 +957,12 @@ export class EditorView {
     }
     const pick = this.pickPart();
     if (pick && snap.mode === 'actions') { this.session.openPanel(pick.uid); return; }
+    if (snap.tool === 'offset' || snap.tool === 'rotate') { this.session.setGizmo(pick?.uid ?? null); return; }
+    if (snap.tool === 'reroot') { if (pick) this.session.reRoot(pick.uid); return; }
     if (pick) {
       this.hoverSet.clear();
-      this.session.pickUp(pick.uid);
+      if (alt) this.session.copyPart(pick.uid);
+      else this.session.pickUp(pick.uid);
     }
   }
 
@@ -836,15 +980,24 @@ export class EditorView {
     return this.mouseInside && !this.drag ? { ...this.mousePx } : null;
   }
 
+  /**
+   * Mouse wheel zooms in notches; a trackpad zooms smoothly with two-finger scroll or pinch (Ctrl+wheel), and pans
+   * sideways with a horizontal swipe. Shift+wheel pans vertically (macOS sends it as horizontal scroll).
+   */
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
     this.updateMouse(e);
-    const delta = e.deltaY || e.deltaX;
-    if (e.shiftKey) {
-      this.gTargetY -= Math.sign(delta) * Math.max(0.4, this.dist * 0.06);
+    const unit = e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 600 : 1;
+    const dx = e.deltaX * unit, dy = e.deltaY * unit;
+    if (e.ctrlKey) {
+      this.gDist = THREE.MathUtils.clamp(this.gDist * Math.exp(THREE.MathUtils.clamp(dy, -60, 60) * 0.01), 3, 60);
+    } else if (e.shiftKey) {
+      this.gTargetY -= THREE.MathUtils.clamp((dy || dx) / 100, -1.5, 1.5) * Math.max(0.4, this.dist * 0.06);
       this.clampTarget();
+    } else if (Math.abs(dx) > Math.abs(dy)) {
+      this.pan(THREE.MathUtils.clamp(dx / 100, -1.5, 1.5) * Math.max(0.3, this.dist * 0.05));
     } else {
-      this.gDist = THREE.MathUtils.clamp(this.gDist * Math.pow(1.12, Math.sign(delta)), 3, 60);
+      this.gDist = THREE.MathUtils.clamp(this.gDist * Math.pow(1.12, THREE.MathUtils.clamp(dy / 100, -1.5, 1.5)), 3, 60);
     }
   };
 
@@ -861,18 +1014,27 @@ export class EditorView {
     if (matches('editorRedo', e)) { e.preventDefault(); s.redo(); return; }
     if (matches('editorUndo', e)) { e.preventDefault(); s.undo(); return; }
     if (matches('editorSave', e)) { e.preventDefault(); s.save(); return; }
-    if (matches('editorCancel', e)) { if (held) s.cancelHeld(); else s.closeTopPanel(); return; }
+    if (matches('editorCancel', e)) {
+      if (this.gizmoDrag) this.endGizmoDrag(false);
+      else if (held) s.cancelHeld();
+      else if (!s.closeTopPanel() && s.getSnapshot().gizmoUid !== null) s.setGizmo(null);
+      return;
+    }
     if (matches('editorDelete', e)) {
       e.preventDefault();
       if (held) s.deleteHeld();
-      else if (s.getSnapshot().hoverUid !== null) s.deletePart(s.getSnapshot().hoverUid!);
+      else if (s.getSnapshot().hoverUid !== null) s.deletePart(s.getSnapshot().hoverUid!, true);
       return;
     }
+    const tool = ([['editorToolPlace', 'place'], ['editorToolOffset', 'offset'], ['editorToolRotate', 'rotate'], ['editorToolReroot', 'reroot']] as const).find(([a]) => matches(a, e))?.[1];
+    if (tool) { e.preventDefault(); s.setTool(tool); return; }
+    if (matches('editorAngleSnap', e)) { s.toggleAngleSnap(); return; }
     if (matches('editorSymmetry', e)) { s.cycleSymmetry(e.shiftKey ? -1 : 1); return; }
     if (matches('editorSymmetryMode', e)) { s.toggleSymmetryMode(); return; }
     if (matches('editorFrame', e)) { this.frameCraft(); return; }
     if (e.altKey) e.preventDefault();
-    if (!held) return;
+    const snap = s.getSnapshot();
+    if (!held && !((snap.tool === 'rotate' || snap.tool === 'offset') && snap.gizmoUid !== null)) return;
     const step = (e.shiftKey ? 5 : 15) * DEG;
     // Camera-relative axes: W/S pitch about screen-right, A/D roll about view direction, Q/E yaw about vertical.
     const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
@@ -885,10 +1047,19 @@ export class EditorView {
       e.preventDefault();
       const [ax, ang] = axes[rotationKey];
       // Camera axes are in the hall (world); held rotations are in the craft frame.
-      s.rotateHeld(fromV(ax.clone().applyQuaternion(this.craftGroup.quaternion.clone().invert())), ang);
+      const axis = fromV(ax.clone().applyQuaternion(this.craftGroup.quaternion.clone().invert()));
+      if (held) s.rotateHeld(axis, ang);
+      else if (snap.tool === 'rotate') s.transformPart(snap.gizmoUid!, { rotation: qFromAxisAngle(axis, ang) }, !e.altKey);
+      else {
+        // Offset tool: W/S up/down, A/D screen left/right, Q/E toward/away from the camera.
+        const nudge = e.shiftKey ? 0.01 : 0.05;
+        const dir = { w: UP, s: v3(0, -1, 0), a: fromV(right.clone().negate()), d: fromV(right), q: fromV(fwd.clone().negate()), e: fromV(fwd) }[rotationKey];
+        const local = fromV(toV(dir).applyQuaternion(this.craftGroup.quaternion.clone().invert()));
+        s.transformPart(snap.gizmoUid!, { offset: v3(local.x * nudge, local.y * nudge, local.z * nudge) }, !e.altKey);
+      }
       return;
     }
-    if (matches('editorReset', e)) { e.preventDefault(); s.resetHeldRotation(); }
+    if (matches('editorReset', e) && held) { e.preventDefault(); s.resetHeldRotation(); }
   };
 
   private onKeyUp = (e: KeyboardEvent) => {
@@ -920,9 +1091,11 @@ export class EditorView {
     this.pitch += (this.gPitch - this.pitch) * k;
     this.dist += (this.gDist - this.dist) * k;
     this.targetY += (this.gTargetY - this.targetY) * k;
-    const target = new THREE.Vector3(0, this.targetY, 0);
+    this.panX += (this.gPanX - this.panX) * k;
+    this.panZ += (this.gPanZ - this.panZ) * k;
+    const target = this.target.set(this.panX, this.targetY, this.panZ);
     const cp = Math.cos(this.pitch);
-    const pos = new THREE.Vector3(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp).multiplyScalar(this.dist).add(target);
+    const pos = this.camPos.set(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp).multiplyScalar(this.dist).add(target);
     // Stay inside the hall.
     pos.x = THREE.MathUtils.clamp(pos.x, -HANGAR.halfX + 2, HANGAR.halfX - 2);
     pos.z = THREE.MathUtils.clamp(pos.z, -HANGAR.halfZ + 2, HANGAR.halfZ - 2);
@@ -945,13 +1118,15 @@ export class EditorView {
     } else if (this.snapKey) this.pulseMarkers();
     const t1 = performance.now();
     // The hangar is static: skip GPU work while nothing moves (re-render at 2 Hz as a safety net).
-    const settling = Math.abs(this.gYaw - this.yaw) + Math.abs(this.gPitch - this.pitch) + Math.abs(this.gTargetY - this.targetY) + Math.abs(this.gDist - this.dist) / Math.max(1, this.dist) > 1e-5;
+    const settling = Math.abs(this.gYaw - this.yaw) + Math.abs(this.gPitch - this.pitch) + Math.abs(this.gTargetY - this.targetY) + Math.abs(this.gDist - this.dist) / Math.max(1, this.dist)
+      + Math.abs(this.gPanX - this.panX) + Math.abs(this.gPanZ - this.panZ) > 1e-5;
     const changed = key !== this.renderedKey || settling || !!this.snapKey;
     this.idleFor = changed ? 0 : this.idleFor + dt;
     if (!changed && this.idleFor < 0.5) return;
     if (!changed) this.idleFor = 0;
     this.renderedKey = key;
     this.updateNodePresentation();
+    this.gizmo?.updateScale(this.camera, this.renderer.domElement.clientHeight);
     this.renderer.render(this.scene, this.camera);
     const t2 = performance.now();
     this.timing = { update: t1 - t0, render: t2 - t1, calls: this.renderer.info.render.calls, tris: this.renderer.info.render.triangles };
@@ -1012,6 +1187,7 @@ export class EditorView {
     this.markerMatHi.dispose();
     this.markerMatHeld.dispose();
     this.ghostMat.dispose();
+    this.gizmo?.dispose();
     releaseRenderer(this.renderer);
     this.renderer.domElement.remove();
   }

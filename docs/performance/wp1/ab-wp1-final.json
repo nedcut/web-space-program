@@ -1,0 +1,320 @@
+{
+ "ascent": {
+  "A": [
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": false,
+     "ut": 964051243.3999586,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 87,
+        "meshes": 254,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 1121.1045703230357,
+        "altitude": 3216.866701067076
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 35.642,
+    "loopGpuMs": 3.037,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 209,
+     "triangles": 1103590,
+     "points": 9000,
+     "programs": 95,
+     "textures": 114,
+     "geometries": 157
+    },
+    "passes": {
+     "upscale": 0.152,
+     "smaa": 0.256,
+     "tonemap": 0.042,
+     "bloom": 0.14,
+     "scene": 1.864
+    },
+    "fencedWall": 3.09,
+    "fenced": 2.017,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-wp1-final-A-ascent-r1-ascent.png",
+    "errors": []
+   }
+  ],
+  "B": [
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": false,
+     "ut": 964051243.4599586,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 87,
+        "meshes": 254,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 1121.0877150240756,
+        "altitude": 3226.4937322362093
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 35.87,
+    "loopGpuMs": 2.863,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 209,
+     "triangles": 1103590,
+     "points": 9000,
+     "programs": 96,
+     "textures": 114,
+     "geometries": 157
+    },
+    "passes": {
+     "upscale": 0.148,
+     "smaa": 0.256,
+     "tonemap": 0.042,
+     "bloom": 0.14,
+     "scene": 1.888
+    },
+    "fencedWall": 3.11,
+    "fenced": 2.054,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-wp1-final-B-ascent-r1-ascent.png",
+    "errors": []
+   }
+  ]
+ },
+ "orbit": {
+  "A": [
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": false,
+     "ut": 964051209.6799908,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 60,
+        "meshes": 154,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 911.8277070949827,
+        "altitude": 150178.49123286142
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 59.39,
+    "loopGpuMs": 2.589,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 102,
+     "triangles": 1051622,
+     "points": 9000,
+     "programs": 88,
+     "textures": 108,
+     "geometries": 99
+    },
+    "passes": {
+     "upscale": 0.224,
+     "smaa": 0.255,
+     "tonemap": 0.04,
+     "bloom": 0.136,
+     "scene": 2.095
+    },
+    "fencedWall": 2.465,
+    "fenced": 2.063,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-wp1-final-A-orbit-r1-orbit.png",
+    "errors": []
+   }
+  ],
+  "B": [
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": false,
+     "ut": 964051209.419991,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 60,
+        "meshes": 154,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 911.8277058547083,
+        "altitude": 150178.49230372428
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 58.437,
+    "loopGpuMs": 2.716,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 102,
+     "triangles": 1051622,
+     "points": 9000,
+     "programs": 89,
+     "textures": 108,
+     "geometries": 100
+    },
+    "passes": {
+     "upscale": 0.225,
+     "smaa": 0.255,
+     "tonemap": 0.04,
+     "bloom": 0.136,
+     "scene": 1.85
+    },
+    "fencedWall": 2.715,
+    "fenced": 2.03,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-wp1-final-B-orbit-r1-orbit.png",
+    "errors": []
+   }
+  ]
+ },
+ "pad": {
+  "A": [
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": false,
+     "ut": 964051209.3199911,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 139,
+        "meshes": 366,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 1126.6526164186198,
+        "altitude": 15.647744321962819
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 58.906,
+    "loopGpuMs": 3.334,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 134,
+     "triangles": 2261765,
+     "points": 9000,
+     "programs": 90,
+     "textures": 108,
+     "geometries": 114
+    },
+    "passes": {
+     "upscale": 0.334,
+     "smaa": 0.271,
+     "tonemap": 0.044,
+     "bloom": 0.141,
+     "scene": 2.337
+    },
+    "fencedWall": 3.145,
+    "fenced": 2.43,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-wp1-final-A-pad-r1-pad.png",
+    "errors": []
+   }
+  ],
+  "B": [
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": false,
+     "ut": 964051210.1599903,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 139,
+        "meshes": 366,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 1126.6526164186198,
+        "altitude": 15.647742178407498
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 53.723,
+    "loopGpuMs": 2.98,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 134,
+     "triangles": 2261765,
+     "points": 9000,
+     "programs": 91,
+     "textures": 108,
+     "geometries": 114
+    },
+    "passes": {
+     "upscale": 0.338,
+     "smaa": 0.271,
+     "tonemap": 0.044,
+     "bloom": 0.142,
+     "scene": 2.141
+    },
+    "fencedWall": 2.895,
+    "fenced": 2.451,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-wp1-final-B-pad-r1-pad.png",
+    "errors": []
+   }
+  ]
+ }
+}

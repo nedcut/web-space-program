@@ -8,7 +8,7 @@ import { formatDistance, formatDuration, formatSpeed } from '../../ui/format';
 import { Panel } from '../../ui/components';
 import { Navball, type NavballFrame, type NavballMarker } from './navball';
 import { DockingIndicator, TargetPanel } from './TargetPanel';
-import { AlertStack, Countdown, FlightHint, StageFlash, type FeelTelemetry } from './FeelHud';
+import { AlertStack, Countdown, FlightHint, type FeelTelemetry } from './FeelHud';
 import type { WarpTargetId } from '../controller/warp';
 import type { ManeuverBurnTelemetry } from '../controller/burn';
 import { FlightDataPanel } from './FlightDataPanel';
@@ -64,6 +64,7 @@ export interface TargetTelemetry {
 /** Snapshot of telemetry pushed to the HUD ~10–20 times per second (not every frame). */
 export interface Telemetry {
   flightData: FlightData;
+  engineering?: { stageDeltaV: number; twr: number; burnCountdown: number | null; impactTime: number | null };
   /** Control trim, null when centred; `held` while SAS is on (trim is then not applied). */
   trim?: { pitch: number; yaw: number; roll: number; held: boolean } | null;
   crew: Astronaut[];
@@ -74,6 +75,7 @@ export interface Telemetry {
   altitudeAsl: number;
   altitudeTerrain: number;
   speedMode: 'surface' | 'orbit' | 'target';
+  speedAutomatic?: boolean;
   speed: number;
   verticalSpeed: number;
   apoapsis: number;
@@ -203,6 +205,9 @@ export function NavballView({ getFrame }: { getFrame: () => { frame: NavballFram
 
 /** App windows supplied by the flight scene (they need the World / controller, not just telemetry). */
 export interface HudDockSlots {
+  alarms?: ReactNode;
+  alarmActive?: boolean;
+  onboarding?: ReactNode;
   /** Flight-assist panel (null when assist is unavailable, e.g. EVA / no control). */
   assist?: ReactNode;
   /** True while an assist program is running (keeps its status visible). */
@@ -215,6 +220,7 @@ export interface HudDockSlots {
   maneuver?: ReactNode;
 }
 
+const ENGINEERING_KEY = 'wsp.hud.engineeringStrip.v1';
 const ORBIT_KEY = 'wsp.hud.orbitStrip.v1';
 
 export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadConnected, shortcutsEnabled = true, partScreen }: {
@@ -227,6 +233,8 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
   const distance = (m: number) => imperial ? (!Number.isFinite(m) ? '—' : Math.abs(m) < 1609.344 ? `${(m / 0.3048).toFixed(0)} ft` : `${(m / 1609.344).toFixed(2)} mi`) : formatDistance(m);
   const speed = useCallback((v: number) => imperial ? `${(v * 2.236936).toFixed(1)} mph` : formatSpeed(v), [imperial]);
   const apps = useApps();
+  const [engineeringStrip, setEngineeringStrip] = useState(() => { try { return sessionStorage.getItem(ENGINEERING_KEY) === '1'; } catch { return false; } });
+  const toggleEngineering = () => setEngineeringStrip(v => { try { sessionStorage.setItem(ENGINEERING_KEY, v ? '0' : '1'); } catch { /* storage unavailable */ } return !v; });
   const [orbitStrip, setOrbitStrip] = useState(() => { try { return sessionStorage.getItem(ORBIT_KEY) === '1'; } catch { return false; } });
   const toggleOrbit = () => setOrbitStrip(v => { try { sessionStorage.setItem(ORBIT_KEY, v ? '0' : '1'); } catch { /* storage unavailable */ } return !v; });
   const [hover, setHover] = useState<number[] | null>(null);
@@ -274,11 +282,13 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
     { id: 'flightData', title: `Flight data (${bindingLabel('flightData')})`, icon: 'flightData', width: 290, content: <FlightDataPanel data={t.flightData} onClose={() => apps.close('flightData')} /> },
     { id: 'science', title: 'Science', icon: 'science', content: dock?.science ?? null },
     { id: 'crew', title: t.eva ? 'EVA' : `Crew (${t.crew.length})`, icon: 'crew', badge: t.noControl ? 'warn' : null, content: <CrewPanel t={t} cb={cb} /> },
+    { id: 'alarms', title: 'Mission alarms', icon: 'flightData', badge: dock?.alarmActive ? 'warn' : null, content: dock?.alarms ?? null },
     { id: 'assist', title: 'Flight assist', icon: 'assist', badge: dock?.assistActive ? 'on' : null, content: dock?.assist ?? null },
     { id: 'target', title: 'Target & docking', icon: 'target', badge: t.target ? 'target' : null, width: 260, content: <TargetPanel t={t} cb={cb} /> },
     { id: 'comms', title: 'Communications', icon: 'comms', content: dock?.signal ?? null },
   ];
   const actions: ToolbarAction[] = [
+    { id: 'engineering', title: 'Engineering strip: stage Δv, TWR, burn countdown and ballistic impact', icon: 'flightData', on: engineeringStrip, onClick: toggleEngineering },
     { id: 'orbit', title: t.mapMode ? 'Orbit summary (always shown in map view)' : 'Orbit summary strip', icon: 'orbit', on: orbitStrip || t.mapMode, onClick: toggleOrbit },
     ...(cb.onSettings ? [{ id: 'settings', title: 'Settings', icon: 'settings' as const, onClick: cb.onSettings }] : []),
     ...(cb.onHelp ? [{ id: 'help', title: `Controls help (${bindingLabel('help')})`, icon: 'help' as const, onClick: cb.onHelp }] : []),
@@ -288,13 +298,16 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
   const floating = openApps.filter(a => apps.state.pos[a.id]);
   const showOrbit = (orbitStrip || t.mapMode) && !t.eva;
   const highlight = picked?.uids ?? hover;
-  const canStage = !t.eva && !t.noControl && t.stages.length > 0;
+  const canStage = !t.eva && !t.noControl && t.stage >= 0;
 
   return (
     <div className="overlay hud" style={{ width: `${100 / settings.hudScale}%`, height: `${100 / settings.hudScale}%`, transform: `scale(${settings.hudScale})`, transformOrigin: 'top left' }}>
       {/* Top-left: time warp and clocks; in map view the maneuver planner; docking indicator; staging at the bottom. */}
       <div className="hud-left">
         <TimeControl t={t} cb={cb} />
+        {dock?.onboarding}
+        {engineeringStrip && !t.eva && t.engineering && <EngineeringStrip data={t.engineering} speed={speed} />}
+        {!dock?.onboarding && !t.mapMode && t.feel.alerts.length === 0 && t.messages.length === 0 && <FlightHint hint={t.feel.hint} onDismiss={cb.onDismissHint} />}
         {gamepadConnected && <div className="hud-pad mono">GAMEPAD</div>}
         {t.mapMode && dock?.maneuver}
         {t.dockingMode && !t.mapMode && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
@@ -327,14 +340,12 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
       </div>
       {floating.map(a => <AppWindow key={a.id} app={a} pos={apps.state.pos[a.id]} scale={settings.hudScale} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} />)}
 
-      {/* Bottom-centre navball cluster. */}
+      {/* Lower-left instruments leave the vessel and its plume in the clear. */}
       <div className="hud-bottom">
         <NavballCluster t={t} cb={vessel || t.eva ? cb : { ...cb, onSasMode: () => {}, onToggleSas: () => {}, onToggleRcs: () => {} }} navball={navball} precision={precision} speed={speed} />
       </div>
 
-      <StageFlash count={t.feel.stagedCount} stage={t.stage} />
       <Countdown value={t.feel.countdown} />
-      <FlightHint hint={t.feel.hint} onDismiss={cb.onDismissHint} navballSize={settings.navballSize} />
       {highlight && partScreen && !t.mapMode && <PartHighlight uids={highlight} at={partScreen} scale={settings.hudScale} strong={!!picked} />}
     </div>
   );
@@ -398,3 +409,13 @@ function PartHighlight({ uids, at, scale, strong }: { uids: number[]; at: (uid: 
 }
 
 export type { AppId };
+
+/** Uses the existing 10 Hz telemetry snapshot; no timers or frame hooks. */
+function EngineeringStrip({ data, speed }: { data: NonNullable<Telemetry['engineering']>; speed: (v: number) => string }) {
+  return <div className="engineering-strip panel" aria-label="Engineering readouts">
+    <div title="Current burning stage, or next engine stage, at current pressure"><span>Stage Δv</span><b>{speed(data.stageDeltaV)}</b></div>
+    <div title="Full-throttle thrust / local weight"><span>Max TWR</span><b>{data.twr.toFixed(2)}</b></div>
+    <div title="Vertical full-throttle burn estimate; assumes upright thrust, constant gravity and no drag"><span>Burn in</span><b>{data.burnCountdown === null ? '—' : data.burnCountdown <= 0 ? 'NOW' : formatDuration(data.burnCountdown)}</b></div>
+    <div title="Unpowered impact prediction along the orbit; no atmospheric drag"><span>Ballistic TTI</span><b>{data.impactTime === null ? '—' : formatDuration(data.impactTime)}</b></div>
+  </div>;
+}

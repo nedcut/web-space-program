@@ -1,0 +1,74 @@
+WP3 validation — 2026-10-08 — implementation ade910df
+
+npm run typecheck: exit 0
+npm run build: exit 0 (existing >500 kB chunk advisory only)
+
+
+Final lint
+
+> web-space-program@0.1.0 lint
+> eslint . --max-warnings=0 && node scripts/check-layering.mjs
+
+Simulation layering verified across 70 modules (static bodies facade exception documented).
+
+
+Focused Vitest
+
+ RUN  v5.0.3 /home/nedcut/.t3/projects/wsp-wt/wp3
+
+
+ Test Files  4 passed (4)
+      Tests  60 passed (60)
+   Start at  12:33:58
+   Duration  5.98s (tests 49%, transform 42%, import 6%, setup 2%)
+
+  Transform  transforming modules took 4.00s · 42% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+
+Full Vitest (tail; timeout retained)
+  touchdown speed=1.61 m/s, upright cos=0.998, ground slope=3.7°, site lat=40.12° lon=159.60°
+  after 3 h of surface warp: moved 0.21 m, sit=landed
+[lunar ascent] T+235800s body=moon alt=25.78km ap=41.9km pe=-51.2km dv=1167m/s mass=5249kg stage=1 sit=flying
+[lunar orbit] T+236338s body=moon alt=41.91km ap=41.9km pe=41.9km dv=40m/s mass=5184kg stage=1 sit=flying
+  TEI plan: node in 896s dv=438.3 SOI exit T+277552 Earth pe=35.0km
+[TEI] T+237259s body=moon alt=42.36km ap=infkm pe=41.9km dv=438m/s mass=4512kg stage=1 sit=flying
+[Earth SOI] T+277554s body=earth alt=119937.99km ap=127125.9km pe=35.9km dv=0m/s mass=4512kg stage=1 sit=flying
+[Earth touchdown] T+461725s body=earth alt=0.00km ap=0.0km pe=-2035.6km dv=0m/s mass=1535kg stage=-1 sit=splashed
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/world-saturn-real.test.ts > Ringrunner Real retains every upper-stage attachment through complete chemical and nuclear burns
+Error: Test timed out in 180000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/world-saturn-real.test.ts:15:1
+     13| // Burn both retained upper stages dry in deep space. This covers thei…
+     14| // verifies that the internal engine mounts actually feed from the tan…
+     15| it('Ringrunner Real retains every upper-stage attachment through compl…
+       | ^
+     16|   const world = new World(new Universe('real'), PART_CATALOG, DEFAULT_…
+     17|   requireIntactFlight(world);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 136 passed (137)
+      Tests  1 failed | 1423 passed | 1 skipped (1425)
+   Start at  12:20:32
+   Duration  374.33s (tests 95%, import 2%, transform 2%, setup 1%)
+
+
+Saturn / WP3 / input rerun
+
+ RUN  v5.0.3 /home/nedcut/.t3/projects/wsp-wt/wp3
+
+Ringrunner Real: parking 220.00 × 220.04 km; remaining Δv 8726.2 m/s, Saturn departure 7562.7 m/s + 500 m/s reserve; wait 16.8 days, flight 1491.8 days; peak flight joint load 82.6%
+
+ Test Files  3 passed (3)
+      Tests  41 passed (41)
+   Start at  12:27:11
+   Duration  164.88s (tests 98%, transform 2%)
+
+

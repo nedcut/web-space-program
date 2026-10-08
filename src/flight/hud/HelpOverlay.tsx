@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { getBindings, subscribeBindings, type Action } from '../../input/bindings';
+import { bindingLabel, getBindings, subscribeBindings, type Action } from '../../input/bindings';
 const SEEN_KEY = 'wsp.help.seen.v1';
 
 export function helpSeen(): boolean {
@@ -43,7 +43,6 @@ const FLIGHT_KEYS: [Action[] | string, string][] = [
   [['cameraLeft', 'cameraRight', 'cameraUp', 'cameraDown', 'cameraZoomIn', 'cameraZoomOut'], 'Orbit / zoom camera from the keyboard'],
   [['focusPrev', 'focusNext'], 'Switch to the previous / next nearby vessel'],
   [['eva'], 'EVA (or the EVA button on a crew portrait)'],
-  [['iva'], 'Interior view (not available yet)'],
   [['quicksave', 'quickload'], 'Quicksave / quickload'],
   [['screenshot'], 'Screenshot (PNG of the flight view)'],
   [['hideUi'], 'Hide / show the interface'],
@@ -78,7 +77,7 @@ export function HelpOverlay({ eva, onClose }: { eva: boolean; onClose(): void })
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <div>
             <div className="label">Flight controls</div>
-            <div style={{ fontSize: 20, fontWeight: 300, letterSpacing: '0.12em', marginTop: 4 }}>{eva ? 'EVA' : 'FIRST FLIGHT'}</div>
+            <div style={{ fontSize: 20, fontWeight: 300, letterSpacing: '0.12em', marginTop: 4 }}>{eva ? 'EVA' : 'FLIGHT'}</div>
           </div>
           <button className="btn small" onClick={onClose}>Got it</button>
         </div>
@@ -91,7 +90,7 @@ export function HelpOverlay({ eva, onClose }: { eva: boolean; onClose(): void })
         {!eva && (
           <p className="help-layout">
             Layout: time warp and clock <b>top-left</b> · altimeter and status lamps <b>top-centre</b> · apps (resources, flight data, science, crew,
-            assist, target, comms) <b>top-right</b> · staging <b>bottom-left</b> · navball, SAS and throttle <b>bottom-centre</b> · crew, map and camera <b>bottom-right</b>.
+            assist, target, comms) <b>top-right</b> · staging <b>bottom-left</b> · navball, SAS and throttle <b>lower-left</b> · crew, map and camera <b>bottom-right</b>.
           </p>
         )}
         <div className="help-grid">
@@ -108,4 +107,19 @@ export function HelpOverlay({ eva, onClose }: { eva: boolean; onClose(): void })
       </div>
     </div>
   );
+}
+
+/** Six essentials, non-modal: the pilot can fly immediately. */
+export function QuickStartCard({ onClose, onHelp }: { onClose(): void; onHelp(): void }) {
+  const bindings = useSyncExternalStore(subscribeBindings, getBindings);
+  const essentials: [Action, string][] = [
+    ['toggleSas', 'Hold attitude'], ['throttleFull', 'Full throttle'], ['stage', 'Launch / next stage'],
+    ['throttleCut', 'Cut throttle'], ['yawRight', 'Tip east gently'], ['map', 'Map view'],
+  ];
+  return <aside className="panel quick-start" aria-label="First flight essentials">
+    <div className="quick-start-head"><span className="label">First flight · six keys</span><button className="btn small ghost" onClick={onClose} aria-label="Dismiss first flight essentials">✕</button></div>
+    <p>Hold attitude, set full throttle, then launch.</p>
+    {essentials.map(([action, label]) => <div className="quick-start-row" key={action}><span>{label}</span><kbd>{bindingLabel(action, bindings)}</kbd></div>)}
+    <button className="btn small" onClick={onHelp}>All controls · {bindingLabel('help', bindings)}</button>
+  </aside>;
 }

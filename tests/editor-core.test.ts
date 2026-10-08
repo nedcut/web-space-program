@@ -229,13 +229,13 @@ describe('staging', () => {
     ed.surfaceAttach('fairing', uids[0], v3(0.5, 0, 0), v3(1, 0, 0));
     expect(ed.craft.parts.find(p => p.partId === 'fairing')!.stage).toBe(ed.craft.parts.find(p => p.uid === uids[2])!.stage);
   });
-  it('stages radial boosters before their parent-edge decouplers', () => {
+  it('lights radial boosters with their core, then drops them', () => {
     const defs = catalog(); defs.get('decoupler')!.modules = [{ type: 'decoupler', ejectionImpulse: 10, node: 'srf', radial: true }];
     const ed = new CraftEditor(defs); const pod = ed.addRoot('pod');
     const tank = ed.attachPart('tank', pod.uid, 'bottom', 'top'); const core = ed.attachPart('engine', tank.uid, 'bottom', 'top');
     const dec = ed.surfaceAttach('decoupler', tank.uid, v3(0.5, 0, 0), v3(1, 0, 0));
     const boosterTank = ed.attachPart('tank', dec.uid, 'bottom', 'top'); const booster = ed.attachPart('engine', boosterTank.uid, 'bottom', 'top');
-    expect(ed.getStageList().map(s => s.partUids)).toEqual([[booster.uid], [dec.uid], [core.uid]]);
+    expect(ed.getStageList().map(s => s.partUids)).toEqual([[core.uid, booster.uid], [dec.uid]]);
   });
   it('retains inserted empty stages at either end and compacts them explicitly', () => {
     const { editor: ed, uids } = rocket();

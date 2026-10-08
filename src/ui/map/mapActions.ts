@@ -1,5 +1,5 @@
 /**
- * Map-object focus cycling and context-menu actions shared by the flight map and the Tracking Station.
+ * Map-object focus cycling and context-menu actions shared by the flight map and Fleet Tracking.
  * Pure data in, data out: callers resolve the world state and execute the chosen action.
  */
 export interface MapObject { kind: 'body' | 'vessel'; id: string }

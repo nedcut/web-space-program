@@ -680,7 +680,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   // ---------------------------------------------------------------- signage
   const sign = new THREE.Mesh(
     track(new THREE.PlaneGeometry(26, 6.5)),
-    track(new THREE.MeshBasicMaterial({ map: track(signTexture('WSP', 'VEHICLE ASSEMBLY · BAY 1')), transparent: true, depthWrite: false, toneMapped: false, color: 0xb0b8c4 })),
+    track(new THREE.MeshBasicMaterial({ map: track(signTexture('WSP', 'INTEGRATION HALL · BAY 1')), transparent: true, depthWrite: false, toneMapped: false, color: 0xb0b8c4 })),
   );
   sign.position.set(-4, doorH + 5.5, -HZ + 0.05);
   group.add(sign);
@@ -692,7 +692,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
 
   const baySign = new THREE.Mesh(
     track(new THREE.PlaneGeometry(12, 3)),
-    track(new THREE.MeshBasicMaterial({ map: track(signTexture('01', 'INTEGRATION HALL')), transparent: true, depthWrite: false, color: 0x71818e })),
+    track(new THREE.MeshBasicMaterial({ map: track(signTexture('01', 'HIGH BAY')), transparent: true, depthWrite: false, color: 0x71818e })),
   );
   baySign.position.set(-24, 9, -HZ + 0.15);
   group.add(baySign);

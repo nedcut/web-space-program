@@ -136,6 +136,7 @@ export function ManeuverPanel({ world, map }: { world: World; map?: FlightMap })
         <button className="btn small" onClick={() => { planner.cancel(); setPlanMsg('Planning cancelled'); }}>Cancel</button>
       </div>}
       {planMsg && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{planMsg}</div>}
+      {options && map && <button className="btn small" onClick={() => map.frameTransferOverview(options.target)}>Show whole transfer</button>}
       {options && <DepartureOptions world={world} options={options} busy={!!planner.progress} onPick={w => planTransfer(options.target, w.departure)} />}
       {nodes.length > 0 && <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: 6, display: 'grid', gap: 4, fontSize: 12 }}>
         {nodes.map((n, i) => <div key={n.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6, alignItems: 'center' }}>
@@ -166,7 +167,7 @@ function DepartureOptions({ world, options, busy, onPick }: { world: World; opti
   return <div style={{ display: 'grid', gap: 3, fontSize: 12 }} aria-label="Departure options">
     <div className="label">Departure options · {world.universe.body(options.target).name}</div>
     {live.map(w => {
-      const tags = [w === soonest ? 'soonest' : '', w.dv <= cheapest + 0.5 ? 'cheapest' : '', w === soonest && w.dv > cheapest * 1.1 + 20 ? 'plane change' : ''].filter(Boolean);
+      const tags = [w.kind === 'now' ? 'now · next orbit, plane change if needed' : w === soonest ? 'soonest' : '', w.dv <= cheapest + 0.5 ? 'cheapest' : '', w === soonest && w.dv > cheapest * 1.1 + 20 ? 'plane change' : ''].filter(Boolean);
       return <button key={w.departure} className="btn ghost small" disabled={busy || near(w)} style={{ textAlign: 'left' }}
         title={near(w) ? 'Planned' : 'Plan this departure (refines the encounter)'} onClick={() => onPick(w)}>
         <span className="mono">{near(w) ? '● ' : '○ '}in {formatDuration(w.departure - world.ut)} · ~{w.dv.toFixed(0)} m/s · flight {formatDuration(w.timeOfFlight)}</span>

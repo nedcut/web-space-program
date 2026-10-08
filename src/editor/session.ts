@@ -8,9 +8,9 @@ import { game } from '../game/store';
 import { Universe } from '../game/universe';
 import { deleteCraft, listCrafts, saveCraft } from '../game/saves';
 import type { ActionGroupId, CraftDef, PartActionId, PartInstance, PartTweaks, ResourceId } from '../sim/vessel/types';
-import { qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../util/quat';
+import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../util/quat';
 import { sub, v3, type Vec3 } from '../util/vec3';
-import { CraftEditor, craftStats, getStageList, type CraftStats, type Stage, type LinkHit } from './core';
+import { CraftEditor, craftStats, descendants, getStageList, type CraftStats, type LinkHit, type PartTransform, type Stage, type Subassembly } from './core';
 import { STOCK_CRAFTS } from './stockCrafts';
 import { computeStageStats, type StageStats } from './ui/dv';
 import { saveErrorText } from '../game/storageErrors';
@@ -45,7 +45,12 @@ export type Placement =
 
 export type SymmetryMode = 'radial' | 'mirror';
 
-export interface Toast { id: number; text: string; tone: 'info' | 'warn' | 'bad' | 'good' }
+export interface Toast { id: number; text: string; tone: 'info' | 'warn' | 'bad' | 'good'; action?: { label: string; run: () => void } }
+
+/** Build tools (keys 1–4): place/pick up parts, offset or rotate placed parts with a gizmo, choose a new root. */
+export type EditorTool = 'place' | 'offset' | 'rotate' | 'reroot';
+/** Bodies offered by the Δv/TWR readout picker. */
+export interface DvBodyOption { id: string; name: string; gravity: number; atmosphere: boolean }
 
 /** Editor interaction mode: building, or assigning part actions to action groups. */
 export type EditorMode = 'build' | 'actions';
@@ -83,6 +88,16 @@ export interface SessionView {
   /** Parts with actions in the selected group (highlighted in 'actions' mode). */
   groupUids: number[];
   panels: InspectorPanelState[];
+  /** Active build tool and the part its gizmo is attached to. */
+  tool: EditorTool;
+  gizmoUid: number | null;
+  /** Offset/rotate gizmos snap (15° / 0.05 m; Shift for fine). */
+  angleSnap: boolean;
+  /** Staging was arranged by hand: new parts are inserted rather than re-staged. */
+  manualStaging: boolean;
+  /** Reference body for the per-stage Δv/TWR readouts. */
+  dvBody: string;
+  dvBodies: DvBodyOption[];
   version: number;
 }
 
@@ -96,7 +111,14 @@ export class EditorSession {
   editor: CraftEditor;
   private listeners = new Set<() => void>();
   private snap!: SessionView;
-  private referenceEarth?: { preset: ReturnType<typeof game.get>['scalePreset']; body: ReturnType<Universe['body']> };
+  private reference?: { preset: ReturnType<typeof game.get>['scalePreset']; universe: Universe; bodies: DvBodyOption[] };
+  private dvBody = 'earth';
+  private launchStats: { craft: CraftDef; stats: Map<number, StageStats> } | null = null;
+  private tool: EditorTool = 'place';
+  private gizmoUid: number | null = null;
+  private angleSnap = true;
+  /** Symmetry setting to restore after a picked-up set is placed or dropped. */
+  private savedSymmetry: { count: SymmetryCount; mode: SymmetryMode } | null = null;
   private name: string;
   private launchWarnedAt = -Infinity;
   private scaleNotices = new Set<string>();
@@ -160,12 +182,12 @@ export class EditorSession {
   private refresh() {
     let craft = this.editor.craft;
     const preset = game.get().scalePreset;
-    const same = this.referenceEarth?.preset === preset && snapshotEqual(craft, this.snap?.craft);
+    const same = this.reference?.preset === preset && snapshotEqual(craft, this.snap?.craft) && this.snap?.dvBody === this.dvBody;
     if (same) craft = this.snap.craft;
-    if (this.referenceEarth?.preset !== preset) this.referenceEarth = { preset, body: new Universe(preset).body('earth') };
+    const reference = this.referenceUniverse();
     const stats = same ? this.snap.stats : craftStats(craft, CATALOG, DENSITIES);
     const stages = same ? this.snap.stages : getStageList(craft);
-    const stageStats = same ? this.snap.stageStats : computeStageStats(craft, CATALOG, this.referenceEarth!.body);
+    const stageStats = same ? this.snap.stageStats : computeStageStats(craft, CATALOG, reference.universe.body(this.dvBody));
     let totalDvVac = 0, totalDvAsl = 0;
     for (const s of stageStats.values()) { totalDvVac += s.dvVac; totalDvAsl += s.dvAsl; }
     this.version++;
@@ -184,9 +206,45 @@ export class EditorSession {
     this.listeners.forEach((l) => l());
   }
 
+  /** Scaled universe for the reference bodies (rebuilt when the program's scale preset changes). */
+  private referenceUniverse() {
+    const preset = game.get().scalePreset;
+    if (this.reference?.preset !== preset) {
+      const universe = new Universe(preset);
+      const bodies: DvBodyOption[] = [];
+      const visit = (id: string) => {
+        const b = universe.bodies.get(id);
+        if (!b) return;
+        if (b.solidSurface && (b.kind === 'planet' || b.kind === 'dwarf' || b.kind === 'moon')) bodies.push({ id: b.id, name: b.name, gravity: b.surfaceGravity, atmosphere: !!b.atmosphere });
+        for (const c of b.children) visit(c);
+      };
+      visit(universe.sunId);
+      this.reference = { preset, universe, bodies };
+      if (!bodies.some(b => b.id === this.dvBody)) this.dvBody = 'earth';
+    }
+    return this.reference;
+  }
+
+  /** Per-stage readouts at the reference body. */
+  setDvBody(id: string) {
+    if (id === this.dvBody || !this.referenceUniverse().bodies.some(b => b.id === id)) return;
+    this.dvBody = id;
+    this.refresh();
+  }
+
+  /** Earth-relative stage stats for launch checks, whatever the readout body is. */
+  launchStageStats(): Map<number, StageStats> {
+    if (this.dvBody === 'earth') return this.snap.stageStats;
+    if (this.launchStats?.craft !== this.snap.craft) this.launchStats = { craft: this.snap.craft, stats: computeStageStats(this.snap.craft, CATALOG, this.referenceUniverse().universe.body('earth')) };
+    return this.launchStats.stats;
+  }
+
   private uiFields(craft: CraftDef = this.snap?.craft ?? this.editor.craft) {
+    if (this.gizmoUid !== null && !craft.parts.some(p => p.uid === this.gizmoUid)) this.gizmoUid = null;
     return { selectedUids: this.selectedUids, mode: this.mode, group: this.group, panels: this.panels,
-      groupUids: craft.parts.filter(p => p.actions?.[this.group]?.length).map(p => p.uid) };
+      groupUids: craft.parts.filter(p => p.actions?.[this.group]?.length).map(p => p.uid),
+      tool: this.tool, gizmoUid: this.gizmoUid, angleSnap: this.angleSnap, manualStaging: this.editor.manualStaging,
+      dvBody: this.dvBody, dvBodies: this.referenceUniverse().bodies };
   }
 
   /** Lightweight update for UI-only fields (no craft recompute). */
@@ -206,17 +264,35 @@ export class EditorSession {
     if (this.editor.linkStart) this.held = { kind: 'new', partId: this.editor.linkStart.partId, rotation: qIdentity() };
     const coreHeld = !!this.editor.held;
     if (coreHeld && this.held?.kind !== 'assembly') this.held = { kind: 'assembly', rotation: qIdentity() };
-    if (!coreHeld && this.held?.kind === 'assembly') this.held = null;
+    if (!coreHeld && this.held?.kind === 'assembly') { this.held = null; this.restoreSymmetry(); }
   }
 
-  toast(text: string, tone: Toast['tone'] = 'info') {
+  /** Holding a set: show (and place with) its symmetry; the player's setting returns afterwards. */
+  private adoptHeldSymmetry() {
+    const sym = this.editor.held?.symmetry;
+    this.savedSymmetry ??= { count: this.symmetry, mode: this.symmetryMode };
+    this.symmetryMode = sym?.mode ?? 'radial';
+    this.symmetry = (sym ? (sym.mode === 'mirror' ? 2 : sym.count) : 1) as SymmetryCount;
+  }
+  private restoreSymmetry() {
+    if (!this.savedSymmetry) return;
+    this.symmetry = this.savedSymmetry.count;
+    this.symmetryMode = this.savedSymmetry.mode;
+    this.savedSymmetry = null;
+  }
+
+  toast(text: string, tone: Toast['tone'] = 'info', action?: Toast['action']) {
     const id = ++this.toastId;
-    this.toasts = [...this.toasts.slice(-3), { id, text, tone }];
+    this.toasts = [...this.toasts.slice(-3), { id, text, tone, ...(action ? { action } : {}) }];
     this.touch();
     setTimeout(() => {
       this.toasts = this.toasts.filter((t) => t.id !== id);
       this.touch();
-    }, Math.max(3200, text.length * 55));
+    }, Math.max(action ? 6000 : 3200, text.length * 55));
+  }
+  dismissToast(id: number) {
+    this.toasts = this.toasts.filter(t => t.id !== id);
+    this.touch();
   }
 
   private guard<T>(fn: () => T): T | undefined {
@@ -239,6 +315,8 @@ export class EditorSession {
     if (!ok) return;
     this.name = craft.name || 'Untitled Craft';
     this.held = null;
+    this.savedSymmetry = null;
+    this.gizmoUid = null;
     this.applyTypeDefaults(this.editor.craft.type);
     this.loadCounter++;
     this.refresh();
@@ -305,7 +383,7 @@ export class EditorSession {
     }
     // Friendly pre-flight check for rockets: warn once when the first powered stage can't lift off.
     if (craft.type !== 'SPH' && performance.now() - this.launchWarnedAt > 8000) {
-      const stats = [...this.snap.stageStats.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);
+      const stats = [...this.launchStageStats().entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);
       const first = stats.find((s) => s.twrAsl > 0 || s.dvVac > 0);
       const msg = !first ? 'No engines found: this craft will not leave the pad.' : first.twrAsl < 1 ? `First stage thrust-to-weight is ${first.twrAsl.toFixed(2)} (needs > 1 to lift off).` : '';
       if (msg) {
@@ -362,8 +440,57 @@ export class EditorSession {
     if (part?.link) {
       this.deletePart(uid); this.pickNew(part.partId); return;
     }
-    // Core marks the change; syncHeld() converts it into an 'assembly' hold.
-    this.guard(() => this.editor.detachSubtree(uid));
+    // Core marks the change; syncHeld() converts it into an 'assembly' hold. A symmetric set comes up together.
+    if (this.guard(() => this.editor.detachSubtree(uid, true))) { this.adoptHeldSymmetry(); this.touch(); }
+  }
+
+  /** Alt-click: hold a copy of the part's subtree (a symmetric source is placed as a set). */
+  copyPart(uid: number) {
+    if (this.held) return;
+    const part = this.editor.craft.parts.find(p => p.uid === uid);
+    if (!part) return;
+    const g = game.get();
+    const locked = this.editor.craft.parts.find(p => [...descendants(this.editor.craft.parts, uid)].includes(p.uid) && !partUnlocked(p.partId, g.mode, g.resumeWorld?.progression ?? newProgression()));
+    if (locked) return this.toast('Research every part in the copy first', 'warn');
+    if (this.guard(() => this.editor.copySubtree(uid))) { this.adoptHeldSymmetry(); this.touch(); }
+  }
+
+  /** Pick a saved subassembly from the drawer. */
+  pickSubassembly(sub: Subassembly) {
+    const g = game.get();
+    if (sub.parts.some(p => !partUnlocked(p.partId, g.mode, g.resumeWorld?.progression ?? newProgression()))) return this.toast('This subassembly uses parts you have not researched', 'warn');
+    if (this.held) this.cancelHeld();
+    this.editor.cancelLink();
+    if (this.guard(() => this.editor.holdAssembly(sub))) { this.adoptHeldSymmetry(); this.touch(); }
+  }
+
+  /** Merge another craft: it is held (root first, no stage numbers) for attaching to this one. */
+  mergeCraft(craft: CraftDef) {
+    const root = craft.parts.find(p => p.parent === undefined);
+    if (!root) return this.toast('That vehicle is empty', 'warn');
+    if (!this.editor.craft.parts.length) return this.load(craft);
+    const parts = craft.parts.map(p => { const q = structuredClone(p); delete q.stage; return q; });
+    this.pickSubassembly({ rootUid: root.uid, parts });
+    if (this.editor.held) this.toast(`Attach "${craft.name}" to a node or surface · Esc cancels`, 'info');
+  }
+
+  /** A subassembly from the held assembly (preferred) or the selected/given part's subtree. */
+  subassemblyFrom(uid?: number): Subassembly | null {
+    const held = this.editor.held;
+    if (held) {
+      const root = held.parts.find(p => p.uid === held.rootUid)!;
+      const parts = held.parts.map(p => {
+        const q = structuredClone(p);
+        q.position = qRotate(qConj(root.rotation), sub(p.position, root.position));
+        q.rotation = qNormalize(qMul(qConj(root.rotation), p.rotation));
+        delete q.stage;
+        return q;
+      });
+      return { rootUid: held.rootUid, parts, ...(held.symmetry ? { symmetry: held.symmetry } : {}) };
+    }
+    const target = uid ?? this.selectedUids[0];
+    if (target === undefined || !this.editor.craft.parts.some(p => p.uid === target)) return null;
+    return this.editor.subassembly(target);
   }
 
   /** Esc: a new part is simply dropped; a picked-up assembly returns to where it came from. */
@@ -393,8 +520,48 @@ export class EditorSession {
     this.guard(() => this.editor.discardHeld());
   }
 
-  deletePart(uid: number) {
-    this.guard(() => this.editor.deletePart(uid));
+  /** Delete a part, its subtree and its symmetry set; `announce` offers an Undo (keyboard deletes). */
+  deletePart(uid: number, announce = false) {
+    const before = this.editor.craft;
+    const part = before.parts.find(p => p.uid === uid);
+    if (!part || !this.guard(() => (this.editor.deletePart(uid), true)) || !announce) return;
+    const removed = before.parts.length - this.editor.craft.parts.length;
+    const name = CATALOG.get(part.partId)?.name ?? 'part';
+    this.toast(`Deleted ${name}${removed > 1 ? ` and ${removed - 1} attached part${removed > 2 ? 's' : ''}` : ''}`, 'info', {
+      label: 'Undo', run: () => { if (!this.held && snapshotEqual(this.editor.craft, this.snap.craft)) this.editor.undo(); },
+    });
+  }
+
+  // ------------------------------------------------------------------ build tools
+  setTool(tool: EditorTool) {
+    if (tool === this.tool) return;
+    if (this.held && tool !== 'place') this.cancelHeld();
+    this.tool = tool;
+    if (tool === 'place' || tool === 'reroot') this.gizmoUid = null;
+    else if (this.gizmoUid === null && this.selectedUids.length === 1) this.gizmoUid = this.selectedUids[0];
+    this.touch();
+  }
+  /** Attach the offset/rotate gizmo to a part (null hides it). */
+  setGizmo(uid: number | null) {
+    if (uid === this.gizmoUid) return;
+    this.gizmoUid = uid;
+    if (uid !== null) this.selectedUids = [uid];
+    this.touch();
+  }
+  toggleAngleSnap() { this.angleSnap = !this.angleSnap; this.touch(); }
+  /** Commit a gizmo gesture (one undo step per `gesture`). */
+  transformPart(uid: number, t: PartTransform, symmetric = true, gesture?: string) {
+    this.guard(() => this.editor.transformPart(uid, t, symmetric, gesture));
+  }
+  reRoot(uid: number) {
+    const part = this.editor.craft.parts.find(p => p.uid === uid);
+    if (!part) return;
+    if (part.parent === undefined) return this.toast('That part is already the root', 'info');
+    if (this.guard(() => (this.editor.reRoot(uid), true))) {
+      this.toast(`${CATALOG.get(part.partId)?.name ?? 'Part'} is now the root part`, 'good');
+      this.loadCounter++;
+      this.refresh();
+    }
   }
 
   rotateHeld(axis: Vec3, angle: number) {
@@ -451,11 +618,17 @@ export class EditorSession {
       // Assembly picked up from the craft: push the accumulated rotation into the core first.
       const rotated = Math.abs(h.rotation.w) < 1 - 1e-9;
       if (p.kind === 'surface') {
+        this.applySymmetry();
         this.editor.surfaceAttachHeld(p.parentUid, p.point, p.normal, p.rotation);
       } else {
         if (rotated) this.editor.rotateHeld(h.rotation);
         if (p.kind === 'root') this.editor.placeHeldAsRoot();
-        else this.editor.attachHeld(p.parentUid, p.parentNode, p.childNode, p.childUid);
+        else {
+          const parent = this.editor.craft.parts.find((x) => x.uid === p.parentUid);
+          if (parent?.symmetryGroup !== undefined && this.symmetryMode === 'mirror') this.editor.setSymmetry({ mode: 'mirror' });
+          else this.editor.setSymmetry({ mode: 'radial', count: 1 });
+          this.editor.attachHeld(p.parentUid, p.parentNode, p.childNode, p.childUid);
+        }
       }
       return true;
     });
@@ -523,11 +696,15 @@ export class EditorSession {
       return;
     }
     if (this.held?.kind === 'assembly') return this.cancelHeld();
+    // Picking up/copying and placing is one action: never stop in a holding state.
     this.editor.undo();
+    for (let i = 0; i < 8 && this.editor.held && this.editor.canUndo; i++) this.editor.undo();
   }
   redo() {
     if (this.held?.kind === 'new') { this.held = null; this.touch(); }
+    if (this.held?.kind === 'assembly') return;
     this.editor.redo();
+    for (let i = 0; i < 8 && this.editor.held && this.editor.canRedo; i++) this.editor.redo();
   }
 
   // ------------------------------------------------------------------ selection, inspector panels, part settings
@@ -582,6 +759,7 @@ export class EditorSession {
 
   // Staging
   moveToStage(uid: number, index: number) { this.guard(() => this.editor.moveToStage(uid, index)); }
+  moveStage(from: number, to: number) { this.guard(() => this.editor.moveStage(from, to)); }
   insertStage(index: number) { this.guard(() => this.editor.insertStage(index)); }
   removeEmptyStages() { this.guard(() => this.editor.removeEmptyStages()); }
   autoStage() { this.guard(() => this.editor.autoStage()); }

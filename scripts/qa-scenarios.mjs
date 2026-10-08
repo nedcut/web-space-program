@@ -148,9 +148,9 @@ try {
       while(v.state.situation!=='landed'&&!v.state.destroyed&&steps++<16000){const alt=w.universe.surfaceInfo('titan',v.state.position,w.ut).heightAboveTerrain;const stage=!armed&&alt<12000&&v.state.telemetry.dynamicPressure<20000;if(stage)armed=true;w.tick(0.25,neutralInput({stage,gear:true,sas:'retrograde',sasReference:'surface'}));if(stage)w.tick(0.02,neutralInput({stage:true,gear:true,sas:'retrograde',sasReference:'surface'}));semi ||= v.state.parts.some(p=>p.chute?.phase==='semi');full ||= v.state.parts.some(p=>p.chute?.phase==='full');}
       return{steps,semi,full,situation:v.state.situation,speed:length(w.surfaceVelocity(v)),parts:v.state.parts.length,originalParts:count,destroyed:v.state.destroyed};});expect(result.situation).toBe('landed');expect(result.speed).toBeLessThan(5);expect(result.parts).toBe(result.originalParts);await shot('titan-landed');return result;
   });
-  await check('Tracking Station comms overlay and Spacepedia navigation',async()=>{
+  await check('Fleet Tracking comms overlay and Spacepedia navigation',async()=>{
     await page.evaluate(async()=>{const {game}=await window.__qaImport('/src/game/store.ts');game.set({resumeWorld:window.__flight.snapshot(),scene:'tracking',settings:{...game.get().settings,commsEnabled:true}});});
-    await expect(page.getByRole('heading',{name:'Tracking Station'})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Fleet Tracking'})).toBeVisible();
     await page.getByRole('checkbox',{name:/Signal links/}).uncheck();await page.getByRole('checkbox',{name:/Signal links/}).check();await shot('tracking-comms');
     await page.getByRole('button',{name:'Spacepedia',exact:true}).click();await expect(page.getByRole('heading',{name:'Spacepedia',exact:true})).toBeVisible();
     await shot('spacepedia');

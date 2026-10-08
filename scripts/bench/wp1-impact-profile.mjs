@@ -1,0 +1,61 @@
+// Windows Chrome quiet-impact CPU profile. From WSL, hold /tmp/wsp-gpu.lock.
+// node.exe wp1-impact-profile.mjs <base> [label] [C:/wsp-tools/shots/wp1]
+import { chromium } from 'playwright-core';
+import { mkdirSync, writeFileSync } from 'node:fs';
+const [base,label='after',out='C:/wsp-tools/shots/wp1'] = process.argv.slice(2);
+mkdirSync(out,{recursive:true});
+const browser=await chromium.connectOverCDP('http://127.0.0.1:9333');
+const context=await browser.newContext({viewport:{width:1600,height:900},deviceScaleFactor:2,serviceWorkers:'block'});
+await context.addInitScript(()=>{
+  localStorage.setItem('wsp.help.seen.v1','1');
+  localStorage.setItem('wsp.settings.v1',JSON.stringify({quality:'medium',graphicsProfile:99,adaptiveQuality:false,autoSaveInterval:0,masterVolume:.7,sfxVolume:1,musicVolume:0,flightHints:false,cameraShake:1}));
+});
+const page=await context.newPage(), errors=[];
+page.on('pageerror',e=>errors.push(e.message));
+page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
+const report={label,base,errors};
+async function load(query='') {
+  await page.goto(`${base}/?flight=stock-meridian${query}`);
+  await page.waitForFunction(()=>window.__flight && !document.querySelector('.loading-screen'),null,{timeout:120000});
+  await page.bringToFront(); await page.mouse.click(10,10); await page.waitForTimeout(3000);
+  await page.evaluate(()=>{
+    window.__wp1={lost:null,bar:null,tasks:[]};
+    new PerformanceObserver(list=>window.__wp1.tasks.push(...list.getEntries().map(e=>({start:e.startTime,duration:e.duration})))).observe({type:'longtask'});
+    const f=window.__flight, old=f.onActiveLost;
+    f.onActiveLost=()=>{window.__wp1.lost=performance.now(); old?.();};
+    new MutationObserver(()=>{if(window.__wp1.bar===null && document.querySelector('.flight-ended-bar'))window.__wp1.bar=performance.now();}).observe(document.body,{childList:true,subtree:true});
+  });
+}
+async function prepareCrash() {
+  await page.evaluate(()=>{
+    const f=window.__flight,w=f.world,v=w.active.state,T={Vector3:f.cam.camera.position.constructor,Quaternion:f.cam.camera.quaternion.constructor};
+    f.paused=true; f.cam.distance=48;
+    const bs=w.universe.ephem.getBodyState(w.active.body,w.ut),up=new T.Vector3().copy(v.position).sub(bs.position).normalize();
+    const air=w.surfaceVelocity(w.active), agl=w.universe.surfaceInfo(w.active.body,v.position,w.ut).heightAboveTerrain;
+    v.position.x+=up.x*(40-agl);v.position.y+=up.y*(40-agl);v.position.z+=up.z*(40-agl);
+    v.orientation=new T.Quaternion().setFromUnitVectors(new T.Vector3(0,1,0),up.clone().negate());
+    v.velocity.x-=air.x+up.x*120;v.velocity.y-=air.y+up.y*120;v.velocity.z-=air.z+up.z*120;
+    w.active.mode='physics';w.active.fixed=undefined;w.active.holdDown=undefined;v.situation='flying';w.renderHistory.invalidate();
+  });
+}
+try {
+  await load();await prepareCrash();await page.waitForTimeout(400);
+  const cdp=await context.newCDPSession(page);await cdp.send('Performance.enable');await cdp.send('Profiler.enable');await cdp.send('Profiler.start');
+  report.metrics=(await cdp.send('Performance.getMetrics')).metrics;
+  await page.evaluate(()=>{window.__wp1.tasks=[];window.__flight.paused=false;});await page.waitForTimeout(280);
+  report.fragments=await page.evaluate(()=>{
+    const f=window.__flight,camera=f.cam.camera,V=camera.position.constructor,point=new V();let visible=0;
+    for(const mesh of f.effects.debris.root.children){
+      if(!mesh.visible)continue;point.copy(mesh.position).applyMatrix4(mesh.parent.matrixWorld);
+      const range=point.distanceTo(camera.position);mesh.geometry.computeBoundingSphere();
+      const pixels=mesh.geometry.boundingSphere.radius*mesh.scale.x/range*innerHeight/(2*Math.tan(camera.fov*Math.PI/360));
+      point.project(camera);if(Math.abs(point.x)<1&&Math.abs(point.y)<1&&Math.abs(point.z)<1&&pixels>=4)visible++;
+    }
+    return {live:f.effects.debris.activeCount,visibleAtLeast4px:visible};
+  });
+  await page.waitForTimeout(4220);
+  writeFileSync(`${out}/after-impact.cpuprofile`,JSON.stringify((await cdp.send('Profiler.stop')).profile));await cdp.detach();
+  report.impact=await page.evaluate(()=>window.__wp1);
+} finally {
+  writeFileSync(`${out}/impact-profile.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));await context.close();await browser.close();
+}

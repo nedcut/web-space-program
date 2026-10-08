@@ -4,7 +4,7 @@ import { qRotate } from '../../util/quat';
 import type { DecouplerModule, ResourceId } from './types';
 import type { PartState, VesselEvent, VesselState } from './runtime';
 import { G0 } from './env';
-import { applyImpulse, cloneVessel, decouplerCutChildren, recomputeMassProperties, splitVessel } from './assembly';
+import { applyImpulse, cloneVessel, decouplerCutChildren, rebuildTopology, recomputeMassProperties, splitVessel } from './assembly';
 import { engineModule, igniteEngine, ispAtPressure, isSolidMotor, maxMassFlow, propellantNeed } from './engines';
 import { availableResource, drawPropellants, drawResource } from './resources';
 import { ejectionScale, thrustLimit } from './tweaks';
@@ -108,6 +108,17 @@ export function jettisonFairing(all: VesselState[], fuid: number, created: Vesse
   if (!mod) return;
   f.activated = true;
   const point = { ...f.position };
+  // The payload rides on the fairing: hand it to the part below before the shell (with its ring) separates.
+  if (f.parent !== null && f.children.length) {
+    for (const uid of f.children) {
+      const child = owner.cache.byUid.get(uid);
+      if (!child) continue;
+      child.parent = f.parent;
+      child.parentNode = f.parentNode === 'srf' || child.attachNode === 'srf' ? 'srf' : f.parentNode;
+      if (child.parentNode === 'srf') child.attachNode = 'srf';
+    }
+    rebuildTopology(owner);
+  }
   const pieces = splitVessel(owner, [fuid]);
   for (const nv of pieces) {
     const diff = sub(nv.com, owner.com);

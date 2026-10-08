@@ -39,7 +39,7 @@ try {
     await page.getByRole('button',{name:mode,exact:true}).click();
     await page.getByRole('button',{name:'Start',exact:true}).click();
     await expect(page.getByText('SPACE CENTER',{exact:true})).toBeVisible();
-    await page.getByRole('button',{name:/Vehicle Assembly/}).click();
+    await page.getByRole('button',{name:/Integration Hall/}).click();
     await page.waitForFunction(() => window.__editor);
     const result = await page.evaluate(async () => { const {game}=await window.__qaImport('/src/game/store.ts'); window.__editor.loadStock('kestrel'); return {mode:game.get().mode, parts:window.__editor.session.currentCraft().parts.length, palette:document.querySelectorAll('.vab-card').length}; });
     await page.getByRole('button',{name:'Exit to Space Center',exact:true}).click();

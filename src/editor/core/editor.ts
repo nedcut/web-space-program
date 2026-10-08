@@ -3,27 +3,28 @@ import { tweakDescriptors } from '../../sim/vessel/tweaks';
 import { partActions } from '../../sim/vessel/actions';
 import { add, sub, v3, length, normalize, type Vec3 } from '../../util/vec3';
 import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../../util/quat';
-import { alignNodes, freeAttachNodes, mirrorPosition, mirrorRotation, requirePart, surfaceContact, surfacePlacement, transformAssembly, worldNode, type HeldAssembly, type PartCatalog, type SnapCandidate } from './geometry';
-import { autoStage, getStageList, insertStage, moveToStage, removeEmptyStages, type Stage } from './staging';
+import { alignNodes, freeAttachNodes, mirrorPosition, mirrorRotation, requirePart, surfaceContact, surfacePlacement, transformAssembly, worldNode, type HeldAssembly, type PartCatalog, type SnapCandidate, type Transform } from './geometry';
+import { autoStage as defaultStager, getStageList, insertIntoStaging, insertStage, moveStage, moveToStage, removeEmptyStages, sameStaging, type Stage, type Stager } from './staging';
+import { copySubtree, counterpartMaps, descendants, fitFairings, groupSymmetry, transformedParts, type PartTransform } from './subtree';
 import { deserializeCraft, serializeCraft } from './serialization';
 
 export type Symmetry = { mode: 'radial'; count: 1 | 2 | 3 | 4 | 6 | 8 } | { mode: 'mirror'; count?: 2 };
 export interface LinkHit { uid: number; point: Vec3; normal: Vec3 }
-export interface EditorSnapshot { craft: CraftDef; held?: HeldAssembly; linkStart?: { partId: string; hit: LinkHit } }
+/** `manualStaging`: the player has arranged the stages; edits insert new parts instead of re-staging everything. */
+export interface EditorSnapshot { craft: CraftDef; held?: HeldAssembly; linkStart?: { partId: string; hit: LinkHit }; manualStaging?: boolean }
+export interface EditorOptions {
+  /** Automatic stager (default: assembly-aware `autoStage`). */
+  stager?: Stager;
+  /** Start in manual (true) or automatic (false) staging; default: manual when the craft's staging differs from automatic. */
+  manualStaging?: boolean;
+}
+/** A saved, reusable subtree: positions relative to the root; `symmetry` re-creates the set it came from. */
+export interface Subassembly { rootUid: number; parts: PartInstance[]; symmetry?: HeldAssembly['symmetry'] }
 export type ChangeListener = (snapshot: EditorSnapshot) => void;
 const copy = <T>(value: T): T => structuredClone(value);
 function assertLinkHit(hit: LinkHit): void {
   if (![hit.point.x, hit.point.y, hit.point.z, hit.normal.x, hit.normal.y, hit.normal.z].every(Number.isFinite)
     || Math.abs(length(hit.normal) - 1) > 1e-5) throw new Error('Invalid surface point');
-}
-function descendants(parts: PartInstance[], uid: number): Set<number> {
-  const result = new Set([uid]);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const p of parts) if (p.parent !== undefined && result.has(p.parent) && !result.has(p.uid)) { result.add(p.uid); changed = true; }
-  }
-  return result;
 }
 /** Reverse the path to the old root without changing craft-frame geometry. */
 function rootAt(parts: PartInstance[], uid: number): PartInstance[] {
@@ -47,7 +48,8 @@ function rootAt(parts: PartInstance[], uid: number): PartInstance[] {
 /** Pure-data editor. Getters/events return defensive snapshots; all writes use explicit
  * transactional methods. Undo includes held assemblies and keeps at least 50 steps.
  * Geometry uses absolute craft-frame rotations. Renderer ray hits use craft coordinates.
- * New attachments auto-stage; manual staging persists until the next structural addition. */
+ * Staging is automatic until the player rearranges it; from then on new parts are inserted into the manual order
+ * (`insertIntoStaging`) until "reset to automatic". Fairing shells refit to their payload after every edit. */
 export class CraftEditor {
   private state: EditorSnapshot;
   private past: EditorSnapshot[] = [];
@@ -55,10 +57,20 @@ export class CraftEditor {
   private listeners = new Set<ChangeListener>();
   private symmetry: Symmetry = { mode: 'radial', count: 1 };
   readonly historyLimit: number;
-  constructor(readonly catalog: PartCatalog, craft: CraftDef = { name: 'Untitled', type: 'VAB', parts: [], version: 1 }, historyLimit = 100) {
+  readonly stager: Stager;
+  constructor(readonly catalog: PartCatalog, craft: CraftDef = { name: 'Untitled', type: 'VAB', parts: [], version: 1 }, historyLimit = 100, options: EditorOptions = {}) {
     this.state = { craft: deserializeCraft(serializeCraft(craft), catalog) };
     this.historyLimit = Math.max(50, Math.floor(historyLimit) || 100);
+    this.stager = options.stager ?? defaultStager;
+    const parts = this.state.craft.parts;
+    let manual = options.manualStaging;
+    if (manual === undefined) {
+      try { manual = parts.length > 0 && !sameStaging(this.state.craft, this.stager(this.state.craft, catalog)); } catch { manual = true; }
+    }
+    if (manual) this.state.manualStaging = true;
   }
+  /** The player arranged the stages (new parts are inserted rather than re-staged). */
+  get manualStaging(): boolean { return !!this.state.manualStaging; }
   get craft(): CraftDef { return copy(this.state.craft); }
   get held(): HeldAssembly | undefined { return copy(this.state.held); }
   get linkStart() { return copy(this.state.linkStart); }
@@ -112,7 +124,7 @@ export class CraftEditor {
       if (this.state.craft.parts.length) throw new Error('Craft already has a root');
       const part = this.newPart(partId);
       this.state.craft.parts.push(part);
-      this.state.craft = autoStage(this.state.craft, this.catalog);
+      this.settle();
       return this.part(part.uid);
     });
   }
@@ -124,59 +136,99 @@ export class CraftEditor {
   private assertFree(uid: number, id: string): void {
     if (!freeAttachNodes(this.state.craft, this.catalog).some(n => n.uid === uid && n.id === id)) throw new Error(`Occupied or missing node ${uid}:${id}`);
   }
+  /** After a structural edit: refit fairing shells, then stage automatically or insert into the manual order. */
+  private settle(): void {
+    let craft = fitFairings(this.state.craft, this.catalog);
+    craft = this.state.manualStaging ? insertIntoStaging(craft, this.catalog, this.stager) : this.stager(craft, this.catalog);
+    this.state.craft = craft;
+  }
   /** Symmetry includes the original: x4 adds four parts, not five.
    * Grouped parents take precedence: copies use each corresponding parent once.
    * A single stack node cannot host radial copies; use symmetric parents or surface attachment. */
   private addSymmetric(part: PartInstance, parent: PartInstance): PartInstance {
+    this.replicate([part], part.uid, parent);
+    this.settle();
+    return this.part(part.uid);
+  }
+  /**
+   * Add a subtree (root already attached to `parent`) plus its symmetry copies: one per parent counterpart when the
+   * parent is grouped, otherwise radial/mirror copies per the symmetry setting (surface roots only). The first copy keeps
+   * its uids. Groups wholly inside the subtree stay per copy; every other part is grouped with its copies.
+   * `skipOccupied`: counterparts whose stack node is taken are skipped instead of failing (re-placed assemblies).
+   */
+  private replicate(parts: PartInstance[], rootUid: number, parent: PartInstance, skipOccupied = false): void {
+    const root = parts.find(p => p.uid === rootUid)!;
     const count = this.symmetry.mode === 'mirror' ? 2 : this.symmetry.count;
     let counterparts = parent.symmetryGroup === undefined ? [parent] : this.state.craft.parts.filter(p => p.symmetryGroup === parent.symmetryGroup);
     counterparts = [parent, ...counterparts.filter(p => p.uid !== parent.uid)];
     const useCounterparts = counterparts.length > 1;
+    if (useCounterparts && skipOccupied && root.attachNode !== 'srf') {
+      const free = new Set(freeAttachNodes(this.state.craft, this.catalog).map(n => `${n.uid}:${n.id}`));
+      counterparts = counterparts.filter((c, i) => i === 0 || free.has(`${c.uid}:${root.parentNode}`));
+    }
     const copies = useCounterparts ? counterparts.length : count;
-    if (copies > 1 && !useCounterparts && part.attachNode !== 'srf') throw new Error('Stack symmetry requires symmetric parent parts');
-    const group = copies > 1 ? 1 + Math.max(0, ...this.state.craft.parts.map(p => p.symmetryGroup ?? 0)) : undefined;
-    const firstUid = this.nextUid();
+    if (copies > 1 && !useCounterparts && root.attachNode !== 'srf') throw new Error('Stack symmetry requires symmetric parent parts');
+    const members = new Map<number, number>();
+    for (const p of parts) if (p.symmetryGroup !== undefined) members.set(p.symmetryGroup, (members.get(p.symmetryGroup) ?? 0) + 1);
+    const internal = (g?: number) => g !== undefined && (members.get(g) ?? 0) > 1;
+    let nextGroup = 1 + Math.max(0, ...this.state.craft.parts.map(p => p.symmetryGroup ?? 0), ...parts.map(p => p.symmetryGroup ?? 0));
+    const across = new Map<number, number>();
+    if (copies > 1) for (const p of parts) if (!internal(p.symmetryGroup)) across.set(p.uid, nextGroup++);
+    let nextUid = 1 + Math.max(0, ...this.state.craft.parts.map(p => p.uid), ...parts.map(p => p.uid), ...(this.state.held?.parts.map(p => p.uid) ?? []));
+    const mirror = this.symmetry.mode === 'mirror';
     for (let i = 0; i < copies; i++) {
-      const p = copy(part); p.uid = firstUid + i;
-      if (group !== undefined) p.symmetryGroup = group;
+      const uids = new Map(parts.map(p => [p.uid, i === 0 ? p.uid : nextUid++]));
+      const groups = new Map<number, number>();
+      let set = parts.map(src => {
+        const p = copy(src);
+        p.uid = uids.get(src.uid)!;
+        if (src.uid !== rootUid && src.parent !== undefined) p.parent = uids.get(src.parent) ?? src.parent;
+        if (p.link) p.link = { ...p.link, sourceUid: uids.get(p.link.sourceUid) ?? p.link.sourceUid, targetUid: uids.get(p.link.targetUid) ?? p.link.targetUid };
+        if (internal(src.symmetryGroup)) {
+          if (i > 0) { if (!groups.has(src.symmetryGroup!)) groups.set(src.symmetryGroup!, nextGroup++); p.symmetryGroup = groups.get(src.symmetryGroup!); }
+        } else if (across.has(src.uid)) p.symmetryGroup = across.get(src.uid);
+        else delete p.symmetryGroup;
+        return p;
+      });
+      const rootCopy = () => set.find(p => p.uid === uids.get(rootUid))!;
+      const move = (t: Transform) => { set = transformAssembly({ rootUid, parts: set }, t).parts; };
       if (useCounterparts) {
         const target = counterparts[i];
-        const delta = qMul(target.rotation, qConj(parent.rotation));
-        p.position = add(target.position, qRotate(delta, sub(part.position, parent.position)));
-        p.rotation = qNormalize(qMul(delta, part.rotation));
-        if (i > 0 && this.symmetry.mode === 'mirror' && counterparts.length === 2) {
-          this.mirrorPartPlacement(p, part);
+        if (i > 0 && mirror && counterparts.length === 2) set = this.mirrorAssembly(set, uids.get(rootUid)!);
+        else if (i > 0) {
+          const delta = qMul(target.rotation, qConj(parent.rotation));
+          move({ rotation: delta, position: sub(target.position, qRotate(delta, parent.position)) });
         }
-        p.parent = target.uid;
-        if (p.attachNode !== 'srf') {
-          this.assertFree(target.uid, p.parentNode!);
-          const t = alignNodes(worldNode(p, this.node(p, p.attachNode!)), worldNode(target, this.node(target, p.parentNode!)));
-          p.position = add(qRotate(t.rotation, p.position), t.position);
-          p.rotation = qNormalize(qMul(t.rotation, p.rotation));
+        const r = rootCopy();
+        r.parent = target.uid;
+        if (r.attachNode !== 'srf') {
+          this.assertFree(target.uid, r.parentNode!);
+          move(alignNodes(worldNode(r, this.node(r, r.attachNode!)), worldNode(target, this.node(target, r.parentNode!))));
         }
-      } else if (i > 0 && this.symmetry.mode === 'mirror') {
-        this.mirrorPartPlacement(p, part);
-      } else if (i > 0) {
+      } else if (i > 0 && mirror) set = this.mirrorAssembly(set, uids.get(rootUid)!);
+      else if (i > 0) {
         const delta = qFromAxisAngle(v3(0, 1, 0), 2 * Math.PI * i / copies);
-        p.position = add(parent.position, qRotate(delta, sub(part.position, parent.position)));
-        p.rotation = qNormalize(qMul(delta, part.rotation));
+        move({ rotation: delta, position: sub(parent.position, qRotate(delta, parent.position)) });
       }
-      this.state.craft.parts.push(p);
+      this.state.craft.parts.push(...set);
     }
-    this.state.craft = autoStage(this.state.craft, this.catalog);
-    return this.part(firstUid);
   }
-  private mirrorPartPlacement(target: PartInstance, original: PartInstance): void {
-    target.position = mirrorPosition(original.position);
-    target.rotation = mirrorRotation(original.rotation);
+  /** Reflect an assembly across craft YZ; a surface-mounted root is re-seated flush on the mirrored contact. */
+  private mirrorAssembly(parts: PartInstance[], rootUid: number): PartInstance[] {
+    const original = parts.find(p => p.uid === rootUid)!;
+    let out = parts.map(p => ({ ...p, position: mirrorPosition(p.position), rotation: mirrorRotation(p.rotation) }));
     if (original.attachNode === 'srf') {
       // Quaternions cannot encode reflection: M R M equals the reflection only for parts symmetric about their
       // local YZ plane (all catalogue radial parts). Re-seat the mount on the mirrored contact point so any
       // part still sits flush on the mirrored surface.
       const def = requirePart(this.catalog, original.partId);
       const contact = surfaceContact(original, def);
-      Object.assign(target, surfacePlacement(def, mirrorPosition(contact.point), mirrorPosition(contact.normal), target.rotation));
+      const mirrored = out.find(p => p.uid === rootUid)!;
+      const seat = surfacePlacement(def, mirrorPosition(contact.point), mirrorPosition(contact.normal), mirrored.rotation);
+      const q = qNormalize(qMul(seat.rotation, qConj(mirrored.rotation)));
+      out = transformAssembly({ rootUid, parts: out }, { rotation: q, position: sub(seat.position, qRotate(q, mirrored.position)) }).parts;
     }
+    return out;
   }
   attachPart(partId: string, parentUid: number, parentNodeId: string, childNodeId: string, rotation: Quat = qIdentity()): PartInstance {
     return this.update(() => {
@@ -253,24 +305,74 @@ export class CraftEditor {
       return this.part(uid);
     });
   }
-  detachSubtree(uid: number): HeldAssembly {
+  /**
+   * Pick up a part with its subtree. `symmetric`: also remove its symmetry counterparts' subtrees; the held assembly
+   * records the set's symmetry so placement re-creates it.
+   */
+  detachSubtree(uid: number, symmetric = false): HeldAssembly {
     return this.update(() => {
       if (this.state.held) throw new Error('An assembly is already held');
       this.part(uid);
-      const ids = descendants(this.state.craft.parts, uid);
-      const linked = new Set(this.state.craft.parts.filter(p => p.link && (ids.has(p.link.sourceUid) || ids.has(p.link.targetUid))).map(p => p.uid));
-      const parts = copy(this.state.craft.parts.filter(p => ids.has(p.uid) && !linked.has(p.uid)));
+      const all = this.state.craft.parts;
+      const ids = descendants(all, uid);
+      const removed = new Set(ids);
+      const set = symmetric ? counterpartMaps(all, uid) : [];
+      for (const c of set.slice(1)) for (const id of descendants(all, c.part.uid)) removed.add(id);
+      const linked = new Set(all.filter(p => p.link && (removed.has(p.link.sourceUid) || removed.has(p.link.targetUid))).map(p => p.uid));
+      const parts = copy(all.filter(p => ids.has(p.uid) && !linked.has(p.uid)));
       // A link mount picked directly becomes ordinary held hardware; endpoints are chosen anew.
       for (const p of parts) if (p.link) delete p.link;
       const root = parts.find(p => p.uid === uid)!;
       delete root.parent; delete root.attachNode; delete root.parentNode;
+      this.state.craft.parts = all.filter(p => !removed.has(p.uid) && !linked.has(p.uid));
       // Break groups that straddle the detached boundary, retaining wholly detached groups.
-      const outsideGroups = new Set(this.state.craft.parts.filter(p => !ids.has(p.uid)).map(p => p.symmetryGroup));
+      const outsideGroups = new Set(this.state.craft.parts.map(p => p.symmetryGroup));
       for (const p of parts) if (outsideGroups.has(p.symmetryGroup)) delete p.symmetryGroup;
-      this.state.craft.parts = this.state.craft.parts.filter(p => !ids.has(p.uid) && !linked.has(p.uid));
       delete this.state.linkStart;
       this.state.held = { rootUid: uid, parts };
+      if (set.length > 1) {
+        const sym = groupSymmetry(all, uid);
+        this.state.held.symmetry = sym.mode === 'mirror' ? sym : { mode: 'radial', count: set.length };
+      }
       return this.state.held;
+    });
+  }
+  /** Alt-click: hold a copy of a part's subtree (fresh uids, same stages); a symmetric source is placed as a set. */
+  copySubtree(uid: number): HeldAssembly {
+    return this.update(() => {
+      if (this.state.held) throw new Error('An assembly is already held');
+      const all = this.state.craft.parts;
+      if (this.part(uid).link) throw new Error('Choose a part, not a strut or fuel line');
+      const held = copySubtree(all, uid, this.nextUid(), 1 + Math.max(0, ...all.map(p => p.symmetryGroup ?? 0)));
+      const sym = groupSymmetry(all, uid);
+      if (sym.count > 1) held.symmetry = sym;
+      delete this.state.linkStart;
+      this.state.held = held;
+      return held;
+    });
+  }
+  /** A reusable subtree (root at the origin, no stage assignments) for the subassembly drawer. */
+  subassembly(uid: number): Subassembly {
+    const held = copySubtree(this.state.craft.parts, uid, 1, 1);
+    const root = held.parts.find(p => p.uid === held.rootUid)!;
+    const moved = transformAssembly(held, { position: sub(v3(), root.position), rotation: qIdentity() });
+    for (const p of moved.parts) delete p.stage;
+    const sym = groupSymmetry(this.state.craft.parts, uid);
+    return copy({ rootUid: moved.rootUid, parts: moved.parts, ...(sym.count > 1 ? { symmetry: sym } : {}) });
+  }
+  /** Hold a subassembly (fresh uids). Parts must exist in the catalogue and form one tree under `rootUid`. */
+  holdAssembly(assembly: Subassembly): HeldAssembly {
+    return this.update(() => {
+      if (this.state.held) throw new Error('An assembly is already held');
+      for (const p of assembly.parts) requirePart(this.catalog, p.partId);
+      if (!assembly.parts.some(p => p.uid === assembly.rootUid)) throw new Error('Subassembly has no root part');
+      const held = copySubtree(assembly.parts, assembly.rootUid, this.nextUid(), 1 + Math.max(0, ...this.state.craft.parts.map(p => p.symmetryGroup ?? 0)));
+      for (const p of held.parts) if (![p.position.x, p.position.y, p.position.z, p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w].every(Number.isFinite)) throw new Error('Invalid subassembly');
+      const sym = assembly.symmetry;
+      if (sym && (sym.mode === 'mirror' || [2, 3, 4, 6, 8].includes(sym.count))) held.symmetry = sym.mode === 'mirror' ? { mode: 'mirror', count: 2 } : { mode: 'radial', count: sym.count };
+      delete this.state.linkStart;
+      this.state.held = held;
+      return held;
     });
   }
   private requireHeld(): HeldAssembly { if (!this.state.held) throw new Error('No held assembly'); return this.state.held; }
@@ -285,7 +387,8 @@ export class CraftEditor {
       this.state.held = transformAssembly(held, { rotation: q, position: sub(center, qRotate(q, center)) });
     });
   }
-  /** Any free node in a held assembly may connect; its tree is rerooted at that part. */
+  /** Any free node in a held assembly may connect; its tree is rerooted at that part. Symmetric parents (and, for
+   * surface mounts, the symmetry setting) re-create the set. */
   attachHeld(parentUid: number, parentNodeId: string, childNodeId: string, childUid?: number): PartInstance {
     return this.update(() => {
       const held = this.requireHeld();
@@ -297,8 +400,9 @@ export class CraftEditor {
       const moved = transformAssembly({ rootUid: uid, parts: rootAt(held.parts, uid) }, delta);
       const root = moved.parts.find(p => p.uid === uid)!;
       root.parent = parentUid; root.parentNode = parentNodeId; root.attachNode = childNodeId;
-      this.state.craft.parts.push(...moved.parts); delete this.state.held;
-      this.state.craft = autoStage(this.state.craft, this.catalog);
+      delete this.state.held;
+      this.replicate(moved.parts, uid, parent, true);
+      this.settle();
       return this.part(uid);
     });
   }
@@ -314,18 +418,20 @@ export class CraftEditor {
       const moved = transformAssembly(held, { rotation: q, position: sub(target.position, qRotate(q, root.position)) });
       const attached = moved.parts.find(p => p.uid === moved.rootUid)!;
       attached.parent = parentUid; attached.attachNode = 'srf'; attached.parentNode = 'srf';
-      this.state.craft.parts.push(...moved.parts); delete this.state.held;
-      this.state.craft = autoStage(this.state.craft, this.catalog);
+      delete this.state.held;
+      this.replicate(moved.parts, attached.uid, parent, true);
+      this.settle();
       return this.part(attached.uid);
     });
   }
-  discardHeld(): void { this.update(() => { this.requireHeld(); delete this.state.held; }); }
+  discardHeld(): void { this.update(() => { this.requireHeld(); delete this.state.held; this.settle(); }); }
   placeHeldAsRoot(): void {
     this.update(() => {
       if (this.state.craft.parts.length) throw new Error('Craft already has a root');
       const held = this.requireHeld(), root = held.parts.find(p => p.uid === held.rootUid)!;
       this.state.craft.parts = transformAssembly(held, { position: sub(v3(), root.position), rotation: qIdentity() }).parts;
       delete this.state.held;
+      this.settle();
     });
   }
   deletePart(uid: number): void {
@@ -336,6 +442,7 @@ export class CraftEditor {
       this.state.craft.parts = this.state.craft.parts.filter(p => !ids.has(p.uid)
         && !(p.link && (ids.has(p.link.sourceUid) || ids.has(p.link.targetUid))));
       delete this.state.linkStart;
+      this.settle();
     });
   }
   reRoot(uid: number): void {
@@ -343,7 +450,23 @@ export class CraftEditor {
       if (this.part(uid).link) throw new Error('A link cannot be the craft root');
       const origin = this.part(uid).position;
       this.state.craft.parts = rootAt(this.state.craft.parts, uid).map(p => ({ ...p, position: sub(p.position, origin) }));
+      // Re-rooting keeps the stages as they are. Automatic staging reads the tree from the root, so keep later edits
+      // from re-staging everything when its result for the new tree would differ.
+      if (!this.state.manualStaging && !sameStaging(this.state.craft, this.stager(this.state.craft, this.catalog))) this.state.manualStaging = true;
+      this.state.craft = fitFairings(this.state.craft, this.catalog);
     });
+  }
+  /**
+   * Offset (craft-frame translation) and/or rotate (about the part's attachment point) a placed part with its subtree;
+   * with `symmetric`, its counterparts follow (rotated or mirrored). `coalesceKey` merges a gesture into one undo step.
+   */
+  transformPart(uid: number, t: PartTransform, symmetric = true, coalesceKey?: string): void {
+    this.update(() => {
+      this.part(uid);
+      const changed = transformedParts(this.state.craft.parts, this.catalog, uid, t, symmetric);
+      this.state.craft.parts = this.state.craft.parts.map(p => changed.get(p.uid) ?? p);
+      this.state.craft = fitFairings(this.state.craft, this.catalog);
+    }, coalesceKey);
   }
   /** Switch between vertical (VAB) and horizontal (SPH) building; geometry is unchanged (craft +Y = nose). */
   setCraftType(type: CraftDef['type']): void {
@@ -366,8 +489,12 @@ export class CraftEditor {
           if (!offered.has(k)) throw new Error(`This part has no ${k} setting`);
           if (v === undefined) delete next[k]; else (next as Record<string, unknown>)[k] = copy(v);
         }
+        // Sizing a shell by hand stops it following the payload.
+        if (('fairingHeight' in tweaks || 'fairingRadius' in tweaks) && !('fairingAuto' in tweaks)) next.fairingAuto = false;
+        if (next.fairingAuto === true) delete next.fairingAuto;
         if (Object.keys(next).length) p.tweaks = next; else delete p.tweaks;
       }
+      this.state.craft = fitFairings(this.state.craft, this.catalog);
     }, `tweak:${uid}:${Object.keys(tweaks).join()}`);
   }
   /** Set resource amounts (clamped to capacity; full amounts are stored as the default). */
@@ -407,9 +534,15 @@ export class CraftEditor {
       }
     });
   }
-  autoStage(): void { this.update(() => { this.state.craft = autoStage(this.state.craft, this.catalog); }); }
-  moveToStage(uid: number, stageIndex: number): void { this.update(() => { this.state.craft = moveToStage(this.state.craft, uid, stageIndex); }); }
-  insertStage(stageIndex: number): void { this.update(() => { this.state.craft = insertStage(this.state.craft, stageIndex); }); }
+  /** Reset to automatic staging (new parts re-stage everything again). */
+  autoStage(): void { this.update(() => { this.state.craft = this.stager(this.state.craft, this.catalog); delete this.state.manualStaging; }); }
+  moveToStage(uid: number, stageIndex: number): void { this.update(() => { this.state.craft = moveToStage(this.state.craft, uid, stageIndex); this.state.manualStaging = true; }); }
+  insertStage(stageIndex: number): void { this.update(() => { this.state.craft = insertStage(this.state.craft, stageIndex); this.state.manualStaging = true; }); }
+  /** Drag a whole stage to another position (UI indices, 0 fires first). */
+  moveStage(from: number, to: number): void {
+    if (from === to) return;
+    this.update(() => { this.state.craft = moveStage(this.state.craft, from, to); this.state.manualStaging = true; });
+  }
   removeEmptyStages(): void { this.update(() => { this.state.craft = removeEmptyStages(this.state.craft); }); }
   getStageList(): Stage[] { return getStageList(this.state.craft); }
 }

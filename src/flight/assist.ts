@@ -130,6 +130,8 @@ export function assistFrame(world: World, assist: Autopilot, pilot: ControlInput
   if (pilotThrottle) return end('pilot', 'Assist cancelled: manual control', true);
   if (pilot.pitch || pilot.yaw || pilot.roll) return end('pilot', 'Assist cancelled: manual control');
   const step = assist.update(world);
+  // Alarms stop coasting automation; a burn/descent already in progress continues safely at 1×.
+  if (world.alarmClock.held && world.alarmClock.holdReason === 'other' && step.coastUntil !== undefined) return end('pilot', 'Assist paused at mission alarm; acknowledge and restart to continue');
   if (assist.error) return end('error', `Assist stopped: ${assist.error}`);
   if (assist.done) return end('done', `${assist.name}: complete`);
   const commands = [...(step.input.commands ?? []), ...(pilot.commands ?? [])];
@@ -144,8 +146,8 @@ export function assistFrame(world: World, assist: Autopilot, pilot: ControlInput
   };
   if (step.coastUntil !== undefined) {
     const idx = warpIndexFor(step.coastUntil - world.ut, dt);
-    world.warp = { mode: 'rails', index: idx };
-    state.warped = idx > 0;
+    world.warp = { mode: 'rails', index: world.alarmClock.held ? 0 : idx };
+    state.warped = world.warp.index > 0;
   } else {
     releaseRailsWarp(world);
     state.warped = false;

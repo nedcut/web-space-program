@@ -7,6 +7,7 @@ import { aircraft } from './parts/aircraft';
 import { antennas } from './parts/antennas';
 import { control } from './parts/control';
 import { coupling } from './parts/coupling';
+import { couplers } from './parts/couplers';
 import { electrical } from './parts/electrical';
 import { engines } from './parts/engines';
 import { expansion } from './parts/expansion';
@@ -19,7 +20,7 @@ import { RESOURCES } from './resources';
 export { gearLayout,landingLegLayout,MANUFACTURERS,SIZE_RADIUS } from './parts/builders';
 
 
-export const PART_DEFS: PartDef[] = [...pods, ...tanks, ...engines, ...coupling, ...structural, ...aero, ...control, ...electrical, ...utility, ...aircraft, ...scienceParts, ...antennas, ...expansion, ...ISRU_PARTS, ...hazardParts].map(p => ({ ...p, maxPressure: pressureLimit(p) }));
+export const PART_DEFS: PartDef[] = [...pods, ...tanks, ...engines, ...coupling, ...structural, ...aero, ...control, ...electrical, ...utility, ...aircraft, ...scienceParts, ...antennas, ...expansion, ...ISRU_PARTS, ...hazardParts, ...couplers].map(p => ({ ...p, maxPressure: pressureLimit(p) }));
 
 
 export const PART_CATALOG: Map<string, PartDef> = new Map(PART_DEFS.map((p) => [p.id, p]));

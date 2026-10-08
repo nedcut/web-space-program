@@ -11,7 +11,7 @@ export function clampToParent(el: HTMLElement | null, x: number, y: number) {
   el.style.top = `${Math.max(8, Math.min(y, h - el.offsetHeight - 8))}px`;
 }
 
-/** Small popup listing actions for a map object (shared by flight map and Tracking Station). */
+/** Small popup listing actions for a map object (shared by flight map and Fleet Tracking). */
 export function MapContextMenu({ x, y, title, subtitle, actions, onAction, onClose }: {
   x: number; y: number; title: string; subtitle?: string; actions: MapAction[];
   onAction: (id: MapActionId) => void; onClose: () => void;

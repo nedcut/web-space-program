@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { AppIcon, type AppGlyph } from './glyphs';
 
-export type AppId = 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms';
+export type AppId = 'alarms' | 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms';
 
 export interface HudApp {
   id: AppId;

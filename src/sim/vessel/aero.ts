@@ -7,6 +7,7 @@ import type { LiftingSurfaceModule, ParachuteModule } from './types';
 import type { PartState, VesselEvent, VesselState } from './runtime';
 import { faceAreas, faceIndex } from './shapes';
 import { deflectionScale } from './tweaks';
+import { FAIRING_CYLINDER, fairingEncloses, fairingShell } from './fairing';
 
 /**
  * Aerodynamics: per-part, occlusion-aware drag with Mach-dependent coefficients, lifting surfaces with
@@ -62,8 +63,30 @@ export function liftingCoefficients(alpha: number, liftSlope: number, machFactor
   return { cl, cd };
 }
 
-/** Exposed area per face per part (part frame), accounting for node-attached neighbours. */
-export function computeExposedAreas(v: VesselState): Map<number, number[]> {
+export interface FairingShielding {
+  /** Parts wholly inside an attached fairing shell: no drag, lift or convective heating. */
+  shielded: Set<number>;
+  /** Fairing parts: projected shell areas per face [+X,-X,+Y,-Y,+Z,-Z] and the body-frame point their drag acts at. */
+  shells: Map<number, { areas: number[]; centre: Vec3 }>;
+}
+
+/** Enclosure by fairing shells still attached to the vessel. */
+export function fairingShielding(v: VesselState): FairingShielding {
+  const out: FairingShielding = { shielded: new Set(), shells: new Map() };
+  for (const f of v.parts) {
+    const shell = fairingShell(f.def, f.tweaks);
+    if (!shell) continue;
+    const side = 2 * shell.radius * shell.height * (FAIRING_CYLINDER + (1 - FAIRING_CYLINDER) * 0.67);
+    const cap = Math.PI * shell.radius * shell.radius;
+    const base = faceAreas(f.def)[3];
+    out.shells.set(f.uid, { areas: [side, side, cap, base, side, side], centre: add(f.position, qRotate(f.rotation, { x: 0, y: shell.baseY + shell.height * 0.4, z: 0 })) });
+    for (const p of v.parts) if (p !== f && !out.shielded.has(p.uid) && fairingEncloses(shell, f, p)) out.shielded.add(p.uid);
+  }
+  return out;
+}
+
+/** Exposed area per face per part (part frame), accounting for node-attached neighbours and fairing shells. */
+export function computeExposedAreas(v: VesselState, shielding: FairingShielding = fairingShielding(v)): Map<number, number[]> {
   const out = new Map<number, number[]>();
   for (const p of v.parts) out.set(p.uid, faceAreas(p.def));
   for (const p of v.parts) {
@@ -84,6 +107,11 @@ export function computeExposedAreas(v: VesselState): Map<number, number[]> {
     out.get(par.uid)![fb] -= areaA;
   }
   for (const arr of out.values()) for (let i = 0; i < 6; i++) arr[i] = Math.max(0, arr[i]);
+  for (const [uid, shell] of shielding.shells) {
+    const arr = out.get(uid)!;
+    for (let i = 0; i < 6; i++) if (i !== 3) arr[i] = shell.areas[i];
+  }
+  for (const uid of shielding.shielded) out.set(uid, [0, 0, 0, 0, 0, 0]);
   return out;
 }
 
@@ -129,7 +157,9 @@ export function computeAeroForces(v: VesselState, ctx: AeroContext, loads?: Part
   const machMul = machDragMultiplier(mach);
   const liftMach = liftMachFactor(mach);
 
+  const shielded = v.cache.shielded;
   for (const p of v.parts) {
+    if (shielded?.has(p.uid)) continue;
     const vb = partAirVelocityBody(v, p, ctx.airVelocityBody);
     const vp = qRotate(qConj(p.rotation), vb);
     const sp = length(vp);
@@ -172,9 +202,10 @@ export function computeAeroForces(v: VesselState, ctx: AeroContext, loads?: Part
     if (p.chute && p.chute.cda > 0) fPart = add(fPart, scale(vp, -0.5 * rho * sp * p.chute.cda));
 
     const fb = qRotate(p.rotation, fPart);
-    loads?.push({ partUid: p.uid, point: p.position, force: fb });
+    const at = v.cache.aeroCentre?.get(p.uid) ?? p.position;
+    loads?.push({ partUid: p.uid, point: at, force: fb });
     force = add(force, fb);
-    torque = add(torque, cross(sub(p.position, v.com), fb));
+    torque = add(torque, cross(sub(at, v.com), fb));
   }
   return { forceBody: force, torqueBody: torque, mach, dynamicPressure };
 }

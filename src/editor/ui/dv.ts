@@ -5,6 +5,7 @@ import { computeStageDeltaV } from '../../sim/vessel/staging';
 import { getStageList } from '../core';
 import type { Body } from '../../sim/bodies/types';
 import { sampleAtmosphere } from '../../sim/atmosphere';
+import { fairingMassDelta } from '../../sim/vessel/fairing';
 
 /** Legacy/default reference conditions for callers without a universe. */
 const EDITOR_G = 9.81;
@@ -19,6 +20,9 @@ export interface StageStats {
   burnTime: number;
   startMass: number;
   endMass: number;
+  /** Thrust-to-weight at burnout (same engines, end mass). */
+  twrEndVac: number;
+  twrEndAsl: number;
 }
 
 /**
@@ -26,9 +30,18 @@ export interface StageStats {
  * Prefers the simulation's `computeStageDeltaV` (exact resource flow rules); falls back to a local
  * rocket-equation estimate if the sim throws on an in-progress craft.
  */
-export function computeStageStats(craft: CraftDef, catalog: Map<string, PartDef>, earth?: Body): Map<number, StageStats> {
-  const gravity = earth?.surfaceGravity ?? EDITOR_G;
-  const pressure = earth ? sampleAtmosphere(earth.atmosphere, 0, gravity).pressure : ASL_PRESSURE;
+export function computeStageStats(craft: CraftDef, catalog: Map<string, PartDef>, body?: Body): Map<number, StageStats> {
+  const gravity = body?.surfaceGravity ?? EDITOR_G;
+  const pressure = body ? (body.atmosphere ? sampleAtmosphere(body.atmosphere, 0, gravity).pressure : 0) : ASL_PRESSURE;
+  const out = stageStatsAt(craft, catalog, gravity, pressure);
+  for (const s of out.values()) {
+    s.twrEndVac = s.endMass > 0 ? s.twrVac * s.startMass / s.endMass : 0;
+    s.twrEndAsl = s.endMass > 0 ? s.twrAsl * s.startMass / s.endMass : 0;
+  }
+  return out;
+}
+
+function stageStatsAt(craft: CraftDef, catalog: Map<string, PartDef>, gravity: number, pressure: number): Map<number, StageStats> {
   const out = new Map<number, StageStats>();
   if (!craft.parts.length) return out;
   const maxStage = getStageList(craft).length - 1;
@@ -41,7 +54,7 @@ export function computeStageStats(craft: CraftDef, catalog: Map<string, PartDef>
       const s: StageStats = {
         dvVac: r.dvVac, dvAsl: r.dvAsl,
         twrVac: r.startMass > 0 ? r.thrustVac / (r.startMass * gravity) : 0,
-        twrAsl: r.twrStart, burnTime: r.burnTime, startMass: r.startMass, endMass: r.endMass,
+        twrAsl: r.twrStart, burnTime: r.burnTime, startMass: r.startMass, endMass: r.endMass, twrEndVac: 0, twrEndAsl: 0,
       };
       if (prev) { prev.dvVac += s.dvVac; prev.dvAsl += s.dvAsl; prev.burnTime += s.burnTime; prev.endMass = s.endMass; }
       else out.set(idx, s);
@@ -69,7 +82,7 @@ export function localEstimate(craft: CraftDef, catalog: Map<string, PartDef>, ma
     let m = 0;
     for (const uid of alive) {
       const p = parts.get(uid)!;
-      m += def(p).dryMass;
+      m += def(p).dryMass + fairingMassDelta(def(p), p.tweaks);
       const r = res.get(uid)!;
       for (const k in r) m += (r[k as ResourceId] ?? 0) * density(k as ResourceId);
     }
@@ -105,7 +118,7 @@ export function localEstimate(craft: CraftDef, catalog: Map<string, PartDef>, ma
       }
     }
     const startMass = mass();
-    const s: StageStats = { dvVac: 0, dvAsl: 0, twrVac: 0, twrAsl: 0, burnTime: 0, startMass, endMass: startMass };
+    const s: StageStats = { dvVac: 0, dvAsl: 0, twrVac: 0, twrAsl: 0, burnTime: 0, startMass, endMass: startMass, twrEndVac: 0, twrEndAsl: 0 };
     let first = true;
     for (let iter = 0; iter < 200; iter++) {
       // Engines with propellant available.
