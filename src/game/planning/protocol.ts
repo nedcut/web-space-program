@@ -3,7 +3,7 @@ import type { ManeuverNode, Orbit, StateVector } from '../../sim/orbit/api';
 import type { TransferOptions, TransferPlan } from './transfers';
 import type { CourseCorrectionOptions, InterplanetaryOptions, InterplanetaryPlan, PorkchopPoint, SearchRange } from '../interplanetary';
 
-/** No craft, functions, class instances, render state or mutable World crosses the boundary. */
+/** Plain snapshots only; no functions, class instances, render state or mutable World crosses the boundary. */
 export interface PlanningSnapshot {
   preset: ScalePresetId;
   activatedAsteroids?: string[];

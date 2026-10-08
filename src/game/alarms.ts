@@ -68,7 +68,7 @@ export class AlarmClock {
         const n = world.nodes[i];
         const record = this.nodeRecords.get(n);
         if (!record || record.vessel !== v.state.id || record.time !== n.time) {
-          this.automatic(v.state.id, 'node', String(n.id), 'Maneuver · prepare burn', n.time - 30, world.ut);
+          this.automatic(v.state.id, 'node', String(n.id), 'Maneuver · node in 30 s', n.time - 30, world.ut);
           this.nodeRecords.set(n, { vessel: v.state.id, time: n.time });
         }
       }
