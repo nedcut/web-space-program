@@ -14,6 +14,7 @@ export const DEFAULT_BINDINGS = {
   evaRight: ['KeyD', 'KeyE'], evaLeft: ['KeyA', 'KeyQ'], evaForward: ['KeyW'], evaBack: ['KeyS'], evaUp: ['ShiftLeft', 'ShiftRight'], evaDown: ['ControlLeft', 'ControlRight'], evaRun: ['ShiftLeft', 'ShiftRight'],
   editorUndo: ['Ctrl+KeyZ'], editorRedo: ['Ctrl+Shift+KeyZ', 'Ctrl+KeyY'], editorSave: ['Ctrl+KeyS'], editorCancel: ['Escape'], editorDelete: ['Delete', 'Backspace'], editorSymmetry: ['KeyX'], editorSymmetryMode: ['KeyR'], editorFrame: ['KeyF'], editorReset: ['Space'],
   editorPitchUp: ['KeyW'], editorPitchDown: ['KeyS'], editorRollLeft: ['KeyA'], editorRollRight: ['KeyD'], editorYawLeft: ['KeyQ'], editorYawRight: ['KeyE'],
+  editorToolPlace: ['Digit1'], editorToolOffset: ['Digit2'], editorToolRotate: ['Digit3'], editorToolReroot: ['Digit4'], editorAngleSnap: ['KeyC'],
 } satisfies Record<string, string[]>;
 export type Action = keyof typeof DEFAULT_BINDINGS;
 export type Bindings = Record<Action, string[]>;

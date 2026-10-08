@@ -4,7 +4,8 @@ import { buildISRU } from './builders/isru';
 import { buildInstrument } from './builders/science';
 import { buildAstronaut } from './builders/astronaut';
 import * as THREE from 'three';
-import type { PartDef } from '../../sim/vessel/types';
+import type { PartDef, PartTweaks } from '../../sim/vessel/types';
+import { fairingShell } from '../../sim/vessel/fairing';
 import type { Builder } from './builders/common';
 import { buildFin, buildWing, buildControlSurface } from './builders/aero';
 import { buildCockpit, buildFuselage, buildGear, buildIntake, buildJetEngine } from './builders/aircraft';
@@ -13,6 +14,7 @@ import { buildBattery, buildSolarDeploy, buildSolarFixed } from './builders/elec
 import { buildEngine, buildIonEngine, buildSrb } from './builders/engines';
 import {
   buildAdapter,
+  buildCoupler,
   buildDecoupler,
   buildFairing,
   buildGirder,
@@ -74,6 +76,7 @@ export const MESH_BUILDERS: Record<string, Builder> = {
   separator: buildSeparator,
   radialDecoupler: buildRadialDecoupler,
   adapter: buildAdapter,
+  coupler: buildCoupler,
   noseCone: buildNoseCone,
   fairing: buildFairing,
   girder: buildGirder,
@@ -129,6 +132,36 @@ export function buildPartMesh(def: PartDef, detail: PartDetail = defaultDetail):
   if (!t) {
     const builder = MESH_BUILDERS[def.mesh] ?? fallback;
     t = withDetail(detail === 'high' ? 1 : 0.5, () => builder(def));
+    bakePartAO(t);
+    optimizePartTemplate(t);
+    t.name = def.id;
+    t.userData.partId = def.id;
+    setPartDeploy(t, 0);
+    templates.set(key, t);
+  }
+  return t.clone(true);
+}
+
+/**
+ * Per-instance mesh parameters (fitted fairing shells), or undefined for the catalogue mesh. Rounded so instances of
+ * the same size share one template.
+ */
+export function partMeshParams(def: PartDef, tweaks?: PartTweaks): Record<string, number> | undefined {
+  if (tweaks?.fairingHeight === undefined && tweaks?.fairingRadius === undefined) return undefined;
+  const shell = fairingShell(def, tweaks);
+  if (!shell) return undefined;
+  return { shellHeight: Math.round(shell.height * 100) / 100, shellRadius: Math.round(shell.radius * 100) / 100 };
+}
+
+/** Like `buildPartMesh`, for an instance with its own mesh parameters (cached per distinct parameter set). */
+export function buildPartMeshVariant(def: PartDef, params: Record<string, number> | undefined, detail: PartDetail = defaultDetail): THREE.Object3D {
+  if (!params) return buildPartMesh(def, detail);
+  const key = `${def.id}|${Object.entries(params).map(([k, v]) => `${k}=${v}`).join(',')}${detail === 'high' ? '' : ':low'}`;
+  let t = templates.get(key);
+  if (!t) {
+    const variant: PartDef = { ...def, meshParams: { ...def.meshParams, ...params } };
+    const builder = MESH_BUILDERS[def.mesh] ?? fallback;
+    t = withDetail(detail === 'high' ? 1 : 0.5, () => builder(variant));
     bakePartAO(t);
     optimizePartTemplate(t);
     t.name = def.id;

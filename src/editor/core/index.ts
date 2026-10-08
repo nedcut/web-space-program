@@ -4,3 +4,4 @@ export * from './geometry';
 export * from './staging';
 export * from './stats';
 export * from './serialization';
+export * from './subtree';

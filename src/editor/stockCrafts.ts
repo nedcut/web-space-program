@@ -3,7 +3,7 @@ import { PART_CATALOG } from '../data/parts';
 import type { CraftDef, PartActionId, PartDef } from '../sim/vessel/types';
 import { qFromAxisAngle, qRotate, type Quat } from '../util/quat';
 import { v3, type Vec3 } from '../util/vec3';
-import { CraftEditor, type PartCatalog } from './core';
+import { autoStageByDepth, CraftEditor, type PartCatalog } from './core';
 import { surfaceTransform } from './surface';
 
 /**
@@ -29,7 +29,8 @@ class Builder {
   readonly resources = new Map<number, CraftDef["parts"][number]["resources"]>();
   readonly stages = new Map<string, number>();
   constructor(readonly catalog: PartCatalog, name: string, description: string, type: CraftDef['type'] = 'VAB', seed?: CraftDef) {
-    this.ed = new CraftEditor(catalog, seed ?? { name, description, type, parts: [], version: 1 });
+    // Stock designs were tuned and flight-tested with the depth stager; keep their staging exactly.
+    this.ed = new CraftEditor(catalog, seed ?? { name, description, type, parts: [], version: 1 }, undefined, { stager: autoStageByDepth, manualStaging: false });
   }
   part(uid: number) {
     return this.ed.craft.parts.find((x) => x.uid === uid)!;

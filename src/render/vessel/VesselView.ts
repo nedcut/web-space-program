@@ -4,7 +4,7 @@ import { batchStaticParts, disposeStaticBatch, isAnimatedNode } from './staticBa
 import * as THREE from 'three';
 import type { VesselState, PartState } from '../../sim/vessel/runtime';
 import type { EngineModule } from '../../sim/vessel/types';
-import { bakeEngineSoot, buildPartMesh, createPlume, getExhaustAnchors, setLightAppearance, setPartDeploy, setEngineGimbal, setGearPose, type Plume } from '../parts';
+import { bakeEngineSoot, buildPartMeshVariant, createPlume, partMeshParams, getExhaustAnchors, setLightAppearance, setPartDeploy, setEngineGimbal, setGearPose, type Plume } from '../parts';
 import { qRotate } from '../../util/quat';
 import type { Vec3 } from '../../util/vec3';
 
@@ -100,7 +100,7 @@ export class VesselView {
     for (const p of this.vessel.parts) {
       if (this.parts.has(p.uid)) continue;
       needsSoot = true;
-      const obj = buildPartMesh(p.def);
+      const obj = buildPartMeshVariant(p.def, partMeshParams(p.def, p.tweaks));
       const heat = new PartHeat(obj);
       const surfaces = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
       obj.traverse((o) => {

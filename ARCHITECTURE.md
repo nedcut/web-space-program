@@ -45,12 +45,19 @@ than importing `World`. `LaunchSite` already follows that structural-input patte
   settings and their descriptors/validation; `actions.ts` holds part actions, action groups and the one-shot
   `ControlInput.commands` applied by the authority (World / multiplayer room). UI for both lives in `ui/inspector`
   (shared floating panels), `editor/ui/{PartInspector,ActionGroupsPanel}` and `flight/hud/PartInspector`.
+  `fairing.ts` defines payload fairing shells (per-instance size in tweaks): enclosure, shell drag areas and mass;
+  `aero.ts` shields enclosed parts (`cache.shielded`, `cache.aeroCentre`).
 - `sim/hazards`: pressure ratings/overload, equipment heat soak, dipole-like radiation dose and Sun occlusion; `game/world/hazards.ts` integrates packed exposure and roster dose.
 - `sim/comms/network.ts`: range/occlusion/relay routing; `sim/science`: biomes, experiments and progression;
   `sim/resources/deposits.ts`: deterministic concentrations; `sim/crew/crew.ts`: roster/seats/control authority.
 
 ### Application and rendering modules
 
+- `editor/core` is the headless assembly API: `editor.ts` (transactional CraftEditor with undo, symmetry
+  replication, staging modes), `staging.ts` (assembly-aware `autoStage`, manual insertion, stage moves),
+  `subtree.ts` (pure subtree copy/transform/fairing-fit helpers shared with the view's drag previews), `geometry.ts`,
+  `stats.ts`, `serialization.ts`. `editor/session.ts` adds UI state (held part, tools, symmetry, reference body);
+  `editor/scene/EditorView.ts` (+ `gizmo.ts`) is the three.js view; `editor/subassemblies.ts` stores reusable subtrees.
 - `game/world.ts` remains the public World/types/physics-clock facade. `game/world/launch.ts` owns pad/runway
   placement and spawning; `crew.ts` owns roster/EVA/boarding/flags; `rails.ts` owns packing, propagation and
   body-fixed synchronization; `docking.ts` owns fleet merges/splits; `resources.ts` owns survey/concentration

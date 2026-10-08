@@ -1,10 +1,16 @@
 import type { AttachNode, CraftDef, PartDef, PartInstance } from '../../sim/vessel/types';
 import { add, sub, scale, negate, normalize, dot, distance, v3, type Vec3 } from '../../util/vec3';
 import { qFromTo, qMul, qNormalize, qRotate, type Quat } from '../../util/quat';
+import { fairingShell } from '../../sim/vessel/fairing';
 
 export type PartCatalog = Map<string, PartDef>;
 /** Held parts retain craft-frame transforms; no transform is baked into their definitions. */
-export interface HeldAssembly { rootUid: number; parts: PartInstance[] }
+export interface HeldAssembly {
+  rootUid: number;
+  parts: PartInstance[];
+  /** Symmetry of the set this assembly was picked up or copied from (placement re-creates the set). */
+  symmetry?: { mode: 'radial' | 'mirror'; count: number };
+}
 export interface Transform { position: Vec3; rotation: Quat }
 export interface WorldAttachNode extends AttachNode { uid: number }
 export interface SnapCandidate {
@@ -54,7 +60,7 @@ export function findBestSnap(held: HeldAssembly, craft: CraftDef, catalog: PartC
   return best;
 }
 export function transformAssembly(assembly: HeldAssembly, transform: Transform): HeldAssembly {
-  return { rootUid: assembly.rootUid, parts: assembly.parts.map(part => ({ ...part,
+  return { ...assembly, parts: assembly.parts.map(part => ({ ...part,
     position: add(qRotate(transform.rotation, part.position), transform.position),
     rotation: qNormalize(qMul(transform.rotation, part.rotation)),
   })) };
@@ -108,6 +114,10 @@ export function partBounds(part: PartInstance, def: PartDef): { min: Vec3; max: 
   const h = shapeHalfExtents(def);
   const points: Vec3[] = [];
   for (const x of [-h.x, h.x]) for (const y of [-h.y, h.y]) for (const z of [-h.z, h.z]) points.push(add(part.position, qRotate(part.rotation, v3(x, y, z))));
+  // Fairing shells rise above their base ring.
+  const shell = fairingShell(def, part.tweaks);
+  if (shell) for (const x of [-shell.radius, shell.radius]) for (const z of [-shell.radius, shell.radius])
+    points.push(add(part.position, qRotate(part.rotation, v3(x, shell.baseY + shell.height, z))));
   // Deployed wheels hang outside the (stowed) part shape.
   for (const m of def.modules) if (m.type === 'wheel') {
     const c = m.wheelCenter, r = m.radius;

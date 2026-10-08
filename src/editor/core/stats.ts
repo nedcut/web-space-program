@@ -2,11 +2,12 @@ import type { CraftDef, PartInstance, ResourceId } from '../../sim/vessel/types'
 import { add, scale, v3, type Vec3 } from '../../util/vec3';
 import { qRotate } from '../../util/quat';
 import { partBounds, requirePart, type PartCatalog } from './geometry';
+import { fairingMassDelta } from '../../sim/vessel/fairing';
 
 export type ResourceDensities = Partial<Record<ResourceId, number>> | ReadonlyMap<ResourceId, number>;
 function partMass(part: PartInstance, catalog: PartCatalog, densities: ResourceDensities): number {
   const def = requirePart(catalog, part.partId);
-  let mass = def.dryMass;
+  let mass = def.dryMass + fairingMassDelta(def, part.tweaks);
   for (const [resource, capacity] of Object.entries(def.resources)) {
     const id = resource as ResourceId;
     const density = densities instanceof Map ? densities.get(id) : (densities as Partial<Record<ResourceId, number>>)[id];

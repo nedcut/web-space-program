@@ -1,7 +1,7 @@
 import { tutorialContext, getTutorial } from '../tutorial/runtime';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { game } from '../game/store';
-import { EditorView } from './scene/EditorView';
+import { EditorView, IS_MAC } from './scene/EditorView';
 import { EditorSession } from './session';
 import { STOCK_CRAFTS } from './stockCrafts';
 import { CraftImportDialog } from './ui/CraftImportDialog';
@@ -70,7 +70,10 @@ export default function EditorScene() {
       <HoverTooltip view={view} getView={getView} />
       <div className="vab-toasts">
         {view.toasts.map((t) => (
-          <div key={t.id} className={`vab-toast panel ${t.tone}`}>{t.text}</div>
+          <div key={t.id} className={`vab-toast panel ${t.tone} ${t.action ? 'actionable' : ''}`}>
+            {t.text}
+            {t.action && <button type="button" className="btn small" onClick={() => { t.action!.run(); session.dismissToast(t.id); }}>{t.action.label}</button>}
+          </div>
         ))}
       </div>
       <div className="vab-hints panel">
@@ -87,18 +90,36 @@ export default function EditorScene() {
             <Hint k="Space">reset</Hint>
             <Hint k="X">{view.symmetryMode === 'mirror' ? (view.symmetry > 1 ? 'mirror on' : 'mirror off') : `symmetry ×${view.symmetry}`}</Hint>
             <Hint k="R">radial / mirror</Hint>
-            <Hint k="Alt">no surface</Hint>
+            <Hint k={ALT}>no surface</Hint>
             <Hint k="Esc">cancel</Hint>
-            <Hint k="Del">discard</Hint>
+            <Hint k={DEL}>discard</Hint>
+          </>
+        ) : view.tool === 'offset' || view.tool === 'rotate' ? (
+          <>
+            <Hint k="Click">{view.gizmoUid === null ? 'choose a part' : 'choose another part'}</Hint>
+            <Hint k="Drag">{view.tool === 'offset' ? 'arrows or part: move' : 'rings: turn'}</Hint>
+            <Hint k="W S · A D · Q E">{view.tool === 'offset' ? 'nudge' : 'turn 15°'}</Hint>
+            <Hint k="Shift">fine</Hint>
+            <Hint k={ALT}>this part only</Hint>
+            <Hint k="C">snap {view.angleSnap ? 'on' : 'off'}</Hint>
+            <Hint k="1">place tool</Hint>
+          </>
+        ) : view.tool === 'reroot' ? (
+          <>
+            <Hint k="Click">make root part</Hint>
+            <Hint k="Drag">orbit</Hint>
+            <Hint k="1">place tool</Hint>
           </>
         ) : (
           <>
-            <Hint k="Click">pick up part</Hint>
-            <Hint k="Right-click">part details</Hint>
-            <Hint k="Drag / RMB">orbit</Hint>
-            <Hint k="Wheel">zoom</Hint>
-            <Hint k="MMB / Shift+Wheel">pan</Hint>
-            <Hint k="Del">delete hovered</Hint>
+            <Hint k="Click">pick up</Hint>
+            <Hint k={`${ALT}+Click`}>copy</Hint>
+            <Hint k={IS_MAC ? 'Ctrl+Click' : 'Right-click'}>details</Hint>
+            <Hint k="Drag">orbit</Hint>
+            <Hint k={IS_MAC ? 'Scroll / Pinch' : 'Wheel'}>zoom</Hint>
+            <Hint k="Shift+Drag">pan</Hint>
+            <Hint k="2 · 3 · 4">offset · rotate · root</Hint>
+            <Hint k={DEL}>delete hovered</Hint>
             <Hint k="F">frame</Hint>
           </>
         )}
@@ -116,6 +137,9 @@ export default function EditorScene() {
     </div>
   );
 }
+
+const ALT = IS_MAC ? '⌥' : 'Alt';
+const DEL = IS_MAC ? '⌫' : 'Del';
 
 function Hint({ k, children }: { k: string; children: React.ReactNode }) {
   return (

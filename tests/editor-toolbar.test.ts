@@ -21,9 +21,9 @@ describe('editor toolbar at narrow widths', () => {
     expect(rule('.vab-launch')).toMatch(/flex-shrink: 0/);
     expect(css).toMatch(/\.vab-topbar > \.vab-exit[^{]*\{ flex-shrink: 0; \}/);
   });
-  it('moves file, sharing and marker tools into the More menu below 1200 px', () => {
-    expect(media(1200)).toMatch(/\.vab-topbar \.vab-collapsible \{ display: none; \}/);
-    expect(media(1200)).toMatch(/\.vab-more \{ display: block; \}/);
+  it('moves file, sharing and marker tools into the More menu below 1500 px (room for the build tools)', () => {
+    expect(media(1500)).toMatch(/\.vab-topbar \.vab-collapsible \{ display: none; \}/);
+    expect(media(1500)).toMatch(/\.vab-more \{ display: block; \}/);
     expect(rule('.vab-more')).toMatch(/display: none/);
     for (const label of ['New craft', 'Load craft', 'Save craft', 'Copy share code', 'Export', 'Import', 'Centre of mass', 'Centre of thrust', 'Centre of lift']) expect(tsx).toContain(`item('${label}`);
     expect((tsx.match(/vab-collapsible/g) ?? []).length).toBe(3);

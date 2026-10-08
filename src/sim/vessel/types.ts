@@ -343,6 +343,10 @@ export interface PartTweaks {
   /** Lamps: on (default true) and colour '#rrggbb'. */
   lightOn?: boolean;
   lightColor?: string;
+  /** Fairings: shell fitted to the payload by the editor (default true); size in metres (absent = catalogue shell). */
+  fairingAuto?: boolean;
+  fairingHeight?: number;
+  fairingRadius?: number;
 }
 
 export const ACTION_GROUP_IDS = ['stage', 'gear', 'brakes', 'lights', 'rcs', 'sas', 'abort',
