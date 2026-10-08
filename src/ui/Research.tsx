@@ -18,7 +18,7 @@ export default function Research() {
   const xy = (n: typeof node) => ({ x: 24 + n.column * 188, y: 20 + n.row * 86 });
   return <main className="program-screen">
     <header className="program-header">
-      <div><div className="label">Coastal Launch Complex · {world.mode}</div><h1>Research & Development</h1><p>Follow a question. Build the instrument. Open the next frontier.</p></div>
+      <div><div className="label">Coastal Launch Complex · {world.mode}</div><h1>Research Lab</h1><p>Follow a question. Build the instrument. Open the next frontier.</p></div>
       <div className="program-balance"><strong>{p.science.toFixed(1)}</strong><span className="label">available science</span></div>
       <Button className="btn" onClick={() => { saveProgram(world); game.set({ scene: 'spaceCenter' }); }}>Space Center</Button>
     </header>

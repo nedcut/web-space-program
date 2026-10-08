@@ -5,7 +5,7 @@ export const DEFAULT_BINDINGS = {
   throttleUp: ['ShiftLeft', 'ShiftRight'], throttleDown: ['ControlLeft', 'ControlRight'], throttleFull: ['KeyZ'], throttleCut: ['KeyX'],
   stage: ['Space'], toggleSas: ['KeyT'], toggleRcs: ['KeyR'], map: ['KeyM'], warpUp: ['Period'], warpDown: ['Comma'], warpStop: ['Slash'],
   menu: ['Escape'], help: ['Shift+F1'], screenshot: ['F1'], hideUi: ['F2'], flightResults: ['F3'], perfOverlay: ['F8'], flightData: ['Shift+F3'], stressOverlay: ['F4'], photoMode: ['KeyP'],
-  focusNext: ['BracketRight'], focusPrev: ['BracketLeft'], toggleCamMode: ['KeyV'], iva: ['KeyC'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyO'], board: ['Enter'], plantFlag: ['KeyF'],
+  focusNext: ['BracketRight'], focusPrev: ['BracketLeft'], toggleCamMode: ['KeyV'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyO'], board: ['Enter'], plantFlag: ['KeyF'],
   toggleGear: ['KeyG'], brakes: ['KeyB'], toggleLights: ['KeyU'], abort: ['Backspace'], stageLock: ['Alt+KeyL'], sasHold: ['KeyF'],
   mapFocusNext: ['Tab'], mapFocusHome: ['Home', 'Backquote'],
   actionGroup1: ['Digit1'], actionGroup2: ['Digit2'], actionGroup3: ['Digit3'], actionGroup4: ['Digit4'], actionGroup5: ['Digit5'],
@@ -14,6 +14,7 @@ export const DEFAULT_BINDINGS = {
   evaRight: ['KeyD', 'KeyE'], evaLeft: ['KeyA', 'KeyQ'], evaForward: ['KeyW'], evaBack: ['KeyS'], evaUp: ['ShiftLeft', 'ShiftRight'], evaDown: ['ControlLeft', 'ControlRight'], evaRun: ['ShiftLeft', 'ShiftRight'],
   editorUndo: ['Ctrl+KeyZ'], editorRedo: ['Ctrl+Shift+KeyZ', 'Ctrl+KeyY'], editorSave: ['Ctrl+KeyS'], editorCancel: ['Escape'], editorDelete: ['Delete', 'Backspace'], editorSymmetry: ['KeyX'], editorSymmetryMode: ['KeyR'], editorFrame: ['KeyF'], editorReset: ['Space'],
   editorPitchUp: ['KeyW'], editorPitchDown: ['KeyS'], editorRollLeft: ['KeyA'], editorRollRight: ['KeyD'], editorYawLeft: ['KeyQ'], editorYawRight: ['KeyE'],
+  editorToolPlace: ['Digit1'], editorToolOffset: ['Digit2'], editorToolRotate: ['Digit3'], editorToolReroot: ['Digit4'], editorAngleSnap: ['KeyC'],
 } satisfies Record<string, string[]>;
 export type Action = keyof typeof DEFAULT_BINDINGS;
 export type Bindings = Record<Action, string[]>;

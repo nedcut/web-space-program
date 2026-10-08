@@ -52,4 +52,22 @@ export interface ManeuverNode {
   prograde: number;
   normal: number;
   radial: number;
+  /**
+   * Planned post-burn state, frozen once the burn has started (set by the world, never by editors). While present and
+   * still matching the node's own fields and the body, predictions use it as the planned orbit instead of re-deriving
+   * it from the live vessel state, so the target stays put while the vessel burns toward it.
+   */
+  anchor?: ManeuverAnchor;
+}
+
+export interface ManeuverAnchor {
+  body: string;
+  /** Post-burn state at the node time, relative to `body` (ecliptic axes). */
+  position: Vec3;
+  velocity: Vec3;
+  /** The node fields this was captured for; any edit to the node invalidates it. */
+  time: number;
+  prograde: number;
+  normal: number;
+  radial: number;
 }

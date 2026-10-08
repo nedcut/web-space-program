@@ -9,8 +9,10 @@ import type { PartDef } from '../../sim/vessel/types';
  * still builds and falls back to simple shapes derived from `def.shape`.
  */
 type Builder = (def: PartDef) => THREE.Object3D;
-const mods = import.meta.glob<{ buildPartMesh?: Builder }>('../../render/parts/index.ts', { eager: true });
+type VariantBuilder = (def: PartDef, params: Record<string, number> | undefined) => THREE.Object3D;
+const mods = import.meta.glob<{ buildPartMesh?: Builder; buildPartMeshVariant?: VariantBuilder }>('../../render/parts/index.ts', { eager: true });
 const external: Builder | undefined = Object.values(mods)[0]?.buildPartMesh;
+const externalVariant: VariantBuilder | undefined = Object.values(mods)[0]?.buildPartMeshVariant;
 
 const templates = new Map<string, THREE.Object3D>();
 
@@ -58,12 +60,16 @@ function studioMaterial(material: THREE.Material): THREE.Material {
   return clone;
 }
 
-/** Returns a fresh instance (shares geometry & materials with a cached template). */
-export function createPartMesh(def: PartDef): THREE.Object3D {
-  let t = templates.get(def.id);
+/** Template key of a part instance's mesh ('' for the catalogue mesh). */
+export const variantKey = (params?: Record<string, number>) => params ? Object.entries(params).map(([k, v]) => `${k}=${v}`).join(',') : '';
+
+/** Returns a fresh instance (shares geometry & materials with a cached template). `params`: per-instance mesh variant. */
+export function createPartMesh(def: PartDef, params?: Record<string, number>): THREE.Object3D {
+  const key = params ? `${def.id}|${variantKey(params)}` : def.id;
+  let t = templates.get(key);
   if (!t) {
     try {
-      t = external ? external(def) : fallbackMesh(def);
+      t = params && externalVariant ? externalVariant(def, params) : external ? external(def) : fallbackMesh(def);
     } catch (e) {
       console.warn(`buildPartMesh failed for ${def.id}`, e);
       t = fallbackMesh(def);
@@ -79,7 +85,7 @@ export function createPartMesh(def: PartDef): THREE.Object3D {
         o.receiveShadow = true;
       }
     });
-    templates.set(def.id, t);
+    templates.set(key, t);
   }
   return t.clone(true);
 }

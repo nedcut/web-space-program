@@ -34,7 +34,7 @@ try {
  report.checks.push('All settings tabs, arrow-key navigation, native switches, reduced motion and dialog close');
  await page.getByRole('button',{name:'New Game',exact:true}).click();
  await page.getByRole('button',{name:'Start',exact:true}).click();
- await page.getByRole('button',{name:/Vehicle Assembly/}).click();
+ await page.getByRole('button',{name:/Integration Hall/}).click();
  await expect(page.locator('.vab-topbar')).toBeAttached();
  await expect(page.locator('.vab-card').first()).toBeVisible();
  const palette = await page.locator('.vab-cards').evaluate(el => ({ client:el.clientWidth, scroll:el.scrollWidth }));

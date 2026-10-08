@@ -6,7 +6,12 @@ import { ACTION_GROUP_IDS, ACTION_LABELS, GROUP_LABELS, partActions } from '../.
 import { thrustLimit, tweakDescriptors } from '../../sim/vessel/tweaks';
 import type { PartDef, PartInstance, ResourceId } from '../../sim/vessel/types';
 import { CATALOG, DENSITIES, type EditorSession, type SessionView } from '../session';
-import type { EditorView } from '../scene/EditorView';
+import { IS_MAC, type EditorView } from '../scene/EditorView';
+import type { EditorTool } from '../session';
+
+const TOOL_TIPS: Record<EditorTool, string> = {
+  place: `Click: pick up · ${IS_MAC ? '⌥' : 'Alt'}+click: copy`, offset: 'Click: move with the gizmo', rotate: 'Click: rotate with the gizmo', reroot: 'Click: make root',
+};
 import { RESOURCE_SHORT, fmtKN, fmtKg } from './partInfo';
 
 const engineOf = (def: PartDef) => def.modules.find(m => m.type === 'engine');
@@ -105,6 +110,6 @@ export function HoverTooltip({ view, getView }: { view: SessionView; getView: ()
   return <div ref={ref} className="vab-hover-tip panel" role="tooltip">
     <strong>{def.name}</strong>
     <span className="mono">{fmtKg(partMass(part, def).wet)}{stage ? ` · stage ${view.stages.length - 1 - stage.index}` : ''}</span>
-    <span className="dim">{view.mode === 'actions' ? 'Click to assign actions' : 'Click: pick up · Right-click: details'}</span>
+    <span className="dim">{view.mode === 'actions' ? 'Click to assign actions' : `${TOOL_TIPS[view.tool]} · ${IS_MAC ? 'Ctrl+click' : 'Right-click'}: details`}</span>
   </div>;
 }

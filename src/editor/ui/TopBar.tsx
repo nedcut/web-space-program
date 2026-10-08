@@ -7,6 +7,7 @@ import { PART_CATALOG } from '../../data/parts';
 import type { EditorSession, SessionView } from '../session';
 import { Icon } from './icons';
 import { fmtDv, fmtKg } from './partInfo';
+import { CRAFT_TYPE_LABELS } from '../craftTypeLabels';
 
 export function TopBar({ session, view, onLoad, onNew, onImport }: { session: EditorSession; view: SessionView; onLoad(): void; onNew(): void; onImport(): void }) {
   const [share, setShare] = useState('');
@@ -37,8 +38,9 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
   return (
     <Panel className="vab-topbar panel">
       <div className="vab-brand vab-mode" role="group" aria-label="Building mode">
-        <Button className={`vab-brand-mark ${view.craftType === 'VAB' ? 'on' : ''}`} title="Vehicle Assembly: build vertically, launch from the pad" onClick={() => session.setCraftType('VAB')}>VAB</Button>
-        <Button className={`vab-brand-mark ${view.craftType === 'SPH' ? 'on' : ''}`} title="Spaceplane Hangar: build horizontally, launch from the runway" onClick={() => session.setCraftType('SPH')}>SPH</Button>
+        {(['VAB', 'SPH'] as const).map(type => (
+          <Button key={type} className={`vab-brand-mark ${view.craftType === type ? 'on' : ''}`} title={`${CRAFT_TYPE_LABELS[type].long}: ${CRAFT_TYPE_LABELS[type].hint}`} onClick={() => session.setCraftType(type)}>{CRAFT_TYPE_LABELS[type].short}</Button>
+        ))}
       </div>
       <input
         className="vab-name"
@@ -64,6 +66,16 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
       <div className="vab-group">
         <Button className="vab-ibtn" title="Undo (Ctrl+Z)" disabled={!view.canUndo} onClick={() => session.undo()}><Icon name="undo" /></Button>
         <Button className="vab-ibtn" title="Redo (Ctrl+Y)" disabled={!view.canRedo} onClick={() => session.redo()}><Icon name="redo" /></Button>
+      </div>
+      <div className="vab-group" role="group" aria-label="Build tools">
+        {TOOLS.map(t => (
+          <Button key={t.id} className={`vab-ibtn ${view.tool === t.id ? 'on' : ''}`} aria-pressed={view.tool === t.id} title={`${t.label} (${t.key}) — ${t.help}`} onClick={() => session.setTool(t.id)}>
+            <ToolGlyph tool={t.id} />
+          </Button>
+        ))}
+        <Button className={`vab-ibtn snap ${view.angleSnap ? 'on' : ''}`} aria-pressed={view.angleSnap} title={`Snap offsets to 5 cm and angles to 15° (C) · hold Shift for 1 cm / 5° · currently ${view.angleSnap ? 'on' : 'off'}`} onClick={() => session.toggleAngleSnap()}>
+          <SnapGlyph on={view.angleSnap} />
+        </Button>
       </div>
       <div className="vab-group">
         <Button
@@ -120,6 +132,33 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
       </Button>
       <Button className="vab-ibtn vab-exit" title="Exit to Space Center" aria-label="Exit to Space Center" onClick={() => session.exit()}><Icon name="exit" /></Button>
     </Panel>
+  );
+}
+
+const TOOLS = [
+  { id: 'place', key: '1', label: 'Place', help: 'pick up and attach parts; Alt/Option-click copies' },
+  { id: 'offset', key: '2', label: 'Offset', help: 'click a part, drag its arrows (or the part) to move it' },
+  { id: 'rotate', key: '3', label: 'Rotate', help: 'click a part, drag its rings to turn it' },
+  { id: 'reroot', key: '4', label: 'Re-root', help: 'click a part to make it the root' },
+] as const;
+
+function ToolGlyph({ tool }: { tool: (typeof TOOLS)[number]['id'] }) {
+  const paths: Record<typeof tool, React.ReactNode> = {
+    place: <path d="M6 3l12 7-5 1.5L16 19l-2.5 1-3-7.5L6 16z" />,
+    offset: <path d="M12 3v18M3 12h18M12 3l-3 3m3-3 3 3M12 21l-3-3m3 3 3-3M3 12l3-3m-3 3 3 3M21 12l-3-3m3 3-3 3" />,
+    rotate: <><path d="M19 12a7 7 0 1 1-2.05-4.95" /><path d="M17 3v4.5h-4.5" /></>,
+    reroot: <><circle cx="12" cy="6" r="2.5" /><path d="M12 8.5V14m0 0-5 6m5-6 5 6M5 20h4m6 0h4" /></>,
+  };
+  return <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">{paths[tool]}</svg>;
+}
+
+function SnapGlyph({ on }: { on: boolean }) {
+  return (
+    <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round">
+      <path d="M4 20h16M4 20V4" />
+      <path d="M4 20 17 7" strokeDasharray={on ? undefined : '2 2'} />
+      <path d="M10 20a6 6 0 0 0-1.8-4.2" />
+    </svg>
   );
 }
 

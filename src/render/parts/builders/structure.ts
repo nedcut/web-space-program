@@ -330,6 +330,47 @@ export function buildAdapter(def: PartDef): THREE.Object3D {
   return root;
 }
 
+/** Multi-way stack coupler: a crown at the top size splitting into one socket per downward stack node. */
+export function buildCoupler(def: PartDef): THREE.Object3D {
+  const { rTop: R, h } = cylDims(def);
+  const rs = num(def, 'socketRadius', R / 2);
+  const root = grp('coupler');
+  const f = 0.03;
+  const seg = R > 0.9 ? 96 : 72;
+  const yTop = h / 2, ySplit = -h / 2 + h * 0.42, yBot = -h / 2;
+  // Crown: straight barrel, then a domed skirt that hides the socket roots.
+  root.add(mk(weather(lathe([[R * 0.995, ySplit + 0.06], [R * 0.995, yTop - f]], { segments: seg, tile: 0.8 }), ySplit, yTop, { soot: 0, streaks: 0.08, seed: 9 }), M.charcoalPanel(), 'body'));
+  root.add(mk(lathe([[R * 0.995, ySplit + 0.06], [R * 0.93, ySplit + 0.015], [R * 0.6, ySplit - 0.01], [0, ySplit - 0.015]], { segments: seg }), M.darkMetal(), 'skirt'));
+  root.add(mk([lathe([[R * 0.99, yTop - f], [R, yTop - f], [R, yTop - 0.006], [R * 0.98, yTop]], { segments: 56 })], M.aluminium(), 'flanges'));
+  root.add(mk([bulkhead(R * 0.98, yTop, 1)], M.darkMetal()));
+  root.add(mk([...boltRing(R, yTop - f / 2, Math.round(20 * R + 8), 0.009)], M.chrome()));
+  // Band just above the split.
+  root.add(mk(lathe([[R * 0.999 + 0.012, ySplit + 0.1], [R * 0.999 + 0.012, ySplit + 0.1 + Math.min(0.08, h * 0.12)]], { segments: seg }), M.satinWhite(), 'stripe'));
+  const sockets: THREE.BufferGeometry[] = [], flanges: THREE.BufferGeometry[] = [], heads: THREE.BufferGeometry[] = [], bolts: THREE.BufferGeometry[] = [];
+  for (const n of def.attachNodes) {
+    if (n.direction.y > -0.5 || n.id === 'top') continue;
+    const x = n.position.x, z = n.position.z;
+    // Up to four sockets share one budget: coarser rings and sparser bolts than a single stack flange.
+    const seg = def.attachNodes.length > 4 ? 28 : 36;
+    const body = lathe([[rs * 0.97, yBot + f], [rs * 0.985, ySplit - 0.02], [rs * 0.9, ySplit + 0.02]], { segments: seg });
+    sockets.push(body.translate(x, 0, z));
+    flanges.push(lathe([[rs * 0.98, yBot], [rs, yBot + 0.006], [rs, yBot + f], [rs * 0.97, yBot + f]], { segments: seg }).translate(x, 0, z));
+    heads.push(bulkhead(rs * 0.97, yBot, -1, seg).translate(x, 0, z));
+    if (detailLevel() >= 1) for (const b of boltRing(rs, yBot + f / 2, Math.round(10 * rs + 6), 0.008)) bolts.push(b.translate(x, 0, z));
+  }
+  if (sockets.length) {
+    root.add(mk(sockets, M.charcoalPanel(), 'sockets'));
+    root.add(mk(flanges, M.aluminium()));
+    root.add(mk(heads, M.darkMetal()));
+    if (bolts.length) root.add(mk(bolts, M.chrome()));
+  }
+  const D = new Markings(def);
+  const pl = D.plateDark;
+  D.lathe(() => R * 0.995, pl, { y: ySplit + (yTop - ySplit) * 0.55, phi: -PI / 2, height: Markings.fit(pl, (yTop - ySplit) * 0.32, R * 1.1) });
+  D.addTo(root);
+  return root;
+}
+
 // ---------------------------------------------------------------------------------------------
 
 /** Tangent ogive radius at distance x from the base (0..L). */

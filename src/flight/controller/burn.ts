@@ -1,4 +1,4 @@
-import { maneuverToInertialDv, propagate } from '../../sim/orbit';
+import { maneuverToInertialDv, propagate, validAnchor } from '../../sim/orbit';
 import { stageBurnTime } from '../../game/autopilot';
 import type { ManeuverNode } from '../../sim/orbit/api';
 import type { StageDeltaV } from '../../sim/vessel';
@@ -25,7 +25,8 @@ export interface ManeuverBurnTelemetry {
 /**
  * Tracks the remaining Δv of the next node the way the genre classic does: the node fixes a target velocity at its
  * time; while burning, the vessel's osculating orbit evaluated at the node time approaches it. Editing the node
- * (any field) re-anchors the target on the then-current orbit.
+ * (any field) re-anchors the target on the then-current orbit. Once the world has frozen the node's plan
+ * (`ManeuverNode.anchor`, from the first thrust of the burn) that plan is the target, also after a reload.
  */
 export class BurnTracker {
   private key = '';
@@ -45,7 +46,7 @@ export class BurnTracker {
         this.target = plannedVelocity(world, wv, node);
       }
       const now = propagate(world.orbitOf(wv), node.time).velocity;
-      const r = length(sub(this.target, now));
+      const r = length(sub(validAnchor(node, wv.body)?.velocity ?? this.target, now));
       if (Number.isFinite(r)) dvRemaining = r;
     } catch {
       this.target = null;

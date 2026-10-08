@@ -1,5 +1,6 @@
 import type { DockingPortModule, PartDef, PartTweaks, RcsAxes, WheelMode } from './types';
 import type { FlightTweaks, PartState, VesselState } from './runtime';
+import { defaultFairingShell, FAIRING_MAX_HEIGHT, FAIRING_MAX_RADIUS_FACTOR, FAIRING_MIN_HEIGHT } from './fairing';
 
 /**
  * Per-part player settings ("tweakables"). Pure, DOM-free helpers shared by the simulation, the editor and the
@@ -43,8 +44,8 @@ export function rcsMask(p: Tweakable): { rot: [number, number, number]; tr: [num
 export type TweakKey = keyof PartTweaks;
 export type TweakDescriptor =
   | { key: 'thrustLimit' | 'gimbalLimit' | 'ejectionScale' | 'deflectionLimit'; kind: 'percent'; label: string; flight: boolean; step: number }
-  | { key: 'chuteMinPressure' | 'chuteDeployAltitude'; kind: 'number'; label: string; flight: boolean; min: number; max: number; step: number; unit: string; fallback: number }
-  | { key: 'gimbalLock' | 'crossfeed' | 'extended' | 'rcsEnabled' | 'lightOn' | 'deflectionInvert'; kind: 'toggle'; label: string; flight: boolean; fallback: boolean }
+  | { key: 'chuteMinPressure' | 'chuteDeployAltitude' | 'fairingHeight' | 'fairingRadius'; kind: 'number'; label: string; flight: boolean; min: number; max: number; step: number; unit: string; fallback: number }
+  | { key: 'gimbalLock' | 'crossfeed' | 'extended' | 'rcsEnabled' | 'lightOn' | 'deflectionInvert' | 'fairingAuto'; kind: 'toggle'; label: string; flight: boolean; fallback: boolean }
   | { key: 'wheelMode'; kind: 'select'; label: string; flight: boolean; options: { value: WheelMode; label: string }[] }
   | { key: 'rcsAxes'; kind: 'axes'; label: string; flight: boolean }
   | { key: 'lightColor'; kind: 'color'; label: string; flight: boolean; fallback: string };
@@ -84,6 +85,14 @@ export function tweakDescriptors(def: PartDef): TweakDescriptor[] {
     }
     if (m.type === 'reactionWheel') out.push({ key: 'wheelMode', kind: 'select', label: 'Wheel mode', flight: true, options: [
       { value: 'normal', label: 'Pilot + SAS' }, { value: 'sasOnly', label: 'SAS only' }, { value: 'pilotOnly', label: 'Pilot only' }, { value: 'off', label: 'Off' }] });
+    if (m.type === 'fairing') {
+      const shell = defaultFairingShell(def);
+      if (shell) {
+        out.push({ key: 'fairingAuto', kind: 'toggle', label: 'Fit shell to payload', flight: false, fallback: true });
+        out.push({ key: 'fairingHeight', kind: 'number', label: 'Shell height', flight: false, min: FAIRING_MIN_HEIGHT, max: FAIRING_MAX_HEIGHT, step: 0.05, unit: 'm', fallback: shell.height });
+        out.push({ key: 'fairingRadius', kind: 'number', label: 'Shell radius', flight: false, min: shell.baseRadius, max: +(shell.baseRadius * FAIRING_MAX_RADIUS_FACTOR).toFixed(2), step: 0.02, unit: 'm', fallback: shell.radius });
+      }
+    }
     if (m.type === 'light') {
       out.push({ key: 'lightOn', kind: 'toggle', label: 'Lamp on', flight: true, fallback: true });
       out.push({ key: 'lightColor', kind: 'color', label: 'Colour', flight: true, fallback: LIGHT_COLORS[0] });
@@ -96,7 +105,7 @@ export function tweakDescriptors(def: PartDef): TweakDescriptor[] {
 
 const FLIGHT_KEYS = new Set<TweakKey>(['thrustLimit', 'gimbalLimit', 'gimbalLock', 'crossfeed', 'deflectionLimit', 'deflectionInvert',
   'chuteMinPressure', 'chuteDeployAltitude', 'rcsEnabled', 'rcsAxes', 'wheelMode', 'lightOn', 'lightColor']);
-const ALL_KEYS = new Set<TweakKey>([...FLIGHT_KEYS, 'ejectionScale', 'extended']);
+const ALL_KEYS = new Set<TweakKey>([...FLIGHT_KEYS, 'ejectionScale', 'extended', 'fairingAuto', 'fairingHeight', 'fairingRadius']);
 const record = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const unit = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1;
 const range = (x: unknown, lo: number, hi: number) => typeof x === 'number' && Number.isFinite(x) && x >= lo && x <= hi;
@@ -111,6 +120,7 @@ export function validTweaks(x: unknown, flightOnly = false): x is PartTweaks {
       case 'thrustLimit': case 'gimbalLimit': case 'ejectionScale': case 'deflectionLimit': if (!unit(v)) return false; break;
       case 'chuteMinPressure': if (!range(v, 0, 1e7)) return false; break;
       case 'chuteDeployAltitude': if (!range(v, 0, 1e5)) return false; break;
+      case 'fairingHeight': case 'fairingRadius': if (!range(v, 0.05, 100)) return false; break;
       case 'wheelMode': if (!['normal', 'sasOnly', 'pilotOnly', 'off'].includes(String(v))) return false; break;
       case 'lightColor': if (typeof v !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(v)) return false; break;
       case 'rcsAxes': if (!record(v) || !Object.entries(v).every(([a, on]) => ['pitch', 'yaw', 'roll', 'lateral', 'fore', 'vertical'].includes(a) && typeof on === 'boolean')) return false; break;

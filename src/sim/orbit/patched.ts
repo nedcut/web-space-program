@@ -2,7 +2,7 @@ import type { Body } from '../bodies/types';
 import type { ManeuverNode, Orbit, StateVector, TrajectoryPatch } from './api';
 import type { Ephemeris } from './ephemeris';
 import { period, propagate, stateToElements, periapsisRadius, apoapsisRadius } from './kepler';
-import { maneuverToInertialDv } from './maneuver';
+import { stateAfterManeuver, validAnchor } from './maneuver';
 import { add, distance, dot, length, sub } from '../../util/vec3';
 
 export interface TrajectoryPredictionOptions {
@@ -57,12 +57,22 @@ export function predictTrajectory(options: TrajectoryPredictionOptions): Traject
   const end = t0 + horizon, patches: TrajectoryPatch[] = [];
   const nodes = (options.maneuvers ?? []).filter(n => n.time >= t0 && n.time <= end).slice().sort((a, b) => a.time - b.time);
   let nodeIndex = 0, time = t0, bodyId = options.initialBody, state = options.state;
+  // A burn in progress: the node's time has passed but it holds a frozen plan. The current orbit is a zero-length
+  // patch (drawn as its full conic, converging on the plan) and the plan itself continues from the anchored state.
+  const burning = (options.maneuvers ?? []).filter(n => n.time < t0 && validAnchor(n, bodyId)).sort((a, b) => b.time - a.time)[0];
+  if (burning && t0 < end) {
+    const body = bodies.get(bodyId);
+    if (!body) throw new RangeError(`Unknown body: ${bodyId}`);
+    patches.push({ orbit: stateToElements(body.gm, bodyId, state.position, state.velocity, t0), startTime: t0, endTime: t0, endReason: 'maneuver' });
+    state = stateAfterManeuver(state, bodyId, burning);
+    time = burning.time;
+  }
   while (time < end && patches.length < maxPatches) {
     const body = bodies.get(bodyId);
     if (!body) throw new RangeError(`Unknown body: ${bodyId}`);
     // Nodes at the initial instant or coincident with a boundary apply in the new local frame.
     while (nodeIndex < nodes.length && nodes[nodeIndex].time <= time) {
-      state = { position: state.position, velocity: add(state.velocity, maneuverToInertialDv(state, nodes[nodeIndex++])) };
+      state = stateAfterManeuver(state, bodyId, nodes[nodeIndex++]);
     }
     const orbit = stateToElements(body.gm, bodyId, state.position, state.velocity, time);
     const limit = Math.min(end, nodes[nodeIndex]?.time ?? Infinity);

@@ -3,7 +3,7 @@ import type { ManeuverNode, Orbit, StateVector } from '../../sim/orbit/api';
 import type { TransferOptions, TransferPlan } from './transfers';
 import type { CourseCorrectionOptions, InterplanetaryOptions, InterplanetaryPlan, PorkchopPoint, SearchRange } from '../interplanetary';
 
-/** No craft, functions, class instances, render state or mutable World crosses the boundary. */
+/** Plain snapshots only; no functions, class instances, render state or mutable World crosses the boundary. */
 export interface PlanningSnapshot {
   preset: ScalePresetId;
   activatedAsteroids?: string[];
@@ -12,6 +12,7 @@ export interface PlanningSnapshot {
   nodes: ManeuverNode[];
 }
 export interface PlanningOperations {
+  landing: { args: import('./landing').LandingRequest; result: import('./landing').LandingPrediction };
   transfer: { args: { target: string; options?: TransferOptions }; result: TransferPlan | null };
   interplanetary: { args: { target: string; options?: InterplanetaryOptions }; result: InterplanetaryPlan | null };
   correction: { args: { target: string; options: CourseCorrectionOptions }; result: TransferPlan | null };

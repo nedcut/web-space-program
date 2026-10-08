@@ -33,7 +33,7 @@ import {
   apoapsisRadius,
   timeToApoapsis,
   timeToPeriapsis,
-  maneuverToInertialDv,
+  stateAfterManeuver,
   inertialDvToManeuver,
   burnTimeEstimate,
   solveLambertAround,
@@ -535,15 +535,18 @@ export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeO
     const wv = w.active!;
     const o = w.orbitOf(wv);
     const sNode = propagate(o, node.time);
-    dvRem = maneuverToInertialDv(sNode, node);
-    target = add(sNode.velocity, dvRem);
-    targetEnergy = dot(target, target) / 2 - o.mu / length(sNode.position);
+    // A burn already under way (restarted executor, reload) aims at the node's frozen plan, not at the live orbit plus
+    // the whole node again.
+    const plan = stateAfterManeuver(sNode, o.body, node);
+    target = plan.velocity;
+    dvRem = sub(target, sNode.velocity);
+    targetEnergy = dot(target, target) / 2 - o.mu / length(plan.position);
     dvDir = length(dvRem) > 0 ? normalize(dvRem) : noseDirection(wv.state);
     steerDir = dvDir;
     dv0 = length(dvRem);
     guide = null;
     try {
-      guide = guidanceTarget(stateToElements(o.mu, o.body, sNode.position, target, node.time), node.time, w.universe.body(o.body).soi);
+      guide = guidanceTarget(stateToElements(o.mu, o.body, plan.position, target, node.time), node.time, w.universe.body(o.body).soi);
     } catch { /* degenerate planned orbit: open-loop burn */ }
     const { stages, burning, lit, dv } = usableStages(wv.state, minStage);
     const deliverable = Math.min(dv0, dv);

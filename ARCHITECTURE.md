@@ -45,12 +45,19 @@ than importing `World`. `LaunchSite` already follows that structural-input patte
   settings and their descriptors/validation; `actions.ts` holds part actions, action groups and the one-shot
   `ControlInput.commands` applied by the authority (World / multiplayer room). UI for both lives in `ui/inspector`
   (shared floating panels), `editor/ui/{PartInspector,ActionGroupsPanel}` and `flight/hud/PartInspector`.
+  `fairing.ts` defines payload fairing shells (per-instance size in tweaks): enclosure, shell drag areas and mass;
+  `aero.ts` shields enclosed parts (`cache.shielded`, `cache.aeroCentre`).
 - `sim/hazards`: pressure ratings/overload, equipment heat soak, dipole-like radiation dose and Sun occlusion; `game/world/hazards.ts` integrates packed exposure and roster dose.
 - `sim/comms/network.ts`: range/occlusion/relay routing; `sim/science`: biomes, experiments and progression;
   `sim/resources/deposits.ts`: deterministic concentrations; `sim/crew/crew.ts`: roster/seats/control authority.
 
 ### Application and rendering modules
 
+- `editor/core` is the headless assembly API: `editor.ts` (transactional CraftEditor with undo, symmetry
+  replication, staging modes), `staging.ts` (assembly-aware `autoStage`, manual insertion, stage moves),
+  `subtree.ts` (pure subtree copy/transform/fairing-fit helpers shared with the view's drag previews), `geometry.ts`,
+  `stats.ts`, `serialization.ts`. `editor/session.ts` adds UI state (held part, tools, symmetry, reference body);
+  `editor/scene/EditorView.ts` (+ `gizmo.ts`) is the three.js view; `editor/subassemblies.ts` stores reusable subtrees.
 - `game/world.ts` remains the public World/types/physics-clock facade. `game/world/launch.ts` owns pad/runway
   placement and spawning; `crew.ts` owns roster/EVA/boarding/flags; `rails.ts` owns packing, propagation and
   body-fixed synchronization; `docking.ts` owns fleet merges/splits; `resources.ts` owns survey/concentration
@@ -190,7 +197,6 @@ Earth terrain requires the immutable ETOPO grid before the first `createTerrain(
 
 The sim decoder/sampler (`sim/terrain/earthData.ts`) accepts ArrayBuffer/SharedArrayBuffer and has no host I/O, DOM, or three.js dependency. The base int16 grid is 16 MiB; interpolation and relief/detail math remain float64. Terrain workers share the buffer when the browser is cross-origin isolated, otherwise each gets one copy. PWA precaches the binary. Projection/pixel-centre conventions, hashes and licensing live under `public/earth/`; deterministic generation lives under `scripts/earth-data/`. Legacy science biome strings remain stable identifiers; new observations use geographic cover classes while old archives/onboard data/contracts retain their keys.
 
-<<<<<<< HEAD
 ## Earth imagery (render only)
 
 `render/planet/earthImagery.ts` loads NASA imagery built by `scripts/earth-imagery/` (`public/earth/imagery/`,
@@ -203,7 +209,7 @@ behind the `EARTH_IMAGERY` define (uniforms only change when data arrives — no
 `EARTH_RICH` (High/Ultra) adds bicubic magnification and marched coast reflections. Terrain hands colour over to
 the imagery with distance (`uEarthBlend`, texel-size driven); from altitude coastlines follow the imagery mask on
 both the ocean and terrain meshes. The cloud cube map bakes from the real cloud composite when available.
-=======
+
 Editor preflight advisories run in `editor/preflight.worker.ts` against plain craft/stage data and the static
 part catalogue. Superseding an edit terminates the previous worker; the UI never displays old-craft checks.
 Unsupported/failed workers use a cancellable idle fallback. This worker needs no Universe or Earth-grid setup.
@@ -212,4 +218,32 @@ waits for quiet input. `editor/scene/thumbnailCache.ts` stores optional PNG blob
 production chunk URL invalidates art revisions. Editor-only soot uses `prepareEngineSoot` to apply exact
 colors in idle batches; flight retains the synchronous wrapper. Material references must not be stored in
 Object3D `userData`, since three.js clones JSON-serialize it (including procedural texture canvases).
->>>>>>> main
+
+## Mission alarms and landing prediction
+
+`game/alarms.ts` owns the persisted, bounded fleet alarm list and cached next deadline. `World.tick` and
+unattended `advanceRailsTo` clamp rails advancement to that deadline, and physics checks it after each
+50 Hz step. Automatic node alarms follow edits; SOI alarms reuse already computed patched-conic paths
+and packed-vessel events. The clock never starts a trajectory search. UI warp-to/assist drivers respect
+an alarm hold; an explicit new warp command acknowledges it.
+
+The existing planner protocol also accepts `landing`. `game/planning/landing.ts` coasts analytically above
+the force/contact domain, then runs the real headless vessel integrator at 50 Hz with zero throttle, hold
+or surface-retrograde SAS, drag, heating, armed/deployed chutes and terrain/contact. It yields after at most
+100 steps or an 8 ms soft work budget. It predicts the active root vessel only, not detached debris; future
+staging/control changes are not assumed. The atmospheric segment is bounded to two hours / 360,000 steps,
+and horizon/escape/breakup results remain visibly partial. Accurate landing presumes the stated control model.
+
+`flight/map/LandingPredictionDriver` samples eligibility at 1 Hz and submits at most every five real seconds
+to one lazy persistent worker. The Earth grid crosses once per worker lifetime. Pending/result identity checks
+reject changes of vessel, SOI, stage, part count, attitude model, thrust or expiry; unavailable workers disable
+automatic prediction rather than run physics in the animation loop. Map geometry changes only when a result
+arrives; samples undo their future body rotation and draw a surface track in the body's orientation at prediction
+start. The cached map marker uses that same endpoint. Coordinates are rebased around a body-relative Float64
+anchor before Float32 upload. The flight surface
+marker rotates the predicted body-fixed touchdown site to the current UT and projects at 4 Hz.
+
+Numerical map prediction now resumes an anchored node from its frozen post-burn state, including after node
+time; its live zero-length patch remains a conic beside the numerical plan. Planners continue to use patched
+conics. The local flight map defaults to the active body and orbit, with an explicit whole-transfer overview.
+>>>>>>> cx/wp4

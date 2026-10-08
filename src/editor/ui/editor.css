@@ -1,4 +1,4 @@
-/* Vehicle Assembly editor UI */
+/* Integration Hall editor UI */
 .vab-root { background: #0d1117; overflow: hidden; color: var(--text); }
 .vab-canvas { z-index: 0; }
 .vab-vignette { z-index: 1; pointer-events: none; background: radial-gradient(ellipse 75% 70% at 50% 48%, transparent 55%, rgba(4, 7, 12, 0.55) 100%); }
@@ -17,7 +17,7 @@
   background: linear-gradient(180deg, #7fd6ff, #3aa9e6);
 }
 .vab-mode { display: flex; gap: 4px; }
-.vab-mode .vab-brand-mark { border: none; cursor: pointer; opacity: 0.45; filter: saturate(0.4); font-family: inherit; }
+.vab-mode .vab-brand-mark { border: none; cursor: pointer; opacity: 0.45; filter: saturate(0.4); font-family: inherit; letter-spacing: 0.06em; padding: 0 12px; }
 .vab-mode .vab-brand-mark.on { opacity: 1; filter: none; }
 .vab-ibtn.on.col { color: #3fa9ff; background: rgba(63, 169, 255, 0.14); border-color: rgba(63, 169, 255, 0.45); }
 .vab-name {
@@ -220,19 +220,24 @@
 .vab-saved-name { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vab-saved-info { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
 
+/* The build-tool group (place/offset/rotate/re-root/snap) needs ~200 px: secondary items collapse earlier. */
+@media (max-width: 1800px) {
+  .vab-stats .vab-stat:nth-child(2) { display: none; }
+  .vab-actions-label { display: none; }
+}
 @media (max-width: 1440px) {
   .vab-name { width: 180px; }
   .vab-stats { gap: 12px; margin-left: 2px; padding-left: 10px; }
   .vab-topbar { gap: 8px; }
 }
 @media (max-width: 1300px) {
-  .vab-stats .vab-stat:nth-child(3) { display: none; }
   .vab-name { width: 150px; }
 }
 /* Responsive toolbar: Launch and Exit stay visible down to 760 px; secondary tools move into the "More tools" menu. */
-@media (max-width: 1200px) {
+@media (max-width: 1500px) {
   .vab-topbar .vab-collapsible { display: none; }
   .vab-more { display: block; }
+  .vab-stats .vab-stat:nth-child(3) { display: none; }
 }
 @media (max-width: 1100px) {
   .vab-topbar .vab-name { width: 130px; }
@@ -243,7 +248,7 @@
   .vab-topbar { gap: 6px; padding: 0 6px; }
   .vab-topbar .vab-name { width: 140px; }
   .vab-stats { display: none; }
-  .vab-mode .vab-brand-mark { padding: 0 7px; letter-spacing: 0.08em; }
+  .vab-mode .vab-brand-mark { padding: 0 7px; letter-spacing: 0.02em; }
   .vab-launch { padding: 0 12px; }
 }
 .vab-stock-locked { font-size: 10.5px; color: var(--warn); margin-top: 4px; }
@@ -301,3 +306,45 @@
 .preflight-list { max-height: 180px; overflow: auto; }
 .preflight-list > div { padding-top: 8px; line-height: 1.4; }
 .preflight-list button { display: block; margin-top: 3px; }
+
+/* ---------------------------------------------------------------- WP2: tools, staging, subassemblies */
+.vab-ibtn.snap.on { color: var(--accent); }
+.vab-manual {
+  margin-left: 8px; padding: 1px 6px; border-radius: var(--radius-sm); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--accent-2, #ffb35c); border: 1px solid rgba(255, 179, 92, 0.45); vertical-align: 1px; cursor: help;
+}
+.vab-staging-head .btn.on { color: var(--accent-2, #ffb35c); }
+.vab-stage-title { cursor: grab; }
+.vab-stage-title:active { cursor: grabbing; }
+.vab-stage-grip { color: var(--text-dim); opacity: 0.45; font-size: 10px; letter-spacing: -2px; margin-right: -4px; }
+.vab-stage-title .vab-stage-dv, .vab-stage-title .vab-stage-dv.dim { margin-left: auto; }
+.vab-stage.dragging { opacity: 0.45; }
+.vab-stage-mass { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
+.vab-dv-body { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.vab-dv-body select {
+  flex: 1; min-width: 0; font: inherit; font-size: 11px; color: var(--text); background: var(--bg, rgba(0, 0, 0, 0.3));
+  border: 1px solid var(--panel-border); border-radius: var(--radius-sm); padding: 3px 4px;
+}
+.vab-staging-foot .dim { color: var(--text-dim); font-size: 11px; }
+.preflight-list span { white-space: normal; overflow-wrap: anywhere; }
+.vab-toast.actionable { pointer-events: auto; display: flex; align-items: center; gap: 12px; }
+.vab-palette.save { border-color: rgba(111, 227, 154, 0.5); }
+.vab-palette.save .vab-discard { background: rgba(10, 52, 30, 0.6); color: #b6f5cd; }
+.vab-subs .vab-palette-head { flex-direction: row; align-items: center; justify-content: space-between; }
+.vab-sub-list { flex: 1; overflow-y: auto; padding: 0 10px 10px; display: flex; flex-direction: column; gap: 4px; }
+.vab-sub { display: flex; align-items: stretch; gap: 2px; }
+.vab-sub-pick {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 7px 9px; text-align: left; cursor: pointer;
+  color: var(--text); background: rgba(255, 255, 255, 0.035); border: 1px solid var(--panel-border); border-radius: var(--radius-sm); font: inherit;
+}
+.vab-sub-pick:hover { border-color: rgba(92, 200, 255, 0.5); background: rgba(92, 200, 255, 0.08); }
+.vab-sub-name { font-size: 12.5px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vab-sub-meta { font-size: 10.5px; color: var(--text-dim); }
+.vab-sub-btn { width: 26px; color: var(--text-dim); background: none; border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; }
+.vab-sub-btn:hover { color: var(--text); border-color: var(--panel-border); }
+.vab-sub-rename { flex: 1; font: inherit; font-size: 12.5px; padding: 6px 8px; color: var(--text); background: var(--bg, #000); border: 1px solid var(--accent); border-radius: var(--radius-sm); }
+
+.vab-merge { display: flex; align-items: center; gap: 6px; margin-left: auto; margin-right: 10px; font-size: 12px; color: var(--text-dim); cursor: pointer; }
+.vab-stock-icon img { width: 64px !important; height: 64px !important; }
+.vab-dv-vac { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; color: var(--text-dim); }
+.vab-dv-vac input { margin: 0; }

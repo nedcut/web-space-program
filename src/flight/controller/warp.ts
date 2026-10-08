@@ -54,6 +54,7 @@ export class WarpDriver {
     const t = warpTargets(world).find((o) => o.id === id);
     if (!t || !world.active) return `Nothing to warp to`;
     if (world.active.state.telemetry.thrust > 0) return 'Cut throttle before warping';
+    world.alarmClock.acknowledge();
     this.target = { ...t, vessel: world.active.state.id };
     return null;
   }
@@ -64,6 +65,7 @@ export class WarpDriver {
     if (!wv || wv.mode === 'prelaunch' || wv.state.situation !== 'flying' || wv.state.eva) return 'Nothing to warp to';
     if (wv.state.telemetry.thrust > 0) return 'Cut throttle before warping';
     if (!Number.isFinite(time) || time <= world.ut + 2) return `Already at ${label.toLowerCase()}`;
+    world.alarmClock.acknowledge();
     this.target = { id: 'custom', label, time, vessel: wv.state.id };
     return null;
   }
@@ -79,6 +81,7 @@ export class WarpDriver {
   drive(world: World, dt: number) {
     const t = this.target;
     if (!t) return;
+    if (world.alarmClock.held) return this.cancel(world);
     if (world.activeId !== t.vessel || !world.active || world.active.state.telemetry.thrust > 0) return this.cancel(world, 'Warp stopped');
     const remaining = t.time - world.ut;
     if (remaining <= 0.5) {

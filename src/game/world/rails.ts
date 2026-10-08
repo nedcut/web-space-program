@@ -99,7 +99,9 @@ export function unpack(this: World, internals: WorldInternals, wv: WorldVessel):
 export function advanceRailsTo(this: World, internals: WorldInternals, ut: number): void {
   if (!Number.isFinite(ut) || ut < this.ut) return;
   for (const wv of this.vessels.values()) internals.pack(wv);
-  internals.advanceRails(ut);
+  this.alarmClock.sync(this, true);
+  internals.advanceRails(Math.min(ut, this.alarmClock.next(this.ut)));
+  this.alarmClock.fire(this);
 }
 
 /**

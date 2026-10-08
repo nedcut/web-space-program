@@ -261,6 +261,10 @@ export interface VesselCache {
   feed: Map<number, number[][]>;
   /** Exposed face areas per part in part frame: [+X,-X,+Y,-Y,+Z,-Z], m^2. */
   exposed: Map<number, number[]>;
+  /** Parts enclosed by an attached fairing shell (no aerodynamic forces). */
+  shielded?: Set<number>;
+  /** Body-frame point at which a part's aerodynamic force acts when not its centre (fairing shells). */
+  aeroCentre?: Map<number, Vec3>;
   /** Thermal links: [uidA, uidB, conductance W/K]. */
   links: [number, number, number][];
   /** Bounding radius about the COM, m. */

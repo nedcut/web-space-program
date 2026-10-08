@@ -55,7 +55,7 @@ try {
   });
   await check('IndexedDB legacy migration, stock scale badges, library actions', async () => {
     await page.evaluate(async () => { const { buildSoundingRocket } = await window.__qaImport('/src/editor/stockCrafts.ts'); localStorage.setItem('wsp.crafts.v1', JSON.stringify([{ ...buildSoundingRocket(), name: 'Legacy QA craft' }])); });
-    await page.getByRole('button', { name: /Vehicle Assembly/ }).click(); await page.waitForFunction(() => window.__editor);
+    await page.getByRole('button', { name: /Integration Hall/ }).click(); await page.waitForFunction(() => window.__editor);
     await page.getByTitle('Load craft', { exact: true }).click();
     await expect(page.locator('.vab-stock-scale').filter({ hasText: 'real scale' }).first()).toBeVisible();
     await expect(page.locator('.vab-stock-scale').filter({ hasText: 'challenging scale' }).first()).toBeVisible();

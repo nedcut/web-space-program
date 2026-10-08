@@ -1,3 +1,4 @@
+import { flightEndReady, scheduleFlightEnd } from './lossPresentation';
 import { CrashOverlay } from '../ui/CrashOverlay';
 import { Panel, Button } from '../ui/components';
 import { attachScenarioWorld, endScenario, getScenarioRun, startScenario } from '../scenarios/runtime';
@@ -18,10 +19,12 @@ import { FlightController } from './controller';
 import { Hud, NavballView, type Telemetry } from './hud/Hud';
 import type { GameAudio } from '../audio';
 import { getGameAudio } from '../audio/ui';
+import { AlarmPanel } from './hud/AlarmPanel';
 import { ManeuverPanel } from './hud/ManeuverPanel';
+import { LandingMarker } from './map/LandingMarker';
 import { MapOverlay } from './map/MapOverlay';
 import { AssistPanel } from './hud/AssistPanel';
-import { HelpOverlay, helpSeen, markHelpSeen } from './hud/HelpOverlay';
+import { HelpOverlay, QuickStartCard, helpSeen, markHelpSeen } from './hud/HelpOverlay';
 import { SettingsPanel } from '../ui/MainMenu';
 import type { CraftDef } from '../sim/vessel/types';
 import { bindingLabel, isTyping, matches } from '../input/bindings';
@@ -49,6 +52,8 @@ export default function FlightScene() {
   pausedRef.current = paused;
   const [report, setReport] = useState(false);
   const [lost, setLost] = useState(false);
+  const [endReady, setEndReady] = useState(false);
+  const lostAt = useRef<number | null>(null);
   const lostRef = useRef(false);
   lostRef.current = lost;
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +62,7 @@ export default function FlightScene() {
   const [loaderMounted, setLoaderMounted] = useState(true);
   const [banner, setBanner] = useState<SituationBannerText | null>(null);
   const [help, setHelp] = useState(false);
+  const [quickStart, setQuickStart] = useState(false);
   /** F2: hide every HUD element except world-space labels. */
   const [uiHidden, setUiHidden] = useState(false);
   /** F3: the active flight's report (does not pause). */
@@ -102,6 +108,7 @@ export default function FlightScene() {
     let readyTimer = 0;
     let bannerTimer = 0;
     let loaderTimer = 0;
+    let cancelFlightEnd: (() => void) | undefined;
     setLoaderMounted(true);
     setBanner(null);
 
@@ -133,11 +140,13 @@ export default function FlightScene() {
       cc.paused = pausedRef.current;
       cc.setModalOpen(helpRef.current);
       setLost(false);
+      setEndReady(false);
+      lostAt.current = null;
       setReport(false);
       cc.onActiveLost = () => {
+        lostAt.current = performance.now();
         setLost(true);
-        setReport(true);
-        setPaused(true);
+        cancelFlightEnd = scheduleFlightEnd(() => setEndReady(true));
       };
       game.set({ launchPending: false });
       const scenario = new URLSearchParams(location.search).get('scenario');
@@ -148,7 +157,7 @@ export default function FlightScene() {
         if (helpRef.current) return closeHelp();
         if (panelsRef.current.length && !pausedRef.current) return setPanels(p => p.slice(0, -1));
         if (settingsRef.current) return setShowSettings(false);
-        if (lostRef.current) return setPaused(true);
+        if (lostRef.current) return;
         setPaused((p) => !p);
       };
       cc.onQuickload = () => {
@@ -170,7 +179,7 @@ export default function FlightScene() {
         cc.cam.distance = Math.max(25, cc.world.active!.state.cache.boundingRadius * 4);
         if (mission.scenario.id === 'rendezvous') { cc.speedMode = 'target'; cc.dockingMode = true; }
       }
-      detachScenario = attachScenarioWorld(cc.world, () => { cc.paused = true; });
+      detachScenario = attachScenarioWorld(cc.world, () => { /* Keep landing/destruction visible behind the side card. */ });
       unsub = cc.subscribe(setTele);
       // Leaving the page mid-flight: autosave and ask for confirmation (Ctrl+W / Ctrl+R are throttle-adjacent).
       window.addEventListener('beforeunload', beforeUnload);
@@ -183,7 +192,7 @@ export default function FlightScene() {
         setBanner(situationBanner(cc.world));
         bannerTimer = window.setTimeout(() => setBanner(null), 4300);
         loaderTimer = window.setTimeout(() => setLoaderMounted(false), 550);
-        if (!cc.network && !getTutorial() && !getScenarioRun() && !helpSeen()) setHelp(true);
+        if (!cc.network && !getTutorial() && !getScenarioRun() && !helpSeen()) setQuickStart(true);
       }, 200);
     };
     let timer = 0;
@@ -200,6 +209,7 @@ export default function FlightScene() {
       window.removeEventListener('beforeunload', beforeUnload);
       window.removeEventListener('pointerdown', resume);
       window.removeEventListener('keydown', resume);
+      cancelFlightEnd?.();
       detachScenario?.();
       unsub?.();
       c?.dispose();
@@ -214,13 +224,16 @@ export default function FlightScene() {
     };
   }, [mountKey]);
 
-  const awaitingTelemetry = tele === null;
-  const scenarioFinished = !!getScenarioRun()?.result;
+  const onSurface = tele?.onSurface;
   useEffect(() => {
-    if (ctrl.current) ctrl.current.paused = paused || photo.active || scenarioFinished;
-    audioRef.current?.setPaused(paused || photo.active || scenarioFinished);
+    if (quickStart && onSurface === false) { markHelpSeen(); setQuickStart(false); }
+  }, [quickStart, onSurface]);
+  const awaitingTelemetry = tele === null;
+  useEffect(() => {
+    if (ctrl.current) ctrl.current.paused = paused || photo.active;
+    audioRef.current?.setPaused(paused || photo.active);
     if (paused || photo.active) audioRef.current?.silenceFlight();
-  }, [paused, awaitingTelemetry, photo.active, scenarioFinished]);
+  }, [paused, awaitingTelemetry, photo.active]);
   // The Controls reference blocks flight input; closing it returns to whatever it covered (flight or the Pause menu).
   useLayoutEffect(() => {
     ctrl.current?.setModalOpen(help);
@@ -269,7 +282,7 @@ export default function FlightScene() {
         setUiHidden(h => !h);
       } else if (matches('flightResults', e)) {
         e.preventDefault();
-        if (!ctrl.current?.network) setResults(r => !r);
+        if (!ctrl.current?.network && flightEndReady(lostAt.current,performance.now())) setResults(r => !r);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -342,7 +355,7 @@ export default function FlightScene() {
     <div className="fullscreen">
       {/* The controller appends its canvas here; React overlays are later siblings so they stay on top. */}
       <div className="fullscreen" ref={host} />
-      {tele && c && !photo.active && !uiHidden && (
+      {tele && c && !lost && !photo.active && !uiHidden && (
         <Hud
           partScreen={partScreen}
           shortcutsEnabled={ready && !paused && !help && !showSettings}
@@ -352,12 +365,15 @@ export default function FlightScene() {
           t={tele}
           navball={<NavballView getFrame={navball} />}
           dock={multiplayer ? undefined : {
+            onboarding: quickStart && ready && !help && !paused && tele.onSurface ? <QuickStartCard onClose={() => { markHelpSeen(); setQuickStart(false); }} onHelp={() => { markHelpSeen(); setQuickStart(false); setHelp(true); }} /> : undefined,
             assist: !tele.eva && !tele.noControl ? <AssistPanel active={tele.assist} onStart={(id) => ctrl.current?.startAssist(id)} onCancel={() => ctrl.current?.cancelAssist()} /> : undefined,
             assistActive: !!tele.assist,
             signal: c.world.commsSettings.enabled ? <SignalPanel world={c.world} /> : undefined,
             resources: (tele.mapMode || active?.state.parts.some(p => p.def.modules.some(m => ['drill', 'converter', 'surfaceScanner', 'surveyScanner'].includes(m.type))))
               ? <ResourcePanel world={c.world} map={c.map} mapMode={tele.mapMode} paused={paused} act={(uid, a) => ctrl.current?.partAction(uid, a)} /> : undefined,
             science: <SciencePanel world={c.world} paused={paused} />,
+            alarmActive: c.world.alarmClock.held,
+            alarms: <AlarmPanel world={c.world} />,
             maneuver: <ManeuverPanel world={c.world} map={c.mapUi} />,
           }}
           cb={{
@@ -390,6 +406,7 @@ export default function FlightScene() {
           }}
         />
       )}
+      {c && ready && !photo.active && !paused && !multiplayer && !uiHidden && <LandingMarker controller={c} />}
       {c && tele?.mapMode && ready && !photo.active && !paused && !multiplayer && !uiHidden && <MapOverlay controller={c} />}
       {c && ready && !photo.active && !paused && !uiHidden && <FlightInspector controller={c} panels={panels} setPanels={setPanels} />}
       {settings.showFps && c && !photo.active && !uiHidden && <PerformanceReadout controller={c} />}
@@ -406,7 +423,14 @@ export default function FlightScene() {
           </Panel>
         </div>
       )}
-      {report && lost && !photo.active && ctrl.current && (() => {
+      {lost && endReady && !photo.active && !uiHidden && <Panel className="flight-ended-bar" style={{ position: 'absolute', left: 16, top: 72, padding: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', maxWidth: 'calc(100vw - 32px)', zIndex: 50 }}>
+        <strong>Flight ended</strong>
+        <Button className="btn small" onClick={revertToLaunch} disabled={!launched.current && !getScenarioRun() && !getTutorial()}>Revert</Button>
+        <Button className="btn small" onClick={recover} disabled={!canRecover}>Recover</Button>
+        <Button className="btn small" onClick={() => setReport(true)}>Report</Button>
+        <Button className="btn small" onClick={() => exitTo('spaceCenter')}>{getScenarioRun() ? 'Scenarios' : 'Space Center'}</Button>
+      </Panel>}
+      {report && endReady && lost && !photo.active && ctrl.current && (() => {
         const r = ctrl.current.world.flightlog.records.find(r => r.id === ctrl.current!.world.latestReportId);
         return r ? <div className="modal-backdrop"><Panel className="panel report-modal"><Button className="btn" onClick={() => setReport(false)}>Close report</Button><FlightReport record={r} /></Panel></div> : null;
       })()}
@@ -445,7 +469,7 @@ export default function FlightScene() {
           )}
         </div>
       )}
-      {ready && banner && !photo.active && !help && !uiHidden && <ArrivalBanner banner={banner} />}
+      {ready && banner && !lost && !photo.active && !help && !uiHidden && <ArrivalBanner banner={banner} />}
       {(!ready || loaderMounted) && (
         <div className="loading-screen" style={ready ? { opacity: 0, pointerEvents: 'none' } : undefined}>
           <div style={{ textAlign: 'center' }}>

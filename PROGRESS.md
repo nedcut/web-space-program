@@ -938,3 +938,50 @@ Fixes from the owner's first short career play-through on a MacBook (Medium):
 - Reviewed before/after Retina-size and device-pixel crops for all five Medium scenes, plus Low/High/Ultra pad. No visible detail loss found; small simulation/camera/animation differences remain in screenshots. Evidence: `docs/screenshots/perfgpu2/`. The pad’s smoothed live-loop GPU timer did not improve despite the fenced improvement, so no live-frame pacing or Mac frame-rate claim is made.
 - Final lint/layering, TypeScript, **128 test files / 1,390 passed / one skipped**, and production build pass. Tests cover geometric sky bounds, floating-origin batch matrices, normalized attributes and slot growth/reuse. Final built output exactly matches the frozen benchmark candidate.
 - Implementation and evidence are committed on `cx/perfgpu2`; no merge or push. Remaining: pad PBR/vegetation/post-processing headroom, real Apple/Safari/multi-draw and 120 Hz validation, Ultra cache/streaming behavior, and timing coverage beyond the five measured scenes.
+
+## 2026-10-08 — WP3: Truthful HUD, quiet guidance (`cx/wp3`)
+
+Implemented automatic Surface/Orbit/nearby-vessel Target reference with manual overrides; thrust/fuel/attitude-aware terrain cautions; quiet staging/throttle messages; pre-ignited-engine Δv; body-aware side hints at 50–100 m/s; non-modal six-key first flight; hidden IVA; optional engineering strip and a navball layout that clears the plume. No renderer, simulation, editor/parts or map/planning edits. Controller integration is isolated in `flight/speedMode.ts`; FlightScene edits only wire onboarding.
+
+Validation: lint/typecheck/build passed; 60 focused tests passed. Full Vitest: 1,423 passed, one skipped, one existing Saturn full-burn timeout under shared load; that file passed on rerun (41 tests across Saturn/WP3/input). Assisted lunar descent lands below 3 m/s without terrain cautions; ballistic fall warns. Real Windows Chrome/RTX captures cover pad, ascent, 150 km orbit, lunar orbit and powered approach at DPR 1/2; browser assertions verify first-flight input, two-message liftoff, a 50.1 m/s turn hint and manual/Target mode behavior.
+
+Completed paired HUD React means: DPR 1 **0.087 → 0.087 ms/frame**; DPR 2 pad/orbit **0.104 → 0.113** (optional strip: 0.084 / 0.117). Raw scene/fps variation, the higher powered-approach capture and the incomplete DPR 2 lunar benchmark tail are retained and explained in [WP3 evidence](docs/screenshots/wp3/README.md). Largest observed completed-case GPU increase +0.39 ms. Parent/owner still needs independent video review and M-series/120 Hz verification; no Apple performance claim. Implementation commit: `ade910df`.
+## WP2: an editor that doesn't fight you (2026-10-08, op/wp2)
+
+From the veteran gap audit (item 2 and 11). What changed in the Vehicle Assembly:
+- **Staging that understands boosters.** Core + radial boosters now light together in the first stage; the side latches fire next; serial stacks stage exactly as before (engines → decoupler → next engines). Once you rearrange stages yourself, adding parts no longer wipes your order: new engines/decouplers slot in next to what they'd fire with (a "manual" badge shows; the wand resets to automatic). Whole stages can be dragged by their header.
+- **Symmetric sets stay sets.** Clicking one of four boosters picks up all four (symmetry ×4 shown, X still changes it) and places them back as a set; your own symmetry setting returns afterwards. Hovering highlights the whole set. **Alt/Option-click copies** a part with everything attached. Ctrl/⌘+Z after placing undoes the whole pick-up-and-place.
+- **Subassemblies:** a new drawer (last tab in the parts list). Drop a held assembly on it, or select a part and press Save; click an entry to pick it up again in any craft. **Merge** another vehicle from the load dialog. Stock vehicles there now show thumbnails.
+- **Tools (keys 1–4):** place, **offset** (arrows, or drag the part itself), **rotate** (rings, pivoting on the attachment point), **re-root**. Symmetric counterparts follow (mirrored on planes); hold Alt/Option to move just one part. Snap 5 cm / 15° (C toggles, Shift for 1 cm / 5°). In offset/rotate, W/S/A/D/Q/E nudge or turn. One undo step per drag; during a drag only meshes move, the craft is committed on release.
+- **Camera, trackpad and Mac:** horizontal pan (Shift+drag, middle drag, sideways two-finger swipe), smooth trackpad zoom and pinch-zoom, F reframes. On a Mac, Ctrl+click opens part details and the hints show ⌥/⌫.
+- **Readouts:** "Readouts at" picker (any planet or moon with a surface): stage TWR at ignition → burnout and mass before → after each stage. Selene's lander stage reads TWR > 1 at the Moon (it read 0.67 against Earth). Launch checks still use Earth.
+- **Quieter:** Delete on a hovered part shows an Undo toast; the pre-flight review stays hidden until there is an engine and its text wraps.
+- **New parts:** five multi-way couplers (Wishbone twin, Trefoil tri, Crossbill quad; 1.25 m and 2.5 m) for engine clusters. **Fairings are now real:** their shell fits the payload automatically (or set height/radius in the part panel) and the simulation shields what's inside from drag and heating (payload drag inside ≤ 5 % of exposed). Jettisoning a fairing no longer throws the payload away with it.
+- **Verified:** new Vitest suites (`editor-wp2*`): booster staging, manual order surviving a nose cone and new engines, set pick-up/re-place, Alt-copy, subassemblies, offsets/rotations incl. mirror pairs, re-root, fairing fit/shielding/heating/jettison, couplers feeding every engine, Selene Moon TWR, session undo/redo. Production build driven on the real GPU (Windows Chrome over CDP) and headless Chromium: scripted build (payload, fairing, two stages, four boosters), copy, set pick-up, both gizmos, Moon readouts, stage drag, subassembly save, delete-undo, pinch/pan, couplers. Screenshots archived outside git at `~/.t3/projects/wsp-traces/wp2/`.
+- **Performance (RTX 3060 Ti, Windows Chrome, production builds, main vs this branch interleaved, 12 warm entries each, two sessions):** editor entry median 638 → 661 ms and 724 → 705 ms (parity, noise from a shared machine); orbiting the Selene stack 4.5 vs 4.4 ms editor CPU per frame, 330 draw calls in both. The gizmo is built on first use; drags move meshes only and commit once. Scripts: `scripts/wp2/`.
+- **Left / caveats:** no visual-only clamshell split (the fairing ring leaves with the shell, leaving a ring-height gap); no fairing "draw your own" profile; no 1.875 m size or procedural tanks; no per-stage body picker; Firefox and real Mac trackpads not driven (pinch/pan verified with synthetic Ctrl+wheel/deltaX events).
+
+
+## 2026-10-08 — WP4: Mission planning (`cx/wp4`)
+
+Implemented body-centred active-orbit framing/filtering, persistent fleet custom/node/SOI alarms with warp stops,
+and worker-based drag/heating/chute landing paths with map/flight impact markers. Preserved the existing worker
+transfer-window search and staging/burn-leading executor, clarified its next-orbit option, restored limiters on
+explicit cancellation, and extended frozen maneuver anchors to numerical maps. Powered assists continue at 1×
+when an alarm fires; coast/warp-to drivers respect the stop. Controller integration stays small.
+
+Lint/typecheck/build pass; final Vitest: **142 files / 1,446 passed / one skipped**. Seeded 120 km re-entry
+misses actual splashdown by **0.9 m**; the three-phase stock-Selene executor acceptance tests pass. One million
+steady alarm sync/check pairs average **0.000047 ms** with 200 alarms. Paired real Chrome DPR 1/2 maps and real
+Firefox confirm local framing/filtering, alarm stops and worker markers, with zero page/console errors.
+Largest paired map GPU increase: **+0.094 ms**; 12 fewer map calls. Chrome transition long tasks remain recorded;
+M-series/120 Hz and independent video review remain unverified. Scope, assumptions and repeatable probes:
+[WP4 validation](docs/audits/2026-10-08-wp4-validation.md). Implementation: `f3720503`, `c8f9a133`, `b081ebe4`.
+
+## WP1 weight and payoff (2026-10-08, cx/wp1)
+
+- Added impulse/energy-scaled camera translation and rotation, original pooled pyro/explosion audio, absolute-thrust engine loudness, larger mass/propellant-scaled fireballs, and 32 pooled template fragments. Reduce Motion / camera-shake settings remain authoritative; the pilot no longer hears a self sonic boom.
+- Distance-based 90 s ascent smoke shares the existing Medium 512 slots (384 reserved for the column); vacuum plume brightness uses existing shaders. Dormant particle/debris pools skip work and draws; no new full-screen passes.
+- Loss follows the debris for 3.5 s, then offers a non-blocking Revert / Recover / Report bar. Reports open on request; mission/landing results dock on the side and leave flight running.
+- Implementation commits: `644bec0e`, `ddf91ea5`, `d859f105`, `680c71db`, `8cfa2540`, `eeaf3708`. Verification and remaining acceptance: `docs/performance/wp1-payoff.md`. No push or merge.
+- Lint, TypeScript, build and final Vitest pass (137 files / 1,427 passed / one skipped). Medium DPR 2 fenced GPU pad/ascent/orbit remains near parity with main: +0.021 / +0.037 / −0.033 ms. Before/after staging/crash videos, 10 km smoke and successful landing evidence are captured. Strict 50 ms event tasks, ordinary-playback 2.5 ms GPU timing and real Mac/120 Hz acceptance remain open; details and capture provenance are in the verification note.

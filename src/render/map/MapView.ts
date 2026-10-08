@@ -1,3 +1,4 @@
+import { smallBodyVisible } from './framing';
 import { patchState } from '../../sim/orbit/numericalPrediction';
 import { createTerrain } from '../../sim/terrain';
 import { CometEffects } from '../planet/CometEffects';
@@ -64,6 +65,7 @@ export interface MapMarkerInput {
 }
 
 export interface MapUpdate {
+  landing?: { body: string; points: Vec3[]; times: number[]; impact: { time: number; position: Vec3; speed: number } | null };
   comms?: Network;
   t: number;
   /** Optional stable identity enables focus animation while the object moves. */
@@ -107,7 +109,7 @@ export interface MapPick { kind: 'body' | 'vessel'; id: string }
 /** CSS pixels relative to the map's element. */
 export interface MapPoint { x: number; y: number }
 
-/** Callbacks from map gestures. Absent handlers disable the gesture (e.g. node editing in the Tracking Station). */
+/** Callbacks from map gestures. Absent handlers disable the gesture (e.g. node editing in Fleet Tracking). */
 export interface MapHandlers {
   /** Click on the active trajectory: add a maneuver node at `time`. Enables ghost nodes and the gizmo. */
   placeNode?(time: number): void;
@@ -297,6 +299,10 @@ export class MapView {
   private resourceBodies = new Set<string>();
   private bodies = new Map<string, BodyVisual>();
   private vesselLines: Line2[] = [];
+  private landingLine?: Line2;
+  private landingData?: MapUpdate['landing'];
+  private landingAnchor?: Vec3;
+  private landingPosition: Vec3 = { x: 0, y: 0, z: 0 };
   private vesselIcon: THREE.Sprite;
   private nodeIcons: THREE.Sprite[] = [];
   private nodeScreen = new Map<number, MapPoint>();
@@ -805,8 +811,37 @@ export class MapView {
     this.lastUpdate = this.frameUpdate;
     Object.assign(this.frameUpdate, u); this.frameUpdate.focus = this.renderFocus; u = this.frameUpdate;
     const { t, focus } = u;
-    this.field?.update(t, focus);
-    for (const [id, fx] of this.comets) fx.update(this.ephem.getBodyState(id, t).position, this.ephem.getBodyState('sun', t).position, focus, this.bodies.get(id)!.body.radius, this.au, t, true);
+    const landing = u.landing;
+    if (landing !== this.landingData) {
+      this.landingData = landing;
+      if (landing && landing.points.length > 1) {
+        this.landingAnchor = landing.points[0];
+        const points = landing.points.map(p => sub(p, this.landingAnchor!));
+        if (!this.landingLine) {
+          this.landingLine = this.makeLine(points, 0xffac66, WIDTH.active, .95, TRAJECTORY_LOOK);
+          this.landingLine.renderOrder = 4; // Keep the drag path legible where it overlaps the live conic.
+        }
+        else {
+          const coords: number[] = [];
+          for (const p of points) coords.push(p.x, p.y, p.z);
+          this.landingLine.geometry.setPositions(coords);
+          this.landingLine.computeLineDistances();
+        }
+      }
+    }
+    if (this.landingLine) {
+      this.landingLine.visible = !!landing && landing.points.length > 1;
+      if (landing && this.landingAnchor) {
+        const bodyPosition = this.ephem.getBodyState(landing.body, t).position, anchor = this.landingAnchor;
+        this.landingPosition.x = bodyPosition.x + anchor.x;
+        this.landingPosition.y = bodyPosition.y + anchor.y;
+        this.landingPosition.z = bodyPosition.z + anchor.z;
+        this.place(this.landingLine, this.landingPosition, focus);
+        this.landingLine.material.resolution.set(u.viewport.width, u.viewport.height);
+      }
+    }
+    if (this.field) { const visible = u.referenceBody === this.sunId; this.field.setVisible(visible); if (visible) this.field.update(t, focus); }
+    for (const [id, fx] of this.comets) fx.update(this.ephem.getBodyState(id, t).position, this.ephem.getBodyState('sun', t).position, focus, this.bodies.get(id)!.body.radius, this.au, t, smallBodyVisible(this.bodies.get(id)!.body.kind, u.referenceBody === this.sunId, this.target?.id === id || identity === id));
     if (!this.commsLines.parent) { this.scene.add(this.commsLines); this.commsLines.renderOrder = 5; }
     this.commsLines.visible = !!u.comms;
     if (u.comms) {
@@ -887,7 +922,7 @@ export class MapView {
       // Moon's orbit stays visible while planning a transfer from far out; tiny rings fade in rather than pop.
       const nearParent = !!parent && (parent.body.id === u.referenceBody || parent.body.id === identity || parentDistance < parent.body.soi * 40);
       const moonMin = nearParent ? 5 : 14;
-      const visible = vis.body.kind !== 'moon' || orbitPx > moonMin || vis.body.id === identity;
+      const visible = smallBodyVisible(vis.body.kind, u.referenceBody === this.sunId, this.target?.id === vis.body.id || identity === vis.body.id) && (vis.body.kind !== 'moon' || orbitPx > moonMin || vis.body.id === identity);
       const ringFade = vis.body.kind === 'moon' && vis.body.id !== identity ? Math.min(1, (orbitPx - moonMin) / (moonMin * 1.5)) : 1;
       vis.sphere.userData.mapVisible = visible;
       const resolved = visible && angular*h > 1.5;

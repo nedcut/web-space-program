@@ -1,10 +1,11 @@
 import { LinkView } from './LinkView';
 import { PartHeat } from '../fx/PartHeat';
+import { thermalSources } from '../fx/thermalSurface';
 import { batchStaticParts, disposeStaticBatch, isAnimatedNode } from './staticBatch';
 import * as THREE from 'three';
 import type { VesselState, PartState } from '../../sim/vessel/runtime';
 import type { EngineModule } from '../../sim/vessel/types';
-import { bakeEngineSoot, buildPartMesh, createPlume, getExhaustAnchors, setLightAppearance, setPartDeploy, setEngineGimbal, setGearPose, type Plume } from '../parts';
+import { bakeEngineSoot, buildPartMeshVariant, createPlume, partMeshParams, getExhaustAnchors, setLightAppearance, setPartDeploy, setEngineGimbal, setGearPose, type Plume } from '../parts';
 import { qRotate } from '../../util/quat';
 import type { Vec3 } from '../../util/vec3';
 
@@ -78,6 +79,18 @@ export class VesselView {
     return true;
   }
 
+  /** Event snapshot remains available after the authority removes a part. */
+  eventPart(uid: number) { return this.parts.get(uid)?.state; }
+
+  debrisGeometry(uid: number): THREE.BufferGeometry | undefined {
+    let geometry: THREE.BufferGeometry | undefined;
+    this.parts.get(uid)?.object.traverse(o => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh && !geometry && !mesh.name.includes('plume')) geometry = thermalSources.get(mesh.geometry)?.source ?? mesh.geometry;
+    });
+    return geometry;
+  }
+
   setVessel(v: VesselState) {
     this.vessel = v;
   }
@@ -100,7 +113,7 @@ export class VesselView {
     for (const p of this.vessel.parts) {
       if (this.parts.has(p.uid)) continue;
       needsSoot = true;
-      const obj = buildPartMesh(p.def);
+      const obj = buildPartMeshVariant(p.def, partMeshParams(p.def, p.tweaks));
       const heat = new PartHeat(obj);
       const surfaces = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
       obj.traverse((o) => {

@@ -50,8 +50,11 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
   }
   const visible = saved.filter(item => (!folder || item.folder === folder) && `${item.craft.name} ${item.folder} ${item.tags.join(' ')}`.toLowerCase().includes(query.toLowerCase()));
 
+  // Merge: the other craft comes in as a held assembly (its root part on the cursor) instead of replacing this one.
+  const [merge, setMerge] = useState(false);
+  const canMerge = session.getSnapshot().craft.parts.length > 0;
   const load = (c: CraftDef) => {
-    session.load(c);
+    if (merge && canMerge) session.mergeCraft(c); else session.load(c);
     onClose();
   };
 
@@ -63,13 +66,16 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
             <div className="label">Craft library</div>
             <div className="vab-modal-title">Load a vehicle</div>
           </div>
+          <label className="vab-merge" title={canMerge ? 'Pick up the chosen vehicle and attach it to the current one' : 'Build or load something first'}>
+            <input type="checkbox" checked={merge && canMerge} disabled={!canMerge} onChange={e => setMerge(e.target.checked)} /> Merge into current craft
+          </label>
           <button className="btn small ghost" onClick={onClose}>Close</button>
         </div>
         <div className="vab-modal-section label">Stock vehicles</div>
         <div className="vab-stock-grid">
           {stock.map((s) => (
             <button key={s.id} className="vab-stock" onClick={() => load(s.craft)}>
-              <div className="vab-stock-icon"><Icon name="launch" size={26} /></div>
+              <div className="vab-stock-icon"><CraftThumbnail craft={s.craft} /></div>
               <div className="vab-stock-name">{s.name}</div>
               <span className={`vab-stock-scale ${s.scale === scale ? 'current' : ''}`}>{s.scale} scale{s.scale === scale ? ' · current' : ''}</span>
               <div className="vab-stock-blurb">{s.blurb}</div>
@@ -86,7 +92,7 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
             <div key={item.id} className="vab-saved-row" style={{ flexWrap: 'wrap' }}>
               <CraftThumbnail craft={item.craft} />
               <div style={{ flex: 1, minWidth: 150 }}><div className="vab-saved-name">{item.craft.name}</div><div className="vab-saved-info mono">{summary(item.craft)}</div><small>{item.folder || 'Unfiled'} · {item.tags.join(', ')}</small></div>
-              <button className="btn small" onClick={() => load(item.craft)}>Load</button>
+              <button className="btn small" onClick={() => load(item.craft)}>{merge && canMerge ? 'Merge' : 'Load'}</button>
               <button className="btn small" onClick={() => edit(item, 'name')}>Rename</button>
               <button className="btn small" onClick={() => edit(item, 'folder')}>Folder</button>
               <button className="btn small" onClick={() => edit(item, 'tags')}>Tags</button>

@@ -125,7 +125,10 @@ export class PadEquipment {
     const mesh = new THREE.InstancedMesh(g, mat, n);
     mesh.name = name;
     mesh.castShadow = mesh.receiveShadow = true;
-    mesh.frustumCulled = false; // a few hundred triangles, always next to the pad
+    // Fixed bounds covering every pose (arms swung or extended, clamps engaged or stowed): culled away from the
+    // pad, and outside the vessel's shadow volume in flight (an unculled caster that moves relative to the
+    // vessel — the whole site does, in orbit — would redraw the shadow map every frame).
+    mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(-4, 17, 0), 30);
     this.group.add(mesh);
     return mesh;
   }

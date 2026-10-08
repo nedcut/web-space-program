@@ -20,3 +20,8 @@ export function admitVoice(nodes: number, cost: number, priority = false): boole
 export function engineTransition(previous: number, next: number): 'ignite' | 'shutdown' | null {
   return previous <= 0 && next > 0 ? 'ignite' : previous > 0 && next <= 0 ? 'shutdown' : null;
 }
+
+/** Absolute Newtons mapped to an amplitude reference; independent of unlit installed hardware. */
+export function thrustGain(newtons: number): number {
+  return Math.sqrt(clampUnit(Math.max(0, finite(newtons)) / 3300000));
+}

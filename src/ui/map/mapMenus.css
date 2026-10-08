@@ -28,6 +28,7 @@
 .map-node-menu label.fine { display: flex; align-items: center; gap: 6px; color: var(--text-dim); }
 
 .map-readout { position: absolute; right: 12px; bottom: 58px; z-index: 5; width: 250px; box-sizing: border-box; padding: 7px 11px; font-size: 11.5px; display: grid; gap: 2px; pointer-events: none; }
+.map-readout button { pointer-events: auto; text-align: left; white-space: normal; }
 .map-readout .title { color: var(--text-dim); letter-spacing: 0.08em; font-size: 10px; text-transform: uppercase; }
 .map-readout .path { color: var(--text); }
 .map-readout .hint { color: var(--text-dim); font-size: 10.5px; margin-top: 3px; line-height: 1.45; }

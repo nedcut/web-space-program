@@ -8,7 +8,7 @@ import type { PartState, VesselCache, VesselState } from './runtime';
 import { m3AddInPlace, m3FromQuat, m3Inverse, m3ParallelAxis, m3RotateTensor, m3Zero } from './mat3';
 import { localInertia, shapeRadius } from './shapes';
 import { DEFAULT_RESOURCE_DEFS, buildFeedGroups, partMass } from './resources';
-import { computeExposedAreas } from './aero';
+import { computeExposedAreas, fairingShielding } from './aero';
 
 export interface BuildOptions {
   id?: string;
@@ -200,7 +200,12 @@ export function rebuildTopology(v: VesselState): void {
     c.decoupleStage.set(p.uid, s);
   }
   for (const p of v.parts) if (p.engine) c.feed.set(p.uid, buildFeedGroups(v, p.uid));
-  c.exposed = computeExposedAreas(v);
+  const shielding = fairingShielding(v);
+  c.exposed = computeExposedAreas(v, shielding);
+  if (shielding.shells.size) {
+    c.shielded = shielding.shielded;
+    c.aeroCentre = new Map([...shielding.shells].map(([uid, s]) => [uid, s.centre]));
+  }
   // Thermal links.
   for (const p of v.parts) {
     if (p.parent === null) continue;

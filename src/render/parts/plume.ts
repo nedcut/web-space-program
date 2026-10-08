@@ -74,7 +74,7 @@ const STYLES: Record<PlumeType, Style> = {
     coreAmp: 2.6, coreR: 0.34, coreLen: 0.3, envAmp: 1.15, envK: 2.4, ring: 0.55, coolRate: 1.6, tailAmt: 0.45,
     turb: 0.45, noiseFreq: 0.5, scroll: 9, soot: 0.85,
     diaAmp: 1.8, diaSpacing: 2.0, diaDecay: 0.42, diaWidth: 0.5,
-    vacDim: 0.35, haze: 0.1, pressureSensitive: true,
+    vacDim: 0.75, haze: 0.1, pressureSensitive: true,
   },
   // Hydrogen: nearly transparent pale blue/violet with pinkish diamonds.
   hydrolox: {
@@ -83,7 +83,7 @@ const STYLES: Record<PlumeType, Style> = {
     coreAmp: 1.4, coreR: 0.34, coreLen: 0.22, envAmp: 0.16, envK: 2.4, ring: 0.3, coolRate: 2.0, tailAmt: 0.2,
     turb: 0.25, noiseFreq: 0.55, scroll: 12, soot: 0,
     diaAmp: 1.5, diaSpacing: 2.2, diaDecay: 0.36, diaWidth: 0.42,
-    vacDim: 0.4, haze: 0.08, pressureSensitive: true,
+    vacDim: 0.8, haze: 0.08, pressureSensitive: true,
   },
   // Methane: blue-violet core, orange tint downstream.
   methalox: {
@@ -92,7 +92,7 @@ const STYLES: Record<PlumeType, Style> = {
     coreAmp: 1.8, coreR: 0.34, coreLen: 0.26, envAmp: 0.36, envK: 2.2, ring: 0.45, coolRate: 1.8, tailAmt: 0.85,
     turb: 0.35, noiseFreq: 0.5, scroll: 10, soot: 0,
     diaAmp: 1.6, diaSpacing: 2.3, diaDecay: 0.38, diaWidth: 0.48,
-    vacDim: 0.35, haze: 0.12, pressureSensitive: true,
+    vacDim: 0.75, haze: 0.12, pressureSensitive: true,
   },
   // Solid motor: very bright, thick white-orange core with billowy smoky turbulent edges.
   solid: {
