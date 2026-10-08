@@ -4,6 +4,7 @@ import type { World } from '../game/world';
 import type { VesselDelta } from './protocol';
 import { isruMachinery } from '../sim/vessel/isru';
 import { recomputeMassProperties, rebuildTopology } from '../sim/vessel';
+import { isFairingDef } from '../sim/vessel/fairing';
 
 export function vesselDeltas(world: World): VesselDelta[] {
   return [...world.vessels.values()].map(v => {
@@ -61,7 +62,9 @@ export function applyDeltas(world: World, ut: number, deltas: VesselDelta[]) {
       for (const p of parts) {
         const part = v.state.cache.byUid.get(p.uid);
         if (part) {
-          linksChanged ||= JSON.stringify(part.link) !== JSON.stringify(p.link) || JSON.stringify(part.tweaks?.crossfeed) !== JSON.stringify(p.tweaks?.crossfeed);
+          linksChanged ||= JSON.stringify(part.link) !== JSON.stringify(p.link) || JSON.stringify(part.tweaks?.crossfeed) !== JSON.stringify(p.tweaks?.crossfeed)
+            // A jettisoned fairing shell changes shielding and exposed areas.
+            || (part.activated !== p.activated && isFairingDef(part.def));
           Object.assign(part, p);
           if (p.tweaks === undefined) delete part.tweaks;
           if (p.linkFatigue === undefined) delete part.linkFatigue;

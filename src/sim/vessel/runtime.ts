@@ -313,6 +313,8 @@ export type VesselEvent =
   | { type: 'structuralFailure'; vesselId: string; partUid: number; parentUid: number; newVesselId: string; loadFraction: number }
   | { type: 'stage'; vesselId: string; stage: number }
   | { type: 'decouple'; vesselId: string; partUid: number; newVesselId: string }
+  /** A fairing shell split into panels and fell away; its base ring stays on the vessel. */
+  | { type: 'fairingJettison'; vesselId: string; partUid: number }
   | { type: 'engineIgnited'; vesselId: string; partUid: number }
   | { type: 'flameout'; vesselId: string; partUid: number }
   | { type: 'chute'; vesselId: string; partUid: number; phase: ChutePhase }

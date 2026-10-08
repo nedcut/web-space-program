@@ -7,7 +7,10 @@ import type { VesselState, PartState } from '../../sim/vessel/runtime';
 import type { EngineModule } from '../../sim/vessel/types';
 import { bakeEngineSoot, buildPartMeshVariant, createPlume, partMeshParams, getExhaustAnchors, setLightAppearance, setPartDeploy, setEngineGimbal, setGearPose, type Plume } from '../parts';
 import { qRotate } from '../../util/quat';
+import { fairingJettisoned, isFairingDef } from '../../sim/vessel/fairing';
 import type { Vec3 } from '../../util/vec3';
+
+const _panelPosition = new THREE.Vector3(), _panelQuaternion = new THREE.Quaternion(), _panelScale = new THREE.Vector3();
 
 interface PartVisual {
   state: PartState;
@@ -46,7 +49,8 @@ export class VesselView {
 
   private geometryKey = '';
   private layoutKey(): string {
-    return this.vessel.parts.map(p => `${p.uid}:${p.partId}:${p.position.x},${p.position.y},${p.position.z}:${p.rotation.x},${p.rotation.y},${p.rotation.z},${p.rotation.w}`).join('|');
+    // A jettisoned fairing shell changes what is drawn (and batched) without moving any part.
+    return this.vessel.parts.map(p => `${p.uid}:${p.partId}:${p.position.x},${p.position.y},${p.position.z}:${p.rotation.x},${p.rotation.y},${p.rotation.z},${p.rotation.w}${fairingJettisoned(p) ? ':j' : ''}`).join('|');
   }
   private readonly impostor = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3)), new THREE.PointsMaterial({ color: 0xbcc9d8, size: 3, sizeAttenuation: false }));
 
@@ -89,6 +93,21 @@ export class VesselView {
       if (mesh.isMesh && !geometry && !mesh.name.includes('plume')) geometry = thermalSources.get(mesh.geometry)?.source ?? mesh.geometry;
     });
     return geometry;
+  }
+
+  /**
+   * Visit a fairing's shell panels with their absolute world placement (Float64 position, not origin-relative), from the
+   * last rendered frame. Used to hand the panels to the jettison effect.
+   */
+  fairingPanels(uid: number, visit: (panel: THREE.Object3D, position: THREE.Vector3, quaternion: THREE.Quaternion) => void) {
+    const shell = this.parts.get(uid)?.object.getObjectByName('fairingShell');
+    if (!shell) return;
+    for (const panel of shell.children) {
+      if (!panel.userData.fairingPanel) continue;
+      panel.updateWorldMatrix(true, false);
+      panel.matrixWorld.decompose(_panelPosition, _panelQuaternion, _panelScale);
+      visit(panel, _panelPosition.add(this.origin), _panelQuaternion);
+    }
   }
 
   setVessel(v: VesselState) {
@@ -149,6 +168,10 @@ export class VesselView {
       obj.position.set(p.position.x, p.position.y, p.position.z);
       obj.quaternion.set(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
       pv.static = staticKinds.has(p.def.mesh);
+      if (isFairingDef(p.def)) {
+        const shell = obj.getObjectByName('fairingShell');
+        if (shell) shell.visible = !p.activated;
+      }
       pv.lightKey = undefined;
       if (this.stressOverlay) {
         pv.stressMaterial ??= new THREE.MeshBasicMaterial({ color: 0x44cc55 });

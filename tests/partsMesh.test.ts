@@ -121,7 +121,9 @@ describe('part meshes (headless)', () => {
     expect(byId('solar-fold').getObjectByName('panelWing')).toBeDefined();
     expect(byId('chute-main').getObjectByName('chuteCanopy')!.visible).toBe(false);
     expect(byId('fin-pivot').getObjectByName('controlSurface')!.userData.hingeAxis).toHaveLength(3);
-    expect(byId('fairing-1').getObjectByName('fairingHalfA')).toBeDefined();
+    expect(byId('fairing-1').getObjectByName('fairingPanel1')?.userData.fairingPanel).toBeDefined();
+    expect(byId('fairing-1').getObjectByName('fairingPanel2')).toBeUndefined();
+    expect(byId('fairing-3').getObjectByName('fairingPanel2')?.userData.fairingPanel).toBeDefined();
     expect(byId('leg-stilt').getObjectByName('legUpper')).toBeDefined();
   });
 });
