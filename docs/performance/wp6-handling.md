@@ -21,10 +21,17 @@ All media and raw measurements are archived outside Git in
   SAS settling, peaks at **5.31 → 1.01° Kestrel / 0.79 → 0.14° Meridian / 0.50 → 0.08° Selene**,
   all below the 5° requirement after the change. Baseline measurements use the same fixture against `29a067d0`.
   Digital keys now take one second to reach full command; analog/translation/trim/precision retain their contracts.
-- Sustained Meridian exposure at **30° AoA / 65 kPa fails in 1.20 s**. A free-flight sideways **Mach-2
-  Meridian at 3 km / 250 kPa fails in 0.10 s**. Warning edges occur first. The threshold test maintains the
-  exposure in a wind tunnel; a craft that naturally leaves the dangerous envelope can recover instead.
-- Crossflow uses the existing saved/replicated joint fatigue and load readout. A latched warning edge
+- Crossflow breakup is **readable** (retuned after WP6). Warning creaks/camera shudder start the instant
+  q ≥ 42 kPa and α ≥ ~17.5° (70% of both limits, warn-only, no damage) and re-sound every 0.5 s.
+  Past both limits (q > 60 kPa, α > 25°) joints fatigue at a rate set by exposure x = q/60 kPa · sin²α/sin²25°:
+  breakup takes **2.4 s / x** after the first warning, never faster than **0.8 s** (x ≥ 3). Real Newton–Euler
+  loads can no longer shear the hull faster than that while in the envelope. Crossflow fatigue relaxes at
+  0.04/s for 3 s after leaving the envelope (not the 2/s numerical-spike decay), so a swinging craft that
+  keeps re-entering still fails, while a craft that really recovers clears. Wind tunnel, Meridian:
+  30°/65 kPa fails in 1.60 s (was 1.20); 90°/250 kPa in 0.80 s (was 0.10); free-flight Mach-2 sideways at
+  3 km / 250 kPa fails at 1.20 s (was 0.10), warning from t = 0. Stock gravity turns reach at most 0.5 of the
+  envelope, only at ~5 kPa, far below the 42 kPa warn gate.
+- Crossflow uses the existing saved/replicated joint fatigue and load readout. A warning event (on entry, then every 0.5 s)
   triggers the existing hull creak and bounded accessible camera kick, including between 20 Hz audio samples.
   Structural failures retain WP1's separation/debris feedback. Existing heating and shield/fairing protection
   remain in use; no artificial heat injection was needed to fulfill the breakup-or-overheat acceptance.

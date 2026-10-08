@@ -249,8 +249,9 @@ export interface VesselTelemetry {
 
 /** Derived topology data. Never serialise; rebuild with `rebuildTopology`. */
 export interface VesselCache {
-  /** Crossflow warning latch; topology rebuilds and leaving the envelope re-arm it. */
-  aeroWarned?: boolean;
+  /** Seconds since the last crossflow warning, and the seconds of slow fatigue recovery left after leaving the envelope. */
+  aeroWarnClock?: number;
+  aeroHold?: number;
   /** Derived flight stress readout; not serialized. */
   strutLoads?: Map<number, number>;
   jointLoads?: Map<number, import('./loads').JointLoad>;
