@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { chunkBounds, chunkEdgeLength, chunkId, faceToSphere, type ChunkData, type ChunkKey } from './chunkBuilder';
+import { chunkBounds, chunkEdgeLength, chunkId, chunkIndices, faceToSphere, type ChunkData, type ChunkKey } from './chunkBuilder';
 import type { TerrainWorkerPool } from './workerPool';
 import { ChunkBatch } from './ChunkBatch';
 
@@ -89,6 +89,8 @@ export class Quadtree {
   private nextSelected = new Set<ChunkNode>();
   private readonly terrainBatch?: ChunkBatch;
   private readonly oceanBatch?: ChunkBatch;
+  /** One index buffer (CPU and GPU) for every land and ocean chunk: they share the grid + skirt pattern. */
+  private readonly index: THREE.BufferAttribute;
   stats = { selected: 0, meshes: 0, inflight: 0, queued: 0, builtTotal: 0, lastBuildMs: 0 };
 
   constructor(opts: QuadtreeOptions) {
@@ -97,6 +99,7 @@ export class Quadtree {
     this.group.name = 'terrain-quadtree';
     // Identity container. Chunks update their own matrices when placed; hidden cached chunks are left alone.
     this.group.matrixAutoUpdate = false;
+    this.index = new THREE.BufferAttribute(chunkIndices(opts.res), 1);
     const vertices = (opts.res + 1) ** 2 + 4 * (opts.res + 1);
     const indices = (opts.res ** 2 + 4 * opts.res) * 6;
     if (opts.batch) {
@@ -278,7 +281,7 @@ export class Quadtree {
     g.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
     g.setAttribute('aColor', new THREE.BufferAttribute(data.colors, 3, true));
     g.setAttribute('aDetail', new THREE.BufferAttribute(data.detail, 3));
-    g.setIndex(new THREE.BufferAttribute(data.indices, 1));
+    g.setIndex(this.index);
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), data.boundRadius);
     const m = new THREE.Mesh(g, this.opts.terrainMaterial);
     m.visible = false;
@@ -292,7 +295,7 @@ export class Quadtree {
       og.setAttribute('normal', new THREE.BufferAttribute(data.ocean.normals, 3));
       og.setAttribute('aDepth', new THREE.BufferAttribute(data.ocean.depth, 1));
       og.setAttribute('aDetail', new THREE.BufferAttribute(data.ocean.detail, 3));
-      og.setIndex(new THREE.BufferAttribute(data.ocean.indices, 1));
+      og.setIndex(this.index);
       og.boundingSphere = new THREE.Sphere(new THREE.Vector3(), data.boundRadius + Math.max(0, -data.minHeight));
       const om = new THREE.Mesh(og, this.opts.oceanMaterial);
       om.visible = false;
@@ -377,7 +380,7 @@ export class Quadtree {
     let excess = this.meshCount - Math.floor(this.opts.cacheSize * 0.9);
     for (const n of candidates) {
       if (excess <= 0) break;
-      this.disposeNode(n, false);
+      this.disposeNode(n, false, true);
       excess--;
     }
     // Drop child arrays whose subtree holds nothing.
@@ -391,12 +394,14 @@ export class Quadtree {
     this.roots.forEach(prune);
   }
 
-  private disposeNode(n: ChunkNode, recursive: boolean): void {
+  /** `keepIndex`: other chunks still draw with the shared index, so its GPU buffer must survive this dispose. */
+  private disposeNode(n: ChunkNode, recursive: boolean, keepIndex = false): void {
     for (const m of [n.mesh, n.oceanMesh]) {
       if (!m) continue;
       this.terrainBatch?.release(m);
       this.oceanBatch?.release(m);
       this.group.remove(m);
+      if (keepIndex) m.geometry.setIndex(null);
       m.geometry.dispose();
     }
     if (n.mesh) this.meshCount--;

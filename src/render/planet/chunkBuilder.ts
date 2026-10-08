@@ -36,14 +36,13 @@ export interface ChunkData extends ChunkKey {
   colors: Uint8Array;
   /** Body-fixed position minus a 1024 m-aligned per-chunk offset (seamless detail texturing). */
   detail: Float32Array;
-  indices: Uint16Array | Uint32Array;
-  /** Optional ocean mesh (same grid at radius R + liquid level, attribute depth). */
+  /** Optional ocean mesh (same grid at radius R + liquid level, attribute depth). Land and ocean share
+   * `chunkIndices(res)`; chunks carry no index arrays of their own. */
   ocean?: {
     positions: Float32Array;
     normals: Float32Array;
     depth: Float32Array;
     detail: Float32Array;
-    indices: Uint16Array | Uint32Array;
   };
   buildMs: number;
 }
@@ -218,8 +217,6 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
     }
   }
 
-  const indices = buildIndices(N, true);
-
   let ocean: ChunkData['ocean'];
   const liquidLevel = terrain.liquid?.level ?? 0;
   if (p.ocean && minH < liquidLevel + 0.5) {
@@ -245,7 +242,7 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
         const i = src % N, j = Math.floor(src / N);
         writeO(N * N + e * N + n, (j + 1) * G + (i + 1), oskirt);
       }
-    ocean = { positions: opos, normals: onrm, depth: odep, detail: odet, indices: buildIndices(N, true) };
+    ocean = { positions: opos, normals: onrm, depth: odep, detail: odet };
   }
 
   const t1 = typeof performance !== 'undefined' ? performance.now() : 0;
@@ -255,17 +252,24 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
     boundRadius: Math.sqrt(bound2),
     minHeight: minH,
     maxHeight: maxH,
-    positions, normals, colors, detail, indices, ocean,
+    positions, normals, colors, detail, ocean,
     buildMs: t1 - t0,
   };
 }
 
 const indexCache = new Map<number, Uint16Array | Uint32Array>();
 
-/** Grid + skirt triangle indices (shared pattern for every chunk with the same N). */
-export function buildIndices(N: number, skirts: boolean): Uint16Array | Uint32Array {
+/**
+ * Grid + skirt triangle indices of every land and ocean chunk with `res` quads per edge. One shared, cached
+ * array: never modify or transfer it.
+ */
+export function chunkIndices(res: number): Uint16Array | Uint32Array {
+  return buildIndices(res + 1, true);
+}
+
+function buildIndices(N: number, skirts: boolean): Uint16Array | Uint32Array {
   const cached = indexCache.get(N * 2 + (skirts ? 1 : 0));
-  if (cached) return cached.slice();
+  if (cached) return cached;
   const quads = (N - 1) * (N - 1) + (skirts ? 4 * (N - 1) : 0);
   const vCount = N * N + (skirts ? 4 * N : 0);
   const idx = vCount < 65536 ? new Uint16Array(quads * 6) : new Uint32Array(quads * 6);
@@ -303,5 +307,5 @@ export function buildIndices(N: number, skirts: boolean): Uint16Array | Uint32Ar
     }
   }
   indexCache.set(N * 2 + (skirts ? 1 : 0), idx);
-  return idx.slice();
+  return idx;
 }
