@@ -16,8 +16,8 @@ export interface FlightInputState {
 export type ActionGroupKey = 'actionGroup1' | 'actionGroup2' | 'actionGroup3' | 'actionGroup4' | 'actionGroup5' | 'actionGroup6' | 'actionGroup7' | 'actionGroup8' | 'actionGroup9' | 'actionGroup10';
 export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'focusPrev' | 'toggleCamMode' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag' | 'toggleGear' | 'stressOverlay' | 'toggleLights' | 'abort' | 'stageLock' | 'sasHold' | 'sasHoldRelease' | 'trimReset' | ActionGroupKey;
 
-/** Keyboard attitude ramp (command units per second): full deflection in 0.2 s, release in ~0.08 s. */
-export const KEY_RAMP_RATE = 5;
+/** Keyboard attitude ramp: a 0.2 s tap reaches 20%; a deliberate one-second hold gets full authority. */
+export const KEY_RAMP_RATE = 1;
 export const KEY_RELEASE_RATE = 12;
 /** Trim (Alt + attitude keys): rate while held (command units/s) and limit. Alt+X clears it. */
 export const TRIM_RATE = 0.2;
@@ -164,7 +164,7 @@ export class FlightInput {
     this.camera.pitch = clamp(axis('cameraUp', 'cameraDown') + analog.cameraPitch);
     this.camera.zoom = axis('cameraZoomOut', 'cameraZoomIn');
     // Keys are digital: ramp attitude keys so a tap gives a small correction and a hold reaches full
-    // authority in ~0.2 s; release returns quickly. Analog sticks and translation pass straight through.
+    // authority in ~1 s; release returns quickly. Analog sticks and translation pass straight through.
     const ramp = (id: 'pitch' | 'yaw' | 'roll', target: number) => {
       const cur = this.keyRamp[id];
       const rate = target === 0 || target * cur < 0 ? KEY_RELEASE_RATE : KEY_RAMP_RATE;

@@ -47,10 +47,13 @@ function probe(world: World) {
   hold(world, 0.2, { sas: 'off', throttle: 0 });
   v.angularVelocity = v3(0.05, 0, 0.05);
   const spin0 = length(v.angularVelocity);
-  // Unpowered, a full launcher has only the capsule's reaction wheel (engines cut in ~0.1 s), so measure SAS by
-  // its command (saturated against the spin) and by the spin starting to fall, not by how fast it stops.
-  hold(world, 0.5, { sas: 'stabilityAssist' });
-  const sasCommand = Math.hypot(v.telemetry.control.pitch, v.telemetry.control.roll, v.telemetry.control.yaw);
+  // Coast wheels are inertia-calibrated: SAS may already have nearly killed the spin after 0.5 s.
+  // Check the peak corrective command across that interval, then verify the spin actually decreases.
+  let sasCommand = 0;
+  for (let i = 0; i < 30; i++) {
+    world.tick(1 / 60, neutralInput({ sas: 'stabilityAssist' }));
+    sasCommand = Math.max(sasCommand, Math.hypot(v.telemetry.control.pitch, v.telemetry.control.roll, v.telemetry.control.yaw));
+  }
   hold(world, 3.5, { sas: 'stabilityAssist' });
   return { ...handback, thrust, turn, maxGimbal, spin0, sasCommand, spin1: length(v.angularVelocity) };
 }

@@ -1,6 +1,6 @@
 import { stepHazards } from '../hazards/vessel';
 import type { PartLoad } from './loads';
-import { breakJoints, crashJointCuts, crashShocks, overloadedJoints } from './structure';
+import { aerodynamicStress, breakJoints, crashJointCuts, crashShocks, overloadedJoints } from './structure';
 import { advanceISRU } from './isru';
 import type { Vec3 } from '../../util/vec3';
 import { add, sub, length, scale, v3 } from '../../util/vec3';
@@ -244,7 +244,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
 
   // Contact impulses.
   solveContacts(v, cp.contacts, loads, h, cp.impacts);
-  const cuts = overloadedJoints(v, loads, h, omegaBefore, result);
+  const cuts = overloadedJoints(v, loads, h, omegaBefore, result, aerodynamicStress(aero.dynamicPressure, airVelocityBody));
   const crashCuts = crashJointCuts(v, shocks);
   L = angularMomentum(v);
 

@@ -1,5 +1,5 @@
 import { SpeedModeTracker } from './speedMode';
-import { explosionDiameter, separationPunch, impactPunch } from '../render/fx/eventDesign';
+import { explosionDiameter, separationPunch, impactPunch, structuralStressPunch } from '../render/fx/eventDesign';
 import { updateSiteShadow } from '../render/site/shadows';
 import { maxDrawingEdge } from '../render/core/drawingLimits';
 import { ShadowMapCache } from '../render/core/shadowCache';
@@ -319,7 +319,8 @@ export class FlightController {
       if (e.type === 'stage' && e.vesselId === this.world.activeId) this.stagedCount++;
       const shake = cameraShakeScale(game.get().settings);
       if (e.vesselId === this.world.activeId && shake > 0) {
-        if (e.type === 'stage') this.cam.addKick(0.35 * shake);
+        if (e.type === 'structuralWarning') this.cam.addKick(structuralStressPunch(e.loadFraction) * shake);
+        else if (e.type === 'stage') this.cam.addKick(0.35 * shake);
         else if (e.type === 'decouple' || e.type === 'structuralFailure') {
           const part = this.views.get(e.vesselId)?.eventPart(e.partUid);
           const separator = part?.def.modules.find(m => m.type === 'decoupler');
@@ -354,6 +355,7 @@ export class FlightController {
         }
       }
       if (!this.audio) return;
+      if (e.type === 'structuralWarning' && e.vesselId === this.world.activeId) this.audio.structuralCreak(e.loadFraction);
       const source = this.world.vessels.get(e.vesselId);
       const active = this.world.active;
       const eventDistance = source && active ? Math.hypot(

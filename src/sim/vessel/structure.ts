@@ -14,6 +14,17 @@ import type { ContactPass } from './contact';
 /** N / N m, by diameter class (0.625, 1.25, 2.5, 3.75, 5 m). */
 const STACK_FORCE = [250_000, 1_500_000, 12_000_000, 40_000_000, 100_000_000];
 const STACK_TORQUE = [120_000, 800_000, 10_000_000, 30_000_000, 100_000_000];
+/** Additional crossflow fatigue envelope for rigid rocket barrels. Pa and sin²(AoA). */
+export const AERO_FAILURE_Q = 60_000;
+export const AERO_FAILURE_SIN2 = Math.sin(25 * Math.PI / 180) ** 2;
+/** Normalized crossflow exposure, symmetric nose-first / shield-first; no angle/vector allocation. */
+export function aerodynamicStress(q: number, velocity: Vec3): number {
+  if (q <= AERO_FAILURE_Q) return 0;
+  const speed2 = dot(velocity, velocity);
+  const lateral2 = velocity.x * velocity.x + velocity.z * velocity.z;
+  const sin2 = speed2 > 0 ? lateral2 / speed2 : 0;
+  return sin2 > AERO_FAILURE_SIN2 ? q / AERO_FAILURE_Q * sin2 / AERO_FAILURE_SIN2 : 0;
+}
 
 export function jointPoint(p: PartState): Vec3 {
   const node = p.def.attachNodes.find(n => n.id === p.attachNode);
@@ -126,10 +137,12 @@ export function evaluateJointLoads(v: VesselState, loads: PartLoad[], omega = v.
   return out;
 }
 
-/** 80 ms continuous exposure at >=2x rating; recovery only below 85%, so brief numerical spikes do not flicker. */
-export function overloadedJoints(v: VesselState, loads: PartLoad[], dt: number, omega = v.angularVelocity, result?: StepResult): number[] {
+/** 80 ms at >=2x rating (100 ms in crossflow); recovery below 85% rejects brief numerical spikes. */
+export function overloadedJoints(v: VesselState, loads: PartLoad[], dt: number, omega = v.angularVelocity, result?: StepResult, aeroStress = 0): number[] {
   const cuts: number[] = [];
   let readings = evaluateJointLoads(v, loads, omega);
+  if (aeroStress > 0 && !v.cache.aeroWarned) result?.events.push({ type: 'structuralWarning', vesselId: v.id, loadFraction: aeroStress });
+  v.cache.aeroWarned = aeroStress > 0;
   let broken = false;
   for (const p of activeLinks(v, 'strut')) {
     const spec = linkModule(p)!;
@@ -149,8 +162,17 @@ export function overloadedJoints(v: VesselState, loads: PartLoad[], dt: number, 
   }
   for (const [uid, load] of readings) {
     const p = v.cache.byUid.get(uid)!;
+    // A barrel's distributed bending/buffeting is unresolved by a single rigid body. Accumulate it in
+    // the existing saved/replicated joint fatigue, with 0.6–1.8 s of exposure for unresolved buffeting. Preserve
+    // ordinary Newton–Euler overloads and explicit ratings; wing roots and fairing-enclosed payloads
+    // retain their measured loads. Aligned launches and shield-first entries never enter this envelope.
+    const shape = p.def.shape;
+    if (aeroStress > 0 && shape.kind === 'cylinder' && shape.height > 2 * Math.max(shape.radiusTop, shape.radiusBottom)
+      && !v.cache.shielded?.has(uid)) {
+      load.fraction = Math.max(load.fraction, 1 + 0.08 / 1.8 * Math.min(3, aeroStress));
+    }
     let fatigue = p.structuralFatigue ?? 0;
-    if (load.fraction > 1) fatigue += dt * Math.min(1, load.fraction - 1);
+    if (load.fraction > 1) fatigue += dt * Math.min(aeroStress > 0 ? 0.08 / 0.1 : 1, load.fraction - 1);
     else if (load.fraction < 0.85) fatigue = Math.max(0, fatigue - dt * 2);
     if (fatigue > 0) p.structuralFatigue = fatigue;
     else delete p.structuralFatigue;

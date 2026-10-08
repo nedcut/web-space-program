@@ -249,6 +249,8 @@ export interface VesselTelemetry {
 
 /** Derived topology data. Never serialise; rebuild with `rebuildTopology`. */
 export interface VesselCache {
+  /** Crossflow warning latch; topology rebuilds and leaving the envelope re-arm it. */
+  aeroWarned?: boolean;
   /** Derived flight stress readout; not serialized. */
   strutLoads?: Map<number, number>;
   jointLoads?: Map<number, import('./loads').JointLoad>;
@@ -305,6 +307,7 @@ export interface VesselState {
 }
 
 export type VesselEvent =
+  | { type: 'structuralWarning'; vesselId: string; loadFraction: number }
   | { type: 'linkBroken'; vesselId: string; partUid: number; targetUid: number; loadFraction: number }
   | { type: 'anomalyDiscovered'; vesselId: string; body: string; landmarkId: string }
   | { type: 'structuralFailure'; vesselId: string; partUid: number; parentUid: number; newVesselId: string; loadFraction: number }

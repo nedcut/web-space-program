@@ -32,6 +32,13 @@ export const SPOOL_CUTOFF = 0.01;
  * engine's `spoolTime`. Jets keep their turbine spool time both ways.
  */
 export const ROCKET_THROTTLE_TIME = 0.02;
+/** Hydraulic actuator speed, rad/s. Limit the combined two-axis motion, including reversals. */
+export const GIMBAL_SLEW_RATE = 25 * Math.PI / 180;
+/** Final chamber-pressure decay: full flow until this many seconds of solid propellant remain. */
+export const SOLID_TAIL_TIME = 1;
+/** Gameplay wheel calibration in coast: capped gain, never authority without installed wheels/EC. */
+export const COAST_WHEEL_ACCELERATION = 0.16;
+export const COAST_WHEEL_MAX_GAIN = 32;
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 
@@ -151,6 +158,7 @@ export function igniteEngine(v: VesselState, p: PartState, events?: VesselEvent[
   for (const k in m.propellants) if (availableResource(v, p.uid, k as ResourceId) <= 0) return false;
   if (st.ignitionsLeft > 0) st.ignitionsLeft -= 1;
   st.ignited = true;
+  st.spooledUp = undefined;
   st.flamedOut = false;
   events?.push({ type: 'engineIgnited', vesselId: v.id, partUid: p.uid });
   return true;
@@ -164,6 +172,7 @@ export function shutdownEngine(p: PartState): boolean {
   p.engine.throttle = 0;
   p.engine.thrust = 0;
   p.engine.massFlow = 0;
+  p.engine.spooledUp = undefined;
   return true;
 }
 
@@ -178,20 +187,28 @@ function perpBasis(d: Vec3): [Vec3, Vec3] {
  * Gimbal deflection for a torque command c (body). Uses the gradient of torque.c w.r.t. the two
  * deflection angles, normalised by the lever arm, so torque is ~linear in the command.
  */
-export function gimbalDirection(v: VesselState, p: PartState, m: EngineModule, control: Vec3): { dir: Vec3; a: number; b: number } {
+export function gimbalDirection(v: VesselState, p: PartState, m: EngineModule, control: Vec3, dt?: number): { dir: Vec3; a: number; b: number } {
   const d = normalize(qRotate(p.rotation, m.thrustDirection));
   const range = m.gimbalRange * gimbalScale(p);
-  if (range <= 0) return { dir: d, a: 0, b: 0 };
+  if (range <= 0 && !(dt !== undefined && p.engine && (p.engine.gimbal.a || p.engine.gimbal.b))) return { dir: d, a: 0, b: 0 };
   const r = sub(p.position, v.com);
   const L = length(r);
-  if (L < 1e-3) return { dir: d, a: 0, b: 0 };
+  if (L < 1e-3 && !(dt !== undefined && p.engine && (p.engine.gimbal.a || p.engine.gimbal.b))) return { dir: d, a: 0, b: 0 };
   const [ea, eb] = perpBasis(d);
-  let da = (range * dot(cross(r, ea), control)) / L;
-  let db = (range * dot(cross(r, eb), control)) / L;
+  let da = L >= 1e-3 ? (range * dot(cross(r, ea), control)) / L : 0;
+  let db = L >= 1e-3 ? (range * dot(cross(r, eb), control)) / L : 0;
   const mag = Math.hypot(da, db);
   if (mag > range) {
     da *= range / mag;
     db *= range / mag;
+  }
+  if (dt !== undefined && p.engine) {
+    const g = p.engine.gimbal;
+    const deltaA = da - g.a, deltaB = db - g.b;
+    const travel = Math.hypot(deltaA, deltaB);
+    const fraction = travel > 0 ? Math.min(1, GIMBAL_SLEW_RATE * dt / travel) : 1;
+    da = g.a + deltaA * fraction;
+    db = g.b + deltaB * fraction;
   }
   const dir = normalize(add(d, add(scale(ea, Math.tan(da)), scale(eb, Math.tan(db)))));
   return { dir, a: da, b: db };
@@ -245,6 +262,19 @@ export function stepEngines(
     }
     const target = targetThrottle(m, throttleCmd);
     st.throttle = spoolThrottle(st.throttle, target, throttleTimeConstant(m, st, target), dt);
+    if (isSolidMotor(m)) {
+      // Solid fuel has local ('none') crossfeed; read the grain directly, without new flow-group arrays.
+      const fuel = (p.resources.solidFuel ?? 0) * v.resourceDefs.solidFuel.density;
+      const fullFlow = maxMassFlow(m) * thrustLimit(p);
+      // sqrt(fuel) gives a finite pressure tail (about two seconds), with no last-step thrust spike.
+      const tail = fullFlow > 0 ? fuel / (fullFlow * SOLID_TAIL_TIME) : 1;
+      st.throttle = Math.min(1, Math.sqrt(tail));
+      if (fuel <= 0) {
+        st.ignited = false; st.flamedOut = true;
+        st.thrust = 0; st.massFlow = 0;
+        events.push({ type: 'flameout', vesselId: v.id, partUid: p.uid });
+      }
+    }
     // The start-up transient ends once the engine first reaches a commanded (non-zero) setting.
     if (!st.spooledUp && target > 0 && st.throttle >= target - SPOOL_CUTOFF) st.spooledUp = true;
     // A commanded cut ends once the flow has decayed below the cutoff; otherwise the exponential lag never
@@ -298,8 +328,8 @@ export function stepEngines(
     // Average thrust over the step (partial supply on the final step scales thrust).
     const thrust = st.massFlow * st.isp * G0;
     st.thrust = f < 1 ? 0 : thrust;
-    const g = gimbalDirection(v, p, m, control);
-    st.gimbal = { a: g.a, b: g.b };
+    const g = gimbalDirection(v, p, m, control, dt);
+    st.gimbal.a = g.a; st.gimbal.b = g.b;
     const F = scale(g.dir, thrust);
     loads?.push({ partUid: p.uid, point: p.position, force: F });
     force = add(force, F);
@@ -418,19 +448,36 @@ function wheelCommand(p: PartState, control: Vec3, split?: { pilot: Vec3; sas: V
   return { x: clamp(raw.x, -1, 1), y: clamp(raw.y, -1, 1), z: clamp(raw.z, -1, 1) };
 }
 
+const installedWheelTorque = new WeakMap<VesselState['cache'], number>();
+function wheelTorque(v: VesselState): number {
+  let total = installedWheelTorque.get(v.cache);
+  if (total === undefined) {
+    total = 0;
+    for (const p of v.parts) for (const m of p.def.modules) if (m.type === 'reactionWheel') total += m.torque;
+    installedWheelTorque.set(v.cache, total);
+  }
+  return total;
+}
+function wheelGain(v: VesselState, inertia: number, total: number): number {
+  return v.telemetry.thrust > 1 || total <= 0 ? 1
+    : Math.max(1, Math.min(COAST_WHEEL_MAX_GAIN, COAST_WHEEL_ACCELERATION * inertia / total));
+}
+
 /** Reaction wheel torque (body) for a command; draws EC. Per-part modes (tweaks) choose pilot and/or SAS input. */
 export function stepReactionWheels(v: VesselState, control: Vec3, dt: number, loads?: PartLoad[], split?: { pilot: Vec3; sas: Vec3 }): ActuatorOutput {
   const zero = { forceBody: v3(), torqueBody: v3() };
   let torque = v3();
   let need = 0;
   const applied: { p: PartState; t: Vec3 }[] = [];
+  const total = wheelTorque(v);
   for (const p of v.parts)
     for (const m of p.def.modules)
       if (m.type === 'reactionWheel') {
         const c = wheelCommand(p, control, split);
         const usage = Math.max(Math.abs(c.x), Math.abs(c.y), Math.abs(c.z));
         if (usage <= 0) continue;
-        const t = scale(c, (m as ReactionWheelModule).torque);
+        const t = { x: c.x * m.torque * wheelGain(v, v.inertia[0], total),
+          y: c.y * m.torque * wheelGain(v, v.inertia[4], total), z: c.z * m.torque * wheelGain(v, v.inertia[8], total) };
         torque = add(torque, t);
         need += (m as ReactionWheelModule).ecRate * usage * dt;
         applied.push({ p, t });
@@ -456,5 +503,6 @@ export function wheelAuthority(v: VesselState): Vec3 {
     ec += (m as ReactionWheelModule).ecRate;
   }
   if (ec > 0 && totalResource(v, 'electricCharge') <= 0) t = 0;
-  return { x: t, y: t, z: t };
+  const total = wheelTorque(v);
+  return { x: t * wheelGain(v, v.inertia[0], total), y: t * wheelGain(v, v.inertia[4], total), z: t * wheelGain(v, v.inertia[8], total) };
 }
