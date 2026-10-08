@@ -1,8 +1,11 @@
 // Windows Chrome quiet-impact CPU profile. From WSL, hold /tmp/wsp-gpu.lock.
-// node.exe wp1-impact-profile.mjs <base> [label] [C:/wsp-tools/shots/wp1]
+// node.exe wp1-impact-profile.mjs <base> [label] [C:/wsp-tools/shots/wp1] [cpu|trace|quiet]
+// cpu: 200 us V8 samples (slows the page; attribution only). trace: Chrome timeline trace of the renderer (native
+// work inside long tasks). quiet: no instrumentation beyond the long-task observer and rAF gaps.
 import { chromium } from 'playwright-core';
 import { mkdirSync, writeFileSync } from 'node:fs';
-const [base,label='after',out='C:/wsp-tools/shots/wp1'] = process.argv.slice(2);
+import { gzipSync } from 'node:zlib';
+const [base,label='after',out='C:/wsp-tools/shots/wp1',mode='cpu'] = process.argv.slice(2);
 mkdirSync(out,{recursive:true});
 const browser=await chromium.connectOverCDP('http://127.0.0.1:9333');
 const context=await browser.newContext({viewport:{width:1600,height:900},deviceScaleFactor:2,serviceWorkers:'block'});
@@ -13,7 +16,7 @@ await context.addInitScript(()=>{
 const page=await context.newPage(), errors=[];
 page.on('pageerror',e=>errors.push(e.message));
 page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
-const report={label,base,errors};
+const report={label,base,mode,errors};
 async function load(query='') {
   await page.goto(`${base}/?flight=stock-meridian${query}`);
   await page.waitForFunction(()=>window.__flight && !document.querySelector('.loading-screen'),null,{timeout:120000});
@@ -41,7 +44,9 @@ async function prepareCrash() {
 }
 try {
   await load();await prepareCrash();await page.waitForTimeout(400);
-  const cdp=await context.newCDPSession(page);await cdp.send('Performance.enable');await cdp.send('Profiler.enable');await cdp.send('Profiler.setSamplingInterval',{interval:200});await cdp.send('Profiler.start');
+  const cdp=await context.newCDPSession(page);await cdp.send('Performance.enable');
+  if(mode==='cpu'){await cdp.send('Profiler.enable');await cdp.send('Profiler.setSamplingInterval',{interval:200});await cdp.send('Profiler.start');}
+  if(mode==='trace')await cdp.send('Tracing.start',{transferMode:'ReturnAsStream',traceConfig:{recordMode:'recordAsMuchAsPossible',includedCategories:['toplevel','devtools.timeline','disabled-by-default-devtools.timeline','blink.user_timing','v8.execute','gpu','blink','cc','viz'],excludedCategories:['*']}});
   report.metrics=(await cdp.send('Performance.getMetrics')).metrics;
   await page.evaluate(()=>{window.__wp1.tasks=[];window.__wp1.gaps=[];window.__flight.paused=false;});await page.waitForTimeout(280);
   report.fragments=await page.evaluate(()=>{
@@ -55,7 +60,15 @@ try {
     return {live:f.effects.debris.activeCount,visibleAtLeast4px:visible};
   });
   await page.waitForTimeout(4220);
-  writeFileSync(`${out}/${label}-impact.cpuprofile`,JSON.stringify((await cdp.send('Profiler.stop')).profile));await cdp.detach();
+  if(mode==='cpu')writeFileSync(`${out}/${label}-impact.cpuprofile`,JSON.stringify((await cdp.send('Profiler.stop')).profile));
+  if(mode==='trace'){
+    const done=new Promise(r=>cdp.once('Tracing.tracingComplete',r));await cdp.send('Tracing.end');const {stream}=await done;let text='';
+    for(;;){const c=await cdp.send('IO.read',{handle:stream,size:1<<22});text+=c.base64Encoded?Buffer.from(c.data,'base64').toString():c.data;if(c.eof)break;}
+    await cdp.send('IO.close',{handle:stream});const events=JSON.parse(text).traceEvents;let pid;
+    for(const e of events)for(const f of e.args?.data?.frames??[])if(f.url?.startsWith(base))pid=f.processId??e.pid;
+    writeFileSync(`${out}/${label}-impact.trace.json.gz`,gzipSync(JSON.stringify({metadata:{pagePid:pid,pageUrl:base},traceEvents:events.filter(e=>e.pid===pid||e.ph==='M')})));
+  }
+  await cdp.detach();
   report.impact=await page.evaluate(()=>window.__wp1);
 } finally {
   writeFileSync(`${out}/${label}-impact-profile.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));await context.close();await browser.close();
