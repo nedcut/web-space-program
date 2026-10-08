@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import type { FlightController } from '../controller';
 import { frameProfiler, PROFILE_HISTORY, PROFILE_SECTIONS, type ProfileSummary } from '../../util/frameProfiler';
 import { useGame } from '../../game/store';
@@ -44,6 +44,7 @@ export function PerfOverlay({ controller: c }: { controller: FlightController })
   const adaptive = useGame((s) => s.settings.adaptiveQuality);
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [copied, setCopied] = useState(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -73,10 +74,26 @@ export function PerfOverlay({ controller: c }: { controller: FlightController })
 
   const f = (n: number, d = 1) => (Number.isFinite(n) ? n.toFixed(d) : '–');
   const s = snap?.s;
+  // Drag by the header; offset is relative to the CSS anchor and clamped so the panel stays on screen.
+  const drag = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const panel = e.currentTarget.parentElement!.getBoundingClientRect();
+    const start = offset;
+    const move = (ev: globalThis.PointerEvent) => {
+      const dx = Math.min(Math.max(ev.clientX - e.clientX, -panel.left), window.innerWidth - panel.right);
+      const dy = Math.min(Math.max(ev.clientY - e.clientY, -panel.top), window.innerHeight - panel.top - 40);
+      setOffset({ x: start.x + dx, y: start.y + dy });
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  };
   return (
     <div className="panel mono perf-overlay" role="status" aria-label="Performance overlay"
-      style={{ position: 'absolute', top: 64, right: 12, width: 290, padding: 10, fontSize: 11, lineHeight: 1.45, zIndex: 30, pointerEvents: 'auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      style={{ position: 'absolute', top: 64, right: 12, width: 290, padding: 10, fontSize: 11, lineHeight: 1.45, zIndex: 30, pointerEvents: 'auto', transform: `translate(${offset.x}px, ${offset.y}px)` }}>
+      <div className="perf-overlay-drag" title="Drag to move" onPointerDown={drag} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <strong style={{ fontSize: 13 }}>{s ? f(s.fps, 0) : '–'} fps</strong>
         <span style={{ color: 'var(--text-dim)' }}>{quality}{adaptive ? ' · adaptive' : ''} · F8</span>
       </div>

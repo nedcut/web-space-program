@@ -223,3 +223,5 @@ html[data-ui-hidden='true'] :is(.tutorial-panel, .scenario-flight, .multiplayer-
   .hud-left { width: 236px; }
   .stg { width: 196px; }
 }
+.perf-overlay-drag { cursor: grab; user-select: none; touch-action: none; }
+.perf-overlay-drag:active { cursor: grabbing; }
