@@ -18,3 +18,13 @@ it('closes already decoded strips and the full image when cropping fails', async
   await expect(cutImageStrips(new Blob(), 64)).rejects.toThrow('decode failed');
   expect(full.close).toHaveBeenCalledOnce(); expect(strip.close).toHaveBeenCalledOnce();
 });
+it('copies cropped strips through a 2D canvas in Firefox, whose texture upload ignores the crop', async () => {
+  const full = { width: 8, height: 4, close: vi.fn() }, crop = { width: 8, height: 2, close: vi.fn() }, owned = { width: 8, height: 2 };
+  const drawImage = vi.fn();
+  vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Macintosh) Gecko/20100101 Firefox/143.0 Zen/1.0' });
+  vi.stubGlobal('OffscreenCanvas', class { getContext() { return { drawImage }; } transferToImageBitmap() { return owned; } });
+  vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValueOnce(full).mockResolvedValue(crop));
+  const result = await cutImageStrips(new Blob(), 8 * 4 * 2);
+  expect(result.strips.map(s => s.bitmap)).toEqual([owned, owned]);
+  expect(drawImage).toHaveBeenCalledTimes(2); expect(crop.close).toHaveBeenCalledTimes(2);
+});
