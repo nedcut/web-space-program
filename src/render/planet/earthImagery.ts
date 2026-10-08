@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { QualitySettings } from '../core/quality';
+import { registerOffscreenPass } from '../core/offscreenWarmup';
 import { decodeImagery, releaseImagery } from './imageryDecode';
 import type { ImageStrips as Strips } from './imageStrips';
 
@@ -256,6 +257,7 @@ export class EarthImagery {
   private failedLevels = new Set<string>();
   private mergeScene: THREE.Scene | null = null;
   private mergeMat: THREE.ShaderMaterial | null = null;
+  private unregisterMerge: (() => void) | null = null;
   private readonly mergeCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private pendingTextures: THREE.Texture[] = [];
   private pendingTarget: THREE.WebGLRenderTarget | null = null;
@@ -272,6 +274,8 @@ export class EarthImagery {
       uEarthBlend: { value: new THREE.Vector2(1e9, 2e9) },
     };
     if (typeof fetch === 'undefined' || typeof createImageBitmap === 'undefined') { this.settled = this.cloudSourceSettled = true; return; }
+    // Built up front so the flight warm-up compiles the merge program behind the loading screen.
+    this.mergePass();
     loadManifest().then((m) => {
       if (this.disposed) return;
       const cap = Math.min(maxTextureSize(), opts.maxLevel ? (m.levels.find((x) => x.id === opts.maxLevel)?.width ?? Infinity) : Infinity);
@@ -450,18 +454,9 @@ export class EarthImagery {
 
   private mergeStrip(renderer: THREE.WebGLRenderer, rt: THREE.WebGLRenderTarget, day: THREE.Texture, water: THREE.Texture,
     t: number, tiles: number, y: number, rows: number, last: boolean): void {
-    if (!this.mergeMat) {
-      this.mergeMat = new THREE.ShaderMaterial({
-        uniforms: { uDay: { value: null }, uWater: { value: null }, uRect: { value: new THREE.Vector4() } },
-        vertexShader: MERGE_VERT, fragmentShader: MERGE_FRAG, depthTest: false, depthWrite: false,
-      });
-      const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.mergeMat);
-      quad.frustumCulled = false;
-      this.mergeScene = new THREE.Scene();
-      this.mergeScene.add(quad);
-    }
+    const merge = this.mergePass();
     const tw = rt.width / tiles;
-    const u = this.mergeMat.uniforms;
+    const u = merge.material.uniforms;
     u.uDay.value = day;
     u.uWater.value = water;
     u.uRect.value.set(t * tw, tw, rt.width, rt.height);
@@ -474,12 +469,27 @@ export class EarthImagery {
     const prevAutoClear = renderer.autoClear;
     renderer.autoClear = false;
     renderer.setRenderTarget(rt);
-    renderer.render(this.mergeScene!, this.mergeCam);
+    renderer.render(merge.scene, this.mergeCam);
     renderer.setRenderTarget(prevTarget);
     renderer.autoClear = prevAutoClear;
     rt.viewport.set(0, 0, rt.width, rt.height);
     rt.scissor.copy(rt.viewport);
     rt.scissorTest = false;
+  }
+
+  private mergePass(): { scene: THREE.Scene; material: THREE.ShaderMaterial } {
+    if (!this.mergeMat || !this.mergeScene) {
+      this.mergeMat = new THREE.ShaderMaterial({
+        uniforms: { uDay: { value: null }, uWater: { value: null }, uRect: { value: new THREE.Vector4() } },
+        vertexShader: MERGE_VERT, fragmentShader: MERGE_FRAG, depthTest: false, depthWrite: false,
+      });
+      const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.mergeMat);
+      quad.frustumCulled = false;
+      this.mergeScene = new THREE.Scene();
+      this.mergeScene.add(quad);
+      this.unregisterMerge = registerOffscreenPass(quad.geometry, this.mergeMat);
+    }
+    return { scene: this.mergeScene, material: this.mergeMat };
   }
 
   private loadClouds(): void {
@@ -511,6 +521,8 @@ export class EarthImagery {
     this.pendingTextures.forEach((t) => t.dispose());
     this.pendingTarget?.dispose();
     if (this.shown) { this.shown.rt.dispose(); this.shown.night?.dispose(); this.shown = null; }
+    this.unregisterMerge?.();
+    this.unregisterMerge = null;
     this.mergeMat?.dispose();
     this.mergeScene?.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
     this.releaseCloudSource();

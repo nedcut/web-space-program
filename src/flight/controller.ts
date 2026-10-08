@@ -22,6 +22,7 @@ import { PHYSICS_DT, World, type WorldVessel } from '../game/world';
 import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
 import { RenderPipeline, getQuality, type QualityId } from '../render/core';
 import { compileInSlices } from '../render/core/compileInSlices';
+import { offscreenWarmup } from '../render/core/offscreenWarmup';
 import type { ExtraOrbit } from '../render/map/MapView';
 import { MapView } from '../render/map/MapView';
 import { FlightMap } from './map/FlightMap';
@@ -889,7 +890,13 @@ export class FlightController {
         renderTarget: this.pipeline.composer.readBuffer,
         cancelled: () => this.warmup !== 'compiling',
       });
-      Promise.all([map, flight]).then(finish, finish);
+      // Off-screen bakes/merges would otherwise compile on their first (mid-flight) step. They draw lightless scenes
+      // into render targets, and light counts are part of three's program key: compile against an empty scene.
+      const offscreen = compileInSlices(r, [offscreenWarmup], this.cam.camera, new THREE.Scene(), {
+        renderTarget: this.pipeline.composer.readBuffer,
+        cancelled: () => this.warmup !== 'compiling',
+      });
+      Promise.all([map, flight, offscreen]).then(finish, finish);
       // Never hold the loading screen on a driver that does not report completion.
       this.warmupTimer = window.setTimeout(finish, 15000);
     } catch {
