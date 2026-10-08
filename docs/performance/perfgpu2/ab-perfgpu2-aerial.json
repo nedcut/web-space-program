@@ -1,0 +1,184 @@
+{
+ "pad": {
+  "A": [
+   {
+    "mode": "flight",
+    "loopFps": 20.449,
+    "loopGpuMs": 5.24,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 708,
+     "triangles": 2290599,
+     "points": 9000,
+     "programs": 87,
+     "textures": 104,
+     "geometries": 857
+    },
+    "passes": {
+     "upscale": 0.338,
+     "smaa": 0.273,
+     "tonemap": 0.044,
+     "bloom": 0.149,
+     "scene": 3.254
+    },
+    "fencedWall": 8.17,
+    "fenced": 3.464,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-perfgpu2-aerial-A-pad-r1-pad.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "loopFps": 43.384,
+    "loopGpuMs": 4.017,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 709,
+     "triangles": 2292903,
+     "points": 9000,
+     "programs": 87,
+     "textures": 104,
+     "geometries": 857
+    },
+    "passes": {
+     "upscale": 0.333,
+     "smaa": 0.272,
+     "tonemap": 0.044,
+     "bloom": 0.144,
+     "scene": 2.848
+    },
+    "fencedWall": 4.705,
+    "fenced": 3.016,
+    "glError": 0,
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "loopFps": 54.746,
+    "loopGpuMs": 3.428,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 709,
+     "triangles": 2292903,
+     "points": 9000,
+     "programs": 87,
+     "textures": 104,
+     "geometries": 857
+    },
+    "passes": {
+     "upscale": 0.332,
+     "smaa": 0.272,
+     "tonemap": 0.043,
+     "bloom": 0.143,
+     "scene": 2.462
+    },
+    "fencedWall": 4.015,
+    "fenced": 3.068,
+    "glError": 0,
+    "errors": []
+   }
+  ],
+  "B": [
+   {
+    "mode": "flight",
+    "loopFps": 20.342,
+    "loopGpuMs": 4.593,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 708,
+     "triangles": 2290599,
+     "points": 9000,
+     "programs": 87,
+     "textures": 104,
+     "geometries": 779
+    },
+    "passes": {
+     "upscale": 0.337,
+     "smaa": 0.273,
+     "tonemap": 0.044,
+     "bloom": 0.147,
+     "scene": 3.083
+    },
+    "fencedWall": 5.665,
+    "fenced": 3.236,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-perfgpu2-aerial-B-pad-r1-pad.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "loopFps": 57.731,
+    "loopGpuMs": 3.274,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 709,
+     "triangles": 2292903,
+     "points": 9000,
+     "programs": 87,
+     "textures": 105,
+     "geometries": 857
+    },
+    "passes": {
+     "upscale": 0.332,
+     "smaa": 0.272,
+     "tonemap": 0.043,
+     "bloom": 0.142,
+     "scene": 2.343
+    },
+    "fencedWall": 3.37,
+    "fenced": 2.715,
+    "glError": 0,
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "loopFps": 55.685,
+    "loopGpuMs": 3.238,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 709,
+     "triangles": 2292903,
+     "points": 9000,
+     "programs": 87,
+     "textures": 105,
+     "geometries": 857
+    },
+    "passes": {
+     "upscale": 0.332,
+     "smaa": 0.272,
+     "tonemap": 0.043,
+     "bloom": 0.142,
+     "scene": 2.382
+    },
+    "fencedWall": 3.525,
+    "fenced": 2.808,
+    "glError": 0,
+    "errors": []
+   }
+  ]
+ }
+}

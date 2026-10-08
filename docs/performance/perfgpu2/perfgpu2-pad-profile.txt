@@ -1,0 +1,42 @@
+marks: wsp:flight:construct:start@3642+0 wsp:flight:ready@13437+0 wsp:flight:construct@3642+331 wsp:flight:shaderWarmup@4826+1119 wsp:flight:firstFrame@5946+182
+
+== self time (total 3395 ms profiled)
+    30.4 ms  Gu.renderBufferDirect BufferGeometryUtils:4220
+    20.2 ms  Tt BufferGeometryUtils:4220
+    19.8 ms  l PlanetRenderer:2535
+    19.6 ms  gt BufferGeometryUtils:4220
+    18.3 ms  multiplyMatrices BufferGeometryUtils:1
+    17.8 ms  placeMesh PlanetRenderer:2535
+    12.6 ms  kc BufferGeometryUtils:4118
+    11.9 ms  updateMatrixWorld BufferGeometryUtils:1
+    11.5 ms  bindVertexArray :0
+     9.6 ms  Dc BufferGeometryUtils:4118
+
+== inclusive
+   390.0 ms  frame FlightScene:152
+   366.8 ms  render FlightScene:152
+   365.2 ms  renderAt FlightScene:152
+   299.9 ms  Gu.render BufferGeometryUtils:4220
+   298.4 ms  render PlanetRenderer:1003
+   297.8 ms  render PlanetRenderer:356
+   192.0 ms  _t BufferGeometryUtils:4220
+   190.6 ms  Gu.renderBufferDirect BufferGeometryUtils:4220
+   190.0 ms  yt BufferGeometryUtils:4220
+   110.5 ms  Tt BufferGeometryUtils:4220
+
+== 0 long tasks, 63 frames > 25 ms (of 63)
+frame @16208 383 ms
+    self:
+    incl:
+frame @16591 50 ms
+    self:
+    incl:
+frame @16641 50 ms
+    self: 6ms Tt BufferGeometryUtils:4220 | 2ms kc BufferGeometryUtils:4118 | 2ms l PlanetRenderer:2535 | 1ms gt BufferGeometryUtils:4220
+    incl: 18ms renderAt FlightScene:152 | 18ms render FlightScene:152 | 16ms Gu.render BufferGeometryUtils:4220 | 16ms render PlanetRenderer:356
+frame @16691 50 ms
+    self: 7ms Dc BufferGeometryUtils:4118 | 1ms c BufferGeometryUtils:4072 | 1ms o BufferGeometryUtils:5 | 1ms place PlanetRenderer:2535
+    incl: 11ms renderAt FlightScene:152 | 11ms render FlightScene:152 | 10ms Gu.render BufferGeometryUtils:4220 | 10ms render PlanetRenderer:356
+frame @16741 50 ms
+    self: 3ms x index:2 | 2ms c BufferGeometryUtils:4072 | 1ms Gu.renderBufferDirect BufferGeometryUtils:4220 | 1ms _t BufferGeometryUtils:4220
+    incl: 6ms Gu.render BufferGeometryUtils:4220 | 6ms render PlanetRenderer:356 | 6ms render PlanetRenderer:1003 | 6ms renderAt FlightScene:152

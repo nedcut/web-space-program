@@ -1,0 +1,438 @@
+{
+  "label": "perfgpu2-complete-profile",
+  "base": "http://172.24.204.38:5348",
+  "dpr": 2,
+  "quality": "medium",
+  "settings": {
+    "quality": "medium",
+    "shadows": true,
+    "bloom": true,
+    "clouds": true,
+    "renderScale": 1,
+    "scatter": true,
+    "adaptiveQuality": false,
+    "graphicsProfile": 99,
+    "showFps": false,
+    "autoSaveInterval": 0,
+    "masterVolume": 0
+  },
+  "size": "1470x920",
+  "date": "2026-10-08T02:52:19.443Z",
+  "cases": {
+    "pad": {
+      "mode": "flight",
+      "sceneState": {
+        "paused": true,
+        "ut": 964051208.7799916,
+        "planets": [
+          {
+            "body": "earth",
+            "idle": true,
+            "stats": {
+              "mode": "near",
+              "chunks": 380,
+              "meshes": 794,
+              "inflight": 0,
+              "queued": 0,
+              "projectedRadiusPx": 1126.6526164186198,
+              "altitude": 15.647743239649571
+            },
+            "imagery": "8k"
+          }
+        ]
+      },
+      "loopFps": 54.551,
+      "loopGpuMs": 2.994,
+      "canvas": [
+        2940,
+        1840
+      ],
+      "pixelRatio": 1.4,
+      "stats": {
+        "calls": 238,
+        "triangles": 2290653,
+        "points": 9000,
+        "programs": 90,
+        "textures": 108,
+        "geometries": 133
+      },
+      "passes": {
+        "upscale": 0.339,
+        "smaa": 0.272,
+        "tonemap": 0.043,
+        "bloom": 0.142,
+        "scene": 2.153
+      },
+      "fencedWall": 3.065,
+      "fenced": 2.526,
+      "otherNames": [
+        "ShaderMaterial:uPixelRatio/uScale",
+        "ShaderMaterial:uMilky/uReady/uIntensity",
+        "ShaderMaterial:opacity",
+        "ShaderMaterial:time/groundNormal/groundOffset",
+        "ShaderMaterial:uTime/uIntensity/uWake/uColorHot",
+        "ShaderMaterial:uTime/uIntensity/uCore/uLimb",
+        "ShaderMaterial:color/sun"
+      ],
+      "families": {
+        "bloom": 0.137,
+        "smaa": 0.245,
+        "shadowMap": 0.098,
+        "terrain": 0.479,
+        "ocean": 0.09,
+        "farSphere": -0.017,
+        "sky": 0.227,
+        "clouds": 0.112,
+        "volumes": 0.018,
+        "scatter": 0.031,
+        "vegetation": 0.289,
+        "siteAerial": -0.004,
+        "partsPBR": 0.567,
+        "plumes": -0.05,
+        "glare": 0.057,
+        "basic": -0.022,
+        "other": 0.017,
+        "emptyScene": 0.454
+      },
+      "familyCounts": {
+        "terrain": 2,
+        "ocean": 1,
+        "farSphere": 2,
+        "sky": 1,
+        "clouds": 1,
+        "volumes": 2,
+        "scatter": 6,
+        "vegetation": 6,
+        "siteAerial": 7,
+        "partsPBR": 47,
+        "plumes": 2,
+        "glare": 1,
+        "basic": 26
+      },
+      "glError": 0,
+      "shot": "C:\\wsp-tools\\shots\\perfgpu\\perfgpu2-complete-profile-pad.png",
+      "errors": []
+    },
+    "ascent": {
+      "mode": "flight",
+      "sceneState": {
+        "paused": true,
+        "ut": 964051243.7199583,
+        "planets": [
+          {
+            "body": "earth",
+            "idle": true,
+            "stats": {
+              "mode": "near",
+              "chunks": 206,
+              "meshes": 634,
+              "inflight": 0,
+              "queued": 0,
+              "projectedRadiusPx": 1121.1109051832339,
+              "altitude": 3213.248572712764
+            },
+            "imagery": "8k"
+          }
+        ]
+      },
+      "loopFps": 59.707,
+      "loopGpuMs": 3.36,
+      "canvas": [
+        2940,
+        1840
+      ],
+      "pixelRatio": 1.4,
+      "stats": {
+        "calls": 272,
+        "triangles": 870342,
+        "points": 9000,
+        "programs": 91,
+        "textures": 114,
+        "geometries": 188
+      },
+      "passes": {
+        "upscale": 0.212,
+        "smaa": 0.256,
+        "tonemap": 0.043,
+        "bloom": 0.14,
+        "scene": 2.631
+      },
+      "fencedWall": 2.945,
+      "fenced": 2.217,
+      "otherNames": [
+        "ShaderMaterial:uPixelRatio/uScale",
+        "ShaderMaterial:uMilky/uReady/uIntensity",
+        "ShaderMaterial:opacity",
+        "ShaderMaterial:time/groundNormal/groundOffset",
+        "ShaderMaterial:uTime/uIntensity/uWake/uColorHot",
+        "ShaderMaterial:uTime/uIntensity/uCore/uLimb",
+        "ShaderMaterial:color/sun"
+      ],
+      "families": {
+        "bloom": 0.114,
+        "smaa": 0.236,
+        "shadowMap": 0.053,
+        "terrain": 0.671,
+        "ocean": 0.289,
+        "farSphere": 0.006,
+        "sky": 0.351,
+        "clouds": 0.163,
+        "volumes": 0.043,
+        "scatter": 0.007,
+        "vegetation": 0.025,
+        "siteAerial": -0.003,
+        "partsPBR": 0.085,
+        "plumes": 0.058,
+        "glare": 0.069,
+        "basic": 0.021,
+        "other": 0.055,
+        "emptyScene": 0.45
+      },
+      "familyCounts": {
+        "terrain": 2,
+        "ocean": 1,
+        "farSphere": 2,
+        "sky": 1,
+        "clouds": 1,
+        "volumes": 2,
+        "scatter": 6,
+        "vegetation": 6,
+        "siteAerial": 7,
+        "partsPBR": 49,
+        "plumes": 4,
+        "glare": 1,
+        "basic": 26
+      },
+      "glError": 0,
+      "shot": "C:\\wsp-tools\\shots\\perfgpu\\perfgpu2-complete-profile-ascent.png",
+      "errors": []
+    },
+    "orbit": {
+      "mode": "flight",
+      "sceneState": {
+        "paused": true,
+        "ut": 964051206.5799937,
+        "planets": [
+          {
+            "body": "earth",
+            "idle": true,
+            "stats": {
+              "mode": "near",
+              "chunks": 136,
+              "meshes": 330,
+              "inflight": 0,
+              "queued": 0,
+              "projectedRadiusPx": 911.8276928373583,
+              "altitude": 150178.50354300835
+            },
+            "imagery": "8k"
+          }
+        ]
+      },
+      "loopFps": 59.954,
+      "loopGpuMs": 3.049,
+      "canvas": [
+        2940,
+        1840
+      ],
+      "pixelRatio": 1.4,
+      "stats": {
+        "calls": 183,
+        "triangles": 743766,
+        "points": 9000,
+        "programs": 88,
+        "textures": 108,
+        "geometries": 119
+      },
+      "passes": {
+        "upscale": 0.234,
+        "smaa": 0.255,
+        "tonemap": 0.04,
+        "bloom": 0.137,
+        "scene": 2.104
+      },
+      "fencedWall": 2.375,
+      "fenced": 2.128,
+      "otherNames": [
+        "ShaderMaterial:uPixelRatio/uScale",
+        "ShaderMaterial:uMilky/uReady/uIntensity",
+        "ShaderMaterial:opacity",
+        "ShaderMaterial:time/groundNormal/groundOffset",
+        "ShaderMaterial:uTime/uIntensity/uWake/uColorHot",
+        "ShaderMaterial:uTime/uIntensity/uCore/uLimb",
+        "ShaderMaterial:color/sun"
+      ],
+      "families": {
+        "bloom": 0.117,
+        "smaa": 0.209,
+        "shadowMap": 0.012,
+        "terrain": 0.462,
+        "ocean": 0.477,
+        "farSphere": -0.016,
+        "sky": 0.028,
+        "clouds": 0.509,
+        "volumes": 0.012,
+        "scatter": -0.007,
+        "vegetation": -0.024,
+        "siteAerial": -0.025,
+        "partsPBR": 0.059,
+        "plumes": -0.009,
+        "glare": -0.025,
+        "basic": -0.024,
+        "other": 0.05,
+        "emptyScene": 0.451
+      },
+      "familyCounts": {
+        "terrain": 2,
+        "ocean": 1,
+        "farSphere": 2,
+        "sky": 1,
+        "clouds": 1,
+        "volumes": 2,
+        "scatter": 6,
+        "vegetation": 6,
+        "siteAerial": 7,
+        "partsPBR": 47,
+        "plumes": 2,
+        "glare": 1,
+        "basic": 26
+      },
+      "glError": 0,
+      "shot": "C:\\wsp-tools\\shots\\perfgpu\\perfgpu2-complete-profile-orbit.png",
+      "errors": []
+    },
+    "map": {
+      "mode": "map",
+      "sceneState": {
+        "paused": true,
+        "ut": 964051206.4999938,
+        "planets": [
+          {
+            "body": "earth",
+            "idle": true,
+            "stats": {
+              "mode": "near",
+              "chunks": 135,
+              "meshes": 330,
+              "inflight": 0,
+              "queued": 0,
+              "projectedRadiusPx": 911.8276794333254,
+              "altitude": 150178.51511615806
+            },
+            "imagery": "8k"
+          }
+        ]
+      },
+      "loopFps": 59.943,
+      "loopGpuMs": 0.427,
+      "canvas": [
+        2940,
+        1840
+      ],
+      "pixelRatio": 2,
+      "stats": {
+        "calls": 32,
+        "triangles": 50056,
+        "points": 2808,
+        "programs": 88,
+        "textures": 95,
+        "geometries": 152
+      },
+      "fencedWall": 0.495,
+      "fenced": 0.332,
+      "glError": 0,
+      "shot": "C:\\wsp-tools\\shots\\perfgpu\\perfgpu2-complete-profile-map.png",
+      "errors": []
+    },
+    "moon": {
+      "mode": "flight",
+      "sceneState": {
+        "paused": true,
+        "ut": 964097799.3096657,
+        "planets": [
+          {
+            "body": "earth",
+            "idle": true,
+            "stats": {
+              "mode": "far",
+              "chunks": 0,
+              "meshes": 0,
+              "inflight": 0,
+              "queued": 0,
+              "projectedRadiusPx": 18.120243914311263,
+              "altitude": 38979535.163137205
+            },
+            "imagery": "8k"
+          }
+        ]
+      },
+      "loopFps": 60.199,
+      "loopGpuMs": 2.43,
+      "canvas": [
+        2940,
+        1840
+      ],
+      "pixelRatio": 1.4,
+      "stats": {
+        "calls": 358,
+        "triangles": 631561,
+        "points": 9000,
+        "programs": 78,
+        "textures": 92,
+        "geometries": 192
+      },
+      "passes": {
+        "upscale": 0.455,
+        "smaa": 0.255,
+        "tonemap": 0.042,
+        "bloom": 0.136,
+        "scene": 1.405
+      },
+      "fencedWall": 1.755,
+      "fenced": 1.27,
+      "otherNames": [
+        "ShaderMaterial:uPixelRatio/uScale",
+        "ShaderMaterial:uMilky/uReady/uIntensity",
+        "ShaderMaterial:opacity",
+        "ShaderMaterial:time/groundNormal/groundOffset",
+        "ShaderMaterial:uTime/uIntensity/uWake/uColorHot",
+        "ShaderMaterial:uTime/uIntensity/uCore/uLimb",
+        "ShaderMaterial:color/sun"
+      ],
+      "families": {
+        "bloom": 0.149,
+        "smaa": 0.195,
+        "shadowMap": 0.069,
+        "terrain": 0.376,
+        "ocean": -0.017,
+        "farSphere": 0.01,
+        "sky": -0.014,
+        "clouds": -0.03,
+        "volumes": -0.018,
+        "scatter": -0.001,
+        "partsPBR": 0.088,
+        "plumes": 0.04,
+        "glare": 0.007,
+        "basic": 0.027,
+        "other": 0.049,
+        "emptyScene": 0.451
+      },
+      "familyCounts": {
+        "terrain": 2,
+        "ocean": 1,
+        "farSphere": 2,
+        "sky": 1,
+        "clouds": 1,
+        "volumes": 2,
+        "scatter": 6,
+        "partsPBR": 27,
+        "plumes": 2,
+        "glare": 1,
+        "basic": 20
+      },
+      "glError": 0,
+      "shot": "C:\\wsp-tools\\shots\\perfgpu\\perfgpu2-complete-profile-moon.png",
+      "errors": []
+    }
+  }
+}

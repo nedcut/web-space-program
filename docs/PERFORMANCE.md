@@ -1380,3 +1380,88 @@ Copy report) is the next confirmation.
 
 Reproduce: `npx vite build && npx vite preview --port 5332 --strictPort --host`, baseline build on 5331, then
 `scripts/bench/gpu-passes-ab.sh medium http://<ip>:5331 http://<ip>:5332 "pad,ascent,orbit,map,moon,editor" 3 --quality medium`.
+
+# GPU pass 2 (2026-10-07–08, cx/perfgpu2)
+
+This pass follows the merged Earth imagery/lighting work. It reduces draw submission and redundant atmospheric work without changing preset resolution, imagery packs, terrain LOD, shadow settings or cloud octaves. The strict **Medium ≤2.5 ms target is narrowly missed on the pad**: 2.795→2.512 ms (−10.1%), with candidate samples 2.476/2.512/2.521 ms. The other four measured scenes meet the target. Low remains inexpensive; High and Ultra improve in the GPU-heavy scenes. This is evidence from five specific scenes, not a bound on every camera/weather/time-of-day combination.
+
+## Production measurements
+
+Main is pinned at `49e6b30ed46444906fd98d63fe8cc205d50cd9fd`; the candidate contains the implementation through `3fabddca`. Windows Chrome / RTX 3060 Ti, CDP 9333, 1470×920 CSS and DPR 2. Medium/High/Ultra output 2940×1840; their internal render ratios remain 1.4/1.7/2.0. Low retains its 735×460 flight canvas and browser stretch. Map uses its separate native-resolution path. Adaptive quality is disabled; Medium/High use the ready 8k Earth pack, and Ultra uses the available 8k fallback.
+
+Each cell below is the median of **three interleaved A→B pairs**, holding `flock /tmp/wsp-gpu.lock` across each pair. Flight is paused and imagery is ready. Low/Medium/High terrain is idle; Ultra has the streaming limitation below. Each fenced sample is a timer-query median of five 20-render batches with readback fences. Draw-submission gaps inside a batch are included; this is not pure fragment-shader ALU cost. Loop fps/pass timers are separate, noisy diagnostics rather than a 120 Hz or Apple result. All 120 final runs have no console errors, GL error 0 and paused simulation. Terrain is idle in 102 runs. Ultra pad/orbit/map have four in-flight builds on both sides in all three repetitions, despite stable selected geometry and matching rendered triangle counts. These Ultra cells describe a streaming scene, not a fully idle workload; ascent has a small geometry variation (10,642,085→10,612,133 median triangles). No samples are dropped.
+
+| Scene | Low ms | Medium ms | High ms | Ultra ms |
+|---|---:|---:|---:|---:|
+| Pad | 0.578 → 0.560 | 2.795 → 2.512 | 7.065 → 6.306 | 14.170 → 13.072 |
+| Ascent | 0.515 → 0.511 | 2.331 → 2.153 | 5.869 → 5.718 | 14.444 → 14.109 |
+| Orbit | 0.509 → 0.499 | 2.381 → 2.037 | 5.319 → 4.982 | 10.184 → 9.764 |
+| Map | 0.332 → 0.329 | 0.333 → 0.329 | 0.331 → 0.328 | 0.328 → 0.324 |
+| Moon | 0.490 → 0.504 | 1.392 → 1.257 | 2.584 → 2.438 | 4.977 → 4.749 |
+
+| Scene | Medium paired Δ ms | Candidate range ms | Draw calls A → B | Triangles A → B |
+|---|---:|---:|---:|---:|
+| Pad | -0.274 | 2.476–2.521 | 708 → 238 | 2290653 → 2290653 |
+| Ascent | -0.190 | 2.141–2.181 | 574 → 272 | 872646 → 872646 |
+| Orbit | -0.347 | 2.034–2.051 | 442 → 183 | 743766 → 743766 |
+| Map | -0.004 | 0.329–0.329 | 32 → 32 | 50056 → 50056 |
+| Moon | -0.114 | 1.253–1.298 | 557 → 358 | 631561 → 631561 |
+
+| Scene | Medium scene-pass ms A → B | Medium post-pass sum ms A → B |
+|---|---:|---:|
+| Pad | 2.526 → 2.806 | 0.788 → 0.790 |
+| Ascent | 2.620 → 2.575 | 0.652 → 0.653 |
+| Orbit | 2.837 → 2.073 | 0.668 → 0.667 |
+| Map | — → — | — → — |
+| Moon | 1.688 → 1.390 | 0.887 → 0.889 |
+
+Low Moon has a small aggregate median increase (0.490→0.504 ms), while its median paired change is −0.007 ms; the mixed individual changes do not establish a consistent regression or win. Low remains near parity overall.
+
+Scene/post timers above are taken in the running render loop; their medians need not sum to the fenced result. Post processing has not changed, so small differences are timing variation. The pad’s smoothed loop GPU timer is 3.401→3.584 ms despite the fenced improvement; that live-loop diagnostic does not establish a pacing win. Batch timing includes submission gaps, and the shared host/compositor/clock state also differs from the back-to-back render batches. Apple/live-frame validation remains necessary.
+
+## Where the work was
+
+The first production family profile found substantial terrain, launch-site/vessel PBR and vegetation work on the pad, plus redundant Earth sky integration behind opaque ground. A separate frozen profile showed ascent sky/cloud costs around 0.54/0.48 ms and orbit ocean/cloud around 0.62/0.33 ms. These family numbers are differences between whole-frame draws with a family hidden, not independent costs; negative deltas in the archived JSON are noise/interactions.
+
+The later diagnostic profile, before the last cloud/phase changes, measured pad terrain/ocean/sky/clouds/vegetation/PBR deltas of 0.48/0.09/0.23/0.11/0.29/0.57 ms. Ascent sky was ~0.35 ms; orbit ocean/clouds ~0.48/0.51 ms; map was cheap (~0.33 ms); Moon terrain was ~0.38 ms. `gpu-profile.sh` and `earthgfx-flightfam.mjs` also identified render/draw submission on the pad, but their CPU/readback wall-time results are not fenced GPU figures. Raw profiles and paired reports are in [performance/perfgpu2/](performance/perfgpu2/README.md).
+
+## Changes and isolated comparisons
+
+| Experiment | Three-pair fenced median A → B ms | Median paired Δ ms | Disposition |
+|---|---:|---:|---|
+| Adaptive daylight aerial integration, pad | 3.068 → 2.808 | −0.260 | Keep; all three improve |
+| Wider terrain/ocean/cloud math group, pad | 2.819 → 3.159 | −0.128 | Reject; aggregate median regresses, retain unfavorable sample |
+| Conservative sky occlusion, pad | 2.712 → 2.572 | −0.104 | Keep; two wins, one unfavorable pair |
+| Terrain/ocean batches, pad | 2.668 → 2.475 | −0.174 | Keep; all three improve |
+| Terrain/ocean batches, orbit | 2.023 → 2.017 | −0.010 | Essentially parity |
+| Terrain/ocean batches, Moon | 1.487 → 1.264 | −0.220 | Keep; all three improve |
+| Shared terrain texture fetches, pad | 2.529 → 2.527 | −0.016 | Equivalent compiler hint; no robust RTX win claimed |
+| Zero-coverage Medium cloud noise, pad | 2.530 → 2.493 | −0.045 | Keep; all three improve |
+| Mie `pow(x,1.5)` → `x*sqrt(x)`, pad | 2.494 → 2.496 | +0.002 | Equivalent algebra; no RTX win claimed |
+
+The incremental sky/batch tests share experimental shaders on both sides to isolate their changes. Those rejected shaders are removed from the final matrix. Early stationary pad runs were unpaused because the old wrapper split multiword `--pre` arguments; the wrapper now preserves arguments. Complete raw pairs, including unfavorable samples, are retained. The README identifies superseded partial matrices and recovered old reports.
+
+- **Aerial integration:** Low/Medium use one or two segments for short, almost level daylight rays whose radial span (including chord sag) is small relative to the aerosol scale height. This is an approximation for varying density; constant-density exponential integration is exact. Sunset/night, long horizon rays, increased haze step multipliers and High/Ultra keep the original budget. Airless bodies return before ray math.
+- **Sky overdraw:** discard only Earth rays certainly behind an inner sphere below the global terrain minimum, triangle sag and a precision margin. Compute the discriminant constant in CPU Float64. Limit the shortcut to cameras within two Earth radii to avoid distant Float32 discriminant errors; horizon pixels keep the original march.
+- **Terrain/ocean draw submission:** reusable `BatchedMesh` slots preserve geometry, normalized attributes, per-object frustum culling and floating-origin transforms. GPU capacity follows peak selected chunks, with slot reuse across LOD replacements. Low and browsers without `WEBGL_multi_draw` keep ordinary meshes; hub/map/portraits retain their existing path. On the pad draw calls fall 708→238 at exactly 2,290,653 triangles.
+- **Clouds/shader expressions:** Medium skips multiplicative detail noise on exactly zero baked coverage after derivative evaluation. Terrain colour/coverage and slope share matching texture reads while retaining cyclic accumulation order. The Mie algebra preserves the scattering model. No new half-precision planet arithmetic is shipped without Apple evidence.
+
+## Visual comparison and verification
+
+Main is on the left; candidate on the right. Normal comparisons show each frame at 1470 px wide (Retina viewing size); device-pixel crops are 1:1. No visible detail loss or missing ground/ocean/cloud geometry was found in these comparisons. Flight setup timing produces small altitude/camera, countdown and animated cloud/plume differences, so these are visual comparisons rather than identical-frame pixel proofs. The aerial approximation remains a model change, documented above.
+
+| Medium scene | Normal comparison | Device-pixel crop |
+|---|---|---|
+| Pad | [before/after](screenshots/perfgpu2/pad-before-after.jpg) | [crop](screenshots/perfgpu2/pad-crop-1to1.jpg) |
+| Ascent | [before/after](screenshots/perfgpu2/ascent-before-after.jpg) | [haze/coast crop](screenshots/perfgpu2/ascent-crop-1to1.jpg) |
+| Orbit | [before/after](screenshots/perfgpu2/orbit-before-after.jpg) | [ocean/cloud crop](screenshots/perfgpu2/orbit-crop-1to1.jpg) |
+| Map | [before/after](screenshots/perfgpu2/map-before-after.jpg) | [crop](screenshots/perfgpu2/map-crop-1to1.jpg) |
+| Moon | [before/after](screenshots/perfgpu2/moon-before-after.jpg) | [terrain crop](screenshots/perfgpu2/moon-crop-1to1.jpg) |
+
+Additional pad comparisons: [Low](screenshots/perfgpu2/low/pad-before-after.jpg), [High](screenshots/perfgpu2/high/pad-before-after.jpg), [Ultra](screenshots/perfgpu2/ultra/pad-before-after.jpg), with corresponding `pad-crop-1to1.jpg` files.
+
+Final checks on the unchanged candidate source: `npm run lint`, `npx tsc --noEmit`, `npx vitest run --maxWorkers=3` (**128 files, 1,390 passed, one skipped**), and `npm run build` pass. Added tests exercise the geometric sky bound, Float64 rebasing before matrix upload, normalized attributes, batch growth and 500 LOD slot replacements. The production build retains the existing large-chunk warning.
+
+## Remaining work
+
+The pad needs at least another 0.012 ms median reduction to cross the strict target, and a larger reduction for useful headroom. Its remaining PBR/vegetation work and ~0.8 ms post chain are worth investigating next; the current sky bound is deliberately conservative. Reversed float depth remains an architectural follow-up, as recorded in the previous pass. Ultra’s continuing pad/orbit/map terrain builds deserve a separate cache/streaming investigation. Real Apple/Safari timing, multi-draw support/performance, and sustained 120 Hz behavior are unmeasured. Sunset/night, thick haze, distant views and other bodies retain safeguards but are outside this five-scene timing matrix. No claim of Mac frame rate is made from RTX scaling alone.

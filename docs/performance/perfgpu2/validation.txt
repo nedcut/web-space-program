@@ -1,0 +1,39 @@
+Validation of the frozen candidate source (implementation through 3fabddca).
+All four commands completed successfully in one sequential locked run.
+
+npm run lint — exit 0
+
+> web-space-program@0.1.0 lint
+> eslint . --max-warnings=0 && node scripts/check-layering.mjs
+
+Simulation layering verified across 70 modules (static bodies facade exception documented).
+
+npx tsc --noEmit — exit 0
+
+
+npx vitest run --maxWorkers=3 — exit 0
+ Test Files  128 passed (128)
+      Tests  1390 passed | 1 skipped (1391)
+   Start at  23:14:26
+   Duration  151.89s (tests 96%, import 2%, transform 1%, setup 1%)
+
+
+npm run build — exit 0
+dist/assets/universe-B7cV0xko.js              71.57 kB │ gzip:  27.84 kB
+dist/assets/MapContextMenu-DYgtBuQ-.js        87.10 kB │ gzip:  28.84 kB
+dist/assets/EditorScene-DOsK9FKg.js          103.02 kB │ gzip:  33.79 kB
+dist/assets/world-9jUZTVe-.js                125.49 kB │ gzip:  42.84 kB
+dist/assets/parts-w15tMX9D.js                154.06 kB │ gzip:  55.14 kB
+dist/assets/index-Cu8jx5At.js                211.04 kB │ gzip:  66.76 kB
+dist/assets/PlanetRenderer-BHuP7dPr.js       258.51 kB │ gzip: 101.32 kB
+dist/assets/FlightScene-BVp56CZK.js          259.06 kB │ gzip:  86.81 kB
+dist/assets/BufferGeometryUtils-z5KbeUJl.js  624.39 kB │ gzip: 156.82 kB
+
+✓ built in 557ms
+
+PWA v1.3.0
+mode      generateSW
+precache  108 entries (31863.12 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-9c191d2f.js

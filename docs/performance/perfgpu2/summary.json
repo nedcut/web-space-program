@@ -1,0 +1,530 @@
+{
+  "low": {
+    "pad": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 0.578,
+      "after": 0.56,
+      "beforeSamples": [
+        0.578,
+        0.578,
+        0.596
+      ],
+      "afterSamples": [
+        0.572,
+        0.532,
+        0.56
+      ],
+      "pairedDelta": -0.03599999999999992,
+      "percent": -3.1141868512110538,
+      "callsBefore": 222,
+      "callsAfter": 222,
+      "trianglesBefore": 360146,
+      "trianglesAfter": 360146,
+      "sceneBefore": 0.633,
+      "sceneAfter": 0.65,
+      "postBefore": 0.028,
+      "postAfter": 0.028
+    },
+    "ascent": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 0.515,
+      "after": 0.511,
+      "beforeSamples": [
+        0.515,
+        0.5,
+        0.771
+      ],
+      "afterSamples": [
+        0.511,
+        0.508,
+        0.618
+      ],
+      "pairedDelta": -0.0040000000000000036,
+      "percent": -0.7766990291262155,
+      "callsBefore": 200,
+      "callsAfter": 200,
+      "trianglesBefore": 148775,
+      "trianglesAfter": 148775,
+      "sceneBefore": 0.575,
+      "sceneAfter": 0.735,
+      "postBefore": 0.025,
+      "postAfter": 0.025
+    },
+    "orbit": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 0.509,
+      "after": 0.499,
+      "beforeSamples": [
+        0.475,
+        0.528,
+        0.509
+      ],
+      "afterSamples": [
+        0.477,
+        0.499,
+        0.515
+      ],
+      "pairedDelta": 0.0020000000000000018,
+      "percent": -1.9646365422396839,
+      "callsBefore": 175,
+      "callsAfter": 175,
+      "trianglesBefore": 171287,
+      "trianglesAfter": 171287,
+      "sceneBefore": 0.474,
+      "sceneAfter": 0.379,
+      "postBefore": 0.022,
+      "postAfter": 0.022
+    },
+    "map": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 0.332,
+      "after": 0.329,
+      "beforeSamples": [
+        0.333,
+        0.332,
+        0.332
+      ],
+      "afterSamples": [
+        0.328,
+        0.329,
+        0.329
+      ],
+      "pairedDelta": -0.0030000000000000027,
+      "percent": -0.9036144578313254,
+      "callsBefore": 32,
+      "callsAfter": 32,
+      "trianglesBefore": 50056,
+      "trianglesAfter": 50056,
+      "sceneBefore": null,
+      "sceneAfter": null,
+      "postBefore": null,
+      "postAfter": null
+    },
+    "moon": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 0.49,
+      "after": 0.504,
+      "beforeSamples": [
+        0.488,
+        0.49,
+        0.546
+      ],
+      "afterSamples": [
+        0.504,
+        0.483,
+        0.511
+      ],
+      "pairedDelta": -0.007000000000000006,
+      "percent": 2.857142857142869,
+      "callsBefore": 207,
+      "callsAfter": 207,
+      "trianglesBefore": 105158,
+      "trianglesAfter": 105158,
+      "sceneBefore": 0.388,
+      "sceneAfter": 0.391,
+      "postBefore": 0.023,
+      "postAfter": 0.023
+    }
+  },
+  "medium": {
+    "pad": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 2.795,
+      "after": 2.512,
+      "beforeSamples": [
+        2.81,
+        2.776,
+        2.795
+      ],
+      "afterSamples": [
+        2.476,
+        2.512,
+        2.521
+      ],
+      "pairedDelta": -0.274,
+      "percent": -10.125223613595702,
+      "callsBefore": 708,
+      "callsAfter": 238,
+      "trianglesBefore": 2290653,
+      "trianglesAfter": 2290653,
+      "sceneBefore": 2.526,
+      "sceneAfter": 2.806,
+      "postBefore": 0.788,
+      "postAfter": 0.79
+    },
+    "ascent": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 2.331,
+      "after": 2.153,
+      "beforeSamples": [
+        2.33,
+        2.331,
+        2.484
+      ],
+      "afterSamples": [
+        2.181,
+        2.141,
+        2.153
+      ],
+      "pairedDelta": -0.18999999999999995,
+      "percent": -7.6362076362076365,
+      "callsBefore": 574,
+      "callsAfter": 272,
+      "trianglesBefore": 872646,
+      "trianglesAfter": 872646,
+      "sceneBefore": 2.62,
+      "sceneAfter": 2.575,
+      "postBefore": 0.652,
+      "postAfter": 0.653
+    },
+    "orbit": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 2.381,
+      "after": 2.037,
+      "beforeSamples": [
+        2.375,
+        2.381,
+        2.385
+      ],
+      "afterSamples": [
+        2.051,
+        2.034,
+        2.037
+      ],
+      "pairedDelta": -0.347,
+      "percent": -14.447711045779076,
+      "callsBefore": 442,
+      "callsAfter": 183,
+      "trianglesBefore": 743766,
+      "trianglesAfter": 743766,
+      "sceneBefore": 2.837,
+      "sceneAfter": 2.073,
+      "postBefore": 0.668,
+      "postAfter": 0.667
+    },
+    "map": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 0.333,
+      "after": 0.329,
+      "beforeSamples": [
+        0.333,
+        0.333,
+        0.335
+      ],
+      "afterSamples": [
+        0.329,
+        0.329,
+        0.329
+      ],
+      "pairedDelta": -0.0040000000000000036,
+      "percent": -1.2012012012012074,
+      "callsBefore": 32,
+      "callsAfter": 32,
+      "trianglesBefore": 50056,
+      "trianglesAfter": 50056,
+      "sceneBefore": null,
+      "sceneAfter": null,
+      "postBefore": null,
+      "postAfter": null
+    },
+    "moon": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 1.392,
+      "after": 1.257,
+      "beforeSamples": [
+        1.392,
+        1.439,
+        1.367
+      ],
+      "afterSamples": [
+        1.298,
+        1.257,
+        1.253
+      ],
+      "pairedDelta": -0.1140000000000001,
+      "percent": -9.69827586206896,
+      "callsBefore": 557,
+      "callsAfter": 358,
+      "trianglesBefore": 631561,
+      "trianglesAfter": 631561,
+      "sceneBefore": 1.688,
+      "sceneAfter": 1.39,
+      "postBefore": 0.887,
+      "postAfter": 0.889
+    }
+  },
+  "high": {
+    "pad": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 7.065,
+      "after": 6.306,
+      "beforeSamples": [
+        7.065,
+        7.151,
+        6.929
+      ],
+      "afterSamples": [
+        6.298,
+        6.316,
+        6.306
+      ],
+      "pairedDelta": -0.7670000000000003,
+      "percent": -10.743099787685784,
+      "callsBefore": 1394,
+      "callsAfter": 242,
+      "trianglesBefore": 5981175,
+      "trianglesAfter": 5981175,
+      "sceneBefore": 7.174,
+      "sceneAfter": 5.376,
+      "postBefore": 0.871,
+      "postAfter": 0.8350000000000001
+    },
+    "ascent": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 5.869,
+      "after": 5.718,
+      "beforeSamples": [
+        5.919,
+        5.845,
+        5.869
+      ],
+      "afterSamples": [
+        5.73,
+        5.718,
+        5.703
+      ],
+      "pairedDelta": -0.16599999999999948,
+      "percent": -2.5728403475890227,
+      "callsBefore": 966,
+      "callsAfter": 272,
+      "trianglesBefore": 1805254,
+      "trianglesAfter": 1805254,
+      "sceneBefore": 5.476,
+      "sceneAfter": 4.765,
+      "postBefore": 0.739,
+      "postAfter": 0.732
+    },
+    "orbit": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 5.319,
+      "after": 4.982,
+      "beforeSamples": [
+        5.357,
+        5.319,
+        5.286
+      ],
+      "afterSamples": [
+        4.923,
+        5.024,
+        4.982
+      ],
+      "pairedDelta": -0.3039999999999994,
+      "percent": -6.33577740176724,
+      "callsBefore": 719,
+      "callsAfter": 183,
+      "trianglesBefore": 1410390,
+      "trianglesAfter": 1410390,
+      "sceneBefore": 4.405,
+      "sceneAfter": 4.315,
+      "postBefore": 0.745,
+      "postAfter": 0.75
+    },
+    "map": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 0.331,
+      "after": 0.328,
+      "beforeSamples": [
+        0.332,
+        0.33,
+        0.331
+      ],
+      "afterSamples": [
+        0.328,
+        0.327,
+        0.328
+      ],
+      "pairedDelta": -0.0030000000000000027,
+      "percent": -0.9063444108761365,
+      "callsBefore": 32,
+      "callsAfter": 32,
+      "trianglesBefore": 50056,
+      "trianglesAfter": 50056,
+      "sceneBefore": null,
+      "sceneAfter": null,
+      "postBefore": null,
+      "postAfter": null
+    },
+    "moon": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 2.584,
+      "after": 2.438,
+      "beforeSamples": [
+        2.626,
+        2.546,
+        2.584
+      ],
+      "afterSamples": [
+        2.445,
+        2.438,
+        2.425
+      ],
+      "pairedDelta": -0.15900000000000025,
+      "percent": -5.6501547987616085,
+      "callsBefore": 816,
+      "callsAfter": 358,
+      "trianglesBefore": 1256713,
+      "trianglesAfter": 1256713,
+      "sceneBefore": 2.502,
+      "sceneAfter": 2.494,
+      "postBefore": 1.071,
+      "postAfter": 1.072
+    }
+  },
+  "ultra": {
+    "pad": {
+      "idleRunsBefore": 0,
+      "idleRunsAfter": 0,
+      "before": 14.17,
+      "after": 13.072,
+      "beforeSamples": [
+        14.135,
+        14.17,
+        15.134
+      ],
+      "afterSamples": [
+        13.072,
+        13.071,
+        13.279
+      ],
+      "pairedDelta": -1.0990000000000002,
+      "percent": -7.748764996471424,
+      "callsBefore": 2032,
+      "callsAfter": 241,
+      "trianglesBefore": 14855766,
+      "trianglesAfter": 14855766,
+      "sceneBefore": 12.705,
+      "sceneAfter": 12.02,
+      "postBefore": 0.763,
+      "postAfter": 0.761
+    },
+    "ascent": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 14.444,
+      "after": 14.109,
+      "beforeSamples": [
+        14.382,
+        14.444,
+        14.526
+      ],
+      "afterSamples": [
+        14.079,
+        14.13,
+        14.109
+      ],
+      "pairedDelta": -0.31400000000000006,
+      "percent": -2.319302132373313,
+      "callsBefore": 1411,
+      "callsAfter": 277,
+      "trianglesBefore": 10642085,
+      "trianglesAfter": 10612133,
+      "sceneBefore": 13.486,
+      "sceneAfter": 12.841,
+      "postBefore": 0.75,
+      "postAfter": 0.741
+    },
+    "orbit": {
+      "idleRunsBefore": 0,
+      "idleRunsAfter": 0,
+      "before": 10.184,
+      "after": 9.764,
+      "beforeSamples": [
+        10.13,
+        10.202,
+        10.184
+      ],
+      "afterSamples": [
+        9.764,
+        9.739,
+        9.793
+      ],
+      "pairedDelta": -0.391,
+      "percent": -4.124116260801259,
+      "callsBefore": 1009,
+      "callsAfter": 182,
+      "trianglesBefore": 4345813,
+      "trianglesAfter": 4345813,
+      "sceneBefore": 8.99,
+      "sceneAfter": 8.515,
+      "postBefore": 0.721,
+      "postAfter": 0.732
+    },
+    "map": {
+      "idleRunsBefore": 0,
+      "idleRunsAfter": 0,
+      "before": 0.328,
+      "after": 0.324,
+      "beforeSamples": [
+        0.329,
+        0.328,
+        0.328
+      ],
+      "afterSamples": [
+        0.324,
+        0.324,
+        0.327
+      ],
+      "pairedDelta": -0.0040000000000000036,
+      "percent": -1.2195121951219523,
+      "callsBefore": 32,
+      "callsAfter": 32,
+      "trianglesBefore": 50056,
+      "trianglesAfter": 50056,
+      "sceneBefore": null,
+      "sceneAfter": null,
+      "postBefore": null,
+      "postAfter": null
+    },
+    "moon": {
+      "idleRunsBefore": 3,
+      "idleRunsAfter": 3,
+      "before": 4.977,
+      "after": 4.749,
+      "beforeSamples": [
+        4.977,
+        5.003,
+        4.836
+      ],
+      "afterSamples": [
+        4.683,
+        4.749,
+        4.8
+      ],
+      "pairedDelta": -0.25400000000000045,
+      "percent": -4.581072935503327,
+      "callsBefore": 1239,
+      "callsAfter": 360,
+      "trianglesBefore": 6095624,
+      "trianglesAfter": 6095624,
+      "sceneBefore": 5.286,
+      "sceneAfter": 4.446,
+      "postBefore": 0.853,
+      "postAfter": 0.786
+    }
+  }
+}

@@ -1,0 +1,908 @@
+{
+ "moon": {
+  "A": [
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964097799.5296655,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "far",
+        "chunks": 0,
+        "meshes": 0,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 18.120233876021477,
+        "altitude": 38979557.1100544
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 60.182,
+    "loopGpuMs": 2.649,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 557,
+     "triangles": 631561,
+     "points": 9000,
+     "programs": 75,
+     "textures": 90,
+     "geometries": 425
+    },
+    "passes": {
+     "upscale": 0.454,
+     "smaa": 0.255,
+     "tonemap": 0.042,
+     "bloom": 0.136,
+     "scene": 1.727
+    },
+    "fencedWall": 1.97,
+    "fenced": 1.484,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-perfgpu2-batch-A-moon-r1-moon.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964097799.4296656,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "far",
+        "chunks": 0,
+        "meshes": 0,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 18.12023842634236,
+        "altitude": 38979547.16159226
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 59.955,
+    "loopGpuMs": 2.747,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 557,
+     "triangles": 631561,
+     "points": 9000,
+     "programs": 75,
+     "textures": 90,
+     "geometries": 421
+    },
+    "passes": {
+     "upscale": 0.454,
+     "smaa": 0.255,
+     "tonemap": 0.042,
+     "bloom": 0.136,
+     "scene": 1.629
+    },
+    "fencedWall": 1.865,
+    "fenced": 1.503,
+    "glError": 0,
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964097799.2096658,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "far",
+        "chunks": 0,
+        "meshes": 0,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 18.120248269987496,
+        "altitude": 38979525.6402412
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 59.233,
+    "loopGpuMs": 2.427,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 557,
+     "triangles": 631561,
+     "points": 9000,
+     "programs": 75,
+     "textures": 89,
+     "geometries": 423
+    },
+    "passes": {
+     "upscale": 0.454,
+     "smaa": 0.255,
+     "tonemap": 0.042,
+     "bloom": 0.135,
+     "scene": 1.738
+    },
+    "fencedWall": 1.86,
+    "fenced": 1.487,
+    "glError": 0,
+    "errors": []
+   }
+  ],
+  "B": [
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964097799.5896654,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "far",
+        "chunks": 0,
+        "meshes": 0,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 18.12023144279648,
+        "altitude": 38979562.42986739
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 59.669,
+    "loopGpuMs": 2.284,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 358,
+     "triangles": 631561,
+     "points": 9000,
+     "programs": 78,
+     "textures": 92,
+     "geometries": 192
+    },
+    "passes": {
+     "upscale": 0.455,
+     "smaa": 0.255,
+     "tonemap": 0.042,
+     "bloom": 0.136,
+     "scene": 1.373
+    },
+    "fencedWall": 1.74,
+    "fenced": 1.264,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-perfgpu2-batch-B-moon-r1-moon.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964097799.3096657,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "far",
+        "chunks": 0,
+        "meshes": 0,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 18.120243929521482,
+        "altitude": 38979535.12988281
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 60.441,
+    "loopGpuMs": 2.609,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 358,
+     "triangles": 631561,
+     "points": 9000,
+     "programs": 78,
+     "textures": 91,
+     "geometries": 192
+    },
+    "passes": {
+     "upscale": 0.455,
+     "smaa": 0.255,
+     "tonemap": 0.042,
+     "bloom": 0.136,
+     "scene": 1.422
+    },
+    "fencedWall": 1.78,
+    "fenced": 1.258,
+    "glError": 0,
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964097799.3696656,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "far",
+        "chunks": 0,
+        "meshes": 0,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 18.120241082189587,
+        "altitude": 38979541.35505998
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 60.193,
+    "loopGpuMs": 2.392,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 358,
+     "triangles": 631561,
+     "points": 9000,
+     "programs": 78,
+     "textures": 91,
+     "geometries": 192
+    },
+    "passes": {
+     "upscale": 0.46,
+     "smaa": 0.255,
+     "tonemap": 0.042,
+     "bloom": 0.136,
+     "scene": 1.375
+    },
+    "fencedWall": 1.8,
+    "fenced": 1.284,
+    "glError": 0,
+    "errors": []
+   }
+  ]
+ },
+ "orbit": {
+  "A": [
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964051206.6999936,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 136,
+        "meshes": 330,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 911.8276933566143,
+        "altitude": 150178.50309467863
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 59.448,
+    "loopGpuMs": 2.941,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 442,
+     "triangles": 743766,
+     "points": 9000,
+     "programs": 85,
+     "textures": 104,
+     "geometries": 528
+    },
+    "passes": {
+     "upscale": 0.236,
+     "smaa": 0.256,
+     "tonemap": 0.04,
+     "bloom": 0.137,
+     "scene": 2.361
+    },
+    "fencedWall": 2.665,
+    "fenced": 2.008,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-perfgpu2-batch-A-orbit-r1-orbit.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964051206.8999934,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 136,
+        "meshes": 330,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 911.8276942056743,
+        "altitude": 150178.50236159342
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 59.678,
+    "loopGpuMs": 2.845,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 442,
+     "triangles": 743766,
+     "points": 9000,
+     "programs": 85,
+     "textures": 105,
+     "geometries": 528
+    },
+    "passes": {
+     "upscale": 0.234,
+     "smaa": 0.255,
+     "tonemap": 0.04,
+     "bloom": 0.137,
+     "scene": 2.477
+    },
+    "fencedWall": 2.46,
+    "fenced": 2.074,
+    "glError": 0,
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964051206.7399936,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 136,
+        "meshes": 330,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 911.827693429164,
+        "altitude": 150178.5030320387
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 59.223,
+    "loopGpuMs": 3.005,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 442,
+     "triangles": 743766,
+     "points": 9000,
+     "programs": 85,
+     "textures": 104,
+     "geometries": 528
+    },
+    "passes": {
+     "upscale": 0.231,
+     "smaa": 0.256,
+     "tonemap": 0.04,
+     "bloom": 0.137,
+     "scene": 2.393
+    },
+    "fencedWall": 2.45,
+    "fenced": 2.023,
+    "glError": 0,
+    "errors": []
+   }
+  ],
+  "B": [
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964051206.5599937,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 136,
+        "meshes": 330,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 911.8276927887092,
+        "altitude": 150178.5035850124
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 60.172,
+    "loopGpuMs": 3.011,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 183,
+     "triangles": 743766,
+     "points": 9000,
+     "programs": 88,
+     "textures": 109,
+     "geometries": 119
+    },
+    "passes": {
+     "upscale": 0.236,
+     "smaa": 0.256,
+     "tonemap": 0.04,
+     "bloom": 0.137,
+     "scene": 2.005
+    },
+    "fencedWall": 2.615,
+    "fenced": 2.017,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-perfgpu2-batch-B-orbit-r1-orbit.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964051205.8999944,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 136,
+        "meshes": 330,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 911.8276898554126,
+        "altitude": 150178.50611764437
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 59.713,
+    "loopGpuMs": 3.091,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 183,
+     "triangles": 743766,
+     "points": 9000,
+     "programs": 88,
+     "textures": 108,
+     "geometries": 119
+    },
+    "passes": {
+     "upscale": 0.236,
+     "smaa": 0.255,
+     "tonemap": 0.04,
+     "bloom": 0.137,
+     "scene": 2.015
+    },
+    "fencedWall": 2.655,
+    "fenced": 2.025,
+    "glError": 0,
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964051206.5199938,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 136,
+        "meshes": 330,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 911.827692555879,
+        "altitude": 150178.5037860399
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 60.193,
+    "loopGpuMs": 2.827,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 183,
+     "triangles": 743766,
+     "points": 9000,
+     "programs": 88,
+     "textures": 108,
+     "geometries": 119
+    },
+    "passes": {
+     "upscale": 0.234,
+     "smaa": 0.256,
+     "tonemap": 0.04,
+     "bloom": 0.137,
+     "scene": 2.011
+    },
+    "fencedWall": 2.61,
+    "fenced": 2.013,
+    "glError": 0,
+    "errors": []
+   }
+  ]
+ },
+ "pad": {
+  "A": [
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964051208.4599919,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 380,
+        "meshes": 794,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 1126.6526164186198,
+        "altitude": 15.647743605426513
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 46.72,
+    "loopGpuMs": 3.777,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 708,
+     "triangles": 2290653,
+     "points": 9000,
+     "programs": 87,
+     "textures": 105,
+     "geometries": 857
+    },
+    "passes": {
+     "upscale": 0.333,
+     "smaa": 0.272,
+     "tonemap": 0.043,
+     "bloom": 0.143,
+     "scene": 2.615
+    },
+    "fencedWall": 5.16,
+    "fenced": 3.037,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-perfgpu2-batch-A-pad-r1-pad.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964051207.5399928,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 380,
+        "meshes": 794,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 1126.6526164186198,
+        "altitude": 15.647742277826183
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 59.183,
+    "loopGpuMs": 3.342,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 708,
+     "triangles": 2290653,
+     "points": 9000,
+     "programs": 87,
+     "textures": 105,
+     "geometries": 857
+    },
+    "passes": {
+     "upscale": 0.333,
+     "smaa": 0.271,
+     "tonemap": 0.043,
+     "bloom": 0.142,
+     "scene": 2.414
+    },
+    "fencedWall": 3.13,
+    "fenced": 2.668,
+    "glError": 0,
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964051207.7799926,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 380,
+        "meshes": 794,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 1126.6526164186198,
+        "altitude": 15.647743244771846
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 59.178,
+    "loopGpuMs": 3.264,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 708,
+     "triangles": 2290653,
+     "points": 9000,
+     "programs": 87,
+     "textures": 104,
+     "geometries": 857
+    },
+    "passes": {
+     "upscale": 0.333,
+     "smaa": 0.271,
+     "tonemap": 0.043,
+     "bloom": 0.142,
+     "scene": 2.438
+    },
+    "fencedWall": 3.465,
+    "fenced": 2.539,
+    "glError": 0,
+    "errors": []
+   }
+  ],
+  "B": [
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964051207.8799925,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 380,
+        "meshes": 794,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 1126.6526164186198,
+        "altitude": 15.647741948487237
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 51.949,
+    "loopGpuMs": 3.311,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 238,
+     "triangles": 2290653,
+     "points": 9000,
+     "programs": 90,
+     "textures": 108,
+     "geometries": 133
+    },
+    "passes": {
+     "upscale": 0.338,
+     "smaa": 0.272,
+     "tonemap": 0.043,
+     "bloom": 0.142,
+     "scene": 2.1
+    },
+    "fencedWall": 3.38,
+    "fenced": 2.472,
+    "glError": 0,
+    "shot": "C:\\wsp-tools\\shots\\perfgpu\\ab-perfgpu2-batch-B-pad-r1-pad.png",
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964051207.8799925,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 380,
+        "meshes": 794,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 1126.6526164186198,
+        "altitude": 15.647742093657143
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 59.958,
+    "loopGpuMs": 3.582,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 238,
+     "triangles": 2290653,
+     "points": 9000,
+     "programs": 90,
+     "textures": 108,
+     "geometries": 133
+    },
+    "passes": {
+     "upscale": 0.333,
+     "smaa": 0.271,
+     "tonemap": 0.043,
+     "bloom": 0.141,
+     "scene": 2.788
+    },
+    "fencedWall": 3.06,
+    "fenced": 2.494,
+    "glError": 0,
+    "errors": []
+   },
+   {
+    "mode": "flight",
+    "sceneState": {
+     "paused": true,
+     "ut": 964051205.7799945,
+     "planets": [
+      {
+       "body": "earth",
+       "idle": true,
+       "stats": {
+        "mode": "near",
+        "chunks": 380,
+        "meshes": 794,
+        "inflight": 0,
+        "queued": 0,
+        "projectedRadiusPx": 1126.6526164186198,
+        "altitude": 15.647742396220565
+       },
+       "imagery": "8k"
+      }
+     ]
+    },
+    "loopFps": 59.961,
+    "loopGpuMs": 3.496,
+    "canvas": [
+     2940,
+     1840
+    ],
+    "pixelRatio": 1.4,
+    "stats": {
+     "calls": 238,
+     "triangles": 2290653,
+     "points": 9000,
+     "programs": 90,
+     "textures": 108,
+     "geometries": 133
+    },
+    "passes": {
+     "upscale": 0.331,
+     "smaa": 0.272,
+     "tonemap": 0.043,
+     "bloom": 0.141,
+     "scene": 2.762
+    },
+    "fencedWall": 2.765,
+    "fenced": 2.475,
+    "glError": 0,
+    "errors": []
+   }
+  ]
+ }
+}

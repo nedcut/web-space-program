@@ -1,0 +1,239 @@
+{
+  "label": "perfgpu2-baseline-frozen",
+  "base": "http://172.24.204.38:5340",
+  "dpr": 2,
+  "quality": "medium",
+  "settings": {
+    "quality": "medium",
+    "shadows": true,
+    "bloom": true,
+    "clouds": true,
+    "renderScale": 1,
+    "scatter": true,
+    "adaptiveQuality": false,
+    "graphicsProfile": 99,
+    "showFps": false,
+    "autoSaveInterval": 0,
+    "masterVolume": 0
+  },
+  "size": "1470x920",
+  "date": "2026-10-08T01:20:09.952Z",
+  "cases": {
+    "ascent": {
+      "mode": "flight",
+      "loopFps": 51.278,
+      "loopGpuMs": 3.539,
+      "canvas": [
+        2940,
+        1840
+      ],
+      "pixelRatio": 1.4,
+      "stats": {
+        "calls": 573,
+        "triangles": 870342,
+        "points": 9000,
+        "programs": 88,
+        "textures": 110,
+        "geometries": 825
+      },
+      "passes": {
+        "upscale": 0.212,
+        "smaa": 0.256,
+        "tonemap": 0.043,
+        "bloom": 0.141,
+        "scene": 2.647
+      },
+      "fencedWall": 3.425,
+      "fenced": 2.879,
+      "otherNames": [
+        "ShaderMaterial:uPixelRatio/uScale",
+        "ShaderMaterial:uMilky/uReady/uIntensity",
+        "ShaderMaterial:opacity",
+        "ShaderMaterial:time/groundNormal/groundOffset",
+        "ShaderMaterial:uTime/uIntensity/uWake/uColorHot",
+        "ShaderMaterial:uTime/uIntensity/uCore/uLimb",
+        "ShaderMaterial:color/sun"
+      ],
+      "families": {
+        "bloom": 0.311,
+        "smaa": 0.174,
+        "shadowMap": -0.47,
+        "terrain": 0.646,
+        "ocean": 0.066,
+        "farSphere": 0.346,
+        "sky": 0.538,
+        "clouds": 0.484,
+        "volumes": 0.52,
+        "scatter": 0.151,
+        "vegetation": -0.027,
+        "siteAerial": 0.152,
+        "partsPBR": 0.642,
+        "plumes": 0.171,
+        "glare": 0.037,
+        "basic": -0.005,
+        "other": 0.144,
+        "emptyScene": 0.46
+      },
+      "familyCounts": {
+        "terrain": 1,
+        "ocean": 1,
+        "farSphere": 2,
+        "sky": 1,
+        "clouds": 1,
+        "volumes": 2,
+        "scatter": 6,
+        "vegetation": 6,
+        "siteAerial": 7,
+        "partsPBR": 49,
+        "plumes": 4,
+        "glare": 1,
+        "basic": 26
+      },
+      "glError": 0,
+      "shot": "C:\\wsp-tools\\shots\\perfgpu\\perfgpu2-baseline-frozen-ascent.png",
+      "errors": []
+    },
+    "orbit": {
+      "mode": "flight",
+      "loopFps": 51.187,
+      "loopGpuMs": 2.861,
+      "canvas": [
+        2940,
+        1840
+      ],
+      "pixelRatio": 1.4,
+      "stats": {
+        "calls": 426,
+        "triangles": 706902,
+        "points": 9000,
+        "programs": 85,
+        "textures": 105,
+        "geometries": 542
+      },
+      "passes": {
+        "upscale": 0.22,
+        "smaa": 0.255,
+        "tonemap": 0.04,
+        "bloom": 0.137,
+        "scene": 2.022
+      },
+      "fencedWall": 3.155,
+      "fenced": 2.49,
+      "otherNames": [
+        "ShaderMaterial:uPixelRatio/uScale",
+        "ShaderMaterial:uMilky/uReady/uIntensity",
+        "ShaderMaterial:opacity",
+        "ShaderMaterial:time/groundNormal/groundOffset",
+        "ShaderMaterial:uTime/uIntensity/uWake/uColorHot",
+        "ShaderMaterial:uTime/uIntensity/uCore/uLimb",
+        "ShaderMaterial:color/sun"
+      ],
+      "families": {
+        "bloom": 0.219,
+        "smaa": 0.316,
+        "shadowMap": 0.169,
+        "terrain": 0.595,
+        "ocean": 0.62,
+        "farSphere": -0.155,
+        "sky": 0.156,
+        "clouds": 0.331,
+        "volumes": -0.007,
+        "scatter": 0.049,
+        "vegetation": 0,
+        "siteAerial": 0.113,
+        "partsPBR": 0.274,
+        "plumes": 0.074,
+        "glare": -0.022,
+        "basic": 0.076,
+        "other": 0.106,
+        "emptyScene": 0.45
+      },
+      "familyCounts": {
+        "terrain": 1,
+        "ocean": 1,
+        "farSphere": 2,
+        "sky": 1,
+        "clouds": 1,
+        "volumes": 2,
+        "scatter": 6,
+        "vegetation": 6,
+        "siteAerial": 7,
+        "partsPBR": 47,
+        "plumes": 2,
+        "glare": 1,
+        "basic": 26
+      },
+      "glError": 0,
+      "shot": "C:\\wsp-tools\\shots\\perfgpu\\perfgpu2-baseline-frozen-orbit.png",
+      "errors": []
+    },
+    "moon": {
+      "mode": "flight",
+      "loopFps": 44.027,
+      "loopGpuMs": 3.102,
+      "canvas": [
+        2940,
+        1840
+      ],
+      "pixelRatio": 1.4,
+      "stats": {
+        "calls": 561,
+        "triangles": 640777,
+        "points": 9000,
+        "programs": 75,
+        "textures": 89,
+        "geometries": 425
+      },
+      "passes": {
+        "upscale": 0.454,
+        "smaa": 0.255,
+        "tonemap": 0.042,
+        "bloom": 0.136,
+        "scene": 1.6
+      },
+      "fencedWall": 3.34,
+      "fenced": 2.383,
+      "otherNames": [
+        "ShaderMaterial:uPixelRatio/uScale",
+        "ShaderMaterial:uMilky/uReady/uIntensity",
+        "ShaderMaterial:opacity",
+        "ShaderMaterial:time/groundNormal/groundOffset",
+        "ShaderMaterial:uTime/uIntensity/uWake/uColorHot",
+        "ShaderMaterial:uTime/uIntensity/uCore/uLimb",
+        "ShaderMaterial:color/sun"
+      ],
+      "families": {
+        "bloom": -0.233,
+        "smaa": 0.307,
+        "shadowMap": 0.382,
+        "terrain": 1.036,
+        "farSphere": 0.228,
+        "sky": 0.125,
+        "clouds": -0.246,
+        "volumes": -0.012,
+        "scatter": -0.272,
+        "partsPBR": 1.204,
+        "plumes": 0.311,
+        "glare": 0.238,
+        "basic": 0.172,
+        "other": 0.099,
+        "emptyScene": 0.471
+      },
+      "familyCounts": {
+        "terrain": 1,
+        "farSphere": 2,
+        "sky": 1,
+        "clouds": 1,
+        "volumes": 2,
+        "scatter": 6,
+        "partsPBR": 27,
+        "plumes": 2,
+        "glare": 1,
+        "basic": 20
+      },
+      "glError": 0,
+      "shot": "C:\\wsp-tools\\shots\\perfgpu\\perfgpu2-baseline-frozen-moon.png",
+      "errors": []
+    }
+  }
+}
