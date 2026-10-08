@@ -8,7 +8,7 @@ export class DebrisPool {
   private readonly material = new THREE.MeshStandardMaterial({ color: 0x858b91, roughness: .85 });
   private readonly slots = Array.from({ length: 32 }, () => ({
     mesh: new THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>(this.placeholder, this.material), position: new THREE.Vector3(),
-    velocity: new THREE.Vector3(), spin: new THREE.Vector3(), remaining: 0,
+    velocity: new THREE.Vector3(), spin: new THREE.Vector3(), remaining: 0, diameter: 0,
   }));
   private cursor = 0;
   private live = 0;
@@ -22,9 +22,14 @@ export class DebrisPool {
   emit(geometry: THREE.BufferGeometry, position: Vec3, inherited: Vec3, diameter: number, count = 6) {
     this.root.visible=true;
     for (let i = 0; i < count; i++) {
-      const s = this.slots[this.cursor++ % this.slots.length];
+      let s = this.slots[this.cursor++ % this.slots.length];
+      if (this.live===this.slots.length) {
+        // A cascade's final tiny fins must not evict every large tank / engine fragment.
+        for (const candidate of this.slots) if(candidate.diameter<s.diameter) s=candidate;
+        if(diameter<s.diameter) continue;
+      }
       if (s.remaining <= 0) this.live++;
-      s.remaining = 3.5 + this.random(); s.mesh.geometry = geometry;
+      s.remaining = 3.5 + this.random(); s.diameter=diameter; s.mesh.geometry = geometry;
       s.mesh.visible = true; s.mesh.scale.setScalar(.15 + this.random() * .25);
       s.mesh.rotation.set(this.random()*6,this.random()*6,this.random()*6);
       s.position.copy(position);

@@ -81,3 +81,12 @@ it('bounces debris in the moving surface frame without damping the solar velocit
   expect(Math.abs(pool.root.children[0].position.x-before)).toBeLessThan(10);
   pool.dispose();geometry.dispose();
 });
+
+it('retains large fragments when small destroyed parts arrive last in a cascade', () => {
+  const pool=new DebrisPool(), big=new THREE.CylinderGeometry(2,2,5), small=new THREE.BoxGeometry(.1,.1,.1), zero=new THREE.Vector3();
+  pool.emit(big,zero,zero,40);
+  for(let i=0;i<100;i++)pool.emit(small,zero,zero,3);
+  expect(pool.activeCount).toBe(32);
+  expect(pool.root.children.filter(o=>(o as THREE.Mesh).geometry===big)).toHaveLength(6);
+  pool.dispose();big.dispose();small.dispose();
+});
