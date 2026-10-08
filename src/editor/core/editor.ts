@@ -99,6 +99,12 @@ export class CraftEditor {
     if (!previous) return false;
     this.future.push(this.state); this.state = previous; this.emit(); return true;
   }
+  /** Undo without leaving a redo entry: the undone step is abandoned, not suspended (cancelled pick-up/copy). */
+  rollback(): boolean {
+    const previous = this.past.pop();
+    if (!previous) return false;
+    this.state = previous; this.emit(); return true;
+  }
   redo(): boolean {
     const next = this.future.pop();
     if (!next) return false;
