@@ -305,7 +305,7 @@ export default function FlightScene() {
       if (scene === 'spaceCenter') {
         if (c.world.active) { c.world.recordFlight(c.world.active, c.world.ut, true); c.world.logFlightEvent(c.world.active, 'checkpoint', 'Returned to Space Center'); const r = c.world.flightlog.records.find(r => r.vesselId === c.world.activeId && !r.outcome); if (r) c.world.latestReportId = r.id; }
       }
-      c.quicksave('autosave');
+      c.quicksave('autosave', 'spaceCenter');
       game.set({ ut: c.world.ut, mode: c.world.mode, resumeWorld: c.snapshot() });
     }
     game.set({ scene: scene === 'spaceCenter' ? 'flightlog' : scene });

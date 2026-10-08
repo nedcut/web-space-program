@@ -8,7 +8,7 @@ import { launchProblem } from '../data/technology';
 import { PART_CATALOG } from '../data/parts';
 import { newProgression } from '../sim/science/progression';
 import { useEffect, useState } from 'react';
-import { game, useGame } from '../game/store';
+import { game, launchableCraft, useGame } from '../game/store';
 import { HubBackdrop } from './hub/HubBackdrop';
 import { SettingsPanel } from './MainMenu';
 import { formatDate } from './format';
@@ -20,7 +20,7 @@ export function SpaceCenter() {
   const [notice, setNotice] = useState(() => game.get().notice ?? '');
   useEffect(() => { if (game.get().notice) game.set({ notice: null }); }, []);
   const ut = useGame((s) => s.ut);
-  const craft = useGame((s) => s.craft);
+  const craft = useGame((s) => launchableCraft(s.craft));
   const [settings, setSettings] = useState(false);
 
   const tiles = [

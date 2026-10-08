@@ -9,6 +9,8 @@ import { add, length, scale, sub, v3, type Vec3 } from '../../util/vec3';
 import { Universe } from '../universe';
 import type { World, WorldVessel } from '../world';
 import type { WorldInternals } from './internals';
+export const BOARD_RANGE = 3;
+export const BOARD_SPEED = 3;
 const bodyQuat = (u: Universe, id: string, t: number) => u.ephem.bodyRotation(id, t);
 
 /** Assign only newly created pods. Existing empty seats must stay empty. */
@@ -84,9 +86,32 @@ export function boardingTarget(this: World, _internals: WorldInternals): { vesse
     if (vessel === eva || vessel.body !== eva.body || vessel.state.destroyed) continue;
     for (const pod of vessel.state.parts) {
       if (seatCapacity(pod) <= (pod.crew?.length ?? 0)) continue;
-      if (length(sub(eva.state.position, this.hatchPosition(vessel.state, pod))) <= 3 && length(sub(eva.state.velocity, vessel.state.velocity)) < 3) return { vessel, pod };
+      if (length(sub(eva.state.position, this.hatchPosition(vessel.state, pod))) <= BOARD_RANGE && length(sub(eva.state.velocity, vessel.state.velocity)) < BOARD_SPEED) return { vessel, pod };
     }
   }
+  return null;
+}
+
+
+/** Why the active astronaut cannot board right now (nearest hatch, with the distance or speed to fix), or null when they can. */
+export function boardingBlocker(this: World, _internals: WorldInternals, whole = false): string | null {
+  const eva = this.active;
+  if (!eva?.state.eva) return null;
+  let best: { name: string; free: boolean; distance: number; speed: number } | null = null;
+  for (const vessel of this.vessels.values()) {
+    if (vessel === eva || vessel.body !== eva.body || vessel.state.destroyed) continue;
+    for (const pod of vessel.state.parts) {
+      if (!seatCapacity(pod)) continue;
+      const free = seatCapacity(pod) > (pod.crew?.length ?? 0);
+      const distance = length(sub(eva.state.position, this.hatchPosition(vessel.state, pod)));
+      // A hatch with a free seat always outranks a full one, however far.
+      if (!best || (free && !best.free) || (free === best.free && distance < best.distance)) best = { name: vessel.state.name, free, distance, speed: length(sub(eva.state.velocity, vessel.state.velocity)) };
+    }
+  }
+  if (!best) return 'No crewed vessel nearby to board';
+  if (!best.free) return `${best.name} has no free seat`;
+  if (best.distance > BOARD_RANGE) return `Move closer to the hatch of ${best.name} — ${whole || best.distance >= 100 ? Math.round(best.distance) : best.distance.toFixed(1)} m away, board within ${BOARD_RANGE} m`;
+  if (best.speed >= BOARD_SPEED) return `Slow down to board ${best.name} — ${whole ? Math.round(best.speed) : best.speed.toFixed(1)} m/s relative, below ${BOARD_SPEED} m/s`;
   return null;
 }
 
@@ -94,7 +119,7 @@ export function boardingTarget(this: World, _internals: WorldInternals): { vesse
 export function boardEva(this: World, internals: WorldInternals): boolean {
   const eva = this.active;
   const target = this.boardingTarget();
-  if (!eva?.state.eva || !target) { this.message('Move within 3 m of a free pod hatch, below 3 m/s', 'warn'); return false; }
+  if (!eva?.state.eva || !target) { if (eva?.state.eva) this.message(this.boardingBlocker() ?? `Move within ${BOARD_RANGE} m of a free pod hatch, below ${BOARD_SPEED} m/s`, 'warn'); return false; }
   const { vessel, pod } = target;
   if (vessel.mode === 'rails' || vessel.mode === 'landedRails') internals.unpack(vessel);
   const v = vessel.state, oldMass = v.mass;

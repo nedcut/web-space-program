@@ -17,6 +17,7 @@ import type { GameAudio } from '../audio';
 import { PART_CATALOG } from '../data/parts';
 import type { Autopilot } from '../game/autopilot';
 import { flightPredictions, targetOrbitState } from '../game/flightData';
+import type { SaveScene } from '../game/saveSlots';
 import { deserializeWorld, loadWorldFromStorage, saveWorldToStorage, serializeWorld, type SavedWorld } from '../game/persistence';
 import { applyCommsSettings, cameraShakeScale, game } from '../game/store';
 import { Universe } from '../game/universe';
@@ -417,12 +418,13 @@ export class FlightController {
   private lossFocusUt = 0;
   private activeLost = false;
 
-  quicksave(slot = 'quicksave') {
+  /** `scene`: where Load resumes (default: this flight; leaving flight passes the scene being left for). */
+  quicksave(slot = 'quicksave', scene: SaveScene = 'flight') {
     if (this.network || getTutorial() || game.get().scenarioActive) return;
     try {
       // Periodic autosaves snapshot now and write on idle tasks; a quicksave the player asked for writes immediately.
       const autosave = slot === 'autosave';
-      saveWorldToStorage(slot, this.world, undefined, autosave ? { defer: true, onError: e => this.world.message(saveErrorText(e), 'bad') } : {});
+      saveWorldToStorage(slot, this.world, undefined, autosave ? { defer: true, scene, onError: e => this.world.message(saveErrorText(e), 'bad') } : { scene });
       if (slot === 'quicksave') this.world.message(`Quicksaved (${bindingLabel('quickload')} to load)`);
     } catch (e) {
       this.world.message(saveErrorText(e), 'bad');
