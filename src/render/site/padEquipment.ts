@@ -146,9 +146,10 @@ export class PadEquipment {
     let first = 0;
     this.pieces = srcs.map((src) => { const p = { src, first, pose: new Float32Array(16).fill(NaN) }; first += src.getAttribute('position').count; return p; });
     for (const name of Object.keys(this.clampGeo.attributes)) {
-      const size = this.clampGeo.getAttribute(name).itemSize, arr = new Float32Array(total * size);
+      const src = this.clampGeo.getAttribute(name) as THREE.BufferAttribute, size = src.itemSize;
+      const arr = new (src.array.constructor as Float32ArrayConstructor)(total * size);
       if (name !== 'position' && name !== 'normal') for (const p of this.pieces) arr.set(p.src.getAttribute(name).array as Float32Array, p.first * size);
-      out.setAttribute(name, new THREE.BufferAttribute(arr, size));
+      out.setAttribute(name, new THREE.BufferAttribute(arr, size, src.normalized));
     }
     out.boundingSphere = new THREE.Sphere(new THREE.Vector3(-4, 17, 0), 30);
     return out;
@@ -333,12 +334,12 @@ function mergeAll(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const names = Object.keys(geos[0].attributes);
   const out = new THREE.BufferGeometry();
   for (const name of names) {
-    const size = geos[0].getAttribute(name).itemSize;
+    const first = geos[0].getAttribute(name) as THREE.BufferAttribute, size = first.itemSize;
     const total = geos.reduce((n, g) => n + g.getAttribute(name).count, 0);
-    const arr = new Float32Array(total * size);
+    const arr = new (first.array.constructor as Float32ArrayConstructor)(total * size);
     let o = 0;
     for (const g of geos) { const a = g.getAttribute(name).array as Float32Array; arr.set(a, o); o += a.length; }
-    out.setAttribute(name, new THREE.BufferAttribute(arr, size));
+    out.setAttribute(name, new THREE.BufferAttribute(arr, size, first.normalized));
   }
   out.computeBoundingSphere();
   return out;

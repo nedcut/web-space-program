@@ -6,9 +6,10 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
  * placement puts y=0 on the terrain, which is flat only at the instance origin) and carry a vertex-colour
  * occlusion term that darkens their buried flanks, so they read as embedded rather than resting on a point.
  */
-export function rockGeometry(variant: number): THREE.BufferGeometry {
-  // Small pebbles (variant 0) stay at 20 faces; the larger variants get 80.
-  const g = new THREE.IcosahedronGeometry(1, variant === 0 ? 0 : 1);
+export function rockGeometry(variant: number, detailed = true): THREE.BufferGeometry {
+  // Small pebbles (variant 0) stay at 20 faces; the larger variants get 80 where rocks are the main ground cover
+  // (airless bodies). Elsewhere the original budget: 80 faces for variant 2 only.
+  const g = new THREE.IcosahedronGeometry(1, (detailed ? variant !== 0 : variant === 2) ? 1 : 0);
   const p = g.getAttribute('position');
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);

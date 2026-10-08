@@ -98,7 +98,8 @@ export function withSiteSurfaces(mat: THREE.MeshStandardMaterial, u: SiteSurface
     prev.call(mat, shader, renderer);
     Object.assign(shader.uniforms, u);
     shader.vertexShader = shader.vertexShader
-      .replace('void main() {', 'attribute vec4 aSite;\nvarying vec4 vSite;\nvarying vec2 vSiteUv;\nvoid main() {\n  vSite = aSite;\n  vSiteUv = uv;');
+      // aSite is four bytes: layer (255 = untextured), roughness, metalness (0–255), flags.
+      .replace('void main() {', 'attribute vec4 aSite;\nvarying vec4 vSite;\nvarying vec2 vSiteUv;\nvoid main() {\n  vSite = vec4(aSite.x > 254.5 ? -1.0 : aSite.x, aSite.yz / 255.0, aSite.w);\n  vSiteUv = uv;');
     shader.fragmentShader = shader.fragmentShader
       .replace('void main() {', `uniform highp sampler2DArray uSiteTex;
 uniform vec3 uWindowGlow;
@@ -154,16 +155,22 @@ export interface SiteSurface {
   vab?: boolean;
 }
 
-/** Write `color` and `aSite` for every vertex of `g` (non-indexed or indexed). */
+/**
+ * Write `color` (3 × u8, normalized, linear) and `aSite` (4 × u8: layer or 255, roughness, metalness, flags) for every
+ * vertex of `g`. Byte attributes keep the merged site at ~32 bytes per vertex: vertex fetch is a real part of the
+ * site's cost (the merged meshes hold most of the complex's vertices).
+ */
 export function paintSurface(g: THREE.BufferGeometry, s: SiteSurface): void {
   const n = g.getAttribute('position').count;
   const c = new THREE.Color(s.color);
-  const color = new Float32Array(n * 3), site = new Float32Array(n * 4);
-  const flags = (s.emissive ?? 0) + (s.vab ? 4 : 0), layer = layerIndex(s.layer);
+  const color = new Uint8Array(n * 3), site = new Uint8Array(n * 4);
+  const flags = (s.emissive ?? 0) + (s.vab ? 4 : 0), layer = s.layer ? layerIndex(s.layer) : 255;
+  const r = Math.round(c.r * 255), gg = Math.round(c.g * 255), b = Math.round(c.b * 255);
+  const rough = Math.round(s.roughness * 255), metal = Math.round(s.metalness * 255);
   for (let i = 0; i < n; i++) {
-    color[i * 3] = c.r; color[i * 3 + 1] = c.g; color[i * 3 + 2] = c.b;
-    site[i * 4] = layer; site[i * 4 + 1] = s.roughness; site[i * 4 + 2] = s.metalness; site[i * 4 + 3] = flags;
+    color[i * 3] = r; color[i * 3 + 1] = gg; color[i * 3 + 2] = b;
+    site[i * 4] = layer; site[i * 4 + 1] = rough; site[i * 4 + 2] = metal; site[i * 4 + 3] = flags;
   }
-  g.setAttribute('color', new THREE.BufferAttribute(color, 3));
-  g.setAttribute('aSite', new THREE.BufferAttribute(site, 4));
+  g.setAttribute('color', new THREE.BufferAttribute(color, 3, true));
+  g.setAttribute('aSite', new THREE.BufferAttribute(site, 4, false));
 }

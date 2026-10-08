@@ -42,7 +42,7 @@ export class SurfaceScatter {
     const palette = body.id === 'earth'
       ? [[0.13, 0.12, 0.10], [0.16, 0.145, 0.125], [0.20, 0.19, 0.17]]
       : body.surface?.colors ?? [[0.2, 0.2, 0.2]];
-    for (let i = 0; i < 3; i++) this.addBatch(rockGeometry(i), 'rock', 16, palette[Math.min(i, palette.length - 1)], quality, u, ROCK_HEIGHT[i]);
+    for (let i = 0; i < 3; i++) this.addBatch(rockGeometry(i, !body.atmosphere), 'rock', 16, palette[Math.min(i, palette.length - 1)], quality, u, ROCK_HEIGHT[i]);
     if (body.id === 'earth' && this.settings.vegetation) {
       this.addBatch(plantGeometry('grass'), 'grass', 64, [0.10, 0.19, 0.035], quality, u);
       this.addBatch(plantGeometry('bush'), 'bush', 4, [0.035, 0.10, 0.02], quality, u);
@@ -66,7 +66,7 @@ export class SurfaceScatter {
     mesh.frustumCulled = false;
     mesh.name = `scatter:${kind}:${this.batches.length}`;
     let blob: THREE.InstancedMesh | undefined;
-    if (kind === 'rock') {
+    if (kind === 'rock' && airless) {
       // Contact + cast shadow on the ground, sharing the rocks' instance data (one more draw per rock batch).
       const bg = shadowBlobGeometry();
       bg.setAttribute('aCell', cells);

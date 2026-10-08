@@ -95,6 +95,20 @@ function roundedRect(hx: number, hz: number, r: number, n = 10): [number, number
   return pts;
 }
 
+/**
+ * Indexed form (identity index for triangle soups). The merged site stays indexed so shared vertices are shaded once
+ * (a box is 24 vertices instead of 36).
+ */
+function toIndexed(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  if (!g.index) {
+    const n = g.getAttribute('position').count;
+    const idx = n > 65535 ? new Uint32Array(n) : new Uint16Array(n);
+    for (let i = 0; i < n; i++) idx[i] = i;
+    g.setIndex(new THREE.BufferAttribute(idx, 1));
+  }
+  return g;
+}
+
 function toNonIndexed(g: THREE.BufferGeometry): THREE.BufferGeometry {
   if (!g.index) return g;
   const n = g.toNonIndexed();
@@ -382,7 +396,7 @@ export class LaunchSite {
    */
   private add(key: Key, g: THREE.BufferGeometry, m?: THREE.Matrix4, ao = 0) {
     const b = this.batches.get(key)!;
-    let geo = toNonIndexed(g);
+    let geo = toIndexed(g);
     if (!geo.getAttribute('normal')) geo.computeVertexNormals();
     if (b.tile) projectUV(geo, b.tile[0], b.tile[1]);
     else if (!geo.getAttribute('uv')) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.getAttribute('position').count * 2), 2));
@@ -400,7 +414,8 @@ export class LaunchSite {
     paintSurface(geo, b.surface);
     if (shade) {
       const c = geo.getAttribute('color') as THREE.BufferAttribute;
-      for (let i = 0; i < c.count; i++) c.setXYZ(i, c.getX(i) * shade[i], c.getY(i) * shade[i], c.getZ(i) * shade[i]);
+      const a = c.array as Uint8Array;
+      for (let i = 0; i < c.count; i++) for (let k = 0; k < 3; k++) a[i * 3 + k] = Math.round(a[i * 3 + k] * shade[i]);
     }
     if (!b.cast) { this.pendingGeos.ground.push(geo); return; }
     // Casters near the pad and the rest of the complex are separate meshes: the vessel-hugging shadow camera's
@@ -435,6 +450,11 @@ export class LaunchSite {
       const merged = this.track(mergeGeometries(list, false)!);
       list.forEach((g) => g.dispose());
       list.length = 0;
+      // Normals as normalized bytes (12 → 3 bytes per vertex; shading normals tolerate 1/127 steps).
+      const nrm = merged.getAttribute('normal');
+      const packed = new Int8Array(nrm.count * 3);
+      for (let i = 0; i < nrm.count * 3; i++) packed[i] = Math.round(Math.max(-1, Math.min(1, (nrm.array as Float32Array)[i])) * 127);
+      merged.setAttribute('normal', new THREE.BufferAttribute(packed, 3, true));
       merged.computeBoundingSphere();
       const mesh = new THREE.Mesh(merged, mat);
       mesh.name = `site:${name}`;
