@@ -9,9 +9,9 @@ mkdirSync(directory, { recursive: true });
 const profile = `C:/wsp-tools/wp4-profile-${tag}`;
 rmSync(profile, { recursive: true, force: true });
 const browser = await puppeteer.launch(which === 'firefox' ? {
-  browser: 'firefox', headless: false, executablePath: 'C:/Program Files/Mozilla Firefox/firefox.exe', userDataDir: profile,
+  browser: 'firefox', headless: false, protocolTimeout: 30000, executablePath: 'C:/Program Files/Mozilla Firefox/firefox.exe', userDataDir: profile,
   extraPrefsFirefox: { 'layout.frame_rate': 120 }, args: ['--width=1600', '--height=990'], defaultViewport: null,
-} : { browser: 'chrome', headless: false, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+} : { browser: 'chrome', headless: false, protocolTimeout: 30000, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
   userDataDir: profile, defaultViewport: { width: 1600, height: 900, deviceScaleFactor: Number(dpr) }, args: ['--disable-frame-rate-limit'] });
 const page = (await browser.pages())[0];
 const errors = [], longTasks = [], scenes = [];
@@ -31,7 +31,7 @@ try {
   await page.goto(base + '?flight=stock-selene&scenario=orbit', { waitUntil: 'load' });
   await page.waitForFunction(() => !!window.__flight && (!document.querySelector('.loading-screen') || getComputedStyle(document.querySelector('.loading-screen')).opacity === '0'), { timeout: 90000 });
   await delay(3000);
-  if (which === 'chrome') {
+  if (which === 'chrome' && !tag.includes('final')) {
     session = await page.createCDPSession();
     session.on('Page.screencastFrame', event => {
       const name = `frame-${String(frame++).padStart(5, '0')}.jpg`;

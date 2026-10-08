@@ -105,6 +105,12 @@ and Chrome `video.mp4`. The after directories also contain `alarms.png`, `surfac
 outside the camera view, so a short local fall verifies the marker. The surface-track coordinate correction
 follows these captures and is being recaptured as `after-final-dpr2`.
 
+Final recapture encountered Chrome protocol timeouts and then a concrete Windows `ENOSPC` failure. The drive
+had filled during shared runs. Removed only WP4's closed generated browser profiles and hash-verified duplicate
+JPEGs whose originals are retained in the Linux artifact directory, recovering about 528 MB. The driver now
+caps protocol waits at 30 s and omits duplicate video recording for final still captures. Earlier successful
+paired videos remain intact; the final worker-coordinate correction is being rechecked in Firefox.
+
 ## Limits / review still required
 
 - Prediction assumes no future burn, staging or chute-arm command. Changed thrust, vessel, body, stage or
