@@ -44,6 +44,8 @@ describe('GLSL portability', () => {
     const reviewed = new Map([
       ['render/site/aerial.ts', 1], // launch-site materials only
       ['render/site/LaunchSite.ts', 1],
+      // Site surface attributes (vec4 + uv); the merged site material drops the map's vMapUv. ~10 of 15 vectors.
+      ['render/site/siteSurfaces.ts', 2],
       ['render/map/OrbitStyle.ts', 2], // Line2 material, not a lit mesh material
     ]);
     const found = new Map<string, number>();

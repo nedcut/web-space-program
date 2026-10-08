@@ -75,9 +75,9 @@ export class SurfaceScatter {
       blob.frustumCulled = false;
       blob.renderOrder = -1;
       blob.name = `scatter:rockShadow:${this.batches.length}`;
-      this.group.add(blob);
     }
     this.batches.push({ mesh, perCell, kind, blob }); this.group.add(mesh);
+    if (blob) this.group.add(blob);
   }
   get idle(): boolean { return this.pending.length === 0 && !this.active; }
 

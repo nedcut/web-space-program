@@ -373,8 +373,12 @@ export class LaunchSite {
     for (const k of Object.keys(B) as Key[]) this.batches.set(k, B[k]);
   }
 
-  /** Add geometry (object space) to a batch, optionally transformed by `m` (object → local pad frame). */
-  private add(key: Key, g: THREE.BufferGeometry, m?: THREE.Matrix4) {
+  /**
+   * Add geometry (object space) to a batch, optionally transformed by `m` (object → local pad frame). `ao` darkens
+   * vertices near the object's base (object-space y below ~3.5 m) by up to that fraction: ground contact and
+   * splash grime on walls, baked into the vertex tint.
+   */
+  private add(key: Key, g: THREE.BufferGeometry, m?: THREE.Matrix4, ao = 0) {
     const b = this.batches.get(key)!;
     let geo = toNonIndexed(g);
     if (!geo.getAttribute('normal')) geo.computeVertexNormals();
@@ -383,9 +387,19 @@ export class LaunchSite {
     // Keep only the attributes every batch member shares.
     for (const name of Object.keys(geo.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'uv') geo.deleteAttribute(name);
     geo.clearGroups();
+    let shade: Float32Array | null = null;
+    if (ao > 0) {
+      const p = geo.getAttribute('position');
+      shade = new Float32Array(p.count);
+      for (let i = 0; i < p.count; i++) shade[i] = 1 - ao * (1 - THREE.MathUtils.smoothstep(p.getY(i), -0.5, 3.5));
+    }
     if (m) geo = geo.applyMatrix4(m);
     if (key === 'deck') { this.pendingGeos.deck.push(geo); return; }
     paintSurface(geo, b.surface);
+    if (shade) {
+      const c = geo.getAttribute('color') as THREE.BufferAttribute;
+      for (let i = 0; i < c.count; i++) c.setXYZ(i, c.getX(i) * shade[i], c.getY(i) * shade[i], c.getZ(i) * shade[i]);
+    }
     (b.cast ? this.pendingGeos.cast : this.pendingGeos.ground).push(geo);
   }
 
@@ -763,10 +777,13 @@ export class LaunchSite {
     const m = this.frameAt(x, z, yaw, w / 2, d / 2);
     const hw = w / 2, hd = d / 2, y0 = -1.5;
     const up = V(0, 1, 0);
-    this.add(wall, this.facing(V(-hw, y0, hd), V(hw, y0, hd), V(hw, h, hd), V(-hw, h, hd), V(0, 0, 1)), m);
-    this.add(wall, this.facing(V(hw, y0, -hd), V(-hw, y0, -hd), V(-hw, h, -hd), V(hw, h, -hd), V(0, 0, -1)), m);
-    this.add(wall, this.facing(V(hw, y0, hd), V(hw, y0, -hd), V(hw, h, -hd), V(hw, h, hd), V(1, 0, 0)), m);
-    this.add(wall, this.facing(V(-hw, y0, -hd), V(-hw, y0, hd), V(-hw, h, hd), V(-hw, h, -hd), V(-1, 0, 0)), m);
+    // Each wall in two bands so the base occlusion stays at the foot of the wall.
+    for (const [ya, yb] of [[y0, 3.5], [3.5, h]]) {
+      this.add(wall, this.facing(V(-hw, ya, hd), V(hw, ya, hd), V(hw, yb, hd), V(-hw, yb, hd), V(0, 0, 1)), m, 0.4);
+      this.add(wall, this.facing(V(hw, ya, -hd), V(-hw, ya, -hd), V(-hw, yb, -hd), V(hw, yb, -hd), V(0, 0, -1)), m, 0.4);
+      this.add(wall, this.facing(V(hw, ya, hd), V(hw, ya, -hd), V(hw, yb, -hd), V(hw, yb, hd), V(1, 0, 0)), m, 0.4);
+      this.add(wall, this.facing(V(-hw, ya, -hd), V(-hw, ya, hd), V(-hw, yb, hd), V(-hw, yb, -hd), V(-1, 0, 0)), m, 0.4);
+    }
     this.add(roof, this.facing(V(-hw, h, hd), V(hw, h, hd), V(hw, h, -hd), V(-hw, h, -hd), up), m);
     // Horizontal spandrels, corner piers and roof plant give the façades readable scale.
     for (let y = 4; y < h; y += 4) {
@@ -803,7 +820,7 @@ export class LaunchSite {
     // Launch control blockhouse (low, heavy concrete, few windows).
     {
       const m = this.frameAt(150, 95, -0.5, 16, 10);
-      this.add('concrete', boxY(32, 20, 0, 0, -1.5, 6), m);
+      this.add('concrete', boxY(32, 20, 0, 0, -1.5, 6), m, 0.35);
       this.add('concrete', boxY(28, 16, 0, 0, 6, 7.5), m);
       this.add('roofDark', boxY(26, 14, 0, 0, 7.5, 7.7), m);
       this.add('windows', this.facing(V(-12, 2.5, 10.02), V(12, 2.5, 10.02), V(12, 5, 10.02), V(-12, 5, 10.02), V(0, 0, 1)), m);
@@ -844,8 +861,8 @@ export class LaunchSite {
     const m = this.frameAt(x, z, yaw, w / 2 + 50, d / 2);
     const hw = w / 2, hd = d / 2;
     // Main high bay + low bay annex (cladding), blue parapet band and corner pilasters.
-    this.add('vabClad', boxY(w, d, 0, 0, -1.5, h), m);
-    this.add('vabClad', boxY(54, d - 20, -hw - 27, -10, -1.5, 48), m);
+    this.add('vabClad', boxY(w, d, 0, 0, -1.5, h), m, 0.3);
+    this.add('vabClad', boxY(54, d - 20, -hw - 27, -10, -1.5, 48), m, 0.3);
     this.add('accent', boxY(w + 0.8, d + 0.8, 0, 0, h - 7, h + 0.6), m);
     this.add('accent', boxY(54.8, d - 19.2, -hw - 27, -10, 44, 48.6), m);
     for (const [cx, cz] of [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]]) this.add('accent', boxY(3, 3, cx, cz, -1.5, h - 7), m);
