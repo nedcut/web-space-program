@@ -126,22 +126,32 @@ it('deposits continuous long-lived trail cells by surface-relative travel, ignor
   for(let i=1;i<=20;i++){v.position.x+=3000; center.x+=3000; update(i*.1);}
   expect(fx.pool.object.visible).toBe(false);
   surface.set(0,120,0); v.velocity.y=120;
-  v.position.x+=3000; center.x+=3000; v.position.y+=12; update(2.1);
+  v.position.x+=3000; center.x+=3000; v.position.y+=36; update(2.1);
   expect(fx.pool.object.visible).toBe(true);
   const params=fx.pool.object.geometry.attributes.params;
-  expect(params.getY(0)).toBe(90);
-  expect(fx.pool.object.geometry.attributes.velocity.getX(0)).toBe(30000);
+  expect(params.getY(128)).toBe(90);
+  expect(fx.pool.object.geometry.attributes.velocity.getX(128)).toBe(30000);
   fx.dispose();
 });
 
 it('leaves an expired pool dormant until a new event establishes a fresh anchor', () => {
   const pool=new ParticlePool(4), zero=new THREE.Vector3(), first=new THREE.Vector3(1.5e11,0,0);
   pool.emit(first,zero,0,1,2,0,new THREE.Color());pool.update(first,2,1000);
-  const attribute=pool.object.geometry.attributes.spawnPosition, version=attribute.version;
+  const attribute=pool.object.geometry.attributes.spawnPosition as THREE.BufferAttribute, version=attribute.version;
   pool.update(new THREE.Vector3(3e11,0,0),3,1000);
   expect(attribute.version).toBe(version);expect(pool.object.visible).toBe(false);
   const next=new THREE.Vector3(3e11,100,0);
   pool.emit(next,zero,3,1,2,0,new THREE.Color());pool.update(next,3.1,1000);
   expect(attribute.getX(1)).toBe(0);expect(pool.object.position.length()).toBe(0);expect(pool.object.visible).toBe(true);
+  pool.dispose();
+});
+
+it('preserves long-lived column cells through a spark / pad-dust burst without adding a draw', () => {
+  const pool=new ParticlePool(512), zero=new THREE.Vector3(), color=new THREE.Color();
+  pool.emit(zero,zero,0,90,60,.015,color);
+  const params=pool.object.geometry.attributes.params;
+  for(let i=0;i<1000;i++)pool.emit(zero,zero,1,.5,1,0,color);
+  expect(params.getY(128)).toBe(90);
+  expect(pool.object.geometry.instanceCount).toBe(512);
   pool.dispose();
 });

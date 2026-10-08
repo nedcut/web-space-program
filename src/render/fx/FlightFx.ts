@@ -152,7 +152,8 @@ export class FlightFx {
       this.trailStart.copy(trail.position);
       if (!fresh) this.trailStart.addScaledVector(this.ambientVelocity,step);
       const travelled = this.trailStart.distanceTo(this.nozzle);
-      const spacing = Math.max(8, Math.min(30, Math.sqrt(p.engine.thrust/100000)*12));
+      const scale=this.quality==='low' ? 4 : 1;
+      const spacing = Math.max(30*scale, Math.min(60*scale, Math.sqrt(p.engine.thrust/100000)*12));
       trail.credit += travelled;
       const cells = trailCells(trail.credit,spacing,24);
       trail.credit = Math.min(spacing, trail.credit-cells*spacing);

@@ -7,6 +7,8 @@ export class ParticlePool {
   private readonly anchor = new THREE.Vector3();
   private initialized = false;
   private cursor = 0;
+  private trailCursor = 0;
+  private readonly burstCapacity: number;
   private expires = 0;
   private dirtyStart = Infinity;
   private dirtyEnd = -1;
@@ -18,6 +20,7 @@ export class ParticlePool {
   private readonly colors: Float32Array;
   private readonly accelerations: Float32Array;
   constructor(readonly capacity: number) {
+    this.burstCapacity=capacity<128 ? capacity : Math.floor(capacity/4);
     this.positions = new Float32Array(capacity * 3);
     this.velocities = new Float32Array(capacity * 3);
     this.params = new Float32Array(capacity * 4);
@@ -92,7 +95,11 @@ export class ParticlePool {
     if (!this.initialized) { this.anchor.copy(position); this.initialized = true; }
     this.expires = Math.max(this.expires,time+life);
     this.object.visible = true;
-    const i = this.cursor++ % this.capacity, j = i * 3, k = i * 4;
+    // Short sparks / pad dust must not overwrite the column back to the ground.
+    const i = life>=30 && this.capacity>this.burstCapacity
+      ? this.burstCapacity + this.trailCursor++ % (this.capacity-this.burstCapacity)
+      : this.cursor++ % this.burstCapacity;
+    const j = i * 3, k = i * 4;
     this.positions[j] = position.x - this.anchor.x; this.positions[j+1] = position.y - this.anchor.y; this.positions[j+2] = position.z - this.anchor.z;
     this.velocities[j] = velocity.x; this.velocities[j+1] = velocity.y; this.velocities[j+2] = velocity.z;
     this.accelerations[j] = acceleration?.x ?? 0; this.accelerations[j+1] = acceleration?.y ?? 0; this.accelerations[j+2] = acceleration?.z ?? 0;
@@ -125,7 +132,7 @@ export class ParticlePool {
   clear() {
     this.params.fill(0);
     this.dirtyStart=0; this.dirtyEnd=this.capacity-1;
-    this.object.visible = false; this.initialized = false; this.cursor = 0; this.expires=0;
+    this.object.visible = false; this.initialized = false; this.cursor = 0; this.trailCursor=0; this.expires=0;
   }
   /** Terrain tangent soft intersection; deliberately avoids a second scene/depth pass. */
   ground(position: Vec3, normal: THREE.Vector3, altitude: number) {
