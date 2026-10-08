@@ -18,7 +18,9 @@ import { FlightController } from './controller';
 import { Hud, NavballView, type Telemetry } from './hud/Hud';
 import type { GameAudio } from '../audio';
 import { getGameAudio } from '../audio/ui';
+import { AlarmPanel } from './hud/AlarmPanel';
 import { ManeuverPanel } from './hud/ManeuverPanel';
+import { LandingMarker } from './map/LandingMarker';
 import { MapOverlay } from './map/MapOverlay';
 import { AssistPanel } from './hud/AssistPanel';
 import { HelpOverlay, QuickStartCard, helpSeen, markHelpSeen } from './hud/HelpOverlay';
@@ -364,6 +366,8 @@ export default function FlightScene() {
             resources: (tele.mapMode || active?.state.parts.some(p => p.def.modules.some(m => ['drill', 'converter', 'surfaceScanner', 'surveyScanner'].includes(m.type))))
               ? <ResourcePanel world={c.world} map={c.map} mapMode={tele.mapMode} paused={paused} act={(uid, a) => ctrl.current?.partAction(uid, a)} /> : undefined,
             science: <SciencePanel world={c.world} paused={paused} />,
+            alarmActive: c.world.alarmClock.held,
+            alarms: <AlarmPanel world={c.world} />,
             maneuver: <ManeuverPanel world={c.world} map={c.mapUi} />,
           }}
           cb={{
@@ -396,6 +400,7 @@ export default function FlightScene() {
           }}
         />
       )}
+      {c && ready && !photo.active && !paused && !multiplayer && !uiHidden && <LandingMarker controller={c} />}
       {c && tele?.mapMode && ready && !photo.active && !paused && !multiplayer && !uiHidden && <MapOverlay controller={c} />}
       {c && ready && !photo.active && !paused && !uiHidden && <FlightInspector controller={c} panels={panels} setPanels={setPanels} />}
       {settings.showFps && c && !photo.active && !uiHidden && <PerformanceReadout controller={c} />}

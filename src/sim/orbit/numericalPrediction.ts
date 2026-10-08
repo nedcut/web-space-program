@@ -3,7 +3,7 @@ import type { Ephemeris } from './ephemeris';
 import type { ManeuverNode, StateVector, TrajectoryPatch } from './api';
 import { adaptiveStep } from './adaptive';
 import { createGravityModel } from './nbody';
-import { maneuverToInertialDv } from './maneuver';
+import { maneuverToInertialDv, validAnchor } from './maneuver';
 import { propagate, stateToElements } from './kepler';
 import { findDominantBody } from './soi';
 import { add, dot, length, scale, sub } from '../../util/vec3';
@@ -40,7 +40,7 @@ export class NumericalPrediction {
   constructor(private readonly bodies: Map<string,Body>, private readonly ephem: Ephemeris,
     private frame: string, private state: StateVector, public time: number, readonly target: number, nodes: ManeuverNode[] = [],
     private readonly surfaceAltitude: (body: Body) => number = b => b.atmosphere?.height ?? 0) {
-    this.nodes = nodes.filter(n=>n.time>=time && n.time<=target).sort((a,b)=>a.time-b.time || a.id-b.id);
+    this.nodes = nodes.filter(n=>(n.time>=time || validAnchor(n, frame)) && n.time<=target).sort((a,b)=>a.time-b.time || a.id-b.id);
     this.model = createGravityModel(bodies,ephem);
     this.newPatch();
   }
@@ -55,7 +55,12 @@ export class NumericalPrediction {
       while (this.nodes[this.nodeIndex]?.time<=this.time) {
         const node = this.nodes[this.nodeIndex];
         patch.endReason='maneuver';
-        this.state={position:this.state.position,velocity:add(this.state.velocity,maneuverToInertialDv(this.state,node))};
+        const anchor = validAnchor(node, this.frame);
+        if (anchor) {
+          if (node.time < this.time) delete patch.samples; // live conic alongside the frozen numerical plan
+          this.state = { position: anchor.position, velocity: anchor.velocity };
+          this.time = node.time;
+        } else this.state={position:this.state.position,velocity:add(this.state.velocity,maneuverToInertialDv(this.state,node))};
         this.nodeIndex++; this.newPatch(); patch=this.patches[this.patches.length-1];
       }
       if (this.time>=this.target) { this.complete=true; break; }

@@ -1,11 +1,12 @@
 /** Worker module logic is also executable in-process for Node and protocol tests. */
+import { landingPrediction } from './landing';
 import { Universe } from '../universe';
 import { planTransferToBody } from './transfers';
 import { planInterplanetaryTransfer, planCourseCorrectionToBody, porkchopRows } from '../interplanetary';
 import type { PlanningWorld } from './context';
 import type { PlannerEvent, PlannerMessage, PlanningSnapshot } from './protocol';
 
-export function restorePlanningWorld(snapshot: PlanningSnapshot): PlanningWorld {
+export function restorePlanningWorld(snapshot: PlanningSnapshot): PlanningWorld & { universe: Universe } {
   const universe = new Universe(snapshot.preset);
   for (const id of snapshot.activatedAsteroids ?? []) universe.activateAsteroid(id);
   const nodes = snapshot.nodes.map(n => ({ ...n }));
@@ -44,6 +45,17 @@ export function createPlannerHandler(send: (event: PlannerEvent) => void, yieldT
       const world = restorePlanningWorld(snapshot);
       let result: Extract<PlannerEvent, { type: 'result' }>['result'];
       switch (message.operation) {
+        case 'landing': {
+          const prediction = landingPrediction(world.universe, snapshot.ut, message.args);
+          let next = prediction.next();
+          while (!next.done) {
+            await yieldTask();
+            if (job.cancelled) return;
+            next = prediction.next();
+          }
+          result = next.value;
+          break;
+        }
         case 'transfer': result = planTransferToBody(world, message.args.target, message.args.options, report); break;
         case 'interplanetary': result = planInterplanetaryTransfer(world, message.args.target, message.args.options, report); break;
         case 'correction': result = planCourseCorrectionToBody(world, message.args.target, message.args.options, report); break;

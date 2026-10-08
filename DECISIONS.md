@@ -237,3 +237,34 @@ Decisions made autonomously while the owner was away. Each can be revisited.
 - **Guidance and controls:** body-named orbit hints require a bound orbit above atmosphere and maximum terrain. Earth ascent advice requires an ascending Earth flight, and the turn window is 50–100 m/s. Hints dock below the left instruments and yield to live cautions/messages. A six-key, non-modal first-flight card replaces automatic full help, disappears on liftoff and remembers completion; Shift+F1 and the help button retain the full sheet. Hide unfinished IVA everywhere: portrait button, help entry, input action and settings binding. Old stored binding objects remain readable; their obsolete IVA key is ignored.
 - **Readout placement:** keep the central vessel/plume column clear by moving the navball/speed/burn cluster to the lower left beside staging. An opt-in, session-persisted engineering strip uses the existing 10 Hz snapshot: current/next engine-stage Δv, maximum TWR at local gravity, a vertical burn countdown only on descending impact trajectories, and explicitly ballistic time to impact. Tooltips describe the no-drag assumptions. Telemetry publication cadence and unchanged-field sharing are preserved; no new animation loop, render pass, shader or simulation mutation.
 - **Integration boundaries:** `controller.ts` changes are the speed-mode interface and removal of the unused IVA notification. `FlightScene.tsx` changes only connect the first-flight card, its seen state and the existing HUD dock. There are no edits to loss flow, renderer/FX/audio/camera, editor, part data, map/planning or `src/sim`.
+
+## Mission planning completion (2026-10-08, cx/wp4)
+
+- **Build on the existing WP4 subset.** Keep the existing worker transfer/window search and staging-aware,
+  half-Δv-before-node executor, fine trim and frozen maneuver anchors. The departure list explicitly labels its
+  “now” option as within the next orbit; signed node countdowns were already fixed on main. Add an explicit
+  whole-transfer overview instead of automatically hiding the local orbit after planning. Explicit assist-button
+  cancellation now queues `Autopilot.release()` so temporary engine limiters are restored there too.
+- **Local map framing.** The default focus is the active body's centre, framing the current orbit on entry.
+  During a burn the automatic frame expands when the vessel would leave it. Elliptic entry framing uses apoapsis
+  with a local bound; escape paths use current radius. User-selected object focus/zoom remains available. Hide
+  asteroid/comet labels/orbits and the procedural asteroid field in local views; targets/focused small bodies
+  remain visible, and heliocentric views retain the field. Rendering edits are functional additions, with no map
+  pipeline refactor. The controller changes are just the frame call and cached prediction payload/markers.
+- **Alarm semantics.** Persist custom/per-vessel, auto-node (30 s preparation lead), auto-SOI alarms as optional
+  version-1 save data. The clock holds at a reached deadline, clamps high rails warp exactly and checks physics
+  every 20 ms. Custom/SOI alarms cancel a coast assist; an executor may continue its own node preparation/burn
+  at 1×. Warp-to stops instead of repeatedly restarting itself. A new explicit warp assignment acknowledges
+  the previous stop, preserving headless-driver and Tracking Station behavior. Clock work reuses existing SOI
+  predictions/events; unchanged nodes and a cached deadline need no new search or per-frame objects. Bound the
+  list to 200 entries; automatic alarms can be disabled and reached/custom alarms removed.
+- **Trajectories contract.** Use actual 50 Hz vessel aero/heating/SAS/chute/contact physics in the existing planner
+  worker rather than a separate approximate drag law. Coast analytically above atmosphere/terrain, then yield
+  every 100 steps or 8 ms of work. Prediction is unpowered, hold current attitude or surface retrograde; simulate
+  already armed/deployed chutes, with no future staging or burns. A horizon, escape or destruction reports a
+  partial path, not a fabricated touchdown. Refresh eligibility at 1 Hz, submit no faster than 5 s, keep one job
+  and one Earth-grid copy in a persistent worker. Unsupported workers disable the automatic feature. Use cached
+  markers/results and rebuild one map line only on new results; the flight surface marker updates at 4 Hz.
+- **Precise-gravity anchors.** Numerical paths now start the planned patch from `validAnchor`'s Float64 post-burn
+  position/velocity at node time, even when the live prediction starts after that time. Preserve the live conic
+  and add the anchor-presence flag to the numerical cache key. No changes to gravity integration/planner math.

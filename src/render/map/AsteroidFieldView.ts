@@ -18,6 +18,10 @@ export class AsteroidFieldView {
     scene.add(this.points, this.line);
   }
   select(id: string | null) { this.selected = id; }
+  setVisible(visible: boolean) {
+    this.points.visible = visible;
+    if (!visible) this.line.visible = false;
+  }
   update(t: number, focus: Vec3) {
     const positions = this.points.geometry.getAttribute('position');
     this.source.asteroidField.forEach((a, i) => {
@@ -37,6 +41,7 @@ export class AsteroidFieldView {
     }
   }
   pick(x: number, y: number, camera: THREE.Camera): string | null {
+    if (!this.points.visible) return null;
     const positions = this.points.geometry.getAttribute('position');
     let best = 0.022 ** 2, id: string | null = null;
     const v = new THREE.Vector3();

@@ -129,6 +129,7 @@ export function assistFrame(world: World, assist: Autopilot, pilot: ControlInput
   // frame). A throttle override applies the pilot's throttle this same frame (e.g. an emergency cut).
   if (pilotThrottle) return end('pilot', 'Assist cancelled: manual control', true);
   if (pilot.pitch || pilot.yaw || pilot.roll) return end('pilot', 'Assist cancelled: manual control');
+  if (world.alarmClock.held && world.alarmClock.holdReason === 'other') return end('pilot', 'Assist paused at mission alarm; acknowledge and restart to continue');
   const step = assist.update(world);
   if (assist.error) return end('error', `Assist stopped: ${assist.error}`);
   if (assist.done) return end('done', `${assist.name}: complete`);
@@ -144,8 +145,8 @@ export function assistFrame(world: World, assist: Autopilot, pilot: ControlInput
   };
   if (step.coastUntil !== undefined) {
     const idx = warpIndexFor(step.coastUntil - world.ut, dt);
-    world.warp = { mode: 'rails', index: idx };
-    state.warped = idx > 0;
+    world.warp = { mode: 'rails', index: world.alarmClock.held ? 0 : idx };
+    state.warped = world.warp.index > 0;
   } else {
     releaseRailsWarp(world);
     state.warped = false;

@@ -30,6 +30,7 @@ import * as crew from './world/crew';
 import * as docking from './world/docking';
 import type { TrajectoryCache, WorldInternals } from './world/internals';
 import * as launch from './world/launch';
+import { AlarmClock } from './alarms';
 import { NodeAnchors } from './world/nodeAnchors';
 import * as progression from './world/progression';
 import * as rails from './world/rails';
@@ -198,6 +199,7 @@ export class World {
   ut: number;
   warp: WarpState = { mode: 'rails', index: 0 };
   nodes: ManeuverNode[] = [];
+  readonly alarmClock = new AlarmClock();
   private readonly nodeAnchors = new NodeAnchors();
   seenTips: string[] = [];
   private recentMessages = new Map<string, number>();
@@ -457,7 +459,7 @@ export class World {
     if (!wv || !this.targetId || wv.mode === 'prelaunch' || this.targetKind() === null) return null;
     const patches = this.trajectory();
     if (!patches.length) return null;
-    const key = `${this.targetId}|${patches.length}|${patches[0].startTime}|${patches[1]?.startTime}|${this.nodes.map((n) => `${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}`).join(',')}`;
+    const key = `${this.targetId}|${patches.length}|${patches[0].startTime}|${patches[1]?.startTime}|${this.nodes.map((n) => `${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}${validAnchor(n, wv.body) ? '*' : ''}`).join(',')}`;
     if (this.approachCache && this.approachCache.key === key) return this.approachCache.value;
     let value: TrajectoryApproach | null;
     try {
@@ -489,6 +491,7 @@ export class World {
       if (reason) this.message(reason, 'warn');
       else if (why) this.message(why.text, why.level, 2.5);
     }
+    this.alarmClock.acknowledge();
     this.warp = next;
   }
 
@@ -504,6 +507,11 @@ export class World {
     const now = performance.now();
     this.messages = this.messages.filter((m) => m.expires > now);
     this.validateTarget();
+    // An explicit new warp assignment acknowledges the previous stop. UI automation (WarpDriver/assist)
+    // checks the hold before assigning a rate, so it cannot silently resume past an alarm.
+    if (this.alarmClock.held && this.warp.index > 0) this.alarmClock.acknowledge();
+    this.alarmClock.sync(this);
+    this.alarmClock.fire(this);
     this.warp = clampWarp(this.warp, this.warpContext());
     // A vessel packed on rails ignores throttle, attitude and SAS. Commanding thrust from a live engine or steering
     // is a request to fly, as staging is below: drop to 1× instead of silently ignoring the controls.
@@ -526,14 +534,10 @@ export class World {
       this.renderHistory.invalidate();
       for (const wv of this.vessels.values()) this.pack(wv);
       let target = this.ut + realDt * rate;
-      // Stop warp at the next maneuver node (minus a margin). Active-vessel events (SOI change, atmosphere,
-      // impact) are handled in advanceRails.
-      const nextNode = this.nodes.filter((n) => n.time > this.ut).sort((a, b) => a.time - b.time)[0];
-      if (nextNode && target > nextNode.time - 30 && this.ut < nextNode.time - 30) {
-        target = nextNode.time - 30;
-        this.warp = { mode: 'rails', index: 0 };
-      }
+      this.alarmClock.sync(this, true); // packing supplies the next fleet SOI events
+      target = Math.min(target, this.alarmClock.next(this.ut));
       this.advanceRails(target);
+      this.alarmClock.fire(this);
       return;
     }
 
@@ -561,6 +565,9 @@ export class World {
       this.pendingCommands = [];
       this.acc -= PHYSICS_DT;
       steps++;
+      const alarmWasHeld = this.alarmClock.held;
+      this.alarmClock.fire(this);
+      if (!alarmWasHeld && this.alarmClock.held) { this.acc = 0; break; }
     }
     if (steps >= MAX_STEPS_PER_FRAME * rate) this.acc = 0;
   }
@@ -862,7 +869,7 @@ export class World {
     if (!this.preciseGravity) return this.burnTrajectory();
     const v = this.active;
     if (!v || v.mode === 'prelaunch' || v.state.situation !== 'flying') return [];
-    const key = `${v.state.id}:${v.body}:`+this.nodes.map(n=>`${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}`).join(',');
+    const key = `${v.state.id}:${v.body}:`+this.nodes.map(n=>`${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}${validAnchor(n, v.body) ? '*' : ''}`).join(',');
     const thrusting = v.state.telemetry.thrust > 0;
     const age = (thrusting ? .2 : 2)*Math.max(1,warpRate(this.warp));
     // Restart at once after an engine cut (see trajectory()).
@@ -947,6 +954,7 @@ export class World {
     } catch {
       patches = [];
     }
+    this.alarmClock.predicted(this, wv.state.id, patches);
     this.trajectoryCache = { time: this.ut, key, patches, thrusting };
     return patches;
   }

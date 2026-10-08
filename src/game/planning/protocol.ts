@@ -12,6 +12,7 @@ export interface PlanningSnapshot {
   nodes: ManeuverNode[];
 }
 export interface PlanningOperations {
+  landing: { args: import('./landing').LandingRequest; result: import('./landing').LandingPrediction };
   transfer: { args: { target: string; options?: TransferOptions }; result: TransferPlan | null };
   interplanetary: { args: { target: string; options?: InterplanetaryOptions }; result: InterplanetaryPlan | null };
   correction: { args: { target: string; options: CourseCorrectionOptions }; result: TransferPlan | null };
