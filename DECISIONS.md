@@ -416,3 +416,10 @@ Decisions made autonomously while the owner was away. Each can be revisited.
 - **Key hints follow the player's bindings.** The indicator footer and the `?scenario=rendezvous` message read `bindingLabel(...)` instead of hard-coded I/K/J/L/H/N/R.
 - **No negative zero in readouts.** Docking readouts use `fixed()`; `formatSpeed` prints `0.0 m/s` for |v| < 0.05 (a target drifting apart at 0.01 m/s used to show `-0.0 m/s`).
 - **Map hover ignores the HUD on top.** `MapView` counts the pointer as on the map only when the window `pointermove` target is the map canvas (`pointerOnMap`). A closest-approach marker under the navball speed button used to show its "Click to pin" tooltip while clicks went to the button.
+
+## Docking UX follow-ups (2026-10-09, op/dockux)
+- **Headline `APPROACH`:** `dockingStatus` out of range says `ALIGN` only when the axes are off by more than the capture angle or the lateral offset exceeds the capture range; a lined-up craft at 5 m reads `APPROACH` (dim, like `ALIGN`).
+- **Docking mode ends on dock:** `dockingModeAfterEvent` (`src/flight/dockingMode.ts`) turns the flag off when a `docked` event involves the active vessel; re-enable with the button or `?scenario=rendezvous` as before.
+- **One closest-approach lead:** `CLOSEST_APPROACH_LEAD = 60 s` (`ui/map/mapActions.ts`) is used by both the vessel menu and the closest-approach marker menu (`pathPointWarpTime`); other markers keep their 10 s lead. Fixed, not speed-scaled.
+- **Total Δv readout** is `white-space: nowrap` (stays on one line at 1280×720; 21 px high).
+- **Pad map "Landing: hold attitude …" was a mislabel.** The row is the landing-prediction toggle (default on), but the predictor never runs for a prelaunch/landed/EVA vessel, so the toggle and its "Unpowered · drag, heating…" hint described nothing. `landingPredictionApplies` now hides both unless the vessel is flying; the driver uses the same predicate.

@@ -11,7 +11,13 @@ const base: DockingTelemetry = {
 describe('docking indicator status', () => {
   it('reports CAPTURE only inside the whole capture envelope', () => {
     expect(dockingStatus(base)).toBe('CAPTURE');
-    expect(dockingStatus({ ...base, z: 5 })).toBe('ALIGN');
+  });
+  it('says APPROACH when lined up but out of range, ALIGN only for real misalignment', () => {
+    expect(dockingStatus({ ...base, z: 5, angle: 3.1 })).toBe('APPROACH');
+    expect(dockingStatus({ ...base, z: 5, angle: 12 })).toBe('ALIGN');
+    expect(dockingStatus({ ...base, z: 5, x: 2 })).toBe('ALIGN');
+    expect(dockingStatus({ ...base, z: 5, x: 0.3, y: -0.3, angle: 9 })).toBe('APPROACH');
+    expect(dockingStatus({ ...base, z: 5, armed: false })).toBe('REARMING');
   });
   it('explains why an in-range pair will not latch', () => {
     expect(dockingStatus({ ...base, vz: -0.8 })).toBe('TOO FAST');

@@ -92,10 +92,13 @@ function dial(v: number, range = 25): number {
 }
 
 /** Indicator headline: why the ports will not latch yet, or CAPTURE when the soft-capture field is active. */
-export function dockingStatus(d: DockingTelemetry): 'SIZE MISMATCH' | 'REARMING' | 'ALIGN' | 'TOO FAST' | 'MISALIGNED' | 'CAPTURE' {
+export function dockingStatus(d: DockingTelemetry): 'SIZE MISMATCH' | 'REARMING' | 'ALIGN' | 'APPROACH' | 'TOO FAST' | 'MISALIGNED' | 'CAPTURE' {
   if (!d.sizeMatch) return 'SIZE MISMATCH';
   if (!d.armed) return 'REARMING';
-  if (Math.hypot(d.x, d.y, d.z) > d.captureRange) return 'ALIGN';
+  if (Math.hypot(d.x, d.y, d.z) > d.captureRange) {
+    // Out of range: ALIGN only while the axes or the lateral offset are outside the capture tolerance.
+    return d.angle > d.captureAngle || Math.hypot(d.x, d.y) > d.captureRange ? 'ALIGN' : 'APPROACH';
+  }
   if (Math.hypot(d.vx, d.vy, d.vz) > d.captureSpeed) return 'TOO FAST';
   if (d.angle > d.captureAngle) return 'MISALIGNED';
   return 'CAPTURE';
@@ -137,7 +140,7 @@ export function DockingIndicator({ d, hasTarget }: { d: DockingTelemetry | null;
     <div className="panel" style={box}>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <span className="label">Docking</span>
-        <span className="mono" style={{ fontSize: 11, color: status === 'CAPTURE' ? good : status === 'ALIGN' ? 'var(--text-dim)' : warn }}>{status}</span>
+        <span className="mono" style={{ fontSize: 11, color: status === 'CAPTURE' ? good : status === 'ALIGN' || status === 'APPROACH' ? 'var(--text-dim)' : warn }}>{status}</span>
       </div>
       <svg width={S} height={S} viewBox={`${-S / 2} ${-S / 2} ${S} ${S}`} style={{ display: 'block', margin: '6px auto' }}>
         <circle r={R} fill="rgba(0,0,0,0.35)" stroke="rgba(140,180,255,0.35)" />

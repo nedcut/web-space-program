@@ -2,7 +2,7 @@ import { LandingPredictionDriver } from './LandingPredictionDriver';
 import type { FlightController } from '../controller';
 import type { WorldVessel } from '../../game/world';
 import type { MapPick, MapPoint } from '../../render/map/MapView';
-import { focusCycle, mapContextActions, nextFocus, pathPointActions, sameObject, type MapAction, type MapActionId, type MapObject, type MapPathPoint } from '../../ui/map/mapActions';
+import { CLOSEST_APPROACH_LEAD, focusCycle, mapContextActions, pathPointWarpTime, nextFocus, pathPointActions, sameObject, type MapAction, type MapActionId, type MapObject, type MapPathPoint } from '../../ui/map/mapActions';
 import { formatDuration } from '../../util/format';
 import { isTyping, matches } from '../../input/bindings';
 import { formatDistance, formatSpeed } from '../../util/format';
@@ -215,7 +215,7 @@ export class FlightMap {
   runPoint(id: MapActionId, point: MapPathPoint) {
     this.menus = { ...this.menus, context: null };
     if (id === 'addNode' && point.time !== undefined) this.placeNode(point.time);
-    else if (id === 'warpPoint' && point.time !== undefined) this.warp(point.orbit ? 'Selected point' : point.label, point.time - (point.orbit ? 0 : 10));
+    else if (id === 'warpPoint' && point.time !== undefined) this.warp(point.orbit ? 'Selected point' : point.label, pathPointWarpTime(point)!);
     else if ((id === 'pin' || id === 'unpin') && point.key) this.c.map.togglePin(point.key);
     this.emit();
   }
@@ -254,7 +254,7 @@ export class FlightMap {
       case 'untarget': c.setTarget(null); break;
       case 'warpApproach': {
         const ca = w.closestApproach();
-        if (ca) this.warp('Closest approach', ca.time - 60);
+        if (ca) this.warp('Closest approach', ca.time - CLOSEST_APPROACH_LEAD);
         break;
       }
       case 'warpSoi': {

@@ -250,3 +250,22 @@ describe('path point actions', () => {
     expect(ids({ label: 'AN', time: 400, key: 'AN' }, false)).toEqual(['pin']);
   });
 });
+
+describe('warp lead times', () => {
+  it('stops closest-approach warps the same lead early from the marker and the vessel menu', async () => {
+    const { pathPointWarpTime, CLOSEST_APPROACH_LEAD, MARKER_WARP_LEAD } = await import('../src/ui/map/mapActions');
+    expect(CLOSEST_APPROACH_LEAD).toBe(60);
+    expect(pathPointWarpTime({ label: 'Closest approach', time: 1000, key: 'ca' })).toBe(1000 - CLOSEST_APPROACH_LEAD);
+    expect(pathPointWarpTime({ label: 'Apoapsis', time: 1000, key: 'ap:0' })).toBe(1000 - MARKER_WARP_LEAD);
+    expect(pathPointWarpTime({ label: 'T−5m', time: 1000, orbit: true })).toBe(1000);
+    expect(pathPointWarpTime({ label: 'x' })).toBeUndefined();
+  });
+  it('offers the landing prediction only to a flying vessel', async () => {
+    const { landingPredictionApplies: ok } = await import('../src/ui/map/mapActions');
+    expect(ok({ mode: 'physics', state: { situation: 'flying' } })).toBe(true);
+    expect(ok({ mode: 'prelaunch', state: { situation: 'flying' } })).toBe(false);
+    expect(ok({ mode: 'physics', state: { situation: 'landed' } })).toBe(false);
+    expect(ok({ mode: 'physics', state: { situation: 'flying', eva: {} } })).toBe(false);
+    expect(ok(null)).toBe(false);
+  });
+});
