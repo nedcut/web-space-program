@@ -14,7 +14,7 @@ describe('sky ground occlusion bound', () => {
       for (let i = 0; i < res * res * 6; i += 3) {
         const vertices = [0, 1, 2].map((j) => indices[i + j] * 3);
         for (const weights of [[1 / 3, 1 / 3, 1 / 3], [0.5, 0.5, 0], [0, 0.5, 0.5], [0.5, 0, 0.5]]) {
-          const xyz = chunk.center.map((center, axis) => center + vertices.reduce((sum, v, j) => sum + chunk.positions[v + axis] * weights[j], 0));
+          const xyz = chunk.origin.map((origin, axis) => origin + vertices.reduce((sum, v, j) => sum + chunk.positions[v + axis] * weights[j], 0));
           expect(Math.hypot(...xyz)).toBeGreaterThan(inner);
         }
       }
