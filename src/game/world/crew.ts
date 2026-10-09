@@ -5,12 +5,14 @@ import { crewIds, generateAstronaut, hasControl, seatCapacity, type Astronaut, t
 import { buildVessel, recomputeMassProperties } from '../../sim/vessel';
 import type { PartState, VesselState } from '../../sim/vessel/runtime';
 import { qConj, qFromTo, qIdentity, qMul, qRotate } from '../../util/quat';
-import { add, length, scale, sub, v3, type Vec3 } from '../../util/vec3';
+import { add, dot, length, normalize, scale, sub, v3, type Vec3 } from '../../util/vec3';
 import { Universe } from '../universe';
 import type { World, WorldVessel } from '../world';
 import type { WorldInternals } from './internals';
 export const BOARD_RANGE = 3;
 export const BOARD_SPEED = 3;
+/** Height of a hatch above a grounded astronaut that boarding treats as climbable (implicit ladder). */
+export const BOARD_CLIMB = 10;
 const bodyQuat = (u: Universe, id: string, t: number) => u.ephem.bodyRotation(id, t);
 
 /** Assign only newly created pods. Existing empty seats must stay empty. */
@@ -79,6 +81,19 @@ export function goEva(this: World, internals: WorldInternals, astronautId?: stri
 }
 
 
+/**
+ * Distance from the astronaut to a hatch for boarding. Standing on the ground, up to BOARD_CLIMB metres of the
+ * hatch's height above the astronaut is climbed rather than counted, so tall landers stay boardable on foot.
+ */
+function hatchReach(world: World, eva: WorldVessel, hatch: Vec3): number {
+  const d = sub(hatch, eva.state.position);
+  if (eva.state.situation !== 'landed' && eva.state.situation !== 'splashed') return length(d);
+  const up = normalize(sub(eva.state.position, world.universe.ephem.getBodyState(eva.body, world.ut).position));
+  const climb = Math.max(0, Math.min(BOARD_CLIMB, dot(d, up)));
+  return length(sub(d, scale(up, climb)));
+}
+
+
 export function boardingTarget(this: World, _internals: WorldInternals): { vessel: WorldVessel; pod: PartState } | null {
   const eva = this.active;
   if (!eva?.state.eva) return null;
@@ -86,7 +101,7 @@ export function boardingTarget(this: World, _internals: WorldInternals): { vesse
     if (vessel === eva || vessel.body !== eva.body || vessel.state.destroyed) continue;
     for (const pod of vessel.state.parts) {
       if (seatCapacity(pod) <= (pod.crew?.length ?? 0)) continue;
-      if (length(sub(eva.state.position, this.hatchPosition(vessel.state, pod))) <= BOARD_RANGE && length(sub(eva.state.velocity, vessel.state.velocity)) < BOARD_SPEED) return { vessel, pod };
+      if (hatchReach(this, eva, this.hatchPosition(vessel.state, pod)) <= BOARD_RANGE && length(sub(eva.state.velocity, vessel.state.velocity)) < BOARD_SPEED) return { vessel, pod };
     }
   }
   return null;
@@ -103,7 +118,7 @@ export function boardingBlocker(this: World, _internals: WorldInternals, whole =
     for (const pod of vessel.state.parts) {
       if (!seatCapacity(pod)) continue;
       const free = seatCapacity(pod) > (pod.crew?.length ?? 0);
-      const distance = length(sub(eva.state.position, this.hatchPosition(vessel.state, pod)));
+      const distance = hatchReach(this, eva, this.hatchPosition(vessel.state, pod));
       // A hatch with a free seat always outranks a full one, however far.
       if (!best || (free && !best.free) || (free === best.free && distance < best.distance)) best = { name: vessel.state.name, free, distance, speed: length(sub(eva.state.velocity, vessel.state.velocity)) };
     }

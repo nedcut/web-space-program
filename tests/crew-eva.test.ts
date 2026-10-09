@@ -155,6 +155,29 @@ describe('human crew and EVA', () => {
     expect(w.vessels.has(eva.state.id)).toBe(true);
   });
 
+  it('boards a hatch overhead from the ground (tall lander, no jetpack lift on the Moon)', () => {
+    const { w, ship } = orbit();
+    const eva = w.goEva()!;
+    eva.state.velocity = { ...ship.state.velocity };
+    const up = normalize(sub(eva.state.position, w.universe.ephem.getBodyState('moon', w.ut).position));
+    const side = normalize(v3(-up.y, up.x, 0));
+    const hatch = { ...eva.state.position };
+    // Standing 4.9 m below the hatch, as after stepping off the stock lander's pod.
+    eva.state.position = sub(hatch, scale(up, 4.9));
+    eva.state.situation = 'flying';
+    expect(w.boardingTarget()).toBeNull();
+    eva.state.situation = 'landed';
+    expect(w.boardingBlocker()).toBeNull();
+    // Climbing does not extend the horizontal reach, and stops at the climb limit.
+    eva.state.position = add(sub(hatch, scale(up, 4.9)), scale(side, 3.5));
+    expect(w.boardingBlocker()).toMatch(/Move closer/);
+    eva.state.position = sub(hatch, scale(up, 14));
+    expect(w.boardingTarget()).toBeNull();
+    eva.state.position = sub(hatch, scale(up, 4.9));
+    expect(w.boardEva()).toBe(true);
+    expect(w.vessels.has(eva.state.id)).toBe(false);
+  });
+
   it('says why boarding is not possible instead of ignoring the key', () => {
     const { w, ship } = orbit();
     const eva = w.goEva()!;

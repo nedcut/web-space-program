@@ -1,5 +1,6 @@
 import { PHYSICS_WARP, RAILS_WARP, warpRate } from '../../game/timewarp';
 import type { World } from '../../game/world';
+import { timeToTrueAnomaly } from '../../sim/orbit';
 import { warpIndexFor } from '../assist';
 
 /**
@@ -7,7 +8,7 @@ import { warpIndexFor } from '../assist';
  * "warp to" targets (next maneuver node, apoapsis, periapsis, SOI change) that pick the fastest safe rate and
  * come back to 1× just before the event. Rails events and clamps in World still apply on top of this.
  */
-export type WarpTargetId = 'node' | 'ap' | 'pe' | 'soi';
+export type WarpTargetId = 'node' | 'ap' | 'pe' | 'atmo' | 'soi';
 
 export interface WarpTargetOption {
   id: WarpTargetId;
@@ -16,8 +17,8 @@ export interface WarpTargetOption {
   time: number;
 }
 
-const LEAD: Record<WarpTargetId, number> = { node: 30, ap: 15, pe: 15, soi: 5 };
-const LABEL: Record<WarpTargetId, string> = { node: 'Maneuver', ap: 'Apoapsis', pe: 'Periapsis', soi: 'SOI change' };
+const LEAD: Record<WarpTargetId, number> = { node: 30, ap: 15, pe: 15, atmo: 5, soi: 5 };
+const LABEL: Record<WarpTargetId, string> = { node: 'Maneuver', ap: 'Apoapsis', pe: 'Periapsis', atmo: 'Atmosphere', soi: 'SOI change' };
 /** Log-space ramp time constant when the selected rate increases. */
 export const WARP_RAMP_TAU = 0.25;
 
@@ -37,7 +38,13 @@ export function warpTargets(world: World): WarpTargetOption[] {
   try {
     const o = world.orbitSummary(wv);
     if (o.orbit.e < 1 && o.ap > 0) add('ap', now + o.timeToAp);
-    if (o.pe > (world.universe.body(wv.body).atmosphere?.height ?? 0)) add('pe', now + o.timeToPe);
+    const body = world.universe.body(wv.body), atmo = body.atmosphere?.height ?? 0;
+    if (o.pe > atmo) add('pe', now + o.timeToPe);
+    else if (atmo > 0 && !world.warpContext().inAtmosphere) {
+      // Periapsis inside the atmosphere (re-entry, aerobraking): offer the descending crossing of its top instead.
+      const { a, e } = o.orbit, r = body.radius + atmo, c = (a * (1 - e * e) / r - 1) / e;
+      if (Math.abs(c) <= 1) add('atmo', now + timeToTrueAnomaly(o.orbit, -Math.acos(c), now));
+    }
   } catch {
     /* degenerate orbit */
   }
