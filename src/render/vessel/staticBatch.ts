@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { isThermalVariant } from '../fx/thermalSurface';
 import { nodeAttribute, nodeDepthMaterial } from '../core/rigidNodes';
+import { colorBatchMaterial } from '../core/colorBatch';
 
 /**
  * Nodes that flight animates or restyles every frame (VesselView.animatePart and its helpers): engine gimbals and
@@ -43,7 +44,7 @@ export interface StaticBatch {
 }
 
 /** One leaf (or one material group of a multi-material leaf) to merge. */
-interface Piece { geometry: THREE.BufferGeometry; matrix: THREE.Matrix4; slot: number; group?: THREE.GeometryGroup }
+interface Piece { geometry: THREE.BufferGeometry; matrix: THREE.Matrix4; slot: number; group?: THREE.GeometryGroup; tint?: THREE.Color }
 
 /** Only node-capable (thermal) materials can follow a moving frame in the shader. */
 const followsNodes = (m: THREE.Material) => isThermalVariant(m);
@@ -77,6 +78,11 @@ export function buildStaticBatch(objects: THREE.Object3D[], options: BatchOption
   const nodes: THREE.Object3D[] = [];
   const buckets = new Map<THREE.Material, Piece[]>();
   const add = (material: THREE.Material, piece: Piece) => {
+    const neutral = colorBatchMaterial(material);
+    if (neutral !== material) {
+      piece.tint = (material as THREE.MeshStandardMaterial).color;
+      material = neutral;
+    }
     let list = buckets.get(material);
     if (!list) buckets.set(material, list = []);
     list.push(piece);
@@ -116,6 +122,16 @@ export function buildStaticBatch(objects: THREE.Object3D[], options: BatchOption
     const layouts = new Map<string, { geometries: THREE.BufferGeometry[]; moving: boolean }>();
     for (const piece of pieces) {
       const g = extract(piece.geometry, piece.group).applyMatrix4(piece.matrix);
+      if (piece.tint) {
+        // Bake only the batch's copy, after soot/AO. Templates and per-part geometries must retain their original
+        // colours for highlighting, stress overlays and the individual draws between staging and re-batching.
+        let color = g.getAttribute('color');
+        if (!color) {
+          color = new THREE.Float32BufferAttribute(new Float32Array(g.getAttribute('position').count * 3).fill(1), 3);
+          g.setAttribute('color', color);
+        }
+        for (let i = 0; i < color.count; i++) color.setXYZ(i, color.getX(i) * piece.tint.r, color.getY(i) * piece.tint.g, color.getZ(i) * piece.tint.b);
+      }
       if (capable) g.setAttribute('wspNode', nodeAttribute(g.getAttribute('position').count, piece.slot));
       const key = `${!!g.index}:` + Object.keys(g.attributes).sort().map(k => `${k}/${g.attributes[k].itemSize}/${g.attributes[k].normalized}`).join(',');
       let entry = layouts.get(key);

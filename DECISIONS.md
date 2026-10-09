@@ -475,6 +475,28 @@ Decisions made autonomously while the owner was away. Each can be revisited.
 - **Cost (Chrome fenced GPU, medium, A/B/A/B):** pad and orbit equal within noise. On the sea view the frame rises from ~2.44 to ~2.54 ms; almost all of that is `UpscalePass`, whose flat-footprint early-out no longer covers the now-detailed water (0.117 → 0.228 ms). The scene pass rises by +0.02 ms.
 - **Rejected:** fading wave octaves by texture footprint. It hid part of the symptom; the blocks persisted with mipmapping disabled, and the real cause was the time precision.
 
+## Colour-only vessel material variants (2026-10-09, op/variantmerge)
+
+- **Explicit compatible families:** accent paints, anodised metals and gold/silver foil use a shared white material
+  per family when batched. Each family's coloured and white materials come from the same factory, preserving
+  maps, normal scale, roughness, metalness, clearcoat and anisotropy. Other families remain separate; similarly
+  named white/charcoal paints have different surface settings, and status LEDs have different emission.
+- **Bake the linear albedo into existing vertex colours at batch construction, after AO/weathering/soot.** Only
+  batch-owned geometry changes. Source meshes keep their materials and vertex colours for individual rendering
+  between staging and re-batching, and for stress overlays. Editor highlighting clones do not inherit family
+  registration. Thermal variants carry the same family registration and retain independent heat/node slots.
+- **No palette texture or new shader variant:** the existing `color` attribute already does the multiplication.
+  No new per-frame work, allocations, attributes, texture fetches or recovery hooks. CPU-backed batch geometry
+  restores through three.js; the existing full-upload-on-restore contract in `rigidNodes.ts` remains authoritative.
+  This supersedes the deferred colour-variant item under “Vessel draws once per material”.
+
+## Maneuver nodes under HUD panels (2026-10-09, op/mnodehud)
+- **Approach: move the drawing, not the node.** A node whose true screen point is under a HUD block (same `HUD_BLOCKS` rectangles as the orbit markers) is drawn and grabbed at the nearest clear spot, with a thin node-blue leader line to its true point on the orbit. The node's time and Δv are untouched, so the burn, the planned orbit and the node menu all stay correct.
+- **The selected node carries its gizmo.** It stands `HANDLE_OFFSET + 16` px (76 px) clear of every panel, so all six handles are reachable as well. If that cannot fit, it falls back to 14 px. Other nodes stand 14 px clear. The cover test and the clearance use the same distance (`nodeClearSpot`), so a node sliding towards a panel is pushed along the panel edge continuously and never jumps at a threshold. Nudged spots are reserved (gizmo-sized for the selected node), so later nodes and the orbit markers do not land on them.
+- **Drags act on the true point.** A node grab records the offset from the drawn icon to the true point. The slide projects cursor + offset onto the orbit, so a nudged node moves 1:1 with the mouse and can be slid deep under a panel (pointer moves over the HUD still reach the window listener). The icon then tracks the panel edge and the leader shows where the node really is. The offset stays fixed for the whole drag. Re-deriving it each move would loop: the nudge depends on the point being solved for. Handle drags and Alt+wheel use the drawn gizmo, whose centre and handles are moved together, so their screen directions stay consistent.
+- **Create.** You still cannot click the covered stretch of orbit itself (the panel takes the pointer). To put a node there, place it on the visible part and slide it under the panel, or use Add node on a nudged Ap/Pe/marker menu.
+- **Cost:** for each node, one rectangle scan per frame (a few dozen comparisons). A nudged node adds an unproject and a leader-line transform string, rebuilt only when its angle or length changes. HUD rectangles are now refreshed once at the top of the map update rather than in the marker pass, so nodes see them first. No new per-frame allocation.
+- Verified in CDP Chrome (1470×920): a node under the navball cluster. Before the change, a click at its point hit `DIV.nb-burn`. After it, the click lands on the map canvas and opens the node menu, the prograde handle pull gives 0 → 48 m/s, and the slide moves the true point 110 px under the panel while the icon follows the panel edge.
 
 ## EVA fixes and polish (2026-10-09, op/eva)
 Supersedes the D-011 jetpack numbers and the "jetpack cannot lift against lunar gravity" note under *Boarding from the ground*.

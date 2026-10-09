@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { nodeAttribute, patchNodeVertex } from '../core/rigidNodes';
+import { colorBatchMaterial, registerColorBatch } from '../core/colorBatch';
 
 // Two texels per part: skin and nozzle. Slot zero is always cold. One shared lookup by a per-vertex
 // slot keeps emission independent per part even after static merging / instancing.
@@ -67,6 +68,8 @@ export function thermalMaterial(m: THREE.Material): THREE.Material {
   variant.customProgramCacheKey = () => `${m.customProgramCacheKey()}:thermal-v3${packed() ? (ormAo ? ':orm-ao' : ':orm') : ''}`;
   variants.set(m, variant);
   isVariant.add(variant);
+  const neutral = colorBatchMaterial(m);
+  if (neutral !== m) registerColorBatch(variant, thermalMaterial(neutral));
   const owned = variant;
   m.addEventListener('dispose', () => owned.dispose());
   return variant;

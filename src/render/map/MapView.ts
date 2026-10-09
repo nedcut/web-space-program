@@ -33,10 +33,10 @@ import {
   type GizmoAxis, type GizmoHandle, type ScreenPolyline,
 } from './maneuverGizmo';
 import { firstPlannedPatch, markerCaption, markerDetail, orbitMarkers, patchDrawnClosed, type OrbitMarker } from './orbitMarkers';
-import { AXIS_COLORS, PLANNED_COLOR, handleTexture, nodeTexture } from './mapIcons';
+import { AXIS_COLORS, NODE_COLOR, PLANNED_COLOR, handleTexture, nodeTexture } from './mapIcons';
 import { GLYPH_PX, LABEL_SHADOW, cssHex, glyphForKey, markerGlyphSvg, type MarkerGlyph } from './markerGlyphs';
 import { setPosition, setStyle } from './styleWriter';
-import { coveredIndex, nudgeClear, overlapsAny } from './hudAvoid';
+import { coveredIndex, nodeClearSpot, nudgeClear, overlapsAny } from './hudAvoid';
 import { HudRectCache } from './hudRects';
 
 /**
@@ -144,7 +144,9 @@ type Hover =
 type Drag =
   | { kind: 'camera'; button: number; x: number; y: number; moved: boolean; hover: Hover }
   | { kind: 'handle'; nodeId: number; index: number; x: number; y: number; dirX: number; dirY: number; pull: number }
-  | { kind: 'node'; nodeId: number; x: number; y: number; moved: boolean; patch: TrajectoryPatch; earliest: number; latest: number; period: number };
+  | { kind: 'node'; nodeId: number; x: number; y: number; moved: boolean; patch: TrajectoryPatch; earliest: number; latest: number; period: number;
+      /** Grab offset, true point minus drawn icon (non-zero when the icon is nudged out from under a HUD panel). */
+      offX: number; offY: number };
 
 const EMPTY_MARKERS: MapMarkerInput[] = [];
 const EMPTY_PATCHES: TrajectoryPatch[] = [];
@@ -230,6 +232,11 @@ interface MarkerElement {
 const EMPTY_RECTS: LabelBox[] = [];
 /** A marker within this many px of a HUD block counts as covered by it; a nudged marker stands this far clear. */
 const HUD_COVER_PX = 6, HUD_CLEAR_PX = 10;
+/**
+ * Maneuver nodes stand this far clear of HUD blocks (icon radius plus a little); the selected node's whole gizmo
+ * (handles at HANDLE_OFFSET plus their icon) does. Closer nodes are drawn at the nearest clear spot with a leader.
+ */
+const NODE_CLEAR_PX = 14, GIZMO_CLEAR_PX = HANDLE_OFFSET + 16;
 
 /** Hover-sampled trajectory polyline (body-relative positions, float64). */
 interface TrajectoryPoly { body: string; patch: number; times: Float64Array; points: Float64Array; count: number }
@@ -365,6 +372,9 @@ export class MapView {
   private markerScreenCount = 0;
   private hudRects: HudRectCache | null = null;
   private readonly nudgeAt = { x: 0, y: 0 };
+  /** HUD rectangles measured this frame; `obstacles` also counts the spots reserved by nudged nodes/markers. */
+  private hudCount = 0;
+  private obstacles = 0;
   private pinned = new Set<string>();
   private trajectoryPolys: TrajectoryPoly[] = [];
   private polysVersion = -1;
@@ -1073,6 +1083,7 @@ export class MapView {
         if (line.material.dashed) line.material.dashScale = pxPerWorld1 / Math.max(this.renderedDistance, 1e-3);
       }
     } else this.updateVesselLines(EMPTY_PATCHES, this.bodies);
+    this.hudCount = this.obstacles = this.hudRects ? this.hudRects.refresh(this.labels, now) : 0;
     this.updateNodes(u);
     this.updateGizmo(u, dt);
     this.updateMarkers(u);
@@ -1113,10 +1124,14 @@ export class MapView {
   // ---------- Maneuver nodes and gizmo ----------
 
   private nodePoints: MapPoint[] = [];
+  /** True on-screen points of the nodes (nodeScreen holds where they are drawn, which may be nudged). */
+  private nodeTruePoints: MapPoint[] = [];
+  private nodeTrue = new Map<number, MapPoint>();
+  private nodeLeaders: { el: HTMLDivElement; a: number; l: number; suffix: string }[] = [];
   private updateNodes(u: MapUpdate) {
-    this.nodeScreen.clear();
-    let k = 0;
-    const selected = this.gizmoNode(u);
+    this.nodeScreen.clear(); this.nodeTrue.clear();
+    let k = 0, gizmoAt = -1;
+    const selected = this.gizmoNode(u), editable = !!(this.handlers.placeNode || this.handlers.nodesChanged);
     for (const n of u.vessel?.nodes ?? EMPTY_NODES) {
       const patch = this.patchAt(u, n.time);
       if (!patch) continue;
@@ -1132,12 +1147,50 @@ export class MapView {
       s.scale.setScalar((hovered ? ICON_PX.nodeHover : ICON_PX.node) * this.spritePx);
       this.scenePosition(patchState(patch, n.time).position, patch.orbit.body, u, s.position, this.patchFrameTime(u, patch));
       s.userData.nodeId = n.id;
-      const point = this.nodePoints[k] ??= { x: 0, y: 0 };
-      this.toScreen(s.position, u, point);
+      const truth = this.toScreen(s.position, u, this.nodeTruePoints[k] ??= { x: 0, y: 0 }), point = this.nodePoints[k] ??= { x: 0, y: 0 };
+      point.x = truth.x; point.y = truth.y;
+      this.nodeTrue.set(n.id, truth);
       this.nodeScreen.set(n.id, point);
+      if (editable && n === selected) gizmoAt = k;
       k++;
     }
     for (let i = k; i < this.nodeIcons.length; i++) this.nodeIcons[i].visible = false;
+    // Nodes under a HUD panel are drawn (and grabbed) at the nearest clear spot, joined to the true point by a
+    // leader line; drags still act on the true point (see Drag.offX). The gizmo node goes first and keeps its whole
+    // gizmo clear; every nudged spot is reserved so later nodes and markers do not land on it.
+    if (gizmoAt >= 0) this.nudgeNode(u, gizmoAt, GIZMO_CLEAR_PX);
+    for (let i = 0; i < k; i++) if (i !== gizmoAt) this.nudgeNode(u, i, NODE_CLEAR_PX);
+    for (let i = k; i < this.nodeLeaders.length; i++) setStyle(this.nodeLeaders[i].el, 'display', 'none');
+  }
+
+  private nudgeNode(u: MapUpdate, i: number, margin: number) {
+    const truth = this.nodeTruePoints[i], point = this.nodePoints[i], rects = this.hudRects?.rects;
+    const nudged = !!rects && Number.isFinite(truth.x)
+      && nodeClearSpot(rects, this.obstacles, truth.x, truth.y, u.viewport.width, u.viewport.height, margin, NODE_CLEAR_PX, point);
+    let leader = this.nodeLeaders[i];
+    if (!nudged && !leader) return;
+    if (!leader) {
+      const el = document.createElement('div');
+      Object.assign(el.style, { position: 'absolute', left: '0', top: '0', width: '1px', height: '1.5px', transformOrigin: '0 0', pointerEvents: 'none', background: NODE_COLOR, opacity: '.8', display: 'none' });
+      this.labels.appendChild(el);
+      leader = this.nodeLeaders[i] = { el, a: NaN, l: -1, suffix: '' };
+    }
+    setStyle(leader.el, 'display', nudged ? 'block' : 'none');
+    if (!nudged || !rects) return;
+    this.fromScreen(point.x, point.y, this.nodeIcons[i].position, u, this.nodeIcons[i].position);
+    const half = margin === GIZMO_CLEAR_PX ? HANDLE_OFFSET : ICON_PX.node / 2;
+    const spot = rects[this.obstacles++] ??= { x: 0, y: 0, width: 0, height: 0 };
+    spot.x = point.x - half; spot.y = point.y - half; spot.width = spot.height = 2 * half;
+    const dx = truth.x - point.x, dy = truth.y - point.y, a = Math.round(Math.atan2(dy, dx) * 100), len = Math.round(Math.hypot(dx, dy));
+    if (a !== leader.a || len !== leader.l) { leader.a = a; leader.l = len; leader.suffix = ` rotate(${a / 100}rad) scaleX(${len})`; }
+    setPosition(leader.el, point.x, point.y, leader.suffix);
+  }
+
+  /** Scene point drawn at CSS-pixel (x, y), at the depth of `at`. */
+  private fromScreen(x: number, y: number, at: THREE.Vector3, u: MapUpdate, out: THREE.Vector3): THREE.Vector3 {
+    const p = this.projected.copy(at).project(this.camera);
+    p.x = x / u.viewport.width * 2 - 1; p.y = 1 - y / u.viewport.height * 2;
+    return out.copy(p.unproject(this.camera));
   }
 
   private updateGizmo(u: MapUpdate, dt: number) {
@@ -1157,6 +1210,9 @@ export class MapView {
       this.gizmoDirs = { prograde: maneuverToInertialDv(this.gizmoState, { prograde: 1, normal: 0, radial: 0 }), normal: maneuverToInertialDv(this.gizmoState, { prograde: 0, normal: 1, radial: 0 }), radial: maneuverToInertialDv(this.gizmoState, { prograde: 0, normal: 0, radial: 1 }) };
     }
     const base = this.scenePosition(this.gizmoState!.position, patch.orbit.body, u, this.gizmoBase, this.patchFrameTime(u, patch));
+    // A node nudged out from under a HUD panel carries its gizmo with it.
+    const shown = this.nodeScreen.get(node.id), truth = this.nodeTrue.get(node.id);
+    if (shown && truth && (shown.x !== truth.x || shown.y !== truth.y)) this.fromScreen(shown.x, shown.y, base, u, base);
     this.toScreen(base, u, this.gizmoCenter);
     const worldPerPx = 2 * base.distanceTo(this.camera.position) * Math.tan(this.camera.fov * Math.PI / 360) / Math.max(1, u.viewport.height);
     // Constant screen size, but never much larger than the orbit the node sits on: zoomed far out a full-size
@@ -1349,9 +1405,8 @@ export class MapView {
     }
     // Dots for every marker; captions in priority order (pinned first), decluttered against body labels.
     this.markerScreenCount = 0;
-    const hudCount = this.hudRects ? this.hudRects.refresh(this.labels, performance.now()) : 0;
-    const hudRects = this.hudRects?.rects ?? EMPTY_RECTS;
-    let obstacles = hudCount;
+    const hudCount = this.hudCount, hudRects = this.hudRects?.rects ?? EMPTY_RECTS;
+    let obstacles = this.obstacles;
     for (let i = 0; i < this.shownCount; i++) {
       const m = this.shown[i], el = this.markerElement(i);
       const s = this.toScreen(this.scenePosition(m.position, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.scratchPoint);
@@ -1548,8 +1603,10 @@ export class MapView {
       } else if (e.button === 0 && h.kind === 'node' && u) {
         const node = u.vessel?.nodes.find(n => n.id === h.id), patch = node && this.patchAt(u, node.time);
         if (node && patch) {
+          const shown = this.nodeScreen.get(node.id), truth = this.nodeTrue.get(node.id);
           this.drag = { kind: 'node', nodeId: node.id, x: e.clientX, y: e.clientY, moved: false, patch: { ...patch, orbit: snapshotOrbit(patch.orbit) },
-            earliest: Math.max(u.t + 5, patch.startTime), latest: this.soiLimit(patch.orbit, Math.max(u.t, patch.startTime)), period: period(patch.orbit) };
+            earliest: Math.max(u.t + 5, patch.startTime), latest: this.soiLimit(patch.orbit, Math.max(u.t, patch.startTime)), period: period(patch.orbit),
+            offX: shown && truth ? truth.x - shown.x : 0, offY: shown && truth ? truth.y - shown.y : 0 };
           e.preventDefault();
         }
       }
@@ -1564,7 +1621,7 @@ export class MapView {
       if (d?.kind === 'handle') { d.pull = handlePull(e.clientX - d.x, e.clientY - d.y, d.dirX, d.dirY); return; }
       if (d?.kind === 'node') {
         if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) > CLICK_SLOP) { d.moved = true; this.tooltip.style.display = 'none'; }
-        if (d.moved) this.slideNode(d, p.x, p.y);
+        if (d.moved) this.slideNode(d, p.x + d.offX, p.y + d.offY);
         return;
       }
       if (d?.kind === 'camera') {
