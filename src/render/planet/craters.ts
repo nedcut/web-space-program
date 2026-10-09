@@ -11,6 +11,10 @@
  * does not repeat. Each crater (rim and ejecta) stays inside its own cell, so one hash per cell and scale is
  * enough. The plane is chosen per body-fixed axis with sharp triplanar weights; only planes with weight are
  * evaluated, which is one plane almost everywhere.
+ *
+ * Cost: ≈0.08 ms per scale at 2940×1840 on an RTX 3060 Ti at 40 m above the Moon, almost independent of the
+ * per-cell maths (a texture-lookup cell, a polynomial rim and loop forms all measured the same), so the quality
+ * tier sets how many scales run (`CRATER_SCALES`, from `terrain.craterScales`): none on Low/Medium.
  */
 export const GLSL_CRATERS = /* glsl */ `
 vec4 craterHash(vec2 p) {
@@ -41,8 +45,12 @@ vec3 craterCell(vec2 p, float S, float seed) {
 void craterPlane(vec2 p, vec3 fades, inout vec2 g, inout float albedo) {
   vec3 c = craterCell(p, 96.0, 0.0);
   g += c.xy * fades.x; albedo *= mix(1.0, c.z, fades.x);
+  #if CRATER_SCALES > 1
   if (fades.y > 0.0) { c = craterCell(p + 11.3, 24.0, 17.0); g += c.xy * fades.y; albedo *= mix(1.0, c.z, fades.y); }
+  #endif
+  #if CRATER_SCALES > 2
   if (fades.z > 0.0) { c = craterCell(p + 3.7, 6.0, 41.0); g += c.xy * fades.z; albedo *= mix(1.0, c.z, fades.z); }
+  #endif
 }
 // Body-fixed gradient (xyz) and albedo factor (w) at body-fixed position bf with sharp triplanar weights w.
 vec4 craterDetail(vec3 bf, vec3 w, float dist) {

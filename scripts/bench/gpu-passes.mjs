@@ -212,9 +212,10 @@ for (const c of cases) {
   else if (c === 'orbit') await run('orbit', '/?flight=stock-kestrel&scenario=orbit');
   else if (c === 'map') await run('map', '/?flight=stock-kestrel&scenario=orbit', { mode: 'map', setup: async (page) => { await page.evaluate(() => window.__flight.toggleMap()); } });
   else if (c === 'moon') await run('moon', '/?mission=suicide-burn', { setup: async (page) => { await page.evaluate(() => { window.__flight.input.state.throttle = 0.35; }); }, settle: 4000 });
-  // Powered descent ~40 m above the Moon (close-up terrain, rocks, vessel shadow, engine dust), then paused.
+  // ~40 m above the Moon (close-up terrain, rocks, vessel shadow, engine dust), engine at 35 %, then paused.
+  // Teleported: the mission ends a slow scripted descent ("hovering above 100 m").
   else if (c === 'moonLow') await run('moonLow', '/?mission=suicide-burn', { setup: async (page) => {
-    await page.evaluate(() => { const f = window.__flight; window.__descend = setInterval(() => { const w = f.world, v = w.active.state, b = w.universe.ephem.getBodyState(w.active.body, w.ut); const r = [v.position.x - b.position.x, v.position.y - b.position.y, v.position.z - b.position.z], l = Math.hypot(...r); const vs = ((v.velocity.x - b.velocity.x) * r[0] + (v.velocity.y - b.velocity.y) * r[1] + (v.velocity.z - b.velocity.z) * r[2]) / l; const h = w.universe.surfaceInfo(w.active.body, v.position, w.ut).heightAboveTerrain; const target = -Math.min(40, Math.max(3, h * 0.12)); f.input.state.throttle = h > 1500 ? 0 : Math.max(0.2, Math.min(1, 0.35 + (target - vs) * 0.25)); if (h < 40) { clearInterval(window.__descend); f.paused = true; } }, 50); });
+    await page.evaluate(() => { const f = window.__flight, w = f.world, v = w.active.state, b = w.universe.ephem.getBodyState(w.active.body, w.ut); const r = [v.position.x - b.position.x, v.position.y - b.position.y, v.position.z - b.position.z], l = Math.hypot(...r); const h = w.universe.surfaceInfo(w.active.body, v.position, w.ut).heightAboveTerrain; const k = (l - h + 40) / l; v.position = { x: b.position.x + r[0] * k, y: b.position.y + r[1] * k, z: b.position.z + r[2] * k }; v.velocity = { x: b.velocity.x, y: b.velocity.y, z: b.velocity.z }; f.input.state.throttle = 0.35; setTimeout(() => { f.paused = true; }, 1500); });
     await page.waitForFunction(() => window.__flight.paused, null, { timeout: 180000, polling: 100 });
   }, settle: 3000 });
   else if (c === 'sea') await run('sea', '/?flight=stock-kestrel&scenario=sea');

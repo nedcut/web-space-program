@@ -256,7 +256,7 @@ export interface TerrainMaterialOptions {
   /** Optional ground cutouts (launch pad / flame trench) where terrain fragments are discarded. */
   cutout?: TerrainCutoutUniforms;
   duneRipples?: boolean;
-  /** Procedural small-crater relief close up (airless bodies). */
+  /** Procedural small-crater relief close up (airless bodies); the number of scales is `q.terrain.craterScales`. */
   craters?: boolean;
   /** Receive the vessel's shadow from the solar shadow map (bodies other than Earth, whose terrain already does). */
   surfaceShadows?: boolean;
@@ -266,7 +266,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
   const img = imagery(u, q);
   return new THREE.ShaderMaterial({
     defines: { ...defines(q, u), ...img.defines, ...(o.detail ? { USE_DETAIL: 1 } : {}), ...(o.cutout ? { USE_CUTOUT: 1 } : {}),
-      ...(o.craters && o.detail ? { CRATER_DETAIL: 1 } : {}), ...(o.surfaceShadows ? { SURFACE_SHADOWS: 1 } : {}) },
+      ...(o.craters && o.detail && q.terrain.craterScales > 0 ? { CRATER_DETAIL: 1, CRATER_SCALES: q.terrain.craterScales } : {}), ...(o.surfaceShadows ? { SURFACE_SHADOWS: 1 } : {}) },
     uniforms: {
       ...u,
       ...img.uniforms,

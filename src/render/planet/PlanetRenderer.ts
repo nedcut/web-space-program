@@ -30,7 +30,7 @@ import { TerrainWorkerPool } from './workerPool';
 import { buildRingProfile } from './textures';
 import { RingParticles } from './RingParticles';
 import { createPlanetEffect } from './effects';
-import { adaptedPlanetshine, reflectedIrradiance, type PlanetLightSource } from './planetshine';
+import { adaptedPlanetshine, discAlbedo, reflectedIrradiance, type PlanetLightSource } from './planetshine';
 import { SurfaceScatter } from './scatter/SurfaceScatter';
 import { terrainCutout } from './cutout';
 import { EarthImagery, seasonMonth } from './earthImagery';
@@ -214,7 +214,7 @@ export class PlanetRenderer {
       for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.EARTH_DETAILS = 1;
     }
     lightSources.set(this, { position: { x: 0, y: 0, z: 0 }, radius: body.radius,
-      albedo: body.surface?.colors?.[1] ?? [0.4, 0.4, 0.4], sunDirection: { x: 1, y: 0, z: 0 }, irradiance: 0 });
+      albedo: discAlbedo(body.id, body.surface?.colors), sunDirection: { x: 1, y: 0, z: 0 }, irradiance: 0 });
   }
 
   // ------------------------------------------------------------------ construction

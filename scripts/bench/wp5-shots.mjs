@@ -40,6 +40,49 @@ const vesselRect = `(() => {
   return [Math.max(0, Math.min(...xs)), Math.max(0, Math.min(...ys)), Math.min(innerWidth, Math.max(...xs)), Math.min(innerHeight, Math.max(...ys))];
 })()`;
 
+// Puts the active vessel in a circular orbit over the Moon's night side (Sun 37° below the horizon), under the Earth. alt > 0: height above
+// the mean radius; alt < 0: -alt above the local terrain.
+const placeNight = (alt) => {
+  const w = window.__flight.world, u = w.universe, v = w.active.state;
+  // Shift the clock to the nearest date within ±16 d with a nearly full Earth over the night side (Sun–Moon–Earth
+  // angle ~25°, i.e. near new Moon), so the earthshine is near its strongest.
+  const phaseAt = (t) => { const mm = u.ephem.getBodyState('moon', t).position, ee = u.ephem.getBodyState('earth', t).position, ss = u.ephem.getBodyState('sun', t).position;
+    const a = [ee.x - mm.x, ee.y - mm.y, ee.z - mm.z], b = [ss.x - mm.x, ss.y - mm.y, ss.z - mm.z];
+    return Math.acos(-(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / Math.hypot(...a) / Math.hypot(...b)) * 57.3; };
+  let bestT = w.ut, bestK = Infinity;
+  for (let dd = -16; dd <= 16; dd += 0.125) { const t = w.ut + dd * 86400, k = Math.abs(phaseAt(t) - 25); if (k < bestK) { bestK = k; bestT = t; } }
+  w.ut = bestT;
+  const m = u.ephem.getBodyState('moon', w.ut), e = u.ephem.getBodyState('earth', w.ut), s = u.ephem.getBodyState('sun', w.ut), b = u.body('moon');
+  const unit = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return a.map((x) => x / l); };
+  const toE = unit([e.position.x - m.position.x, e.position.y - m.position.y, e.position.z - m.position.z]);
+  const toS = unit([s.position.x - m.position.x, s.position.y - m.position.y, s.position.z - m.position.z]);
+  // Sun 37° below the horizon (deep night), the Earth as high in the sky as that allows.
+  const eS = toE[0] * toS[0] + toE[1] * toS[1] + toE[2] * toS[2], perp = unit(toE.map((x, i) => x - eS * toS[i]));
+  const up = unit(perp.map((x, i) => 0.8 * x - 0.6 * toS[i]));
+  window.__wp5night = { sunElevDeg: Math.asin(up[0] * toS[0] + up[1] * toS[1] + up[2] * toS[2]) * 57.3, earthElevDeg: Math.asin(up[0] * toE[0] + up[1] * toE[1] + up[2] * toE[2]) * 57.3, earthPhaseDeg: Math.acos(-eS) * 57.3 };
+  const east = unit([up[1] * toS[2] - up[2] * toS[1], up[2] * toS[0] - up[0] * toS[2], up[0] * toS[1] - up[1] * toS[0]]);
+  let r = b.radius + Math.abs(alt);
+  const put = () => { v.position = { x: m.position.x + up[0] * r, y: m.position.y + up[1] * r, z: m.position.z + up[2] * r }; };
+  put();
+  if (alt < 0) for (let i = 0; i < 4; i++) { r += -alt - u.surfaceInfo('moon', v.position, w.ut).heightAboveTerrain; put(); }
+  const vc = Math.sqrt(b.gm / r);
+  v.velocity = { x: m.velocity.x + east[0] * vc, y: m.velocity.y + east[1] * vc, z: m.velocity.z + east[2] * vc };
+};
+// Aims the flight camera so its view direction makes `cosDown` with straight down (searched over yaw/pitch).
+const lookDown = async (cosDown) => {
+  const f = window.__flight, c = f.cam, w = f.world, frame = () => new Promise((r) => requestAnimationFrame(r));
+  const b = w.universe.ephem.getBodyState(w.active.body, w.ut).position, v = w.active.state.position;
+  const l = Math.hypot(v.x - b.x, v.y - b.y, v.z - b.z), down = [(b.x - v.x) / l, (b.y - v.y) / l, (b.z - v.z) / l];
+  let best = null;
+  for (let i = 0; i < 24; i++) for (const pitch of [-1.2, -0.8, -0.4, 0, 0.4, 0.8, 1.2]) {
+    const yaw = (i / 24) * Math.PI * 2; c.tYaw = c.cYaw = yaw; c.tPitch = c.cPitch = pitch; c.tDist = c.cDist = 40; c.distanceSet = true;
+    await frame(); await frame();
+    const d = c.camera.getWorldDirection(c.camera.position.clone());
+    const k = Math.abs(d.x * down[0] + d.y * down[1] + d.z * down[2] - cosDown);
+    if (!best || k < best.k) best = { k, yaw, pitch };
+  }
+  c.tYaw = c.cYaw = best.yaw; c.tPitch = c.cPitch = best.pitch;
+};
 const stage = async (page) => { await page.keyboard.press('KeyT'); await page.keyboard.press('KeyZ'); await page.keyboard.press('Space'); };
 const CASES = {
   pad: { url: '/?flight=stock-meridian', setup: async (p) => { await p.evaluate(cam(Math.PI * 0.8, 0.12, 70)); }, wait: 6000 },
@@ -52,18 +95,12 @@ const CASES = {
   moon50: { url: '/?mission=suicide-burn', setup: async (p) => { await p.evaluate(cam(Math.PI * 0.75, 0.3, 25)); await p.evaluate(() => { const f = window.__flight; window.__wp5land = setInterval(() => { const w = f.world, v = w.active.state, b = w.universe.ephem.getBodyState(w.active.body, w.ut); const r = [v.position.x - b.position.x, v.position.y - b.position.y, v.position.z - b.position.z], l = Math.hypot(...r); const vs = ((v.velocity.x - b.velocity.x) * r[0] + (v.velocity.y - b.velocity.y) * r[1] + (v.velocity.z - b.velocity.z) * r[2]) / l; const h = w.universe.surfaceInfo(w.active.body, v.position, w.ut).heightAboveTerrain; const target = -Math.min(40, Math.max(3, h * 0.12)); f.input.state.throttle = h > 1500 ? 0 : Math.max(0, Math.min(1, 0.35 + (target - vs) * 0.25)); }, 50); }); await p.waitForFunction(() => { const f = window.__flight; return f.world.universe.surfaceInfo(f.world.active.body, f.world.active.state.position, f.world.ut).heightAboveTerrain < 60; }, null, { timeout: 180000, polling: 50 }); }, wait: 200 },
   // Same descent, camera high above the lander looking down: its shadow on the ground.
   moonTop: { url: '/?mission=suicide-burn', setup: async (p) => { await p.evaluate(cam(Math.PI * 0.75, 1.4, 45)); await p.evaluate(() => { const f = window.__flight; window.__wp5land = setInterval(() => { const w = f.world, v = w.active.state, b = w.universe.ephem.getBodyState(w.active.body, w.ut); const r = [v.position.x - b.position.x, v.position.y - b.position.y, v.position.z - b.position.z], l = Math.hypot(...r); const vs = ((v.velocity.x - b.velocity.x) * r[0] + (v.velocity.y - b.velocity.y) * r[1] + (v.velocity.z - b.velocity.z) * r[2]) / l; const h = w.universe.surfaceInfo(w.active.body, v.position, w.ut).heightAboveTerrain; const target = -Math.min(40, Math.max(3, h * 0.12)); f.input.state.throttle = h > 1500 ? 0 : Math.max(0, Math.min(1, 0.35 + (target - vs) * 0.25)); }, 50); }); await p.waitForFunction(() => { const f = window.__flight; return f.world.universe.surfaceInfo(f.world.active.body, f.world.active.state.position, f.world.ut).heightAboveTerrain < 60; }, null, { timeout: 180000, polling: 50 }); }, wait: 200 },
-  // Moon night side under the Earth (earthshine): 8 km up, on the sub-Earth side turned away from the Sun.
-  moonNight: { url: '/?flight=stock-kestrel&scenario=moon', setup: async (p) => { await p.evaluate(() => {
-    const w = window.__flight.world, u = w.universe, v = w.active.state;
-    const m = u.ephem.getBodyState('moon', w.ut), e = u.ephem.getBodyState('earth', w.ut), s = u.ephem.getBodyState('sun', w.ut), b = u.body('moon');
-    const unit = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return a.map((x) => x / l); };
-    const toE = unit([e.position.x - m.position.x, e.position.y - m.position.y, e.position.z - m.position.z]);
-    const toS = unit([s.position.x - m.position.x, s.position.y - m.position.y, s.position.z - m.position.z]);
-    const up = unit(toE.map((x, i) => x - 0.9 * toS[i])), r = b.radius + 8000;
-    const east = unit([up[1] * toS[2] - up[2] * toS[1], up[2] * toS[0] - up[0] * toS[2], up[0] * toS[1] - up[1] * toS[0]]), vc = Math.sqrt(b.gm / r);
-    v.position = { x: m.position.x + up[0] * r, y: m.position.y + up[1] * r, z: m.position.z + up[2] * r };
-    v.velocity = { x: m.velocity.x + east[0] * vc, y: m.velocity.y + east[1] * vc, z: m.velocity.z + east[2] * vc };
-  }); await p.evaluate(cam(Math.PI * 0.75, 0.25, 40)); }, wait: 6000 },
+  // Moon night side under the Earth (earthshine): on the sub-Earth side turned away from the Sun, circular orbit.
+  moonNight: { url: '/?flight=stock-kestrel&scenario=moon', setup: async (p) => { await p.evaluate(placeNight, 8000); await p.evaluate(cam(Math.PI * 0.75, 0.25, 40)); }, wait: 6000 },
+  // Same, ~3 km above the local terrain, camera above the vessel looking down past it.
+  moonNight3k: { url: '/?flight=stock-kestrel&scenario=moon', setup: async (p) => { await p.evaluate(placeNight, -3000); await p.evaluate(cam(Math.PI * 0.75, 0.6, 40)); }, wait: 6000 },
+  // Same, 60 km lunar orbit.
+  moonNightOrbit: { url: '/?flight=stock-kestrel&scenario=moon', setup: async (p) => { await p.evaluate(placeNight, 60000); await p.waitForTimeout(500); await p.evaluate(lookDown, 0.75); }, wait: 8000 },
   // 150 km orbit, looking down past the vessel at the coast below (stair-stepped coastline check).
   orbitDown: { url: '/?flight=stock-meridian&scenario=orbit', setup: async (p) => { await p.evaluate(cam(Math.PI * 0.5, 1.35, 60)); }, wait: 9000 },
   // Planet preview (same Earth materials as flight): 150 km over Florida looking down at the coast.
@@ -112,7 +149,7 @@ for (const name of cases) {
     const info = await page.evaluate(() => {
       const f = window.__flight, wv = f.world.active, p = f.pipeline;
       const s = f.world.universe.surfaceInfo(wv.body, wv.state.position, f.world.ut);
-      return { body: wv.body, mode: wv.mode, alt: Math.round(s.heightAboveTerrain), stats: { ...p.stats }, glError: p.renderer.getContext().getError() };
+      return { night: window.__wp5night, body: wv.body, mode: wv.mode, alt: Math.round(s.heightAboveTerrain), stats: { ...p.stats }, glError: p.renderer.getContext().getError() };
     });
     info.rect = await page.evaluate(vesselRect);
     const file = `${shotDir}\\${label}-${name}.png`;
