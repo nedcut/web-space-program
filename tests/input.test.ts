@@ -19,9 +19,16 @@ describe('action bindings', () => {
   it('detects conflicts only within an input context', () => {
     const a = defaultBindings(); a.map = ['Space'];
     expect(conflicts(a)).toContainEqual({ key: 'Space', actions: ['stage', 'map'] });
+    expect(conflicts(a)).toContainEqual({ key: 'Space', actions: ['map', 'evaJump'] });
     expect(conflicts(a).some(c => c.actions.includes('editorReset'))).toBe(false);
     a.board = ['Space'];
-    expect(conflicts(a)).toContainEqual({ key: 'Space', actions: ['stage', 'map', 'board'] });
+    expect(conflicts(a)).toContainEqual({ key: 'Space', actions: ['map', 'board', 'evaJump'] });
+  });
+  it('gives Space to staging in flight and to jumping on EVA, never both', () => {
+    const b = defaultBindings();
+    expect(b.stage).toEqual(['Space']);
+    expect(b.evaJump).toEqual(['Space']);
+    expect(conflicts(b).some(c => c.key === 'Space')).toBe(false);
   });
   it('persists chords, alternate keys, and explicitly unbound actions', () => {
     const storage = memory();
@@ -202,6 +209,26 @@ describe('flight gamepad actions', () => {
       expect(h.actions).not.toContain('stage');
       expect(h.input.running).toBe(false);
     } finally { h.input.dispose(); }
+  });
+  it('jumps instead of staging on EVA (keyboard and gamepad A)', () => {
+    const h = harness(); const settings = game.get().settings;
+    const key = (code: string, type = 'keydown') => h.target.dispatchEvent(Object.assign(new Event(type), { code, ctrlKey: false, shiftKey: false, metaKey: false, altKey: false, repeat: false }));
+    try {
+      game.set({ settings: { ...settings, gamepadEnabled: false } });
+      key('Space'); key('Space', 'keyup');
+      expect(h.actions).toEqual(['stage']);
+      h.input.evaMode = true;
+      key('Space'); key('Space', 'keyup');
+      expect(h.actions).toEqual(['stage', 'evaJump']);
+      game.set({ settings: { ...settings, gamepadEnabled: true } });
+      h.input.update(0.1);
+      h.buttons({ 0: 1 }); h.input.update(0.1); h.input.update(1);
+      expect(h.actions).toEqual(['stage', 'evaJump', 'evaJump']);
+      expect(h.input.stageProgress).toBe(0);
+      // Boarding with A still held must not stage the vessel the astronaut just entered.
+      h.input.evaMode = false; h.input.update(1);
+      expect(h.actions.filter(a => a === 'stage')).toHaveLength(1);
+    } finally { h.input.dispose(); game.set({ settings }); }
   });
   it('routes rebound EVA, boarding, flag, gear and brake controls', () => {
     const h = harness(); const settings = game.get().settings;

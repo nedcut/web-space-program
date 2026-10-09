@@ -45,7 +45,7 @@ export function CrewPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
       </div>
       {t.eva.boardHint && <div role="status" style={{ fontSize: 10, marginTop: 5, color: 'var(--warn)' }}>{t.eva.boardHint}</div>}
       <div style={{ fontSize: 10, marginTop: 7, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        {key('evaForward')}/{key('evaLeft')}/{key('evaBack')}/{key('evaRight')} move<br />{t.eva.landed ? `${key('evaRun')} run · ${key('stage')} hop` : `${key('evaUp')}/${key('evaDown')} rise / descend`}<br />Mouse drag to turn · Board within 3 m
+        {key('evaForward')}/{key('evaLeft')}/{key('evaBack')}/{key('evaRight')} move<br />{t.eva.landed ? `${key('evaRun')} run · ${key('evaJump')} jump` : `${key('evaUp')}/${key('evaDown')} rise / descend`}<br />Mouse drag to turn · Board within 3 m
       </div>
     </>}
   </div>;

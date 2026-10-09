@@ -59,7 +59,7 @@ const FLIGHT_KEYS: [Action[] | string, string][] = [
 const EVA_KEYS: [Action[] | string, string][] = [
   [['evaForward', 'evaLeft', 'evaBack', 'evaRight'], 'Move · strafe'],
   [['evaRun', 'evaUp', 'evaDown'], 'Run (ground) · jetpack up / down (space)'],
-  [['stage'], 'Hop'],
+  [['evaJump'], 'Jump (feet on the ground)'],
   [['board'], 'Board a hatch within 3 m'],
   [['plantFlag'], 'Plant a flag (landed)'],
 ];

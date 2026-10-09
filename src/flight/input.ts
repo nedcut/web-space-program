@@ -14,7 +14,7 @@ export interface FlightInputState {
 }
 
 export type ActionGroupKey = 'actionGroup1' | 'actionGroup2' | 'actionGroup3' | 'actionGroup4' | 'actionGroup5' | 'actionGroup6' | 'actionGroup7' | 'actionGroup8' | 'actionGroup9' | 'actionGroup10';
-export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'focusPrev' | 'toggleCamMode' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag' | 'toggleGear' | 'stressOverlay' | 'toggleLights' | 'abort' | 'stageLock' | 'sasHold' | 'sasHoldRelease' | 'trimReset' | ActionGroupKey;
+export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'focusPrev' | 'toggleCamMode' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag' | 'toggleGear' | 'stressOverlay' | 'toggleLights' | 'abort' | 'stageLock' | 'sasHold' | 'sasHoldRelease' | 'trimReset' | 'evaJump' | ActionGroupKey;
 
 /** Keyboard attitude ramp: a 0.2 s tap reaches 20%; a deliberate one-second hold gets full authority. */
 export const KEY_RAMP_RATE = 1;
@@ -27,9 +27,11 @@ export const THROTTLE_RATE = 0.8;
 export const FINE_THROTTLE_RATE = 0.2;
 
 export const ACTION_GROUP_KEYS: ActionGroupKey[] = ['actionGroup1', 'actionGroup2', 'actionGroup3', 'actionGroup4', 'actionGroup5', 'actionGroup6', 'actionGroup7', 'actionGroup8', 'actionGroup9', 'actionGroup10'];
-const FLIGHT_ACTIONS: FlightAction[] = ['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'focusNext', 'focusPrev', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'board', 'plantFlag', 'toggleGear', 'stressOverlay', 'toggleLights', 'abort', 'stageLock', 'sasHold', ...ACTION_GROUP_KEYS];
-/** Vessel-only actions that a walking astronaut ignores. */
-const VESSEL_ONLY = new Set<FlightAction>(['abort', 'toggleLights', 'stageLock', 'sasHold']);
+const FLIGHT_ACTIONS: FlightAction[] = ['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'focusNext', 'focusPrev', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'board', 'plantFlag', 'toggleGear', 'stressOverlay', 'toggleLights', 'abort', 'stageLock', 'sasHold', 'evaJump', ...ACTION_GROUP_KEYS];
+/** Vessel-only actions that a walking astronaut ignores (Space jumps on EVA; it never stages the craft left behind). */
+const VESSEL_ONLY = new Set<FlightAction>(['stage', 'abort', 'toggleLights', 'stageLock', 'sasHold']);
+/** Astronaut-only actions: a piloted vessel ignores them. */
+const EVA_ONLY = new Set<FlightAction>(['board', 'plantFlag', 'evaJump']);
 export class FlightInput {
   readonly state: FlightInputState = { pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, throttle: 0, brakes: false };
   /** Camera orbit/zoom rates from arrow keys, +/- and RB + right stick (-1..1). */
@@ -111,7 +113,7 @@ export class FlightInput {
     if (e.repeat) return;
     if (actions.includes('precision')) this.precision = !this.precision;
     if (actions.includes('trimReset')) { this.trim.pitch = this.trim.yaw = this.trim.roll = 0; this.emit('trimReset'); }
-    for (const a of FLIGHT_ACTIONS) if (actions.includes(a as Action) && (!(a === 'board' || a === 'plantFlag') || this.evaMode) && !(this.evaMode && (VESSEL_ONLY.has(a) || a.startsWith('actionGroup')))) {
+    for (const a of FLIGHT_ACTIONS) if (actions.includes(a as Action) && (!EVA_ONLY.has(a) || this.evaMode) && !(this.evaMode && (VESSEL_ONLY.has(a) || a.startsWith('actionGroup')))) {
       if (a === 'sasHold') { if (this.sasHoldKey) continue; this.sasHoldKey = e.code; }
       this.emit(a);
     }
@@ -149,7 +151,11 @@ export class FlightInput {
       if (connected) { this.buttons = now; this.stageConfirmed = now.has(0); this.padIndex = pad.index; }
       const actions: [number, FlightAction][] = [[2, 'toggleSas'], [3, 'toggleRcs'], [8, 'map'], [9, 'menu'], [11, 'toggleCamMode'], [12, 'warpUp'], [13, 'warpDown'], [14, 'warpStop']];
       for (const [b, a] of actions) if (!connected && now.has(b) && !this.buttons.has(b)) this.emit(a);
-      if (now.has(0)) {
+      if (this.evaMode) {
+        // A jumps on EVA (a tap, no hold): there is nothing to stage.
+        if (!connected && now.has(0) && !this.buttons.has(0)) this.emit('evaJump');
+        this.stageHeld = this.stageProgress = 0; this.stageConfirmed = now.has(0);
+      } else if (now.has(0)) {
         this.stageHeld += dt;
         this.stageProgress = Math.min(1, this.stageHeld / 0.75);
         if (!this.stageConfirmed && this.stageHeld >= 0.75) { this.emit('stage'); this.stageConfirmed = true; }

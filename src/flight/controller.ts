@@ -158,6 +158,8 @@ export class FlightController {
   /** Map conics of non-active vessels, refreshed at most once per second while in physics. */
   private mapOrbits = new Map<string, { orbit?: Orbit; at: number }>();
   private stagePending = false;
+  /** Jump request from the astronaut's jump key, latched until the next control input is built. */
+  private evaJumpPending = false;
   /** Gear command from G (applied once, then left to the vessel state). */
   private gearPending: boolean | undefined = undefined;
   /** One-shot part actions / action groups / flight settings for the next input sent to the authority. */
@@ -313,6 +315,7 @@ export class FlightController {
           case 'stage': this.requestStage(); break;
           case 'eva': this.goEva(); break;
           case 'board': this.boardEva(); break;
+          case 'evaJump': this.evaJump(); break;
           case 'plantFlag': this.plantFlag(); break;
           case 'toggleSas': this.toggleSas(); break;
           case 'toggleRcs': this.toggleRcs(); break;
@@ -673,6 +676,12 @@ export class FlightController {
     }
   }
 
+  /** Space on EVA: hop (only takes effect with feet on the ground). Never stages anything. */
+  evaJump() {
+    if (this.paused || !this.world.active?.state.eva) return;
+    this.evaJumpPending = true;
+  }
+
   plantFlag() {
     if (this.paused) return;
     if (this.network) this.network.action('flag');
@@ -866,7 +875,7 @@ export class FlightController {
     const drivingRover = wv?.state.situation === 'landed' && wv.state.parts.some(p => p.def.modules.some(m => m.type === 'wheel' && !!m.motorTorque));
     const ctrl = neutralInput({
       evaHeading: wv?.state.eva ? { x: this.cam.camera.quaternion.x, y: this.cam.camera.quaternion.y, z: this.cam.camera.quaternion.z, w: this.cam.camera.quaternion.w } : undefined,
-      evaJump: !!wv?.state.eva && this.stagePending,
+      evaJump: !!wv?.state.eva && this.evaJumpPending,
       evaRun: this.input.running,
       pitch: drivingRover ? 0 : s.pitch + trim.pitch,
       wheelThrottle: drivingRover ? -s.pitch : 0,
@@ -888,6 +897,7 @@ export class FlightController {
     });
     if (!this.paused) {
       this.stagePending = false;
+      this.evaJumpPending = false;
       this.gearPending = undefined;
       this.pendingCommands = [];
     }
