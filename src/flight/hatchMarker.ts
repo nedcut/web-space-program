@@ -131,7 +131,7 @@ export class HatchMarker {
       const dim = behind && Number.isNaN(angle);
       if (dim !== this.behind) this.el.classList.toggle('behind', this.behind = dim);
     }
-    if (on !== this.shown) this.el.style.display = (this.shown = on) ? '' : 'none';
+    if (on !== this.shown) { this.shown = on; this.el.style.display = on ? '' : 'none'; }
   }
 
   dispose() { this.el.remove(); }

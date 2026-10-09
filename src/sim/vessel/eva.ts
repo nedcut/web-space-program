@@ -188,7 +188,7 @@ export function collideEvaWithHull(eva: VesselState, hull: VesselState): boolean
       rot(hq, R, true, R);
       rot(pq, R, true, L);
       const lx = S[L], ly = S[L + 1], lz = S[L + 2];
-      let depth = 0, nx = 0, ny = 0, nz = 0;
+      let depth: number, nx = 0, ny = 0, nz = 0;
       if (s.kind === 'box') {
         const hx = s.size.x / 2, hy = s.size.y / 2, hz = s.size.z / 2;
         const qx = Math.max(-hx, Math.min(hx, lx)), qy = Math.max(-hy, Math.min(hy, ly)), qz = Math.max(-hz, Math.min(hz, lz));
