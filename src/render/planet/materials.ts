@@ -407,6 +407,12 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         grad = vec3(0.0, ga.x, ga.y) * w.x + vec3(gb.y, 0.0, gb.x) * w.y + vec3(gc.x, gc.y, 0.0) * w.z;
         return cyclic ? b * w.y + c * w.z + a * w.x : a * w.x + b * w.y + c * w.z;
       }
+      // Blend of two independent 0.5-centred detail channels under the region mask m (0..1, crossing at 0.5),
+      // centred on 0 and with its variance kept close to constant (the polynomial is exact at t = 0, 0.5 and 1).
+      float mixDetail(float a, float b, float m) {
+        float t = clamp(m * 5.0 - 2.0, 0.0, 1.0);
+        return (mix(a, b, t) - 0.5) * (1.0 + 1.657 * t * (1.0 - t));
+      }
 
       void main() {
         ${GLSL_LOGDEPTH_FRAG}
@@ -447,11 +453,22 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           float hd = 0.0;
           float cover = 0.5;
           vec3 g = vec3(0.0);
-          // Three octaves; the large one uses the decorrelated A channel to hide tiling.
+          // Three octaves. vDetail repeats every 1024 m, so the coarse pair would show a 256 m tile 20+ times from
+          // a few km up (a diagonal grid on the Moon). It uses absolute body-fixed metres instead (float32 error
+          // ≤ 0.25 m, invisible at these scales) with prime periods 1531 m and 263 m. Each finer octave switches
+          // between two independent channels under a mask from the coarser octave's fetch, so neighbouring
+          // tiles differ. No extra fetches.
           vec3 grad;
-          if (f3 > 0.0) { vec4 s = triSample(vDetail.zxy, w.zxy, 1024.0); vec4 s2 = triSampleGrad(vDetail, w, 256.0, false, grad); cover = s.a * 0.6 + s2.a * 0.4; hd += ((s.a - 0.5) * 0.7 + (s2.a - 0.5) * 0.5) * f3; g += grad * f3 * 0.35; }
-          if (f2 > 0.0) { vec4 s = triSampleGrad(vDetail, w, 32.0, true, grad); hd += (s.r - 0.5) * f2 * 0.6; g += grad * f2 * 0.6; }
-          if (f1 > 0.0) { vec4 s = triSampleGrad(vDetail, w, 4.0, false, grad); hd += (s.r - 0.5) * f1 * 0.5; g += grad * f1; }
+          vec4 sMid = vec4(0.5), sFine = vec4(0.5);
+          if (f3 > 0.0) {
+            vec3 bf = transpose(uBodyRot) * rel;
+            vec4 s = triSample(bf.zxy, w.zxy, 1531.0);
+            sMid = triSampleGrad(bf, w, 263.0, false, grad);
+            float mid = mixDetail(sMid.a, sMid.r, s.r);
+            cover = s.a * 0.6 + (mid + 0.5) * 0.4; hd += ((s.a - 0.5) * 0.7 + mid * 0.5) * f3; g += grad * f3 * 0.35;
+          }
+          if (f2 > 0.0) { sFine = triSampleGrad(vDetail, w, 32.0, true, grad); hd += mixDetail(sFine.r, sFine.a, sMid.a) * f2 * 0.6; g += grad * f2 * 0.6; }
+          if (f1 > 0.0) { vec4 s = triSampleGrad(vDetail, w, 4.0, false, grad); hd += mixDetail(s.r, s.a, sFine.a) * f1 * 0.5; g += grad * f1; }
           float microFade = 1.0 - smoothstep(15.0, 100.0, dist);
           if (microFade > 0.0) g += triGrad(vDetail, w, 0.5) * microFade * 0.35;
           // Shallow wind ripples, projected into the tangent plane below; no collision relief.
