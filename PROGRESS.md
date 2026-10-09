@@ -1068,3 +1068,7 @@ M-series/120 Hz and independent video review remain unverified. Scope, assumptio
   92-part Selene-real pad 4,222 → 1,525 (frame 11.1 → 7.9 ms), orbit 3,588 → 865 (8.3 → 5.4 ms). Chrome CPU
   −0.5 to −1.5 ms, GPU unchanged or lower. Same-frame visual A/B: ≤ 0.02% pixels differ (edge sparkle). Details:
   docs/PERFORMANCE.md "Vessel batching pass". Apple/M-series timing still unmeasured.
+
+## Context recovery follow-ups (op/ctx2, 2026-10-09)
+
+Craft previews in the load dialog now pause/retry after WebGL loss and never cache a lost-context PNG; closing the dialog cancels retries. Hub planet switching now uses the unscaled viewport contract. Map/planet portraits are far-only and crew portraits use 2D canvas, so they cannot have the adaptive near/far regression. Targeted tests: 16 passed; four new craft regressions fail with the guards removed. Chrome visual verification in progress.

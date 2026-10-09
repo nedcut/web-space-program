@@ -334,7 +334,7 @@ export class HubScene {
     sc.updateProjectionMatrix();
 
     updateSiteShadow(this.sun, this.pipeline.renderer.shadowMap.enabled);
-    this.planets.update({ t, origin, camera: this.camera, sunPos, dt, focusBody: 'earth', viewportHeight: this.pipeline.lodViewportHeight });
+    this.planets.update({ t, origin, camera: this.camera, sunPos, dt, focusBody: 'earth', viewportHeight: this.pipeline.lodViewportHeight, switchViewportHeight: this.pipeline.lodSwitchViewportHeight });
     const camSim = add(origin, { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z });
     const eclipse = this.planets.sunVisibility?.(camSim, sunPos) ?? 1;
     const tint = this.planets.sunTint?.(camSim, sunPos) ?? [1, 1, 1];
