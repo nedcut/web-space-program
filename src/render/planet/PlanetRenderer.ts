@@ -1,4 +1,5 @@
 import { acquireSurfaceBake } from './sharedBake';
+import { releasePixels } from '../texturePixels';
 import { SurfaceFeatures } from './SurfaceFeatures';
 import * as THREE from 'three';
 import { CloudMap } from './cloudMap';
@@ -38,8 +39,10 @@ import { EarthImagery, seasonMonth } from './earthImagery';
 export interface PlanetRendererOptions {
   /** Portraits bake surface detail without allocating close-up terrain. */
   farOnly?: boolean;
-  /** Host renderer supports WEBGL_multi_draw; otherwise retain ordinary chunk meshes. */
+  /** Draw visible terrain chunks as one batch per planet (needs `renderer`); otherwise ordinary chunk meshes. */
   batchTerrain?: boolean;
+  /** Host renderer: the terrain batch owns GPU buffers on its context. */
+  renderer?: THREE.WebGLRenderer;
   /** Map uniforms must not replace the live flight lighting registry. */
   registerUniforms?: boolean;
   quality: QualitySettings;
@@ -141,6 +144,7 @@ export class PlanetRenderer {
   private sunIlluminance: number;
   private sunRadiance: number;
   private readonly terrainKey: string;
+  private readonly hostRenderer?: THREE.WebGLRenderer;
   private readonly frustum = new THREE.Frustum();
   private readonly tmpM4 = new THREE.Matrix4();
   private readonly inverseRotation = new THREE.Quaternion();
@@ -160,6 +164,7 @@ export class PlanetRenderer {
     this.scale = opts.scale ?? SCALE_PRESETS.standard;
     this.sunIlluminance = opts.sunIlluminance ?? 4;
     this.sunRadiance = opts.sunRadiance ?? 60;
+    this.hostRenderer = opts.renderer;
     this.root.name = `planet:${body.id}`;
     // Identity container: placed children update themselves; do not force every cached chunk each frame.
     this.root.matrixAutoUpdate = false;
@@ -333,7 +338,8 @@ export class PlanetRenderer {
       maxInFlight: q.terrain.maxInFlight,
       buildBudgetMs: q.terrain.buildBudgetMs,
       cacheSize: q.terrain.cacheSize,
-      batch: opts.batchTerrain,
+      cacheBytes: q.terrain.cacheMB * 1048576,
+      batch: opts.batchTerrain && opts.renderer ? opts.renderer.getContext() as WebGL2RenderingContext : undefined,
     });
     this.root.add(this.quadtree.group);
     if (terrain) { this.surfaceFeatures = new SurfaceFeatures(this.body, terrain); this.root.add(this.surfaceFeatures.group); }
@@ -554,6 +560,9 @@ export class PlanetRenderer {
       }).catch(() => { if (!this.disposed) { this.surfaceBake?.release(); this.surfaceBake = undefined; this.bakeRequested = false; } });
     }
 
+    // The far-LOD bake lives on the GPU once drawn: drop its CPU pixels (32 MB per body at Ultra).
+    if (this.farTexture?.source.dataReady && this.hostRenderer) releasePixels(this.farTexture, this.hostRenderer);
+
     const qt = this.quadtree;
     // Flat, colorful moons need texture resolution, not geometric refinement: retain the bake longer.
     const colorDominated = this.body.id === 'io' || this.body.id === 'europa';
@@ -588,7 +597,7 @@ export class PlanetRenderer {
       Object.assign(this.stats, { chunks: qt.stats.selected, meshes: qt.stats.meshes, inflight: qt.stats.inflight, queued: qt.stats.queued });
     } else {
       qt?.hideAll();
-      if (qt) qt.pump();
+      if (qt) { qt.pump(); qt.evict(this.frame, true); }
       this.farSphere!.visible = true;
       placeWhole(this.farSphere!, R);
       this.stats.mode = 'far';

@@ -56,7 +56,7 @@ export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualit
   const make = (id: string) => {
     const b = universe.body(id);
     const terrain = b.solidSurface ? universe.terrain(id) : null;
-    const pr = new PlanetRenderer(b, terrain, { quality, scale, batchTerrain });
+    const pr = new PlanetRenderer(b, terrain, { quality, scale, batchTerrain, renderer });
     scene.add(pr.root);
     renderers.set(id, pr);
     return pr;

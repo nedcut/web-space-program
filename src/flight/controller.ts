@@ -12,7 +12,7 @@ import { FlightFx, isBurstEvent } from '../render/fx/FlightFx';
 import { PhotoCamera } from '../render/core/PhotoCamera';
 import * as THREE from 'three';
 import { SkyEnvironment } from '../render/core/skyEnv';
-import { setPartDetail } from '../render/parts';
+import { releasePartTexturePixels, restorePartTexturePixels, setPartDetail } from '../render/parts';
 import type { GameAudio } from '../audio';
 import { PART_CATALOG } from '../data/parts';
 import type { Autopilot } from '../game/autopilot';
@@ -190,6 +190,8 @@ export class FlightController {
   private elapsed = 0;
   onExit: (() => void) | null = null;
   private framesRendered = 0;
+  /** Next time to drop CPU pixels of part textures this renderer has uploaded (newly seen parts upload later). */
+  private nextPixelRelease = 0;
   /**
    * Shader warm-up: the first frame updates the scene without drawing, then every material in the
    * flight and map scenes (including hidden plumes, FX and the map) is compiled with
@@ -919,6 +921,10 @@ export class FlightController {
       this.render(renderVessel, dt);
       if (first) performance.measure('wsp:flight:firstFrame', { start: first });
       this.framesRendered++;
+      if (now >= this.nextPixelRelease && this.sceneReady) {
+        this.nextPixelRelease = now + 5000;
+        releasePartTexturePixels(this.pipeline.renderer);
+      }
     }
     t0 = prof.now();
     this.updateAudio(this.world.active);
@@ -1455,6 +1461,8 @@ export class FlightController {
     this.fadeEl?.remove();
     this.pipeline.dispose();
     this.pipeline.renderer.domElement.remove();
+    // The next scene's renderers need the part texture pixels this one dropped.
+    restorePartTexturePixels();
   }
 }
 

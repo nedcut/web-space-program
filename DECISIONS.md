@@ -390,3 +390,24 @@ Decisions made autonomously while the owner was away. Each can be revisited.
 - **Navball redraw tolerance 2e-4** (unit vectors; < 0.1 device px at the rim) instead of 1e-6, so a coasting orbit redraws a few times a second rather than every frame. Small edit in the HUD area.
 - **Off-screen bake/merge programs compile in the flight warm-up** against an empty scene (three puts light counts in every program key; these passes draw lightless scenes).
 - **Not changed, by choice:** the launch site's 200 km hide distance (the orbit test scenario starts above the pad, so the site's ~28 draws stay in orbit benchmarks), `ChunkBatch` per-instance frustum culling (re-uploads the batch's indirect texture every frame; the quadtree already culls) — both in `render/site` / `render/planet`, owned elsewhere — and bloom mip count (changes the look).
+
+## Terrain and texture heap (2026-10-08, op/heapfix)
+
+- **One index pattern.** Land and ocean chunks carry no index arrays; every chunk of a quadtree shares one
+  `BufferAttribute` over `chunkIndices(res)`. Evicted geometries detach it before dispose so its GPU buffer survives.
+- **Cache budget in bytes.** `terrain.cacheMB` (Low 16, Medium 32, High 64, Ultra 96) caps CPU bytes of *stale*
+  chunks (not visited by the selection walk for 30 frames); `cacheSize` now counts land + ocean meshes. Chunks in
+  use (selected, their ancestors and out-of-frustum siblings) are never evicted: on the pad they are the bulk of the
+  cache, and only denser packing or Ultra density (owner's call) reduces them. Stale chunks are evicted during a
+  reused selection too (only those the last walk did not visit) and while the planet is drawn far.
+- **Own multi-draw batch instead of three's BatchedMesh.** BatchedMesh keeps a full JS copy of the batch and only
+  doubles. `ChunkBatch` is a Mesh drawn through three's batching program path (`isBatchedMesh` + matrices/indirect
+  textures) over GL buffers it owns (`GLBufferAttribute`): slots are written from the chunk arrays, resizes copy
+  GPU-side, growth ×1.5, shrink to 1.5× the recent peak after 8 s at ≤ 40 % use, release when idle. Index buffers
+  are typed as element data inside a private VAO; all writes use COPY_* targets. Depends on three internals
+  (`_multiDraw*`, `_matricesTexture`, `_indirectTexture`): re-check on three upgrades (tests/chunk-batch.test.ts).
+  The per-draw fallback without WEBGL_multi_draw (Firefox) uses the same fields.
+- **Dropping uploaded pixels.** `render/texturePixels.ts`: owners drop DataTexture pixels once their renderer holds
+  them; an upload that still needs them only allocates and `onUpdate` refills asynchronously. Flight drops the far
+  bake and the part textures it uploaded; at flight end part textures revert to 1×1 placeholders and reload through
+  the worker/IndexedDB path so editor/thumbnail renderers never upload empty pixels.
