@@ -67,6 +67,11 @@ describe('EVA hatch marker', () => {
     // Straight behind and to the side: the side edge.
     markerPlacement({ x: 50, y: 0, z: 1 }, { x: -3, y: 0 }, 1000, 800, out);
     expect(out.x).toBeCloseTo(972, 6);
+    // Overhead, just either side of the camera plane: the top edge both times (no top/bottom flip).
+    markerPlacement({ x: 0.1, y: 10, z: -0.01 }, { x: 0.1 / 0.01 * 1.7, y: 10 / 0.01 * 1.7 }, 1000, 800, out);
+    expect(out.y).toBeCloseTo(28, 6);
+    markerPlacement({ x: 0.1, y: 10, z: 0.01 }, { x: -17, y: -1700 }, 1000, 800, out);
+    expect(out.y).toBeCloseTo(28, 6);
   });
 
   it('captions the distance, then the board key once in reach', () => {
