@@ -1,6 +1,19 @@
 import * as THREE from 'three';
 import type { AtmosphereParams } from './atmosphereParams';
 
+/** Period (s) of the shader clock; see {@link shaderTime}. */
+export const SHADER_TIME_PERIOD = 100000;
+/**
+ * Simulation time folded into a float32-safe uniform. Absolute UT (~1e9 s) has a 64 s float32 step, and
+ * wave drift (uTime · speed) added to a detail coordinate snapped that coordinate to a 128 m grid: tilted
+ * squares of sea in the sun glint. 1e5 s keeps 8 ms resolution, leaves the gas-giant mod(t, 1e5) unchanged
+ * and is a whole number of the 4000 s and 12500 s effect cycles; other loops jump once a day of game time.
+ */
+export function shaderTime(t: number): number {
+  const w = t % SHADER_TIME_PERIOD;
+  return w < 0 ? w + SHADER_TIME_PERIOD : w;
+}
+
 /** Uniform objects shared by every material of one planet (updated once per frame). */
 export interface PlanetUniforms {
   uPlanetCenter: THREE.IUniform<THREE.Vector3>;

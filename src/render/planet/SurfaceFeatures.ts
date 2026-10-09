@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { shaderTime } from './uniforms';
 import type { BodyDef } from '../../sim/bodies/types';
 import type { Terrain } from '../../sim/terrain';
 import { latLonToUnit } from '../../sim/terrain';
@@ -138,7 +139,7 @@ export class SurfaceFeatures {
   }
   update(offset: THREE.Vector3, rotation: THREE.Quaternion, camera: THREE.Vector3, time: number, sun: THREE.Vector3) {
     this.sun.value.copy(sun);
-    this.time.value = time;
+    this.time.value = shaderTime(time);
     for(const e of this.entries) {
       e.mesh.position.copy(e.position).applyQuaternion(rotation).add(offset);
       e.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),e.position.clone().normalize()).premultiply(rotation);
