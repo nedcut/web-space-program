@@ -246,4 +246,7 @@ marker rotates the predicted body-fixed touchdown site to the current UT and pro
 Numerical map prediction now resumes an anchored node from its frozen post-burn state, including after node
 time; its live zero-length patch remains a conic beside the numerical plan. Planners continue to use patched
 conics. The local flight map defaults to the active body and orbit, with an explicit whole-transfer overview.
->>>>>>> cx/wp4
+While following the vessel, `flight/map/framing.ts` (`AutoFramer`) also frames the first SOI change on the flown
+(unplanned) path and reframes on SOI change or capture; a wheel zoom suppresses automatic reframing until the next
+SOI change. `render/map/framing.ts` `patchDrawnNow` decides which patches share the present frame; a return to a body
+the path has left is drawn where that body will be.

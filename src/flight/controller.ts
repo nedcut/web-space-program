@@ -1141,8 +1141,8 @@ export class FlightController {
     const t = this.world.ut;
     const origin = this.network?.pose(wv.state.id)?.position ?? wv.state.position;
     this.updateMapTargets(wv);
-    const focus = this.mapUi.focusFrame(wv, origin);
     const patches = this.world.mapTrajectory();
+    const focus = this.mapUi.focusFrame(wv, origin, patches);
     const relInc = this.predictions.crossings.length ? this.relativeInclination(wv) : NaN;
     const incText = Number.isFinite(relInc) ? `\nRelative inclination ${relInc.toFixed(2)}°` : '';
     const impactOnPath = patches.some(p => p.endReason === 'impact' && p.orbit.body === wv.body && !p.samples);

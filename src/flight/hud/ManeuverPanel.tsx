@@ -99,47 +99,11 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
   return (
     <>
     {transferTarget && <TransferWindow world={world} target={transferTarget} onClose={() => setTransferTarget(null)} onPlanned={setPlanMsg} />}
-    <div className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+    {/* Header and node list stay in view; the tools scroll so the panel never reaches the staging stack or navball. */}
+    <div className="panel mp">
       {header}
-      {world.preciseGravity && <div className="label">Precise map path · planners use patched conics. Allow correction burns.</div>}
-      <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5 }}>Click your orbit to add a node. Drag its handles: green prograde/retrograde, magenta normal, cyan radial. Click the node for exact values.</div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <button className="btn small" onClick={() => add('ap')} disabled={orbit.e >= 1}>Node @ Ap</button>
-        <button className="btn small" onClick={() => add('pe')}>Node @ Pe</button>
-        <button className="btn small" onClick={() => add('soon')}>+2 min</button>
-      </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <button className="btn small" onClick={() => planCirc('apoapsis')} disabled={orbit.e >= 1}>Circularize @ Ap</button>
-        <button className="btn small" onClick={() => planCirc('periapsis')}>@ Pe</button>
-      </div>
-      {targets.length > 0 && (
-        <select
-          className="btn small"
-          disabled={!!planner.progress || !!transferTarget}
-          value=""
-          onChange={(e) => e.target.value && planTransfer(e.target.value)}
-          style={{ background: 'var(--panel-solid)', color: 'var(--text)' }}
-        >
-          <option value="">Plan transfer to…</option>
-          {targets.map((b) => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
-      )}
-      {siblings.length > 0 && <select className="btn small" aria-label="Transfer window destination" disabled={!!planner.progress} value="" onChange={e => { if (e.target.value) setTransferTarget(e.target.value); }} style={{ background: 'var(--panel-solid)', color: 'var(--text)' }}>
-        <option value="">Explore transfer windows…</option>
-        {siblings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-      </select>}
-      {planner.progress && <div role="status" style={{ fontSize: 12 }}>
-        Planning… {planner.progress.phase} ({Math.round(planner.progress.fraction * 100)}%)
-        <progress aria-label="Transfer planning progress" value={planner.progress.fraction} max={1} />
-        <button className="btn small" onClick={() => { planner.cancel(); setPlanMsg('Planning cancelled'); }}>Cancel</button>
-      </div>}
-      {planMsg && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{planMsg}</div>}
-      {options && map && <button className="btn small" onClick={() => map.frameTransferOverview(options.target)}>Show whole transfer</button>}
-      {options && <DepartureOptions world={world} options={options} busy={!!planner.progress} onPick={w => planTransfer(options.target, w.departure)} />}
-      {nodes.length > 0 && <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: 6, display: 'grid', gap: 4, fontSize: 12 }}>
-        {nodes.map((n, i) => <div key={n.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6, alignItems: 'center' }}>
+      {nodes.length > 0 && <div className="mp-nodes">
+        {nodes.map((n, i) => <div key={n.id} className="mp-node">
           <button className="btn ghost small" style={{ textAlign: 'left' }} onClick={() => map?.openNode(n.id)} title="Select and open the node menu">
             <span className="mono">#{i + 1} · {Math.hypot(n.prograde, n.normal, n.radial).toFixed(1)} m/s · {formatCountdown(n.time - world.ut)}</span>
           </button>
@@ -147,6 +111,45 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
           <button className="btn small danger" aria-label={`Delete node ${i + 1}`} onClick={() => map ? map.deleteNode(n.id) : world.removeNode(n.id)}>×</button>
         </div>)}
       </div>}
+      <div className="mp-scroll">
+        {world.preciseGravity && <div className="label">Precise map path · planners use patched conics. Allow correction burns.</div>}
+        {nodes.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5 }}>Click your orbit to add a node. Drag its handles: green prograde/retrograde, magenta normal, cyan radial. Click the node for exact values.</div>}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button className="btn small" onClick={() => add('ap')} disabled={orbit.e >= 1}>Node @ Ap</button>
+          <button className="btn small" onClick={() => add('pe')}>Node @ Pe</button>
+          <button className="btn small" onClick={() => add('soon')}>+2 min</button>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button className="btn small" onClick={() => planCirc('apoapsis')} disabled={orbit.e >= 1}>Circularize @ Ap</button>
+          <button className="btn small" onClick={() => planCirc('periapsis')}>@ Pe</button>
+        </div>
+        {targets.length > 0 && (
+          <select
+            className="btn small"
+            disabled={!!planner.progress || !!transferTarget}
+            value=""
+            onChange={(e) => e.target.value && planTransfer(e.target.value)}
+            style={{ background: 'var(--panel-solid)', color: 'var(--text)' }}
+          >
+            <option value="">Plan transfer to…</option>
+            {targets.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        )}
+        {siblings.length > 0 && <select className="btn small" aria-label="Transfer window destination" disabled={!!planner.progress} value="" onChange={e => { if (e.target.value) setTransferTarget(e.target.value); }} style={{ background: 'var(--panel-solid)', color: 'var(--text)' }}>
+          <option value="">Explore transfer windows…</option>
+          {siblings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>}
+        {planner.progress && <div role="status" style={{ fontSize: 12 }}>
+          Planning… {planner.progress.phase} ({Math.round(planner.progress.fraction * 100)}%)
+          <progress aria-label="Transfer planning progress" value={planner.progress.fraction} max={1} />
+          <button className="btn small" onClick={() => { planner.cancel(); setPlanMsg('Planning cancelled'); }}>Cancel</button>
+        </div>}
+        {planMsg && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{planMsg}</div>}
+        {options && map && <button className="btn small" onClick={() => map.frameTransferOverview(options.target)}>Show whole transfer</button>}
+        {options && <DepartureOptions world={world} options={options} busy={!!planner.progress} onPick={w => planTransfer(options.target, w.departure)} />}
+      </div>
     </div>
     </>
   );
