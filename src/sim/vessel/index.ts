@@ -123,7 +123,7 @@ export {
 } from './docking';
 export type { PortInfo, PortAlignment, DockingCandidate, DockingEvent } from './docking';
 
-export { stepEva, EVA_HEIGHT, EVA_THRUST, EVA_EXHAUST_SPEED } from './eva';
+export { stepEva, collideEvaWithHull, EVA_HEIGHT, EVA_THRUST, EVA_EXHAUST_SPEED } from './eva';
 export { advanceISRU } from './isru';
 
 export { evaluateJointLoads, jointStrength, breakJoints } from './structure';

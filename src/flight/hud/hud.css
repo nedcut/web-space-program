@@ -109,6 +109,17 @@
 .crew-card { display: flex; gap: 8px; padding: 6px 8px 6px 6px; width: 166px; align-items: center; }
 .crew-card.eva { width: 280px; }
 .eva-jet { display: flex; align-items: center; gap: 6px; }
+/* EVA hatch marker (flight label layer): a diamond on the hatch, caption to its right. */
+.hatch-marker { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; color: #8fdcf2; will-change: transform; transition: opacity .2s; }
+.hatch-marker i { position: absolute; left: -6px; top: -6px; width: 8px; height: 8px; border: 2px solid currentColor; transform: rotate(45deg); box-shadow: 0 0 3px #000c, inset 0 0 3px #000c; }
+.hatch-marker span { position: absolute; left: 11px; top: -7px; font: 650 10.5px var(--mono); letter-spacing: .04em; white-space: nowrap; text-shadow: 0 1px 2px #000, 0 0 4px #000; }
+.hatch-marker.ready { color: #9cf5b0; }
+.hatch-marker.behind { opacity: .45; }
+.hatch-marker.flip span { left: auto; right: 11px; }
+.hatch-marker b { display: none; position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; }
+.hatch-marker b::after { content: ''; position: absolute; right: -4px; top: 6px; border: 5px solid transparent; border-left: 7px solid currentColor; filter: drop-shadow(0 0 2px #000); }
+.hatch-marker.edge b { display: block; }
+.hatch-marker.edge i { opacity: .7; }
 .eva-jet .eva-jet-toggle { padding: 2px 7px; font-size: 10.5px; pointer-events: auto; }
 .eva-jet .eva-jet-toggle.on { color: #062333; background: linear-gradient(180deg, #8adff1, #65bed7); border-color: var(--accent); }
 .eva-gas { flex: 1; height: 5px; min-width: 30px; border-radius: 3px; background: #ffffff18; overflow: hidden; }

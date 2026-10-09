@@ -304,6 +304,9 @@ export class World {
 
   boardingBlocker(whole = false): string | null { return crew.boardingBlocker.call(this, this.systems, whole); }
 
+  /** The active astronaut's nearest hatch (free seats first), for the HUD's hatch marker. */
+  nearestHatch(): crew.NearestHatch | null { return crew.nearestHatch.call(this, this.systems); }
+
   boardEva(): boolean { const v = this.active; const ok = crew.boardEva.call(this, this.systems); if (ok && v) this.closeFlightRecord(v, 'boarded'); return ok; }
 
   plantFlag(): PlantedFlag | null { const flag = crew.plantFlag.call(this, this.systems); if (flag && this.active) { if (!this.achievementProfile.flags.includes(flag.body)) this.achievementProfile.flags.push(flag.body); this.logFlightEvent(this.active, 'flag'); saveAchievements(this.achievementProfile); } return flag; }
@@ -749,6 +752,7 @@ export class World {
         if (isActive) this.activeId = null;
       }
     }
+    crew.collideAstronauts(this);
     this.stepDockingAll();
     this.ut = t + PHYSICS_DT;
     this.applyPassedNodes();

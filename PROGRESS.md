@@ -2,6 +2,21 @@
 
 _Last updated: 2026-10-09_
 
+## EVA round 2 (2026-10-09, op/eva2)
+
+- **Hatch distance** no longer jumps mid-hop beside a tall grounded rocket (Meridian: 4 → 16 → 4 m before; now
+  3.6 m throughout in Chrome, 5.1 → 5.2 → 5.2 m in Firefox).
+- **Hatch marker:** on EVA the nearest free hatch within 250 m is marked (diamond + "Hatch · 12 m", "Board · Enter"
+  in reach); off screen it rides the view's edge with an arrow. DOM label: no draw call or shader program.
+- **Locked camera on EVA:** strafing used to spin astronaut and camera round each other (~85°/s, Chrome). Now the
+  astronaut faces where you look; A/D sidestep.
+- **Pad flame pit:** a walkway grating now covers the flame hole and open trench, flush with the (flat) pad
+  collision; launches unchanged. **Hull collision:** astronauts are stopped by vessel hulls (0.5–1.7 µs per step
+  beside a vessel).
+- **Firefox:** pad, Moon and orbit EVA runs complete (walk, hop, jetpack, flag, marker, board); no Firefox-specific
+  game defect found. Frame time on the pad during EVA is unchanged vs main (A/B, ±run noise).
+  Details: DECISIONS.md "EVA round 2".
+
 ## Colour variant batching (2026-10-09, op/variantmerge)
 
 - Accent paints, anodised metals and foil colours share batch materials, with colour baked into existing

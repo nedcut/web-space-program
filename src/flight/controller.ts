@@ -55,10 +55,12 @@ import { formatDistance, formatDuration, formatSpeed } from '../ui/format';
 import { frameProfiler as prof } from '../util/frameProfiler';
 import { shareUnchanged, snapshotEqual } from '../util/snapshotEqual';
 import { bindingLabel } from '../input/bindings';
+import { HatchMarker, HATCH_MARKER_RANGE } from './hatchMarker';
+import { BOARD_RANGE, BOARD_SPEED } from '../game/world/crew';
 import { add, cross, dot, length, normalize, scale, sub, type Vec3 } from '../util/vec3';
 import { qRotate } from '../util/quat';
 import { type AssistId } from './assist';
-import { CAMERA_MODE_INFO, FlightCamera, PivotSmoother, TouchdownKick } from './camera';
+import { CAMERA_MODE_INFO, cameraModeInfo, FlightCamera, PivotSmoother, TouchdownKick } from './camera';
 import { hudLensShift, LiftoffDetector, speedFovBoost, towerAvailable, towerPlacement, towerRevertDistance } from './cameraFraming';
 import { warpRate } from '../game/timewarp';
 import * as assist from './controller/assist';
@@ -192,6 +194,8 @@ export class FlightController {
   private reentry = new ReentryFx();
   private reentryHeat = 0;
   private labelHost: HTMLDivElement;
+  /** On EVA: marks the nearest free hatch so it can be found on a long hull or from a drift. */
+  private hatchMarker: HatchMarker;
   /** Smoothed frames per second (for the optional FPS readout). */
   fps = 60;
   private raf = 0;
@@ -297,6 +301,7 @@ export class FlightController {
     Object.assign(labelHost.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
     labelHost.classList.add('photo-hide');
     host.appendChild(labelHost);
+    this.hatchMarker = new HatchMarker(labelHost);
     this.map = new MapView(universe.bodies, universe.ephem, labelHost, q, universe);
     this.map.setVisible(false);
     this.mapUi = new FlightMap(this);
@@ -712,7 +717,8 @@ export class FlightController {
     const u = this.world.universe;
     const tower = !!wv && towerAvailable(u.body(wv.body).solidSurface, u.surfaceInfo(wv.body, wv.state.position, this.world.ut).heightAboveTerrain, wv.state.cache.boundingRadius);
     const mode = this.cam.cycleMode(!!wv?.state.eva, tower);
-    this.world.message(`Camera: ${CAMERA_MODE_INFO[mode].label} — ${CAMERA_MODE_INFO[mode].hint}`, 'info', 2.5);
+    const info = cameraModeInfo(mode, !!wv?.state.eva);
+    this.world.message(`Camera: ${info.label} — ${info.hint}`, 'info', 2.5);
   }
 
   /** Warp to the next maneuver node / apoapsis / periapsis / SOI change. */
@@ -895,6 +901,7 @@ export class FlightController {
       evaHeading: wv?.state.eva ? { x: this.cam.camera.quaternion.x, y: this.cam.camera.quaternion.y, z: this.cam.camera.quaternion.z, w: this.cam.camera.quaternion.w } : undefined,
       evaJump: !!wv?.state.eva && this.evaJumpPending,
       evaRun: this.input.running,
+      evaFaceView: !!wv?.state.eva && this.cam.mode === 'locked',
       pitch: drivingRover ? 0 : s.pitch + trim.pitch,
       wheelThrottle: drivingRover ? -s.pitch : 0,
       yaw: s.yaw + trim.yaw,
@@ -976,6 +983,7 @@ export class FlightController {
     this.telemetryTimer += dt;
     if (this.telemetryTimer > 0.1 && wv) {
       this.telemetryTimer = 0;
+      this.updateHatchTarget(wv);
       const t = shareUnchanged(this.telemetry(wv), this.lastTelemetry);
       const hudInput = `${this.input.precisionActive}:${this.input.stageProgress}:${this.input.gamepadConnected}`;
       if (hudInput !== this.lastHudInput || !snapshotEqual(t, this.lastTelemetry)) {
@@ -1056,6 +1064,7 @@ export class FlightController {
     for (const label of this.playerLabels.values()) label.style.display = 'none';
     let t0 = prof.now();
     if (this.mapMode) {
+      this.hatchMarker.update(this.world.vessels, origin, this.cam.camera, 0, 0, false);
       this.updateMapScene(wv);
       prof.add('map', t0);
       t0 = prof.now();
@@ -1108,6 +1117,7 @@ export class FlightController {
     if (this.photo.active) this.photo.update(photoDt);
     else this.updateCamera(wv, origin, bodyState, airVel, t, dt);
     const camera = this.cam.camera;
+    this.hatchMarker.update(this.world.vessels, origin, camera, this.viewport.width, this.viewport.height, !this.uiHidden && !this.photo.active);
     const groundAltitude = u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain;
     this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, groundAltitude, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors, u.body(wv.body).surfaceGravity);
     this.effects.rcs(wv.state,this.rcsOn,this.input.state);
@@ -1354,6 +1364,7 @@ export class FlightController {
       frameCentre: mid,
       fovBoost: settings.reduceMotion ? 0 : speedFovBoost(tel.dynamicPressure, spaceBlend),
       eye,
+      eva: !!st.eva,
     }, dt);
   }
 
@@ -1497,6 +1508,14 @@ export class FlightController {
     }
   };
 
+  /** Telemetry rate: the hatch the EVA marker points at (nearest free seat in range), or none. */
+  private updateHatchTarget(wv: WorldVessel) {
+    const near = wv.state.eva && !this.mapMode ? this.world.nearestHatch() : null;
+    this.hatchMarker.topInset = (HUD_TOP_PX + 24) * game.get().settings.hudScale;
+    this.hatchMarker.setTarget(near?.free && near.distance <= HATCH_MARKER_RANGE
+      ? { vesselId: near.vessel.state.id, podUid: near.pod.uid, distance: near.distance, ready: near.distance <= BOARD_RANGE && near.speed < BOARD_SPEED, boardKey: bindingLabel('board') }
+      : null);
+  }
   private telemetry(wv: WorldVessel): Telemetry { return telemetry.telemetry.call(this, this.systems, wv); }
 
   /** Gear / brakes / intake-air readouts for the HUD (null fields when the vessel has no such hardware). */
@@ -1525,6 +1544,7 @@ export class FlightController {
     this.unwatchContext?.();
     this.skyEnv.dispose();
     this.scene.environment = null;
+    this.hatchMarker.dispose();
     this.labelHost.remove();
     this.fadeEl?.remove();
     this.pipeline.dispose();

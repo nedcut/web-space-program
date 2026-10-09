@@ -14,6 +14,7 @@ import { coastalTreeGeometry, smoothSphereNormals } from '../planet/scatter/geom
 import { packBand } from './vegetationBands';
 import { PadEquipment, CLAMP } from './padEquipment';
 import { PadSteam } from './padSteam';
+import { padGrating } from './padGrating';
 import type { VesselState } from '../../sim/vessel/runtime';
 import { paintSurface, SiteTextureArray, siteSurfaceUniforms, withSiteSurfaces, type SiteLayer, type SiteSurface, type SiteSurfaceUniforms } from './siteSurfaces';
 
@@ -566,6 +567,9 @@ export class LaunchSite {
     const dg = new THREE.ExtrudeGeometry(ds, { depth: 2 * T - 0.1, bevelEnabled: false, curveSegments: 16 });
     const dm = new THREE.Matrix4().makeBasis(V(0, 0, -1), V(0, 1, 0), V(1, 0, 0)).setPosition(-T + 0.05, 0, 0);
     this.add('darkMetal', dg, dm);
+    // Walkway grating over the flame hole and the open trench (past the lintel), flush with the deck: collision ground
+    // is flat across the pad, so the astronaut walks on what is drawn. Rockets still stand 5 cm above the deck.
+    for (const b of padGrating(T, zDeck - 0.7, zN)) this.add('steel', boxY(b.w, b.d, b.x, b.z, b.y0, b.y1));
     // Water deluge pipes along the hole rim.
     for (const sx of [-1, 1]) this.add('steel', new THREE.CylinderGeometry(0.18, 0.18, 2 * H, 8).rotateX(Math.PI / 2).translate(sx * (H - 0.3), -0.45, 0));
 
