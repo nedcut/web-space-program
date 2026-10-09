@@ -1061,8 +1061,8 @@ export class FlightController {
     if (this.photo.active) this.photo.update(photoDt);
     else this.updateCamera(wv, origin, bodyState, airVel, t, dt);
     const camera = this.cam.camera;
-    const surf = u.surfaceInfo(wv.body, wv.state.position, t);
-    this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, surf.heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors, u.body(wv.body).surfaceGravity);
+    const groundAltitude = u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain;
+    this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, groundAltitude, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors, u.body(wv.body).surfaceGravity);
     this.effects.rcs(wv.state,this.rcsOn,this.input.state);
     prof.add('fx', t0);
     if (this.network) {
@@ -1131,10 +1131,13 @@ export class FlightController {
     // Ground bounce from the terrain under the vessel: mid palette albedo on land, the darkest (water) entry over liquid.
     const colors = envBody.surface.colors;
     const terrain = envBody.solidSurface ? u.terrain(wv.body) : null;
-    const overLiquid = !!terrain?.ocean && surf.terrainHeight < (terrain.liquid?.level ?? 0);
+    // The surface under the vessel is max(liquid level, terrain): at the liquid level means over liquid.
+    const datumAltitude = length(sub(wv.state.position, bodyState.position)) - envBody.radius;
+    const liquidLevel = terrain?.liquid?.level ?? 0;
+    const overLiquid = !!terrain?.ocean && Math.abs(datumAltitude - groundAltitude - liquidLevel) < 0.01;
     const bounce = envBody.solidSurface ? surfaceBounce({
       albedo: (overLiquid ? colors[0] : colors[1] ?? colors[0]) ?? [0.3, 0.3, 0.3],
-      altitude: surf.altitude, radius: envBody.radius, daylight: eclipse,
+      altitude: datumAltitude, radius: envBody.radius, daylight: eclipse,
       sunColor: [this.sunLight.color.r, this.sunLight.color.g, this.sunLight.color.b], airless: !envBody.atmosphere,
     }, this.envBounce) : undefined;
     this.scene.environment = this.skyEnv.update(
