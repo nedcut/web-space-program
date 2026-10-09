@@ -39,8 +39,17 @@ export function thermalMaterial(m: THREE.Material): THREE.Material {
   if (variant) return variant;
   variant = m.clone();
   variant.name = `${m.name}#thermal`;
+  // Packed ORM (R = AO, G = roughness, B = metalness) bound once instead of as three maps: one texture fetch, and
+  // two fewer texture binds per material switch. Same texture object, so the same UV channel and transform.
+  const orm = !!m.roughnessMap && m.metalnessMap === m.roughnessMap && (!m.aoMap || m.aoMap === m.roughnessMap);
+  const ormAo = orm && !!m.aoMap;
+  const v = variant as THREE.MeshStandardMaterial;
+  if (orm) { v.metalnessMap = null; v.aoMap = null; }
+  // Follows the variant's current maps, so restoring them (e.g. to compare) returns three's own path.
+  const packed = () => orm && !v.metalnessMap && !v.aoMap;
   variant.onBeforeCompile = (shader, renderer) => {
     m.onBeforeCompile(shader, renderer);
+    if (packed()) packedOrm(shader, ormAo, m.aoMapIntensity);
     // Part meshes also carry a rigid node slot (identity unless merged under a gimbal/deployable; see rigidNodes).
     patchNodeVertex(shader);
     shader.uniforms.wspThermal = { value: thermalTexture };
@@ -55,12 +64,34 @@ export function thermalMaterial(m: THREE.Material): THREE.Material {
       float wspIndex = floor(wspSlot + 0.5);
       totalEmissiveRadiance += texelFetch(wspThermal, ivec2(int(mod(wspIndex, 128.0)), int(wspIndex / 128.0)), 0).rgb;`);
   };
-  variant.customProgramCacheKey = () => `${m.customProgramCacheKey()}:thermal-v3`;
+  variant.customProgramCacheKey = () => `${m.customProgramCacheKey()}:thermal-v3${packed() ? (ormAo ? ':orm-ao' : ':orm') : ''}`;
   variants.set(m, variant);
   isVariant.add(variant);
   const owned = variant;
   m.addEventListener('dispose', () => owned.dispose());
   return variant;
+}
+
+/** Read metalness (B) and AO (R) from the roughness map's texel (three's chunks, minus their own fetches). */
+function packedOrm(shader: THREE.WebGLProgramParametersWithUniforms, ao: boolean, aoIntensity: number): void {
+  let f = shader.fragmentShader.replace('#include <metalnessmap_fragment>', 'float metalnessFactor = metalness * texelRoughness.b;');
+  if (ao) {
+    shader.uniforms.wspAoIntensity = { value: aoIntensity };
+    f = 'uniform float wspAoIntensity;\n' + f.replace('#include <aomap_fragment>', `
+  float ambientOcclusion = ( texelRoughness.r - 1.0 ) * wspAoIntensity + 1.0;
+  reflectedLight.indirectDiffuse *= ambientOcclusion;
+  #if defined( USE_CLEARCOAT )
+    clearcoatSpecularIndirect *= ambientOcclusion;
+  #endif
+  #if defined( USE_SHEEN )
+    sheenSpecularIndirect *= ambientOcclusion;
+  #endif
+  #if defined( USE_ENVMAP ) && defined( STANDARD )
+    float dotNV = saturate( dot( geometryNormal, geometryViewDir ) );
+    reflectedLight.indirectSpecular *= computeSpecularOcclusion( dotNV, ambientOcclusion, material.roughness );
+  #endif`);
+  }
+  shader.fragmentShader = f;
 }
 
 // Retain template identity so repeated static parts still use InstancedMesh, not unique draws.

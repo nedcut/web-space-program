@@ -75,3 +75,29 @@ describe('batched thermal surfaces', () => {
     view.dispose();
   });
 });
+
+describe('packed ORM in thermal variants', () => {
+  it('binds the packed occlusion/roughness/metalness texture once and reads its channels from one fetch', async () => {
+    const { thermalMaterial } = await import('../src/render/fx/thermalSurface');
+    const orm = new THREE.Texture();
+    const base = new THREE.MeshPhysicalMaterial({ roughnessMap: orm, metalnessMap: orm, aoMap: orm, aoMapIntensity: 0.7 });
+    const v = thermalMaterial(base) as THREE.MeshPhysicalMaterial;
+    expect(v.roughnessMap).toBe(orm);
+    expect(v.metalnessMap).toBeNull();
+    expect(v.aoMap).toBeNull();
+    expect(v.customProgramCacheKey()).toContain(':orm-ao');
+    const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.physical.vertexShader, fragmentShader: THREE.ShaderLib.physical.fragmentShader } as unknown as THREE.WebGLProgramParametersWithUniforms;
+    v.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+    expect(shader.fragmentShader).not.toContain('#include <metalnessmap_fragment>');
+    expect(shader.fragmentShader).not.toContain('#include <aomap_fragment>');
+    expect(shader.fragmentShader).toContain('texelRoughness.b');
+    expect((shader.uniforms as Record<string, { value: number }>).wspAoIntensity.value).toBe(0.7);
+    // Restoring the maps returns three's own path (used to compare the two in a browser).
+    v.metalnessMap = orm; v.aoMap = orm;
+    expect(v.customProgramCacheKey()).not.toContain(':orm');
+    // A material with separate maps keeps them.
+    const other = thermalMaterial(new THREE.MeshStandardMaterial({ roughnessMap: orm, metalnessMap: new THREE.Texture() })) as THREE.MeshStandardMaterial;
+    expect(other.metalnessMap).not.toBeNull();
+    expect(other.customProgramCacheKey()).not.toContain(':orm');
+  });
+});
