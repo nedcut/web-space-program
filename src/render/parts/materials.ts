@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { registerColorBatch } from '../core/colorBatch';
 import { decalMaterial, disposeDecals } from './decals';
 import { disposeTextures, repeated, texSet, type TexSet } from './textures';
 
@@ -77,6 +78,19 @@ const metal = (key: string, set: string, color: number, rough: number, o: { norm
   return get(key, () => std({ color, ...maps(t, o.tile ?? 1, o.normal ?? 0.5), roughness: rough, metalness: o.metal ?? 1, envMapIntensity: o.env }));
 };
 
+/** Same factory for the coloured and white material guarantees all non-colour settings stay identical. */
+function colorFamily<M extends THREE.MeshStandardMaterial>(family: string, key: string, make: (color: number) => M, color: number): M {
+  const neutral = get(`${family}#white`, () => make(0xffffff));
+  const source = get(key, () => make(color));
+  registerColorBatch(source, neutral);
+  return source;
+}
+
+function foil(key: string, color: number): THREE.MeshPhysicalMaterial {
+  const t = texSet('foil');
+  return colorFamily('foil', key, c => phys({ color: c, ...maps(t, 1, 0.85), roughness: 1, metalness: 1, anisotropy: 0.45 }), color);
+}
+
 export const M = {
   // --- white thermal paint family -------------------------------------------------------------
   /** Gloss-white painted aluminium with panel lines, rivets, welds and light grime. */
@@ -89,7 +103,10 @@ export const M = {
   satinWhite: () => paint('satinWhite', 'smooth', 0xf3f2ee, { normal: 0.5, cc: 0.45, ccRough: 0.18 }),
   blackPaint: () => paint('blackPaint', 'smooth', 0x18191c, { normal: 0.4, cc: 0.3, ccRough: 0.3 }),
   /** Livery accent paints. */
-  accent: (which: Accent) => paint('accent-' + which, 'smooth', ACCENTS[which], { normal: 0.4, cc: 0.6, ccRough: 0.12, rough: 1.1 }),
+  accent: (which: Accent) => {
+    const t = texSet('smooth');
+    return colorFamily('accent', 'accent-' + which, color => phys({ color, ...maps(t, 1, 0.4), roughness: 1.1, metalness: t.ormMap ? 1 : 0.05, clearcoat: 0.6, clearcoatRoughness: 0.12 }), ACCENTS[which]);
+  },
 
   // --- insulation -------------------------------------------------------------------------------
   /** Spray-on orange foam (albedo carries the colour). */
@@ -98,14 +115,8 @@ export const M = {
     return get('orangeFoam', () => std({ color: 0xffffff, ...maps(t, 1, 1), roughness: 1, metalness: 0 }));
   },
   /** Gold multi-layer insulation foil (anisotropic crinkle). */
-  goldFoil: () => {
-    const t = texSet('foil');
-    return get('goldFoil', () => phys({ color: 0xe7bb62, ...maps(t, 1, 0.85), roughness: 1, metalness: 1, anisotropy: 0.45 }));
-  },
-  silverFoil: () => {
-    const t = texSet('foil');
-    return get('silverFoil', () => phys({ color: 0xe0e2e5, ...maps(t, 1, 0.85), roughness: 1, metalness: 1, anisotropy: 0.45 }));
-  },
+  goldFoil: () => foil('goldFoil', 0xe7bb62),
+  silverFoil: () => foil('silverFoil', 0xe0e2e5),
   /** Quilted beta-cloth blanket. */
   quilt: () => {
     const t = texSet('quilt');
@@ -120,7 +131,10 @@ export const M = {
   darkMetal: () => metal('darkMetal', 'metal', 0x34373c, 1.4, { normal: 0.4, metal: 0.45 }),
   chrome: () => metal('chrome', 'metal', 0xeef0f3, 0.3, { normal: 0.15 }),
   /** Coloured anodised aluminium (docking hardware, fittings). */
-  anodised: (which: Accent) => metal('anodised-' + which, 'metal', ACCENTS[which], 1.1, { normal: 0.3 }),
+  anodised: (which: Accent) => {
+    const t = texSet('metal');
+    return colorFamily('anodised', 'anodised-' + which, color => std({ color, ...maps(t, 1, 0.3), roughness: 1.1, metalness: 1 }), ACCENTS[which]);
+  },
   redOxide: () => metal('redOxide', 'metal', 0x8c3a22, 1.6, { normal: 0.3 }),
   /** Heat-stained, sooty engine-bay metal. */
   scorched: () => metal('scorched', 'scorch', 0xffffff, 1, { normal: 0.6 }),
