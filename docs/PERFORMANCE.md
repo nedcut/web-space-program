@@ -1911,3 +1911,111 @@ CPU pass 2 doubles terrain chunk resolution (fewer, larger chunks: fewer draws, 
 | Orbit | 1.98 → 2.05 | 0.68 M → 1.05 M |
 
 All scenes stay within the ≤2.5 ms Medium budget; the +0.05 ms in ascent/orbit is the extra terrain vertices. Apple tile GPUs may weigh vertex work more than the RTX; revisit chunk resolution if the owner's F8 report shows vertex-bound frames. Raw CPU traces and full-size imagery screenshots for CPU pass 2 (~160 MB) are archived outside the repository.
+
+# Firefox / Zen pass — 2026-10-08 (`op/ffperf`)
+
+Target: the owner's Zen on an M1-class MacBook (120 Hz Retina). Their F8 report in Earth orbit/re-entry: 89 fps,
+frame p50 8.7 / p95 19.3 / p99 25.1 ms with only 2.4 ms main-thread CPU, 281–416 draws, render submit 1.3–1.8 ms.
+Firefox remotes WebGL: every GL call is a command executed later by the GPU process, so the page's "CPU" can be low
+while the GPU process (or a synchronous wait on it) drops frames.
+
+## Method
+
+- **Windows Firefox 143** (RTX 3060 Ti, ANGLE/D3D11), production builds, Medium, adaptive resolution off, 1600×915,
+  DPR 1. This PC's Firefox vsync is 30 Hz, so steady-state A/Bs run Firefox in ASAP mode
+  (`layout.frame_rate = 0`): the frame interval is then the whole pipeline's cost (page + GPU process + GPU), not
+  vsync. `scripts/windows-firefox/ab.mjs` (40 s warm-up, 10 s window; `GLCOUNT=1` counts GL calls per frame) and
+  `timeline.mjs` (per-second log from navigation; with `GLCOUNT=1` it lists the GL calls of every frame over 40 ms).
+  Main = `422423e3`, served from a detached worktree. Results are single A/B pairs and noisy (the PC is shared).
+- **Attribution** (which objects issue which calls) used Playwright Firefox on Linux (software GL) with
+  `renderBufferDirect`/GL-prototype wrappers; draw lists do not depend on the GPU. Firefox exposes neither
+  `WEBGL_multi_draw` nor timer queries nor parallel shader compile (Windows 143 and Linux).
+- **Chrome**: `gpu-passes-ab.sh` (fenced GPU ms, Medium, DPR 2, 3 interleaved pairs) and the timeline driver for
+  imagery streaming.
+
+## Where the frame went (orbit, Meridian above the pad, one Firefox frame)
+
+~1,660 GL calls for ~223 draws: vessel ~70 draws / ~770 calls (32 materials, 13 programs), Earth terrain+ocean
+89 chunks / ~355 calls (no multi-draw: one mesh each), launch site 28 draws / ~330 calls (the orbit scenario starts
+above the pad, inside its 200 km hide distance), post-processing ~94 + ~60 pass-setup calls. Uniform tracing found
+`directionalShadowMatrix` re-uploaded on every material switch (~60/frame) and the bloom kernels on every blur pass:
+three caches single uniforms but never array uniforms. In re-entry the vessel was 62% of all calls.
+
+Spikes, from `timeline.mjs` and temporary section probes:
+
+| Spike | Firefox cost | Cause | Fix |
+|---|---:|---|---|
+| Imagery streaming (~10 s after load) | 5–16 ms per unit, one unit every frame | Bitmaps copied through a 2D canvas (the Firefox crop workaround) are read back synchronously on upload; the budget always admitted one unit per frame | Pixel strips in Firefox; credit budget |
+| Cloud-field bake, ~20 s into a flight | 1,052 ms once (587 ms with a warm shader cache) | Bake program compiled and linked on its first strip; Firefox has no parallel compile | Compiled in the warm-up (`offscreenWarmup`) |
+| Imagery merge, first strip | ~16 ms | Same, small shader | Same |
+| Sky-environment re-bake, ≤ 1/s in ascent/re-entry | allocation + every PBR material re-resolving its program | `PMREMGenerator.fromScene` allocates a new target per bake; new texture ⇒ program re-resolve | Re-bake into the existing target |
+
+After the changes no program links after the loading screen in the orbit test (was 1). Loading and the first
+40 s of flight, Windows Firefox (30 Hz vsync, `timeline.mjs`, orbit, two interleaved pairs):
+
+| | loading screen closed | frames > 40 ms after loading | > 100 ms | worst |
+|---|---:|---:|---:|---:|
+| main | 16 s / 12 s | 11 / 8 | 4 / 4 | 947 / 934 ms (cloud-bake compile) |
+| branch | 14 s / 14 s | 1 / 2 | 0 / 0 | < 100 ms |
+
+With the branch, the bundled 4k imagery was on screen 11.6 s after navigation and the 8k pack 17.8 s, no imagery unit
+over 6 ms. (One earlier pair under heavy machine load — load average > 30 — showed the branch loading in 37 s with
+many 40–600 ms frames; it did not reproduce in the two clean pairs above.)
+
+## Changes
+
+1. `imageStrips.ts`/`earthImagery.ts`: Firefox gets packed `Uint8Array` strips from the decode worker (red only for
+   masks: ¼ of the bytes and strips); streaming budget is a credit (overruns repaid by skipped frames; units charged
+   at least the running estimate because Firefox's timer has 1 ms resolution). Merged imagery read back from the GPU
+   is byte-identical to the old path.
+2. `skyEnv.ts`: re-bakes render into the previous PMREM target.
+3. `uniformCache.ts`: compare-before-upload cache for float/vector/matrix array uniforms, per program.
+4. *Tried and dropped:* sorting opaque draws by program before material saved ~70 calls (4%) but cost ~0.1 ms of
+   Chrome GPU on the pad (fenced 2.43–2.45 → 2.53–2.56 ms, over the 2.5 ms budget).
+5. `flight/planets.ts`: terrain/ocean `BatchedMesh` also without `WEBGL_multi_draw` (three's per-chunk fallback:
+   `uniform1i` + `drawElements` per chunk, one program setup and VAO).
+6. `VesselView.ts`: deployables (solar arrays, bays, legs, gear) join a second static batch after 30 still frames.
+7. `navball.ts`: redraw tolerance 2e-4 instead of 1e-6 (the second WebGL context and 2D overlay redrew every frame
+   in a coasting orbit).
+8. `offscreenWarmup.ts`: cube bakes and the imagery merge register proxies the flight warm-up compiles (against an
+   empty scene: light counts are part of three's program key).
+
+## Before / after
+
+Final branch (`7b3f0e63`, after merging main) against current main (`29a067d0`).
+
+GL calls per frame, orbit: Windows Firefox counted over a 10 s window **1,655 → 1,481 (−10.5%)**; draws 221 → 212.
+Per subtree (Linux Firefox, one frame, before the sort was dropped): vessel 765 → 656, Earth 355 → 304, launch
+site 329 → 268, post 94 → 72.
+
+Windows Firefox 143, ASAP mode, Medium, 1600×915, interleaved pairs (rAF interval in ms; render = app "Render
+submit" section; CPU = app main-thread frame time):
+
+| Window | main mean / p50 / p95 / p99 | branch mean / p50 / p95 / p99 | render ms | CPU ms | navball ms |
+|---|---|---|---|---|---|
+| Orbit, GL counting on | 7.13 / 7.1 / 10.2 / 11.9 | **5.91 / 5.3 / 9.4 / 10.6** | 3.17 → 2.69 | 4.00 → 3.36 | 0.21 → 0.07 |
+| Orbit | 6.70 / 6.4 / 9.1 / 11.0 | **5.56 / 5.1 / 9.0 / 10.6** | 2.78 → 2.14 | 3.63 → 2.78 | 0.26 → 0.09 |
+| Orbit | 6.53 / 6.3 / 8.8 / 11.3 | 7.80 / 7.3 / 14.4 / 17.5 | 2.69 → 4.74 | 3.50 → 6.35 | 0.20 → 0.29 |
+| Re-entry | 7.34 / 7.2 / 10.9 / 12.5 | **6.61 / 6.2 / 10.2 / 12.1** | 2.73 → 2.52 | 3.75 → 3.53 | 0.21 → 0.17 |
+
+Three of four pairs improve the mean frame interval by 10–17%. In the third pair every section of the branch run was
+slower, including simulation, which this branch does not touch (0.10 → 0.30 ms); the PC was shared with other
+agents (load average > 30 at times), so read single pairs with caution. Earlier pairs against the older main
+(`422423e3`, with the program-major sort still in) gave orbit 7.49 → 5.59 and 9.83 → 7.34 ms, re-entry
+11.71 → 8.17 and 11.21 → 11.06 ms. Screenshots of an orbit pair match (mean absolute difference 2–4/255, one second
+of simulation apart).
+
+Chrome (RTX 3060 Ti), `gpu-passes.mjs`, Medium, DPR 2, fenced GPU ms, final branch vs current main, two interleaved
+pairs (main → branch):
+
+| Case | pair 1 | pair 2 |
+|---|---:|---:|
+| Pad | 2.456 → 2.448 | 2.401 → 2.397 |
+| Ascent | 2.027 → 2.047 | 2.056 → 2.049 |
+| Orbit | 2.053 → 2.041 | 2.021 → 2.027 |
+
+Unchanged within noise and within the 2.5 ms Medium budget. (With the program-major sort, pad had been
+2.44 → 2.55; see change 4.)
+
+Chrome steady orbit CPU 2.4 → 2.35 ms, draws 139 → 130; imagery streaming finished in ~4 s after loading on both
+(texSubImage2D activity), no regression from the credit budget.
