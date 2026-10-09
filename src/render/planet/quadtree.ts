@@ -26,7 +26,7 @@ export interface QuadtreeOptions {
   maxInFlight: number;
   buildBudgetMs: number;
   cacheSize: number;
-  /** Enable only when the host renderer supports WEBGL_multi_draw. */
+  /** Draw chunks through a `BatchedMesh` (works without WEBGL_multi_draw: three falls back to per-chunk draws). */
   batch?: boolean;
 }
 

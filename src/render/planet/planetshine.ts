@@ -8,6 +8,16 @@ export function reflectedIrradiance(radius: number, distance: number, phaseCosin
   return Math.min(0.15, (2 / 3) * (radius / distance) ** 2 * Math.max(0, phase));
 }
 
+/**
+ * Planetshine as displayed. The physical value (a fraction of the Sun's irradiance) is ~2e-4 for full
+ * earthshine on the Moon: right for a camera exposed for daylight, but it leaves a night side pitch black where
+ * an eye adapted to the dark side sees ashen light. Compress the ratio by its square root (≈1.4 % for that full
+ * Earth, ~0.4 % at quarter phase), capped like the physical value. Direction, phase and parent colour stay physical.
+ */
+export function adaptedPlanetshine(reflected: number): number {
+  return reflected > 0 ? Math.min(0.15, Math.sqrt(reflected)) : 0;
+}
+
 export interface PlanetLightSource {
   position: Vec3;
   radius: number;

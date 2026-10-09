@@ -30,7 +30,7 @@ import { TerrainWorkerPool } from './workerPool';
 import { buildRingProfile } from './textures';
 import { RingParticles } from './RingParticles';
 import { createPlanetEffect } from './effects';
-import { reflectedIrradiance, type PlanetLightSource } from './planetshine';
+import { adaptedPlanetshine, reflectedIrradiance, type PlanetLightSource } from './planetshine';
 import { SurfaceScatter } from './scatter/SurfaceScatter';
 import { terrainCutout } from './cutout';
 import { EarthImagery, seasonMonth } from './earthImagery';
@@ -38,7 +38,7 @@ import { EarthImagery, seasonMonth } from './earthImagery';
 export interface PlanetRendererOptions {
   /** Portraits bake surface detail without allocating close-up terrain. */
   farOnly?: boolean;
-  /** Host renderer supports WEBGL_multi_draw; otherwise retain ordinary chunk meshes. */
+  /** Batch terrain/ocean chunks into one `BatchedMesh` per family (multi-draw where available, else three's per-chunk fallback). */
   batchTerrain?: boolean;
   /** Map uniforms must not replace the live flight lighting registry. */
   registerUniforms?: boolean;
@@ -466,7 +466,7 @@ export class PlanetRenderer {
       const distance = Math.hypot(dx, dy, dz);
       if (distance <= parent.radius) continue;
       const phase = -(dx * parent.sunDirection.x + dy * parent.sunDirection.y + dz * parent.sunDirection.z) / distance;
-      const strength = reflectedIrradiance(parent.radius, distance, phase) * parent.irradiance;
+      const strength = adaptedPlanetshine(reflectedIrradiance(parent.radius, distance, phase)) * parent.irradiance;
       u.uPlanetshineDir.value.set(dx / distance, dy / distance, dz / distance);
       u.uPlanetshineColor.value.set(parent.albedo[0] * strength, parent.albedo[1] * strength, parent.albedo[2] * strength);
       break;

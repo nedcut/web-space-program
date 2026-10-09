@@ -44,7 +44,8 @@ export const SITE_LAYOUT = {
   apronRadius: 62,
 } as const;
 
-const HIDE_DISTANCE = 200e3;
+/** Beyond this distance the 1.2 km complex spans a few pixels; hiding it saves its draws on ascent and in low orbit. */
+const HIDE_DISTANCE = 60e3;
 /** Shadow casters within this radius of the pad (m) form the pad's caster mesh; the rest of the complex another. */
 const NEAR_CASTERS = 300;
 const BODY = 'earth';
@@ -1377,7 +1378,7 @@ export class LaunchSite {
 
   /**
    * Place the site for the floating origin `origin` (float64 inertial) at sim time `t`, and update the terrain
-   * cutout. Hidden beyond 200 km.
+   * cutout. Hidden beyond 60 km.
    */
   update(origin: Vec3, t: number, cameraPosition?: THREE.Vector3, pad?: PadVessel | null) {
     const eph = this.universe.ephem;
