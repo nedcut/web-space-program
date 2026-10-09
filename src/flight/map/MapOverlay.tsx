@@ -2,7 +2,7 @@ import { memo, useEffect, useReducer, useRef, useState } from 'react';
 import type { FlightController } from '../controller';
 import type { ManeuverNode } from '../../sim/orbit/api';
 import { MapContextMenu, MapInfoCard, clampToParent } from '../../ui/map/MapContextMenu';
-import type { MapObject } from '../../ui/map/mapActions';
+import { landingPredictionApplies, type MapObject } from '../../ui/map/mapActions';
 import { AXIS_COLORS } from '../../render/map/mapIcons';
 import { period } from '../../sim/orbit';
 import { formatCountdown, formatDistance, formatDuration, formatSpeed } from '../../util/format';
@@ -83,25 +83,25 @@ function MapReadout({ controller: c }: { controller: FlightController }) {
   } catch { /* degenerate orbit */ }
   const title = f ? `Viewing ${ui.name(f)}` : `Viewing ${body?.name ?? 'body'} · ${wv?.state.name ?? 'vessel'}`;
   return <ReadoutView controller={c} title={title} path={path} orbit={orbit}
-    landing={ui.landing.enabled ? ui.landing.attitude : 'off'} status={ui.landing.status} />;
+    landing={!landingPredictionApplies(wv) ? 'n/a' : ui.landing.enabled ? ui.landing.attitude : 'off'} status={ui.landing.status} />;
 }
 
 /** The readout's DOM, re-rendered only when one of its strings changes. */
 const ReadoutView = memo(function ReadoutView({ controller: c, title, path, orbit, landing, status }: {
-  controller: FlightController; title: string; path: string; orbit: string | null; landing: 'off' | 'hold' | 'retrograde'; status: string | null | undefined;
+  controller: FlightController; title: string; path: string; orbit: string | null; landing: 'n/a' | 'off' | 'hold' | 'retrograde'; status: string | null | undefined;
 }) {
   const ui = c.mapUi;
   return <div className="panel map-readout" aria-label="Map focus">
     <span className="title">{title}</span>
     {path && <span className="path">{path}</span>}
     {orbit && <span className="mono">{orbit}</span>}
-    <button className="btn ghost small" onClick={() => {
+    {landing !== 'n/a' && <button className="btn ghost small" onClick={() => {
       const l = ui.landing;
       if (!l.enabled) { l.enabled = true; l.attitude = 'hold'; }
       else if (l.attitude === 'hold') l.attitude = 'retrograde';
       else l.enabled = false;
-    }}>Landing: {landing === 'off' ? 'off' : landing === 'hold' ? 'hold attitude' : 'surface retrograde'}</button>
-    {landing !== 'off' && <span className="hint">Unpowered · drag, heating, deployed chutes · no future staging</span>}
+    }}>Landing: {landing === 'off' ? 'off' : landing === 'hold' ? 'hold attitude' : 'surface retrograde'}</button>}
+    {landing !== 'off' && landing !== 'n/a' && <span className="hint">Unpowered · drag, heating, deployed chutes · no future staging</span>}
     {status && <span role="status">{status}</span>}
     <button className="btn ghost small" onClick={() => ui.frameOrbit()}>Frame active orbit</button>
     <span className="hint">{hints()}</span>

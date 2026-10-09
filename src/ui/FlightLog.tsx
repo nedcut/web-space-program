@@ -5,7 +5,10 @@ import { openProgram } from '../game/program';
 import { ACHIEVEMENTS } from '../game/flightlog/achievements';
 import { loadAchievements } from '../game/flightlog/storage';
 import { eventLabel, orderedSamples, summaryText, type FlightRecord } from '../game/flightlog/recorder';
+import { BODY_DEFS } from '../data/bodies';
 import './flightlog.css';
+
+const BODY_NAMES = new Map(BODY_DEFS.map(b => [b.id, b.name]));
 
 function Chart({ record, title, y, x = 0, unit }: { record: FlightRecord; title: string; y: number; x?: number; unit: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -16,7 +19,8 @@ function Chart({ record, title, y, x = 0, unit }: { record: FlightRecord; title:
     ctx.clearRect(0, 0, c.width, c.height);
     const left = 66, right = 580, top = 22, bottom = 174;
     const xs = data.map(s => s[x] as number), ys = data.map(s => s[y] as number);
-    const minX = Math.min(0, ...xs), maxX = Math.max(1, ...xs), minY = Math.min(0, ...ys), maxY = Math.max(1, ...ys);
+    // The live buffer keeps the latest samples only: start the axis at the oldest one kept, not at launch.
+    const minX = xs.length ? Math.min(...xs) : 0, maxX = Math.max(1, ...xs), minY = Math.min(0, ...ys), maxY = Math.max(1, ...ys);
     ctx.font = '11px monospace'; ctx.fillStyle = '#8b98ad';
     for (let i = 0; i <= 4; i++) {
       const h = top + (bottom - top) * i / 4;
@@ -37,7 +41,7 @@ function Chart({ record, title, y, x = 0, unit }: { record: FlightRecord; title:
 }
 export function FlightReport({ record }: { record: FlightRecord }) {
   const [share, setShare] = useState(false);
-  const stats = [['Maximum altitude', `${Math.round(record.stats.maxAltitude).toLocaleString()} m`], ['Maximum speed', `${Math.round(record.stats.maxSpeed).toLocaleString()} m/s`], ['Maximum g-load', `${record.stats.maxG.toFixed(2)} g`], ['Δv spent', `${Math.round(record.stats.dvSpent).toLocaleString()} m/s`], ['Distance travelled', `${Math.round(record.stats.distance).toLocaleString()} m`], ['Bodies visited', record.bodies.join(', ')]];
+  const stats = [['Maximum altitude', `${Math.round(record.stats.maxAltitude).toLocaleString()} m`], ['Maximum speed', `${Math.round(record.stats.maxSpeed).toLocaleString()} m/s`], ['Maximum g-load', `${record.stats.maxG.toFixed(2)} g`], ['Δv spent', `${Math.round(record.stats.dvSpent).toLocaleString()} m/s`], ['Distance travelled', `${Math.round(record.stats.distance).toLocaleString()} m`], ['Bodies visited', record.bodies.map(id => BODY_NAMES.get(id) ?? id).join(', ')]];
   return <article className="flight-report"><div className="report-heading"><div><div className="label">{record.outcome ?? 'Flight in progress'} · {Math.round((record.end ?? record.last?.ut ?? record.start) - record.start).toLocaleString()} seconds</div><h2>{record.name}</h2></div><Button className="btn" onClick={() => setShare(!share)}>Share summary</Button></div>
     {share && <label>Copy this flight summary<textarea readOnly value={summaryText(record)} onFocus={e => e.currentTarget.select()} /></label>}
     <dl className="report-stats">{stats.map(([name, value]) => <Panel className="panel" key={name}><dt>{name}</dt><dd>{value}</dd></Panel>)}</dl>

@@ -86,6 +86,27 @@ describe('time warp feel', () => {
     expect((world.ut - before) / dt).toBeCloseTo(10, 3);
   }, 60000);
 
+  it('offers the atmosphere entry instead of a periapsis inside the atmosphere, and stops above it', () => {
+    const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+    const b = world.universe.body('earth'), atmo = b.atmosphere!.height;
+    const r = b.radius + 2_000_000;
+    // Falling from 2000 km with a 35 km periapsis, like a lunar return.
+    const rp = b.radius + 35000, vt = Math.sqrt(2 * b.gm * rp / (r * (r + rp)));
+    spawnRelative(world, buildOrbiter(), 'earth', v3(r, 0, 0), v3(0, vt, 0));
+    const ids = warpTargets(world).map((o) => o.id);
+    expect(ids).toContain('atmo');
+    expect(ids).not.toContain('pe');
+    const drv = new WarpDriver();
+    expect(drv.start(world, 'atmo')).toBeNull();
+    let frames = 0;
+    while (drv.target && frames < 20000) { drv.drive(world, 1 / 60); world.tick(drv.rampDt(world, 1 / 60), neutralInput()); frames++; }
+    const alt = world.warpContext().altitude;
+    expect(drv.target).toBeNull();
+    expect(world.warp.index).toBe(0);
+    expect(alt).toBeGreaterThan(atmo);
+    expect(alt).toBeLessThan(atmo + 60000);
+  }, 60000);
+
   it('warps to apoapsis and stops just before it', () => {
     const { world, wv } = orbiting();
     const opts = warpTargets(world);

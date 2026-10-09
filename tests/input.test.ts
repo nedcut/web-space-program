@@ -1,7 +1,7 @@
 import { FlightInput } from '../src/flight/input';
 import { game } from '../src/game/store';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BINDINGS_KEY, conflicts, defaultBindings, getBindings, loadBindings, saveBindings, matches, isTyping, bindingText, TYPING_SELECTOR } from '../src/input/bindings';
+import { BINDINGS_KEY, conflicts, defaultBindings, getBindings, loadBindings, saveBindings, matches, isTyping, bindingText, bindingLabel, TYPING_SELECTOR } from '../src/input/bindings';
 import { deadZone, mapGamepad } from '../src/input/gamepad';
 
 const memory = () => {
@@ -124,6 +124,11 @@ describe('keyboard matching', () => {
     expect(matches('throttleDown', key('ControlLeft', { ctrlKey: true }))).toBe(true);
     saveBindings({ ...defaultBindings(), editorFrame: ['Alt+KeyP'] }, memory());
     expect(matches('editorFrame', key('KeyP', { altKey: true }))).toBe(true);
+  });
+  it('boards from either Enter key (some keyboards and drivers report the keypad code)', () => {
+    expect(matches('board', key('Enter'))).toBe(true);
+    expect(matches('board', key('NumpadEnter'))).toBe(true);
+    expect(bindingLabel('board', defaultBindings())).toBe('Enter');
   });
   it('renders lesson instructions from current bindings, including unbound actions', () => {
     const bindings = { ...defaultBindings(), stage: ['KeyP'], map: [], throttleUp: ['Equal'] };

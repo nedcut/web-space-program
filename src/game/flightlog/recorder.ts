@@ -9,6 +9,8 @@ export interface FlightEvent { time: number; kind: EventKind; body: string; deta
 export interface Observation {
   clearance?: number;
   inertialSpeed?: number;
+  /** Speed for the peak statistic (surface low down, orbital high up); defaults to `speed`. */
+  displaySpeed?: number;
   ut: number; body: string; altitude: number; speed: number; vertical: number; horizontal: number;
   ap: number; pe: number; mach: number; q: number; g: number; temperature: number; mass: number; dv: number;
   thrustAcceleration: number; flying: boolean; prelaunch: boolean; stableOrbit: boolean; parts: number;
@@ -58,7 +60,7 @@ export function observe(r: FlightRecord, o: Observation, force = false, integrat
   const p = r.last;
   const dt = p ? Math.max(0, o.ut - p.ut) : 0;
   r.stats.maxAltitude = Math.max(r.stats.maxAltitude, o.altitude);
-  r.stats.maxSpeed = Math.max(r.stats.maxSpeed, o.speed);
+  r.stats.maxSpeed = Math.max(r.stats.maxSpeed, o.displaySpeed ?? o.speed);
   r.stats.maxG = Math.max(r.stats.maxG, o.g);
   if (p && p.body === o.body && !o.prelaunch) r.stats.distance += (p.speed + o.speed) * 0.5 * dt;
   if (integrateThrust) r.stats.dvSpent += o.thrustAcceleration * dt;

@@ -1,8 +1,10 @@
 import { SpeedModeTracker } from './speedMode';
+import { dockingModeAfterEvent } from './dockingMode';
 import { explosionDiameter, separationPunch, impactPunch, structuralStressPunch } from '../render/fx/eventDesign';
 import { updateSiteShadow } from '../render/site/shadows';
 import { maxDrawingEdge } from '../render/core/drawingLimits';
 import { ShadowMapCache } from '../render/core/shadowCache';
+import { onContextRestored } from '../render/core/contextRecovery';
 import { stageExplanation } from './cues';
 import { actionAvailable, partActions } from '../sim/vessel/actions';
 import { CondensationFx } from '../render/fx/CondensationFx';
@@ -13,7 +15,7 @@ import { FlightFx, isBurstEvent } from '../render/fx/FlightFx';
 import { PhotoCamera } from '../render/core/PhotoCamera';
 import * as THREE from 'three';
 import { SkyEnvironment } from '../render/core/skyEnv';
-import { setPartDetail } from '../render/parts';
+import { releasePartTexturePixels, restorePartTexturePixels, setPartDetail } from '../render/parts';
 import type { GameAudio } from '../audio';
 import { PART_CATALOG } from '../data/parts';
 import type { Autopilot } from '../game/autopilot';
@@ -115,6 +117,7 @@ export class FlightController {
   readonly scene = flightScene();
   /** Skips the sun's depth pass while every caster and the light are unchanged (pad, attitude hold, pause). */
   private readonly shadowCache = new ShadowMapCache();
+  private unwatchContext: (() => void) | null = null;
   readonly cam = new FlightCamera();
   readonly map: MapView;
   /** Map focus, menus and maneuver-node commands. */
@@ -195,6 +198,8 @@ export class FlightController {
   private elapsed = 0;
   onExit: (() => void) | null = null;
   private framesRendered = 0;
+  /** Next time to drop CPU pixels of part textures this renderer has uploaded (newly seen parts upload later). */
+  private nextPixelRelease = 0;
   /**
    * Shader warm-up: the first frame updates the scene without drawing, then every material in the
    * flight and map scenes (including hidden plumes, FX and the map) is compiled with
@@ -275,6 +280,8 @@ export class FlightController {
     // Image-based fill light so sunlit-from-behind vessels aren't pitch black. Scaled by air density each frame.
     // Procedural sky/planetshine environment, re-baked as altitude, attitude and sun change.
     this.skyEnv = new SkyEnvironment(this.pipeline.renderer);
+    // A restored context has an empty shadow depth map: the cache would otherwise keep skipping the redraw.
+    this.unwatchContext = onContextRestored(this.pipeline.renderer, () => this.shadowCache.invalidate());
     this.scene.environmentIntensity = 1;
 
     this.planets = createPlanetLayer(this.scene, universe, quality, this.pipeline.renderer);
@@ -397,6 +404,7 @@ export class FlightController {
       if (e.type === 'partDestroyed') this.audio.explosion(Math.max(1,(this.views.get(e.vesselId)?.eventPart(e.partUid)?.mass ?? 1000)/500), eventDistance, active?.state.telemetry.staticPressure ?? 0, e.vesselId === this.world.activeId);
       if (e.vesselId === this.world.activeId && e.type === 'chute' && (e.phase === 'semi' || e.phase === 'full')) this.audio.chuteDeploy();
       if (e.type === 'docked' && (e.vesselId === this.world.activeId || e.otherId === this.world.activeId)) this.audio.docking();
+      this.dockingMode = dockingModeAfterEvent(this.dockingMode, e, this.world.activeId);
       if (e.type === 'undocked' && e.vesselId === this.world.activeId) this.audio.decouple();
     };
 
@@ -924,6 +932,10 @@ export class FlightController {
       this.render(renderVessel, dt);
       if (first) performance.measure('wsp:flight:firstFrame', { start: first });
       this.framesRendered++;
+      if (now >= this.nextPixelRelease && this.sceneReady) {
+        this.nextPixelRelease = now + 5000;
+        releasePartTexturePixels(this.pipeline.renderer);
+      }
     }
     t0 = prof.now();
     this.updateAudio(this.world.active);
@@ -1466,12 +1478,15 @@ export class FlightController {
     this.condensation.dispose();
     this.surfaceDust.dispose();
     this.flags.dispose();
+    this.unwatchContext?.();
     this.skyEnv.dispose();
     this.scene.environment = null;
     this.labelHost.remove();
     this.fadeEl?.remove();
     this.pipeline.dispose();
     this.pipeline.renderer.domElement.remove();
+    // The next scene's renderers need the part texture pixels this one dropped.
+    restorePartTexturePixels();
   }
 }
 

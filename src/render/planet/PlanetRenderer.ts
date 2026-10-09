@@ -1,7 +1,9 @@
 import { acquireSurfaceBake } from './sharedBake';
+import { releasePixels } from '../texturePixels';
 import { SurfaceFeatures } from './SurfaceFeatures';
 import * as THREE from 'three';
 import { CloudMap } from './cloudMap';
+import { RestoreHook } from '../core/contextRecovery';
 import { skyOcclusionRadius } from './skyOcclusion';
 import type { BodyDef } from '../../sim/bodies/types';
 import type { Terrain } from '../../sim/terrain/api';
@@ -38,8 +40,10 @@ import { EarthImagery, seasonMonth } from './earthImagery';
 export interface PlanetRendererOptions {
   /** Portraits bake surface detail without allocating close-up terrain. */
   farOnly?: boolean;
-  /** Batch terrain/ocean chunks into one `BatchedMesh` per family (multi-draw where available, else three's per-chunk fallback). */
+  /** Draw visible terrain chunks as one batch per planet (needs `renderer`); otherwise ordinary chunk meshes. */
   batchTerrain?: boolean;
+  /** Host renderer: the terrain batch owns GPU buffers on its context. */
+  renderer?: THREE.WebGLRenderer;
   /** Map uniforms must not replace the live flight lighting registry. */
   registerUniforms?: boolean;
   quality: QualitySettings;
@@ -126,6 +130,8 @@ export class PlanetRenderer {
   private cloudRadius = 0;
   private cloudMap: CloudMap | null = null;
   private cloudSourceBound = false;
+  /** Imagery and the cloud bake are GPU-only content: rebuilt after a context restore (renderer seen in onBeforeRender). */
+  private readonly restoreHook = new RestoreHook(() => this.restoreGpuContent());
   /** Renderer seen by the cloud mesh's onBeforeRender; used to bake the cloud map in update(). */
   private bakeRenderer: THREE.WebGLRenderer | null = null;
   private readonly cloudRotM = new THREE.Matrix3();
@@ -141,6 +147,7 @@ export class PlanetRenderer {
   private sunIlluminance: number;
   private sunRadiance: number;
   private readonly terrainKey: string;
+  private readonly hostRenderer?: THREE.WebGLRenderer;
   private readonly frustum = new THREE.Frustum();
   private readonly tmpM4 = new THREE.Matrix4();
   private readonly inverseRotation = new THREE.Quaternion();
@@ -160,6 +167,7 @@ export class PlanetRenderer {
     this.scale = opts.scale ?? SCALE_PRESETS.standard;
     this.sunIlluminance = opts.sunIlluminance ?? 4;
     this.sunRadiance = opts.sunRadiance ?? 60;
+    this.hostRenderer = opts.renderer;
     this.root.name = `planet:${body.id}`;
     // Identity container: placed children update themselves; do not force every cached chunk each frame.
     this.root.matrixAutoUpdate = false;
@@ -207,7 +215,7 @@ export class PlanetRenderer {
       for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.TITAN_HAZE = 1;
     }
     if (this.imagery) {
-      const capture = (r: THREE.WebGLRenderer) => { this.glRenderer = r; };
+      const capture = (r: THREE.WebGLRenderer) => { this.glRenderer = r; this.restoreHook.attach(r); };
       for (const m of this.materials) m.onBeforeRender = capture;
     }
     if (body.id === 'earth' && this.quality.earth.nightLights) {
@@ -335,7 +343,8 @@ export class PlanetRenderer {
       maxInFlight: q.terrain.maxInFlight,
       buildBudgetMs: q.terrain.buildBudgetMs,
       cacheSize: q.terrain.cacheSize,
-      batch: opts.batchTerrain,
+      cacheBytes: q.terrain.cacheMB * 1048576,
+      batch: opts.batchTerrain && opts.renderer ? opts.renderer.getContext() as WebGL2RenderingContext : undefined,
     });
     this.root.add(this.quadtree.group);
     if (terrain) { this.surfaceFeatures = new SurfaceFeatures(this.body, terrain); this.root.add(this.surfaceFeatures.group); }
@@ -357,7 +366,7 @@ export class PlanetRenderer {
       this.clouds.matrixAutoUpdate = false;
       this.clouds.frustumCulled = false;
       this.clouds.renderOrder = 2;
-      this.clouds.onBeforeRender = (renderer) => { if (!this.cloudMap?.done) this.bakeRenderer = renderer; };
+      this.clouds.onBeforeRender = (renderer) => { this.restoreHook.attach(renderer); if (!this.cloudMap?.done) this.bakeRenderer = renderer; };
       this.root.add(this.clouds);
     }
   }
@@ -556,6 +565,9 @@ export class PlanetRenderer {
       }).catch(() => { if (!this.disposed) { this.surfaceBake?.release(); this.surfaceBake = undefined; this.bakeRequested = false; } });
     }
 
+    // The far-LOD bake lives on the GPU once drawn: drop its CPU pixels (32 MB per body at Ultra).
+    if (this.farTexture?.source.dataReady && this.hostRenderer) releasePixels(this.farTexture, this.hostRenderer);
+
     const qt = this.quadtree;
     // Flat, colorful moons need texture resolution, not geometric refinement: retain the bake longer.
     const colorDominated = this.body.id === 'io' || this.body.id === 'europa';
@@ -590,7 +602,7 @@ export class PlanetRenderer {
       Object.assign(this.stats, { chunks: qt.stats.selected, meshes: qt.stats.meshes, inflight: qt.stats.inflight, queued: qt.stats.queued });
     } else {
       qt?.hideAll();
-      if (qt) qt.pump();
+      if (qt) { qt.pump(); qt.evict(this.frame, true); }
       this.farSphere!.visible = true;
       placeWhole(this.farSphere!, R);
       this.stats.mode = 'far';
@@ -689,8 +701,21 @@ export class PlanetRenderer {
     this.quality = q;
   }
 
+  /** After a WebGL context restore: stream the Earth imagery again and re-bake the cloud map. */
+  private restoreGpuContent(): void {
+    if (this.disposed) return;
+    this.imagery?.restoreContext();
+    if (!this.cloudMap) return;
+    this.cloudMap.restart();
+    this.cloudSourceBound = false;
+    this.bakeRenderer = null; // the cloud mesh sets it again on its next draw
+    this.uniforms.uCloudShell.value = 0; // hides the shell until the new bake is complete
+    this.imagery?.reloadClouds();
+  }
+
   dispose(): void {
     this.disposed = true;
+    this.restoreHook.dispose();
     unregisterPlanetUniforms(this.body.id, this.uniforms);
     lightSources.delete(this);
     this.ringParticles?.dispose();

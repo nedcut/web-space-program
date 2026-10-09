@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { chunkBounds, chunkEdgeLength, chunkId, faceToSphere, type ChunkData, type ChunkKey } from './chunkBuilder';
+import { chunkBounds, chunkEdgeLength, chunkId, chunkIndices, faceToSphere, type ChunkData, type ChunkKey } from './chunkBuilder';
 import type { TerrainWorkerPool } from './workerPool';
 import { ChunkBatch } from './ChunkBatch';
 
@@ -25,9 +25,12 @@ export interface QuadtreeOptions {
   oceanMaterial?: THREE.Material;
   maxInFlight: number;
   buildBudgetMs: number;
+  /** Max chunk meshes (land + ocean) per planet before LRU eviction of stale chunks. */
   cacheSize: number;
-  /** Draw chunks through a `BatchedMesh` (works without WEBGL_multi_draw: three falls back to per-chunk draws). */
-  batch?: boolean;
+  /** Max CPU bytes of stale chunk data (land + ocean; not drawn or needed recently) kept for reuse. */
+  cacheBytes: number;
+  /** Draw visible chunks as one batch on this context (see ChunkBatch); otherwise one mesh per chunk. */
+  batch?: WebGL2RenderingContext;
 }
 
 export interface SelectContext {
@@ -42,6 +45,18 @@ export interface SelectContext {
 }
 
 const GEOM_ERROR_FACTOR = 0.3;
+/** A chunk not visited by the selection walk for this many frames may be evicted. */
+const STALE_FRAMES = 30;
+/** Evictions per check: bounds the main-thread cost when a large cache becomes stale at once. */
+const MAX_EVICTIONS = 64;
+
+/** CPU bytes held by a chunk's land and ocean arrays (the index pattern is shared). */
+function chunkBytes(d: ChunkData): number {
+  let b = d.positions.byteLength + d.normals.byteLength + d.colors.byteLength + d.detail.byteLength;
+  const o = d.ocean;
+  if (o) b += o.positions.byteLength + o.normals.byteLength + o.depth.byteLength + o.detail.byteLength;
+  return b;
+}
 /** View key: body-fixed camera position (3), orientation quaternion (4), screen factor, projection x/y/z scale. */
 export const VIEW_KEY = 11;
 function sameView(a: Float64Array, b: ArrayLike<number>): boolean {
@@ -84,12 +99,18 @@ export class Quadtree {
   private completed: { node: ChunkNode; data: ChunkData }[] = [];
   private inflight = 0;
   private meshCount = 0;
+  private bytes = 0;
+  /** Frame of the last full selection walk (a reused selection does not refresh `lastUsed`). */
+  private walkFrame = 0;
+  private evictFrame = -Infinity;
   readonly selected: ChunkNode[] = [];
   private prevSelected = new Set<ChunkNode>();
   private nextSelected = new Set<ChunkNode>();
   private readonly terrainBatch?: ChunkBatch;
   private readonly oceanBatch?: ChunkBatch;
-  stats = { selected: 0, meshes: 0, inflight: 0, queued: 0, builtTotal: 0, lastBuildMs: 0 };
+  /** One index buffer (CPU and GPU) for every land and ocean chunk: they share the grid + skirt pattern. */
+  private readonly index: THREE.BufferAttribute;
+  stats = { selected: 0, meshes: 0, cacheMB: 0, inflight: 0, queued: 0, builtTotal: 0, lastBuildMs: 0 };
 
   constructor(opts: QuadtreeOptions) {
     this.opts = opts;
@@ -97,14 +118,15 @@ export class Quadtree {
     this.group.name = 'terrain-quadtree';
     // Identity container. Chunks update their own matrices when placed; hidden cached chunks are left alone.
     this.group.matrixAutoUpdate = false;
+    this.index = new THREE.BufferAttribute(chunkIndices(opts.res), 1);
     const vertices = (opts.res + 1) ** 2 + 4 * (opts.res + 1);
     const indices = (opts.res ** 2 + 4 * opts.res) * 6;
     if (opts.batch) {
-      this.terrainBatch = new ChunkBatch(opts.terrainMaterial, vertices, indices);
+      this.terrainBatch = new ChunkBatch(opts.terrainMaterial, opts.batch, vertices, indices);
       this.group.add(this.terrainBatch.mesh);
     }
     if (opts.batch && opts.oceanMaterial) {
-      this.oceanBatch = new ChunkBatch(opts.oceanMaterial, vertices, indices);
+      this.oceanBatch = new ChunkBatch(opts.oceanMaterial, opts.batch, vertices, indices);
       this.group.add(this.oceanBatch.mesh);
     }
   }
@@ -144,6 +166,9 @@ export class Quadtree {
   select(ctx: SelectContext, view?: ArrayLike<number>): ChunkNode[] {
     this.reused = !!view && this.selectedVersion === this.version && sameView(this.lastView, view);
     if (this.reused) return this.selected;
+    // The previous walk's chunks stayed in use while its selection was reused: their age starts now, not then.
+    if (ctx.frame - 1 > this.walkFrame) this.touch(this.walkFrame, ctx.frame - 1);
+    this.walkFrame = ctx.frame;
     if (view) { for (let i = 0; i < VIEW_KEY; i++) this.lastView[i] = view[i]; this.selectedVersion = this.version; }
     else this.selectedVersion = -1;
     const R = this.opts.radius;
@@ -217,6 +242,14 @@ export class Quadtree {
     return this.selected;
   }
 
+  private touch(from: number, to: number): void {
+    const visit = (n: ChunkNode): void => {
+      if (n.lastUsed === from) n.lastUsed = to;
+      n.children?.forEach(visit);
+    };
+    this.roots.forEach(visit);
+  }
+
   private want(n: ChunkNode, priority: number, level: number): void {
     // Lower levels first so coarse coverage arrives quickly, then nearest-first.
     this.wanted.set(n, priority + level * 0.25);
@@ -278,7 +311,7 @@ export class Quadtree {
     g.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
     g.setAttribute('aColor', new THREE.BufferAttribute(data.colors, 3, true));
     g.setAttribute('aDetail', new THREE.BufferAttribute(data.detail, 3));
-    g.setIndex(new THREE.BufferAttribute(data.indices, 1));
+    g.setIndex(this.index);
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), data.boundRadius);
     const m = new THREE.Mesh(g, this.opts.terrainMaterial);
     m.visible = false;
@@ -292,17 +325,19 @@ export class Quadtree {
       og.setAttribute('normal', new THREE.BufferAttribute(data.ocean.normals, 3));
       og.setAttribute('aDepth', new THREE.BufferAttribute(data.ocean.depth, 1));
       og.setAttribute('aDetail', new THREE.BufferAttribute(data.ocean.detail, 3));
-      og.setIndex(new THREE.BufferAttribute(data.ocean.indices, 1));
+      og.setIndex(this.index);
       og.boundingSphere = new THREE.Sphere(new THREE.Vector3(), data.boundRadius + Math.max(0, -data.minHeight));
       const om = new THREE.Mesh(og, this.opts.oceanMaterial);
       om.visible = false;
       om.matrixAutoUpdate = false;
       node.oceanMesh = om;
       if (!this.oceanBatch) this.group.add(om);
+      this.meshCount++;
     }
     node.state = 'ready';
     this.version++;
     this.meshCount++;
+    this.bytes += chunkBytes(data);
     this.stats.builtTotal++;
     this.stats.lastBuildMs = data.buildMs;
   }
@@ -340,8 +375,11 @@ export class Quadtree {
     }
     this.nextSelected = this.prevSelected;
     this.prevSelected = now;
+    this.terrainBatch?.maintain();
+    this.oceanBatch?.maintain();
     this.stats.selected = this.selected.length;
     this.stats.meshes = this.meshCount;
+    this.stats.cacheMB = this.bytes / 1048576;
   }
 
   private placeMesh(m: THREE.Mesh, x: number, y: number, z: number, rot: THREE.Quaternion): boolean {
@@ -361,45 +399,69 @@ export class Quadtree {
       if (n.oceanMesh) this.oceanBatch?.release(n.oceanMesh);
     }
     this.prevSelected.clear();
+    this.terrainBatch?.maintain();
+    this.oceanBatch?.maintain();
   }
 
-  /** LRU eviction of meshes not used recently (never roots). */
-  evict(frame: number): void {
-    // A reused selection did not refresh `lastUsed`; nothing new was built either, so there is nothing to evict.
-    if (this.reused || this.meshCount <= this.opts.cacheSize) return;
+  /**
+   * LRU eviction of stale chunks (never roots) while the cache exceeds its mesh count or stale-byte budget.
+   * A reused selection did not refresh `lastUsed`, but its chunks are exactly those visited by the last walk, so
+   * they stay; any other chunk not visited for STALE_FRAMES is stale. `hidden`: the planet drew no near terrain
+   * this frame (far LOD), so chunks of the last walk go stale too.
+   */
+  evict(frame: number, hidden = false): void {
+    const o = this.opts;
+    if (this.meshCount <= o.cacheSize && this.bytes <= o.cacheBytes) return;
+    // Staleness changes no faster than STALE_FRAMES; checking a few times per window is enough.
+    if (frame - this.evictFrame < 8) return;
+    this.evictFrame = frame;
     const candidates: ChunkNode[] = [];
+    let staleBytes = 0;
     const visit = (n: ChunkNode) => {
-      if (n.key.level > 0 && n.state === 'ready' && frame - n.lastUsed > 30) candidates.push(n);
+      if (n.key.level > 0 && n.state === 'ready' && frame - n.lastUsed > STALE_FRAMES && (hidden || n.lastUsed !== this.walkFrame)) {
+        candidates.push(n);
+        staleBytes += chunkBytes(n.data!);
+      }
       n.children?.forEach(visit);
     };
     this.roots.forEach(visit);
+    let excessMeshes = this.meshCount > o.cacheSize ? this.meshCount - Math.floor(o.cacheSize * 0.9) : 0;
+    let excessBytes = staleBytes > o.cacheBytes ? staleBytes - o.cacheBytes * 0.9 : 0;
+    if (excessMeshes <= 0 && excessBytes <= 0) return;
+    // Least recently used first, finest first among equals.
     candidates.sort((a, b) => a.lastUsed - b.lastUsed || b.key.level - a.key.level);
-    let excess = this.meshCount - Math.floor(this.opts.cacheSize * 0.9);
+    let evicted = 0;
     for (const n of candidates) {
-      if (excess <= 0) break;
-      this.disposeNode(n, false);
-      excess--;
+      if ((excessMeshes <= 0 && excessBytes <= 0) || evicted === MAX_EVICTIONS) break;
+      excessMeshes -= (n.mesh ? 1 : 0) + (n.oceanMesh ? 1 : 0);
+      excessBytes -= chunkBytes(n.data!);
+      this.disposeNode(n, false, true);
+      evicted++;
     }
     // Drop child arrays whose subtree holds nothing.
     const prune = (n: ChunkNode): boolean => {
       if (!n.children) return n.state === 'none';
       let empty = true;
       for (const c of n.children) if (!prune(c)) empty = false;
-      if (empty && frame - n.lastUsed > 30) n.children = null;
+      if (empty && frame - n.lastUsed > STALE_FRAMES && (hidden || n.lastUsed !== this.walkFrame)) n.children = null;
       return empty && n.state === 'none';
     };
     this.roots.forEach(prune);
   }
 
-  private disposeNode(n: ChunkNode, recursive: boolean): void {
+  /** `keepIndex`: other chunks still draw with the shared index, so its GPU buffer must survive this dispose. */
+  private disposeNode(n: ChunkNode, recursive: boolean, keepIndex = false): void {
     for (const m of [n.mesh, n.oceanMesh]) {
       if (!m) continue;
       this.terrainBatch?.release(m);
       this.oceanBatch?.release(m);
       this.group.remove(m);
+      if (keepIndex) m.geometry.setIndex(null);
       m.geometry.dispose();
     }
     if (n.mesh) this.meshCount--;
+    if (n.oceanMesh) this.meshCount--;
+    if (n.data) this.bytes -= chunkBytes(n.data);
     this.version++;
     n.mesh = null;
     n.oceanMesh = null;

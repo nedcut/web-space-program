@@ -1,5 +1,6 @@
 import { placeInCircularOrbit, spawnRendezvousTarget } from '../../game/scenarios';
 import { quatFromBasis } from '../../game/world';
+import { bindingLabel } from '../../input/bindings';
 import { qRotate } from '../../util/quat';
 import { add, cross, normalize, scale, sub, v3 } from '../../util/vec3';
 import type { FlightController } from '../controller';
@@ -17,7 +18,7 @@ export function devScenario(this: FlightController, internals: FlightControllerI
       this.dockingMode = true;
       this.sasOn = true;
       this.sas = 'target';
-      this.world.message('Rendezvous: target 100 m ahead. R = RCS, I/K J/L H/N translate.', 'info', 8);
+      this.world.message(`Rendezvous: target 100 m ahead. ${bindingLabel('toggleRcs')} = RCS; ${bindingLabel('translateForward')}/${bindingLabel('translateBack')} ${bindingLabel('translateLeft')}/${bindingLabel('translateRight')} ${bindingLabel('translateUp')}/${bindingLabel('translateDown')} translate.`, 'info', 8);
     }
     return;
   }

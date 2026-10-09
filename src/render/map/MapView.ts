@@ -259,6 +259,16 @@ function colorOf(b: Body): THREE.Color {
 
 export { sampleConic };
 
+/**
+ * Whether a pointer event is over the map itself: inside its rect and not over a HUD element stacked above it
+ * (pointermove listens on window, so its target is whatever is on top). A marker under a HUD panel would otherwise
+ * show its tooltip while clicks go to the panel.
+ */
+export function pointerOnMap(el: HTMLElement, target: EventTarget | null, x: number, y: number, width: number, height: number): boolean {
+  if (!(x >= 0 && y >= 0 && x <= width && y <= height)) return false;
+  return !target || target === el || (typeof (target as Node).nodeType === 'number' && el.contains(target as Node));
+}
+
 export class MapView {
   private field?: AsteroidFieldView;
   private comets = new Map<string, CometEffects>();
@@ -1486,7 +1496,7 @@ export class MapView {
       const r = el.getBoundingClientRect();
       this.pointer.x = e.clientX - r.left; this.pointer.y = e.clientY - r.top;
       this.pointer.clientX = e.clientX; this.pointer.clientY = e.clientY;
-      this.pointer.inside = this.pointer.x >= 0 && this.pointer.y >= 0 && this.pointer.x <= r.width && this.pointer.y <= r.height;
+      this.pointer.inside = pointerOnMap(el, e.target, this.pointer.x, this.pointer.y, r.width, r.height);
       return this.pointer;
     };
     const down = (e: PointerEvent) => {

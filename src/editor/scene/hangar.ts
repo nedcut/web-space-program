@@ -425,6 +425,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   group.name = 'hangar';
   const disposables: { dispose(): void }[] = [];
   const track = <T extends { dispose(): void }>(x: T) => (disposables.push(x), x);
+  let reflectionProbe: THREE.WebGLRenderTarget | null = null;
   const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   const { halfX: HX, halfZ: HZ, height: H } = HANGAR;
 
@@ -738,7 +739,9 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
       const vis = hidden.map((o) => o.visible);
       hidden.forEach((o) => (o.visible = false));
       const pmrem = new THREE.PMREMGenerator(renderer);
-      const rt = track(pmrem.fromScene(scene, 0, 0.1, 250, { size: 256, position: PROBE }));
+      // Called again after a context restore: the previous probe is blank by then.
+      reflectionProbe?.dispose();
+      const rt = reflectionProbe = track(pmrem.fromScene(scene, 0, 0.1, 250, { size: 256, position: PROBE }));
       pmrem.dispose();
       hidden.forEach((o, i) => (o.visible = vis[i]));
       for (const m of [floorMat, platMat]) {

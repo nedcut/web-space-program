@@ -35,7 +35,7 @@ import { bakePartAO } from './ao';
 
 export { createPlume, type Plume, type PlumeParams, type PlumeOptions } from './plume';
 export { disposeMaterials } from './materials';
-export { partTexturesReady } from './textures';
+export { partTexturesReady, releasePartTexturePixels, restorePartTexturePixels } from './textures';
 export { setGearPose } from './builders/aircraft';
 export { bakeEngineSoot, prepareEngineSoot, releaseSoot, isSooted } from './soot';
 

@@ -114,6 +114,17 @@ describe('flight recorder', () => {
     expect(w.flightlog.records[0].stats.dvSpent).toBe(0);
     expect(w.flightlog.records[0].last!.thrustAcceleration).toBe(0);
   });
+  it('peak speed uses orbital speed high up, not the surface frame of a rotating body', () => {
+    const w = new World(new Universe('standard'), PART_CATALOG, 1000);
+    const v = w.launch(buildOrbiter());
+    const earth = w.universe.body('earth'), bs = w.universe.ephem.getBodyState('earth', w.ut), radius = earth.radius + 30_000_000;
+    v.mode = 'physics'; v.state.situation = 'flying';
+    // A slow high coast (a lunar return's apoapsis): its surface-frame speed is dominated by Earth's rotation.
+    v.state.position = add(bs.position, { x: radius, y: 0, z: 0 });
+    v.state.velocity = add(bs.velocity, { x: 0, y: 100, z: 0 });
+    w.recordFlight(v, w.ut + 1, true);
+    expect(w.flightlog.records[0].stats.maxSpeed).toBeCloseTo(100, 0);
+  });
   it('observes actual World states for orbit, SOI and recovery', () => {
     const w = new World(new Universe('standard'), PART_CATALOG, 1000);
     const v = w.launch(buildOrbiter());
