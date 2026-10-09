@@ -15,6 +15,9 @@ import { onContextRestored } from './contextRecovery';
 import { detachRenderer, finishRenderer, noteDfgLut } from '../releaseRenderer';
 import type { QualitySettings } from './quality';
 
+/** Frame time adaptive resolution ignores after a context restore, while every program recompiles. */
+const RESTORE_HOLD_MS = 5000;
+
 export type ToneMappingId = 'aces' | 'agx' | 'neutral';
 
 export interface RenderPipelineOptions {
@@ -87,7 +90,7 @@ export class RenderPipeline {
     r.debug.checkShaderErrors = !!import.meta.env?.DEV;
     this.gpuTimer = GpuTimer.create(r.getContext());
     // Query objects and the extension handle die with the context; without this the pending queue stays full.
-    this.unwatchContext = onContextRestored(r, () => { this.gpuTimer?.recover(); this.gpuMs = NaN; });
+    this.unwatchContext = onContextRestored(r, () => { this.gpuTimer?.recover(); this.gpuMs = NaN; this.adaptive.hold(RESTORE_HOLD_MS); });
     this.gpuName = rendererName(r.getContext());
     // Adaptive resolution starts where this class of GPU usually lands, then converges from measurements.
     // A Retina-reduced, upscaled start already draws about half the device pixels, so mid-range GPUs start there.
@@ -228,8 +231,17 @@ export class RenderPipeline {
    */
   get lodViewportHeight(): number {
     // Terrain detail follows the device resolution the upscaler reconstructs, not the reduced internal one.
-    const pr = this.plan.lod;
-    return (this.height * pr) / Math.sqrt(Math.max(1, pr));
+    return lodHeight(this.height, this.plan.lod);
+  }
+
+  /**
+   * `lodViewportHeight` without the adaptive reduction. Chunk refinement may follow a temporary resolution drop,
+   * but whether a body is drawn as terrain at all (near/far switch) must not: in a low lunar orbit a drop to 0.55
+   * swapped the terrain for the far sphere's ~2.7 km texels, until the scale climbed back (often never).
+   */
+  get lodSwitchViewportHeight(): number {
+    const adaptive = this.capturing || this.mapHiRes ? 1 : this.adaptive.scale;
+    return lodHeight(this.height, this.plan.lod / adaptive);
   }
 
   /** Main-thread time from updateAdaptive (frame start) to the end of the last render submission. */
@@ -324,6 +336,11 @@ export interface ResolutionPlan {
   lod: number;
   /** The preset's device pixel ratio, min(devicePixelRatio, maxPixelRatio). */
   device: number;
+}
+
+/** LOD viewport height for a pixel ratio: the error tolerance grows with √ratio above 1 (see `lodViewportHeight`). */
+function lodHeight(cssHeight: number, pr: number): number {
+  return (cssHeight * pr) / Math.sqrt(Math.max(1, pr));
 }
 
 /**

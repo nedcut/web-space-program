@@ -94,6 +94,17 @@ describe('adaptive scale', () => {
     run(q, 16.7, 4);
     expect(q.scale).toBe(0.9);
   });
+  it('ignores the recompile stall after a context restore (hold), then judges frames again', () => {
+    const q = new AdaptiveQuality();
+    run(q, 16.7, 3);
+    q.hold(5000);
+    run(q, 120, 4.9); // every program recompiling: slow, but each frame under the 250 ms cutoff
+    expect(q.scale).toBe(1);
+    run(q, 16.7, 2);
+    expect(q.scale).toBe(1);
+    run(q, 120, 1.1);
+    expect(q.scale).toBeLessThan(1); // sustained slowness after the hold still counts
+  });
 });
 it('batching preserves world bounds, transparent leaves and shared geometry', () => {
   const group=new THREE.Group(), geometry=new THREE.BoxGeometry(), mat=new THREE.MeshBasicMaterial();

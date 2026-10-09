@@ -18,7 +18,8 @@
  *   the starting scale is restored and reductions pause (20 s, doubling to ~3 min) instead of sinking to the
  *   minimum for nothing. Single steps are not judged alone: with strict vsync a step can show no gain until the
  *   frame fits the next interval.
- * - Frames over 250 ms (loading, tab switch, debugger) are ignored.
+ * - Frames over 250 ms (loading, tab switch, debugger) are ignored, and so is everything during `hold` (after a
+ *   WebGL context restore every program recompiles over a few seconds of slow but sub-250 ms frames).
  */
 export class AdaptiveQuality {
   scale = 1;
@@ -44,6 +45,15 @@ export class AdaptiveQuality {
   private episode: { from: number; meanBefore: number; since: number } | null = null;
   private downBlockedMs = 0;
   private downBlockMs = 20000;
+  private holdMs = 0;
+
+  /** Ignore frames for the next `ms` of frame time (a known transient stall, not sustained load). */
+  hold(ms: number): void {
+    this.holdMs = Math.max(this.holdMs, ms);
+    this.resetWindow();
+    this.bad = 0;
+    this.goodMs = 0;
+  }
 
   /**
    * @param gpuMs GPU time of the frame's rendering from timer queries, when available.
@@ -55,6 +65,7 @@ export class AdaptiveQuality {
     const previous = this.scale;
     if (!enabled) { this.scale = 1; this.resetWindow(); this.bad = 0; this.goodMs = 0; this.episode = null; this.downBlockedMs = 0; return previous !== this.scale; }
     if (!Number.isFinite(frameMs) || frameMs <= 0 || frameMs >= 250) { this.resetWindow(); return false; }
+    if (this.holdMs > 0) { this.holdMs -= frameMs; return false; }
     this.frames++;
     this.elapsed += frameMs;
     this.sinceUpMs += frameMs;

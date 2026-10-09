@@ -17,6 +17,7 @@ export interface PlanetLayerUpdate {
   /** Body the active vessel is near (gets full-detail treatment). */
   focusBody: string;
   viewportHeight?: number;
+  switchViewportHeight?: number;
 }
 
 export interface PlanetLayer {
@@ -113,6 +114,7 @@ export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualit
           dt: u.dt,
           time: u.t,
           viewportHeight: u.viewportHeight,
+          switchViewportHeight: u.switchViewportHeight,
         });
       }
     },

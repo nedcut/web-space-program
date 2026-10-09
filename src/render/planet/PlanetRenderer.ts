@@ -75,6 +75,8 @@ export interface PlanetUpdateParams {
   time?: number;
   /** Drawing-buffer height in pixels (for LOD). Default: 1080. */
   viewportHeight?: number;
+  /** Height for the near/far terrain switch only, when it should ignore transient resolution drops. Default: viewportHeight. */
+  switchViewportHeight?: number;
 }
 
 export type PlanetKind = 'star' | 'gas' | 'solid';
@@ -169,6 +171,7 @@ export class PlanetRenderer {
     this.sunRadiance = opts.sunRadiance ?? 60;
     this.hostRenderer = opts.renderer;
     this.root.name = `planet:${body.id}`;
+    this.root.userData.planet = this; // diagnostics/automation
     // Identity container: placed children update themselves; do not force every cached chunk each frame.
     this.root.matrixAutoUpdate = false;
     this.terrainKey = `${JSON.stringify(body)}:${opts.terrainMinWavelength ?? 6}`;
@@ -191,7 +194,6 @@ export class PlanetRenderer {
         clouds: !opts.farOnly && !!terrain && opts.quality.clouds });
       enableEarthImagery(this.uniforms, this.imagery.uniforms);
       this.root.userData.imagery = this.imagery; // diagnostics/automation
-      this.root.userData.planet = this;
     }
     if (this.kind === 'star') this.buildSun();
     else if (this.kind === 'gas') this.buildGasGiant();
@@ -496,7 +498,7 @@ export class PlanetRenderer {
 
     const vh = p.viewportHeight ?? 1080;
     const sf = screenSpaceFactor(cam, vh);
-    const projR = (R / Math.max(camDist, R * 1.0001)) * sf;
+    const projR = (R / Math.max(camDist, R * 1.0001)) * (p.switchViewportHeight === undefined ? sf : screenSpaceFactor(cam, p.switchViewportHeight));
     this.stats.projectedRadiusPx = projR;
     this.stats.altitude = camDist - R;
 
