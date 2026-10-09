@@ -1,5 +1,6 @@
 import { game } from '../game/store';
 import * as THREE from 'three';
+import { liftoffDollyPitch, liftoffDollyScale, LIFTOFF_DOLLY, towerFov } from './cameraFraming';
 
 /**
  * Flight camera: orbits the active vessel. The scene origin is the vessel (floating origin), so the camera
@@ -16,10 +17,12 @@ import * as THREE from 'three';
  * - `orbital` — "up" is the orbit normal, so the orbit plane is the horizon.
  * - `chase`   — trails the direction of travel (surface velocity in air, orbital velocity in space).
  * - `locked`  — rigidly attached to the vessel and rolls with it.
+ * - `tower`   — a fixed spot on the ground near the vessel that tracks and zooms as it climbs (the controller
+ *               supplies the eye point and hands back to `auto` once the craft is far away).
  */
-export type CameraMode = 'auto' | 'free' | 'orbital' | 'chase' | 'locked';
+export type CameraMode = 'auto' | 'free' | 'orbital' | 'chase' | 'locked' | 'tower';
 
-export const CAMERA_MODES: readonly CameraMode[] = ['auto', 'free', 'orbital', 'chase', 'locked'];
+export const CAMERA_MODES: readonly CameraMode[] = ['auto', 'free', 'orbital', 'chase', 'locked', 'tower'];
 
 export const CAMERA_MODE_INFO: Record<CameraMode, { label: string; hint: string }> = {
   auto: { label: 'Auto', hint: 'Horizon-level near the surface, orbit-aligned in space' },
@@ -27,7 +30,21 @@ export const CAMERA_MODE_INFO: Record<CameraMode, { label: string; hint: string 
   orbital: { label: 'Orbital', hint: 'Orbit plane is the horizon' },
   chase: { label: 'Chase', hint: 'Follows the direction of travel' },
   locked: { label: 'Locked', hint: 'Attached to the vessel; rolls with it' },
+  tower: { label: 'Tower', hint: 'Ground camera near the pad; tracks the climb' },
 };
+
+/** Mode cycle order. EVA skips orbital/chase (little meaning on foot); the tower only joins near the ground. */
+export function cameraModeCycle(eva: boolean, tower: boolean): readonly CameraMode[] {
+  if (eva) return ['auto', 'free', 'locked'];
+  return tower ? CAMERA_MODES : CAMERA_MODES.filter(m => m !== 'tower');
+}
+
+/** Next mode in the cycle; a mode missing from the cycle (e.g. the tower once it is unavailable) restarts it. */
+export function nextCameraMode(current: CameraMode, eva: boolean, tower: boolean): CameraMode {
+  const list = cameraModeCycle(eva, tower);
+  const i = list.indexOf(current);
+  return list[(i + 1) % list.length] ?? 'auto';
+}
 
 export interface CameraFrame {
   /** Radial-out unit vector at the vessel (scene space). */
@@ -49,8 +66,17 @@ export interface CameraFrame {
   rumble?: number;
   /** Suppress an in-progress event immediately when accessibility settings change. */
   motionEnabled?: boolean;
-  /** 1 on the ground: aim slightly below the vessel so it sits above the HUD's navball cluster. */
-  groundFraming?: number;
+  /** Upward lens shift (fraction of viewport height) that keeps the vessel and plume clear of the bottom HUD. */
+  lensShift?: number;
+  /** Extra FOV (deg) as a speed cue; 0 with reduced motion. */
+  fovBoost?: number;
+  /**
+   * Middle of the vessel's extent relative to the orbit pivot (scene space). The lens shift frames this point rather
+   * than the pivot, so a tall rocket whose COM sits low in the stack is centred as a whole.
+   */
+  frameCentre?: THREE.Vector3;
+  /** Tower mode: the ground eye point (scene space). Without it the tower mode behaves like `auto`. */
+  eye?: THREE.Vector3 | null;
   /** Orbit/aim point relative to the scene origin (the vessel COM), e.g. from {@link PivotSmoother}. */
   pivot?: THREE.Vector3;
 }
@@ -102,6 +128,13 @@ const MIN_PITCH = -1.5;
 const MAX_PITCH = 1.5;
 
 const Y = new THREE.Vector3(0, 1, 0);
+/** Lens shift and FOV cue ease time constants (s): slow enough that a HUD toggle or max-Q never jolts the view. */
+const SHIFT_TAU = 0.4;
+const FOV_TAU = 0.8;
+/** Largest correction (fraction of viewport height) for the vessel centre sitting off the pivot. */
+const CENTRE_SHIFT_MAX = 0.2;
+const _camUp = new THREE.Vector3();
+const _camFwd = new THREE.Vector3();
 
 /** Camera distance that comfortably frames a vessel of bounding radius `r` (60° FOV). */
 export function framingDistance(r: number) {
@@ -151,7 +184,14 @@ export class FlightCamera {
   private radius = 0;
   private time = 0;
   private kick = 0;
-  private lift = -1;
+  /** Current (eased) lens shift and FOV cue; the first frame snaps. */
+  private shift = 0;
+  private shiftInit = false;
+  private fovCue = 0;
+  /** Seconds since liftoff while the liftoff dolly runs, else -1. */
+  private dollyT = -1;
+  /** FOV (deg) from the settings; the camera adds the speed cue or the tower zoom on top. */
+  baseFov: number;
   /** Keyboard / gamepad orbit input (-1..1 per axis), applied as a rate. */
   readonly drive = { yaw: 0, pitch: 0, zoom: 0 };
   /** Last applied terrain push (m), exposed for tests/telemetry. */
@@ -159,24 +199,35 @@ export class FlightCamera {
 
   constructor(fov = 60) {
     this.camera = new THREE.PerspectiveCamera(fov, 1, 0.1, 1e13);
+    this.baseFov = fov;
   }
 
   get mode() { return this._mode; }
   set mode(m: CameraMode) {
     if (m === this._mode) return;
+    const prev = this._mode;
     // Keep the current view direction on screen; only the reference frame changes.
     if (this.horizonBasis || this._mode === 'locked') this.remap = this.camera.position.clone().normalize();
     this._mode = m;
     this.upTau = 0.3;
     if (m === 'chase') this.chaseInit = false;
+    // A cut to or from the tower must not inherit the other camera's up vector ease.
+    if (m === 'tower' || prev === 'tower') this.upInitialised = false;
   }
 
-  /** Cycle to the next mode (EVA skips orbital/chase, which mean little on foot). */
-  cycleMode(eva = false) {
-    const list = eva ? (['auto', 'free', 'locked'] as CameraMode[]) : CAMERA_MODES;
-    const i = list.indexOf(this._mode);
-    this.mode = list[(i + 1) % list.length] ?? 'auto';
+  /** Cycle to the next mode (EVA skips orbital/chase; `tower` only when a ground camera is available). */
+  cycleMode(eva = false, tower = false) {
+    this.mode = nextCameraMode(this._mode, eva, tower);
     return this.mode;
+  }
+
+  /** Start the liftoff dolly: the view backs out and drops slightly over the first seconds of the climb. */
+  startLiftoff() { this.dollyT = 0; }
+
+  /** Drop the lens shift (photo mode composes its own frame). */
+  clearLensShift() {
+    this.shift = 0;
+    this.camera.clearViewOffset();
   }
 
   // Direct assignment snaps (scripts, scenario setup); interactive input eases via the targets.
@@ -209,7 +260,7 @@ export class FlightCamera {
     const rate = 1.8; // rad/s at full keyboard deflection
     this.tYaw += this.drive.yaw * rate * dt;
     this.tPitch += this.drive.pitch * rate * dt;
-    if (this.drive.zoom) { this.tDist *= Math.exp(this.drive.zoom * 1.6 * dt); this.zoomTau = ZOOM_TAU; }
+    if (this.drive.zoom) { this.tDist *= Math.exp(this.drive.zoom * 1.6 * dt); this.zoomTau = ZOOM_TAU; this.dollyT = -1; }
     if (!this.dragging) {
       this.tYaw += this.yawVel * dt;
       this.tPitch += this.pitchVel * dt;
@@ -272,6 +323,21 @@ export class FlightCamera {
       this.remap = null;
     }
 
+    // Liftoff dolly: scale distance and offset pitch by this frame's step of the curve, so player input still adds on top.
+    if (this.dollyT >= 0) {
+      if (this._mode !== 'auto' && this._mode !== 'chase') this.dollyT = -1;
+      else {
+        const t0 = this.dollyT, t1 = t0 + dt;
+        const r = liftoffDollyScale(t1) / liftoffDollyScale(t0);
+        const dp = liftoffDollyPitch(t1) - liftoffDollyPitch(t0);
+        this.tDist = Math.min(this.maxDistance, this.tDist * r);
+        this.cDist = Math.min(this.maxDistance, this.cDist * r);
+        this.tPitch = Math.max(MIN_PITCH, this.tPitch + dp);
+        this.cPitch = Math.max(MIN_PITCH, this.cPitch + dp);
+        this.dollyT = t1 >= LIFTOFF_DOLLY.duration ? -1 : t1;
+      }
+    }
+
     // Ease current → target. Yaw targets accumulate freely; ease along the shortest arc.
     const ko = ease(dt, ORBIT_TAU);
     this.cYaw += (this.tYaw - this.cYaw) * ko;
@@ -301,14 +367,25 @@ export class FlightCamera {
     this.upTau = Math.max(this._mode === 'locked' ? 0.02 : 0.25, this.upTau - dt * 0.5);
     this.smoothedUp.lerp(basisUp, ease(dt, this.upTau)).normalize();
 
-    const liftTarget = Math.max(0, Math.min(1, f.groundFraming ?? 0));
-    this.lift = this.lift < 0 ? liftTarget : this.lift + (liftTarget - this.lift) * ease(dt, 1.2);
-    const aimDown = this.lift * Math.min(this.radius * 0.45, this.cDist * 0.15);
     const px = f.pivot?.x ?? 0, py = f.pivot?.y ?? 0, pz = f.pivot?.z ?? 0;
-    this.camera.position.copy(offset);
-    this.camera.position.x += px; this.camera.position.y += py; this.camera.position.z += pz;
-    this.camera.up.copy(this.smoothedUp);
-    this.camera.lookAt(px - f.up.x * aimDown, py - f.up.y * aimDown, pz - f.up.z * aimDown);
+    const tower = this._mode === 'tower' ? f.eye ?? null : null;
+    if (tower) {
+      // Fixed ground eye looking at the vessel, horizon level; the zoom keeps the climbing craft a readable size.
+      this.camera.position.copy(tower);
+      this.camera.up.copy(f.up);
+    } else {
+      this.camera.position.copy(offset);
+      this.camera.position.x += px; this.camera.position.y += py; this.camera.position.z += pz;
+      this.camera.up.copy(this.smoothedUp);
+    }
+    this.camera.lookAt(px, py, pz);
+
+    // Speed FOV cue (eased) and the tower's tracking zoom.
+    const cueTarget = f.motionEnabled === false ? 0 : f.fovBoost ?? 0;
+    this.fovCue += (cueTarget - this.fovCue) * ease(dt, FOV_TAU);
+    this.camera.fov = tower
+      ? towerFov(this.baseFov, this.radius, Math.hypot(this.camera.position.x - px, this.camera.position.y - py, this.camera.position.z - pz))
+      : this.baseFov + this.fovCue;
 
     // A directional impulse plus damped vibration: the first event frame always reads as a punch.
     if (f.motionEnabled === false) this.kick = 0;
@@ -322,7 +399,31 @@ export class FlightCamera {
     }
     this.kick *= Math.exp(-dt / .32);
 
-    this.camera.near = Math.max(0.05, this.cDist * 0.005);
+    this.camera.near = Math.max(0.05, (tower ? Math.min(this.cDist, this.camera.position.length()) : this.cDist) * 0.005);
+    // Lens shift: an off-centre projection window, so the orbit geometry and controls are unchanged while the
+    // vessel sits higher on screen. The view object is created once and then edited in place (no per-frame allocation).
+    let centreShift = 0;
+    if (f.frameCentre) {
+      // Screen-space drop (fraction of viewport height) of the vessel centre below the pivot, before any shake.
+      const c = this.camera.position, q = this.camera.quaternion, k = f.frameCentre;
+      const u = _camUp.set(0, 1, 0).applyQuaternion(q), w = _camFwd.set(0, 0, -1).applyQuaternion(q);
+      const pdx = px - c.x, pdy = py - c.y, pdz = pz - c.z;
+      const cdx = pdx + k.x, cdy = pdy + k.y, cdz = pdz + k.z;
+      const pz0 = pdx * w.x + pdy * w.y + pdz * w.z, cz0 = cdx * w.x + cdy * w.y + cdz * w.z;
+      if (pz0 > 1e-3 && cz0 > 1e-3) {
+        const yp = (pdx * u.x + pdy * u.y + pdz * u.z) / pz0, yc = (cdx * u.x + cdy * u.y + cdz * u.z) / cz0;
+        const drop = (yp - yc) / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
+        centreShift = Math.max(-CENTRE_SHIFT_MAX, Math.min(CENTRE_SHIFT_MAX, drop));
+      }
+    }
+    const shiftTarget = Math.max(-CENTRE_SHIFT_MAX, Math.min(0.45, (f.lensShift ?? 0) + centreShift));
+    this.shift = !this.shiftInit ? shiftTarget : this.shift + (shiftTarget - this.shift) * ease(dt, SHIFT_TAU);
+    this.shiftInit = true;
+    const view = this.camera.view;
+    if (Math.abs(this.shift) > 1e-4) {
+      if (!view) this.camera.setViewOffset(1, 1, 0, this.shift, 1, 1);
+      else { view.enabled = true; view.offsetY = this.shift; }
+    } else if (view) view.enabled = false;
     this.camera.updateProjectionMatrix();
     this.camera.updateMatrixWorld();
   }
@@ -407,6 +508,7 @@ export class FlightCamera {
       const delta = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
       this.tDist = Math.max(this.minDistance, Math.min(this.maxDistance, this.tDist * Math.exp(delta * 0.0012)));
       this.zoomTau = ZOOM_TAU;
+      this.dollyT = -1;
     };
     const ctx = (e: Event) => e.preventDefault();
     el.addEventListener('pointerdown', down);
