@@ -637,9 +637,6 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
           EarthUV eUV;
         #endif
         vec3 w = abs(upBF); w = w * w; w *= w; w /= (w.x + w.y + w.z);
-        // Wave-texture footprint as a 4x anisotropic sampler sees it (taken in uniform control flow).
-        float pdx = length(dFdx(vDetail)), pdy = length(dFdy(vDetail));
-        float waveFp = max(min(pdx, pdy), max(pdx, pdy) * 0.25);
         // Flat coasts are tessellated coarsely (little geometric error), so the interpolated depth's zero
         // crossing would follow triangle edges. Perturb it with world-space noise (≈600 m and 90 m) for an
         // organic shoreline; only shallow water moves.
@@ -673,23 +670,14 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         float t = uTime;
         float fade1 = 1.0 - smoothstep(200.0, 2000.0, dist);
         float fade2 = 1.0 - smoothstep(2000.0, 30000.0, dist);
-        float waveLost = 0.0;
         #if OCEAN_QUALITY == 0
           vec3 g = vec3(0.0);
         #else
           // Faded octaves are skipped, not multiplied by zero: from orbit every water pixel is beyond both fades.
-          // Grazing rays stretch the footprint far past what the distance fades assume. Coarse mips of the wave
-          // texture keep a mean slope per texel, which tilted texel-sized squares of sea into a stair-stepped
-          // glint, so an octave fades once its footprint spans more than ~2 texels (scale / 128).
-          float r64 = fade1 * (1.0 - smoothstep(0.5, 2.0, waveFp));
-          float r23 = fade1 * (1.0 - smoothstep(0.18, 0.72, waveFp));
-          float r512 = fade2 * (1.0 - smoothstep(4.0, 16.0, waveFp));
           vec3 g = vec3(0.0);
-          if (r64 > 0.0) g += waveGrad(vDetail, w, 64.0, vec2(t * 1.3, t * 0.7)) * r64;
-          if (r23 > 0.0) g += waveGrad(vDetail, w, 23.0, vec2(-t * 0.9, t * 1.6)) * r23 * 0.7;
-          if (r512 > 0.0) g += waveGrad(vDetail, w, 512.0, vec2(t * 2.0, -t * 1.1)) * r512 * 0.6;
-          // Unresolved slopes become roughness: an octave holds 2·(0.9·0.064·weight)² of mean square slope.
-          waveLost = 0.0066 * ((fade1 - r64) + 0.49 * (fade1 - r23) + 0.36 * (fade2 - r512));
+          if (fade1 > 0.0) g += waveGrad(vDetail, w, 64.0, vec2(t * 1.3, t * 0.7)) * fade1
+                              + waveGrad(vDetail, w, 23.0, vec2(-t * 0.9, t * 1.6)) * fade1 * 0.7;
+          if (fade2 > 0.0) g += waveGrad(vDetail, w, 512.0, vec2(t * 2.0, -t * 1.1)) * fade2 * 0.6;
         #endif
         if (uHydrocarbon > 0.5) {
           g *= 0.18;
@@ -726,7 +714,6 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         vec3 sunT = sunTransmittance(rel) * ringShadow(rel) * cloudShadow(rel);
         // Resolved waves up close; Cox–Munk slope statistics once individual waves are sub-pixel.
         float alpha = mix(0.07, coxMunkAlpha(seaWind(upBF, rel)), smoothstep(400.0, 25000.0, dist));
-        alpha = sqrt(alpha * alpha + waveLost);
         vec3 skyAmb = skyAmbient(rel, up);
         // Water body colour: absorption with depth, lit by sun + sky.
         float depthT = 1.0 - exp(-depth / 18.0);
