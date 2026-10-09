@@ -3,6 +3,7 @@ import { releasePixels } from '../texturePixels';
 import { SurfaceFeatures } from './SurfaceFeatures';
 import * as THREE from 'three';
 import { CloudMap } from './cloudMap';
+import { RestoreHook } from '../core/contextRecovery';
 import { skyOcclusionRadius } from './skyOcclusion';
 import type { BodyDef } from '../../sim/bodies/types';
 import type { Terrain } from '../../sim/terrain/api';
@@ -129,6 +130,8 @@ export class PlanetRenderer {
   private cloudRadius = 0;
   private cloudMap: CloudMap | null = null;
   private cloudSourceBound = false;
+  /** Imagery and the cloud bake are GPU-only content: rebuilt after a context restore (renderer seen in onBeforeRender). */
+  private readonly restoreHook = new RestoreHook(() => this.restoreGpuContent());
   /** Renderer seen by the cloud mesh's onBeforeRender; used to bake the cloud map in update(). */
   private bakeRenderer: THREE.WebGLRenderer | null = null;
   private readonly cloudRotM = new THREE.Matrix3();
@@ -212,7 +215,7 @@ export class PlanetRenderer {
       for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.TITAN_HAZE = 1;
     }
     if (this.imagery) {
-      const capture = (r: THREE.WebGLRenderer) => { this.glRenderer = r; };
+      const capture = (r: THREE.WebGLRenderer) => { this.glRenderer = r; this.restoreHook.attach(r); };
       for (const m of this.materials) m.onBeforeRender = capture;
     }
     if (body.id === 'earth' && this.quality.earth.nightLights) {
@@ -361,7 +364,7 @@ export class PlanetRenderer {
       this.clouds.matrixAutoUpdate = false;
       this.clouds.frustumCulled = false;
       this.clouds.renderOrder = 2;
-      this.clouds.onBeforeRender = (renderer) => { if (!this.cloudMap?.done) this.bakeRenderer = renderer; };
+      this.clouds.onBeforeRender = (renderer) => { this.restoreHook.attach(renderer); if (!this.cloudMap?.done) this.bakeRenderer = renderer; };
       this.root.add(this.clouds);
     }
   }
@@ -696,8 +699,21 @@ export class PlanetRenderer {
     this.quality = q;
   }
 
+  /** After a WebGL context restore: stream the Earth imagery again and re-bake the cloud map. */
+  private restoreGpuContent(): void {
+    if (this.disposed) return;
+    this.imagery?.restoreContext();
+    if (!this.cloudMap) return;
+    this.cloudMap.restart();
+    this.cloudSourceBound = false;
+    this.bakeRenderer = null; // the cloud mesh sets it again on its next draw
+    this.uniforms.uCloudShell.value = 0; // hides the shell until the new bake is complete
+    this.imagery?.reloadClouds();
+  }
+
   dispose(): void {
     this.disposed = true;
+    this.restoreHook.dispose();
     unregisterPlanetUniforms(this.body.id, this.uniforms);
     lightSources.delete(this);
     this.ringParticles?.dispose();

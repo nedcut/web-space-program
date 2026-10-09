@@ -1,5 +1,6 @@
 import { storageBlocked, STORAGE_BLOCKED_NOTICE } from './ui/storageGuard';
-import { loadEarthData } from './game/earthLoader';
+import { earthDataMessage, loadEarthData } from './game/earthLoader';
+import { setEarthDataSource } from './render/planet/earthSource';
 import { Profiler } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RootErrorBoundary } from './ui/ErrorBoundary';
@@ -18,6 +19,8 @@ try { [ , { App } ] = await Promise.all([loadEarthData(), appModule]); } catch (
   root.textContent = String(error);
   throw error;
 }
+// Terrain workers reuse the fetched Blob rather than the render layer building a second 16 MiB copy.
+setEarthDataSource(earthDataMessage);
 
 // First run / new graphics profile: choose a preset for this GPU (weak iGPUs start on Low).
 // Probing the GPU creates a throwaway WebGL context (~30 ms on the main thread): only when a re-tune is due.

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mulberry32 } from '../../sim/terrain/noise';
 import { GLSL_NOISE } from '../core/glsl';
 import { ProceduralCubeMap } from '../core/proceduralCube';
+import { RestoreHook } from '../core/contextRecovery';
 import { blackbodyLinear, GALACTIC_CENTER, GALACTIC_NORTH, LMC, SMC } from './astro';
 
 export interface StarfieldOptions {
@@ -25,6 +26,11 @@ export class Starfield {
   private starMat: THREE.ShaderMaterial;
   private milkyMat: THREE.ShaderMaterial | null = null;
   private milkyMap: ProceduralCubeMap | null = null;
+  /** The baked band is GPU-only: a context restore bakes it again. */
+  private readonly restore = new RestoreHook(() => {
+    this.milkyMap?.restart();
+    if (this.milkyMat) this.milkyMat.uniforms.uReady.value = 0;
+  });
   private bakeRenderer: THREE.WebGLRenderer | null = null;
 
   constructor(opts: StarfieldOptions) {
@@ -187,7 +193,7 @@ export class Starfield {
       this.milky.frustumCulled = false;
       this.milky.renderOrder = -1001;
       // Bake strips in update() with the renderer that draws the sky (no nested renders).
-      this.milky.onBeforeRender = (renderer) => { if (!this.milkyMap?.done) this.bakeRenderer = renderer; };
+      this.milky.onBeforeRender = (renderer) => { this.restore.attach(renderer); if (!this.milkyMap?.done) this.bakeRenderer = renderer; };
       this.group.add(this.milky);
     }
   }
@@ -209,6 +215,7 @@ export class Starfield {
   }
 
   dispose(): void {
+    this.restore.dispose();
     this.stars.geometry.dispose();
     this.starMat.dispose();
     this.milky?.geometry.dispose();

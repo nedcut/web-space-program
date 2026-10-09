@@ -2,7 +2,7 @@ import { releaseRenderer } from '../../render/releaseRenderer';
 import { enqueueIdle, waitForInputQuiet } from '../../util/idleQueue';
 import * as THREE from 'three';
 import { cachedThumbnail, persistThumbnail, preloadThumbnails } from './thumbnailCache';
-import { createStudioEnvironment } from '../../render/core/studioEnv';
+import { StudioEnvironment } from '../../render/core/studioEnv';
 import { partTexturesReady } from '../../render/parts/textures';
 import type { PartDef } from '../../sim/vessel/types';
 import { createPartMesh } from './partMesh';
@@ -23,7 +23,7 @@ const renderedParts = new Map<string, THREE.Object3D>();
 let renderer: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
 let camera: THREE.PerspectiveCamera | null = null;
-let envRT: THREE.WebGLRenderTarget | null = null;
+let envRT: StudioEnvironment | null = null;
 let scheduled = false;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -89,8 +89,8 @@ function setup() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setClearColor(0x000000, 0);
   scene = new THREE.Scene();
-  envRT = createStudioEnvironment(renderer, { variant: 'thumbnail' });
-  scene.environment = envRT.texture;
+  const target = scene;
+  envRT = new StudioEnvironment(renderer, { variant: 'thumbnail' }, (rt) => { target.environment = rt.texture; });
   scene.environmentIntensity = 0.9;
   const key = new THREE.DirectionalLight(0xffffff, 2.2);
   key.position.set(3, 5, 4);
@@ -185,8 +185,7 @@ export function mountPartTurntable(canvas: HTMLCanvasElement, def: PartDef, redu
   r.toneMapping = THREE.ACESFilmicToneMapping;
   r.toneMappingExposure = 1.15;
   const s = new THREE.Scene();
-  const environment = createStudioEnvironment(r, { variant: 'thumbnail' });
-  s.environment = environment.texture;
+  const environment = new StudioEnvironment(r, { variant: 'thumbnail' }, (rt) => { s.environment = rt.texture; });
   s.environmentIntensity = 0.9;
   const key = new THREE.DirectionalLight(0xffffff, 2.2);
   key.position.set(3, 5, 4);
