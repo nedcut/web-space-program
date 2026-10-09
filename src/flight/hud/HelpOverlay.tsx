@@ -39,7 +39,7 @@ const FLIGHT_KEYS: [Action[] | string, string][] = [
   [['map'], 'Map view + maneuver planner'],
   ['Tab', 'Map view: cycle focus'],
   [['warpDown', 'warpUp', 'warpStop'], 'Time warp slower / faster / stop'],
-  [['toggleCamMode'], 'Camera mode (auto / free / orbital / chase / locked)'],
+  [['toggleCamMode'], 'Camera mode (auto / free / orbital / chase / locked / tower near the ground)'],
   [['cameraLeft', 'cameraRight', 'cameraUp', 'cameraDown', 'cameraZoomIn', 'cameraZoomOut'], 'Orbit / zoom camera from the keyboard'],
   [['focusPrev', 'focusNext'], 'Switch to the previous / next nearby vessel'],
   [['eva'], 'EVA (or the EVA button on a crew portrait)'],
