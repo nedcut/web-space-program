@@ -45,6 +45,8 @@ export interface DockingTelemetry {
   captureSpeed: number;
   /** Degrees. */
   captureAngle: number;
+  /** False while either port is disarmed after an undock (re-arms once the ports drift clear). */
+  armed: boolean;
 }
 
 export interface TargetTelemetry {
