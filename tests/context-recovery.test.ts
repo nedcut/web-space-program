@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RestoreHook, onContextRestored } from '../src/render/core/contextRecovery';
 import { ProceduralCubeMap } from '../src/render/core/proceduralCube';
 import type { ImageStrips } from '../src/render/planet/imageStrips';
+import { SITE_LAYERS, SiteTextureArray, type SiteLayer } from '../src/render/site/siteSurfaces';
 
 /** A renderer stand-in: a canvas that can emit context events, and just enough of the draw API for the bakers. */
 function fakeRenderer() {
@@ -204,5 +205,38 @@ describe('Earth imagery after a context restore', () => {
     expect(imagery.cloudSource).not.toBe(first);
     expect(imagery.cloudSourceSettled).toBe(true);
     imagery.dispose();
+  });
+});
+
+describe('Launch site texture array across a context restore', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const layers = () => {
+    const ctx2d = { setTransform: () => {}, clearRect: () => {}, drawImage: () => {} };
+    vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => ctx2d }) });
+    const image = { width: 4, height: 4 } as unknown as HTMLCanvasElement;
+    return Object.fromEntries(SITE_LAYERS.map((l) => [l, image])) as Record<SiteLayer, HTMLCanvasElement>;
+  };
+
+  it('copies every layer again after a restore (they only existed on the GPU)', () => {
+    const { renderer, calls, restore } = fakeRenderer();
+    const array = new SiteTextureArray(layers());
+    array.fill(renderer);
+    array.fill(renderer);
+    expect(calls.copy).toBe(SITE_LAYERS.length);
+    restore();
+    expect(array.ready).toBe(false);
+    array.fill(renderer);
+    expect(calls.copy).toBe(2 * SITE_LAYERS.length);
+    expect(array.ready).toBe(true);
+  });
+
+  it('stops listening once disposed', () => {
+    const { renderer, calls, restore } = fakeRenderer();
+    const array = new SiteTextureArray(layers());
+    array.fill(renderer);
+    array.dispose();
+    restore();
+    array.fill(renderer);
+    expect(calls.copy).toBe(SITE_LAYERS.length);
   });
 });
