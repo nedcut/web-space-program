@@ -170,7 +170,7 @@ describe('quadtree selection reuse', () => {
     const pool = { available: false, buildChunkSync: (_k: string, p: Parameters<typeof buildChunk>[1]) => buildChunk(terrain, p) };
     const R = 600_000;
     const qt = new Quadtree({ terrainKey: 't', radius: R, minHeight: 0, maxHeight: 0, res: 8, maxLevel: 6, ocean: false,
-      pool: pool as never, terrainMaterial: new THREE.MeshBasicMaterial(), maxInFlight: 4, buildBudgetMs: 1e9, cacheSize: 1 });
+      pool: pool as never, terrainMaterial: new THREE.MeshBasicMaterial(), maxInFlight: 4, buildBudgetMs: 1e9, cacheSize: 1, cacheBytes: 0 });
     let walks = 0;
     const ctx = (z: number) => ({ camBF: { x: 0, y: 0, z }, screenFactor: 1000, maxScreenError: 2, inFrustum: () => { walks++; return true; }, frame: 0 });
     const view = (z: number) => { const v = new Float64Array(VIEW_KEY); v[2] = z; v[6] = 1; v[7] = 1000; return v; };

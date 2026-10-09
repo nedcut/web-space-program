@@ -80,6 +80,7 @@ export function dockingTelemetry(this: FlightController, internals: FlightContro
     captureRange: Math.min(mine.mod.captureRange, theirs.mod.captureRange),
     captureSpeed: Math.min(mine.mod.captureSpeed, theirs.mod.captureSpeed),
     captureAngle: (Math.min(mine.mod.captureAngle, theirs.mod.captureAngle) * 180) / Math.PI,
+    armed: !mine.part.dockDisarmed && !theirs.part.dockDisarmed,
   };
 }
 

@@ -1,6 +1,7 @@
 import { game } from '../../game/store';
 import * as THREE from 'three';
 import { releaseRenderer } from '../../render/releaseRenderer';
+import { onContextRestored } from '../../render/core/contextRecovery';
 import type { Vec3 } from '../../util/vec3';
 import { dot } from '../../util/vec3';
 
@@ -120,6 +121,7 @@ export class Navball {
   private lastKey = new Float64Array(0);
   private lastColourBlind = false;
   private bezel: CanvasGradient | null = null;
+  private readonly unwatchContext: () => void;
 
   constructor(size = 210) {
     this.size = size;
@@ -132,6 +134,8 @@ export class Navball {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     Object.assign(this.renderer.domElement.style, { position: 'absolute', inset: '0', borderRadius: '50%' });
     this.element.appendChild(this.renderer.domElement);
+    // A restored context starts with a blank canvas; unchanged-frame skipping would leave it that way.
+    this.unwatchContext = onContextRestored(this.renderer, () => { this.lastKey = new Float64Array(0); });
 
     this.overlay = document.createElement('canvas');
     this.overlay.width = size * devicePixelRatio;
@@ -249,6 +253,7 @@ export class Navball {
   }
 
   dispose() {
+    this.unwatchContext();
     releaseRenderer(this.renderer, this.scene);
     this.element.remove();
   }

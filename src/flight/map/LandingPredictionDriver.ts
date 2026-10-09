@@ -5,6 +5,7 @@ import type { LandingPrediction, LandingRequest } from '../../game/planning/land
 import type { PlannerEvent, PlanningSnapshot } from '../../game/planning/protocol';
 import { earthDataMessage } from '../../game/earthLoader';
 import { periapsisRadius } from '../../sim/orbit';
+import { landingPredictionApplies } from '../../ui/map/mapActions';
 import { warpRate } from '../../game/timewarp';
 
 const EMPTY_MARKERS: MapMarkerInput[] = [];
@@ -49,7 +50,7 @@ export class LandingPredictionDriver {
   private update() {
     const w = this.c.world, v = w.active;
     if (this.sampledAttitude !== this.attitude) { this.clear(); this.lastRequest = -Infinity; this.sampledAttitude = this.attitude; }
-    if (this.c.network || !this.enabled || !v || v.mode === 'prelaunch' || v.state.situation !== 'flying' || v.state.eva || v.state.telemetry.thrust > 0 || warpRate(w.warp) > 1) { this.clear(); this.status = ''; return; }
+    if (this.c.network || !this.enabled || !landingPredictionApplies(v) || !v || v.state.telemetry.thrust > 0 || warpRate(w.warp) > 1) { this.clear(); this.status = ''; return; }
     if (this.result && (this.result.vesselId !== v.state.id || this.result.body !== v.body || this.result.attitude !== this.attitude || this.result.impact && this.result.impact.time < w.ut)) this.result = null;
     if (this.pending) { if (!this.current()) this.clear(); else return; }
     if (this.c.paused || this.failed || performance.now() - this.lastRequest < 5000) return;

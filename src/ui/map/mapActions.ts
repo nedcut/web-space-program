@@ -77,6 +77,23 @@ export function mapContextActions(obj: MapObject, c: MapActionContext): MapActio
 /** A point on the predicted path: a marker (Ap, Pe, encounter…) or a spot on the orbit line. */
 export interface MapPathPoint { label: string; time?: number; key?: string; pinned?: boolean; orbit?: boolean }
 
+/** The unpowered landing prediction only runs for a vessel that is flying (not on the pad, landed or on EVA). */
+export function landingPredictionApplies(v: { mode: string; state: { situation: string; eva?: unknown } } | null | undefined): boolean {
+  return !!v && v.mode !== 'prelaunch' && v.state.situation === 'flying' && !v.state.eva;
+}
+
+/** Seconds before closest approach that "Warp to closest approach" stops, whichever menu starts it. */
+export const CLOSEST_APPROACH_LEAD = 60;
+/** Seconds before an ordinary marker (Ap, Pe, encounter…) that "Warp to <marker>" stops. */
+export const MARKER_WARP_LEAD = 10;
+
+/** UT a warp to this path point should stop at: exact on the orbit line, else a lead before the marker. */
+export function pathPointWarpTime(p: MapPathPoint): number | undefined {
+  if (p.time === undefined) return undefined;
+  if (p.orbit) return p.time;
+  return p.time - (p.key?.startsWith('ca') ? CLOSEST_APPROACH_LEAD : MARKER_WARP_LEAD);
+}
+
 /** Actions for a right-clicked path point: add a node (orbit line), warp there, pin/unpin (markers). */
 export function pathPointActions(p: MapPathPoint, c: { now: number; canWarp: boolean; canPlan: boolean }): MapAction[] {
   const out: MapAction[] = [];

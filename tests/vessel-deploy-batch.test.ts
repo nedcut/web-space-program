@@ -145,3 +145,27 @@ describe('node-aware override shaders', () => {
     pass.dispose();
   });
 });
+
+describe('node texture uploads', () => {
+  it('uploads ranges once the texture exists and a full texture again after a context restore', async () => {
+    const { nodeTexture, patchNodeVertex, commitNodes, allocateNodes, releaseNodes, writeNode } = await import('../src/render/core/rigidNodes');
+    const canvas = new EventTarget();
+    const renderer = { domElement: canvas } as unknown as THREE.WebGLRenderer;
+    const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: '' } as unknown as THREE.WebGLProgramParametersWithUniforms;
+    patchNodeVertex(shader, renderer);
+    expect(shader.vertexShader).toContain('wspNodeMatrix * vec4(transformed, 1.0)');
+    nodeTexture.onUpdate!(nodeTexture); // three uploaded the whole texture
+    const base = allocateNodes(2);
+    writeNode(base + 1, new THREE.Matrix4().makeTranslation(1, 2, 3));
+    commitNodes(base + 1, base + 1);
+    expect(nodeTexture.updateRanges).toHaveLength(1);
+    expect(nodeTexture.updateRanges[0].count).toBe(12);
+    canvas.dispatchEvent(new Event('webglcontextrestored'));
+    expect(nodeTexture.updateRanges).toHaveLength(0);
+    // Until three has re-uploaded everything, changes do not queue partial ranges.
+    writeNode(base + 1, new THREE.Matrix4().makeTranslation(4, 5, 6));
+    commitNodes(base + 1, base + 1);
+    expect(nodeTexture.updateRanges).toHaveLength(0);
+    releaseNodes(base, 2);
+  });
+});

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { onContextRestored } from './contextRecovery';
 
 /**
  * Procedural studio environment for image-based lighting, baked once through PMREM.
@@ -136,4 +137,30 @@ export function createStudioEnvironment(renderer: THREE.WebGLRenderer, opts: { v
   pmrem.dispose();
   for (const d of disposables) d.dispose();
   return rt;
+}
+
+/**
+ * A studio environment that survives WebGL context loss: baked now and again after every restore (the PMREM target's
+ * pixels are GPU-only). `apply` receives each new target and should point the scene's `environment` at it; the
+ * previous target is disposed here.
+ */
+export class StudioEnvironment {
+  target: THREE.WebGLRenderTarget;
+  private readonly off: () => void;
+
+  constructor(renderer: THREE.WebGLRenderer, opts: { variant?: StudioVariant }, apply: (target: THREE.WebGLRenderTarget) => void) {
+    this.target = createStudioEnvironment(renderer, opts);
+    apply(this.target);
+    this.off = onContextRestored(renderer, () => {
+      const next = createStudioEnvironment(renderer, opts);
+      apply(next);
+      this.target.dispose();
+      this.target = next;
+    });
+  }
+
+  dispose(): void {
+    this.off();
+    this.target.dispose();
+  }
 }

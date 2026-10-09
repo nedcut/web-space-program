@@ -2020,6 +2020,73 @@ Unchanged within noise and within the 2.5 ms Medium budget. (With the program-ma
 Chrome steady orbit CPU 2.4 → 2.35 ms, draws 139 → 130; imagery streaming finished in ~4 s after loading on both
 (texSubImage2D activity), no regression from the credit budget.
 
+## Terrain and texture heap — 2026-10-08 (`op/heapfix`)
+
+`usedJSHeapSize` (the F8 "heap") includes ArrayBuffer backing stores; ~97 % of it was typed arrays, mostly terrain
+(investigation: 940–1210 MB at Ultra, 240 MB at Medium). Fixes, in commit order:
+
+1. **Shared chunk index** — every land/ocean chunk carried its own copy of the same index pattern; now one
+   `BufferAttribute` per quadtree over `chunkIndices(res)` (one GPU index buffer on the non-batched path too).
+2. **Cache by bytes, ocean counted** — `terrain.cacheMB` (Low 16 / Medium 32 / High 64 / Ultra 96) caps *stale*
+   chunk bytes; `cacheSize` counts land + ocean meshes; stale chunks also go during a reused selection and in far
+   LOD. Chunks in use (drawn, ancestors, siblings needed to split) are never evicted.
+3. **Batch sized to demand** and 4. **no CPU mirror** — `ChunkBatch` replaces three's `BatchedMesh` (JS copy of
+   the whole batch, doubling only) with its own multi-draw batch on GL buffers it owns: slots written from the
+   chunk arrays, GPU-side resize copies, ×1.5 growth, shrink after 8 s at ≤ 40 % use, release when idle.
+5. **Uploaded pixels dropped** — far-LOD bake (flight) and part textures (flight), refilled on demand
+   (`render/texturePixels.ts`; context restore, other renderers, end of flight).
+
+### JS heap after GC (MB; prod build, Windows Chrome over CDP, 1600×900, `scripts/bench/heap-probe.sh`)
+
+Teleport = `?flight=stock-kestrel` → `devScenario('orbit')` → map. Ascent = `?flight=stock-meridian`, orbit assist
+at 4× physics warp, then map. Typed = ArrayBuffer backing stores (`Runtime.getHeapUsage`); V8 objects are 22–28 MB
+everywhere and unchanged.
+
+| Scene | Base used (typed) | + fix 1 | + fix 2 | Final used (typed) | Δ |
+|---|---:|---:|---:|---:|---:|
+| Medium pad | 254 (232) | 233 | 233 | **148** (126) | −106 |
+| Medium orbit | 241 (217) | 222 | 194 | **111** (87) | −130 |
+| Medium map | 242 (217) | 224 | 196 | **112** (87) | −130 |
+| Ultra pad | 998 (973) | 896 | 896 | **419** (394) | −579 |
+| Ultra orbit | 922 (897) | 838 | 715 | **244** (220) | −678 |
+| Ultra map | 923 (897) | 839 | 716 | **245** (220) | −678 |
+| Medium ascent: pad | 262 (239) | | | **154** (130) | −108 |
+| Medium ascent: orbit | 255 (229) | | | **118** (93) | −137 |
+| Medium ascent: map | 256 (229) | | | **118** (91) | −138 |
+| Ultra ascent: pad / orbit / map | 1010 / 954 / 955 | | | not measured¹ | |
+
+¹ The real-GPU Chrome went offline before the final Ultra ascent run; the Ultra teleport rows are the comparison.
+Fixes 3–5 were measured together (final). The batch mirror equals the batch GPU size: base 51 MB Medium /
+375 MB Ultra, all removed; part textures ~33 MB and the Ultra far bake 32 MB per body.
+
+Batch GPU memory (vertex + index buffers, land + ocean) also follows demand now: Medium pad 52 → 42 MB, orbit
+52 → 23 MB; Ultra pad 375 → 277 MB, orbit 375 → 121 MB (base kept its pad-peak capacity forever; one more
+doubling would have added ~300 MB).
+
+### What remains (Ultra pad ≈ 420 MB)
+
+- ~334 MB is chunk data **in use** (≈ 310 drawn land chunks, their ancestors and out-of-frustum siblings, plus
+  ocean). Only denser vertex packing (normal → oct/int8, `aDetail` derived from position + per-chunk offset:
+  ≈ 39 → 20 B/vertex) or Ultra terrain density (`maxScreenError 1`, res 96; owner's call) reduce it.
+- Earth ETOPO grid 16 MB (physics), launch-site/scatter instance buffers ~22 MB, other geometry ~17 MB.
+
+### Checks
+
+- No new long tasks: load long tasks base 102/516/72/68/94 ms vs final 104/525/73/61/89 ms (Medium, same
+  sequence); none during orbit. Resizes issue only `bufferData` + `copyBufferSubData` (no CPU copy).
+- No GL errors (Medium pad/orbit). A forced `WEBGL_lose_context` restore redraws terrain and part textures
+  (pixels refilled); Earth imagery/clouds stay blank after a restore on base and final alike (pre-existing, imagery
+  render targets are never refilled). The restore frame is one 1.1 s task vs 292 ms on base (restore path only).
+- Low quality draws separate chunk meshes (only the shared index changed); without WEBGL_multi_draw (Firefox)
+  three loops over the batch's draw arrays. Neither was re-checked on hardware.
+- Screenshots (Medium pad and orbit, same sequence) match base within run-to-run noise: ≤ 0.04 % of pixels
+  differ by more than 16/255 (mean ≤ 0.18/255), the same as between two final-branch runs.
+- **Not done:** GPU and CPU per-frame A/B (`gpu-passes-ab.sh`, `cpu-steady.sh`), the final Ultra ascent and resize
+  timing during an Ultra ascent: the real-GPU Chrome (CDP 9333) went offline. Per frame the batch does the same
+  work as BatchedMesh did (per-chunk sphere culling, one multi-draw per batch, matrices texture upload when
+  chunks move), with the same triangle counts (Medium pad 2.45 M on base and batch builds); re-run before merging:
+  `AB_OUT=/tmp/heapfix-ab scripts/bench/gpu-passes-ab.sh heapfix <base> <branch> pad,ascent,orbit 3 --quality medium`.
+
 # Vessel batching pass — 2026-10-09 (`op/vesselbatch`)
 
 Goal: cut vessel GL calls and draws, mainly for Firefox/Zen, where every GL call is remoted to the GPU process.

@@ -377,7 +377,6 @@ Decisions made autonomously while the owner was away. Each can be revisited.
 - **Follow-ups are conditional.** `hold` (choose Prograde) only while the turn is going, burning and SAS is not already Prograde; `maxq` (ease the throttle) only while crossflow stress is in the warn band and throttle > 0.9, so a gentle ascent never sees it; `coast` now reads "cut the engines once apoapsis reaches the height you want". One hint at a time (`hintFor` returns a single hint, `maxq` first).
 - **First-flight card:** the non-modal `QuickStartCard` is trimmed to four rows (stage, throttle, steer, map), a pointer to the Training lessons on the main menu, and the full controls sheet one click away. Still gated by the persisted `wsp.help.seen.v1` flag, so it appears on the first flight only and never for tutorials, scenarios or multiplayer.
 
-
 ## Firefox / Zen performance (2026-10-08, op/ffperf)
 
 - **Firefox imagery strips are pixels, not bitmaps.** Its 2D-canvas-copied `ImageBitmap`s (needed because Firefox ignores bitmap crops on upload) were read back synchronously on every `texSubImage2D`. The decode worker now returns packed `Uint8Array` rows in Firefox (red only for single-channel masks); Chrome/Safari keep cropped bitmaps. Merged imagery is byte-identical to the previous path (read back from the merged target).
@@ -391,6 +390,46 @@ Decisions made autonomously while the owner was away. Each can be revisited.
 - **Off-screen bake/merge programs compile in the flight warm-up** against an empty scene (three puts light counts in every program key; these passes draw lightless scenes).
 - **Not changed, by choice:** the launch site's 200 km hide distance (the orbit test scenario starts above the pad, so the site's ~28 draws stay in orbit benchmarks), `ChunkBatch` per-instance frustum culling (re-uploads the batch's indirect texture every frame; the quadtree already culls) — both in `render/site` / `render/planet`, owned elsewhere — and bloom mip count (changes the look).
 
+## Terrain and texture heap (2026-10-08, op/heapfix)
+
+- **One index pattern.** Land and ocean chunks carry no index arrays; every chunk of a quadtree shares one
+  `BufferAttribute` over `chunkIndices(res)`. Evicted geometries detach it before dispose so its GPU buffer survives.
+- **Cache budget in bytes.** `terrain.cacheMB` (Low 16, Medium 32, High 64, Ultra 96) caps CPU bytes of *stale*
+  chunks (not visited by the selection walk for 30 frames); `cacheSize` now counts land + ocean meshes. Chunks in
+  use (selected, their ancestors and out-of-frustum siblings) are never evicted: on the pad they are the bulk of the
+  cache, and only denser packing or Ultra density (owner's call) reduces them. Stale chunks are evicted during a
+  reused selection too (only those the last walk did not visit) and while the planet is drawn far.
+- **Own multi-draw batch instead of three's BatchedMesh.** BatchedMesh keeps a full JS copy of the batch and only
+  doubles. `ChunkBatch` is a Mesh drawn through three's batching program path (`isBatchedMesh` + matrices/indirect
+  textures) over GL buffers it owns (`GLBufferAttribute`): slots are written from the chunk arrays, resizes copy
+  GPU-side, growth ×1.5, shrink to 1.5× the recent peak after 8 s at ≤ 40 % use, release when idle. Index buffers
+  are typed as element data inside a private VAO; all writes use COPY_* targets. Depends on three internals
+  (`_multiDraw*`, `_matricesTexture`, `_indirectTexture`): re-check on three upgrades (tests/chunk-batch.test.ts).
+  The per-draw fallback without WEBGL_multi_draw (Firefox) uses the same fields.
+- **Dropping uploaded pixels.** `render/texturePixels.ts`: owners drop DataTexture pixels once their renderer holds
+  them; an upload that still needs them only allocates and `onUpdate` refills asynchronously. Flight drops the far
+  bake and the part textures it uploaded; at flight end part textures revert to 1×1 placeholders and reload through
+  the worker/IndexedDB path so editor/thumbnail renderers never upload empty pixels.
+
+## Docking indicator status, live key hints, no negative zero (2026-10-09, op/dockqa)
+- **Docking indicator headline explains why the ports will not latch.** `dockingStatus` (`src/flight/hud/TargetPanel.tsx`) mirrors the sim's capture test (`findDockingCandidates`): `CAPTURE` only when range, relative speed and angle are all inside the envelope; otherwise `TOO FAST`, `MISALIGNED`, `REARMING` (a port disarmed by an undock until the ports drift 2× capture range apart), `ALIGN` (out of range) or `SIZE MISMATCH`. Previously it said `CAPTURE` on range alone. `DockingTelemetry.armed` carries the disarmed state.
+- **Key hints follow the player's bindings.** The indicator footer and the `?scenario=rendezvous` message read `bindingLabel(...)` instead of hard-coded I/K/J/L/H/N/R.
+- **No negative zero in readouts.** Docking readouts use `fixed()`; `formatSpeed` prints `0.0 m/s` for |v| < 0.05 (a target drifting apart at 0.01 m/s used to show `-0.0 m/s`).
+- **Map hover ignores the HUD on top.** `MapView` counts the pointer as on the map only when the window `pointermove` target is the map canvas (`pointerOnMap`). A closest-approach marker under the navball speed button used to show its "Click to pin" tooltip while clicks went to the button.
+
+## Docking UX follow-ups (2026-10-09, op/dockux)
+- **Headline `APPROACH`:** `dockingStatus` out of range says `ALIGN` only when the axes are off by more than the capture angle or the lateral offset exceeds the capture range; a lined-up craft at 5 m reads `APPROACH` (dim, like `ALIGN`).
+- **Docking mode ends on dock:** `dockingModeAfterEvent` (`src/flight/dockingMode.ts`) turns the flag off when a `docked` event involves the active vessel; re-enable with the button or `?scenario=rendezvous` as before.
+- **One closest-approach lead:** `CLOSEST_APPROACH_LEAD = 60 s` (`ui/map/mapActions.ts`) is used by both the vessel menu and the closest-approach marker menu (`pathPointWarpTime`); other markers keep their 10 s lead. Fixed, not speed-scaled.
+- **Total Δv readout** is `white-space: nowrap` (stays on one line at 1280×720; 21 px high).
+- **Pad map "Landing: hold attitude …" was a mislabel.** The row is the landing-prediction toggle (default on), but the predictor never runs for a prelaunch/landed/EVA vessel, so the toggle and its "Unpowered · drag, heating…" hint described nothing. `landingPredictionApplies` now hides both unless the vessel is flying; the driver uses the same predicate.
+
+## WebGL context loss (2026-10-09, op/ctxloss)
+
+- **Recovery.** three.js re-creates programs, geometry and any texture backed by CPU data after `webglcontextrestored`, but GPU-only content comes back blank: the Earth imagery (strip-uploaded night/water textures and the merged day+water target), the baked cloud and Milky Way cube maps, PMREM environments (flight sky, hangar, hub, thumbnails, hangar reflection probe), the light shadow depth (`ShadowMapCache` kept skipping redraws) and the navball canvas (unchanged-frame skip). New `render/core/contextRecovery.ts` (`onContextRestored`, `RestoreHook` for owners that only see the renderer in `onBeforeRender`) lets each owner reset its own state; callbacks only drop stale GPU objects and queue work, so recovery runs through the existing budgeted streaming/bake paths and nothing was added per frame. Earth imagery re-streams the bundled preview first, as at start: decoded strips still held (or shared with another renderer) are reused without decoding, otherwise they are fetched again from Cache Storage / the service worker precache (no network when cached). **Rejected:** keeping decoded 8k/16k strips alive after upload just in case (128 MB+ of CPU memory for a rare event). The cloud source is reloaded the same way for the re-bake; `uCloudShell` is zeroed until it finishes. Bake/stream steps are skipped while `isContextLost()` so they cannot "complete" against a dead context. `GpuTimer` drops its invalid queries and re-enables the extension (the pending queue otherwise stayed full and `gpuMs` froze). Remaining known gap: a context lost *during* the first load of a never-rendered object is covered by its normal first-use path.
+- **The imagery merge pass is kept across a restore** (three recompiles its program; disposing it would also orphan its off-screen warm-up registration from op/ffperf).
+- **Verified (production build, Chrome and Firefox, forced `WEBGL_lose_context`):** in orbit over Earth, main comes back with no imagery or clouds; the branch restores both, and the cloud and Milky Way cube read back byte-identical to before the loss. In the editor, main's frame darkens after a restore (lost studio environment / hangar probe) while the branch's mean colour matches the pre-loss frame exactly. Not exercised in a browser: the hub scene and the part-thumbnail renderer.
+
 ## Vessel draws once per material (2026-10-09, op/vesselbatch)
 
 - **Rigid node slots.** Every merged vessel vertex carries `wspNode`; a shared 384×64 RGBA32F texture (`render/core/rigidNodes.ts`) holds each moving frame's 3×4 transform relative to the vessel frame. Moving frames are gimbals, control surfaces, gear joints, brace stages and every `userData.deploy` node (`isMovingNode`). Their leaves merge in the node's own frame, so a vessel draws once per material (and vertex layout) while engines gimbal and arrays deploy. Plumes (exhaust anchors), lamp lenses (per-part material) and EVA limbs stay individual. Slot 0 is the identity for rigid geometry and every unbatched mesh, so one program serves both. This supersedes the settled-deployable second batch and the per-node individual draws of `isAnimatedNode`.
@@ -401,4 +440,5 @@ Decisions made autonomously while the owner was away. Each can be revisited.
 - **Only re-posed parts rewrite slots:** each part remembers gimbal a/b, gear compression/steer/spin and deploy; unchanged → no matrix work and no upload. A new animation input in `animatePart` must be added to that pose vector.
 - **Repeats are flattened, not instanced.** An instanced draw needed its own `#inst` program variant and material setup, which cost more GL calls than its vertices. Selene gains ~12 k vertices (+12%); Selene-real ~+4 k. Multi-material leaves (fins, flaps) are split by geometry group instead of drawn individually. Supersedes the instancing part of "Batched part heat".
 - **Packed ORM bound once:** flight part variants whose roughness/metalness/AO maps are the same texture drop the metalness and AO maps and read B and R from the roughness texel (three's own chunk math). This means two fewer texture binds per material switch and two fewer fragment fetches. It follows the variant's current maps: restoring them returns three's path (used for the same-frame A/B, pixel-identical).
+- **Context restore:** the node texture is CPU-backed, so three re-uploads it, but pending update ranges would make that upload partial. Every renderer that compiles a node program subscribes to its restore; the callback clears ranges and forces one full upload; ranges resume after three's `onUpdate`.
 - **Not done:** merging colour-only material variants (accent/anodised families) into vertex colour would save ~3 more draws on Selene; skipped for now (small, and clearcoat/normal parameters differ in most families).

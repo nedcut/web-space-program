@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { TerrainWorkerPool } from './workerPool';
+import { makeReleasable } from '../texturePixels';
 
 interface Entry {
   refs: number;
@@ -23,6 +24,8 @@ export function acquireSurfaceBake(pool: TerrainWorkerPool, terrainKey: string, 
       texture.generateMipmaps = true;
       texture.anisotropy = 4;
       texture.needsUpdate = true;
+      // Owners drop the pixels once uploaded (releasePixels); a later upload re-bakes them in a worker.
+      makeReleasable(texture, () => pool.bake(terrainKey, width).then((r) => r.data));
       return { texture, minHeight: res.minHeight, maxHeight: res.maxHeight };
     });
     entry = { refs: 0, promise }; cache.set(key, entry);

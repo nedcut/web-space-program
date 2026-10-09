@@ -152,7 +152,7 @@
 .stg-fuel { position: absolute; left: 2px; bottom: 2px; width: 3px; max-height: calc(100% - 4px); border-radius: 2px; background: var(--good); }
 .stg-heat { position: absolute; left: 2px; top: 2px; height: 3px; max-width: calc(100% - 4px); border-radius: 2px; background: #ff7a45; }
 .stg-mult { position: absolute; right: 2px; bottom: 0; font: 9px var(--mono); color: var(--text); }
-.stg-total { align-self: flex-start; font-size: 11px; padding: 2px 8px; border-radius: var(--radius-sm); background: #040b14c0; border: 1px solid var(--panel-border); }
+.stg-total { align-self: flex-start; white-space: nowrap; font-size: 11px; padding: 2px 8px; border-radius: var(--radius-sm); background: #040b14c0; border: 1px solid var(--panel-border); }
 .stg-total .mono { color: var(--accent-2); }
 .stg-basis { font: 9px var(--mono); letter-spacing: .06em; color: var(--text-dim); }
 .stg-vac { font-size: 10px; opacity: .75; }

@@ -51,7 +51,7 @@ export function thermalMaterial(m: THREE.Material): THREE.Material {
     m.onBeforeCompile(shader, renderer);
     if (packed()) packedOrm(shader, ormAo, m.aoMapIntensity);
     // Part meshes also carry a rigid node slot (identity unless merged under a gimbal/deployable; see rigidNodes).
-    patchNodeVertex(shader);
+    patchNodeVertex(shader, renderer);
     shader.uniforms.wspThermal = { value: thermalTexture };
     // A float varying packs into a spare component beside three's vec3 varyings; a vec3 needs a whole
     // vector, and physical materials with maps, shadows and log depth already use WebGL 2's minimum of 15

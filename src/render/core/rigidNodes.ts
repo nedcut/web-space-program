@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { onContextRestored } from './contextRecovery';
 
 /**
  * Rigid node transforms for merged vessel geometry.
@@ -29,6 +30,16 @@ nodeTexture.needsUpdate = true;
  */
 let uploaded = false;
 nodeTexture.onUpdate = () => { uploaded = true; };
+/**
+ * After a context restore three re-uploads the texture from CPU data: make that a full upload, not pending ranges.
+ * Every renderer that compiles a node program subscribes (flight, editor and thumbnail renderers share the texture).
+ */
+const restoreSubscribed = new WeakSet<THREE.WebGLRenderer>();
+function restoreFull(): void {
+  nodeTexture.clearUpdateRanges();
+  uploaded = false;
+  nodeTexture.needsUpdate = true;
+}
 
 /** Row 0 holds the identity slot; other rows are free or owned by one vessel. */
 const rowOwned = new Uint8Array(ROWS);
@@ -89,7 +100,11 @@ export function nodeRows(slot: number): Float32Array {
 }
 
 /** Vertex-shader patch: transform `transformed` (and the normal/tangent, when present) by the vertex's node. */
-export function patchNodeVertex(shader: THREE.WebGLProgramParametersWithUniforms): void {
+export function patchNodeVertex(shader: THREE.WebGLProgramParametersWithUniforms, renderer?: THREE.WebGLRenderer): void {
+  if (renderer && !restoreSubscribed.has(renderer)) {
+    restoreSubscribed.add(renderer);
+    onContextRestored(renderer, restoreFull);
+  }
   shader.uniforms.wspNodes = { value: nodeTexture };
   shader.vertexShader = `attribute float wspNode;
 uniform highp sampler2D wspNodes;
@@ -145,7 +160,7 @@ const alphaDepth = new WeakMap<THREE.Material, THREE.MeshDepthMaterial>();
 function nodeDepth(): THREE.MeshDepthMaterial {
   const m = new THREE.MeshDepthMaterial();
   m.name = 'vessel node depth';
-  m.onBeforeCompile = patchNodeVertex;
+  m.onBeforeCompile = (shader, renderer) => patchNodeVertex(shader, renderer);
   m.customProgramCacheKey = () => 'wsp-node-depth-v1';
   return m;
 }
