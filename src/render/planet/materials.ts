@@ -120,7 +120,10 @@ vec3 shadeWater(vec3 bodyAlbedo, vec3 up, vec3 N, vec3 V, vec3 rel, vec3 skyRefl
   float k = alpha * 0.5;
   float G = (NdL / (NdL * (1.0 - k) + k)) * (NdV / (NdV * (1.0 - k) + k));
   float Fs = 0.02 + 0.98 * pow(1.0 - VdH, 5.0);
-  vec3 spec = min(uSunColor * sunT * waterGGX(NdH, alpha) * G * Fs / (4.0 * NdV), vec3(200.0));
+  vec3 spec = uSunColor * sunT * waterGGX(NdH, alpha) * G * Fs / (4.0 * NdV);
+  // Soft-compress the glint to ≲4. Near the sea at grazing view a wide glitter path reached the old 200 clamp, and
+  // bloom smeared that low-sun orange over the whole frame as a brown veil. Orbital glints (≲1) are barely changed.
+  spec /= 1.0 + max(spec.r, max(spec.g, spec.b)) * 0.25;
   // Rough-surface Schlick: unresolved wave facets cap grazing reflectance of the sky.
   float F = 0.02 + 0.53 * pow(1.0 - NdV, 5.0);
   vec3 lightIn = uSunColor * sunT * max(dot(up, L), 0.0) / ATMO_PI + skyAmb / ATMO_PI;
