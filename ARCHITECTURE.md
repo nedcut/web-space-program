@@ -157,6 +157,11 @@ only row boundaries and pre-start work yield there. UI hooks cancel on supersess
 applied explicitly with fresh World node IDs, after rejecting stale vessel/trajectory/node-list changes.
 `planning/windows.ts` estimates departure options (Lambert arcs from the actual orbit, any plane) for moons and
 returns home; transfer results carry them as `windows`, and `options.departure` re-plans a chosen one.
+The worker's `windows` operation lists moon/return and planet-to-planet estimates without allocating nodes;
+map destination selection and the porkchop dialog reuse that operation before explicit row selection.
+`sim/vessel/burnTime.ts` shares stage-by-stage rocket-equation duration and the executor's activation allowance
+with Flight Data, node summary and navball. The countdown centres on time to deliver half the Δv across stages,
+using existing cached `StageDeltaV` readouts and no new per-frame staging projection.
 Flight-assist programs run through `flight/assist.ts assistFrame`, which owns time warp for the program's lifetime.
 ## Quick-start scenarios
 

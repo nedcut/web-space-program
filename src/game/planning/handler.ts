@@ -1,8 +1,9 @@
 /** Worker module logic is also executable in-process for Node and protocol tests. */
+import { transferWindows } from './windows';
 import { landingPrediction } from './landing';
 import { Universe } from '../universe';
 import { planTransferToBody } from './transfers';
-import { planInterplanetaryTransfer, planCourseCorrectionToBody, porkchopRows } from '../interplanetary';
+import { planInterplanetaryTransfer, planCourseCorrectionToBody, porkchopRows, interplanetaryWindows } from '../interplanetary';
 import type { PlanningWorld } from './context';
 import type { PlannerEvent, PlannerMessage, PlanningSnapshot } from './protocol';
 
@@ -56,16 +57,24 @@ export function createPlannerHandler(send: (event: PlannerEvent) => void, yieldT
           result = next.value;
           break;
         }
+        case 'windows': {
+          const from = world.active && world.universe.body(world.active.body);
+          const target = world.universe.body(message.args.target);
+          result = from?.parent === world.universe.sunId && target.parent === world.universe.sunId
+            ? interplanetaryWindows(world, target.id) : transferWindows(world, target.id, { earliest: world.ut + 300 });
+          break;
+        }
         case 'transfer': result = planTransferToBody(world, message.args.target, message.args.options, report); break;
         case 'interplanetary': result = planInterplanetaryTransfer(world, message.args.target, message.args.options, report); break;
         case 'correction': result = planCourseCorrectionToBody(world, message.args.target, message.args.options, report); break;
         case 'porkchop': {
-          result = [];
+          const grid: (import('../interplanetary').PorkchopPoint | null)[] = [];
+          result = grid;
           let index = 0;
           const { from, target, departures, flights } = message.args;
           for (const cells of porkchopRows(world, from, target, departures, flights)) {
             if (job.cancelled) return;
-            result.push(...cells);
+            grid.push(...cells);
             send({ type: 'progress', id, progress: { phase: 'Calculating transfer windows', fraction: (index + 1) / (departures.samples ?? 25), row: { index: index++, cells } } });
             await yieldTask();
             if (job.cancelled) return;

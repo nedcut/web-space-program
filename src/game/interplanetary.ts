@@ -94,22 +94,22 @@ export function ejectionVelocity(mu: number, r: Vec3, excess: Vec3): Vec3 {
 
 /** Cheapest single-burn ejection onto the asymptote `excess` from the parking orbit within half a revolution of
  * `t`: the parking plane is fixed, so an asymptote far out of it costs a dog-leg that the coplanar estimate ignores. */
-function ejectionCost(orbit: Orbit, gm: number, t: number, excess: Vec3, T: number, samples = 24): number {
+function ejectionCost(orbit: Orbit, gm: number, t: number, excess: Vec3, T: number, samples = 24, nextOrbit = false): number {
   let best = Infinity;
   for (let k = 0; k < samples; k++) {
-    const s = propagate(orbit, t + (k / samples - 0.5) * T);
+    const s = propagate(orbit, t + (k / samples - (nextOrbit ? 0 : 0.5)) * T);
     best = Math.min(best, length(sub(ejectionVelocity(gm, s.position, excess), s.velocity)));
   }
   return best;
 }
 
 /** Departure options over `span`: local minima of the plane-aware departure Δv (best flight time per date),
- * cheapest few in time order, plus departing at once when that is not absurd. Estimates only. */
-function interplanetaryWindows(world: PlanningWorld, a: string, b: string, orbit: Orbit, earliest: number, span: number,
+ * cheapest few in time order, plus the cost of leaving within the next orbit. Estimates only. */
+function scanInterplanetaryWindows(world: PlanningWorld, a: string, b: string, orbit: Orbit, earliest: number, span: number,
   tofRange: SearchRange, altitude: number, includeCapture: boolean, max = 4): TransferWindow[] {
   const u = world.universe, T = period(orbit), gm = u.body(a).gm, parking = length(world.relativeState(world.active!).position);
   const rows: { t: number; dv: number; tof: number; capture: number; score: number }[] = [];
-  const N = 60, M = 12;
+  const N = 121, M = 16;
   for (let i = 0; i < N; i++) {
     const t = earliest + (span * i) / (N - 1);
     let best = { t, dv: Infinity, tof: 0, capture: 0, score: Infinity };
@@ -117,7 +117,7 @@ function interplanetaryWindows(world: PlanningWorld, a: string, b: string, orbit
       const tof = tofRange.min + ((tofRange.max - tofRange.min) * j) / (M - 1);
       try {
         const p = point(world, a, b, t, tof, parking, u.body(b).radius + altitude);
-        const dv = ejectionCost(orbit, gm, t, p.departureExcess, T, 12);
+        const dv = ejectionCost(orbit, gm, t, p.departureExcess, T, 12, i === 0);
         const score = dv + (includeCapture ? p.captureDv : 0);
         if (score < best.score) best = { t, dv, tof, capture: p.captureDv, score };
       } catch { /* collinear cell */ }
@@ -127,12 +127,32 @@ function interplanetaryWindows(world: PlanningWorld, a: string, b: string, orbit
   const finite = rows.filter(r => Number.isFinite(r.score));
   if (!finite.length) return [];
   // Ranked like the planner ranks departures (departure plus capture unless capture is excluded).
-  const cheapest = Math.min(...finite.map(r => r.score));
-  const minima = rows.filter((r, i) => Number.isFinite(r.score) && r.score <= (rows[i - 1]?.score ?? Infinity) && r.score <= (rows[i + 1]?.score ?? Infinity));
-  const picked = minima.sort((x, y) => x.score - y.score).slice(0, max);
-  if (rows[0] && Number.isFinite(rows[0].score) && rows[0].score < 2.5 * cheapest && !picked.includes(rows[0])) picked.push(rows[0]);
+  const minima = rows.filter((r, i) => i > 0 && i < rows.length - 1 && Number.isFinite(r.score) && r.score <= rows[i - 1].score && r.score <= rows[i + 1].score);
+  // One useful minimum per launch season, rather than multiple neighbouring grid ripples.
+  const separation = span / 2 * 0.45;
+  const picked: typeof rows = [];
+  for (const r of minima.sort((x, y) => x.score - y.score)) {
+    if (r !== rows[0] && picked.every(p => Math.abs(p.t - r.t) > separation)) picked.push(r);
+    if (picked.length >= max - 1) break;
+  }
+  // Always show the cost of leaving soon, even when waiting is dramatically cheaper.
+  if (Number.isFinite(rows[0].score)) picked.push(rows[0]);
   return picked.sort((x, y) => x.t - y.t).map(r => ({ departure: r.t, wait: r.t - world.ut, dv: r.dv, captureDv: r.capture, timeOfFlight: r.tof,
     kind: r === rows[0] ? 'now' as const : 'window' as const, seed: [0, 0, 0] as [number, number, number] }));
+}
+
+/** Estimate the next two launch seasons and a next-orbit plane-aware departure without creating nodes. */
+export function interplanetaryWindows(world: PlanningWorld, targetId: string, opts: InterplanetaryOptions = {}): TransferWindow[] {
+  const wv = world.active;
+  if (!wv) return [];
+  const { a, b, mu } = planets(world, wv.body, targetId);
+  const orbit = world.orbitOf(wv);
+  if (!Number.isFinite(period(orbit))) return [];
+  const hohmann = Math.PI * Math.sqrt(((a.orbit!.a + b.orbit!.a) / 2) ** 3 / mu);
+  const synodic = 2 * Math.PI / Math.abs(Math.sqrt(mu / a.orbit!.a ** 3) - Math.sqrt(mu / b.orbit!.a ** 3));
+  return scanInterplanetaryWindows(world, a.id, b.id, orbit, Math.max(world.ut + 300, opts.earliest ?? world.ut + 300),
+    2 * synodic, opts.timeOfFlightRange ?? { min: hohmann * 0.65, max: hohmann * 1.35 },
+    opts.periapsisAltitude ?? safeAltitude(world, b.id), opts.includeCapture !== false);
 }
 
 function predict(world: PlanningWorld, orbit: Orbit, time: number, components: number[], horizon: number): TrajectoryPatch[] {
@@ -212,7 +232,7 @@ export function planInterplanetaryTransfer(world: PlanningWorld, targetPlanetId:
   // Options over two synodic periods. Unless a range or window was given, plan the earliest option within a few
   // percent of the cheapest (departure + capture): a slightly dearer window months earlier beats waiting.
   report?.('Listing transfer windows', 0);
-  const windows = opts.departureRange ? [] : interplanetaryWindows(world, a.id, b.id, orbit, earliest, 2 * synodic, tof, altitude, opts.includeCapture !== false);
+  const windows = opts.departureRange ? [] : scanInterplanetaryWindows(world, a.id, b.id, orbit, earliest, 2 * synodic, tof, altitude, opts.includeCapture !== false);
   let pick = opts.departure;
   let auto = false;
   if (pick === undefined && opts.window === undefined && windows.length) {
@@ -221,7 +241,9 @@ export function planInterplanetaryTransfer(world: PlanningWorld, targetPlanetId:
     pick = windows[totals.findIndex(x => x <= cheapest * 1.08 + 25)].departure;
     auto = true;
   }
-  const around = pick !== undefined && !opts.departureRange
+  // A list's UT can be a few seconds old by selection time; keep its next-orbit option bounded.
+  const goNow = pick !== undefined && pick <= earliest + T;
+  const around = goNow ? { min: earliest, max: earliest + T, samples: 25 } : pick !== undefined && !opts.departureRange
     ? { min: Math.max(earliest, pick - synodic / 30), max: Math.max(earliest, pick - synodic / 30) + synodic / 15, samples: 9 } : undefined;
   let dep = opts.departureRange ?? around ?? { min: earliest, max: earliest + (opts.window ?? synodic), samples: 25 };
   checkRange(dep); checkRange(tof, true);

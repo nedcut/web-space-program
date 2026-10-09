@@ -35,14 +35,14 @@ import {
   timeToPeriapsis,
   stateAfterManeuver,
   inertialDvToManeuver,
-  burnTimeEstimate,
   solveLambertAround,
   stateToElements,
 } from '../sim/orbit';
 import { add, sub, scale, length, normalize, dot, cross, v3, type Vec3 } from '../util/vec3';
 import { qRotate } from '../util/quat';
 import { thrustLimit } from '../sim/vessel/tweaks';
-import type { StageDeltaV } from '../sim/vessel/staging';
+import { stageBurnTime, NODE_STAGE_PAUSE as STAGE_PAUSE } from '../sim/vessel/burnTime';
+export { stageBurnTime } from '../sim/vessel/burnTime';
 import { cachedStageDeltaV } from './stageDeltaVCache';
 import { formatDuration } from '../util/format';
 
@@ -456,29 +456,8 @@ export function spoolDownDv(v: VesselState): { tail: number; step: number } {
   return { tail, step };
 }
 
-/** Seconds lost per stage activation during a burn (decouple, ignite, spool up). */
-const STAGE_PAUSE = 1;
 /** Pointing error that allows staging and throttle, rad. */
 const BURN_CONE = (15 * Math.PI) / 180;
-
-/**
- * Full-throttle time to deliver `dv`, spending `stages` (per-stage Δv readout) in firing order, highest stage
- * number first, starting at `burning` (the stage burning now, or the one that fires next). Each stage that still has
- * to be activated adds `pause` seconds. Infinity if the stages run out.
- */
-export function stageBurnTime(stages: StageDeltaV[], burning: number, dv: number, pause = 0, lit = true): number {
-  let left = dv;
-  let t = 0;
-  for (const s of [...stages].filter(s => s.stage <= burning).sort((a, b) => b.stage - a.stage)) {
-    if (left <= 1e-6) break;
-    if (!lit || s.stage < burning) t += pause;
-    if (!(s.dv > 0) || !(s.thrust > 0) || !(s.isp > 0)) continue;
-    const use = Math.min(left, s.dv);
-    t += burnTimeEstimate(use, s.thrust, s.startMass, s.isp);
-    left -= use;
-  }
-  return left > 1e-3 ? Infinity : t;
-}
 
 /** Vacuum stage readout limited to the stages the program may use, from the one burning now (or firing next). */
 function usableStages(v: VesselState, minStage: number) {

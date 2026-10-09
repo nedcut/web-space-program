@@ -1,4 +1,5 @@
 import { usePlanner } from './usePlanner';
+import { DepartureOptions } from './DepartureOptions';
 import type { TransferWindow as DepartureWindow } from '../../game/planning/windows';
 import { applyPlanningResult } from '../../game/planning/apply';
 import { TransferWindow } from './TransferWindow';
@@ -76,7 +77,7 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
       const target = world.universe.body(id), node = world.nodes[0];
       if (map && node) { map.selectNode(node.id); map.frameTransfer(id); }
       // Keep the option list from the first search when the player picks one of its departures.
-      if (plan.windows?.length) setOptions({ target: id, windows: plan.windows });
+      if (departure === undefined && plan.windows?.length) setOptions({ target: id, windows: plan.windows });
       const wait = plan.node.time - world.ut;
       setPlanMsg(`${target.name} transfer: ${plan.dv.toFixed(0)} m/s, burn in ${formatDuration(wait)}. `
         + `Encounter in ${formatDuration(plan.encounterTime - world.ut)}, periapsis ${formatDistance(plan.periapsisAltitude)}. `
@@ -84,6 +85,14 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
     } catch (e) {
       if ((e as Error).name !== 'AbortError') setPlanMsg((e as Error).message);
     }
+  };
+  const listDepartures = async (id: string) => {
+    setPlanMsg(''); setOptions(null);
+    try {
+      const { result } = await planner.run('windows', { target: id });
+      setOptions({ target: id, windows: result });
+      if (!result.length) setPlanMsg('No departure windows found from this orbit.');
+    } catch (e) { if ((e as Error).name !== 'AbortError') setPlanMsg((e as Error).message); }
   };
   const planCirc = (at: 'apoapsis' | 'periapsis') => {
     world.nodes = [];
@@ -126,12 +135,13 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
         {targets.length > 0 && (
           <select
             className="btn small"
+            aria-label="Transfer destination"
             disabled={!!planner.progress || !!transferTarget}
             value=""
-            onChange={(e) => e.target.value && planTransfer(e.target.value)}
+            onChange={(e) => e.target.value && listDepartures(e.target.value)}
             style={{ background: 'var(--panel-solid)', color: 'var(--text)' }}
           >
-            <option value="">Plan transfer to…</option>
+            <option value="">Transfer windows to…</option>
             {targets.map((b) => (
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
@@ -154,28 +164,3 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
     </>
   );
 });
-
-/**
- * The departures the planner found for the last transfer: wait versus Δv, so the player can trade a long wait for
- * a dearer burn now (usually a plane change) or the reverse. Δv values are estimates until picked and refined.
- */
-function DepartureOptions({ world, options, busy, onPick }: { world: World; options: { target: string; windows: DepartureWindow[] }; busy: boolean; onPick(w: DepartureWindow): void }) {
-  const live = options.windows.filter(w => w.departure > world.ut + 120);
-  if (live.length < 2) return null;
-  const cheapest = Math.min(...live.map(w => w.dv));
-  const soonest = live[0];
-  const node = world.nodes[0];
-  const current = node ? live.reduce((a, b) => (Math.abs(b.departure - node.time) < Math.abs(a.departure - node.time) ? b : a)) : null;
-  const near = (w: DepartureWindow) => !!node && w === current && Math.abs(w.departure - node.time) < Math.max(3600, 0.05 * (w.departure - world.ut));
-  return <div style={{ display: 'grid', gap: 3, fontSize: 12 }} aria-label="Departure options">
-    <div className="label">Departure options · {world.universe.body(options.target).name}</div>
-    {live.map(w => {
-      const tags = [w.kind === 'now' ? 'now · next orbit, plane change if needed' : w === soonest ? 'soonest' : '', w.dv <= cheapest + 0.5 ? 'cheapest' : '', w === soonest && w.dv > cheapest * 1.1 + 20 ? 'plane change' : ''].filter(Boolean);
-      return <button key={w.departure} className="btn ghost small" disabled={busy || near(w)} style={{ textAlign: 'left' }}
-        title={near(w) ? 'Planned' : 'Plan this departure (refines the encounter)'} onClick={() => onPick(w)}>
-        <span className="mono">{near(w) ? '● ' : '○ '}in {formatDuration(w.departure - world.ut)} · ~{w.dv.toFixed(0)} m/s · flight {formatDuration(w.timeOfFlight)}</span>
-        {tags.length > 0 && <span style={{ color: 'var(--text-dim)' }}> · {tags.join(', ')}</span>}
-      </button>;
-    })}
-  </div>;
-}

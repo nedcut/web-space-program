@@ -262,6 +262,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
       ...maneuverBurn,
       // HUD snapshots are compared field by field: quantize so an idle coast does not re-render React.
       dvRemaining: Math.round(maneuverBurn.dvRemaining * 10) / 10,
+      burnStartLead: Number.isFinite(maneuverBurn.burnStartLead) ? Math.round(maneuverBurn.burnStartLead * 10) / 10 : maneuverBurn.burnStartLead,
       burnTime: Number.isFinite(maneuverBurn.burnTime) ? Math.round(maneuverBurn.burnTime * 10) / 10 : maneuverBurn.burnTime,
     },
     engineering: {

@@ -250,7 +250,7 @@ export function planTransferToBody(world: PlanningWorld, targetId: string, opts:
     const arrival = w.departure + (outbound ? w.timeOfFlight : 1.5 * w.timeOfFlight + central.soi / 150);
     try {
       const freedom = Number.isFinite(T) ? Math.min(T / 8, 0.05 * w.timeOfFlight) : 0;
-      return refine(world, o, targetId, w.departure, [...w.seed], arrival, peAlt, Infinity, freedom, earliest, Infinity, false);
+      return refine(world, o, targetId, w.departure, [...w.seed], arrival, peAlt, Infinity, freedom, earliest, w.kind === 'now' && Number.isFinite(T) ? earliest + T : Infinity, false);
     } catch { return null; }
   };
   let chosen: TransferPlan | null = null;

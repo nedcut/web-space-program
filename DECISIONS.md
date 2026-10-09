@@ -329,3 +329,22 @@ Decisions made autonomously while the owner was away. Each can be revisited.
 - **Auto-framing:** the vessel-following map frames the local orbit plus the first SOI change on the path actually flown (encounter: its point plus the encountered body's SOI; escape: the SOI edge). Planned (post-node) encounters keep WP4's local frame and explicit overview. It reframes after every SOI change (new primary), and when the flown path's first SOI change appears/changes/disappears (capture) once stable for 0.7 s with engines off. A node ahead of any SOI change leaves the path undecided: framing holds until the burn, then compares the outcome with the last decided state (so a capture planned and flown inside the SOI still zooms in). Any wheel zoom suppresses those in-SOI reframes until the next explicit or SOI-change framing. Allocation-free per frame; no prediction is started.
 - **Re-encounters:** a return to a body the path has left (e.g. the uncaptured flyby's later lunar passes) was drawn around that body now, stacking phantom hyperbolas with Pe markers across the live flyby. Such patches are now drawn where the body will be relative to its parent, continuous with the parent-orbit patch and its encounter marker. The focused body's first encounter keeps the present-frame view.
 - **Planner panel:** in map view the left column reserves 212 px at the bottom (navball G meter/SAS column height) alongside the staging stack; the planner shrinks first (header and node list fixed, tools scroll), and its help text shows only while there are no nodes.
+
+## Transfer windows and staged burn timing (2026-10-08, cx/windows)
+
+- Destination selection lists estimates first; it does not replace the current maneuver nodes until a row is
+  selected and the existing worker refinement/application path verifies an encounter. Both the map planner and
+  interplanetary porkchop dialog show UTC departure, live wait, departure and circular-capture Δv, and flight time.
+  Pin the next-orbit “Go now (with plane change)” option, rank the remaining rows by departure + capture, and retain
+  it even when it is expensive. Search two synodic periods for planets, reject search-boundary endpoints as launch
+  minima, and suppress adjacent ripples within 0.45 synodic periods. Bound now-option polishing/refinement to the
+  next parking revolution. Capture costs remain estimates; selecting a row creates only the departure node.
+- Keep list search, Lambert/ejection math, and encounter refinement in the existing planner worker protocol
+  (`windows` operation). Listing has no node side effects and uses the same cancellation lifecycle as other jobs.
+  The porkchop grid and list have independent cancellable requests so neither search discards the other's results.
+- Move the existing stage-duration calculation to pure `sim/vessel/burnTime.ts`, with an allocation-free scan in
+  firing order. Use each `StageDeltaV`'s remaining wet mass/thrust/effective Isp, include unpowered separator-stage
+  activations and the executor's existing 1 s ignition/separation allowance, and report Infinity for insufficient
+  propellant. Share it between Flight Data, node summary, navball duration/countdown and Execute node. Centre on
+  time to deliver half the Δv, preserving the executor's existing behavior; landing-stage selection and guided
+  aim-point cutoff are unchanged. The old autopilot/controller exports remain compatibility re-exports.
