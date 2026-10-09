@@ -200,35 +200,54 @@ function climbDown(world: World, host: WorldVessel, pod: PartState, eva: VesselS
 }
 
 /**
+ * How far the astronaut's feet are above the ground: 0 standing, the hop/flight height when airborne. Measured
+ * radially from the terrain (cheap, no normal), so standing on a slope is not mistaken for a hop.
+ */
+function footLift(world: World, eva: WorldVessel): number {
+  if (eva.state.situation === 'landed' || eva.state.situation === 'splashed') return 0;
+  return Math.max(0, world.universe.surfaceInfo(eva.body, eva.state.position, world.ut).heightAboveTerrain - EVA_HEIGHT);
+}
+
+/**
  * Distance from the astronaut to a hatch for boarding. Standing on the ground, up to BOARD_CLIMB metres of the
  * hatch's height above the astronaut is climbed rather than counted, so tall landers stay boardable on foot.
+ * Airborne (a hop, a jetpack flight) the on-foot measures add the feet's height above the ground in quadrature
+ * and the straight-line distance still counts: the result is continuous, so a hop beside a tall rocket reads
+ * 4.0 → 4.1 → 4.0 m, not 4 → 15 → 4 m.
  */
-function hatchReach(world: World, eva: WorldVessel, vessel: WorldVessel, pod: PartState): number {
+function hatchReach(world: World, eva: WorldVessel, vessel: WorldVessel, pod: PartState, up: Vec3, lift: number): number {
   const hatch = world.hatchPosition(vessel.state, pod);
   const d = sub(hatch, eva.state.position);
-  if (eva.state.situation !== 'landed' && eva.state.situation !== 'splashed') return length(d);
-  const up = normalize(sub(eva.state.position, world.universe.ephem.getBodyState(eva.body, world.ut).position));
+  const direct = length(d);
+  // The on-foot measures only ever shorten the distance; far up they cannot.
+  if (lift >= direct) return direct;
   const climb = Math.max(0, Math.min(BOARD_CLIMB, dot(d, up)));
-  const reach = length(sub(d, scale(up, climb)));
+  let foot = length(sub(d, scale(up, climb)));
   // Grounded vessel: the spot below the hatch, clear of the hull, at any hatch height (see hatchColumn).
-  if (!grounded(vessel) || reach <= BOARD_RANGE || length(d) > vessel.state.cache.boundingRadius + 50) return reach;
-  let best = reach;
-  for (const column of [hatchColumn(world, vessel.state, pod, up), exitColumn(world, vessel, pod, up)]) {
-    const c = sub(column, eva.state.position);
-    if (dot(c, up) >= -BOARD_RANGE) best = Math.min(best, length(sub(c, scale(up, dot(c, up)))));
+  if (grounded(vessel) && Math.hypot(foot, lift) > BOARD_RANGE && direct <= vessel.state.cache.boundingRadius + 50) {
+    for (const column of [hatchColumn(world, vessel.state, pod, up), exitColumn(world, vessel, pod, up)]) {
+      const c = sub(column, eva.state.position);
+      if (dot(c, up) >= -BOARD_RANGE) foot = Math.min(foot, length(sub(c, scale(up, dot(c, up)))));
+    }
   }
-  return best;
+  return Math.min(direct, Math.hypot(foot, lift));
+}
+
+/** Local up at the astronaut and its feet's height above the ground, shared by every hatch it is measured to. */
+function reachFrame(world: World, eva: WorldVessel): { up: Vec3; lift: number } {
+  return { up: normalize(sub(eva.state.position, world.universe.ephem.getBodyState(eva.body, world.ut).position)), lift: footLift(world, eva) };
 }
 
 
 export function boardingTarget(this: World, _internals: WorldInternals): { vessel: WorldVessel; pod: PartState } | null {
   const eva = this.active;
   if (!eva?.state.eva) return null;
+  const { up, lift } = reachFrame(this, eva);
   for (const vessel of this.vessels.values()) {
     if (vessel === eva || vessel.body !== eva.body || vessel.state.destroyed) continue;
     for (const pod of vessel.state.parts) {
       if (seatCapacity(pod) <= (pod.crew?.length ?? 0)) continue;
-      if (hatchReach(this, eva, vessel, pod) <= BOARD_RANGE && length(sub(eva.state.velocity, vessel.state.velocity)) < BOARD_SPEED) return { vessel, pod };
+      if (hatchReach(this, eva, vessel, pod, up, lift) <= BOARD_RANGE && length(sub(eva.state.velocity, vessel.state.velocity)) < BOARD_SPEED) return { vessel, pod };
     }
   }
   return null;
@@ -240,12 +259,13 @@ export function boardingBlocker(this: World, _internals: WorldInternals, whole =
   const eva = this.active;
   if (!eva?.state.eva) return null;
   let best: { name: string; free: boolean; distance: number; speed: number } | null = null;
+  const { up, lift } = reachFrame(this, eva);
   for (const vessel of this.vessels.values()) {
     if (vessel === eva || vessel.body !== eva.body || vessel.state.destroyed) continue;
     for (const pod of vessel.state.parts) {
       if (!seatCapacity(pod)) continue;
       const free = seatCapacity(pod) > (pod.crew?.length ?? 0);
-      const distance = hatchReach(this, eva, vessel, pod);
+      const distance = hatchReach(this, eva, vessel, pod, up, lift);
       // A hatch with a free seat always outranks a full one, however far.
       if (!best || (free && !best.free) || (free === best.free && distance < best.distance)) best = { name: vessel.state.name, free, distance, speed: length(sub(eva.state.velocity, vessel.state.velocity)) };
     }
