@@ -87,7 +87,7 @@ describe('packed ORM in thermal variants', () => {
     expect(v.aoMap).toBeNull();
     expect(v.customProgramCacheKey()).toContain(':orm-ao');
     const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.physical.vertexShader, fragmentShader: THREE.ShaderLib.physical.fragmentShader } as unknown as THREE.WebGLProgramParametersWithUniforms;
-    v.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+    v.onBeforeCompile(shader, { domElement: new EventTarget() } as unknown as THREE.WebGLRenderer);
     expect(shader.fragmentShader).not.toContain('#include <metalnessmap_fragment>');
     expect(shader.fragmentShader).not.toContain('#include <aomap_fragment>');
     expect(shader.fragmentShader).toContain('texelRoughness.b');
