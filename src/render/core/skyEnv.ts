@@ -24,6 +24,44 @@ export interface SkyEnvParams {
   skyTint?: [number, number, number];
   /** Apparent angular radius of the body below (rad); larger = planet fills more of the sky. */
   bodyAngle: number;
+  /** Sunlit local ground radiance at normal incidence (linear RGB, see `surfaceBounce`); omitted = none. */
+  bounce?: readonly [number, number, number];
+}
+
+/** Irradiance of the flight sun light (`sunLight.intensity` before eclipse); the bounce must match the hull's direct light. */
+const SUN_IRRADIANCE = 3.2;
+/** Airless regolith backscatters (Lommel–Seeliger in the terrain shader): the ground looks ~1.3× a Lambert surface. */
+const REGOLITH_GAIN = 1.3;
+const NO_BOUNCE: readonly [number, number, number] = [0, 0, 0];
+
+export interface SurfaceBounceInput {
+  /** Albedo of the ground under the vessel (linear RGB). */
+  albedo: readonly [number, number, number];
+  /** Height above the body's datum (m) and body radius (m). */
+  altitude: number;
+  radius: number;
+  /** 0..1 sun visibility at the vessel (eclipse). */
+  daylight: number;
+  /** Sun light colour (linear RGB, max component 1). */
+  sunColor: readonly [number, number, number];
+  airless: boolean;
+}
+
+/**
+ * Local ground bounce for vessels near a surface. The environment's planet disc is coloured by the body's darkest
+ * palette entry (right for Earth's oceans seen from orbit, far too dark for sunlit regolith), so a landed hull's shadow
+ * side went black on a bright Moon. This is the radiance of the sunlit ground under the vessel at normal incidence
+ * (albedo × E/π); the shader applies the disc's own Lambert term, so sun elevation and the terminator come for free.
+ * Fades out over 0.3 %–3 % of the radius above the datum (Moon ≈ 5–52 km, Earth ≈ 19–190 km), where the local
+ * albedo stops representing the visible disc.
+ */
+export function surfaceBounce(p: SurfaceBounceInput, out: [number, number, number] = [0, 0, 0]): [number, number, number] {
+  const h = p.altitude / Math.max(1, p.radius);
+  const t = Math.min(1, Math.max(0, (h - 0.003) / 0.027));
+  const fade = 1 - t * t * (3 - 2 * t);
+  const k = (SUN_IRRADIANCE / Math.PI) * (p.airless ? REGOLITH_GAIN : 1) * Math.min(1, Math.max(0, p.daylight)) * fade;
+  out[0] = p.albedo[0] * p.sunColor[0] * k; out[1] = p.albedo[1] * p.sunColor[1] * k; out[2] = p.albedo[2] * p.sunColor[2] * k;
+  return out;
 }
 
 const vertex = /* glsl */ `
@@ -40,6 +78,7 @@ const fragment = /* glsl */ `
   uniform vec3 uZenith;
   uniform vec3 uHorizon;
   uniform vec3 uGround;
+  uniform vec3 uBounce;
   uniform vec3 uSunCol;
   uniform float uHorizonCos;
   varying vec3 vDir;
@@ -59,6 +98,7 @@ const fragment = /* glsl */ `
     vec3 bodyNormal = normalize(d * hit + uUp);
     float lambert = max(dot(bodyNormal, uSun), 0.0);
     vec3 groundCol = uGround * (0.06 + 0.94 * lambert);
+    groundCol += uBounce * lambert; // sunlit ground under a landed/low vessel (fill for its shadow side)
     vec3 col = mix(groundCol, skyCol, sky);
     col += uSunCol * (pow(sunAmt, 900.0) * 40.0 + pow(sunAmt, 40.0) * 0.6);
     gl_FragColor = vec4(col, 1.0);
@@ -111,6 +151,7 @@ export class SkyEnvironment {
         uZenith: { value: new THREE.Color() },
         uHorizon: { value: new THREE.Color() },
         uGround: { value: new THREE.Color() },
+        uBounce: { value: new THREE.Color() },
         uSunCol: { value: new THREE.Color() },
         uHorizonCos: { value: 0 },
       },
@@ -125,7 +166,8 @@ export class SkyEnvironment {
   /** Re-bake if inputs changed meaningfully. Returns the current environment texture. */
   update(p: SkyEnvParams, nowMs: number): THREE.Texture | null {
     const q = (x: number, s: number) => Math.round(x * s);
-    const key = [q(p.up.x, 12), q(p.up.y, 12), q(p.up.z, 12), q(p.sun.x, 12), q(p.sun.y, 12), q(p.sun.z, 12), q(p.air, 20), q(p.daylight, 10), q(p.bodyAngle, 20), ...p.ground, ...(p.skyTint ?? [])].join(',');
+    const b = p.bounce ?? NO_BOUNCE;
+    const key = [q(p.up.x, 12), q(p.up.y, 12), q(p.up.z, 12), q(p.sun.x, 12), q(p.sun.y, 12), q(p.sun.z, 12), q(p.air, 20), q(p.daylight, 10), q(p.bodyAngle, 20), ...p.ground, ...(p.skyTint ?? []), q(b[0], 50), q(b[1], 50), q(b[2], 50)].join(',');
     if (key === this.key && this.rt) return this.rt.texture;
     if (this.rt && nowMs - this.lastBake < 1000) return this.rt.texture;
     this.key = key;
@@ -152,6 +194,8 @@ export class SkyEnvironment {
     // Ground / planetshine: albedo lit by the sun, a little skylight even in shadow.
     const g = p.ground;
     u.uGround.value.setRGB(g[0] * 0.9, g[1] * 0.9, g[2] * 0.9);
+    const b = p.bounce ?? NO_BOUNCE;
+    u.uBounce.value.setRGB(b[0], b[1], b[2]);
     u.uSunCol.value.setRGB(1, 0.97, 0.9).multiplyScalar(p.daylight);
     // Horizon dips as the planet shrinks below us: cos of the angle from up to the limb.
     u.uHorizonCos.value = -Math.cos(Math.min(Math.PI / 2, p.bodyAngle));

@@ -13,7 +13,7 @@ import { FlightFx, isBurstEvent } from '../render/fx/FlightFx';
 
 import { PhotoCamera } from '../render/core/PhotoCamera';
 import * as THREE from 'three';
-import { SkyEnvironment } from '../render/core/skyEnv';
+import { SkyEnvironment, surfaceBounce } from '../render/core/skyEnv';
 import { releasePartTexturePixels, restorePartTexturePixels, setPartDetail } from '../render/parts';
 import type { GameAudio } from '../audio';
 import { PART_CATALOG } from '../data/parts';
@@ -169,6 +169,7 @@ export class FlightController {
   private glare: SunGlare;
   private skyEnv!: SkyEnvironment;
   private readonly envUp = new THREE.Vector3();
+  private readonly envBounce: [number, number, number] = [0, 0, 0];
   private sunLight = new THREE.DirectionalLight(0xffffff, 3.2);
   private ambient = new THREE.HemisphereLight(0x8899bb, 0x221a10, 0.12);
   private planets: PlanetLayer;
@@ -1072,7 +1073,8 @@ export class FlightController {
     if (this.photo.active) this.photo.update(photoDt);
     else this.updateCamera(wv, origin, bodyState, airVel, t, dt);
     const camera = this.cam.camera;
-    this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors, u.body(wv.body).surfaceGravity);
+    const groundAltitude = u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain;
+    this.effects.update(wv.state, origin, bodyState.position, bodyState.velocity, wv.body, groundAltitude, air.density, this.reentryHeat, airVel, this.paused ? 0 : dt, this.pipeline.renderer.domElement.height, t, u.body(wv.body).surface.colors, u.body(wv.body).surfaceGravity);
     this.effects.rcs(wv.state,this.rcsOn,this.input.state);
     prof.add('fx', t0);
     if (this.network) {
@@ -1138,6 +1140,18 @@ export class FlightController {
     const envBody = u.body(wv.body);
     const envRel = sub(origin, bodyState.position);
     const envDist = Math.max(envBody.radius, length(envRel));
+    // Ground bounce from the terrain under the vessel: mid palette albedo on land, the darkest (water) entry over liquid.
+    const colors = envBody.surface.colors;
+    const terrain = envBody.solidSurface ? u.terrain(wv.body) : null;
+    // The surface under the vessel is max(liquid level, terrain): at the liquid level means over liquid.
+    const datumAltitude = length(sub(wv.state.position, bodyState.position)) - envBody.radius;
+    const liquidLevel = terrain?.liquid?.level ?? 0;
+    const overLiquid = !!terrain?.ocean && Math.abs(datumAltitude - groundAltitude - liquidLevel) < 0.01;
+    const bounce = envBody.solidSurface ? surfaceBounce({
+      albedo: (overLiquid ? colors[0] : colors[1] ?? colors[0]) ?? [0.3, 0.3, 0.3],
+      altitude: datumAltitude, radius: envBody.radius, daylight: eclipse,
+      sunColor: [this.sunLight.color.r, this.sunLight.color.g, this.sunLight.color.b], airless: !envBody.atmosphere,
+    }, this.envBounce) : undefined;
     this.scene.environment = this.skyEnv.update(
       {
         up: this.envUp.set(envRel.x, envRel.y, envRel.z).normalize(),
@@ -1147,6 +1161,7 @@ export class FlightController {
         ground: envBody.surface.colors[0] ?? [0.3, 0.3, 0.3],
         skyTint: envBody.atmosphere?.tint,
         bodyAngle: Math.asin(Math.min(1, envBody.radius / envDist)),
+        bounce,
       },
       performance.now(),
     );
