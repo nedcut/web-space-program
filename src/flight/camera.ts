@@ -16,7 +16,8 @@ import { liftoffDollyPitch, liftoffDollyScale, LIFTOFF_DOLLY, towerFov } from '.
  * - `free`    — inertial: fixed against the stars, ignores the planet.
  * - `orbital` — "up" is the orbit normal, so the orbit plane is the horizon.
  * - `chase`   — trails the direction of travel (surface velocity in air, orbital velocity in space).
- * - `locked`  — rigidly attached to the vessel and rolls with it.
+ * - `locked`  — rigidly attached to the vessel and rolls with it. On EVA the astronaut turns to face the view instead
+ *               (the camera keeps the horizon), so the two never chase each other round in circles.
  * - `tower`   — a fixed spot on the ground near the vessel that tracks and zooms as it climbs (the controller
  *               supplies the eye point and hands back to `auto` once the craft is far away).
  */
@@ -32,6 +33,11 @@ export const CAMERA_MODE_INFO: Record<CameraMode, { label: string; hint: string 
   locked: { label: 'Locked', hint: 'Attached to the vessel; rolls with it' },
   tower: { label: 'Tower', hint: 'Ground camera near the pad; tracks the climb' },
 };
+
+/** Label and hint for a mode; `locked` means something different on EVA (see {@link CameraFrame.eva}). */
+export function cameraModeInfo(mode: CameraMode, eva: boolean): { label: string; hint: string } {
+  return eva && mode === 'locked' ? { label: 'Locked', hint: 'Astronaut faces where you look' } : CAMERA_MODE_INFO[mode];
+}
 
 /** Mode cycle order. EVA skips orbital/chase (little meaning on foot); the tower only joins near the ground. */
 export function cameraModeCycle(eva: boolean, tower: boolean): readonly CameraMode[] {
@@ -79,6 +85,11 @@ export interface CameraFrame {
   eye?: THREE.Vector3 | null;
   /** Orbit/aim point relative to the scene origin (the vessel COM), e.g. from {@link PivotSmoother}. */
   pivot?: THREE.Vector3;
+  /**
+   * Active vessel is an astronaut. `locked` then keeps the horizon frame: the astronaut faces the view
+   * (`ControlInput.evaFaceView`), and a camera attached to a body that turns toward the camera would spin forever.
+   */
+  eva?: boolean;
 }
 
 /**
@@ -275,7 +286,7 @@ export class FlightCamera {
 
     // Reference frame.
     const up = this.referenceUp(f);
-    if (this._mode === 'locked') {
+    if (this._mode === 'locked' && !f.eva) {
       this.basis.copy(f.vesselQuat);
     } else {
       if (!this.horizonBasis) this.horizonBasis = new THREE.Quaternion().setFromUnitVectors(Y, up);

@@ -38,6 +38,7 @@ function turnToward(q: Quat, target: Quat, a: number): Quat {
  * Controls (`translateX/Y/Z`) are in the camera frame `evaHeading`, levelled to the local horizon near a surface.
  * `rcs` is the jetpack switch: off, the astronaut only walks, runs and jumps; on, translation fires the jetpack
  * whenever the feet are off the ground, and thrusting up lifts off where the jetpack can beat gravity.
+ * Facing follows the walking direction (or the view while thrusting); with `evaFaceView` it always follows the view.
  */
 export function stepEva(v: VesselState, input: ControlInput, env: Environment, t: number, dt: number): StepResult {
   const result: StepResult = { newVessels: [], events: [] };
@@ -92,7 +93,8 @@ export function stepEva(v: VesselState, input: ControlInput, env: Environment, t
     const speed = length(move);
     eva.walking = speed > 0.05;
     eva.walkPhase += speed * dt * 4;
-    if (eva.walking) v.orientation = yawToward(v.orientation, scale(move, 1 / speed), up, turn);
+    if (input.evaFaceView) v.orientation = yawToward(v.orientation, qRotate(frame, v3(0, 0, -1)), up, turn);
+    else if (eva.walking) v.orientation = yawToward(v.orientation, scale(move, 1 / speed), up, turn);
   } else if (jetpack && demand > 0) {
     const used = Math.min(fuel, EVA_THRUST * demand * dt / EVA_EXHAUST_SPEED);
     const dv = EVA_EXHAUST_SPEED * Math.log(v.mass / (v.mass - used));
@@ -103,7 +105,7 @@ export function stepEva(v: VesselState, input: ControlInput, env: Environment, t
     v.telemetry.thrust = used * EVA_EXHAUST_SPEED / dt;
     // Face the way the camera looks while flying (upright near a surface).
     v.orientation = turnToward(v.orientation, frame, turn);
-  }
+  } else if (input.evaFaceView) v.orientation = turnToward(v.orientation, frame, turn);
   const oldPosition = sub(v.position, ref0.position);
   v.position = add(ref1.position, add(oldPosition, add(scale(velocity, dt), scale(gravity, 0.5 * dt * dt))));
   v.velocity = add(ref1.velocity, add(velocity, scale(gravity, dt)));

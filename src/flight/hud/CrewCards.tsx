@@ -1,6 +1,6 @@
 import { memo, useSyncExternalStore } from 'react';
 import { bindingLabel, getBindings, subscribeBindings } from '../../input/bindings';
-import { CAMERA_MODE_INFO } from '../camera';
+import { cameraModeInfo } from '../camera';
 import { Portrait } from './CrewPanel';
 import { AppIcon } from './glyphs';
 import type { HudCallbacks, Telemetry } from './Hud';
@@ -35,7 +35,7 @@ export const CrewCards = memo(function CrewCards({ crew, eva, mapMode, noControl
   const t = { crew, eva, mapMode, noControl };
   const bindings = useSyncExternalStore(subscribeBindings, getBindings);
   const key = (a: Parameters<typeof bindingLabel>[0]) => bindingLabel(a, bindings);
-  const cam = CAMERA_MODE_INFO[cameraMode];
+  const cam = cameraModeInfo(cameraMode, !!eva);
   const shown = t.crew.slice(0, MAX_CARDS);
   return (
     <div className="crew-dock">

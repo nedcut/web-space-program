@@ -46,6 +46,8 @@ export interface ControlInput {
   evaHeading?: Quat;
   evaJump?: boolean;
   evaRun?: boolean;
+  /** EVA: turn to face the camera heading (locked camera) rather than the walking direction; strafing stays sideways. */
+  evaFaceView?: boolean;
   /** Main throttle 0..1. */
   throttle: number;
   sas: SasMode;

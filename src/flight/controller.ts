@@ -58,7 +58,7 @@ import { bindingLabel } from '../input/bindings';
 import { add, cross, dot, length, normalize, scale, sub, type Vec3 } from '../util/vec3';
 import { qRotate } from '../util/quat';
 import { type AssistId } from './assist';
-import { CAMERA_MODE_INFO, FlightCamera, PivotSmoother, TouchdownKick } from './camera';
+import { CAMERA_MODE_INFO, cameraModeInfo, FlightCamera, PivotSmoother, TouchdownKick } from './camera';
 import { hudLensShift, LiftoffDetector, speedFovBoost, towerAvailable, towerPlacement, towerRevertDistance } from './cameraFraming';
 import { warpRate } from '../game/timewarp';
 import * as assist from './controller/assist';
@@ -712,7 +712,8 @@ export class FlightController {
     const u = this.world.universe;
     const tower = !!wv && towerAvailable(u.body(wv.body).solidSurface, u.surfaceInfo(wv.body, wv.state.position, this.world.ut).heightAboveTerrain, wv.state.cache.boundingRadius);
     const mode = this.cam.cycleMode(!!wv?.state.eva, tower);
-    this.world.message(`Camera: ${CAMERA_MODE_INFO[mode].label} — ${CAMERA_MODE_INFO[mode].hint}`, 'info', 2.5);
+    const info = cameraModeInfo(mode, !!wv?.state.eva);
+    this.world.message(`Camera: ${info.label} — ${info.hint}`, 'info', 2.5);
   }
 
   /** Warp to the next maneuver node / apoapsis / periapsis / SOI change. */
@@ -895,6 +896,7 @@ export class FlightController {
       evaHeading: wv?.state.eva ? { x: this.cam.camera.quaternion.x, y: this.cam.camera.quaternion.y, z: this.cam.camera.quaternion.z, w: this.cam.camera.quaternion.w } : undefined,
       evaJump: !!wv?.state.eva && this.evaJumpPending,
       evaRun: this.input.running,
+      evaFaceView: !!wv?.state.eva && this.cam.mode === 'locked',
       pitch: drivingRover ? 0 : s.pitch + trim.pitch,
       wheelThrottle: drivingRover ? -s.pitch : 0,
       yaw: s.yaw + trim.yaw,
@@ -1354,6 +1356,7 @@ export class FlightController {
       frameCentre: mid,
       fovBoost: settings.reduceMotion ? 0 : speedFovBoost(tel.dynamicPressure, spaceBlend),
       eye,
+      eva: !!st.eva,
     }, dt);
   }
 
