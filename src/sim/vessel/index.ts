@@ -166,3 +166,5 @@ export {
   LIGHT_COLORS,
 } from './tweaks';
 export type { TweakDescriptor, TweakKey } from './tweaks';
+
+export { stageBurnTime, NODE_STAGE_PAUSE } from './burnTime';

@@ -994,3 +994,28 @@ M-series/120 Hz and independent video review remain unverified. Scope, assumptio
 - Lint, typecheck and build pass. Full Vitest: **148 files / 1,518 passed / one skipped**, including all stock SAS, ascent, autopilot and scripted orbital/lunar/Saturn/runway/return missions. Used two workers for shared-host render-test timeouts; isolated render reruns also pass without timeout changes. The final solid telemetry cleanup passed the focused engine/WP6 run.
 - Paired `cpu-steady.sh` at 4× CPU throttle shows mean `__perf.sim` cost **0.755 → 0.723 ms/frame pad**, **2.317 → 2.226 ascent**, **1.445 → 1.438 orbit**, with matching draw counts and zero page/console errors. Treat this as roughly flat, not a proven speedup. Controlled Node ticks also stay flat. Six alternating Chrome fixed-tick pairs show powered ascent **−0.3%** and coast **+4.1%** paired medians (aggregate coast **0.3807 → 0.4174 ms/tick**); raw variability remains in the evidence. No exact zero-regression or cross-machine frame-budget claim. Additional steady-step work uses scalar math and topology caches; no new per-step allocations.
 - Before/after real Chrome gravity-turn videos show gradual lean and settling; original frames, telemetry, scripts and raw timings are archived outside Git at `~/.t3/projects/wsp-traces/wp6/`. Independent human feel and structural-warning listening review remain. Scope, tuning caveats and measurement provenance: [WP6 evidence](docs/performance/wp6-handling.md). Implementation: `a7fef318`; no push or merge.
+
+## Transfer-window list and staged burn readouts (2026-10-08, cx/windows)
+
+- In the map planner, choose **Transfer windows to…**, compare departure UTC, wait, departure/capture Δv and
+  flight time, then select a row to verify its encounter and create the maneuver node. **Go now (with plane
+  change)** stays available within the next parking orbit. The same ranked list appears above the planetary
+  porkchop grid. Listing leaves existing nodes intact; cancellation and stale-plan checks use the existing worker
+  path. Values are estimates and capture is a readout, not an automatically added second node.
+- Flight Data, the map node summary and navball share pure stage-aware burn timing with Execute node, including
+  separator activations and the existing 1 s ignition/separation allowance. “Start burn in” now matches time to
+  deliver half the Δv, which can differ from half the elapsed duration across a staging transition. The landing
+  stage chooser and guided aim-point cutoff retain their behavior.
+- Evidence: Node real-scale Earth→Mars launch minima 766.9 days apart; inclined Earth→Moon next-orbit and
+  circular-capture estimates; independent rocket-equation staging/partial-stage tests; worker protocol tests prove
+  listing does not mutate nodes. A 200,000-iteration warmed Node benchmark measured 0.29 µs for full + half-Δv
+  timing together; the helper makes no array copies or sorts. Full suite: 157 files, 1,569 passed / 1 skipped;
+  lint, TypeScript and production build pass. Final changed-area assist/planning regressions are recorded below.
+- Final changed-area verification: all 10 assist/planning/window/burn test files pass (52 tests), including the
+  recent landing-stage and guided-burn regressions. Chrome screenshot/list interaction remains unverified:
+  the T3 automation host disconnected, then GPU-lock acquisition timed out behind other agents' browser QA
+  after bounded 30 s and 180 s waits. The optional capture driver is `C:/wsp-tools/drv/windows-list.mjs`; no
+  browser profile was created. No new render passes or GPU work were added; Apple M-series timing is unmeasured.
+- Two additional delayed-selection integration cases pass for Moon and Mars: list a next-orbit row, advance the
+  clock by 5 s, verify its encounter in the worker, then install exactly one live node bounded to the next orbit
+  through `applyPlanningResult`. The complete planning protocol file passes all 16 tests.

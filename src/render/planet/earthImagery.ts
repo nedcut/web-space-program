@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { QualitySettings } from '../core/quality';
+import { registerOffscreenPass } from '../core/offscreenWarmup';
 import { decodeImagery, releaseImagery } from './imageryDecode';
 import type { ImageStrips as Strips } from './imageStrips';
 
@@ -107,10 +108,10 @@ function urlsOf(level: ManifestLevel, kind: Kind, month: number): string[] {
 }
 
 /** Decoded strips of one image, shared by URL between renderers (reference counted). */
-function acquireStrips(url: string): { key: string; promise: Promise<Strips> } {
+function acquireStrips(url: string, kind: Kind): { key: string; promise: Promise<Strips> } {
   let entry = decoded.get(url);
   if (!entry) {
-    const promise = fetchBlob(url, url.includes('/packs/')).then(blob => decodeImagery(blob, STRIP_BYTES));
+    const promise = fetchBlob(url, url.includes('/packs/')).then(blob => decodeImagery(blob, STRIP_BYTES, kind === 'day' ? 4 : 1));
     entry = { refs: 0, promise };
     decoded.set(url, entry);
     promise.catch(() => { if (decoded.get(url) === entry) decoded.delete(url); });
@@ -164,7 +165,9 @@ class StripUpload {
       return false;
     }
     const strip = this.src.strips[this.next++];
-    const source = new THREE.Texture(strip.bitmap as unknown as HTMLImageElement);
+    const source = strip.pixels
+      ? new THREE.DataTexture(strip.pixels, this.src.width, strip.rows, t.format as THREE.PixelFormat, THREE.UnsignedByteType)
+      : new THREE.Texture(strip.bitmap as unknown as HTMLImageElement);
     t.generateMipmaps = !!t.userData.mips && this.done;
     renderer.copyTextureToTexture(source, t, null, this.at.set(0, strip.y));
     if (this.done) t.generateMipmaps = !!t.userData.mips;
@@ -254,6 +257,7 @@ export class EarthImagery {
   private failedLevels = new Set<string>();
   private mergeScene: THREE.Scene | null = null;
   private mergeMat: THREE.ShaderMaterial | null = null;
+  private unregisterMerge: (() => void) | null = null;
   private readonly mergeCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private pendingTextures: THREE.Texture[] = [];
   private pendingTarget: THREE.WebGLRenderTarget | null = null;
@@ -270,6 +274,8 @@ export class EarthImagery {
       uEarthBlend: { value: new THREE.Vector2(1e9, 2e9) },
     };
     if (typeof fetch === 'undefined' || typeof createImageBitmap === 'undefined') { this.settled = this.cloudSourceSettled = true; return; }
+    // Built up front so the flight warm-up compiles the merge program behind the loading screen.
+    this.mergePass();
     loadManifest().then((m) => {
       if (this.disposed) return;
       const cap = Math.min(maxTextureSize(), opts.maxLevel ? (m.levels.find((x) => x.id === opts.maxLevel)?.width ?? Infinity) : Infinity);
@@ -317,9 +323,9 @@ export class EarthImagery {
     const month = this.wantedMonth;
     // Water masks above 8k cost more memory than they add: Ultra pairs 16k colour with the 8k mask.
     const waterLevel = level.width > 8192 ? (this.levels.filter((l) => l.width <= 8192).pop() ?? level) : level;
-    const day = urlsOf(level, 'day', month).map(acquireStrips);
-    const water = acquireStrips(urlsOf(waterLevel, 'water', month)[0]);
-    const night = this.opts.nightLights ? acquireStrips(urlsOf(level, 'night', month)[0]) : null;
+    const day = urlsOf(level, 'day', month).map(url => acquireStrips(url, 'day'));
+    const water = acquireStrips(urlsOf(waterLevel, 'water', month)[0], 'water');
+    const night = this.opts.nightLights ? acquireStrips(urlsOf(level, 'night', month)[0], 'night') : null;
     const parts = [...day, water, ...(night ? [night] : [])];
     const keys = parts.map((p) => p.key);
     Promise.all([Promise.all(day.map((p) => p.promise)), water.promise, night?.promise ?? null]).then(([dayS, waterS, nightS]) => {
@@ -394,26 +400,37 @@ export class EarthImagery {
   /**
    * Stream for about 6% of the measured frame interval, 1–3 ms: a slow (or throttled) machine gets the same number
    * of frames' worth of work, so streaming time does not grow as the frame rate drops, while 120 Hz frames spend
-   * about a millisecond. The next unit starts only if its predicted cost fits (one unit always runs). A single
-   * allocation or mip generation can still exceed the budget; diagnostics retain the actual maximum.
+   * about a millisecond. The budget is a credit: the next unit starts only if its predicted cost fits, and a unit
+   * that overran (an allocation, mip generation, or any upload where the browser blocks, e.g. Firefox's GPU
+   * process) is repaid by skipping frames, so the average stays at the limit instead of one unit every frame.
+   * Until the first level is on screen (behind the loading screen) the limit is 4 ms. Diagnostics retain the
+   * actual maximum.
    */
   private lastStep = 0;
   private frameMs = 16.7;
   private unitMs = 0.5;
+  private credit = 0;
   step(renderer: THREE.WebGLRenderer): void {
     if (this.disposed) return;
     const timed = typeof performance !== 'undefined';
     const t0 = timed ? performance.now() : 0;
     if (this.lastStep) this.frameMs += (Math.min(100, Math.max(4, t0 - this.lastStep)) - this.frameMs) * 0.2;
     this.lastStep = t0;
-    const limit = Math.min(3, Math.max(1, this.frameMs * 0.06));
+    const limit = this.shown ? Math.min(3, Math.max(1, this.frameMs * 0.06)) : 4;
+    if (!this.jobs && !this.cloudJob) { this.credit = 0; return; }
+    this.credit = Math.min(limit, this.credit + limit);
     let units = 0;
-    const budget = (heavy = false) => !timed || units === 0 || (!heavy && performance.now() - t0 + this.unitMs <= limit);
+    const budget = (heavy = false) => !timed || (this.credit > 0 && (units === 0 || (!heavy && this.unitMs <= this.credit)));
     /** Run one unit and fold its duration into the estimate used to admit the next one. */
     const unit = (work: () => boolean): boolean => {
       const start = timed ? performance.now() : 0;
       const done = work();
-      if (timed) this.unitMs += (performance.now() - start - this.unitMs) * 0.25;
+      if (timed) {
+        const ms = performance.now() - start;
+        this.unitMs += (ms - this.unitMs) * 0.25;
+        // Coarse timers (Firefox: 1 ms) read most units as 0: charge at least the running estimate.
+        this.credit -= Math.max(ms, this.unitMs);
+      }
       this.stats.units++; units++;
       return done;
     };
@@ -437,18 +454,9 @@ export class EarthImagery {
 
   private mergeStrip(renderer: THREE.WebGLRenderer, rt: THREE.WebGLRenderTarget, day: THREE.Texture, water: THREE.Texture,
     t: number, tiles: number, y: number, rows: number, last: boolean): void {
-    if (!this.mergeMat) {
-      this.mergeMat = new THREE.ShaderMaterial({
-        uniforms: { uDay: { value: null }, uWater: { value: null }, uRect: { value: new THREE.Vector4() } },
-        vertexShader: MERGE_VERT, fragmentShader: MERGE_FRAG, depthTest: false, depthWrite: false,
-      });
-      const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.mergeMat);
-      quad.frustumCulled = false;
-      this.mergeScene = new THREE.Scene();
-      this.mergeScene.add(quad);
-    }
+    const merge = this.mergePass();
     const tw = rt.width / tiles;
-    const u = this.mergeMat.uniforms;
+    const u = merge.material.uniforms;
     u.uDay.value = day;
     u.uWater.value = water;
     u.uRect.value.set(t * tw, tw, rt.width, rt.height);
@@ -461,7 +469,7 @@ export class EarthImagery {
     const prevAutoClear = renderer.autoClear;
     renderer.autoClear = false;
     renderer.setRenderTarget(rt);
-    renderer.render(this.mergeScene!, this.mergeCam);
+    renderer.render(merge.scene, this.mergeCam);
     renderer.setRenderTarget(prevTarget);
     renderer.autoClear = prevAutoClear;
     rt.viewport.set(0, 0, rt.width, rt.height);
@@ -469,10 +477,25 @@ export class EarthImagery {
     rt.scissorTest = false;
   }
 
+  private mergePass(): { scene: THREE.Scene; material: THREE.ShaderMaterial } {
+    if (!this.mergeMat || !this.mergeScene) {
+      this.mergeMat = new THREE.ShaderMaterial({
+        uniforms: { uDay: { value: null }, uWater: { value: null }, uRect: { value: new THREE.Vector4() } },
+        vertexShader: MERGE_VERT, fragmentShader: MERGE_FRAG, depthTest: false, depthWrite: false,
+      });
+      const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.mergeMat);
+      quad.frustumCulled = false;
+      this.mergeScene = new THREE.Scene();
+      this.mergeScene.add(quad);
+      this.unregisterMerge = registerOffscreenPass(quad.geometry, this.mergeMat);
+    }
+    return { scene: this.mergeScene, material: this.mergeMat };
+  }
+
   private loadClouds(): void {
     const level = this.target!;
     const lv = this.levels.filter((l) => l.width <= Math.min(level.width, 8192)).pop() ?? level;
-    const part = acquireStrips(urlsOf(lv, 'clouds', 0)[0]);
+    const part = acquireStrips(urlsOf(lv, 'clouds', 0)[0], 'clouds');
     this.cloudKey = part.key;
     part.promise.then((s) => {
       if (this.disposed) return;
@@ -498,6 +521,8 @@ export class EarthImagery {
     this.pendingTextures.forEach((t) => t.dispose());
     this.pendingTarget?.dispose();
     if (this.shown) { this.shown.rt.dispose(); this.shown.night?.dispose(); this.shown = null; }
+    this.unregisterMerge?.();
+    this.unregisterMerge = null;
     this.mergeMat?.dispose();
     this.mergeScene?.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
     this.releaseCloudSource();

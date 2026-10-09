@@ -293,6 +293,7 @@ export default function FlightScene() {
   const partScreen = useCallback((uid: number) => ctrl.current?.partScreenPosition(uid) ?? null, []);
   useEffect(() => {
     document.documentElement.dataset.uiHidden = String(uiHidden);
+    if (ctrl.current) ctrl.current.uiHidden = uiHidden;
     return () => { delete document.documentElement.dataset.uiHidden; };
   }, [uiHidden]);
 

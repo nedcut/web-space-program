@@ -258,7 +258,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   const hazardFailures = stepHazards(v, { air: air.sample, radiation: env.radiation?.(v.position, tMid) ?? 0, timeScale: env.hazardTimeScale ?? 1 }, h, result.events);
   const overheated = opts.disableHeating
     ? []
-    : stepThermal(v, { air: air.sample, airVelocityBody, sunDirBody: sunBody, sunDistance: sun.exposure === 0 ? Infinity : sun.distance }, h);
+    : stepThermal(v, { air: air.sample, airVelocityBody, sunDirBody: sunBody, sunDistance: sun.exposure === 0 ? Infinity : sun.thermalDistance ?? sun.distance }, h);
 
   // Telemetry & situation.
   const pa = scale(Fworld, 1 / m);

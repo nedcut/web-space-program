@@ -30,7 +30,7 @@ export interface TransferWindow {
   seed: [number, number, number];
 }
 
-interface Sample { t: number; dv: number; tof: number; seed: [number, number, number] }
+interface Sample { t: number; dv: number; tof: number; seed: [number, number, number]; capture?: number }
 
 /** Lambert estimate from the vessel's orbit at `t` to a moon's centre, best over a few flight times. */
 /** Apoapsis radius of the conic through (r, v); Infinity when unbound. */
@@ -43,7 +43,7 @@ function apoapsis(mu: number, r: Vec3, v: Vec3): number {
 }
 
 const TOF_SCALES = [0.6, 0.75, 0.9, 1, 1.15, 1.35, 1.6];
-function outbound(o: Orbit, world: PlanningWorld, targetId: string, t: number, tofs?: number[]): Sample | null {
+function outbound(o: Orbit, world: PlanningWorld, targetId: string, t: number, tofs?: number[], captureRadius?: number): Sample | null {
   const s = propagate(o, t);
   const h = cross(s.position, s.velocity);
   const hohmann = tofOf(o, world, targetId, t);
@@ -52,14 +52,19 @@ function outbound(o: Orbit, world: PlanningWorld, targetId: string, t: number, t
   for (const tof of tofs ?? TOF_SCALES.map(f => f * hohmann)) {
     if (!(tof > 0)) continue;
     try {
-      const end = world.universe.ephem.getRelativeState(targetId, t + tof).position;
-      const v1 = solveLambertAround(o.mu, s.position, end, tof, h).departureVelocity;
+      const target = world.universe.body(targetId);
+      const end = world.universe.ephem.getRelativeState(targetId, t + tof);
+      const arc = solveLambertAround(o.mu, s.position, end.position, tof, h);
+      const v1 = arc.departureVelocity;
       // Arcs that leave the central body's SOI before arriving are not transfers in patched conics.
       if (apoapsis(o.mu, s.position, v1) > 0.95 * soi) continue;
       const dvv = sub(v1, s.velocity), dv = length(dvv);
       if (!best || dv < best.dv) {
         const c = inertialDvToManeuver(s, dvv);
-        best = { t, dv, tof, seed: [c.prograde, c.normal, c.radial] };
+        const rp = captureRadius ?? target.radius + 30000;
+        const excess = length(sub(arc.arrivalVelocity, end.velocity));
+        const capture = Math.sqrt(excess * excess + 2 * target.gm / rp) - Math.sqrt(target.gm / rp);
+        best = { t, dv, tof, capture, seed: [c.prograde, c.normal, c.radial] };
       }
     } catch { /* collinear or unbracketed arc: neighbouring flight times cover it */ }
   }
@@ -89,7 +94,7 @@ function homeward(o: Orbit, world: PlanningWorld, parentId: string, moonId: stri
   if (!Number.isFinite(dv)) return null;
   const c = inertialDvToManeuver(s, dvv);
   const tof = Math.PI * Math.sqrt(((rc + peGoal) / 2) ** 3 / mu);
-  return { t, dv, tof, seed: [c.prograde, c.normal, c.radial] };
+  return { t, dv, tof, capture: Math.sqrt(Math.max(0, dot(need, need) + 2 * mu * (1 / peGoal - 1 / rc))) - Math.sqrt(mu / peGoal), seed: [c.prograde, c.normal, c.radial] };
 }
 
 /** Group samples by revolution: the cheapest of the first revolution is "now"; later local minima are windows. */
@@ -102,7 +107,7 @@ function pickWindows(samples: Sample[], earliest: number, revolution: number, no
   }
   const dense = buckets.filter(Boolean);
   const out: TransferWindow[] = [];
-  const add = (s: Sample, kind: TransferWindow['kind']) => out.push({ departure: s.t, wait: s.t - now, dv: s.dv, timeOfFlight: s.tof, kind, seed: s.seed });
+  const add = (s: Sample, kind: TransferWindow['kind']) => out.push({ departure: s.t, wait: s.t - now, dv: s.dv, timeOfFlight: s.tof, captureDv: s.capture, kind, seed: s.seed });
   add(dense[0], 'now');
   const minima: Sample[] = [];
   for (let i = 1; i < dense.length; i++) {
@@ -116,12 +121,12 @@ function pickWindows(samples: Sample[], earliest: number, revolution: number, no
 }
 
 /** Polish a sampled departure over (time, flight time) by simplex. */
-function polishOutbound(o: Orbit, world: PlanningWorld, targetId: string, s: Sample, step: number, earliest: number): Sample {
+function polishOutbound(o: Orbit, world: PlanningWorld, targetId: string, s: Sample, step: number, earliest: number, latest: number, captureRadius?: number): Sample {
   let best = s;
   const cost = (x: number[]) => {
     const t = s.t + x[0];
-    if (t < earliest) return 1e9;
-    const r = outbound(o, world, targetId, t, [s.tof * x[1]]);
+    if (t < earliest || t > latest) return 1e9;
+    const r = outbound(o, world, targetId, t, [s.tof * x[1]], captureRadius);
     if (r && r.dv < best.dv) best = r;
     return r ? r.dv : 1e9;
   };
@@ -158,13 +163,13 @@ export function transferWindows(world: PlanningWorld, targetId: string, search: 
     const step = closed ? T / 18 : span / 60;
     const samples: Sample[] = [];
     for (let t = search.earliest; t <= search.earliest + span; t += step) {
-      const s = outbound(o, world, targetId, t);
+      const s = outbound(o, world, targetId, t, undefined, search.periapsisRadius);
       if (s) samples.push(s);
     }
     return pickWindows(samples, search.earliest, revolution, world.ut, max)
       .map(w => {
-        const p = polishOutbound(o, world, targetId, { t: w.departure, dv: w.dv, tof: w.timeOfFlight, seed: w.seed }, step, search.earliest);
-        return { ...w, departure: p.t, wait: p.t - world.ut, dv: p.dv, timeOfFlight: p.tof, seed: p.seed };
+        const p = polishOutbound(o, world, targetId, { t: w.departure, dv: w.dv, tof: w.timeOfFlight, seed: w.seed, capture: w.captureDv }, step, search.earliest, search.earliest + (w.kind === 'now' ? Math.min(revolution, span) : span), search.periapsisRadius);
+        return { ...w, departure: p.t, wait: p.t - world.ut, dv: p.dv, captureDv: p.capture, timeOfFlight: p.tof, seed: p.seed };
       });
   }
   if (central.parent === targetId && closed) {
@@ -196,12 +201,12 @@ export function transferWindows(world: PlanningWorld, targetId: string, search: 
       if (arg.dv < best.dv) best = arg;
       nelderMead(x => {
         const t = arg.t + x[0];
-        if (t < search.earliest) return 1e9;
+        if (t < search.earliest || t > search.earliest + (w.kind === 'now' ? T : span)) return 1e9;
         const s = homeward(o, world, targetId, central.id, peGoal, t, arg.phi + x[1], arg.vr + x[2]);
         if (s && s.dv < best.dv) best = s;
         return s ? s.dv : 1e9;
       }, [0, 0, 0], [T / 96, 0.13, 0.1 * vMoon], 120);
-      return { ...w, departure: best.t, wait: best.t - world.ut, dv: best.dv, timeOfFlight: best.tof, seed: best.seed };
+      return { ...w, departure: best.t, wait: best.t - world.ut, dv: best.dv, captureDv: best.capture, timeOfFlight: best.tof, seed: best.seed };
     };
     return pickWindows(samples, search.earliest, T, world.ut, max).map(polish);
   }

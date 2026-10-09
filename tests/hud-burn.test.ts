@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { formatDuration } from '../src/util/format';
+import { flightData } from '../src/game/flightData';
 import { BurnTracker, stageBurnTime } from '../src/flight/controller/burn';
 import { PART_CATALOG } from '../src/data/parts';
 import { buildOrbiter } from '../src/editor/stockCrafts';
@@ -41,6 +43,21 @@ describe('navball maneuver burn readout', () => {
     // Editing the node re-anchors the plan on the current orbit.
     node.prograde = 30;
     expect(tracker.update(world, wv, [], 1)!.dvRemaining).toBeCloseTo(30, 3);
+  });
+  it('uses the same staged duration and half-Δv lead in Flight Data and navball countdown', () => {
+    const { world, wv } = orbiting();
+    const first = wv.state.nextStage;
+    const stages = [stage({ stage: first, dv: 200, thrust: 50000, startMass: 5000, isp: 300 }),
+      stage({ stage: first - 1, dv: 1000, thrust: 10000, startMass: 1000, isp: 340 })];
+    world.addNode(world.ut + 600).prograde = 500;
+    const burn = new BurnTracker().update(world, wv, stages, first + 1)!;
+    const expected = stageBurnTime(stages, first, 500, 1, false);
+    expect(burn.burnTime).toBeCloseTo(expected, 8);
+    expect(burn.burnStartLead).toBeCloseTo(stageBurnTime(stages, first, 250, 1, false), 8);
+    expect(Math.abs(burn.burnStartLead - burn.burnTime / 2)).toBeGreaterThan(0.1);
+    const data = flightData(world, wv, stages, { crossings: [], impact: null });
+    const row = data.find(d => d.title === 'Propulsion')!.rows.find(r => r[0] === 'Next node burn')!;
+    expect(row[1]).toBe(formatDuration(expected));
   });
   it('spends stages in firing order for the burn time estimate', () => {
     const upper = stage({ stage: 1, dv: 500, thrust: 50000, startMass: 5000, isp: 320 });
