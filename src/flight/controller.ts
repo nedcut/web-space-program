@@ -1,3 +1,4 @@
+import { HUD_BLOCKS } from './hud/hudBlocks';
 import { SpeedModeTracker } from './speedMode';
 import { dockingModeAfterEvent } from './dockingMode';
 import { explosionDiameter, separationPunch, impactPunch, structuralStressPunch } from '../render/fx/eventDesign';
@@ -291,6 +292,7 @@ export class FlightController {
     this.mapUi = new FlightMap(this);
     // The navball cluster owns the bottom centre in flight; the map overlay shows the focus path instead.
     this.map.showBreadcrumb = false;
+    this.map.setHudBlocks(HUD_BLOCKS);
     this.disposers.push(() => this.mapUi.dispose());
 
     this.disposers.push(this.cam.attach(canvas, () => !this.mapMode && !this.paused));
