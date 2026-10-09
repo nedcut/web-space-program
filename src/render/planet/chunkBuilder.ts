@@ -3,8 +3,13 @@
  * Workers and on the main thread.
  *
  * A chunk is addressed by (face, level, ix, iy): face ∈ 0..5, level 0 = whole face, ix/iy ∈ [0, 2^level).
- * Vertices are stored RELATIVE TO THE CHUNK CENTRE (float32-safe); the chunk centre is returned in float64
- * body-fixed coordinates so the renderer can place the mesh via the floating origin.
+ * Vertices are stored relative to a per-chunk ORIGIN (float32-safe): the 1024 m-aligned body-fixed point at or
+ * below the chunk centre, returned in float64 so the renderer places the mesh via the floating origin. Because the
+ * origin is aligned to the detail-texture period, the local position doubles as the seamless detail coordinate.
+ *
+ * Packed vertex layout (20 bytes, every attribute 4-byte aligned for Metal/ANGLE):
+ *   land:  position f32×3 · aNormalOct int16×2 (normalised octahedral) · aColor uint8×4 (normalised, gamma-2 RGB)
+ *   ocean: position f32×3 · aNormalOct int16×2 · aDepth f32
  */
 import type { Terrain, RGB } from '../../sim/terrain/api';
 
@@ -26,23 +31,24 @@ export interface ChunkBuildParams extends ChunkKey {
 export interface ChunkData extends ChunkKey {
   /** Chunk centre in body-fixed coordinates (float64), on the displaced surface. */
   center: [number, number, number];
+  /** Body-fixed origin of the vertex positions (float64, multiples of DETAIL_PERIOD). */
+  origin: [number, number, number];
   /** Bounding sphere radius around center (m). */
   boundRadius: number;
   minHeight: number;
   maxHeight: number;
+  /** Body-fixed position minus `origin` (×3): also the seamless detail-texture coordinate. */
   positions: Float32Array;
-  normals: Float32Array;
-  /** Albedo RGB (linear, 0..1) packed as Uint8 normalised (×3). */
+  /** Octahedral-encoded unit normals, Int16 normalised (×2). Decode with `octDecode`. */
+  normals: Int16Array;
+  /** Albedo RGB (gamma-2 encoded, 0..1) packed as Uint8 normalised (×4, alpha unused). */
   colors: Uint8Array;
-  /** Body-fixed position minus a 1024 m-aligned per-chunk offset (seamless detail texturing). */
-  detail: Float32Array;
   /** Optional ocean mesh (same grid at radius R + liquid level, attribute depth). Land and ocean share
    * `chunkIndices(res)`; chunks carry no index arrays of their own. */
   ocean?: {
     positions: Float32Array;
-    normals: Float32Array;
+    normals: Int16Array;
     depth: Float32Array;
-    detail: Float32Array;
   };
   buildMs: number;
 }
@@ -91,6 +97,32 @@ export function chunkId(k: ChunkKey): string {
 
 const DETAIL_PERIOD = 1024;
 
+/** Write unit vector (x,y,z) as an Int16 normalised octahedral pair at out[i], out[i+1]. */
+export function octEncode(x: number, y: number, z: number, out: Int16Array, i: number): void {
+  const l1 = Math.abs(x) + Math.abs(y) + Math.abs(z) || 1;
+  let u = x / l1, v = y / l1;
+  if (z < 0) {
+    const pu = u;
+    u = (1 - Math.abs(v)) * (pu >= 0 ? 1 : -1);
+    v = (1 - Math.abs(pu)) * (v >= 0 ? 1 : -1);
+  }
+  out[i] = Math.round(Math.max(-1, Math.min(1, u)) * 32767);
+  out[i + 1] = Math.round(Math.max(-1, Math.min(1, v)) * 32767);
+}
+
+/** Inverse of `octEncode` (the shaders' `octDecode`), normalised. */
+export function octDecode(a: number, b: number, out: [number, number, number]): [number, number, number] {
+  const u = Math.max(a / 32767, -1), v = Math.max(b / 32767, -1);
+  let x = u, y = v;
+  const z = 1 - Math.abs(u) - Math.abs(v);
+  const t = Math.max(-z, 0);
+  x += x >= 0 ? -t : t;
+  y += y >= 0 ? -t : t;
+  const l = Math.sqrt(x * x + y * y + z * z) || 1;
+  out[0] = x / l; out[1] = y / l; out[2] = z / l;
+  return out;
+}
+
 /** Build one chunk. Cost ≈ (res+3)² terrain queries. */
 export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
   const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
@@ -110,7 +142,7 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
   let minH = Infinity, maxH = -Infinity;
   const vCount = N * N + 4 * N;
   // Albedo, gamma-2 encoded so dark albedos stay precise in 8 bits (decoded as c*c in the shader).
-  const colors = new Uint8Array(vCount * 3);
+  const colors = new Uint8Array(vCount * 4);
   const col: RGB = [0.5, 0.5, 0.5];
   // Vertex spacing as an angle: colour detail finer than the mesh fades instead of speckling.
   const footprint = chunkEdgeLength(level, R) / res / R;
@@ -134,7 +166,7 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
         if (h > maxH) maxH = h;
         // Colour immediately after the height query so presets can reuse side outputs (no re-evaluation).
         if (terrain.colorAt) terrain.colorAt(d[0], d[1], d[2], h, col, footprint);
-        const vi = ((j - 1) * N + (i - 1)) * 3;
+        const vi = ((j - 1) * N + (i - 1)) * 4;
         colors[vi] = Math.round(Math.sqrt(Math.min(1, Math.max(0, col[0]))) * 255);
         colors[vi + 1] = Math.round(Math.sqrt(Math.min(1, Math.max(0, col[1]))) * 255);
         colors[vi + 2] = Math.round(Math.sqrt(Math.min(1, Math.max(0, col[2]))) * 255);
@@ -153,22 +185,18 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
   const edge = chunkEdgeLength(level, R);
   const skirtDepth = Math.max(edge / res * 1.5, (maxH - minH) * 0.2 + 2);
   const positions = new Float32Array(vCount * 3);
-  const normals = new Float32Array(vCount * 3);
-  const detail = new Float32Array(vCount * 3);
+  const normals = new Int16Array(vCount * 2);
   let bound2 = 0;
 
   const writeVertex = (vi: number, k: number, sink: number) => {
     const dx = dirs[k * 3], dy = dirs[k * 3 + 1], dz = dirs[k * 3 + 2];
     const X = px[k] - dx * sink, Y = py[k] - dy * sink, Z = pz[k] - dz * sink;
     const lx = X - cx, ly = Y - cy, lz = Z - cz;
-    positions[vi * 3] = lx;
-    positions[vi * 3 + 1] = ly;
-    positions[vi * 3 + 2] = lz;
     const b = lx * lx + ly * ly + lz * lz;
     if (b > bound2) bound2 = b;
-    detail[vi * 3] = X - offX;
-    detail[vi * 3 + 1] = Y - offY;
-    detail[vi * 3 + 2] = Z - offZ;
+    positions[vi * 3] = X - offX;
+    positions[vi * 3 + 1] = Y - offY;
+    positions[vi * 3 + 2] = Z - offZ;
   };
 
   // 2) Interior vertices with central-difference normals.
@@ -185,9 +213,7 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
       nx /= nl; ny /= nl; nz /= nl;
       // Ensure outward
       if (nx * dirs[k * 3] + ny * dirs[k * 3 + 1] + nz * dirs[k * 3 + 2] < 0) { nx = -nx; ny = -ny; nz = -nz; }
-      normals[vi * 3] = nx;
-      normals[vi * 3 + 1] = ny;
-      normals[vi * 3 + 2] = nz;
+      octEncode(nx, ny, nz, normals, vi * 2);
     }
   }
 
@@ -208,12 +234,11 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
       const k = (j + 1) * G + (i + 1);
       const vi = N * N + e * N + n;
       writeVertex(vi, k, skirtDepth);
-      normals[vi * 3] = normals[src * 3];
-      normals[vi * 3 + 1] = normals[src * 3 + 1];
-      normals[vi * 3 + 2] = normals[src * 3 + 2];
-      colors[vi * 3] = colors[src * 3];
-      colors[vi * 3 + 1] = colors[src * 3 + 1];
-      colors[vi * 3 + 2] = colors[src * 3 + 2];
+      normals[vi * 2] = normals[src * 2];
+      normals[vi * 2 + 1] = normals[src * 2 + 1];
+      colors[vi * 4] = colors[src * 4];
+      colors[vi * 4 + 1] = colors[src * 4 + 1];
+      colors[vi * 4 + 2] = colors[src * 4 + 2];
     }
   }
 
@@ -222,16 +247,13 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
   if (p.ocean && minH < liquidLevel + 0.5) {
     const oN = N * N + 4 * N;
     const opos = new Float32Array(oN * 3);
-    const onrm = new Float32Array(oN * 3);
+    const onrm = new Int16Array(oN * 2);
     const odep = new Float32Array(oN);
-    const odet = new Float32Array(oN * 3);
     const writeO = (vi: number, k: number, sink: number) => {
       const dx = dirs[k * 3], dy = dirs[k * 3 + 1], dz = dirs[k * 3 + 2];
       const r = R + liquidLevel - sink;
-      const X = dx * r, Y = dy * r, Z = dz * r;
-      opos[vi * 3] = X - cx; opos[vi * 3 + 1] = Y - cy; opos[vi * 3 + 2] = Z - cz;
-      onrm[vi * 3] = dx; onrm[vi * 3 + 1] = dy; onrm[vi * 3 + 2] = dz;
-      odet[vi * 3] = X - offX; odet[vi * 3 + 1] = Y - offY; odet[vi * 3 + 2] = Z - offZ;
+      opos[vi * 3] = dx * r - offX; opos[vi * 3 + 1] = dy * r - offY; opos[vi * 3 + 2] = dz * r - offZ;
+      octEncode(dx, dy, dz, onrm, vi * 2);
       odep[vi] = liquidLevel - hs[k];
     };
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) writeO(j * N + i, (j + 1) * G + (i + 1), 0);
@@ -242,17 +264,18 @@ export function buildChunk(terrain: Terrain, p: ChunkBuildParams): ChunkData {
         const i = src % N, j = Math.floor(src / N);
         writeO(N * N + e * N + n, (j + 1) * G + (i + 1), oskirt);
       }
-    ocean = { positions: opos, normals: onrm, depth: odep, detail: odet };
+    ocean = { positions: opos, normals: onrm, depth: odep };
   }
 
   const t1 = typeof performance !== 'undefined' ? performance.now() : 0;
   return {
     face, level, ix, iy,
     center: [cx, cy, cz],
+    origin: [offX, offY, offZ],
     boundRadius: Math.sqrt(bound2),
     minHeight: minH,
     maxHeight: maxH,
-    positions, normals, colors, detail, ocean,
+    positions, normals, colors, ocean,
     buildMs: t1 - t0,
   };
 }

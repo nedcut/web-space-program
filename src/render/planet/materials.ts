@@ -189,7 +189,21 @@ varying vec3 vAerialL;
 varying vec3 vAerialT;
 `;
 
-/** The chunk matrix is a floating-origin transform, exactly as on an ordinary Mesh. */
+/** Packed chunk normal: Int16 normalised octahedral pair (chunkBuilder `octEncode`), body-fixed. */
+const GLSL_OCT_DECODE = /* glsl */ `
+attribute vec2 aNormalOct;
+vec3 octDecode(vec2 e) {
+  vec3 n = vec3(e, 1.0 - abs(e.x) - abs(e.y));
+  float t = max(-n.z, 0.0);
+  n.xy += vec2(n.x >= 0.0 ? -t : t, n.y >= 0.0 ? -t : t);
+  return normalize(n);
+}
+`;
+
+/**
+ * The chunk matrix is a floating-origin transform, exactly as on an ordinary Mesh. Positions are relative to the
+ * chunk's 1024 m-aligned origin, so they are also the seamless detail-texture coordinate.
+ */
 const GLSL_CHUNK_POSITION = /* glsl */ `
   vec4 localPosition = vec4(position, 1.0);
   #ifdef USE_BATCHING
@@ -285,9 +299,9 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
     },
     vertexShader: /* glsl */ `
       ${GLSL_LOGDEPTH_VERT_PARS}
-      attribute vec3 aColor;
+      attribute vec4 aColor;
       #include <batching_pars_vertex>
-      attribute vec3 aDetail;
+      ${GLSL_OCT_DECODE}
       varying vec3 vWorldPos;
       varying vec3 vNormalBF;
       varying vec3 vColor;
@@ -305,9 +319,9 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       void main() {
         ${GLSL_CHUNK_POSITION}
         vWorldPos = wp.xyz;
-        vNormalBF = normal;
-        vColor = aColor * aColor; // stored gamma-2 encoded
-        vDetail = aDetail;
+        vNormalBF = octDecode(aNormalOct);
+        vColor = aColor.rgb * aColor.rgb; // stored gamma-2 encoded
+        vDetail = position;
         computeAerial(wp.xyz);
         #ifdef EARTH_IMAGERY
           // Imagery water drawn by terrain must match the ocean mesh beside it. Only vertices near the
@@ -662,7 +676,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
       ${GLSL_LOGDEPTH_VERT_PARS}
       attribute float aDepth;
       #include <batching_pars_vertex>
-      attribute vec3 aDetail;
+      ${GLSL_OCT_DECODE}
       varying vec3 vWorldPos;
       varying vec3 vUpBF;
       varying float vDepth;
@@ -677,16 +691,17 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
       void main() {
         ${GLSL_CHUNK_POSITION}
         vWorldPos = wp.xyz;
-        vUpBF = normal;
+        vec3 upBF = octDecode(aNormalOct);
+        vUpBF = upBF;
         vDepth = aDepth;
-        vDetail = aDetail;
+        vDetail = position;
         computeAerial(wp.xyz);
         #if defined(EARTH_IMAGERY) && !defined(EARTH_RICH)
           // From altitude Medium blends to the analytic reflection: only march where it is still visible.
-          if (uEarthImagery < 0.5 || distance(cameraPosition, wp.xyz) < uEarthBlend.y) computeSkyRefl(wp.xyz, normalize(uBodyRot * normal));
+          if (uEarthImagery < 0.5 || distance(cameraPosition, wp.xyz) < uEarthBlend.y) computeSkyRefl(wp.xyz, normalize(uBodyRot * upBF));
           else vSkyRefl = vec3(0.0);
         #else
-          computeSkyRefl(wp.xyz, normalize(uBodyRot * normal));
+          computeSkyRefl(wp.xyz, normalize(uBodyRot * upBF));
         #endif
         gl_Position = projectionMatrix * viewMatrix * wp;
         ${GLSL_LOGDEPTH_VERT}

@@ -36,7 +36,7 @@ describe('distinctive surfaces', () => {
     expect(c.ocean).toBeDefined();
     for(let i=0;i<81;i++) {
       const p=c.ocean!.positions;
-      expect(Math.hypot(p[i*3]+c.center[0],p[i*3+1]+c.center[1],p[i*3+2]+c.center[2])).toBeCloseTo(199960,2);
+      expect(Math.hypot(p[i*3]+c.origin[0],p[i*3+1]+c.origin[1],p[i*3+2]+c.origin[2])).toBeCloseTo(199960,2);
       expect(c.ocean!.depth[i]).toBe(60);
     }
   });

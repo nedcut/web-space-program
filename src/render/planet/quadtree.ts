@@ -52,9 +52,9 @@ const MAX_EVICTIONS = 64;
 
 /** CPU bytes held by a chunk's land and ocean arrays (the index pattern is shared). */
 function chunkBytes(d: ChunkData): number {
-  let b = d.positions.byteLength + d.normals.byteLength + d.colors.byteLength + d.detail.byteLength;
+  let b = d.positions.byteLength + d.normals.byteLength + d.colors.byteLength;
   const o = d.ocean;
-  if (o) b += o.positions.byteLength + o.normals.byteLength + o.depth.byteLength + o.detail.byteLength;
+  if (o) b += o.positions.byteLength + o.normals.byteLength + o.depth.byteLength;
   return b;
 }
 /** View key: body-fixed camera position (3), orientation quaternion (4), screen factor, projection x/y/z scale. */
@@ -308,11 +308,13 @@ export class Quadtree {
     node.data = data;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
-    g.setAttribute('aColor', new THREE.BufferAttribute(data.colors, 3, true));
-    g.setAttribute('aDetail', new THREE.BufferAttribute(data.detail, 3));
+    g.setAttribute('aNormalOct', new THREE.BufferAttribute(data.normals, 2, true));
+    g.setAttribute('aColor', new THREE.BufferAttribute(data.colors, 4, true));
     g.setIndex(this.index);
-    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), data.boundRadius);
+    // Positions are relative to the 1024 m-aligned origin, not the centre (both body-fixed float64).
+    const [cx, cy, cz] = data.center, [ox, oy, oz] = data.origin;
+    const local = new THREE.Vector3(cx - ox, cy - oy, cz - oz);
+    g.boundingSphere = new THREE.Sphere(local, data.boundRadius);
     const m = new THREE.Mesh(g, this.opts.terrainMaterial);
     m.visible = false;
     m.matrixAutoUpdate = false;
@@ -322,11 +324,10 @@ export class Quadtree {
     if (data.ocean && this.opts.oceanMaterial) {
       const og = new THREE.BufferGeometry();
       og.setAttribute('position', new THREE.BufferAttribute(data.ocean.positions, 3));
-      og.setAttribute('normal', new THREE.BufferAttribute(data.ocean.normals, 3));
+      og.setAttribute('aNormalOct', new THREE.BufferAttribute(data.ocean.normals, 2, true));
       og.setAttribute('aDepth', new THREE.BufferAttribute(data.ocean.depth, 1));
-      og.setAttribute('aDetail', new THREE.BufferAttribute(data.ocean.detail, 3));
       og.setIndex(this.index);
-      og.boundingSphere = new THREE.Sphere(new THREE.Vector3(), data.boundRadius + Math.max(0, -data.minHeight));
+      og.boundingSphere = new THREE.Sphere(local.clone(), data.boundRadius + Math.max(0, -data.minHeight));
       const om = new THREE.Mesh(og, this.opts.oceanMaterial);
       om.visible = false;
       om.matrixAutoUpdate = false;
@@ -344,7 +345,7 @@ export class Quadtree {
 
   /**
    * Show the selected chunks, positioning each via the floating origin:
-   *   renderPos = bodyRender + rot · centre   (float64 → float32)
+   *   renderPos = bodyRender + rot · origin   (float64 → float32)
    */
   place(bodyRenderX: number, bodyRenderY: number, bodyRenderZ: number, rot: THREE.Quaternion, rotM: THREE.Matrix3): void {
     const e = rotM.elements; // column-major
@@ -360,7 +361,7 @@ export class Quadtree {
       }
     }
     for (const n of this.selected) {
-      const [x, y, z] = n.data!.center;
+      const [x, y, z] = n.data!.origin;
       const px = bodyRenderX + e[0] * x + e[3] * y + e[6] * z;
       const py = bodyRenderY + e[1] * x + e[4] * y + e[7] * z;
       const pz = bodyRenderZ + e[2] * x + e[5] * y + e[8] * z;

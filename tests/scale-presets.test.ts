@@ -55,8 +55,8 @@ it('real-size terrain chunks preserve adjoining near-surface vertices to sub-mil
   const a = buildChunk(universe.terrain('earth'), params);
   const b = buildChunk(universe.terrain('earth'), { ...params, ix: params.ix + 1 });
   for (let row = 0; row <= 8; row++) for (let axis = 0; axis < 3; axis++) {
-    const x = a.center[axis] + a.positions[(row * 9 + 8) * 3 + axis];
-    const y = b.center[axis] + b.positions[row * 9 * 3 + axis];
+    const x = a.origin[axis] + a.positions[(row * 9 + 8) * 3 + axis];
+    const y = b.origin[axis] + b.positions[row * 9 * 3 + axis];
     expect(Math.abs(x - y)).toBeLessThan(0.001);
   }
 });

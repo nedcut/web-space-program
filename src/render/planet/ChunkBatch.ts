@@ -21,6 +21,7 @@ function glType(gl: WebGL2RenderingContext, array: THREE.TypedArray): number {
   if (array instanceof Float32Array) return gl.FLOAT;
   if (array instanceof Uint8Array) return gl.UNSIGNED_BYTE;
   if (array instanceof Uint16Array) return gl.UNSIGNED_SHORT;
+  if (array instanceof Int16Array) return gl.SHORT;
   if (array instanceof Uint32Array) return gl.UNSIGNED_INT;
   throw new Error('ChunkBatch: unsupported attribute array');
 }
@@ -47,6 +48,8 @@ export class ChunkBatch {
   private readonly scratch: Uint32Array;
   private readonly sources: (THREE.Mesh | null)[] = [];
   private readonly radii: number[] = [];
+  /** Bounding-sphere centres in chunk-local coordinates (x, y, z per slot). */
+  private centres = new Float64Array(MIN_SLOTS * 3);
   private matrices!: THREE.DataTexture;
   private indirect!: THREE.DataTexture;
   private lowSince = -1;
@@ -92,7 +95,16 @@ export class ChunkBatch {
       slot = this.allocate(source);
       this.slots.set(source, slot);
       this.sources[slot] = source;
-      this.radii[slot] = source.geometry.boundingSphere?.radius ?? Infinity;
+      const bs = source.geometry.boundingSphere;
+      this.radii[slot] = bs?.radius ?? Infinity;
+      if (this.centres.length < (slot + 1) * 3) {
+        const grown = new Float64Array(Math.max(this.centres.length * 2, (slot + 1) * 3));
+        grown.set(this.centres);
+        this.centres = grown;
+      }
+      this.centres[slot * 3] = bs?.center.x ?? 0;
+      this.centres[slot * 3 + 1] = bs?.center.y ?? 0;
+      this.centres[slot * 3 + 2] = bs?.center.z ?? 0;
       this.upload(slot, source);
       changed = true;
     }
@@ -221,6 +233,7 @@ export class ChunkBatch {
       this.slots.set(src, to);
       this.sources[to] = src;
       this.radii[to] = this.radii[from];
+      this.centres.copyWithin(to * 3, from * 3, from * 3 + 3);
     }
     this.sources.length = this.radii.length = this.count;
     this.free = [];
@@ -299,14 +312,18 @@ export class ChunkBatch {
   private prepareDraws(camera: THREE.Camera): void {
     const m = this.mesh as THREE.Mesh & { _multiDrawStarts: Int32Array; _multiDrawCounts: Int32Array; _multiDrawCount: number };
     const starts = m._multiDrawStarts, counts = m._multiDrawCounts, ids = this.indirect.image.data as Uint32Array;
-    const mat = this.matrices.image.data as Float32Array;
+    const mat = this.matrices.image.data as Float32Array, c = this.centres;
     _matrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(this.mesh.matrixWorld);
     _frustum.setFromProjectionMatrix(_matrix, camera.coordinateSystem, camera.reversedDepth);
     let n = 0;
     if (!this.lost) {
       for (let s = 0; s < this.count; s++) {
         if (!this.sources[s]) continue;
-        _sphere.center.set(mat[s * 16 + 12], mat[s * 16 + 13], mat[s * 16 + 14]);
+        const o = s * 16, x = c[s * 3], y = c[s * 3 + 1], z = c[s * 3 + 2];
+        _sphere.center.set(
+          mat[o + 12] + mat[o] * x + mat[o + 4] * y + mat[o + 8] * z,
+          mat[o + 13] + mat[o + 1] * x + mat[o + 5] * y + mat[o + 9] * z,
+          mat[o + 14] + mat[o + 2] * x + mat[o + 6] * y + mat[o + 10] * z);
         _sphere.radius = this.radii[s];
         if (!_frustum.intersectsSphere(_sphere)) continue;
         starts[n] = s * this.indices * 4;
