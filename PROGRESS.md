@@ -38,6 +38,10 @@ wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLA
   rocks sit in the regolith with contact/cast shadows; your lander's shadow falls on the ground (also on Mars etc.); a
   radial dust sheet races out under the engine below ~100 m.
 - **Backlit vessels** keep their shape in space (fill + sun-rim lighting): about 2× brighter on the shadow side.
+- **Moon night side (round 4):** earthshine now lights it faintly — crater rims are readable from 3 km and from lunar
+  orbit under a near-full Earth (it was pitch black: the Earth's light was computed from its green land colour).
+- **Small craters are now a High/Ultra feature:** on Medium they cost ~0.25 ms of GPU close to the Moon (+15 % of the
+  frame there); High and Ultra keep all three scales.
 - **Please look at:** the pad at liftoff (Meridian), and a Moon landing. Note the Suicide Burn mission lands with the Sun
   ~88° high, so the lander's shadow is straight underneath you; a lower Sun there would look far better (scenario change,
   not made). Screenshots: `docs/screenshots/wp5/`.
