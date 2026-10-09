@@ -94,8 +94,8 @@ function hatchColumn(world: World, v: VesselState, pod: PartState, up: Vec3, tur
 }
 
 /**
- * Where to climb down: the hatch side, unless that is over the pad's open flame pit; then the side (hatch side,
- * quarter turns, opposite) that needs the shortest walk out to clear the pit.
+ * Where to climb down: the hatch side, unless that is over the pad's flame pit (grated, but right under the engines);
+ * then the side (hatch side, quarter turns, opposite) that needs the shortest walk out to clear the pit.
  */
 const exitMemo = new WeakMap<PartState, { ut: number; vessel: VesselState; column: Vec3 }>();
 function exitColumn(world: World, vessel: WorldVessel, pod: PartState, up: Vec3): Vec3 {
@@ -140,7 +140,7 @@ function inPit(pad: PadFrame, p: Vec3): boolean {
   const m = LAUNCH_PAD_PIT.half + 0.6;
   return Math.abs(x) < m && z < m && z > LAUNCH_PAD_PIT.trenchEnd - 1;
 }
-/** True when a point is over the launch pad's flame hole or trench (drawn open; collision terrain is flat there). */
+/** True when a point is over the launch pad's flame hole or trench (grated over, flush with the deck). */
 export function overPadPit(world: World, body: string, p: Vec3): boolean {
   const pad = padFrame(world, body);
   return !!pad && inPit(pad, p);

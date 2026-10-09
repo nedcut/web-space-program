@@ -38,7 +38,7 @@ const EDGE = 28;
 
 /**
  * Where a marker goes for a view-space point (camera looks down −Z): on screen, or clamped to the view's edge in its
- * direction (also when behind the camera). `ndc` is the point's projection, valid when in front. Writes CSS px to
+ * direction (behind the camera: the bottom edge, toward its side). `ndc` is the point's projection, valid when in front. Writes CSS px to
  * `out` (x right, y down) and returns the arrow angle (rad, screen space, 0 = right) or NaN when on screen.
  */
 export function markerPlacement(view: { x: number; y: number; z: number }, ndc: { x: number; y: number }, width: number, height: number, out: { x: number; y: number }, top = EDGE): number {
@@ -47,8 +47,9 @@ export function markerPlacement(view: { x: number; y: number; z: number }, ndc: 
     out.x = (ndc.x + 1) * 0.5 * width; out.y = (1 - ndc.y) * 0.5 * height;
     return NaN;
   }
-  // Screen-space direction (px, y up): the projection in front, the view-space offset behind.
-  let dx = front ? ndc.x * width : view.x, dy = front ? ndc.y * height : view.y;
+  // Screen-space direction (px, y up): the projection in front; behind the camera the bottom edge ("turn round"),
+  // toward the side the point lies on.
+  let dx = front ? ndc.x * width : view.x, dy = front ? ndc.y * height : -(Math.abs(view.y) + Math.abs(view.z));
   if (dx === 0 && dy === 0) dy = -1;
   // The top edge sits below the HUD's top bar.
   const hw = Math.max(1, width / 2 - EDGE), hh = Math.max(1, height / 2 - (dy > 0 ? top : EDGE));

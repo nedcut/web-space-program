@@ -57,10 +57,16 @@ describe('EVA hatch marker', () => {
     // ... below the HUD's top bar when given its height.
     markerPlacement({ x: 0, y: 10, z: -2 }, { x: 0, y: 4 }, 1000, 800, out, 90);
     expect(out.y).toBeCloseTo(90, 6);
-    // Behind the camera and to the right: right edge, arrow pointing right (projection would mirror it).
-    const right = markerPlacement({ x: 5, y: 0, z: 10 }, { x: -3, y: 0 }, 1000, 800, out);
+    // Behind the camera (even above it) and to the right: bottom edge, right of centre, arrow pointing down-right
+    // (the projection would mirror it left and up).
+    const behind = markerPlacement({ x: 5, y: 3, z: 10 }, { x: -3, y: -2 }, 1000, 800, out);
+    expect(out.y).toBeCloseTo(772, 6);
+    expect(out.x).toBeGreaterThan(500);
+    expect(behind).toBeGreaterThan(0);
+    expect(behind).toBeLessThan(Math.PI / 2);
+    // Straight behind and to the side: the side edge.
+    markerPlacement({ x: 50, y: 0, z: 1 }, { x: -3, y: 0 }, 1000, 800, out);
     expect(out.x).toBeCloseTo(972, 6);
-    expect(right).toBeCloseTo(0, 6);
   });
 
   it('captions the distance, then the board key once in reach', () => {
