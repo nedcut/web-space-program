@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RestoreHook } from '../core/contextRecovery';
 
 /**
  * One material for (almost) the whole launch complex.
@@ -33,12 +34,20 @@ export interface SiteSurfaceUniforms {
   uVabGlow: { value: THREE.Color };
 }
 
-/** Array texture whose layers are filled from canvases on first use (needs the renderer, see `fill`). */
+type LayerSource = CanvasImageSource & { width: number; height: number };
+
+/**
+ * Array texture whose layers are filled from canvases on first use (needs the renderer, see `fill`). The layers
+ * only exist on the GPU, so a context restore queues them all again (the canvases are cached by the site
+ * texture factory anyway; holding them here costs nothing).
+ */
 export class SiteTextureArray {
   readonly texture: THREE.DataArrayTexture;
-  private pending: Map<SiteLayer, CanvasImageSource & { width: number; height: number }> | null;
+  private readonly sources: Map<SiteLayer, LayerSource>;
+  private pending: Map<SiteLayer, LayerSource> | null;
+  private readonly restore = new RestoreHook(() => { this.pending = new Map(this.sources); });
 
-  constructor(sources: Record<SiteLayer, CanvasImageSource & { width: number; height: number }>) {
+  constructor(sources: Record<SiteLayer, LayerSource>) {
     const t = new THREE.DataArrayTexture(null, SIZE, SIZE, SITE_LAYERS.length);
     t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -50,7 +59,8 @@ export class SiteTextureArray {
     t.source.dataReady = false;
     t.needsUpdate = true;
     this.texture = t;
-    this.pending = new Map(Object.entries(sources) as [SiteLayer, CanvasImageSource & { width: number; height: number }][]);
+    this.sources = new Map(Object.entries(sources) as [SiteLayer, LayerSource][]);
+    this.pending = new Map(this.sources);
   }
 
   get ready(): boolean { return this.pending === null; }
@@ -60,6 +70,7 @@ export class SiteTextureArray {
     const pending = this.pending;
     if (!pending) return;
     this.pending = null;
+    this.restore.attach(renderer);
     const t = this.texture;
     renderer.initTexture(t);
     const c = document.createElement('canvas');
@@ -83,7 +94,7 @@ export class SiteTextureArray {
     src.dispose();
   }
 
-  dispose(): void { this.texture.dispose(); this.pending = null; }
+  dispose(): void { this.restore.dispose(); this.texture.dispose(); this.pending = null; }
 }
 
 /**
