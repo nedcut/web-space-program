@@ -3,6 +3,7 @@ import type { BodyDef } from '../../sim/bodies/types';
 import type { Terrain } from '../../sim/terrain/api';
 import { buildChunk, type ChunkBuildParams, type ChunkData } from './chunkBuilder';
 import { bakeEquirect, type BakeResult } from './bake';
+import { earthDataSource } from './earthSource';
 
 interface Pending {
   resolve: (v: unknown) => void;
@@ -72,10 +73,12 @@ export class TerrainWorkerPool {
     if (this.registered.has(key)) return;
     this.registered.set(key, { body, minWavelength });
     if (this.workers.length && body.surface.preset === 'earth' && !this.earthSent) {
-      const buffer = earthData().buffer;
       // Blob structured cloning shares its immutable backing store. Materialise ArrayBuffers in the
       // workers instead of synchronously copying the 16 MiB grid once per worker on the render thread.
-      const source = buffer instanceof ArrayBuffer ? { blob: new Blob([buffer]) } : { buffer };
+      // Prefer the host's fetched Blob; building a new one copies the grid again on this thread.
+      const host = earthDataSource();
+      const buffer = host ? undefined : earthData().buffer;
+      const source = host ? host() : buffer instanceof ArrayBuffer ? { blob: new Blob([buffer]) } : { buffer: buffer! };
       for (const w of this.workers) w.postMessage({ type: 'earthData', ...source });
       this.earthSent = true;
     }
