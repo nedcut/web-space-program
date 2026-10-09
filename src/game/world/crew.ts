@@ -97,9 +97,20 @@ function hatchColumn(world: World, v: VesselState, pod: PartState, up: Vec3, tur
  * Where to climb down: the hatch side, unless that is over the pad's open flame pit; then the side (hatch side,
  * quarter turns, opposite) that needs the shortest walk out to clear the pit.
  */
+const exitMemo = new WeakMap<PartState, { ut: number; vessel: VesselState; column: Vec3 }>();
 function exitColumn(world: World, vessel: WorldVessel, pod: PartState, up: Vec3): Vec3 {
+  // Boarding target and blocker ask for the same spot in one telemetry update.
+  const memo = exitMemo.get(pod);
+  if (memo && memo.ut === world.ut && memo.vessel === vessel.state) return memo.column;
+  const column = findExitColumn(world, vessel, pod, up);
+  exitMemo.set(pod, { ut: world.ut, vessel: vessel.state, column });
+  return column;
+}
+function findExitColumn(world: World, vessel: WorldVessel, pod: PartState, up: Vec3): Vec3 {
   const first = hatchColumn(world, vessel.state, pod, up);
-  if (!overPadPit(world, vessel.body, first)) return first;
+  const pad = padFrame(world, vessel.body);
+  const overPit = (p: Vec3) => !!pad && inPit(pad, p);
+  if (!overPit(first)) return first;
   let best: { column: Vec3; extra: number } | null = null;
   for (const turn of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
     const column = turn ? hatchColumn(world, vessel.state, pod, up, turn) : first;
@@ -107,23 +118,32 @@ function exitColumn(world: World, vessel: WorldVessel, pod: PartState, up: Vec3)
     const dir = normalize(sub(out, scale(up, dot(out, up))));
     for (let extra = 0; extra <= 16 && (!best || extra < best.extra); extra += 0.5) {
       const p = add(column, scale(dir, extra));
-      if (!overPadPit(world, vessel.body, p)) { best = { column: p, extra }; break; }
+      if (!overPit(p)) { best = { column: p, extra }; break; }
     }
   }
   return best?.column ?? first;
 }
 
-/** True when a point is over the launch pad's flame hole or trench (drawn open; collision terrain is flat there). */
-export function overPadPit(world: World, body: string, p: Vec3): boolean {
-  if (body !== 'earth') return false;
+interface PadFrame { origin: Vec3; east: Vec3; south: Vec3 }
+/** The launch pad's centre and horizontal axes (inertial, now); null away from Earth. */
+function padFrame(world: World, body: string): PadFrame | null {
+  if (body !== 'earth') return null;
   const u = world.universe;
   const dir = latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon);
-  const east = normalize(cross(v3(0, 0, 1), dir)), south = cross(east, dir);
+  const east = normalize(cross(v3(0, 0, 1), dir));
   const q = bodyQuat(u, body, world.ut);
-  const d = sub(p, add(u.ephem.getBodyState(body, world.ut).position, qRotate(q, scale(dir, u.body(body).radius))));
-  const x = dot(d, qRotate(q, east)), z = dot(d, qRotate(q, south));
+  return { origin: add(u.ephem.getBodyState(body, world.ut).position, qRotate(q, scale(dir, u.body(body).radius))), east: qRotate(q, east), south: qRotate(q, cross(east, dir)) };
+}
+function inPit(pad: PadFrame, p: Vec3): boolean {
+  const d = sub(p, pad.origin);
+  const x = dot(d, pad.east), z = dot(d, pad.south);
   const m = LAUNCH_PAD_PIT.half + 0.6;
   return Math.abs(x) < m && z < m && z > LAUNCH_PAD_PIT.trenchEnd - 1;
+}
+/** True when a point is over the launch pad's flame hole or trench (drawn open; collision terrain is flat there). */
+export function overPadPit(world: World, body: string, p: Vec3): boolean {
+  const pad = padFrame(world, body);
+  return !!pad && inPit(pad, p);
 }
 
 export function goEva(this: World, internals: WorldInternals, astronautId?: string): WorldVessel | null {

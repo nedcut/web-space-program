@@ -9,7 +9,7 @@ describe('EVA key hints', () => {
   it('shows the controls that apply right now, with primary keys only', () => {
     expect(evaHint(eva, key)).toBe('WASD walk · Shift run · Space jump');
     expect(evaHint({ ...eva, jetpack: true }, key)).toBe('WASD walk · Shift run · Space jump · Shift lift off');
-    expect(evaHint({ ...eva, landed: false }, key)).toBe('Falling · R jetpack on');
+    expect(evaHint({ ...eva, landed: false }, key)).toBe('In the air · R jetpack on');
     expect(evaHint({ ...eva, landed: false, jetpack: true }, key)).toBe('WASD fly · Shift up · Ctrl down');
     expect(evaHint({ ...eva, landed: false, jetpack: true, fuel: 0 }, key)).toBe('Jetpack empty · board to refill');
   });

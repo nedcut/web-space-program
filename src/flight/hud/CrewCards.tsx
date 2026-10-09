@@ -14,7 +14,7 @@ export function evaHint(eva: NonNullable<Telemetry['eva']>, label: (a: Parameter
   const keys = [key('evaForward'), key('evaLeft'), key('evaBack'), key('evaRight')];
   const move = keys.every(k => k.length === 1) ? keys.join('') : keys.join('/');
   if (eva.landed) return `${move} walk · ${key('evaRun')} run · ${key('evaJump')} jump${eva.jetpack ? ` · ${key('evaUp')} lift off` : ''}`;
-  if (!eva.jetpack) return `Falling · ${key('toggleRcs')} jetpack on`;
+  if (!eva.jetpack) return `In the air · ${key('toggleRcs')} jetpack on`;
   if (eva.fuel <= 0) return 'Jetpack empty · board to refill';
   return `${move} fly · ${key('evaUp')} up · ${key('evaDown')} down`;
 }
