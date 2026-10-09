@@ -254,11 +254,12 @@ export function boardingTarget(this: World, _internals: WorldInternals): { vesse
 }
 
 
-/** Why the active astronaut cannot board right now (nearest hatch, with the distance or speed to fix), or null when they can. */
-export function boardingBlocker(this: World, _internals: WorldInternals, whole = false): string | null {
+/** The active astronaut's nearest hatch: a free seat outranks a full one, however far. Null off EVA or with no crewed vessel. */
+export interface NearestHatch { vessel: WorldVessel; pod: PartState; free: boolean; distance: number; speed: number }
+export function nearestHatch(this: World, _internals: WorldInternals): NearestHatch | null {
   const eva = this.active;
   if (!eva?.state.eva) return null;
-  let best: { name: string; free: boolean; distance: number; speed: number } | null = null;
+  let best: NearestHatch | null = null;
   const { up, lift } = reachFrame(this, eva);
   for (const vessel of this.vessels.values()) {
     if (vessel === eva || vessel.body !== eva.body || vessel.state.destroyed) continue;
@@ -266,14 +267,21 @@ export function boardingBlocker(this: World, _internals: WorldInternals, whole =
       if (!seatCapacity(pod)) continue;
       const free = seatCapacity(pod) > (pod.crew?.length ?? 0);
       const distance = hatchReach(this, eva, vessel, pod, up, lift);
-      // A hatch with a free seat always outranks a full one, however far.
-      if (!best || (free && !best.free) || (free === best.free && distance < best.distance)) best = { name: vessel.state.name, free, distance, speed: length(sub(eva.state.velocity, vessel.state.velocity)) };
+      if (!best || (free && !best.free) || (free === best.free && distance < best.distance)) best = { vessel, pod, free, distance, speed: length(sub(eva.state.velocity, vessel.state.velocity)) };
     }
   }
+  return best;
+}
+
+/** Why the active astronaut cannot board right now (nearest hatch, with the distance or speed to fix), or null when they can. */
+export function boardingBlocker(this: World, internals: WorldInternals, whole = false): string | null {
+  if (!this.active?.state.eva) return null;
+  const best = nearestHatch.call(this, internals);
   if (!best) return 'No crewed vessel nearby to board';
-  if (!best.free) return `${best.name} has no free seat`;
-  if (best.distance > BOARD_RANGE) return `Move closer to the hatch of ${best.name} — ${whole || best.distance >= 100 ? Math.round(best.distance) : best.distance.toFixed(1)} m away, board within ${BOARD_RANGE} m`;
-  if (best.speed >= BOARD_SPEED) return `Slow down to board ${best.name} — ${whole ? Math.round(best.speed) : best.speed.toFixed(1)} m/s relative, below ${BOARD_SPEED} m/s`;
+  const name = best.vessel.state.name;
+  if (!best.free) return `${name} has no free seat`;
+  if (best.distance > BOARD_RANGE) return `Move closer to the hatch of ${name} — ${whole || best.distance >= 100 ? Math.round(best.distance) : best.distance.toFixed(1)} m away, board within ${BOARD_RANGE} m`;
+  if (best.speed >= BOARD_SPEED) return `Slow down to board ${name} — ${whole ? Math.round(best.speed) : best.speed.toFixed(1)} m/s relative, below ${BOARD_SPEED} m/s`;
   return null;
 }
 
