@@ -107,7 +107,13 @@
 .view-btn .mono { color: var(--accent); }
 .crew-cards { display: flex; flex-wrap: wrap-reverse; flex-direction: row-reverse; gap: 6px; max-width: 340px; }
 .crew-card { display: flex; gap: 8px; padding: 6px 8px 6px 6px; width: 166px; align-items: center; }
-.crew-card.eva { width: 236px; }
+.crew-card.eva { width: 280px; }
+.eva-jet { display: flex; align-items: center; gap: 6px; }
+.eva-jet .eva-jet-toggle { padding: 2px 7px; font-size: 10.5px; pointer-events: auto; }
+.eva-jet .eva-jet-toggle.on { color: #062333; background: linear-gradient(180deg, #8adff1, #65bed7); border-color: var(--accent); }
+.eva-gas { flex: 1; height: 5px; min-width: 30px; border-radius: 3px; background: #ffffff18; overflow: hidden; }
+.eva-gas > span { display: block; height: 100%; background: var(--accent); }
+.eva-keys { font-size: 10px; line-height: 1.35; }
 .crew-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
 .crew-name { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .crew-meta { font-size: 10.5px; color: var(--text-dim); }

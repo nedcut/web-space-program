@@ -57,9 +57,11 @@ const FLIGHT_KEYS: [Action[] | string, string][] = [
 ];
 
 const EVA_KEYS: [Action[] | string, string][] = [
-  [['evaForward', 'evaLeft', 'evaBack', 'evaRight'], 'Move · strafe'],
-  [['evaRun', 'evaUp', 'evaDown'], 'Run (ground) · jetpack up / down (space)'],
+  [['evaForward', 'evaLeft', 'evaBack', 'evaRight'], 'Walk / fly, relative to the camera'],
+  [['evaRun'], 'Run (on the ground)'],
   [['evaJump'], 'Jump (feet on the ground)'],
+  [['toggleRcs'], 'Jetpack on / off (on in space, off on the ground when you step out)'],
+  [['evaUp', 'evaDown'], 'Jetpack up / down (lifts off where it can beat gravity, e.g. the Moon)'],
   [['board'], 'Board a hatch within 3 m'],
   [['plantFlag'], 'Plant a flag (landed)'],
 ];

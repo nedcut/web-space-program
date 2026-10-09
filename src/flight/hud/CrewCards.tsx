@@ -7,6 +7,15 @@ import type { HudCallbacks, Telemetry } from './Hud';
 
 const MAX_CARDS = 4;
 
+/** One line of the controls that matter right now (on the ground, flying with or without the jetpack). */
+export function evaHint(eva: NonNullable<Telemetry['eva']>, key: (a: Parameters<typeof bindingLabel>[0]) => string): string {
+  const move = `${key('evaForward')}${key('evaLeft')}${key('evaBack')}${key('evaRight')}`;
+  if (eva.landed) return `${move} walk · ${key('evaRun')} run · ${key('evaJump')} jump${eva.jetpack ? ` · ${key('evaUp')} lift off` : ''}`;
+  if (!eva.jetpack) return `Falling · ${key('toggleRcs')} jetpack on`;
+  if (eva.fuel <= 0) return 'Jetpack empty · board to refill';
+  return `${move} fly · ${key('evaUp')} up · ${key('evaDown')} down`;
+}
+
 /** Bottom-right: crew portrait cards (EVA per astronaut) with MAP and camera buttons. */
 export interface CrewCardsProps {
   crew: Telemetry['crew'];
@@ -43,7 +52,12 @@ export const CrewCards = memo(function CrewCards({ crew, eva, mapMode, noControl
             {t.crew[0] && <Portrait person={t.crew[0]} size={52} />}
             <div className="crew-info">
               <div className="crew-name">{t.crew[0]?.name ?? 'Astronaut'}</div>
-              <div className="crew-meta mono">Jetpack {t.eva.fuel.toFixed(2)} kg</div>
+              <div className="crew-meta mono eva-jet">
+                <button type="button" className={`btn small eva-jet-toggle ${t.eva.jetpack ? 'on' : ''}`} aria-pressed={t.eva.jetpack} onClick={cb.onToggleRcs} title={`Jetpack on/off (${key('toggleRcs')})`}>Jetpack {t.eva.jetpack ? 'ON' : 'OFF'} · {key('toggleRcs')}</button>
+                <span className="eva-gas" title="Jetpack monopropellant (5 kg full; refilled on boarding)"><span style={{ width: `${Math.min(100, t.eva.fuel * 20)}%` }} /></span>
+                {t.eva.fuel.toFixed(2)} kg
+              </div>
+              <div className="crew-meta eva-keys">{evaHint(t.eva, key)}</div>
               <div className="crew-actions">
                 <button type="button" className="btn small" disabled={!t.eva.canBoard} onClick={cb.onBoard} title={t.eva.boardHint ?? 'Board a hatch within 3 m'}>Board · {key('board')}</button>
                 <button type="button" className="btn small" disabled={!t.eva.landed} onClick={cb.onPlantFlag} title="Plant a flag (landed)">Flag · {key('plantFlag')}</button>

@@ -108,7 +108,7 @@ export const LESSONS: Lesson[] = [
   ] },
   { id: 'eva', title: 'EVA', description: 'Step outside, use a jetpack, plant a flag and board.', scene: 'flight', craft: lunarTrainer, setup: w => placeOnSurface(w, w.active!, 'moon'), steps: [
     step('eva', 'Our lander is already on the Moon. Press {eva} or the EVA button on the crew portrait (bottom-right) to step outside. {evaForward}/{evaLeft}/{evaBack}/{evaRight} walks; drag the view to choose your heading.', c => !!c.world?.active?.state.eva),
-    step('jetpack', 'Press {evaJump} to jump, then hold {evaUp} above the ground to thrust upward. {evaDown} thrusts down. Your finite monopropellant supply powers the jetpack; come back near the hatch.', c => !!c.world?.active?.state.eva && c.world.active.state.parts.some(p => (p.resources.monopropellant ?? 5) < 4.99)),
+    step('jetpack', 'Press {evaJump} to jump. Switch the jetpack on with {toggleRcs}, then hold {evaUp} to lift off and {evaDown} to descend; movement keys fly level. Your finite monopropellant supply powers the jetpack; come back near the hatch.', c => !!c.world?.active?.state.eva && c.world.active.state.parts.some(p => (p.resources.monopropellant ?? 5) < 4.99)),
     step('flag', 'Settle onto the ground and press {plantFlag} to plant your expedition flag.', c => !!c.world?.flags.length),
     step('board', 'Walk back to the hatch, within 3 m and below 3 m/s relative speed. Press {board} or Board to return to the cabin.', c => !!c.world?.active && !c.world.active.state.eva && c.world.crewFor().length > 0),
   ] },

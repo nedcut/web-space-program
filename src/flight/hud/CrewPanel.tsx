@@ -38,14 +38,14 @@ export function CrewPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
     </div>)}
     {!t.crew.length && <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{t.noControl ? 'An astronaut or probe core is required.' : 'Uncrewed · remote control'}</div>}
     {t.eva && <>
-      <div className="mono" style={{ fontSize: 11, marginBottom: 6 }}>Jetpack {t.eva.fuel.toFixed(2)} / 5 kg</div>
+      <div className="mono" style={{ fontSize: 11, marginBottom: 6 }}>Jetpack {t.eva.jetpack ? 'on' : 'off'} ({key('toggleRcs')}) · {t.eva.fuel.toFixed(2)} / 5 kg</div>
       <div style={{ display: 'flex', gap: 5 }}>
         <button className="btn small" disabled={!t.eva.canBoard} title={t.eva.boardHint ?? `Board at a free hatch within 3 m, below 3 m/s (${key('board')})`} onClick={cb.onBoard}>Board · {key('board')}</button>
         <button className="btn small" disabled={!t.eva.landed} title={`Plant a flag on solid ground (${key('plantFlag')})`} onClick={cb.onPlantFlag}>Flag · {key('plantFlag')}</button>
       </div>
       {t.eva.boardHint && <div role="status" style={{ fontSize: 10, marginTop: 5, color: 'var(--warn)' }}>{t.eva.boardHint}</div>}
       <div style={{ fontSize: 10, marginTop: 7, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        {key('evaForward')}/{key('evaLeft')}/{key('evaBack')}/{key('evaRight')} move<br />{t.eva.landed ? `${key('evaRun')} run · ${key('evaJump')} jump` : `${key('evaUp')}/${key('evaDown')} rise / descend`}<br />Mouse drag to turn · Board within 3 m
+        {key('evaForward')}/{key('evaLeft')}/{key('evaBack')}/{key('evaRight')} move (camera relative) · {key('evaRun')} run · {key('evaJump')} jump<br />{key('toggleRcs')} jetpack · {key('evaUp')}/{key('evaDown')} up / down while it is on<br />Drag to look around · Board within 3 m of a hatch
       </div>
     </>}
   </div>;

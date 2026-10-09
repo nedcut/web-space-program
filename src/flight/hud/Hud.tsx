@@ -71,7 +71,8 @@ export interface Telemetry {
   trim?: { pitch: number; yaw: number; roll: number; held: boolean } | null;
   crew: Astronaut[];
   noControl: boolean;
-  eva: { fuel: number; canBoard: boolean; boardHint: string | null; landed: boolean } | null;
+  /** Active astronaut: jetpack gas (kg), jetpack switch, boarding state, feet on the ground (or water). */
+  eva: { fuel: number; jetpack: boolean; canBoard: boolean; boardHint: string | null; landed: boolean } | null;
   ut: number;
   bodyName: string;
   altitudeAsl: number;

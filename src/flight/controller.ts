@@ -145,6 +145,9 @@ export class FlightController {
   stagedCount = 0;
   sasOn = false;
   rcsOn = false;
+  /** Astronaut jetpack switch (the RCS key on EVA). Each new EVA starts with it on in flight/space, off on the ground. */
+  jetpackOn = false;
+  private jetpackFor: string | null = null;
   readonly speedReference = new SpeedModeTracker();
   get speedMode(): Telemetry['speedMode'] { return this.speedReference.mode; }
   set speedMode(mode: Telemetry['speedMode']) { this.speedReference.select(mode); }
@@ -496,6 +499,11 @@ export class FlightController {
 
   toggleRcs() {
     if (!this.world.canControl()) return;
+    if (this.world.active?.state.eva) {
+      this.jetpackOn = !this.jetpackOn;
+      this.world.message(this.jetpackOn ? `Jetpack on — ${bindingLabel('evaUp')} / ${bindingLabel('evaDown')} up / down` : 'Jetpack off', 'info', 2);
+      return;
+    }
     this.rcsOn = !this.rcsOn;
     if (this.hasBindings('rcs')) this.fireGroup('rcs', this.rcsOn);
   }
@@ -657,7 +665,12 @@ export class FlightController {
     if (this.paused) return;
     if (this.network) return this.network.action('eva', { astronautId });
     if (this.world.active?.state.eva) return this.world.message('Already on EVA — approach the hatch to board', 'info');
-    if (this.world.goEva(astronautId)) {
+    const host = this.world.active;
+    const grounded = !!host && (host.mode === 'prelaunch' || host.state.situation === 'landed' || host.state.situation === 'splashed');
+    const eva = this.world.goEva(astronautId);
+    if (eva) {
+      this.jetpackFor = eva.state.id;
+      this.jetpackOn = !grounded;
       this.cancelAssist();
       this.stagePending = false;
       this.input.state.throttle = 0;
@@ -842,6 +855,11 @@ export class FlightController {
       if (this.autosaveTimer >= settings.autoSaveInterval) { this.autosaveTimer = 0; this.quicksave('autosave'); }
     } else if (!settings.autoSaveInterval) this.autosaveTimer = 0;
     this.input.evaMode = !!this.world.active?.state.eva;
+    const evaState = this.world.active?.state;
+    if (evaState?.eva && this.jetpackFor !== evaState.id) {
+      this.jetpackFor = evaState.id;
+      this.jetpackOn = evaState.situation !== 'landed' && evaState.situation !== 'splashed' && this.world.active?.mode !== 'prelaunch';
+    } else if (!evaState?.eva) this.jetpackFor = null;
     this.input.mouseEnabled = !this.mapMode;
     applyCommsSettings(this.world);
     this.input.update(dt);
@@ -886,7 +904,7 @@ export class FlightController {
       translateZ: s.tz,
       throttle: s.throttle,
       sas: this.sasOn ? this.sas : 'off',
-      rcs: this.rcsOn,
+      rcs: wv?.state.eva ? this.jetpackOn : this.rcsOn,
       stage: !wv?.state.eva && this.stagePending,
       gear: this.gearPending,
       brakes: s.brakes,

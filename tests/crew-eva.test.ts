@@ -77,11 +77,11 @@ describe('human crew and EVA', () => {
     v.eva = { astronautId: 'test', walkPhase: 0, walking: false, jetting: false };
     const startMass = v.mass;
     const env = vacuumEnv();
-    for(let i=0;i<500;i++) stepEva(v,neutralInput({translateX:1}),env,i*0.25,0.25);
+    for(let i=0;i<500;i++) stepEva(v,neutralInput({translateX:1,rcs:true}),env,i*0.25,0.25);
     expect(v.parts[0].resources.monopropellant).toBe(0);
     expect(length(v.velocity)).toBeCloseTo(EVA_EXHAUST_SPEED*Math.log(startMass/95),7);
     const before = {...v.velocity};
-    stepEva(v,neutralInput({translateX:1}),env,126,1);
+    stepEva(v,neutralInput({translateX:1,rcs:true}),env,126,1);
     expect(v.velocity).toEqual(before);
     expect(v.eva.jetting).toBe(false);
   });
