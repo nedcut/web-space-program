@@ -10,6 +10,8 @@ import { buildSoundingRocket } from '../src/editor/stockCrafts';
 import { neutralInput, freePorts, mergeVessels } from '../src/sim/vessel';
 import { placeInCircularOrbit, placeOnSurface } from '../src/game/scenarios';
 import { serializeWorld, deserializeWorld } from '../src/game/persistence';
+import { dot, normalize, sub, v3 } from '../src/util/vec3';
+import { qRotate } from '../src/util/quat';
 import { COMPLETION_KEY, startLesson, getTutorial, endTutorial, tickTutorial, advanceTutorial, readCompletions, saveCompletion } from '../src/tutorial/runtime';
 
 function setup(id: string) {
@@ -154,8 +156,12 @@ describe('training definitions and deterministic scenarios', () => {
   it('starts EVA on terrain with a crewed cabin and supports going outside and boarding', () => {
     const world = setup('eva');
     expect(world.active!.body).toBe('moon');
-    for (let i = 0; i < 50; i++) world.tick(0.02, neutralInput());
+    const lander = world.active!.state;
+    for (let i = 0; i < 500; i++) world.tick(0.02, neutralInput());
     expect(world.active!.state.destroyed).toBe(false);
+    // Set down on level ground: it must still stand upright (a 12° slope used to topple it within 7 s).
+    const up = normalize(sub(lander.position, world.universe.ephem.getBodyState('moon', world.ut).position));
+    expect(dot(qRotate(lander.orientation, v3(0, 1, 0)), up)).toBeGreaterThan(Math.cos(5 * Math.PI / 180));
     expect(world.goEva()).not.toBeNull();
     expect(predicate('eva', 'eva', { world })).toBe(true);
     expect(predicate('eva', 'board', { world })).toBe(false);

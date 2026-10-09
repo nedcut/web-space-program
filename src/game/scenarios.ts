@@ -1,7 +1,7 @@
 import type { CraftDef } from '../sim/vessel/types';
 import { freePorts } from '../sim/vessel';
 import { propagate, stateToElements } from '../sim/orbit';
-import { add, cross, normalize, scale, sub, v3 } from '../util/vec3';
+import { add, cross, normalize, scale, sub, v3, type Vec3 } from '../util/vec3';
 import { qRotate } from '../util/quat';
 import { quatFromBasis, type World, type WorldVessel } from './world';
 
@@ -59,6 +59,28 @@ export function spawnRendezvousTarget(world: World, craft: CraftDef, ahead = 100
 }
 
 /** Place an upright craft at rest on analytic terrain; useful for surface training and missions. */
+/**
+ * The most level body-fixed direction on a grid of `n`×`n` points spanning `span` radians around `direction`,
+ * judged by the terrain gradient across a `footprint`-metre base (so a lander set down there stays upright).
+ */
+export function levelSite(world: World, bodyId: string, direction = v3(1, 0, 0), span = 0.01, n = 9, footprint = 4): Vec3 {
+  const terrain = world.universe.terrain(bodyId), radius = world.universe.body(bodyId).radius;
+  const d0 = normalize(direction);
+  const tA = normalize(Math.abs(d0.z) < 0.9 ? cross(v3(0, 0, 1), d0) : cross(v3(1, 0, 0), d0)), tB = cross(d0, tA);
+  const eps = footprint / radius;
+  const h = (d: Vec3) => terrain.heightAt(d.x, d.y, d.z);
+  let best = d0, bestSlope = Infinity;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const a = (i / (n - 1) - 0.5) * span, b = (j / (n - 1) - 0.5) * span;
+    const d = normalize(add(d0, add(scale(tA, a), scale(tB, b))));
+    const ga = (h(normalize(add(d, scale(tA, eps)))) - h(normalize(sub(d, scale(tA, eps))))) / (2 * footprint);
+    const gb = (h(normalize(add(d, scale(tB, eps)))) - h(normalize(sub(d, scale(tB, eps))))) / (2 * footprint);
+    const slope = Math.hypot(ga, gb);
+    if (slope < bestSlope) { bestSlope = slope; best = d; }
+  }
+  return best;
+}
+
 export function placeOnSurface(world: World, wv: WorldVessel, bodyId: string, direction = v3(1, 0, 0)) {
   const u = world.universe;
   const up = normalize(direction);

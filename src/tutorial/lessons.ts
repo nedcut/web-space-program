@@ -4,7 +4,7 @@ import type { EditorSession } from '../editor/session';
 import type { CraftDef } from '../sim/vessel/types';
 import { PART_CATALOG } from '../data/parts';
 import { buildMoonLander, buildOrbiter, buildSoundingRocket, buildSwift, buildTender } from '../editor/stockCrafts';
-import { placeInCircularOrbit, placeOnSurface, spawnRendezvousTarget } from '../game/scenarios';
+import { levelSite, placeInCircularOrbit, placeOnSurface, spawnRendezvousTarget } from '../game/scenarios';
 import { length, normalize, dot } from '../util/vec3';
 import { qRotate, qConj } from '../util/quat';
 
@@ -106,7 +106,7 @@ export const LESSONS: Lesson[] = [
     step('rotate', 'At about 65 m/s, gently pull up with {pitchDown}. Climb clear of the runway before retracting gear with {toggleGear}.', c => altitude(c) > 300 && c.world?.active?.state.situation === 'flying'),
     step('return', 'Circle back, lower gear with {toggleGear} and reduce throttle. Make a shallow approach, flare just above the runway, then hold {brakes} to brake after touchdown.', c => landed(c) && !!c.world?.active && length(c.world.surfaceVelocity(c.world.active)) < 5),
   ] },
-  { id: 'eva', title: 'EVA', description: 'Step outside, use a jetpack, plant a flag and board.', scene: 'flight', craft: lunarTrainer, setup: w => placeOnSurface(w, w.active!, 'moon'), steps: [
+  { id: 'eva', title: 'EVA', description: 'Step outside, use a jetpack, plant a flag and board.', scene: 'flight', craft: lunarTrainer, setup: w => placeOnSurface(w, w.active!, 'moon', levelSite(w, 'moon')), steps: [
     step('eva', 'Our lander is already on the Moon. Press {eva} or the EVA button on the crew portrait (bottom-right) to step outside. {evaForward}/{evaLeft}/{evaBack}/{evaRight} walks; drag the view to choose your heading.', c => !!c.world?.active?.state.eva),
     step('jetpack', 'Press {evaJump} to jump. Switch the jetpack on with {toggleRcs}, then hold {evaUp} to lift off and {evaDown} to descend; movement keys fly level. Your finite monopropellant supply powers the jetpack; come back near the hatch.', c => !!c.world?.active?.state.eva && c.world.active.state.parts.some(p => (p.resources.monopropellant ?? 5) < 4.99)),
     step('flag', 'Settle onto the ground and press {plantFlag} to plant your expedition flag.', c => !!c.world?.flags.length),
