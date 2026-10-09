@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from 'react';
+import { bindingLabel } from '../../input/bindings';
 import { formatDistance, formatDuration, formatSpeed } from '../../ui/format';
 import type { DockingTelemetry, HudCallbacks, Telemetry } from './Hud';
 
@@ -78,10 +79,26 @@ function Row({ label, value, color }: { label: string; value: string; color?: st
   );
 }
 
+/** Fixed-point readout without a "-0.00" for values that round to zero. */
+export const fixed = (v: number, digits = 2): string => {
+  const s = v.toFixed(digits);
+  return /^-0\.?0*$/.test(s) ? s.slice(1) : s;
+};
+
 /** Non-linear radial mapping so both metres and centimetres are readable on the same dial. */
 function dial(v: number, range = 25): number {
   const s = Math.sign(v);
   return s * Math.min(1, Math.log10(1 + Math.abs(v) * 20) / Math.log10(1 + range * 20));
+}
+
+/** Indicator headline: why the ports will not latch yet, or CAPTURE when the soft-capture field is active. */
+export function dockingStatus(d: DockingTelemetry): 'SIZE MISMATCH' | 'REARMING' | 'ALIGN' | 'TOO FAST' | 'MISALIGNED' | 'CAPTURE' {
+  if (!d.sizeMatch) return 'SIZE MISMATCH';
+  if (!d.armed) return 'REARMING';
+  if (Math.hypot(d.x, d.y, d.z) > d.captureRange) return 'ALIGN';
+  if (Math.hypot(d.vx, d.vy, d.vz) > d.captureSpeed) return 'TOO FAST';
+  if (d.angle > d.captureAngle) return 'MISALIGNED';
+  return 'CAPTURE';
 }
 
 /**
@@ -107,8 +124,7 @@ export function DockingIndicator({ d, hasTarget }: { d: DockingTelemetry | null;
   const latSpeed = Math.hypot(d.vx, d.vy);
   const closing = -d.vz;
   const okAngle = d.angle < d.captureAngle;
-  const okSpeed = Math.hypot(d.vx, d.vy, d.vz) < d.captureSpeed;
-  const inRange = Math.hypot(d.x, d.y, d.z) < d.captureRange;
+  const status = dockingStatus(d);
   const good = 'var(--good)', warn = 'var(--warn)', bad = 'var(--bad)';
   // Radial dial mapping (keeps the direction, compresses the distance) so the dot never leaves the dial.
   const lr = Math.hypot(d.x, d.y);
@@ -121,7 +137,7 @@ export function DockingIndicator({ d, hasTarget }: { d: DockingTelemetry | null;
     <div className="panel" style={box}>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <span className="label">Docking</span>
-        <span className="mono" style={{ fontSize: 11, color: inRange ? good : 'var(--text-dim)' }}>{inRange ? 'CAPTURE' : d.sizeMatch ? 'ALIGN' : 'SIZE MISMATCH'}</span>
+        <span className="mono" style={{ fontSize: 11, color: status === 'CAPTURE' ? good : status === 'ALIGN' ? 'var(--text-dim)' : warn }}>{status}</span>
       </div>
       <svg width={S} height={S} viewBox={`${-S / 2} ${-S / 2} ${S} ${S}`} style={{ display: 'block', margin: '6px auto' }}>
         <circle r={R} fill="rgba(0,0,0,0.35)" stroke="rgba(140,180,255,0.35)" />
@@ -134,13 +150,13 @@ export function DockingIndicator({ d, hasTarget }: { d: DockingTelemetry | null;
         <circle cx={dx} cy={dy} r={6} fill="#ff4fb8" />
       </svg>
       <div className="mono" style={{ fontSize: 11, display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', columnGap: 8, rowGap: 1 }}>
-        <span className="label">Range</span><span>{d.z.toFixed(2)} m</span><span style={{ color: closing > d.captureSpeed ? bad : closing > 0 ? good : 'var(--text-dim)' }}>{closing.toFixed(2)} m/s</span>
-        <span className="label">Right</span><span>{d.x.toFixed(2)} m</span><span>{d.vx.toFixed(2)} m/s</span>
-        <span className="label">Up</span><span>{d.y.toFixed(2)} m</span><span>{d.vy.toFixed(2)} m/s</span>
-        <span className="label">Align</span><span style={{ color: okAngle ? good : warn }}>{d.angle.toFixed(1)}°</span><span style={{ color: okSpeed ? good : warn }}>{lateral < 0.05 ? 'centred' : 'offset'}</span>
+        <span className="label">Range</span><span>{fixed(d.z)} m</span><span style={{ color: closing > d.captureSpeed ? bad : closing > 0 ? good : 'var(--text-dim)' }}>{fixed(closing)} m/s</span>
+        <span className="label">Right</span><span>{fixed(d.x)} m</span><span>{fixed(d.vx)} m/s</span>
+        <span className="label">Up</span><span>{fixed(d.y)} m</span><span>{fixed(d.vy)} m/s</span>
+        <span className="label">Align</span><span style={{ color: okAngle ? good : warn }}>{fixed(d.angle, 1)}°</span><span style={{ color: lateral < 0.05 ? good : warn }}>{lateral < 0.05 ? 'centred' : 'offset'}</span>
       </div>
       <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>
-        Capture: &lt;{d.captureRange} m, &lt;{d.captureSpeed} m/s, &lt;{d.captureAngle.toFixed(0)}°. Translate: I/K fwd/back, L/J right/left, H/N up/down.
+        Capture: &lt;{d.captureRange} m, &lt;{d.captureSpeed} m/s, &lt;{d.captureAngle.toFixed(0)}°. Translate: {bindingLabel('translateForward')}/{bindingLabel('translateBack')} fwd/back, {bindingLabel('translateRight')}/{bindingLabel('translateLeft')} right/left, {bindingLabel('translateUp')}/{bindingLabel('translateDown')} up/down.
       </div>
     </div>
   );

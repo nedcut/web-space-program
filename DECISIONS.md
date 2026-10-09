@@ -377,7 +377,6 @@ Decisions made autonomously while the owner was away. Each can be revisited.
 - **Follow-ups are conditional.** `hold` (choose Prograde) only while the turn is going, burning and SAS is not already Prograde; `maxq` (ease the throttle) only while crossflow stress is in the warn band and throttle > 0.9, so a gentle ascent never sees it; `coast` now reads "cut the engines once apoapsis reaches the height you want". One hint at a time (`hintFor` returns a single hint, `maxq` first).
 - **First-flight card:** the non-modal `QuickStartCard` is trimmed to four rows (stage, throttle, steer, map), a pointer to the Training lessons on the main menu, and the full controls sheet one click away. Still gated by the persisted `wsp.help.seen.v1` flag, so it appears on the first flight only and never for tutorials, scenarios or multiplayer.
 
-
 ## Firefox / Zen performance (2026-10-08, op/ffperf)
 
 - **Firefox imagery strips are pixels, not bitmaps.** Its 2D-canvas-copied `ImageBitmap`s (needed because Firefox ignores bitmap crops on upload) were read back synchronously on every `texSubImage2D`. The decode worker now returns packed `Uint8Array` rows in Firefox (red only for single-channel masks); Chrome/Safari keep cropped bitmaps. Merged imagery is byte-identical to the previous path (read back from the merged target).
@@ -411,3 +410,9 @@ Decisions made autonomously while the owner was away. Each can be revisited.
   them; an upload that still needs them only allocates and `onUpdate` refills asynchronously. Flight drops the far
   bake and the part textures it uploaded; at flight end part textures revert to 1×1 placeholders and reload through
   the worker/IndexedDB path so editor/thumbnail renderers never upload empty pixels.
+
+## Docking indicator status, live key hints, no negative zero (2026-10-09, op/dockqa)
+- **Docking indicator headline explains why the ports will not latch.** `dockingStatus` (`src/flight/hud/TargetPanel.tsx`) mirrors the sim's capture test (`findDockingCandidates`): `CAPTURE` only when range, relative speed and angle are all inside the envelope; otherwise `TOO FAST`, `MISALIGNED`, `REARMING` (a port disarmed by an undock until the ports drift 2× capture range apart), `ALIGN` (out of range) or `SIZE MISMATCH`. Previously it said `CAPTURE` on range alone. `DockingTelemetry.armed` carries the disarmed state.
+- **Key hints follow the player's bindings.** The indicator footer and the `?scenario=rendezvous` message read `bindingLabel(...)` instead of hard-coded I/K/J/L/H/N/R.
+- **No negative zero in readouts.** Docking readouts use `fixed()`; `formatSpeed` prints `0.0 m/s` for |v| < 0.05 (a target drifting apart at 0.01 m/s used to show `-0.0 m/s`).
+- **Map hover ignores the HUD on top.** `MapView` counts the pointer as on the map only when the window `pointermove` target is the map canvas (`pointerOnMap`). A closest-approach marker under the navball speed button used to show its "Click to pin" tooltip while clicks went to the button.
