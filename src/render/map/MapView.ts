@@ -36,6 +36,8 @@ import { firstPlannedPatch, markerCaption, markerDetail, orbitMarkers, patchDraw
 import { AXIS_COLORS, PLANNED_COLOR, handleTexture, nodeTexture } from './mapIcons';
 import { GLYPH_PX, LABEL_SHADOW, cssHex, glyphForKey, markerGlyphSvg, type MarkerGlyph } from './markerGlyphs';
 import { setPosition, setStyle } from './styleWriter';
+import { coveredIndex, nudgeClear, overlapsAny } from './hudAvoid';
+import { HudRectCache } from './hudRects';
 
 /**
  * Map view ("tracking" view): conic orbit lines for bodies and vessels, body spheres + icons,
@@ -217,9 +219,17 @@ interface ShownMarker {
 }
 interface MarkerElement {
   root: HTMLDivElement; dot: HTMLDivElement; text: HTMLDivElement; box: LabelBox; content: string; color: string; glyph: string;
+  /** Thin line from a nudged glyph back to its true point, as last written (rounded to 0.01 rad / 1 px). */
+  leader: HTMLDivElement; leaderA: number; leaderL: number;
+  /** Caption sits left of the glyph (the right side runs under a HUD panel). */
+  flipped: boolean;
   /** Caption placement box, re-measured only when its text changes. */
   caption: LabelBox; measured: string; lines: number;
 }
+
+const EMPTY_RECTS: LabelBox[] = [];
+/** A marker within this many px of a HUD block counts as covered by it; a nudged marker stands this far clear. */
+const HUD_COVER_PX = 6, HUD_CLEAR_PX = 10;
 
 /** Hover-sampled trajectory polyline (body-relative positions, float64). */
 interface TrajectoryPoly { body: string; patch: number; times: Float64Array; points: Float64Array; count: number }
@@ -353,6 +363,8 @@ export class MapView {
   private captioned: boolean[] = [];
   private markerScreen: { key: string; x: number; y: number }[] = [];
   private markerScreenCount = 0;
+  private hudRects: HudRectCache | null = null;
+  private readonly nudgeAt = { x: 0, y: 0 };
   private pinned = new Set<string>();
   private trajectoryPolys: TrajectoryPoly[] = [];
   private polysVersion = -1;
@@ -1286,13 +1298,14 @@ export class MapView {
   private markerElement(i: number): MarkerElement {
     let el = this.markerEls[i];
     if (el) return el;
-    const root = document.createElement('div'), dot = document.createElement('div'), text = document.createElement('div');
+    const root = document.createElement('div'), dot = document.createElement('div'), text = document.createElement('div'), leader = document.createElement('div');
     Object.assign(root.style, { position: 'absolute', left: '0', top: '0', pointerEvents: 'none', display: 'none' });
+    Object.assign(leader.style, { position: 'absolute', left: '0', top: '0', width: '1px', height: '1px', transformOrigin: '0 0', display: 'none', opacity: '.65' });
     Object.assign(dot.style, { position: 'absolute', left: `${-GLYPH_PX / 2}px`, top: `${-GLYPH_PX / 2}px`, width: `${GLYPH_PX}px`, height: `${GLYPH_PX}px`, lineHeight: '0' });
     Object.assign(text.style, { position: 'absolute', left: `${GLYPH_PX / 2 + 3}px`, top: '-9px', font: '600 12px system-ui, sans-serif', whiteSpace: 'pre', textShadow: LABEL_SHADOW, lineHeight: '17px', letterSpacing: '.02em' });
-    root.appendChild(dot); root.appendChild(text);
+    root.appendChild(leader); root.appendChild(dot); root.appendChild(text);
     this.labels.appendChild(root);
-    el = { root, dot, text, box: { x: 0, y: 0, width: 0, height: 17 }, content: '', color: '', glyph: '', caption: { x: 0, y: 0, width: 0, height: 0 }, measured: '', lines: 0 };
+    el = { root, dot, text, leader, leaderA: NaN, leaderL: -1, flipped: false, box: { x: 0, y: 0, width: 0, height: 17 }, content: '', color: '', glyph: '', caption: { x: 0, y: 0, width: 0, height: 0 }, measured: '', lines: 0 };
     this.markerEls[i] = el;
     return el;
   }
@@ -1336,6 +1349,9 @@ export class MapView {
     }
     // Dots for every marker; captions in priority order (pinned first), decluttered against body labels.
     this.markerScreenCount = 0;
+    const hudCount = this.hudRects ? this.hudRects.refresh(this.labels, performance.now()) : 0;
+    const hudRects = this.hudRects?.rects ?? EMPTY_RECTS;
+    let obstacles = hudCount;
     for (let i = 0; i < this.shownCount; i++) {
       const m = this.shown[i], el = this.markerElement(i);
       const s = this.toScreen(this.scenePosition(m.position, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.scratchPoint);
@@ -1351,14 +1367,28 @@ export class MapView {
       setStyle(el.root, 'display', on ? 'block' : 'none');
       el.box.x = NaN;
       if (!on) continue;
-      setPosition(el.root, s.x, s.y);
+      // A marker under a HUD panel moves to the nearest clear spot, joined to its true point by a thin leader line;
+      // the spot is reserved so a second covered marker does not land on top of it.
+      let px = s.x, py = s.y, nudged = false;
+      if (hudCount && coveredIndex(hudRects, hudCount, px, py, HUD_COVER_PX) >= 0
+        && nudgeClear(hudRects, obstacles, px, py, u.viewport.width, u.viewport.height, HUD_CLEAR_PX, this.nudgeAt)) {
+        px = this.nudgeAt.x; py = this.nudgeAt.y; nudged = true;
+        const spot = hudRects[obstacles++] ??= { x: 0, y: 0, width: GLYPH_PX, height: GLYPH_PX };
+        spot.x = px - GLYPH_PX / 2; spot.y = py - GLYPH_PX / 2; spot.width = GLYPH_PX; spot.height = GLYPH_PX;
+      }
+      setPosition(el.root, px, py);
       if (el.color !== m.color || el.glyph !== m.glyph) {
         el.color = m.color; el.glyph = m.glyph;
-        el.dot.innerHTML = markerGlyphSvg(m.glyph, m.color); el.text.style.color = m.color;
+        el.dot.innerHTML = markerGlyphSvg(m.glyph, m.color); el.text.style.color = m.color; el.leader.style.background = m.color;
       }
-      el.box.x = s.x; el.box.y = s.y;
+      setStyle(el.leader, 'display', nudged ? 'block' : 'none');
+      if (nudged) {
+        const dx = s.x - px, dy = s.y - py, a = Math.round(Math.atan2(dy, dx) * 100), len = Math.round(Math.hypot(dx, dy));
+        if (a !== el.leaderA || len !== el.leaderL) { el.leaderA = a; el.leaderL = len; el.leader.style.transform = `rotate(${a / 100}rad) scaleX(${len})`; }
+      }
+      el.box.x = px; el.box.y = py;
       const hit = this.markerScreen[this.markerScreenCount++] ??= { key: '', x: 0, y: 0 };
-      hit.key = m.key; hit.x = s.x; hit.y = s.y;
+      hit.key = m.key; hit.x = px; hit.y = py;
     }
     for (let i = this.shownCount; i < this.markerEls.length; i++) setStyle(this.markerEls[i].root, 'display', 'none');
     // Captions: shown below only if they win placement this frame.
@@ -1383,9 +1413,16 @@ export class MapView {
         box.width = longest * 7 + 12; el.lines = lines;
       }
       box.x = el.box.x + GLYPH_PX / 2 + 3; box.y = el.box.y - 9; box.height = el.lines * 17 + (pinned ? 6 : 0);
-      if (!pinned && !placeLabel(box, this.labelBoxes, labelCount)) continue;
+      // A caption that would run under a HUD panel flips to the glyph's other side.
+      const flip = hudCount > 0 && overlapsAny(box, hudRects, hudCount, 2);
+      if (flip) box.x = el.box.x - GLYPH_PX / 2 - 3 - box.width;
+      if (!pinned && (!placeLabel(box, this.labelBoxes, labelCount) || (flip && overlapsAny(box, hudRects, hudCount, 2)))) continue;
       this.labelBoxes[labelCount++] = box;
       captioned[i] = true;
+      if (el.flipped !== flip) {
+        el.flipped = flip;
+        Object.assign(el.text.style, flip ? { left: 'auto', right: `${GLYPH_PX / 2 + 3}px`, textAlign: 'right' } : { left: `${GLYPH_PX / 2 + 3}px`, right: 'auto', textAlign: 'left' });
+      }
       if (el.content !== content) { el.content = content; el.text.textContent = content; }
       setStyle(el.text, 'background', pinned ? '#0a1525dd' : 'none');
       setStyle(el.text, 'border', pinned ? `1px solid ${m.color}55` : 'none');
@@ -1648,7 +1685,17 @@ export class MapView {
     if (!visible) { this.drag = null; this.pointer.inside = false; this.setHover(NONE); this.ghost.visible = false; }
   }
 
+  /**
+   * CSS selector of the HUD blocks that sit above the map and take pointer events. Markers and captions under
+   * them are nudged clear (empty disables it). The rectangles are measured only when the HUD changes.
+   */
+  setHudBlocks(selector: string) {
+    if (selector && !this.hudRects) this.hudRects = new HudRectCache();
+    this.hudRects?.setSelector(selector);
+  }
+
   dispose() {
+    this.hudRects?.dispose();
     for (const fx of this.comets.values()) fx.dispose();
     this.comets.clear();
     this.sunGlow.material.map?.dispose();
