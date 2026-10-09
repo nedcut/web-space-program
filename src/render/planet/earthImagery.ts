@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { QualitySettings } from '../core/quality';
+import { contextIsLost } from '../core/contextRecovery';
 import { decodeImagery, releaseImagery } from './imageryDecode';
 import type { ImageStrips as Strips } from './imageStrips';
 
@@ -251,6 +252,8 @@ export class EarthImagery {
   private held: string[] = [];
   private cloudKey: string | null = null;
   private cloudJob: StripUpload | null = null;
+  /** Bumped per cloud load so a superseded load (context restore) cannot install its upload. */
+  private cloudLoad = 0;
   private failedLevels = new Set<string>();
   private mergeScene: THREE.Scene | null = null;
   private mergeMat: THREE.ShaderMaterial | null = null;
@@ -402,6 +405,8 @@ export class EarthImagery {
   private unitMs = 0.5;
   step(renderer: THREE.WebGLRenderer): void {
     if (this.disposed) return;
+    // Uploads and merges are dropped while the context is lost: wait for the restore (which resets the work).
+    if ((this.jobs || this.cloudJob) && contextIsLost(renderer)) return;
     const timed = typeof performance !== 'undefined';
     const t0 = timed ? performance.now() : 0;
     if (this.lastStep) this.frameMs += (Math.min(100, Math.max(4, t0 - this.lastStep)) - this.frameMs) * 0.2;
@@ -474,10 +479,58 @@ export class EarthImagery {
     const lv = this.levels.filter((l) => l.width <= Math.min(level.width, 8192)).pop() ?? level;
     const part = acquireStrips(urlsOf(lv, 'clouds', 0)[0]);
     this.cloudKey = part.key;
+    const load = ++this.cloudLoad;
     part.promise.then((s) => {
-      if (this.disposed) return;
+      if (this.disposed || load !== this.cloudLoad) return;
       this.cloudJob = new StripUpload(s, 'clouds');
-    }, () => { this.cloudSourceSettled = true; });
+    }, () => { if (load === this.cloudLoad) this.cloudSourceSettled = true; });
+  }
+
+  /**
+   * The cloud source was lost with the GPU context (or is about to be needed again for a re-bake): upload it again.
+   * The decoded image is shared by URL, so it is only fetched again when nothing else still holds it.
+   */
+  reloadClouds(): void {
+    if (this.disposed || !this.opts.clouds || !this.target) return;
+    const previous = this.cloudKey;
+    this.cloudJob?.texture.dispose();
+    this.cloudJob = null;
+    this.cloudSource?.dispose();
+    this.cloudSource = null;
+    this.cloudSourceSettled = false;
+    this.loadClouds(); // acquires before the old reference is released, so a held image is not decoded twice
+    if (previous) releaseStrips(previous);
+  }
+
+  /**
+   * The GPU context was restored: every texture and render target this binding owns is blank (they were filled by
+   * strip uploads and merge passes, so three.js has no CPU copy to re-send). Drop them and stream the level again.
+   * Decoded strips still held (or shared with another renderer) are reused; otherwise they come back from Cache
+   * Storage / the service worker, never the network when they were cached. The bundled preview goes first, as at start.
+   */
+  restoreContext(): void {
+    if (this.disposed) return;
+    const held = this.held;
+    this.held = [];
+    this.jobs = null;
+    this.pendingTextures.forEach((t) => t.dispose());
+    this.pendingTextures = [];
+    this.pendingTarget?.dispose();
+    this.pendingTarget = null;
+    if (this.shown) { this.shown.rt.dispose(); this.shown.night?.dispose(); this.shown = null; }
+    const u = this.uniforms;
+    u.uEarthDay.value = placeholder(true);
+    u.uEarthNight.value = placeholder(false);
+    u.uEarthImagery.value = 0;
+    u.uEarthNightOn.value = 0;
+    this.settled = false;
+    this.mergeMat?.dispose(); // recompiled on the next merge; keeps program state tied to the new context
+    this.mergeMat = null;
+    this.mergeScene?.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+    this.mergeScene = null;
+    // Re-acquire first (pump) so images in `held` that are still decoded are shared rather than released and re-fetched.
+    this.pump();
+    held.forEach(releaseStrips);
   }
 
   /** The cloud source is only needed for the one-time cube bake. */

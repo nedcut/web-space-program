@@ -14,7 +14,8 @@ import { alignNodes, counterpartMaps, freeAttachNodes, mirrorPosition, mirrorRot
 import { axisVector, TransformGizmo, type GizmoHandle } from './gizmo';
 import { CATALOG, type EditorSession, type Placement, type SessionView } from '../session';
 import { surfaceTransform } from '../surface';
-import { createStudioEnvironment } from '../../render/core/studioEnv';
+import { StudioEnvironment } from '../../render/core/studioEnv';
+import { onContextRestored } from '../../render/core/contextRecovery';
 import { buildHangar, HANGAR, type Hangar } from './hangar';
 import { createPartMesh, variantKey } from './partMesh';
 import { partMeshParams, prepareEngineSoot, releaseSoot, setLightAppearance, setPartDetail } from '../../render/parts';
@@ -78,7 +79,8 @@ export class EditorView {
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(45, 1, 0.1, 400);
   private hangar: Hangar;
-  private envRT: THREE.WebGLRenderTarget;
+  private envRT: StudioEnvironment;
+  private unwatchContext: () => void;
   private key: THREE.DirectionalLight;
   private craftGroup = new THREE.Group();
   private heldGroup = new THREE.Group();
@@ -182,8 +184,7 @@ export class EditorView {
 
     // Lighting: baked studio IBL (softbox reflections on parts, glossy floor) + a three-point rig.
     // One shadow caster (the key); fill, rim and hemisphere are unshadowed.
-    this.envRT = createStudioEnvironment(this.renderer, { variant: 'hangar' });
-    this.scene.environment = this.envRT.texture;
+    this.envRT = new StudioEnvironment(this.renderer, { variant: 'hangar' }, (rt) => { this.scene.environment = rt.texture; });
     this.scene.environmentIntensity = 0.62;
     this.scene.background = new THREE.Color(0x0b1018);
     this.scene.fog = new THREE.Fog(0x101c2b, 32, 125);
@@ -218,6 +219,16 @@ export class EditorView {
     this.hangar = buildHangar(this.renderer);
     this.scene.add(this.hangar.group);
     this.hangar.bakeReflections(this.scene);
+    // After a context restore the shadow depth and the floor/platform reflection probe are blank: redo both.
+    this.unwatchContext = onContextRestored(this.renderer, () => {
+      // The probe captures the empty hall: keep the craft out of it, as in the first bake.
+      const shown = this.craftGroup.visible;
+      this.craftGroup.visible = false;
+      this.hangar.bakeReflections(this.scene);
+      this.craftGroup.visible = shown;
+      this.renderer.shadowMap.needsUpdate = true;
+      this.renderedKey = '';
+    });
     this.scene.add(this.craftGroup);
     this.craftGroup.add(this.heldGroup, this.ghostGroup, this.nodeGroup, this.links.root, this.linkPreview);
     this.linkPreview.visible = false;
@@ -1176,6 +1187,7 @@ export class EditorView {
     el.removeEventListener('pointerleave', this.onPointerLeave);
     el.removeEventListener('wheel', this.onWheel);
     el.removeEventListener('contextmenu', preventDefault);
+    this.unwatchContext();
     this.hangar.dispose();
     this.envRT.dispose();
     this.links.dispose();

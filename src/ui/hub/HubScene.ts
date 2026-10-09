@@ -6,6 +6,7 @@ import { game } from '../../game/store';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RenderPipeline, getQuality, type QualityId } from '../../render/core';
 import { compileInSlices } from '../../render/core/compileInSlices';
+import { onContextRestored } from '../../render/core/contextRecovery';
 import { Starfield } from '../../render/sky/Starfield';
 import { SunGlare } from '../../render/sky/SunGlare';
 import { LaunchSite, type SiteObjectId } from '../../render/site/LaunchSite';
@@ -134,10 +135,17 @@ export class HubScene {
       this.sun.shadow.bias = -0.0003;
       this.sun.shadow.normalBias = 0.05;
     }
-    const pmrem = new THREE.PMREMGenerator(this.pipeline.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    const bakeEnvironment = () => {
+      const pmrem = new THREE.PMREMGenerator(this.pipeline.renderer);
+      const previous = this.scene.environment;
+      this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      pmrem.dispose();
+      return previous;
+    };
+    bakeEnvironment();
     this.scene.environmentIntensity = 0.45;
-    pmrem.dispose();
+    // The baked environment is GPU-only: bake it again after a context restore.
+    this.disposers.push(onContextRestored(this.pipeline.renderer, () => bakeEnvironment()?.dispose()));
 
     this.planets = createPlanetLayer(this.scene, this.universe, opts.quality);
     this.site = new LaunchSite(this.universe, { vegetationDensity: q.siteVegetation });

@@ -3,6 +3,7 @@ import { explosionDiameter, separationPunch, impactPunch, structuralStressPunch 
 import { updateSiteShadow } from '../render/site/shadows';
 import { maxDrawingEdge } from '../render/core/drawingLimits';
 import { ShadowMapCache } from '../render/core/shadowCache';
+import { onContextRestored } from '../render/core/contextRecovery';
 import { stageExplanation } from './cues';
 import { actionAvailable, partActions } from '../sim/vessel/actions';
 import { CondensationFx } from '../render/fx/CondensationFx';
@@ -113,6 +114,7 @@ export class FlightController {
   readonly scene = flightScene();
   /** Skips the sun's depth pass while every caster and the light are unchanged (pad, attitude hold, pause). */
   private readonly shadowCache = new ShadowMapCache();
+  private unwatchContext: (() => void) | null = null;
   readonly cam = new FlightCamera();
   readonly map: MapView;
   /** Map focus, menus and maneuver-node commands. */
@@ -269,6 +271,8 @@ export class FlightController {
     // Image-based fill light so sunlit-from-behind vessels aren't pitch black. Scaled by air density each frame.
     // Procedural sky/planetshine environment, re-baked as altitude, attitude and sun change.
     this.skyEnv = new SkyEnvironment(this.pipeline.renderer);
+    // A restored context has an empty shadow depth map: the cache would otherwise keep skipping the redraw.
+    this.unwatchContext = onContextRestored(this.pipeline.renderer, () => this.shadowCache.invalidate());
     this.scene.environmentIntensity = 1;
 
     this.planets = createPlanetLayer(this.scene, universe, quality, this.pipeline.renderer);
@@ -1442,6 +1446,7 @@ export class FlightController {
     this.effects.dispose();
     this.condensation.dispose();
     this.flags.dispose();
+    this.unwatchContext?.();
     this.skyEnv.dispose();
     this.scene.environment = null;
     this.labelHost.remove();

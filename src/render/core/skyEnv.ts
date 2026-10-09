@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { onContextRestored } from './contextRecovery';
 
 /**
  * Procedural image-based lighting for flight: a PMREM-baked sky/ground gradient that follows the
@@ -71,8 +72,11 @@ export class SkyEnvironment {
   private rt: THREE.WebGLRenderTarget | null = null;
   private key = '';
   private lastBake = -1e9;
+  private readonly unwatch: () => void;
 
   constructor(renderer: THREE.WebGLRenderer) {
+    // The PMREM target's pixels are lost with the context: bake again on the next update, whatever the inputs.
+    this.unwatch = onContextRestored(renderer, () => { this.key = ''; this.lastBake = -1e9; });
     this.pmrem = new THREE.PMREMGenerator(renderer);
     this.mat = new THREE.ShaderMaterial({
       vertexShader: vertex,
@@ -135,6 +139,7 @@ export class SkyEnvironment {
   }
 
   dispose() {
+    this.unwatch();
     this.rt?.dispose();
     this.rt = null;
     this.pmrem.dispose();
