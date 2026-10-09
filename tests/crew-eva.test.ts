@@ -7,6 +7,7 @@ import { buildTender, STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { DEFAULT_START_UT } from '../src/game/store';
 import { serializeWorld, deserializeWorld } from '../src/game/persistence';
 import { placeInCircularOrbit } from '../src/game/scenarios';
+import { overPadPit } from '../src/game/world/crew';
 import { buildVessel, neutralInput, recomputeMassProperties, freePorts, mergeVessels, undock, dockedPorts } from '../src/sim/vessel';
 import { stepEva, EVA_HEIGHT, EVA_EXHAUST_SPEED } from '../src/sim/vessel/eva';
 import { vacuumEnv } from '../src/sim/vessel/testing';
@@ -130,7 +131,11 @@ describe('human crew and EVA', () => {
       // Outside the hull: no part's bounding sphere centre within a metre, horizontally.
       const off = sub(eva.state.position, ship.state.position);
       expect(flat(off)).toBeGreaterThan(1);
-      expect(flat(off)).toBeLessThan(ship.state.cache.boundingRadius + 2);
+      // Beside the hull, or just past the 5 m flame-hole edge for slim rockets.
+      expect(flat(off)).toBeLessThan(Math.max(ship.state.cache.boundingRadius + 2, 7));
+      // Never over the pad's open flame hole/trench (collision ground is flat there).
+      expect(overPadPit(w, 'earth', eva.state.position)).toBe(false);
+      expect(overPadPit(w, 'earth', ship.state.position)).toBe(true);
       let maxSpeed = 0;
       for (let i = 0; i < 100; i++) { w.tick(0.02, neutralInput()); maxSpeed = Math.max(maxSpeed, length(sub(eva.state.velocity, ship.state.velocity))); }
       expect(maxSpeed).toBeLessThan(0.1);

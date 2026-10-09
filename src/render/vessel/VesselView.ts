@@ -56,6 +56,8 @@ export class VesselView {
   private readonly origin = new THREE.Vector3();
   private inner = new THREE.Group();
   private parts = new Map<number, PartVisual>();
+  /** EVA stride amplitude (0 standing … 1 walking), eased in animatePart. */
+  private evaGait = 0;
   private lastTopology?: VesselState['cache'];
   private batch?: THREE.Group;
   /** Frames until the deferred batch may run; 0 = batched (or nothing pending). */
@@ -349,8 +351,10 @@ export class VesselView {
   private animatePart(p: PartState, pv: PartVisual, time: number, ambientPressure: number, dt: number) {
     const eva = this.vessel.eva;
     if (eva) {
+      // Ease the stride in and out so stopping, landing or a hop does not snap the limbs.
+      this.evaGait += ((eva.walking ? 1 : 0) - this.evaGait) * (1 - Math.exp(-dt * 8));
       for (const side of [-1, 1]) {
-        const swing = eva.walking ? Math.sin(eva.walkPhase) * 0.48 * side : 0;
+        const swing = Math.sin(eva.walkPhase) * 0.48 * side * this.evaGait;
         pv.object.getObjectByName(`arm${side}`)!.rotation.x = -swing;
         pv.object.getObjectByName(`leg${side}`)!.rotation.x = swing;
         const puff = pv.object.getObjectByName(`evaPuff${side}`)!;

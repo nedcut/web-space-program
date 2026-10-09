@@ -8,6 +8,7 @@ import type { Quat } from '../../util/quat';
 import { qConj, qFromAxisAngle, qFromTo, qIdentity, qMul, qRotate } from '../../util/quat';
 import { add, cross, dot, length, normalize, scale, sub, v3, type Vec3 } from '../../util/vec3';
 import { Universe } from '../universe';
+import { latLonToUnit, LAUNCH_PAD_PIT, LAUNCH_SITE } from '../../sim/terrain';
 import type { World, WorldVessel } from '../world';
 import type { WorldInternals } from './internals';
 export const BOARD_RANGE = 3;
@@ -72,14 +73,14 @@ function partExtent(p: PartState, q: Quat, d: Vec3): number {
  * Implicit ladder: leaving a grounded vessel climbs down to the ground there, and boarding from the ground is
  * measured from there, at any hatch height (ladders stay visual, D-015).
  */
-function hatchColumn(world: World, v: VesselState, pod: PartState, up: Vec3): Vec3 {
+function hatchColumn(world: World, v: VesselState, pod: PartState, up: Vec3, turn = 0): Vec3 {
   const hatch = world.hatchPosition(v, pod);
   const flat = (x: Vec3) => sub(x, scale(up, dot(x, up)));
   let out = flat(sub(hatch, v.position));
   if (length(out) < 0.05) out = flat(qRotate(v.orientation, qRotate(pod.rotation, v3(0, 0, 1))));
   if (length(out) < 1e-6) out = flat(v3(1, 0, 0));
   if (length(out) < 1e-6) out = flat(v3(0, 1, 0));
-  out = normalize(out);
+  out = qRotate(qFromAxisAngle(up, turn), normalize(out));
   const side = cross(up, out);
   let reach = dot(sub(hatch, v.position), out);
   for (const p of v.parts) {
@@ -90,6 +91,39 @@ function hatchColumn(world: World, v: VesselState, pod: PartState, up: Vec3): Ve
     reach = Math.max(reach, dot(c, out) + partExtent(p, q, out) + 0.6);
   }
   return add(add(v.position, scale(out, reach)), scale(up, dot(sub(hatch, v.position), up)));
+}
+
+/**
+ * Where to climb down: the hatch side, unless that is over the pad's open flame pit; then the side (hatch side,
+ * quarter turns, opposite) that needs the shortest walk out to clear the pit.
+ */
+function exitColumn(world: World, vessel: WorldVessel, pod: PartState, up: Vec3): Vec3 {
+  const first = hatchColumn(world, vessel.state, pod, up);
+  if (!overPadPit(world, vessel.body, first)) return first;
+  let best: { column: Vec3; extra: number } | null = null;
+  for (const turn of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+    const column = turn ? hatchColumn(world, vessel.state, pod, up, turn) : first;
+    const out = sub(column, vessel.state.position);
+    const dir = normalize(sub(out, scale(up, dot(out, up))));
+    for (let extra = 0; extra <= 16 && (!best || extra < best.extra); extra += 0.5) {
+      const p = add(column, scale(dir, extra));
+      if (!overPadPit(world, vessel.body, p)) { best = { column: p, extra }; break; }
+    }
+  }
+  return best?.column ?? first;
+}
+
+/** True when a point is over the launch pad's flame hole or trench (drawn open; collision terrain is flat there). */
+export function overPadPit(world: World, body: string, p: Vec3): boolean {
+  if (body !== 'earth') return false;
+  const u = world.universe;
+  const dir = latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon);
+  const east = normalize(cross(v3(0, 0, 1), dir)), south = cross(east, dir);
+  const q = bodyQuat(u, body, world.ut);
+  const d = sub(p, add(u.ephem.getBodyState(body, world.ut).position, qRotate(q, scale(dir, u.body(body).radius))));
+  const x = dot(d, qRotate(q, east)), z = dot(d, qRotate(q, south));
+  const m = LAUNCH_PAD_PIT.half + 0.6;
+  return Math.abs(x) < m && z < m && z > LAUNCH_PAD_PIT.trenchEnd - 1;
 }
 
 export function goEva(this: World, internals: WorldInternals, astronautId?: string): WorldVessel | null {
@@ -127,8 +161,7 @@ export function goEva(this: World, internals: WorldInternals, astronautId?: stri
 function climbDown(world: World, host: WorldVessel, pod: PartState, eva: VesselState) {
   const env = world.universe.createEnvironment(() => host.body);
   const up = normalize(sub(eva.position, world.universe.ephem.getBodyState(host.body, world.ut).position));
-  const column = hatchColumn(world, host.state, pod, up);
-  let foot = column;
+  let foot = exitColumn(world, host, pod, up);
   let ground = env.ground(foot, world.ut);
   // The surface sample is radial below the point; two passes settle it on slopes.
   for (let i = 0; i < 3 && ground; i++) {
@@ -159,9 +192,12 @@ function hatchReach(world: World, eva: WorldVessel, vessel: WorldVessel, pod: Pa
   const reach = length(sub(d, scale(up, climb)));
   // Grounded vessel: the spot below the hatch, clear of the hull, at any hatch height (see hatchColumn).
   if (!grounded(vessel) || reach <= BOARD_RANGE || length(d) > vessel.state.cache.boundingRadius + 50) return reach;
-  const c = sub(hatchColumn(world, vessel.state, pod, up), eva.state.position);
-  if (dot(c, up) < -BOARD_RANGE) return reach;
-  return Math.min(reach, length(sub(c, scale(up, dot(c, up)))));
+  let best = reach;
+  for (const column of [hatchColumn(world, vessel.state, pod, up), exitColumn(world, vessel, pod, up)]) {
+    const c = sub(column, eva.state.position);
+    if (dot(c, up) >= -BOARD_RANGE) best = Math.min(best, length(sub(c, scale(up, dot(c, up)))));
+  }
+  return best;
 }
 
 

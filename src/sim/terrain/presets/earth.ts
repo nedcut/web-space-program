@@ -9,6 +9,13 @@ import { setRGB, type PresetContext, type PresetResult } from './common';
 export const LAUNCH_SITE = { lat: 28.5, lon: -80.6, elevation: 10, flatRadius: 3000, blendRadius: 3500 } as const;
 
 /**
+ * Pad flame pit in the pad's local frame (metres: +X east, +Z south): a square hole of half size `half` centred
+ * on the pad, and a trench of the same half width running north to `trenchEnd`. The 3D pad is drawn from these;
+ * collision terrain stays flat over the pit, so the game keeps astronauts from being placed over it.
+ */
+export const LAUNCH_PAD_PIT = { half: 5, trenchEnd: -62 } as const;
+
+/**
  * Runway on the launch-site plateau, in the pad's local tangent frame (metres: +X east, +Z south), running
  * east–west so take-offs head out to sea like launches. It lies entirely inside LAUNCH_SITE.flatRadius
  * (far corner ≈ 2.1 km from the pad), so the ground under it is exactly flat at the plateau elevation.

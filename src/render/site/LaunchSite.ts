@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Terrain } from '../../sim/terrain/api';
-import { latLonToUnit, LAUNCH_SITE, RUNWAY } from '../../sim/terrain';
+import { latLonToUnit, LAUNCH_PAD_PIT, LAUNCH_SITE, RUNWAY } from '../../sim/terrain';
 import type { Ephemeris } from '../../sim/orbit/ephemeris';
 import type { Vec3 } from '../../util/vec3';
 import { qRotate } from '../../util/quat';
@@ -32,10 +32,10 @@ export const SITE_LAYOUT = {
   padHalf: 21,
   padCorner: 7,
   /** Flame hole half size (square, centred on the pad). */
-  holeHalf: 5,
+  holeHalf: LAUNCH_PAD_PIT.half,
   /** Flame trench: runs from the hole toward −Z (north), open beyond the deck to `trenchEnd`. */
-  trenchHalf: 5,
-  trenchEnd: -62,
+  trenchHalf: LAUNCH_PAD_PIT.half,
+  trenchEnd: LAUNCH_PAD_PIT.trenchEnd,
   trenchDepth: 11,
   /** Service tower centre and footprint half size. */
   tower: { x: -17, z: 0, half: 3, height: 45 },

@@ -8,8 +8,11 @@ import type { HudCallbacks, Telemetry } from './Hud';
 const MAX_CARDS = 4;
 
 /** One line of the controls that matter right now (on the ground, flying with or without the jetpack). */
-export function evaHint(eva: NonNullable<Telemetry['eva']>, key: (a: Parameters<typeof bindingLabel>[0]) => string): string {
-  const move = `${key('evaForward')}${key('evaLeft')}${key('evaBack')}${key('evaRight')}`;
+export function evaHint(eva: NonNullable<Telemetry['eva']>, label: (a: Parameters<typeof bindingLabel>[0]) => string): string {
+  // Primary key only ("A", not "A / Q"): the line has to stay short.
+  const key = (a: Parameters<typeof bindingLabel>[0]) => label(a).split(' / ')[0];
+  const keys = [key('evaForward'), key('evaLeft'), key('evaBack'), key('evaRight')];
+  const move = keys.every(k => k.length === 1) ? keys.join('') : keys.join('/');
   if (eva.landed) return `${move} walk · ${key('evaRun')} run · ${key('evaJump')} jump${eva.jetpack ? ` · ${key('evaUp')} lift off` : ''}`;
   if (!eva.jetpack) return `Falling · ${key('toggleRcs')} jetpack on`;
   if (eva.fuel <= 0) return 'Jetpack empty · board to refill';

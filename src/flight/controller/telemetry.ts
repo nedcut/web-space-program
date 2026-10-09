@@ -226,7 +226,8 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   if (changedBody) w.message(`Entering ${b.name}'s sphere of influence`);
   const orbit = flying && orb.orbit.e < 1 && orb.pe > Math.max(b.atmosphere?.height ?? 0, w.universe.terrain(wv.body).maxHeight);
   if (previous && !previous.orbit && orbit) w.message(`Orbit achieved around ${b.name}`);
-  if (previous && previous.situation === 'flying' && st.situation !== 'flying') w.message(st.situation === 'splashed' ? `Splashed down on ${b.name}` : `Landed on ${b.name}`);
+  // An astronaut's every hop would announce a landing.
+  if (previous && previous.situation === 'flying' && st.situation !== 'flying' && !st.eva) w.message(st.situation === 'splashed' ? `Splashed down on ${b.name}` : `Landed on ${b.name}`);
   const soi = changedBody || (previous?.soi ?? false);
   cueStates.set(this, { vessel: st.id, body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation, staged: this.stagedCount });
   const propulsionTwr = ((ignited ? currentStage : dvs.find(d => d.thrust > 0))?.thrust ?? 0) / st.mass / gravity;

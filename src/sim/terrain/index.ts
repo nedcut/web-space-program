@@ -8,7 +8,7 @@ import { marsPreset, venusPreset, titanPreset } from './presets/planetary';
 import { ioPreset, europaPreset } from './presets/moons';
 
 export type { Terrain, TerrainHeightFn, RGB } from './api';
-export { LAUNCH_SITE, RUNWAY, siteLocalToUnit } from './presets/earth';
+export { LAUNCH_SITE, LAUNCH_PAD_PIT, RUNWAY, siteLocalToUnit } from './presets/earth';
 export { latLonToUnit, unitToLatLon } from './geo';
 
 export interface CreateTerrainOptions {
