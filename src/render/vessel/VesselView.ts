@@ -31,6 +31,10 @@ interface PartVisual {
   stressMaterial?: THREE.MeshBasicMaterial;
   /** Lamp state last applied (a rebuild restores template materials, so it clears this). */
   lightKey?: string;
+  /** Pose inputs last applied to the part's moving nodes (gimbal, gear, deploy); NaN = unknown. */
+  pose: Float64Array;
+  /** Its moving nodes need their slots rewritten this frame. */
+  posed: boolean;
 }
 
 /**
@@ -61,6 +65,8 @@ export class VesselView {
    * `nodeBase + i` (see rigidNodes): the vessel draws once per material while they move.
    */
   private nodes: THREE.Object3D[] = [];
+  /** Owning part of each node (slots are only rewritten for parts whose pose changed). */
+  private nodeParts: PartVisual[] = [];
   private nodeBase = 0;
   /** Node matrices when the shadow map last saw them; merged meshes that need a shadow redraw when they move. */
   private nodeShadow = new Float32Array(0);
@@ -181,7 +187,7 @@ export class VesselView {
         }
       }
       this.inner.add(obj);
-      this.parts.set(p.uid, { state: p, heat, uid: p.uid, partId: p.partId, object: obj, plumes, surfaces, deploy: 0, static: false });
+      this.parts.set(p.uid, { state: p, heat, uid: p.uid, partId: p.partId, object: obj, plumes, surfaces, deploy: 0, static: false, pose: new Float64Array(6).fill(NaN), posed: true });
     }
     const staticKinds = new Set(['tank', 'adapter', 'girder', 'strut', 'noseCone', 'battery', 'reactionWheel', 'probeCore', 'heatShield', 'monoSphere', 'monoTorus', 'xenonTank', 'framework', 'habitat', 'rcsQuad', 'rcsPorts', 'instrument', 'decoupler', 'separator', 'radialDecoupler']);
     for (const p of this.vessel.parts) {
@@ -224,6 +230,7 @@ export class VesselView {
     releaseNodes(this.nodeBase, this.nodes.length);
     this.nodeBase = 0;
     this.nodes = [];
+    this.nodeParts = [];
     this.movingMeshes = [];
   }
 
@@ -248,18 +255,22 @@ export class VesselView {
     this.nodeBase = base;
     this.movingMeshes = batch.moving;
     this.nodeShadow = new Float32Array(this.nodes.length * 12).fill(NaN);
+    const owner = new Map<THREE.Object3D, PartVisual>();
+    for (const pv of this.parts.values()) owner.set(pv.object, pv);
+    this.nodeParts = this.nodes.map(n => { let o: THREE.Object3D | null = n; while (o && !owner.has(o)) o = o.parent; return owner.get(o!)!; });
     this.inner.add(this.batch);
     for (const obj of staticObjects) obj.traverse(o => { o.matrixAutoUpdate = false; });
-    this.updateNodes();
+    this.updateNodes(true);
   }
 
   /** Write every moving frame's transform relative to the vessel frame (collapsed when hidden) into its slot. */
-  private updateNodes() {
+  private updateNodes(all = false) {
     const nodes = this.nodes;
     if (!nodes.length) return;
     let first = Infinity, last = -1, moved = false;
     const shadow = this.nodeShadow;
     for (let i = 0; i < nodes.length; i++) {
+      if (!all && !this.nodeParts[i].posed) continue;
       let visible = true;
       _node.identity();
       for (let o: THREE.Object3D | null = nodes[i]; o && o !== this.inner; o = o.parent) {
@@ -277,6 +288,7 @@ export class VesselView {
         if (!(Math.abs(v - shadow[i * 12 + r * 4 + c]) <= SHADOW_EPSILON)) { moved = true; break; }
       }
     }
+    for (const pv of this.nodeParts) pv.posed = false;
     commitNodes(first, last);
     if (!moved) return;
     // Snapshot every node and tell the shadow cache (it compares caster keys, not node slots).
@@ -323,6 +335,13 @@ export class VesselView {
       pv.object.position.set(p.position.x, p.position.y, p.position.z);
       pv.object.quaternion.set(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
       this.animatePart(p, pv, time, ambientPressure, dt);
+      // Everything animatePart poses on moving nodes follows from these inputs.
+      const pose = pv.pose, g = p.engine?.gimbal, w = p.wheel;
+      const a = g?.a ?? 0, b = g?.b ?? 0, c = w?.compression ?? 0, st = w?.steer ?? 0, sp = w?.spin ?? 0;
+      if (pose[0] !== a || pose[1] !== b || pose[2] !== c || pose[3] !== st || pose[4] !== sp || pose[5] !== pv.deploy) {
+        pose[0] = a; pose[1] = b; pose[2] = c; pose[3] = st; pose[4] = sp; pose[5] = pv.deploy;
+        pv.posed = true;
+      }
     }
     this.updateNodes();
   }
