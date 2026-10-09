@@ -272,7 +272,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     flightData: flightData(w, wv, dvs, internals.predictions),
     crew: w.crewFor(st),
     noControl,
-    eva: st.eva ? { fuel: st.parts[0].resources.monopropellant ?? 0, canBoard: !!w.boardingTarget(), landed: st.situation === 'landed' } : null,
+    eva: st.eva ? { fuel: st.parts[0].resources.monopropellant ?? 0, canBoard: !!w.boardingTarget(), boardHint: w.boardingBlocker(true), landed: st.situation === 'landed' } : null,
     ut: w.ut,
     bodyName: b.name,
     altitudeAsl: info.altitude,

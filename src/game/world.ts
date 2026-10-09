@@ -302,6 +302,8 @@ export class World {
 
   boardingTarget(): { vessel: WorldVessel; pod: PartState } | null { return crew.boardingTarget.call(this, this.systems); }
 
+  boardingBlocker(whole = false): string | null { return crew.boardingBlocker.call(this, this.systems, whole); }
+
   boardEva(): boolean { const v = this.active; const ok = crew.boardEva.call(this, this.systems); if (ok && v) this.closeFlightRecord(v, 'boarded'); return ok; }
 
   plantFlag(): PlantedFlag | null { const flag = crew.plantFlag.call(this, this.systems); if (flag && this.active) { if (!this.achievementProfile.flags.includes(flag.body)) this.achievementProfile.flags.push(flag.body); this.logFlightEvent(this.active, 'flag'); saveAchievements(this.achievementProfile); } return flag; }

@@ -1,6 +1,6 @@
 import { localId } from '../util/localId';
-import { game, loadLastCraft, reportSaveError } from './store';
-import { SLOTS_KEY, commitSaveSlot, deferSaveWrite, flushSaveWrites, listSaveSlots, saveSlotJson, type SaveSlot } from './saveSlots';
+import { draftForSave, game, loadLastCraft, reportSaveError } from './store';
+import { SLOTS_KEY, commitSaveSlot, deferSaveWrite, flushSaveWrites, listSaveSlots, sceneForSave, saveSlotJson, type SaveScene, type SaveSlot } from './saveSlots';
 import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { newProgression, type GameMode, type Progression } from '../sim/science/progression';
 import type { Astronaut, PlantedFlag } from '../sim/crew/crew';
@@ -154,6 +154,8 @@ export interface SaveOptions {
    * Errors go to `onError`; readers and other saves flush the queue first, so order and visibility are unchanged.
    */
   defer?: boolean;
+  /** Scene Load returns to. Default: flight when the player is in flight right now, otherwise the Space Center. */
+  scene?: SaveScene;
   onError?: (e: unknown) => void;
 }
 
@@ -163,7 +165,7 @@ export function saveWorldToStorage(slot: string, world: World, displayName?: str
   const programId = game.get().saveId ?? 'legacy-program';
   // The editor draft travels with the program save so Load restores this program's craft.
   const craft = game.get().trainingActive || game.get().scenarioActive ? loadLastCraft(programId) : game.get().craft;
-  const saved: SaveSlot = { id: slot === 'autosave' ? localId() : `${programId}:${slot}`, programId, name: displayName ?? (slot === 'autosave' ? 'Autosave' : slot === 'quicksave' ? 'Quicksave' : slot), kind: slot === 'autosave' ? 'auto' : 'manual', savedAt, data, craft };
+  const saved: SaveSlot = { id: slot === 'autosave' ? localId() : `${programId}:${slot}`, programId, name: displayName ?? (slot === 'autosave' ? 'Autosave' : slot === 'quicksave' ? 'Quicksave' : slot), kind: slot === 'autosave' ? 'auto' : 'manual', savedAt, data, craft, scene: options.scene ?? (game.get().scene === 'flight' ? 'flight' : 'spaceCenter') };
   let dataJson = '', failed = false;
   const steps = [
     () => { dataJson = JSON.stringify(data); },
@@ -225,9 +227,9 @@ export function deleteSave(slot: string) {
 
 
 /** Never throws: a failed write (full or blocked storage) is reported as a notification and play/navigation continues. */
-export function trySaveWorld(slot: string, world: World, displayName?: string): boolean {
+export function trySaveWorld(slot: string, world: World, displayName?: string, options?: SaveOptions): boolean {
   try {
-    saveWorldToStorage(slot, world, displayName);
+    saveWorldToStorage(slot, world, displayName, options);
     return true;
   } catch (e) {
     reportSaveError(e);
@@ -240,4 +242,9 @@ export function saveNamedWorld(name: string, world: World) {
   name = name.trim().slice(0, 200);
   if (!name) throw new Error('A save slot needs a name.');
   saveWorldToStorage(`manual:${name}`, world, name);
+}
+
+/** Resume a save: straight into the flight it was made in, else the Space Center. */
+export function resumeSave(slot: SaveSlot) {
+  game.set({ saveId: slot.programId, resumeWorld: slot.data, mode: slot.data.mode ?? 'sandbox', scalePreset: slot.data.preset, ut: slot.data.ut, launchPending: false, craft: draftForSave(slot), scene: sceneForSave(slot) });
 }

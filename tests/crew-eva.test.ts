@@ -155,6 +155,33 @@ describe('human crew and EVA', () => {
     expect(w.vessels.has(eva.state.id)).toBe(true);
   });
 
+  it('says why boarding is not possible instead of ignoring the key', () => {
+    const { w, ship } = orbit();
+    const eva = w.goEva()!;
+    expect(w.boardingBlocker()).toBeNull();
+    eva.state.velocity = add(ship.state.velocity,v3(5,0,0));
+    expect(w.boardingBlocker()).toMatch(/Slow down.*5\.0 m\/s/);
+    eva.state.velocity = { ...ship.state.velocity };
+    eva.state.position = add(eva.state.position,v3(10,0,0));
+    expect(w.boardingBlocker()).toMatch(/Move closer to the hatch/);
+    expect(w.boardingBlocker(true)).toMatch(/\d+ m away/);
+    expect(w.boardEva()).toBe(false);
+    expect(w.messages.at(-1)).toMatchObject({ level: 'warn', text: expect.stringMatching(/Move closer to the hatch.* m away/) });
+    // A vessel whose seats are all taken is named as such rather than reported as out of range.
+    w.switchTo(ship.state.id);
+    ship.state.parts[0].crew = ['someone'];
+    w.switchTo(eva.state.id);
+    expect(w.boardingBlocker()).toMatch(/no free seat/);
+  });
+
+  it('reports no hatch when nothing crewed is nearby', () => {
+    const { w, ship } = orbit();
+    const eva = w.goEva()!;
+    w.vessels.delete(ship.state.id);
+    expect(w.boardingBlocker()).toMatch(/No crewed vessel/);
+    expect(eva.state.eva).toBeTruthy();
+  });
+
   it('latches hops across render frames with no physics step', () => {
     const { w, eva } = lunarSurface();
     w.tick(0.005,neutralInput({evaJump:true}));

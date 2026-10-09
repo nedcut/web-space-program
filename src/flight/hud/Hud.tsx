@@ -69,7 +69,7 @@ export interface Telemetry {
   trim?: { pitch: number; yaw: number; roll: number; held: boolean } | null;
   crew: Astronaut[];
   noControl: boolean;
-  eva: { fuel: number; canBoard: boolean; landed: boolean } | null;
+  eva: { fuel: number; canBoard: boolean; boardHint: string | null; landed: boolean } | null;
   ut: number;
   bodyName: string;
   altitudeAsl: number;

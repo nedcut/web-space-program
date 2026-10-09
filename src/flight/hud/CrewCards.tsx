@@ -45,9 +45,10 @@ export const CrewCards = memo(function CrewCards({ crew, eva, mapMode, noControl
               <div className="crew-name">{t.crew[0]?.name ?? 'Astronaut'}</div>
               <div className="crew-meta mono">Jetpack {t.eva.fuel.toFixed(2)} kg</div>
               <div className="crew-actions">
-                <button type="button" className="btn small" disabled={!t.eva.canBoard} onClick={cb.onBoard} title="Board a hatch within 3 m">Board · {key('board')}</button>
+                <button type="button" className="btn small" disabled={!t.eva.canBoard} onClick={cb.onBoard} title={t.eva.boardHint ?? 'Board a hatch within 3 m'}>Board · {key('board')}</button>
                 <button type="button" className="btn small" disabled={!t.eva.landed} onClick={cb.onPlantFlag} title="Plant a flag (landed)">Flag · {key('plantFlag')}</button>
               </div>
+              {t.eva.boardHint && <div className="crew-meta" role="status">{t.eva.boardHint}</div>}
             </div>
           </article>
         </div>
