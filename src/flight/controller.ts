@@ -1283,6 +1283,22 @@ export class FlightController {
   private readonly liftoff = new LiftoffDetector();
   private readonly camEye = new THREE.Vector3();
   private readonly camMid = new THREE.Vector3();
+  /** Time spent choosing the last tower eye (ms; telemetry for perf checks). */
+  towerPickMs = 0;
+  /** Launch-site structure meshes (not instanced vegetation) that can block the tower camera's view. */
+  private towerBlockers(): THREE.Object3D[] {
+    const out: THREE.Object3D[] = [];
+    if (!this.site?.root.visible) return out;
+    this.site.root.updateMatrixWorld();
+    this.site.root.traverseVisible(o => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || (o as THREE.InstancedMesh).isInstancedMesh) return;
+      // Skip invisible pick volumes and see-through effects (hover ring, light curtain).
+      const mat = Array.isArray(m.material) ? m.material[0] : m.material;
+      if (mat && mat.visible && !mat.transparent) out.push(o);
+    });
+    return out;
+  }
   /** Tower camera anchor: body-fixed position (m) on the ground near where the mode was chosen. */
   private tower: { id: string; body: string; fixed: Vec3 } | null = null;
 
@@ -1294,20 +1310,42 @@ export class FlightController {
     if (!a || a.id !== st.id || a.body !== wv.body) {
       this.tower = null;
       if (!towerAvailable(u.body(wv.body).solidSurface, agl, radius)) return null;
-      // Stand off horizontally on the side the camera is already looking from, then drop to the ground.
+      // Stand off horizontally, starting on the side the camera already looks from and stepping round in 45° bearings
+      // until the line of sight to the vessel clears the launch site's structures (a one-off test on mode entry).
+      const t0 = performance.now();
       const rel = sub(origin, bodyPos);
-      const upF = normalize(u.ephem.toBodyFixed(wv.body, rel, t));
+      const fixedRel = u.ephem.toBodyFixed(wv.body, rel, t);
+      const upF = normalize(fixedRel);
       const c = this.cam.camera.position;
       const look = u.ephem.toBodyFixed(wv.body, { x: c.x, y: c.y, z: c.z }, t);
       let h = sub(look, scale(upF, dot(look, upF)));
       if (length(h) < 1e-6) h = cross(upF, Math.abs(upF.z) < 0.9 ? { x: 0, y: 0, z: 1 } : { x: 1, y: 0, z: 0 });
+      h = normalize(h);
+      const side = cross(upF, h);
       const place = towerPlacement(radius);
-      const fixedRel = u.ephem.toBodyFixed(wv.body, rel, t);
-      const groundDir = normalize(add(sub(fixedRel, scale(upF, agl)), scale(normalize(h), place.distance)));
       const rot = u.ephem.bodyRotation(wv.body, t);
-      const probe = add(bodyPos, qRotate(rot, scale(groundDir, length(fixedRel))));
-      const info = u.surfaceInfo(wv.body, probe, t);
-      a = this.tower = { id: st.id, body: wv.body, fixed: scale(groundDir, info.r - info.heightAboveTerrain + place.height) };
+      const ground = sub(fixedRel, scale(upF, agl));
+      const blockers = this.towerBlockers();
+      let first: Vec3 | null = null;
+      for (let k = 0; k < 8; k++) {
+        const b = (k * Math.PI) / 4;
+        const dir = add(scale(h, Math.cos(b)), scale(side, Math.sin(b)));
+        const groundDir = normalize(add(ground, scale(dir, place.distance)));
+        const info = u.surfaceInfo(wv.body, add(bodyPos, qRotate(rot, scale(groundDir, length(fixedRel)))), t);
+        const fixed = scale(groundDir, info.r - info.heightAboveTerrain + place.height);
+        first ??= fixed;
+        if (!blockers.length) break;
+        const e = sub(add(bodyPos, qRotate(rot, fixed)), origin);
+        const d = length(e);
+        this.raycaster.ray.origin.set(e.x, e.y, e.z);
+        this.raycaster.ray.direction.set(-e.x / d, -e.y / d, -e.z / d);
+        this.raycaster.near = 0;
+        this.raycaster.far = Math.max(0, d - radius * 1.5);
+        if (!this.raycaster.intersectObjects(blockers, false).length) { first = fixed; break; }
+      }
+      this.raycaster.far = Infinity;
+      this.towerPickMs = performance.now() - t0;
+      a = this.tower = { id: st.id, body: wv.body, fixed: first! };
     }
     const eye = sub(add(bodyPos, qRotate(u.ephem.bodyRotation(wv.body, t), a.fixed)), origin);
     if (length(eye) > towerRevertDistance(radius)) { this.tower = null; return null; }

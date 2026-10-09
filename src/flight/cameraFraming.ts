@@ -78,9 +78,10 @@ export function towerRevertDistance(radius: number): number {
   return Math.max(1500, fullZoom * 2);
 }
 
-/** Tower camera placement: horizontal distance from the vessel's ground point and eye height above the terrain (m). */
+/** Tower camera placement: horizontal distance from the vessel's ground point and eye height above the terrain (m, mast height: clears scrub). */
 export function towerPlacement(radius: number): { distance: number; height: number } {
-  return { distance: Math.max(40, Math.min(300, radius * 8)), height: 2 };
+  // Far enough to clear the pad's own structures and exhaust cloud; the tracking zoom makes up the distance.
+  return { distance: Math.max(200, Math.min(500, radius * 25)), height: 10 };
 }
 
 /** The tower camera only makes sense close to a solid surface. */

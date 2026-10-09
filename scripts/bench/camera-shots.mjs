@@ -27,7 +27,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice
 const state = () => page.evaluate(() => {
   const f = window.__flight, wv = f.world.active, tel = wv.state.telemetry, c = f.cam.camera;
   const p = new c.position.constructor(0, 0, 0).project(c);
-  return { met: +(f.world.ut - (window.__t0 ?? f.world.ut)).toFixed(1), agl: Math.round(tel.altitudeAGL), q: Math.round(tel.dynamicPressure), mode: f.cam.mode, fov: +c.fov.toFixed(2), dist: +f.cam.distance.toFixed(1), vesselScreenY: +((1 - p.y) / 2).toFixed(3) };
+  return { met: +(f.world.ut - (window.__t0 ?? f.world.ut)).toFixed(1), agl: Math.round(tel.altitudeAGL), q: Math.round(tel.dynamicPressure), mode: f.cam.mode, fov: +c.fov.toFixed(2), dist: +f.cam.distance.toFixed(1), vesselScreenY: +((1 - p.y) / 2).toFixed(3), towerPickMs: f.towerPickMs === undefined ? undefined : +f.towerPickMs.toFixed(2) };
 });
 // rAF interval stats over `ms` (vsync-bound; a regression would show as missed frames / a higher p95).
 const frames = (ms) => page.evaluate((ms) => new Promise((res) => {
