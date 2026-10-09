@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { contextIsLost } from './contextRecovery';
+import { registerOffscreenPass } from './offscreenWarmup';
 
 export interface ProceduralCubeOptions {
   format?: THREE.PixelFormat;
@@ -23,6 +24,8 @@ export class ProceduralCubeMap {
   private readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   protected readonly material: THREE.ShaderMaterial;
   private readonly quad: THREE.Mesh;
+  /** Compiled by the flight warm-up until the bake finishes. */
+  private unregister: (() => void) | null;
 
   constructor(size: number, bakeGlsl: string, opts: ProceduralCubeOptions = {}) {
     this.size = size;
@@ -58,6 +61,7 @@ export class ProceduralCubeMap {
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material);
     this.quad.frustumCulled = false;
     this.scene.add(this.quad);
+    this.unregister = registerOffscreenPass(this.quad.geometry, this.material);
   }
 
   get texture(): THREE.CubeTexture { return this.target.texture; }
@@ -103,10 +107,13 @@ export class ProceduralCubeMap {
     }
     renderer.setRenderTarget(prevTarget, prevFace, prevMip);
     renderer.autoClear = prevAutoClear;
+    if (last) { this.unregister?.(); this.unregister = null; }
     return last;
   }
 
   dispose(): void {
+    this.unregister?.();
+    this.unregister = null;
     this.target.dispose();
     this.material.dispose();
     this.quad.geometry.dispose();

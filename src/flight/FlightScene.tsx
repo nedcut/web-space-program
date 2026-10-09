@@ -366,6 +366,12 @@ export default function FlightScene() {
           t={tele}
           navball={<NavballView getFrame={navball} />}
           dock={multiplayer ? undefined : {
+            recovery: canRecover && active && active.mode !== 'prelaunch' && !tele.eva ? (
+              <Panel className="feel-hint" role="status">
+                <span style={{ flex: 1 }}>{active.state.situation === 'splashed' ? 'Splashed down' : 'Landed'} on Earth</span>
+                <Button className="btn small" onClick={recover}>Recover vessel</Button>
+              </Panel>
+            ) : undefined,
             onboarding: quickStart && ready && !help && !paused && tele.onSurface ? <QuickStartCard onClose={() => { markHelpSeen(); setQuickStart(false); }} onHelp={() => { markHelpSeen(); setQuickStart(false); setHelp(true); }} /> : undefined,
             assist: !tele.eva && !tele.noControl ? <AssistPanel active={tele.assist} onStart={(id) => ctrl.current?.startAssist(id)} onCancel={() => ctrl.current?.cancelAssist()} /> : undefined,
             assistActive: !!tele.assist,

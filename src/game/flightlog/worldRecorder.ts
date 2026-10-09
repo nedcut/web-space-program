@@ -16,7 +16,10 @@ export function recordVessel(w: World, v: WorldVessel, ut = w.ut, force = false)
   // Packed states retain the last physics telemetry; it must never count as ongoing thrust during warp.
   const telemetry = v.mode === 'physics' ? s.telemetry : { ...s.telemetry, thrust: 0, dynamicPressure: 0, mach: 0, gForce: v.mode === 'rails' ? 0 : b.gm / (radius * radius * 9.80665) };
   r.stats.maxAltitude = Math.max(r.stats.maxAltitude, radius - b.radius);
-  r.stats.maxSpeed = Math.max(r.stats.maxSpeed, speed);
+  // Peak speed in the frame the HUD's automatic readout uses (flight/speedMode orbitSpeedAltitude): surface speed
+  // low down, orbital speed above it, so a high coast is not inflated by the body's rotation.
+  const displaySpeed = radius - b.radius < (b.atmosphere?.height || b.radius * 0.05) ? speed : length(relative.velocity);
+  r.stats.maxSpeed = Math.max(r.stats.maxSpeed, displaySpeed);
 
   if (!force && last && last.body === v.body && last.flying === (s.situation === 'flying') && last.prelaunch === (v.mode === 'prelaunch') && ut - last.ut < sampleInterval({ ...last, thrustAcceleration: telemetry.thrust / Math.max(1, s.mass), q: telemetry.dynamicPressure })) {
     // Capture short-lived peak loads and integrate thrust at the actual physics rate.
@@ -50,7 +53,7 @@ export function recordVessel(w: World, v: WorldVessel, ut = w.ut, force = false)
     const down = qRotate(qConj(s.orientation), scale(normalize(relative.position), -1));
     clearance -= w.restOffset(s, down);
   }
-  observe(r, { inertialSpeed: length(relative.velocity), clearance, ut, body: v.body, altitude: radius - b.radius, speed, vertical, horizontal: Math.sqrt(Math.max(0, speed * speed - vertical * vertical)), ap: o.ap, pe: o.pe, mach: telemetry.mach, q: telemetry.dynamicPressure, g: telemetry.gForce, temperature, mass: s.mass,
+  observe(r, { inertialSpeed: length(relative.velocity), displaySpeed, clearance, ut, body: v.body, altitude: radius - b.radius, speed, vertical, horizontal: Math.sqrt(Math.max(0, speed * speed - vertical * vertical)), ap: o.ap, pe: o.pe, mach: telemetry.mach, q: telemetry.dynamicPressure, g: telemetry.gForce, temperature, mass: s.mass,
     dv,
     thrustAcceleration: telemetry.thrust / Math.max(1, s.mass),
     flying: s.situation === 'flying', prelaunch: v.mode === 'prelaunch', stableOrbit: s.situation === 'flying' && orbit.e < 1 && o.pe > Math.max(b.atmosphere?.height ?? 0, w.universe.terrain(b.id).maxHeight), parts: s.parts.length,

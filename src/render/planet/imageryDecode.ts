@@ -35,23 +35,25 @@ function getWorker(): Worker {
 }
 
 /** Cropping big decoded images can block Chrome despite createImageBitmap returning a promise. */
-export function decodeImagery(blob: Blob, stripBytes: number): Promise<ImageStrips> {
-  if (unavailable || typeof Worker === 'undefined') return cutImageStrips(blob, stripBytes);
+export function decodeImagery(blob: Blob, stripBytes: number, channels: 1 | 4): Promise<ImageStrips> {
+  if (unavailable || typeof Worker === 'undefined') return cutImageStrips(blob, stripBytes, channels);
   try {
     const target = getWorker();
     return new Promise<ImageStrips>((resolve, reject) => {
       const id = nextId++;
-      const fallback = () => { void cutImageStrips(blob, stripBytes).then(resolve, reject); };
+      const fallback = () => { void cutImageStrips(blob, stripBytes, channels).then(resolve, reject); };
       pending.set(id, { resolve, fallback });
-      try { target.postMessage({ id, blob, stripBytes }); }
+      try { target.postMessage({ id, blob, stripBytes, channels }); }
       catch { pending.delete(id); fallback(); scheduleIdle(); }
     });
-  } catch { unavailable = true; return cutImageStrips(blob, stripBytes); }
+  } catch { unavailable = true; return cutImageStrips(blob, stripBytes, channels); }
 }
 
 /** Last reference only: transferring relinquishes main-thread ownership after the GPU copy is submitted. */
 export function releaseImagery(source: ImageStrips): void {
-  const bitmaps = source.strips.map(s => s.bitmap);
+  // Pixel strips (Firefox) are ordinary garbage-collected buffers.
+  const bitmaps = source.strips.flatMap(s => s.bitmap ? [s.bitmap] : []);
+  if (!bitmaps.length) return;
   if (!unavailable && typeof Worker !== 'undefined') {
     try {
       getWorker().postMessage({ type: 'release', bitmaps }, bitmaps);
