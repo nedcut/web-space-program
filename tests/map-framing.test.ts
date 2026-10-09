@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Orbit, TrajectoryPatch } from '../src/sim/orbit/api';
-import { AutoFramer, firstTransition, orbitFrameDistance, pathFrameDistance } from '../src/flight/map/framing';
+import { AutoFramer, NO_TRANSITION, UNDECIDED, firstTransition, orbitFrameDistance, pathFrameDistance } from '../src/flight/map/framing';
 import { patchDrawnNow } from '../src/render/map/framing';
 
 const orbit = (body: string, e = 0.1): Orbit => ({ body, a: 7e6, e, i: 0, lan: 0, argPe: 0, m0: 0, epoch: 0, mu: 4e14 });
@@ -15,10 +15,10 @@ describe('map framing: first SOI change on the flown path', () => {
     expect(firstTransition([patch('earth', 'soiEnter', 'moon'), patch('moon', 'soiExit', 'earth')], 'earth')).toBe(0);
     expect(firstTransition([patch('moon', 'soiExit', 'earth'), patch('earth', 'horizon')], 'moon')).toBe(0);
     // A node first: the encounter belongs to the plan, which keeps the local frame (explicit overview instead).
-    expect(firstTransition([patch('earth', 'maneuver'), patch('earth', 'soiEnter', 'moon'), patch('moon', 'horizon')], 'earth')).toBe(-1);
-    expect(firstTransition([patch('earth', 'horizon')], 'earth')).toBe(-1);
+    expect(firstTransition([patch('earth', 'maneuver'), patch('earth', 'soiEnter', 'moon'), patch('moon', 'horizon')], 'earth')).toBe(UNDECIDED);
+    expect(firstTransition([patch('earth', 'horizon')], 'earth')).toBe(NO_TRANSITION);
     // A path from a stale prediction (other body) never frames.
-    expect(firstTransition([patch('earth', 'soiEnter', 'moon')], 'moon')).toBe(-1);
+    expect(firstTransition([patch('earth', 'soiEnter', 'moon')], 'moon')).toBe(NO_TRANSITION);
   });
 
   it('widens the local frame to include the transition, never narrows it', () => {
@@ -69,6 +69,21 @@ describe('map framing: automatic reframing', () => {
     zoomed.framed('moon', exit, 4, 0);
     expect(zoomed.update('moon', undefined, 5, 100, false)).toBe(false);
     expect(zoomed.update('moon', undefined, 5, 5000, false)).toBe(false);
+  });
+
+  it('holds while a node decides the path, then frames its outcome (capture planned and flown in the SOI)', () => {
+    const f = new AutoFramer();
+    f.framed('moon', exit, 0, 0);
+    expect(f.update('moon', null, 0, 1000, false)).toBe(false);
+    expect(f.update('moon', null, 0, 9000, true)).toBe(false);
+    expect(f.update('moon', undefined, 0, 9500, false)).toBe(false);
+    expect(f.update('moon', undefined, 0, 10300, false)).toBe(true);
+    // Opened with the TLI node still ahead: the encounter after the burn is framed.
+    const tli = new AutoFramer();
+    tli.framed('earth', null, 0, 0);
+    expect(tli.update('earth', null, 0, 5000, false)).toBe(false);
+    expect(tli.update('earth', enter, 0, 6000, false)).toBe(false);
+    expect(tli.update('earth', enter, 0, 6800, false)).toBe(true);
   });
 });
 

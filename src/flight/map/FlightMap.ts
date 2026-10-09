@@ -9,7 +9,7 @@ import { formatDistance, formatSpeed } from '../../util/format';
 import { length, sub, type Vec3 } from '../../util/vec3';
 import type { TrajectoryPatch } from '../../sim/orbit/api';
 import { patchState } from '../../sim/orbit/numericalPrediction';
-import { AutoFramer, firstTransition, pathFrameDistance } from './framing';
+import { AutoFramer, UNDECIDED, firstTransition, pathFrameDistance } from './framing';
 import { nodeSummary, patchAtNode } from './nodeInfo';
 
 export interface MapMenus {
@@ -99,7 +99,7 @@ export class FlightMap {
     // Following the vessel: frame the new primary after an SOI change, and an encounter/escape (or its loss on
     // capture) as it appears on the flown path, unless the player has zoomed since.
     const i = firstTransition(patches, active.body);
-    if (this.autoFrame.update(active.body, i >= 0 ? patches[i] : undefined, this.c.map.zoomCount, performance.now(), thrusting)) this.frameActive(patches);
+    if (this.autoFrame.update(active.body, i === UNDECIDED ? null : patches[i], this.c.map.zoomCount, performance.now(), thrusting)) this.frameActive(patches);
     // The local body remains central; enlarge the frame only if a burn carries the vessel out of view.
     if (thrusting) {
       const dx = origin.x - bodyState.position.x, dy = origin.y - bodyState.position.y, dz = origin.z - bodyState.position.z;
@@ -138,9 +138,9 @@ export class FlightMap {
   private frameActive(patches: readonly TrajectoryPatch[]) {
     const v = this.world.active;
     if (!v) return;
-    const i = firstTransition(patches, v.body), transition = i >= 0 ? patches[i] : undefined;
+    const i = firstTransition(patches, v.body), transition = patches[i];
     this.c.map.distance = this.vesselFrameDistance(v, transition);
-    this.autoFrame.framed(v.body, transition, this.c.map.zoomCount, performance.now());
+    this.autoFrame.framed(v.body, i === UNDECIDED ? null : transition, this.c.map.zoomCount, performance.now());
   }
 
   /** Local orbit of `v`, widened to include the SOI change ending patch `p` (an encounter or escape). */
