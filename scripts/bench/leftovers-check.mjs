@@ -107,6 +107,26 @@ try {
       console.log(body, lat, JSON.stringify(results));
     }
   }
+  if (mode === 'pad') {
+    // Ignition and liftoff over the flame hole, from two low viewpoints (one along the trench).
+    for (const [view, yaw, pitch, dist] of [['side', 0.6, 0.12, 40], ['trench', 2.4, 0.25, 55], ['top', 0.6, 1.25, 30]]) {
+      await go('/?flight=stock-meridian'); await ready();
+      await hideHud();
+      await page.evaluate(({ yaw, pitch, dist }) => {
+        const c = window.__flight.cam; c.tYaw = c.cYaw = yaw; c.tPitch = c.cPitch = pitch; c.tDist = c.cDist = dist; c.distanceSet = true;
+      }, { yaw, pitch, dist });
+      await sleep(3000);
+      await shot(`pad-${view}-0-before-${label}`);
+      await page.evaluate(() => { window.__flight.input.state.throttle = 1; window.__flight.stage(); });
+      const t0 = Date.now();
+      for (const at of [400, 1200, 2500, 4000, 6000, 8000]) {
+        await sleep(Math.max(0, at - (Date.now() - t0)));
+        await shot(`pad-${view}-${at}ms-${label}`);
+      }
+      results[view] = await page.evaluate(() => { const v = window.__flight.world.active.state; return { situation: v.situation, agl: v.telemetry.altitudeAGL, thrust: v.telemetry.thrust }; });
+      console.log(view, JSON.stringify(results[view]));
+    }
+  }
   /*PAD*/
   results.errors = errors;
   console.log(JSON.stringify(results, null, 2));
