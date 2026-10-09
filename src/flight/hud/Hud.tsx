@@ -211,6 +211,8 @@ export interface HudDockSlots {
   alarms?: ReactNode;
   alarmActive?: boolean;
   onboarding?: ReactNode;
+  /** Offer to recover a vessel that has come to rest on Earth (landed or splashed down). */
+  recovery?: ReactNode;
   /** Flight-assist panel (null when assist is unavailable, e.g. EVA / no control). */
   assist?: ReactNode;
   /** True while an assist program is running (keeps its status visible). */
@@ -309,6 +311,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
       <div className={`hud-left${t.mapMode ? ' map' : ''}`}>
         <TimeControl t={t} cb={cb} />
         {dock?.onboarding}
+        {dock?.recovery}
         {engineeringStrip && !t.eva && t.engineering && <EngineeringStrip data={t.engineering} speed={speed} />}
         {!dock?.onboarding && !t.mapMode && t.feel.alerts.length === 0 && t.messages.length === 0 && <FlightHint hint={t.feel.hint} onDismiss={cb.onDismissHint} />}
         {gamepadConnected && <div className="hud-pad mono">GAMEPAD</div>}
