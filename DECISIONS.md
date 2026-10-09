@@ -348,3 +348,9 @@ Decisions made autonomously while the owner was away. Each can be revisited.
   propellant. Share it between Flight Data, node summary, navball duration/countdown and Execute node. Centre on
   time to deliver half the Δv, preserving the executor's existing behavior; landing-stage selection and guided
   aim-point cutoff are unchanged. The old autopilot/controller exports remain compatibility re-exports.
+
+## Thermal sunlight uses unscaled distance; Firefox pageerror was the QA driver (2026-10-08, op/smallfix)
+
+- **Pink fairing:** the white fairing (and any sunlit skin) glowed red because standard-scale universes compress the Sun distance by s = 0.1, so thermal irradiance from `sun.distance` was 100x real (136 kW/m²). In vacuum or thin air sunlit skins settled at 800-1,100 K (fairing: 1,023 K in the climb, over `PartHeat`'s 700 K glow threshold; red emission over white paint reads pink). `Environment.sun` now also returns `thermalDistance` (`distance / s`, the real-universe distance), and `stepVessel` heats skins with it. Solar-panel output still uses the scaled `distance`, so stock power balance and the hazard calibrations are unchanged. Result at the same ascent: fairing skin peak 301 K (was 1,023 K), no glow. Sunlit parts in vacuum now equilibrate near 320 K instead of 800 K+, so reentry and heat-shield behaviour are unchanged but sun-heated hardware is cooler than before.
+- **Firefox "Permission denied to access property length":** not game code. It appears only intermittently (1 in ~20 runs) right at navigation, also on a static blank page, and only with the driver's `evaluateOnNewDocument` hook: a Firefox BiDi preload-script race. `qa-lib.mjs` now logs it as `[driver-noise]` and does not count it as a page error.
+
