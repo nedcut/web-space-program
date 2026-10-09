@@ -26,6 +26,7 @@ let scene: THREE.Scene | null = null;
 let camera: THREE.PerspectiveCamera | null = null;
 let envRT: StudioEnvironment | null = null;
 let scheduled = false;
+let craftRequests = 0;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function getThumbnail(id: string): string | undefined {
@@ -182,10 +183,7 @@ async function pump() {
     }
   }
   notify();
-  if (!queue.length) {
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => !queue.length && teardown(), 4000);
-  }
+  scheduleTeardown();
 }
 
 /** Live encyclopedia thumbnail, using the same mesh, framing and lighting as catalogue thumbnails. */
@@ -235,9 +233,53 @@ export function mountPartTurntable(canvas: HTMLCanvasElement, def: PartDef, redu
   return () => { cancelAnimationFrame(raf); resize.disconnect(); visibility.disconnect(); environment.dispose(); r.dispose(); r.forceContextLoss(); };
 }
 
-/** Whole-craft preview shares the catalogue renderer and cached mesh geometry. */
-export function renderCraftThumbnail(craft: import('../../sim/vessel/types').CraftDef, catalog: ReadonlyMap<string, PartDef>): string {
+/** Release the shared context only when neither thumbnail consumer is waiting on it. */
+function scheduleTeardown() {
+  if (queue.length || craftRequests) return;
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => { if (!queue.length && !craftRequests) teardown(); }, 4000);
+}
+
+/** Whole-craft previews share the idle queue with parts, including retries after a context loss. */
+export function requestCraftThumbnail(
+  craft: import('../../sim/vessel/types').CraftDef, catalog: ReadonlyMap<string, PartDef>, ready: (image: string) => void,
+): () => void {
+  craftRequests++;
+  if (idleTimer) clearTimeout(idleTimer);
+  let cancelled = false;
+  let cancelIdle: (() => void) | undefined;
+  let offRestore: (() => void) | undefined;
+  const finish = () => {
+    if (cancelled) return;
+    cancelled = true;
+    cancelIdle?.();
+    offRestore?.();
+    craftRequests--;
+    scheduleTeardown();
+  };
+  const attempt = () => {
+    if (cancelled) return;
+    offRestore?.();
+    offRestore = undefined;
+    let image: string | undefined;
+    try { image = renderCraftThumbnail(craft, catalog); }
+    catch { if (!renderer || !contextIsLost(renderer)) image = ''; }
+    if (image === undefined && renderer) {
+      // Release the idle queue while waiting, so a lost thumbnail context cannot stall unrelated jobs.
+      offRestore = onContextRestored(renderer, () => { cancelIdle = enqueueIdle(attempt); });
+    } else {
+      finish();
+      ready(image ?? '');
+    }
+  };
+  cancelIdle = enqueueIdle(attempt);
+  return finish;
+}
+
+/** Synchronous draw/readback; never accept the canvas contents from a lost context. */
+function renderCraftThumbnail(craft: import('../../sim/vessel/types').CraftDef, catalog: ReadonlyMap<string, PartDef>): string | undefined {
   setup();
+  if (contextIsLost(renderer!)) return;
   const holder = new THREE.Group();
   for (const p of craft.parts) {
     const def = catalog.get(p.partId); if (!def) continue;
@@ -256,11 +298,11 @@ export function renderCraftThumbnail(craft: import('../../sim/vessel/types').Cra
     camera!.near = dist / 100; camera!.far = dist * 4;
     camera!.updateProjectionMatrix(); camera!.lookAt(0, 0, 0);
     renderer!.render(scene!, camera!);
-    return renderer!.domElement.toDataURL('image/png');
+    if (contextIsLost(renderer!)) return;
+    const image = renderer!.domElement.toDataURL('image/png');
+    return contextIsLost(renderer!) ? undefined : image;
   } finally {
     scene!.remove(holder);
     renderedParts.set('craft', holder);
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => !queue.length && teardown(), 4000);
   }
 }

@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { PartDef } from '../src/sim/vessel/types';
 
-const mocks = vi.hoisted(() => ({ build: vi.fn(), ready: vi.fn(), gl: { lost: false }, canvases: [] as EventTarget[] }));
+const mocks = vi.hoisted(() => ({ build: vi.fn(), ready: vi.fn(), render: vi.fn(), encode: vi.fn(), gl: { lost: false }, canvases: [] as EventTarget[] }));
 vi.mock('../src/editor/scene/partMesh', () => ({ createPartMesh: mocks.build }));
 vi.mock('../src/render/parts/textures', () => ({ partTexturesReady: mocks.ready }));
 vi.mock('../src/render/core/studioEnv', () => ({
@@ -15,9 +15,9 @@ vi.mock('three', async (importOriginal) => {
   const THREE = await importOriginal<typeof import('three')>();
   class FakeRenderer {
     debug = { checkShaderErrors: true };
-    domElement = Object.assign(new EventTarget(), { toBlob: (cb: (b: Blob) => void) => cb(new Blob()) });
+    domElement = Object.assign(new EventTarget(), { toBlob: (cb: (b: Blob) => void) => cb(new Blob()), toDataURL: mocks.encode });
     constructor() { mocks.canvases.push(this.domElement); }
-    setPixelRatio() {} setSize() {} setClearColor() {} render() {} dispose() {} forceContextLoss() {}
+    setPixelRatio() {} setSize() {} setClearColor() {} render = mocks.render; dispose() {} forceContextLoss() {}
     getContext() { return { isContextLost: () => mocks.gl.lost }; }
     compileAsync() { return mocks.gl.lost ? Promise.reject(new Error('lost')) : Promise.resolve(); }
   }
@@ -92,4 +92,73 @@ it('retries thumbnails that failed while the context was lost once it is restore
   await slice();
   expect(getThumbnail('b')).toBe('blob:x');
   leave();
+});
+
+async function craftFixture() {
+  vi.resetModules();
+  mocks.gl.lost = false;
+  mocks.render.mockReset();
+  mocks.encode.mockReset().mockReturnValue('data:image/png;valid');
+  const idle: IdleRequestCallback[] = [];
+  vi.stubGlobal('requestIdleCallback', (cb: IdleRequestCallback) => idle.push(cb));
+  vi.stubGlobal('document', { createElement: () => ({}), addEventListener() {} });
+  const THREE = await import('three');
+  mocks.build.mockImplementation(() => new THREE.Object3D());
+  const { requestCraftThumbnail } = await import('../src/editor/scene/thumbnails');
+  const craft = { name: 'Test vehicle', parts: [{ partId: 'test', position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0, w: 1 } }] } as import('../src/sim/vessel/types').CraftDef;
+  const catalog = new Map([['test', { id: 'test' } as PartDef]]);
+  const slice = async () => {
+    idle.shift()!({ didTimeout: false, timeRemaining: () => 50 });
+    await new Promise(r => setTimeout(r, 0));
+  };
+  const restore = () => {
+    mocks.gl.lost = false;
+    mocks.canvases.at(-1)!.dispatchEvent(new Event('webglcontextrestored'));
+  };
+  return { idle, slice, restore, request: (ready: (image: string) => void) => requestCraftThumbnail(craft, catalog, ready) };
+}
+
+it('pauses craft previews while lost, frees the shared queue, and retries on restore', async () => {
+  const f = await craftFixture(), ready = vi.fn();
+  const { enqueueIdle } = await import('../src/util/idleQueue');
+  mocks.gl.lost = true;
+  f.request(ready);
+  await f.slice();
+  expect(mocks.build).not.toHaveBeenCalled();
+  expect(mocks.encode).not.toHaveBeenCalled();
+  expect(ready).not.toHaveBeenCalled();
+  expect(f.idle).toHaveLength(0);
+  const unrelated = vi.fn();
+  enqueueIdle(unrelated);
+  await f.slice();
+  expect(unrelated).toHaveBeenCalledOnce();
+  f.restore();
+  await f.slice();
+  expect(ready).toHaveBeenCalledExactlyOnceWith('data:image/png;valid');
+  f.restore();
+  expect(f.idle).toHaveLength(0);
+});
+
+it.each(['draw', 'readback'])('rejects a craft image lost during %s and redraws it after restore', async stage => {
+  const f = await craftFixture(), ready = vi.fn();
+  if (stage === 'draw') mocks.render.mockImplementationOnce(() => { mocks.gl.lost = true; });
+  else mocks.encode.mockImplementationOnce(() => { mocks.gl.lost = true; return 'data:image/png;blank'; });
+  f.request(ready);
+  await f.slice();
+  expect(ready).not.toHaveBeenCalled();
+  expect(f.idle).toHaveLength(0);
+  f.restore();
+  await f.slice();
+  expect(ready).toHaveBeenCalledExactlyOnceWith('data:image/png;valid');
+});
+
+it('cancels a craft preview waiting for restore when the dialog closes', async () => {
+  const f = await craftFixture(), ready = vi.fn();
+  mocks.gl.lost = true;
+  const cancel = f.request(ready);
+  await f.slice();
+  cancel(); cancel();
+  f.restore();
+  expect(f.idle).toHaveLength(0);
+  expect(ready).not.toHaveBeenCalled();
 });
