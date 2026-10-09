@@ -3,6 +3,7 @@ import { clampPixelRatio, maxDrawingEdge } from './drawingLimits';
 import { UpscalePass } from './UpscalePass';
 import { FusedBloomPass, ToneMapPass } from './fusedBloom';
 import { AdaptiveQuality } from './adaptiveQuality';
+import { ArrayUniformCache } from './uniformCache';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -46,6 +47,7 @@ export class RenderPipeline {
   private quality: QualitySettings;
   private adaptive = new AdaptiveQuality();
   private gpuTimer: GpuTimer | null;
+  private readonly arrayUniforms = new ArrayUniformCache();
   /** Smoothed GPU time per frame (ms) from timer queries; NaN when the browser does not expose them. */
   gpuMs = NaN;
   readonly stats = { calls: 0, triangles: 0, points: 0, programs: 0, textures: 0, geometries: 0 };
@@ -246,6 +248,7 @@ export class RenderPipeline {
     this.renderPass.scene = scene;
     this.renderPass.camera = camera;
     this.renderer.info.reset();
+    this.arrayUniforms.sync(this.renderer.info.programs);
     this.gpuTimer?.begin();
     this.composer.render();
     this.gpuTimer?.end();
@@ -256,6 +259,7 @@ export class RenderPipeline {
   /** Direct (non-composited) render used by the map view. */
   renderMap(scene: THREE.Scene, camera: THREE.Camera): void {
     this.renderer.info.reset();
+    this.arrayUniforms.sync(this.renderer.info.programs);
     this.renderer.setRenderTarget(null);
     this.gpuTimer?.begin();
     this.renderer.render(scene, camera);

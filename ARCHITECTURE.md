@@ -194,7 +194,9 @@ Shader programs are part of the frame budget: the flight controller compiles the
 `compileAsync` behind the loading screen (first frame updates without drawing). Anything that changes a three.js
 program key at runtime — light count/visibility, shadow type, defines, `needsUpdate` on materials — recompiles every
 affected material and stalls the frame (hundreds of ms on ANGLE/D3D). Keep lights resident (zero intensity) instead
-of toggling visibility, and create runtime materials from existing variants.
+of toggling visibility, and create runtime materials from existing variants. Off-screen passes that first draw
+mid-flight (procedural cube bakes, the Earth imagery merge) register a proxy with `render/core/offscreenWarmup.ts` so the
+warm-up compiles them too; Firefox has no parallel shader compile, so a late link freezes the frame for up to a second.
 
 ## Real Earth data initialization
 
@@ -255,3 +257,4 @@ While following the vessel, `flight/map/framing.ts` (`AutoFramer`) also frames t
 (unplanned) path and reframes on SOI change or capture; a wheel zoom suppresses automatic reframing until the next
 SOI change. `render/map/framing.ts` `patchDrawnNow` decides which patches share the present frame; a return to a body
 the path has left is drawn where that body will be.
+
