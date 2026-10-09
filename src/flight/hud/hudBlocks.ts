@@ -13,4 +13,7 @@ export const HUD_BLOCKS = [
   '.hud > .feel-hint',
   '.stg > :not(.stg-scroll)',
   '.stg-scroll > *',
+  // Children that stick out of their parent's box (the Δv tags beside the stages, the speed readout above the ball).
+  '.stg-dv',
+  '.nb-speed',
 ].join(', ');
