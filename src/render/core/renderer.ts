@@ -11,6 +11,7 @@ import { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
 import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { classifyGpu } from '../../util/gpuTier';
+import { onContextRestored } from './contextRecovery';
 import { detachRenderer, finishRenderer, noteDfgLut } from '../releaseRenderer';
 import type { QualitySettings } from './quality';
 
@@ -47,6 +48,7 @@ export class RenderPipeline {
   private quality: QualitySettings;
   private adaptive = new AdaptiveQuality();
   private gpuTimer: GpuTimer | null;
+  private readonly unwatchContext: () => void;
   private readonly arrayUniforms = new ArrayUniformCache();
   /** Smoothed GPU time per frame (ms) from timer queries; NaN when the browser does not expose them. */
   gpuMs = NaN;
@@ -84,6 +86,8 @@ export class RenderPipeline {
     // Shader info-log queries force a synchronous compile wait; production builds skip them.
     r.debug.checkShaderErrors = !!import.meta.env?.DEV;
     this.gpuTimer = GpuTimer.create(r.getContext());
+    // Query objects and the extension handle die with the context; without this the pending queue stays full.
+    this.unwatchContext = onContextRestored(r, () => { this.gpuTimer?.recover(); this.gpuMs = NaN; });
     this.gpuName = rendererName(r.getContext());
     // Adaptive resolution starts where this class of GPU usually lands, then converges from measurements.
     // A Retina-reduced, upscaled start already draws about half the device pixels, so mid-range GPUs start there.
@@ -301,6 +305,7 @@ export class RenderPipeline {
 
   /** Full teardown: passes, render targets, renderer, shared DFG LUT and the WebGL context (freed immediately). */
   dispose(): void {
+    this.unwatchContext();
     this.gpuTimer?.dispose();
     for (const pass of this.composer.passes) pass.dispose();
     this.composer.dispose();
@@ -425,6 +430,12 @@ class GpuTimer {
       if (!disjoint) result = ns / 1e6;
     }
     return result;
+  }
+
+  /** After a context restore: forget every query (their objects are invalid) and enable the extension again. */
+  recover(): void {
+    this.ext = (this.gl.getExtension('EXT_disjoint_timer_query_webgl2') as TimerQueryExt | null) ?? this.ext;
+    this.pending = []; this.free = []; this.active = null;
   }
 
   dispose(): void {

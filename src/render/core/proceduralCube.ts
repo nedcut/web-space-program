@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { contextIsLost } from './contextRecovery';
 import { registerOffscreenPass } from './offscreenWarmup';
 
 export interface ProceduralCubeOptions {
@@ -67,9 +68,22 @@ export class ProceduralCubeMap {
 
   get done(): boolean { return this.next >= 6 * Math.ceil(this.size / this.strip); }
 
+  /**
+   * Bake again from the first strip: the target's contents are gone after a context loss. Safe to call at any
+   * point; `done` is false until the new bake has finished.
+   */
+  restart(): void {
+    this.next = 0;
+    this.target.viewport.set(0, 0, this.size, this.size);
+    this.target.scissor.copy(this.target.viewport);
+    this.target.scissorTest = false;
+  }
+
   /** Bake one strip of one face. Returns true once the whole map (with mipmaps) is ready. */
   step(renderer: THREE.WebGLRenderer): boolean {
     if (this.done) return true;
+    // While the context is lost the draw is dropped: do not count the strip as baked.
+    if (contextIsLost(renderer)) return false;
     const perFace = Math.ceil(this.size / this.strip);
     const face = Math.floor(this.next / perFace);
     const row = (this.next % perFace) * this.strip;

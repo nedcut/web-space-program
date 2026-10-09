@@ -4,7 +4,10 @@ import type { PartDef } from '../src/sim/vessel/types';
 const mocks = vi.hoisted(() => ({ build: vi.fn(), ready: vi.fn() }));
 vi.mock('../src/editor/scene/partMesh', () => ({ createPartMesh: mocks.build }));
 vi.mock('../src/render/parts/textures', () => ({ partTexturesReady: mocks.ready }));
-vi.mock('../src/render/core/studioEnv', () => ({ createStudioEnvironment: () => ({ texture: null, dispose() {} }) }));
+vi.mock('../src/render/core/studioEnv', () => ({
+  createStudioEnvironment: () => ({ texture: null, dispose() {} }),
+  StudioEnvironment: class { target = { texture: null, dispose() {} }; dispose() {} },
+}));
 vi.mock('../src/editor/scene/thumbnailCache', () => ({
   cachedThumbnail: () => undefined, persistThumbnail: async () => {}, preloadThumbnails: async () => {},
 }));
