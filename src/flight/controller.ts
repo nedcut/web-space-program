@@ -1174,7 +1174,7 @@ export class FlightController {
       pv.state = wv.state; pv.held = wv.mode === 'prelaunch'; pv.firing = wv.mode !== 'prelaunch' || !!wv.holdDown;
       this.site.update(origin, t, camera.position, pv);
     } else this.site?.hide();
-    this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.lodViewportHeight });
+    this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.lodViewportHeight, switchViewportHeight: this.pipeline.lodSwitchViewportHeight });
     const eclipse = this.planets.sunVisibility?.(origin, sunPos) ?? 1;
     const tint = this.planets.sunTint?.(origin, sunPos) ?? [1, 1, 1];
     const tmax = Math.max(1e-6, tint[0], tint[1], tint[2]);

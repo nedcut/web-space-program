@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RestoreHook, onContextRestored } from '../src/render/core/contextRecovery';
 import { ProceduralCubeMap } from '../src/render/core/proceduralCube';
 import type { ImageStrips } from '../src/render/planet/imageStrips';
+import { SITE_LAYERS, SiteTextureArray } from '../src/render/site/siteSurfaces';
 
 /** A renderer stand-in: a canvas that can emit context events, and just enough of the draw API for the bakers. */
 function fakeRenderer() {
@@ -206,3 +207,26 @@ describe('Earth imagery after a context restore', () => {
     imagery.dispose();
   });
 });
+
+describe('launch-site texture array after a context restore', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('copies every layer again (the layers only ever existed on the GPU)', () => {
+    const ctx2d = { setTransform: () => {}, clearRect: () => {}, drawImage: () => {} };
+    vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => ctx2d }) });
+    const { renderer, calls, restore } = fakeRenderer();
+    const source = { width: 4, height: 4 } as unknown as HTMLCanvasElement;
+    const sites = new SiteTextureArray(Object.fromEntries(SITE_LAYERS.map((l) => [l, source])) as Record<(typeof SITE_LAYERS)[number], HTMLCanvasElement>);
+    sites.fill(renderer);
+    sites.fill(renderer);
+    expect(calls).toMatchObject({ init: 1, copy: SITE_LAYERS.length });
+    restore();
+    expect(sites.ready).toBe(false);
+    sites.fill(renderer);
+    expect(calls).toMatchObject({ init: 2, copy: 2 * SITE_LAYERS.length });
+    sites.dispose();
+    restore();
+    expect(sites.ready).toBe(true); // a disposed array no longer listens
+  });
+});
+

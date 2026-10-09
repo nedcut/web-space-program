@@ -156,4 +156,20 @@ describe('planet detail integration', () => {
       expect(moon.uniforms.uPlanetshineColor.value.length()).toBe(0);
     } finally { parent.dispose(); moon.dispose(); lowMoon.dispose(); }
   });
+
+  it('chooses near terrain or the far sphere from the switch height, not an adaptive-reduced LOD height', () => {
+    const moon = new PlanetRenderer(body('moon'), null, { quality: getQuality('high') });
+    const camera = new THREE.PerspectiveCamera(60);
+    const R = moon.body.radius;
+    const params = { camera, origin: { x: 0, y: 0, z: 0 }, bodyPosition: { x: R * 1.3, y: 0, z: 0 }, bodyRotation: { x: 0, y: 0, z: 0, w: 1 },
+      sunPosition: { x: 0, y: 0, z: 1e11 }, dt: 0 };
+    try {
+      moon.update({ ...params, viewportHeight: 1000 });
+      const full = moon.stats.projectedRadiusPx;
+      moon.update({ ...params, viewportHeight: 550 }); // adaptive scale 0.55, no switch height: old behaviour
+      expect(moon.stats.projectedRadiusPx).toBeCloseTo(full * 0.55);
+      moon.update({ ...params, viewportHeight: 550, switchViewportHeight: 1000 });
+      expect(moon.stats.projectedRadiusPx).toBeCloseTo(full);
+    } finally { moon.dispose(); }
+  });
 });
