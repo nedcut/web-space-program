@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Pass, FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { NODE_POSITION_GLSL, nodeOverrideDefaults } from './rigidNodes';
 
 /** Small depth-aware blur in metres: avoids precision loss from astronomical camera far planes. */
 export class PhotoEffectsPass extends Pass {
@@ -8,10 +9,12 @@ export class PhotoEffectsPass extends Pass {
   private depth = new THREE.WebGLRenderTarget(64, 64);
   private depthMaterial = new THREE.ShaderMaterial({
     uniforms: { focus: { value: 20 } },
+    // Merged vessel geometry is stored in its moving frames (gimbals, deployables): place it through its node slot.
     vertexShader: `#include <common>
       #include <logdepthbuf_pars_vertex>
+      ${NODE_POSITION_GLSL}
       varying float viewDepth;
-      void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); viewDepth = -mv.z; gl_Position = projectionMatrix * mv;
+      void main() { vec4 mv = modelViewMatrix * vec4(wspNodePosition(position), 1.0); viewDepth = -mv.z; gl_Position = projectionMatrix * mv;
         #include <logdepthbuf_vertex>
       }`,
     fragmentShader: `#include <common>
@@ -41,7 +44,7 @@ export class PhotoEffectsPass extends Pass {
       }`,
   });
   private quad = new FullScreenQuad(this.material);
-  constructor() { super(); this.enabled = false; }
+  constructor() { super(); this.enabled = false; nodeOverrideDefaults(this.depthMaterial); }
   set focus(value: number) { this.depthMaterial.uniforms.focus.value = value; }
   setSize(width: number, height: number) { this.depth.setSize(width, height); this.uniforms.resolution.value.set(width, height); }
   render(renderer: THREE.WebGLRenderer, writeBuffer: THREE.WebGLRenderTarget, readBuffer: THREE.WebGLRenderTarget) {

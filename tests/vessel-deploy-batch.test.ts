@@ -132,3 +132,16 @@ describe('rigid node batching', () => {
     for (const b of held) releaseNodes(b, NODES_PER_ROW);
   });
 });
+
+describe('node-aware override shaders', () => {
+  it('photo depth places merged vessel geometry through node slots and defaults other meshes to the identity', async () => {
+    const { PhotoEffectsPass } = await import('../src/render/core/PhotoEffectsPass');
+    const { nodeTexture } = await import('../src/render/core/rigidNodes');
+    const pass = new PhotoEffectsPass();
+    const depth = (pass as unknown as { depthMaterial: THREE.ShaderMaterial }).depthMaterial;
+    expect(depth.vertexShader).toContain('wspNodePosition(position)');
+    expect(depth.uniforms.wspNodes.value).toBe(nodeTexture);
+    expect((depth.defaultAttributeValues as Record<string, number[]>).wspNode).toEqual([0]);
+    pass.dispose();
+  });
+});

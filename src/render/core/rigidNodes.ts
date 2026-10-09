@@ -111,6 +111,26 @@ mat4 wspNodeMatrix;
   transformed = (wspNodeMatrix * vec4(transformed, 1.0)).xyz;`);
 }
 
+/**
+ * For hand-written override shaders (photo depth) drawn over the whole scene: `wspNodePosition(position)`. Most meshes
+ * have no `wspNode` attribute, so pair this with `nodeOverrideDefaults` (the generic attribute value would otherwise be
+ * whatever another program left at that location).
+ */
+export const NODE_POSITION_GLSL = `attribute float wspNode;
+uniform highp sampler2D wspNodes;
+vec3 wspNodePosition(vec3 p) {
+  int wspSlot = int(wspNode + 0.5);
+  ivec2 at = ivec2((wspSlot % ${NODES_PER_ROW}) * 3, wspSlot / ${NODES_PER_ROW});
+  vec4 p4 = vec4(p, 1.0);
+  return vec3(dot(texelFetch(wspNodes, at, 0), p4), dot(texelFetch(wspNodes, at + ivec2(1, 0), 0), p4), dot(texelFetch(wspNodes, at + ivec2(2, 0), 0), p4));
+}
+`;
+/** ShaderMaterial settings for NODE_POSITION_GLSL: the node texture uniform and slot 0 for meshes without slots. */
+export function nodeOverrideDefaults(material: THREE.ShaderMaterial): void {
+  material.uniforms.wspNodes = { value: nodeTexture };
+  (material.defaultAttributeValues as Record<string, number[]>).wspNode = [0];
+}
+
 /** Per-vertex slot attribute (all `slot`). */
 export function nodeAttribute(count: number, slot = 0): THREE.BufferAttribute {
   return new THREE.Float32BufferAttribute(new Float32Array(count).fill(slot), 1);
