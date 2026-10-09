@@ -474,3 +474,18 @@ Decisions made autonomously while the owner was away. Each can be revisited.
 - **Visible result:** the sea near the camera now shows the designed wave glitter (sparkling glint path) instead of a flat sheen with blocks. Orbit views are unchanged (Chrome mean pixel difference 0.16/255).
 - **Cost (Chrome fenced GPU, medium, A/B/A/B):** pad and orbit equal within noise. On the sea view the frame rises from ~2.44 to ~2.54 ms; almost all of that is `UpscalePass`, whose flat-footprint early-out no longer covers the now-detailed water (0.117 → 0.228 ms). The scene pass rises by +0.02 ms.
 - **Rejected:** fading wave octaves by texture footprint. It hid part of the symptom; the blocks persisted with mipmapping disabled, and the real cause was the time precision.
+
+## Colour-only vessel material variants (2026-10-09, op/variantmerge)
+
+- **Explicit compatible families:** accent paints, anodised metals and gold/silver foil use a shared white material
+  per family when batched. Each family's coloured and white materials come from the same factory, preserving
+  maps, normal scale, roughness, metalness, clearcoat and anisotropy. Other families remain separate; similarly
+  named white/charcoal paints have different surface settings, and status LEDs have different emission.
+- **Bake the linear albedo into existing vertex colours at batch construction, after AO/weathering/soot.** Only
+  batch-owned geometry changes. Source meshes keep their materials and vertex colours for individual rendering
+  between staging and re-batching, and for stress overlays. Editor highlighting clones do not inherit family
+  registration. Thermal variants carry the same family registration and retain independent heat/node slots.
+- **No palette texture or new shader variant:** the existing `color` attribute already does the multiplication.
+  No new per-frame work, allocations, attributes, texture fetches or recovery hooks. CPU-backed batch geometry
+  restores through three.js; the existing full-upload-on-restore contract in `rigidNodes.ts` remains authoritative.
+  This supersedes the deferred colour-variant item under “Vessel draws once per material”.
