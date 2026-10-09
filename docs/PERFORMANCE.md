@@ -2204,3 +2204,7 @@ individual meshes in the same frame (≤ 0.007 % pixels differ, the same as befo
 The vessel is unchanged across the restore; the rest of the frame changes by the same amount as on main (Earth
 imagery re-streams). Chrome's "delete: object does not belong to this context" warnings after a restore also occur
 on main.
+
+After a further merge of main `4a648dbc` (vtxpack, mapmarkers), there was a Firefox smoke run only, not an A/B.
+Selene orbit measured 858 GL calls per frame, 4.72 ms mean frame interval and 2.0 ms CPU. The context-loss check
+passed again (batched vs individual ≤ 0.006 % pixels before and after the restore).
