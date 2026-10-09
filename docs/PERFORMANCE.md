@@ -2153,3 +2153,33 @@ mid-deploy), right after staging, all parts at 1,500 K (heat glow), and photo DO
 foot pads (present in both, different noise). Packed-ORM A/B (maps restored, four programs recompiled): 0 differing
 pixels. Cross-build screenshots are not comparable (the paused sim state differs between loads), hence the
 same-frame method. Screenshots: `~/.t3/projects/wsp-traces/vesselbatch/shots/`, `C:\wsp-tools\shots\vesselbatch\`.
+
+## Re-check after merging main `711e5ede` (vessellight, ctxloss, workerinit)
+
+Production builds of main `711e5ede` and the merged branch, Medium, Selene.
+
+Windows Chrome 155 (CDP, `vb-gpu-passes.mjs`, 1470×920 DPR 2, render 1.4), two interleaved pairs:
+
+| Case | CPU ms | draws | fenced GPU ms |
+|---|---|---|---|
+| pad | 2.11, 2.12 → 1.91, 1.87 | 195 → 123 | 2.53, 2.53 → 2.51, 2.53 |
+| orbit | 2.08, 2.07 → 1.78, 1.76 | 163 → 91 | 2.05, 2.08 → 2.06, 2.07 |
+
+Windows Firefox (ASAP, `GLCOUNT=1`, 40 s warm-up, 10 s window), runs interleaved in both orders:
+
+| Case | GL calls / frame | draws | CPU ms | frame interval mean ms |
+|---|---|---|---|---|
+| orbit | 1,640 → **1,178** | 238 → 166 | 5.08, 4.29 → 3.85, 3.45 | 8.10, 7.19 → 6.71, 6.55 |
+| pad | 1,870 → **1,393–1,396** | 340 → 268 | 3.42, 3.61, 5.22 → 4.07, 2.75, 3.61, 3.54 | 5.05, 5.06, 6.71 → 6.12, 4.55, 5.74, 5.80 |
+
+GL calls and draws reproduce round 1 exactly. Orbit timing reproduces the gain. Pad timing drifted with machine
+state during this session (main's third run 6.71 ms) and stayed within noise: mean 5.61 ms main vs 5.55 ms branch.
+Screenshots (`C:\wsp-tools\shots\vesselbatch\vb2*`): the editor is pixel-identical in Firefox (0 differing pixels)
+and in Chrome (max 6/255). Pad and orbit differ only where the live sim moved (clouds, Earth under the orbit).
+
+Context loss (`C:\wsp-tools\drv-ff\ctxloss-vb.mjs`, Selene orbit, paused, engines gimballed 0.09/−0.06 rad, forced
+`WEBGL_lose_context`): after the restore, and after re-posing the gimbals post-restore, the batched vessel matches its
+individual meshes in the same frame (≤ 0.007 % pixels differ, the same as before the loss) in Firefox and Chrome.
+The vessel is unchanged across the restore; the rest of the frame changes by the same amount as on main (Earth
+imagery re-streams). Chrome's "delete: object does not belong to this context" warnings after a restore also occur
+on main.
