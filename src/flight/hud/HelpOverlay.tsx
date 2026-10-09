@@ -109,17 +109,21 @@ export function HelpOverlay({ eva, onClose }: { eva: boolean; onClose(): void })
   );
 }
 
-/** Six essentials, non-modal: the pilot can fly immediately. */
+/** Short, dismissible first-flight card: the few inputs needed to get off the pad. Shown once (see helpSeen). */
 export function QuickStartCard({ onClose, onHelp }: { onClose(): void; onHelp(): void }) {
   const bindings = useSyncExternalStore(subscribeBindings, getBindings);
-  const essentials: [Action, string][] = [
-    ['toggleSas', 'Hold attitude'], ['throttleFull', 'Full throttle'], ['stage', 'Launch / next stage'],
-    ['throttleCut', 'Cut throttle'], ['yawRight', 'Tip east gently'], ['map', 'Map view'],
+  const key = (...actions: Action[]) => actions.map(a => bindingLabel(a, bindings)).join(' ');
+  const rows: [string, string][] = [
+    ['Stage (lights the engines)', key('stage')],
+    ['Throttle up / down', `${key('throttleUp')} / ${key('throttleDown')}`],
+    ['Steer', key('pitchUp', 'yawLeft', 'pitchDown', 'yawRight')],
+    ['Map view', key('map')],
   ];
-  return <aside className="panel quick-start" aria-label="First flight essentials">
-    <div className="quick-start-head"><span className="label">First flight · six keys</span><button className="btn small ghost" onClick={onClose} aria-label="Dismiss first flight essentials">✕</button></div>
-    <p>Hold attitude, set full throttle, then launch.</p>
-    {essentials.map(([action, label]) => <div className="quick-start-row" key={action}><span>{label}</span><kbd>{bindingLabel(action, bindings)}</kbd></div>)}
+  return <aside className="panel quick-start" aria-label="First flight">
+    <div className="quick-start-head"><span className="label">First flight</span><button className="btn small ghost" onClick={onClose} aria-label="Dismiss first flight card">✕</button></div>
+    <p>Stage, then raise the throttle and lift off. Steer in small taps.</p>
+    {rows.map(([label, keys]) => <div className="quick-start-row" key={label}><span>{label}</span><kbd>{keys}</kbd></div>)}
+    <p className="quick-start-note">New here? The <b>Training</b> lessons on the main menu walk you through a full launch.</p>
     <button className="btn small" onClick={onHelp}>All controls · {bindingLabel('help', bindings)}</button>
   </aside>;
 }

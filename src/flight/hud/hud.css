@@ -238,6 +238,7 @@ html[data-ui-hidden='true'] :is(.tutorial-panel, .scenario-flight, .multiplayer-
 .quick-start-head, .quick-start-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .quick-start-row { margin-bottom: 8px; }
 .quick-start p { color: var(--text-dim); line-height: 1.5; }
+.quick-start .quick-start-note { margin: 8px 0; }
 @media (max-width: 1000px) { .hud-bottom { left: 125px; } .nb-burn { width: 120px; } }
 
 /* ------------------------------------------------------------ map view: maneuver planner in the left column */

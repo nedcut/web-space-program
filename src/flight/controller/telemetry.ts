@@ -228,6 +228,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   if (previous && previous.situation === 'flying' && st.situation !== 'flying') w.message(st.situation === 'splashed' ? `Splashed down on ${b.name}` : `Landed on ${b.name}`);
   const soi = changedBody || (previous?.soi ?? false);
   cueStates.set(this, { vessel: st.id, body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation, staged: this.stagedCount });
+  const propulsionTwr = ((ignited ? currentStage : dvs.find(d => d.thrust > 0))?.thrust ?? 0) / st.mass / gravity;
   const hint = this.hints.update({
     enabled: settings.flightHints && !this.network && !getTutorial() && !game.get().scenarioActive && !this.assist,
     bodyId: b.id, bodyName: b.name, terrainHeight: u.terrain(b.id).maxHeight, boundOrbit: orb.orbit.e < 1, verticalSpeed: vs,
@@ -242,6 +243,10 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     atmosphereHeight: b.atmosphere?.height ?? 0,
     throttle: this.input.state.throttle,
     hasThrust: dvs.some((d) => d.dv > 1),
+    twr: propulsionTwr,
+    tilt: (Math.acos(Math.max(-1, Math.min(1, upward))) * 180) / Math.PI,
+    sasMode: this.sasOn ? this.sas : 'off',
+    stress: st.telemetry.crossflowStress,
   });
   const warp = w.warp;
   let burnTracker = burnTrackers.get(this);

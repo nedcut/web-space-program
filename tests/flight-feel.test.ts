@@ -135,7 +135,7 @@ describe('first-orbit hints', () => {
     expect(t.update(base)).toBeNull();
     expect(t.update({ ...base, altitude: 40000, surfaceSpeed: 1500, apoapsis: 80000 })?.id).toBe('coast');
     t.dismiss();
-    expect(saved.at(-1)).toEqual(['turn', 'coast']);
+    expect(saved.at(-1)).toEqual(['turn', 'hold', 'coast']);
   });
   it('mentions the live key bindings', () => {
     expect(hintFor(base, new Set())!.text).toContain('D');
