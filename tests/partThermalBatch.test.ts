@@ -13,7 +13,7 @@ const hot = { skinTemperature: [290, 290, 290, 1600, 290, 290] } as PartState;
 const radiance = (slot: number) => thermalTexture.image.data![slot * 4];
 
 describe('batched thermal surfaces', () => {
-  it('keeps repeated parts in one instanced draw with independent radiance and a stable shader binding', () => {
+  it('merges repeated parts into one draw with independent radiance and a stable shader binding', () => {
     const geometry = new THREE.BoxGeometry(), material = new THREE.MeshStandardMaterial();
     const a = new THREE.Mesh(geometry, material), b = new THREE.Mesh(geometry, material);
     b.position.x = 3;
@@ -21,21 +21,19 @@ describe('batched thermal surfaces', () => {
     expect(a.material).toBe(b.material);
     const batch = batchStaticParts([a, b]);
     expect(batch.children).toHaveLength(1);
-    const mesh = batch.children[0] as THREE.InstancedMesh;
-    expect(mesh.isInstancedMesh).toBe(true);
+    const mesh = batch.children[0] as THREE.Mesh;
+    expect((mesh as THREE.InstancedMesh).isInstancedMesh).toBeFalsy();
     const slots = mesh.geometry.getAttribute('wspHeatSlot');
-    expect(slots).toBeInstanceOf(THREE.InstancedBufferAttribute);
-    expect(slots.getX(0)).not.toBe(slots.getX(1));
+    const n = geometry.getAttribute('position').count;
+    expect(slots.getX(0)).not.toBe(slots.getX(n));
     ah.update(hot, 1);
     expect(radiance(slots.getX(0))).toBeGreaterThan(1);
-    expect(radiance(slots.getX(1))).toBe(0);
-    const instanced = mesh.material as THREE.Material;
-    expect(instanced).not.toBe(a.material);
-    expect(instanced.onBeforeCompile).toBe(a.material.onBeforeCompile);
-    expect(instanced.customProgramCacheKey()).toBe(a.material.customProgramCacheKey());
-    const version = instanced.version;
+    expect(radiance(slots.getX(n))).toBe(0);
+    // Same material (and program) as the individual meshes: no instanced variant.
+    expect(mesh.material).toBe(a.material);
+    const version = (mesh.material as THREE.Material).version;
     ah.update(hot, 1);
-    expect(instanced.version).toBe(version);
+    expect((mesh.material as THREE.Material).version).toBe(version);
     disposeStaticBatch(batch); ah.dispose(); bh.dispose();
     expect(radiance(slots.getX(0))).toBe(0);
     geometry.dispose(); material.dispose();

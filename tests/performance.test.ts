@@ -103,7 +103,7 @@ it('batching preserves world bounds, transparent leaves and shared geometry', ()
   const batch=batchStaticParts([group]);const result=new THREE.Group();result.add(group,batch);result.updateMatrixWorld(true);
   const bounds=new THREE.Box3();result.traverseVisible(o=>{if(o instanceof THREE.Mesh)bounds.expandByObject(o)});
   expect(bounds.min.toArray()).toEqual(before.min.toArray());expect(bounds.max.toArray()).toEqual(before.max.toArray());
-  expect(glass.visible).toBe(true);expect(batch.children.some(o=>o instanceof THREE.InstancedMesh && o.count===4)).toBe(true);
+  expect(glass.visible).toBe(true);expect(batch.children).toHaveLength(1);expect((batch.children[0] as THREE.Mesh).geometry.getAttribute('position').count).toBe(4*geometry.getAttribute('position').count);
   let disposed=false;geometry.addEventListener('dispose',()=>{disposed=true});disposeStaticBatch(batch);expect(disposed).toBe(false);
 });
 it('vessel batches survive staging and distant LOD returns to full detail', () => {

@@ -48,6 +48,17 @@ describe('shadow map cache', () => {
     expect(frame(cache)).toBe(false);
   });
 
+  it('redraws when a caster reports shader-side motion (vessel node slots)', () => {
+    const { light, caster, frame } = shadowScene();
+    const cache = new ShadowMapCache();
+    frame(cache);
+    light.shadow.map = new THREE.WebGLRenderTarget(1, 1);
+    expect(frame(cache)).toBe(false);
+    caster.userData.casterVersion = 1;
+    expect(frame(cache)).toBe(true);
+    expect(frame(cache)).toBe(false);
+  });
+
   it('redraws when casters appear, disappear, change geometry, or the map is reallocated', () => {
     const { scene, light, caster, frame } = shadowScene();
     const cache = new ShadowMapCache();
@@ -113,12 +124,13 @@ describe('ephemeris time slots', () => {
 });
 
 describe('rigid batching of animated parts', () => {
-  it('draws only animated, transparent or multi-material meshes individually and keeps gimbals live', async () => {
+  it('draws only plumes, lamps or transparent meshes individually and moves gimbals through node slots', async () => {
     const { buildVessel } = await import('../src/sim/vessel');
     const { buildMoonLander, buildRoverLander } = await import('../src/editor/stockCrafts');
     const { PART_CATALOG } = await import('../src/data/parts');
     const { VesselView } = await import('../src/render/vessel/VesselView');
-    const { isAnimatedNode } = await import('../src/render/vessel/staticBatch');
+    const { isAnimatedNode, isMovingNode } = await import('../src/render/vessel/staticBatch');
+    const { nodeRows } = await import('../src/render/core/rigidNodes');
     let gimbalCount = 0;
     for (const craft of [buildMoonLander(), buildRoverLander()]) {
       const v = buildVessel(craft, PART_CATALOG), view = new VesselView(v);
@@ -126,28 +138,24 @@ describe('rigid batching of animated parts', () => {
       let batched = 0;
       view.root.traverseVisible(o => {
         if (!(o instanceof THREE.Mesh)) return;
-        let inBatch = false, animated = false;
-        for (let p: THREE.Object3D | null = o; p; p = p.parent) {
-          if (p.children.some(c => c instanceof THREE.InstancedMesh) && p.parent?.type === 'Group' && p !== o && p.children.every(c => c instanceof THREE.Mesh)) inBatch = true;
-          if (isAnimatedNode(p)) animated = true;
-        }
-        if (inBatch) { batched++; return; }
-        const material = o.material as THREE.Material | THREE.Material[];
-        expect(animated || Array.isArray(material) || material.transparent || o.children.length > 0, o.name).toBe(true);
+        if (o.userData.ownedGeometry) { batched++; return; }
+        let individual = false;
+        for (let p: THREE.Object3D | null = o; p; p = p.parent) if (isAnimatedNode(p) && !isMovingNode(p)) individual = true;
+        const material = o.material as THREE.Material;
+        expect(individual || material.transparent || o.children.length > 0, o.name).toBe(true);
       });
       expect(batched).toBeGreaterThan(0);
-      // Gimballed engines still move their own (unbatched) nozzles.
       const gimbals: THREE.Object3D[] = [];
       view.root.traverse(o => { if (o.name === 'gimbal') gimbals.push(o); });
       gimbalCount += gimbals.length;
+      const slots = gimbals.map(g => (view as unknown as { nodes: THREE.Object3D[]; nodeBase: number }).nodes.indexOf(g) + (view as unknown as { nodeBase: number }).nodeBase);
+      const before = slots.map(s => Array.from(nodeRows(s)));
       for (const p of v.parts) if (p.engine) p.engine.gimbal.a = 0.05;
       view.update({ x: 0, y: 0, z: 0 }, 0, 101325, 0.02);
-      for (const gimbal of gimbals) {
+      gimbals.forEach((gimbal, i) => {
         expect(gimbal.rotation.x).toBeCloseTo(0.05);
-        let visibleChild = false;
-        gimbal.traverseVisible(o => { if (o !== gimbal && o instanceof THREE.Mesh) visibleChild = true; });
-        expect(visibleChild).toBe(true);
-      }
+        expect(Array.from(nodeRows(slots[i]))).not.toEqual(before[i]);
+      });
       view.dispose();
     }
     expect(gimbalCount).toBeGreaterThan(0);

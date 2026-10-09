@@ -170,8 +170,10 @@ function positionVersion(o: THREE.Object3D): number {
   return version + (g.drawRange.count === Infinity ? 0 : g.drawRange.count * 1e6);
 }
 
+/** Instance matrices, or `userData.casterVersion` for casters moved by shader data (vessel node slots). */
 function instanceKey(o: THREE.Object3D): number {
-  return (o as THREE.InstancedMesh).isInstancedMesh ? (o as THREE.InstancedMesh).instanceMatrix.version : 0;
+  const moved = (o.userData.casterVersion as number | undefined) ?? 0;
+  return (o as THREE.InstancedMesh).isInstancedMesh ? (o as THREE.InstancedMesh).instanceMatrix.version + moved * 2 ** 32 : moved;
 }
 
 /** How far a caster's geometry extends from its local origin (rotation tolerance scales with it). */

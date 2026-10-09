@@ -1,7 +1,8 @@
 import { LinkView } from './LinkView';
 import { PartHeat } from '../fx/PartHeat';
 import { thermalSources } from '../fx/thermalSurface';
-import { batchStaticParts, disposeStaticBatch, isAnimatedNode } from './staticBatch';
+import { buildStaticBatch, countMovingNodes, disposeStaticBatch, isAnimatedNode, isMovingNode } from './staticBatch';
+import { allocateNodes, commitNodes, releaseNodes, writeNode } from '../core/rigidNodes';
 import * as THREE from 'three';
 import type { VesselState, PartState } from '../../sim/vessel/runtime';
 import type { EngineModule } from '../../sim/vessel/types';
@@ -11,8 +12,11 @@ import { fairingJettisoned, isFairingDef } from '../../sim/vessel/fairing';
 import type { Vec3 } from '../../util/vec3';
 
 const _panelPosition = new THREE.Vector3(), _panelQuaternion = new THREE.Quaternion(), _panelScale = new THREE.Vector3();
-/** Frames of stillness before deployables are batched (~0.5 s at 60 fps). */
-const SETTLE_FRAMES = 30;
+const _node = new THREE.Matrix4();
+/** Leaves under these stay individually drawn: plumes (exhaust anchors), lamp lenses (per-part material), EVA limbs. */
+const individual = (o: THREE.Object3D) => isAnimatedNode(o) && !isMovingNode(o);
+/** Node motion (matrix units: metres / unitless rotation) that invalidates the cached shadow map. */
+const SHADOW_EPSILON = 1e-4;
 
 interface PartVisual {
   state: PartState;
@@ -53,14 +57,14 @@ export class VesselView {
   /** Frames until the deferred batch may run; 0 = batched (or nothing pending). */
   private batchPending = 0;
   /**
-   * Deployables (solar arrays, bays, legs, gear) are drawn individually so they can move, but they spend nearly all
-   * of a flight still. After SETTLE_FRAMES without deploy motion their leaves join a second batch (a few draws instead
-   * of one per panel); the first deploy motion restores them. The main batch is never rebuilt for this.
+   * Moving frames (gimbals, control surfaces, deployables, gear joints) merged into the batch through rigid node slots
+   * `nodeBase + i` (see rigidNodes): the vessel draws once per material while they move.
    */
-  private deployBatch?: THREE.Group;
-  private deployHidden: THREE.Object3D[] = [];
-  /** Frames without deploy motion; Infinity once settled (batched, or nothing to batch) until the next motion. */
-  private deployQuiet = 0;
+  private nodes: THREE.Object3D[] = [];
+  private nodeBase = 0;
+  /** Node matrices when the shadow map last saw them; merged meshes that need a shadow redraw when they move. */
+  private nodeShadow = new Float32Array(0);
+  private movingMeshes: THREE.Mesh[] = [];
   private stressOverlay = false;
   private links = new LinkView();
 
@@ -81,7 +85,6 @@ export class VesselView {
     // Splits preserve PartState identity. Move the existing visuals (including thermal state, plumes and
     // soot) before the donor rebuild removes them; never match unrelated vessels by their local UID.
     if (donors) for (const donor of donors) for (const p of vessel.parts) {
-      donor.unbatchDeployables();
       const pv = donor.parts.get(p.uid);
       if (pv?.state !== p) continue;
       donor.parts.delete(p.uid);
@@ -140,9 +143,7 @@ export class VesselView {
   }
 
   private rebuild(defer = false) {
-    this.unbatchDeployables();
-    if (this.batch) disposeStaticBatch(this.batch);
-    this.batch = undefined;
+    this.unbatch();
     // Restore static leaves hidden by the previous batch before regrouping after staging/docking.
     for (const pv of this.parts.values()) pv.object.traverse(o => { if (o.userData.batchedVisible) { o.visible = true; o.matrixWorldAutoUpdate = true; delete o.userData.batchedVisible; } });
     let needsSoot = false;
@@ -217,6 +218,15 @@ export class VesselView {
     else this.batchParts();
   }
 
+  private unbatch() {
+    if (this.batch) disposeStaticBatch(this.batch);
+    this.batch = undefined;
+    releaseNodes(this.nodeBase, this.nodes.length);
+    this.nodeBase = 0;
+    this.nodes = [];
+    this.movingMeshes = [];
+  }
+
   private batchParts() {
     this.batchPending = 0;
     const staticObjects: THREE.Object3D[] = [];
@@ -228,9 +238,59 @@ export class VesselView {
       if (pv.static) staticObjects.push(pv.object);
       else if (!this.vessel.eva) rigidObjects.push(pv.object);
     }
-    this.batch = batchStaticParts([...staticObjects, ...rigidObjects], isAnimatedNode);
+    const objects = [...staticObjects, ...rigidObjects];
+    const count = countMovingNodes(objects, individual, isMovingNode);
+    const base = count ? allocateNodes(count) : 0;
+    // Out of node slots: moving frames draw individually, as before node slots existed.
+    const batch = base ? buildStaticBatch(objects, { skip: individual, node: isMovingNode, slotBase: base }) : buildStaticBatch(objects, { skip: isAnimatedNode });
+    this.batch = batch.group;
+    this.nodes = batch.nodes;
+    this.nodeBase = base;
+    this.movingMeshes = batch.moving;
+    this.nodeShadow = new Float32Array(this.nodes.length * 12).fill(NaN);
     this.inner.add(this.batch);
     for (const obj of staticObjects) obj.traverse(o => { o.matrixAutoUpdate = false; });
+    this.updateNodes();
+  }
+
+  /** Write every moving frame's transform relative to the vessel frame (collapsed when hidden) into its slot. */
+  private updateNodes() {
+    const nodes = this.nodes;
+    if (!nodes.length) return;
+    let first = Infinity, last = -1, moved = false;
+    const shadow = this.nodeShadow;
+    for (let i = 0; i < nodes.length; i++) {
+      let visible = true;
+      _node.identity();
+      for (let o: THREE.Object3D | null = nodes[i]; o && o !== this.inner; o = o.parent) {
+        if (!o.visible) { visible = false; break; }
+        if (o.matrixAutoUpdate) o.updateMatrix();
+        _node.premultiply(o.matrix);
+      }
+      const slot = this.nodeBase + i;
+      if (!writeNode(slot, visible ? _node : null)) continue;
+      first = Math.min(first, slot); last = slot;
+      if (moved) continue;
+      const e = _node.elements;
+      for (let r = 0; r < 3 && !moved; r++) for (let c = 0; c < 4; c++) {
+        const v = visible ? e[c * 4 + r] : 0;
+        if (!(Math.abs(v - shadow[i * 12 + r * 4 + c]) <= SHADOW_EPSILON)) { moved = true; break; }
+      }
+    }
+    commitNodes(first, last);
+    if (!moved) return;
+    // Snapshot every node and tell the shadow cache (it compares caster keys, not node slots).
+    for (let i = 0; i < nodes.length; i++) {
+      let visible = true;
+      _node.identity();
+      for (let o: THREE.Object3D | null = nodes[i]; o && o !== this.inner; o = o.parent) {
+        if (!o.visible) { visible = false; break; }
+        _node.premultiply(o.matrix);
+      }
+      const e = _node.elements;
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) shadow[i * 12 + r * 4 + c] = visible ? e[c * 4 + r] : 0;
+    }
+    for (const mesh of this.movingMeshes) mesh.userData.casterVersion = ((mesh.userData.casterVersion as number) ?? 0) + 1;
   }
 
   update(origin: Vec3, time: number, ambientPressure: number, dt: number, distant = false) {
@@ -264,34 +324,7 @@ export class VesselView {
       pv.object.quaternion.set(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
       this.animatePart(p, pv, time, ambientPressure, dt);
     }
-    this.settleDeployables();
-  }
-
-  /** Called before any deploy pose changes: the individual meshes must be live again. */
-  private unbatchDeployables() {
-    this.deployQuiet = 0;
-    if (!this.deployBatch) return;
-    disposeStaticBatch(this.deployBatch);
-    this.deployBatch = undefined;
-    for (const o of this.deployHidden) { o.visible = true; o.matrixWorldAutoUpdate = true; delete o.userData.batchedVisible; }
-    this.deployHidden = [];
-  }
-
-  private settleDeployables() {
-    // Wait for a deferred main batch first: the deploy batch assumes non-deploy leaves are already batched.
-    if (this.batchPending > 0 || this.deployQuiet === Infinity || ++this.deployQuiet < SETTLE_FRAMES) return;
-    this.deployQuiet = Infinity;
-    if (this.stressOverlay || this.vessel.eva) return;
-    // Drills set their pose every frame; static kinds are already in the main batch.
-    const roots = [...this.parts.values()].filter(pv => !pv.static && pv.state.drillDeploy === undefined).map(pv => pv.object);
-    const leaves: THREE.Object3D[] = [];
-    for (const root of roots) root.traverse(o => { if ((o as THREE.Mesh).isMesh && !o.userData.batchedVisible) leaves.push(o); });
-    // Leaves outside deploy subtrees are already hidden by the main batch (and skipped); other moving nodes stay out.
-    const batch = batchStaticParts(roots, o => isAnimatedNode(o) && !o.userData.deploy);
-    this.deployHidden = leaves.filter(o => o.userData.batchedVisible);
-    if (!this.deployHidden.length) { disposeStaticBatch(batch); return; }
-    this.deployBatch = batch;
-    this.inner.add(batch);
+    this.updateNodes();
   }
 
   private animatePart(p: PartState, pv: PartVisual, time: number, ambientPressure: number, dt: number) {
@@ -318,7 +351,6 @@ export class VesselView {
     if (p.wheel) {
       // Gear deploy follows the simulated animation; steering sign converts body-frame steer to the part frame.
       if (Math.abs(pv.deploy - p.wheel.deploy) > 1e-4) {
-        this.unbatchDeployables();
         pv.deploy = p.wheel.deploy;
         setPartDeploy(pv.object, pv.deploy);
       }
@@ -338,7 +370,6 @@ export class VesselView {
     // Retractable solar arrays follow their extended setting (catalogue default: extended).
     if (p.def.modules.some(m => m.type === 'solarPanel' && m.tracking)) target = p.tweaks?.extended === false ? 0 : 1;
     if (target >= 0 && Math.abs(pv.deploy - target) > 1e-3) {
-      this.unbatchDeployables();
       pv.deploy += Math.sign(target - pv.deploy) * Math.min(Math.abs(target - pv.deploy), dt * 0.6);
       setPartDeploy(pv.object, pv.deploy);
     }
@@ -346,8 +377,7 @@ export class VesselView {
 
   dispose() {
     this.links.dispose();
-    if (this.batch) disposeStaticBatch(this.batch);
-    if (this.deployBatch) disposeStaticBatch(this.deployBatch);
+    this.unbatch();
     this.impostor.geometry.dispose(); this.impostor.material.dispose();
     for (const pv of this.parts.values()) {
       pv.heat.dispose();
