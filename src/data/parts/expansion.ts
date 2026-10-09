@@ -1,5 +1,5 @@
 import type { PartDef } from '../../sim/vessel/types';
-import { adapter, box, cyl, DEG, expandedEngine, fuelTank, hardware, landingGear, landingLegLayout, noseCone, SIZE_RADIUS, solidMotor, srfNode, stackDecoupler, v } from './builders';
+import { adapter, box, cyl, DEG, expandedEngine, fuelTank, hardware, landingGear, landingLegModule, noseCone, SIZE_RADIUS, solidMotor, srfNode, stackDecoupler, v } from './builders';
 import { utility } from './utility';
 
 export const expansion: PartDef[] = [
@@ -81,7 +81,7 @@ export const expansion: PartDef[] = [
     meshParams: { style: i === 2 ? 'radial' : 'stack', canopyRadius: [4.5,22,16][i], colors: i ? 'white' : 'red' } })),
   { ...utility.find(p => p.id === 'leg-strider')!, id: 'leg-colossus', name: 'Colossus Landing Leg', dryMass: 420, cost: 1700,
     shape: box(0.56,2.8,0.56), attachNodes: [srfNode(0.56,0.42)], meshParams: { scale: 2.8 },
-    modules: [{ type: 'landingLeg', spring: 400000, damper: 40000, travel: 0.7, footPosition: landingLegLayout(2.8).contact }] },
+    modules: [landingLegModule(2.8, 400000, 40000, 0.7)] },
   ...[0,1].map(i => { const p = landingGear({ id: `rover-wheel-${i}`, name: i ? 'Boulder Powered Rover Wheel' : 'Pebble Powered Rover Wheel', description: 'Fixed powered terrain wheel with steering, a sprung hub and independent braking. On the ground, W/S drive forward/reverse, A/D steer and B brakes.', dryMass: i ? 110 : 35, cost: i ? 850 : 350, radius: i ? 0.48 : 0.25, strut: i ? 0.55 : 0.3, fold: 0, spring: i ? 80000 : 25000, damper: i ? 7000 : 2500, travel: i ? 0.3 : 0.15, brakeTorque: i ? 1800 : 350, steerDeg: 30, crashTolerance: 18 });
     return { ...p, modules: p.modules.map(m => m.type === 'wheel' ? { ...m, motorTorque: i ? 1500 : 250 } : m) }; }),
   { ...hardware('rover-chassis', 'Trailhead Rover Chassis', 'structural', 220, 1200, box(1.5,2,0.35), 'framework', [], { style: 'chassis' }, 1), resources: { electricCharge: 800 } },

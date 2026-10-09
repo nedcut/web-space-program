@@ -1,5 +1,5 @@
 import type { PartDef } from '../../sim/vessel/types';
-import { box, cyl, landingLegLayout, MANUFACTURERS, srfNode, stackNodes } from './builders';
+import { box, cyl, landingLegModule, MANUFACTURERS, srfNode, stackNodes } from './builders';
 
 
 
@@ -118,7 +118,7 @@ export const utility: PartDef[] = [
     dragCoefficient: { axial: 0.3, side: 0.5 },
     maxTemp: 1800,
     crashTolerance: 12,
-    modules: [{ type: 'landingLeg', spring: 40_000, damper: 4_000, travel: 0.3, footPosition: landingLegLayout(1).contact }],
+    modules: [landingLegModule(1, 40_000, 4_000, 0.3)],
     mesh: 'landingLeg',
     meshParams: { scale: 1 },
   },
@@ -138,7 +138,7 @@ export const utility: PartDef[] = [
     dragCoefficient: { axial: 0.3, side: 0.5 },
     maxTemp: 1800,
     crashTolerance: 14,
-    modules: [{ type: 'landingLeg', spring: 150_000, damper: 15_000, travel: 0.5, footPosition: landingLegLayout(1.8).contact }],
+    modules: [landingLegModule(1.8, 150_000, 15_000, 0.5)],
     mesh: 'landingLeg',
     meshParams: { scale: 1.8 },
   },

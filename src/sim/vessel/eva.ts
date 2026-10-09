@@ -1,6 +1,7 @@
 import { add, sub, scale, length, normalize, dot, cross, v3, type Vec3 } from '../../util/vec3';
 import { qNormalize, qRotate, qFromTo, qMul, qFromAxisAngle, type Quat } from '../../util/quat';
-import type { ControlInput, VesselState, StepResult } from './runtime';
+import type { ControlInput, VesselState, StepResult, PartState } from './runtime';
+import type { LandingLegModule, WheelModule } from './types';
 import type { Environment } from './env';
 import { stepHazards } from '../hazards/vessel';
 import { removePart, recomputeMassProperties } from './assembly';
@@ -137,8 +138,8 @@ const PROBES = [-0.5, 0, 0.5];
 
 // Scratch for the allocation-free hull test (the sim is single-threaded; nothing here escapes a call). Vectors pass
 // through a typed array by offset: doubles passed as arguments to a call V8 does not inline are boxed.
-const S = new Float64Array(9);
-const R = 0, L = 3, P = 6;
+const S = new Float64Array(15);
+const R = 0, L = 3, P = 6, A = 9, B = 12;
 const put = (o: number, x: number, y: number, z: number) => { S[o] = x; S[o + 1] = y; S[o + 2] = z; };
 
 /** S[o..o+2] = q · S[i..i+2] · q⁻¹ (or the inverse rotation when `inv`); `i` may equal `o`. */
@@ -151,12 +152,38 @@ function rot(q: { x: number; y: number; z: number; w: number }, i: number, inv: 
   S[o + 2] = z + qw * tz + (qx * ty - qy * tx);
 }
 
+/** Deployed strut radius as a fraction of the foot/tyre radius. */
+const STRUT_FRACTION = 0.3;
+
+/**
+ * Deployed extension of a part, in its part frame: strut top S[A], foot pad / wheel centre S[B]. Returns the foot or
+ * tyre radius, or 0 when the part has none deployed (stowed legs and gear are inside their collision shape).
+ */
+function deployedExtent(p: PartState): number {
+  if (p.leg?.deployed) {
+    const m = p.def.modules[p.leg.moduleIndex] as LandingLegModule, f = m.footPosition, t = m.strutTop;
+    if (t) put(A, t.x, t.y, t.z); else put(A, 0, 0, 0);
+    put(B, f.x, f.y, f.z);
+    return m.footRadius ?? 0.15;
+  }
+  // Wheels are only in contact once fully down (contact.ts); while swinging they keep the stowed shape.
+  if (p.wheel && p.wheel.deploy >= 1) {
+    const m = p.def.modules[p.wheel.moduleIndex] as WheelModule, c = m.wheelCenter;
+    // The gear hangs along part +Z from its mounting plane (z = 0).
+    put(A, c.x, c.y, 0);
+    put(B, c.x, c.y, c.z);
+    return m.radius;
+  }
+  return 0;
+}
+
 /**
  * Keep an astronaut out of a vessel's hull: three spheres along the suit against every part's collision shape
- * (box, or cylinder/cone as for aero and the pad placement). Penetration is resolved by moving the astronaut out
- * along the shortest way, and velocity into the hull (relative to the vessel) is removed; the vessel is not pushed
- * (a 100 kg astronaut against tonnes). With feet on the ground the push is horizontal only, so an astronaut is
- * stopped by a hull rather than lifted onto it. Returns whether there was contact. Allocation-free.
+ * (box, or cylinder/cone as for aero and the pad placement), plus a strut capsule and a foot pad / tyre sphere for
+ * deployed landing legs and lowered wheels. Penetration is resolved by moving the astronaut out along the shortest
+ * way, and velocity into the hull (relative to the vessel) is removed; the vessel is not pushed (a 100 kg astronaut
+ * against tonnes). With feet on the ground the push is horizontal only, so an astronaut is stopped by a hull rather
+ * than lifted onto it. Returns whether there was contact. Allocation-free.
  */
 export function collideEvaWithHull(eva: VesselState, hull: VesselState): boolean {
   const ep = eva.position, hp = hull.position, eo = eva.orientation;
@@ -164,8 +191,9 @@ export function collideEvaWithHull(eva: VesselState, hull: VesselState): boolean
   put(R, 0, 1, 0);
   rot(eo, R, false, R);
   const ux = S[R], uy = S[R + 1], uz = S[R + 2];
-  const reach = hull.cache.boundingRadius + EVA_HULL_RADIUS + 0.5;
-  if (Math.abs(ep.x - hp.x) > reach + 0.5 || Math.abs(ep.y - hp.y) > reach + 0.5 || Math.abs(ep.z - hp.z) > reach + 0.5) return false;
+  // The bounding radius allows 2 m for legs; the largest feet reach a little further.
+  const reach = hull.cache.boundingRadius + EVA_HULL_RADIUS + 2;
+  if (Math.abs(ep.x - hp.x) > reach || Math.abs(ep.y - hp.y) > reach || Math.abs(ep.z - hp.z) > reach) return false;
   const hq = hull.orientation;
   let hit = false;
   const parts = hull.parts;
@@ -175,67 +203,91 @@ export function collideEvaWithHull(eva: VesselState, hull: VesselState): boolean
     put(R, p.position.x - hull.com.x, p.position.y - hull.com.y, p.position.z - hull.com.z);
     rot(hq, R, false, R);
     const cx = hp.x + S[R], cy = hp.y + S[R + 1], cz = hp.z + S[R + 2];
-    // Bounding sphere of the shape (as `shapeRadius`, without Math.hypot's allocation).
+    // Bounding sphere of the shape (as `shapeRadius`, without Math.hypot's allocation) and of any deployed extension.
     const rMax = s.kind === 'box' ? 0 : Math.max(s.radiusTop, s.radiusBottom);
-    const bound = (s.kind === 'box' ? 0.5 * Math.sqrt(s.size.x * s.size.x + s.size.y * s.size.y + s.size.z * s.size.z) : Math.sqrt(s.height * s.height / 4 + rMax * rMax)) + EVA_HULL_RADIUS + 0.5;
+    let bound = s.kind === 'box' ? 0.5 * Math.sqrt(s.size.x * s.size.x + s.size.y * s.size.y + s.size.z * s.size.z) : Math.sqrt(s.height * s.height / 4 + rMax * rMax);
+    const foot = p.leg || p.wheel ? deployedExtent(p) : 0;
+    if (foot > 0) bound = Math.max(bound, Math.sqrt(S[B] * S[B] + S[B + 1] * S[B + 1] + S[B + 2] * S[B + 2]) + foot);
+    bound += EVA_HULL_RADIUS + 0.5;
     const dx0 = ep.x - cx, dy0 = ep.y - cy, dz0 = ep.z - cz;
     if (dx0 * dx0 + dy0 * dy0 + dz0 * dz0 > bound * bound) continue;
     const pq = p.rotation;
+    // Sub-shape 0: the part's shape; 1: deployed strut (capsule A→B); 2: foot pad / tyre (sphere at B).
+    const shapes = foot > 0 ? 3 : 1;
     for (let j = 0; j < PROBES.length; j++) {
       const k = PROBES[j];
-      // Probe centre in the part frame.
-      put(R, ep.x + ux * k - cx, ep.y + uy * k - cy, ep.z + uz * k - cz);
-      rot(hq, R, true, R);
-      rot(pq, R, true, L);
-      const lx = S[L], ly = S[L + 1], lz = S[L + 2];
-      let depth: number, nx = 0, ny = 0, nz = 0;
-      if (s.kind === 'box') {
-        const hx = s.size.x / 2, hy = s.size.y / 2, hz = s.size.z / 2;
-        const qx = Math.max(-hx, Math.min(hx, lx)), qy = Math.max(-hy, Math.min(hy, ly)), qz = Math.max(-hz, Math.min(hz, lz));
-        const ox = lx - qx, oy = ly - qy, oz = lz - qz, d = Math.sqrt(ox * ox + oy * oy + oz * oz);
-        if (d > 1e-9) {
-          if (d >= EVA_HULL_RADIUS) continue;
-          depth = EVA_HULL_RADIUS - d; nx = ox / d; ny = oy / d; nz = oz / d;
-        } else {
-          // Centre inside the box: out through the nearest face.
-          const fx = hx - Math.abs(lx), fy = hy - Math.abs(ly), fz = hz - Math.abs(lz);
-          if (fx <= fy && fx <= fz) { depth = fx + EVA_HULL_RADIUS; nx = lx < 0 ? -1 : 1; }
-          else if (fy <= fz) { depth = fy + EVA_HULL_RADIUS; ny = ly < 0 ? -1 : 1; }
-          else { depth = fz + EVA_HULL_RADIUS; nz = lz < 0 ? -1 : 1; }
+      let stale = true;
+      for (let sub = 0; sub < shapes; sub++) {
+        // Probe centre in the part frame (again after a push from the previous sub-shape).
+        if (stale) {
+          put(R, ep.x + ux * k - cx, ep.y + uy * k - cy, ep.z + uz * k - cz);
+          rot(hq, R, true, R);
+          rot(pq, R, true, L);
+          stale = false;
         }
-      } else {
-        const hh = s.height / 2;
-        const yc = Math.max(-hh, Math.min(hh, ly));
-        const rad = s.radiusBottom + (s.radiusTop - s.radiusBottom) * (hh > 0 ? (yc + hh) / (2 * hh) : 0.5);
-        const rr = Math.sqrt(lx * lx + lz * lz);
-        if (Math.abs(ly) < hh && rr < rad) {
-          // Inside: out through the side or the nearer end, whichever is shorter.
-          const side = rad - rr, end = hh - Math.abs(ly);
-          if (side <= end && rr > 1e-9) { depth = side + EVA_HULL_RADIUS; nx = lx / rr; nz = lz / rr; }
-          else { depth = end + EVA_HULL_RADIUS; ny = ly < 0 ? -1 : 1; }
+        const lx = S[L], ly = S[L + 1], lz = S[L + 2];
+        let depth: number, nx = 0, ny = 0, nz = 0;
+        if (sub > 0) {
+          // Closest point on the strut segment (or the foot centre), then a sphere-sphere test.
+          let qx = S[B], qy = S[B + 1], qz = S[B + 2], rad = foot;
+          if (sub === 1) {
+            const ax = S[A], ay = S[A + 1], az = S[A + 2], sx = qx - ax, sy = qy - ay, sz = qz - az;
+            const ss = sx * sx + sy * sy + sz * sz;
+            const t = ss > 1e-12 ? Math.max(0, Math.min(1, ((lx - ax) * sx + (ly - ay) * sy + (lz - az) * sz) / ss)) : 1;
+            qx = ax + sx * t; qy = ay + sy * t; qz = az + sz * t; rad = foot * STRUT_FRACTION;
+          }
+          const ox = lx - qx, oy = ly - qy, oz = lz - qz, d = Math.sqrt(ox * ox + oy * oy + oz * oz);
+          if (d >= rad + EVA_HULL_RADIUS || d < 1e-9) continue;
+          depth = rad + EVA_HULL_RADIUS - d; nx = ox / d; ny = oy / d; nz = oz / d;
+        } else if (s.kind === 'box') {
+          const hx = s.size.x / 2, hy = s.size.y / 2, hz = s.size.z / 2;
+          const qx = Math.max(-hx, Math.min(hx, lx)), qy = Math.max(-hy, Math.min(hy, ly)), qz = Math.max(-hz, Math.min(hz, lz));
+          const ox = lx - qx, oy = ly - qy, oz = lz - qz, d = Math.sqrt(ox * ox + oy * oy + oz * oz);
+          if (d > 1e-9) {
+            if (d >= EVA_HULL_RADIUS) continue;
+            depth = EVA_HULL_RADIUS - d; nx = ox / d; ny = oy / d; nz = oz / d;
+          } else {
+            // Centre inside the box: out through the nearest face.
+            const fx = hx - Math.abs(lx), fy = hy - Math.abs(ly), fz = hz - Math.abs(lz);
+            if (fx <= fy && fx <= fz) { depth = fx + EVA_HULL_RADIUS; nx = lx < 0 ? -1 : 1; }
+            else if (fy <= fz) { depth = fy + EVA_HULL_RADIUS; ny = ly < 0 ? -1 : 1; }
+            else { depth = fz + EVA_HULL_RADIUS; nz = lz < 0 ? -1 : 1; }
+          }
         } else {
-          const k2 = rr > rad && rr > 1e-9 ? rad / rr : 1;
-          const ox = lx - lx * k2, oy = ly - yc, oz = lz - lz * k2, d = Math.sqrt(ox * ox + oy * oy + oz * oz);
-          if (d >= EVA_HULL_RADIUS || d < 1e-9) continue;
-          depth = EVA_HULL_RADIUS - d; nx = ox / d; ny = oy / d; nz = oz / d;
+          const hh = s.height / 2;
+          const yc = Math.max(-hh, Math.min(hh, ly));
+          const rad = s.radiusBottom + (s.radiusTop - s.radiusBottom) * (hh > 0 ? (yc + hh) / (2 * hh) : 0.5);
+          const rr = Math.sqrt(lx * lx + lz * lz);
+          if (Math.abs(ly) < hh && rr < rad) {
+            // Inside: out through the side or the nearer end, whichever is shorter.
+            const side = rad - rr, end = hh - Math.abs(ly);
+            if (side <= end && rr > 1e-9) { depth = side + EVA_HULL_RADIUS; nx = lx / rr; nz = lz / rr; }
+            else { depth = end + EVA_HULL_RADIUS; ny = ly < 0 ? -1 : 1; }
+          } else {
+            const k2 = rr > rad && rr > 1e-9 ? rad / rr : 1;
+            const ox = lx - lx * k2, oy = ly - yc, oz = lz - lz * k2, d = Math.sqrt(ox * ox + oy * oy + oz * oz);
+            if (d >= EVA_HULL_RADIUS || d < 1e-9) continue;
+            depth = EVA_HULL_RADIUS - d; nx = ox / d; ny = oy / d; nz = oz / d;
+          }
         }
+        // Back to world axes.
+        put(R, nx, ny, nz);
+        rot(pq, R, false, R);
+        rot(hq, R, false, P);
+        let px = S[P], py = S[P + 1], pz = S[P + 2];
+        if (grounded) {
+          const up = px * ux + py * uy + pz * uz;
+          px -= ux * up; py -= uy * up; pz -= uz * up;
+          const n = Math.sqrt(px * px + py * py + pz * pz);
+          if (n < 0.2) continue;
+          depth /= n; px /= n; py /= n; pz /= n;
+        }
+        ep.x += px * depth; ep.y += py * depth; ep.z += pz * depth;
+        stale = true;
+        const vn = (eva.velocity.x - hull.velocity.x) * px + (eva.velocity.y - hull.velocity.y) * py + (eva.velocity.z - hull.velocity.z) * pz;
+        if (vn < 0) { eva.velocity.x -= px * vn; eva.velocity.y -= py * vn; eva.velocity.z -= pz * vn; }
+        hit = true;
       }
-      // Back to world axes.
-      put(R, nx, ny, nz);
-      rot(pq, R, false, R);
-      rot(hq, R, false, P);
-      let px = S[P], py = S[P + 1], pz = S[P + 2];
-      if (grounded) {
-        const up = px * ux + py * uy + pz * uz;
-        px -= ux * up; py -= uy * up; pz -= uz * up;
-        const n = Math.sqrt(px * px + py * py + pz * pz);
-        if (n < 0.2) continue;
-        depth /= n; px /= n; py /= n; pz /= n;
-      }
-      ep.x += px * depth; ep.y += py * depth; ep.z += pz * depth;
-      const vn = (eva.velocity.x - hull.velocity.x) * px + (eva.velocity.y - hull.velocity.y) * py + (eva.velocity.z - hull.velocity.z) * pz;
-      if (vn < 0) { eva.velocity.x -= px * vn; eva.velocity.y -= py * vn; eva.velocity.z -= pz * vn; }
-      hit = true;
     }
   }
   return hit;

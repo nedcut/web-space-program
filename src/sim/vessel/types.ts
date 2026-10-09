@@ -178,6 +178,10 @@ export interface LandingLegModule {
   travel: number;
   /** Foot contact point in part frame when deployed. */
   footPosition: Vec3;
+  /** Top of the deployed strut (hinge) in part frame, for astronaut collision (default: part origin). */
+  strutTop?: Vec3;
+  /** Foot pad radius, m, for astronaut collision (default 0.15). */
+  footRadius?: number;
 }
 
 export interface SolarPanelModule {

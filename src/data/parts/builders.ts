@@ -1,4 +1,4 @@
-import type { AttachNode, PartDef, PartModule } from '../../sim/vessel/types';
+import type { AttachNode, LandingLegModule, PartDef, PartModule } from '../../sim/vessel/types';
 import { KEROLOX_FUEL_FRACTION, KEROLOX_OX_FRACTION, RESOURCES } from '../resources';
 
 
@@ -414,6 +414,12 @@ export function landingLegLayout(s: number) {
   const padDrop = 0.04 * s; // ball joint to pad centre
   const contact = v(0, footPivot.y - padDrop - padHeight / 2, footPivot.z);
   return { hinge, stowedLength, deployedLength, deployAngle, footPivot, padRadius, padHeight, padDrop, contact };
+}
+
+/** Landing-leg module whose foot, strut and pad match the `landingLegLayout(s)` mesh. */
+export function landingLegModule(s: number, spring: number, damper: number, travel: number): LandingLegModule {
+  const L = landingLegLayout(s);
+  return { type: 'landingLeg', spring, damper, travel, footPosition: L.contact, strutTop: L.hinge, footRadius: L.padRadius };
 }
 
 

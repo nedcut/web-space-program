@@ -10,8 +10,9 @@ import { buildVessel, neutralInput } from '../src/sim/vessel';
 import { collideEvaWithHull, EVA_HEIGHT, EVA_HULL_RADIUS } from '../src/sim/vessel/eva';
 import { NOSE_UP } from '../src/sim/vessel/testing';
 import type { VesselState } from '../src/sim/vessel/runtime';
-import { qIdentity, qFromAxisAngle } from '../src/util/quat';
-import { v3, sub, scale, length, normalize, dot, cross } from '../src/util/vec3';
+import { qIdentity, qFromAxisAngle, qRotate } from '../src/util/quat';
+import { v3, add, sub, scale, length, normalize, dot, cross } from '../src/util/vec3';
+import type { LandingLegModule, WheelModule } from '../src/sim/vessel/types';
 
 /** Camera attitude looking along `forward` (−Z) with `up` as screen up. */
 function look(forward: ReturnType<typeof v3>, up: ReturnType<typeof v3>) {
@@ -121,5 +122,47 @@ describe('astronaut vs hull collision', () => {
     expect(length(sub(eva.state.velocity, ship.state.velocity))).toBeLessThan(1e-3);
     expect(length(sub(w.hatchPosition(ship.state, pod), eva.state.position))).toBeLessThan(0.01);
     expect(w.boardEva()).toBe(true);
+  });
+
+  /** World position of a point given in the frame of the hull's only part. */
+  function partPoint(v: VesselState, local: ReturnType<typeof v3>) {
+    const p = v.parts[0];
+    return add(v.position, qRotate(v.orientation, sub(add(p.position, qRotate(p.rotation, local)), v.com)));
+  }
+
+  it('deployed landing legs collide with their strut and foot pad, stowed legs only with the stowed shape', () => {
+    const leg = hull('leg-stilt', v3(0, 0, 0));
+    const m = leg.parts[0].def.modules[leg.parts[0].leg!.moduleIndex] as LandingLegModule;
+    const foot = partPoint(leg, m.footPosition);
+    const out = normalize(sub(foot, partPoint(leg, v3(m.footPosition.x, m.footPosition.y, 0))));
+    // Astronaut drifting (not grounded) with the waist 0.3 m from the pad centre, outward from the leg.
+    const at = add(foot, scale(out, 0.3));
+    const stowed = astronaut(at.x, at.y, at.z, false);
+    expect(collideEvaWithHull(stowed, leg)).toBe(false);
+    leg.parts[0].leg!.deployed = true;
+    const a = astronaut(at.x, at.y, at.z, false);
+    a.velocity = scale(out, -0.5);
+    expect(collideEvaWithHull(a, leg)).toBe(true);
+    expect(length(sub(a.position, foot))).toBeGreaterThanOrEqual(m.footRadius! + EVA_HULL_RADIUS - 1e-9);
+    expect(dot(a.velocity, out)).toBeGreaterThanOrEqual(-1e-12);
+    // Halfway along the strut, too.
+    const mid = scale(add(partPoint(leg, m.strutTop!), foot), 0.5);
+    const b = astronaut(mid.x + out.x * 0.2, mid.y + out.y * 0.2, mid.z + out.z * 0.2, false);
+    expect(collideEvaWithHull(b, leg)).toBe(true);
+  });
+
+  it('lowered wheels collide with the tyre; gear still swinging down keeps the stowed shape', () => {
+    const gear = hull('gear-bogie', v3(0, 0, 0));
+    const w = gear.parts[0].wheel!;
+    const m = gear.parts[0].def.modules[w.moduleIndex] as WheelModule;
+    const centre = partPoint(gear, m.wheelCenter);
+    const out = normalize(sub(centre, partPoint(gear, v3(m.wheelCenter.x, m.wheelCenter.y, 0))));
+    const at = add(centre, scale(out, m.radius));
+    w.deployed = true; w.deploy = 0.5;
+    expect(collideEvaWithHull(astronaut(at.x, at.y, at.z, false), gear)).toBe(false);
+    w.deploy = 1;
+    const a = astronaut(at.x, at.y, at.z, false);
+    expect(collideEvaWithHull(a, gear)).toBe(true);
+    expect(length(sub(a.position, centre))).toBeGreaterThanOrEqual(m.radius + EVA_HULL_RADIUS - 1e-9);
   });
 });
