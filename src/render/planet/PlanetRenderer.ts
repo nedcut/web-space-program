@@ -13,7 +13,7 @@ import type { Quat } from '../../util/quat';
 import { QUALITY_PRESETS, type QualitySettings } from '../core/quality';
 import { screenSpaceFactor } from '../core/camera';
 import { computeAtmosphereParams, buildTransmittanceLUT, type AtmosphereParams } from './atmosphereParams';
-import { createPlanetUniforms, registerPlanetUniforms, unregisterPlanetUniforms, type PlanetUniforms } from './uniforms';
+import { createPlanetUniforms, registerPlanetUniforms, shaderTime, unregisterPlanetUniforms, type PlanetUniforms } from './uniforms';
 import {
   createTerrainMaterial,
   createOceanMaterial,
@@ -442,7 +442,7 @@ export class PlanetRenderer {
     const Ra = this.atmosphere?.atmosphereRadius ?? R;
     u.uCamCAtm.value = (camDist - Ra) * (camDist + Ra);
     u.uCamCGround.value = (camDist - R) * (camDist + R);
-    u.uTime.value = time;
+    u.uTime.value = shaderTime(time);
 
     const q = p.bodyRotation;
     this.rotQ.set(q.x, q.y, q.z, q.w);
@@ -508,7 +508,7 @@ export class PlanetRenderer {
     if (this.sunMesh) {
       placeWhole(this.sunMesh, R);
       const sm = this.sunMesh.material as THREE.ShaderMaterial;
-      sm.uniforms.uTime.value = time;
+      sm.uniforms.uTime.value = u.uTime.value;
       // Resolve photosphere detail when approaching the Sun; retain bright HDR radiance at a distance.
       const close = 1 - THREE.MathUtils.smoothstep(camDist / R, 6, 30);
       sm.uniforms.uIntensity.value = THREE.MathUtils.lerp(this.sunRadiance, 1.7, close);
