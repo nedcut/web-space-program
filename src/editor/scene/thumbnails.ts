@@ -3,6 +3,7 @@ import { enqueueIdle, waitForInputQuiet } from '../../util/idleQueue';
 import * as THREE from 'three';
 import { cachedThumbnail, persistThumbnail, preloadThumbnails } from './thumbnailCache';
 import { StudioEnvironment } from '../../render/core/studioEnv';
+import { contextIsLost, onContextRestored } from '../../render/core/contextRecovery';
 import { partTexturesReady } from '../../render/parts/textures';
 import type { PartDef } from '../../sim/vessel/types';
 import { createPartMesh } from './partMesh';
@@ -53,6 +54,8 @@ const texturesFinal = new Set<string>();
 function schedule() {
   // No palette mounted (e.g. preparing a launch): leave the queue suspended until it returns.
   if (scheduled || !queue.length || !listeners.size) return;
+  // Context lost: renders would fail or come back blank. The restore subscription (setup) resumes the queue.
+  if (renderer && contextIsLost(renderer)) return;
   scheduled = true;
   // Storage and texture readiness never run mesh construction in a React effect.
   void preloadThumbnails().then(() => {
@@ -88,6 +91,7 @@ function setup() {
   renderer.toneMappingExposure = 1.15;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setClearColor(0x000000, 0);
+  onContextRestored(renderer, schedule);
   scene = new THREE.Scene();
   const target = scene;
   envRT = new StudioEnvironment(renderer, { variant: 'thumbnail' }, (rt) => { target.environment = rt.texture; });
@@ -158,6 +162,7 @@ async function pump() {
     if (!cachedThumbnail(d.id)) {
       try {
         const blob = await renderOne(d);
+        if (renderer && contextIsLost(renderer)) throw new Error('context lost');
         const previous = cache.get(d.id);
         cache.set(d.id, URL.createObjectURL(blob));
         if (previous?.startsWith('blob:')) URL.revokeObjectURL(previous);
@@ -165,6 +170,12 @@ async function pump() {
         // Canvas encoding is asynchronous; only final images enter persistent storage.
         if (texturesFinal.has(d.id)) void persistThumbnail(d.id, blob);
       } catch (e) {
+        if (renderer && contextIsLost(renderer)) {
+          // Not the part's fault: try again after the restore instead of caching a failure for the session.
+          queued.add(d.id);
+          queue.unshift(d);
+          return;
+        }
         console.warn('thumbnail failed', d.id, e);
         cache.set(d.id, '');
       }
