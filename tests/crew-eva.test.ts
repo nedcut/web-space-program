@@ -3,7 +3,7 @@ import { World } from '../src/game/world';
 import { Universe } from '../src/game/universe';
 import { PART_CATALOG } from '../src/data/parts';
 import { EVA_PART } from '../src/data/eva';
-import { buildTender } from '../src/editor/stockCrafts';
+import { buildTender, STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { DEFAULT_START_UT } from '../src/game/store';
 import { serializeWorld, deserializeWorld } from '../src/game/persistence';
 import { placeInCircularOrbit } from '../src/game/scenarios';
@@ -13,8 +13,18 @@ import { vacuumEnv } from '../src/sim/vessel/testing';
 import { generateAstronaut, crewIds } from '../src/sim/crew/crew';
 import type { CraftDef } from '../src/sim/vessel/types';
 import { qIdentity, qFromTo } from '../src/util/quat';
-import { v3, add, sub, scale, length, normalize, dot } from '../src/util/vec3';
+import { v3, add, sub, scale, length, normalize, dot, cross } from '../src/util/vec3';
 
+/** Camera attitude looking along `forward` (−Z) with `up` as screen up. */
+function look(forward: ReturnType<typeof v3>, up: ReturnType<typeof v3>) {
+  const z = scale(forward, -1), x = normalize(cross(up, z)), y = cross(z, x);
+  const m = [[x.x, y.x, z.x], [x.y, y.y, z.y], [x.z, y.z, z.z]];
+  const t = m[0][0] + m[1][1] + m[2][2];
+  if (t > 0) { const k = Math.sqrt(t + 1) * 2; return { w: k / 4, x: (m[2][1] - m[1][2]) / k, y: (m[0][2] - m[2][0]) / k, z: (m[1][0] - m[0][1]) / k }; }
+  if (m[0][0] > m[1][1] && m[0][0] > m[2][2]) { const k = Math.sqrt(1 + m[0][0] - m[1][1] - m[2][2]) * 2; return { w: (m[2][1] - m[1][2]) / k, x: k / 4, y: (m[0][1] + m[1][0]) / k, z: (m[0][2] + m[2][0]) / k }; }
+  if (m[1][1] > m[2][2]) { const k = Math.sqrt(1 + m[1][1] - m[0][0] - m[2][2]) * 2; return { w: (m[0][2] - m[2][0]) / k, x: (m[0][1] + m[1][0]) / k, y: k / 4, z: (m[1][2] + m[2][1]) / k }; }
+  const k = Math.sqrt(1 + m[2][2] - m[0][0] - m[1][1]) * 2; return { w: (m[1][0] - m[0][1]) / k, x: (m[0][2] + m[2][0]) / k, y: (m[1][2] + m[2][1]) / k, z: k / 4 };
+}
 const pod: CraftDef = { name: 'Crew test', version: 1, type: 'VAB', parts: [{ uid: 1, partId: 'pod-lantern-1', position: v3(), rotation: qIdentity(), stage: 0 }] };
 function orbit() {
   const w = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
@@ -102,6 +112,40 @@ describe('human crew and EVA', () => {
     expect(eva.state.situation).toBe('flying');
     for(let i=0;i<300;i++) w.tick(0.02,neutralInput());
     expect(eva.state.situation).toBe('landed');
+  });
+
+  it('climbs down from a grounded vessel beside its hull and boards again from there', () => {
+    for (const id of ['stock-kestrel', 'stock-meridian', 'stock-selene']) {
+      const w = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+      const ship = w.launch(STOCK_CRAFTS.find(c => c.id === id)!.build());
+      for (let i = 0; i < 10; i++) w.tick(0.02, neutralInput());
+      const eva = w.goEva()!;
+      const env = w.universe.createEnvironment(() => eva.body);
+      const g = env.ground(eva.state.position, w.ut)!;
+      // On the ground at once: no fall from the hatch (the Selene hatch is ~24 m up).
+      expect(eva.state.situation).toBe('landed');
+      expect(dot(sub(eva.state.position, g.surfacePoint), g.normal)).toBeCloseTo(EVA_HEIGHT, 2);
+      const up = normalize(sub(eva.state.position, w.universe.ephem.getBodyState(eva.body, w.ut).position));
+      const flat = (x: ReturnType<typeof v3>) => length(sub(x, scale(up, dot(x, up))));
+      // Outside the hull: no part's bounding sphere centre within a metre, horizontally.
+      const off = sub(eva.state.position, ship.state.position);
+      expect(flat(off)).toBeGreaterThan(1);
+      expect(flat(off)).toBeLessThan(ship.state.cache.boundingRadius + 2);
+      let maxSpeed = 0;
+      for (let i = 0; i < 100; i++) { w.tick(0.02, neutralInput()); maxSpeed = Math.max(maxSpeed, length(sub(eva.state.velocity, ship.state.velocity))); }
+      expect(maxSpeed).toBeLessThan(0.1);
+      expect(eva.state.situation).toBe('landed');
+      expect(w.boardingBlocker()).toBeNull();
+      // Walk away (camera looking away from the vessel) and the hatch is out of reach; walk back and board.
+      const flatDir = (x: ReturnType<typeof v3>) => normalize(sub(x, scale(up, dot(x, up))));
+      for (let i = 0; i < 400; i++) w.tick(0.02, neutralInput({ translateZ: -1, evaHeading: look(flatDir(off), up) }));
+      expect(w.boardingBlocker()).toMatch(/Move closer/);
+      let steps = 0;
+      while (w.boardingBlocker() && steps++ < 1000) w.tick(0.02, neutralInput({ translateZ: -1, evaHeading: look(flatDir(sub(ship.state.position, eva.state.position)), up) }));
+      expect(w.boardingBlocker()).toBeNull();
+      expect(w.boardEva()).toBe(true);
+      expect(w.active).toBe(ship);
+    }
   });
 
   it('boards a free seat, removes EVA, and refills the suit on the next sortie', () => {
