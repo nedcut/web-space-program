@@ -457,6 +457,8 @@ export class World {
   closestApproach(): TrajectoryApproach | null {
     const wv = this.active;
     if (!wv || !this.targetId || wv.mode === 'prelaunch' || this.targetKind() === null) return null;
+    // Targeting the body you are orbiting: "closest approach" would just be periapsis to its centre.
+    if (this.targetId === wv.body) return null;
     const patches = this.trajectory();
     if (!patches.length) return null;
     const key = `${this.targetId}|${patches.length}|${patches[0].startTime}|${patches[1]?.startTime}|${this.nodes.map((n) => `${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}${validAnchor(n, wv.body) ? '*' : ''}`).join(',')}`;

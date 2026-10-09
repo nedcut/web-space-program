@@ -119,8 +119,7 @@ export function targetOptions(this: FlightController, _internals: FlightControll
   const cur = w.universe.body(wv.body);
   const bodies: Telemetry['targetOptions'] = [];
   for (const b of w.universe.bodies.values()) {
-    if (b.id === cur.id) continue;
-    if (b.parent === cur.id || b.id === cur.parent || (cur.parent && b.parent === cur.parent)) {
+    if (b.id === cur.id || b.parent === cur.id || b.id === cur.parent || (cur.parent && b.parent === cur.parent)) {
       const bp = w.universe.ephem.getBodyState(b.id, w.ut).position;
       bodies.push({ id: b.id, name: b.name, kind: 'body', distance: length(sub(bp, wv.state.position)) - b.radius });
     }
