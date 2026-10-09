@@ -1,6 +1,6 @@
 import { stepHazards } from '../hazards/vessel';
 import type { PartLoad } from './loads';
-import { breakJoints, crashJointCuts, crashShocks, overloadedJoints } from './structure';
+import { aerodynamicStress, breakJoints, crashJointCuts, crashShocks, overloadedJoints } from './structure';
 import { advanceISRU } from './isru';
 import type { Vec3 } from '../../util/vec3';
 import { add, sub, length, scale, v3 } from '../../util/vec3';
@@ -244,7 +244,8 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
 
   // Contact impulses.
   solveContacts(v, cp.contacts, loads, h, cp.impacts);
-  const cuts = overloadedJoints(v, loads, h, omegaBefore, result);
+  const crossflowStress = aerodynamicStress(aero.dynamicPressure, airVelocityBody);
+  const cuts = overloadedJoints(v, loads, h, omegaBefore, result, crossflowStress);
   const crashCuts = crashJointCuts(v, shocks);
   L = angularMomentum(v);
 
@@ -257,7 +258,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   const hazardFailures = stepHazards(v, { air: air.sample, radiation: env.radiation?.(v.position, tMid) ?? 0, timeScale: env.hazardTimeScale ?? 1 }, h, result.events);
   const overheated = opts.disableHeating
     ? []
-    : stepThermal(v, { air: air.sample, airVelocityBody, sunDirBody: sunBody, sunDistance: sun.exposure === 0 ? Infinity : sun.distance }, h);
+    : stepThermal(v, { air: air.sample, airVelocityBody, sunDirBody: sunBody, sunDistance: sun.exposure === 0 ? Infinity : sun.thermalDistance ?? sun.distance }, h);
 
   // Telemetry & situation.
   const pa = scale(Fworld, 1 / m);
@@ -270,6 +271,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   v.telemetry.altitudeAGL = cp.altitudeAGL;
   v.telemetry.thrust = eng.thrust;
   v.telemetry.intakeAirRatio = eng.airRatio;
+  v.telemetry.crossflowStress = crossflowStress;
   for (const p of v.parts)
     if (p.wheel) {
       if (!p.wheel.inContact) p.wheel.rollSpeed *= Math.exp(-h / 4); // free wheel spinning down

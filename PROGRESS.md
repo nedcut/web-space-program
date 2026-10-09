@@ -975,7 +975,8 @@ From the veteran gap audit (item 2 and 11). What changed in the Vehicle Assembly
 - **New parts:** five multi-way couplers (Wishbone twin, Trefoil tri, Crossbill quad; 1.25 m and 2.5 m) for engine clusters. **Fairings are now real:** their shell fits the payload automatically (or set height/radius in the part panel) and the simulation shields what's inside from drag and heating (payload drag inside ≤ 5 % of exposed). Jettisoning a fairing no longer throws the payload away with it.
 - **Verified:** new Vitest suites (`editor-wp2*`): booster staging, manual order surviving a nose cone and new engines, set pick-up/re-place, Alt-copy, subassemblies, offsets/rotations incl. mirror pairs, re-root, fairing fit/shielding/heating/jettison, couplers feeding every engine, Selene Moon TWR, session undo/redo. Production build driven on the real GPU (Windows Chrome over CDP) and headless Chromium: scripted build (payload, fairing, two stages, four boosters), copy, set pick-up, both gizmos, Moon readouts, stage drag, subassembly save, delete-undo, pinch/pan, couplers. Screenshots archived outside git at `~/.t3/projects/wsp-traces/wp2/`.
 - **Performance (RTX 3060 Ti, Windows Chrome, production builds, main vs this branch interleaved, 12 warm entries each, two sessions):** editor entry median 638 → 661 ms and 724 → 705 ms (parity, noise from a shared machine); orbiting the Selene stack 4.5 vs 4.4 ms editor CPU per frame, 330 draw calls in both. The gizmo is built on first use; drags move meshes only and commit once. Scripts: `scripts/wp2/`.
-- **Left / caveats:** no visual-only clamshell split (the fairing ring leaves with the shell, leaving a ring-height gap); no fairing "draw your own" profile; no 1.875 m size or procedural tanks; no per-stage body picker; Firefox and real Mac trackpads not driven (pinch/pan verified with synthetic Ctrl+wheel/deltaX events).
+- **Left / caveats:** ~~no visual-only clamshell split~~ (done, see below); no fairing "draw your own" profile; no 1.875 m size or procedural tanks; no per-stage body picker; Firefox and real Mac trackpads not driven (pinch/pan verified with synthetic Ctrl+wheel/deltaX events).
+- **Clamshell fairing jettison (op/fairingsplit):** jettisoning now splits the shell into two halves (three panels on shells ≥ 1.8 m radius, i.e. the 3.75 m / 5 m fairings) that hinge outward from the base, tumble away under gravity and air drag and vanish after 6 s. The base ring stays on the stage with the payload still seated on it (no gap), the shell's mass leaves, and shielding ends at once. Verified on the real GPU (production build): no errors, sim keeps one vessel, ring mass 36 kg / 108 kg, ~6 extra draw calls per two-panel fairing and ~17 per three-panel one, only while the panels fly.
 
 
 ## 2026-10-08 — WP4: Mission planning (`cx/wp4`)
@@ -1001,3 +1002,36 @@ M-series/120 Hz and independent video review remain unverified. Scope, assumptio
 - Loss follows the debris for 3.5 s, then offers a non-blocking Revert / Recover / Report bar. Reports open on request; mission/landing results dock on the side and leave flight running.
 - Implementation commits: `644bec0e`, `ddf91ea5`, `d859f105`, `680c71db`, `8cfa2540`, `eeaf3708`. Verification and remaining acceptance: `docs/performance/wp1-payoff.md`. No push or merge.
 - Lint, TypeScript, build and final Vitest pass (137 files / 1,427 passed / one skipped). Medium DPR 2 fenced GPU pad/ascent/orbit remains near parity with main: +0.021 / +0.037 / −0.033 ms. Before/after staging/crash videos, 10 km smoke and successful landing evidence are captured. Strict 50 ms event tasks, ordinary-playback 2.5 ms GPU timing and real Mac/120 Hz acceptance remain open; details and capture provenance are in the verification note.
+
+## WP6 handling with inertia (2026-10-08, cx/wp6)
+
+- Implemented 25°/s gimbal slew, repeatable liquid ignition transients, finite solid tail-off, inertia-aware SAS tuning and bounded coasting-wheel calibration. Digital attitude keys ramp to full command in one second. Extreme dense-air crossflow uses existing joint fatigue and WP1 creak/camera/debris feedback; no separate effects system or artificial heating.
+- All WP6 Vitest acceptance cases pass. Meridian's 90° coast turn improves **33.12 → 6.96 s**; stock Meridian has no RCS hardware, so its RCS-enabled test uses its installed wheel. Selene / Meridian Real turn 90° with wheels disabled on actual gimbal torque in **6.28 / 8.36 s**. Kestrel's powered 0.2 s tap improves **5.31 → 1.01°**; Meridian / Selene peak at **0.14 / 0.08°**. Sustained 30° / 65 kPa exposure fails in **1.20 s**; free sideways Mach 2 at 3 km fails in **0.10 s**, after warning.
+- Lint, typecheck and build pass. Full Vitest: **148 files / 1,518 passed / one skipped**, including all stock SAS, ascent, autopilot and scripted orbital/lunar/Saturn/runway/return missions. Used two workers for shared-host render-test timeouts; isolated render reruns also pass without timeout changes. The final solid telemetry cleanup passed the focused engine/WP6 run.
+- Paired `cpu-steady.sh` at 4× CPU throttle shows mean `__perf.sim` cost **0.755 → 0.723 ms/frame pad**, **2.317 → 2.226 ascent**, **1.445 → 1.438 orbit**, with matching draw counts and zero page/console errors. Treat this as roughly flat, not a proven speedup. Controlled Node ticks also stay flat. Six alternating Chrome fixed-tick pairs show powered ascent **−0.3%** and coast **+4.1%** paired medians (aggregate coast **0.3807 → 0.4174 ms/tick**); raw variability remains in the evidence. No exact zero-regression or cross-machine frame-budget claim. Additional steady-step work uses scalar math and topology caches; no new per-step allocations.
+- Before/after real Chrome gravity-turn videos show gradual lean and settling; original frames, telemetry, scripts and raw timings are archived outside Git at `~/.t3/projects/wsp-traces/wp6/`. Independent human feel and structural-warning listening review remain. Scope, tuning caveats and measurement provenance: [WP6 evidence](docs/performance/wp6-handling.md). Implementation: `a7fef318`; no push or merge.
+
+## Transfer-window list and staged burn readouts (2026-10-08, cx/windows)
+
+- In the map planner, choose **Transfer windows to…**, compare departure UTC, wait, departure/capture Δv and
+  flight time, then select a row to verify its encounter and create the maneuver node. **Go now (with plane
+  change)** stays available within the next parking orbit. The same ranked list appears above the planetary
+  porkchop grid. Listing leaves existing nodes intact; cancellation and stale-plan checks use the existing worker
+  path. Values are estimates and capture is a readout, not an automatically added second node.
+- Flight Data, the map node summary and navball share pure stage-aware burn timing with Execute node, including
+  separator activations and the existing 1 s ignition/separation allowance. “Start burn in” now matches time to
+  deliver half the Δv, which can differ from half the elapsed duration across a staging transition. The landing
+  stage chooser and guided aim-point cutoff retain their behavior.
+- Evidence: Node real-scale Earth→Mars launch minima 766.9 days apart; inclined Earth→Moon next-orbit and
+  circular-capture estimates; independent rocket-equation staging/partial-stage tests; worker protocol tests prove
+  listing does not mutate nodes. A 200,000-iteration warmed Node benchmark measured 0.29 µs for full + half-Δv
+  timing together; the helper makes no array copies or sorts. Full suite: 157 files, 1,569 passed / 1 skipped;
+  lint, TypeScript and production build pass. Final changed-area assist/planning regressions are recorded below.
+- Final changed-area verification: all 10 assist/planning/window/burn test files pass (52 tests), including the
+  recent landing-stage and guided-burn regressions. Chrome screenshot/list interaction remains unverified:
+  the T3 automation host disconnected, then GPU-lock acquisition timed out behind other agents' browser QA
+  after bounded 30 s and 180 s waits. The optional capture driver is `C:/wsp-tools/drv/windows-list.mjs`; no
+  browser profile was created. No new render passes or GPU work were added; Apple M-series timing is unmeasured.
+- Two additional delayed-selection integration cases pass for Moon and Mars: list a next-orbit row, advance the
+  clock by 5 s, verify its encounter in the worker, then install exactly one live node bounded to the next orbit
+  through `applyPlanningResult`. The complete planning protocol file passes all 16 tests.

@@ -4,8 +4,18 @@ import { deserializeWorld, SAVE_VERSION } from './persistence';
 import { PART_CATALOG } from '../data/parts';
 import type { CraftDef } from '../sim/vessel/types';
 import { validateCraft } from './craftSharing';
-/** `craft` is the program's editor draft when the slot was written (null: empty editor; absent: older slot). */
-export interface SaveSlot { id: string; programId: string; name: string; kind: 'manual' | 'auto'; savedAt: number; data: SavedWorld; craft?: CraftDef | null }
+/** Where Load resumes: a save made mid-flight returns to that flight, any other save to the Space Center. */
+export type SaveScene = 'flight' | 'spaceCenter';
+/**
+ * `craft` is the program's editor draft when the slot was written (null: empty editor; absent: older slot).
+ * `scene` is the scene the save was made in (absent in older slots: they load into the Space Center).
+ */
+export interface SaveSlot { id: string; programId: string; name: string; kind: 'manual' | 'auto'; savedAt: number; data: SavedWorld; craft?: CraftDef | null; scene?: SaveScene }
+/** Scene to enter when loading `slot`: the flight itself only if it was saved in flight and its active vessel still exists. */
+export function sceneForSave(slot: Pick<SaveSlot, 'data' | 'scene'>): SaveScene {
+  const { activeId, vessels } = slot.data;
+  return slot.scene === 'flight' && activeId && vessels.some(v => v.state.id === activeId && !v.state.destroyed) ? 'flight' : 'spaceCenter';
+}
 export const SLOTS_KEY = 'wsp.save-slots.v1';
 type SlotStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -74,6 +84,10 @@ export function listSaveSlots(storage: SlotStorage = localStorage): SaveSlot[] {
   const data: unknown = JSON.parse(raw);
   if (!Array.isArray(data)) throw new Error('Save slot index is invalid.');
   return (data as SaveSlot[]).sort((a, b) => b.savedAt - a.savedAt);
+}
+/** The most recently written save across all programs (what Continue resumes), or null when there are none. */
+export function latestSaveSlot(slots: readonly SaveSlot[]): SaveSlot | null {
+  return slots.reduce<SaveSlot | null>((best, s) => !best || s.savedAt > best.savedAt ? s : best, null);
 }
 /** JSON for a slot; `dataJson` reuses an already serialised world. */
 export function saveSlotJson(slot: SaveSlot, dataJson = JSON.stringify(slot.data)): string {

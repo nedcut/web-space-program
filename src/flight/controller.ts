@@ -1,5 +1,5 @@
 import { SpeedModeTracker } from './speedMode';
-import { explosionDiameter, separationPunch, impactPunch } from '../render/fx/eventDesign';
+import { explosionDiameter, separationPunch, impactPunch, structuralStressPunch } from '../render/fx/eventDesign';
 import { updateSiteShadow } from '../render/site/shadows';
 import { maxDrawingEdge } from '../render/core/drawingLimits';
 import { ShadowMapCache } from '../render/core/shadowCache';
@@ -18,6 +18,7 @@ import type { GameAudio } from '../audio';
 import { PART_CATALOG } from '../data/parts';
 import type { Autopilot } from '../game/autopilot';
 import { flightPredictions, targetOrbitState } from '../game/flightData';
+import type { SaveScene } from '../game/saveSlots';
 import { deserializeWorld, loadWorldFromStorage, saveWorldToStorage, serializeWorld, type SavedWorld } from '../game/persistence';
 import { applyCommsSettings, cameraShakeScale, game } from '../game/store';
 import { Universe } from '../game/universe';
@@ -25,6 +26,7 @@ import { PHYSICS_DT, World, type WorldVessel } from '../game/world';
 import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
 import { RenderPipeline, getQuality, type QualityId } from '../render/core';
 import { compileInSlices } from '../render/core/compileInSlices';
+import { offscreenWarmup } from '../render/core/offscreenWarmup';
 import type { ExtraOrbit } from '../render/map/MapView';
 import { MapView } from '../render/map/MapView';
 import { FlightMap } from './map/FlightMap';
@@ -43,16 +45,19 @@ import type { ActionGroupId, PartActionId } from '../sim/vessel/types';
 import type { FlightTweaks, SasMode, VesselCommand, VesselState } from '../sim/vessel/runtime';
 import { pickPartAlongRay, partWorldPosition } from './partPick';
 import { stagnationHeatFlux } from '../sim/vessel/heating';
+import { fairingShellMass } from '../sim/vessel/fairing';
 import type { CraftDef } from '../sim/vessel/types';
 import { getTutorial } from '../tutorial/runtime';
 import { formatDistance, formatDuration, formatSpeed } from '../ui/format';
 import { frameProfiler as prof } from '../util/frameProfiler';
 import { shareUnchanged, snapshotEqual } from '../util/snapshotEqual';
 import { bindingLabel } from '../input/bindings';
-import { cross, dot, length, normalize, sub, type Vec3 } from '../util/vec3';
+import { add, cross, dot, length, normalize, scale, sub, type Vec3 } from '../util/vec3';
 import { qRotate } from '../util/quat';
 import { type AssistId } from './assist';
 import { CAMERA_MODE_INFO, FlightCamera, PivotSmoother, TouchdownKick } from './camera';
+import { hudLensShift, LiftoffDetector, speedFovBoost, towerAvailable, towerPlacement, towerRevertDistance } from './cameraFraming';
+import { warpRate } from '../game/timewarp';
 import * as assist from './controller/assist';
 import * as audio from './controller/audio';
 import type { FlightControllerInternals } from './controller/internals';
@@ -76,6 +81,10 @@ const graphicsKeyOf = (s: { quality: string; shadows: boolean; bloom: boolean; r
  * Owns the flight scene: world simulation, rendering (flight + map), input, camera.
  * React only hosts the canvas and HUD; this class runs the frame loop.
  */
+/** Bottom-HUD and top-HUD extents (CSS px at HUD scale 1) used to frame the vessel in the clear band between them. */
+const HUD_TOP_PX = 64;
+const HUD_BOTTOM_EXTRA_PX = 70;
+
 export class FlightController {
   private stressOverlay = false;
   private readonly systems: FlightControllerInternals = ((owner: FlightController) => ({
@@ -238,7 +247,7 @@ export class FlightController {
     Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block' });
     host.appendChild(canvas);
     this.photo = new PhotoCamera(this.pipeline, this.scene, this.cam.camera, () => new THREE.Vector3(), active => {
-      if (active) { if (this.network || !this.world.active) return false; this.photoWasPaused = this.paused; this.paused = true; this.mapMode = false; this.map.setVisible(false); this.pipeline.setMapMode(false); }
+      if (active) { if (this.network || !this.world.active) return false; this.photoWasPaused = this.paused; this.paused = true; this.mapMode = false; this.map.setVisible(false); this.pipeline.setMapMode(false); this.cam.clearLensShift(); }
       else this.paused = this.photoWasPaused;
       return true;
     });
@@ -324,7 +333,8 @@ export class FlightController {
       if (e.type === 'stage' && e.vesselId === this.world.activeId) this.stagedCount++;
       const shake = cameraShakeScale(game.get().settings);
       if (e.vesselId === this.world.activeId && shake > 0) {
-        if (e.type === 'stage') this.cam.addKick(0.35 * shake);
+        if (e.type === 'structuralWarning') this.cam.addKick(structuralStressPunch(e.loadFraction) * shake);
+        else if (e.type === 'stage') this.cam.addKick(0.35 * shake);
         else if (e.type === 'decouple' || e.type === 'structuralFailure') {
           const part = this.views.get(e.vesselId)?.eventPart(e.partUid);
           const separator = part?.def.modules.find(m => m.type === 'decoupler');
@@ -351,6 +361,20 @@ export class FlightController {
 
         }
       }
+      if (e.type === 'fairingJettison') {
+        const vessel = this.world.vessels.get(e.vesselId);
+        const part = this.views.get(e.vesselId)?.eventPart(e.partUid);
+        const fairing = part?.def.modules.find(m => m.type === 'fairing');
+        if (vessel && part && fairing?.type === 'fairing') {
+          const shellMass = fairingShellMass(part.def, part.tweaks);
+          this.views.get(e.vesselId)!.fairingPanels(e.partUid, (panel, position, quaternion) => {
+            // Separation speed of each panel from the module's ejection impulse.
+            const panelMass = shellMass * (panel.userData.fairingPanel.span as number) / (2 * Math.PI);
+            const kick = Math.min(6, Math.max(1, fairing.ejectionImpulse / Math.max(1, panelMass)));
+            this.effects.fairingPanels.emit(panel, position, quaternion, vessel.state.velocity, kick);
+          });
+        }
+      }
       if(e.type==='chute' && e.phase==='semi') {
         const vessel=this.world.vessels.get(e.vesselId);
         if(vessel) {
@@ -359,6 +383,7 @@ export class FlightController {
         }
       }
       if (!this.audio) return;
+      if (e.type === 'structuralWarning' && e.vesselId === this.world.activeId) this.audio.structuralCreak(e.loadFraction);
       const source = this.world.vessels.get(e.vesselId);
       const active = this.world.active;
       const eventDistance = source && active ? Math.hypot(
@@ -420,12 +445,13 @@ export class FlightController {
   private lossFocusUt = 0;
   private activeLost = false;
 
-  quicksave(slot = 'quicksave') {
+  /** `scene`: where Load resumes (default: this flight; leaving flight passes the scene being left for). */
+  quicksave(slot = 'quicksave', scene: SaveScene = 'flight') {
     if (this.network || getTutorial() || game.get().scenarioActive) return;
     try {
       // Periodic autosaves snapshot now and write on idle tasks; a quicksave the player asked for writes immediately.
       const autosave = slot === 'autosave';
-      saveWorldToStorage(slot, this.world, undefined, autosave ? { defer: true, onError: e => this.world.message(saveErrorText(e), 'bad') } : {});
+      saveWorldToStorage(slot, this.world, undefined, autosave ? { defer: true, scene, onError: e => this.world.message(saveErrorText(e), 'bad') } : { scene });
       if (slot === 'quicksave') this.world.message(`Quicksaved (${bindingLabel('quickload')} to load)`);
     } catch (e) {
       this.world.message(saveErrorText(e), 'bad');
@@ -649,7 +675,10 @@ export class FlightController {
   }
 
   cycleCameraMode() {
-    const mode = this.cam.cycleMode(!!this.world.active?.state.eva);
+    const wv = this.world.active;
+    const u = this.world.universe;
+    const tower = !!wv && towerAvailable(u.body(wv.body).solidSurface, u.surfaceInfo(wv.body, wv.state.position, this.world.ut).heightAboveTerrain, wv.state.cache.boundingRadius);
+    const mode = this.cam.cycleMode(!!wv?.state.eva, tower);
     this.world.message(`Camera: ${CAMERA_MODE_INFO[mode].label} — ${CAMERA_MODE_INFO[mode].hint}`, 'info', 2.5);
   }
 
@@ -741,9 +770,13 @@ export class FlightController {
     return () => this.telemetryListeners.delete(fn);
   }
 
+  /** Host size (CSS px) from the resize observer: the map reads it every frame without forcing a layout. */
+  private readonly viewport = { width: 1, height: 1 };
+
   private resize() {
     const w = this.host.clientWidth || 1;
     const h = this.host.clientHeight || 1;
+    this.viewport.width = w; this.viewport.height = h;
     this.pipeline.setSize(w, h);
     this.cam.setAspect(w / h);
   }
@@ -769,7 +802,7 @@ export class FlightController {
     }
     const settings = game.get().settings;
     this.input.enabled = !this.paused && !this.modalOpen;
-    if (!this.photo.active) this.cam.camera.fov = settings.cameraFov;
+    this.cam.baseFov = settings.cameraFov;
     const graphicsKey = graphicsKeyOf(settings);
     if (graphicsKey !== this.graphicsKey) {
       this.graphicsKey = graphicsKey;
@@ -938,7 +971,13 @@ export class FlightController {
         renderTarget: this.pipeline.composer.readBuffer,
         cancelled: () => this.warmup !== 'compiling',
       });
-      Promise.all([map, flight]).then(finish, finish);
+      // Off-screen bakes/merges would otherwise compile on their first (mid-flight) step. They draw lightless scenes
+      // into render targets, and light counts are part of three's program key: compile against an empty scene.
+      const offscreen = compileInSlices(r, [offscreenWarmup], this.cam.camera, new THREE.Scene(), {
+        renderTarget: this.pipeline.composer.readBuffer,
+        cancelled: () => this.warmup !== 'compiling',
+      });
+      Promise.all([map, flight, offscreen]).then(finish, finish);
       // Never hold the loading screen on a driver that does not report completion.
       this.warmupTimer = window.setTimeout(finish, 15000);
     } catch {
@@ -1134,8 +1173,8 @@ export class FlightController {
     const t = this.world.ut;
     const origin = this.network?.pose(wv.state.id)?.position ?? wv.state.position;
     this.updateMapTargets(wv);
-    const focus = this.mapUi.focusFrame(wv, origin);
     const patches = this.world.mapTrajectory();
+    const focus = this.mapUi.focusFrame(wv, origin, patches);
     const relInc = this.predictions.crossings.length ? this.relativeInclination(wv) : NaN;
     const incText = Number.isFinite(relInc) ? `\nRelative inclination ${relInc.toFixed(2)}°` : '';
     const impactOnPath = patches.some(p => p.endReason === 'impact' && p.orbit.body === wv.body && !p.samples);
@@ -1155,7 +1194,7 @@ export class FlightController {
         ...(!this.world.preciseGravity && this.predictions.impact && !impactOnPath ? [{ key: 'impact', body: wv.body, position: this.predictions.impact.position, label: 'Impact', color: '#ff6b6b', time: this.predictions.impact.time,
           detail: `Impact (terrain)\nT−${formatDuration(this.predictions.impact.time - t)}\n${formatSpeed(this.predictions.impact.speed)}` }] : []),
       ],
-      viewport: { width: this.host.clientWidth, height: this.host.clientHeight },
+      viewport: this.viewport,
     });
   }
 
@@ -1200,7 +1239,8 @@ export class FlightController {
     const settings = game.get().settings;
     let rumble = 0;
     const shake = cameraShakeScale(settings);
-    if (shake > 0 && !this.paused) {
+    // No vibration while paused or under physics warp (a 4× rumble is noise, not feel).
+    if (shake > 0 && !this.paused && warpRate(this.world.warp) <= 1) {
       rumble = flightRumble(tel.thrust, st.mass * body.surfaceGravity, agl, tel.dynamicPressure, tel.mach) * shake;
       // Touchdown kick, growing with the vertical speed at contact (a gentle 1.5 m/s landing stays still).
       const touchdown = this.touchdown.update(st.id, st.situation !== 'flying', dot(airVel, up), dt);
@@ -1214,6 +1254,28 @@ export class FlightController {
     // Staging/docking move the COM (the scene origin) inside the vessel: ease the orbit point across instead of jumping.
     const po = this.pivotSmoother.update(st.id, st.com, dt);
     const pw = qRotate(q, po);
+    // Liftoff: the auto camera eases back from the pad framing (an automatic camera move, so not with reduced motion).
+    const grounded = st.situation !== 'flying' || wv.mode === 'prelaunch';
+    if (this.liftoff.update(st.id, grounded, tel.thrust > 0, this.paused ? 0 : dt) && !settings.reduceMotion) this.cam.startLiftoff();
+    if (this.cam.mode !== 'tower') this.tower = null;
+    const eye = this.cam.mode === 'tower' ? this.towerEye(wv, origin, bodyState.position, t, agl) : null;
+    if (this.cam.mode === 'tower' && !eye) {
+      this.cam.mode = 'auto';
+      this.world.message(`Camera: ${CAMERA_MODE_INFO.auto.label} — ${CAMERA_MODE_INFO.auto.hint}`, 'info', 2.5);
+    }
+    // Frame the middle of the parts' extent rather than the COM (build frame → scene, no allocation).
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (const p of st.parts) {
+      const pp = p.position;
+      if (pp.x < x0) x0 = pp.x; if (pp.x > x1) x1 = pp.x;
+      if (pp.y < y0) y0 = pp.y; if (pp.y > y1) y1 = pp.y;
+      if (pp.z < z0) z0 = pp.z; if (pp.z > z1) z1 = pp.z;
+    }
+    const mid = st.parts.length ? this.camMid.set((x0 + x1) / 2 - st.com.x - po.x, (y0 + y1) / 2 - st.com.y - po.y, (z0 + z1) / 2 - st.com.z - po.z)
+      .applyQuaternion(this.camQuat.set(q.x, q.y, q.z, q.w)) : undefined;
+    // Lift the vessel out from behind the navball cluster (HUD px scale with the HUD scale setting).
+    const hud = settings.hudScale;
+    const lensShift = this.uiHidden ? 0 : hudLensShift(this.viewport.height, HUD_TOP_PX * hud, (settings.navballSize + HUD_BOTTOM_EXTRA_PX) * hud);
     this.cam.update({
       pivot: this.camPivot.set(pw.x, pw.y, pw.z),
       up: this.camUp.set(up.x, up.y, up.z),
@@ -1232,8 +1294,85 @@ export class FlightController {
         : undefined,
       rumble,
       motionEnabled: shake > 0,
-      groundFraming: flying ? 0 : 1,
+      lensShift,
+      frameCentre: mid,
+      fovBoost: settings.reduceMotion ? 0 : speedFovBoost(tel.dynamicPressure, spaceBlend),
+      eye,
     }, dt);
+  }
+
+  /** F2 state from the HUD: with the UI hidden the vessel returns to screen centre. */
+  uiHidden = false;
+  private readonly liftoff = new LiftoffDetector();
+  private readonly camEye = new THREE.Vector3();
+  private readonly camMid = new THREE.Vector3();
+  /** Time spent choosing the last tower eye (ms; telemetry for perf checks). */
+  towerPickMs = 0;
+  /** Launch-site structure meshes (not instanced vegetation) that can block the tower camera's view. */
+  private towerBlockers(): THREE.Object3D[] {
+    const out: THREE.Object3D[] = [];
+    if (!this.site?.root.visible) return out;
+    this.site.root.updateMatrixWorld();
+    this.site.root.traverseVisible(o => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || (o as THREE.InstancedMesh).isInstancedMesh) return;
+      // Skip invisible pick volumes and see-through effects (hover ring, light curtain).
+      const mat = Array.isArray(m.material) ? m.material[0] : m.material;
+      if (mat && mat.visible && !mat.transparent) out.push(o);
+    });
+    return out;
+  }
+  /** Tower camera anchor: body-fixed position (m) on the ground near where the mode was chosen. */
+  private tower: { id: string; body: string; fixed: Vec3 } | null = null;
+
+  /** Scene-space eye point of the tower camera, or null when it should hand back (far away, other vessel or body). */
+  private towerEye(wv: WorldVessel, origin: Vec3, bodyPos: Vec3, t: number, agl: number): THREE.Vector3 | null {
+    const u = this.world.universe;
+    const st = wv.state, radius = st.cache.boundingRadius;
+    let a = this.tower;
+    if (!a || a.id !== st.id || a.body !== wv.body) {
+      this.tower = null;
+      if (!towerAvailable(u.body(wv.body).solidSurface, agl, radius)) return null;
+      // Stand off horizontally, starting on the side the camera already looks from and stepping round in 45° bearings
+      // until the line of sight to the vessel clears the launch site's structures (a one-off test on mode entry).
+      const t0 = performance.now();
+      const rel = sub(origin, bodyPos);
+      const fixedRel = u.ephem.toBodyFixed(wv.body, rel, t);
+      const upF = normalize(fixedRel);
+      const c = this.cam.camera.position;
+      const look = u.ephem.toBodyFixed(wv.body, { x: c.x, y: c.y, z: c.z }, t);
+      let h = sub(look, scale(upF, dot(look, upF)));
+      if (length(h) < 1e-6) h = cross(upF, Math.abs(upF.z) < 0.9 ? { x: 0, y: 0, z: 1 } : { x: 1, y: 0, z: 0 });
+      h = normalize(h);
+      const side = cross(upF, h);
+      const place = towerPlacement(radius);
+      const rot = u.ephem.bodyRotation(wv.body, t);
+      const ground = sub(fixedRel, scale(upF, agl));
+      const blockers = this.towerBlockers();
+      let first: Vec3 | null = null;
+      for (let k = 0; k < 8; k++) {
+        const b = (k * Math.PI) / 4;
+        const dir = add(scale(h, Math.cos(b)), scale(side, Math.sin(b)));
+        const groundDir = normalize(add(ground, scale(dir, place.distance)));
+        const info = u.surfaceInfo(wv.body, add(bodyPos, qRotate(rot, scale(groundDir, length(fixedRel)))), t);
+        const fixed = scale(groundDir, info.r - info.heightAboveTerrain + place.height);
+        first ??= fixed;
+        if (!blockers.length) break;
+        const e = sub(add(bodyPos, qRotate(rot, fixed)), origin);
+        const d = length(e);
+        this.raycaster.ray.origin.set(e.x, e.y, e.z);
+        this.raycaster.ray.direction.set(-e.x / d, -e.y / d, -e.z / d);
+        this.raycaster.near = 0;
+        this.raycaster.far = Math.max(0, d - radius * 1.5);
+        if (!this.raycaster.intersectObjects(blockers, false).length) { first = fixed; break; }
+      }
+      this.raycaster.far = Infinity;
+      this.towerPickMs = performance.now() - t0;
+      a = this.tower = { id: st.id, body: wv.body, fixed: first! };
+    }
+    const eye = sub(add(bodyPos, qRotate(u.ephem.bodyRotation(wv.body, t), a.fixed)), origin);
+    if (length(eye) > towerRevertDistance(radius)) { this.tower = null; return null; }
+    return this.camEye.set(eye.x, eye.y, eye.z);
   }
 
   /** Fleet icons/conics, target highlight and closest-approach markers for the map view. */

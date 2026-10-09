@@ -27,6 +27,10 @@ export const FAIRING_AREAL_MASS = 4;
 export const FAIRING_MAX_RADIUS_FACTOR = 2.5;
 export const FAIRING_MIN_HEIGHT = 0.6;
 export const FAIRING_MAX_HEIGHT = 40;
+/** Share of the catalogue dry mass in the base ring, which stays on the vessel when the shell is jettisoned. */
+export const FAIRING_RING_FRACTION = 0.2;
+/** Shell radius (m) from which the shell splits into three panels instead of two. */
+export const FAIRING_TRI_RADIUS = 1.8;
 
 const fairingDefs = new WeakMap<PartDef, boolean>();
 export function isFairingDef(def: PartDef): boolean {
@@ -85,6 +89,17 @@ export function fairingMassDelta(def: PartDef, tweaks?: PartTweaks): number {
   const base = defaultFairingShell(def)!, shell = fairingShell(def, tweaks)!;
   return Math.max(-0.6 * def.dryMass, FAIRING_AREAL_MASS * (fairingShellArea(shell) - fairingShellArea(base)));
 }
+
+/** Mass of the instance shell (everything but the base ring), kg. */
+export function fairingShellMass(def: PartDef, tweaks?: PartTweaks): number {
+  return isFairingDef(def) ? def.dryMass * (1 - FAIRING_RING_FRACTION) + fairingMassDelta(def, tweaks) : 0;
+}
+
+/** Number of clamshell panels the shell splits into. */
+export const fairingPanelCount = (radius: number) => radius >= FAIRING_TRI_RADIUS ? 3 : 2;
+
+/** Whether a fairing part has jettisoned its shell (the ring stays; `activated` is set by staging or the action). */
+export const fairingJettisoned = (p: { def: PartDef; activated: boolean }) => p.activated && isFairingDef(p.def);
 
 /** Points that bound a part (rims of cylinders, corners of boxes) in its own frame. */
 export function partHullPoints(def: PartDef): Vec3[] {

@@ -50,8 +50,12 @@ export interface Environment {
    * whose penetration depth would be negative anyway.
    */
   clearOfGround?(posInertial: Vec3, t: number, margin: number): boolean;
-  /** Sun direction (unit, from position toward the Sun) & distance (m) for solar power and heating. */
-  sun(posInertial: Vec3, t: number): { dir: Vec3; distance: number; exposure?: number };
+  /**
+   * Sun direction (unit, from position toward the Sun) & distance (m) for solar power and heating.
+   * `thermalDistance` is the unscaled (real-universe) distance used for skin heating; scaled universes
+   * compress distances, so heating from `distance` would be 1/s² too strong. Defaults to `distance`.
+   */
+  sun(posInertial: Vec3, t: number): { dir: Vec3; distance: number; thermalDistance?: number; exposure?: number };
   /**
    * OPTIONAL: state of the dominant (reference) body. Used by SAS orbital modes (prograde/normal/radial).
    * If absent, inertial velocity is used for prograde and gravity direction for radial.

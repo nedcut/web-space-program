@@ -5,7 +5,9 @@ import { PART_CATALOG } from '../src/data/parts';
 import { STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { DEFAULT_START_UT } from '../src/game/store';
 import { placeInCircularOrbit } from '../src/game/scenarios';
-import { planTransferToBody, type Autopilot } from '../src/game/autopilot';
+import { coastUntil, planTransferToBody, type Autopilot } from '../src/game/autopilot';
+import { deserializeWorld, serializeWorld } from '../src/game/persistence';
+import { PART_CATALOG as CATALOG } from '../src/data/parts';
 import { assistFrame, createAssist } from '../src/flight/assist';
 import { maneuverToInertialDv, periapsisRadius, propagate, stateToElements } from '../src/sim/orbit';
 import { neutralInput } from '../src/sim/vessel';
@@ -88,4 +90,33 @@ describe('Execute-node assist', () => {
     expect(world.warp.index).toBe(0);
     expect(world.active!.mode).toBe('physics');
   }, 600_000);
+
+  // QA: quickload ~30 s before the node, then Execute node, gave a 297 km lunar periapsis for a 30 km plan. With the
+  // low-thrust Zephyr stage (≈2.4 min burn) the centred start is already past: the burn runs late, and a quarter-turn
+  // aim point let it swing the transfer. Mid-burn reloads resume from the saved frozen plan (node.anchor).
+  it.each(['reload before the burn', 'reload mid-burn'] as const)('hits the planned lunar periapsis after a %s on the low-thrust transfer stage', mode => {
+    let { world } = seleneInOrbit();
+    // Booster, its decoupler, then the Zephyr transfer stage.
+    for (let k = 0; k < 3; k++) {
+      world.tick(1 / 60, neutralInput({ stage: true }));
+      for (let i = 0; i < 90; i++) world.tick(1 / 60, neutralInput({ sas: 'stabilityAssist' }));
+    }
+    expect(world.active!.state.nextStage).toBe(3);
+    const plan = planTransferToBody(world, 'moon')!;
+    const node = world.nodes[0];
+    if (mode === 'reload mid-burn') {
+      const first = createAssist('node', world);
+      driveLikeFlightScene(world, first, node.time - 30 - world.ut);
+      expect(world.active!.state.telemetry.thrust).toBeGreaterThan(0);
+      expect(world.nodes[0].anchor).toBeDefined();
+    } else coastUntil(world, node.time - 30);
+    world = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(world))), CATALOG);
+    const assist = createAssist('node', world);
+    const ended = driveLikeFlightScene(world, assist, 86400);
+    const pe = moonPe(world);
+    console.log(`${mode}: plan ${(plan.periapsisAltitude / 1000).toFixed(1)} km, got ${pe !== undefined ? (pe / 1000).toFixed(1) : 'none'} km; ${ended?.message}`);
+    expect(ended?.reason, assist.error).toBe('done');
+    expect(pe).toBeDefined();
+    expect(Math.abs(pe! - plan.periapsisAltitude)).toBeLessThan(10000);
+  }, 300_000);
 });

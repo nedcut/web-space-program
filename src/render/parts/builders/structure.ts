@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { PartDef } from '../../../sim/vessel/types';
+import { fairingPanelCount } from '../../../sim/vessel/fairing';
 import { M } from '../materials';
 import { around, bevelBox, box, cyl, cylinder, detailLevel, grp, lathe, merge, mk, pipe, rod, sphere, torus, type Profile } from '../geom';
 import { boxDims, cylDims, num, srfMount, str } from './common';
@@ -478,29 +479,36 @@ export function buildFairing(def: PartDef): THREE.Object3D {
   const inner: Profile = prof.map(([pr, py]) => [Math.max(pr - 0.025, 0), py]);
   const shell = grp('fairingShell');
   const gap = 0.01;
-  for (const [name, phi] of [['fairingHalfA', 0], ['fairingHalfB', PI]] as const) {
-    const half = grp(name);
-    half.add(mk(lathe(prof, { segments: 32, phiStart: phi + gap, phiLength: PI - 2 * gap, tile: 1 }), M.satinWhite()));
-    half.add(mk(lathe(inner, { segments: 32, phiStart: phi + gap, phiLength: PI - 2 * gap, tile: 1 }), M.innerLining()));
+  // Two clamshell halves, three panels on wide shells. Each panel records its geometry for the jettison effect.
+  const n = fairingPanelCount(rs), span = (2 * PI) / n;
+  for (let k = 0; k < n; k++) {
+    const phi = k * span;
+    const half = grp(`fairingPanel${k}`);
+    half.userData.fairingPanel = { azimuth: phi + span / 2, span, radius: rs, baseY: y0, height: H };
+    // Three panels keep the two-panel triangle budget (extra rails and livery).
+    const segments = n === 3 ? 18 : 32;
+    half.add(mk(lathe(prof, { segments, phiStart: phi + gap, phiLength: span - 2 * gap, tile: 1 }), M.satinWhite()));
+    half.add(mk(lathe(inner, { segments, phiStart: phi + gap, phiLength: span - 2 * gap, tile: 1 }), M.innerLining()));
     // spine rail along the split edges
     const rails: THREE.BufferGeometry[] = [];
-    for (const a of [phi + gap, phi + PI - gap]) {
+    for (const a of [phi + gap, phi + span - gap]) {
       const pts: [number, number, number][] = [];
       for (let i = 1; i < prof.length - 1; i += 2) pts.push([prof[i][0] * Math.sin(a), prof[i][1], prof[i][0] * Math.cos(a)]);
       if (pts.length > 1) rails.push(pipe(pts, 0.012, 5, 40));
     }
     half.add(mk(rails, M.gunmetal()));
-    // livery on each half: maker's badge up the side, agency insignia above it
+    // livery on each panel: maker's badge up the side, agency insignia above it
     const D = new Markings(def);
     const yA = y0 + boat + 0.05;
     const yB = yCyl - 0.05;
-    const span = yB - yA;
-    if (span > 0.3) {
+    const mid = phi + span / 2;
+    const spanY = yB - yA;
+    if (spanY > 0.3) {
       const b = D.badge;
-      const hb = Markings.fit(b, 0.1 + 0.1 * rs, span * 0.6);
-      D.cyl(rs, b, { y: yA + span * 0.4, phi: phi + PI / 2, height: hb, vertical: true });
-      D.lathe((y) => (y <= yCyl ? rs : ogive(rs, L, y - yCyl)), decals.insignia(), { y: yCyl + L * 0.12, phi: phi + PI / 2, height: Math.min(0.2 + 0.2 * rs, L * 0.18) });
-      D.cyl(rs, decals.hazard(), { y: y0 + boat + 0.025, phi: phi + PI / 2, height: 0.03, width: rs * 0.5 });
+      const hb = Markings.fit(b, 0.1 + 0.1 * rs, spanY * 0.6);
+      D.cyl(rs, b, { y: yA + spanY * 0.4, phi: mid, height: hb, vertical: true });
+      D.lathe((y) => (y <= yCyl ? rs : ogive(rs, L, y - yCyl)), decals.insignia(), { y: yCyl + L * 0.12, phi: mid, height: Math.min(0.2 + 0.2 * rs, L * 0.18) });
+      D.cyl(rs, decals.hazard(), { y: y0 + boat + 0.025, phi: mid, height: 0.03, width: rs * 0.5 });
     }
     D.addTo(half);
     shell.add(half);

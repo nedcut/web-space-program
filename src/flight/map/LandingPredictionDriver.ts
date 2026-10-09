@@ -3,7 +3,7 @@ import { formatSpeed } from '../../util/format';
 import type { FlightController } from '../controller';
 import type { LandingPrediction, LandingRequest } from '../../game/planning/landing';
 import type { PlannerEvent, PlanningSnapshot } from '../../game/planning/protocol';
-import { earthData } from '../../sim/terrain/earthData';
+import { earthDataMessage } from '../../game/earthLoader';
 import { periapsisRadius } from '../../sim/orbit';
 import { warpRate } from '../../game/timewarp';
 
@@ -65,7 +65,7 @@ export class LandingPredictionDriver {
       const submitStart = performance.now();
       if (!this.worker) {
         this.worker = new Worker(new URL('../../game/planning/planner.worker.ts', import.meta.url), { type: 'module' });
-        this.worker.postMessage({ type: 'earthData', buffer: earthData().buffer });
+        this.worker.postMessage({ type: 'earthData', ...earthDataMessage() });
         this.worker.onmessage = (e: MessageEvent<PlannerEvent>) => {
           if (e.data.id !== this.pending?.id) return;
           if (e.data.type === 'result') {

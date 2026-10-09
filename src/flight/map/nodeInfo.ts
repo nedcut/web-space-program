@@ -1,28 +1,17 @@
 import type { World } from '../../game/world';
 import type { ManeuverNode, TrajectoryPatch } from '../../sim/orbit/api';
-import { apoapsisRadius, burnTimeEstimate, period, periapsisRadius } from '../../sim/orbit';
-import { computeStageDeltaV } from '../../sim/vessel';
-import { thrustLimit } from '../../sim/vessel/tweaks';
+import { apoapsisRadius, period, periapsisRadius } from '../../sim/orbit';
+import { stageBurnTime, NODE_STAGE_PAUSE } from '../../sim/vessel';
+import { cachedStageDeltaV } from '../../game/stageDeltaVCache';
 
 /** Estimated burn duration for `dv` on the ignited engines, else the next powered stage (Infinity without thrust). */
 export function burnTime(world: World, dv: number): number {
   const wv = world.active;
   if (!wv) return Infinity;
-  let thrust = wv.state.parts.reduce((s, p) => {
-    const e = p.def.modules.find((m) => m.type === 'engine');
-    return s + (e && e.type === 'engine' && p.engine?.ignited ? e.maxThrustVac * thrustLimit(p) : 0);
-  }, 0);
-  let isp = 300;
-  try {
-    const stages = computeStageDeltaV(wv.state, 0, world.universe.body(wv.body).surfaceGravity);
-    // Engines not lit yet: plan with the next stage that has thrust (as the stage readout does).
-    const st = thrust > 0 ? stages[0] : stages.find(x => x.thrustVac > 0);
-    if (st?.isp) isp = st.isp;
-    if (!(thrust > 0)) thrust = st?.thrustVac ?? 0;
-  } catch {
-    /* keep default */
-  }
-  try { return thrust > 0 ? burnTimeEstimate(dv, thrust, wv.state.mass, isp) : Infinity; } catch { return Infinity; }
+  const v = wv.state;
+  const lit = v.parts.some(p => p.engine?.ignited && !p.engine.flamedOut);
+  return stageBurnTime(cachedStageDeltaV(v, 0, world.universe.body(wv.body).surfaceGravity),
+    v.nextStage + (lit ? 1 : 0), dv, NODE_STAGE_PAUSE, lit);
 }
 
 /** The trajectory patch a node sits on (the orbit before its burn). */

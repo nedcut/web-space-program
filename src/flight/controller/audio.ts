@@ -48,7 +48,7 @@ export function updateAudio(this: FlightController, internals: FlightControllerI
       history.mechanics.set(p.uid, deployed);
     }
     if (p.wheel?.inContact) wheelSpeed = Math.max(wheelSpeed, Math.abs(p.wheel.rollSpeed));
-    if (p.def.modules.some(m => m.type === 'fairing')) fairings++;
+    if (p.def.modules.some(m => m.type === 'fairing') && !p.activated) fairings++;
     const eng = p.def.modules.find(m => m.type === 'engine');
     if (!eng || eng.type !== 'engine') continue;
     if (p.engine && p.engine.thrust > 0) {
@@ -71,6 +71,8 @@ export function updateAudio(this: FlightController, internals: FlightControllerI
   let stress = 0;
   for (const load of st.cache.jointLoads?.values() ?? []) stress = Math.max(stress, load.fraction);
   for (const load of st.cache.strutLoads?.values() ?? []) stress = Math.max(stress, load);
+  // Crossflow creaks start in the warn-only band, before any joint is overloaded.
+  stress = Math.max(stress, Math.min(1, tm.crossflowStress ?? 0));
   // Four nearest audible vessels; camera-space dot products preserve floating-origin precision.
   for (const source of history.neighbors) source.thrust = 0;
   const camera = this.cam.camera;

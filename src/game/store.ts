@@ -192,6 +192,11 @@ export function loadLastCraft(programId: string | null = game.get().saveId): Cra
   return loadProgramDraft(programId) ?? null;
 }
 
+/** The editor craft if it has parts, else null: an empty draft ("Untitled Craft") is not a vehicle ready to launch. */
+export function launchableCraft(craft: CraftDef | null): CraftDef | null {
+  return craft && craft.parts.length ? craft : null;
+}
+
 /** Editor craft to restore with a loaded save: the program's latest draft, else the one stored in the slot. */
 export function draftForSave(slot: { programId: string; craft?: CraftDef | null }): CraftDef | null {
   const draft = loadProgramDraft(slot.programId);

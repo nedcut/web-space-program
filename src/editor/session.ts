@@ -504,7 +504,8 @@ export class EditorSession {
     }
     // Undo back to before the detach (rotations are not pushed to the core until placement).
     // (Possibly several steps if the hold came from undoing a placement that included a rotation.)
-    for (let i = 0; i < 8 && this.editor.held && this.editor.canUndo; i++) this.editor.undo();
+    // Rolled back, not undone: a cancelled pick-up/copy must not leave a Redo entry.
+    for (let i = 0; i < 8 && this.editor.held && this.editor.canUndo; i++) this.editor.rollback();
     if (this.editor.held) this.editor.discardHeld();
   }
 

@@ -108,9 +108,15 @@ describe('flight and crash breakup', () => {
     const craft = STOCK_CRAFTS.find(c => c.id === 'stock-kestrel')!.build();
     const env = flatEarthEnv({ g: 0, surface: 'none', scaleHeight: Infinity });
     const run = (broadside: boolean) => {
-      const v = buildVessel(craft, PART_CATALOG, { velocity: broadside ? { x: 400, y: 0, z: 0 } : { x: 0, y: 400, z: 0 } });
-      const events = [];
-      for (let i = 0; i < 50; i++) events.push(...stepVessel(v, neutralInput(), env, i * .02, .02, { disableHeating: true }).events);
+      const velocity = broadside ? { x: 400, y: 0, z: 0 } : { x: 0, y: 400, z: 0 };
+      const v = buildVessel(craft, PART_CATALOG, { velocity });
+      const events = [], orientation = { ...v.orientation };
+      // Wind-tunnel hold: a free craft weathervanes out of the envelope and may recover (readable failure);
+      // sustained crossflow breaks the hull 0.8–2.4 s after the first warning.
+      for (let i = 0; i < 100; i++) {
+        v.orientation = { ...orientation }; v.angularVelocity = { x: 0, y: 0, z: 0 }; v.velocity = { ...velocity };
+        events.push(...stepVessel(v, neutralInput(), env, i * .02, .02, { disableHeating: true }).events);
+      }
       return events.filter(e => e.type === 'structuralFailure');
     };
     expect(run(true).length).toBeGreaterThan(0);

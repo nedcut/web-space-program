@@ -1,4 +1,4 @@
-import { hudStages } from './stages';
+import { dvBasis, hudStages, totalVacuumDv } from './stages';
 import { suicideBurn } from '../../sim/orbit/readouts';
 import { flightMessages, ThrottleCueTracker, throttleExplanation } from '../cues';
 import { controlAuthority } from '../../sim/vessel/integrator';
@@ -119,8 +119,7 @@ export function targetOptions(this: FlightController, _internals: FlightControll
   const cur = w.universe.body(wv.body);
   const bodies: Telemetry['targetOptions'] = [];
   for (const b of w.universe.bodies.values()) {
-    if (b.id === cur.id) continue;
-    if (b.parent === cur.id || b.id === cur.parent || (cur.parent && b.parent === cur.parent)) {
+    if (b.id === cur.id || b.parent === cur.id || b.id === cur.parent || (cur.parent && b.parent === cur.parent)) {
       const bp = w.universe.ephem.getBodyState(b.id, w.ut).position;
       bodies.push({ id: b.id, name: b.name, kind: 'body', distance: length(sub(bp, wv.state.position)) - b.radius });
     }
@@ -159,6 +158,11 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     dvs = [];
   }
   const stages = hudStages(st, dvs);
+  const dvAt = dvBasis(pressure, b.atmosphere?.surfacePressure ?? 0);
+  let totalDvVac = 0;
+  try {
+    totalDvVac = dvAt === 'vac' ? stages.reduce((s, x) => s + x.deltaV, 0) : totalVacuumDv(stages, cachedStageDeltaV(st, 0, b.surfaceGravity));
+  } catch { /* the readout simply omits the vacuum line */ }
 
   internals.predictions = flightPredictions(w, wv);
   const ground = internals.groundTelemetry(wv);
@@ -200,6 +204,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     stageBurnTime: ignited ? (dvs.find((d) => d.stage === st.nextStage + 1)?.burnTime ?? Number.NaN) : Number.NaN,
     flameout: flameout && this.input.state.throttle > 0,
     power: ec && ec.max > 0 ? ec.amount / ec.max : Number.NaN,
+    structuralStress: st.telemetry.crossflowStress,
   }, performance.now() / 1000);
   const warpTo = this.warpDriver.target;
   const settings = game.get().settings;
@@ -223,6 +228,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   if (previous && previous.situation === 'flying' && st.situation !== 'flying') w.message(st.situation === 'splashed' ? `Splashed down on ${b.name}` : `Landed on ${b.name}`);
   const soi = changedBody || (previous?.soi ?? false);
   cueStates.set(this, { vessel: st.id, body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation, staged: this.stagedCount });
+  const propulsionTwr = ((ignited ? currentStage : dvs.find(d => d.thrust > 0))?.thrust ?? 0) / st.mass / gravity;
   const hint = this.hints.update({
     enabled: settings.flightHints && !this.network && !getTutorial() && !game.get().scenarioActive && !this.assist,
     bodyId: b.id, bodyName: b.name, terrainHeight: u.terrain(b.id).maxHeight, boundOrbit: orb.orbit.e < 1, verticalSpeed: vs,
@@ -237,6 +243,10 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     atmosphereHeight: b.atmosphere?.height ?? 0,
     throttle: this.input.state.throttle,
     hasThrust: dvs.some((d) => d.dv > 1),
+    twr: propulsionTwr,
+    tilt: (Math.acos(Math.max(-1, Math.min(1, upward))) * 180) / Math.PI,
+    sasMode: this.sasOn ? this.sas : 'off',
+    stress: st.telemetry.crossflowStress,
   });
   const warp = w.warp;
   let burnTracker = burnTrackers.get(this);
@@ -257,6 +267,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
       ...maneuverBurn,
       // HUD snapshots are compared field by field: quantize so an idle coast does not re-render React.
       dvRemaining: Math.round(maneuverBurn.dvRemaining * 10) / 10,
+      burnStartLead: Number.isFinite(maneuverBurn.burnStartLead) ? Math.round(maneuverBurn.burnStartLead * 10) / 10 : maneuverBurn.burnStartLead,
       burnTime: Number.isFinite(maneuverBurn.burnTime) ? Math.round(maneuverBurn.burnTime * 10) / 10 : maneuverBurn.burnTime,
     },
     engineering: {
@@ -272,7 +283,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     flightData: flightData(w, wv, dvs, internals.predictions),
     crew: w.crewFor(st),
     noControl,
-    eva: st.eva ? { fuel: st.parts[0].resources.monopropellant ?? 0, canBoard: !!w.boardingTarget(), landed: st.situation === 'landed' } : null,
+    eva: st.eva ? { fuel: st.parts[0].resources.monopropellant ?? 0, canBoard: !!w.boardingTarget(), boardHint: w.boardingBlocker(true), landed: st.situation === 'landed' } : null,
     ut: w.ut,
     bodyName: b.name,
     altitudeAsl: info.altitude,
@@ -302,6 +313,8 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     ...ground,
     stage: st.nextStage,
     stages,
+    dvAt,
+    totalDvVac,
     resources: [...totals.entries()]
       .filter(([id, e]) => e.max > 0 && id !== 'intakeAir')
       .map(([id, e]) => ({ id, name: RESOURCES[id as keyof typeof RESOURCES]?.name ?? id, amount: e.amount, max: e.max, color: RESOURCE_COLORS[id] ?? '#aaa' })),

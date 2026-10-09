@@ -16,7 +16,7 @@ import { m3MulVec } from './mat3';
  * a 100 kg probe and a 500 t launcher without oscillating.
  */
 
-export const SAS_MAX_RATE = 1.0;
+export const SAS_MAX_RATE = 0.5;
 export const SAS_INTEGRAL_TIME = 1.5;
 
 const NOSE: Vec3 = { x: 0, y: 1, z: 0 };
@@ -103,7 +103,9 @@ export function computeSas(v: VesselState, input: ControlInput, env: Environment
   const th = [theta.x, theta.y, theta.z];
   const om = [w.x, w.y, w.z];
   const integ = [sas.integral.x, sas.integral.y, sas.integral.z];
-  const tauR = Math.max(0.1, 5 * h);
+  // Give the rate loop time to observe hydraulic slew instead of reversing the gimbal every step.
+  // The braking envelope below still scales with actual torque / moment of inertia on each axis.
+  const tauR = Math.max(0.2, 5 * h);
   const tauP = 3.5 * tauR;
   const alphaDes = [0, 0, 0];
   for (let i = 0; i < 3; i++) {

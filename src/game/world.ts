@@ -302,6 +302,8 @@ export class World {
 
   boardingTarget(): { vessel: WorldVessel; pod: PartState } | null { return crew.boardingTarget.call(this, this.systems); }
 
+  boardingBlocker(whole = false): string | null { return crew.boardingBlocker.call(this, this.systems, whole); }
+
   boardEva(): boolean { const v = this.active; const ok = crew.boardEva.call(this, this.systems); if (ok && v) this.closeFlightRecord(v, 'boarded'); return ok; }
 
   plantFlag(): PlantedFlag | null { const flag = crew.plantFlag.call(this, this.systems); if (flag && this.active) { if (!this.achievementProfile.flags.includes(flag.body)) this.achievementProfile.flags.push(flag.body); this.logFlightEvent(this.active, 'flag'); saveAchievements(this.achievementProfile); } return flag; }
@@ -457,6 +459,8 @@ export class World {
   closestApproach(): TrajectoryApproach | null {
     const wv = this.active;
     if (!wv || !this.targetId || wv.mode === 'prelaunch' || this.targetKind() === null) return null;
+    // Targeting the body you are orbiting: "closest approach" would just be periapsis to its centre.
+    if (this.targetId === wv.body) return null;
     const patches = this.trajectory();
     if (!patches.length) return null;
     const key = `${this.targetId}|${patches.length}|${patches[0].startTime}|${patches[1]?.startTime}|${this.nodes.map((n) => `${n.id}:${n.time}:${n.prograde}:${n.normal}:${n.radial}${validAnchor(n, wv.body) ? '*' : ''}`).join(',')}`;

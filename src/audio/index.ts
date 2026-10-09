@@ -377,6 +377,14 @@ export class GameAudio {
   }
 
   staging(): void { this.pyro('stage'); }
+  /** Existing hull creak, also callable on the sim's warning edge before a fast overload separates. */
+  structuralCreak(stress: number): void {
+    const ctx = this.context;
+    if (!ctx || this.paused || this.hidden || ctx.state !== 'running' || ctx.currentTime < this.nextCreak) return;
+    this.burst(0.45, 0.06 * unit(stress), 420, 'bandpass', 'crackle');
+    this.tone(130, 0.35, 0.035, 'triangle', 85);
+    this.nextCreak = ctx.currentTime + 1.5;
+  }
   decouple(kind: 'decoupler' | 'solid' = 'decoupler'): void { this.pyro(kind); }
   private pyro(kind: 'stage' | 'decoupler' | 'solid' | 'fairing'): void {
     const ctx = this.context;
@@ -705,9 +713,7 @@ export class GameAudio {
     }
     this.previousSpeed = Math.abs(state.verticalSpeed ?? state.airspeed);
     if ((state.structuralStress ?? 0) > 0.55 && ctx.currentTime >= this.nextCreak) {
-      this.burst(0.45, 0.06 * unit(state.structuralStress!), 420, 'bandpass', 'crackle');
-      this.tone(130, 0.35, 0.035, 'triangle', 85);
-      this.nextCreak = ctx.currentTime + 1.5;
+      this.structuralCreak(state.structuralStress!);
     }
     this.wasLanded = !!state.landed;
     if (state.walking && ctx.currentTime >= this.nextStep) {

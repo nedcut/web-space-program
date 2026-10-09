@@ -42,7 +42,9 @@ const DESTROY_ANGLE = 2e-4;
  */
 export function createPlanetLayer(scene: THREE.Scene, universe: Universe, qualityId: QualityId, renderer?: THREE.WebGLRenderer): PlanetLayer {
   const quality = getQuality(qualityId);
-  const batchTerrain = qualityId !== 'low' && !!renderer?.extensions.has('WEBGL_multi_draw');
+  // Without WEBGL_multi_draw (Firefox) three draws a batch chunk by chunk, still sharing one program setup and vertex
+  // array: two GL calls per chunk instead of four or more.
+  const batchTerrain = qualityId !== 'low' && !!renderer;
   const scale = SCALE_PRESETS[universe.preset];
   const renderers = new Map<string, PlanetRenderer>();
   const comets = new Map([...universe.bodies.values()].filter(b => b.kind === 'comet').map(b => {

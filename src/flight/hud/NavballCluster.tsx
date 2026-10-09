@@ -129,8 +129,8 @@ function GMeter({ g, height }: { g: number; height: number }) {
 /** Node burn readout to the right of the navball: remaining Δv with a bar, estimated burn time, node countdown. */
 function BurnInfo({ burn }: { burn: NonNullable<Telemetry['maneuverBurn']> }) {
   const frac = burn.dvTotal > 0 ? Math.max(0, Math.min(1, burn.dvRemaining / burn.dvTotal)) : 0;
-  // Start the burn half its duration before the node: count down to that moment too.
-  const startIn = Number.isFinite(burn.burnTime) ? burn.timeToNode - burn.burnTime / 2 : Number.NaN;
+  // Match the executor: deliver half the Δv before the node, including stage pauses.
+  const startIn = Number.isFinite(burn.burnTime) ? burn.timeToNode - burn.burnStartLead : Number.NaN;
   return (
     <div className="nb-burn" aria-label="Maneuver burn" title="Remaining velocity change, estimated full-throttle burn duration, and time to the maneuver node">
       <div className="nb-burn-row">

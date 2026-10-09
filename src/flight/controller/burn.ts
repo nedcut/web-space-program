@@ -1,5 +1,5 @@
 import { maneuverToInertialDv, propagate, validAnchor } from '../../sim/orbit';
-import { stageBurnTime } from '../../game/autopilot';
+import { stageBurnTime, NODE_STAGE_PAUSE } from '../../sim/vessel/burnTime';
 import type { ManeuverNode } from '../../sim/orbit/api';
 import type { StageDeltaV } from '../../sim/vessel';
 import { add, length, sub, type Vec3 } from '../../util/vec3';
@@ -18,6 +18,8 @@ export interface ManeuverBurnTelemetry {
   dvRemaining: number;
   /** Estimated full-throttle burn time for the remaining Δv across the coming stages, s (Infinity without thrust). */
   burnTime: number;
+  /** Time to deliver half the remaining Δv, including stage pauses (executor centring rule). */
+  burnStartLead: number;
   /** Seconds until the node (negative once passed). */
   timeToNode: number;
 }
@@ -51,7 +53,13 @@ export class BurnTracker {
     } catch {
       this.target = null;
     }
-    return { nodeId: node.id, dvTotal, dvRemaining, burnTime: stageBurnTime(stages, burning, dvRemaining), timeToNode: node.time - world.ut };
+    const lit = wv.state.parts.some(p => p.engine?.ignited && !p.engine.flamedOut);
+    if (!lit) burning = wv.state.nextStage;
+    return {
+      nodeId: node.id, dvTotal, dvRemaining, timeToNode: node.time - world.ut,
+      burnTime: stageBurnTime(stages, burning, dvRemaining, NODE_STAGE_PAUSE, lit),
+      burnStartLead: stageBurnTime(stages, burning, dvRemaining / 2, NODE_STAGE_PAUSE, lit),
+    };
   }
 }
 
@@ -61,4 +69,4 @@ function plannedVelocity(world: World, wv: WorldVessel, node: ManeuverNode): Vec
 }
 
 /** Shared with the node executor, which adds a pause per stage activation. */
-export { stageBurnTime } from '../../game/autopilot';
+export { stageBurnTime } from '../../sim/vessel/burnTime';

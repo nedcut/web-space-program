@@ -25,6 +25,9 @@ function tiles(stage: HudStage): Tile[] {
 
 export interface StagingProps {
   stages: HudStage[];
+  /** Pressure the per-stage and total Δv are computed at; `totalDvVac` is the same total in vacuum. */
+  dvAt: 'asl' | 'atm' | 'vac';
+  totalDvVac: number;
   stage: number;
   locked: boolean;
   imperial: boolean;
@@ -35,7 +38,7 @@ export interface StagingProps {
 }
 
 /** Bottom-left staging stack: the next stage at the bottom, each stage's parts as icons with fuel/heat gauges. */
-export const StagingStack = memo(function StagingStack({ stages, stage, locked, imperial, canStage, dockingMode, stageProgress, cb }: StagingProps) {
+export const StagingStack = memo(function StagingStack({ stages, dvAt, totalDvVac, stage, locked, imperial, canStage, dockingMode, stageProgress, cb }: StagingProps) {
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const speed = (v: number) => (imperial ? `${(v * 2.236936).toFixed(0)} mph` : formatSpeed(v));
   const total = stages.reduce((s, x) => s + x.deltaV, 0);
@@ -72,7 +75,7 @@ export const StagingStack = memo(function StagingStack({ stages, stage, locked, 
                 <span className="stg-tag">{active ? 'ACTIVE' : current ? 'NEXT' : ''}</span>
                 {closed && <span className="stg-count">{s.parts.length}</span>}
               </button>
-              {s.deltaV > 0.05 && <span className="stg-dv mono" title="Stage Δv at current pressure">{speed(s.deltaV)}</span>}
+              {s.deltaV > 0.05 && <span className="stg-dv mono" title="Stage Δv at the current pressure">{speed(s.deltaV)}</span>}
               {!closed && (
                 <div className="stg-parts">
                   {tiles(s).map(tile => (
@@ -92,9 +95,14 @@ export const StagingStack = memo(function StagingStack({ stages, stage, locked, 
             </section>
           );
         })}
-        {stages.length > 0 && <div className="stg-total"><span className="label">Total Δv</span> <span className="mono">{speed(total)}</span></div>}
+        {stages.length > 0 && (
+          <div className="stg-total" title={dvAt === 'vac' ? 'Total Δv in vacuum' : `Total Δv at the current ${dvAt === 'asl' ? 'sea-level' : 'ambient'} pressure; the engines' vacuum figure is shown below`}>
+            <span className="label">Total Δv</span> <span className="mono">{speed(total)}</span> <span className="stg-basis">{dvAt === 'vac' ? 'VAC' : dvAt === 'asl' ? 'ASL' : 'ATM'}</span>
+            {dvAt !== 'vac' && totalDvVac > total + 0.5 && <div className="stg-vac"><span className="label">in vacuum</span> <span className="mono">{speed(totalDvVac)}</span></div>}
+          </div>
+        )}
       </div>
     </div>
   );
-}, (a, b) => a.stage === b.stage && a.locked === b.locked && a.imperial === b.imperial && a.canStage === b.canStage && a.dockingMode === b.dockingMode
+}, (a, b) => a.stage === b.stage && a.dvAt === b.dvAt && a.totalDvVac === b.totalDvVac && a.locked === b.locked && a.imperial === b.imperial && a.canStage === b.canStage && a.dockingMode === b.dockingMode
   && a.stageProgress === b.stageProgress && a.cb === b.cb && snapshotEqual(a.stages, b.stages));

@@ -43,7 +43,7 @@ export interface MapAction { id: MapActionId; label: string }
 
 export interface MapActionContext {
   activeId?: string | null;
-  /** Body whose SOI the active vessel is in (not targetable). */
+  /** Body whose SOI the active vessel is in. */
   activeBody?: string | null;
   targetId?: string | null;
   canTarget?: boolean;
@@ -61,7 +61,7 @@ export function mapContextActions(obj: MapObject, c: MapActionContext): MapActio
   const out: MapAction[] = [{ id: 'focus', label: 'Focus view' }];
   const isActive = obj.kind === 'vessel' && obj.id === c.activeId;
   const name = c.name?.(obj) ?? obj.id;
-  if (c.canTarget && !isActive && !(obj.kind === 'body' && obj.id === c.activeBody)) {
+  if (c.canTarget && !isActive) {
     out.push(c.targetId === obj.id ? { id: 'untarget', label: 'Unset target' } : { id: 'target', label: 'Set as target' });
   }
   if (c.canWarp && c.activeId) {

@@ -4,6 +4,8 @@ import { thermalTexture } from '../src/render/fx/thermalSurface';
 import { blackbody, PartHeat } from '../src/render/fx/PartHeat';
 import { ParticlePool } from '../src/render/fx/ParticlePool';
 import { FlightFx, FX_BUDGET } from '../src/render/fx/FlightFx';
+import { FairingPanels } from '../src/render/fx/FairingPanels';
+import { buildPartMesh } from '../src/render/parts';
 import { buildVessel } from '../src/sim/vessel';
 import { buildMoonLander, buildTender } from '../src/editor/stockCrafts';
 import { PART_CATALOG } from '../src/data/parts';
@@ -64,9 +66,33 @@ describe('flight visual effects', () => {
     update(100); expect(fx.pool.object.visible).toBe(false);
     fx.dispose();
   });
+  it('peels fairing panels outward about their base, then frees them', () => {
+    const fx = new FairingPanels(), zero = { x: 0, y: 0, z: 0 }, up = new THREE.Vector3(0, 1, 0);
+    const mesh = buildPartMesh(PART_CATALOG.get('fairing-2')!);
+    const panels = mesh.getObjectByName('fairingShell')!.children;
+    expect(panels).toHaveLength(2);
+    const at = new THREE.Vector3(0, 1000, 0), q = new THREE.Quaternion();
+    for (const panel of panels) fx.emit(panel, at, q, zero, 2);
+    expect(fx.activeCount).toBe(2);
+    const holders = fx.root.children;
+    const start = holders.map(h => h.position.clone());
+    fx.update(zero, 0.5, new THREE.Vector3(0, -9.81, 0), zero, up, 1000, zero, 0);
+    holders.slice(0, 2).forEach((h, i) => {
+      const azimuth = (panels[i].userData.fairingPanel as { azimuth: number }).azimuth;
+      const out = new THREE.Vector3(Math.sin(azimuth), 0, Math.cos(azimuth));
+      // Moves outward and tips its top outward (local +Y leans toward `out`).
+      expect(h.position.clone().sub(start[i]).dot(out)).toBeGreaterThan(0.5);
+      expect(new THREE.Vector3(0, 1, 0).applyQuaternion(h.quaternion).dot(out)).toBeGreaterThan(0.2);
+    });
+    for (let i = 0; i < 20; i++) fx.update(zero, 0.5, new THREE.Vector3(0, -9.81, 0), zero, up, 1000, zero, 0);
+    expect(fx.activeCount).toBe(0);
+    expect(fx.root.visible).toBe(false);
+    for (const h of holders) expect(h.children).toHaveLength(0);
+    fx.dispose();
+  });
   it('changes quality with a bounded pool', () => {
     const fx=new FlightFx('high'); fx.setQuality('low');
-    expect(fx.pool.capacity).toBe(FX_BUDGET.low.count); expect(fx.root.children.length).toBe(3); fx.dispose();
+    expect(fx.pool.capacity).toBe(FX_BUDGET.low.count); expect(fx.root.children.length).toBe(4); fx.dispose();
   });
 });
 

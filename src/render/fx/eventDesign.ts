@@ -8,6 +8,10 @@ export function separationPunch(impulse: number): number {
 export function impactPunch(mass: number, speed: number): number {
   return Math.min(1.5, .35 + Math.sqrt(Math.max(0, mass) * speed * speed / 2e6));
 }
+/** Brief hull shudder on a crossflow warning; reuse the existing accessible camera-event path. */
+export function structuralStressPunch(stress: number): number {
+  return Math.min(.25, .08 * Math.max(0, stress));
+}
 /** Number of overlapping trail cells to fill, bounded even when a frame is missed. */
 export function trailCells(distance: number, spacing: number, budget: number): number {
   return Math.min(budget, Math.floor(Math.max(0, distance) / spacing));

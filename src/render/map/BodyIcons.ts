@@ -5,6 +5,9 @@ export class BodyIcons {
   readonly mesh: THREE.InstancedMesh;
   private matrix = new THREE.Matrix4();
   private color = new THREE.Color();
+  /** Colour last written per instance: hex→linear conversion and its upload only happen on change. */
+  private colors: Int32Array;
+  private colorsDirty = false;
   constructor(count: number) {
     const material = new THREE.ShaderMaterial({
       transparent: true, depthTest: false, depthWrite: false,
@@ -34,15 +37,20 @@ export class BodyIcons {
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false; this.mesh.renderOrder = 10;
     for (let i = 0; i < count; i++) this.mesh.setColorAt(i, this.color.setHex(0xffffff));
+    this.colors = new Int32Array(count).fill(0xffffff);
   }
   set(index: number, position: THREE.Vector3, width: number, height: number, color: number) {
     this.matrix.makeScale(width, height, 1).setPosition(position.x, position.y, 0);
     this.mesh.setMatrixAt(index, this.matrix);
-    this.mesh.setColorAt(index, this.color.setHex(color));
+    if (this.colors[index] !== color) {
+      this.colors[index] = color;
+      this.mesh.setColorAt(index, this.color.setHex(color));
+      this.colorsDirty = true;
+    }
   }
   finish(count: number) {
     this.mesh.count = count;
     this.mesh.instanceMatrix.needsUpdate = true;
-    this.mesh.instanceColor!.needsUpdate = true;
+    if (this.colorsDirty) { this.mesh.instanceColor!.needsUpdate = true; this.colorsDirty = false; }
   }
 }

@@ -243,12 +243,17 @@ export interface VesselTelemetry {
   thrust: number;
   /** Intake air supply / demand of air-breathing engines (1 = fully fed; NaN = no jets running). */
   intakeAirRatio: number;
+  /** Normalized crossflow exposure (see `aerodynamicStress`): 0 clear, 0.49–0.99 warn-only band, ≥ 1 inside the breakup envelope. */
+  crossflowStress: number;
   /** Last commanded control vector after SAS (pitch, yaw, roll). */
   control: { pitch: number; yaw: number; roll: number };
 }
 
 /** Derived topology data. Never serialise; rebuild with `rebuildTopology`. */
 export interface VesselCache {
+  /** Seconds since the last crossflow warning, and the seconds of slow fatigue recovery left after leaving the envelope. */
+  aeroWarnClock?: number;
+  aeroHold?: number;
   /** Derived flight stress readout; not serialized. */
   strutLoads?: Map<number, number>;
   jointLoads?: Map<number, import('./loads').JointLoad>;
@@ -305,11 +310,14 @@ export interface VesselState {
 }
 
 export type VesselEvent =
+  | { type: 'structuralWarning'; vesselId: string; loadFraction: number }
   | { type: 'linkBroken'; vesselId: string; partUid: number; targetUid: number; loadFraction: number }
   | { type: 'anomalyDiscovered'; vesselId: string; body: string; landmarkId: string }
   | { type: 'structuralFailure'; vesselId: string; partUid: number; parentUid: number; newVesselId: string; loadFraction: number }
   | { type: 'stage'; vesselId: string; stage: number }
   | { type: 'decouple'; vesselId: string; partUid: number; newVesselId: string }
+  /** A fairing shell split into panels and fell away; its base ring stays on the vessel. */
+  | { type: 'fairingJettison'; vesselId: string; partUid: number }
   | { type: 'engineIgnited'; vesselId: string; partUid: number }
   | { type: 'flameout'; vesselId: string; partUid: number }
   | { type: 'chute'; vesselId: string; partUid: number; phase: ChutePhase }

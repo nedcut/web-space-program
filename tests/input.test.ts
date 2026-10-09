@@ -247,7 +247,7 @@ describe('flight gamepad actions', () => {
     const key = (code: string, ctrlKey = false) => h.target.dispatchEvent(Object.assign(new Event('keydown'), { code, ctrlKey, shiftKey: false, metaKey: false, altKey: false, repeat: false }));
     try {
       game.set({ settings: { ...settings, invertPitch: true, gamepadEnabled: false, inputSmoothing: 0 } });
-      key('KeyW'); h.input.update(0.25); expect(h.input.state.pitch).toBe(1);
+      key('KeyW'); h.input.update(1); expect(h.input.state.pitch).toBe(1);
       game.set({ settings: { ...game.get().settings, invertPitch: false } });
       h.input.update(0.1); expect(h.input.state.pitch).toBe(-1);
       key('ControlLeft', true); h.input.update(0.1);
@@ -285,34 +285,35 @@ describe('flight gamepad actions', () => {
       game.set({ settings: { ...settings, gamepadEnabled: false, inputSmoothing: 0 } });
       saveBindings({ ...defaultBindings(), pitchUp: ['KeyP'] }, memory());
       h.target.dispatchEvent(Object.assign(new Event('keydown'), { code: 'KeyP', ctrlKey: false, shiftKey: false, metaKey: false, altKey: false, repeat: false }));
-      h.input.update(0.25); expect(h.input.state.pitch).toBe(-1);
+      h.input.update(1); expect(h.input.state.pitch).toBe(-1);
       h.input.precision = true; h.input.update(0.1); expect(h.input.state.pitch).toBe(-0.35);
       h.input.enabled = false; h.input.update(0.1); expect(h.input.state.pitch).toBe(0);
     } finally { h.input.dispose(); game.set({ settings }); }
   });
-  it('ramps digital attitude keys: taps are gentle, holds reach full authority quickly', () => {
+  it('ramps digital attitude keys: taps are gentle, a one-second hold reaches full authority', () => {
     const h = harness(); const settings = game.get().settings;
     const ev = (type: string, code: string) => h.target.dispatchEvent(Object.assign(new Event(type), { code, ctrlKey: false, shiftKey: false, metaKey: false, altKey: false, repeat: false }));
     try {
       game.set({ settings: { ...settings, gamepadEnabled: false, inputSmoothing: 0, invertPitch: false } });
       const frame = 1 / 60;
-      // A 50 ms tap commands at most a quarter of full deflection.
+      // A 50 ms tap commands 5% of full deflection.
       ev('keydown', 'KeyD');
       let peak = 0;
       for (let i = 0; i < 3; i++) { h.input.update(frame); peak = Math.max(peak, h.input.state.yaw); }
       ev('keyup', 'KeyD');
       for (let i = 0; i < 6; i++) h.input.update(frame);
-      expect(peak).toBeGreaterThan(0.15);
-      expect(peak).toBeLessThan(0.3);
+      expect(peak).toBeCloseTo(0.05);
       expect(h.input.state.yaw).toBe(0);
-      // Held: full authority within 0.2 s, and reversing direction passes through zero quickly.
+      // Held: full authority within 1 s, and reversing direction passes through zero quickly.
       ev('keydown', 'KeyD');
-      for (let i = 0; i < 12; i++) h.input.update(frame);
-      expect(h.input.state.yaw).toBe(1);
+      for (let i = 0; i < 60; i++) h.input.update(frame);
+      expect(h.input.state.yaw).toBeCloseTo(1);
       ev('keyup', 'KeyD'); ev('keydown', 'KeyA');
       let t = 0;
-      while (h.input.state.yaw > -1 && t < 1) { h.input.update(frame); t += frame; }
-      expect(t).toBeLessThan(0.35);
+      while (h.input.state.yaw > 0 && t < 1) { h.input.update(frame); t += frame; }
+      expect(t).toBeLessThan(0.1);
+      for (let i = 0; i < 60; i++) h.input.update(frame);
+      expect(h.input.state.yaw).toBeCloseTo(-1);
     } finally { h.input.dispose(); game.set({ settings }); }
   });
   it('trims with Alt + attitude keys, clears with Alt+X, and slows the throttle in fine mode', () => {

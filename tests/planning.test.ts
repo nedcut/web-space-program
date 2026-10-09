@@ -11,7 +11,7 @@ import { planningSnapshot, requestPlan } from '../src/game/planning/client';
 import { createPlannerHandler, restorePlanningWorld } from '../src/game/planning/handler';
 import { applyPlanningResult } from '../src/game/planning/apply';
 import type { PlannerEvent, PlannerMessage, PlanningRequest } from '../src/game/planning/protocol';
-import { stateToElements, propagate } from '../src/sim/orbit';
+import { stateToElements, propagate, period } from '../src/sim/orbit';
 import { add, v3 } from '../src/util/vec3';
 
 function parked() {
@@ -156,4 +156,43 @@ it('cancels the async fallback from a streamed row and leaves the live nodes int
   await expect(task.result).rejects.toMatchObject({ name: 'AbortError' });
   expect(rows).toEqual([0]);
   expect(world.nodes).toEqual(snapshot.nodes);
+});
+
+it('hands the Earth grid to workers as a shared Blob, not a 16 MiB clone', async () => {
+  const { earthDataMessage } = await import('../src/game/earthLoader');
+  const { earthData } = await import('../src/sim/terrain/earthData');
+  const first = earthDataMessage(), second = earthDataMessage();
+  if (earthData().buffer instanceof ArrayBuffer) {
+    expect(first.blob).toBeInstanceOf(Blob);
+    expect(first.blob!.size).toBe(earthData().buffer.byteLength);
+    expect(second.blob).toBe(first.blob);
+  } else expect(first.buffer).toBe(earthData().buffer);
+});
+
+it.each(['moon', 'mars'])('lists %s windows through the planner protocol without changing existing nodes', async target => {
+  const world = parked();
+  world.addNode(world.ut + 60).prograde = 12;
+  const before = structuredClone(world.nodes);
+  const result = await requestPlan('windows', planningSnapshot(world), { target }).result;
+  expect(result.length).toBeGreaterThan(0);
+  expect(result.some(w => w.kind === 'now')).toBe(true);
+  expect(result.every(w => Number.isFinite(w.dv) && Number.isFinite(w.captureDv))).toBe(true);
+  expect(world.nodes).toEqual(before);
+});
+
+it.each(['moon', 'mars'])('verifies and installs the selected next-orbit %s row through the existing application path', async target => {
+  const world = parked();
+  const windows = await requestPlan('windows', planningSnapshot(world), { target }).result;
+  const now = windows.find(w => w.kind === 'now')!;
+  // The row is naturally a few seconds old by the time a player selects it.
+  world.advanceRailsTo(world.ut + 5);
+  const snapshot = planningSnapshot(world);
+  const plan = await requestPlan('transfer', snapshot, { target, options: { departure: now.departure } }).result;
+  expect(plan).not.toBeNull();
+  expect(plan!.node.time).toBeGreaterThan(world.ut);
+  expect(plan!.node.time).toBeLessThanOrEqual(world.ut + 300 + period(world.orbitOf(world.active!)));
+  expect(world.nodes).toEqual([]);
+  applyPlanningResult(world, snapshot, plan!);
+  expect(world.nodes).toHaveLength(1);
+  expect(world.nodes[0].time).toBe(plan!.node.time);
 });

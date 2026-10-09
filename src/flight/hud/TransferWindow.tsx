@@ -1,3 +1,5 @@
+import { DepartureOptions } from './DepartureOptions';
+import type { TransferWindow as DepartureWindow } from '../../game/planning/windows';
 import { createPortal } from 'react-dom';
 import { useEffect, useRef, useState } from 'react';
 import type { World } from '../../game/world';
@@ -9,6 +11,9 @@ import { applyPlanningResult } from '../../game/planning/apply';
 
 const N = 36;
 export function TransferWindow({ world, target, onClose, onPlanned }: { world: World; target: string; onClose(): void; onPlanned(message: string): void }) {
+  const [windows, setWindows] = useState<DepartureWindow[]>([]);
+  const windowPlanner = usePlanner(world);
+  const { run: listWindows, cancel: cancelWindows } = windowPlanner;
   const canvas = useRef<HTMLCanvasElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
   const { run, cancel, progress } = usePlanner(world);
@@ -20,6 +25,12 @@ export function TransferWindow({ world, target, onClose, onPlanned }: { world: W
   const [grid, setGrid] = useState<(PorkchopPoint | null)[]>([]);
   const [hover, setHover] = useState<PorkchopPoint | null>(null);
   const [message, setMessage] = useState('Calculating transfer windows…');
+  useEffect(() => {
+    setWindows([]);
+    void listWindows('windows', { target }).then(({ result }) => setWindows(result))
+      .catch(e => { if (e.name !== 'AbortError') setMessage(e.message); });
+    return cancelWindows;
+  }, [target, listWindows, cancelWindows]);
   const busy = !!progress;
   const [range, setRange] = useState<{ start: number; span: number; minFlight: number; maxFlight: number } | null>(null);
   useEffect(() => {
@@ -59,6 +70,16 @@ export function TransferWindow({ world, target, onClose, onPlanned }: { world: W
     const y = Math.min(N - 1, Math.max(0, N - 1 - Math.floor((e.clientY - r.top) / r.height * N)));
     return grid[x * N + y] ?? null;
   };
+  const pickWindow = async (w: DepartureWindow) => {
+    if (busy) return;
+    setMessage('Verifying selected departure…');
+    try {
+      const { result, snapshot } = await run('interplanetary', { target, options: { departure: w.departure } });
+      if (!result) { setMessage('This estimate did not refine to an encounter. Try another window.'); return; }
+      applyPlanningResult(world, snapshot, result);
+      onPlanned(`Transfer planned: ${result.dv.toFixed(0)} m/s`); onClose();
+    } catch (e) { if ((e as Error).name !== 'AbortError') setMessage((e as Error).message); }
+  };
   const plan = async (p: PorkchopPoint | null) => {
     if (!p || busy || !range) return;
     setMessage('Verifying encounter and parking-orbit ejection…');
@@ -85,6 +106,8 @@ export function TransferWindow({ world, target, onClose, onPlanned }: { world: W
   }}>
     <div className="panel transfer-plot">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span className="label">Transfer window · {world.universe.body(target).name}</span><button className="btn small" onClick={onClose}>Close</button></div>
+      {windowPlanner.progress && <div role="status" className="label">Finding upcoming departures…</div>}
+      <DepartureOptions world={world} options={{ target, windows }} busy={busy} onPick={pickWindow} />
       <div className="label">Flight time ↑ · departure date →</div>
       <canvas ref={canvas} width={648} height={360} aria-label="Departure date versus flight time, total delta-v colour map" onMouseMove={e => setHover(cell(e))} onMouseLeave={() => setHover(null)} onClick={e => plan(cell(e))} />
       {range && <div className="mono" style={{ fontSize: 11 }}>{formatDate(range.start)} → {formatDate(range.start + range.span)} · flight {formatDuration(range.minFlight)}–{formatDuration(range.maxFlight)}</div>}

@@ -227,7 +227,7 @@ export class Universe {
           if (b.id === self.sunId || !mayBeWithin(ranges.get(b.id)!, r, b.radius, true)) continue;
           blockers.push({ radius: b.radius, position: self.ephem.getBodyState(b.id, t).position });
         }
-        return { dir: scale(d, 1 / dist), distance: dist, exposure: sunExposure(pos, sp, blockers) };
+        return { dir: scale(d, 1 / dist), distance: dist, thermalDistance: dist / SCALE_PRESETS[self.preset].s, exposure: sunExposure(pos, sp, blockers) };
       },
       referenceBody(_pos, t) {
         const s = self.ephem.getBodyState(getDominant(), t);

@@ -7,7 +7,7 @@ import type { LiftingSurfaceModule, ParachuteModule } from './types';
 import type { PartState, VesselEvent, VesselState } from './runtime';
 import { faceAreas, faceIndex } from './shapes';
 import { deflectionScale } from './tweaks';
-import { FAIRING_CYLINDER, fairingEncloses, fairingShell } from './fairing';
+import { FAIRING_CYLINDER, fairingEncloses, fairingJettisoned, fairingShell } from './fairing';
 
 /**
  * Aerodynamics: per-part, occlusion-aware drag with Mach-dependent coefficients, lifting surfaces with
@@ -74,6 +74,7 @@ export interface FairingShielding {
 export function fairingShielding(v: VesselState): FairingShielding {
   const out: FairingShielding = { shielded: new Set(), shells: new Map() };
   for (const f of v.parts) {
+    if (fairingJettisoned(f)) continue;
     const shell = fairingShell(f.def, f.tweaks);
     if (!shell) continue;
     const side = 2 * shell.radius * shell.height * (FAIRING_CYLINDER + (1 - FAIRING_CYLINDER) * 0.67);

@@ -1,8 +1,8 @@
 import { pressureLimit, operatingLimit } from '../sim/hazards/vessel';
 import type { World, WorldVessel } from './world';
-import { ballisticImpact, targetPlaneNodes, phaseAngle, suicideBurn, period, burnTimeEstimate, periapsisRadius } from '../sim/orbit';
+import { ballisticImpact, targetPlaneNodes, phaseAngle, suicideBurn, period, periapsisRadius } from '../sim/orbit';
 import { biomeAt } from '../sim/science/biomes';
-import { type StageDeltaV } from '../sim/vessel';
+import { stageBurnTime, NODE_STAGE_PAUSE, type StageDeltaV } from '../sim/vessel';
 import { add, cross, dot, length, normalize, sub, v3 } from '../util/vec3';
 import { qConj, qRotate } from '../util/quat';
 import { formatDuration, formatDistance, formatSpeed } from '../ui/format';
@@ -32,6 +32,7 @@ export function flightData(w: World, v: WorldVessel, stages: StageDeltaV[], pred
   const info = u.surfaceInfo(v.body, st.position, w.ut), gravity = b.gm / info.r ** 2;
   const active = st.parts.filter(p => p.engine?.ignited);
   const stage = active.length ? stages.find(s => s.stage === st.nextStage + 1) : stages.find(s => s.thrust > 0);
+  const lit = active.some(p => !p.engine?.flamedOut);
   const currentThrust = active.reduce((sum, p) => sum + (p.engine?.thrust ?? 0), 0);
   const maxThrust = stage?.thrust ?? 0;
   const vel = w.surfaceVelocity(v), local = qRotate(qConj(st.orientation), vel);
@@ -72,7 +73,7 @@ export function flightData(w: World, v: WorldVessel, stages: StageDeltaV[], pred
       ['TWR current / max', `${(currentThrust / st.mass / gravity).toFixed(2)} / ${(maxThrust / st.mass / gravity).toFixed(2)}`],
       ['Stage Δv / vacuum', `${(stage?.dv ?? 0).toFixed(0)} / ${(stage?.dvVac ?? 0).toFixed(0)} m/s`],
       ['Total Δv / vacuum', `${stages.reduce((s, x) => s + x.dv, 0).toFixed(0)} / ${stages.reduce((s, x) => s + x.dvVac, 0).toFixed(0)} m/s`],
-      ['Next node burn', node && maxThrust > 0 ? dt(burnTimeEstimate(Math.hypot(node.prograde, node.normal, node.radial), maxThrust, st.mass, stage?.isp ?? 300)) : '—'],
+      ['Next node burn', node ? dt(stageBurnTime(stages, st.nextStage + (lit ? 1 : 0), Math.hypot(node.prograde, node.normal, node.radial), NODE_STAGE_PAUSE, lit)) : '—'],
     ] },
     { title: 'Surface & atmosphere', rows: [
       ['Ballistic impact', predictions.impact ? dt(predictions.impact.time - w.ut) : '—'],

@@ -4,6 +4,7 @@ import type { Vec3 } from '../../util/vec3';
 import type { QualityId } from '../core/quality';
 import { rcsEnabled, rcsMask } from '../../sim/vessel/tweaks';
 import { DebrisPool } from './DebrisPool';
+import { FairingPanels } from './FairingPanels';
 import { trailCells } from './eventDesign';
 import { ParticlePool } from './ParticlePool';
 
@@ -21,6 +22,7 @@ export class FlightFx {
   readonly root = new THREE.Group();
   pool: ParticlePool;
   readonly debris = new DebrisPool();
+  readonly fairingPanels = new FairingPanels();
   private readonly trails = new Map<number, { position: THREE.Vector3; credit: number }>();
   /**
    * Burst flash. It stays visible at zero intensity between bursts: toggling visibility would change
@@ -55,7 +57,7 @@ export class FlightFx {
   private readonly lastOrigin = new THREE.Vector3();
   private seed = 193;
   constructor(private quality: QualityId) {
-    this.pool = new ParticlePool(FX_BUDGET[quality].count); this.root.add(this.pool.object, this.light, this.debris.root);
+    this.pool = new ParticlePool(FX_BUDGET[quality].count); this.root.add(this.pool.object, this.light, this.debris.root, this.fairingPanels.root);
   }
   private random() { this.seed = (Math.imul(this.seed,1664525)+1013904223)>>>0; return this.seed/4294967296; }
   setQuality(quality: QualityId) {
@@ -89,7 +91,7 @@ export class FlightFx {
     const teleported = this.lastUt !== undefined && this.lastOrigin.distanceToSquared(origin)>1e12;
     this.lastUt = simulationTime; this.lastOrigin.copy(origin);
     // Rails/teleports must not stretch old trails across interplanetary distances.
-    if(elapsed>1 || teleported) { this.pool.clear(); this.debris.clear(); this.trails.clear(); this.flash=0; }
+    if(elapsed>1 || teleported) { this.pool.clear(); this.debris.clear(); this.fairingPanels.clear(); this.trails.clear(); this.flash=0; }
     const step = Math.min(1,elapsed); this.lastStep=step; this.clock += step;
     this.density = density;
     this.up.copy(v.position).sub(bodyPosition).normalize();
@@ -198,6 +200,7 @@ export class FlightFx {
     }
     for (const uid of this.trails.keys()) if (!(v.cache.byUid.get(uid)?.engine?.thrust ?? 0)) this.trails.delete(uid);
     this.debris.update(origin,step,this.gravity,v.position,this.up,altitude,this.ambientVelocity);
+    this.fairingPanels.update(origin,step,this.gravity,v.position,this.up,altitude,this.ambientVelocity,density);
     this.flash *= Math.exp(-step*8);
     this.flashPosition.addScaledVector(this.flashVelocity,step);
     const lit = this.flash>.001;
@@ -242,5 +245,5 @@ export class FlightFx {
       }
     }
   }
-  dispose() { this.debris.dispose(); this.pool.dispose(); this.light.dispose(); this.root.removeFromParent(); }
+  dispose() { this.debris.dispose(); this.fairingPanels.dispose(); this.pool.dispose(); this.light.dispose(); this.root.removeFromParent(); }
 }

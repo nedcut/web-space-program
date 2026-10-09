@@ -149,7 +149,7 @@ describe('map focus and context actions', () => {
     const base = { activeId: 'ship', activeBody: 'earth', canTarget: true, canSwitch: true, canWarp: true, now: 0 };
     const ids = (o: Parameters<typeof mapContextActions>[0], c = {}) => mapContextActions(o, { ...base, ...c }).map(a => a.id);
     expect(ids({ kind: 'vessel', id: 'ship' })).toEqual(['focus', 'info']);
-    expect(ids({ kind: 'body', id: 'earth' })).toEqual(['focus', 'info']);
+    expect(ids({ kind: 'body', id: 'earth' })).toEqual(['focus', 'target', 'info']);
     expect(ids({ kind: 'vessel', id: 'station' })).toEqual(['focus', 'target', 'switch', 'info']);
     expect(ids({ kind: 'vessel', id: 'station' }, { targetId: 'station', approach: { id: 'station', time: 100 } }))
       .toEqual(['focus', 'untarget', 'warpApproach', 'switch', 'info']);

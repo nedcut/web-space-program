@@ -51,7 +51,7 @@ export { bakeEngineSoot, prepareEngineSoot, releaseSoot, isSooted } from './soot
  *  - 'legUpper' / 'legLower' / 'legFoot'      landing legs
  *  - 'panelWing' / 'panel0..n'                deployable solar arrays
  *  - 'chuteCanopy' (+ 'chuteLines')           parachutes (hidden until deployed)
- *  - 'fairingShell' / 'fairingHalfA' / 'fairingHalfB'
+ *  - 'fairingShell' / 'fairingPanel0..n'        fairing shell panels (2, or 3 when wide); userData.fairingPanel
  *  - 'lightLens' / 'lightAnchor'              lamps (anchor looks along +Z)
  *  - 'ionGrid'                                ion engine grid (emissive)
  *  - 'gearStrut' / 'gearSlide' / 'gearSteer' / 'gearWheel'   landing gear (see setGearPose)

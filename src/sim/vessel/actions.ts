@@ -179,7 +179,7 @@ export function applyPartAction(v: VesselState, cmd: PartCommand, events: Vessel
     case 'deploy.retract': setDeploy(p, false); return true;
     case 'deploy.toggle': setDeploy(p, want); return true;
     case 'decouple': if (p.activated) return false; fireDecoupler(all, p.uid, events, created); return true;
-    case 'fairing.jettison': if (p.activated) return false; jettisonFairing(all, p.uid, created); return true;
+    case 'fairing.jettison': if (p.activated) return false; jettisonFairing(all, p.uid, events); return true;
     case 'chute.deploy':
       if (!p.chute || p.chute.phase !== 'stowed') return false;
       p.chute.phase = 'armed'; p.activated = true;

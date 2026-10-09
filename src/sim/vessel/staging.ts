@@ -5,6 +5,7 @@ import type { DecouplerModule, ResourceId } from './types';
 import type { PartState, VesselEvent, VesselState } from './runtime';
 import { G0 } from './env';
 import { applyImpulse, cloneVessel, decouplerCutChildren, rebuildTopology, recomputeMassProperties, splitVessel } from './assembly';
+import { isFairingDef } from './fairing';
 import { engineModule, igniteEngine, ispAtPressure, isSolidMotor, maxMassFlow, propellantNeed } from './engines';
 import { availableResource, drawPropellants, drawResource } from './resources';
 import { ejectionScale, thrustLimit } from './tweaks';
@@ -49,7 +50,7 @@ export function activateStage(v: VesselState, stage: number, events: VesselEvent
   const all: VesselState[] = [v];
   const created: VesselState[] = [];
   for (const duid of decouplers) fireDecoupler(all, duid, events, created);
-  for (const fuid of fairings) jettisonFairing(all, fuid, created);
+  for (const fuid of fairings) jettisonFairing(all, fuid, events);
   runActionGroup(v, 'stage', events, all, created);
   return created;
 }
@@ -99,36 +100,19 @@ function cutDetachedEngines(piece: VesselState): void {
   }
 }
 
-/** Jettison one fairing part (never the root). */
-export function jettisonFairing(all: VesselState[], fuid: number, created: VesselState[]): void {
+/**
+ * Jettison a fairing's shell. The shell splits into clamshell panels that fall away symmetrically (no net impulse, so
+ * no debris vessel: the render animates the panels); the base ring stays on the vessel with the payload on it. The
+ * shell's mass leaves and its shielding ends.
+ */
+export function jettisonFairing(all: VesselState[], fuid: number, events: VesselEvent[]): void {
   const owner = findOwner(all, fuid);
-  if (!owner || fuid === owner.rootUid) return;
-  const f = owner.cache.byUid.get(fuid)!;
-  const mod = f.def.modules.find((m) => m.type === 'fairing') as { type: 'fairing'; ejectionImpulse: number } | undefined;
-  if (!mod) return;
+  const f = owner?.cache.byUid.get(fuid);
+  if (!owner || !f || !isFairingDef(f.def)) return;
   f.activated = true;
-  const point = { ...f.position };
-  // The payload rides on the fairing: hand it to the part below before the shell (with its ring) separates.
-  if (f.parent !== null && f.children.length) {
-    for (const uid of f.children) {
-      const child = owner.cache.byUid.get(uid);
-      if (!child) continue;
-      child.parent = f.parent;
-      child.parentNode = f.parentNode === 'srf' || child.attachNode === 'srf' ? 'srf' : f.parentNode;
-      if (child.parentNode === 'srf') child.attachNode = 'srf';
-    }
-    rebuildTopology(owner);
-  }
-  const pieces = splitVessel(owner, [fuid]);
-  for (const nv of pieces) {
-    const diff = sub(nv.com, owner.com);
-    const dirBody = length(diff) > 1e-9 ? normalize(diff) : { x: 1, y: 0, z: 0 };
-    const J = scale(qRotate(owner.orientation, dirBody), mod.ejectionImpulse);
-    applyImpulse(nv, J, point);
-    applyImpulse(owner, scale(J, -1), point);
-    all.push(nv);
-    created.push(nv);
-  }
+  rebuildTopology(owner);
+  recomputeMassProperties(owner);
+  events.push({ type: 'fairingJettison', vesselId: owner.id, partUid: fuid });
 }
 
 /** Fire the next stage (highest unactivated stage number). */
@@ -157,6 +141,8 @@ export interface StageDeltaV {
   thrustVac: number;
   thrustAsl: number;
   thrust: number;
+  /** Lowest steady vacuum thrust at the start of the stage: every engine at its minimum throttle (solids at full), N. */
+  minThrustVac: number;
   /** Thrust-to-weight at the requested pressure and gravity, at start and end of the stage. */
   twrStart: number;
   twrEnd: number;
@@ -168,7 +154,7 @@ function burnSimulation(sim: VesselState, stage: number, pressure: number, gravi
   const startMass = sim.mass;
   const r: StageDeltaV = {
     stage, dvVac: 0, dvAsl: 0, dv: 0, burnTime: 0, startMass, endMass: startMass,
-    thrustVac: 0, thrustAsl: 0, thrust: 0, twrStart: 0, twrEnd: 0, isp: 0,
+    thrustVac: 0, thrustAsl: 0, thrust: 0, minThrustVac: 0, twrStart: 0, twrEnd: 0, isp: 0,
   };
   let first = true;
   let lastThrust = 0;
@@ -188,12 +174,13 @@ function burnSimulation(sim: VesselState, stage: number, pressure: number, gravi
     if (active.length === 0) break;
     const eps = 1e-6;
     const ledgers = new Map<ResourceId, DrawLedger>();
-    let mdot = 0, fVac = 0, fAsl = 0, fP = 0;
+    let mdot = 0, fVac = 0, fAsl = 0, fP = 0, fMin = 0;
     for (const p of active) {
       const m = engineModule(p)!;
       const md = maxMassFlow(m) * thrustLimit(p);
       mdot += md;
       fVac += md * m.ispVac * G0;
+      fMin += md * m.ispVac * G0 * (m.throttleable && !isSolidMotor(m) ? m.minThrottle : 1);
       fAsl += md * ispAtPressure(m, 101325) * G0;
       fP += md * ispAtPressure(m, pressure) * G0;
       const need = propellantNeed(m, sim.resourceDefs, md);
@@ -218,6 +205,7 @@ function burnSimulation(sim: VesselState, stage: number, pressure: number, gravi
       r.thrustVac = fVac;
       r.thrustAsl = fAsl;
       r.thrust = fP;
+      r.minThrustVac = fMin;
       r.twrStart = fP / (startMass * gravity);
       first = false;
     }

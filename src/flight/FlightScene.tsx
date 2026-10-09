@@ -293,6 +293,7 @@ export default function FlightScene() {
   const partScreen = useCallback((uid: number) => ctrl.current?.partScreenPosition(uid) ?? null, []);
   useEffect(() => {
     document.documentElement.dataset.uiHidden = String(uiHidden);
+    if (ctrl.current) ctrl.current.uiHidden = uiHidden;
     return () => { delete document.documentElement.dataset.uiHidden; };
   }, [uiHidden]);
 
@@ -305,7 +306,7 @@ export default function FlightScene() {
       if (scene === 'spaceCenter') {
         if (c.world.active) { c.world.recordFlight(c.world.active, c.world.ut, true); c.world.logFlightEvent(c.world.active, 'checkpoint', 'Returned to Space Center'); const r = c.world.flightlog.records.find(r => r.vesselId === c.world.activeId && !r.outcome); if (r) c.world.latestReportId = r.id; }
       }
-      c.quicksave('autosave');
+      c.quicksave('autosave', 'spaceCenter');
       game.set({ ut: c.world.ut, mode: c.world.mode, resumeWorld: c.snapshot() });
     }
     game.set({ scene: scene === 'spaceCenter' ? 'flightlog' : scene });

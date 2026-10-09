@@ -35,14 +35,14 @@ import {
   timeToPeriapsis,
   stateAfterManeuver,
   inertialDvToManeuver,
-  burnTimeEstimate,
   solveLambertAround,
   stateToElements,
 } from '../sim/orbit';
 import { add, sub, scale, length, normalize, dot, cross, v3, type Vec3 } from '../util/vec3';
 import { qRotate } from '../util/quat';
 import { thrustLimit } from '../sim/vessel/tweaks';
-import type { StageDeltaV } from '../sim/vessel/staging';
+import { stageBurnTime, NODE_STAGE_PAUSE as STAGE_PAUSE } from '../sim/vessel/burnTime';
+export { stageBurnTime } from '../sim/vessel/burnTime';
 import { cachedStageDeltaV } from './stageDeltaVCache';
 import { formatDuration } from '../util/format';
 
@@ -386,19 +386,24 @@ export interface ExecuteNodeOptions {
   /** Remove the node from the world when finished (default true). */
   removeNode?: boolean;
   /**
-   * For mostly prograde/retrograde burns, end the burn when the planned orbital energy (semi-major axis) is
-   * reached instead of when the vector dv is used up. Finite burns in a fixed direction lose a little
+   * For mostly prograde/retrograde burns without closed-loop guidance, end the burn when the planned orbital energy
+   * (semi-major axis) is reached instead of when the vector dv is used up. Finite burns in a fixed direction lose a little
    * efficiency, and for near-escape burns (e.g. trans-lunar injection) a 1% dv shortfall moves the apoapsis by
    * thousands of km; matching energy keeps the transfer timing right. Default true.
    */
   matchEnergy?: boolean;
 }
 
+/** Farthest transfer angle the guidance aim point may sit at: clear of the singular 180° Lambert arc. */
+const GUIDE_MAX_ANGLE = (175 * Math.PI) / 180;
+
 /**
- * Aim point for closed-loop burn guidance: where the planned post-burn orbit is about a quarter turn after the
- * node (a well-conditioned Lambert arc), never past ~90% of the SOI radius. Null when no usable point exists.
+ * Aim point for closed-loop burn guidance: the farthest point of the planned post-burn orbit up to `until` (the
+ * planned patch's end, e.g. an encounter), ~175° after the node, ~90% of the SOI radius or ~half a period. A far
+ * point fixes what the plan is for (where the transfer goes, and when); a point a quarter turn ahead let a long or
+ * late burn swing the line of apsides by degrees, hundreds of km at the Moon. Null when no usable point exists.
  */
-function guidanceTarget(o: Orbit, node: number, soi: number): { time: number; position: Vec3; normal: Vec3 } | null {
+function guidanceTarget(o: Orbit, node: number, soi: number, until = Infinity): { time: number; position: Vec3; normal: Vec3 } | null {
   const s0 = propagate(o, node);
   const normal = cross(s0.position, s0.velocity);
   if (!(length(normal) > 0)) return null;
@@ -407,12 +412,13 @@ function guidanceTarget(o: Orbit, node: number, soi: number): { time: number; po
   let best: { time: number; position: Vec3; normal: Vec3 } | null = null;
   for (let k = 1; k <= 240; k++) {
     const t = node + (span * k) / 240;
+    if (t > until) break;
     const r = propagate(o, t).position;
     if (length(r) > 0.9 * soi) break;
     const angle = angleBetween(s0.position, r);
     if (angle < (20 * Math.PI) / 180) continue;
     best = { time: t, position: r, normal };
-    if (angle >= Math.PI / 2) break;
+    if (angle >= GUIDE_MAX_ANGLE) break;
   }
   return best;
 }
@@ -450,29 +456,8 @@ export function spoolDownDv(v: VesselState): { tail: number; step: number } {
   return { tail, step };
 }
 
-/** Seconds lost per stage activation during a burn (decouple, ignite, spool up). */
-const STAGE_PAUSE = 1;
 /** Pointing error that allows staging and throttle, rad. */
 const BURN_CONE = (15 * Math.PI) / 180;
-
-/**
- * Full-throttle time to deliver `dv`, spending `stages` (per-stage Δv readout) in firing order, highest stage
- * number first, starting at `burning` (the stage burning now, or the one that fires next). Each stage that still has
- * to be activated adds `pause` seconds. Infinity if the stages run out.
- */
-export function stageBurnTime(stages: StageDeltaV[], burning: number, dv: number, pause = 0, lit = true): number {
-  let left = dv;
-  let t = 0;
-  for (const s of [...stages].filter(s => s.stage <= burning).sort((a, b) => b.stage - a.stage)) {
-    if (left <= 1e-6) break;
-    if (!lit || s.stage < burning) t += pause;
-    if (!(s.dv > 0) || !(s.thrust > 0) || !(s.isp > 0)) continue;
-    const use = Math.min(left, s.dv);
-    t += burnTimeEstimate(use, s.thrust, s.startMass, s.isp);
-    left -= use;
-  }
-  return left > 1e-3 ? Infinity : t;
-}
 
 /** Vacuum stage readout limited to the stages the program may use, from the one burning now (or firing next). */
 function usableStages(v: VesselState, minStage: number) {
@@ -490,7 +475,14 @@ function stageBlocker(v: VesselState, minStage: number): string | null {
   return null;
 }
 
-const fmtS = (s: number) => (!Number.isFinite(s) ? '—' : s >= 90 ? formatDuration(s) : `${Math.max(0, s).toFixed(0)} s`);
+/** Countdown text: "42 s", "2:14", "1:05:09", then days. */
+const fmtS = (s: number) => {
+  if (!Number.isFinite(s)) return '—';
+  if (s < 60) return `${Math.max(0, s).toFixed(0)} s`;
+  if (s >= 86400) return formatDuration(s);
+  const t = Math.floor(s), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = String(t % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+};
 
 /**
  * Fly a maneuver node the way a careful pilot does:
@@ -506,6 +498,9 @@ const fmtS = (s: number) => (!Number.isFinite(s) ? '—' : s >= 90 ? formatDurat
  */
 export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeOptions = {}): Autopilot & { dvUsed(): number; remaining(): number; residual(): number } {
   if (world.preciseGravity) world.message('Precise gravity prediction differs from patched-conic planning. This node may need a correction burn.', 'warn', 10);
+  // The program flies this node: no "node in 30 s" alarm (it would stop the program's own warp and linger as ✓).
+  const owner = world.active?.state.id;
+  if (owner) world.alarmClock.quietNode(owner, node);
   const minStage = opts.minStage ?? 0;
   const alignLead = opts.alignLead ?? 20;
   const tail = opts.tail ?? 1.5;
@@ -545,8 +540,11 @@ export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeO
     steerDir = dvDir;
     dv0 = length(dvRem);
     guide = null;
+    // The planned patch ends at an SOI change, impact or the next node: aim no farther.
+    const patch = w.trajectory().find(p => Math.abs(p.startTime - node.time) < 1e-3 && p.orbit.body === o.body);
+    const until = patch && patch.endReason !== 'horizon' ? patch.endTime : Infinity;
     try {
-      guide = guidanceTarget(stateToElements(o.mu, o.body, plan.position, target, node.time), node.time, w.universe.body(o.body).soi);
+      guide = guidanceTarget(stateToElements(o.mu, o.body, plan.position, target, node.time), node.time, w.universe.body(o.body).soi, until);
     } catch { /* degenerate planned orbit: open-loop burn */ }
     const { stages, burning, lit, dv } = usableStages(wv.state, minStage);
     const deliverable = Math.min(dv0, dv);
@@ -555,8 +553,20 @@ export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeO
     burnStart = node.time - (Number.isFinite(half) ? half : 0);
     if (dv < dv0 - 0.5) w.message(`Node needs ${dv0.toFixed(0)} m/s; the usable stages hold ${dv.toFixed(0)} m/s`, 'warn', 8);
   };
+  /** Velocity change still needed to reach the planned aim point on time from here (null: no usable guidance). */
+  const guidedRemaining = (w: World): Vec3 | null => {
+    if (!guide || guide.time - w.ut <= 1) return null;
+    try {
+      const rs = w.relativeState(w.active!);
+      const need = solveLambertAround(w.universe.body(w.active!.body).gm, rs.position, guide.position, guide.time - w.ut, guide.normal).departureVelocity;
+      return sub(need, rs.velocity);
+    } catch { return null; }
+  };
   const finish = (w: World) => {
-    residual = length(sub(target, propagate(w.orbitOf(w.active!), node.time).velocity));
+    // Guided burns are judged against the trajectory they flew to (a finite burn cannot equal the impulsive velocity
+    // at the node time); unguided ones against the planned post-burn velocity.
+    const miss = guidedRemaining(w);
+    residual = miss ? length(miss) : length(sub(target, propagate(w.orbitOf(w.active!), node.time).velocity));
     phase = 'done';
     ap.done = true;
     ap.status = `Done · ${residual.toFixed(1)} m/s off the plan`;
@@ -572,6 +582,8 @@ export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeO
     release() {
       const commands: VesselCommand[] = [...limiters].map(([uid, prev]) => ({ kind: 'tweak', uid, tweaks: { thrustLimit: prev }, symmetric: false }));
       limiters.clear();
+      // Cancelled or failed with the node still planned: the pilot gets its reminder back.
+      if (owner && !ap.done) world.alarmClock.unquietNode(owner, node);
       return commands;
     },
     update(w) {
@@ -594,15 +606,12 @@ export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeO
         dvRem = sub(dvRem, scale(a, dt));
         used += length(a) * dt;
       }
-      if (phase === 'burn' && guide && guide.time - w.ut > 1) {
+      if (phase === 'burn' || phase === 'cutoff') {
         // The velocity that reaches the planned aim point on time from here, minus the current velocity: this
-        // absorbs finite-burn losses, burn timing and steering errors that open-loop Δv tracking leaves behind.
-        try {
-          const rs = w.relativeState(wv);
-          const need = solveLambertAround(w.universe.body(wv.body).gm, rs.position, guide.position, guide.time - w.ut, guide.normal).departureVelocity;
-          const rem = sub(need, rs.velocity);
-          if (length(rem) < 2 * dv0 + 10) { dvRem = rem; guided = true; }
-        } catch { /* fall back to the integrated estimate this frame */ }
+        // absorbs finite-burn losses, burn timing (a late start after a reload) and steering errors that open-loop
+        // Δv tracking leaves behind. Else fall back to the integrated estimate this frame.
+        const rem = guidedRemaining(w);
+        if (rem && length(rem) < 2 * dv0 + 10) { dvRem = rem; guided = true; }
       }
       // Steer along the remaining dv vector; once it is nearly used up its direction is just noise, so keep
       // the last good direction (the energy criterion may still ask for a few m/s of finite-burn losses).
@@ -636,11 +645,11 @@ export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeO
         }
         phase = 'burn';
       }
-      // Remaining Δv along the burn. Guidance steers; for mostly along-track burns the cut still comes from the
-      // planned orbital energy, which fixes the transfer timing far more tightly than an aim point a quarter turn
-      // ahead can (TLI: 0.1 m/s moves the lunar periapsis by tens of km).
+      // Remaining Δv along the burn. Guided burns steer and cut on the aim point: reaching it on time fixes the
+      // transfer's energy and orientation together (TLI: 0.1 m/s moves the lunar periapsis by tens of km). Without
+      // guidance, mostly along-track burns cut on the planned orbital energy.
       let along = dot(dvRem, guided ? steerDir : dvDir);
-      if (opts.matchEnergy !== false) {
+      if (opts.matchEnergy !== false && !guided) {
         const rs = w.relativeState(wv);
         const mu = w.universe.body(wv.body).gm;
         const vAlong = dot(rs.velocity, dvDir);
@@ -734,14 +743,18 @@ export interface BrakingPrediction {
  * body rotation, falling mass). Used by the landing controller to time and throttle its suicide burn.
  */
 export function predictBraking(world: World, wv: WorldVessel, fraction: number, maxTime = 900): BrakingPrediction {
+  const rs = world.relativeState(wv);
+  return predictBrakingFrom(world, wv, rs.position, rs.velocity, world.ut, fraction, propulsion(wv.state), maxTime);
+}
+
+/** `predictBraking` for a burn starting at `t0` from the body-relative state (r0, v0), e.g. a later point of the coast. */
+function predictBrakingFrom(world: World, wv: WorldVessel, r0: Vec3, v0: Vec3, t0: number, fraction: number, prop: Propulsion, maxTime = 900): BrakingPrediction {
   const u = world.universe;
   const body = u.body(wv.body);
   const terrain = u.terrain(wv.body);
-  const prop = propulsion(wv.state);
   const bottom = world.bottomOffset(wv.state);
-  const rs = world.relativeState(wv);
-  let r = rs.position;
-  let v = rs.velocity;
+  let r = r0;
+  let v = v0;
   let m = wv.state.mass;
   const F = prop.thrust * fraction;
   const mdot = prop.massFlow * fraction;
@@ -754,7 +767,7 @@ export function predictBraking(world: World, wv: WorldVessel, fraction: number, 
   let t = 0;
   let lastCheck = -Infinity;
   while (t < maxTime) {
-    const vs = sub(v, u.ephem.surfaceVelocity(wv.body, r, world.ut));
+    const vs = sub(v, u.ephem.surfaceVelocity(wv.body, r, t0));
     const speed = length(vs);
     const rr = length(r);
     const aT = F / Math.max(1, m);
@@ -768,11 +781,11 @@ export function predictBraking(world: World, wv: WorldVessel, fraction: number, 
     t += dt;
     if (length(r) < ceiling && t - lastCheck > 0.5) {
       lastCheck = t;
-      const h = heightAt(r, world.ut + t);
-      if (h < 0) return { stopHeight: -length(sub(v, u.ephem.surfaceVelocity(wv.body, r, world.ut))) - 1, time: t, impact: true };
+      const h = heightAt(r, t0 + t);
+      if (h < 0) return { stopHeight: -length(sub(v, u.ephem.surfaceVelocity(wv.body, r, t0))) - 1, time: t, impact: true };
     }
   }
-  return { stopHeight: heightAt(r, world.ut + t), time: t, impact: false };
+  return { stopHeight: heightAt(r, t0 + t), time: t, impact: false };
 }
 
 /** Tangent basis at a body-fixed unit direction. */
@@ -846,42 +859,180 @@ export interface LandingOptions {
   divertRadius?: number;
 }
 
-/**
- * Powered landing on an airless body from orbit:
- *  1. deorbit — burn retrograde until the periapsis is below the surface;
- *  2. coast — (warpable) until the braking burn is near, then predict the stop point each frame;
- *  3. brake — "suicide burn": throttle chosen by bisection so the predicted stop point (surface-retrograde
- *     constant-throttle burn) sits `stopHeight` above the terrain under it;
- *  4. terminal — pick the nearest spot with a gentle enough slope (divert if needed), then a velocity-tracking
- *     descent: fly over the site, sink at a rate proportional to radar altitude down to `touchdownSpeed`;
- *  5. landed — engine off once the legs carry the vessel and it has settled.
- * `touchdownSpeed()` reports the surface-relative speed at first ground contact.
- */
 /** Throttle fraction the braking burn is planned at (the rest is margin). */
 const PLANNING_THROTTLE = 0.75;
+/** A stage hovers outright when its lowest thrust is at most this fraction of its landing weight. */
+const HOVER_MARGIN = 0.95;
+/**
+ * Above that, the terminal phase pulses the minimum setting (engine spool smooths the pulses into an average). That
+ * holds a hover down to a 25% duty; a minimum heavier than this many landing weights can only fall or climb.
+ */
+const PULSE_FLOOR = 4;
+/** Braking needs a thrust-to-weight of at least this at the start of the landing stage. */
+const MIN_LANDING_TWR = 1.3;
+/** Seconds before the solved braking start at which warp ends (the last stretch is sampled at 2 Hz at 1×). */
+const BRAKE_LEAD = 15;
 
+export interface LandingStagePlan {
+  /** Stage whose engines fly the landing: the one burning now, or one to stage down to before the deorbit burn. */
+  stage: number;
+  /** Δv the landing is expected to need from here, m/s. */
+  dvNeeded: number;
+  /** Set when no allowed stage can land here (the program refuses to start). */
+  error?: string;
+  /** Set when the landing can be flown but looks marginal. */
+  warning?: string;
+}
+
+/**
+ * Pick the stage to land on before anything is burned. A landing ends in a hover: the stage's engines at minimum
+ * throttle should weigh less than the craft at touchdown, or at most `PULSE_FLOOR` times as much so the terminal phase
+ * can pulse them (a booster at 55% minimum on the Moon outweighs it ~8 times over and can only fall or climb). It must
+ * out-thrust gravity enough to brake, and it should hold the landing Δv.
+ * Picks the first stage in firing order that qualifies, so a full stack drops its booster and transfer stage in
+ * orbit rather than flying a landing it cannot finish.
+ */
+export function planLandingStage(world: World, wv: WorldVessel, minStage = 0): LandingStagePlan {
+  const f = localFrame(world, wv);
+  const g = f.body.gm / (f.body.radius * f.body.radius);
+  const height = Math.max(0, f.altitude);
+  // Kill the surface-relative velocity and the fall from here, with gravity losses on top.
+  const dvNeeded = 1.15 * Math.sqrt(length(f.surfVel) ** 2 + 2 * g * height) + 30;
+  const { stages, burning } = usableStages(wv.state, minStage);
+  const candidates = stages.filter(s => s.dv > 0 && s.thrustVac > 0).sort((a, b) => b.stage - a.stage);
+  const plan = (stage: number, warning?: string): LandingStagePlan => ({ stage, dvNeeded, warning });
+  if (!candidates.length) return { stage: burning, dvNeeded, error: 'no engine with fuel in the allowed stages' };
+  const fits = candidates.map(s => {
+    const landMass = Math.max(s.endMass, s.startMass * Math.exp(-Math.min(dvNeeded, s.dv) / (Math.max(1, s.isp) * G0)));
+    return { s, floor: s.minThrustVac / (landMass * g), twr: s.thrustVac / (s.startMass * g) };
+  });
+  // Prefer a stage that hovers outright; else one whose minimum can be pulsed down to a hover.
+  const hovering = fits.filter(c => c.floor <= HOVER_MARGIN && c.twr >= MIN_LANDING_TWR);
+  const able = hovering.length ? hovering : fits.filter(c => c.floor <= PULSE_FLOOR && c.twr >= MIN_LANDING_TWR);
+  const best = able.find(c => c.s.dv >= dvNeeded) ?? able[0];
+  if (best) {
+    // Stages fired to get there (nextStage down to the landing stage) must not open parachutes.
+    const blocked = wv.state.parts.some(p => p.stage !== undefined && p.stage >= best.s.stage && p.stage <= wv.state.nextStage && !p.activated && p.chute);
+    if (blocked) return { stage: best.s.stage, dvNeeded, error: 'the stages to drop before landing hold parachutes; stage manually' };
+    return plan(best.s.stage, best.s.dv < dvNeeded ? `Landing needs ~${dvNeeded.toFixed(0)} m/s; the landing stage holds ${best.s.dv.toFixed(0)} m/s` : undefined);
+  }
+  const first = fits[0];
+  if (fits.every(c => c.floor > PULSE_FLOOR))
+    return { stage: first.s.stage, dvNeeded, error: `the engines cannot throttle low enough to land here (minimum thrust ${first.floor.toFixed(1)}× the landing weight) and no allowed stage below can` };
+  return { stage: first.s.stage, dvNeeded, error: `too little thrust to brake for a landing here (thrust-to-weight ${Math.max(...fits.map(c => c.twr)).toFixed(2)})` };
+}
+
+/** Conic time when the coast first reaches radius `rStop` (searched over one period from `t0`), or null. */
+function timeToRadius(o: Orbit, t0: number, rStop: number): number | null {
+  const T = period(o);
+  const span = Number.isFinite(T) ? T : 1e5;
+  const step = Math.max(1, span / 400);
+  let prev = t0;
+  for (let t = t0; t <= t0 + span; t += step) {
+    if (length(propagate(o, t).position) <= rStop) {
+      // Refine within the last step.
+      let lo = prev, hi = t;
+      for (let k = 0; k < 20; k++) {
+        const mid = (lo + hi) / 2;
+        if (length(propagate(o, mid).position) <= rStop) hi = mid;
+        else lo = mid;
+      }
+      return hi;
+    }
+    prev = t;
+  }
+  return null;
+}
+
+/**
+ * Powered landing on an airless body from orbit:
+ *  0. stage — if the stage burning now cannot hover here (see `planLandingStage`), stage down to one that can while
+ *     still in orbit; refuse (error) when none can;
+ *  1. deorbit — burn retrograde until the periapsis is below the surface;
+ *  2. coast — warpable: the braking start is solved once along the coasting conic (the same constant-throttle braking
+ *     prediction, from future points of the coast), warp ends `BRAKE_LEAD` s before it, then the stop point is
+ *     predicted at 2 Hz;
+ *  3. brake — "suicide burn": throttle chosen by bisection (never below the engines' minimum) so the predicted stop
+ *     point (surface-retrograde constant-throttle burn) sits `stopHeight` above the terrain under it;
+ *  4. terminal — pick the nearest spot with a gentle enough slope (divert if needed), then a velocity-tracking
+ *     descent: fly over the site, sink at a rate proportional to radar altitude down to `touchdownSpeed`;
+ *  5. landed — engine off once the legs carry the vessel and it has settled. Contact that costs parts (or the
+ *     vessel) is a crash: `error` says so instead of reporting a landing.
+ * `touchdown` reports the surface-relative speed at first ground contact.
+ */
 export function landingController(world: World, opts: LandingOptions = {}): Autopilot & { touchdown: { speed: number; time: number } | null } {
-  const stager = new AutoStager(opts.minStage ?? 0);
+  const minStage = opts.minStage ?? 0;
+  const stager = new AutoStager(minStage);
+  const owner = world.active?.state.id;
   // Tall craft need clearance to rotate upright after cancelling orbital velocity.
-  const craftRadius = world.active?.state.cache.boundingRadius ?? 0;
-  const stopTarget = opts.stopHeight ?? (craftRadius > 8 ? 30 * craftRadius : 60);
+  let craftRadius = world.active?.state.cache.boundingRadius ?? 0;
+  let stopTarget = opts.stopHeight ?? (craftRadius > 8 ? 30 * craftRadius : 60);
   const vTouch = opts.touchdownSpeed ?? 1.5;
+  type Phase = 'plan' | 'stage' | 'deorbit' | 'coast' | 'brake' | 'terminal' | 'landed' | 'done' | 'failed';
+  let phase: Phase = 'plan';
+  let landingStage = -1;
   let lastUt = world.ut;
-  let gateTime = -Infinity;
+  let stageCooldown = 0;
+  let separation = 0;
+  let brakeAt = NaN;
+  let coastTo = NaN;
   let nextCoastSolve = -Infinity;
+  let nextResolve = -Infinity;
   let settled = 0;
   let lastSolve = -Infinity;
   let brakeFraction = 1;
   let lastFlyingSpeed = 0;
+  let partsAtContact = 0;
   let site: Vec3 | null = null;
   const maxSlope = opts.maxSlope ?? (8 * Math.PI) / 180;
+  const fail = (why: string, status: string) => {
+    phase = 'failed';
+    ap.error = why;
+    ap.status = status;
+    return { input: neutralInput({ sas: 'stabilityAssist', throttle: 0 }) };
+  };
+  /** Throttle fraction the coast plans its braking start at (above any minimum throttle, with margin). */
+  const planningFraction = (minThrottle: number) => Math.max(PLANNING_THROTTLE, minThrottle + 0.5 * (1 - minThrottle));
+  /** Clearance the 2 Hz braking trigger keeps above the stop target for a coast state. */
+  const triggerHeight = (surfVel: Vec3, up: Vec3) => stopTarget + Math.max(0.1 * length(surfVel), 0.6 * Math.abs(dot(surfVel, up)));
+  /** Latest time along the coasting conic at which the braking burn may start (now if it is already due). */
+  const solveBrakeStart = (w: World, wv: WorldVessel): number => {
+    const u = w.universe;
+    const body = u.body(wv.body);
+    const o = w.orbitOf(wv);
+    const prop = propulsion(wv.state);
+    const frac = planningFraction(prop.minThrottle);
+    const early = (t: number) => {
+      const s = propagate(o, t);
+      const pred = predictBrakingFrom(w, wv, s.position, s.velocity, t, frac, prop);
+      const surfVel = sub(s.velocity, u.ephem.surfaceVelocity(wv.body, s.position, t));
+      return !pred.impact && pred.stopHeight > triggerHeight(surfVel, normalize(s.position));
+    };
+    if (!early(w.ut)) return w.ut;
+    const ceiling = body.radius + u.terrain(wv.body).maxHeight + w.bottomOffset(wv.state);
+    const reach = timeToRadius(o, w.ut, ceiling);
+    // Not below the highest terrain within a period (or still early there): re-solve at 1× when that time comes.
+    if (reach === null || early(reach)) return reach ?? w.ut + (Number.isFinite(period(o)) ? period(o) : 600);
+    let lo = w.ut, hi = reach;
+    for (let k = 0; k < 16 && hi - lo > 0.25; k++) {
+      const mid = (lo + hi) / 2;
+      if (early(mid)) lo = mid;
+      else hi = mid;
+    }
+    return lo;
+  };
   const ap: Autopilot & { touchdown: { speed: number; time: number } | null } = {
     name: 'landing',
-    status: 'deorbit',
+    status: 'planning the descent',
     done: false,
     touchdown: null,
     update(w) {
-      const wv = w.active!;
+      const wv = w.active;
+      if (phase === 'failed' || phase === 'done') return { input: neutralInput({ sas: 'stabilityAssist', throttle: 0 }) };
+      if (!wv || wv.state.id !== owner || wv.state.destroyed) {
+        const speed = ap.touchdown?.speed ?? lastFlyingSpeed;
+        return fail(`crashed: vessel lost on impact at ${speed.toFixed(1)} m/s`, `crashed · ${speed.toFixed(1)} m/s`);
+      }
       const v = wv.state;
       const dt = Math.max(0, w.ut - lastUt);
       lastUt = w.ut;
@@ -897,48 +1048,87 @@ export function landingController(world: World, opts: LandingOptions = {}): Auto
         return { input: steer(dir, throttle, { stage, gear: gearDown ? true : undefined }) };
       };
 
-      if (ap.status === 'deorbit') {
+      if (phase === 'plan') {
+        if (v.situation !== 'flying') phase = 'terminal';
+        else {
+          const plan = planLandingStage(w, wv, minStage);
+          if (plan.error) return fail(plan.error, 'cannot land with this craft');
+          if (plan.warning) w.message(plan.warning, 'warn', 8);
+          landingStage = plan.stage;
+          phase = v.nextStage >= landingStage ? 'stage' : 'deorbit';
+          if (phase === 'stage' && propulsion(v).thrust > 0) w.message('Assist: staging to the landing stage (the current engines cannot throttle low enough to hover)', 'info', 6);
+        }
+      }
+      if (phase === 'stage') {
+        // Fire stages (engines idle) until the landing stage's engines are lit, then let the dropped hardware drift
+        // clear before the deorbit burn points the engine at it.
+        stageCooldown -= dt;
+        if (v.nextStage >= landingStage) {
+          ap.status = `staging to the landing stage · stage ${v.nextStage}`;
+          const fire = stageCooldown <= 0;
+          if (fire) stageCooldown = 1;
+          return { input: neutralInput({ sas: 'stabilityAssist', throttle: 0, stage: fire }) };
+        }
+        separation += dt;
+        if (separation < 4) {
+          ap.status = 'staging to the landing stage · separating';
+          return { input: neutralInput({ sas: 'stabilityAssist', throttle: 0 }) };
+        }
+        craftRadius = v.cache.boundingRadius;
+        if (opts.stopHeight === undefined) stopTarget = craftRadius > 8 ? 30 * craftRadius : 60;
+        phase = 'deorbit';
+      }
+      if (phase === 'deorbit') {
         const peTarget = opts.deorbitPeriapsis ?? -0.04 * body.radius;
         const pe = periapsisRadius(o) - body.radius;
         const retro = scale(normalize(f.rs.velocity), -1);
         if (pe > peTarget) {
           const err = angleBetween(noseDirection(v), retro);
           const frac = err < 0.05 ? clamp((pe - peTarget) / 2000, 0.05, 1) : 0;
+          ap.status = frac > 0
+            ? `deorbit burn · periapsis ${(pe / 1000).toFixed(1)} km → ${(peTarget / 1000).toFixed(1)} km`
+            : `deorbit · turning retrograde · ${((err * 180) / Math.PI).toFixed(0)}° to go`;
           return input(retro, throttleForFraction(frac, prop.minThrottle));
         }
-        ap.status = 'coast';
-        // Gate: when the descending trajectory crosses this radius, start predicting the braking burn.
-        const gateR = body.radius + terrain.maxHeight + Math.max(8000, 0.06 * body.radius);
-        gateTime = w.ut;
-        if (length(f.rs.position) > gateR) {
-          for (let t = w.ut; t < w.ut + (isFinite(period(o)) ? period(o) : 1e5); t += 5) {
-            if (length(propagate(o, t).position) <= gateR) { gateTime = t; break; }
-          }
-        }
+        phase = 'coast';
+        brakeAt = solveBrakeStart(w, wv);
+        coastTo = brakeAt - BRAKE_LEAD;
       }
-      if (ap.status === 'coast') {
+      if (phase === 'coast') {
         const retro = scale(normalize(f.surfVel), -1);
-        if (w.ut < gateTime - 30) return { ...input(retro, 0), coastUntil: gateTime - 30 };
+        if (w.ut < coastTo) {
+          ap.status = `coast · braking burn in ${fmtS(brakeAt - w.ut)}`;
+          return { ...input(retro, 0), coastUntil: coastTo };
+        }
+        if (w.ut >= nextResolve && brakeAt - w.ut < -BRAKE_LEAD) {
+          // Past the solved start and still early (the conic had not reached the terrain yet): solve again.
+          nextResolve = w.ut + 10;
+          brakeAt = solveBrakeStart(w, wv);
+          coastTo = brakeAt - BRAKE_LEAD;
+          if (w.ut < coastTo) return { ...input(retro, 0), coastUntil: coastTo };
+        }
+        ap.status = `coast · braking burn in ${fmtS(Math.max(0, brakeAt - w.ut))}`;
         // Start braking when a burn at the planning throttle would only just stop in time; the remaining
         // throttle range is the margin for terrain surprises.
         // Re-solving a minutes-long burn at 50 Hz dominates full-size Moon missions.
         // Sample at 2 Hz, with a full sample interval of vertical clearance as margin.
         if (w.ut < nextCoastSolve) return input(retro, 0);
         nextCoastSolve = w.ut + 0.5;
-        const pred = predictBraking(w, wv, PLANNING_THROTTLE);
-        if (!pred.impact && pred.stopHeight > stopTarget + Math.max(0.1 * length(f.surfVel), 0.6 * Math.abs(dot(f.surfVel, f.up)))) return input(retro, 0);
-        ap.status = 'brake';
+        const pred = predictBraking(w, wv, planningFraction(prop.minThrottle));
+        if (!pred.impact && pred.stopHeight > triggerHeight(f.surfVel, f.up)) return input(retro, 0);
+        phase = 'brake';
       }
-      if (ap.status === 'brake') {
+      if (phase === 'brake') {
         const retro = scale(normalize(f.surfVel), -1);
         const radar = radarAltitude(w, wv);
         const speed = length(f.surfVel);
-        if (speed < 15 || radar < 80) ap.status = 'terminal';
+        if (speed < 15 || radar < 80) phase = 'terminal';
         else {
           if (w.ut - lastSolve >= 0.1) {
             lastSolve = w.ut;
-            // Lowest throttle whose predicted stop point is at least stopTarget above the terrain.
-            let lo = 0.05, hi = 1;
+            // Lowest throttle whose predicted stop point is at least stopTarget above the terrain. The engines cannot
+            // run below their minimum, so the search starts there (a stop above the target then just comes early).
+            let lo = Math.max(0.05, prop.minThrottle), hi = 1;
             if (predictBraking(w, wv, hi).stopHeight < stopTarget) lo = hi;
             else
               for (let k = 0; k < 8; k++) {
@@ -948,16 +1138,18 @@ export function landingController(world: World, opts: LandingOptions = {}): Auto
               }
             brakeFraction = Math.max(lo, hi);
           }
+          ap.status = `braking · ${speed.toFixed(0)} m/s · ${radar >= 1000 ? `${(radar / 1000).toFixed(1)} km` : `${radar.toFixed(0)} m`} up`;
           const err = angleBetween(noseDirection(v), retro);
           return input(retro, err < 0.3 ? throttleForFraction(brakeFraction, prop.minThrottle) : 0);
         }
       }
-      if (ap.status === 'terminal') {
+      if (phase === 'terminal') {
         if (v.situation !== 'flying') {
           if (!ap.touchdown) ap.touchdown = { speed: lastFlyingSpeed, time: w.ut };
-          ap.status = 'landed';
+          phase = 'landed';
         } else {
           lastFlyingSpeed = length(f.surfVel);
+          partsAtContact = v.parts.length;
           const u = w.universe;
           const info = u.surfaceInfo(wv.body, v.position, w.ut);
           if (!site) site = findLandingSite(w, wv.body, info.fixedDir, maxSlope, opts.divertRadius ?? 400) ?? info.fixedDir;
@@ -971,6 +1163,7 @@ export function landingController(world: World, opts: LandingOptions = {}): Auto
           const vVert = dot(f.surfVel, f.up);
           const vHor = sub(f.surfVel, scale(f.up, vVert));
           const hSpeed = length(vHor);
+          ap.status = `final descent · ${radar.toFixed(0)} m · ${Math.abs(vVert).toFixed(1)} m/s down`;
           // Velocity tracking: fly over the site, sink at a rate proportional to radar altitude; while still
           // translating (or sliding sideways) near the ground, hold ~30 m.
           // A tall stack rotates more slowly; avoid chasing the site faster than attitude can follow.
@@ -991,19 +1184,26 @@ export function landingController(world: World, opts: LandingOptions = {}): Auto
           // Point within the tilt cone even when no vertical thrust is wanted right now, so the engine is
           // never facing sideways when it is needed again.
           const dir = normalize(add(scale(f.up, Math.max(aUp, 0.5 * f.g)), aHor));
-          // A high-thrust engine's minimum setting can exceed lunar hover thrust.
-          // Pulse that minimum rather than commanding it continuously and climbing away.
           const demand = clamp(frac, 0, 1);
+          // A high-thrust engine's minimum setting can exceed hover thrust (see PULSE_FLOOR).
+          // Pulse that minimum rather than commanding it continuously and climbing away.
           const pulse = demand > 0 && demand < prop.minThrottle;
           const on = !pulse || (w.ut % 0.25) < 0.25 * demand / prop.minThrottle;
           return input(dir, on ? throttleForFraction(demand, prop.minThrottle) : 0);
         }
       }
-      if (ap.status === 'landed') {
+      if (phase === 'landed') {
+        // Parts lost at or after contact (a leg, the engine, the whole stack) make it a crash, not a landing.
+        const lost = partsAtContact - v.parts.length;
+        const speed = ap.touchdown?.speed ?? lastFlyingSpeed;
+        if (lost > 0) return fail(`crashed: hit the ground at ${speed.toFixed(1)} m/s and lost ${lost} part${lost === 1 ? '' : 's'}`, `crashed · ${speed.toFixed(1)} m/s · ${lost} part${lost === 1 ? '' : 's'} lost`);
+        ap.status = `touchdown · ${speed.toFixed(1)} m/s · settling`;
         settled = length(f.surfVel) < 0.3 && v.situation !== 'flying' ? settled + dt : 0;
         if (settled > 3) {
+          if (dot(noseDirection(v), f.up) < 0.5) return fail(`landed at ${speed.toFixed(1)} m/s but tipped over`, 'tipped over');
+          phase = 'done';
           ap.done = true;
-          ap.status = 'done';
+          ap.status = `landed · touchdown ${speed.toFixed(1)} m/s`;
         }
         return { input: neutralInput({ sas: 'stabilityAssist', throttle: 0, gear: true }) };
       }

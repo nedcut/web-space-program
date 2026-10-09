@@ -14,6 +14,38 @@ import type { ContactPass } from './contact';
 /** N / N m, by diameter class (0.625, 1.25, 2.5, 3.75, 5 m). */
 const STACK_FORCE = [250_000, 1_500_000, 12_000_000, 40_000_000, 100_000_000];
 const STACK_TORQUE = [120_000, 800_000, 10_000_000, 30_000_000, 100_000_000];
+/** Additional crossflow fatigue envelope for rigid rocket barrels. Pa and sin²(AoA). */
+export const AERO_FAILURE_Q = 60_000;
+export const AERO_FAILURE_SIN2 = Math.sin(25 * Math.PI / 180) ** 2;
+/** Warn-only band: from 70% of both limits the hull creaks, but nothing accumulates damage. */
+export const AERO_WARN_FRACTION = 0.7;
+/** Crossflow breakup follows the first warning by this many seconds (mildest / most extreme exposure). */
+export const AERO_BREAKUP_SLOWEST = 2.4;
+export const AERO_BREAKUP_FASTEST = 0.8;
+/** Stress at which breakup reaches its fastest; ~Mach 2 sideways at 3 km is far beyond it. */
+const AERO_STRESS_CAP = AERO_BREAKUP_SLOWEST / AERO_BREAKUP_FASTEST;
+/** Re-sounding interval of the warning while the hull stays in the envelope. */
+export const AERO_WARN_INTERVAL = 0.5;
+/** After leaving the envelope, crossflow fatigue is metal fatigue, not a numerical spike: it relaxes this slowly. */
+export const AERO_RECOVERY_TIME = 3;
+const AERO_RECOVERY_RATE = 0.08 / 2;
+/**
+ * Normalized crossflow exposure q/q₀ · sin²α/sin²α₀, symmetric nose-first / shield-first; no angle/vector
+ * allocation. ≥ 1 only past both limits (breakup envelope); 0.49–0.99 in the warn-only band; else 0.
+ */
+export function aerodynamicStress(q: number, velocity: Vec3): number {
+  if (q <= AERO_WARN_FRACTION * AERO_FAILURE_Q) return 0;
+  const speed2 = dot(velocity, velocity);
+  const lateral2 = velocity.x * velocity.x + velocity.z * velocity.z;
+  const sin2 = speed2 > 0 ? lateral2 / speed2 : 0;
+  if (sin2 <= AERO_WARN_FRACTION * AERO_FAILURE_SIN2) return 0;
+  const stress = q / AERO_FAILURE_Q * sin2 / AERO_FAILURE_SIN2;
+  return q > AERO_FAILURE_Q && sin2 > AERO_FAILURE_SIN2 ? stress : Math.min(0.99, stress);
+}
+/** Fatigue per second under crossflow: 0.08 (the failure threshold) over a 2.4 s … 0.8 s breakup time. */
+export function aeroFatigueRate(stress: number): number {
+  return 0.08 * Math.min(AERO_STRESS_CAP, stress) / AERO_BREAKUP_SLOWEST;
+}
 
 export function jointPoint(p: PartState): Vec3 {
   const node = p.def.attachNodes.find(n => n.id === p.attachNode);
@@ -126,10 +158,30 @@ export function evaluateJointLoads(v: VesselState, loads: PartLoad[], omega = v.
   return out;
 }
 
-/** 80 ms continuous exposure at >=2x rating; recovery only below 85%, so brief numerical spikes do not flicker. */
-export function overloadedJoints(v: VesselState, loads: PartLoad[], dt: number, omega = v.angularVelocity, result?: StepResult): number[] {
+/**
+ * 80 ms at >=2x rating; recovery below 85% rejects brief numerical spikes. Inside the crossflow envelope
+ * every joint accumulates at the readable crossflow rate (never faster than 0.8 s), after a warning that
+ * re-sounds every 0.5 s.
+ */
+export function overloadedJoints(v: VesselState, loads: PartLoad[], dt: number, omega = v.angularVelocity, result?: StepResult, aeroStress = 0): number[] {
   const cuts: number[] = [];
   let readings = evaluateJointLoads(v, loads, omega);
+  if (aeroStress > 0) {
+    v.cache.aeroHold = AERO_RECOVERY_TIME;
+    v.cache.aeroWarnClock = (v.cache.aeroWarnClock ?? AERO_WARN_INTERVAL) + dt;
+    if (v.cache.aeroWarnClock >= AERO_WARN_INTERVAL) {
+      v.cache.aeroWarnClock = 0;
+      result?.events.push({ type: 'structuralWarning', vesselId: v.id, loadFraction: aeroStress });
+    }
+  } else if (v.cache.aeroHold !== undefined) {
+    // Briefly leaving and re-entering the envelope neither re-warns nor resets the fatigue.
+    v.cache.aeroWarnClock = (v.cache.aeroWarnClock ?? 0) + dt;
+    v.cache.aeroHold -= dt;
+  }
+  const recovering = v.cache.aeroHold !== undefined && v.cache.aeroHold > 0;
+  if (!recovering) { delete v.cache.aeroHold; delete v.cache.aeroWarnClock; }
+  const crossflow = aeroStress >= 1;
+  const crossflowRate = crossflow ? aeroFatigueRate(aeroStress) : 0;
   let broken = false;
   for (const p of activeLinks(v, 'strut')) {
     const spec = linkModule(p)!;
@@ -149,9 +201,20 @@ export function overloadedJoints(v: VesselState, loads: PartLoad[], dt: number, 
   }
   for (const [uid, load] of readings) {
     const p = v.cache.byUid.get(uid)!;
+    // A barrel's distributed bending/buffeting is unresolved by a single rigid body. Accumulate it in
+    // the existing saved/replicated joint fatigue at a readable rate: breakup follows the first warning by
+    // 0.8–2.4 s, however violent the exposure, so the pilot hears the creaks and has a moment to recover.
+    // Preserve ordinary Newton–Euler overloads and explicit ratings outside the envelope; wing roots and
+    // fairing-enclosed payloads retain their measured loads. Aligned launches and shield-first entries
+    // never enter this envelope.
+    const shape = p.def.shape;
+    if (crossflow && shape.kind === 'cylinder' && shape.height > 2 * Math.max(shape.radiusTop, shape.radiusBottom)
+      && !v.cache.shielded?.has(uid)) {
+      load.fraction = Math.max(load.fraction, 1 + crossflowRate);
+    }
     let fatigue = p.structuralFatigue ?? 0;
-    if (load.fraction > 1) fatigue += dt * Math.min(1, load.fraction - 1);
-    else if (load.fraction < 0.85) fatigue = Math.max(0, fatigue - dt * 2);
+    if (load.fraction > 1) fatigue += dt * Math.min(crossflow ? crossflowRate : 1, load.fraction - 1);
+    else if (load.fraction < 0.85) fatigue = Math.max(0, fatigue - dt * (recovering ? AERO_RECOVERY_RATE : 2));
     if (fatigue > 0) p.structuralFatigue = fatigue;
     else delete p.structuralFatigue;
     if (fatigue >= 0.08) cuts.push(uid);
