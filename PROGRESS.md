@@ -1,6 +1,21 @@
 # Progress Report
 
-_Last updated: 2026-10-08_
+_Last updated: 2026-10-09_
+
+## Colour variant batching (2026-10-09, op/variantmerge)
+
+- Accent paints, anodised metals and foil colours share batch materials, with colour baked into existing
+  vertex colours once at rebuild. Source meshes, editor highlighting, heat and moving-node slots are preserved;
+  no new frame-loop work, shader variants or texture lookups.
+- Chrome CDP / RTX 3060 Ti, Medium, Selene: pad **106 → 103 draws**, orbit **59 → 56**. Full-frame CPU
+  **1.818 → 1.726 ms** / **1.633 → 1.566 ms**; GPU unchanged within noise (**2.439 → 2.429 ms** /
+  **2.010 → 2.007 ms**). Geometry/program counts unchanged. No intended visible behaviour change.
+- Same-frame batch/individual screenshots match visually through context restore, re-posing, heating,
+  stress and staging (≤ 0.008% differing pixels, mean ≤ 0.0005/255). Editor normal/selection/staging/hover
+  screenshots are pixel-identical to main. All checks pass: lint, typecheck, build, 1,676 tests (one skipped).
+- Existing main also changes launch-site scenery and logs GL deletion warnings after forced context loss;
+  vessel recovery works, but this scene-wide gap remains. Firefox/M-series timing is unverified.
+  Full measurements, screenshot paths and caveats: [colour batching evidence](docs/performance/variantmerge.md).
 
 ## Start here (for Ned)
 **Run it:** `npm install && npm run play` (optimised production build, opens http://localhost:4173). `npm run dev` is for development only: it serves unbundled modules with React's debug build and is much slower to load and run. Pick **New Game → Sandbox → Standard** for the easiest start;
