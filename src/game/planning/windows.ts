@@ -10,6 +10,7 @@ import { propagate, period, solveLambertAround, inertialDvToManeuver } from '../
 import { add, cross, dot, length, normalize, scale, sub, type Vec3 } from '../../util/vec3';
 import { nelderMead } from '../../util/nelderMead';
 import { ejectionVelocity } from '../interplanetary';
+import { arrivalPeriapsisAltitude } from './arrival';
 
 /** One departure option. Δv is an estimate (impulsive, aimed at the target's centre or on a direct return). */
 export interface TransferWindow {
@@ -167,7 +168,7 @@ export function transferWindows(world: PlanningWorld, targetId: string, search: 
       });
   }
   if (central.parent === targetId && closed) {
-    const peGoal = search.periapsisRadius ?? target.radius + (target.atmosphere ? target.atmosphere.height * 0.5 : 30000);
+    const peGoal = search.periapsisRadius ?? target.radius + arrivalPeriapsisAltitude(world, central.id, targetId, search.earliest);
     const vMoon = length(u.ephem.getRelativeState(central.id, search.earliest).velocity);
     // A fixed parking plane lines up with the way home twice a month: scan half of it, one revolution at a time.
     const span = search.span ?? Math.max(T, 0.5 * (central.orbitalPeriod ?? T));

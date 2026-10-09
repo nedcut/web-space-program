@@ -7,6 +7,7 @@ import { add, sub, scale, length, normalize, type Vec3 } from '../../util/vec3';
 import { nelderMead } from '../../util/nelderMead';
 import { planInterplanetaryTransfer, refine } from '../interplanetary';
 import { transferWindows, type TransferWindow } from './windows';
+import { arrivalPeriapsisAltitude } from './arrival';
 
 export interface TransferPlan {
   node: ManeuverNode;
@@ -87,7 +88,7 @@ function firstWindowTransfer(world: PlanningWorld, targetId: string, opts: Trans
   const T = period(o);
   if (!isFinite(T)) return null;
   const earliest = opts.earliest ?? world.ut + 300;
-  const peAlt = opts.periapsisAltitude ?? (target.atmosphere ? target.atmosphere.height * 0.5 : 30000);
+  const peAlt = opts.periapsisAltitude ?? arrivalPeriapsisAltitude(world, central.id, targetId, world.ut);
   const peGoal = target.radius + peAlt;
 
   report?.('Searching departures', 0);
@@ -239,7 +240,7 @@ export function planTransferToBody(world: PlanningWorld, targetId: string, opts:
     throw new Error(`planTransferToBody: ${targetId} is neither a child nor the parent of ${central.id}`);
   const outbound = target.parent === central.id;
   const earliest = opts.earliest ?? world.ut + 300;
-  const peAlt = opts.periapsisAltitude ?? (target.atmosphere ? target.atmosphere.height * 0.5 : 30000);
+  const peAlt = opts.periapsisAltitude ?? arrivalPeriapsisAltitude(world, central.id, targetId, world.ut);
   const tolerance = Math.max(5000, target.radius * 0.05);
   const T = period(o);
   const accurate = (p: TransferPlan | null): p is TransferPlan => !!p && p.node.time > world.ut && Math.abs(p.periapsisAltitude - peAlt) <= tolerance;
