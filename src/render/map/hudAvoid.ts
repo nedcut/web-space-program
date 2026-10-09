@@ -61,3 +61,15 @@ export function nudgeClear(rects: readonly LabelBox[], count: number, x: number,
   }
   return false;
 }
+
+/**
+ * Display spot for a maneuver node: the true point when it stands at least `margin` px clear of every rectangle,
+ * else the nearest spot that does (`fallback` px if `margin` cannot fit, e.g. a small viewport). Cover test and
+ * clearance use the same distance, so a node sliding towards a panel is pushed smoothly along its edge instead of
+ * jumping when it crosses a threshold. Returns true when `out` differs from the true point.
+ */
+export function nodeClearSpot(rects: readonly LabelBox[], count: number, x: number, y: number, width: number, height: number, margin: number, fallback: number, out: ClearPoint): boolean {
+  out.x = x; out.y = y;
+  if (!count || coveredIndex(rects, count, x, y, margin - 0.5) < 0) return false;
+  return nudgeClear(rects, count, x, y, width, height, margin, out) || nudgeClear(rects, count, x, y, width, height, fallback, out);
+}
