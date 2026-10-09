@@ -311,3 +311,24 @@ Decisions made autonomously while the owner was away. Each can be revisited.
 - **Keyboard:** one-second ramp to full digital attitude command, quick 12/s release. A 0.2 s tap reaches 20%; analog controls, translation, precision and trim retain their existing contracts. The powered 40 m/s tests use real FlightInput key events and include three seconds of SAS settling. Peak changes: Kestrel 1.01°, Meridian 0.14°, Selene 0.08°. Heavier stacks deliberately show more inertia.
 - **Acceptance methodology:** threshold failure uses sustained 30° / 65 kPa wind-tunnel exposure (1.20 s); free-flight Mach-2 sideways Meridian at 3 km / 250 kPa fails in 0.10 s, after the warning edge. Holding exposure avoids making an automatic recovery out of the envelope count as failure. Preserve existing stock mission and every-stock SAS regressions. The assist hand-back test now samples the peak SAS correction over its initial 0.5 s because calibrated coast wheels can already have stopped a spin at the previous single sample time.
 - **Performance contract:** additional steady-step work is scalar math and topology-lifetime cached wheel totals. No new per-step arrays/vectors/maps are introduced; gimbal updates remove one allocation, local solid grain reads avoid flow-group allocations, and warning events allocate only on envelope entry. Measurements and browser evidence are recorded with the WP6 progress entry after final verification.
+
+## Terrain and texture heap (2026-10-08, op/heapfix)
+
+- **One index pattern.** Land and ocean chunks carry no index arrays; every chunk of a quadtree shares one
+  `BufferAttribute` over `chunkIndices(res)`. Evicted geometries detach it before dispose so its GPU buffer survives.
+- **Cache budget in bytes.** `terrain.cacheMB` (Low 16, Medium 32, High 64, Ultra 96) caps CPU bytes of *stale*
+  chunks (not visited by the selection walk for 30 frames); `cacheSize` now counts land + ocean meshes. Chunks in
+  use (selected, their ancestors and out-of-frustum siblings) are never evicted: on the pad they are the bulk of the
+  cache, and only denser packing or Ultra density (owner's call) reduces them. Stale chunks are evicted during a
+  reused selection too (only those the last walk did not visit) and while the planet is drawn far.
+- **Own multi-draw batch instead of three's BatchedMesh.** BatchedMesh keeps a full JS copy of the batch and only
+  doubles. `ChunkBatch` is a Mesh drawn through three's batching program path (`isBatchedMesh` + matrices/indirect
+  textures) over GL buffers it owns (`GLBufferAttribute`): slots are written from the chunk arrays, resizes copy
+  GPU-side, growth ×1.5, shrink to 1.5× the recent peak after 8 s at ≤ 40 % use, release when idle. Index buffers
+  are typed as element data inside a private VAO; all writes use COPY_* targets. Depends on three internals
+  (`_multiDraw*`, `_matricesTexture`, `_indirectTexture`): re-check on three upgrades (tests/chunk-batch.test.ts).
+  The per-draw fallback without WEBGL_multi_draw (Firefox) uses the same fields.
+- **Dropping uploaded pixels.** `render/texturePixels.ts`: owners drop DataTexture pixels once their renderer holds
+  them; an upload that still needs them only allocates and `onUpdate` refills asynchronously. Flight drops the far
+  bake and the part textures it uploaded; at flight end part textures revert to 1×1 placeholders and reload through
+  the worker/IndexedDB path so editor/thumbnail renderers never upload empty pixels.
