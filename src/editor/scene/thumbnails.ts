@@ -304,6 +304,5 @@ function renderCraftThumbnail(craft: import('../../sim/vessel/types').CraftDef, 
   } finally {
     scene!.remove(holder);
     renderedParts.set('craft', holder);
-
   }
 }

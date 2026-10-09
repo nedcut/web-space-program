@@ -1,8 +1,11 @@
 // CDP Chrome regression evidence. Copy beside playwright-core in C:\wsp-tools\drv and run under wsp-gpu.lock.
-// node ctx2-check.mjs http://172.24.204.38:5582 ctx|thumbs|sea|terrain
+// node ctx2-check.mjs http://172.24.204.38:5582 ctx|thumbs|sea|terrain|lod-cost
+// mercury-detail <file> uses the pre-10c1efe8 detail block from materials.ts ("// Three octaves;" up to,
+// excluding, "float microFade") for a same-scene shader A/B; the file is plain shader source.
 import { chromium } from 'playwright-core';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 const [base, mode = 'ctx'] = process.argv.slice(2);
+const oldDetail = mode === 'mercury-detail' ? readFileSync(process.argv[4], 'utf8') : null;
 const dir = 'C:/wsp-tools/shots/ctx2';
 mkdirSync(dir, { recursive: true });
 const browser = await chromium.connectOverCDP('http://127.0.0.1:9333');
@@ -115,7 +118,7 @@ try {
     await page.getByRole('button', { name: 'Close', exact: true }).click();
     await page.getByTitle('Load craft', { exact: true }).click();
     results.craftsReopen = await imageStats('.vab-stock img'); await shot('crafts-reopened');
-  } else if (mode === 'terrain') {
+  } else if (mode === 'terrain' || mode === 'mercury-detail') {
     const place = async (body, alt, distance = 0) => page.evaluate(({ body, alt, distance }) => {
       const f = window.__flight, w = f.world, u = w.universe, v = w.active.state;
       f.paused = true; w.active.body = body;
@@ -140,7 +143,7 @@ try {
       v.velocity = {x:bs.velocity.x+tangent[0]*speed,y:bs.velocity.y+tangent[1]*speed,z:bs.velocity.z+tangent[2]*speed};
       return { body, altitude: u.surfaceInfo(body,v.position,w.ut).heightAboveTerrain, distance };
     }, { body, alt, distance });
-    for (const body of ['moon','earth','mars','mercury']) {
+    for (const body of (oldDetail ? ['mercury'] : ['moon','earth','mars','mercury'])) {
       await go(body === 'earth' ? '/?flight=stock-kestrel' : '/?flight=stock-kestrel&scenario=moon'); await ready();
       await page.evaluate(() => {
         const f=window.__flight; f.paused=true;
@@ -150,7 +153,20 @@ try {
       results[body] = {};
       for (const alt of [8000,200]) {
         results[body][alt] = await place(body,alt); await sleep(10000);
-        await shot(`${body}-${alt}m`);
+        await shot(`${body}-${alt}m${oldDetail ? '-current' : ''}`);
+        if (oldDetail) {
+          results[body][alt].baselineMaterials = await page.evaluate(old => {
+            const mats = new Set(); window.__flight.scene.traverse(o => { if(o.material?.uniforms?.uRockBlend) mats.add(o.material); });
+            for (const m of mats) {
+              m.__current = m.fragmentShader;
+              m.fragmentShader = m.fragmentShader.replace(/\/\/ Three octaves[\s\S]*?(?=float microFade)/, old);
+              m.needsUpdate = true;
+            }
+            return mats.size;
+          }, oldDetail);
+          await sleep(2000); await shot(`${body}-${alt}m-previous-detail`);
+          await page.evaluate(() => { window.__flight.scene.traverse(o => { const m=o.material; if(m?.__current) {m.fragmentShader=m.__current; m.needsUpdate=true;} }); });
+        }
       }
       if (body === 'moon' || body === 'earth') {
         const frames=[];
@@ -168,6 +184,18 @@ try {
       },body);
       console.log(body,JSON.stringify(results[body]));
     }
+  } else if (mode === 'lod-cost') {
+    await go('/?flight=stock-kestrel'); await ready();
+    await page.evaluate(() => { window.__flight.paused = true; }); await sleep(6000);
+    results.switchCost = await page.evaluate(() => {
+      const f=window.__flight,w=f.world,p=f.pipeline;
+      const u={ t:w.ut,origin:w.active.state.position,camera:f.cam.camera,sunPos:w.universe.ephem.getBodyState('sun',w.ut).position,dt:0,focusBody:w.active.body,viewportHeight:p.lodViewportHeight,switchViewportHeight:undefined };
+      const time=extra => { const start=performance.now(); for(let i=0;i<200;i++) { u.viewportHeight=p.lodViewportHeight; u.switchViewportHeight=extra?p.lodSwitchViewportHeight:undefined; f.planets.update(u); } return (performance.now()-start)/200; };
+      time(false);time(true);
+      const pairs=[]; for(let i=0;i<15;i++) { if(i%2) { const after=time(true);pairs.push([time(false),after]); } else pairs.push([time(false),time(true)]); }
+      const median=a=>a.sort((a,b)=>a-b)[Math.floor(a.length/2)];
+      return {unit:'CPU ms per planet-layer update',baseline:median(pairs.map(p=>p[0])),withSwitch:median(pairs.map(p=>p[1])),medianPairedDelta:median(pairs.map(p=>p[1]-p[0])),pairs};
+    });
   } else if (mode === 'sea') {
     await go('/?flight=stock-kestrel&scenario=sea'); await ready();
     await page.evaluate(() => {
