@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLSL_NOISE, GLSL_LOGDEPTH_FRAG, GLSL_LOGDEPTH_FRAG_PARS, GLSL_LOGDEPTH_VERT, GLSL_LOGDEPTH_VERT_PARS } from '../core/glsl';
 import { GLSL_ATMOSPHERE, GLSL_RING_SHADOW } from './shaders/atmosphere.glsl';
-import type { PlanetUniforms } from './uniforms';
+import { loopingSpeed, type PlanetUniforms } from './uniforms';
 import type { QualitySettings } from '../core/quality';
 import { siteShadowUniforms, GLSL_SITE_SHADOW } from '../site/shadows';
 import { getDetailTexture } from './textures';
@@ -659,6 +659,9 @@ export function createRockShadowMaterial(u: PlanetUniforms, centers: THREE.DataT
 
 // ---------------------------------------------------------------- Ocean
 
+/** GLSL literal for a drift speed that repeats seamlessly across the shader clock wrap (see loopingSpeed). */
+const loop = (speed: number, tile: number): string => loopingSpeed(speed, tile).toFixed(7);
+
 export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabed: [number, number, number], hydrocarbon = false): THREE.ShaderMaterial {
   const img = imagery(u, q);
   return new THREE.ShaderMaterial({
@@ -775,14 +778,14 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         #else
           // Faded octaves are skipped, not multiplied by zero: from orbit every water pixel is beyond both fades.
           vec3 g = vec3(0.0);
-          if (fade1 > 0.0) g += waveGrad(vDetail, w, 64.0, vec2(t * 1.3, t * 0.7)) * fade1
-                              + waveGrad(vDetail, w, 23.0, vec2(-t * 0.9, t * 1.6)) * fade1 * 0.7;
-          if (fade2 > 0.0) g += waveGrad(vDetail, w, 512.0, vec2(t * 2.0, -t * 1.1)) * fade2 * 0.6;
+          if (fade1 > 0.0) g += waveGrad(vDetail, w, 64.0, vec2(t * ${loop(1.3, 64)}, t * ${loop(0.7, 64)})) * fade1
+                              + waveGrad(vDetail, w, 23.0, vec2(-t * ${loop(0.9, 23)}, t * ${loop(1.6, 23)})) * fade1 * 0.7;
+          if (fade2 > 0.0) g += waveGrad(vDetail, w, 512.0, vec2(t * ${loop(2.0, 512)}, -t * ${loop(1.1, 512)})) * fade2 * 0.6;
         #endif
         if (uHydrocarbon > 0.5) {
           g *= 0.18;
           vec3 cell = fract(vDetail / 3.0) - 0.5;
-          float rain = sin(length(cell) * 70.0 - t * 9.0) * exp(-length(cell)*7.0);
+          float rain = sin(length(cell) * 70.0 - t * ${loop(9.0, 2.0 * Math.PI)}) * exp(-length(cell)*7.0);
           g += cell * rain * 0.09 * fade1;
         }
         g -= dot(g, upBF) * upBF;

@@ -14,6 +14,15 @@ export function shaderTime(t: number): number {
   return w < 0 ? w + SHADER_TIME_PERIOD : w;
 }
 
+/**
+ * `speed` (per second) nudged so one {@link SHADER_TIME_PERIOD} advances a pattern repeating every `tile` by a whole
+ * number of repeats: the pattern is the same either side of the wrap instead of jumping (the sea's glint changed in
+ * one frame). The nudge is under 0.1 % for the ocean's drifts.
+ */
+export function loopingSpeed(speed: number, tile: number): number {
+  return (Math.round((speed * SHADER_TIME_PERIOD) / tile) * tile) / SHADER_TIME_PERIOD;
+}
+
 /** Uniform objects shared by every material of one planet (updated once per frame). */
 export interface PlanetUniforms {
   uPlanetCenter: THREE.IUniform<THREE.Vector3>;
