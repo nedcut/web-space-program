@@ -4,7 +4,7 @@ import { ChunkBatch } from '../src/render/planet/ChunkBatch';
 
 /** Minimal WebGL 2 buffer model: enough to check what the batch stores on the GPU and how it binds. */
 class FakeGL {
-  readonly FLOAT = 0x1406; readonly UNSIGNED_BYTE = 0x1401; readonly UNSIGNED_SHORT = 0x1403; readonly UNSIGNED_INT = 0x1405;
+  readonly FLOAT = 0x1406; readonly UNSIGNED_BYTE = 0x1401; readonly UNSIGNED_SHORT = 0x1403; readonly SHORT = 0x1402; readonly UNSIGNED_INT = 0x1405;
   readonly ELEMENT_ARRAY_BUFFER = 0x8893; readonly COPY_READ_BUFFER = 0x8f36; readonly COPY_WRITE_BUFFER = 0x8f37;
   readonly STATIC_DRAW = 0x88e4; readonly VERTEX_ARRAY_BINDING = 0x85b5;
   readonly canvas = new EventTarget();
@@ -40,16 +40,15 @@ const V = 3, I = 3;
 function source(value = 1): THREE.Mesh {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, value]), 3));
-  geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]), 3));
-  geometry.setAttribute('aColor', new THREE.BufferAttribute(new Uint8Array(9).fill(value), 3, true));
-  geometry.setAttribute('aDetail', new THREE.BufferAttribute(new Float32Array(9).fill(value), 3));
+  geometry.setAttribute('aNormalOct', new THREE.BufferAttribute(new Int16Array(6), 2, true));
+  geometry.setAttribute('aColor', new THREE.BufferAttribute(new Uint8Array(12).fill(value), 4, true));
   geometry.setIndex([0, 1, 2]);
   geometry.computeBoundingSphere();
   return new THREE.Mesh(geometry);
 }
 type GLAttr = THREE.GLBufferAttribute & { buffer: { data: Uint8Array } };
 const attr = (b: ChunkBatch, name: string) => b.mesh.geometry.getAttribute(name) as unknown as GLAttr;
-const colorOf = (b: ChunkBatch, slot: number) => attr(b, 'aColor').buffer.data[slot * V * 3];
+const colorOf = (b: ChunkBatch, slot: number) => attr(b, 'aColor').buffer.data[slot * V * 4];
 const indexOf = (b: ChunkBatch, slot: number) => Array.from(new Uint32Array((b.mesh.geometry.index as unknown as GLAttr).buffer.data.buffer.slice(slot * I * 4, (slot + 1) * I * 4)));
 const slotOf = (b: ChunkBatch, m: THREE.Mesh) => (b as unknown as { slots: Map<THREE.Mesh, number> }).slots.get(m)!;
 const draws = (b: ChunkBatch) => {
@@ -73,7 +72,9 @@ describe('visible terrain chunk batches', () => {
     expect([m[12], m[13], m[14]]).toEqual([12.25, -4.5, 0.03125]);
     expect(attr(batch, 'aColor').normalized).toBe(true);
     expect(attr(batch, 'aColor').type).toBe(gl.UNSIGNED_BYTE);
-    expect(Array.from(attr(batch, 'aColor').buffer.data.subarray(0, 9))).toEqual(Array(9).fill(123));
+    expect(Array.from(attr(batch, 'aColor').buffer.data.subarray(0, 12))).toEqual(Array(12).fill(123));
+    expect(attr(batch, 'aNormalOct').type).toBe(gl.SHORT);
+    expect(attr(batch, 'aNormalOct').normalized).toBe(true);
     expect(indexOf(batch, 0)).toEqual([0, 1, 2]);
     // three treats it as a batch; the index buffer is element-typed and no foreign VAO saw it bound.
     expect((batch.mesh as unknown as { isBatchedMesh: boolean }).isBatchedMesh).toBe(true);
@@ -81,6 +82,22 @@ describe('visible terrain chunk batches', () => {
     expect(draws(batch)).toBe(1);
     batch.dispose(); mesh.geometry.dispose(); material.dispose();
     expect(gl.live.size).toBe(0);
+  });
+
+  it('culls on the bounding sphere centre, not the chunk origin the matrix translates', () => {
+    const gl = new FakeGL(), material = new THREE.ShaderMaterial();
+    const batch = new ChunkBatch(material, gl as never, V, I);
+    // Origin far off to the side, sphere centre (rotated by the matrix) back in front of the camera at z = 50.
+    const mesh = source();
+    mesh.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 5000, 0), 2);
+    mesh.position.set(5000, 0, 0);
+    mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+    mesh.updateMatrix();
+    batch.place(mesh, true);
+    expect(draws(batch)).toBe(1);
+    mesh.position.set(0, 0, 0); mesh.updateMatrix(); batch.place(mesh, true);
+    expect(draws(batch)).toBe(0);
+    batch.dispose(); mesh.geometry.dispose(); material.dispose();
   });
 
   it('grows by 1.5× for the visible peak, keeps slot data, and reuses storage through LOD replacements', () => {

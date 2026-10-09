@@ -81,6 +81,8 @@ const fragment = /* glsl */ `
   uniform vec3 uBounce;
   uniform vec3 uSunCol;
   uniform float uHorizonCos;
+  uniform vec3 uFill;
+  uniform vec3 uHalo;
   varying vec3 vDir;
   void main() {
     vec3 d = normalize(vDir);
@@ -101,6 +103,9 @@ const fragment = /* glsl */ `
     groundCol += uBounce * lambert; // sunlit ground under a landed/low vessel (fill for its shadow side)
     vec3 col = mix(groundCol, skyCol, sky);
     col += uSunCol * (pow(sunAmt, 900.0) * 40.0 + pow(sunAmt, 40.0) * 0.6);
+    // Above thin air: a faint cool fill from everywhere and a broad lobe around the Sun. Backlit hulls keep
+    // their form (a grazing rim from the lobe, a readable shadow side from the fill) instead of going black.
+    col += uFill + uHalo * pow(sunAmt, 4.0);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -154,6 +159,8 @@ export class SkyEnvironment {
         uBounce: { value: new THREE.Color() },
         uSunCol: { value: new THREE.Color() },
         uHorizonCos: { value: 0 },
+        uFill: { value: new THREE.Color() },
+        uHalo: { value: new THREE.Color() },
       },
     });
     this.scene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 48, 24), this.mat));
@@ -197,6 +204,9 @@ export class SkyEnvironment {
     const b = p.bounce ?? NO_BOUNCE;
     u.uBounce.value.setRGB(b[0], b[1], b[2]);
     u.uSunCol.value.setRGB(1, 0.97, 0.9).multiplyScalar(p.daylight);
+    const space = 1 - airVis;
+    u.uFill.value.setRGB(0.1, 0.11, 0.135).multiplyScalar(space * (0.15 + 0.85 * p.daylight));
+    u.uHalo.value.setRGB(1, 0.97, 0.9).multiplyScalar(1.3 * space * p.daylight);
     // Horizon dips as the planet shrinks below us: cos of the angle from up to the limb.
     u.uHorizonCos.value = -Math.cos(Math.min(Math.PI / 2, p.bodyAngle));
     this.rt = bakeInto(this.pmrem, this.scene, this.rt);

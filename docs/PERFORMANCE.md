@@ -2087,6 +2087,27 @@ doubling would have added ~300 MB).
   chunks move), with the same triangle counts (Medium pad 2.45 M on base and batch builds); re-run before merging:
   `AB_OUT=/tmp/heapfix-ab scripts/bench/gpu-passes-ab.sh heapfix <base> <branch> pad,ascent,orbit 3 --quality medium`.
 
+## Terrain vertex packing — 2026-10-09 (`op/vtxpack`)
+
+Chunk vertices went from 39 B (land: position f32×3, normal f32×3, colour u8×3, `aDetail` f32×3) and 40 B (ocean)
+to **20 B** each: position f32×3 relative to the chunk's 1024 m-aligned origin (so it is also the seamless
+detail-texture coordinate and `aDetail` is gone), octahedral normal int16×2 normalised, colour rgba8 (alpha
+pad keeps every attribute 4-byte aligned) or ocean depth f32. Normal round-trip error < 0.01°. Index buffers are
+unchanged (shared pattern; in each batch slot).
+
+Production builds, Windows Chrome (RTX 3060 Ti) over CDP, `heap-probe-stages.mjs --run teleport` (main 711e5ede
+→ branch). Cache = CPU chunk arrays; GPU = land + ocean batch buffers incl. indices:
+
+| | Medium pad | Medium orbit | Ultra pad | Ultra orbit |
+|---|---|---|---|---|
+| JS heap after GC | 148.7 → 112.3 MB | 110.2 → 93.0 MB | 425.9 → 260.0 MB | 246.8 → 167.5 MB |
+| Terrain chunk cache | 73.7 → 37.5 MB | 34.6 → 17.5 MB | 340.9 → 173.6 MB | 161.9 → 82.0 MB |
+| Batch GPU (land + ocean) | 42 → 29 MB | 24 → 17 MB | 277 → 192 MB | 120 → 83 MB |
+
+Time: GPU fenced ms on Chrome Medium pad 2.419 → 2.349, ascent 2.041 → 2.038, orbit 2.058 → 2.037. CPU steady flight
+(4× throttle, Medium, `cpu-steady.mjs`, n = 2 interleaved), mean CPU ms/frame: pad 12.73 → 12.78, ascent
+18.31 → 18.15, orbit 10.58 → 10.57; script ms/frame 13.38/19.12/11.14 → 13.42/19.01/11.14. Neutral (noise).
+
 # Vessel batching pass — 2026-10-09 (`op/vesselbatch`)
 
 Goal: cut vessel GL calls and draws, mainly for Firefox/Zen, where every GL call is remoted to the GPU process.

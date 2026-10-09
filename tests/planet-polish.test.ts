@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { ringCell, ringCellSeed, ringProfileAt, RingParticles } from '../src/render/planet/RingParticles';
-import { reflectedIrradiance } from '../src/render/planet/planetshine';
+import { adaptedPlanetshine, discAlbedo, reflectedIrradiance } from '../src/render/planet/planetshine';
 import { createPlanetUniforms } from '../src/render/planet/uniforms';
+import { createTerrainMaterial } from '../src/render/planet/materials';
 import { PlanetRenderer } from '../src/render/planet/PlanetRenderer';
 import { BODY_DEFS } from '../src/data/bodies';
 import { getQuality } from '../src/render/core/quality';
@@ -65,6 +66,30 @@ describe('reflected planet irradiance', () => {
     expect(reflectedIrradiance(1, 20, 1)).toBeCloseTo(full / 4);
     expect(reflectedIrradiance(1, 1.01, 1)).toBeLessThanOrEqual(0.15);
     expect(reflectedIrradiance(1, 0, 1)).toBe(0);
+  });
+
+  it('shows earthshine on the Moon night side at a visible level, with Earth reflecting as a whole disc', () => {
+    const earth = BODY_DEFS.find((b) => b.id === 'earth')!;
+    const full = adaptedPlanetshine(reflectedIrradiance(earth.radius, 384_400_000, 1));
+    expect(full).toBeGreaterThan(0.08);
+    expect(full).toBeLessThan(0.15);
+    expect(adaptedPlanetshine(reflectedIrradiance(earth.radius, 384_400_000, 0))).toBeLessThan(full);
+    expect(adaptedPlanetshine(0)).toBe(0);
+    const a = discAlbedo('earth', earth.surface?.colors);
+    expect(Math.min(...a)).toBeGreaterThan(0.25);
+    expect(a[2]).toBeGreaterThan(a[1]);
+  });
+});
+
+describe('crater micro-relief by quality tier', () => {
+  it('runs no crater scales on Low/Medium and all three on High/Ultra', () => {
+    for (const [id, scales] of [['low', 0], ['medium', 0], ['high', 3], ['ultra', 3]] as const) {
+      const q = getQuality(id);
+      expect(q.terrain.craterScales).toBe(scales);
+      const m = createTerrainMaterial(createPlanetUniforms(1.7374e6, null, null), q, { rockColor: [0.13, 0.125, 0.12], rockBlend: 0.35, airless: 1, detail: true, detailStrength: 1, craters: true });
+      expect(m.defines.CRATER_DETAIL ? m.defines.CRATER_SCALES : 0).toBe(scales);
+      m.dispose();
+    }
   });
 });
 

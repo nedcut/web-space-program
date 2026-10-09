@@ -32,7 +32,7 @@ import { TerrainWorkerPool } from './workerPool';
 import { buildRingProfile } from './textures';
 import { RingParticles } from './RingParticles';
 import { createPlanetEffect } from './effects';
-import { reflectedIrradiance, type PlanetLightSource } from './planetshine';
+import { adaptedPlanetshine, discAlbedo, reflectedIrradiance, type PlanetLightSource } from './planetshine';
 import { SurfaceScatter } from './scatter/SurfaceScatter';
 import { terrainCutout } from './cutout';
 import { EarthImagery, seasonMonth } from './earthImagery';
@@ -222,7 +222,7 @@ export class PlanetRenderer {
       for (const material of this.materials) if (material instanceof THREE.ShaderMaterial) material.defines.EARTH_DETAILS = 1;
     }
     lightSources.set(this, { position: { x: 0, y: 0, z: 0 }, radius: body.radius,
-      albedo: body.surface?.colors?.[1] ?? [0.4, 0.4, 0.4], sunDirection: { x: 1, y: 0, z: 0 }, irradiance: 0 });
+      albedo: discAlbedo(body.id, body.surface?.colors), sunDirection: { x: 1, y: 0, z: 0 }, irradiance: 0 });
   }
 
   // ------------------------------------------------------------------ construction
@@ -316,6 +316,8 @@ export class PlanetRenderer {
       duneRipples: preset === 'mars',
       detailStrength: preset === 'earth' ? 1 : preset === 'mars' ? 1.5 : 1.0,
       cutout: terrainCutout(this.body.id),
+      craters: preset === 'lunar' || preset === 'mercury' || preset === 'rocky',
+      surfaceShadows: preset !== 'earth' && this.body.id !== 'earth',
     });
     this.materials.push(terrainMat);
     let oceanMat: THREE.ShaderMaterial | undefined;
@@ -473,7 +475,7 @@ export class PlanetRenderer {
       const distance = Math.hypot(dx, dy, dz);
       if (distance <= parent.radius) continue;
       const phase = -(dx * parent.sunDirection.x + dy * parent.sunDirection.y + dz * parent.sunDirection.z) / distance;
-      const strength = reflectedIrradiance(parent.radius, distance, phase) * parent.irradiance;
+      const strength = adaptedPlanetshine(reflectedIrradiance(parent.radius, distance, phase)) * parent.irradiance;
       u.uPlanetshineDir.value.set(dx / distance, dy / distance, dz / distance);
       u.uPlanetshineColor.value.set(parent.albedo[0] * strength, parent.albedo[1] * strength, parent.albedo[2] * strength);
       break;

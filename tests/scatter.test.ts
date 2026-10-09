@@ -83,7 +83,7 @@ describe('surface scatter', () => {
     expect(scatter.stats.cells).toBe(1);
     const second = new THREE.Matrix4(); resident.getMatrixAt(0, second);
     expect(second.elements).not.toEqual(first.elements);
-    expect(scatter.group.children).toHaveLength(3); // Medium: rocks only.
+    expect(scatter.group.children).toHaveLength(6); // Medium: rocks and their ground shadows only.
     expect(QUALITY_PRESETS.low.scatter.radius).toBe(0);
     scatter.dispose();
   });

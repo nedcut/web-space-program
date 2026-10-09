@@ -52,6 +52,11 @@ export interface QualitySettings {
     cacheMB: number;
     /** Triplanar close-up detail texturing. */
     detail: boolean;
+    /**
+     * Procedural small-crater relief scales on airless terrain (0–3: 96, 24, 6 m cells). Each scale costs ≈0.08 ms
+     * of terrain shading per frame at 2940×1840 on an RTX 3060 Ti close to the ground (log depth defeats early-Z).
+     */
+    craterScales: number;
   };
   scatter: { radius: number; maxAltitude: number; vegetation: boolean; cellsPerFrame: number; budgetMs: number };
   atmosphere: {
@@ -102,7 +107,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     aa: 'fxaa',
     bloom: { enabled: false, strength: 0.3, radius: 0.4, threshold: 3.0 },
     shadowMapSize: 0,
-    terrain: { chunkResolution: 48, maxScreenError: 6, minVertexSpacing: 6, buildBudgetMs: 3, workers: 2, maxInFlight: 6, cacheSize: 130, cacheMB: 16, detail: false },
+    terrain: { chunkResolution: 48, maxScreenError: 6, minVertexSpacing: 6, buildBudgetMs: 3, workers: 2, maxInFlight: 6, cacheSize: 130, cacheMB: 16, detail: false, craterScales: 0 },
     atmosphere: { viewSteps: 8, aerialSteps: 3 },
     bakedTextureWidth: 512,
     sphereSegments: 64,
@@ -127,7 +132,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     aa: 'smaa',
     bloom: { enabled: true, strength: 0.35, radius: 0.45, threshold: 2.5 },
     shadowMapSize: 1024,
-    terrain: { chunkResolution: 64, maxScreenError: 3.5, minVertexSpacing: 3, buildBudgetMs: 4, workers: 3, maxInFlight: 10, cacheSize: 220, cacheMB: 32, detail: true },
+    terrain: { chunkResolution: 64, maxScreenError: 3.5, minVertexSpacing: 3, buildBudgetMs: 4, workers: 3, maxInFlight: 10, cacheSize: 220, cacheMB: 32, detail: true, craterScales: 0 },
     atmosphere: { viewSteps: 16, aerialSteps: 6 },
     bakedTextureWidth: 1024,
     sphereSegments: 96,
@@ -150,7 +155,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     aa: 'smaa',
     bloom: { enabled: true, strength: 0.4, radius: 0.5, threshold: 2.2 },
     shadowMapSize: 2048,
-    terrain: { chunkResolution: 64, maxScreenError: 2, minVertexSpacing: 1.5, buildBudgetMs: 6, workers: 4, maxInFlight: 16, cacheSize: 360, cacheMB: 64, detail: true },
+    terrain: { chunkResolution: 64, maxScreenError: 2, minVertexSpacing: 1.5, buildBudgetMs: 6, workers: 4, maxInFlight: 16, cacheSize: 360, cacheMB: 64, detail: true, craterScales: 3 },
     atmosphere: { viewSteps: 24, aerialSteps: 8 },
     bakedTextureWidth: 2048,
     sphereSegments: 128,
@@ -166,7 +171,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualitySettings> = {
     maxPixelRatio: 2, renderScale: 1, msaaSamples: 4, aa: 'smaa', upscale: { mode: 'edge', retinaScale: 1, sharpness: 0.3 },
     bloom: { enabled: true, strength: .4, radius: .5, threshold: 2.2 },
     shadowMapSize: 4096,
-    terrain: { chunkResolution: 96, maxScreenError: 1, minVertexSpacing: .75, buildBudgetMs: 6, workers: 4, maxInFlight: 20, cacheSize: 480, cacheMB: 96, detail: true },
+    terrain: { chunkResolution: 96, maxScreenError: 1, minVertexSpacing: .75, buildBudgetMs: 6, workers: 4, maxInFlight: 20, cacheSize: 480, cacheMB: 96, detail: true, craterScales: 3 },
     scatter: { radius: 1536, maxAltitude: 4000, vegetation: true, cellsPerFrame: 5, budgetMs: 2.5 },
     atmosphere: { viewSteps: 32, aerialSteps: 12 },
     bakedTextureWidth: 4096, sphereSegments: 160, ringSegments: 768,

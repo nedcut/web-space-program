@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { Quadtree, VIEW_KEY } from '../src/render/planet/quadtree';
-import { buildChunk, chunkIndices } from '../src/render/planet/chunkBuilder';
+import { buildChunk, chunkIndices, octDecode, octEncode } from '../src/render/planet/chunkBuilder';
 
 type Terrain = Parameters<typeof buildChunk>[0];
 const R = 600_000;
@@ -31,6 +31,40 @@ function meshes(qt: Quadtree) {
 }
 
 describe('terrain chunk memory', () => {
+  it('packs 20 bytes per vertex; positions are relative to the 1024 m detail origin', () => {
+    const t = { heightAt: (x: number, y: number) => 300 * x * y - 100, maxHeight: 200, minHeight: -400, liquid: { level: 0 } } as unknown as Terrain;
+    const c = buildChunk(t, { radius: R, res: 8, level: 6, face: 2, ix: 17, iy: 40, ocean: true });
+    const n = c.positions.length / 3;
+    expect((c.positions.byteLength + c.normals.byteLength + c.colors.byteLength) / n).toBe(20);
+    const o = c.ocean!;
+    expect((o.positions.byteLength + o.normals.byteLength + o.depth.byteLength) / n).toBe(20);
+    for (const v of c.origin) expect(Math.abs(v % 1024)).toBe(0);
+    // Local positions stay small (chunk + < 1774 m to the aligned origin) and land on the body.
+    const out: [number, number, number] = [0, 0, 0];
+    for (let i = 0; i < n; i++) {
+      const x = c.origin[0] + c.positions[i * 3], y = c.origin[1] + c.positions[i * 3 + 1], z = c.origin[2] + c.positions[i * 3 + 2];
+      const r = Math.hypot(x, y, z);
+      expect(r).toBeGreaterThan(R - 3000); expect(r).toBeLessThan(R + 400);
+      // Decoded normals are unit and outward.
+      octDecode(c.normals[i * 2], c.normals[i * 2 + 1], out);
+      expect(Math.hypot(...out)).toBeCloseTo(1, 6);
+      expect(out[0] * x + out[1] * y + out[2] * z).toBeGreaterThan(0);
+    }
+  });
+
+  it('octahedral normals round-trip within 0.01°', () => {
+    const e = new Int16Array(2), out: [number, number, number] = [0, 0, 0];
+    let worst = 0;
+    for (let i = 0; i < 20000; i++) {
+      const z = i === 0 ? -1 : i === 1 ? 1 : Math.cos(i * 2.399963) * 0.999 * (i % 2 ? 1 : -1), a = i * 0.7548776;
+      const s = Math.sqrt(1 - z * z), x = s * Math.cos(a), y = s * Math.sin(a);
+      octEncode(x, y, z, e, 0);
+      octDecode(e[0], e[1], out);
+      worst = Math.max(worst, Math.acos(Math.min(1, x * out[0] + y * out[1] + z * out[2])));
+    }
+    expect(worst * 180 / Math.PI).toBeLessThan(0.01);
+  });
+
   it('chunks carry no index arrays: land and ocean share one index attribute', () => {
     const chunk = buildChunk(terrain, { radius: R, res: 8, level: 1, face: 0, ix: 0, iy: 0, ocean: true });
     expect('indices' in chunk).toBe(false);
@@ -105,9 +139,9 @@ function staleMB(qt: Quadtree, frame: number) {
   let bytes = 0;
   for (const n of nodes) {
     if (!n.data || n.key.level === 0 || n.lastUsed === walk || frame - n.lastUsed <= 30) continue;
-    bytes += n.data.positions.byteLength + n.data.normals.byteLength + n.data.colors.byteLength + n.data.detail.byteLength;
+    bytes += n.data.positions.byteLength + n.data.normals.byteLength + n.data.colors.byteLength;
     const o = n.data.ocean;
-    if (o) bytes += o.positions.byteLength + o.normals.byteLength + o.depth.byteLength + o.detail.byteLength;
+    if (o) bytes += o.positions.byteLength + o.normals.byteLength + o.depth.byteLength;
   }
   return bytes / 1048576;
 }

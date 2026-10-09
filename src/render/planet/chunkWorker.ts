@@ -56,7 +56,7 @@ ctx.onmessage = async (ev: MessageEvent<InMsg>) => {
 };
 
 function transferablesOf(d: ChunkData): Transferable[] {
-  const t: Transferable[] = [d.positions.buffer, d.normals.buffer, d.colors.buffer, d.detail.buffer];
-  if (d.ocean) t.push(d.ocean.positions.buffer, d.ocean.normals.buffer, d.ocean.depth.buffer, d.ocean.detail.buffer);
+  const t: Transferable[] = [d.positions.buffer, d.normals.buffer, d.colors.buffer];
+  if (d.ocean) t.push(d.ocean.positions.buffer, d.ocean.normals.buffer, d.ocean.depth.buffer);
   return t as Transferable[];
 }

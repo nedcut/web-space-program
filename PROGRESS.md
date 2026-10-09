@@ -1,6 +1,6 @@
 # Progress Report
 
-_Last updated: 2026-10-07_
+_Last updated: 2026-10-08_
 
 ## Start here (for Ned)
 **Run it:** `npm install && npm run play` (optimised production build, opens http://localhost:4173). `npm run dev` is for development only: it serves unbundled modules with React's debug build and is much slower to load and run. Pick **New Game → Sandbox → Standard** for the easiest start;
@@ -25,6 +25,29 @@ performance overlay (fps, frame-time graph, CPU/GPU breakdown) and use **Copy re
 map and in the Ring Skimmer mission — `docs/PERFORMANCE.md` ("What to measure on the laptop") lists what to send.
 Graphics are auto-tuned once per device (weak GPUs start on Low; adaptive resolution is on). Then tell me what feels
 wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLAYER.md and DECISIONS.md.
+
+## A sense of place at the pad and on the Moon (2026-10-08, op/wp5)
+- **Launch pad:** hold-down clamp arms now reach in to your rocket's aft skirt (fitted to each craft) and fall back over
+  their pedestals the moment the clamps release; the tower's swing arms stand at the vehicle with umbilical hoods and swing
+  clear at ignition. Deluge steam boils out of the flame trench and rolls off its exit while the engines fire over the pad.
+  The trench and hole are now scorched concrete and steel instead of a black void; buildings have ribbed cladding,
+  window façades with sills and grime, textured roofs and darker bases.
+- **Cheaper, not dearer:** the whole complex now draws with one layered material (site draws per frame 22 + 11 shadow →
+  5 + 3, equipment included). GPU A/B vs main (RTX 3060 Ti, Medium, DPR 2) is in `docs/PERFORMANCE.md`.
+- **Moon close-up:** small craters at three scales appear below ~3 km, so 3 km, 500 m and 50 m finally look different;
+  rocks sit in the regolith with contact/cast shadows; your lander's shadow falls on the ground (also on Mars etc.); a
+  radial dust sheet races out under the engine below ~100 m.
+- **Backlit vessels** keep their shape in space (fill + sun-rim lighting): about 2× brighter on the shadow side.
+- **Moon night side (round 4):** earthshine now lights it faintly — crater rims are readable from 3 km and from lunar
+  orbit under a near-full Earth (it was pitch black: the Earth's light was computed from its green land colour).
+- **Small craters are now a High/Ultra feature:** on Medium they cost ~0.25 ms of GPU close to the Moon (+15 % of the
+  frame there); High and Ultra keep all three scales.
+- **Cost vs main (round 5, RTX 3060 Ti, Medium):** pad and orbit unchanged (±0.03 ms GPU); 40 m above the Moon +0.08 ms GPU
+  for the rocks, shadows and dust. CPU per frame is lower everywhere (pad −1.2 ms, ascent −1.4 ms, orbit −0.5 ms at 4×
+  throttle): the launch complex is batched into fewer draws and is no longer drawn beyond 60 km.
+- **Please look at:** the pad at liftoff (Meridian), and a Moon landing. Note the Suicide Burn mission lands with the Sun
+  ~88° high, so the lander's shadow is straight underneath you; a lower Sun there would look far better (scenario change,
+  not made). Screenshots: `docs/screenshots/wp5/`.
 
 ## CPU pass 2 (2026-10-07, cx/perfcpu2)
 
