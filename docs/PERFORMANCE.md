@@ -2019,3 +2019,70 @@ Unchanged within noise and within the 2.5 ms Medium budget. (With the program-ma
 
 Chrome steady orbit CPU 2.4 → 2.35 ms, draws 139 → 130; imagery streaming finished in ~4 s after loading on both
 (texSubImage2D activity), no regression from the credit budget.
+
+# Vessel batching pass — 2026-10-09 (`op/vesselbatch`)
+
+Goal: cut vessel GL calls and draws, mainly for Firefox/Zen, where every GL call is remoted to the GPU process.
+
+## Where the vessel's calls went (Linux Playwright Firefox, one frame, `renderBufferDirect` + GL-prototype counting)
+
+Stock Selene in orbit: 1,632 GL calls per frame, the vessel 831 of them in 104 draws. 44 draws came from the static
+batch (~30 materials, plus `#inst` variants for repeated parts), and 60 were individually drawn meshes: every mesh
+under an engine gimbal (~11 per engine), and fins/flaps whose two-material groups the batcher skipped. Selene-real
+(92 parts, 47 engines) drew **556 vessel meshes, 3,075 of 4,196 GL calls** on the pad. A material switch cost ~14
+calls. Ten of those were texture binds, including the same packed ORM texture bound three times (roughness,
+metalness, AO).
+
+## Changes
+
+1. Rigid node slots (`render/core/rigidNodes.ts`, `staticBatch.ts`, `VesselView.ts`). See DECISIONS "Vessel draws once
+   per material". Gimbals, control surfaces, deployables and gear joints merge into the batch; a shared float texture
+   places them. Repeats are flattened rather than instanced, and multi-material leaves are split by group. The
+   settled-deployable second batch is gone.
+2. Node-aware shadow depth material and shadow-cache `casterVersion`; node-aware photo DOF depth.
+3. Packed ORM bound once in flight part variants.
+4. Node slots rewritten only for parts whose gimbal/gear/deploy inputs changed (a first version rewrote all 51 Selene
+   nodes each frame: Firefox `vessels` section 0.05 → 0.14 ms; after the fix 0.05).
+
+Selene vessel: 104 → 32 draws, 831 → 371 GL calls (orbit). Selene-real: 556 → 32 draws, 3,075 → 401 calls (pad).
+
+## A/B, production builds, Medium
+
+Windows Firefox 143 (RTX 3060 Ti), ASAP mode (`layout.frame_rate = 0`), 1600×915, DPR 1, `scripts/windows-firefox/ab.mjs`
+(40 s warm-up, 10 s window, `GLCOUNT=1`). Main = `84f6ff60`; branch = node slots + ORM + pose-dirty (`02975631`;
+the first orbit pair used the build before the pose-dirty fix). Ascent: full throttle + first stage at 40 s, then
+measured. Firefox has no GPU timer queries, so the mean frame interval (ASAP) stands in for whole-pipeline cost.
+
+| Craft / case | GL calls / frame | draws | CPU ms | render ms | frame interval mean / p95 ms |
+|---|---|---|---|---|---|
+| Selene pad | 1,870 → **1,393** | 340 → 268 | 3.47 → 2.90 | 2.97 → 2.34 | 4.99 / 7.0 → 4.57 / 6.5 |
+| Selene ascent | 2,187 → **1,550** | 433 → 289 | 5.06 → 3.92 | 3.98 → 2.80 | 7.81 / 12.5 → 7.53 / 13.0 |
+| Selene orbit (pair 1) | 1,640 → **1,178** | 238 → 164 | 4.15 → 3.66 | 3.40 → 2.67 | 7.19 / 11.1 → 6.92 / 11.4 |
+| Selene orbit (pair 2) | 1,640 → **1,178** | 238 → 166 | 4.59 → 3.63 | 3.70 → 2.76 | 7.41 / 11.4 → 6.87 / 11.5 |
+| Selene-real pad | 4,222 → **1,525** | 854 → 330 | 10.78 → 5.98 | 9.55 → 4.56 | 11.14 / 15.7 → 7.89 / 10.7 |
+| Selene-real orbit | 3,588 → **865** | 652 → 126 | 7.35 → 2.98 | 6.44 → 2.26 | 8.33 / 10.4 → 5.40 / 10.6 |
+
+Windows Chrome 155 (CDP), `gpu-passes.mjs` copy with `--craft`, 1470×920 DPR 2 (render 1.4), fenced GPU ms (median of
+5 × 20 renders), CPU = pipeline frame ms over 4 s. Branch build before the pose-dirty and DOF fixes (CPU-only and
+photo-mode changes). Two interleaved pairs for Selene, one for Selene-real:
+
+| Craft / case | CPU ms | draws | fenced GPU ms | loop fps |
+|---|---|---|---|---|
+| Selene pad | 2.59, 2.53 → 2.09, 1.80 | 195 → 123 | 2.54, 2.53 → 2.50, 2.52 | 60 → 60 |
+| Selene ascent | 3.88, 3.26 → 2.38, 2.37 | 239 → 95 | 1.99, 1.99 → 1.96, 1.98 | 51, 57 → 60 |
+| Selene orbit | 2.42, 2.37 → 1.79, 1.84 | 163 → 91 | 2.06, 2.09 → 2.06, 2.09 | 60 → 60 |
+| Selene-real pad | 4.12 → 2.57 | 632 → 108 | 3.39 → 3.32 | 60 → 60 |
+| Selene-real orbit | 3.87 → 2.38 | 583 → 59 | 1.74 → 1.47 | 60 → 60 |
+
+GPU time is unchanged within noise on Selene (extra vertex work: one 3-texel fetch per vertex, +12% vertices from
+flattening; fewer fragment fetches from the ORM change) and lower on Selene-real.
+
+## Visual identity
+
+Same-frame A/B in Linux Firefox (`pipeline.capture`, paused, fixed camera, engines gimballed to 0.09/−0.06 rad):
+merged batch vs the individual meshes restored. Selene pad and orbit, Selene-real, Moonmoth lander (legs
+mid-deploy), right after staging, all parts at 1,500 K (heat glow), and photo DOF. ≤ 0.02% of pixels differ, mean
+≤ 0.0006/255. Differing pixels are specular sparkles on sub-pixel edges and pre-existing z-fighting on the lander's
+foot pads (present in both, different noise). Packed-ORM A/B (maps restored, four programs recompiled): 0 differing
+pixels. Cross-build screenshots are not comparable (the paused sim state differs between loads), hence the
+same-frame method. Screenshots: `~/.t3/projects/wsp-traces/vesselbatch/shots/`, `C:\wsp-tools\shots\vesselbatch\`.

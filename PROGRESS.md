@@ -1019,3 +1019,14 @@ M-series/120 Hz and independent video review remain unverified. Scope, assumptio
 - Two additional delayed-selection integration cases pass for Moon and Mars: list a next-orbit row, advance the
   clock by 5 s, verify its encounter in the worker, then install exactly one live node bounded to the next orbit
   through `applyPlanningResult`. The complete planning protocol file passes all 16 tests.
+
+## Vessel batching for Firefox/Zen (2026-10-09, op/vesselbatch)
+
+- Rockets now draw once per material instead of once per moving part. Engine gimbals, fins, flaps, solar arrays,
+  legs and gear stay in the merged batch and are moved by a small per-node transform texture. Repeated parts are
+  merged rather than instanced, and the packed roughness/metal/AO texture is bound once. Shadows, heat glow,
+  staging, docking/undocking, deploy animation and photo depth-of-field follow the same transforms.
+- Windows Firefox, Medium, GL calls per frame: Selene pad 1,870 → 1,393, ascent 2,187 → 1,550, orbit 1,640 → 1,178;
+  92-part Selene-real pad 4,222 → 1,525 (frame 11.1 → 7.9 ms), orbit 3,588 → 865 (8.3 → 5.4 ms). Chrome CPU
+  −0.5 to −1.5 ms, GPU unchanged or lower. Same-frame visual A/B: ≤ 0.02% pixels differ (edge sparkle). Details:
+  docs/PERFORMANCE.md "Vessel batching pass". Apple/M-series timing still unmeasured.
