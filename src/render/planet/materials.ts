@@ -407,9 +407,11 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         grad = vec3(0.0, ga.x, ga.y) * w.x + vec3(gb.y, 0.0, gb.x) * w.y + vec3(gc.x, gc.y, 0.0) * w.z;
         return cyclic ? b * w.y + c * w.z + a * w.x : a * w.x + b * w.y + c * w.z;
       }
-      // Variance-preserving blend of two independent 0.5-centred detail channels; t is a smooth region mask.
-      float mixDetail(float a, float b, float t) {
-        return ((a - 0.5) * (1.0 - t) + (b - 0.5) * t) * inversesqrt(1.0 - 2.0 * t + 2.0 * t * t);
+      // Blend of two independent 0.5-centred detail channels under the region mask m (0..1, crossing at 0.5),
+      // centred on 0 and with its variance kept close to constant (the polynomial is exact at t = 0, 0.5 and 1).
+      float mixDetail(float a, float b, float m) {
+        float t = clamp(m * 5.0 - 2.0, 0.0, 1.0);
+        return (mix(a, b, t) - 0.5) * (1.0 + 1.657 * t * (1.0 - t));
       }
 
       void main() {
@@ -462,11 +464,11 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             vec3 bf = transpose(uBodyRot) * rel;
             vec4 s = triSample(bf.zxy, w.zxy, 1531.0);
             sMid = triSampleGrad(bf, w, 263.0, false, grad);
-            float mid = mixDetail(sMid.a, sMid.r, smoothstep(0.4, 0.6, s.r));
+            float mid = mixDetail(sMid.a, sMid.r, s.r);
             cover = s.a * 0.6 + (mid + 0.5) * 0.4; hd += ((s.a - 0.5) * 0.7 + mid * 0.5) * f3; g += grad * f3 * 0.35;
           }
-          if (f2 > 0.0) { sFine = triSampleGrad(vDetail, w, 32.0, true, grad); hd += mixDetail(sFine.r, sFine.a, smoothstep(0.4, 0.6, sMid.a)) * f2 * 0.6; g += grad * f2 * 0.6; }
-          if (f1 > 0.0) { vec4 s = triSampleGrad(vDetail, w, 4.0, false, grad); hd += mixDetail(s.r, s.a, smoothstep(0.4, 0.6, sFine.a)) * f1 * 0.5; g += grad * f1; }
+          if (f2 > 0.0) { sFine = triSampleGrad(vDetail, w, 32.0, true, grad); hd += mixDetail(sFine.r, sFine.a, sMid.a) * f2 * 0.6; g += grad * f2 * 0.6; }
+          if (f1 > 0.0) { vec4 s = triSampleGrad(vDetail, w, 4.0, false, grad); hd += mixDetail(s.r, s.a, sFine.a) * f1 * 0.5; g += grad * f1; }
           float microFade = 1.0 - smoothstep(15.0, 100.0, dist);
           if (microFade > 0.0) g += triGrad(vDetail, w, 0.5) * microFade * 0.35;
           // Shallow wind ripples, projected into the tangent plane below; no collision relief.
