@@ -57,6 +57,23 @@ describe('editor session (WP2)', () => {
     expect(session.getSnapshot().craft).toEqual(before);
   });
 
+  it('cancelling a held Alt-copy or pick-up leaves no Redo entry', () => {
+    const { session, latch } = boosterSession();
+    const before = session.getSnapshot().craft;
+    expect(session.getSnapshot().canRedo).toBe(false);
+    session.copyPart(latch.uid);
+    expect(session.getSnapshot().held?.kind).toBe('assembly');
+    session.cancelHeld();
+    expect(session.getSnapshot().held).toBeNull();
+    expect(session.getSnapshot().craft).toEqual(before);
+    expect(session.getSnapshot().canRedo).toBe(false);
+    session.pickUp(latch.uid);
+    session.undo(); // Ctrl+Z while holding cancels too
+    expect(session.getSnapshot().held).toBeNull();
+    expect(session.getSnapshot().craft).toEqual(before);
+    expect(session.getSnapshot().canRedo).toBe(false);
+  });
+
   it('deletes the hovered part with an Undo toast', () => {
     const { session, latch } = boosterSession();
     const before = session.getSnapshot().craft;

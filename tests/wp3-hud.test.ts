@@ -7,7 +7,7 @@ import { landingReadout } from '../src/flight/landingReadout';
 import { AlertTracker, alertConditions, type AlertInput } from '../src/flight/alerts';
 import { SCENARIOS, setupScenario } from '../src/scenarios/catalog';
 import { cachedStageDeltaV } from '../src/game/stageDeltaVCache';
-import { hudStages } from '../src/flight/controller/stages';
+import { dvBasis, hudStages, totalVacuumDv } from '../src/flight/controller/stages';
 import { ascentGuidance, landingController, runAutopilot, localFrame, noseDirection } from '../src/game/autopilot';
 import { dot, v3 } from '../src/util/vec3';
 import { PART_CATALOG } from '../src/data/parts';
@@ -155,6 +155,26 @@ it('shows nonzero Δv for pre-ignited engines, even without activated flags or s
     expect(display.find(s => s.index === st.nextStage + 1)!.deltaV).toBeGreaterThan(100);
     expect(display.reduce((s, x) => s + x.deltaV, 0)).toBeCloseTo(dvs.reduce((s, x) => s + x.dv, 0));
   }
+});
+
+it('labels the flight Δv basis and keeps the vacuum total beside the sea-level one', () => {
+  expect(dvBasis(0, 101325)).toBe('vac');
+  expect(dvBasis(101325, 101325)).toBe('asl');
+  expect(dvBasis(60000, 101325)).toBe('atm');
+  expect(dvBasis(0.5, 101325)).toBe('vac');
+  expect(dvBasis(101325, 0)).toBe('vac');
+  const v = buildVessel(buildOrbiter(), PART_CATALOG);
+  const g = 9.81;
+  const asl = hudStages(v, cachedStageDeltaV(v, 101325, g));
+  const total = asl.reduce((s, x) => s + x.deltaV, 0);
+  const vac = totalVacuumDv(asl, cachedStageDeltaV(v, 0, g));
+  expect(total).toBeGreaterThan(0);
+  expect(vac).toBeGreaterThan(total); // the pad total is lower than vacuum; the HUD shows both, labelled
+  // Reading both bases every tick must not thrash the cache.
+  expect(cachedStageDeltaV(v, 101325, g)).toBe(cachedStageDeltaV(v, 101325, g));
+  const vacRead = cachedStageDeltaV(v, 0, g);
+  cachedStageDeltaV(v, 101325, g);
+  expect(cachedStageDeltaV(v, 0, g)).toBe(vacRead);
 });
 
 it('debounces unstaged throttle and removes obsolete messages on ignition/staging', () => {

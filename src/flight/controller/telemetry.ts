@@ -1,4 +1,4 @@
-import { hudStages } from './stages';
+import { dvBasis, hudStages, totalVacuumDv } from './stages';
 import { suicideBurn } from '../../sim/orbit/readouts';
 import { flightMessages, ThrottleCueTracker, throttleExplanation } from '../cues';
 import { controlAuthority } from '../../sim/vessel/integrator';
@@ -158,6 +158,11 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     dvs = [];
   }
   const stages = hudStages(st, dvs);
+  const dvAt = dvBasis(pressure, b.atmosphere?.surfacePressure ?? 0);
+  let totalDvVac = 0;
+  try {
+    totalDvVac = dvAt === 'vac' ? stages.reduce((s, x) => s + x.deltaV, 0) : totalVacuumDv(stages, cachedStageDeltaV(st, 0, b.surfaceGravity));
+  } catch { /* the readout simply omits the vacuum line */ }
 
   internals.predictions = flightPredictions(w, wv);
   const ground = internals.groundTelemetry(wv);
@@ -302,6 +307,8 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     ...ground,
     stage: st.nextStage,
     stages,
+    dvAt,
+    totalDvVac,
     resources: [...totals.entries()]
       .filter(([id, e]) => e.max > 0 && id !== 'intakeAir')
       .map(([id, e]) => ({ id, name: RESOURCES[id as keyof typeof RESOURCES]?.name ?? id, amount: e.amount, max: e.max, color: RESOURCE_COLORS[id] ?? '#aaa' })),
