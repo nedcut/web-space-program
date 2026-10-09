@@ -41,8 +41,9 @@ const vesselRect = `(() => {
 })()`;
 
 // Puts the active vessel in a circular orbit over the Moon's night side (Sun 37° below the horizon), under the Earth. alt > 0: height above
-// the mean radius; alt < 0: -alt above the local terrain.
-const placeNight = (alt) => {
+// the mean radius; alt < 0: -alt above the local terrain. { alt, day: true }: the same orbit on the day side, Sun ~53° high.
+const placeNight = (arg) => {
+  const alt = typeof arg === 'number' ? arg : arg.alt, day = typeof arg === 'object' && arg.day;
   const w = window.__flight.world, u = w.universe, v = w.active.state;
   // Shift the clock to the nearest date within ±16 d with a nearly full Earth over the night side (Sun–Moon–Earth
   // angle ~25°, i.e. near new Moon), so the earthshine is near its strongest.
@@ -58,7 +59,7 @@ const placeNight = (alt) => {
   const toS = unit([s.position.x - m.position.x, s.position.y - m.position.y, s.position.z - m.position.z]);
   // Sun 37° below the horizon (deep night), the Earth as high in the sky as that allows.
   const eS = toE[0] * toS[0] + toE[1] * toS[1] + toE[2] * toS[2], perp = unit(toE.map((x, i) => x - eS * toS[i]));
-  const up = unit(perp.map((x, i) => 0.8 * x - 0.6 * toS[i]));
+  const up = unit(perp.map((x, i) => day ? 0.6 * x + 0.8 * toS[i] : 0.8 * x - 0.6 * toS[i]));
   window.__wp5night = { sunElevDeg: Math.asin(up[0] * toS[0] + up[1] * toS[1] + up[2] * toS[2]) * 57.3, earthElevDeg: Math.asin(up[0] * toE[0] + up[1] * toE[1] + up[2] * toE[2]) * 57.3, earthPhaseDeg: Math.acos(-eS) * 57.3 };
   const east = unit([up[1] * toS[2] - up[2] * toS[1], up[2] * toS[0] - up[0] * toS[2], up[0] * toS[1] - up[1] * toS[0]]);
   let r = b.radius + Math.abs(alt);
@@ -101,6 +102,9 @@ const CASES = {
   moonNight3k: { url: '/?flight=stock-kestrel&scenario=moon', setup: async (p) => { await p.evaluate(placeNight, -3000); await p.evaluate(cam(Math.PI * 0.75, 0.6, 40)); }, wait: 6000 },
   // Same, 60 km lunar orbit.
   moonNightOrbit: { url: '/?flight=stock-kestrel&scenario=moon', setup: async (p) => { await p.evaluate(placeNight, 60000); await p.waitForTimeout(500); await p.evaluate(lookDown, 0.75); }, wait: 8000 },
+  // Day-side counterparts: 8 km over the terrain and a 60 km lunar orbit with the Sun ~53° high.
+  moonDay: { url: '/?flight=stock-kestrel&scenario=moon', setup: async (p) => { await p.evaluate(placeNight, { alt: -8000, day: true }); await p.evaluate(cam(Math.PI * 0.75, 0.6, 40)); }, wait: 6000 },
+  moonDayOrbit: { url: '/?flight=stock-kestrel&scenario=moon', setup: async (p) => { await p.evaluate(placeNight, { alt: 60000, day: true }); await p.waitForTimeout(500); await p.evaluate(lookDown, 0.75); }, wait: 8000 },
   // 150 km orbit, looking down past the vessel at the coast below (stair-stepped coastline check).
   orbitDown: { url: '/?flight=stock-meridian&scenario=orbit', setup: async (p) => { await p.evaluate(cam(Math.PI * 0.5, 1.35, 60)); }, wait: 9000 },
   // Planet preview (same Earth materials as flight): 150 km over Florida looking down at the coast.

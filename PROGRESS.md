@@ -42,6 +42,9 @@ wrong — handling, balance, visuals, UI. Open decisions for you are in MULTIPLA
   orbit under a near-full Earth (it was pitch black: the Earth's light was computed from its green land colour).
 - **Small craters are now a High/Ultra feature:** on Medium they cost ~0.25 ms of GPU close to the Moon (+15 % of the
   frame there); High and Ultra keep all three scales.
+- **Cost vs main (round 5, RTX 3060 Ti, Medium):** pad and orbit unchanged (±0.03 ms GPU); 40 m above the Moon +0.08 ms GPU
+  for the rocks, shadows and dust. CPU per frame is lower everywhere (pad −1.2 ms, ascent −1.4 ms, orbit −0.5 ms at 4×
+  throttle), mostly because the launch site is no longer drawn beyond 60 km.
 - **Please look at:** the pad at liftoff (Meridian), and a Moon landing. Note the Suicide Burn mission lands with the Sun
   ~88° high, so the lander's shadow is straight underneath you; a lower Sun there would look far better (scenario change,
   not made). Screenshots: `docs/screenshots/wp5/`.
