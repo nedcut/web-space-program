@@ -752,6 +752,7 @@ export class World {
         if (isActive) this.activeId = null;
       }
     }
+    crew.collideAstronauts(this);
     this.stepDockingAll();
     this.ut = t + PHYSICS_DT;
     this.applyPassedNodes();

@@ -2,7 +2,7 @@ import { EVA_PART } from '../../data/eva';
 import { RESOURCES } from '../../data/resources';
 import { remoteControlAllowed } from '../../sim/comms/network';
 import { crewIds, generateAstronaut, hasControl, seatCapacity, type Astronaut, type PlantedFlag } from '../../sim/crew/crew';
-import { buildVessel, recomputeMassProperties, EVA_HEIGHT } from '../../sim/vessel';
+import { buildVessel, collideEvaWithHull, recomputeMassProperties, EVA_HEIGHT } from '../../sim/vessel';
 import type { PartState, VesselState } from '../../sim/vessel/runtime';
 import type { Quat } from '../../util/quat';
 import { qConj, qFromAxisAngle, qFromTo, qIdentity, qMul, qRotate } from '../../util/quat';
@@ -144,6 +144,17 @@ function inPit(pad: PadFrame, p: Vec3): boolean {
 export function overPadPit(world: World, body: string, p: Vec3): boolean {
   const pad = padFrame(world, body);
   return !!pad && inPit(pad, p);
+}
+
+/** After each physics step: astronauts are kept out of the hulls of vessels around them (simulated or on the pad). */
+export function collideAstronauts(world: World): void {
+  for (const a of world.vessels.values()) {
+    if (!a.state.eva || a.mode !== 'physics' || a.state.destroyed) continue;
+    for (const v of world.vessels.values()) {
+      if (v === a || v.state.eva || v.state.destroyed || v.body !== a.body || (v.mode !== 'physics' && v.mode !== 'prelaunch')) continue;
+      collideEvaWithHull(a.state, v.state);
+    }
+  }
 }
 
 export function goEva(this: World, internals: WorldInternals, astronautId?: string): WorldVessel | null {
