@@ -98,20 +98,19 @@ const ReadoutView = memo(function ReadoutView({ controller: c, title, path, orbi
   useEscape(() => setHelp(false), help, 'panel');
   return <div className="panel map-readout" aria-label="Map focus">
     {help && <MapKeysHelp onClose={() => setHelp(false)} />}
+    <span className="title">{title}</span>
     <div className="map-readout-head">
-      <span className="title">{title}</span>
-      <button className="btn ghost small" aria-label="Frame active orbit" title="Frame active orbit" onClick={() => ui.frameOrbit()}>⌖</button>
+      <span className="path">{path}</span>
+      <button className="btn ghost small" title="Frame the active vessel's orbit" onClick={() => ui.frameOrbit()}>Frame</button>
       <button className="btn ghost small" aria-label="Map controls" aria-expanded={help} title="Map controls and node keys" onClick={() => setHelp(h => !h)}>?</button>
     </div>
-    {path && <span className="path">{path}</span>}
     {orbit && <span className="mono">{orbit}</span>}
-    {landing !== 'n/a' && <button className="btn ghost small" onClick={() => {
+    {landing !== 'n/a' && <button className="btn ghost small" title="Landing prediction: unpowered, with drag, heating and deployed chutes; no future staging" onClick={() => {
       const l = ui.landing;
       if (!l.enabled) { l.enabled = true; l.attitude = 'hold'; }
       else if (l.attitude === 'hold') l.attitude = 'retrograde';
       else l.enabled = false;
     }}>Landing: {landing === 'off' ? 'off' : landing === 'hold' ? 'hold attitude' : 'surface retrograde'}</button>}
-    {landing !== 'off' && landing !== 'n/a' && <span className="hint">Unpowered · drag, heating, deployed chutes · no future staging</span>}
     {status && <span role="status">{status}</span>}
   </div>;
 });
