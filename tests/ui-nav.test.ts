@@ -44,6 +44,10 @@ describe('escape stack', () => {
     expect(run).not.toHaveBeenCalled();
     stack.handle(esc({ target: { tagName: 'INPUT', type: 'checkbox', blur } as unknown as EventTarget }));
     expect(run).toHaveBeenCalledTimes(1);
+    // A text field inside a dialog (prompt) cancels the dialog directly.
+    stack.handle(esc({ target: { tagName: 'INPUT', type: 'text', blur, closest: () => ({}) } as unknown as EventTarget }));
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(blur).toHaveBeenCalledTimes(1);
   });
 });
 

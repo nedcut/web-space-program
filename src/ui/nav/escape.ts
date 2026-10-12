@@ -30,8 +30,9 @@ export function createEscapeStack() {
       e.preventDefault();
       e.stopImmediatePropagation();
       if (e.repeat) return true;
-      // First Esc in a text field only leaves the field (search boxes keep their text).
-      if (isTextField(e.target)) { (e.target as HTMLElement).blur(); return true; }
+      // First Esc in a page's text field only leaves the field (search boxes keep their text);
+      // inside a dialog Esc cancels the dialog as usual.
+      if (isTextField(e.target) && !(e.target as HTMLElement).closest?.('dialog, [role=dialog]')) { (e.target as HTMLElement).blur(); return true; }
       top()?.run();
       return true;
     },
