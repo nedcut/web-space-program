@@ -3,7 +3,7 @@ import { AppIcon, type AppGlyph } from './glyphs';
 import { useEscape } from '../../ui/nav/escape';
 import { isTyping, matches } from '../../input/bindings';
 
-export type AppId = 'alarms' | 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms';
+export type AppId = 'alarms' | 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms' | 'station';
 
 export interface HudApp {
   id: AppId;

@@ -9,7 +9,7 @@ import { flightData, flightPredictions } from '../../game/flightData';
 import { cachedStageDeltaV } from '../../game/stageDeltaVCache';
 import { maxRailsIndexAt, RAILS_WARP, warpLabel } from '../../game/timewarp';
 import { type WorldVessel } from '../../game/world';
-import { ACTION_GROUP_IDS, dockedPorts, freePorts, GROUP_LABELS, groupBindings, lightOn, type PortInfo, type StageDeltaV } from '../../sim/vessel';
+import { ACTION_GROUP_IDS, controlPartUid, dockedPorts, freePorts, GROUP_LABELS, groupBindings, lightOn, type PortInfo, type StageDeltaV } from '../../sim/vessel';
 import { bindingLabel } from '../../input/bindings';
 import { qRotate } from '../../util/quat';
 import { dot, length, negate, sub, v3 } from '../../util/vec3';
@@ -42,7 +42,9 @@ export function dockingPair(this: FlightController, _internals: FlightController
   const act = w.active;
   if (!act || !w.targetId || w.targetKind() !== 'vessel') return null;
   const theirsAll = freePorts(w.vessels.get(w.targetId)!.state);
-  const mineAll = freePorts(act.state);
+  const mineFree = freePorts(act.state);
+  const chosen = this.ownPortUid !== null ? mineFree.filter((p) => p.part.uid === this.ownPortUid) : [];
+  const mineAll = chosen.length ? chosen : mineFree;
   if (!theirsAll.length || !mineAll.length) return null;
   const dist = (a: PortInfo, b: PortInfo) => length(sub(a.pos, b.pos)) + (a.mod.size === b.mod.size ? 0 : 1e9);
   let best: { mine: PortInfo; theirs: PortInfo } | null = null;
@@ -67,6 +69,9 @@ export function dockingTelemetry(this: FlightController, internals: FlightContro
   return {
     myPort: mine.part.def.name,
     targetPort: theirs.part.def.name,
+    myPortUid: mine.part.uid,
+    targetPortUid: theirs.part.uid,
+    targetId: theirs.vessel.id,
     sizeMatch: mine.mod.size === theirs.mod.size,
     x: dot(rel, right),
     y: dot(rel, up),
@@ -103,7 +108,7 @@ export function targetTelemetry(this: FlightController, _internals: FlightContro
     relSpeed: length(rv),
     closing: d > 0 ? dot(rv, rel) / d : 0,
     portUid: w.targetPortUid,
-    ports: tv ? freePorts(tv).map((p) => ({ uid: p.part.uid, name: p.part.def.name })) : [],
+    ports: tv ? freePorts(tv).map((p) => ({ uid: p.part.uid, name: p.part.def.name, size: p.mod.size })) : [],
     approach: ca ? { distance: ca.distance, time: ca.time - w.ut, relSpeed: ca.relativeSpeed } : null,
   };
 }
@@ -330,6 +335,10 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     dockingMode: this.dockingMode,
     docking: this.dockingMode ? internals.dockingTelemetry() : null,
     dockedPorts: dockedPorts(st).map((p) => ({ uid: p.uid, name: p.def.name })),
+    // Own-port picker: only while a vessel is targeted or docking mode is on (no work otherwise).
+    ownPorts: this.dockingMode || w.targetKind() === 'vessel' ? freePorts(st).map((p) => ({ uid: p.part.uid, name: p.part.def.name, size: p.mod.size })) : [],
+    ownPortUid: this.ownPortUid,
+    controlFrom: controlPart(st),
     actionGroups: ACTION_GROUP_IDS.filter(g => g === 'abort' || g.startsWith('custom')).map(g => ({
       id: g, label: GROUP_LABELS[g], key: bindingLabel(g === 'abort' ? 'abort' : `actionGroup${g.slice(6)}` as 'actionGroup1'),
       count: groupBindings(st, g).length, on: !!st.groupState?.[g],
@@ -370,4 +379,12 @@ export function groundTelemetry(this: FlightController, _internals: FlightContro
 export function trimReadout(trim: { pitch: number; yaw: number; roll: number }, sasOn: boolean): { pitch: number; yaw: number; roll: number; held: boolean } | null {
   if (!trim.pitch && !trim.yaw && !trim.roll) return null;
   return { pitch: trim.pitch, yaw: trim.yaw, roll: trim.roll, held: sasOn };
+}
+
+
+/** Part the active vessel is controlled from (null = as built). */
+function controlPart(v: WorldVessel['state']): Telemetry['controlFrom'] {
+  const uid = controlPartUid(v);
+  const p = uid === null ? undefined : v.cache.byUid.get(uid);
+  return p ? { uid: p.uid, name: p.def.name, port: p.def.modules.some((m) => m.type === 'dockingPort') } : null;
 }

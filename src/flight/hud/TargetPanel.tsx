@@ -1,37 +1,54 @@
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
+import { SIZE_RADIUS } from '../../data/parts/builders';
 import { bindingLabel } from '../../input/bindings';
 import { formatDistance, formatDuration, formatSpeed } from '../../ui/format';
 import type { DockingTelemetry, HudCallbacks, Telemetry } from './Hud';
+import { hoverPorts, portHover } from './PortHighlight';
+
+/** Vessels this close can be flown directly (they share the physics bubble). */
+export const SWITCH_RANGE = 5000;
+/** Port diameter for a size class ("1.25 m"). */
+export const portSize = (size: number) => `${+(2 * (SIZE_RADIUS[size] ?? 0)).toFixed(3)} m`;
 
 /** Bottom-left target panel: pick/clear target, target readouts, closest approach, port choice, docking. */
 export function TargetPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
   const [open, setOpen] = useState(false);
+  useEffect(() => () => portHover.set(null), []);
   const tg = t.target;
+  const targetVessel = tg?.kind === 'vessel' ? tg : null;
+  // Ports that can mate with anything on the other side (equal size), for the size-mismatch hint.
+  const ownSizes = new Set(t.ownPorts.map(p => p.size));
+  const targetSizes = new Set(targetVessel?.ports.map(p => p.size) ?? []);
+  const ownPort = t.ownPorts.find(p => p.uid === (t.docking?.myPortUid ?? t.ownPortUid)) ?? null;
   return (
-    <div data-tutorial="target-panel" className="panel" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'auto', flexShrink: 0 }}>
+    <div data-tutorial="target-panel" className="panel target-panel" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'auto', flexShrink: 0 }}>
       <div className="label" style={{ color: tg ? '#ff4fb8' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={tg?.name}>
         {tg ? `Target · ${tg.name}` : 'No target'}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <button title="Choose a vessel or celestial body to target" style={{ flex: 1 }} className="btn small" onClick={() => setOpen((o) => !o)}>{open ? 'Close' : 'Set target'}</button>
+        <button title="Choose a vessel or celestial body to target" style={{ flex: 1 }} className="btn small" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? 'Close' : 'Set target'}</button>
         {tg && <button className="btn small" title="Clear target" onClick={() => cb.onSetTarget(null)}>✕</button>}
       </div>
       {open && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 200, overflowY: 'auto' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 220, overflowY: 'auto' }}>
           {t.targetOptions.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Nothing to target</div>}
           {t.targetOptions.map((o) => (
-            <button
-              key={o.id}
-              title={`Target ${o.name}`}
-              className="btn small"
-              style={{ display: 'flex', justifyContent: 'space-between', gap: 8, textAlign: 'left' }}
-              onClick={() => { cb.onSetTarget(o.id); setOpen(false); }}
-            >
-              <span>{o.kind === 'vessel' ? '◇' : '●'} {o.name}</span>
-              <span className="mono" style={{ color: 'var(--text-dim)' }}>{formatDistance(o.distance)}</span>
-            </button>
+            <div key={o.id} className="tgt-row">
+              <button
+                title={`Target ${o.name}`}
+                className={`btn small ${tg?.id === o.id ? 'primary' : ''}`}
+                style={{ display: 'flex', justifyContent: 'space-between', gap: 8, textAlign: 'left', flex: 1, minWidth: 0 }}
+                onClick={() => { cb.onSetTarget(o.id); setOpen(false); }}
+              >
+                <span className="tgt-name">{o.kind === 'vessel' ? '◇' : '●'} {o.name}</span>
+                <span className="mono" style={{ color: 'var(--text-dim)' }}>{formatDistance(o.distance)}</span>
+              </button>
+              {o.kind === 'vessel' && o.distance < SWITCH_RANGE && cb.onSwitchVessel && (
+                <button className="btn small" title={`Fly ${o.name} (switch vessel)`} onClick={() => cb.onSwitchVessel!(o.id)}>Fly</button>
+              )}
+            </div>
           ))}
-          <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>Tip: click an icon in map view to target it.</div>
+          <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>Tip: click an icon in map view to target it. “Fly” switches to a vessel nearby.</div>
         </div>
       )}
       {tg && (
@@ -45,23 +62,49 @@ export function TargetPanel({ t, cb }: { t: Telemetry; cb: HudCallbacks }) {
               value={`${formatDistance(tg.approach.distance)} · ${formatDuration(Math.max(0, tg.approach.time))}`}
             />
           )}
-          {tg.ports.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
-              <span className="label" style={{ width: '100%' }}>Target port</span>
-              <button title="Target vessel center rather than a docking port" className={`btn small ${tg.portUid === null ? 'primary' : ''}`} onClick={() => cb.onSetTarget(tg.id, null)}>Vessel</button>
-              {tg.ports.map((p, i) => (
-                <button key={p.uid} title={p.name} className={`btn small ${tg.portUid === p.uid ? 'primary' : ''}`} onClick={() => cb.onSetTarget(tg.id, p.uid)}>
-                  Port {i + 1}
-                </button>
-              ))}
-            </div>
-          )}
         </>
       )}
-      <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
-        <button title="Show port alignment and target-relative speed" className={`btn small ${t.dockingMode ? 'primary' : ''}`} style={{ flex: 1 }} onClick={cb.onToggleDocking}>Docking mode</button>
+      {targetVessel && targetVessel.ports.length > 0 && (
+        <div className="port-pick" role="group" aria-label="Target docking port">
+          <span className="label">Target port</span>
+          <button title="Aim at the vessel's centre; docking uses the closest free port" className={`btn small ${targetVessel.portUid === null ? 'primary' : ''}`} aria-pressed={targetVessel.portUid === null} onClick={() => cb.onSetTarget(targetVessel.id, null)}>Auto</button>
+          {targetVessel.ports.map((p, i) => (
+            <button key={p.uid} title={`${p.name} (${portSize(p.size)})${ownSizes.size && !ownSizes.has(p.size) ? ' — no free port of this size on your vessel' : ''}`}
+              className={`btn small ${targetVessel.portUid === p.uid ? 'primary' : ''} ${ownSizes.size && !ownSizes.has(p.size) ? 'mismatch' : ''}`}
+              aria-pressed={targetVessel.portUid === p.uid}
+              onClick={() => cb.onSetTarget(targetVessel.id, p.uid)} {...hoverPorts([{ uid: p.uid, vesselId: targetVessel.id, tone: 'hover', label: `Port ${i + 1}` }])}>
+              {i + 1} · {portSize(p.size)}
+            </button>
+          ))}
+        </div>
+      )}
+      {(targetVessel || t.dockingMode) && t.ownPorts.length > 0 && (
+        <div className="port-pick" role="group" aria-label="Your docking port">
+          <span className="label">Your port</span>
+          {t.ownPorts.length > 1 && cb.onSetOwnPort && (
+            <button title="Use whichever free port is closest to the target port" className={`btn small ${t.ownPortUid === null ? 'primary' : ''}`} aria-pressed={t.ownPortUid === null} onClick={() => cb.onSetOwnPort!(null)}>Auto</button>
+          )}
+          {t.ownPorts.map((p, i) => (
+            <button key={p.uid} title={`${p.name} (${portSize(p.size)})${targetSizes.size && !targetSizes.has(p.size) ? ' — target has no free port of this size' : ''}`}
+              className={`btn small ${t.ownPortUid === p.uid || (t.ownPorts.length === 1) ? 'primary' : ''} ${targetSizes.size && !targetSizes.has(p.size) ? 'mismatch' : ''}`}
+              aria-pressed={t.ownPortUid === p.uid}
+              onClick={() => t.ownPorts.length > 1 && cb.onSetOwnPort?.(p.uid)} {...hoverPorts([{ uid: p.uid, tone: 'hover', label: `Your port ${i + 1}` }])}>
+              {i + 1} · {portSize(p.size)}
+            </button>
+          ))}
+        </div>
+      )}
+      {ownPort && cb.onControlFrom && (
+        <button className={`btn small ${t.controlFrom?.uid === ownPort.uid ? 'primary' : ''}`} disabled={t.controlFrom?.uid === ownPort.uid}
+          title="Point the controls, SAS and navball out of this port (forward = toward the port face)"
+          onClick={() => cb.onControlFrom!(ownPort.uid)} {...hoverPorts([{ uid: ownPort.uid, tone: 'own', label: 'Control here' }])}>
+          {t.controlFrom?.uid === ownPort.uid ? '◎ Controlling from this port' : '◎ Control from this port'}
+        </button>
+      )}
+      <div style={{ display: 'flex', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
+        <button title="Show port alignment and target-relative speed" className={`btn small ${t.dockingMode ? 'primary' : ''}`} style={{ flex: 1 }} aria-pressed={t.dockingMode} onClick={cb.onToggleDocking}>Docking mode</button>
         {t.dockedPorts.map((p, i) => (
-          <button key={p.uid} className="btn small danger" title={`Undock at ${p.name}`} onClick={() => cb.onUndock(p.uid)}>
+          <button key={p.uid} className="btn small danger" title={`Undock at ${p.name}`} onClick={() => cb.onUndock(p.uid)} {...hoverPorts([{ uid: p.uid, tone: 'hover', label: 'Undock here' }])}>
             Undock{t.dockedPorts.length > 1 ? ` ${i + 1}` : ''}
           </button>
         ))}
@@ -110,12 +153,12 @@ export function dockingStatus(d: DockingTelemetry): 'SIZE MISMATCH' | 'REARMING'
  * arrow = lateral relative velocity. Readouts give the exact numbers and capture limits.
  */
 export function DockingIndicator({ d, hasTarget }: { d: DockingTelemetry | null; hasTarget: boolean }) {
-  const S = 180;
+  const S = 150;
   const R = S / 2 - 10;
-  const box: CSSProperties = { padding: 10, pointerEvents: 'none', flexShrink: 0 };
+  const box: CSSProperties = { padding: 10, pointerEvents: 'none', flexShrink: 0, width: 214 };
   if (!d) {
     return (
-      <div className="panel" style={box}>
+      <div className="panel dock-indicator" style={box} role="group" aria-label="Docking alignment">
         <div className="label">Docking mode</div>
         <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
           {hasTarget ? 'No free docking port pair (need a free port on both vessels).' : 'Target a vessel with a docking port.'}
@@ -137,11 +180,12 @@ export function DockingIndicator({ d, hasTarget }: { d: DockingTelemetry | null;
   const vscale = R / Math.max(0.5, latSpeed * 4);
   const vx = d.vx * vscale * 0.6, vy = -d.vy * vscale * 0.6;
   return (
-    <div className="panel" style={box}>
+    <div className="panel dock-indicator" style={box} role="group" aria-label="Docking alignment">
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <span className="label">Docking</span>
         <span className="mono" style={{ fontSize: 11, color: status === 'CAPTURE' ? good : status === 'ALIGN' || status === 'APPROACH' ? 'var(--text-dim)' : warn }}>{status}</span>
       </div>
+      <div className="dock-pair" title={`Your ${d.myPort} → target ${d.targetPort}`}>{d.myPort} → {d.targetPort}</div>
       <svg width={S} height={S} viewBox={`${-S / 2} ${-S / 2} ${S} ${S}`} style={{ display: 'block', margin: '6px auto' }}>
         <circle r={R} fill="rgba(0,0,0,0.35)" stroke="rgba(140,180,255,0.35)" />
         <circle r={R * dial(1)} fill="none" stroke="rgba(140,180,255,0.18)" strokeDasharray="3 3" />

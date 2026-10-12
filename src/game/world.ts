@@ -567,6 +567,8 @@ export class World {
       this.renderHistory.capture(this.ut, this.vessels.values());
       // A stage request is latched until a physics step actually consumes it (frames can have zero steps).
       this.physicsStep({ ...input, evaJump: this.evaJumpRequested, stage: this.stageRequested, target, commands: this.pendingCommands.length ? this.pendingCommands : undefined });
+      // "Control from here" re-expresses the vessel in another frame: don't blend orientations across it.
+      if (this.pendingCommands.some(c => c.kind === 'control')) this.renderHistory.invalidate();
       this.stageRequested = false;
       this.evaJumpRequested = false;
       this.pendingCommands = [];

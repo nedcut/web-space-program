@@ -24,7 +24,8 @@ export interface StockCraft {
 
 type Sym = 1 | 2 | 3 | 4 | 6 | 8 | 'mirror';
 
-class Builder {
+/** Programmatic craft assembly (also used by test/dev fixtures such as `flight/stationFixture`). */
+export class Builder {
   readonly ed: CraftEditor;
   readonly resources = new Map<number, CraftDef["parts"][number]["resources"]>();
   readonly stages = new Map<string, number>();

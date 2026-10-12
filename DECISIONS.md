@@ -685,3 +685,36 @@ Supersedes the "retractable solar arrays/antennas default extended" sentence of 
 - **Cost (CDP Chrome, F8 `hud` section, Meridian, Resources + Flight data docked, 12 s windows, two runs each):** pad
   0.025–0.028 ms/frame before → 0.030 after (second run; first run 0.041 is warm-up), orbit 0.025–0.026 → 0.024.
   Within run-to-run noise; nothing new runs per frame.
+
+## UX-9 docking & stations (2026-10-12, op/ux9)
+Owner: getting around a docked complex felt clunky ("navigating the space stations").
+- **Station & modules app** (new HUD app, `StationPanel.tsx`): the active vessel split into its docked modules
+  (`sim/vessel/station.ts` `stationModules`: cut at every port-to-port joint; names are what undocking would restore,
+  root module = vessel name). Per module: crew with one-click moves (inline "→ module" for ≤ 2 destinations, else one
+  dropdown), EVA from that module's hatch, control points, ports (free/partner, named Undock), supplies; plus every
+  vessel within 5 km with Target / Fly. Hovering a module, port or destination rings it in 3D. Computed from the World
+  on telemetry ticks only while the window is open.
+- **Crew transfer** (`{ kind: 'crew' }` command) moves an astronaut to any free seat in the same rigid vessel. No
+  hatch/connectivity rule: a docked complex is one pressurised vessel here (simpler than KSP; revisit if we model
+  unpressurised parts). Mass properties update (COM shifts a few cm).
+- **Control from here** (`{ kind: 'control' }`) rebases the vessel's body frame onto the part's control frame (pods,
+  probe cores; ports look out of the docking face; cabins without flight control are excluded). Every part pose is
+  rotated by C⁻¹ and the orientation by C, so nothing moves physically, and pilot input, SAS, RCS translation, the navball
+  and camera follow without any per-step cost. `VesselState.controlUid` records the choice (saved; MP topology key
+  includes it so replicas resync). The World drops render interpolation for that step. Known limits: RCS per-axis masks
+  are in body axes and therefore reinterpret after a rebase; an undocked half keeps the rotated frame (its control part
+  shows "as built" if the part left).
+- **Docking port picker**: Target port (Auto / numbered with diameter) and Your port (Auto / numbered) in the Target app;
+  size mismatches struck through; hover rings the port in 3D; "Control from this port" next to it. The controller keeps
+  `ownPortUid` (reset on vessel switch); the docking pair prefers it.
+- **Docking readout beside the navball** (was top-left), with the port pair named; the chosen ports carry permanent
+  "Your port"/"Target port" rings while docking mode is on. `PortHighlight` is DOM rings, allocation-free projection
+  (`controller.partScreenInto`), styles written only on ≥ 0.5 px moves, and no frame loop when nothing is marked.
+- **Vessel switching** without blind `[ ]`: "Fly" in the Target list (vessels < 5 km) and the station app's Nearby list.
+- **EVA board prompt**: a hatch marker on screen but under the top bar is parked below it with an up arrow; the inset
+  grew to 108 px (altimeter + lamps).
+- `?scenario=station` (dev): a three-module outpost (`flight/stationFixture.ts`, original names) with the launched craft
+  60 m away; the same fixture backs `tests/station.test.ts`. `Builder` in `stockCrafts.ts` is exported for it.
+- **Cost** (CDP Chrome, profiling build, rendezvous in docking mode, React render per 10 s): main 43.5 / 43.6 ms,
+  branch 47.0 / 43.7 ms (0.30 ms/commit both, noise). Station app open on the outpost: 74 ms / 10 s (0.50 ms/commit),
+  only while open.

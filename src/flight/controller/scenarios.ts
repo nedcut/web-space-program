@@ -1,5 +1,6 @@
 import { placeInCircularOrbit, spawnRendezvousTarget } from '../../game/scenarios';
 import { quatFromBasis } from '../../game/world';
+import { spawnTestOutpost } from '../stationFixture';
 import { bindingLabel } from '../../input/bindings';
 import { qRotate } from '../../util/quat';
 import { add, cross, normalize, scale, sub, v3 } from '../../util/vec3';
@@ -19,6 +20,17 @@ export function devScenario(this: FlightController, internals: FlightControllerI
       this.sasOn = true;
       this.sas = 'target';
       this.world.message(`Rendezvous: target 100 m ahead. ${bindingLabel('toggleRcs')} = RCS; ${bindingLabel('translateForward')}/${bindingLabel('translateBack')} ${bindingLabel('translateLeft')}/${bindingLabel('translateRight')} ${bindingLabel('translateUp')}/${bindingLabel('translateDown')} translate.`, 'info', 8);
+    }
+    return;
+  }
+  if (name === 'station') {
+    // Docked outpost (three modules, crew, a free collar) 60 m ahead; fly it, the launched craft waits nearby.
+    placeInCircularOrbit(this.world, wv, 'earth', Math.max(90000, this.world.universe.body('earth').atmosphere!.height + 80000));
+    const outpost = spawnTestOutpost(this.world, 60);
+    if (outpost) {
+      this.world.switchTo(outpost.state.id);
+      this.world.setTarget(wv.state.id);
+      this.world.message('Station test: open Station & modules in the app bar. Your launched craft is nearby.', 'info', 8);
     }
     return;
   }

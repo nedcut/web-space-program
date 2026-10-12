@@ -1,0 +1,54 @@
+/* UX-9 docking & stations: station overview app, port pickers, port highlight, docking indicator by the navball. */
+
+/* ---- 3D port highlight (screen-space rings; static styles, no animated shadows) */
+.port-hl { position: absolute; inset: 0; pointer-events: none !important; z-index: 2; }
+.port-hl-ring { position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--accent); box-shadow: 0 0 10px rgba(121, 215, 238, .55); }
+.port-hl-ring.own { border-color: var(--accent); }
+.port-hl-ring.target { border-color: #ff4fb8; box-shadow: 0 0 10px rgba(255, 79, 184, .55); }
+.port-hl-ring.hover { border-color: #fff; border-width: 3px; box-shadow: 0 0 14px rgba(255, 255, 255, .6); }
+.port-hl-label { position: absolute; left: 34px; top: 4px; white-space: nowrap; font-size: 11px; line-height: 1; padding: 3px 6px; border-radius: 4px; color: var(--text); background: rgba(8, 16, 26, .82); border: 1px solid rgba(140, 180, 255, .25); }
+
+/* ---- target panel: port pickers */
+.target-panel .tgt-row { display: flex; gap: 4px; }
+.target-panel .tgt-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.port-pick { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 2px; }
+.port-pick > .label { width: 100%; }
+.port-pick .btn.mismatch { opacity: .55; text-decoration: line-through; }
+
+/* ---- docking indicator next to the navball (the HUD's bottom cluster becomes a row while it is shown) */
+.hud-bottom.with-docking { display: flex; align-items: flex-end; gap: 0; }
+.hud-bottom.with-docking > .dock-indicator { margin-bottom: 8px; }
+.dock-indicator .dock-pair { font-size: 10px; color: var(--text-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- station overview app */
+.station { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.st-summary { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-dim); font-size: 11px; }
+.st-summary b { color: var(--text); font-weight: 600; }
+.st-control { font-size: 11px; color: var(--text-dim); }
+.st-control b { color: var(--accent); font-weight: 600; }
+.st-note { font-size: 11px; color: var(--warn); }
+.st-module { border: 1px solid rgba(140, 180, 255, .16); border-radius: 6px; background: rgba(255, 255, 255, .02); }
+.st-head { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 6px; padding: 6px 8px; cursor: pointer; border-radius: 6px; }
+.st-head:hover { background: rgba(121, 215, 238, .08); }
+.st-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.st-caret { width: 10px; color: var(--text-dim); }
+.st-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.st-meta { color: var(--text-dim); font-size: 11px; }
+.st-body { display: flex; flex-direction: column; gap: 5px; padding: 0 8px 8px; }
+.st-row { display: grid; grid-template-columns: 52px 1fr; gap: 6px; align-items: start; }
+.st-key { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); padding-top: 4px; }
+.st-list { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.st-list.inline { flex-direction: row; flex-wrap: wrap; }
+.st-crew, .st-port, .st-near { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.st-person { flex: 1; min-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-port > span { flex: 1; }
+.st-free { color: var(--good); }
+.st-dim { color: var(--text-dim); font-size: 11px; }
+.st-move { font: inherit; font-size: 11px; color: var(--text); background: rgba(255, 255, 255, .06); border: 1px solid rgba(140, 180, 255, .25); border-radius: 4px; padding: 2px 4px; }
+.st-res { display: grid; grid-template-columns: 1fr 60px 34px; gap: 6px; align-items: center; font-size: 11px; }
+.st-res-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
+.st-res .res-track { display: block; margin: 0; }
+.st-res .res-track > span { display: block; height: 100%; border-radius: 3px; }
+.st-res > .mono { text-align: right; }
+.st-nearby { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; }
+.st-near .st-name { font-weight: 400; }

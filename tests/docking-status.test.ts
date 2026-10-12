@@ -4,7 +4,7 @@ import { formatSpeed } from '../src/util/format';
 import type { DockingTelemetry } from '../src/flight/hud/Hud';
 
 const base: DockingTelemetry = {
-  myPort: 'a', targetPort: 'b', sizeMatch: true, x: 0, y: 0, z: 0.4, vx: 0, vy: 0, vz: -0.1,
+  myPort: 'a', targetPort: 'b', myPortUid: 1, targetPortUid: 2, targetId: 't', sizeMatch: true, x: 0, y: 0, z: 0.4, vx: 0, vy: 0, vz: -0.1,
   angle: 2, tiltX: 0, tiltY: 0, captureRange: 0.5, captureSpeed: 0.5, captureAngle: 10, armed: true,
 };
 

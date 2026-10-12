@@ -104,5 +104,5 @@ export function replaceWorld(world: World, saved: SavedWorld) {
   if (!world.setTarget(world.targetId, world.targetPortUid)) world.setTarget(null);
   world.restoreAfterLoad();
 }
-export const topologyKey = (world: World) => JSON.stringify([...world.vessels.values()].map(v => [v.state.id, v.state.parts.map(p => [p.uid, p.parent, p.crew, p.docked, p.link])]));
+export const topologyKey = (world: World) => JSON.stringify([...world.vessels.values()].map(v => [v.state.id, v.state.parts.map(p => [p.uid, p.parent, p.crew, p.docked, p.link]), v.state.controlUid]));
 export { serializeWorld };

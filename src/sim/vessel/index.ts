@@ -171,3 +171,5 @@ export type { TweakDescriptor, TweakKey } from './tweaks';
 export { panelMaxQ, panelLoad, stepDeployables, PANEL_LOAD_WARN, PANEL_DEPLOY_TIME } from './deployables';
 
 export { stageBurnTime, NODE_STAGE_PAUSE } from './burnTime';
+export { canControlFrom, controlFrom, controlPartUid, controlRotation, freeSeats, stationModules, transferCrew } from './station';
+export type { StationModule, StationPort } from './station';
