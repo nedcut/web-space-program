@@ -479,15 +479,20 @@ export function setGear(v: VesselState, deployed: boolean): void {
   }
 }
 
-/** Current gear state: true if any retractable gear/leg is commanded down (undefined if the vessel has none). */
+/**
+ * Gear state as the G key sees it: true when every landing leg and retractable wheel is commanded down, false when
+ * any is up (so a mixed vessel lowers first). Bays are driven by the toggle but never decide its direction unless the
+ * vessel has no legs or wheels, where they alone are the "gear" (open = down). Undefined if the vessel has none of these.
+ */
 export function gearState(v: VesselState): boolean | undefined {
-  let any: boolean | undefined;
+  let gear: boolean | undefined;
+  let bays: boolean | undefined;
   for (const p of v.parts) {
-    if (p.bayOpen !== undefined) any = (any ?? false) || p.bayOpen;
-    if (p.leg) any = (any ?? false) || p.leg.deployed;
-    if (p.wheel && (p.def.modules[p.wheel.moduleIndex] as WheelModule).retractable) any = (any ?? false) || p.wheel.deployed;
+    if (p.leg) gear = (gear ?? true) && p.leg.deployed;
+    if (p.wheel && (p.def.modules[p.wheel.moduleIndex] as WheelModule).retractable) gear = (gear ?? true) && p.wheel.deployed;
+    if (p.bayOpen !== undefined) bays = (bays ?? false) || p.bayOpen;
   }
-  return any;
+  return gear ?? bays;
 }
 
 /** World position of a body-frame point. */

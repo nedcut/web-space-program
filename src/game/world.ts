@@ -217,6 +217,8 @@ export class World {
   private msgId = 0;
   private stageRequested = false;
   private evaJumpRequested = false;
+  /** Latched gear command (true = down) until a physics step consumes it; frames can have zero steps. */
+  private gearRequested: boolean | undefined = undefined;
   /** One-shot player commands latched until a physics step consumes them (like staging). */
   private pendingCommands: VesselCommand[] = [];
   private nodeId = 1;
@@ -331,6 +333,7 @@ export class World {
     this.activeId = id;
     this.stageRequested = false;
     this.evaJumpRequested = false;
+    this.gearRequested = undefined;
     this.pendingCommands = [];
     this.nodes = [];
     this.trajectoryCache = null;
@@ -509,7 +512,7 @@ export class World {
   /** Advance the simulation by `realDt` seconds of wall time with the given control input for the active vessel. */
   tick(realDt: number, input: ControlInput) {
     this.discoverLandmarks();
-    if (!this.canControl()) { input = this.disconnectedInput(this.active?.state); this.stageRequested = false; this.evaJumpRequested = false; this.pendingCommands = []; }
+    if (!this.canControl()) { input = this.disconnectedInput(this.active?.state); this.stageRequested = false; this.evaJumpRequested = false; this.gearRequested = undefined; this.pendingCommands = []; }
     realDt = Math.min(realDt, 0.25);
     const now = performance.now();
     this.messages = this.messages.filter((m) => m.expires > now);
@@ -530,8 +533,9 @@ export class World {
 
     if (input.evaJump) this.evaJumpRequested = true;
     if (input.stage) this.stageRequested = true;
+    if (input.gear !== undefined) this.gearRequested = input.gear;
     if (input.commands?.length) this.pendingCommands = [...this.pendingCommands, ...input.commands].slice(0, MAX_COMMANDS);
-    if ((this.stageRequested || this.pendingCommands.length) && this.warp.mode === 'rails' && rate > 1) {
+    if ((this.stageRequested || this.pendingCommands.length || this.gearRequested !== undefined) && this.warp.mode === 'rails' && rate > 1) {
       // Staging during rails warp: drop out of warp; the request is consumed by the next physics step.
       this.warp = { mode: 'rails', index: 0 };
       return;
@@ -566,9 +570,10 @@ export class World {
       }
       this.renderHistory.capture(this.ut, this.vessels.values());
       // A stage request is latched until a physics step actually consumes it (frames can have zero steps).
-      this.physicsStep({ ...input, evaJump: this.evaJumpRequested, stage: this.stageRequested, target, commands: this.pendingCommands.length ? this.pendingCommands : undefined });
+      this.physicsStep({ ...input, evaJump: this.evaJumpRequested, stage: this.stageRequested, gear: this.gearRequested, target, commands: this.pendingCommands.length ? this.pendingCommands : undefined });
       this.stageRequested = false;
       this.evaJumpRequested = false;
+      this.gearRequested = undefined;
       this.pendingCommands = [];
       this.acc -= PHYSICS_DT;
       steps++;
