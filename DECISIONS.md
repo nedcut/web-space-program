@@ -565,3 +565,35 @@ Supersedes the D-011 jetpack numbers and the "jetpack cannot lift against lunar 
 - **Fix:** a renderer's first node-program compile (`patchNodeVertex`, already tracked per renderer for context-restore subscriptions) now runs the same full-upload reset as a context restore: clear pending ranges, stop queueing ranges until the next upload, mark for update. Compiles always precede that renderer's first draw, both for prewarm (`compileInSlices`) and lazy compiles. Cost: one full 393 KB upload per new renderer; nothing per frame.
 - **Evidence:** regression test in `tests/vessel-deploy-batch.test.ts` (fails on main). CDP Chrome and Firefox, Meridian on the pad, flight → editor → flight: on main the second launch shows only small bits of the vessel; with the fix it matches the first launch. Screenshots `C:\wsp-tools\shots\invisship\` (`before-*`, `after-*`, `ff-before-*`, `ff-after-*`), drivers `C:\wsp-tools\drv\invisship.mjs`, `C:\wsp-tools\drv-ff\invisship-ff.mjs`.
 - **Remaining gap (not hit by any current flow):** two live renderers that both draw node programs, where the second compiles, the first uploads and queues new ranges, and only then the second draws. Only VesselView queues ranges, and only the flight renderer draws vessels, so this does not arise today.
+
+## Stowed arrays and antennas, air-load tearing, extend above atmosphere (2026-10-12, op/panels)
+
+Supersedes the "retractable solar arrays/antennas default extended" sentence of the part interaction layer entry.
+- **Default stowed.** Tracking arrays and antennas launch retracted unless the editor's "… extended at launch" is on. A craft
+  file or pad save with no `extended` tweak takes the new default. Flight saves from before this change (no
+  `panelDeploy` on the part) keep hardware extended as it was flying; `persistence.ts` migrates them on load.
+- **Extend above atmosphere** (`autoDeploy` tweak, editor and flight, **on by default**): new players are not punished,
+  and the tearing only bites when someone extends by hand. It acts on transitions with hysteresis: extend when
+  q < 10 Pa and static pressure < 100 Pa (≈ 40 km on a standard-scale ascent); stow when q > 100 Pa or pressure > 1 kPa.
+  A manual extend or retract holds until the air next crosses a threshold. The first evaluation only ever extends, so
+  a craft spawned in vacuum opens up and hardware the player set out at launch is not stowed behind their back.
+- **Tearing.** Each part has a `maxQ` on its solar/antenna module: Sunfold 3 kPa, Sunwing 2 kPa, Sundial/Solstice
+  1.2/1.0 kPa, Thread aerial 6 kPa, Lattice relay 3 kPa, Arcwatch 2 kPa, Horizon 1.2 kPa (3 kPa default for anything
+  without one). A stock ascent peaks near 10 kPa, so extended arrays go in the first ~20 s (Meridian: ~600 m, 3.1 kPa);
+  slow drifting near the ground (40 m/s ≈ 1 kPa) does not. While moving, the rating halves. An extended part also tears
+  when its hottest skin face reaches 80 % of its temperature limit. Stowed and fairing-enclosed hardware is immune.
+  A tear goes through `breakJoints` (the part leaves as debris); the `structuralFailure` event carries `cause`, so
+  FX/audio/flight log treat it as a breakage, and World posts "<part> was ripped off by the airstream" (or "burned
+  through and tore away"). A torn part (`panelTorn`) never extends, generates or links again.
+- **Deploy motion is simulated** (`panelDeploy`, 2 s travel); the renderer follows it instead of animating on its own.
+  Tracking arrays generate only when fully extended, in physics and on rails (rails generation previously ignored the
+  extended flag).
+- **Stowed antennas keep a near-field command link** (rating 1 m → ≈ 2.8 Mm to a ground station). Without it a probe in
+  Science/Career (control needs a connection) could not even stage off the pad. Science transmission and relaying
+  still need the antenna extended.
+- **Warnings.** `telemetry.deployableLoad` (worst load fraction) drives a HUD caution "PANELS EXPOSED nn% · RETRACT" from
+  70 % and a red "PANELS TEARING" from 90 %; on the Meridian the caution leads the tear by ~2.4 s. The editor preflight
+  flags hardware extended at launch outside a fairing, and the part palette lists the extended air-load limit.
+- **Cost.** `stepDeployables` runs per substep over a topology-cached list of retractable parts; no allocation unless a
+  part tears or the automation flips. Measured 60–100 ns per substep (2–4 retractables) against ~100–140 µs per World
+  step; the before/after ascent benchmark (`scripts/bench/deployables.ts`) is within run-to-run noise.
