@@ -34,3 +34,8 @@
 .pedia-preview { border: 1px solid var(--panel-border); }
 .pedia .scene-header { margin-bottom: 0; }
 .pedia-index .btn.selected { box-shadow: inset 2px 0 0 var(--accent); }
+/* Part quick look over the editor / flight (inspector "book" button). */
+.pedia-quicklook-modal { pointer-events: auto; width: min(720px, 92vw); max-height: 86vh; overflow: auto; }
+.pedia.pedia-quicklook { padding: 0; background: none; gap: 0; display: block; }
+.pedia-quicklook .pedia-intro { margin-top: 8px; }
+.pedia-quicklook:focus { outline: none; }

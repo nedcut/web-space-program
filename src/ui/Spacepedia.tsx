@@ -1,4 +1,5 @@
-import { Button } from './components';
+import { Button, Modal } from './components';
+import type { PartDef } from '../sim/vessel/types';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BODY_DEFS } from '../data/bodies';
 import { PART_CATALOG } from '../data/parts';
@@ -65,6 +66,23 @@ function Diagram({ kind = 'orbit', e = 0.45 }: { kind?: string; e?: number }) {
     <text x="25" y="200">{kind === 'burn' ? 'Tangential thrust changes orbital energy' : kind === 'turn' ? 'Gradually build sideways velocity' : 'Focus • closest approach ← → farthest approach'}</text>
   </svg>;
 }
+/** Hardware specifications of a part (full article and the in-scene quick look). */
+function PartSpecs({ part }: { part: PartDef }) {
+  return <><h3>Hardware specifications</h3><dl><dt>Manufacturer</dt><dd>{part.manufacturer}</dd><dt>Dry mass</dt><dd>{number(part.dryMass, 'kg')}</dd><dt>Cost</dt><dd>{number(part.cost, 'cr')}</dd><dt>Temperature limit</dt><dd>{number(part.maxTemp, 'K')}</dd><dt>Impact tolerance</dt><dd>{number(part.crashTolerance, 'm/s')}</dd><dt>Research</dt><dd>{PART_ARTICLES.find(p => p.id === part.id)!.research.name} · {PART_ARTICLES.find(p => p.id === part.id)!.research.cost} science</dd></dl><h3>Construction</h3><p>Attachment nodes: {part.attachNodes.map(n => n.id).join(', ') || 'none'} · Surface attachment: {part.surfaceAttachable ? 'yes' : 'no'}</p><p>Drag coefficient: axial {part.dragCoefficient.axial}, side {part.dragCoefficient.side}</p><p>{part.shape.kind === 'cylinder' ? `Height ${number(part.shape.height, 'm')} · end radii ${number(part.shape.radiusTop, 'm')} / ${number(part.shape.radiusBottom, 'm')}` : `Dimensions ${number(part.shape.size.x, 'm')} × ${number(part.shape.size.y, 'm')} × ${number(part.shape.size.z, 'm')}`}</p><h3>Resource capacity (catalog units)</h3>{Object.entries(part.resources).map(([k, v]) => <p key={k}>{k}: {v}</p>)}{!Object.keys(part.resources).length && <p>No storage.</p>}<h3>Modules</h3>{part.modules.map((m, i) => <section className="pedia-module" key={i}><strong>{m.type}</strong><dl>{Object.entries(m).filter(([k]) => k !== 'type').map(([k, v]) => <div key={k}><dt>{fieldLabel(k)}</dt><dd>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</dd></div>)}</dl></section>)}<p className="pedia-muted">Module fields use SI units unless marked by their name: thrust N, Isp s, mass kg, distance m, angle rad; storage and flow use catalog resource units. These are game hardware specifications.</p></>;
+}
+/**
+ * A part's article in a dialog over the current scene (editor and flight part inspectors), so reading
+ * about hardware never leaves the build or the flight. No 3D preview: it would add a renderer.
+ */
+export function PediaQuickLook({ partId, onClose }: { partId: string; onClose: () => void }) {
+  const part = PART_CATALOG.get(partId), article = PART_ARTICLES.find(a => a.id === partId);
+  if (!part || !article) return null;
+  return <Modal title={part.name} onClose={onClose} className="pedia-quicklook-modal">
+    {/* Focus lands in the article; data-settings-modal makes flight/editor controls ignore keys typed here. */}
+    <div className="pedia pedia-quicklook" tabIndex={-1} data-autofocus data-settings-modal>
+    <div className="label">Spacepedia · {part.category} · {part.manufacturer}</div><p className="pedia-intro">{article.text}</p><PartSpecs part={part} />
+  </div></Modal>;
+}
 export default function Spacepedia() {
   const discoveries = useGame(s => s.resumeWorld?.discoveries) ?? NO_DISCOVERIES;
   const preset = useGame(s => s.scalePreset);
@@ -122,7 +140,7 @@ export default function Spacepedia() {
           <h3>Discovered landmarks</h3>{LANDMARKS.filter(l => l.body === body.id && discoveries.includes(l.id)).map(l => <section key={l.id}><h4>{l.name}</h4><p>{l.description}</p><p className="pedia-muted">{l.lat}° latitude · {l.lon}° longitude</p></section>)}{!LANDMARKS.some(l => l.body === body.id && discoveries.includes(l.id)) && <p>Approach a landmark within 2 km to record it here.</p>}
           <AtmosphereChart body={body} real={real} />{body.orbit && <><h3>Orbit about {bodies.get(body.parent!)?.name}</h3><Diagram e={body.orbit.e} /><p className="pedia-muted">Shape schematic in the orbital plane, not a distance scale. Eccentricity {body.orbit.e.toFixed(4)} · inclination {number(body.orbit.i * 180 / Math.PI, '°')} relative to {body.orbit.frame === 'parentEquator' ? 'the parent equator' : 'the ecliptic'}.</p></>}
           {body.parent === 'saturn' || body.id === 'saturn' ? <p className="pedia-muted">Science reading: <a href="https://science.nasa.gov/mission/cassini/science/rings/" target="_blank" rel="noreferrer">NASA Cassini rings</a> · <a href="https://science.nasa.gov/saturn/moons/titan/facts/" target="_blank" rel="noreferrer">Titan</a> · <a href="https://science.nasa.gov/saturn/moons/enceladus/" target="_blank" rel="noreferrer">Enceladus</a></p> : null}</>}
-        {part && <><Preview key={part.id} id={part.id} part /><h3>Hardware specifications</h3><dl><dt>Manufacturer</dt><dd>{part.manufacturer}</dd><dt>Dry mass</dt><dd>{number(part.dryMass, 'kg')}</dd><dt>Cost</dt><dd>{number(part.cost, 'cr')}</dd><dt>Temperature limit</dt><dd>{number(part.maxTemp, 'K')}</dd><dt>Impact tolerance</dt><dd>{number(part.crashTolerance, 'm/s')}</dd><dt>Research</dt><dd>{PART_ARTICLES.find(p => p.id === part.id)!.research.name} · {PART_ARTICLES.find(p => p.id === part.id)!.research.cost} science</dd></dl><h3>Construction</h3><p>Attachment nodes: {part.attachNodes.map(n => n.id).join(', ') || 'none'} · Surface attachment: {part.surfaceAttachable ? 'yes' : 'no'}</p><p>Drag coefficient: axial {part.dragCoefficient.axial}, side {part.dragCoefficient.side}</p><p>{part.shape.kind === 'cylinder' ? `Height ${number(part.shape.height, 'm')} · end radii ${number(part.shape.radiusTop, 'm')} / ${number(part.shape.radiusBottom, 'm')}` : `Dimensions ${number(part.shape.size.x, 'm')} × ${number(part.shape.size.y, 'm')} × ${number(part.shape.size.z, 'm')}`}</p><h3>Resource capacity (catalog units)</h3>{Object.entries(part.resources).map(([k, v]) => <p key={k}>{k}: {v}</p>)}{!Object.keys(part.resources).length && <p>No storage.</p>}<h3>Modules</h3>{part.modules.map((m, i) => <section className="pedia-module" key={i}><strong>{m.type}</strong><dl>{Object.entries(m).filter(([k]) => k !== 'type').map(([k, v]) => <div key={k}><dt>{fieldLabel(k)}</dt><dd>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</dd></div>)}</dl></section>)}<p className="pedia-muted">Module fields use SI units unless marked by their name: thrust N, Isp s, mass kg, distance m, angle rad; storage and flow use catalog resource units. These are game hardware specifications.</p></>}
+        {part && <><Preview key={part.id} id={part.id} part /><PartSpecs part={part} /></>}
         {article.kind === 'lesson' && <Diagram kind={FLIGHT_SCHOOL.find(a => a.id === article.id)!.diagram} />}
       </>}</article></div><footer className="pedia-muted">{BODY_ARTICLES.length} worlds · {PART_ARTICLES.length} parts · {FLIGHT_SCHOOL.length} flight notes</footer></main>;
 }

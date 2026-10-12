@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Slider, Toggle } from '../components';
 import { Icon } from '../components/Icon';
 import { LIGHT_COLORS, type TweakDescriptor } from '../../sim/vessel/tweaks';
@@ -12,7 +12,10 @@ import './inspector.css';
  */
 
 export interface InspectorPanelProps { uid: number; pinned: boolean }
-export interface InspectorContent { title: string; subtitle?: string; body: ReactNode }
+/** `partId` adds a Spacepedia button that opens the part's article over the scene. */
+export interface InspectorContent { title: string; subtitle?: string; body: ReactNode; partId?: string }
+
+const PediaQuickLook = lazy(() => import('../Spacepedia').then(m => ({ default: m.PediaQuickLook })));
 
 export interface Insets { top: number; right: number; bottom: number; left: number }
 
@@ -28,6 +31,7 @@ export function InspectorLayer({ panels, anchor, content, onClose, onPin, insets
 }) {
   const host = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
+  const [pedia, setPedia] = useState<string | null>(null);
   const offsets = useRef(new Map<number, { x: number; y: number }>());
   const anchorRef = useRef(anchor);
   anchorRef.current = anchor;
@@ -116,6 +120,7 @@ export function InspectorLayer({ panels, anchor, content, onClose, onPin, insets
                 <strong>{c.title}</strong>
                 {c.subtitle && <span>{c.subtitle}</span>}
               </div>
+              {c.partId && <Button className="insp-icon" title="Spacepedia article" aria-label={`${c.title} in Spacepedia`} onClick={() => setPedia(c.partId!)}><Icon name="book" size={14} /></Button>}
               <Button className={`insp-icon ${pinned ? 'on' : ''}`} title={pinned ? 'Unpin (closes with the next selection)' : 'Pin: keep open while inspecting other parts'} aria-pressed={pinned} onClick={() => onPin(uid)}>
                 <PinGlyph />
               </Button>
@@ -125,6 +130,7 @@ export function InspectorLayer({ panels, anchor, content, onClose, onPin, insets
           </section>
         );
       })}
+      {pedia && <Suspense fallback={null}><PediaQuickLook partId={pedia} onClose={() => setPedia(null)} /></Suspense>}
     </div>
   );
 }

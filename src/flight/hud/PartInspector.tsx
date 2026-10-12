@@ -35,7 +35,7 @@ export function FlightInspector({ controller: c, panels, setPanels }: { controll
     const p = v?.cache.byUid.get(uid);
     if (!v || !p) return null;
     const copies = p.symmetryGroup === undefined ? 1 : v.parts.filter(q => q.symmetryGroup === p.symmetryGroup && q.partId === p.partId).length;
-    return { title: p.def.name, subtitle: `${p.def.manufacturer}${copies > 1 ? ` · symmetry ×${copies}` : ''}`, body: <FlightPartBody c={c} part={p} copies={copies} /> };
+    return { title: p.def.name, partId: p.def.id, subtitle: `${p.def.manufacturer}${copies > 1 ? ` · symmetry ×${copies}` : ''}`, body: <FlightPartBody c={c} part={p} copies={copies} /> };
   };
   if (c.mapMode) return null;
   return <InspectorLayer panels={panels} anchor={anchor} content={content}
