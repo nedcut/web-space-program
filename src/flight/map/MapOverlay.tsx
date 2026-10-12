@@ -9,6 +9,8 @@ import { formatCountdown, formatDistance, formatDuration, formatSpeed } from '..
 import { bindingLabel } from '../../input/bindings';
 import { bodyBreadcrumbs } from '../../render/map/presentation';
 import { nodeSummary } from './nodeInfo';
+import { useEscape } from '../../ui/nav/escape';
+import { altKeyLabel, mapKeyHelp } from '../../ui/map/nodeKeys';
 import type { FlightMap } from './FlightMap';
 
 const BODY_KIND = { star: 'Star', planet: 'Planet', dwarf: 'Dwarf planet', moon: 'Moon', asteroid: 'Asteroid', comet: 'Comet' } as const;
@@ -44,6 +46,7 @@ export const MapOverlay = memo(function MapOverlay({ controller: c }: { controll
 
 function InfoCard({ controller: c, obj }: { controller: FlightController; obj: MapObject }) {
   const w = c.world, close = () => c.mapUi.closeInfo();
+  useEscape(close, true, 'panel');
   if (obj.kind === 'body') {
     const b = w.universe.bodies.get(obj.id);
     if (!b) return null;
@@ -91,8 +94,15 @@ const ReadoutView = memo(function ReadoutView({ controller: c, title, path, orbi
   controller: FlightController; title: string; path: string; orbit: string | null; landing: 'n/a' | 'off' | 'hold' | 'retrograde'; status: string | null | undefined;
 }) {
   const ui = c.mapUi;
+  const [help, setHelp] = useState(false);
+  useEscape(() => setHelp(false), help, 'panel');
   return <div className="panel map-readout" aria-label="Map focus">
-    <span className="title">{title}</span>
+    {help && <MapKeysHelp onClose={() => setHelp(false)} />}
+    <div className="map-readout-head">
+      <span className="title">{title}</span>
+      <button className="btn ghost small" aria-label="Frame active orbit" title="Frame active orbit" onClick={() => ui.frameOrbit()}>⌖</button>
+      <button className="btn ghost small" aria-label="Map controls" aria-expanded={help} title="Map controls and node keys" onClick={() => setHelp(h => !h)}>?</button>
+    </div>
     {path && <span className="path">{path}</span>}
     {orbit && <span className="mono">{orbit}</span>}
     {landing !== 'n/a' && <button className="btn ghost small" onClick={() => {
@@ -103,13 +113,15 @@ const ReadoutView = memo(function ReadoutView({ controller: c, title, path, orbi
     }}>Landing: {landing === 'off' ? 'off' : landing === 'hold' ? 'hold attitude' : 'surface retrograde'}</button>}
     {landing !== 'off' && landing !== 'n/a' && <span className="hint">Unpowered · drag, heating, deployed chutes · no future staging</span>}
     {status && <span role="status">{status}</span>}
-    <button className="btn ghost small" onClick={() => ui.frameOrbit()}>Frame active orbit</button>
-    <span className="hint">{hints()}</span>
   </div>;
 });
 
-function hints() {
-  return `Click orbit: add node · Right-click: menu · Double-click: focus · ${bindingLabel('mapFocusNext')} / Shift+${bindingLabel('mapFocusNext')}: cycle focus · ${bindingLabel('mapFocusHome')}: back to vessel`;
+/** Map gestures and node keys, opened from the readout's "?" (was a permanent hint paragraph). */
+function MapKeysHelp({ onClose }: { onClose(): void }) {
+  return <div className="map-keys" role="dialog" aria-label="Map controls">
+    <div className="map-menu-head"><strong>Map controls</strong><button className="btn ghost small" aria-label="Close map controls" onClick={onClose}>×</button></div>
+    <dl>{mapKeyHelp(bindingLabel('mapFocusNext'), bindingLabel('mapFocusHome')).map(([k, v]) => <div key={k}><dt className="kbd">{k}</dt><dd>{v}</dd></div>)}</dl>
+  </div>;
 }
 
 const AXES: { axis: 'prograde' | 'normal' | 'radial'; label: string }[] = [
@@ -119,11 +131,15 @@ const AXES: { axis: 'prograde' | 'normal' | 'radial'; label: string }[] = [
 /** Numeric Δv field: shows the live value, edits commit on Enter/blur. */
 function DvField({ value, onCommit, label }: { value: number; onCommit: (v: number) => void; label: string }) {
   const [text, setText] = useState<string | null>(null);
-  const commit = () => { if (text !== null) { const v = Number(text); if (Number.isFinite(v)) onCommit(v); } setText(null); };
-  return <input aria-label={`${label} m/s`} inputMode="decimal" value={text ?? value.toFixed(1)}
+  const input = useRef<HTMLInputElement>(null);
+  const cancelled = useRef(false);
+  const commit = () => { if (text !== null && !cancelled.current) { const v = Number(text); if (Number.isFinite(v)) onCommit(v); } cancelled.current = false; setText(null); };
+  // Esc while editing reverts the field only; the next Esc closes the node editor.
+  useEscape(() => { cancelled.current = true; input.current?.blur(); }, text !== null, 'capture');
+  return <input ref={input} aria-label={`${label} m/s`} inputMode="decimal" value={text ?? value.toFixed(1)}
     onFocus={e => { setText(value.toFixed(1)); e.currentTarget.select(); }}
     onChange={e => setText(e.target.value)} onBlur={commit}
-    onKeyDown={e => { if (e.key === 'Enter') { commit(); e.currentTarget.blur(); } if (e.key === 'Escape') { setText(null); e.currentTarget.blur(); } e.stopPropagation(); }} />;
+    onKeyDown={e => { if (e.key === 'Enter') { commit(); e.currentTarget.blur(); } e.stopPropagation(); }} />;
 }
 
 function NodeMenu({ controller: c, node }: { controller: FlightController; node: ManeuverNode }) {
@@ -144,10 +160,9 @@ function NodeMenu({ controller: c, node }: { controller: FlightController; node:
       raf = requestAnimationFrame(follow);
     };
     raf = requestAnimationFrame(follow);
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) { e.stopPropagation(); c.mapUi.closeMenus(); } };
-    window.addEventListener('keydown', key, true);
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('keydown', key, true); };
+    return () => cancelAnimationFrame(raf);
   }, [c, node.id]);
+  useEscape(() => ui.closeMenus(), true, 'panel');
   const s = nodeSummary(w, node);
   const set = (axis: 'prograde' | 'normal' | 'radial', v: number) => { node[axis] = v; w.nodes = [...w.nodes]; };
   const step = c.map.fineTune ? 0.1 : 1;
@@ -179,7 +194,8 @@ function NodeMenu({ controller: c, node }: { controller: FlightController; node:
     <div className="actions">
       <label className="fine"><input type="checkbox" checked={c.map.fineTune} onChange={e => { c.map.fineTune = e.target.checked; refresh(); }} style={{ width: 'auto' }} /> Fine tune</label>
       <button className="btn small" onClick={() => { node.prograde = node.normal = node.radial = 0; w.nodes = [...w.nodes]; }}>Zero</button>
-      <button className="btn small danger" onClick={() => ui.deleteNode(node.id)}>Delete</button>
+      <button className="btn small danger" title="Delete (Del)" onClick={() => ui.deleteNode(node.id)}>Delete</button>
     </div>
+    <div className="keys">↑↓ prograde · →← normal · {altKeyLabel()}+↑↓ radial · Shift ×10 · {altKeyLabel()}+→← next node</div>
   </div>;
 }

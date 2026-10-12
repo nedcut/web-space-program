@@ -8,6 +8,7 @@ import { formatDate, formatDuration } from '../../ui/format';
 
 import { usePlanner } from './usePlanner';
 import { applyPlanningResult } from '../../game/planning/apply';
+import { useEscape } from '../../ui/nav/escape';
 
 const N = 36;
 export function TransferWindow({ world, target, onClose, onPlanned }: { world: World; target: string; onClose(): void; onPlanned(message: string): void }) {
@@ -17,6 +18,7 @@ export function TransferWindow({ world, target, onClose, onPlanned }: { world: W
   const canvas = useRef<HTMLCanvasElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
   const { run, cancel, progress } = usePlanner(world);
+  useEscape(onClose, true, 'modal');
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     dialog.current?.focus();
@@ -96,7 +98,6 @@ export function TransferWindow({ world, target, onClose, onPlanned }: { world: W
   };
   return createPortal(<div ref={dialog} tabIndex={-1} className="transfer-modal" role="dialog" aria-modal="true" aria-label="Transfer window" onKeyDown={e => {
     e.stopPropagation();
-    if (e.key === 'Escape') onClose();
     if (e.key === 'Tab') {
       e.preventDefault();
       const buttons = [...(dialog.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
@@ -105,7 +106,7 @@ export function TransferWindow({ world, target, onClose, onPlanned }: { world: W
     }
   }}>
     <div className="panel transfer-plot">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span className="label">Transfer window · {world.universe.body(target).name}</span><button className="btn small" onClick={onClose}>Close</button></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span className="label">Transfer window · {world.universe.body(target).name}</span><button className="btn small" onClick={onClose}>Close <span className="kbd">Esc</span></button></div>
       {windowPlanner.progress && <div role="status" className="label">Finding upcoming departures…</div>}
       <DepartureOptions world={world} options={{ target, windows }} busy={busy} onPick={pickWindow} />
       <div className="label">Flight time ↑ · departure date →</div>

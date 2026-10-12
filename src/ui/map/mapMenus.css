@@ -27,8 +27,18 @@
 .map-node-menu .actions .btn { flex: 1 1 auto; }
 .map-node-menu label.fine { display: flex; align-items: center; gap: 6px; color: var(--text-dim); }
 
-.map-readout { position: absolute; right: 12px; bottom: 58px; z-index: 5; width: 250px; box-sizing: border-box; padding: 7px 11px; font-size: 11.5px; display: grid; gap: 2px; pointer-events: none; }
+.map-node-menu .keys { color: var(--text-dim); font-size: 10.5px; line-height: 1.4; }
+
+.map-readout { position: absolute; right: 12px; bottom: 58px; z-index: 5; width: 230px; box-sizing: border-box; padding: 6px 10px; font-size: 11.5px; display: grid; gap: 2px; pointer-events: none; }
 .map-readout button { pointer-events: auto; text-align: left; white-space: normal; }
+.map-readout-head { display: flex; align-items: center; gap: 2px; }
+.map-readout-head .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-readout-head .btn.small { padding: 1px 7px; min-width: 22px; text-align: center; }
 .map-readout .title { color: var(--text-dim); letter-spacing: 0.08em; font-size: 10px; text-transform: uppercase; }
+.map-keys { position: absolute; right: 0; bottom: calc(100% + 6px); width: 330px; box-sizing: border-box; padding: 6px 10px 8px; pointer-events: auto; background: var(--panel-solid, #0b1726); border: 1px solid var(--panel-border); border-radius: 6px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55); }
+.map-keys dl { margin: 0; display: grid; gap: 3px; }
+.map-keys dl div { display: grid; grid-template-columns: 112px 1fr; gap: 8px; align-items: baseline; }
+.map-keys dt { justify-self: start; white-space: nowrap; }
+.map-keys dd { margin: 0; color: var(--text-dim); line-height: 1.35; }
 .map-readout .path { color: var(--text); }
 .map-readout .hint { color: var(--text-dim); font-size: 10.5px; margin-top: 3px; line-height: 1.45; }
