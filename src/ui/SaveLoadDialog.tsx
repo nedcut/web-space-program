@@ -126,7 +126,7 @@ export function SaveLoadDialog({ onClose }: { onClose(): void }) {
     </div>
     <label className="load-drop">
       <input type="file" className="visually-hidden" accept=".wsp-save.json,application/json" aria-label="Import save file" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importFile(f); }} />
-      <Icon name="import" size={18} /><span><strong>Import a save file</strong> — drop a <code>.wsp-save.json</code> here or click to browse. Manual saves and the latest three autosaves per program are kept.</span>
+      <Icon name="load" size={18} /><span><strong>Import a save file</strong> — drop a <code>.wsp-save.json</code> here or click to browse. Manual saves and the latest three autosaves per program are kept.</span>
     </label>
     <div className="load-foot"><Button className="btn" onClick={onClose}>Back <Kbd>Esc</Kbd></Button></div>
     {pending && <ConfirmModal danger confirmLabel="Delete"

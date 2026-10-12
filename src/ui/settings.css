@@ -16,3 +16,6 @@
 .binding-row.clash .binding-key { border-color: var(--warn); color: var(--warn); }
 .graphics-custom { color: var(--text-dim); font-weight: 400; }
 @media (max-width: 600px) { .settings-head { flex-wrap: wrap; } .settings-search { order: 3; width: 100%; } }
+/* Fixed height: switching tabs or typing a search never moves the header and tabs under the pointer. */
+.settings-dialog { height: min(760px, calc(100dvh - 40px)); }
+.settings-content { flex: 1; }
