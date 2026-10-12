@@ -1,6 +1,9 @@
 import { tutorialContext, getTutorial } from '../tutorial/runtime';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { game } from '../game/store';
+import { listLibrary } from '../game/saves';
+import { snapshotEqual } from '../util/snapshotEqual';
+import { ConfirmModal } from '../ui/components';
 import { EditorView, IS_MAC } from './scene/EditorView';
 import { EditorSession } from './session';
 import { STOCK_CRAFTS } from './stockCrafts';
@@ -8,7 +11,7 @@ import { CraftImportDialog } from './ui/CraftImportDialog';
 import { LoadDialog } from './ui/LoadDialog';
 import { Palette } from './ui/Palette';
 import { StagingPanel } from './ui/StagingPanel';
-import { TopBar } from './ui/TopBar';
+import { TopBar, keyOf } from './ui/TopBar';
 import { ActionGroupsPanel } from './ui/ActionGroupsPanel';
 import { EditorInspector, HoverTooltip } from './ui/PartInspector';
 import './ui/editor.css';
@@ -27,6 +30,7 @@ export default function EditorScene() {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const [showLoad, setShowLoad] = useState(false);
+  const [confirmNew, setConfirmNew] = useState(false);
   const getView = useCallback(() => viewRef.current, []);
   const [importSource, setImportSource] = useState<{ initial?: string; file?: File } | null>(() => { const code = new URLSearchParams(location.hash.slice(1)).get('craft'); return code ? { initial: code } : null; });
 
@@ -41,7 +45,14 @@ export default function EditorScene() {
     window.__editor = { session, view: v, loadStock };
     const q = new URLSearchParams(location.search).get('stock');
     if (q && !game.get().craft && !getTutorial()) loadStock(q);
+    // A craft carried in from the hub or a flight counts as saved when the library holds the same design.
+    const initial = session.currentCraft();
+    let live = true;
+    if (initial.parts.length) void listLibrary().then(items => {
+      if (live && session.getSnapshot().dirty && items.some(i => snapshotEqual(i.craft, initial)) && snapshotEqual(session.currentCraft(), initial)) session.markSaved();
+    }).catch(() => {});
     return () => {
+      live = false;
       v.dispose();
       if (tutorialContext.editor === session) delete tutorialContext.editor;
       viewRef.current = null;
@@ -59,10 +70,7 @@ export default function EditorScene() {
         view={view}
         onLoad={() => setShowLoad(true)}
         onImport={() => setImportSource({})}
-        onNew={() => {
-          if (view.craft.parts.length && !window.confirm('Start a new craft? Unsaved changes will be lost.')) return;
-          session.newCraft();
-        }}
+        onNew={() => { if (session.getSnapshot().dirty) setConfirmNew(true); else session.newCraft(); }}
       />
       {view.mode === 'actions' ? <ActionGroupsPanel session={session} view={view} /> : <Palette session={session} view={view} />}
       <StagingPanel session={session} view={view} />
@@ -134,6 +142,9 @@ export default function EditorScene() {
       )}
       {importSource && <CraftImportDialog session={session} {...importSource} onClose={() => { setImportSource(null); if (location.hash.startsWith('#craft=')) history.replaceState(null, '', location.pathname + location.search); }} />}
       {showLoad && <LoadDialog session={session} onClose={() => setShowLoad(false)} />}
+      {confirmNew && <ConfirmModal title="Start a new craft?" confirmLabel="Discard and start new" danger onConfirm={() => { setConfirmNew(false); session.newCraft(); }} onCancel={() => setConfirmNew(false)}>
+        “{view.name}” has unsaved changes. Save it first ({keyOf('editorSave')}) to keep it in the craft library.
+      </ConfirmModal>}
     </div>
   );
 }
