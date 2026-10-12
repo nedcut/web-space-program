@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { AppIcon, type AppGlyph } from './glyphs';
+import { useEscape } from '../../ui/nav/escape';
+import { isTyping, matches } from '../../input/bindings';
 
 export type AppId = 'alarms' | 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms';
 
@@ -12,6 +14,11 @@ export interface HudApp {
   /** Small status light on the toolbar button. */
   badge?: 'on' | 'warn' | 'target' | null;
   width?: number;
+  /**
+   * How readily the window gives up height when docked windows don't fit the column (default 1). Long, scrolling
+   * readouts use more so short ones (resource bars, alarms) keep their rows.
+   */
+  shrink?: number;
 }
 
 /** Extra toolbar buttons that act rather than open a window (orbit strip, settings, help). */
@@ -41,12 +48,55 @@ export function useApps() {
   return { state, toggle, close, move, dock };
 }
 
+/** Input that decides whether Esc belongs to the app windows (true) or to the pause menu (false). */
+export type AppEscapeInput =
+  | { kind: 'pointer'; inApps: boolean }
+  | { kind: 'key'; key: string; typing: boolean; appKey: boolean };
+
+const PASSIVE_KEYS = new Set(['Escape', 'Shift', 'Control', 'Alt', 'Meta', 'Tab', 'CapsLock']);
+
+/**
+ * Esc closes app windows only while the pilot is working with them: a click in the toolbar or a window (or the
+ * flight-data shortcut) engages; a click in the scene or any flight key hands Esc back to the pause menu. Windows
+ * kept open while flying therefore never swallow the pause key.
+ */
+export function appEscapeEngaged(engaged: boolean, input: AppEscapeInput): boolean {
+  if (input.kind === 'pointer') return input.inApps;
+  if (input.appKey) return true;
+  if (input.typing || PASSIVE_KEYS.has(input.key)) return engaged;
+  return false;
+}
+
+/**
+ * Escape handling for the app windows: while engaged, each Esc closes the most recently opened visible window.
+ * Returns the window that the next Esc would close (null when Esc pauses). Listeners are input events only.
+ */
+export function useAppEscape(visible: AppId[], close: (id: AppId) => void): AppId | null {
+  const [engaged, setEngaged] = useState(false);
+  const engagedRef = useRef(false);
+  useEffect(() => {
+    // Only a change re-renders the HUD (held flight keys repeat keydown).
+    const apply = (input: AppEscapeInput) => {
+      const next = appEscapeEngaged(engagedRef.current, input);
+      if (next !== engagedRef.current) { engagedRef.current = next; setEngaged(next); }
+    };
+    const pointer = (e: PointerEvent) => apply({ kind: 'pointer', inApps: !!(e.target as Element | null)?.closest?.('.app-win, .app-bar') });
+    const key = (e: KeyboardEvent) => apply({ kind: 'key', key: e.key, typing: isTyping(e.target), appKey: matches('flightData', e) });
+    window.addEventListener('pointerdown', pointer, true);
+    window.addEventListener('keydown', key, true);
+    return () => { window.removeEventListener('pointerdown', pointer, true); window.removeEventListener('keydown', key, true); };
+  }, []);
+  const top = engaged ? visible.at(-1) ?? null : null;
+  useEscape(() => { if (top) close(top); }, top !== null, 'panel');
+  return top;
+}
+
 /** Top-right toolbar strip of small icon buttons. */
 export function AppToolbar({ apps, open, onToggle, actions }: { apps: HudApp[]; open: AppId[]; onToggle(id: AppId): void; actions: ToolbarAction[] }) {
   return (
     <nav className="app-bar panel" aria-label="Applications">
       {apps.filter(a => a.content !== null).map(a => (
-        <button key={a.id} type="button" className={`app-btn ${open.includes(a.id) ? 'on' : ''}`} aria-pressed={open.includes(a.id)} title={a.title}
+        <button key={a.id} type="button" className={`app-btn ${open.includes(a.id) ? 'on' : ''}`} aria-pressed={open.includes(a.id)} data-tip={a.title}
           aria-label={a.title} data-tutorial={a.id === 'target' ? 'target' : `app-${a.id}`} onClick={() => onToggle(a.id)}>
           <AppIcon name={a.icon} />
           {a.badge && <span className={`app-badge ${a.badge}`} />}
@@ -54,7 +104,7 @@ export function AppToolbar({ apps, open, onToggle, actions }: { apps: HudApp[]; 
       ))}
       <span className="app-sep" aria-hidden />
       {actions.map(a => (
-        <button key={a.id} type="button" className={`app-btn ${a.on ? 'on' : ''}`} title={a.title} aria-label={a.title} aria-pressed={a.on} data-tutorial={a.tutorial} onClick={a.onClick}>
+        <button key={a.id} type="button" className={`app-btn ${a.on ? 'on' : ''}`} data-tip={a.title} aria-label={a.title} aria-pressed={a.on} data-tutorial={a.tutorial} onClick={a.onClick}>
           <AppIcon name={a.icon} />
         </button>
       ))}
@@ -63,7 +113,7 @@ export function AppToolbar({ apps, open, onToggle, actions }: { apps: HudApp[]; 
 }
 
 /** A draggable app window. Undragged windows stack under the toolbar; dragging detaches one (double-click the title to re-dock). */
-export function AppWindow({ app, pos, scale, onClose, onMove, onDock }: { app: HudApp; pos?: { x: number; y: number }; scale: number; onClose(): void; onMove(x: number, y: number): void; onDock(): void }) {
+export function AppWindow({ app, pos, scale, escTarget = false, onClose, onMove, onDock }: { app: HudApp; pos?: { x: number; y: number }; scale: number; escTarget?: boolean; onClose(): void; onMove(x: number, y: number): void; onDock(): void }) {
   const ref = useRef<HTMLElement>(null);
   const drag = useRef<{ dx: number; dy: number; id: number; x: number; y: number; style: string; scale: number; left: number; top: number; maxX: number; maxY: number } | null>(null);
   const frame = useRef(0);
@@ -108,11 +158,12 @@ export function AppWindow({ app, pos, scale, onClose, onMove, onDock }: { app: H
   };
   return (
     <section ref={ref} className={`app-win panel ${pos ? 'floating' : ''}`} aria-label={app.title}
-      style={{ width: app.width ?? 270, ...(pos ? { left: pos.x, top: pos.y } : {}) }}>
+      style={{ width: app.width ?? 270, ...(pos ? { left: pos.x, top: pos.y } : { flexShrink: app.shrink ?? 1 }) }}>
       <header className="app-win-head" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up} onDoubleClick={onDock}
         title="Drag to move · double-click to dock under the toolbar">
         <AppIcon name={app.icon} size={14} />
         <span>{app.title}</span>
+        {escTarget && <kbd className="kbd app-win-esc" title="Esc closes this window">Esc</kbd>}
         <button type="button" className="app-win-close" onClick={onClose} aria-label={`Close ${app.title}`}>×</button>
       </header>
       <div className="app-win-body">{app.content}</div>

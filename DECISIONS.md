@@ -655,3 +655,33 @@ Supersedes the "retractable solar arrays/antennas default extended" sentence of 
 - **Unsaved indicator (`SessionView.dirty`, small edit to `src/editor/session.ts`).** The baseline is the craft and name as last loaded or saved. The deep compare runs only when the craft object or name changes; hover and UI touches reuse the cached result. Undoing back to the baseline counts as clean, and empty crafts are never dirty. A craft carried in from the hub or a flight counts as clean only when the library holds an identical entry (checked once on mount). New craft, library Load (except Merge) and Import ask for confirmation only when dirty. Before, New always used `window.confirm` and Load/Import never asked.
 - **Craft library uses the shared `Modal`**, which brings focus trap, focus restore and Esc. Saved vehicles are listed first; search matches all words across stock and saved craft; sort is recent/name/part count. Stock craft for other scales are hidden behind "Show other scales (N)", and a badge appears only for a craft that doesn't match the current scale (the old "Standard scale · current" badge on every card is gone). Rename uses `PromptModal`. Folder and Tags use a local `FieldModal`, because `PromptModal` cannot submit an empty value (unfiling or clearing tags). Delete now asks for confirmation (before, it deleted on one click).
 - **`/` focuses the part search** (not while typing or with a dialog open). In the search box, Esc clears the text first, then leaves the field.
+
+## UX-7 flight shell: pause menu, app windows, results, exit to hub (2026-10-12, op/ux7)
+- **Pause menu (`flight/hud/PauseMenu.tsx`).** Header shows vessel + situation; Resume first (focused, Enter resumes);
+  then groups Flight (revert to launch / revert to editor / recover) · Program (quicksave / save as / quickload) ·
+  Options (photo / controls / settings) and "← Space Center" last. Arrow keys move between buttons. Reverts ask with
+  `ConfirmModal` except after the vessel is lost (nothing left to lose); "Save as…" uses `PromptModal`. Lessons and
+  challenges show one "Restart lesson/challenge" (previously both "Restart lesson" and "Revert to launch"), no recover,
+  no revert to editor and no saves. Group contents are a pure function (`pauseMenuGroups`, tested).
+- **Esc is the shared stack in flight too.** Pause menu, Help, F3 results and the post-loss report register as
+  `modal`; part-detail panels as `panel`. A handled Esc never reaches the controller, which fixes F3 + Esc
+  closing results *and* pausing. The controller's `onExit` now only runs when the stack is empty (Esc → pause) or for
+  the gamepad menu button. Esc now also opens the menu after the vessel is lost (it used to do nothing).
+- **App windows and Esc: engaged/disengaged rule, not "always close first".** Many players keep apps open while
+  flying; making Esc close those first would cost an emergency pause one press per window. So Esc closes app windows
+  (most recently opened first, with an `Esc` hint on that window) only while the pilot is working with them: after a
+  click in the toolbar or a window, or the flight-data shortcut. A click in the scene or any flight key hands Esc back
+  to the pause menu (`appEscapeEngaged`, tested). Listeners are input events; the HUD re-renders only when the state flips.
+- **App column layout is CSS only.** Docked windows shrink to share the column between the toolbar and the crew/MAP
+  dock (body scrolls, min 110 px) before the column itself scrolls; long readouts give up height first
+  (`HudApp.shrink`: flight data 8, science/target 3). Five windows fit at 1600×900 without reaching MAP/AUTO.
+- **Toolbar:** instant hover/focus labels (`data-tip`, CSS) instead of the delayed native title; Mission alarms and the
+  Engineering strip had the Flight data glyph (three identical icons), now an alarm clock and a Δ glyph.
+- **First-flight card** hides during EVA and in map view (it is about launching).
+- **Leaving flight lands on the hub.** `exitTo('spaceCenter')` sets `scene: 'spaceCenter'` and a hub notice from
+  `flight/exit.ts` (`flightExitNotice`): "<vessel>: flight report in the Flight Log (max altitude …)", appended to a
+  recovery summary. Seam for UX-3: the report id is `World.latestReportId`, saved in `game.resumeWorld` (the Flight Log
+  already opens it); a debrief card can read it from there and replace the notice (drop the `notice` line in `exitTo`).
+- **Cost (CDP Chrome, F8 `hud` section, Meridian, Resources + Flight data docked, 12 s windows, two runs each):** pad
+  0.025–0.028 ms/frame before → 0.030 after (second run; first run 0.041 is warm-up), orbit 0.025–0.026 → 0.024.
+  Within run-to-run noise; nothing new runs per frame.
