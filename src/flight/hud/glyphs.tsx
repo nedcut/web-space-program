@@ -48,7 +48,7 @@ export const SasIcon = memo(function SasIcon({ mode, size = 22, color }: { mode:
   );
 });
 
-export type AppGlyph = 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms' | 'orbit' | 'settings' | 'help' | 'map' | 'camera' | 'stage' | 'lock' | 'unlock' | 'docking' | 'menu';
+export type AppGlyph = 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms' | 'orbit' | 'settings' | 'help' | 'map' | 'camera' | 'stage' | 'lock' | 'unlock' | 'docking' | 'menu' | 'alarm' | 'engineering';
 
 const APP: Record<AppGlyph, ReactElement> = {
   // Three level gauges.
@@ -72,6 +72,8 @@ const APP: Record<AppGlyph, ReactElement> = {
   unlock: <><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 7.5-2" /></>,
   docking: <><path d="M4 9h5v6H4zM15 9h5v6h-5zM9 12h2M13 12h2" /></>,
   menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+  alarm: <><circle cx="12" cy="13" r="7.5" /><path d="M12 9v4l2.5 2M4 5l3-2.5M20 5l-3-2.5" /></>,
+  engineering: <path d="M12 4L4 19h16zM12 10l-3 6h6" />,
 };
 
 export const AppIcon = memo(function AppIcon({ name, size = 18 }: { name: AppGlyph; size?: number }) {

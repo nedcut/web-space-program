@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { bindingLabel, getBindings, subscribeBindings, type Action } from '../../input/bindings';
+import { useEscape } from '../../ui/nav/escape';
 const SEEN_KEY = 'wsp.help.seen.v1';
 
 export function helpSeen(): boolean {
@@ -69,6 +70,8 @@ const EVA_KEYS: [Action[] | string, string][] = [
 /** First-flight controls cheat sheet (F1 or the "?" button). */
 export function HelpOverlay({ eva, onClose }: { eva: boolean; onClose(): void }) {
   const bindings = useSyncExternalStore(subscribeBindings, getBindings);
+  // Closing returns to whatever it covered (flight or the pause menu).
+  useEscape(onClose, true, 'modal');
   // Compact, human key names; only the primary binding per action keeps rows narrow.
   const KEY_NAMES: Record<string, string> = { ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Equal: '+', Minus: '−', Backspace: '⌫', Escape: 'Esc', BracketRight: ']', BracketLeft: '[', Comma: ',', Period: '.', Slash: '/', Space: 'Space', Enter: 'Enter' };
   const keyName = (k: string) => k.split('+').map(p => KEY_NAMES[p] ?? p.replace(/Key|Digit|Numpad/g, '').replace(/(Shift|Control|Alt|Meta)(Left|Right)/g, '$1').replace('Control', 'Ctrl')).join('+');
@@ -104,7 +107,7 @@ export function HelpOverlay({ eva, onClose }: { eva: boolean; onClose(): void })
           ))}
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-          Press <span className="kbd">{keys(['help'])}</span> or the <span className="kbd">?</span> button any time to show this again. <span className="kbd">{keys(['menu'])}</span> closes it.
+          Press <span className="kbd">{keys(['help'])}</span> or the <span className="kbd">?</span> button any time to show this again. <span className="kbd">Esc</span> closes it.
         </div>
       </div>
     </div>

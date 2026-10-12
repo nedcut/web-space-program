@@ -1,6 +1,6 @@
 import { flightEndReady, scheduleFlightEnd } from './lossPresentation';
 import { CrashOverlay } from '../ui/CrashOverlay';
-import { Panel, Button } from '../ui/components';
+import { Panel, Button, Kbd } from '../ui/components';
 import { attachScenarioWorld, endScenario, getScenarioRun, startScenario } from '../scenarios/runtime';
 import { FlightReport } from '../ui/FlightLog';
 import { photoMode, usePhotoMode } from '../game/photoMode';
@@ -13,7 +13,7 @@ import type { ActionGroupId } from '../sim/vessel/types';
 import { tutorialContext, getTutorial, endTutorial, startLesson } from '../tutorial/runtime';
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { game, updateSettings, useGame } from '../game/store';
 import { FlightController } from './controller';
 import { Hud, NavballView, type Telemetry } from './hud/Hud';
@@ -37,6 +37,9 @@ import { ArrivalBanner } from './hud/FeelHud';
 import { situationBanner, type SituationBannerText } from './situation';
 import { pauseMenuVisible } from './modals';
 import { saveErrorText } from '../game/storageErrors';
+import { PauseMenu, type PauseMenuModel } from './hud/PauseMenu';
+import { useEscape } from '../ui/nav/escape';
+import { flightExitNotice } from './exit';
 
 export default function FlightScene() {
   useRenderProfile();
@@ -54,8 +57,6 @@ export default function FlightScene() {
   const [lost, setLost] = useState(false);
   const [endReady, setEndReady] = useState(false);
   const lostAt = useRef<number | null>(null);
-  const lostRef = useRef(false);
-  lostRef.current = lost;
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   /** Loading screen stays mounted briefly after ready so it can fade instead of popping. */
@@ -151,13 +152,13 @@ export default function FlightScene() {
       game.set({ launchPending: false });
       const scenario = new URLSearchParams(location.search).get('scenario');
       if (scenario && mountKey === 0 && !getTutorial() && !getScenarioRun()) cc.devScenario(scenario);
-      // Esc: close the help overlay first; never un-pause the "vessel lost" screen (there is nothing to fly).
+      // The menu action (Esc, gamepad Start). Esc reaches this only when no dialog, app window or panel is on the
+      // Escape stack (they close first); the gamepad still walks the same order here.
       cc.onExit = () => {
         if (getScenarioRun()?.result) return;
         if (helpRef.current) return closeHelp();
         if (panelsRef.current.length && !pausedRef.current) return setPanels(p => p.slice(0, -1));
         if (settingsRef.current) return setShowSettings(false);
-        if (lostRef.current) return;
         setPaused((p) => !p);
       };
       cc.onQuickload = () => {
@@ -289,6 +290,9 @@ export default function FlightScene() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Part details panels close with Esc (most recent first) before Esc pauses.
+  useEscape(() => setPanels(p => p.slice(0, -1)), panels.length > 0 && !paused, 'panel');
+
   const navball = useCallback(() => ctrl.current?.navball() ?? null, []);
   const partScreen = useCallback((uid: number) => ctrl.current?.partScreenPosition(uid) ?? null, []);
   useEffect(() => {
@@ -308,8 +312,9 @@ export default function FlightScene() {
       }
       c.quicksave('autosave', 'spaceCenter');
       game.set({ ut: c.world.ut, mode: c.world.mode, resumeWorld: c.snapshot() });
+      if (scene === 'spaceCenter') game.set({ notice: flightExitNotice(c.world, game.get().notice) });
     }
-    game.set({ scene: scene === 'spaceCenter' ? 'flightlog' : scene });
+    game.set({ scene });
   };
   /** Recover the active vessel (on Earth, landed / on the pad) and summarise what it earned on the hub. */
   const recover = () => {
@@ -372,7 +377,7 @@ export default function FlightScene() {
                 <Button className="btn small" onClick={recover}>Recover vessel</Button>
               </Panel>
             ) : undefined,
-            onboarding: quickStart && ready && !help && !paused && tele.onSurface ? <QuickStartCard onClose={() => { markHelpSeen(); setQuickStart(false); }} onHelp={() => { markHelpSeen(); setQuickStart(false); setHelp(true); }} /> : undefined,
+            onboarding: quickStart && ready && !help && !paused && tele.onSurface && !tele.eva && !tele.mapMode ? <QuickStartCard onClose={() => { markHelpSeen(); setQuickStart(false); }} onHelp={() => { markHelpSeen(); setQuickStart(false); setHelp(true); }} /> : undefined,
             assist: !tele.eva && !tele.noControl ? <AssistPanel active={tele.assist} onStart={(id) => ctrl.current?.startAssist(id)} onCancel={() => ctrl.current?.cancelAssist()} /> : undefined,
             assistActive: !!tele.assist,
             signal: c.world.commsSettings.enabled ? <SignalPanel world={c.world} /> : undefined,
@@ -435,44 +440,37 @@ export default function FlightScene() {
         <Button className="btn small" onClick={revertToLaunch} disabled={!launched.current && !getScenarioRun() && !getTutorial()}>Revert</Button>
         <Button className="btn small" onClick={recover} disabled={!canRecover}>Recover</Button>
         <Button className="btn small" onClick={() => setReport(true)}>Report</Button>
-        <Button className="btn small" onClick={() => exitTo('spaceCenter')}>{getScenarioRun() ? 'Scenarios' : 'Space Center'}</Button>
+        <Button className="btn small" onClick={() => exitTo('spaceCenter')}>{getScenarioRun() ? 'Challenges' : getTutorial() ? 'Lessons' : 'Space Center'}</Button>
       </Panel>}
       {report && endReady && lost && !photo.active && ctrl.current && (() => {
         const r = ctrl.current.world.flightlog.records.find(r => r.id === ctrl.current!.world.latestReportId);
-        return r ? <div className="modal-backdrop"><Panel className="panel report-modal"><Button className="btn" onClick={() => setReport(false)}>Close report</Button><FlightReport record={r} /></Panel></div> : null;
+        return r ? <ReportModal label="Close report" onClose={() => setReport(false)}><FlightReport record={r} /></ReportModal> : null;
       })()}
       {results && !report && !paused && !photo.active && ctrl.current && (() => {
         const w = ctrl.current.world;
         const r = w.flightlog.records.find(r => r.vesselId === w.activeId && !r.outcome) ?? w.flightlog.records.find(r => r.id === w.latestReportId);
-        return <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && setResults(false)}><Panel className="panel report-modal">
-          <Button className="btn" onClick={() => setResults(false)}>Close flight results <span className="kbd" style={{ marginLeft: 6 }}>{bindingLabel('flightResults')}</span></Button>
+        return <ReportModal label="Close flight results" shortcut={bindingLabel('flightResults')} onClose={() => setResults(false)}>
           {r ? <FlightReport record={r} /> : <p style={{ color: 'var(--text-dim)' }}>No flight record yet.</p>}
-        </Panel></div>;
+        </ReportModal>;
       })()}
       {pauseMenuVisible({ paused, help }) && !multiplayer && !photo.active && !report && (
         <div className="modal-backdrop">
           {showSettings ? (
             <SettingsPanel world={c?.world} onClose={() => setShowSettings(false)} />
           ) : (
-            <Panel className="pause-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 10, width: 280 }}>
-              <div className="label" style={{ textAlign: 'center', color: lost ? 'var(--bad)' : undefined }}>{lost ? 'Vessel lost' : 'Paused'}</div>
-              {!lost && <Button className="btn" onClick={() => photoMode.open()}>Photo mode</Button>}
-              {!lost && <Button className="btn primary" onClick={() => setPaused(false)}>Resume <span className="kbd" style={{ marginLeft: 6 }}>Esc</span></Button>}
-              {getTutorial() && <Button className="btn" onClick={() => startLesson(getTutorial()!.lesson.id)}>Restart lesson</Button>}
-              {lost && !getTutorial() && !getScenarioRun() && hasSave('quicksave') && <Button className="btn primary" onClick={() => ctrl.current?.onQuickload?.()}>Load quicksave</Button>}
-              {canRecover && (
-                <Button className="btn" onClick={recover}>Recover vessel</Button>
-              )}
-              {launched.current && <Button className="btn" onClick={revertToLaunch}>Revert to launch</Button>}
-              {launched.current && <Button className="btn" onClick={revert}>Revert to editor</Button>}
-              {!lost && !getTutorial() && !getScenarioRun() && <Button className="btn" onClick={() => { const name = window.prompt('Save slot name', 'Mission save'); if (name?.trim() && ctrl.current) { try { saveNamedWorld(name, ctrl.current.world); ctrl.current.world.message('Mission saved.'); } catch (e) { ctrl.current.world.message(saveErrorText(e), 'bad'); } } }}>Save as…</Button>}
-              {!lost && !getTutorial() && !getScenarioRun() && <Button className="btn" onClick={() => ctrl.current?.quicksave()}>Quicksave <span className="kbd" style={{ marginLeft: 6 }}>F5</span></Button>}
-              {!lost && !getTutorial() && !getScenarioRun() && hasSave('quicksave') && <Button className="btn" onClick={() => ctrl.current?.onQuickload?.()}>Quickload <span className="kbd" style={{ marginLeft: 6 }}>F9</span></Button>}
-              <Button className="btn" onClick={() => setHelp(true)}>Controls <span className="kbd" style={{ marginLeft: 6 }}>{bindingLabel('help')}</span></Button>
-              <Button className="btn" onClick={() => setShowSettings(true)}>Settings</Button>
-              <Button className="btn" onClick={() => exitTo('spaceCenter')}>{getScenarioRun() ? 'Back to scenarios' : getTutorial() ? 'Back to lessons' : 'Space Center'}</Button>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>{(getTutorial() || getScenarioRun()) ? 'Practice is separate from your saved program.' : 'Progress is autosaved when you leave flight.'}</div>
-            </Panel>
+            <PauseMenu model={pauseModel(c, lost, canRecover, !!launched.current)} act={{
+              resume: () => setPaused(false),
+              photo: () => photoMode.open(),
+              recover,
+              revertToLaunch,
+              revertToEditor: revert,
+              saveAs: (name) => { const w = ctrl.current?.world; if (!w) return; try { saveNamedWorld(name, w); w.message('Mission saved.'); } catch (e) { w.message(saveErrorText(e), 'bad'); } },
+              quicksave: () => ctrl.current?.quicksave(),
+              quickload: () => ctrl.current?.onQuickload?.(),
+              controls: () => setHelp(true),
+              settings: () => setShowSettings(true),
+              leave: () => exitTo('spaceCenter'),
+            }} />
           )}
         </div>
       )}
@@ -488,6 +486,23 @@ export default function FlightScene() {
       )}
     </div>
   );
+}
+
+/** What the pause menu offers right now (only built while the menu is open). */
+function pauseModel(c: FlightController | null, lost: boolean, canRecover: boolean, launched: boolean): PauseMenuModel {
+  const practice = getTutorial() ? 'lesson' : getScenarioRun() ? 'challenge' : null;
+  return { lost, practice, title: c ? situationBanner(c.world) : null, canRecover, canRevert: launched, hasQuicksave: !practice && hasSave('quicksave') };
+}
+
+/** Flight report sheet (F3 results, or the report after a loss). Esc closes it and only it. */
+function ReportModal({ label, shortcut, onClose, children }: { label: string; shortcut?: string; onClose(): void; children: ReactNode }) {
+  useEscape(onClose, true, 'modal');
+  return <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+    <Panel className="panel report-modal" role="dialog" aria-label={label}>
+      <Button className="btn" onClick={onClose}>{label} {shortcut && <Kbd>{shortcut}</Kbd>} <Kbd>Esc</Kbd></Button>
+      {children}
+    </Panel>
+  </div>;
 }
 
 function PerformanceReadout({ controller: c }: { controller: FlightController }) {

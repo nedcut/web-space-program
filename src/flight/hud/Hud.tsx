@@ -16,7 +16,7 @@ import { CrewPanel } from './CrewPanel';
 import { NavballCluster } from './NavballCluster';
 import { StagingStack } from './StagingStack';
 import { Altimeter, TimeControl } from './TopBar';
-import { AppToolbar, AppWindow, useApps, type AppId, type HudApp, type ToolbarAction } from './AppLauncher';
+import { AppToolbar, AppWindow, useAppEscape, useApps, type AppId, type HudApp, type ToolbarAction } from './AppLauncher';
 import { CrewCards } from './CrewCards';
 import type { StagePartGlyph } from './glyphs';
 import './hud.css';
@@ -290,18 +290,19 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
     { id: 'flightData', title: `Flight data (${bindingLabel('flightData')})`, icon: 'flightData', width: 290, content: <FlightDataPanel data={t.flightData} onClose={() => apps.close('flightData')} /> },
     { id: 'science', title: 'Science', icon: 'science', content: dock?.science ?? null },
     { id: 'crew', title: t.eva ? 'EVA' : `Crew (${t.crew.length})`, icon: 'crew', badge: t.noControl ? 'warn' : null, content: <CrewPanel t={t} cb={cb} /> },
-    { id: 'alarms', title: 'Mission alarms', icon: 'flightData', badge: dock?.alarmActive ? 'warn' : null, content: dock?.alarms ?? null },
+    { id: 'alarms', title: 'Mission alarms', icon: 'alarm', badge: dock?.alarmActive ? 'warn' : null, content: dock?.alarms ?? null },
     { id: 'assist', title: 'Flight assist', icon: 'assist', badge: dock?.assistActive ? 'on' : null, content: dock?.assist ?? null },
     { id: 'target', title: 'Target & docking', icon: 'target', badge: t.target ? 'target' : null, width: 260, content: <TargetPanel t={t} cb={cb} /> },
     { id: 'comms', title: 'Communications', icon: 'comms', content: dock?.signal ?? null },
   ];
   const actions: ToolbarAction[] = [
-    { id: 'engineering', title: 'Engineering strip: stage Δv, TWR, burn countdown and ballistic impact', icon: 'flightData', on: engineeringStrip, onClick: toggleEngineering },
+    { id: 'engineering', title: 'Engineering strip: stage Δv, TWR, burn countdown and ballistic impact', icon: 'engineering', on: engineeringStrip, onClick: toggleEngineering },
     { id: 'orbit', title: t.mapMode ? 'Orbit summary (always shown in map view)' : 'Orbit summary strip', icon: 'orbit', on: orbitStrip || t.mapMode, onClick: toggleOrbit },
     ...(cb.onSettings ? [{ id: 'settings', title: 'Settings', icon: 'settings' as const, onClick: cb.onSettings }] : []),
     ...(cb.onHelp ? [{ id: 'help', title: `Controls help (${bindingLabel('help')})`, icon: 'help' as const, onClick: cb.onHelp }] : []),
   ];
   const openApps = apps.state.open.map(id => hudApps.find(a => a.id === id)).filter((a): a is HudApp => !!a && a.content !== null);
+  const escTarget = useAppEscape(openApps.map(a => a.id), apps.close);
   const docked = openApps.filter(a => !apps.state.pos[a.id]);
   const floating = openApps.filter(a => apps.state.pos[a.id]);
   const showOrbit = (orbitStrip || t.mapMode) && !t.eva;
@@ -346,11 +347,11 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
       <div className="hud-right">
         <AppToolbar apps={hudApps} open={apps.state.open} onToggle={apps.toggle} actions={actions} />
         <div className="app-stack">
-          {docked.map(a => <AppWindow key={a.id} app={a} scale={settings.hudScale} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} />)}
+          {docked.map(a => <AppWindow key={a.id} app={a} scale={settings.hudScale} escTarget={a.id === escTarget} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} />)}
         </div>
         <CrewCards crew={t.crew} eva={t.eva} mapMode={t.mapMode} noControl={t.noControl} cameraMode={t.feel.cameraMode} cb={stableCb} />
       </div>
-      {floating.map(a => <AppWindow key={a.id} app={a} pos={apps.state.pos[a.id]} scale={settings.hudScale} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} />)}
+      {floating.map(a => <AppWindow key={a.id} app={a} pos={apps.state.pos[a.id]} scale={settings.hudScale} escTarget={a.id === escTarget} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} />)}
 
       {/* Lower-left instruments leave the vessel and its plume in the clear. */}
       <div className="hud-bottom">

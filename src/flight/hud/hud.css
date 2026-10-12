@@ -79,8 +79,18 @@
 .app-badge.warn { background: var(--warn); }
 .app-badge.target { background: #ff4fb8; }
 .app-sep { width: 1px; height: 18px; background: var(--panel-border); margin: 0 3px; }
+/* Instant labels (the native title tooltip takes a second and never shows for keyboard focus). */
+.app-btn[data-tip]:is(:hover, :focus-visible)::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; width: max-content; max-width: 240px;
+  padding: 5px 9px; border: 1px solid var(--panel-border); border-radius: var(--radius-sm); background: var(--panel-solid);
+  box-shadow: var(--shadow-panel); color: var(--text); font: 11.5px/1.35 var(--sans); text-align: left; pointer-events: none;
+}
 .app-stack { flex: 0 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; scrollbar-width: thin; pointer-events: none !important; }
 .app-win { display: flex; flex-direction: column; max-height: min(62vh, 560px); flex-shrink: 0; overflow: hidden; }
+/* Docked windows share the column between the toolbar and the crew/MAP dock: each shrinks (its body scrolls)
+   down to a readable minimum before the column itself scrolls, so none slides under MAP/AUTO or the crew. */
+.app-stack > .app-win { flex: 0 1 auto; min-height: 96px; }
+.app-win-esc { font-size: 9.5px; padding: 0 4px; line-height: 15px; letter-spacing: 0; text-transform: none; opacity: .85; }
 .app-win.floating { position: absolute; z-index: 12; }
 .app-win-head { display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 10px; cursor: grab; border-bottom: 1px solid var(--panel-border); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); touch-action: none; }
 .app-win-head:active { cursor: grabbing; }
@@ -267,3 +277,20 @@ html[data-ui-hidden='true'] :is(.tutorial-panel, .scenario-flight, .multiplayer-
 .mp-node { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; }
 .mp-scroll { flex: 0 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-right: -6px; padding-right: 6px; scrollbar-width: thin; }
 .mp-nodes + .mp-scroll { border-top: 1px solid var(--panel-border); padding-top: 8px; }
+
+/* ------------------------------------------------------------ pause menu */
+.pause-menu { width: 340px; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
+.pause-head { text-align: center; }
+.pause-head .label.bad { color: var(--bad); }
+.pause-title { margin-top: 6px; font-size: 16px; display: flex; flex-direction: column; gap: 2px; }
+.pause-title span { font-size: 11.5px; color: var(--text-dim); }
+.pause-menu .btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.pause-menu .btn .kbd { font-size: 10px; padding: 0 5px; }
+.pause-resume { padding-block: 10px; }
+.pause-group { display: flex; flex-direction: column; gap: 6px; }
+.pause-group > .label { color: var(--text-dim); font-size: 10px; letter-spacing: .14em; }
+.pause-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pause-grid > :last-child:nth-child(odd) { grid-column: span 2; }
+.pause-grid .btn { padding-inline: 8px; }
+.pause-leave { margin-top: 4px; }
+.pause-note { font-size: 11px; color: var(--text-dim); text-align: center; }
