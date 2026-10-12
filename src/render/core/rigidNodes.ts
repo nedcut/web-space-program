@@ -31,8 +31,10 @@ nodeTexture.needsUpdate = true;
 let uploaded = false;
 nodeTexture.onUpdate = () => { uploaded = true; };
 /**
- * After a context restore three re-uploads the texture from CPU data: make that a full upload, not pending ranges.
- * Every renderer that compiles a node program subscribes (flight, editor and thumbnail renderers share the texture).
+ * `uploaded` is module state, but GPU textures are per renderer: each new renderer (every flight, editor and thumbnail
+ * renderer) starts without one, and three would apply ranges queued for the previous renderer to the new one's first
+ * upload. That left slot 0 zero and collapsed every rigid hull vertex: the second launch drew only engines, panels and
+ * FX. So a renderer's first node program, like a context restore, makes the next upload a full one.
  */
 const restoreSubscribed = new WeakSet<THREE.WebGLRenderer>();
 function restoreFull(): void {
@@ -104,6 +106,8 @@ export function patchNodeVertex(shader: THREE.WebGLProgramParametersWithUniforms
   if (renderer && !restoreSubscribed.has(renderer)) {
     restoreSubscribed.add(renderer);
     onContextRestored(renderer, restoreFull);
+    // Compiles precede the first draw (and its texture upload) on this renderer.
+    restoreFull();
   }
   shader.uniforms.wspNodes = { value: nodeTexture };
   shader.vertexShader = `attribute float wspNode;
