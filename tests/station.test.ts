@@ -10,6 +10,7 @@ import { spawnTestOutpost } from '../src/flight/stationFixture';
 import { crewIds } from '../src/sim/crew/crew';
 import { controlFrom, controlPartUid, dockedPorts, freePorts, neutralInput, portInfo, stationModules, transferCrew, validCommands } from '../src/sim/vessel';
 import type { VesselState } from '../src/sim/vessel/runtime';
+import { berths, nearbyVessels } from '../src/flight/hud/StationPanel';
 import { qRotate } from '../src/util/quat';
 import { add, dot, length, sub } from '../src/util/vec3';
 
@@ -118,5 +119,16 @@ describe('docked outpost fixture and station modules', () => {
     expect(controlPartUid(w.active!.state)).toBeNull();
     const freed = [...w.vessels.values()].find(x => x.state.name === 'Lantern Ferry')!;
     expect(controlPartUid(freed.state)).toBe(pod.uid);
+  });
+
+  it('lists free berths and nearby vessels for the overview', () => {
+    const { w, wv, outpost } = setup();
+    w.switchTo(outpost.state.id);
+    const b = berths(stationModules(outpost.state));
+    expect(b).toEqual([{ uid: expect.any(Number), label: 'Bellweather Outpost', free: 2 }]);
+    const near = nearbyVessels(w);
+    expect(near.map(n => n.id)).toEqual([wv.state.id]);
+    expect(near[0].distance).toBeGreaterThan(40);
+    expect(near[0].distance).toBeLessThan(80);
   });
 });

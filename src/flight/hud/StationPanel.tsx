@@ -71,13 +71,15 @@ export function StationPanel({ world, act, readOnly }: { world: World; act: Stat
   for (const m of modules) for (const uid of m.partUids) moduleOf.set(uid, m.name);
   const controlName = control === null ? null : v.cache.byUid.get(control)?.def.name;
   const nearby = nearbyVessels(world);
+  const portLabel = (p: StationModule['ports'][number] | undefined) =>
+    !p ? 'Port' : p.partner === null ? `Free port · ${portSize(p.size)}` : `Port ↔ ${moduleOf.get(p.partner) ?? 'docked'}`;
   const toggle = (key: number) => setCollapsed(s => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; });
 
   return (
     <div className="station">
       <div className="st-summary">
         <span><b>{modules.length}</b> module{modules.length === 1 ? '' : 's'}</span>
-        <span title="Crew aboard / seats"><b>{aboard}</b>/{seats} crew</span>
+        {seats > 0 && <span title="Crew aboard / seats"><b>{aboard}</b>/{seats} crew</span>}
         <span title="Free docking ports"><b>{freePorts}</b> free port{freePorts === 1 ? '' : 's'}</span>
         <span>{fmtMass(v.mass)}</span>
       </div>
@@ -129,7 +131,7 @@ export function StationPanel({ world, act, readOnly }: { world: World; act: Stat
                     <button key={c.uid} type="button" className={`btn small ${control === c.uid ? 'primary' : ''}`} aria-pressed={control === c.uid} disabled={readOnly}
                       title={control === c.uid ? `Controlling from ${c.name}` : `Control from ${c.name}${c.kind === 'port' ? ' (forward = out of the port)' : ''}`}
                       onClick={() => control !== c.uid && act.controlFrom(c.uid)} {...hoverPorts([{ uid: c.uid, tone: 'own', label: c.name }])}>
-                      ◎ {c.kind === 'port' ? `Port · ${portSize(m.ports.find(p => p.uid === c.uid)?.size ?? 0)}` : c.name}
+                      ◎ {c.kind === 'port' ? portLabel(m.ports.find(p => p.uid === c.uid)) : c.name}
                     </button>
                   ))}
                 </div>
