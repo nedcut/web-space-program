@@ -131,7 +131,7 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
             <div className="vab-stock-icon"><CraftThumbnail craft={s.craft} /></div>
             <div className="vab-stock-name">{s.name}</div>
             {s.scale !== scale && <span className="vab-stock-scale">Built for {SCALE_NAME[s.scale] ?? s.scale} scale</span>}
-            <div className="vab-stock-blurb">{s.blurb.replace(/ · research required$/, '')}</div>
+            <div className="vab-stock-blurb">{s.blurb.replace(/ · research required$/, '').replace(new RegExp(`^${SCALE_NAME[scale]} scale · `), '')}</div>
             <div className="vab-stock-info mono">{s.info}</div>
             {lockedCount(s.craft) > 0 && <div className="vab-stock-locked">Needs research · {lockedCount(s.craft)} locked part type{lockedCount(s.craft) > 1 ? 's' : ''}</div>}
           </button>

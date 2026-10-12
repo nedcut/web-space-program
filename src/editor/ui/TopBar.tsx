@@ -60,7 +60,7 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
   const s = view.stats;
   const save = keyOf('editorSave');
   return (
-    <div className="vab-topbar panel" ref={bar} onPointerOver={tip.over} onPointerOut={tip.out} onFocus={tip.over} onBlur={tip.out}>
+    <div className="vab-topbar panel" ref={bar} onPointerOver={tip.over} onPointerOut={tip.out} onFocus={tip.over} onBlur={tip.out} onPointerDown={tip.hide}>
       <Button className="btn ghost small vab-exit" aria-label="Exit to Space Center" data-tip="Back to the Space Center · your craft stays loaded here" onClick={() => session.exit()}>
         <Icon name="arrow" size={14} /><span className="vab-exit-label">Space Center</span>
       </Button>
@@ -131,14 +131,15 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
           </Button>
         </Group>
         <div className="vab-stats mono">
+          {/* Δv first: narrower windows drop Parts, then Height (media rules count children). */}
+          <Stat label="Δv" value={fmtDv(view.totalDvVac)} accent />
           <Stat label="Mass" value={fmtKg(s.totalMass)} />
           <Stat label="Parts" value={String(s.partCount)} />
           {view.craftType === 'SPH' ? <Stat label="Length" value={`${s.height.toFixed(1)} m`} /> : <Stat label="Height" value={`${s.height.toFixed(1)} m`} />}
-          <Stat label="Δv" value={fmtDv(view.totalDvVac)} accent />
         </div>
       </div>
       <div className="vab-more">
-        <Button className={`vab-ibtn ${menu?.id === 'more' ? 'on' : ''}`} data-menu aria-label="More tools" data-tip="File, sharing and overlays" aria-haspopup="menu" aria-expanded={menu?.id === 'more'} onClick={e => openMenu('more', e.currentTarget)}><Icon name="more" /></Button>
+        <Button className={`vab-ibtn ${menu?.id === 'more' ? 'on' : ''} ${view.dirty ? 'pending' : ''}`} data-menu aria-label="More tools" data-tip={view.dirty ? 'File, sharing and overlays · unsaved changes' : 'File, sharing and overlays'} aria-haspopup="menu" aria-expanded={menu?.id === 'more'} onClick={e => openMenu('more', e.currentTarget)}><Icon name="more" /></Button>
       </div>
       <Button className="btn primary vab-launch" data-tip={mode === 'career' ? `${cost.toLocaleString()} cr launch cost · ${funds.toLocaleString()} cr available` : 'Roll out to the launch site'} onClick={() => session.launch()}>
         <Icon name="launch" size={17} /> Launch{mode === 'career' && <span className="vab-launch-cost">{cost.toLocaleString()} cr</span>}
@@ -198,6 +199,8 @@ function useToolbarTips(bar: React.RefObject<HTMLDivElement | null>) {
   const hide = () => { clearTimeout(state.current.timer); state.current.target = null; if (el.current) el.current.hidden = true; };
   return {
     el,
+    /** Clicking dismisses the tip until the pointer moves to another control (it would cover menus). */
+    hide() { clearTimeout(state.current.timer); if (el.current) el.current.hidden = true; },
     over(e: React.SyntheticEvent) {
       const target = (e.target as Element).closest?.<HTMLElement>('[data-tip]');
       if (!target || target === state.current.target) return;

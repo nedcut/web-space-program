@@ -40,6 +40,8 @@
 .vab-ibtn.on.cot { color: #d08bff; background: rgba(192, 97, 255, 0.14); border-color: rgba(192, 97, 255, 0.45); }
 .vab-ibtn.sym .mono { font-size: 12px; min-width: 20px; text-align: left; }
 .vab-stats { display: flex; gap: 18px; margin-left: 8px; padding-left: 16px; border-left: 1px solid var(--panel-border); }
+/* Stats that do not fit wrap onto a hidden second line: whole readouts drop out (Δv last), never half-clipped. */
+.vab-tools > .vab-stats { flex: 0 1 auto; min-width: 0; flex-wrap: wrap; height: 36px; overflow: hidden; row-gap: 20px; }
 .vab-stat { display: flex; flex-direction: column; gap: 1px; font-size: 14px; white-space: nowrap; }
 .vab-stat .label { font-size: 9.5px; }
 .vab-stat .accent { color: var(--accent); font-weight: 600; }
@@ -241,7 +243,8 @@
 .vab-saved-main { flex: 1; min-width: 0; }
 .vab-saved-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px; color: var(--text-dim); }
 .vab-tag { color: var(--accent); opacity: 0.85; }
-.vab-saved-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 330px; }
+.vab-saved-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+@media (min-width: 900px) { .vab-saved-actions { flex-wrap: nowrap; } }
 .vab-saved-actions .btn.ghost { color: var(--text-dim); }
 .vab-saved-actions .btn.ghost:hover { color: var(--text); }
 .vab-stock:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -268,7 +271,7 @@
 
 /* The build-tool group (place/offset/rotate/re-root/snap) needs ~200 px: secondary items collapse earlier. */
 @media (max-width: 1800px) {
-  .vab-stats .vab-stat:nth-child(2) { display: none; }
+  .vab-stats .vab-stat:nth-child(3) { display: none; }
   .vab-actions-label { display: none; }
 }
 @media (max-width: 1440px) {
@@ -283,8 +286,9 @@
 @media (max-width: 1500px) {
   .vab-topbar .vab-collapsible { display: none; }
   .vab-more { display: block; }
-  .vab-stats .vab-stat:nth-child(3) { display: none; }
+  .vab-stats .vab-stat:nth-child(4) { display: none; }
 }
+@media (max-width: 1700px) { .vab-stats .vab-stat:nth-child(4) { display: none; } }
 @media (max-width: 1100px) {
   .vab-name-wrap { width: 130px; }
   .vab-stats .vab-stat:nth-child(2) { display: none; }
