@@ -9,6 +9,9 @@ import type { PartState } from '../../sim/vessel/runtime';
 import type { PartActionId, PartTweaks, ResourceId } from '../../sim/vessel/types';
 import type { FlightController } from '../controller';
 import { game } from '../../game/store';
+import { canControlFrom, controlPartUid, freeSeats, stationModules } from '../../sim/vessel';
+import { seatCapacity } from '../../sim/crew/crew';
+import { berths } from './StationPanel';
 
 const fmtKN = (n: number) => (n < 1000 ? `${n.toFixed(0)} N` : `${(n / 1000).toFixed(n < 1e5 ? 1 : 0)} kN`);
 const CHUTE_PHASE: Record<string, string> = { stowed: 'Stowed', armed: 'Armed — waiting for air', semi: 'Partly open', full: 'Fully open', cut: 'Cut away' };
@@ -121,6 +124,12 @@ function FlightPartBody({ c, part: p, copies }: { c: FlightController; part: Par
     }
   }
   const descriptors = tweakDescriptors(p.def).filter(d => d.flight);
+  // Crew and control: "control from here" on pods/probes/ports; seat moves to any free seat in the docked complex.
+  const controllable = canControlFrom(p);
+  const controlling = controlPartUid(v) === p.uid;
+  const seats = seatCapacity(p);
+  const dest = seats > 0 && p.crew?.length ? berths(stationModules(v)).filter(b => b.uid !== p.uid) : [];
+  const crewName = (id: string) => c.world.crew.find(x => x.id === id)?.name ?? id;
   const groups = ACTION_GROUP_IDS.filter(g => p.actions?.[g]?.length);
   return <>
     <Section title="Status">
@@ -131,6 +140,18 @@ function FlightPartBody({ c, part: p, copies }: { c: FlightController; part: Par
     {resources.length > 0 && <Section title="Contents">
       {resources.map(([id, max]) => <Bar key={id} label={RESOURCES[id]?.name ?? id} value={p.resources[id] ?? 0} max={max} color={RESOURCE_COLORS[id] ?? '#aaa'}
         right={`${(p.resources[id] ?? 0).toFixed((p.resources[id] ?? 0) < 10 ? 1 : 0)} / ${max.toFixed(0)}`} />)}
+    </Section>}
+    {(controllable || seats > 0) && <Section title={seats > 0 ? `Crew · ${p.crew?.length ?? 0}/${seats}${freeSeats(p) ? '' : ' full'}` : 'Control'}>
+      {controllable && <div className="insp-actions"><Button className={`btn small ${controlling ? 'primary' : ''}`} disabled={!enabled || controlling}
+        title="Point the controls, SAS and navball along this part (ports: out of the docking face)" onClick={() => c.controlFrom(p.uid)}>
+        {controlling ? '◎ Controlling from here' : '◎ Control from here'}</Button></div>}
+      {(p.crew ?? []).map(id => <div key={id} className="insp-actions" style={{ alignItems: 'center' }}>
+        <span style={{ flex: 1, minWidth: 80 }}>{crewName(id)}</span>
+        {dest.length > 0 && <select aria-label={`Move ${crewName(id)} to`} value="" disabled={!enabled} className="st-move" onChange={e => e.target.value && c.transferCrew(id, +e.target.value)}>
+          <option value="">Move to…</option>
+          {dest.map(b => <option key={b.uid} value={b.uid}>{b.label} ({b.free} free)</option>)}
+        </select>}
+      </div>)}
     </Section>}
     {buttons.length > 0 && <Section title="Actions">
       <div className="insp-actions">{buttons.map(b => <Button key={`${b.action}-${b.experiment ?? ''}`} className={`btn small ${b.danger ? 'danger' : ''}`} disabled={!enabled || b.disabled}
