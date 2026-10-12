@@ -9,12 +9,21 @@ import { game, useGame, type Scene } from '../game/store';
 import { mountPlanetPreview } from './planetPreview';
 import { mountPartTurntable } from '../editor/scene/thumbnails';
 import './pedia.css';
-import { useEscape } from './nav/escape';
+import { MenuScreenHeader } from './nav/MenuScreenHeader';
+import { facilityLabel } from './nav/scenes';
+import { arrowNav } from './nav/arrowNav';
 import { LANDMARKS } from '../sim/terrain/landmarks';
 
 const NO_DISCOVERIES: readonly string[] = [];
+export type PediaKind = 'body' | 'part' | 'lesson';
 let returnScene: Scene = 'menu';
-export function openPedia(from: Scene) { returnScene = from; game.set({ scene: 'pedia' }); }
+let pendingArticle: { kind: PediaKind; id: string } | null = null;
+/** Open the Spacepedia; `article` deep-links straight to an entry (e.g. a part from the Research Lab). */
+export function openPedia(from: Scene, article?: { kind: PediaKind; id: string }) {
+  returnScene = from; pendingArticle = article ?? null; game.set({ scene: 'pedia' });
+}
+const BACK_LABELS: Partial<Record<Scene, string>> = { spaceCenter: 'Space Center', editor: facilityLabel('editor'), tracking: facilityLabel('tracking'), flightlog: facilityLabel('flightlog'), research: facilityLabel('research'), missions: facilityLabel('missions') };
+const TAB_LABELS: Record<PediaKind, string> = { body: 'Worlds', part: 'Parts', lesson: 'Flight school' };
 
 function Preview({ id, part = false }: { id: string; part?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -57,15 +66,27 @@ function Diagram({ kind = 'orbit', e = 0.45 }: { kind?: string; e?: number }) {
   </svg>;
 }
 export default function Spacepedia() {
-  useEscape(() => game.set({ scene: returnScene }), true, 'screen');
   const discoveries = useGame(s => s.resumeWorld?.discoveries) ?? NO_DISCOVERIES;
   const preset = useGame(s => s.scalePreset);
   const bodies = useMemo(() => buildUniverse(BODY_DEFS, SCALE_PRESETS[preset]), [preset]);
   const realBodies = useMemo(() => buildUniverse(BODY_DEFS, SCALE_PRESETS.real), []);
   const [query, setQuery] = useState('');
-  const [tab, setTab] = useState<'body' | 'part' | 'lesson'>('body');
-  const [selected, setSelected] = useState('saturn');
-  const entries = PEDIA_INDEX.filter(a => a.kind === tab && `${a.name} ${a.text} ${a.id}`.toLowerCase().includes(query.toLowerCase()));
+  const [tab, setTab] = useState<PediaKind>(() => pendingArticle?.kind ?? 'body');
+  const [selected, setSelected] = useState(() => pendingArticle?.id ?? 'saturn');
+  useEffect(() => { pendingArticle = null; }, []);
+  const search = useRef<HTMLInputElement>(null);
+  const index = useRef<HTMLDivElement>(null);
+  // "/" jumps to the search field from anywhere on the page.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement)?.tagName ?? '')) return;
+      e.preventDefault(); search.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const matches = useMemo(() => { const q = query.toLowerCase(); return PEDIA_INDEX.filter(a => `${a.name} ${a.text} ${a.id}`.toLowerCase().includes(q)); }, [query]);
+  const entries = matches.filter(a => a.kind === tab);
   const article = entries.find(a => a.id === selected) ?? entries[0];
   const body = article?.kind === 'body' ? bodies.get(article.id)! : null;
   const real = body ? realBodies.get(body.id)! : null;
@@ -80,10 +101,23 @@ export default function Spacepedia() {
     ['Datum temperature', body.atmosphere?.surfaceTemperature, real.atmosphere?.surfaceTemperature, 'K'],
     ['Ring inner radius', body.rings?.innerRadius, real.rings?.innerRadius, 'm'], ['Ring outer radius', body.rings?.outerRadius, real.rings?.outerRadius, 'm'],
   ] : [];
-  return <main className="fullscreen pedia"><header><div><div className="label">The explorer’s field guide</div><h1>Spacepedia</h1></div><div className="pedia-muted">Current universe: {preset}</div><Button className="btn" onClick={() => game.set({ scene: returnScene })}>Back</Button></header>
-    <div className="pedia-layout"><aside className="panel"><nav>{(['body', 'part', 'lesson'] as const).map(t => <Button className={`btn small ${tab === t ? 'primary' : ''}`} key={t} onClick={() => { setTab(t); setSelected(''); }}>{t === 'body' ? 'Worlds' : t === 'part' ? 'Parts' : 'Flight school'}</Button>)}</nav>
-      <input aria-label="Search Spacepedia" placeholder="Search names and descriptions…" value={query} onChange={e => setQuery(e.target.value)} /><div className="label">{entries.length} entries</div><div className="pedia-index">{entries.map(a => <Button key={a.id} className={`btn ghost ${article?.id === a.id ? 'selected' : ''}`} onClick={() => setSelected(a.id)}>{a.name}</Button>)}{!entries.length && <p>No matching entries.</p>}</div></aside>
-      <article className="panel pedia-article">{article && <><div className="label">{article.kind === 'body' ? `${body!.kind} · ${body!.parent ?? 'solar system centre'}` : article.kind === 'part' ? part!.category : 'Flight school'}</div><h2>{article.name}</h2><p className="pedia-intro">{article.text}</p>
+  const back = () => game.set({ scene: returnScene });
+  const firstItem = () => index.current?.querySelector<HTMLElement>('button')?.focus();
+  return <main className="fullscreen pedia">
+    <MenuScreenHeader backLabel={BACK_LABELS[returnScene] ?? 'Main menu'} onBack={back} kicker="The explorer’s field guide" title="Spacepedia"
+      aside={<div className="pedia-muted">Current universe: {preset}</div>} />
+    <div className="pedia-layout"><aside className="panel"><nav aria-label="Spacepedia sections">{(['body', 'part', 'lesson'] as const).map(t => {
+      const count = query ? matches.filter(a => a.kind === t).length : null;
+      return <Button className={`btn small ${tab === t ? 'primary' : ''}`} aria-pressed={tab === t} key={t} onClick={() => { setTab(t); setSelected(''); }}>{TAB_LABELS[t]}{count !== null && ` · ${count}`}</Button>;
+    })}</nav>
+      <input ref={search} aria-label="Search Spacepedia" aria-keyshortcuts="/" placeholder="Search names and descriptions…  /" value={query} onChange={e => setQuery(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); firstItem(); }
+          if (e.key === 'Enter' && entries[0]) { e.preventDefault(); setSelected(entries[0].id); firstItem(); }
+        }} />
+      <div className="label">{entries.length} entries{query && !entries.length && matches.length ? ` · ${matches.length} in other sections` : ''}</div>
+      <div className="pedia-index" ref={index} onKeyDown={e => arrowNav(e)}>{entries.map(a => <Button key={a.id} className={`btn ghost ${article?.id === a.id ? 'selected' : ''}`} aria-current={article?.id === a.id ? 'true' : undefined} onClick={() => setSelected(a.id)}>{a.name}</Button>)}{!entries.length && <p>No matching entries.</p>}</div></aside>
+      <article className="panel pedia-article">{article && <><div className="label">{article.kind === 'body' ? `${body!.kind} · ${body!.parent ? `orbits ${bodies.get(body!.parent)?.name ?? body!.parent}` : 'solar system centre'}` : article.kind === 'part' ? part!.category : 'Flight school'}</div><h2>{article.name}</h2><p className="pedia-intro">{article.text}</p>
         {body && real && <><Preview key={body.id} id={body.id} /><table><thead><tr><th>Figure</th><th>{preset}</th><th>Real world</th></tr></thead><tbody>{rows.filter(r => r[1] !== undefined).map(([name, scaled, source, unit]) => <tr key={name}><th>{name}</th><td>{number(scaled!, unit)}</td><td>{number(source!, unit)}</td></tr>)}</tbody></table><p className="pedia-muted">Mean spherical radii; atmosphere cutoffs and procedural surfaces are model choices. Gas giant datum values do not describe solid ground. Figures use the catalog’s JPL / NASA source data.</p>
           <h3>Discovered landmarks</h3>{LANDMARKS.filter(l => l.body === body.id && discoveries.includes(l.id)).map(l => <section key={l.id}><h4>{l.name}</h4><p>{l.description}</p><p className="pedia-muted">{l.lat}° latitude · {l.lon}° longitude</p></section>)}{!LANDMARKS.some(l => l.body === body.id && discoveries.includes(l.id)) && <p>Approach a landmark within 2 km to record it here.</p>}
           <AtmosphereChart body={body} real={real} />{body.orbit && <><h3>Orbit about {bodies.get(body.parent!)?.name}</h3><Diagram e={body.orbit.e} /><p className="pedia-muted">Shape schematic in the orbital plane, not a distance scale. Eccentricity {body.orbit.e.toFixed(4)} · inclination {number(body.orbit.i * 180 / Math.PI, '°')} relative to {body.orbit.frame === 'parentEquator' ? 'the parent equator' : 'the ecliptic'}.</p></>}

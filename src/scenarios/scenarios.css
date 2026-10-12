@@ -1,7 +1,5 @@
 .scenario-library { padding: 36px max(24px, 5vw); overflow-y: auto; background:var(--screen-bg); }
-.scenario-library header { max-width: 1400px; margin: auto; }
-.scenario-library h1 { margin: 8px 0; font-size: clamp(32px, 5vw, 56px); }
-.scenario-library header p, .scenario-muted { color: var(--text-dim); }
+.scenario-muted { color: var(--text-dim); }
 .scenario-layout { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap:var(--space-6); max-width: 1400px; margin: 24px auto; align-items: start; }
 .scenario-layout nav { display: grid; gap: 10px; }
 .scenario-card { text-align: left; padding: 16px; display: grid; gap: 8px; cursor: pointer; color: var(--text); font: inherit; }
@@ -33,3 +31,9 @@
 .scenario-collapsed p { margin: 4px 0; font-size: 12px; line-height: 1.4; }
 .scenario-flight:not(.scenario-debrief) .scenario-drag { cursor: grab; user-select: none; touch-action: none; }
 .scenario-flight:not(.scenario-debrief) .scenario-drag:active { cursor: grabbing; }
+.scenario-library .scene-header, .scenario-library .scenario-layout { max-width: 1400px; margin-left: auto; margin-right: auto; }
+.scenario-layout { margin-top: 0; }
+.scenario-medals { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.scenario-medals strong { font-family: var(--mono); font-size: 28px; color: var(--accent); }
+.scenario-actions .scenario-best { align-self: center; font-size: 13px; text-transform: capitalize; }
+.scenario-hint { margin: 4px 0 0; font-size: 12px; color: var(--text-dim); }

@@ -17,6 +17,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { SaveErrorNotice } from './SaveErrorNotice';
 import { UnsupportedScreen } from './Unsupported';
 import { browserSupport, SCENES_NEEDING_WEBGL2 } from './browserSupport';
+import './nav/sceneHistory';
 
 // Heavy 3D scenes are code-split so the menu loads instantly.
 const Scenarios = lazy(() => import('../scenarios/Scenarios'));
