@@ -3,15 +3,21 @@ import type { ManeuverNode, TrajectoryPatch } from '../../sim/orbit/api';
 import { apoapsisRadius, period, periapsisRadius } from '../../sim/orbit';
 import { stageBurnTime, NODE_STAGE_PAUSE } from '../../sim/vessel';
 import { cachedStageDeltaV } from '../../game/stageDeltaVCache';
+import type { StageDeltaV } from '../../sim/vessel/staging';
+
+/** The active vessel's remaining stages in vacuum (the cached HUD readout). */
+export function vacuumStages(world: World): readonly StageDeltaV[] {
+  const wv = world.active;
+  return wv ? cachedStageDeltaV(wv.state, 0, world.universe.body(wv.body).surfaceGravity) : [];
+}
 
 /** Estimated burn duration for `dv` on the ignited engines, else the next powered stage (Infinity without thrust). */
-export function burnTime(world: World, dv: number): number {
+export function burnTime(world: World, dv: number, stages: readonly StageDeltaV[] = vacuumStages(world)): number {
   const wv = world.active;
   if (!wv) return Infinity;
   const v = wv.state;
   const lit = v.parts.some(p => p.engine?.ignited && !p.engine.flamedOut);
-  return stageBurnTime(cachedStageDeltaV(v, 0, world.universe.body(wv.body).surfaceGravity),
-    v.nextStage + (lit ? 1 : 0), dv, NODE_STAGE_PAUSE, lit);
+  return stageBurnTime(stages, v.nextStage + (lit ? 1 : 0), dv, NODE_STAGE_PAUSE, lit);
 }
 
 /** The trajectory patch a node sits on (the orbit before its burn). */
@@ -22,6 +28,8 @@ export function patchAtNode(patches: readonly TrajectoryPatch[], node: ManeuverN
 export interface NodeSummary {
   dv: number;
   burn: number;
+  /** Remaining stages in vacuum (for the Δv budget). */
+  stages: readonly StageDeltaV[];
   /** Orbit after the burn. */
   body: string;
   ap: number;
@@ -46,9 +54,11 @@ export function nodeSummary(world: World, node: ManeuverNode): NodeSummary {
   const index = after ? patches.indexOf(after) : patches.length;
   const enc = patches.findIndex((p, i) => i >= index && p.endReason === 'soiEnter');
   const inside = enc >= 0 ? patches[enc + 1] : undefined;
+  const stages = vacuumStages(world);
   return {
     dv,
-    burn: burnTime(world, dv),
+    burn: burnTime(world, dv, stages),
+    stages,
     body,
     ap: after ? apoapsisRadius(after.orbit) - radius : NaN,
     pe: after ? periapsisRadius(after.orbit) - radius : NaN,

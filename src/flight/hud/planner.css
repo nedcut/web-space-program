@@ -1,0 +1,110 @@
+/* Maneuver planner, departure options, Δv budget, plan timeline and transfer chart. Numbers never wrap:
+   chips are nowrap + tabular figures, text columns shrink with an ellipsis. Lays out from ~240 to ~480 px. */
+.pl-num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pl-chip { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10px; line-height: 15px; letter-spacing: .04em;
+  background: var(--accent-soft); border: 1px solid var(--accent-border); color: var(--accent); vertical-align: 1px; }
+.pl-chip.good { background: var(--good-soft); border-color: #8cd5ba66; color: var(--good); }
+.btn.small.pl-icon { padding: 3px 6px; min-width: 26px; display: inline-grid; place-items: center; line-height: 1; }
+.mp .dim, .map-node-menu .dim, .transfer-plot .dim { color: var(--text-dim); }
+
+.mp { container-type: inline-size; }
+.btn.small.mp-head { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.mp-head .pl-chip { margin-left: 0; }
+
+/* Node list: index · Δv · countdown | warp | delete, one line each. */
+.mp .mp-node { grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px; }
+.btn.small.mp-node-main { display: grid; grid-template-columns: 18px auto minmax(0, 1fr); gap: 8px; align-items: center; text-align: left; padding: 4px 6px; min-width: 0; }
+.mp-node-main .pl-num { font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.mp-node-main .pl-num.dim { text-align: right; }
+.mp-idx { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; font-weight: 650; color: #06121e; background: #4d9dff; }
+
+/* Δv budget: stage segments above, what the plan needs below. */
+.dvb { display: grid; gap: 2px; font-size: 11px; }
+.dvb-have, .dvb-need { display: flex; height: 5px; border-radius: 3px; overflow: hidden; background: #ffffff0d; }
+.dvb-have i { height: 100%; border-right: 1px solid #0b1726; }
+.dvb-have i:last-child { border-right: 0; }
+.dvb-have .s0 { background: #5b8fb3; } .dvb-have .s1 { background: #6fb0a0; } .dvb-have .s2 { background: #8d86c9; } .dvb-have .s3 { background: #b49a68; }
+.dvb-need i { height: 100%; }
+.dvb-need .pre { background: #ffffff38; }
+.dvb-need .now { background: var(--accent); }
+.dvb-need .cap { background: repeating-linear-gradient(135deg, var(--accent-2) 0 3px, transparent 3px 6px); }
+.dvb.short .dvb-need .now { background: var(--bad); }
+.dvb-text { display: flex; justify-content: space-between; gap: 8px; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dvb-text b { color: var(--text); font-weight: 600; font-family: var(--mono); }
+.dvb.short .dvb-text b { color: var(--bad); }
+
+/* Last installed transfer: title + Δv, timeline, one primary action. */
+.mp-card { display: grid; gap: 8px; padding: 8px; border: 1px solid var(--accent-border); border-radius: var(--radius-sm); background: var(--accent-soft); }
+.mp-card-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; font-size: 12px; }
+.mp-card-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tl { display: grid; align-items: start; font-size: 11px; }
+.tl-stop { display: grid; justify-items: center; gap: 2px; min-width: 0; max-width: 110px; }
+.tl-stop:first-child { justify-items: start; }
+.tl-stop:last-child { justify-items: end; text-align: right; }
+.tl-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-dim); }
+.tl-stop.burn .tl-dot { background: #4d9dff; }
+.tl-stop.arrive .tl-dot { background: var(--good); }
+.tl-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.tl-value { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-dim); font-size: 10.5px; }
+.tl-seg { display: grid; gap: 3px; padding-top: 4px; min-width: 0; text-align: center; }
+.tl-seg i { height: 2px; margin: 0 -2px; background: #ffffff30; }
+.tl-seg span { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Tool rows: a fixed label column, then buttons that share the rest. */
+.mp-row { display: grid; grid-template-columns: 74px repeat(auto-fit, minmax(0, 1fr)); gap: 4px; align-items: center; }
+.mp-row-label { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+.mp-row .btn.small { padding: 5px 6px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mp-row select.btn.small { grid-column: 2 / -1; text-align: left; background: var(--panel-solid); color: var(--text); }
+.mp-hint { display: grid; gap: 4px; font-size: 11.5px; color: var(--text-dim); }
+.mp-axes { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; }
+.mp-axes span { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.mp-note { font-size: 11px; color: var(--warn); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp-msg { font-size: 12px; color: var(--text-dim); line-height: 1.4; }
+.mp-prog { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 2px 6px; align-items: center; font-size: 11.5px; }
+.mp-prog-phase { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
+.mp-prog progress { grid-column: 1 / -1; width: 100%; height: 4px; }
+
+/* Departure options: name · wait · total Δv, then departure/capture bar · trip. */
+.dep { display: grid; gap: 4px; font-size: 12px; }
+.dep-head { display: flex; align-items: center; gap: 4px; min-height: 26px; }
+.dep-head .label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
+.dep-opt { all: unset; box-sizing: border-box; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: 'name wait dv' 'bar bar trip'; gap: 3px 8px; align-items: center;
+  padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid transparent; background: var(--surface-soft); }
+.dep-opt:hover, .dep-opt:focus-visible { border-color: var(--accent-border); background: var(--accent-soft); }
+.dep-opt.best { border-color: #8cd5ba55; }
+.dep-opt[disabled] { opacity: .5; cursor: progress; }
+.dep-name { grid-area: name; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dep-wait { grid-area: wait; color: var(--text-dim); font-size: 11px; }
+.dep-dv { grid-area: dv; font-weight: 600; text-align: right; }
+.dep-bar { grid-area: bar; display: flex; height: 4px; border-radius: 2px; overflow: hidden; background: #ffffff0d; }
+.dep-bar .now { background: var(--accent); }
+.dep-bar .cap { background: repeating-linear-gradient(135deg, var(--accent-2) 0 3px, transparent 3px 6px); }
+.dep-trip { grid-area: trip; color: var(--text-dim); font-size: 10.5px; text-align: right; }
+.dep-date { display: none; }
+@container (min-width: 360px) { .dep-date { display: inline; } }
+.transfer-plot .dep-date { display: inline; }
+
+/* Node editor additions (layout lives in mapMenus.css). */
+.map-node-menu .axis { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; white-space: nowrap; }
+.map-node-menu .summary .strong { color: var(--text); font-weight: 600; }
+
+/* Transfer chart: axes, legend, best-cell marker and fixed-height hover readout. */
+.pc-head { display: flex; justify-content: space-between; align-items: center; }
+.pc { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; gap: 4px 6px; }
+.pc-y { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; font-size: 10.5px; color: var(--text-dim); }
+.pc-y-name, .pc-x-name { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+.pc-y-name { writing-mode: vertical-rl; transform: rotate(180deg); }
+.pc-plot { position: relative; line-height: 0; }
+.transfer-plot .pc-plot canvas { width: 100%; aspect-ratio: 1.8; cursor: crosshair; display: block; }
+.pc-best, .pc-hover { position: absolute; box-sizing: border-box; pointer-events: none; }
+.pc-best { border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #000a; transform: scale(1.8); }
+.pc-hover { outline: 2px solid #fff; outline-offset: -1px; }
+.pc-x { grid-column: 2; display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-dim); }
+.pc-legend { display: grid; grid-template-columns: auto minmax(60px, 1fr) auto auto auto auto auto; gap: 6px; align-items: center; font-size: 11px; }
+.pc-ramp { height: 8px; border-radius: 3px; }
+.pc-none { width: 10px; height: 10px; border-radius: 2px; background: #151b28; border: 1px solid #ffffff22; margin-left: 6px; }
+.pc-best-key { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff; margin-left: 6px; }
+.pc-read { display: flex; flex-wrap: wrap; gap: 4px 16px; min-height: 36px; align-content: center; font-size: 12px; }
+.pc-read > span { white-space: nowrap; }
+.pc-read b { font-weight: 600; }
