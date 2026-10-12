@@ -164,6 +164,12 @@ export interface PartState {
   bayOpen?: boolean;
   drillDeployed?: boolean;
   drillDeploy?: number;
+  /** Retractable arrays/antennas: deploy progress 0..1 (follows the `extended` tweak). */
+  panelDeploy?: number;
+  /** Retractable arrays/antennas: torn off by air load or heat; never extends or works again. */
+  panelTorn?: boolean;
+  /** Last automation verdict (true: thin air) for `autoDeploy`; absent before the first physics step. */
+  autoDeploySafe?: boolean;
   converterRunning?: boolean;
   converterRecipe?: 'kerolox' | 'monopropellant';
   /** Isolated machinery core with integral radiator; K. */
@@ -247,6 +253,8 @@ export interface VesselTelemetry {
   intakeAirRatio: number;
   /** Normalized crossflow exposure (see `aerodynamicStress`): 0 clear, 0.49–0.99 warn-only band, ≥ 1 inside the breakup envelope. */
   crossflowStress: number;
+  /** Worst load fraction of extended arrays/antennas (≥ 1 tears); absent/0 when none are exposed. */
+  deployableLoad?: number;
   /** Last commanded control vector after SAS (pitch, yaw, roll). */
   control: { pitch: number; yaw: number; roll: number };
 }
@@ -258,6 +266,8 @@ export interface VesselCache {
   aeroHold?: number;
   /** Derived flight stress readout; not serialized. */
   strutLoads?: Map<number, number>;
+  /** Retractable arrays/antennas (lazily built by `deployableParts`). */
+  deployables?: PartState[];
   jointLoads?: Map<number, import('./loads').JointLoad>;
   byUid: Map<number, PartState>;
   /** Tree depth from root. */
@@ -315,7 +325,8 @@ export type VesselEvent =
   | { type: 'structuralWarning'; vesselId: string; loadFraction: number }
   | { type: 'linkBroken'; vesselId: string; partUid: number; targetUid: number; loadFraction: number }
   | { type: 'anomalyDiscovered'; vesselId: string; body: string; landmarkId: string }
-  | { type: 'structuralFailure'; vesselId: string; partUid: number; parentUid: number; newVesselId: string; loadFraction: number }
+  /** `cause` marks an extended array/antenna torn off by air load or heat. */
+  | { type: 'structuralFailure'; vesselId: string; partUid: number; parentUid: number; newVesselId: string; loadFraction: number; cause?: 'airload' | 'heat' }
   | { type: 'stage'; vesselId: string; stage: number }
   | { type: 'decouple'; vesselId: string; partUid: number; newVesselId: string }
   /** A fairing shell split into panels and fell away; its base ring stays on the vessel. */

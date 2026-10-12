@@ -20,7 +20,7 @@ import { stepThermal } from './heating';
 import { computeSas } from './sas';
 import { addResource, drawResource } from './resources';
 import { applyVesselCommands } from './actions';
-import { isExtended } from './tweaks';
+import { stepDeployables } from './deployables';
 
 /** Fixed physics step, s. */
 export const PHYSICS_DT = 1 / 50;
@@ -213,7 +213,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   for (const p of v.parts)
     for (const m of p.def.modules) {
       if (m.type === 'command' && (m as CommandModule).ecPerSecond > 0) drawResource(v, p.uid, 'electricCharge', (m as CommandModule).ecPerSecond * h * (p.electronicsDegraded ? 2 : 1));
-      else if (m.type === 'solarPanel' && isExtended(p)) {
+      else if (m.type === 'solarPanel' && (!(m as SolarPanelModule).tracking || p.panelDeploy === 1 && !p.panelTorn)) {
         const sp = m as SolarPanelModule;
         const nrm = qRotate(p.rotation, { x: 0, y: 0, z: 1 });
         const cosA = sp.tracking ? 1 : Math.max(0, nrm.x * sunBody.x + nrm.y * sunBody.y + nrm.z * sunBody.z);
@@ -228,6 +228,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   // Aerodynamics & parachutes.
   const aero = computeAeroForces(v, { air: air.sample, airVelocityBody, control: c }, loads);
   updateParachutes(v, { air: air.sample, dynamicPressure: aero.dynamicPressure, altitudeAGL: cp.altitudeAGL }, h, result.events);
+  const torn = stepDeployables(v, aero.dynamicPressure, air.sample.pressure, h);
 
   // Sum forces.
   const Fbody = add(add(eng.forceBody, rcs.forceBody), aero.forceBody);
@@ -280,7 +281,7 @@ function substep(v: VesselState, input: ControlInput, env: Environment, t: numbe
   v.situation = cp.landed ? 'landed' : cp.splashed ? 'splashed' : 'flying';
 
   // Break attachments after integration, preserving the solved rigid-body velocity field.
-  breakJoints(v, [...cuts, ...crashCuts.keys()], result, crashCuts);
+  breakJoints(v, torn ? [...cuts, ...crashCuts.keys(), ...torn.keys()] : [...cuts, ...crashCuts.keys()], result, crashCuts, torn);
 
   // Destruction (crash / overheat), including parts detached by another failure this step.
   const kill: [number, 'crash' | 'overheat' | 'pressure'][] = [...hazardFailures, ...cp.impacts.map((u) => [u, 'crash'] as [number, 'crash']), ...overheated.map((u) => [u, 'overheat'] as [number, 'overheat'])];

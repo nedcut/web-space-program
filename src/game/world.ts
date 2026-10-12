@@ -791,7 +791,8 @@ export class World {
     if (v) {
       if (e.type === 'decouple') this.logFlightEvent(v, 'separation', `Detached part ${e.partUid} → ${e.newVesselId}`);
       if (e.type === 'stage') this.logFlightEvent(v, 'stage', `Stage ${e.stage}`);
-      if (e.type === 'structuralFailure') this.logFlightEvent(v, 'partLoss', `Attachment ${e.partUid} broke at ${(e.loadFraction * 100).toFixed(0)}% load`);
+      if (e.type === 'structuralFailure') this.logFlightEvent(v, 'partLoss', e.cause ? tornMessage(this.vessels.get(e.newVesselId)?.state.cache.byUid.get(e.partUid)?.def.name, e.cause)
+        : `Attachment ${e.partUid} broke at ${(e.loadFraction * 100).toFixed(0)}% load`);
       if (e.type === 'partDestroyed') this.logFlightEvent(v, 'partLoss', `Part ${e.partUid}: ${e.reason}`);
       if (e.type === 'docked') this.logFlightEvent(v, 'docking', e.otherId);
     }
@@ -799,7 +800,7 @@ export class World {
     if (e.vesselId !== this.activeId) return;
     if (e.type === 'hazardWarning') this.message(e.message, 'warn', 6);
     if (e.type === 'linkBroken') this.message('Structural brace broke!', 'bad', 4);
-    if (e.type === 'structuralFailure') this.message('Structural failure — attachment broke!', 'bad', 4);
+    if (e.type === 'structuralFailure') this.message(e.cause ? tornMessage(this.vessels.get(e.newVesselId)?.state.cache.byUid.get(e.partUid)?.def.name, e.cause) : 'Structural failure — attachment broke!', 'bad', 4);
     if (e.type === 'stage') this.message(`Stage ${e.stage} activated`);
     if (e.type === 'flameout') this.message('Engine flameout — check propellant and intake air', 'warn', 4);
     if (e.type === 'docked' || e.type === 'undocked') this.approachCache = null;
@@ -1029,3 +1030,8 @@ export class World {
 }
 
 export { quatFromBasis } from '../util/basis';
+
+/** Flight log / message text for an extended array or antenna that tore off. */
+function tornMessage(name: string | undefined, cause: 'airload' | 'heat'): string {
+  return `${name ?? 'An extended panel'} ${cause === 'heat' ? 'burned through and tore away' : 'was ripped off by the airstream'}`;
+}

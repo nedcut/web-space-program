@@ -24,7 +24,7 @@ export type ClientMessage = Envelope & (
   | { type: 'chat'; text: string }
   | { type: 'action'; action: 'eva' | 'board' | 'flag' | 'undock'; uid?: number; astronautId?: string }
 );
-export type PartDelta = Pick<PartState, 'uid' | 'tweaks' | 'resources' | 'mass' | 'temperature' | 'skinTemperature' | 'activated' | 'engine' | 'chute' | 'leg' | 'wheel' | 'bayOpen' | 'drillDeployed' | 'drillDeploy' | 'converterRunning' | 'converterRecipe' | 'processTemperature' | 'dockDisarmed' | 'structuralFatigue' | 'linkFatigue' | 'link'>;
+export type PartDelta = Pick<PartState, 'uid' | 'tweaks' | 'resources' | 'mass' | 'temperature' | 'skinTemperature' | 'activated' | 'engine' | 'chute' | 'leg' | 'wheel' | 'bayOpen' | 'drillDeployed' | 'drillDeploy' | 'panelDeploy' | 'panelTorn' | 'autoDeploySafe' | 'converterRunning' | 'converterRecipe' | 'processTemperature' | 'dockDisarmed' | 'structuralFatigue' | 'linkFatigue' | 'link'>;
 export type DynamicState = Pick<VesselState, 'position' | 'velocity' | 'orientation' | 'angularVelocity' | 'mass' | 'com' | 'inertia' | 'invInertia' | 'nextStage' | 'situation' | 'sas' | 'telemetry' | 'eva' | 'destroyed' | 'groupState'> & { parts: PartDelta[] };
 export type HazardDelta = Pick<PartState, 'uid' | 'radiationDose' | 'ambientTemperature' | 'pressureExposure' | 'pressureWarned' | 'heatWarned' | 'electronicsDegraded' | 'electronicsFailed'> & { electricCharge?: number };
 export type VesselDelta = { id: string; body: string; hazards?: HazardDelta[]; crewDose?: { id: string; dose: number }[] } & (

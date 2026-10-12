@@ -92,7 +92,7 @@ function setDeploy(p: PartState, on: boolean): void {
   if (p.leg) p.leg.deployed = on;
   if (p.wheel && (p.def.modules[p.wheel.moduleIndex] as WheelModule).retractable) p.wheel.deployed = on;
   if (p.bayOpen !== undefined) p.bayOpen = on;
-  if (retractablePanel(p.def)) mergeTweaks(p, { extended: on });
+  if (retractablePanel(p.def) && !p.panelTorn) mergeTweaks(p, { extended: on });
 }
 
 /** Is the action meaningful right now (flight UI enablement)? World actions are checked by the World. */
@@ -107,6 +107,7 @@ export function actionAvailable(p: PartState, action: PartActionId): boolean {
     case 'decouple': return !p.activated;
     case 'fairing.jettison': return !p.activated;
     case 'undock': return !!p.docked;
+    case 'deploy.extend': case 'deploy.retract': case 'deploy.toggle': return !p.panelTorn;
     default: return true;
   }
 }

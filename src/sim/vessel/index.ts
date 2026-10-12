@@ -156,6 +156,8 @@ export {
   ejectionScale,
   crossfeedOpen,
   isExtended,
+  autoDeploy,
+  retractablePanel,
   lightOn,
   rcsEnabled,
   wheelMode,
@@ -166,5 +168,6 @@ export {
   LIGHT_COLORS,
 } from './tweaks';
 export type { TweakDescriptor, TweakKey } from './tweaks';
+export { panelMaxQ, panelLoad, stepDeployables, PANEL_LOAD_WARN, PANEL_DEPLOY_TIME } from './deployables';
 
 export { stageBurnTime, NODE_STAGE_PAUSE } from './burnTime';

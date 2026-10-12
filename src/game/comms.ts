@@ -14,6 +14,13 @@ export const GROUND_STATIONS = [
 
 const stationSites = new WeakMap<World['universe'], { direction: ReturnType<typeof latLonToUnit>; altitude: number }[]>();
 
+/**
+ * A stowed antenna still carries a near-field command link: rating 1 m, which reaches a ground station
+ * (8e12 m) out to ≈ 2.8 Mm — pad, ascent and low passes overhead — but no further. Science transmission and
+ * relaying still need the antenna extended.
+ */
+export const STOWED_ANTENNA_RANGE = 1;
+
 /** Adapter only: the graph solver has no World, ephemeris, DOM or renderer dependencies. */
 export function worldNetwork(w: World): Network {
   const u = w.universe, earth = u.body('earth'), center = u.ephem.getBodyState('earth', w.ut).position;
@@ -32,8 +39,14 @@ export function worldNetwork(w: World): Network {
   });
   for (const { state: v } of w.vessels.values()) {
     if (v.destroyed) continue;
-    const antennas = v.parts.filter(isExtended).flatMap(p => p.def.modules.filter(m => m.type === 'antenna'));
-    nodes.push({ id: v.id, name: v.name, position: { ...v.position }, range: Math.max(0, ...antennas.map(a => a.range)), relay: antennas.some(a => a.relay) });
+    let range = 0, relay = false;
+    for (const p of v.parts) for (const m of p.def.modules) {
+      if (m.type !== 'antenna' || p.panelTorn) continue;
+      const out = isExtended(p);
+      range = Math.max(range, out ? m.range : STOWED_ANTENNA_RANGE);
+      relay ||= out && m.relay;
+    }
+    nodes.push({ id: v.id, name: v.name, position: { ...v.position }, range, relay });
   }
   return solveNetwork(nodes, [...u.bodies.values()].map(b => ({ radius: b.radius, position: u.ephem.getBodyState(b.id, w.ut).position })));
 }

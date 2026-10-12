@@ -1,6 +1,7 @@
 import { buildVessel, decouplerCutChildren } from '../sim/vessel/assembly';
 import { availableResource } from '../sim/vessel/resources';
 import { engineModule } from '../sim/vessel/engines';
+import { panelMaxQ } from '../sim/vessel/deployables';
 import { aeroControlMargin } from './aeroStability';
 import type { CraftDef, PartDef, ResourceId } from '../sim/vessel/types';
 import type { StageStats } from './ui/dv';
@@ -37,5 +38,7 @@ export function preflightChecks(craft: CraftDef, catalog: Map<string, PartDef>, 
     if (premature.length) add(`order-${p.uid}`, 'Separator fires before its attached engines finish their stage. Review the order.', [p.uid, ...premature.map(e => e.uid)]);
   }
   if (craft.type === 'VAB' && aeroControlMargin(craft, catalog) < -0.01) add('aero', 'Possible aero instability: insufficient restoring/control margin through launch fuel burn and Mach range. Move fins aft or mass forward.', v.parts.filter(p => p.def.modules.some(m => m.type === 'liftingSurface')).map(p => p.uid));
+  const exposed = v.parts.filter(p => (p.panelDeploy ?? 0) > 0 && !v.cache.shielded?.has(p.uid));
+  if (exposed.length) add('panels-out', `${exposed.length === 1 ? exposed[0].def.name : `${exposed.length} arrays/antennas`} extended at launch: airflow tears them off above ${(Math.min(...exposed.map(p => panelMaxQ(p.def))) / 1000).toFixed(1)} kPa. Stow them, or leave Extend above atmosphere on.`, exposed.map(p => p.uid));
   return out;
 }

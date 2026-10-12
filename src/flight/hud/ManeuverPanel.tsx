@@ -3,7 +3,7 @@ import { DepartureOptions } from './DepartureOptions';
 import type { TransferWindow as DepartureWindow } from '../../game/planning/windows';
 import { applyPlanningResult } from '../../game/planning/apply';
 import { TransferWindow } from './TransferWindow';
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import type { World } from '../../game/world';
 import { timeToApoapsis, timeToPeriapsis } from '../../sim/orbit';
 import { formatCountdown, formatDistance, formatDuration } from '../../ui/format';
@@ -13,8 +13,9 @@ import { getTutorial } from '../../tutorial/runtime';
 import type { FlightMap } from '../map/FlightMap';
 
 const OPEN_KEY = 'wsp.mapPlanner.open.v1';
-function storedOpen(): boolean {
-  try { return localStorage.getItem(OPEN_KEY) === '1'; } catch { return false; }
+/** '1' opened, '0' collapsed by the player, null never toggled. */
+function storedOpen(): string | null {
+  try { return localStorage.getItem(OPEN_KEY); } catch { return null; }
 }
 
 /**
@@ -25,17 +26,25 @@ function storedOpen(): boolean {
 export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world: World; map?: FlightMap }) {
   useRenderProfile();
   const [, force] = useState(0);
-  const [open, setOpen] = useState(() => storedOpen() || !!getTutorial());
+  // Open when the player left it open, in a lesson, or when there is a plan to show (unless they collapsed it).
+  const [open, setOpen] = useState(() => { const s = storedOpen(); return s === '1' || !!getTutorial() || (s !== '0' && world.nodes.length > 0); });
   const planner = usePlanner(world);
   const [planMsg, setPlanMsg] = useState('');
   const [transferTarget, setTransferTarget] = useState<string | null>(null);
   const [options, setOptions] = useState<{ target: string; windows: DepartureWindow[] } | null>(null);
 
-  // Node list readouts (and the collapsed header's node count) refresh at 4 Hz.
+  // Node list readouts (and the collapsed header's node count) refresh at 4 Hz. A new plan (no nodes → some) opens
+  // the planner so its node list and tools are in view; a later collapse holds until the next new plan.
+  const hadNodes = useRef(world.nodes.length > 0);
   useEffect(() => {
-    const id = window.setInterval(() => force((x) => (x + 1) % 1e6), 250);
+    const id = window.setInterval(() => {
+      const has = world.nodes.length > 0;
+      if (has && !hadNodes.current) setOpen(true);
+      hadNodes.current = has;
+      force((x) => (x + 1) % 1e6);
+    }, 250);
     return () => window.clearInterval(id);
-  }, []);
+  }, [world]);
 
   const toggle = () => {
     setOpen(o => {
@@ -122,7 +131,7 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
       </div>}
       <div className="mp-scroll">
         {world.preciseGravity && <div className="label">Precise map path · planners use patched conics. Allow correction burns.</div>}
-        {nodes.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5 }}>Click your orbit to add a node. Drag its handles: green prograde/retrograde, magenta normal, cyan radial. Click the node for exact values.</div>}
+        {nodes.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5 }}>Click your orbit to add a node. Drag its handles: green prograde/retrograde, magenta normal, cyan radial. Click the node for exact values; arrow keys nudge the selected node (? in the map readout).</div>}
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="btn small" onClick={() => add('ap')} disabled={orbit.e >= 1}>Node @ Ap</button>
           <button className="btn small" onClick={() => add('pe')}>Node @ Pe</button>
@@ -141,14 +150,14 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
             onChange={(e) => e.target.value && listDepartures(e.target.value)}
             style={{ background: 'var(--panel-solid)', color: 'var(--text)' }}
           >
-            <option value="">Transfer windows to…</option>
+            <option value="">Plan transfer to…</option>
             {targets.map((b) => (
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
           </select>
         )}
         {siblings.length > 0 && <select className="btn small" aria-label="Transfer window destination" disabled={!!planner.progress} value="" onChange={e => { if (e.target.value) setTransferTarget(e.target.value); }} style={{ background: 'var(--panel-solid)', color: 'var(--text)' }}>
-          <option value="">Explore transfer windows…</option>
+          <option value="">Transfer window chart…</option>
           {siblings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>}
         {planner.progress && <div role="status" style={{ fontSize: 12 }}>
