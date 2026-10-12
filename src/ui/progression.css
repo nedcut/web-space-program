@@ -21,3 +21,24 @@
 .mission-card { border-top: 2px solid var(--accent-border); }
 .tech-node:hover { border-color: var(--accent); }
 .research-scroll { min-height: 550px; }
+
+/* UX-4a: research graph states, dossier and keyboard hints. */
+.tech-node.locked { opacity: .62; }
+.tech-node.locked:focus-visible, .tech-node.locked.selected { opacity: 1; }
+.tech-node.affordable { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-border) inset; }
+.tech-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.research-detail .btn.primary { margin-top: var(--space-2); display: inline-flex; justify-content: center; align-items: center; gap: var(--space-2); }
+.research-detail .btn .kbd { font-size: 10px; padding: 0 5px; }
+.research-detail h3 { font-size: 12px; font-weight: 500; color: var(--text-dim); letter-spacing: .06em; text-transform: uppercase; margin: var(--space-5) 0 0; }
+.research-detail .research-parts { margin: var(--space-2) 0 0; }
+.research-status { margin: var(--space-2) 0 0; }
+.link-button { background: none; border: 0; padding: 0; font: inherit; color: var(--text); cursor: pointer; text-align: left; }
+.link-button:hover, .link-button:focus-visible { color: var(--accent); text-decoration: underline; }
+.program-note .kbd, .mission-note .kbd { font-size: 10px; padding: 0 5px; }
+.mission-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-5); }
+.mission-toolbar .mission-actions { display: flex; gap: var(--space-2); margin-left: auto; flex-wrap: wrap; }
+.mission-card-actions { display: flex; gap: var(--space-2); }
+.mission-card-actions .btn { flex: 1; }
+.mission-card-actions .btn.ghost { flex: 0 0 auto; margin-left: auto; color: var(--text-dim); }
+.mission-card.failed { opacity: .7; border-top-color: var(--panel-border); }
+.program-tabs .seg button { font-size: 13px; }

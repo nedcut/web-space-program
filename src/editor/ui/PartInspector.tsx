@@ -30,7 +30,7 @@ export function EditorInspector({ session, view, getView }: { session: EditorSes
     const def = part && CATALOG.get(part.partId);
     if (!part || !def) return null;
     const copies = part.symmetryGroup === undefined ? 1 : view.craft.parts.filter(p => p.symmetryGroup === part.symmetryGroup && p.partId === part.partId).length;
-    return { title: def.name, subtitle: `${def.manufacturer}${copies > 1 ? ` · symmetry ×${copies}` : ''}`, body: <EditorPartBody session={session} view={view} part={part} def={def} copies={copies} /> };
+    return { title: def.name, partId: def.id, subtitle: `${def.manufacturer}${copies > 1 ? ` · symmetry ×${copies}` : ''}`, body: <EditorPartBody session={session} view={view} part={part} def={def} copies={copies} /> };
   };
   return <InspectorLayer panels={view.panels} anchor={anchor} content={content} onClose={uid => session.closePanel(uid)} onPin={uid => session.togglePin(uid)}
     insets={{ top: 74, right: 270, bottom: 60, left: 338 }} />;

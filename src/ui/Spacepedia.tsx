@@ -1,4 +1,5 @@
-import { Button } from './components';
+import { Button, Modal } from './components';
+import type { PartDef } from '../sim/vessel/types';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BODY_DEFS } from '../data/bodies';
 import { PART_CATALOG } from '../data/parts';
@@ -9,12 +10,21 @@ import { game, useGame, type Scene } from '../game/store';
 import { mountPlanetPreview } from './planetPreview';
 import { mountPartTurntable } from '../editor/scene/thumbnails';
 import './pedia.css';
-import { useEscape } from './nav/escape';
+import { MenuScreenHeader } from './nav/MenuScreenHeader';
+import { facilityLabel } from './nav/scenes';
+import { arrowNav } from './nav/arrowNav';
 import { LANDMARKS } from '../sim/terrain/landmarks';
 
 const NO_DISCOVERIES: readonly string[] = [];
+export type PediaKind = 'body' | 'part' | 'lesson';
 let returnScene: Scene = 'menu';
-export function openPedia(from: Scene) { returnScene = from; game.set({ scene: 'pedia' }); }
+let pendingArticle: { kind: PediaKind; id: string } | null = null;
+/** Open the Spacepedia; `article` deep-links straight to an entry (e.g. a part from the Research Lab). */
+export function openPedia(from: Scene, article?: { kind: PediaKind; id: string }) {
+  returnScene = from; pendingArticle = article ?? null; game.set({ scene: 'pedia' });
+}
+const BACK_LABELS: Partial<Record<Scene, string>> = { spaceCenter: 'Space Center', editor: facilityLabel('editor'), tracking: facilityLabel('tracking'), flightlog: facilityLabel('flightlog'), research: facilityLabel('research'), missions: facilityLabel('missions') };
+const TAB_LABELS: Record<PediaKind, string> = { body: 'Worlds', part: 'Parts', lesson: 'Flight school' };
 
 function Preview({ id, part = false }: { id: string; part?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -56,16 +66,45 @@ function Diagram({ kind = 'orbit', e = 0.45 }: { kind?: string; e?: number }) {
     <text x="25" y="200">{kind === 'burn' ? 'Tangential thrust changes orbital energy' : kind === 'turn' ? 'Gradually build sideways velocity' : 'Focus • closest approach ← → farthest approach'}</text>
   </svg>;
 }
+/** Hardware specifications of a part (full article and the in-scene quick look). */
+function PartSpecs({ part }: { part: PartDef }) {
+  return <><h3>Hardware specifications</h3><dl><dt>Manufacturer</dt><dd>{part.manufacturer}</dd><dt>Dry mass</dt><dd>{number(part.dryMass, 'kg')}</dd><dt>Cost</dt><dd>{number(part.cost, 'cr')}</dd><dt>Temperature limit</dt><dd>{number(part.maxTemp, 'K')}</dd><dt>Impact tolerance</dt><dd>{number(part.crashTolerance, 'm/s')}</dd><dt>Research</dt><dd>{PART_ARTICLES.find(p => p.id === part.id)!.research.name} · {PART_ARTICLES.find(p => p.id === part.id)!.research.cost} science</dd></dl><h3>Construction</h3><p>Attachment nodes: {part.attachNodes.map(n => n.id).join(', ') || 'none'} · Surface attachment: {part.surfaceAttachable ? 'yes' : 'no'}</p><p>Drag coefficient: axial {part.dragCoefficient.axial}, side {part.dragCoefficient.side}</p><p>{part.shape.kind === 'cylinder' ? `Height ${number(part.shape.height, 'm')} · end radii ${number(part.shape.radiusTop, 'm')} / ${number(part.shape.radiusBottom, 'm')}` : `Dimensions ${number(part.shape.size.x, 'm')} × ${number(part.shape.size.y, 'm')} × ${number(part.shape.size.z, 'm')}`}</p><h3>Resource capacity (catalog units)</h3>{Object.entries(part.resources).map(([k, v]) => <p key={k}>{k}: {v}</p>)}{!Object.keys(part.resources).length && <p>No storage.</p>}<h3>Modules</h3>{part.modules.map((m, i) => <section className="pedia-module" key={i}><strong>{m.type}</strong><dl>{Object.entries(m).filter(([k]) => k !== 'type').map(([k, v]) => <div key={k}><dt>{fieldLabel(k)}</dt><dd>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</dd></div>)}</dl></section>)}<p className="pedia-muted">Module fields use SI units unless marked by their name: thrust N, Isp s, mass kg, distance m, angle rad; storage and flow use catalog resource units. These are game hardware specifications.</p></>;
+}
+/**
+ * A part's article in a dialog over the current scene (editor and flight part inspectors), so reading
+ * about hardware never leaves the build or the flight. No 3D preview: it would add a renderer.
+ */
+export function PediaQuickLook({ partId, onClose }: { partId: string; onClose: () => void }) {
+  const part = PART_CATALOG.get(partId), article = PART_ARTICLES.find(a => a.id === partId);
+  if (!part || !article) return null;
+  return <Modal title={part.name} onClose={onClose} className="pedia-quicklook-modal">
+    {/* Focus lands in the article; data-settings-modal makes flight/editor controls ignore keys typed here. */}
+    <div className="pedia pedia-quicklook" tabIndex={-1} data-autofocus data-settings-modal>
+    <div className="label">Spacepedia · {part.category} · {part.manufacturer}</div><p className="pedia-intro">{article.text}</p><PartSpecs part={part} />
+  </div></Modal>;
+}
 export default function Spacepedia() {
-  useEscape(() => game.set({ scene: returnScene }), true, 'screen');
   const discoveries = useGame(s => s.resumeWorld?.discoveries) ?? NO_DISCOVERIES;
   const preset = useGame(s => s.scalePreset);
   const bodies = useMemo(() => buildUniverse(BODY_DEFS, SCALE_PRESETS[preset]), [preset]);
   const realBodies = useMemo(() => buildUniverse(BODY_DEFS, SCALE_PRESETS.real), []);
   const [query, setQuery] = useState('');
-  const [tab, setTab] = useState<'body' | 'part' | 'lesson'>('body');
-  const [selected, setSelected] = useState('saturn');
-  const entries = PEDIA_INDEX.filter(a => a.kind === tab && `${a.name} ${a.text} ${a.id}`.toLowerCase().includes(query.toLowerCase()));
+  const [tab, setTab] = useState<PediaKind>(() => pendingArticle?.kind ?? 'body');
+  const [selected, setSelected] = useState(() => pendingArticle?.id ?? 'saturn');
+  useEffect(() => { pendingArticle = null; }, []);
+  const search = useRef<HTMLInputElement>(null);
+  const index = useRef<HTMLDivElement>(null);
+  // "/" jumps to the search field from anywhere on the page.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement)?.tagName ?? '')) return;
+      e.preventDefault(); search.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const matches = useMemo(() => { const q = query.toLowerCase(); return PEDIA_INDEX.filter(a => `${a.name} ${a.text} ${a.id}`.toLowerCase().includes(q)); }, [query]);
+  const entries = matches.filter(a => a.kind === tab);
   const article = entries.find(a => a.id === selected) ?? entries[0];
   const body = article?.kind === 'body' ? bodies.get(article.id)! : null;
   const real = body ? realBodies.get(body.id)! : null;
@@ -80,15 +119,28 @@ export default function Spacepedia() {
     ['Datum temperature', body.atmosphere?.surfaceTemperature, real.atmosphere?.surfaceTemperature, 'K'],
     ['Ring inner radius', body.rings?.innerRadius, real.rings?.innerRadius, 'm'], ['Ring outer radius', body.rings?.outerRadius, real.rings?.outerRadius, 'm'],
   ] : [];
-  return <main className="fullscreen pedia"><header><div><div className="label">The explorer’s field guide</div><h1>Spacepedia</h1></div><div className="pedia-muted">Current universe: {preset}</div><Button className="btn" onClick={() => game.set({ scene: returnScene })}>Back</Button></header>
-    <div className="pedia-layout"><aside className="panel"><nav>{(['body', 'part', 'lesson'] as const).map(t => <Button className={`btn small ${tab === t ? 'primary' : ''}`} key={t} onClick={() => { setTab(t); setSelected(''); }}>{t === 'body' ? 'Worlds' : t === 'part' ? 'Parts' : 'Flight school'}</Button>)}</nav>
-      <input aria-label="Search Spacepedia" placeholder="Search names and descriptions…" value={query} onChange={e => setQuery(e.target.value)} /><div className="label">{entries.length} entries</div><div className="pedia-index">{entries.map(a => <Button key={a.id} className={`btn ghost ${article?.id === a.id ? 'selected' : ''}`} onClick={() => setSelected(a.id)}>{a.name}</Button>)}{!entries.length && <p>No matching entries.</p>}</div></aside>
-      <article className="panel pedia-article">{article && <><div className="label">{article.kind === 'body' ? `${body!.kind} · ${body!.parent ?? 'solar system centre'}` : article.kind === 'part' ? part!.category : 'Flight school'}</div><h2>{article.name}</h2><p className="pedia-intro">{article.text}</p>
+  const back = () => game.set({ scene: returnScene });
+  const firstItem = () => index.current?.querySelector<HTMLElement>('button')?.focus();
+  return <main className="fullscreen pedia">
+    <MenuScreenHeader backLabel={BACK_LABELS[returnScene] ?? 'Main menu'} onBack={back} kicker="The explorer’s field guide" title="Spacepedia"
+      aside={<div className="pedia-muted">Current universe: {preset}</div>} />
+    <div className="pedia-layout"><aside className="panel"><nav aria-label="Spacepedia sections">{(['body', 'part', 'lesson'] as const).map(t => {
+      const count = query ? matches.filter(a => a.kind === t).length : null;
+      return <Button className={`btn small ${tab === t ? 'primary' : ''}`} aria-pressed={tab === t} key={t} onClick={() => { setTab(t); setSelected(''); }}>{TAB_LABELS[t]}{count !== null && ` · ${count}`}</Button>;
+    })}</nav>
+      <input ref={search} aria-label="Search Spacepedia" aria-keyshortcuts="/" placeholder="Search names and descriptions…  /" value={query} onChange={e => setQuery(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); firstItem(); }
+          if (e.key === 'Enter' && entries[0]) { e.preventDefault(); setSelected(entries[0].id); firstItem(); }
+        }} />
+      <div className="label">{entries.length} entries{query && !entries.length && matches.length ? ` · ${matches.length} in other sections` : ''}</div>
+      <div className="pedia-index" ref={index} onKeyDown={e => arrowNav(e)}>{entries.map(a => <Button key={a.id} className={`btn ghost ${article?.id === a.id ? 'selected' : ''}`} aria-current={article?.id === a.id ? 'true' : undefined} onClick={() => setSelected(a.id)}>{a.name}</Button>)}{!entries.length && <p>No matching entries.</p>}</div></aside>
+      <article className="panel pedia-article">{article && <><div className="label">{article.kind === 'body' ? `${body!.kind} · ${body!.parent ? `orbits ${bodies.get(body!.parent)?.name ?? body!.parent}` : 'solar system centre'}` : article.kind === 'part' ? part!.category : 'Flight school'}</div><h2>{article.name}</h2><p className="pedia-intro">{article.text}</p>
         {body && real && <><Preview key={body.id} id={body.id} /><table><thead><tr><th>Figure</th><th>{preset}</th><th>Real world</th></tr></thead><tbody>{rows.filter(r => r[1] !== undefined).map(([name, scaled, source, unit]) => <tr key={name}><th>{name}</th><td>{number(scaled!, unit)}</td><td>{number(source!, unit)}</td></tr>)}</tbody></table><p className="pedia-muted">Mean spherical radii; atmosphere cutoffs and procedural surfaces are model choices. Gas giant datum values do not describe solid ground. Figures use the catalog’s JPL / NASA source data.</p>
           <h3>Discovered landmarks</h3>{LANDMARKS.filter(l => l.body === body.id && discoveries.includes(l.id)).map(l => <section key={l.id}><h4>{l.name}</h4><p>{l.description}</p><p className="pedia-muted">{l.lat}° latitude · {l.lon}° longitude</p></section>)}{!LANDMARKS.some(l => l.body === body.id && discoveries.includes(l.id)) && <p>Approach a landmark within 2 km to record it here.</p>}
           <AtmosphereChart body={body} real={real} />{body.orbit && <><h3>Orbit about {bodies.get(body.parent!)?.name}</h3><Diagram e={body.orbit.e} /><p className="pedia-muted">Shape schematic in the orbital plane, not a distance scale. Eccentricity {body.orbit.e.toFixed(4)} · inclination {number(body.orbit.i * 180 / Math.PI, '°')} relative to {body.orbit.frame === 'parentEquator' ? 'the parent equator' : 'the ecliptic'}.</p></>}
           {body.parent === 'saturn' || body.id === 'saturn' ? <p className="pedia-muted">Science reading: <a href="https://science.nasa.gov/mission/cassini/science/rings/" target="_blank" rel="noreferrer">NASA Cassini rings</a> · <a href="https://science.nasa.gov/saturn/moons/titan/facts/" target="_blank" rel="noreferrer">Titan</a> · <a href="https://science.nasa.gov/saturn/moons/enceladus/" target="_blank" rel="noreferrer">Enceladus</a></p> : null}</>}
-        {part && <><Preview key={part.id} id={part.id} part /><h3>Hardware specifications</h3><dl><dt>Manufacturer</dt><dd>{part.manufacturer}</dd><dt>Dry mass</dt><dd>{number(part.dryMass, 'kg')}</dd><dt>Cost</dt><dd>{number(part.cost, 'cr')}</dd><dt>Temperature limit</dt><dd>{number(part.maxTemp, 'K')}</dd><dt>Impact tolerance</dt><dd>{number(part.crashTolerance, 'm/s')}</dd><dt>Research</dt><dd>{PART_ARTICLES.find(p => p.id === part.id)!.research.name} · {PART_ARTICLES.find(p => p.id === part.id)!.research.cost} science</dd></dl><h3>Construction</h3><p>Attachment nodes: {part.attachNodes.map(n => n.id).join(', ') || 'none'} · Surface attachment: {part.surfaceAttachable ? 'yes' : 'no'}</p><p>Drag coefficient: axial {part.dragCoefficient.axial}, side {part.dragCoefficient.side}</p><p>{part.shape.kind === 'cylinder' ? `Height ${number(part.shape.height, 'm')} · end radii ${number(part.shape.radiusTop, 'm')} / ${number(part.shape.radiusBottom, 'm')}` : `Dimensions ${number(part.shape.size.x, 'm')} × ${number(part.shape.size.y, 'm')} × ${number(part.shape.size.z, 'm')}`}</p><h3>Resource capacity (catalog units)</h3>{Object.entries(part.resources).map(([k, v]) => <p key={k}>{k}: {v}</p>)}{!Object.keys(part.resources).length && <p>No storage.</p>}<h3>Modules</h3>{part.modules.map((m, i) => <section className="pedia-module" key={i}><strong>{m.type}</strong><dl>{Object.entries(m).filter(([k]) => k !== 'type').map(([k, v]) => <div key={k}><dt>{fieldLabel(k)}</dt><dd>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</dd></div>)}</dl></section>)}<p className="pedia-muted">Module fields use SI units unless marked by their name: thrust N, Isp s, mass kg, distance m, angle rad; storage and flow use catalog resource units. These are game hardware specifications.</p></>}
+        {part && <><Preview key={part.id} id={part.id} part /><PartSpecs part={part} /></>}
         {article.kind === 'lesson' && <Diagram kind={FLIGHT_SCHOOL.find(a => a.id === article.id)!.diagram} />}
       </>}</article></div><footer className="pedia-muted">{BODY_ARTICLES.length} worlds · {PART_ARTICLES.length} parts · {FLIGHT_SCHOOL.length} flight notes</footer></main>;
 }

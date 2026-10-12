@@ -1,7 +1,4 @@
 .pedia { background:var(--screen-bg); padding: 24px 4vw; display: flex; flex-direction: column; gap: 18px; }
-.pedia header { display: flex; align-items: center; gap:var(--space-6); }
-.pedia header .btn { margin-left: auto; }
-.pedia h1 { margin: 4px 0; font-weight: 300; letter-spacing: .08em; }
 .pedia-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap:var(--space-6); flex: 1; min-height: 0; }
 .pedia aside { display: flex; flex-direction: column; padding: 16px; gap: 16px; min-height: 0; }
 .pedia nav { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -30,8 +27,15 @@
 .pedia-module dl { display: block; }
 .pedia-module dl div { display: grid; grid-template-columns: 1fr 2fr; padding: 5px 0; }
 .pedia a { color: #79cfff; }
-@media (max-width: 760px) { .pedia { padding: 16px; } .pedia-layout { grid-template-columns: 180px minmax(0,1fr); gap: 10px; } .pedia-article { padding: 16px; } .pedia header .pedia-muted { display: none; } .pedia th, .pedia td { padding: 6px; font-size: 12px; } }
+@media (max-width: 760px) { .pedia { padding: 16px; } .pedia-layout { grid-template-columns: 180px minmax(0,1fr); gap: 10px; } .pedia-article { padding: 16px; } .pedia th, .pedia td { padding: 6px; font-size: 12px; } }
 
 .pedia-index .btn { font-size: 13px; padding: 9px 12px; }
 .pedia-intro { max-width: 76ch; font-size: 15px; }
 .pedia-preview { border: 1px solid var(--panel-border); }
+.pedia .scene-header { margin-bottom: 0; }
+.pedia-index .btn.selected { box-shadow: inset 2px 0 0 var(--accent); }
+/* Part quick look over the editor / flight (inspector "book" button). */
+.pedia-quicklook-modal { pointer-events: auto; width: min(720px, 92vw); max-height: 86vh; overflow: auto; }
+.pedia.pedia-quicklook { padding: 0; background: none; gap: 0; display: block; }
+.pedia-quicklook .pedia-intro { margin-top: 8px; }
+.pedia-quicklook:focus { outline: none; }
