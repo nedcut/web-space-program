@@ -1,4 +1,8 @@
 import { SceneHeader } from './nav/SceneHeader';
+import { arrowNav, focusFirst } from './nav/arrowNav';
+import { facilityLabel } from './nav/scenes';
+import { previousScene } from './nav/sceneHistory';
+import { game } from '../game/store';
 import { Button, Panel, EmptyState, Badge } from './components';
 import { useEffect, useRef, useState } from 'react';
 import { openProgram } from '../game/program';
@@ -58,8 +62,34 @@ export default function FlightLog() {
   const [world] = useState(openProgram);
   const [tab, setTab] = useState<'history' | 'achievements'>('history');
   const [selected, setSelected] = useState(() => world.latestReportId ?? world.flightlog.records.at(-1)?.id);
-  const record = world.flightlog.records.find(r => r.id === selected);
-  return <div className="fullscreen flight-log"><SceneHeader scene="flightlog" kicker="Mission archive" title="Flight Log" /><nav className="flight-log-tabs"><Button className={`btn ${tab === 'history' ? 'primary' : ''}`} aria-pressed={tab === 'history'} onClick={() => setTab('history')}>Flights · {world.flightlog.records.length}</Button><Button className={`btn ${tab === 'achievements' ? 'primary' : ''}`} aria-pressed={tab === 'achievements'} onClick={() => setTab('achievements')}>Achievements</Button></nav>
-    {tab === 'achievements' ? <AchievementsPanel /> : <div className="flight-log-layout"><aside className="panel">{[...world.flightlog.records].reverse().map(r => <Button className={`btn ${selected === r.id ? 'primary' : ''}`} key={r.id} onClick={() => setSelected(r.id)}>{r.name}<small>{r.outcome ?? 'In progress'} · {r.bodies.join(', ')}</small></Button>)}{!world.flightlog.records.length && <p>No flights recorded yet. Launch a vessel to begin your archive.</p>}</aside>{record ? <FlightReport key={record.id} record={record} /> : <EmptyState title="Your next story starts on the pad">Your flights, charts and milestones will appear here.</EmptyState>}</div>}
+  // Arriving straight from a flight: offer the way on to the hub and show the recovery summary here
+  // (it would otherwise only appear on the hub, one screen later).
+  const [fromFlight] = useState(() => previousScene() === 'flight');
+  const [notice] = useState(() => fromFlight ? game.get().notice : null);
+  const arrival = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (notice) game.set({ notice: null });
+    if (fromFlight) focusFirst(arrival.current);
+  }, [fromFlight, notice]);
+  const records = world.flightlog.records;
+  const record = records.find(r => r.id === selected);
+  const latest = records.find(r => r.id === world.latestReportId);
+  const earned = Object.keys(loadAchievements().unlocked).length;
+  return <div className="fullscreen flight-log"><SceneHeader scene="flightlog" kicker="Mission archive" title="Flight Log" />
+    {fromFlight && <section className="panel flight-arrival" ref={arrival} aria-label="Flight summary">
+      <div><div className="label">Back from flight{latest ? ` · ${latest.outcome ?? 'in progress'}` : ''}</div><strong>{latest?.name ?? 'Flight report'}</strong>{notice && <p>{notice}</p>}</div>
+      <div className="flight-arrival-actions"><Button className="btn" onClick={() => game.set({ scene: 'editor' })}>{facilityLabel('editor')}</Button>
+        <Button className="btn primary" onClick={() => game.set({ scene: 'spaceCenter' })}>Continue to Space Center</Button></div>
+    </section>}
+    <nav className="flight-log-tabs"><div className="seg" role="group" aria-label="Flight Log view">
+      <Button className={tab === 'history' ? 'on' : ''} aria-pressed={tab === 'history'} onClick={() => setTab('history')}>Flights · {records.length}</Button>
+      <Button className={tab === 'achievements' ? 'on' : ''} aria-pressed={tab === 'achievements'} onClick={() => setTab('achievements')}>Achievements · {earned} / {ACHIEVEMENTS.length}</Button>
+    </div></nav>
+    {tab === 'achievements' ? <AchievementsPanel /> : !records.length ? <EmptyState title="Your next story starts on the pad">
+      Launch a vessel to begin your archive: flight reports, charts and milestones appear here. <Button className="btn primary flight-log-build" onClick={() => game.set({ scene: 'editor' })}>Open {facilityLabel('editor')}</Button>
+    </EmptyState> : <div className="flight-log-layout">
+      <aside className="panel" aria-label="Recorded flights" onKeyDown={e => arrowNav(e)}>{[...records].reverse().map(r => <Button className={`btn ${selected === r.id ? 'primary' : ''}`} aria-current={selected === r.id ? 'true' : undefined} key={r.id} onClick={() => setSelected(r.id)}>{r.name}<small>{r.outcome ?? 'In progress'} · {r.bodies.map(id => BODY_NAMES.get(id) ?? id).join(', ')}</small></Button>)}</aside>
+      {record ? <FlightReport key={record.id} record={record} /> : <EmptyState title="Choose a flight">Select a flight on the left to open its report.</EmptyState>}
+    </div>}
   </div>;
 }

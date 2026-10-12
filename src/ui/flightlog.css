@@ -16,3 +16,9 @@
 .achievement-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; } .achievement { padding: 18px; color: var(--text-dim); } .achievement.earned { color: var(--text); border-color: var(--good); } .achievement h3 { margin: 10px 0; } .achievement p { font-size: 13px; line-height: 1.6; }
 .report-modal { width: min(1100px, 94vw); max-height: 90vh; overflow: auto; padding:var(--space-6); background: var(--panel-solid); }
 @media (max-width: 800px) { .flight-log-layout { grid-template-columns: 1fr; } .flight-log aside { max-height: 200px; } .report-stats { grid-template-columns: repeat(2, minmax(0,1fr)); } .report-charts { grid-template-columns: 1fr; } }
+/* UX-4a: arrival from flight, segmented view switch, single empty state. */
+.flight-arrival { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); flex-wrap: wrap; padding: var(--space-4) var(--space-5); margin-bottom: var(--space-5); border-color: var(--accent-border); background: linear-gradient(90deg, var(--accent-soft), transparent 60%), var(--panel-solid); }
+.flight-arrival strong { display: block; font-size: 18px; font-weight: 500; margin-top: 4px; }
+.flight-arrival p { margin: 6px 0 0; color: var(--good); font-size: 13px; }
+.flight-arrival-actions { display: flex; gap: var(--space-2); }
+.flight-log-build { display: flex; margin: var(--space-4) auto 0; }
