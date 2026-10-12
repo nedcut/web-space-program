@@ -30,12 +30,15 @@ export function MainMenu() {
   const [scale, setScale] = useState<ScalePresetId>('standard');
   // Esc steps back to the root list; keyboard focus follows the open panel and returns to its opener.
   const sub = useRef<HTMLDivElement>(null);
-  const opener = useRef<HTMLElement | null>(null);
-  const open = (next: typeof panel) => { opener.current = document.activeElement as HTMLElement | null; setPanel(next); };
+  const actions = useRef<HTMLDivElement>(null);
+  const opener = useRef('');
+  const open = (next: typeof panel) => { opener.current = document.activeElement?.textContent ?? ''; setPanel(next); };
   useEscape(() => setPanel('root'), panel !== 'root' && panel !== 'settings', 'screen');
   useEffect(() => {
-    if (panel !== 'root') focusFirst(sub.current);
-    else if (opener.current?.isConnected) opener.current.focus({ preventScroll: true });
+    if (panel !== 'root') return focusFirst(sub.current);
+    if (!opener.current) return;
+    // The root list re-mounts: focus the button that opened the panel by its label.
+    [...actions.current?.querySelectorAll('button') ?? []].find(b => b.textContent === opener.current)?.focus({ preventScroll: true });
   }, [panel]);
 
   return (
@@ -47,7 +50,7 @@ export function MainMenu() {
         <p className="menu-caption">Build with purpose. Fly with curiosity.</p>
 
         {panel === 'root' && (
-          <div className="menu-actions" onKeyDown={e => arrowNav(e)}>
+          <div ref={actions} className="menu-actions" onKeyDown={e => arrowNav(e)}>
             <Button className="btn primary" onClick={() => open('new')}><Icon name="rocket" />New Game<span className="menu-go"><Icon name="arrow" /></span></Button>
             <Button className="btn" onClick={() => open('load')}><Icon name="log" />Continue</Button>
             <Button className="btn" onClick={() => game.set({ scene: 'scenarios' })}><Icon name="orbit" />Scenarios · Missions</Button>

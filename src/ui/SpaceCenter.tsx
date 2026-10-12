@@ -1,5 +1,5 @@
 import { Icon } from './components/Icon';
-import { Panel, Button } from './components';
+import { Panel, Button, PromptModal } from './components';
 import { photoMode } from '../game/photoMode';
 import { openProgram } from '../game/program';
 import { saveNamedWorld } from '../game/persistence';
@@ -25,6 +25,7 @@ export function SpaceCenter() {
   const ut = useGame((s) => s.ut);
   const craft = useGame((s) => launchableCraft(s.craft));
   const [settings, setSettings] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const tiles = [
     { id: 'editor', title: facilityLabel('editor'), desc: 'Design and build rockets', onClick: () => game.set({ scene: 'editor' }) },
@@ -91,13 +92,15 @@ export function SpaceCenter() {
           ))}
         </div>
         <div className="hub-actions">
-          <Button className="btn small" onClick={() => { const name = window.prompt('Save slot name', 'Program save'); if (name?.trim()) { try { saveNamedWorld(name, openProgram()); setNotice('Program saved.'); } catch (e) { setNotice(saveErrorText(e)); } } }}>Save as…</Button>
+          <Button className="btn small" onClick={() => setSaving(true)}>Save as…</Button>
           <Button className="btn small" onClick={() => game.set({ scene: 'menu' })}>Main menu</Button>
           <Button className="btn" onClick={() => void import('./Spacepedia').then(m => m.openPedia('spaceCenter'))}>Spacepedia</Button>
           <Button className="btn small" onClick={() => photoMode.open()}>Photo mode</Button>
           <Button className="btn small" onClick={() => setSettings((v) => !v)}>Settings</Button>
         </div>
         {settings && <SettingsPanel onClose={() => setSettings(false)} />}
+        {saving && <PromptModal title="Save program" label="Save slot name" initial="Program save" onCancel={() => setSaving(false)}
+          onSubmit={name => { setSaving(false); try { saveNamedWorld(name, openProgram()); setNotice('Program saved.'); } catch (e) { setNotice(saveErrorText(e)); } }} />}
       </div>
     </div>
   );
