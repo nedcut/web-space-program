@@ -235,7 +235,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   const hint = this.hints.update({
     enabled: settings.flightHints && !this.network && !getTutorial() && !game.get().scenarioActive && !this.assist,
     bodyId: b.id, bodyName: b.name, terrainHeight: u.terrain(b.id).maxHeight, boundOrbit: orb.orbit.e < 1, verticalSpeed: vs,
-    map: this.mapMode, node: w.nodes.length > 0, soi, eva: !!st.eva,
+    map: this.mapMode, node: this.mapMode && w.nodes.length > 0, soi, eva: !!st.eva,
     landing: flying && info.heightAboveTerrain < 10000 && vs < -20 && ignited && !st.parts.some(p => p.chute?.phase === 'semi' || p.chute?.phase === 'full'),
     flying,
     altitude: info.altitude,
