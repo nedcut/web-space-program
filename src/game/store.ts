@@ -70,8 +70,13 @@ export interface GameState {
 
 const SETTINGS_KEY = 'wsp.settings.v1';
 
+/** Factory defaults (fresh object each call); Settings "Reset" uses them per tab. */
+export function defaultSettings(): Settings {
+  return { quality: 'medium', graphicsCustom: false, advancedGraphics: {}, frameRateCap: 0, masterVolume: 0.8, invertPitch: false, showFps: false, perfOverlay: false, adaptiveQuality: true, graphicsProfile: 0, shadows: true, bloom: true, clouds: true, scatter: true, renderScale: 1, musicVolume: 1, sfxVolume: 1, uiVolume: 1, gamepadEnabled: true, deadZone: 0.15, sensitivity: 1, inputSmoothing: 0, mouseFlight: false, units: 'metric', navballSize: 200, hudScale: 1, cameraFov: 60, autoSaveInterval: 60, uiScale: 1, highContrast: false, reduceMotion: false, colourBlind: false, launchCountdown: false, flightHints: true, cameraShake: 1, commsEnabled: null, commsRestrictControl: null, commsOverlay: true };
+}
+
 function loadSettings(): Settings {
-  const defaults: Settings = { quality: 'medium', graphicsCustom: false, advancedGraphics: {}, frameRateCap: 0, masterVolume: 0.8, invertPitch: false, showFps: false, perfOverlay: false, adaptiveQuality: true, graphicsProfile: 0, shadows: true, bloom: true, clouds: true, scatter: true, renderScale: 1, musicVolume: 1, sfxVolume: 1, uiVolume: 1, gamepadEnabled: true, deadZone: 0.15, sensitivity: 1, inputSmoothing: 0, mouseFlight: false, units: 'metric', navballSize: 200, hudScale: 1, cameraFov: 60, autoSaveInterval: 60, uiScale: 1, highContrast: false, reduceMotion: false, colourBlind: false, launchCountdown: false, flightHints: true, cameraShake: 1, commsEnabled: null, commsRestrictControl: null, commsOverlay: true };
+  const defaults = defaultSettings();
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SETTINGS_KEY) : null;
     return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;

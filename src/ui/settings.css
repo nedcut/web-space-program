@@ -1,0 +1,18 @@
+/* Settings dialog: header search, search sections, footer, inline binding conflicts (UX-10). */
+.settings-head { display: flex; align-items: center; gap: var(--space-3); }
+.settings-head h2 { margin-right: auto; }
+.settings-search { width: min(260px, 45%); }
+.settings-tabs.searching { opacity: .55; }
+.settings-section-title { margin: var(--space-4) 0 0; font: 600 var(--type-xs) var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.settings-section:first-child .settings-section-title { margin-top: 0; }
+.settings-section:not(:has(.setting-row)), .settings-group:not(:has(.setting-row)), .settings-section .advanced-graphics:not(:has(.setting-row)) { display: none; }
+.settings-empty { color: var(--text-dim); font-size: var(--type-sm); }
+.settings-content:has(.setting-row) .settings-empty { display: none; }
+.settings-foot { display: flex; justify-content: flex-end; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--panel-border); flex-shrink: 0; }
+.settings-foot .ghost { margin-right: auto; }
+.binding-keys { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.binding-key { min-width: 96px; }
+.binding-clash { display: block; margin-top: 3px; font-size: var(--type-xs); color: var(--warn); }
+.binding-row.clash .binding-key { border-color: var(--warn); color: var(--warn); }
+.graphics-custom { color: var(--text-dim); font-weight: 400; }
+@media (max-width: 600px) { .settings-head { flex-wrap: wrap; } .settings-search { order: 3; width: 100%; } }
