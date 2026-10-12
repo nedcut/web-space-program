@@ -106,6 +106,8 @@ describe('environmental hazards', () => {
     const env = u.createEnvironment(() => 'earth');
     const panel = { ...getPart('probe-cairn'), id: 'solar-test', modules: [{ type: 'solarPanel' as const, tracking: true, chargeRate: 1 }] };
     const v = buildVessel(craft(panel.id), new Map([[panel.id, panel]]));
+    v.parts[0].tweaks = { extended: true };
+    v.parts[0].panelDeploy = 1;
     v.parts[0].resources.electricCharge = 0;
     v.position = add(bs.position, scale(direction, -(u.body('earth').radius + 100_000)));
     v.velocity = bs.velocity;
