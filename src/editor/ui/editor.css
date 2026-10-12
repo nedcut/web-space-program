@@ -49,10 +49,9 @@
 /* Middle tools take the leftover width and clip rather than push Launch/Exit off screen (long names, UI scale). */
 .vab-tools { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: inherit; overflow: hidden; }
 .vab-tools > * { flex-shrink: 0; }
-.vab-topbar .vab-name { flex: 0 1 auto; min-width: 72px; }
 .vab-more { position: relative; display: none; flex-shrink: 0; }
 .vab-more-menu {
-  position: absolute; top: calc(100% + 10px); right: 0; z-index: 60; min-width: 230px; padding: 6px; background: rgba(10, 15, 26, 0.97);
+  position: absolute; top: calc(100% + 8px); z-index: 60; min-width: 230px; padding: 6px; background: rgba(10, 15, 26, 0.97);
   display: flex; flex-direction: column; gap: 1px;
 }
 .vab-more-menu hr { width: 100%; border: none; border-top: 1px solid var(--panel-border); margin: 4px 0; }
@@ -65,6 +64,36 @@
 .vab-more-item:hover, .vab-more-item:focus-visible { background: rgba(92, 200, 255, 0.12); }
 .vab-more-item:disabled { opacity: 0.4; cursor: default; }
 .vab-more-item .mono { color: var(--text-dim); font-size: 11px; }
+.vab-more-item .kbd { font-size: 10px; padding: 0 5px; }
+.vab-more-menu.right { right: 0; }
+
+/* UX-6: captioned groups, labelled exit, unsaved indicator, shared tooltip */
+.vab-gwrap { display: flex; flex-direction: column; align-items: stretch; gap: 1px; }
+.vab-glabel { font-size: 9px; line-height: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); opacity: 0.75; padding-left: 6px; white-space: nowrap; user-select: none; }
+.vab-gwrap .vab-group { padding: 2px; }
+.vab-gwrap .vab-ibtn { height: 30px; }
+.vab-exit.btn { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding-left: 6px; color: var(--text-dim); white-space: nowrap; }
+.vab-exit.btn:hover { color: var(--text); }
+.vab-exit .ui-icon { transform: scaleX(-1); }
+.vab-name-wrap { position: relative; display: flex; align-items: center; flex: 0 1 auto; min-width: 72px; width: 230px; }
+.vab-name-wrap .vab-name { width: 100%; padding-right: 12px; }
+.vab-name-wrap.dirty .vab-name { padding-right: 74px; }
+.vab-dirty { position: absolute; right: 8px; display: inline-flex; align-items: center; gap: 5px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--warn); pointer-events: none; }
+.vab-dirty:empty { display: none; }
+.vab-dirty-dot, .vab-ibtn.pending::after { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
+.vab-ibtn.pending { position: relative; }
+.vab-ibtn.pending::after { content: ''; position: absolute; top: 4px; right: 5px; }
+.vab-share-btn { font-size: 12px; color: var(--text); padding: 0 8px; }
+.vab-caret { font-size: 9px; opacity: 0.7; }
+.vab-symmode .mono { font-size: 11px; min-width: 38px; }
+.vab-tip {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 70; display: flex; align-items: center; gap: 8px; max-width: 320px; width: max-content;
+  padding: 6px 10px; font-size: 12px; line-height: 1.4; color: var(--text); pointer-events: none;
+  background: var(--panel-solid, rgba(10, 15, 26, 0.97)); border: 1px solid var(--panel-border); border-radius: var(--radius-sm); box-shadow: var(--shadow-panel);
+}
+.vab-tip[hidden] { display: none; }
+.vab-tip .kbd { flex: none; font-size: 10.5px; padding: 0 6px; }
+.vab-share-code { width: 100%; margin-top: var(--space-3, 12px); font-size: 11px; color: var(--text); background: var(--bg); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 8px; resize: vertical; word-break: break-all; }
 
 /* ---------------------------------------------------------------- palette */
 .vab-palette {
@@ -197,12 +226,30 @@
 .vab-welcome-title { font-size: 17px; font-weight: 600; }
 .vab-welcome-text { font-size: 13px; color: var(--text-dim); line-height: 1.5; margin-bottom: 6px; }
 
-/* ---------------------------------------------------------------- load dialog */
-.vab-modal-backdrop { position: absolute; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(3, 6, 12, 0.55); backdrop-filter: blur(3px); }
-.vab-modal { position: relative; width: min(760px, 92vw); max-height: 84vh; overflow-y: auto; padding: 20px 22px 22px; background: rgba(10, 15, 26, 0.95); }
-.vab-modal-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
-.vab-modal-title { font-size: 20px; font-weight: 300; letter-spacing: 0.06em; margin-top: 2px; }
+/* ---------------------------------------------------------------- craft library / import (shared Modal) */
+.vab-library.ui-modal { width: min(860px, calc(100% - 40px)); max-height: calc(100% - 60px); }
+.vab-import.ui-modal { width: min(600px, calc(100% - 40px)); }
+.vab-lib-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.vab-lib-search { flex: 1 1 240px; height: 34px; }
+.vab-lib-bar select { height: 34px; font: inherit; font-size: 12.5px; color: var(--text); background: var(--bg); border: 1px solid var(--panel-border); border-radius: var(--radius-sm); padding: 0 8px; }
+.vab-lib-bar .vab-merge { margin: 0 0 0 auto; }
+.vab-lib-error { color: var(--bad); font-size: 12.5px; margin: 8px 0 0; }
+.vab-lib-count { text-transform: none; letter-spacing: 0; }
+.vab-lib-stock-head { display: flex; align-items: center; justify-content: space-between; }
+.vab-lib-stock-head .vab-merge { margin: 0; }
 .vab-modal-section { margin: 16px 0 8px; }
+.vab-saved-main { flex: 1; min-width: 0; }
+.vab-saved-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px; color: var(--text-dim); }
+.vab-tag { color: var(--accent); opacity: 0.85; }
+.vab-saved-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 330px; }
+.vab-saved-actions .btn.ghost { color: var(--text-dim); }
+.vab-saved-actions .btn.ghost:hover { color: var(--text); }
+.vab-stock:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.vab-dropzone { border: 1px dashed var(--panel-border); border-radius: var(--radius); padding: 14px; transition: border-color 0.12s, background 0.12s; }
+.vab-dropzone.over { border-color: var(--accent); background: rgba(92, 200, 255, 0.08); }
+.vab-import-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.vab-import-or, .vab-import-hint { font-size: 12px; color: var(--text-dim); }
+.vab-import-preview { display: flex; align-items: center; gap: 14px; margin-top: 14px; padding: 10px 12px; border-radius: var(--radius); background: rgba(255, 255, 255, 0.03); border: 1px solid var(--panel-border); }
 .vab-stock-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .vab-stock {
   text-align: left; padding: 14px; border-radius:var(--radius); cursor: pointer; background: rgba(255, 255, 255, 0.03);
@@ -211,8 +258,7 @@
 .vab-stock:hover { border-color: var(--accent); background: rgba(92, 200, 255, 0.08); }
 .vab-stock-icon { color: var(--accent); margin-bottom: 4px; }
 .vab-stock-name { font-weight: 600; font-size: 14px; }
-.vab-stock-scale { align-self: flex-start; padding: 2px 7px; border: 1px solid var(--text-dim); border-radius: 4px; font-size: 11px; text-transform: capitalize; color: var(--text-dim); }
-.vab-stock-scale.current { color: var(--accent); border-color: var(--accent); }
+.vab-stock-scale { align-self: flex-start; padding: 2px 7px; border: 1px solid rgba(255, 209, 102, 0.5); border-radius: 4px; font-size: 11px; color: var(--warn); }
 .vab-stock-blurb { font-size: 12px; color: var(--text-dim); }
 .vab-stock-info { font-size: 10.5px; color: var(--accent-2); margin-top: 6px; }
 .vab-saved { display: flex; flex-direction: column; gap: 6px; }
@@ -226,12 +272,12 @@
   .vab-actions-label { display: none; }
 }
 @media (max-width: 1440px) {
-  .vab-name { width: 180px; }
+  .vab-name-wrap { width: 180px; }
   .vab-stats { gap: 12px; margin-left: 2px; padding-left: 10px; }
   .vab-topbar { gap: 8px; }
 }
 @media (max-width: 1300px) {
-  .vab-name { width: 150px; }
+  .vab-name-wrap { width: 150px; }
 }
 /* Responsive toolbar: Launch and Exit stay visible down to 760 px; secondary tools move into the "More tools" menu. */
 @media (max-width: 1500px) {
@@ -240,21 +286,18 @@
   .vab-stats .vab-stat:nth-child(3) { display: none; }
 }
 @media (max-width: 1100px) {
-  .vab-topbar .vab-name { width: 130px; }
+  .vab-name-wrap { width: 130px; }
   .vab-stats .vab-stat:nth-child(2) { display: none; }
   .vab-actions-label { display: none; }
 }
 @media (max-width: 900px) {
   .vab-topbar { gap: 6px; padding: 0 6px; }
-  .vab-topbar .vab-name { width: 140px; }
+  .vab-name-wrap { width: 140px; }
   .vab-stats { display: none; }
   .vab-mode .vab-brand-mark { padding: 0 7px; letter-spacing: 0.02em; }
   .vab-launch { padding: 0 12px; }
 }
 .vab-stock-locked { font-size: 10.5px; color: var(--warn); margin-top: 4px; }
-
-/* Sharing actions stay below the primary toolbar so launch controls remain visible. */
-.vab-sharing { position: absolute; top: 64px; left: 330px; background: rgba(10, 15, 26, 0.9); }
 
 .vab-card { background: var(--surface-soft); border-color: var(--panel-border); }
 .vab-topbar, .vab-palette, .vab-staging { box-shadow: var(--shadow-panel); }
@@ -262,7 +305,7 @@
 .vab-card-name { font-size: 11px; line-height: 1.35; min-height: 30px; }
 .vab-stage { background: var(--surface-soft); border-color: var(--panel-border); }
 .vab-search { background: var(--bg); }
-@media (max-width: 1440px) { .vab-name { width: 155px; } .vab-stats { gap: 10px; } .vab-hints { max-width: calc(100vw - 600px); flex-wrap: wrap; justify-content: center; white-space: normal; gap: 4px 12px; } }
+@media (max-width: 1440px) { .vab-name-wrap { width: 155px; } .vab-stats { gap: 10px; } .vab-hints { max-width: calc(100vw - 600px); flex-wrap: wrap; justify-content: center; white-space: normal; gap: 4px 12px; } }
 
 .vab-card { min-width: 0; }
 
@@ -348,3 +391,10 @@
 .vab-stock-icon img { width: 64px !important; height: 64px !important; }
 .vab-dv-vac { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; color: var(--text-dim); }
 .vab-dv-vac input { margin: 0; }
+
+@media (max-width: 1300px) {
+  .vab-dirty-text { display: none; }
+  .vab-name-wrap.dirty .vab-name { padding-right: 22px; }
+}
+@media (max-width: 1100px) { .vab-exit-label { display: none; } }
+.vab-search-key { font-size: 10px; padding: 0 5px; opacity: 0.6; }

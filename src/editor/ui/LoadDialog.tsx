@@ -2,7 +2,7 @@ import { localId } from '../../util/localId';
 import { listLibrary, saveLibraryItem, craftRepository, type LibraryCraft } from '../../game/saves';
 import { CraftThumbnail } from './CraftThumbnail';
 import { useEffect, useMemo, useState } from 'react';
-import { game, useGame } from '../../game/store';
+import { useGame } from '../../game/store';
 import { Universe } from '../../game/universe';
 import { partUnlocked } from '../../data/technology';
 import { newProgression } from '../../sim/science/progression';
@@ -14,97 +14,164 @@ import { computeStageStats } from './dv';
 import { Icon } from './icons';
 import { fmtDv, fmtKg } from './partInfo';
 import { saveErrorText } from '../../game/storageErrors';
-import { useEscape } from '../../ui/nav/escape';
+import { Button, ConfirmModal, Modal, PromptModal } from '../../ui/components';
+import { arrowNav } from '../../ui/nav/arrowNav';
+import { filterLibrary, matchesQuery, type LibrarySort } from './library';
 
-function summary(craft: CraftDef) {
+function summary(craft: CraftDef, earth: ReturnType<Universe['body']>) {
   try {
     const s = craftStats(craft, CATALOG, DENSITIES);
     let dv = 0;
-    for (const x of computeStageStats(craft, CATALOG, new Universe(game.get().scalePreset).body('earth')).values()) dv += x.dvVac;
+    for (const x of computeStageStats(craft, CATALOG, earth).values()) dv += x.dvVac;
     return `${s.partCount} parts · ${fmtKg(s.totalMass)} · ${s.height.toFixed(1)} m · ${fmtDv(dv)}`;
   } catch {
     return `${craft.parts.length} parts`;
   }
 }
 
+const SCALE_NAME: Record<string, string> = { standard: 'Standard', challenging: 'Challenging', real: 'Real' };
+const when = (t: number) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(new Date(t).getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) });
+
+type Edit = { item: LibraryCraft; field: 'name' | 'folder' | 'tags' } | { item: LibraryCraft; field: 'delete' } | { craft: CraftDef; field: 'replace' };
+
 export function LoadDialog({ session, onClose }: { session: EditorSession; onClose(): void }) {
-  useEscape(onClose, true, 'modal');
   const [rev, setRev] = useState(0);
   const scale = useGame(s => s.scalePreset);
   const mode = useGame((s) => s.mode);
   const progression = useGame((s) => s.resumeWorld?.progression) ?? newProgression();
   const lockedCount = (c: CraftDef) => new Set(c.parts.map((p) => p.partId).filter((id) => !partUnlocked(id, mode, progression))).size;
+  const earth = useMemo(() => new Universe(scale).body('earth'), [scale]);
   const stock = useMemo(() => STOCK_CRAFTS.map((s) => {
     const craft = s.build();
-    return { ...s, craft, info: summary(craft) };
-  }), []);
-  const [saved, setSaved] = useState<LibraryCraft[]>([]);
+    return { ...s, craft, info: summary(craft, earth) };
+  }), [earth]);
+  const [saved, setSaved] = useState<LibraryCraft[] | null>(null);
   const [query, setQuery] = useState('');
   const [folder, setFolder] = useState('');
+  const [sort, setSort] = useState<LibrarySort>('recent');
+  const [allScales, setAllScales] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => { let live = true; void listLibrary().then(items => { if (live) setSaved(items); }).catch(e => { if (live) setError((e as Error).message); }); return () => { live = false; }; }, [rev]);
+  const [edit, setEdit] = useState<Edit | null>(null);
+  useEffect(() => { let live = true; void listLibrary().then(items => { if (live) setSaved(items); }).catch(e => { if (live) { setSaved([]); setError((e as Error).message); } }); return () => { live = false; }; }, [rev]);
+  const library = useMemo(() => saved ?? [], [saved]);
+  // Stats need a stage simulation per craft: computed once per library load, not per keystroke.
+  const infos = useMemo(() => new Map(library.map(item => [item.id, summary(item.craft, earth)])), [library, earth]);
   const refresh = (action: Promise<unknown>) => void action.then(() => setRev(r => r + 1)).catch(e => setError(saveErrorText(e)));
-  function edit(item: LibraryCraft, field: 'name' | 'folder' | 'tags') {
-    const value = window.prompt(`Vehicle ${field}`, field === 'name' ? item.craft.name : field === 'folder' ? item.folder : item.tags.join(', '));
-    if (value === null || (field === 'name' && !value.trim())) return;
-    if (field === 'name' && saved.some(x => x.id !== item.id && x.craft.name === value.trim())) { setError('That vehicle name is already used.'); return; }
-    refresh(saveLibraryItem({ ...item, updatedAt: Date.now(), craft: field === 'name' ? { ...item.craft, name: value.trim().slice(0, 200) } : item.craft, folder: field === 'folder' ? value.trim() : item.folder, tags: field === 'tags' ? [...new Set(value.split(',').map(t => t.trim()).filter(Boolean))] : item.tags }));
-  }
-  const visible = saved.filter(item => (!folder || item.folder === folder) && `${item.craft.name} ${item.folder} ${item.tags.join(' ')}`.toLowerCase().includes(query.toLowerCase()));
+  const update = (item: LibraryCraft, patch: Partial<LibraryCraft>) => refresh(saveLibraryItem({ ...item, ...patch, updatedAt: Date.now() }));
+  const folders = [...new Set(library.map(x => x.folder).filter(Boolean))].sort();
+  const visible = filterLibrary(library, { query, folder, sort });
+  const stockVisible = stock.filter(s => (allScales || s.scale === scale) && matchesQuery(`${s.name} ${s.blurb}`, query));
+  const otherScales = stock.filter(s => s.scale !== scale).length;
 
   // Merge: the other craft comes in as a held assembly (its root part on the cursor) instead of replacing this one.
   const [merge, setMerge] = useState(false);
   const canMerge = session.getSnapshot().craft.parts.length > 0;
-  const load = (c: CraftDef) => {
+  const commit = (c: CraftDef) => {
     if (merge && canMerge) session.mergeCraft(c); else session.load(c);
     onClose();
   };
+  const load = (c: CraftDef) => (!(merge && canMerge) && session.getSnapshot().dirty ? setEdit({ craft: c, field: 'replace' }) : commit(c));
+  const duplicate = (item: LibraryCraft) => {
+    let name = `${item.craft.name} copy`;
+    for (let n = 2; library.some(x => x.craft.name === name); n++) name = `${item.craft.name} copy ${n}`;
+    refresh(saveLibraryItem({ ...item, id: localId(), craft: { ...item.craft, name }, updatedAt: Date.now() }));
+  };
 
   return (
-    <div className="vab-modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="vab-modal panel">
-        <div className="vab-modal-head">
-          <div>
-            <div className="label">Craft library</div>
-            <div className="vab-modal-title">Load a vehicle</div>
-          </div>
-          <label className="vab-merge" title={canMerge ? 'Pick up the chosen vehicle and attach it to the current one' : 'Build or load something first'}>
-            <input type="checkbox" checked={merge && canMerge} disabled={!canMerge} onChange={e => setMerge(e.target.checked)} /> Merge into current craft
-          </label>
-          <button className="btn small ghost" onClick={onClose}>Close</button>
-        </div>
-        <div className="vab-modal-section label">Stock vehicles</div>
-        <div className="vab-stock-grid">
-          {stock.map((s) => (
-            <button key={s.id} className="vab-stock" onClick={() => load(s.craft)}>
-              <div className="vab-stock-icon"><CraftThumbnail craft={s.craft} /></div>
-              <div className="vab-stock-name">{s.name}</div>
-              <span className={`vab-stock-scale ${s.scale === scale ? 'current' : ''}`}>{s.scale} scale{s.scale === scale ? ' · current' : ''}</span>
-              <div className="vab-stock-blurb">{s.blurb}</div>
-              <div className="vab-stock-info mono">{s.info}</div>
-              {lockedCount(s.craft) > 0 && <div className="vab-stock-locked">Needs research · {lockedCount(s.craft)} locked part type{lockedCount(s.craft) > 1 ? 's' : ''}</div>}
-            </button>
-          ))}
-        </div>
-        <div className="vab-modal-section label">Saved vehicles</div>
-        <div style={{ display: 'flex', gap: 8 }}><input aria-label="Search craft library" placeholder="Search names, folders, tags" value={query} onChange={e => setQuery(e.target.value)} /><select aria-label="Craft folder" value={folder} onChange={e => setFolder(e.target.value)}><option value="">All folders</option>{[...new Set(saved.map(x => x.folder).filter(Boolean))].sort().map(f => <option key={f}>{f}</option>)}</select></div>
-        {error && <p role="alert">{error}</p>}
-        <div className="vab-saved">
-          {visible.map(item => (
-            <div key={item.id} className="vab-saved-row" style={{ flexWrap: 'wrap' }}>
-              <CraftThumbnail craft={item.craft} />
-              <div style={{ flex: 1, minWidth: 150 }}><div className="vab-saved-name">{item.craft.name}</div><div className="vab-saved-info mono">{summary(item.craft)}</div><small>{item.folder || 'Unfiled'} · {item.tags.join(', ')}</small></div>
-              <button className="btn small" onClick={() => load(item.craft)}>{merge && canMerge ? 'Merge' : 'Load'}</button>
-              <button className="btn small" onClick={() => edit(item, 'name')}>Rename</button>
-              <button className="btn small" onClick={() => edit(item, 'folder')}>Folder</button>
-              <button className="btn small" onClick={() => edit(item, 'tags')}>Tags</button>
-              <button className="btn small" onClick={() => { let name = `${item.craft.name} copy`; let n = 2; while (saved.some(x => x.craft.name === name)) name = `${item.craft.name} copy ${n++}`; refresh(saveLibraryItem({ ...item, id: localId(), craft: { ...item.craft, name }, updatedAt: Date.now() })); }}>Duplicate</button>
-              <button className="btn small danger" title="Delete" onClick={() => refresh(craftRepository.remove(item.id))}><Icon name="trash" size={14} /></button>
-            </div>
-          ))}
-          {!visible.length && <div className="vab-empty">No matching vehicles. Use Save (Ctrl+S) to keep your designs.</div>}
-        </div>
+    <Modal title="Craft library" onClose={onClose} className="vab-library">
+      <div className="vab-lib-bar">
+        <label className="vab-search vab-lib-search">
+          <Icon name="search" size={15} />
+          <input data-autofocus aria-label="Search vehicles" placeholder="Search vehicles, folders, tags" value={query} onChange={e => setQuery(e.target.value)} />
+        </label>
+        {folders.length > 0 && <select aria-label="Folder" value={folder} onChange={e => setFolder(e.target.value)}><option value="">All folders</option>{folders.map(f => <option key={f}>{f}</option>)}</select>}
+        <select aria-label="Sort saved vehicles" value={sort} onChange={e => setSort(e.target.value as LibrarySort)}>
+          <option value="recent">Recently saved</option><option value="name">Name</option><option value="parts">Part count</option>
+        </select>
+        <label className="vab-merge" title={canMerge ? 'Pick up the chosen vehicle and attach it to the current one' : 'Build or load something first'}>
+          <input type="checkbox" checked={merge && canMerge} disabled={!canMerge} onChange={e => setMerge(e.target.checked)} /> Merge into current craft
+        </label>
       </div>
-    </div>
+      {error && <p className="vab-lib-error" role="alert">{error}</p>}
+
+      <div className="vab-modal-section label">Saved vehicles{saved && library.length > 0 && <span className="vab-lib-count"> · {visible.length === library.length ? library.length : `${visible.length} of ${library.length}`}</span>}</div>
+      <div className="vab-saved">
+        {visible.map(item => (
+          <div key={item.id} className="vab-saved-row">
+            <CraftThumbnail craft={item.craft} />
+            <div className="vab-saved-main">
+              <div className="vab-saved-name">{item.craft.name}</div>
+              <div className="vab-saved-info mono">{infos.get(item.id)}</div>
+              <div className="vab-saved-meta">
+                <span>{when(item.updatedAt)}</span>
+                {item.folder && <span className="ui-badge">{item.folder}</span>}
+                {item.tags.map(t => <span key={t} className="vab-tag">#{t}</span>)}
+              </div>
+            </div>
+            <div className="vab-saved-actions">
+              <Button className="btn small primary" onClick={() => load(item.craft)}>{merge && canMerge ? 'Merge' : 'Load'}</Button>
+              <Button className="btn small ghost" onClick={() => setEdit({ item, field: 'name' })}>Rename</Button>
+              <Button className="btn small ghost" onClick={() => setEdit({ item, field: 'folder' })}>Folder</Button>
+              <Button className="btn small ghost" onClick={() => setEdit({ item, field: 'tags' })}>Tags</Button>
+              <Button className="btn small ghost" onClick={() => duplicate(item)}>Duplicate</Button>
+              <Button className="btn small ghost danger" aria-label={`Delete ${item.craft.name}`} title="Delete" onClick={() => setEdit({ item, field: 'delete' })}><Icon name="trash" size={14} /></Button>
+            </div>
+          </div>
+        ))}
+        {saved && !visible.length && <div className="vab-empty">{library.length ? 'No saved vehicles match.' : 'No saved vehicles yet. Save (Ctrl+S) keeps your designs here.'}</div>}
+      </div>
+
+      <div className="vab-modal-section vab-lib-stock-head">
+        <span className="label">Stock vehicles</span>
+        {otherScales > 0 && <label className="vab-merge"><input type="checkbox" checked={allScales} onChange={e => setAllScales(e.target.checked)} /> Show other scales ({otherScales})</label>}
+      </div>
+      <div className="vab-stock-grid" onKeyDown={e => arrowNav(e, '.vab-stock')}>
+        {stockVisible.map((s) => (
+          <button type="button" key={s.id} className="vab-stock" onClick={() => load(s.craft)}>
+            <div className="vab-stock-icon"><CraftThumbnail craft={s.craft} /></div>
+            <div className="vab-stock-name">{s.name}</div>
+            {s.scale !== scale && <span className="vab-stock-scale">Built for {SCALE_NAME[s.scale] ?? s.scale} scale</span>}
+            <div className="vab-stock-blurb">{s.blurb.replace(/ · research required$/, '')}</div>
+            <div className="vab-stock-info mono">{s.info}</div>
+            {lockedCount(s.craft) > 0 && <div className="vab-stock-locked">Needs research · {lockedCount(s.craft)} locked part type{lockedCount(s.craft) > 1 ? 's' : ''}</div>}
+          </button>
+        ))}
+        {!stockVisible.length && <div className="vab-empty">No stock vehicles match.</div>}
+      </div>
+
+      {edit?.field === 'name' && <PromptModal title="Rename vehicle" label="Name" initial={edit.item.craft.name} submitLabel="Rename" onCancel={() => setEdit(null)} onSubmit={value => {
+        const name = value.slice(0, 200);
+        if (library.some(x => x.id !== edit.item.id && x.craft.name === name)) { setError(`“${name}” is already used by another vehicle.`); return; }
+        setError(''); setEdit(null); update(edit.item, { craft: { ...edit.item.craft, name } });
+      }} />}
+      {(edit?.field === 'folder' || edit?.field === 'tags') && <FieldModal
+        title={edit.field === 'folder' ? 'Move to folder' : 'Edit tags'}
+        label={edit.field === 'folder' ? 'Folder (empty = unfiled)' : 'Tags, separated by commas'}
+        initial={edit.field === 'folder' ? edit.item.folder : edit.item.tags.join(', ')}
+        suggestions={edit.field === 'folder' ? folders : undefined}
+        onCancel={() => setEdit(null)}
+        onSubmit={value => {
+          setEdit(null);
+          update(edit.item, edit.field === 'folder' ? { folder: value.trim() } : { tags: [...new Set(value.split(',').map(t => t.trim()).filter(Boolean))] });
+        }} />}
+      {edit?.field === 'delete' && <ConfirmModal title="Delete vehicle?" confirmLabel="Delete" danger onCancel={() => setEdit(null)} onConfirm={() => { setEdit(null); refresh(craftRepository.remove(edit.item.id)); }}>
+        “{edit.item.craft.name}” will be removed from the craft library. This cannot be undone.
+      </ConfirmModal>}
+      {edit?.field === 'replace' && <ConfirmModal title="Replace the current craft?" confirmLabel="Discard and load" danger onCancel={() => setEdit(null)} onConfirm={() => { setEdit(null); commit(edit.craft); }}>
+        “{session.getSnapshot().name}” has unsaved changes. Tick “Merge into current craft” to attach the vehicle instead.
+      </ConfirmModal>}
+    </Modal>
   );
+}
+
+/** Like PromptModal, but an empty value is allowed (clear a folder or the tags). */
+function FieldModal({ title, label, initial, suggestions, onSubmit, onCancel }: { title: string; label: string; initial: string; suggestions?: string[]; onSubmit(value: string): void; onCancel(): void }) {
+  const [value, setValue] = useState(initial);
+  return <Modal title={title} onClose={onCancel} className="ui-modal-small">
+    <form onSubmit={e => { e.preventDefault(); onSubmit(value); }}>
+      <label className="ui-field"><span>{label}</span><input data-autofocus value={value} list={suggestions?.length ? 'vab-folder-list' : undefined} onChange={e => setValue(e.target.value)} onFocus={e => e.currentTarget.select()} /></label>
+      {suggestions && <datalist id="vab-folder-list">{suggestions.map(f => <option key={f} value={f} />)}</datalist>}
+      <div className="ui-modal-actions"><Button className="btn" onClick={onCancel}>Cancel</Button><Button type="submit" className="btn primary">Save</Button></div>
+    </form>
+  </Modal>;
 }

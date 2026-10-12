@@ -10,6 +10,7 @@ import { deleteSubassembly, listSubassemblies, saveSubassembly, subscribeSubasse
 import type { Subassembly } from '../core';
 import { getThumbnail, requestThumbnails, subscribeThumbnails, thumbnailVersion } from '../scene/thumbnails';
 import { Icon } from './icons';
+import { isTyping } from '../../input/bindings';
 import { CATEGORY_TABS, RESOURCE_SHORT, fmtKN, fmtKg, sizeLabel, wetMass } from './partInfo';
 
 export function useThumbnails() {
@@ -43,6 +44,21 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
     return () => { observer.current?.disconnect(); entries.clear(); };
   }, []);
   const [hover, setHover] = useState<{ def: PartDef; y: number } | null>(null);
+  // "/" jumps to the part search from anywhere in the hall (not while typing or with a dialog open).
+  const search = useRef<HTMLInputElement>(null);
+  const focusSearch = useRef(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target) || document.querySelector('dialog[open]')) return;
+      e.preventDefault();
+      focusSearch.current = true;
+      setTab(t => (t === 'subassemblies' ? 'all' : t));
+      search.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  useEffect(() => { if (focusSearch.current && tab !== 'subassemblies') { focusSearch.current = false; search.current?.focus(); } }, [tab]);
   const heldAtDown = useRef(false);
 
   const counts = useMemo(() => {
@@ -86,10 +102,12 @@ export function Palette({ session, view }: { session: EditorSession; view: Sessi
       {tab === 'subassemblies' ? <SubassemblyDrawer session={session} view={view} /> : <div className="vab-palette-main">
         <div className="vab-palette-head">
           <div className="label">{CATEGORY_TABS.find((t) => t.id === tab)?.label}</div>
-          <div className="vab-search">
+          <label className="vab-search">
             <Icon name="search" size={15} />
-            <input value={query} placeholder="Search parts" onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQuery('')} />
-          </div>
+            <input ref={search} value={query} aria-label="Search parts" placeholder="Search parts" onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') { if (query) setQuery(''); else e.currentTarget.blur(); } }} />
+            {!query && <kbd className="kbd vab-search-key" title="Press / to search parts">/</kbd>}
+          </label>
         </div>
         <div className="vab-cards" aria-busy={query !== deferredQuery}>
           {parts.map(d => <PartCard key={d.id} def={d} selected={view.held?.kind === 'new' && view.held.partId === d.id} enter={enter} leave={leave} pick={pick} watch={watch} />)}

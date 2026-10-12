@@ -98,6 +98,8 @@ export interface SessionView {
   /** Reference body for the per-stage Δv/TWR readouts. */
   dvBody: string;
   dvBodies: DvBodyOption[];
+  /** The craft or its name changed since it was last saved or loaded (empty crafts are never dirty). */
+  dirty: boolean;
   version: number;
 }
 
@@ -137,6 +139,8 @@ export class EditorSession {
   private group: ActionGroupId = 'custom1';
   private panels: InspectorPanelState[] = [];
   private version = 0;
+  /** Craft and name as last saved or loaded: the unsaved-changes baseline. */
+  private clean: { craft: CraftDef; name: string } | null = null;
   private unsub: () => void = () => {};
   /** Bumped when a whole craft is loaded (view re-frames the camera). */
   loadCounter = 0;
@@ -197,6 +201,7 @@ export class EditorSession {
     this.panels = this.panels.filter(p => alive.has(p.uid));
     this.snap = {
       ...this.uiFields(craft),
+      dirty: this.isDirty(craft),
       craft, name: this.name, stages, stageStats, stats, totalDvVac, totalDvAsl,
       held: this.held, linkStart: this.editor.linkStart, symmetry: this.symmetry, symmetryMode: this.symmetryMode, craftType: craft.type,
       showCoM: this.showCoM, showCoT: this.showCoT, showCoL: this.showCoL,
@@ -247,11 +252,28 @@ export class EditorSession {
       dvBody: this.dvBody, dvBodies: this.referenceUniverse().bodies };
   }
 
+  /** Compared only when the craft or name changed since the last snapshot (not on hover/UI updates). */
+  private isDirty(craft: CraftDef): boolean {
+    const k = this.dirtyKey;
+    if (k && k.craft === craft && k.name === this.name && k.clean === this.clean) return k.dirty;
+    const c = this.clean;
+    const dirty = craft.parts.length > 0 && !(c && c.name === this.name && (c.craft === craft || snapshotEqual(c.craft, craft)));
+    this.dirtyKey = { craft, name: this.name, clean: c, dirty };
+    return dirty;
+  }
+  private dirtyKey: { craft: CraftDef; name: string; clean: EditorSession['clean']; dirty: boolean } | null = null;
+
+  /** Treat the current craft as saved (e.g. it matches a library entry). */
+  markSaved() {
+    this.clean = { craft: this.editor.craft, name: this.name };
+    this.touch();
+  }
+
   /** Lightweight update for UI-only fields (no craft recompute). */
   private touch() {
     this.version++;
     this.snap = {
-      ...this.snap, ...this.uiFields(), name: this.name, held: this.held, linkStart: this.editor.linkStart, symmetry: this.symmetry, symmetryMode: this.symmetryMode,
+      ...this.snap, ...this.uiFields(), dirty: this.isDirty(this.snap.craft), name: this.name, held: this.held, linkStart: this.editor.linkStart, symmetry: this.symmetry, symmetryMode: this.symmetryMode,
       showCoM: this.showCoM, showCoT: this.showCoT, showCoL: this.showCoL,
       canUndo: this.editor.canUndo || this.held?.kind === 'new', canRedo: this.editor.canRedo,
       toasts: this.toasts, hoverUid: this.hoverUid, highlightUids: this.highlightUids, version: this.version,
@@ -319,6 +341,7 @@ export class EditorSession {
     this.gizmoUid = null;
     this.applyTypeDefaults(this.editor.craft.type);
     this.loadCounter++;
+    this.clean = { craft: this.editor.craft, name: this.name };
     this.refresh();
     if (announce) this.toast(`Loaded "${this.name}"`, 'good');
   }
@@ -351,7 +374,9 @@ export class EditorSession {
     const craft = this.currentCraft();
     if (!craft.parts.length) return this.toast('Nothing to save yet', 'warn');
     try {
+      const baseline = { craft: this.editor.craft, name: this.name };
       await saveCraft(craft);
+      this.clean = baseline;
       this.toast(`Saved "${craft.name}"`, 'good');
     } catch (e) {
       this.toast(saveErrorText(e), 'bad');
