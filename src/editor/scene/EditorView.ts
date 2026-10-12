@@ -1032,7 +1032,10 @@ export class EditorView {
     if (matches('editorCancel', e)) {
       if (this.gizmoDrag) this.endGizmoDrag(false);
       else if (held) s.cancelHeld();
-      else if (!s.closeTopPanel() && s.getSnapshot().gizmoUid !== null) s.setGizmo(null);
+      else if (s.closeTopPanel()) return;
+      else if (s.getSnapshot().gizmoUid !== null) s.setGizmo(null);
+      // The action-groups view advertises "Esc close panel": return to building.
+      else if (s.getSnapshot().mode === 'actions') s.setMode('build');
       return;
     }
     if (matches('editorDelete', e)) {

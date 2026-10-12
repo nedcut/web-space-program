@@ -14,6 +14,7 @@ import { computeStageStats } from './dv';
 import { Icon } from './icons';
 import { fmtDv, fmtKg } from './partInfo';
 import { saveErrorText } from '../../game/storageErrors';
+import { useEscape } from '../../ui/nav/escape';
 
 function summary(craft: CraftDef) {
   try {
@@ -27,6 +28,7 @@ function summary(craft: CraftDef) {
 }
 
 export function LoadDialog({ session, onClose }: { session: EditorSession; onClose(): void }) {
+  useEscape(onClose, true, 'modal');
   const [rev, setRev] = useState(0);
   const scale = useGame(s => s.scalePreset);
   const mode = useGame((s) => s.mode);

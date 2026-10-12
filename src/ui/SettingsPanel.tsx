@@ -7,6 +7,7 @@ import { actionLabel, conflicts, defaultBindings, getBindings, keyChord, saveBin
 import { AdvancedGraphicsPanel } from './AdvancedGraphics';
 import { presetSettings } from '../render/core/quality';
 import { graphicsLabel } from './graphicsLabels';
+import { useEscape } from './nav/escape';
 
 const TABS = ['Graphics', 'Audio', 'Controls', 'Gameplay', 'Accessibility'] as const;
 export function SettingsPanel({ onClose, world }: { onClose: () => void; world?: World }) {
@@ -20,6 +21,9 @@ export function SettingsPanel({ onClose, world }: { onClose: () => void; world?:
   const close = useRef(onClose);
   close.current = onClose;
   const dialog = useRef<HTMLDivElement>(null);
+  useEscape(() => close.current(), true, 'modal');
+  // While rebinding, Esc cancels the capture instead of closing Settings.
+  useEscape(() => setCapture(null), capture !== null, 'capture');
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     dialog.current?.focus();
@@ -28,7 +32,6 @@ export function SettingsPanel({ onClose, world }: { onClose: () => void; world?:
         e.stopImmediatePropagation();
         e.preventDefault();
         if (/^(Control|Shift|Alt|Meta)/.test(e.code)) return;
-        if (e.code === 'Escape') { setCapture(null); return; }
         if (e.repeat) return;
         saveBindings({ ...getBindings(), [capture]: [keyChord(e)] });
         setCapture(null);
@@ -38,7 +41,7 @@ export function SettingsPanel({ onClose, world }: { onClose: () => void; world?:
         if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { e.preventDefault(); last?.focus(); }
         else if (!e.shiftKey && (document.activeElement === last || document.activeElement === dialog.current)) { e.preventDefault(); first?.focus(); }
         return;
-      } else if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); close.current(); }
+      }
     };
     const release = (e: KeyboardEvent) => {
       if (capture && /^(Control|Shift|Alt|Meta)/.test(e.code)) {

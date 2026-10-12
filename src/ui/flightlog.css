@@ -1,7 +1,7 @@
 .flight-log { overflow: auto; padding: 24px 4vw; background:var(--screen-bg); }
-.flight-log header, .report-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.flight-log h1, .flight-report h2 { font-weight: 300; margin: 8px 0 18px; }
-.flight-log nav { display: flex; gap: 8px; margin-bottom: 24px; }
+.report-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.flight-report h2 { font-weight: 300; margin: 8px 0 18px; }
+.flight-log-tabs { display: flex; gap: 8px; margin-bottom: 24px; }
 .flight-log-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap:var(--space-6); }
 .flight-log aside { padding: 12px; align-self: start; display: flex; flex-direction: column; gap: 8px; max-height: 70vh; overflow: auto; }
 .flight-log aside .btn { text-align: left; flex-shrink: 0; }

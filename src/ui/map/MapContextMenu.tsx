@@ -1,5 +1,6 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import type { MapAction, MapActionId } from './mapActions';
+import { useEscape } from '../nav/escape';
 import './mapMenus.css';
 
 /** Keep a floating box inside its positioned parent. */
@@ -18,11 +19,7 @@ export function MapContextMenu({ x, y, title, subtitle, actions, onAction, onClo
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { clampToParent(ref.current, x + 12, y - 8); }, [x, y, actions.length]);
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
-    window.addEventListener('keydown', key, true);
-    return () => window.removeEventListener('keydown', key, true);
-  }, [onClose]);
+  useEscape(onClose, true, 'panel');
   return <div ref={ref} className="panel map-menu" role="menu" aria-label={`${title} actions`} onPointerDown={e => e.stopPropagation()}>
     <div className="map-menu-head"><strong>{title}</strong>{subtitle && <span>{subtitle}</span>}</div>
     {actions.map(a => <button key={a.id} role="menuitem" className="map-menu-item" onClick={() => onAction(a.id)}>{a.label}</button>)}

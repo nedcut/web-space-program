@@ -3,7 +3,9 @@ import { PART_CATALOG } from '../../data/parts';
 import { decodeCraft, MAX_CRAFT_BYTES, validateCraft, type CraftImport } from '../../game/craftSharing';
 import { CraftThumbnail } from './CraftThumbnail';
 import type { EditorSession } from '../session';
+import { useEscape } from '../../ui/nav/escape';
 export function CraftImportDialog({ session, initial = '', file, onClose }: { session: EditorSession; initial?: string; file?: File; onClose(): void }) {
+  useEscape(onClose, true, 'modal');
   const [code, setCode] = useState(initial);
   const [result, setResult] = useState<CraftImport | null>(null);
   const [error, setError] = useState('');

@@ -1,7 +1,7 @@
 import { Button, Card, EmptyState } from './components';
 import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { useState } from 'react';
-import { game } from '../game/store';
+import { SceneHeader } from './nav/SceneHeader';
 import { openProgram, saveProgram } from '../game/program';
 import './progression.css';
 export default function Missions() {
@@ -10,10 +10,8 @@ export default function Missions() {
   const p = world.progression;
   const update = (fn: () => void) => { fn(); saveProgram(world); refresh(n => n + 1); };
   return <main className="program-screen">
-    <header className="program-header"><div><div className="label">Coastal Launch Complex · Expedition desk</div><h1>Mission Control</h1><p>Accept a commission. Advance the program. Bring your discoveries home.</p></div>
-      <div className="program-balance"><strong>{p.funds.toLocaleString()}</strong><span className="label">credits · {p.reputation} reputation</span></div>
-      <Button className="btn" onClick={() => { saveProgram(world); game.set({ scene: 'spaceCenter' }); }}>Space Center</Button>
-    </header>
+    <SceneHeader scene="missions" kicker="Coastal Launch Complex · Expedition desk" title="Mission Control" subtitle="Accept a commission. Advance the program. Bring your discoveries home."
+      onLeave={() => saveProgram(world)} aside={<div className="program-balance"><strong>{p.funds.toLocaleString()}</strong><span className="label">credits · {p.reputation} reputation</span></div>} />
     {world.mode !== 'career' ? <EmptyState title="Build a funded space program">Contracts and program finances are available in Career mode.</EmptyState> : <>
       <div className="program-tabs"><span className="label">{p.contracts.filter(c => c.status === 'active').length} / 3 active commissions</span>
         <Button className="btn" disabled={p.contracts.some(c => c.status === 'offered')} onClick={() => update(() => world.refreshContracts())}>Request new offers</Button></div>

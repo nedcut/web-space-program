@@ -613,7 +613,7 @@ export const STOCK_CRAFTS: StockCraft[] = ([
   { scale: 'standard', id: 'stock-swift', name: 'Swift Jet', blurb: 'Runway takeoff · turbofan trainer aircraft', build: () => buildSwift() },
   { scale: 'standard', id: 'stock-ringrunner', name: 'Ringrunner Saturn Probe', blurb: 'Standard scale · three stages to Saturn', build: () => buildRingrunner() },
   { scale: 'standard', id: 'stock-pebblecatcher', name: 'Pebblecatcher', blurb: 'Bennu sample-return probe · gentle RCS touchdown', launchBody: 'bennu', needsResearch: true, build: () => buildPebblecatcher() },
-  { scale: 'standard', id: 'stock-tender', name: 'Wren Tender', blurb: 'Docking practice tug · try ?scenario=rendezvous', build: () => buildTender() },
+  { scale: 'standard', id: 'stock-tender', name: 'Wren Tender', blurb: 'Small RCS tug for rendezvous and docking practice', build: () => buildTender() },
   ...([
     ['hearthlight', 'Hearthlight Station', 'Docking hub · four-seat orbital outpost', buildStationCore, 'earth'],
     ['homeward', 'Homeward Crew Ferry', 'Dock, exchange crew and return under parachutes', buildCrewFerry, 'earth'],

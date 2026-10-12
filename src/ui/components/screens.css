@@ -17,7 +17,7 @@
 .menu-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 390px; max-width: 100%; }
 .menu-actions .btn { text-align: left; min-height: 44px; font-size: 13px; display: flex; align-items: center; gap: 10px; }
 .menu-actions .btn:first-child { grid-column: 1 / -1; min-height: 52px; font-size: 15px; }
-.menu-actions .btn:nth-child(3) { grid-column: 1 / -1; grid-row: 5; }
+.menu-actions .btn.menu-wide { grid-column: 1 / -1; }
 .menu-actions .ui-icon { opacity: .8; }
 .menu-actions .menu-go { margin-left: auto; }
 .menu-new { padding: 24px; width: min(440px, 100%); }

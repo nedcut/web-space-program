@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useEscape } from '../nav/escape';
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
 
 /** Native semantics and all data/ARIA hooks are preserved by these shared primitives. */
 export function Button({ className = 'btn', variant, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'danger' }) {
@@ -32,12 +33,14 @@ export function EmptyState({ title, children }: { title: string; children: React
 }
 export function Modal({ title, onClose, children, className = '' }: { title: string; onClose: () => void; children: ReactNode; className?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
+  useEscape(onClose, true, 'modal');
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     ref.current?.showModal();
+    ref.current?.querySelector<HTMLElement>('[data-autofocus]')?.focus();
     return () => { previous?.focus(); };
   }, []);
-  return <dialog ref={ref} className={`panel ui-modal ${className}`} aria-label={title} onCancel={event => { event.preventDefault(); onClose(); }}><div className="ui-modal-heading"><h2>{title}</h2><Button className="btn ghost small" onClick={onClose}>Close</Button></div>{children}</dialog>;
+  return <dialog ref={ref} className={`panel ui-modal ${className}`} aria-label={title} onCancel={event => event.preventDefault()}><div className="ui-modal-heading"><h2>{title}</h2><Button className="btn ghost small" onClick={onClose}>Close</Button></div>{children}</dialog>;
 }
 
 export function Tabs<T extends string>({ label, options, value, onChange, panelId, className = '' }: { label: string; options: readonly T[]; value: T; onChange: (value: T) => void; panelId: string; className?: string }) {
@@ -50,4 +53,27 @@ export function Tabs<T extends string>({ label, options, value, onChange, panelI
     event.preventDefault(); onChange(options[next]);
     event.currentTarget.querySelectorAll<HTMLButtonElement>('button')[next]?.focus();
   }}>{options.map(option => <Button role="tab" aria-selected={value === option} aria-controls={panelId} tabIndex={value === option ? 0 : -1} key={option} className={value === option ? 'on' : ''} onClick={() => onChange(option)}>{option}</Button>)}</div>;
+}
+
+/** Keyboard key hint, e.g. <Kbd>Esc</Kbd>. */
+export function Kbd({ children }: { children: ReactNode }) {
+  return <kbd className="kbd">{children}</kbd>;
+}
+/** In-game replacement for window.confirm: Enter confirms, Esc cancels. */
+export function ConfirmModal({ title, children, confirmLabel = 'Confirm', danger = false, onConfirm, onCancel }: { title: string; children?: ReactNode; confirmLabel?: string; danger?: boolean; onConfirm: () => void; onCancel: () => void }) {
+  return <Modal title={title} onClose={onCancel} className="ui-modal-small">
+    {children && <div className="ui-modal-body">{children}</div>}
+    <div className="ui-modal-actions"><Button className="btn" onClick={onCancel}>Cancel</Button><Button className={`btn ${danger ? 'danger' : 'primary'}`} data-autofocus onClick={onConfirm}>{confirmLabel}</Button></div>
+  </Modal>;
+}
+/** In-game replacement for window.prompt: a single text field, Enter submits, Esc cancels. */
+export function PromptModal({ title, label, initial = '', submitLabel = 'Save', onSubmit, onCancel }: { title: string; label: string; initial?: string; submitLabel?: string; onSubmit: (value: string) => void; onCancel: () => void }) {
+  const [value, setValue] = useState(initial);
+  const submit = () => { if (value.trim()) onSubmit(value.trim()); };
+  return <Modal title={title} onClose={onCancel} className="ui-modal-small">
+    <form onSubmit={e => { e.preventDefault(); submit(); }}>
+      <label className="ui-field"><span>{label}</span><input data-autofocus value={value} onChange={e => setValue(e.target.value)} onFocus={e => e.currentTarget.select()} /></label>
+      <div className="ui-modal-actions"><Button className="btn" onClick={onCancel}>Cancel</Button><Button type="submit" className="btn primary" disabled={!value.trim()}>{submitLabel}</Button></div>
+    </form>
+  </Modal>;
 }

@@ -1,6 +1,6 @@
+import { SceneHeader } from './nav/SceneHeader';
 import { Button, Panel, EmptyState, Badge } from './components';
 import { useEffect, useRef, useState } from 'react';
-import { game } from '../game/store';
 import { openProgram } from '../game/program';
 import { ACHIEVEMENTS } from '../game/flightlog/achievements';
 import { loadAchievements } from '../game/flightlog/storage';
@@ -59,7 +59,7 @@ export default function FlightLog() {
   const [tab, setTab] = useState<'history' | 'achievements'>('history');
   const [selected, setSelected] = useState(() => world.latestReportId ?? world.flightlog.records.at(-1)?.id);
   const record = world.flightlog.records.find(r => r.id === selected);
-  return <div className="fullscreen flight-log"><header><div><div className="label">Mission archive</div><h1>Flight log</h1></div><Button className="btn" onClick={() => game.set({ scene: 'spaceCenter' })}>Space Center</Button></header><nav><Button className={`btn ${tab === 'history' ? 'primary' : ''}`} aria-pressed={tab === 'history'} onClick={() => setTab('history')}>Flights · {world.flightlog.records.length}</Button><Button className={`btn ${tab === 'achievements' ? 'primary' : ''}`} aria-pressed={tab === 'achievements'} onClick={() => setTab('achievements')}>Achievements</Button></nav>
+  return <div className="fullscreen flight-log"><SceneHeader scene="flightlog" kicker="Mission archive" title="Flight Log" /><nav className="flight-log-tabs"><Button className={`btn ${tab === 'history' ? 'primary' : ''}`} aria-pressed={tab === 'history'} onClick={() => setTab('history')}>Flights · {world.flightlog.records.length}</Button><Button className={`btn ${tab === 'achievements' ? 'primary' : ''}`} aria-pressed={tab === 'achievements'} onClick={() => setTab('achievements')}>Achievements</Button></nav>
     {tab === 'achievements' ? <AchievementsPanel /> : <div className="flight-log-layout"><aside className="panel">{[...world.flightlog.records].reverse().map(r => <Button className={`btn ${selected === r.id ? 'primary' : ''}`} key={r.id} onClick={() => setSelected(r.id)}>{r.name}<small>{r.outcome ?? 'In progress'} · {r.bodies.join(', ')}</small></Button>)}{!world.flightlog.records.length && <p>No flights recorded yet. Launch a vessel to begin your archive.</p>}</aside>{record ? <FlightReport key={record.id} record={record} /> : <EmptyState title="Your next story starts on the pad">Your flights, charts and milestones will appear here.</EmptyState>}</div>}
   </div>;
 }
