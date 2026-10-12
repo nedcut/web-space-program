@@ -156,6 +156,12 @@ describe('map focus and context actions', () => {
     expect(ids({ kind: 'body', id: 'moon' }, { soiChanges: [{ body: 'moon', time: 3 }] })).toEqual(['focus', 'target', 'info']);
     expect(ids({ kind: 'body', id: 'moon' }, { soiChanges: [{ body: 'moon', time: 300 }] })).toEqual(['focus', 'target', 'warpSoi', 'info']);
     expect(ids({ kind: 'vessel', id: 'station' }, { canSwitch: false, canTarget: false })).toEqual(['focus', 'info']);
+    expect(ids({ kind: 'vessel', id: 'station' }, { info: false })).toEqual(['focus', 'target', 'switch']);
+  });
+
+  it('uses the same Focus / Fly labels as Fleet Tracking', () => {
+    const labels = mapContextActions({ kind: 'vessel', id: 'station' }, { activeId: 'ship', canSwitch: true }).map(a => a.label);
+    expect(labels).toEqual(['Focus', 'Fly', 'Info']);
   });
 });
 
