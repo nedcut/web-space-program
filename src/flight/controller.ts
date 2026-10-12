@@ -43,7 +43,7 @@ import { sampleAtmosphere } from '../sim/atmosphere';
 import type { ScalePresetId } from '../sim/bodies/scale';
 import type { Orbit } from '../sim/orbit/api';
 import type { GameMode } from '../sim/science/progression';
-import { gearState, groupBindings, lightOn, neutralInput, type PortInfo } from '../sim/vessel';
+import { canControlFrom, freeSeats, gearState, groupBindings, lightOn, neutralInput, type PortInfo } from '../sim/vessel';
 import type { ActionGroupId, PartActionId } from '../sim/vessel/types';
 import type { FlightTweaks, SasMode, VesselCommand, VesselState } from '../sim/vessel/runtime';
 import { pickPartAlongRay, partWorldPosition } from './partPick';
@@ -155,6 +155,8 @@ export class FlightController {
   set speedMode(mode: Telemetry['speedMode']) { this.speedReference.select(mode); }
   /** Docking mode: HUD shows the port alignment indicator for the targeted docking port. */
   dockingMode = false;
+  /** Docking port of the active vessel chosen for the approach (null = the one closest to the target port). */
+  ownPortUid: number | null = null;
   /** Stage lock (Alt+L): staging requests are refused so a stray Space cannot fire the next stage. */
   stageLocked = false;
   /** SAS was toggled by a momentary hold (F); releasing the key toggles it back. */
@@ -465,6 +467,37 @@ export class FlightController {
     if (this.dockingMode && this.world.targetKind() === 'vessel') this.speedMode = 'target';
   }
 
+  /** Choose the active vessel's docking port for the approach (null = automatic: the closest free port). */
+  setOwnPort(uid: number | null) {
+    const p = uid === null ? undefined : this.world.active?.state.cache.byUid.get(uid);
+    this.ownPortUid = p ? uid : null;
+    if (p) this.world.message(`Docking from ${p.def.name}`, 'info', 2);
+  }
+
+  /** "Control from here": re-point the controls, SAS and navball along a command part or out of a docking port. */
+  controlFrom(uid: number) {
+    const p = this.world.active?.state.cache.byUid.get(uid);
+    if (!p || !canControlFrom(p)) return this.world.message('Cannot control from that part', 'warn');
+    this.command({ kind: 'control', uid });
+    this.world.message(`Controlling from ${p.def.name}`, 'info', 2.5);
+  }
+
+  /** Move an astronaut to a free seat in part `uid` of the active vessel (any docked module). */
+  transferCrew(astronautId: string, uid: number) {
+    const v = this.world.active?.state;
+    const to = v?.cache.byUid.get(uid);
+    if (!v || !to || freeSeats(to) <= 0) return this.world.message('No free seat there', 'warn');
+    this.command({ kind: 'crew', uid, astronautId });
+    const name = this.world.crew.find(c => c.id === astronautId)?.name ?? 'Crew';
+    this.world.message(`${name} moved to ${to.def.name}`, 'info', 2.5);
+  }
+
+  /** Fly a specific vessel within physics range (the station overview / target list), instead of cycling with [ ]. */
+  switchToVessel(id: string) {
+    if (this.network?.ownId) return;
+    if (this.world.switchTo(id)) { this.ownPortUid = null; this.world.message(`Switched to ${this.world.active!.state.name}`); }
+  }
+
   /** Undock the active vessel at a port (default: first docked joint). */
   undock(portUid?: number) {
     if (this.network) return this.network.action('undock', { uid: portUid });
@@ -588,8 +621,8 @@ export class FlightController {
     return hit?.uid ?? null;
   }
   /** Screen position (CSS px within the canvas) of an active-vessel part, or null when hidden/behind the camera. */
-  partScreenPosition(uid: number): { x: number; y: number } | null {
-    const wv = this.world.active, origin = this.renderOrigin();
+  partScreenPosition(uid: number, vesselId?: string): { x: number; y: number } | null {
+    const wv = vesselId ? this.world.vessels.get(vesselId) : this.world.active, origin = this.renderOrigin();
     const p = wv?.state.cache.byUid.get(uid);
     if (!wv || !p || !origin || this.mapMode) return null;
     const pose = this.network?.pose(wv.state.id);
@@ -598,6 +631,26 @@ export class FlightController {
     if (v.z > 1 || v.z < -1) return null;
     const el = this.pipeline.renderer.domElement;
     return { x: ((v.x + 1) / 2) * el.clientWidth, y: ((1 - v.y) / 2) * el.clientHeight };
+  }
+  private readonly screenV = new THREE.Vector3();
+  private readonly screenQ = new THREE.Quaternion();
+  /**
+   * Allocation-free screen position (CSS px) of a part of any vessel (default: the active one), for per-frame
+   * overlays such as the docking-port highlight. Returns false when hidden, behind the camera or in map view.
+   */
+  partScreenInto(uid: number, vesselId: string | undefined, out: { x: number; y: number }): boolean {
+    const wv = vesselId ? this.world.vessels.get(vesselId) : this.world.active, act = this.world.active;
+    const p = wv?.state.cache.byUid.get(uid);
+    if (!wv || !act || !p || this.mapMode) return false;
+    const s = wv.state, pose = this.network?.pose(s.id), q = pose?.orientation ?? s.orientation, pos = pose?.position ?? s.position;
+    const origin = this.network?.pose(act.state.id)?.position ?? act.state.position;
+    const v = this.screenV.set(p.position.x - s.com.x, p.position.y - s.com.y, p.position.z - s.com.z).applyQuaternion(this.screenQ.set(q.x, q.y, q.z, q.w));
+    v.x += pos.x - origin.x; v.y += pos.y - origin.y; v.z += pos.z - origin.z;
+    v.project(this.cam.camera);
+    if (v.z > 1 || v.z < -1) return false;
+    const el = this.pipeline.renderer.domElement;
+    out.x = ((v.x + 1) / 2) * el.clientWidth; out.y = ((1 - v.y) / 2) * el.clientHeight;
+    return true;
   }
   /** Right-click (without dragging the camera) or a touch long-press picks a part. */
   private attachPartPicking(el: HTMLElement) {
@@ -757,7 +810,7 @@ export class FlightController {
   /** [ / ]: switch to the previous / next vessel within physics range. */
   switchVessel(direction: 1 | -1) {
     if (this.network?.ownId) return;
-    if (this.world.focusNextNearby(direction)) this.world.message(`Switched to ${this.world.active!.state.name}`);
+    if (this.world.focusNextNearby(direction)) { this.ownPortUid = null; this.world.message(`Switched to ${this.world.active!.state.name}`); }
   }
 
   /** Open a part's inspector (as a right-click on it would): used by the staging stack icons. */
@@ -1522,7 +1575,8 @@ export class FlightController {
   /** Telemetry rate: the hatch the EVA marker points at (nearest free seat in range), or none. */
   private updateHatchTarget(wv: WorldVessel) {
     const near = wv.state.eva && !this.mapMode ? this.world.nearestHatch() : null;
-    this.hatchMarker.topInset = (HUD_TOP_PX + 24) * game.get().settings.hudScale;
+    // Clear of the altimeter and status lamps (≈ 80 px tall) plus the caption height.
+    this.hatchMarker.topInset = (HUD_TOP_PX + 44) * game.get().settings.hudScale;
     this.hatchMarker.setTarget(near?.free && near.distance <= HATCH_MARKER_RANGE
       ? { vesselId: near.vessel.state.id, podUid: near.pod.uid, distance: near.distance, ready: near.distance <= BOARD_RANGE && near.speed < BOARD_SPEED, boardKey: bindingLabel('board') }
       : null);

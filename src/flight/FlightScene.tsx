@@ -13,13 +13,14 @@ import type { ActionGroupId } from '../sim/vessel/types';
 import { tutorialContext, getTutorial, endTutorial, startLesson } from '../tutorial/runtime';
 import { openProgram, saveProgram } from '../game/program';
 import { SciencePanel } from './hud/SciencePanel';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { game, updateSettings, useGame } from '../game/store';
 import { FlightController } from './controller';
 import { Hud, NavballView, type Telemetry } from './hud/Hud';
 import type { GameAudio } from '../audio';
 import { getGameAudio } from '../audio/ui';
 import { AlarmPanel } from './hud/AlarmPanel';
+import { StationPanel, type StationActions } from './hud/StationPanel';
 import { ManeuverPanel } from './hud/ManeuverPanel';
 import { LandingMarker } from './map/LandingMarker';
 import { MapOverlay } from './map/MapOverlay';
@@ -291,6 +292,15 @@ export default function FlightScene() {
 
   const navball = useCallback(() => ctrl.current?.navball() ?? null, []);
   const partScreen = useCallback((uid: number) => ctrl.current?.partScreenPosition(uid) ?? null, []);
+  const partScreenInto = useCallback((uid: number, vesselId: string | undefined, out: { x: number; y: number }) => ctrl.current?.partScreenInto(uid, vesselId, out) ?? false, []);
+  const stationActions = useMemo<StationActions>(() => ({
+    controlFrom: (uid) => ctrl.current?.controlFrom(uid),
+    transferCrew: (id, uid) => ctrl.current?.transferCrew(id, uid),
+    switchTo: (id) => ctrl.current?.switchToVessel(id),
+    setTarget: (id, port) => ctrl.current?.setTarget(id, port),
+    undock: (uid) => ctrl.current?.undock(uid),
+    eva: (id) => ctrl.current?.goEva(id),
+  }), []);
   useEffect(() => {
     document.documentElement.dataset.uiHidden = String(uiHidden);
     if (ctrl.current) ctrl.current.uiHidden = uiHidden;
@@ -359,6 +369,7 @@ export default function FlightScene() {
       {tele && c && !lost && !photo.active && !uiHidden && (
         <Hud
           partScreen={partScreen}
+          partScreenInto={partScreenInto}
           shortcutsEnabled={ready && !paused && !help && !showSettings}
           precision={c.input.precisionActive}
           stageProgress={c.input.stageProgress}
@@ -382,6 +393,7 @@ export default function FlightScene() {
             alarmActive: c.world.alarmClock.held,
             alarms: <AlarmPanel world={c.world} />,
             maneuver: <ManeuverPanel world={c.world} map={c.mapUi} />,
+            station: <StationPanel world={c.world} act={stationActions} readOnly={!c.world.canControl()} />,
           }}
           cb={{
             onEva: (id) => ctrl.current?.goEva(id),
@@ -402,6 +414,9 @@ export default function FlightScene() {
             onSetTarget: (id, port) => ctrl.current?.setTarget(id, port ?? null),
             onToggleDocking: () => ctrl.current?.toggleDockingMode(),
             onUndock: (uid) => ctrl.current?.undock(uid),
+            onSetOwnPort: (uid) => ctrl.current?.setOwnPort(uid),
+            onControlFrom: (uid) => ctrl.current?.controlFrom(uid),
+            onSwitchVessel: multiplayer ? undefined : (id) => ctrl.current?.switchToVessel(id),
             onHelp: () => setHelp((h) => !h),
             onSettings: multiplayer ? undefined : () => { setPaused(true); setShowSettings(true); },
             onStageLock: () => ctrl.current?.toggleStageLock(),

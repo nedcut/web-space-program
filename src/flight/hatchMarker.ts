@@ -38,14 +38,18 @@ const EDGE = 28;
 
 /**
  * Where a marker goes for a view-space point (camera looks down −Z): on screen, or clamped to the view's edge in its
- * direction (behind the camera: toward the bottom edge). `ndc` is the point's projection, valid when in front. Writes CSS px to
+ * direction (behind the camera: toward the bottom edge). A point on screen but inside the top inset (under the HUD's
+ * top bar) is parked at the inset with an upward arrow, so "Board" never covers the status lamps. `ndc` is the point's projection, valid when in front. Writes CSS px to
  * `out` (x right, y down) and returns the arrow angle (rad, screen space, 0 = right) or NaN when on screen.
  */
 export function markerPlacement(view: { x: number; y: number; z: number }, ndc: { x: number; y: number }, width: number, height: number, out: { x: number; y: number }, top = EDGE): number {
   const front = view.z < 0;
   if (front && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1) {
     out.x = (ndc.x + 1) * 0.5 * width; out.y = (1 - ndc.y) * 0.5 * height;
-    return NaN;
+    if (out.y >= top) return NaN;
+    // On screen but under the HUD's top bar (altimeter, status lamps): park it just below with an arrow up.
+    out.y = top;
+    return -Math.PI / 2;
   }
   // Screen-space direction (px, y up): the projection in front. Behind the camera the view-space offset tilted down
   // by the depth behind: continuous with the front across the camera plane (a hatch overhead stays on the top edge),

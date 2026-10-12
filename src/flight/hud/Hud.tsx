@@ -18,6 +18,7 @@ import { StagingStack } from './StagingStack';
 import { Altimeter, TimeControl } from './TopBar';
 import { AppToolbar, AppWindow, useApps, type AppId, type HudApp, type ToolbarAction } from './AppLauncher';
 import { CrewCards } from './CrewCards';
+import { PortHighlight, type PartScreenInto, type PortMark } from './PortHighlight';
 import type { StagePartGlyph } from './glyphs';
 import './hud.css';
 
@@ -27,6 +28,10 @@ export type { ManeuverBurnTelemetry } from '../controller/burn';
 export interface DockingTelemetry {
   myPort: string;
   targetPort: string;
+  /** Part uids of the port pair (for the 3D highlight) and the vessel the target port belongs to. */
+  myPortUid: number;
+  targetPortUid: number;
+  targetId: string;
   sizeMatch: boolean;
   /** Target face position in the active port frame, m. */
   x: number;
@@ -59,7 +64,7 @@ export interface TargetTelemetry {
   /** Closing speed (positive = approaching), m/s. */
   closing: number;
   portUid: number | null;
-  ports: { uid: number; name: string }[];
+  ports: { uid: number; name: string; size: number }[];
   approach: { distance: number; time: number; relSpeed: number } | null;
 }
 
@@ -122,6 +127,12 @@ export interface Telemetry {
   docking: DockingTelemetry | null;
   /** Docking ports of the active vessel that join two halves (undock candidates). */
   dockedPorts: { uid: number; name: string }[];
+  /** Free docking ports of the active vessel (filled only while a vessel is targeted or in docking mode). */
+  ownPorts: { uid: number; name: string; size: number }[];
+  /** Own port chosen for docking (null = automatic). */
+  ownPortUid: number | null;
+  /** Part the vessel is controlled from ("control from here"), null = as built. */
+  controlFrom: { uid: number; name: string; port: boolean } | null;
   /** Abort and custom action groups: bound action count and toggle state. */
   actionGroups: { id: string; label: string; key: string; count: number; on: boolean }[];
   /** Lamps on (null = vessel has none). */
@@ -166,6 +177,12 @@ export interface HudCallbacks {
   onSetTarget(id: string | null, portUid?: number | null): void;
   onToggleDocking(): void;
   onUndock(portUid?: number): void;
+  /** Choose the active vessel's docking port (null = automatic). */
+  onSetOwnPort?(uid: number | null): void;
+  /** Control the vessel from a command part or docking port. */
+  onControlFrom?(uid: number): void;
+  /** Fly another vessel within physics range. */
+  onSwitchVessel?(id: string): void;
   /** Open the controls help overlay. */
   onHelp?(): void;
   /** Open the settings dialog. */
@@ -226,15 +243,19 @@ export interface HudDockSlots {
   resources?: ReactNode;
   /** Map-mode maneuver planner (left column in map view; owned by the map view). */
   maneuver?: ReactNode;
+  /** Station overview: docked modules, crew, control points, ports, nearby vessels. */
+  station?: ReactNode;
 }
 
 const ENGINEERING_KEY = 'wsp.hud.engineeringStrip.v1';
 const ORBIT_KEY = 'wsp.hud.orbitStrip.v1';
 
-export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadConnected, shortcutsEnabled = true, partScreen }: {
+export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadConnected, shortcutsEnabled = true, partScreen, partScreenInto }: {
   t: Telemetry; cb: HudCallbacks; navball: ReactNode; dock?: HudDockSlots; precision?: boolean; stageProgress?: number; gamepadConnected?: boolean; shortcutsEnabled?: boolean;
   /** Screen position (CSS px) of an active-vessel part, for the staging-icon highlight. */
   partScreen?: (uid: number) => { x: number; y: number } | null;
+  /** Allocation-free screen position of any vessel's part, for the docking-port highlight. */
+  partScreenInto?: PartScreenInto;
 }) {
   const settings = useGame(s => s.settings);
   const imperial = settings.units === 'imperial';
@@ -293,6 +314,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
     { id: 'alarms', title: 'Mission alarms', icon: 'flightData', badge: dock?.alarmActive ? 'warn' : null, content: dock?.alarms ?? null },
     { id: 'assist', title: 'Flight assist', icon: 'assist', badge: dock?.assistActive ? 'on' : null, content: dock?.assist ?? null },
     { id: 'target', title: 'Target & docking', icon: 'target', badge: t.target ? 'target' : null, width: 260, content: <TargetPanel t={t} cb={cb} /> },
+    { id: 'station', title: 'Station & modules', icon: 'docking', badge: t.dockedPorts.length ? 'on' : null, width: 300, content: t.eva ? null : dock?.station ?? null },
     { id: 'comms', title: 'Communications', icon: 'comms', content: dock?.signal ?? null },
   ];
   const actions: ToolbarAction[] = [
@@ -307,6 +329,8 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
   const showOrbit = (orbitStrip || t.mapMode) && !t.eva;
   const highlight = picked?.uids ?? hover;
   const canStage = !t.eva && !t.noControl && t.stage >= 0;
+  const dockingShown = t.dockingMode && !t.mapMode && !t.eva;
+  const portMarks = useDockingMarks(dockingShown ? t.docking : null);
 
   return (
     <div className="overlay hud" style={{ width: `${100 / settings.hudScale}%`, height: `${100 / settings.hudScale}%`, transform: `scale(${settings.hudScale})`, transformOrigin: 'top left' }}>
@@ -319,7 +343,6 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
         {!dock?.onboarding && !t.mapMode && t.feel.alerts.length === 0 && t.messages.length === 0 && <FlightHint hint={t.feel.hint} onDismiss={cb.onDismissHint} />}
         {gamepadConnected && <div className="hud-pad mono">GAMEPAD</div>}
         {t.mapMode && dock?.maneuver}
-        {t.dockingMode && !t.mapMode && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
         <div className="hud-left-fill" />
         {/* In map view this block also keeps the planner above the navball cluster's SAS column. */}
         <div className="hud-left-bottom">
@@ -353,12 +376,15 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
       {floating.map(a => <AppWindow key={a.id} app={a} pos={apps.state.pos[a.id]} scale={settings.hudScale} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} />)}
 
       {/* Lower-left instruments leave the vessel and its plume in the clear. */}
-      <div className="hud-bottom">
+      {/* Docking mode: the alignment readout sits beside the navball, where the eyes already are. */}
+      <div className={`hud-bottom${dockingShown ? ' with-docking' : ''}`}>
         <NavballCluster t={t} cb={vessel || t.eva ? cb : { ...cb, onSasMode: () => {}, onToggleSas: () => {}, onToggleRcs: () => {} }} navball={navball} precision={precision} speed={speed} />
+        {dockingShown && <DockingIndicator d={t.docking} hasTarget={t.target?.kind === 'vessel'} />}
       </div>
 
       <Countdown value={t.feel.countdown} />
       {highlight && partScreen && !t.mapMode && <PartHighlight uids={highlight} at={partScreen} scale={settings.hudScale} strong={!!picked} />}
+      {partScreenInto && !t.mapMode && <PortHighlight marks={portMarks} at={partScreenInto} scale={settings.hudScale} />}
     </div>
   );
 }
@@ -430,4 +456,14 @@ function EngineeringStrip({ data, speed }: { data: NonNullable<Telemetry['engine
     <div title="Vertical full-throttle burn estimate; assumes upright thrust, constant gravity and no drag"><span>Burn in</span><b>{data.burnCountdown === null ? '—' : data.burnCountdown <= 0 ? 'NOW' : formatDuration(data.burnCountdown)}</b></div>
     <div title="Unpowered impact prediction along the orbit; no atmospheric drag"><span>Ballistic TTI</span><b>{data.impactTime === null ? '—' : formatDuration(data.impactTime)}</b></div>
   </div>;
+}
+
+const NO_MARKS: readonly PortMark[] = [];
+/** The docking pair as highlight marks, referentially stable while the pair is unchanged (telemetry is 10–20 Hz). */
+function useDockingMarks(d: DockingTelemetry | null): readonly PortMark[] {
+  const own = d?.myPortUid ?? -1, target = d?.targetPortUid ?? -1, id = d?.targetId ?? '';
+  return useMemo(() => (own < 0 ? NO_MARKS : [
+    { uid: own, tone: 'own', label: 'Your port' },
+    { uid: target, vesselId: id, tone: 'target', label: 'Target port' },
+  ]), [own, target, id]);
 }

@@ -80,3 +80,15 @@ describe('EVA hatch marker', () => {
     expect(hatchMarkerLabel(2, true, 'Enter')).toBe('Board · Enter');
   });
 });
+
+describe('hatch marker under the HUD top bar', () => {
+  it('parks an on-screen hatch below the top inset with an upward arrow', () => {
+    const out = { x: 0, y: 0 };
+    // ndc y 0.9 on an 800 px view = 40 px from the top, inside a 120 px inset.
+    expect(markerPlacement({ x: 0, y: 1, z: -10 }, { x: 0, y: 0.9 }, 1000, 800, out, 120)).toBeCloseTo(-Math.PI / 2);
+    expect(out).toEqual({ x: 500, y: 120 });
+    // Below the inset it is drawn where it is.
+    expect(markerPlacement({ x: 0, y: 1, z: -10 }, { x: 0, y: 0.5 }, 1000, 800, out, 120)).toBeNaN();
+    expect(out.y).toBe(200);
+  });
+});
