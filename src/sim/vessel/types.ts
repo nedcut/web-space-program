@@ -189,6 +189,8 @@ export interface SolarPanelModule {
   /** EC/s at 1 AU, facing sun. */
   chargeRate: number;
   tracking: boolean;
+  /** Tracking arrays: dynamic pressure an extended array survives, Pa (see `deployables.ts`). */
+  maxQ?: number;
 }
 
 export interface CommandModule {
@@ -249,7 +251,8 @@ export type PartModule =
   | { type: 'generator'; chargeRate: number }
   | { type: 'fuelCell'; chargeRate: number; fuelRate: number; oxidizerRate: number }
   | { type: 'science'; experiment: string }
-  | { type: 'antenna'; transmission: number; range: number; relay: boolean };
+  /** `maxQ`: dynamic pressure the extended antenna survives, Pa (see `deployables.ts`). */
+  | { type: 'antenna'; transmission: number; range: number; relay: boolean; maxQ?: number };
 
 export interface PartDef {
   id: string;
@@ -337,8 +340,11 @@ export interface PartTweaks {
   chuteMinPressure?: number;
   /** Parachutes: height above terrain for full deployment, m. */
   chuteDeployAltitude?: number;
-  /** Deployables (solar arrays, antennas, legs, gear, bays): extended state. Absent = catalogue/launch default. */
+  /** Deployables (solar arrays, antennas, legs, gear, bays): extended state. Absent = catalogue/launch default
+   * (retractable arrays and antennas: stowed). */
   extended?: boolean;
+  /** Retractable arrays/antennas: extend above the atmosphere and stow when the air thickens (default true). */
+  autoDeploy?: boolean;
   /** RCS blocks: thruster block enabled (default true) and per-axis mask. */
   rcsEnabled?: boolean;
   rcsAxes?: RcsAxes;

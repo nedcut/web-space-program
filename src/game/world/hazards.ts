@@ -62,7 +62,8 @@ export function advancePackedHazards(w: World, internals: WorldInternals, wv: Wo
     const sunBody = qRotate(qConj(orientation), sun.dir);
     let supply = 0;
     for (const p of wv.state.parts) for (const m of p.def.modules) {
-      if (m.type === 'solarPanel') {
+      // Tracking arrays generate only when fully extended (and still attached).
+      if (m.type === 'solarPanel' && (!m.tracking || p.panelDeploy === 1 && !p.panelTorn)) {
         const n = qRotate(p.rotation, { x: 0, y: 0, z: 1 });
         const incidence = m.tracking ? 1 : Math.max(0, n.x * sunBody.x + n.y * sunBody.y + n.z * sunBody.z);
         supply += m.chargeRate * (AU / sun.distance) ** 2 * (sun.exposure ?? 1) * incidence;

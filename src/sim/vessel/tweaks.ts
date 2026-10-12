@@ -28,7 +28,10 @@ export function crossfeedOpen(p: Tweakable): boolean {
 }
 /** Retractable solar arrays (tracking panels) and antennas can be stowed; fixed hardware is always "extended". */
 export const retractablePanel = (def: PartDef) => def.modules.some(m => (m.type === 'solarPanel' && m.tracking) || m.type === 'antenna');
-export const isExtended = (p: Tweakable): boolean => !retractablePanel(p.def) || p.tweaks?.extended !== false;
+/** Commanded extension. Retractable arrays/antennas default stowed; a torn-off part never counts as extended. */
+export const isExtended = (p: Tweakable & { panelTorn?: boolean }): boolean => !retractablePanel(p.def) || (p.tweaks?.extended === true && !p.panelTorn);
+/** Retractable arrays/antennas extend above the atmosphere and stow in thick air unless the player turns it off. */
+export const autoDeploy = (p: Tweakable): boolean => retractablePanel(p.def) && p.tweaks?.autoDeploy !== false;
 export const lightOn = (p: Tweakable): boolean => p.tweaks?.lightOn !== false;
 export const rcsEnabled = (p: Tweakable): boolean => p.tweaks?.rcsEnabled !== false;
 export const wheelMode = (p: Tweakable): WheelMode => p.tweaks?.wheelMode ?? 'normal';
@@ -45,7 +48,7 @@ export type TweakKey = keyof PartTweaks;
 export type TweakDescriptor =
   | { key: 'thrustLimit' | 'gimbalLimit' | 'ejectionScale' | 'deflectionLimit'; kind: 'percent'; label: string; flight: boolean; step: number }
   | { key: 'chuteMinPressure' | 'chuteDeployAltitude' | 'fairingHeight' | 'fairingRadius'; kind: 'number'; label: string; flight: boolean; min: number; max: number; step: number; unit: string; fallback: number }
-  | { key: 'gimbalLock' | 'crossfeed' | 'extended' | 'rcsEnabled' | 'lightOn' | 'deflectionInvert' | 'fairingAuto'; kind: 'toggle'; label: string; flight: boolean; fallback: boolean }
+  | { key: 'gimbalLock' | 'crossfeed' | 'extended' | 'autoDeploy' | 'rcsEnabled' | 'lightOn' | 'deflectionInvert' | 'fairingAuto'; kind: 'toggle'; label: string; flight: boolean; fallback: boolean }
   | { key: 'wheelMode'; kind: 'select'; label: string; flight: boolean; options: { value: WheelMode; label: string }[] }
   | { key: 'rcsAxes'; kind: 'axes'; label: string; flight: boolean }
   | { key: 'lightColor'; kind: 'color'; label: string; flight: boolean; fallback: string };
@@ -76,7 +79,10 @@ export function tweakDescriptors(def: PartDef): TweakDescriptor[] {
       out.push({ key: 'chuteMinPressure', kind: 'number', label: 'Deploy pressure', flight: true, min: Math.min(10, m.minPressure), max: 80000, step: 10, unit: 'Pa', fallback: m.minPressure });
       out.push({ key: 'chuteDeployAltitude', kind: 'number', label: 'Full deploy height', flight: true, min: Math.min(50, m.deployAltitude), max: 5000, step: 50, unit: 'm', fallback: m.deployAltitude });
     }
-    if ((m.type === 'solarPanel' && m.tracking) || m.type === 'antenna') out.push({ key: 'extended', kind: 'toggle', label: m.type === 'antenna' ? 'Antenna extended' : 'Panels extended', flight: false, fallback: true });
+    if ((m.type === 'solarPanel' && m.tracking) || m.type === 'antenna') {
+      out.push({ key: 'extended', kind: 'toggle', label: m.type === 'antenna' ? 'Antenna extended at launch' : 'Panels extended at launch', flight: false, fallback: false });
+      out.push({ key: 'autoDeploy', kind: 'toggle', label: 'Extend above atmosphere', flight: true, fallback: true });
+    }
     if (m.type === 'landingLeg' || (m.type === 'wheel' && m.retractable) || m.type === 'bay')
       out.push({ key: 'extended', kind: 'toggle', label: m.type === 'bay' ? 'Doors open at launch' : 'Deployed at launch', flight: false, fallback: m.type === 'wheel' });
     if (m.type === 'rcs') {
@@ -104,7 +110,7 @@ export function tweakDescriptors(def: PartDef): TweakDescriptor[] {
 // ------------------------------------------------------------------ validation (untrusted crafts, saves, network)
 
 const FLIGHT_KEYS = new Set<TweakKey>(['thrustLimit', 'gimbalLimit', 'gimbalLock', 'crossfeed', 'deflectionLimit', 'deflectionInvert',
-  'chuteMinPressure', 'chuteDeployAltitude', 'rcsEnabled', 'rcsAxes', 'wheelMode', 'lightOn', 'lightColor']);
+  'chuteMinPressure', 'chuteDeployAltitude', 'autoDeploy', 'rcsEnabled', 'rcsAxes', 'wheelMode', 'lightOn', 'lightColor']);
 const ALL_KEYS = new Set<TweakKey>([...FLIGHT_KEYS, 'ejectionScale', 'extended', 'fairingAuto', 'fairingHeight', 'fairingRadius']);
 const record = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const unit = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1;
