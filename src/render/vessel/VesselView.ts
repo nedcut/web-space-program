@@ -420,8 +420,11 @@ export class VesselView {
     if (p.bayOpen !== undefined) target = p.bayOpen ? 1 : 0;
     if (p.leg) target = p.leg.deployed ? 1 : 0;
     if (p.chute) target = p.chute.phase === 'full' ? 1 : p.chute.phase === 'semi' ? 0.35 : 0;
-    // Retractable solar arrays follow their extended setting (catalogue default: extended).
-    if (p.def.modules.some(m => m.type === 'solarPanel' && m.tracking)) target = p.tweaks?.extended === false ? 0 : 1;
+    // Retractable arrays and antennas follow the simulated deploy progress.
+    if (p.panelDeploy !== undefined) {
+      if (pv.deploy !== p.panelDeploy) { pv.deploy = p.panelDeploy; setPartDeploy(pv.object, pv.deploy); }
+      return;
+    }
     if (target >= 0 && Math.abs(pv.deploy - target) > 1e-3) {
       pv.deploy += Math.sign(target - pv.deploy) * Math.min(Math.abs(target - pv.deploy), dt * 0.6);
       setPartDeploy(pv.object, pv.deploy);

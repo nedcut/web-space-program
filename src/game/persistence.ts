@@ -6,7 +6,7 @@ import { newProgression, type GameMode, type Progression } from '../sim/science/
 import type { Astronaut, PlantedFlag } from '../sim/crew/crew';
 import type { VesselState } from '../sim/vessel/runtime';
 import type { PartDef } from '../sim/vessel/types';
-import { rebuildTopology, recomputeMassProperties } from '../sim/vessel';
+import { rebuildTopology, recomputeMassProperties, retractablePanel } from '../sim/vessel';
 import type { ManeuverNode, Orbit } from '../sim/orbit/api';
 import type { Quat } from '../util/quat';
 import type { Vec3 } from '../util/vec3';
@@ -130,6 +130,12 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
     const parts = sv.state.parts.map((p) => {
       const def = world.catalog.get(p.partId);
       if (!def) throw new Error(`Save references unknown part ${p.partId}`);
+      // Saves from before stowed-by-default arrays/antennas (no deploy progress): hardware already flying stays
+      // extended as it was; a craft still waiting on the pad takes the new stowed default.
+      if (p.panelDeploy === undefined && retractablePanel(def)) {
+        const extended = p.tweaks?.extended ?? sv.mode !== 'prelaunch';
+        return { ...p, def, tweaks: { ...p.tweaks, extended }, panelDeploy: extended ? 1 : 0 };
+      }
       return { ...p, def };
     });
     const state = { ...sv.state, parts, resourceDefs: RESOURCES, cache: undefined } as unknown as VesselState;

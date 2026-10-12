@@ -583,6 +583,46 @@ Supersedes the D-011 jetpack numbers and the "jetpack cannot lift against lunar 
 - **Not changed (left for packages):** flight exit still opens the Flight Log (UX-3/UX-7); the flight pause menu, app windows and F3 results still use the flight controller's Esc chain (UX-7); `window.prompt`/`confirm` remain in the editor and flight pause (UX-6/UX-7). `ConfirmModal`/`PromptModal` are ready for them, and the hub "Save as…" already uses `PromptModal`.
 - **Cost:** nothing per frame. One keydown listener (O(stack) on Esc only), arrow navigation reads layout only on an arrow key press, and hub keys use one listener.
 
+## Stowed arrays and antennas, air-load tearing, extend above atmosphere (2026-10-12, op/panels)
+
+Supersedes the "retractable solar arrays/antennas default extended" sentence of the part interaction layer entry.
+- **Default stowed.** Tracking arrays and antennas launch retracted unless the editor's "… extended at launch" is on. A craft
+  file or pad save with no `extended` tweak takes the new default. Flight saves from before this change (no
+  `panelDeploy` on the part) keep hardware extended as it was flying; `persistence.ts` migrates them on load.
+- **Extend above atmosphere** (`autoDeploy` tweak, editor and flight, **on by default**): new players are not punished,
+  and the tearing only bites when someone extends by hand. It acts on transitions with hysteresis: extend when
+  q < 10 Pa and static pressure < 100 Pa (≈ 40 km on a standard-scale ascent); stow when q > 100 Pa or pressure > 1 kPa.
+  A manual extend or retract holds until the air next crosses a threshold. The first evaluation only ever extends, so
+  a craft spawned in vacuum opens up and hardware the player set out at launch is not stowed behind their back.
+- **Tearing.** Each part has a `maxQ` on its solar/antenna module: Sunfold 3 kPa, Sunwing 2 kPa, Sundial/Solstice
+  1.2/1.0 kPa, Thread aerial 6 kPa, Lattice relay 3 kPa, Arcwatch 2 kPa, Horizon 1.2 kPa (3 kPa default for anything
+  without one). A stock ascent peaks near 10 kPa, so extended arrays go in the first ~20 s (Meridian: ~600 m, 3.1 kPa);
+  slow drifting near the ground (40 m/s ≈ 1 kPa) does not. While moving, the rating halves. An extended part also tears
+  when its hottest skin face reaches 80 % of its temperature limit. Stowed and fairing-enclosed hardware is immune.
+  A tear goes through `breakJoints` (the part leaves as debris); the `structuralFailure` event carries `cause`, so
+  FX/audio/flight log treat it as a breakage, and World posts "<part> was ripped off by the airstream" (or "burned
+  through and tore away"). A torn part (`panelTorn`) never extends, generates or links again.
+- **Deploy motion is simulated** (`panelDeploy`, 2 s travel); the renderer follows it instead of animating on its own.
+  Tracking arrays generate only when fully extended, in physics and on rails (rails generation previously ignored the
+  extended flag).
+- **Stowed antennas keep a near-field command link** (rating 1 m → ≈ 2.8 Mm to a ground station). Without it a probe in
+  Science/Career (control needs a connection) could not even stage off the pad. Science transmission and relaying
+  still need the antenna extended.
+- **Warnings.** `telemetry.deployableLoad` (worst load fraction) drives a HUD caution "PANELS EXPOSED nn% · RETRACT" from
+  70 % and a red "PANELS TEARING" from 90 %; on the Meridian the caution leads the tear by ~2.4 s. The editor preflight
+  flags hardware extended at launch outside a fairing, and the part palette lists the extended air-load limit.
+- **Cost.** `stepDeployables` runs per substep over a topology-cached list of retractable parts; no allocation unless a
+  part tears or the automation flips. Measured 60–100 ns per substep (2–4 retractables) against ~100–140 µs per World
+  step; the before/after ascent benchmark (`scripts/bench/deployables.ts`) is within run-to-run noise.
+
+## UX-8 Map & maneuver planning (2026-10-12, op/ux8)
+- **Keyboard node editing (`src/ui/map/nodeKeys.ts`, used by `FlightMap`).** In map view, with at least one node: ↑/↓ prograde ±, →/← normal ±, Alt(Option)+↑/↓ radial out/in, Shift ×10, the node editor's Fine tune ÷10 (base step 1 m/s; held keys repeat). Alt+→/← steps to the next/previous node in time order and opens its editor. Delete now removes the selected node even when its editor is closed. The keys edit the open editor's node, else the gizmo's node, else the next burn. Why arrows: in map view they only orbit the hidden flight camera, so they collide with nothing the player can see. The listener runs in the capture phase and consumes these keys, so the flight camera no longer drifts while you edit. Letters are all taken by flight controls that still work in map view (steering, RCS). PageUp/PageDown and numpad do not exist on a MacBook keyboard. Ctrl/Cmd+arrows belong to the OS (macOS switches desktops). The keys are fixed, not added to `bindings.ts`, because a new "map" binding context would touch Settings (UX-10) and the conflict checker. That can follow if the owner wants them rebindable. Alt+← does not navigate back: the keydown is cancelled, verified in CDP Chrome. Firefox was not checked.
+- **Esc stack:** the node editor and the map info card register as `panel`, and the transfer-window chart as `modal`. A Δv field being edited registers as `capture`, so Esc reverts the field, then a second Esc closes the editor, then a third pauses. Before, the node editor had its own window capture listener, and Esc in a field was handled ad hoc. The planner panel itself is **not** on the stack: it is a persistent map column rather than a window, so Esc with only the planner open still pauses.
+- **Planner visible by default when a node exists.** It opens on mount if nodes exist, and whenever the node count goes 0 → >0 (a new plan from a click, the context menu or keys). A collapse the player makes is stored as '0' and holds until the next new plan. Lessons still force it open.
+- **Slimmer map readout:** focus path + Frame + `?` on one row, then period/e, landing toggle and status. The permanent gesture paragraph and the landing caveat moved into the `?` popover and a tooltip (~210 → ~130 px tall at 1600×900). The `?` popover lists the gestures and every node key and closes on Esc.
+- **Naming:** the planner selects are "Plan transfer to…" (lists departures; matches the transfer lesson text) and "Transfer window chart…" (Δv map). They were "Transfer windows to…" and "Explore transfer windows…", which read as the same thing. Map context actions now read "Focus" and "Fly", the same labels as Fleet Tracking's vessel buttons (was "Focus view"/"Switch to vessel"). `mapContextActions` gained `info: false` for callers with their own info panel. Tracking (UX-5) can drop its `switch → 'Fly'` relabel and pass `info: false`; it was not edited here.
+- **Cost:** nothing new per frame. One extra keydown listener (early return outside map view). Nudges do what the editor's +/− buttons already did (`world.nodes = [...]`). Readouts keep their existing 4–8 Hz timers.
+- **Evidence:** CDP Chrome, `C:\wsp-tools\shots\ux8\{before,after}-*.png`, driver `C:\wsp-tools\drv\ux8-map.mjs` (orbit scenario). On main the arrows leave the node at 0/0/0 and the first Esc pauses. On the branch, 5×↑ + Shift↑ + 2×→ + 3×Alt↑ gives prograde 15 / normal 2 / radial 3. Alt+→ opens node 2 then wraps to node 1 with the URL unchanged. Esc goes field → editor → pause, the chart closes on Esc without pausing, and there are no console errors. Tests: `tests/map-node-keys.test.ts`, plus label/`info` cases in `tests/map-maneuver.test.ts`.
 ## UX-4 facility and library screens (2026-10-12, op/ux4)
 - **One header for library screens.** `src/ui/nav/MenuScreenHeader.tsx` (new, append-only) reuses the `SceneHeader` classes: back control top-left with the destination's name ("Main menu", or for Spacepedia the screen it was opened from) and Esc, kicker/title/subtitle, right-hand aside for progress. Training, Challenges and Spacepedia now leave from the same spot as the facilities; the old bottom-left/inside-the-card/top-right back buttons are gone.
 - **Selection follows focus on cheap screens, not on Spacepedia.** In the Research graph and the Challenges list, arrow keys move focus and the dossier/briefing follows; Enter acts on the focused item (research / fly). Click still only selects, so a mouse can never research or launch by accident. Spacepedia keeps click/Enter-to-open, because every article mounts a 3D preview with its own render pipeline and arrow-key auto-repeat would build and drop several per second.

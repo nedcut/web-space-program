@@ -20,7 +20,7 @@ import { add, scale, v3 } from '../src/util/vec3';
 const craft = (antenna = true): CraftDef => ({ name: 'Field laboratory', type: 'VAB', version: 1, parts: [
   { uid: 1, partId: 'pod-lantern-1', position: v3(), rotation: qIdentity() },
   { uid: 2, partId: 'sensor-thermal', position: v3(0, 0, 0.7), rotation: qIdentity(), parent: 1, attachNode: 'srf' },
-  ...(antenna ? [{ uid: 3, partId: 'antenna-thread', position: v3(0, 0, -0.7), rotation: qIdentity(), parent: 1, attachNode: 'srf' }] : []),
+  ...(antenna ? [{ uid: 3, partId: 'antenna-thread', position: v3(0, 0, -0.7), rotation: qIdentity(), parent: 1, attachNode: 'srf', tweaks: { extended: true } }] : []),
 ] });
 const world = (mode: 'science' | 'career' | 'sandbox' = 'career') => new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT, mode);
 

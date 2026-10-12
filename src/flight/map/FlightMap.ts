@@ -11,6 +11,7 @@ import type { TrajectoryPatch } from '../../sim/orbit/api';
 import { patchState } from '../../sim/orbit/numericalPrediction';
 import { AutoFramer, UNDECIDED, firstTransition, pathFrameDistance } from './framing';
 import { nodeSummary, patchAtNode } from './nodeInfo';
+import { cycleNodeId, nodeKeyCommand, nudged } from '../../ui/map/nodeKeys';
 
 export interface MapMenus {
   /** Node whose menu is open. */
@@ -40,7 +41,30 @@ export class FlightMap {
     if (!c.mapMode || c.paused || e.repeat || isTyping(e.target)) return;
     if (matches('mapFocusNext', e)) { e.preventDefault(); this.cycle(e.shiftKey ? -1 : 1); }
     else if (matches('mapFocusHome', e)) { e.preventDefault(); this.setFocus(null); }
-    else if (e.code === 'Delete' && this.menus.node !== null) { e.preventDefault(); this.deleteNode(this.menus.node); }
+    else if (e.code === 'Delete') {
+      const id = this.menus.node ?? this.c.map.selectedNodeId;
+      if (id !== null && this.world.nodes.some(n => n.id === id)) { e.preventDefault(); this.deleteNode(id); }
+    }
+  };
+  /**
+   * Node keys (see ui/map/nodeKeys) run in the capture phase and are consumed, so the arrows do not also orbit the
+   * hidden flight camera. Held keys repeat. Only active with a node to edit, outside text fields and modals.
+   */
+  private readonly nodeKeydown = (e: KeyboardEvent) => {
+    const c = this.c, w = this.world;
+    if (!c.mapMode || c.paused || c.modalOpen || !w.nodes.length || isTyping(e.target)) return;
+    if (e.target instanceof Element && e.target.closest('[aria-modal="true"]')) return;
+    const cmd = nodeKeyCommand(e, c.map.fineTune);
+    if (!cmd) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (cmd.kind === 'cycle') {
+      if (e.repeat) return;
+      const id = cycleNodeId(w.nodes, this.menus.node ?? c.map.selectedNodeId, cmd.dir);
+      if (id !== null) this.openNode(id);
+      return;
+    }
+    this.nudgeNode(cmd.axis, cmd.sign, cmd.step);
   };
 
   constructor(private c: FlightController) {
@@ -57,9 +81,15 @@ export class FlightMap {
       orbitMenu: (time, at) => this.openPoint({ label: `T−${formatDuration(time - this.world.ut)}`, time, orbit: true }, at),
     };
     window.addEventListener('keydown', this.keydown);
+    window.addEventListener('keydown', this.nodeKeydown, true);
   }
 
-  dispose() { this.landing.dispose(); window.removeEventListener('keydown', this.keydown); this.listeners.clear(); }
+  dispose() {
+    this.landing.dispose();
+    window.removeEventListener('keydown', this.keydown);
+    window.removeEventListener('keydown', this.nodeKeydown, true);
+    this.listeners.clear();
+  }
 
   subscribe(fn: () => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
   private emit() { this.listeners.forEach(fn => fn()); }
@@ -319,6 +349,20 @@ export class FlightMap {
       w.message('Node added: drag the coloured handles to add Δv, drag the node to move it, click it for options', 'info', 5);
     }
     this.emit();
+  }
+
+  /**
+   * Keyboard Δv step on the selected node (the open editor's node, else the gizmo's); with neither, the next burn is
+   * selected and edited.
+   */
+  nudgeNode(axis: 'prograde' | 'normal' | 'radial', sign: 1 | -1, step: number) {
+    const w = this.world, map = this.c.map;
+    const id = this.menus.node ?? map.selectedNodeId;
+    const node = w.nodes.find(n => n.id === id) ?? [...w.nodes].sort((a, b) => a.time - b.time)[0];
+    if (!node) return;
+    node[axis] = nudged(node[axis], sign, step);
+    w.nodes = [...w.nodes];
+    if (map.selectedNodeId !== node.id) { map.selectedNodeId = node.id; this.emit(); }
   }
 
   /** Show the gizmo on a node. */

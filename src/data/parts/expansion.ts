@@ -72,7 +72,7 @@ export const expansion: PartDef[] = [
   hardware('generator-isotope', 'Isotope Thermoelectric Generator', 'electrical', 85, 14000, box(0.35,0.65,0.35), 'powerUnit', [{ type: 'generator', chargeRate: 0.8 }], { style: 'rtg' }, undefined,
     'Finned radioisotope generator supplies constant electrical power in darkness and far from the Sun, without consuming stored resources.'),
   ...[1,2].map(i => hardware(`solar-grand-${i}`, i === 1 ? 'Sundial Large Solar Wing' : 'Solstice Expedition Array', 'electrical', i * 180, i * 3800, box(1.2,1.8,0.25), 'solarDeploy',
-    [{ type: 'solarPanel', chargeRate: i * 16, tracking: true }], { panels: i === 1 ? 6 : 10, panelLength: 1.5, panelWidth: 1.1 })),
+    [{ type: 'solarPanel', chargeRate: i * 16, tracking: true, maxQ: i === 1 ? 1200 : 1000 }], { panels: i === 1 ? 6 : 10, panelLength: 1.5, panelWidth: 1.1 })),
   ...[1,2].map(i => hardware(`radiator-${i}`, i === 1 ? 'Finch Cooling Panel' : 'Heron Radiator Bank', 'utility', i * 60, i * 450, box(i * 0.8,1.4,0.12), 'framework', [], { style: 'radiator' }, undefined,
     'External ribbed radiator panel with coolant headers. Visual thermal hardware pending active heat-transfer simulation.')),
   ...[0,1,2].map(i => ({ ...utility.find(p => p.id === (i === 2 ? 'chute-radial' : 'chute-main'))!, id: ['chute-brake','chute-heavy','chute-radial-heavy'][i], name: ['Reef High-Speed Drogue','Orchard Heavy Parachute','Orchard Radial Parachute'][i],

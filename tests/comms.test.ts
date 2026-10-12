@@ -14,7 +14,7 @@ import type { CraftDef } from '../src/sim/vessel/types';
 const node = (id: string, x: number, y: number, extra: Partial<CommsNode> = {}): CommsNode => ({ id, name: id, position: v3(x, y, 0), range: 1e9, relay: false, ...extra });
 const craft = (crewed = false, antenna = true): CraftDef => ({ name: 'Signal test', version: 1, type: 'VAB', parts: [
   { uid: 1, partId: crewed ? 'pod-lantern-1' : 'probe-pebble', position: v3(), rotation: qIdentity() },
-  ...(antenna ? [{ uid: 2, partId: 'antenna-thread', position: v3(0, 0, 0.8), rotation: qIdentity(), parent: 1 }] : []),
+  ...(antenna ? [{ uid: 2, partId: 'antenna-thread', position: v3(0, 0, 0.8), rotation: qIdentity(), parent: 1, tweaks: { extended: true } }] : []),
   { uid: 3, partId: 'sensor-thermal', position: v3(0, 0, -0.8), rotation: qIdentity(), parent: 1 },
 ] });
 const world = () => new World(new Universe('standard'), PART_CATALOG, 0);

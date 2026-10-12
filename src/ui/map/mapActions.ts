@@ -55,10 +55,13 @@ export interface MapActionContext {
   soiChanges?: readonly { body: string; time: number }[];
   now?: number;
   name?: (o: MapObject) => string;
+  /** Offer "Info" (default true); a caller with its own info panel (Fleet Tracking) can leave it out. */
+  info?: boolean;
 }
 
 export function mapContextActions(obj: MapObject, c: MapActionContext): MapAction[] {
-  const out: MapAction[] = [{ id: 'focus', label: 'Focus view' }];
+  // Labels match Fleet Tracking's vessel buttons (Focus · Fly) so the same object reads the same in both views.
+  const out: MapAction[] = [{ id: 'focus', label: 'Focus' }];
   const isActive = obj.kind === 'vessel' && obj.id === c.activeId;
   const name = c.name?.(obj) ?? obj.id;
   if (c.canTarget && !isActive) {
@@ -69,8 +72,8 @@ export function mapContextActions(obj: MapObject, c: MapActionContext): MapActio
     if (c.approach && c.approach.id === obj.id && c.approach.time > now + 5) out.push({ id: 'warpApproach', label: 'Warp to closest approach' });
     if (obj.kind === 'body' && c.soiChanges?.some(s => s.body === obj.id && s.time > now + 5)) out.push({ id: 'warpSoi', label: `Warp to ${name} SOI change` });
   }
-  if (c.canSwitch && obj.kind === 'vessel' && !isActive) out.push({ id: 'switch', label: 'Switch to vessel' });
-  out.push({ id: 'info', label: 'Info' });
+  if (c.canSwitch && obj.kind === 'vessel' && !isActive) out.push({ id: 'switch', label: 'Fly' });
+  if (c.info !== false) out.push({ id: 'info', label: 'Info' });
   return out;
 }
 

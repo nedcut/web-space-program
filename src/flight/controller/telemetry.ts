@@ -206,6 +206,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     flameout: flameout && this.input.state.throttle > 0,
     power: ec && ec.max > 0 ? ec.amount / ec.max : Number.NaN,
     structuralStress: st.telemetry.crossflowStress,
+    panelLoad: st.telemetry.deployableLoad,
   }, performance.now() / 1000);
   const warpTo = this.warpDriver.target;
   const settings = game.get().settings;

@@ -22,7 +22,7 @@ export function vesselDeltas(world: World): VesselDelta[] {
       sas: s.sas, telemetry: s.telemetry, eva: s.eva, destroyed: s.destroyed, groupState: s.groupState,
       parts: s.parts.map(p => ({ uid: p.uid, tweaks: p.tweaks, resources: p.resources, mass: p.mass, temperature: p.temperature,
         skinTemperature: p.skinTemperature, activated: p.activated, engine: p.engine, chute: p.chute, leg: p.leg, wheel: p.wheel,
-        bayOpen: p.bayOpen, drillDeployed: p.drillDeployed, drillDeploy: p.drillDeploy, converterRunning: p.converterRunning,
+        bayOpen: p.bayOpen, drillDeployed: p.drillDeployed, drillDeploy: p.drillDeploy, panelDeploy: p.panelDeploy, panelTorn: p.panelTorn, autoDeploySafe: p.autoDeploySafe, converterRunning: p.converterRunning,
         converterRecipe: p.converterRecipe, processTemperature: p.processTemperature, dockDisarmed: p.dockDisarmed, link: p.link, linkFatigue: p.linkFatigue, structuralFatigue: p.structuralFatigue })),
     });
     if (v.mode === 'landedRails' && v.fixed) return { ...base, mode: 'landedRails', fixed: structuredClone(v.fixed), state };

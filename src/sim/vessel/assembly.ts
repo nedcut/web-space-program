@@ -9,6 +9,7 @@ import { m3AddInPlace, m3FromQuat, m3Inverse, m3ParallelAxis, m3RotateTensor, m3
 import { localInertia, shapeRadius } from './shapes';
 import { DEFAULT_RESOURCE_DEFS, buildFeedGroups, partMass } from './resources';
 import { computeExposedAreas, fairingShielding } from './aero';
+import { retractablePanel } from './tweaks';
 
 export interface BuildOptions {
   id?: string;
@@ -98,6 +99,8 @@ export function buildVessel(craft: CraftDef, partCatalog: Map<string, PartDef>, 
       if (p.wheel && (def.modules[p.wheel.moduleIndex] as WheelModule).retractable) { p.wheel.deployed = extended; p.wheel.deploy = extended ? 1 : 0; }
       if (p.bayOpen !== undefined) p.bayOpen = extended;
     }
+    // Retractable arrays and antennas launch stowed unless the editor extended them.
+    if (retractablePanel(def)) p.panelDeploy = extended === true ? 1 : 0;
     p.mass = partMass(p, defs);
     return p;
   });
