@@ -5,6 +5,7 @@ import { newProgression } from '../../sim/science/progression';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { PART_DEFS } from '../../data/parts';
 import type { PartCategory, PartDef } from '../../sim/vessel/types';
+import { panelMaxQ } from '../../sim/vessel/deployables';
 import { CATALOG, type EditorSession, type SessionView } from '../session';
 import { deleteSubassembly, listSubassemblies, saveSubassembly, subscribeSubassemblies, type SavedSubassembly } from '../subassemblies';
 import type { Subassembly } from '../core';
@@ -219,6 +220,7 @@ function PartTooltip({ def, y }: { def: PartDef; y: number }) {
   if (chute && chute.type === 'parachute') rows.push(['Drag area', `${chute.deployedCdA} m²`]);
   if (wing && wing.type === 'liftingSurface') rows.push(['Wing area', `${wing.area} m²${wing.deflection ? ' · control' : ''}`]);
   if (solar && solar.type === 'solarPanel') rows.push(['Charge', `${solar.chargeRate} EC/s`]);
+  if (Number.isFinite(panelMaxQ(def))) rows.push(['Extended limit', `${(panelMaxQ(def) / 1000).toFixed(1)} kPa air load`]);
   for (const [k, v] of Object.entries(def.resources)) if (v) rows.push([RESOURCE_SHORT[k as keyof typeof RESOURCE_SHORT], `${Math.round(v).toLocaleString('en-US')} u`]);
   rows.push(['Attach', [def.attachNodes.some((n) => n.id !== 'srf') ? 'stack' : '', def.surfaceAttachable ? 'surface' : ''].filter(Boolean).join(' + ') || '—']);
   const top = Math.max(64, Math.min(y - 20, window.innerHeight - 380));

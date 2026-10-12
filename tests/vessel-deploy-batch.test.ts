@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { buildVessel } from '../src/sim/vessel/assembly';
+import type { VesselState } from '../src/sim/vessel/runtime';
 import { STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { PART_CATALOG } from '../src/data/parts';
 import { VesselView } from '../src/render/vessel/VesselView';
@@ -19,7 +20,13 @@ function liveDeployMeshes(root: THREE.Object3D): THREE.Mesh[] {
   });
   return out;
 }
-const step = (view: VesselView, n: number, t0 = 0) => { for (let i = 0; i < n; i++) view.update({ x: 0, y: 0, z: 0 }, t0 + i * 0.02, 0, 0.02); };
+/** Renders n frames; retractable arrays extend as the simulation would (they follow `panelDeploy`, 2 s travel). */
+const step = (view: VesselView, n: number, t0 = 0) => {
+  for (let i = 0; i < n; i++) {
+    for (const p of (view as unknown as { vessel: VesselState }).vessel.parts) if (p.panelDeploy !== undefined) p.panelDeploy = Math.min(1, p.panelDeploy + 0.01);
+    view.update({ x: 0, y: 0, z: 0 }, t0 + i * 0.02, 0, 0.02);
+  }
+};
 /** Slot transform applied to a point (rows are the 3×4 affine matrix). */
 const apply = (rows: Float32Array, p: THREE.Vector3) => new THREE.Vector3(
   rows[0] * p.x + rows[1] * p.y + rows[2] * p.z + rows[3],
@@ -39,7 +46,7 @@ describe('rigid node batching', () => {
     const deploy = nodes.filter(n => n.userData.deploy);
     expect(deploy.length).toBeGreaterThan(0);
     expect(movingMeshes.length).toBeGreaterThan(0);
-    // Arrays extend over ~1.7 s; they stay merged the whole time.
+    // Arrays extend over 2 s; they stay merged the whole time.
     step(view, 20, 0.02);
     expect(liveDeployMeshes(view.root)).toHaveLength(0);
     const i = nodes.indexOf(deploy[0]);

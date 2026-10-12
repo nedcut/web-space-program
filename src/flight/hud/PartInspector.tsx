@@ -79,7 +79,8 @@ function FlightPartBody({ c, part: p, copies }: { c: FlightController; part: Par
   if (p.chute) rows.push(['Parachute', CHUTE_PHASE[p.chute.phase] ?? p.chute.phase, p.chute.phase === 'cut' ? 'warn' : undefined]);
   if (p.leg || p.wheel || p.bayOpen !== undefined || p.def.modules.some(m => (m.type === 'solarPanel' && m.tracking) || m.type === 'antenna')) {
     const out = actionState(p, 'deploy.toggle');
-    rows.push(['Deployed', out ? 'Extended' : 'Retracted']);
+    const moving = p.panelDeploy !== undefined && p.panelDeploy > 0 && p.panelDeploy < 1;
+    rows.push(['Deployed', p.panelTorn ? 'Torn off' : moving ? (out ? 'Extending…' : 'Retracting…') : out ? 'Extended' : 'Retracted', p.panelTorn ? 'bad' : undefined]);
   }
   if (p.def.modules.some(m => m.type === 'decoupler' || m.type === 'dockingPort')) rows.push(['Crossfeed', crossfeedOpen(p) ? 'Open' : 'Closed']);
   if (p.docked) rows.push(['Docked', p.docked.vesselName]);

@@ -582,3 +582,35 @@ Supersedes the D-011 jetpack numbers and the "jetpack cannot lift against lunar 
 - **Keyboard:** geometric arrow-key focus (`arrowNav`) for menu grids rather than a roving tabindex: it follows the actual layout, including irregular ones like the main menu, and needs no per-screen index bookkeeping. Hub number keys 1–6 match the tiles' order and are ignored while a dialog, Settings, photo mode or a text field is active. Opening a panel focuses its primary action (New Game → Start, so Enter starts).
 - **Not changed (left for packages):** flight exit still opens the Flight Log (UX-3/UX-7); the flight pause menu, app windows and F3 results still use the flight controller's Esc chain (UX-7); `window.prompt`/`confirm` remain in the editor and flight pause (UX-6/UX-7). `ConfirmModal`/`PromptModal` are ready for them, and the hub "Save as…" already uses `PromptModal`.
 - **Cost:** nothing per frame. One keydown listener (O(stack) on Esc only), arrow navigation reads layout only on an arrow key press, and hub keys use one listener.
+
+## Stowed arrays and antennas, air-load tearing, extend above atmosphere (2026-10-12, op/panels)
+
+Supersedes the "retractable solar arrays/antennas default extended" sentence of the part interaction layer entry.
+- **Default stowed.** Tracking arrays and antennas launch retracted unless the editor's "… extended at launch" is on. A craft
+  file or pad save with no `extended` tweak takes the new default. Flight saves from before this change (no
+  `panelDeploy` on the part) keep hardware extended as it was flying; `persistence.ts` migrates them on load.
+- **Extend above atmosphere** (`autoDeploy` tweak, editor and flight, **on by default**): new players are not punished,
+  and the tearing only bites when someone extends by hand. It acts on transitions with hysteresis: extend when
+  q < 10 Pa and static pressure < 100 Pa (≈ 40 km on a standard-scale ascent); stow when q > 100 Pa or pressure > 1 kPa.
+  A manual extend or retract holds until the air next crosses a threshold. The first evaluation only ever extends, so
+  a craft spawned in vacuum opens up and hardware the player set out at launch is not stowed behind their back.
+- **Tearing.** Each part has a `maxQ` on its solar/antenna module: Sunfold 3 kPa, Sunwing 2 kPa, Sundial/Solstice
+  1.2/1.0 kPa, Thread aerial 6 kPa, Lattice relay 3 kPa, Arcwatch 2 kPa, Horizon 1.2 kPa (3 kPa default for anything
+  without one). A stock ascent peaks near 10 kPa, so extended arrays go in the first ~20 s (Meridian: ~600 m, 3.1 kPa);
+  slow drifting near the ground (40 m/s ≈ 1 kPa) does not. While moving, the rating halves. An extended part also tears
+  when its hottest skin face reaches 80 % of its temperature limit. Stowed and fairing-enclosed hardware is immune.
+  A tear goes through `breakJoints` (the part leaves as debris); the `structuralFailure` event carries `cause`, so
+  FX/audio/flight log treat it as a breakage, and World posts "<part> was ripped off by the airstream" (or "burned
+  through and tore away"). A torn part (`panelTorn`) never extends, generates or links again.
+- **Deploy motion is simulated** (`panelDeploy`, 2 s travel); the renderer follows it instead of animating on its own.
+  Tracking arrays generate only when fully extended, in physics and on rails (rails generation previously ignored the
+  extended flag).
+- **Stowed antennas keep a near-field command link** (rating 1 m → ≈ 2.8 Mm to a ground station). Without it a probe in
+  Science/Career (control needs a connection) could not even stage off the pad. Science transmission and relaying
+  still need the antenna extended.
+- **Warnings.** `telemetry.deployableLoad` (worst load fraction) drives a HUD caution "PANELS EXPOSED nn% · RETRACT" from
+  70 % and a red "PANELS TEARING" from 90 %; on the Meridian the caution leads the tear by ~2.4 s. The editor preflight
+  flags hardware extended at launch outside a fairing, and the part palette lists the extended air-load limit.
+- **Cost.** `stepDeployables` runs per substep over a topology-cached list of retractable parts; no allocation unless a
+  part tears or the automation flips. Measured 60–100 ns per substep (2–4 retractables) against ~100–140 µs per World
+  step; the before/after ascent benchmark (`scripts/bench/deployables.ts`) is within run-to-run noise.

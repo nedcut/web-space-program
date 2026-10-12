@@ -1,4 +1,5 @@
 import { landingReadout } from './landingReadout';
+import { PANEL_LOAD_WARN } from '../sim/vessel/deployables';
 /**
  * Caution & warning logic for the flight HUD: a short, prioritised list of things that need the pilot's
  * attention *now* (overheating, crushing g-load, ground rushing up, flameout, no control...). Pure and
@@ -48,7 +49,12 @@ export interface AlertInput {
   power: number;
   /** Normalized crossflow exposure: > 0 in the warn band, ≥ 1 inside the breakup envelope. */
   structuralStress?: number;
+  /** Worst load fraction of extended arrays/antennas (air load or heat; ≥ 1 tears them off). */
+  panelLoad?: number;
 }
+
+/** Extended arrays/antennas: caution from `PANEL_LOAD_WARN`, warning from this load fraction. */
+const PANEL_LOAD_BAD = 0.9;
 
 /** Seconds an alert lingers after its condition clears. */
 const HOLD = 1.2;
@@ -73,6 +79,9 @@ export function alertConditions(i: AlertInput): FlightAlert[] {
   const stress = i.structuralStress ?? 0;
   if (i.flying && stress >= 1) out.push({ id: 'structure', level: 'bad', text: 'STRUCTURAL · BREAKUP · REDUCE ANGLE' });
   else if (i.flying && stress > 0) out.push({ id: 'structure', level: 'warn', text: 'STRUCTURAL · SIDE LOAD' });
+  const panels = i.panelLoad ?? 0;
+  if (i.flying && panels >= PANEL_LOAD_WARN) out.push({ id: 'panels', level: panels >= PANEL_LOAD_BAD ? 'bad' : 'warn',
+    text: `${panels >= PANEL_LOAD_BAD ? 'PANELS TEARING' : 'PANELS EXPOSED'} ${(Math.min(panels, 1) * 100).toFixed(0)}% · RETRACT` });
   if (i.flameout) out.push({ id: 'fuel', level: 'bad', text: 'FLAMEOUT' });
   else if (i.thrusting && Number.isFinite(i.stageBurnTime) && i.stageBurnTime < 10) out.push({ id: 'fuel', level: 'warn', text: `STAGE FUEL · ${Math.max(0, i.stageBurnTime).toFixed(0)} s` });
   if (Number.isFinite(i.power) && i.power < 0.05 && !i.eva) out.push({ id: 'power', level: i.power <= 0.001 ? 'bad' : 'warn', text: i.power <= 0.001 ? 'NO POWER' : 'LOW POWER' });

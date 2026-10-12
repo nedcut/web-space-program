@@ -258,7 +258,7 @@ export function crashJointCuts(v: VesselState, shocks: CrashShock[]): Map<number
 }
 
 /** Deepest-first cuts handle simultaneous nested failures exactly once and conserve momentum. */
-export function breakJoints(v: VesselState, cuts: number[], result: StepResult, crash = new Map<number, number>()): void {
+export function breakJoints(v: VesselState, cuts: number[], result: StepResult, crash = new Map<number, number>(), torn?: ReadonlyMap<number, 'airload' | 'heat'>): void {
   const ordered = [...new Set(cuts)].sort((a, b) => (v.cache.depth.get(b) ?? 0) - (v.cache.depth.get(a) ?? 0) || a - b);
   const readings = v.cache.jointLoads;
   for (const uid of ordered) {
@@ -285,7 +285,10 @@ export function breakJoints(v: VesselState, cuts: number[], result: StepResult, 
         applyImpulse(v, scale(J, -1), point);
       }
       result.newVessels.push(nv);
-      result.events.push({ type: 'structuralFailure', vesselId: v.id, partUid: uid, parentUid, newVesselId: nv.id, loadFraction: fraction });
+      const cause = torn?.get(uid);
+      result.events.push(cause
+        ? { type: 'structuralFailure', vesselId: v.id, partUid: uid, parentUid, newVesselId: nv.id, loadFraction: Math.max(1, fraction), cause }
+        : { type: 'structuralFailure', vesselId: v.id, partUid: uid, parentUid, newVesselId: nv.id, loadFraction: fraction });
     }
   }
 }
