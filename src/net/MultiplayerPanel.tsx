@@ -5,16 +5,24 @@ import { WARP_RATES, validCraft } from './protocol';
 import type { MultiplayerClient } from './client';
 import './multiplayer.css';
 
+/** Host URL and display name from the last successful join, so rejoining is one click. */
+const LAST_KEY = 'wsp.multiplayer.last.v1';
+function lastJoin(): { url?: string; name?: string } {
+  try { const v: unknown = JSON.parse(localStorage.getItem(LAST_KEY) ?? '{}'); return v && typeof v === 'object' ? v as { url?: string; name?: string } : {}; } catch { return {}; }
+}
+
 export function MultiplayerSetup({ onBack }: { onBack: () => void }) {
-  const [url, setUrl] = useState(`ws://${location.hostname || 'localhost'}:8787`);
+  const [last] = useState(lastJoin);
+  const [url, setUrl] = useState(typeof last.url === 'string' ? last.url : `ws://${location.hostname || 'localhost'}:8787`);
   const [room, setRoom] = useState('');
-  const [name, setName] = useState('Pilot');
+  const [name, setName] = useState(typeof last.name === 'string' ? last.name : 'Pilot');
   const [error, setError] = useState('');
   return <form className="panel multiplayer-setup" onSubmit={e => {
     e.preventDefault();
     try {
       if (!['ws:', 'wss:'].includes(new URL(url).protocol)) throw new Error('Use ws:// or wss://');
       if (!name.trim()) throw new Error('Enter a display name');
+      try { localStorage.setItem(LAST_KEY, JSON.stringify({ url, name: name.trim() })); } catch { /* storage unavailable */ }
       game.set({ multiplayer: { url, room: room.trim().toUpperCase(), name: name.trim() }, scene: 'flight' });
     } catch (e) { setError((e as Error).message); }
   }}>
@@ -24,7 +32,7 @@ export function MultiplayerSetup({ onBack }: { onBack: () => void }) {
     <label>Room code<input aria-label="Room code" maxLength={8} pattern="[a-zA-Z0-9]{4,8}|" placeholder="Empty = create a room" value={room} onChange={e => setRoom(e.target.value)} /></label>
     <label>Display name<input aria-label="Display name" required maxLength={24} value={name} onChange={e => setName(e.target.value)} /></label>
     {error && <p role="alert">{error}</p>}
-    <div className="mp-row"><button type="button" className="btn" onClick={onBack}>Back</button><button className="btn primary" type="submit">{room.trim() ? 'Join room' : 'Create room'}</button></div>
+    <div className="mp-row mp-actions"><button type="button" className="btn ghost" onClick={onBack}>Back</button><button className="btn primary" type="submit">{room.trim() ? 'Join room' : 'Create room'}</button></div>
   </form>;
 }
 

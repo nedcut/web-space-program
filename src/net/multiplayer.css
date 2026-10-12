@@ -12,3 +12,4 @@
 .mp-error { color: var(--bad); margin: 0; }
 
 @media (max-width: 800px) { .multiplayer-panel { left: auto; right: 8px; width: 280px; } }
+.mp-actions { justify-content: flex-end; margin-top: 4px; }

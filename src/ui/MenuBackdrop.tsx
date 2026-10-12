@@ -5,8 +5,6 @@ import { useEffect, useRef, useState } from 'react';
 export function MenuBackdrop() {
   const live = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
-  const readyRef = useRef(false);
-  readyRef.current = ready;
   useEffect(() => {
     let disposed = false;
     let cleanup: (() => void) | undefined;
@@ -24,26 +22,35 @@ export function MenuBackdrop() {
   }, []);
   const ref = useRef<HTMLCanvasElement>(null);
 
+  // The 2D fallback runs only until the live planet is ready (or for good without WebGL). With reduced
+  // motion it draws once per resize instead of every frame.
   useEffect(() => {
+    if (ready) return;
     const canvas = ref.current!;
     const ctx = canvas.getContext('2d')!;
     let raf = 0;
     let seed = 1337;
+    let dirty = true;
     const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     const stars = Array.from({ length: 900 }, () => ({ x: rand(), y: rand(), m: rand() ** 3, t: rand() * 6.28 }));
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
     const resize = () => {
       canvas.width = canvas.clientWidth * devicePixelRatio;
       canvas.height = canvas.clientHeight * devicePixelRatio;
+      dirty = true;
     };
     resize();
     window.addEventListener('resize', resize);
 
     const draw = (time: number) => {
-      if (readyRef.current) { raf = requestAnimationFrame(draw); return; }
+      raf = requestAnimationFrame(draw);
+      const still = game.get().settings.reduceMotion || reduced.matches;
+      if (still && !dirty) return;
+      dirty = false;
       const w = canvas.width;
       const h = canvas.height;
-      const t = game.get().settings.reduceMotion || matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : time / 1000;
+      const t = still ? 0 : time / 1000;
       ctx.fillStyle = '#04060c';
       ctx.fillRect(0, 0, w, h);
 
@@ -55,13 +62,14 @@ export function MenuBackdrop() {
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
 
+      // One fill colour, per-star alpha: no colour strings per star per frame.
+      ctx.fillStyle = 'rgb(220,230,255)';
       for (const s of stars) {
-        const a = 0.35 + 0.65 * s.m * (0.8 + 0.2 * Math.sin(t * 1.5 + s.t));
-        ctx.fillStyle = `rgba(220,230,255,${a})`;
+        ctx.globalAlpha = 0.35 + 0.65 * s.m * (0.8 + 0.2 * Math.sin(t * 1.5 + s.t));
         const r = (0.4 + s.m * 1.4) * devicePixelRatio;
         ctx.fillRect(((s.x + t * 0.002) % 1) * w, s.y * h, r, r);
       }
-
+      ctx.globalAlpha = 1;
       // Ringed planet
       const cx = w * 0.72;
       const cy = h * 0.55;
@@ -107,15 +115,13 @@ export function MenuBackdrop() {
       }
       ctx.restore();
       drawRings(true);
-
-      raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
     };
-  }, []);
+  }, [ready]);
 
   return <>
     <canvas ref={ref} className="fullscreen" style={{ width: '100%', height: '100%', opacity: ready ? 0 : 1, transition: 'opacity 0.6s ease' }} />
