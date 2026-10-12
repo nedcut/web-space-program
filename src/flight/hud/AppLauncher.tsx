@@ -14,6 +14,11 @@ export interface HudApp {
   /** Small status light on the toolbar button. */
   badge?: 'on' | 'warn' | 'target' | null;
   width?: number;
+  /**
+   * How readily the window gives up height when docked windows don't fit the column (default 1). Long, scrolling
+   * readouts use more so short ones (resource bars, alarms) keep their rows.
+   */
+  shrink?: number;
 }
 
 /** Extra toolbar buttons that act rather than open a window (orbit strip, settings, help). */
@@ -153,7 +158,7 @@ export function AppWindow({ app, pos, scale, escTarget = false, onClose, onMove,
   };
   return (
     <section ref={ref} className={`app-win panel ${pos ? 'floating' : ''}`} aria-label={app.title}
-      style={{ width: app.width ?? 270, ...(pos ? { left: pos.x, top: pos.y } : {}) }}>
+      style={{ width: app.width ?? 270, ...(pos ? { left: pos.x, top: pos.y } : { flexShrink: app.shrink ?? 1 }) }}>
       <header className="app-win-head" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up} onDoubleClick={onDock}
         title="Drag to move · double-click to dock under the toolbar">
         <AppIcon name={app.icon} size={14} />

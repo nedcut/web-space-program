@@ -287,12 +287,12 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
       <ResourceBars resources={t.resources} />
       {dock?.resources}
     </> },
-    { id: 'flightData', title: `Flight data (${bindingLabel('flightData')})`, icon: 'flightData', width: 290, content: <FlightDataPanel data={t.flightData} onClose={() => apps.close('flightData')} /> },
-    { id: 'science', title: 'Science', icon: 'science', content: dock?.science ?? null },
+    { id: 'flightData', title: `Flight data (${bindingLabel('flightData')})`, icon: 'flightData', width: 290, shrink: 8, content: <FlightDataPanel data={t.flightData} onClose={() => apps.close('flightData')} /> },
+    { id: 'science', title: 'Science', icon: 'science', shrink: 3, content: dock?.science ?? null },
     { id: 'crew', title: t.eva ? 'EVA' : `Crew (${t.crew.length})`, icon: 'crew', badge: t.noControl ? 'warn' : null, content: <CrewPanel t={t} cb={cb} /> },
     { id: 'alarms', title: 'Mission alarms', icon: 'alarm', badge: dock?.alarmActive ? 'warn' : null, content: dock?.alarms ?? null },
     { id: 'assist', title: 'Flight assist', icon: 'assist', badge: dock?.assistActive ? 'on' : null, content: dock?.assist ?? null },
-    { id: 'target', title: 'Target & docking', icon: 'target', badge: t.target ? 'target' : null, width: 260, content: <TargetPanel t={t} cb={cb} /> },
+    { id: 'target', title: 'Target & docking', icon: 'target', badge: t.target ? 'target' : null, width: 260, shrink: 3, content: <TargetPanel t={t} cb={cb} /> },
     { id: 'comms', title: 'Communications', icon: 'comms', content: dock?.signal ?? null },
   ];
   const actions: ToolbarAction[] = [

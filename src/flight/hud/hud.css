@@ -89,7 +89,7 @@
 .app-win { display: flex; flex-direction: column; max-height: min(62vh, 560px); flex-shrink: 0; overflow: hidden; }
 /* Docked windows share the column between the toolbar and the crew/MAP dock: each shrinks (its body scrolls)
    down to a readable minimum before the column itself scrolls, so none slides under MAP/AUTO or the crew. */
-.app-stack > .app-win { flex: 0 1 auto; min-height: 96px; }
+.app-stack > .app-win { flex: 0 1 auto; min-height: 110px; }
 .app-win-esc { font-size: 9.5px; padding: 0 4px; line-height: 15px; letter-spacing: 0; text-transform: none; opacity: .85; }
 .app-win.floating { position: absolute; z-index: 12; }
 .app-win-head { display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 10px; cursor: grab; border-bottom: 1px solid var(--panel-border); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); touch-action: none; }
