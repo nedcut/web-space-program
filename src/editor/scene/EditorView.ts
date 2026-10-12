@@ -18,6 +18,7 @@ import { StudioEnvironment } from '../../render/core/studioEnv';
 import { onContextRestored } from '../../render/core/contextRecovery';
 import { buildHangar, HANGAR, type Hangar } from './hangar';
 import { createPartMesh, variantKey } from './partMesh';
+import { engineShrouds } from '../../sim/vessel/shroud';
 import { partMeshParams, prepareEngineSoot, releaseSoot, setLightAppearance, setPartDetail } from '../../render/parts';
 
 const DEG = Math.PI / 180;
@@ -337,11 +338,12 @@ export class EditorView {
     this.links.update(snap.craft.parts);
     const seen = new Set<number>();
     let lightKey = '';
+    const shrouds = engineShrouds(snap.craft.parts, p => CATALOG.get(p.partId));
     for (const p of snap.craft.parts) {
       seen.add(p.uid);
       let entry = this.partObjs.get(p.uid);
       const def = CATALOG.get(p.partId)!;
-      const params = partMeshParams(def, p.tweaks), variant = variantKey(params);
+      const params = partMeshParams(def, p.tweaks, shrouds.get(p.uid)), variant = variantKey(params);
       if (!entry || entry.partId !== p.partId || entry.variant !== variant) {
         if (entry) { releaseSoot(entry.obj); this.craftGroup.remove(entry.obj); }
         const obj = createPartMesh(def, params);
@@ -360,7 +362,8 @@ export class EditorView {
     this.lightKey = lightKey;
     for (const [uid, e] of this.partObjs) if (!seen.has(uid)) { releaseSoot(e.obj); this.craftGroup.remove(e.obj); this.partObjs.delete(uid); }
     // Engine soot depends on where every engine sits; re-bake only when the layout changes.
-    const sootKey = snap.craft.parts.map(p => `${p.uid}:${p.partId}:${p.position.x},${p.position.y},${p.position.z}:${p.rotation.x},${p.rotation.y},${p.rotation.z},${p.rotation.w}`).join('|');
+    // A rebuilt variant (skirt added or removed) is a fresh, unsooted mesh.
+    const sootKey = snap.craft.parts.map(p => `${p.uid}:${p.partId}:${p.position.x},${p.position.y},${p.position.z}:${p.rotation.x},${p.rotation.y},${p.rotation.z},${p.rotation.w}:${this.partObjs.get(p.uid)?.variant}`).join('|');
     if (sootKey !== this.sootKey) {
       this.renderer.shadowMap.needsUpdate = true;
       this.sootKey = sootKey;
@@ -515,9 +518,10 @@ export class EditorView {
     this.heldMeshes.clear();
     this.ghostGroup.clear();
     this.ghostCount = 0;
+    const shrouds = engineShrouds(this.heldParts, p => CATALOG.get(p.partId));
     for (const p of this.heldParts) {
       const def = CATALOG.get(p.partId)!;
-      const obj = createPartMesh(def, partMeshParams(def, p.tweaks));
+      const obj = createPartMesh(def, partMeshParams(def, p.tweaks, shrouds.get(p.uid)));
       obj.userData.heldUid = p.uid;
       this.heldMeshes.add(obj);
     }

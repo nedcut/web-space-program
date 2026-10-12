@@ -5,6 +5,8 @@ import { around, bellRadius, box, cyl, grp, lathe, mk, pipe, rod, sphere, torus,
 import { cylDims, num, str } from './common';
 import { decals } from '../decals';
 import { Markings } from './markings';
+import { weather } from './structure';
+import { fairingPanelCount } from '../../../sim/vessel/fairing';
 
 const PI = Math.PI;
 
@@ -171,6 +173,7 @@ export function buildEngine(def: PartDef): THREE.Object3D {
   const yT = h / 2;
   const yB = -h / 2;
   const root = grp('engine');
+  addShroud(def, root, yT, yB);
 
   if (style === 'cluster') return buildCluster(def, root, r, h, re, Math.round(num(def, 'bells', 4)));
 
@@ -371,6 +374,66 @@ export function buildEngine(def: PartDef): THREE.Object3D {
   gim.add(mk(hoses, M.cable(), 'hydraulicHoses'));
   engineMarkings(def, root, r, yT, plateT, skirtSpan);
   return root;
+}
+
+/**
+ * Interstage skirt (see sim/vessel/shroud.ts) when the instance carries `shroudTop`/`shroudBottom`/`shroudLength`: a tangent-blended
+ * frustum from the stage above to the stage below, split into jettisonable panels like a fairing shell. Panels reuse
+ * the tank skin, frame and decal materials so the batched vessel draws no extra materials; the interior is the same
+ * lathe wound inwards rather than a back-side material.
+ */
+function addShroud(def: PartDef, root: THREE.Object3D, yT: number, yB: number) {
+  const rTop = num(def, 'shroudTop', 0), rBot = num(def, 'shroudBottom', 0);
+  if (!(rTop > 0 && rBot > 0)) return;
+  // The skirt may continue over a decoupler and taper below the bottom node.
+  yB -= num(def, 'shroudLength', 0);
+  const f = 0.03;
+  const y0 = yB + f, y1 = yT - f;
+  const taper = Math.abs(rTop - rBot) > 0.01;
+  const n = taper ? 10 : 1;
+  const rOf = (y: number) => {
+    const t = Math.min(1, Math.max(0, (y - y0) / (y1 - y0)));
+    return rBot + (rTop - rBot) * t * t * (3 - 2 * t);
+  };
+  const prof: Profile = [];
+  for (let i = 0; i <= n; i++) {
+    const y = y0 + ((y1 - y0) * i) / n;
+    prof.push([rOf(y), y]);
+  }
+  const inner: Profile = prof.map(([pr, py]) => [pr - 0.02, py] as [number, number]).reverse();
+  const rMax = Math.max(rTop, rBot);
+  const shroud = grp('engineShroud');
+  const panels = fairingPanelCount(rMax), span = (2 * PI) / panels, gap = 0.006;
+  const segments = Math.max(16, Math.round(48 / panels * Math.min(1.5, Math.max(0.75, rMax))));
+  for (let k = 0; k < panels; k++) {
+    const phi = k * span;
+    const panel = grp(`shroudPanel${k}`);
+    // Same record as fairing panels, so the jettison effect peels them about the lower edge.
+    panel.userData.fairingPanel = { azimuth: phi + span / 2, span, radius: rMax, baseY: yB, height: yT - yB };
+    const opts = { segments, phiStart: phi + gap, phiLength: span - 2 * gap, tile: 0.5 };
+    panel.add(mk(weather(lathe(prof, opts), y0, y1, { soot: 0, streaks: 0.12, seed: 11 + k }), M.whitePanel(), 'shroudSkin'));
+    panel.add(mk(lathe(inner, opts), M.darkMetal(), 'shroudInner'));
+    const rails: THREE.BufferGeometry[] = [];
+    for (const a of [phi + gap, phi + span - gap]) {
+      rails.push(pipe(prof.map(([pr, py]) => [pr * Math.sin(a), py, pr * Math.cos(a)] as [number, number, number]), 0.008 + 0.004 * rMax, 4, n * 2));
+    }
+    panel.add(mk(rails, M.gunmetal(), 'shroudRails'));
+    // Flanges where the skirt meets the stages, part of each panel so they leave with it.
+    panel.add(mk([
+      lathe([[rBot * 0.985, yB], [rBot, yB + 0.004], [rBot, y0], [rOf(y0) * 0.99, y0]], { ...opts, tile: 1 }),
+      lathe([[rOf(y1) * 0.99, y1], [rTop, y1], [rTop, yT - 0.004], [rTop * 0.985, yT]], { ...opts, tile: 1 }),
+    ], M.aluminium(), 'shroudFlanges'));
+    const D = new Markings(def);
+    const mid = phi + span / 2;
+    const hgt = y1 - y0;
+    if (hgt > 0.35) {
+      const b = D.badgeDark;
+      D.lathe(rOf, b, { y: y0 + hgt * 0.5, phi: mid, height: Markings.fit(b, hgt * 0.4, Math.min(rTop, rBot) * span * 0.5) });
+    }
+    D.addTo(panel);
+    shroud.add(panel);
+  }
+  root.add(shroud);
 }
 
 /** Maker's mark and data plate on the mount ring (and on the boat-tail skirt when present). */

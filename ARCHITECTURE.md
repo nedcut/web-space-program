@@ -47,6 +47,7 @@ than importing `World`. `LaunchSite` already follows that structural-input patte
   (shared floating panels), `editor/ui/{PartInspector,ActionGroupsPanel}` and `flight/hud/PartInspector`.
   `fairing.ts` defines payload fairing shells (per-instance size in tweaks): enclosure, shell drag areas and mass;
   `aero.ts` shields enclosed parts (`cache.shielded`, `cache.aeroCentre`).
+  `shroud.ts` derives engine interstage skirts from topology (render-only; jettisoned when the decoupler they cover fires).
 - `sim/hazards`: pressure ratings/overload, equipment heat soak, dipole-like radiation dose and Sun occlusion; `game/world/hazards.ts` integrates packed exposure and roster dose.
 - `sim/comms/network.ts`: range/occlusion/relay routing; `sim/science`: biomes, experiments and progression;
   `sim/resources/deposits.ts`: deterministic concentrations; `sim/crew/crew.ts`: roster/seats/control authority.

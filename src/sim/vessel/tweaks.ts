@@ -1,6 +1,7 @@
 import type { DockingPortModule, PartDef, PartTweaks, RcsAxes, WheelMode } from './types';
 import type { FlightTweaks, PartState, VesselState } from './runtime';
 import { defaultFairingShell, FAIRING_MAX_HEIGHT, FAIRING_MAX_RADIUS_FACTOR, FAIRING_MIN_HEIGHT } from './fairing';
+import { hasShroudOption } from './shroud';
 
 /**
  * Per-part player settings ("tweakables"). Pure, DOM-free helpers shared by the simulation, the editor and the
@@ -45,7 +46,7 @@ export type TweakKey = keyof PartTweaks;
 export type TweakDescriptor =
   | { key: 'thrustLimit' | 'gimbalLimit' | 'ejectionScale' | 'deflectionLimit'; kind: 'percent'; label: string; flight: boolean; step: number }
   | { key: 'chuteMinPressure' | 'chuteDeployAltitude' | 'fairingHeight' | 'fairingRadius'; kind: 'number'; label: string; flight: boolean; min: number; max: number; step: number; unit: string; fallback: number }
-  | { key: 'gimbalLock' | 'crossfeed' | 'extended' | 'rcsEnabled' | 'lightOn' | 'deflectionInvert' | 'fairingAuto'; kind: 'toggle'; label: string; flight: boolean; fallback: boolean }
+  | { key: 'gimbalLock' | 'crossfeed' | 'extended' | 'rcsEnabled' | 'lightOn' | 'deflectionInvert' | 'fairingAuto' | 'shroud'; kind: 'toggle'; label: string; flight: boolean; fallback: boolean }
   | { key: 'wheelMode'; kind: 'select'; label: string; flight: boolean; options: { value: WheelMode; label: string }[] }
   | { key: 'rcsAxes'; kind: 'axes'; label: string; flight: boolean }
   | { key: 'lightColor'; kind: 'color'; label: string; flight: boolean; fallback: string };
@@ -62,6 +63,7 @@ export function tweakDescriptors(def: PartDef): TweakDescriptor[] {
         out.push({ key: 'gimbalLimit', kind: 'percent', label: 'Gimbal range', flight: true, step: 1 });
         out.push({ key: 'gimbalLock', kind: 'toggle', label: 'Gimbal locked', flight: true, fallback: false });
       }
+      if (hasShroudOption(def)) out.push({ key: 'shroud', kind: 'toggle', label: 'Interstage skirt', flight: false, fallback: true });
     }
     if (m.type === 'decoupler') {
       out.push({ key: 'ejectionScale', kind: 'percent', label: 'Ejection force', flight: false, step: 1 });
@@ -105,7 +107,7 @@ export function tweakDescriptors(def: PartDef): TweakDescriptor[] {
 
 const FLIGHT_KEYS = new Set<TweakKey>(['thrustLimit', 'gimbalLimit', 'gimbalLock', 'crossfeed', 'deflectionLimit', 'deflectionInvert',
   'chuteMinPressure', 'chuteDeployAltitude', 'rcsEnabled', 'rcsAxes', 'wheelMode', 'lightOn', 'lightColor']);
-const ALL_KEYS = new Set<TweakKey>([...FLIGHT_KEYS, 'ejectionScale', 'extended', 'fairingAuto', 'fairingHeight', 'fairingRadius']);
+const ALL_KEYS = new Set<TweakKey>([...FLIGHT_KEYS, 'ejectionScale', 'extended', 'fairingAuto', 'fairingHeight', 'fairingRadius', 'shroud']);
 const record = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const unit = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1;
 const range = (x: unknown, lo: number, hi: number) => typeof x === 'number' && Number.isFinite(x) && x >= lo && x <= hi;

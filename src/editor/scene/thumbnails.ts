@@ -7,6 +7,8 @@ import { contextIsLost, onContextRestored } from '../../render/core/contextRecov
 import { partTexturesReady } from '../../render/parts/textures';
 import type { PartDef } from '../../sim/vessel/types';
 import { createPartMesh } from './partMesh';
+import { engineShrouds } from '../../sim/vessel/shroud';
+import { partMeshParams } from '../../render/parts';
 
 /**
  * Part thumbnails: each part is rendered once into a small offscreen WebGL canvas and cached as a data URL
@@ -281,9 +283,11 @@ function renderCraftThumbnail(craft: import('../../sim/vessel/types').CraftDef, 
   setup();
   if (contextIsLost(renderer!)) return;
   const holder = new THREE.Group();
+  const shrouds = engineShrouds(craft.parts, p => catalog.get(p.partId));
   for (const p of craft.parts) {
     const def = catalog.get(p.partId); if (!def) continue;
-    const mesh = createPartMesh(def);
+    // Instance variants (interstage skirts, fitted fairing shells), as the editor and flight draw them.
+    const mesh = createPartMesh(def, partMeshParams(def, p.tweaks, shrouds.get(p.uid)));
     mesh.position.set(p.position.x, p.position.y, p.position.z);
     mesh.quaternion.set(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
     holder.add(mesh);

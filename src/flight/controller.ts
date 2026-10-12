@@ -191,6 +191,7 @@ export class FlightController {
   /** Reused argument for the launch site's pad equipment (no per-frame object). */
   private readonly padVessel: PadVessel = { state: null as unknown as VesselState, held: false, firing: false };
   private readonly effectPosition = new THREE.Vector3();
+  private lastShroudJettison = '';
   private reentry = new ReentryFx();
   private reentryHeat = 0;
   private labelHost: HTMLDivElement;
@@ -380,6 +381,16 @@ export class FlightController {
           const geometry = e.type === 'partDestroyed' ? view?.debrisGeometry(e.partUid) : undefined;
           if (geometry) this.effects.debris.emit(geometry,this.effectPosition,vessel.state.velocity,size);
 
+        }
+      }
+      if (e.type === 'decouple') {
+        // The decoupler under an engine throws its interstage skirt clear in panels (render-only, like fairing shells).
+        // A decoupler splitting off several pieces reports each; its skirt leaves once.
+        const vessel = this.world.vessels.get(e.vesselId), key = `${e.vesselId}:${e.partUid}`;
+        if (vessel && key !== this.lastShroudJettison) {
+          this.lastShroudJettison = key;
+          this.views.get(e.vesselId)?.shroudPanels(e.partUid, (panel, position, quaternion) =>
+            this.effects.fairingPanels.emit(panel, position, quaternion, vessel.state.velocity, 2.5));
         }
       }
       if (e.type === 'fairingJettison') {

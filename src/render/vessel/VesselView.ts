@@ -9,6 +9,7 @@ import type { EngineModule } from '../../sim/vessel/types';
 import { bakeEngineSoot, buildPartMeshVariant, createPlume, partMeshParams, getExhaustAnchors, setLightAppearance, setPartDeploy, setEngineGimbal, setGearPose, type Plume } from '../parts';
 import { qRotate } from '../../util/quat';
 import { fairingJettisoned, isFairingDef } from '../../sim/vessel/fairing';
+import { engineShrouds, type EngineShroud } from '../../sim/vessel/shroud';
 import type { Vec3 } from '../../util/vec3';
 
 const _panelPosition = new THREE.Vector3(), _panelQuaternion = new THREE.Quaternion(), _panelScale = new THREE.Vector3();
@@ -35,6 +36,8 @@ interface PartVisual {
   pose: Float64Array;
   /** Its moving nodes need their slots rewritten this frame. */
   posed: boolean;
+  /** Interstage skirt the mesh was built with (it stays in the mesh, hidden, once jettisoned). */
+  shroud?: EngineShroud;
 }
 
 /**
@@ -83,9 +86,12 @@ export class VesselView {
   }
 
   private geometryKey = '';
+  /** Interstage skirts of the current topology (refreshed with the layout key). */
+  private shrouds = new Map<number, EngineShroud>();
   private layoutKey(): string {
-    // A jettisoned fairing shell changes what is drawn (and batched) without moving any part.
-    return this.vessel.parts.map(p => `${p.uid}:${p.partId}:${p.position.x},${p.position.y},${p.position.z}:${p.rotation.x},${p.rotation.y},${p.rotation.z},${p.rotation.w}${fairingJettisoned(p) ? ':j' : ''}`).join('|');
+    // A jettisoned fairing shell or interstage skirt changes what is drawn (and batched) without moving any part.
+    this.shrouds = engineShrouds(this.vessel.parts, p => p.def);
+    return this.vessel.parts.map(p => `${p.uid}:${p.partId}:${p.position.x},${p.position.y},${p.position.z}:${p.rotation.x},${p.rotation.y},${p.rotation.z},${p.rotation.w}${fairingJettisoned(p) ? ':j' : ''}${this.shrouds.has(p.uid) ? ':s' : ''}`).join('|');
   }
   private readonly impostor = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3)), new THREE.PointsMaterial({ color: 0xbcc9d8, size: 3, sizeAttenuation: false }));
 
@@ -146,6 +152,24 @@ export class VesselView {
     }
   }
 
+  /**
+   * Visit the panels of the interstage skirt closed by part `belowUid` (a decoupler that just fired), placed as in
+   * `fairingPanels`. Skirts stay in the engine mesh, hidden, so this works before or after the view rebuilds.
+   */
+  shroudPanels(belowUid: number, visit: (panel: THREE.Object3D, position: THREE.Vector3, quaternion: THREE.Quaternion) => void) {
+    for (const pv of this.parts.values()) {
+      if (pv.shroud?.below !== belowUid) continue;
+      const shroud = pv.object.getObjectByName('engineShroud');
+      if (!shroud) continue;
+      for (const panel of shroud.children) {
+        if (!panel.userData.fairingPanel) continue;
+        panel.updateWorldMatrix(true, false);
+        panel.matrixWorld.decompose(_panelPosition, _panelQuaternion, _panelScale);
+        visit(panel, _panelPosition.add(this.origin), _panelQuaternion);
+      }
+    }
+  }
+
   setVessel(v: VesselState) {
     this.vessel = v;
   }
@@ -155,9 +179,14 @@ export class VesselView {
     // Restore static leaves hidden by the previous batch before regrouping after staging/docking.
     for (const pv of this.parts.values()) pv.object.traverse(o => { if (o.userData.batchedVisible) { o.visible = true; o.matrixWorldAutoUpdate = true; delete o.userData.batchedVisible; } });
     let needsSoot = false;
+    this.geometryKey = this.layoutKey();
+    const shrouds = this.shrouds;
     const alive = new Set(this.vessel.parts.map((p) => p.uid));
     for (const [uid, pv] of this.parts) {
-      if (!alive.has(uid) || this.vessel.cache.byUid.get(uid)?.partId !== pv.partId) {
+      // A skirt the mesh lacks (or of another size) needs a new mesh; a lost one is only hidden.
+      const want = shrouds.get(uid);
+      const reshroud = want && (want.radiusTop !== pv.shroud?.radiusTop || want.radiusBottom !== pv.shroud?.radiusBottom);
+      if (!alive.has(uid) || this.vessel.cache.byUid.get(uid)?.partId !== pv.partId || reshroud) {
         pv.heat.dispose();
         this.inner.remove(pv.object);
         pv.plumes.forEach((pl) => pl.dispose());
@@ -168,7 +197,8 @@ export class VesselView {
     for (const p of this.vessel.parts) {
       if (this.parts.has(p.uid)) continue;
       needsSoot = true;
-      const obj = buildPartMeshVariant(p.def, partMeshParams(p.def, p.tweaks));
+      const shroud = shrouds.get(p.uid);
+      const obj = buildPartMeshVariant(p.def, partMeshParams(p.def, p.tweaks, shroud));
       const heat = new PartHeat(obj);
       const surfaces = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
       obj.traverse((o) => {
@@ -189,7 +219,7 @@ export class VesselView {
         }
       }
       this.inner.add(obj);
-      this.parts.set(p.uid, { state: p, heat, uid: p.uid, partId: p.partId, object: obj, plumes, surfaces, deploy: 0, static: false, pose: new Float64Array(6).fill(NaN), posed: true });
+      this.parts.set(p.uid, { state: p, heat, uid: p.uid, partId: p.partId, object: obj, plumes, surfaces, deploy: 0, static: false, pose: new Float64Array(6).fill(NaN), posed: true, shroud });
     }
     const staticKinds = new Set(['tank', 'adapter', 'girder', 'strut', 'noseCone', 'battery', 'reactionWheel', 'probeCore', 'heatShield', 'monoSphere', 'monoTorus', 'xenonTank', 'framework', 'habitat', 'rcsQuad', 'rcsPorts', 'instrument', 'decoupler', 'separator', 'radialDecoupler']);
     for (const p of this.vessel.parts) {
@@ -207,6 +237,7 @@ export class VesselView {
         const shell = obj.getObjectByName('fairingShell');
         if (shell) shell.visible = !p.activated;
       }
+      if (pv.shroud) obj.getObjectByName('engineShroud')!.visible = shrouds.has(p.uid);
       pv.lightKey = undefined;
       if (this.stressOverlay) {
         pv.stressMaterial ??= new THREE.MeshBasicMaterial({ color: 0x44cc55 });
@@ -218,7 +249,6 @@ export class VesselView {
     // Soot follows the current engine layout (PartHeat already gave every part its own geometry copy).
     // Separation does not wash off accumulated staining. Only a new/moved layout needs a bake.
     if (needsSoot) bakeEngineSoot([...this.parts.values()].map(pv => pv.object), this.inner);
-    this.geometryKey = this.layoutKey();
     this.lastTopology = this.vessel.cache;
     this.batchPending = 0;
     if (this.stressOverlay) return;

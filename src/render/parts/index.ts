@@ -6,6 +6,7 @@ import { buildAstronaut } from './builders/astronaut';
 import * as THREE from 'three';
 import type { PartDef, PartTweaks } from '../../sim/vessel/types';
 import { fairingShell } from '../../sim/vessel/fairing';
+import type { EngineShroud } from '../../sim/vessel/shroud';
 import type { Builder } from './builders/common';
 import { buildFin, buildWing, buildControlSurface } from './builders/aero';
 import { buildCockpit, buildFuselage, buildGear, buildIntake, buildJetEngine } from './builders/aircraft';
@@ -52,6 +53,7 @@ export { bakeEngineSoot, prepareEngineSoot, releaseSoot, isSooted } from './soot
  *  - 'panelWing' / 'panel0..n'                deployable solar arrays
  *  - 'chuteCanopy' (+ 'chuteLines')           parachutes (hidden until deployed)
  *  - 'fairingShell' / 'fairingPanel0..n'        fairing shell panels (2, or 3 when wide); userData.fairingPanel
+ *  - 'engineShroud' / 'shroudPanel0..n'        engine interstage skirt panels; userData.fairingPanel
  *  - 'lightLens' / 'lightAnchor'              lamps (anchor looks along +Z)
  *  - 'ionGrid'                                ion engine grid (emissive)
  *  - 'gearStrut' / 'gearSlide' / 'gearSteer' / 'gearWheel'   landing gear (see setGearPose)
@@ -143,10 +145,11 @@ export function buildPartMesh(def: PartDef, detail: PartDetail = defaultDetail):
 }
 
 /**
- * Per-instance mesh parameters (fitted fairing shells), or undefined for the catalogue mesh. Rounded so instances of
- * the same size share one template.
+ * Per-instance mesh parameters (fitted fairing shells, engine interstage skirts from `engineShrouds`), or undefined
+ * for the catalogue mesh. Rounded so instances of the same size share one template.
  */
-export function partMeshParams(def: PartDef, tweaks?: PartTweaks): Record<string, number> | undefined {
+export function partMeshParams(def: PartDef, tweaks?: PartTweaks, shroud?: EngineShroud): Record<string, number> | undefined {
+  if (shroud) return { shroudTop: shroud.radiusTop, shroudBottom: shroud.radiusBottom, shroudLength: shroud.length };
   if (tweaks?.fairingHeight === undefined && tweaks?.fairingRadius === undefined) return undefined;
   const shell = fairingShell(def, tweaks);
   if (!shell) return undefined;

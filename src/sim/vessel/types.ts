@@ -351,6 +351,8 @@ export interface PartTweaks {
   fairingAuto?: boolean;
   fairingHeight?: number;
   fairingRadius?: number;
+  /** Engines: skirt enclosing the engine when a part is stacked below it (default true; see shroud.ts). */
+  shroud?: boolean;
 }
 
 export const ACTION_GROUP_IDS = ['stage', 'gear', 'brakes', 'lights', 'rcs', 'sas', 'abort',
