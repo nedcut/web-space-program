@@ -79,7 +79,11 @@ export type FlightTweaks = Pick<PartTweaks, 'thrustLimit' | 'gimbalLimit' | 'gim
 export type VesselCommand =
   | { kind: 'group'; group: ActionGroupId; state?: boolean }
   | { kind: 'part'; uid: number; action: PartActionId; state?: boolean; experiment?: string }
-  | { kind: 'tweak'; uid: number; tweaks: FlightTweaks; symmetric?: boolean };
+  | { kind: 'tweak'; uid: number; tweaks: FlightTweaks; symmetric?: boolean }
+  /** Control from part `uid` (command part or docking port): rebases the control axes (see station.ts). */
+  | { kind: 'control'; uid: number }
+  /** Move astronaut `astronautId` to a free seat in part `uid` of the same vessel. */
+  | { kind: 'crew'; uid: number; astronautId: string };
 
 export const neutralInput = (overrides: Partial<ControlInput> = {}): ControlInput => ({
   pitch: 0,
@@ -292,6 +296,8 @@ export interface VesselState {
   /** Toggle state of action groups (absent = off). Replaced, never mutated in place (splits share it). */
   groupState?: Partial<Record<ActionGroupId, boolean>>;
   eva?: { astronautId: string; walkPhase: number; walking: boolean; jetting: boolean };
+  /** Part chosen with "control from here" (the body frame is its control frame); absent = as built. */
+  controlUid?: number;
   id: string;
   name: string;
   rootUid: number;

@@ -3,6 +3,7 @@ import type { PartState, VesselCommand, VesselEvent, VesselState } from './runti
 import { rebuildTopology } from './assembly';
 import { engineModule, igniteEngine, isSolidMotor, shutdownEngine } from './engines';
 import { fireDecoupler, jettisonFairing } from './staging';
+import { controlFrom, transferCrew } from './station';
 import { applyFlightTweaks, crossfeedOpen, isDecouplerDef, isDockingPort, isExtended, lightOn, mergeTweaks, rcsEnabled, retractablePanel, validTweaks, wheelMode } from './tweaks';
 
 /**
@@ -135,6 +136,8 @@ export function validCommands(x: unknown): x is VesselCommand[] {
     if (r.kind === 'part') return uid && (PART_ACTION_IDS as readonly string[]).includes(String(r.action))
       && (r.experiment === undefined || (typeof r.experiment === 'string' && r.experiment.length <= 64));
     if (r.kind === 'tweak') return uid && validTweaks(r.tweaks, true) && (r.symmetric === undefined || typeof r.symmetric === 'boolean');
+    if (r.kind === 'control') return uid;
+    if (r.kind === 'crew') return uid && typeof r.astronautId === 'string' && r.astronautId.length > 0 && r.astronautId.length <= 64;
     return false;
   });
 }
@@ -213,7 +216,8 @@ export function applyVesselCommands(v: VesselState, cmds: readonly VesselCommand
     else if (c.kind === 'tweak') {
       const owner = all.find(x => x.cache.byUid.has(c.uid));
       if (owner && applyFlightTweaks(owner, c.uid, c.tweaks, c.symmetric).topology) rebuildTopology(owner);
-    }
+    } else if (c.kind === 'control') controlFrom(v, c.uid);
+    else if (c.kind === 'crew') transferCrew(v, c.astronautId, c.uid);
   }
   return created;
 }
