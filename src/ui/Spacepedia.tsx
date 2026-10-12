@@ -9,6 +9,7 @@ import { game, useGame, type Scene } from '../game/store';
 import { mountPlanetPreview } from './planetPreview';
 import { mountPartTurntable } from '../editor/scene/thumbnails';
 import './pedia.css';
+import { useEscape } from './nav/escape';
 import { LANDMARKS } from '../sim/terrain/landmarks';
 
 const NO_DISCOVERIES: readonly string[] = [];
@@ -56,6 +57,7 @@ function Diagram({ kind = 'orbit', e = 0.45 }: { kind?: string; e?: number }) {
   </svg>;
 }
 export default function Spacepedia() {
+  useEscape(() => game.set({ scene: returnScene }), true, 'screen');
   const discoveries = useGame(s => s.resumeWorld?.discoveries) ?? NO_DISCOVERIES;
   const preset = useGame(s => s.scalePreset);
   const bodies = useMemo(() => buildUniverse(BODY_DEFS, SCALE_PRESETS[preset]), [preset]);

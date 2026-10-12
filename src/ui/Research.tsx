@@ -1,6 +1,6 @@
 import { Button } from './components';
 import { useState } from 'react';
-import { game } from '../game/store';
+import { SceneHeader } from './nav/SceneHeader';
 import { openProgram, saveProgram } from '../game/program';
 import { TECH_NODES } from '../data/technology';
 import { PART_CATALOG } from '../data/parts';
@@ -17,11 +17,8 @@ export default function Research() {
   const available = node.requires.every(unlocked) && p.science >= node.cost && !unlocked(node.id);
   const xy = (n: typeof node) => ({ x: 24 + n.column * 188, y: 20 + n.row * 86 });
   return <main className="program-screen">
-    <header className="program-header">
-      <div><div className="label">Coastal Launch Complex · {world.mode}</div><h1>Research Lab</h1><p>Follow a question. Build the instrument. Open the next frontier.</p></div>
-      <div className="program-balance"><strong>{p.science.toFixed(1)}</strong><span className="label">available science</span></div>
-      <Button className="btn" onClick={() => { saveProgram(world); game.set({ scene: 'spaceCenter' }); }}>Space Center</Button>
-    </header>
+    <SceneHeader scene="research" kicker={`Coastal Launch Complex · ${world.mode}`} title="Research Lab" subtitle="Follow a question. Build the instrument. Open the next frontier."
+      onLeave={() => saveProgram(world)} aside={<div className="program-balance"><strong>{p.science.toFixed(1)}</strong><span className="label">available science</span></div>} />
     <nav className="program-tabs"><Button className={`btn ${!archive ? 'primary' : ''}`} onClick={() => showArchive(false)}>Technology · 25 nodes</Button><Button className={`btn ${archive ? 'primary' : ''}`} onClick={() => showArchive(true)}>Science archive · {Object.keys(p.archive).length} subjects</Button></nav>
     {archive ? <section className="program-archive panel">
       <h2>Collected knowledge</h2><p>Recorded data earns credit when transmitted or recovered. The archive shows credited science.</p>

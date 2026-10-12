@@ -9,7 +9,9 @@ import { World } from '../game/world';
 import { Universe } from '../game/universe';
 import { PART_CATALOG } from '../data/parts';
 import { saveProgram } from '../game/program';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useEscape } from './nav/escape';
+import { arrowNav, focusFirst } from './nav/arrowNav';
 import { game, DEFAULT_START_UT } from '../game/store';
 import { SCALE_PRESETS, type ScalePresetId } from '../sim/bodies/scale';
 import { MenuBackdrop } from './MenuBackdrop';
@@ -26,6 +28,15 @@ export function MainMenu() {
   const [panel, setPanel] = useState<'root' | 'new' | 'settings' | 'multiplayer' | 'load'>('root');
   const [mode, setMode] = useState<GameMode>('sandbox');
   const [scale, setScale] = useState<ScalePresetId>('standard');
+  // Esc steps back to the root list; keyboard focus follows the open panel and returns to its opener.
+  const sub = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const open = (next: typeof panel) => { opener.current = document.activeElement as HTMLElement | null; setPanel(next); };
+  useEscape(() => setPanel('root'), panel !== 'root' && panel !== 'settings', 'screen');
+  useEffect(() => {
+    if (panel !== 'root') focusFirst(sub.current);
+    else if (opener.current?.isConnected) opener.current.focus({ preventScroll: true });
+  }, [panel]);
 
   return (
     <div className="fullscreen">
@@ -36,20 +47,20 @@ export function MainMenu() {
         <p className="menu-caption">Build with purpose. Fly with curiosity.</p>
 
         {panel === 'root' && (
-          <div className="menu-actions">
-            <Button className="btn primary" onClick={() => setPanel('new')}><Icon name="rocket" />New Game<span className="menu-go"><Icon name="arrow" /></span></Button>
-            <Button className="btn" onClick={() => setPanel('load')}><Icon name="log" />Continue</Button>
-            <Button className="btn" onClick={() => setPanel('multiplayer')}><Icon name="orbit" />Multiplayer (experimental)</Button>
+          <div className="menu-actions" onKeyDown={e => arrowNav(e)}>
+            <Button className="btn primary" onClick={() => open('new')}><Icon name="rocket" />New Game<span className="menu-go"><Icon name="arrow" /></span></Button>
+            <Button className="btn" onClick={() => open('load')}><Icon name="log" />Continue</Button>
             <Button className="btn" onClick={() => game.set({ scene: 'scenarios' })}><Icon name="orbit" />Scenarios · Missions</Button>
             <Button className="btn" onClick={() => game.set({ scene: 'training' })}><Icon name="science" />Training</Button>
             <Button className="btn" onClick={() => void import('./Spacepedia').then(m => m.openPedia('menu'))}><Icon name="book" />Spacepedia</Button>
-            <Button className="btn" onClick={() => setPanel('settings')}><Icon name="settings" />Settings</Button>
+            <Button className="btn" onClick={() => open('settings')}><Icon name="settings" />Settings</Button>
+            <Button className="btn menu-wide" onClick={() => open('multiplayer')}><Icon name="orbit" />Multiplayer (experimental)</Button>
           </div>
         )}
         {panel === 'root' && <UnsupportedNotice />}
 
         {panel === 'new' && (
-          <Panel className="menu-new">
+          <div ref={sub}><Panel className="menu-new">
             <div className="label" style={{ marginBottom: 8 }}>Program mode</div>
             <div className="seg" style={{ marginBottom: 8 }}>
               {(['sandbox', 'science', 'career'] as GameMode[]).map(id => <Button key={id} className={mode === id ? 'on' : ''} onClick={() => setMode(id)}>{id[0].toUpperCase() + id.slice(1)}</Button>)}
@@ -94,11 +105,11 @@ export function MainMenu() {
                 Start
               </Button>
             </div>
-          </Panel>
+          </Panel></div>
         )}
 
-        {panel === 'load' && <SaveLoadDialog onClose={() => setPanel('root')} />}
-        {panel === 'multiplayer' && <MultiplayerSetup onBack={() => setPanel('root')} />}
+        {panel === 'load' && <div ref={sub}><SaveLoadDialog onClose={() => setPanel('root')} /></div>}
+        {panel === 'multiplayer' && <div ref={sub}><MultiplayerSetup onBack={() => setPanel('root')} /></div>}
         {panel === 'settings' && <SettingsPanel onClose={() => setPanel('root')} />}
       </div>
       <div style={{ position: 'absolute', bottom: 16, right: 20 }} className="label">v0.1 · pre-alpha</div>

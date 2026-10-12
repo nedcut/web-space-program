@@ -13,6 +13,7 @@ import { formatDate, formatDistance, formatDuration } from '../format';
 import { TrackingView, type TrackingFocus } from './trackingView';
 import { MapContextMenu } from '../map/MapContextMenu';
 import { mapContextActions, type MapActionId, type MapObject } from '../map/mapActions';
+import { useEscape } from '../nav/escape';
 import './tracking.css';
 
 const distance = (n: number) => Number.isFinite(n) ? formatDistance(n) : '∞';
@@ -52,6 +53,7 @@ export default function TrackingStation() {
   }, [world]);
 
   const exit = (scene: 'spaceCenter' | 'flight' | 'pedia' | 'flightlog') => leaveTracking(world, scene);
+  useEscape(() => exit('spaceCenter'), true, 'screen');
   const remove = (id: string) => {
     const vessel = world.vessels.get(id);
     if (vessel) world.finishFlight(vessel, 'lost');
@@ -90,7 +92,7 @@ export default function TrackingStation() {
         <label className="label"><input type="checkbox" checked={world.showLagrangePoints} onChange={e => { world.showLagrangePoints=e.target.checked; update(); }} /> Lagrange points</label>
         <Button className="btn small" onClick={() => void import('../Spacepedia').then(m => { exit('pedia'); m.openPedia('tracking'); })}>Spacepedia</Button>
         <Button className="btn small" onClick={() => exit('flightlog')}>Flight log</Button>
-        <Button className="btn small" onClick={() => exit('spaceCenter')}>Back to Space Center</Button>
+        <Button className="btn small" onClick={() => exit('spaceCenter')}>Back to Space Center <span className="kbd">Esc</span></Button>
       </header>
       <aside className="panel tracking-fleet"><div className="label">Vessels · {world.vessels.size}</div>
         {!world.vessels.size && <p className="tracking-muted">No vessels to track yet. Launch a vehicle from the Space Center to begin a mission.</p>}

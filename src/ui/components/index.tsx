@@ -1,3 +1,4 @@
+import { useEscape } from '../nav/escape';
 import { useEffect, useRef, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
 
 /** Native semantics and all data/ARIA hooks are preserved by these shared primitives. */
@@ -32,12 +33,13 @@ export function EmptyState({ title, children }: { title: string; children: React
 }
 export function Modal({ title, onClose, children, className = '' }: { title: string; onClose: () => void; children: ReactNode; className?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
+  useEscape(onClose, true, 'modal');
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     ref.current?.showModal();
     return () => { previous?.focus(); };
   }, []);
-  return <dialog ref={ref} className={`panel ui-modal ${className}`} aria-label={title} onCancel={event => { event.preventDefault(); onClose(); }}><div className="ui-modal-heading"><h2>{title}</h2><Button className="btn ghost small" onClick={onClose}>Close</Button></div>{children}</dialog>;
+  return <dialog ref={ref} className={`panel ui-modal ${className}`} aria-label={title} onCancel={event => event.preventDefault()}><div className="ui-modal-heading"><h2>{title}</h2><Button className="btn ghost small" onClick={onClose}>Close</Button></div>{children}</dialog>;
 }
 
 export function Tabs<T extends string>({ label, options, value, onChange, panelId, className = '' }: { label: string; options: readonly T[]; value: T; onChange: (value: T) => void; panelId: string; className?: string }) {
