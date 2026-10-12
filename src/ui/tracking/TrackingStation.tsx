@@ -135,7 +135,8 @@ export default function TrackingStation() {
   for (const a of world.alarmClock.alarms) {
     if (a.fired || a.disabled) continue;
     const list = alarmsByVessel.get(a.vesselId) ?? [];
-    list.push({ label: a.label, time: a.time });
+    // Automatic node alarms ring 30 s early (game/alarms.ts); the list shows the burn itself.
+    list.push(a.kind === 'node' ? { label: 'Maneuver', time: a.time + 30 } : { label: a.label, time: a.time });
     alarmsByVessel.set(a.vesselId, list);
   }
   const entries: FleetEntry[] = [];
