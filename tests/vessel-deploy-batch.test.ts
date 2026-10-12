@@ -168,4 +168,42 @@ describe('node texture uploads', () => {
     expect(nodeTexture.updateRanges).toHaveLength(0);
     releaseNodes(base, 2);
   });
+
+  it('a new renderer (the next flight) gets the whole texture, not only the ranges queued for the previous one', async () => {
+    // Regression (owner report 2026-10-12): after a first flight, the next launch drew only engines, panels and FX.
+    // The first flight's renderer had uploaded the texture, so the next flight's vessel queued ranges before its new
+    // renderer had ever uploaded it; three applied only those ranges to the fresh GPU texture, leaving slot 0 (the
+    // identity every rigid hull vertex uses) zero.
+    const { nodeTexture, patchNodeVertex, commitNodes, allocateNodes, releaseNodes, writeNode } = await import('../src/render/core/rigidNodes');
+    const shader = () => ({ uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: '' } as unknown as THREE.WebGLProgramParametersWithUniforms);
+    const first = { domElement: new EventTarget() } as unknown as THREE.WebGLRenderer;
+    patchNodeVertex(shader(), first);
+    nodeTexture.onUpdate!(nodeTexture); // the first flight's renderer uploaded the texture
+    nodeTexture.clearUpdateRanges();
+    const base = allocateNodes(1);
+    // Next flight: its vessel batches (and queues its slots) before or after the new renderer compiles its programs.
+    writeNode(base, new THREE.Matrix4().makeTranslation(1, 2, 3));
+    commitNodes(base, base);
+    const version = nodeTexture.version;
+    const next = { domElement: new EventTarget() } as unknown as THREE.WebGLRenderer;
+    patchNodeVertex(shader(), next);
+    expect(nodeTexture.updateRanges).toHaveLength(0);
+    expect(nodeTexture.version).toBeGreaterThan(version);
+    // Compiled first, batched later: still no partial ranges until a full upload has happened.
+    writeNode(base, new THREE.Matrix4().makeTranslation(4, 5, 6));
+    commitNodes(base, base);
+    expect(nodeTexture.updateRanges).toHaveLength(0);
+    nodeTexture.onUpdate!(nodeTexture);
+    writeNode(base, new THREE.Matrix4().makeTranslation(7, 8, 9));
+    commitNodes(base, base);
+    expect(nodeTexture.updateRanges).toHaveLength(1);
+    // The same renderer compiling more programs does not force further full uploads.
+    nodeTexture.clearUpdateRanges();
+    patchNodeVertex(shader(), next);
+    writeNode(base, new THREE.Matrix4().makeTranslation(1, 1, 1));
+    commitNodes(base, base);
+    expect(nodeTexture.updateRanges).toHaveLength(1);
+    nodeTexture.clearUpdateRanges();
+    releaseNodes(base, 1);
+  });
 });
