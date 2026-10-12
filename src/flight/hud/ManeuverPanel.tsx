@@ -173,7 +173,7 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
         {nodes.map((n, i) => <div key={n.id} className="mp-node">
           <button className="btn ghost small mp-node-main" onClick={() => map?.openNode(n.id)} title={`Node ${i + 1}: ${nodeDv(n).toFixed(1)} m/s at ${whenTitle(n.time, world.ut)}\nClick to edit`}>
             <span className="mp-idx">{i + 1}</span>
-            <span className="pl-num">{nodeDv(n).toFixed(1)} m/s</span>
+            <span className="pl-num">{nodeDv(n).toFixed(1)}<span className="unit">m/s</span></span>
             <span className="pl-num dim">{shortCountdown(n.time - world.ut)}</span>
           </button>
           {map && <button className="btn small pl-icon" aria-label={`Warp to node ${i + 1}`} title="Warp to node" onClick={() => map.warpToNode(n.id)}><WarpGlyph /></button>}

@@ -36,7 +36,7 @@ export function DepartureOptions({ world, options, busy, onPick, tools }: {
         + `Departure ~${dvText(w.dv)} · capture ${w.captureDv === undefined ? '—' : `~${dvText(w.captureDv)}`} · flight ${formatDuration(w.timeOfFlight)}\n`
         + 'Click to verify and create the node';
       return <button key={w.departure} className={`dep-opt${w === best ? ' best' : ''}`} disabled={busy} title={title} aria-label={title.replace(/\n/g, '. ')} onClick={() => onPick(w)}>
-        <span className="dep-name">{w.kind === 'now' ? 'Go now' : 'Window'}{w === best && <span className="pl-chip good">best</span>}</span>
+        <span className="dep-name">{w.kind === 'now' ? 'Go now' : 'Window'}{w === best && <span className="pl-star" aria-hidden>★</span>}</span>
         <span className="dep-wait pl-num">in {shortDuration(w.departure - world.ut)}</span>
         <span className="dep-dv pl-num">{dvText(cost(w))}</span>
         <span className="dep-bar"><i className="now" style={{ width: `${(w.dv / max) * 100}%` }} />{w.captureDv !== undefined && <i className="cap" style={{ width: `${(w.captureDv / max) * 100}%` }} />}</span>

@@ -113,6 +113,7 @@ export function TransferWindow({ world, target, onClose, onPlanned }: { world: W
   const h = hover !== null ? grid[hover] ?? null : null;
   // Cell outline position, as a percentage of the chart.
   const at = (k: number) => ({ left: `${(Math.floor(k / N) / N) * 100}%`, top: `${((N - 1 - (k % N)) / N) * 100}%`, width: `${100 / N}%`, height: `${100 / N}%` });
+  const centre = (k: number) => ({ left: `${((Math.floor(k / N) + 0.5) / N) * 100}%`, top: `${((N - 0.5 - (k % N)) / N) * 100}%` });
   const best = scale.best >= 0 ? grid[scale.best] : null;
   return createPortal(<div ref={dialog} tabIndex={-1} className="transfer-modal" role="dialog" aria-modal="true" aria-label="Transfer window" onKeyDown={e => {
     e.stopPropagation();
@@ -136,7 +137,7 @@ export function TransferWindow({ world, target, onClose, onPlanned }: { world: W
         <div className="pc-plot">
           <canvas ref={canvas} width={648} height={360} aria-label="Departure date versus flight time, total delta-v colour map"
             onMouseMove={e => { const k = cellAt(e); if (k !== hover) setHover(k); }} onMouseLeave={() => setHover(null)} onClick={e => plan(grid[cellAt(e)] ?? null)} />
-          {best && <span className="pc-best" style={at(scale.best)} title={`Lowest Δv: ${dvText(best.totalDv)}`} />}
+          {best && <span className="pc-best" style={centre(scale.best)} title={`Lowest Δv: ${dvText(best.totalDv)}`} />}
           {hover !== null && <span className="pc-hover" style={at(hover)} />}
         </div>
         <div className="pc-x pl-num" aria-hidden>

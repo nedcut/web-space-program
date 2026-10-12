@@ -3,6 +3,7 @@
 .pl-num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pl-chip { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10px; line-height: 15px; letter-spacing: .04em;
   background: var(--accent-soft); border: 1px solid var(--accent-border); color: var(--accent); vertical-align: 1px; }
+.pl-star { color: var(--good); margin-left: 4px; }
 .pl-chip.good { background: var(--good-soft); border-color: #8cd5ba66; color: var(--good); }
 .btn.small.pl-icon { padding: 3px 6px; min-width: 26px; display: inline-grid; place-items: center; line-height: 1; }
 .mp .dim, .map-node-menu .dim, .transfer-plot .dim { color: var(--text-dim); }
@@ -13,10 +14,11 @@
 
 /* Node list: index · Δv · countdown | warp | delete, one line each. */
 .mp .mp-node { grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px; }
-.btn.small.mp-node-main { display: grid; grid-template-columns: 18px auto minmax(0, 1fr); gap: 8px; align-items: center; text-align: left; padding: 4px 6px; min-width: 0; }
-.mp-node-main .pl-num { font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.btn.small.mp-node-main { display: grid; grid-template-columns: 16px auto minmax(0, 1fr); gap: 6px; align-items: center; text-align: left; padding: 4px 6px; min-width: 0; }
+.mp-node-main .pl-num { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
+.mp-node-main .unit { font-family: var(--sans); font-size: 10px; color: var(--text-dim); margin-left: 2px; }
 .mp-node-main .pl-num.dim { text-align: right; }
-.mp-idx { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; font-weight: 650; color: #06121e; background: #4d9dff; }
+.mp-idx { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; font-size: 10px; font-weight: 650; color: #06121e; background: #4d9dff; }
 
 /* Δv budget: stage segments above, what the plan needs below. */
 .dvb { display: grid; gap: 2px; font-size: 11px; }
@@ -39,7 +41,7 @@
 .mp-card-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .tl { display: grid; align-items: start; font-size: 11px; }
-.tl-stop { display: grid; justify-items: center; gap: 2px; min-width: 0; max-width: 110px; }
+.tl-stop { display: grid; justify-items: center; gap: 2px; min-width: 0; max-width: 110px; padding-top: 14px; }
 .tl-stop:first-child { justify-items: start; }
 .tl-stop:last-child { justify-items: end; text-align: right; }
 .tl-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-dim); }
@@ -47,8 +49,10 @@
 .tl-stop.arrive .tl-dot { background: var(--good); }
 .tl-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .tl-value { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-dim); font-size: 10.5px; }
-.tl-seg { display: grid; gap: 3px; padding-top: 4px; min-width: 0; text-align: center; }
-.tl-seg i { height: 2px; margin: 0 -2px; background: #ffffff30; }
+.tl-seg { display: grid; grid-template-rows: 14px 2px; align-items: end; min-width: 0; text-align: center; padding-top: 4px; }
+.tl-seg span { grid-row: 1; line-height: 12px; align-self: start; margin-top: -4px; }
+.tl-seg i { grid-row: 2; }
+.tl-seg i { height: 2px; margin: 0 -2px; background: #ffffff30; transform: translateY(-2px); }
 .tl-seg span { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Tool rows: a fixed label column, then buttons that share the rest. */
@@ -69,13 +73,13 @@
 .dep { display: grid; gap: 4px; font-size: 12px; }
 .dep-head { display: flex; align-items: center; gap: 4px; min-height: 26px; }
 .dep-head .label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
-.dep-opt { all: unset; box-sizing: border-box; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: 'name wait dv' 'bar bar trip'; gap: 3px 8px; align-items: center;
+.dep-opt { all: unset; box-sizing: border-box; cursor: pointer; pointer-events: auto; color: var(--text); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: 'name wait dv' 'bar bar trip'; gap: 3px 8px; align-items: center;
   padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid transparent; background: var(--surface-soft); }
 .dep-opt:hover, .dep-opt:focus-visible { border-color: var(--accent-border); background: var(--accent-soft); }
 .dep-opt.best { border-color: #8cd5ba55; }
 .dep-opt[disabled] { opacity: .5; cursor: progress; }
-.dep-name { grid-area: name; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dep-wait { grid-area: wait; color: var(--text-dim); font-size: 11px; }
+.dep-name { grid-area: name; white-space: nowrap; }
+.dep-wait { grid-area: wait; color: var(--text-dim); font-size: 11px; text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .dep-dv { grid-area: dv; font-weight: 600; text-align: right; }
 .dep-bar { grid-area: bar; display: flex; height: 4px; border-radius: 2px; overflow: hidden; background: #ffffff0d; }
 .dep-bar .now { background: var(--accent); }
@@ -98,7 +102,7 @@
 .pc-plot { position: relative; line-height: 0; }
 .transfer-plot .pc-plot canvas { width: 100%; aspect-ratio: 1.8; cursor: crosshair; display: block; }
 .pc-best, .pc-hover { position: absolute; box-sizing: border-box; pointer-events: none; }
-.pc-best { border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #000a; transform: scale(1.8); }
+.pc-best { width: 14px; height: 14px; transform: translate(-50%, -50%); border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #000a; }
 .pc-hover { outline: 2px solid #fff; outline-offset: -1px; }
 .pc-x { grid-column: 2; display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-dim); }
 .pc-legend { display: grid; grid-template-columns: auto minmax(60px, 1fr) auto auto auto auto auto; gap: 6px; align-items: center; font-size: 11px; }

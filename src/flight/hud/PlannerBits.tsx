@@ -27,7 +27,7 @@ export function DvBudget({ stages, need, extra = 0, before = 0, extraLabel = 'ca
       {extra > 0 && <i className="cap" style={{ width: pct(extra, scale) }} />}
     </div>
     <div className="dvb-text">
-      <span>{short > 0.5 ? <b>short {dvText(short)}</b> : <>need <b>{dvText(total)}</b></>}</span>
+      <span>{short > 0.5 ? <b>short {dvText(short)}</b> : <>need <b>{extra > 0 ? `${Math.round(before + need)}+${Math.round(extra)} m/s` : dvText(total)}</b></>}</span>
       <span>have <b>{dvText(have)}</b></span>
     </div>
   </div>;
