@@ -1087,3 +1087,17 @@ M-series/120 Hz and independent video review remain unverified. Scope, assumptio
 ## Context recovery follow-ups (op/ctx2, 2026-10-09)
 
 Craft previews in the load dialog now pause/retry after WebGL loss and never cache a lost-context PNG; closing the dialog cancels retries. Hub planet switching now uses the unscaled viewport contract. Map/planet portraits are far-only and crew portraits use 2D canvas, so they cannot have the adaptive near/far regression. Targeted tests: 16 passed; four new craft regressions fail with the guards removed. Chrome (RTX 3060 Ti, 1600×900): hub after two losses is pixel-identical; pad frame difference 0.019/255. Part palette recovers 24/24 images (none blank), then reloads all from IndexedDB without a thumbnail renderer. Load dialog recovers 27/27 previews after a 6.5 s loss; reopening keeps all 27. Ocean sea-pixel change across the 100,000 s clock wrap is 0.055/255 versus 0.054 for an ordinary 1/60 s step (same-frame 0, random-time 6.62). No browser errors in successful recovery/sea runs. Lint, TypeScript, build, 179 test files / 1,706 tests pass (one existing skip). Moon and Earth near-pad motion sequences (16 frames, 120 m sideways / 200→170 m AGL) show no visible swim/crawl; Mars and Mercury shots at 8 km and 200 m show no repeating regolith grid. Mercury has a separate pre-existing crater-rim cutoff, retained in a same-scene pre-tiling shader A/B; generator diagnosis/fix remains a follow-up. Full evidence and screenshot index: docs/performance/ctx2.md.
+
+## Mid-climb GPU (2026-10-13, op/climbgpu)
+
+- **Sky costs less high in the climb:** the atmosphere is no longer marched 16 steps per pixel through near-vacuum.
+  Real RTX 3060 Ti at the owner's Mac resolution (3488×2048, Medium, adaptive off, Selene, three interleaved pairs,
+  median whole-frame GPU ms): 20 km 2.47 → 2.31 (−7%), 30 km 2.35 → 2.00 (−15%), 40 km 2.31 → 1.91 (−17%). Pad,
+  10 km, orbit and map unchanged; draws and triangles identical. Same-frame image difference ≤ 2/255. Expected on the
+  Mac: ~1.5 ms off the reported 10.2 ms at 30 km if it scales like the 3060 Ti (unmeasured).
+- **The "3D scale 0.70" in the Mac snapshots is Medium's normal Retina scale, not adaptive lowering it.** F8 now shows
+  the adaptive part separately and times each GPU pass (scene, bloom, tone map, SMAA, upscale); please send an F8
+  report from the climb so we can see which pass dominates on the Mac.
+- Firefox (Windows, DPR 1, 30 km, ASAP): 3.37–3.46 → 3.30–3.34 ms frame interval; Firefox is CPU-bound there, so parity.
+  Details: docs/PERFORMANCE.md "Mid-climb GPU", DECISIONS.md.
+

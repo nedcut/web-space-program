@@ -55,6 +55,14 @@ export class RenderPipeline {
   private readonly arrayUniforms = new ArrayUniformCache();
   /** Smoothed GPU time per frame (ms) from timer queries; NaN when the browser does not expose them. */
   gpuMs = NaN;
+  /**
+   * Per-pass GPU timing for the performance overlay: while on, one elapsed query per composer pass replaces the
+   * whole-frame query (queries cannot nest) and `gpuMs` is their sum. `passMs` holds smoothed ms per pass name
+   * (`scene` includes the shadow map); empty without timer queries.
+   */
+  passTiming = false;
+  readonly passMs: Record<string, number> = {};
+  private passTimers: { name: string; timer: GpuTimer }[] = [];
   readonly stats = { calls: 0, triangles: 0, points: 0, programs: 0, textures: 0, geometries: 0 };
   // Low/adaptive resolution can round a 1px bootstrap canvas down to zero. Scene constructors
   // run PMREM baking before their first resize, so the initial default framebuffer must be valid.
@@ -90,7 +98,12 @@ export class RenderPipeline {
     r.debug.checkShaderErrors = !!import.meta.env?.DEV;
     this.gpuTimer = GpuTimer.create(r.getContext());
     // Query objects and the extension handle die with the context; without this the pending queue stays full.
-    this.unwatchContext = onContextRestored(r, () => { this.gpuTimer?.recover(); this.gpuMs = NaN; this.adaptive.hold(RESTORE_HOLD_MS); });
+    this.unwatchContext = onContextRestored(r, () => {
+      this.gpuTimer?.recover();
+      for (const p of this.passTimers) p.timer.recover();
+      this.gpuMs = NaN;
+      this.adaptive.hold(RESTORE_HOLD_MS);
+    });
     this.gpuName = rendererName(r.getContext());
     // Adaptive resolution starts where this class of GPU usually lands, then converges from measurements.
     // A Retina-reduced, upscaled start already draws about half the device pixels, so mid-range GPUs start there.
@@ -191,8 +204,48 @@ export class RenderPipeline {
     this.upscalePass.sharpness = q.upscale.sharpness;
     composer.addPass(this.upscalePass);
     this.composer = composer;
+    this.timePasses();
     this.postRatio = 0;
     this.setSize(this.width, this.height);
+  }
+
+  /** Wrap each composer pass in its own (idle unless `passTiming`) timer; closures are made once per composer. */
+  private timePasses(): void {
+    for (const p of this.passTimers) p.timer.dispose();
+    this.passTimers = [];
+    for (const key of Object.keys(this.passMs)) delete this.passMs[key];
+    if (!this.gpuTimer) return;
+    const gl = this.renderer.getContext();
+    for (const pass of this.composer.passes) {
+      const timer = GpuTimer.create(gl);
+      if (!timer) return;
+      const x = pass instanceof OnHdr ? pass.inner : pass;
+      const name = x === this.renderPass ? 'scene' : x === this.bloomPass ? 'bloom' : x instanceof ToneMapPass ? 'tonemap'
+        : x === this.smaaPass ? 'smaa' : x === this.fxaaPass ? 'fxaa' : x === this.photoEffects ? 'photo' : x === this.upscalePass ? 'upscale' : `pass${this.passTimers.length}`;
+      this.passTimers.push({ name, timer });
+      const render = pass.render.bind(pass);
+      pass.render = (renderer, writeBuffer, readBuffer, deltaTime, maskActive) => {
+        if (!this.passTiming) return render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+        timer.begin();
+        render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+        timer.end();
+      };
+    }
+  }
+
+  /** Per-pass results that completed since the last poll; their sum stands in for the frame timer. */
+  private pollPasses(): number | undefined {
+    let total: number | undefined;
+    for (const { name, timer } of this.passTimers) {
+      const ms = timer.poll();
+      if (ms === undefined) continue;
+      const prev = this.passMs[name];
+      this.passMs[name] = Number.isFinite(prev) ? prev * 0.9 + ms * 0.1 : ms;
+      if (name === 'scene') total = 0;
+    }
+    if (total === undefined) return undefined;
+    for (const { name } of this.passTimers) total += this.passMs[name] ?? 0;
+    return total;
   }
 
   setQuality(q: QualitySettings): void {
@@ -250,11 +303,16 @@ export class RenderPipeline {
 
   updateAdaptive(frameMs: number, enabled: boolean, frameRateCap = 0): void {
     this.adaptive.frameRateCap = frameRateCap;
-    const gpu = this.gpuTimer?.poll();
+    const frame = this.gpuTimer?.poll();
+    const passes = this.passTimers.length ? this.pollPasses() : undefined;
+    const gpu = frame ?? passes;
     if (gpu !== undefined) this.gpuMs = Number.isFinite(this.gpuMs) ? this.gpuMs * 0.9 + gpu * 0.1 : gpu;
     if (this.adaptive.update(frameMs, enabled, gpu, this.cpuMs)) this.setSize(this.width, this.height);
     this.frameStart = performance.now();
   }
+
+  /** Adaptive resolution multiplier (1 = no adaptive reduction; the preset's Retina scale is separate). */
+  get adaptiveScale(): number { return this.adaptive.scale; }
 
   /** Internal 3D resolution as a fraction of the preset's device resolution (per axis). */
   get effectiveRenderScale(): number { const p = this.plan; return p.internal / p.device; }
@@ -265,9 +323,10 @@ export class RenderPipeline {
     this.renderPass.camera = camera;
     this.renderer.info.reset();
     this.arrayUniforms.sync(this.renderer.info.programs);
-    this.gpuTimer?.begin();
+    const timer = this.passTiming && this.passTimers.length ? null : this.gpuTimer;
+    timer?.begin();
     this.composer.render();
-    this.gpuTimer?.end();
+    timer?.end();
     this.captureStats();
     if (Number.isFinite(this.frameStart)) this.cpuMs = performance.now() - this.frameStart;
   }
@@ -319,6 +378,7 @@ export class RenderPipeline {
   dispose(): void {
     this.unwatchContext();
     this.gpuTimer?.dispose();
+    for (const p of this.passTimers) p.timer.dispose();
     for (const pass of this.composer.passes) pass.dispose();
     this.composer.dispose();
     this.hdrTarget?.dispose();

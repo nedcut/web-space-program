@@ -102,11 +102,12 @@ async function pageMeasure({ mode, families }) {
   const scene = mode === 'editor' ? ed.scene : mode === 'map' ? f.map.scene : f.scene;
   const cam = mode === 'editor' ? ed.camera : mode === 'map' ? f.map.camera : f.cam.camera;
   const draw = mode === 'editor' ? () => renderer.render(scene, cam) : mode === 'map' ? () => p.renderMap(scene, cam) : () => p.render(scene, cam);
+  const drawRef = { fn: draw };
   // One elapsed query spans the whole batch (the pipeline's own timer is parked: queries cannot nest).
   const bench = async (n = 20) => {
-    draw(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    drawRef.fn(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
     const q = ext ? gl.createQuery() : null; if (q) gl.beginQuery(ext.TIME_ELAPSED_EXT, q);
-    const t0 = performance.now(); for (let i = 0; i < n; i++) draw();
+    const t0 = performance.now(); for (let i = 0; i < n; i++) drawRef.fn();
     if (q) gl.endQuery(ext.TIME_ELAPSED_EXT);
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
     const wall = (performance.now() - t0) / n;
@@ -136,15 +137,18 @@ async function pageMeasure({ mode, families }) {
       stars: (m) => U(m).uGC || /star|milky/i.test(m.name ?? ''), glare: (m) => U(m).uAspect && U(m).uSun,
       basic: (m) => m.isMeshBasicMaterial || m.isMeshLambertMaterial || m.isLineBasicMaterial || m.isPointsMaterial,
     };
-    const claimed = new Set(); const counts = {};
+    const claimed = new Set(); const counts = {}; const famStats = {};
+    // Shadow map redrawn every frame (a climbing, rotating vessel invalidates the shadow cache each frame).
+    let sun = null; scene.traverse((o) => { if (o.isDirectionalLight && o.castShadow) sun = o; });
+    if (sun) { const dr = draw; const forced = () => { sun.shadow.needsUpdate = true; dr(); }; const keep = drawRef.fn; drawRef.fn = forced; out.fencedShadowForced = await fenced(); fam.shadowForced = r2(out.fencedShadowForced - out.fenced); drawRef.fn = keep; }
     for (const [k, pred] of Object.entries(groups)) {
       const ms = [...mats].filter((m) => !claimed.has(m) && pred(m)); ms.forEach((m) => claimed.add(m));
-      if (!ms.length) continue; counts[k] = ms.length; ms.forEach((m) => (m.visible = false)); fam[k] = d(await fenced()); ms.forEach((m) => (m.visible = true));
+      if (!ms.length) continue; counts[k] = ms.length; ms.forEach((m) => (m.visible = false)); fam[k] = d(await fenced()); famStats[k] = [out.stats.calls - p.stats.calls, out.stats.triangles - p.stats.triangles]; ms.forEach((m) => (m.visible = true));
     }
     const rest = [...mats].filter((m) => !claimed.has(m));
     if (rest.length) { rest.forEach((m) => (m.visible = false)); fam.other = d(await fenced()); rest.forEach((m) => (m.visible = true)); out.otherNames = [...new Set(rest.map((m) => (m.name || m.type) + ':' + Object.keys(U(m)).slice(0, 4).join('/')))].slice(0, 20); }
     [...mats].forEach((m) => (m.visible = false)); fam.emptyScene = await fenced(); [...mats].forEach((m) => (m.visible = true));
-    out.families = fam; out.familyCounts = counts;
+    out.families = fam; out.familyCounts = counts; out.familyStats = famStats;
   }
   if (p) p.gpuTimer = parked;
   out.glError = gl.getError();
@@ -201,6 +205,17 @@ async function run(name, url, { setup, mode = 'flight', settle = settleMs } = {}
   finally { await context.close(); }
 }
 
+// Autopilot gravity-turn ascent ("Launch to orbit" assist) at 4× physics warp, paused once the vessel is `alt` m
+// above the terrain (mid-climb scenes: 10/20/30/40 km).
+const climbSetup = (alt) => async (page) => {
+  await page.evaluate(() => { const f = window.__flight; f.startAssist('orbit'); f.world.warp = { mode: 'physics', index: 3 }; });
+  await page.waitForFunction((alt) => {
+    const f = window.__flight, w = f.world, a = w.active;
+    const h = w.universe.surfaceInfo(a.body, a.state.position, w.ut).heightAboveTerrain;
+    if (h < alt) return false;
+    f.paused = true; return true;
+  }, alt, { timeout: 300000, polling: 50 });
+};
 const ascentSetup = async (page) => {
   await page.keyboard.press('KeyT'); await page.keyboard.press('KeyZ'); await page.keyboard.press('Space');
   await page.waitForTimeout(1500);
@@ -209,6 +224,7 @@ const ascentSetup = async (page) => {
 for (const c of cases) {
   if (c === 'pad') await run('pad', '/?flight=stock-kestrel');
   else if (c === 'ascent') await run('ascent', '/?flight=stock-meridian', { setup: ascentSetup, settle: 9000 });
+  else if (/^climb\d+$/.test(c)) await run(c, `/?flight=${args.craft ?? 'stock-kestrel'}`, { setup: climbSetup(+c.slice(5) * 1000), settle: 10000 });
   else if (c === 'orbit') await run('orbit', '/?flight=stock-kestrel&scenario=orbit');
   else if (c === 'map') await run('map', '/?flight=stock-kestrel&scenario=orbit', { mode: 'map', setup: async (page) => { await page.evaluate(() => window.__flight.toggleMap()); } });
   else if (c === 'moon') await run('moon', '/?mission=suicide-burn', { setup: async (page) => { await page.evaluate(() => { window.__flight.input.state.throttle = 0.35; }); }, settle: 4000 });
