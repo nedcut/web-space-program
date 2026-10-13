@@ -33,11 +33,22 @@ describe('placeWindow', () => {
       others.push(p);
     }
   });
-  it('cascades instead of stacking exactly when the screen is full', () => {
+  it('uses space under the HUD margins rather than covering a window when the free area is full', () => {
+    // 1440×900: three tall windows do not fit beside each other in the free area.
+    const v = { w: 1440, h: 900 }, tall = { w: 264, h: 366 };
+    const others: Rect[] = [];
+    for (const a of [{ x: 720, y: 450 }, { x: 720, y: 330 }, { x: 720, y: 520 }]) {
+      const p = { ...placeWindow(a, tall, v, insets, others), ...tall };
+      for (const o of others) expect(overlap(p, o)).toBe(false);
+      expect(inside(p, v)).toBe(true);
+      others.push(p);
+    }
+  });
+  it('covers as little as possible when the screen is full', () => {
     const small = { w: 600, h: 400 };
-    const others = [{ x: 8, y: 8, w: 584, h: 384 }];
+    const others = [{ x: 8, y: 8, w: 400, h: 384 }];
     const p = placeWindow({ x: 300, y: 200 }, { w: 300, h: 200 }, small, { top: 0, right: 0, bottom: 0, left: 0 }, others);
-    expect(p).not.toEqual({ x: 8, y: 8 });
+    expect(p.x).toBeGreaterThanOrEqual(small.w - 300 - SPACING - 16);
     expect(inside({ ...p, w: 300, h: 200 }, small)).toBe(true);
   });
 });

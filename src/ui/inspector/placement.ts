@@ -42,8 +42,8 @@ function clampFree(pos: Point, size: Size, view: Size, m: Insets): Point {
 
 /**
  * Position for a newly opened window. Beside the part on the side with room (right first), then the other side;
- * when those collide with `others` (windows already open), stacked below or above them. A part off screen
- * (`anchor` null) opens the window near the centre.
+ * when those collide with `others` (windows already open), stacked below or above them; failing that, wherever on
+ * screen it covers the least of other windows and the HUD. A part off screen (`anchor` null) opens it near the centre.
  */
 export function placeWindow(anchor: Point | null, size: Size, view: Size, insets: Insets, others: readonly Rect[]): Point {
   const a = anchor ?? { x: view.w / 2, y: view.h / 2 };
@@ -62,10 +62,27 @@ export function placeWindow(anchor: Point | null, size: Size, view: Size, insets
     const p = clampFree(c, size, view, insets);
     if (free(p)) return p;
   }
-  // Nowhere free: cascade from the preferred spot so no window hides another completely.
-  const base = clampFree(sides[0], size, view, insets);
-  return clampToView({ x: base.x + 24 * others.length, y: base.y + 24 * others.length }, size, view);
+  // The free area is full: scan the screen for the spot that covers the least of other windows, then of the HUD,
+  // then is nearest the part. Runs once per opened window.
+  const hudFree = { x: insets.left, y: insets.top, w: view.w - insets.left - insets.right, h: view.h - insets.top - insets.bottom };
+  let best = clampFree(sides[0], size, view, insets), bestScore = Infinity;
+  const step = 16;
+  for (let y = SPACING; y <= view.h - size.h - SPACING; y += step) {
+    for (let x = SPACING; x <= view.w - size.w - SPACING; x += step) {
+      const r = { x, y, ...size };
+      let cover = 0;
+      for (const o of others) cover += area(r, { x: o.x - SPACING, y: o.y - SPACING, w: o.w + 2 * SPACING, h: o.h + 2 * SPACING });
+      const hud = size.w * size.h - area(r, hudFree);
+      const dx = Math.max(x - a.x, 0, a.x - x - size.w), dy = Math.max(y - a.y, 0, a.y - y - size.h);
+      const score = 8 * cover + hud + 40 * Math.hypot(dx, dy);
+      if (score < bestScore) { bestScore = score; best = { x, y }; }
+    }
+  }
+  return best;
 }
+
+const area = (a: Rect, b: Rect) =>
+  Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
 
 /** One window's placement. `moved` once the player dragged it. */
 export interface Placement { x: number; y: number; w: number; h: number; moved: boolean }
