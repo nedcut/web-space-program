@@ -1,141 +1,226 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Button, Slider, Toggle } from '../components';
+import { lazy, memo, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Button, Slider } from '../components';
 import { Icon } from '../components/Icon';
 import { LIGHT_COLORS, type TweakDescriptor } from '../../sim/vessel/tweaks';
 import type { PartTweaks, RcsAxes, WheelMode } from '../../sim/vessel/types';
 import { frameProfiler as prof } from '../../util/frameProfiler';
+import { useEscape } from '../nav/escape';
+import { createPlacements, leader, type Insets, type Point } from './placement';
 import './inspector.css';
 
+export type { Insets } from './placement';
+
 /**
- * Floating part inspector panels shared by the editor and flight. Panels are anchored to a part's screen position
- * (supplied per frame by the 3D view) with a thin tether; positions update in requestAnimationFrame via refs, never
- * through React state. Headers can be dragged to offset a panel from its part.
+ * Floating part windows shared by the editor and flight. A window is placed once beside its part when it opens and
+ * then stays where it is (or where the player drags it); a leader line drawn per frame links it to the part.
+ * Placement is in `placement.ts`; positions are written to the DOM directly, never through React state.
  */
 
 export interface InspectorPanelProps { uid: number; pinned: boolean }
-/** `partId` adds a Spacepedia button that opens the part's article over the scene. */
-export interface InspectorContent { title: string; subtitle?: string; body: ReactNode; partId?: string }
+/**
+ * `partId` adds a Spacepedia button that opens the part's article over the scene. `subtitle` is the header tooltip,
+ * `badge` a short tag after the name (symmetry count). `sig` (optional) summarises everything the body shows: while it
+ * is unchanged a re-render of the layer skips the body.
+ */
+export interface InspectorContent { title: string; subtitle?: string; badge?: string; body: ReactNode; partId?: string; sig?: string }
 
 const PediaQuickLook = lazy(() => import('../Spacepedia').then(m => ({ default: m.PediaQuickLook })));
 
-export interface Insets { top: number; right: number; bottom: number; left: number }
+/** Body re-renders only when its signature changes (or when it has none). */
+const Body = memo(({ children }: { sig?: string; children: ReactNode }) => <>{children}</>, (a, b) => a.sig !== undefined && a.sig === b.sig);
 
-export function InspectorLayer({ panels, anchor, content, onClose, onPin, insets = { top: 8, right: 8, bottom: 8, left: 8 } }: {
+/** Leader-line ring radius around the part (px). */
+const RING = 6;
+
+export function InspectorLayer({ panels, anchor, anchorInto, content, onClose, onPin, insets = { top: 8, right: 8, bottom: 8, left: 8 }, closeOnEscape = false }: {
   panels: InspectorPanelProps[];
   /** Part centre in CSS px relative to the layer, or null when off-screen. */
-  anchor: (uid: number) => { x: number; y: number } | null;
+  anchor: (uid: number) => Point | null;
+  /** Allocation-free variant of `anchor` for the per-frame leader lines (falls back to `anchor`). */
+  anchorInto?: (uid: number, out: Point) => boolean;
   content: (uid: number) => InspectorContent | null;
   onClose: (uid: number) => void;
   onPin: (uid: number) => void;
-  /** Screen margins kept clear (fixed toolbars and side panels). */
+  /** Screen margins kept clear when a window opens (fixed toolbars and side panels). */
   insets?: Insets;
+  /** Esc closes the topmost window. */
+  closeOnEscape?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
   const [pedia, setPedia] = useState<string | null>(null);
-  const offsets = useRef(new Map<number, { x: number; y: number }>());
+  const [book] = useState(createPlacements);
+  const els = useRef(new Map<number, HTMLElement>());
+  // Stacking order: the most recently opened or touched window is on top (and closes first on Esc).
+  const order = useRef(new Map<number, number>());
+  const top = useRef(0);
+  /** Bumped whenever a window moves, so the leader lines are redrawn even if no part moved. */
+  const moved = useRef(0);
   const anchorRef = useRef(anchor);
   anchorRef.current = anchor;
+  const anchorIntoRef = useRef(anchorInto);
+  anchorIntoRef.current = anchorInto;
   const insetsRef = useRef(insets);
   insetsRef.current = insets;
-  const hasPanels = panels.length > 0;
+  const items = panels.flatMap(p => { const c = content(p.uid); return c ? [{ ...p, c }] : []; });
+
+  const view = () => ({ w: host.current?.clientWidth ?? 0, h: host.current?.clientHeight ?? 0 });
+  const write = (uid: number) => {
+    const el = els.current.get(uid), p = book.get(uid);
+    if (!el || !p) return;
+    el.style.transform = `translate(${p.x}px, ${p.y}px)`;
+    moved.current++;
+  };
+  const raise = (uid: number) => {
+    if (order.current.get(uid) === top.current && top.current) return;
+    order.current.set(uid, ++top.current);
+    const el = els.current.get(uid);
+    if (el) el.style.zIndex = String(top.current);
+    moved.current++;
+  };
+  const topmost = () => {
+    let best: number | null = null, z = -1;
+    for (const { uid } of panels) { const o = order.current.get(uid) ?? 0; if (o > z) { z = o; best = uid; } }
+    return best;
+  };
+  useEscape(() => { const uid = topmost(); if (uid !== null) onClose(uid); }, closeOnEscape && items.length > 0, 'panel');
+
+  // Size changes of a window (content, wrapping) and of the layer (viewport) keep windows on screen. Nothing per frame.
+  const observer = useRef<ResizeObserver | null>(null);
   useEffect(() => {
-    if (!hasPanels) { svg.current?.firstElementChild?.setAttribute('d', ''); return; }
-    let raf = 0;
+    if (typeof ResizeObserver === 'undefined' || !host.current) return;
+    const ro = new ResizeObserver(entries => {
+      const v = view();
+      for (const e of entries) {
+        const el = e.target as HTMLElement;
+        if (el === host.current) { for (const uid of book.fit(v)) write(uid); continue; }
+        const uid = Number(el.dataset.uid);
+        const p = book.get(uid);
+        if (p && (p.w !== el.offsetWidth || p.h !== el.offsetHeight)) { book.resize(uid, { w: el.offsetWidth, h: el.offsetHeight }, v); write(uid); }
+      }
+    });
+    ro.observe(host.current);
+    observer.current = ro;
+    return () => { ro.disconnect(); observer.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `write`/`view` only read refs and `book`
+  }, [book]);
+
+  // Place windows that just opened (once, before paint); forget closed ones.
+  const key = items.map(p => p.uid).join(',');
+  useLayoutEffect(() => {
+    const open = new Set(items.map(p => p.uid));
+    book.retain(open);
+    for (const uid of order.current.keys()) if (!open.has(uid)) order.current.delete(uid);
+    const v = view();
+    for (const uid of open) {
+      const el = els.current.get(uid);
+      if (!el || book.has(uid)) continue;
+      book.open(uid, anchorRef.current(uid), { w: el.offsetWidth, h: el.offsetHeight }, v, insetsRef.current);
+      write(uid);
+      raise(uid);
+      observer.current?.observe(el);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` lists the open windows
+  }, [key, book]);
+
+  // Leader lines: part ring + line to the nearest window edge; the topmost window's line is brighter.
+  const hasPanels = items.length > 0;
+  useEffect(() => {
+    const lines = svg.current;
+    const [base, hot] = lines ? [...lines.children] as SVGPathElement[] : [];
+    if (!hasPanels || !base || !hot) { base?.setAttribute('d', ''); hot?.setAttribute('d', ''); return; }
+    let raf = 0, last = new Float64Array(16), lastMoved = -1;
+    const pt = { x: 0, y: 0 };
     const loop = () => {
       raf = requestAnimationFrame(loop);
-      const root = host.current, lines = svg.current;
-      if (!root || !lines) return;
       const t0 = prof.now();
-      const W = root.clientWidth, H = root.clientHeight;
-      const m = insetsRef.current;
-      const els = [...root.querySelectorAll<HTMLElement>('.insp-panel')];
-      const placed: { x: number; y: number; w: number; h: number }[] = [];
-      const overlaps = (r: { x: number; y: number; w: number; h: number }) => placed.find(q => r.x < q.x + q.w + 6 && q.x < r.x + r.w + 6 && r.y < q.y + q.h + 6 && q.y < r.y + r.h + 6);
-      const clampX = (x: number, w: number) => Math.max(m.left, Math.min(W - w - m.right, x));
-      const clampY = (y: number, h: number) => Math.max(m.top, Math.min(H - h - m.bottom, y));
-      let path = '';
-      els.forEach((el) => {
-        const uid = Number(el.dataset.uid);
-        const a = anchorRef.current(uid);
-        const manual = offsets.current.get(uid);
-        const off = manual ?? { x: 46, y: -36 };
-        const w = el.offsetWidth, h = el.offsetHeight;
-        const base = a ?? { x: Number(el.dataset.lx ?? W / 2), y: Number(el.dataset.ly ?? H / 2) };
-        if (a) { el.dataset.lx = String(a.x); el.dataset.ly = String(a.y); }
-        let x = base.x + off.x, y = base.y + off.y - h / 2;
-        // Flip to the left of the part near the right edge; keep inside the free screen area.
-        if (x + w > W - m.right && off.x > 0) x = base.x - off.x - w;
-        x = clampX(x, w); y = clampY(y, h);
-        if (!manual) {
-          // Avoid earlier panels: try the other side of the part, then stack below/above the blocker.
-          const other = { x: clampX(base.x - off.x - w, w), y, w, h };
-          if (overlaps({ x, y, w, h }) && !overlaps(other)) x = other.x;
-          for (let guard = 0; guard < 8; guard++) {
-            const hit = overlaps({ x, y, w, h });
-            if (!hit) break;
-            const below = hit.y + hit.h + 8;
-            y = below + h <= H - m.bottom ? below : clampY(hit.y - h - 8, h);
-            if (y === clampY(hit.y - h - 8, h) && overlaps({ x, y, w, h })) { x = clampX(hit.x + hit.w + 8, w); y = clampY(base.y + off.y - h / 2, h); }
+      const uids = order.current;
+      if (last.length < uids.size * 2) last = new Float64Array(uids.size * 4);
+      // Redraw only when a part moved by a quarter pixel or a window moved.
+      let i = 0, changed = lastMoved !== moved.current;
+      for (const uid of uids.keys()) {
+        const into = anchorIntoRef.current;
+        let ok: boolean;
+        if (into) ok = into(uid, pt);
+        else { const a = anchorRef.current(uid); ok = !!a; if (a) { pt.x = a.x; pt.y = a.y; } }
+        const x = ok ? pt.x : NaN, y = ok ? pt.y : NaN;
+        if (!(Math.abs(x - last[i]) < 0.25 && Math.abs(y - last[i + 1]) < 0.25) && !(Number.isNaN(x) && Number.isNaN(last[i]))) { changed = true; last[i] = x; last[i + 1] = y; }
+        const el = els.current.get(uid);
+        if (el && el.classList.contains('lost') === ok) el.classList.toggle('lost', !ok);
+        i += 2;
+      }
+      if (changed) {
+        lastMoved = moved.current;
+        let d = '', h = '';
+        const hi = topmost();
+        i = 0;
+        for (const uid of uids.keys()) {
+          const x = last[i], y = last[i + 1], p = book.get(uid);
+          i += 2;
+          if (Number.isNaN(x) || !p) continue;
+          const e = leader({ x, y }, p);
+          let seg = `M${(x + RING).toFixed(1)} ${y.toFixed(1)}a${RING} ${RING} 0 1 0 ${-2 * RING} 0a${RING} ${RING} 0 1 0 ${2 * RING} 0`;
+          if (e) {
+            const len = Math.hypot(e.x - x, e.y - y);
+            if (len > RING + 2) seg += `M${(x + ((e.x - x) * RING) / len).toFixed(1)} ${(y + ((e.y - y) * RING) / len).toFixed(1)}L${e.x.toFixed(1)} ${e.y.toFixed(1)}`;
           }
+          if (uid === hi) h += seg; else d += seg;
         }
-        placed.push({ x, y, w, h });
-        el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
-        el.classList.toggle('lost', !a);
-        if (a) {
-          const ex = Math.max(x, Math.min(x + w, a.x)), ey = Math.max(y, Math.min(y + h, a.y));
-          path += `M${a.x.toFixed(1)} ${a.y.toFixed(1)}L${ex.toFixed(1)} ${ey.toFixed(1)}`;
-          path += `M${(a.x + 3).toFixed(1)} ${a.y.toFixed(1)}a3 3 0 1 0 -6 0a3 3 0 1 0 6 0`;
-        }
-      });
-      const p = lines.firstElementChild as SVGPathElement | null;
-      if (p && p.getAttribute('d') !== path) p.setAttribute('d', path);
+        base.setAttribute('d', d);
+        hot.setAttribute('d', h);
+      }
       prof.add('hud', t0);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [hasPanels]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs only
+  }, [hasPanels, book]);
 
   const drag = (uid: number) => (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('button')) return;
-    const start = { x: e.clientX, y: e.clientY };
-    const panel = (e.currentTarget as HTMLElement).closest('.insp-panel') as HTMLElement;
-    const rect = panel.getBoundingClientRect(), root = host.current!.getBoundingClientRect();
-    const lx = Number(panel.dataset.lx ?? 0), ly = Number(panel.dataset.ly ?? 0);
-    // Start from the panel's current placement so dragging does not jump.
-    const o0 = offsets.current.get(uid) ?? { x: rect.left - root.left - lx, y: rect.top - root.top + rect.height / 2 - ly };
-    const move = (ev: PointerEvent) => offsets.current.set(uid, { x: o0.x + ev.clientX - start.x, y: o0.y + ev.clientY - start.y });
-    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
+    if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
+    const p = book.get(uid);
+    if (!p) return;
+    const head = e.currentTarget as HTMLElement;
+    const start = { x: e.clientX, y: e.clientY }, from = { x: p.x, y: p.y };
+    head.setPointerCapture?.(e.pointerId);
+    const move = (ev: PointerEvent) => { book.drag(uid, { x: from.x + ev.clientX - start.x, y: from.y + ev.clientY - start.y }, view()); write(uid); };
+    const up = () => { head.removeEventListener('pointermove', move); head.removeEventListener('pointerup', up); head.removeEventListener('pointercancel', up); };
+    head.addEventListener('pointermove', move);
+    head.addEventListener('pointerup', up);
+    head.addEventListener('pointercancel', up);
   };
 
   return (
     <div ref={host} className="insp-layer">
-      <svg ref={svg} className="insp-tethers" aria-hidden="true"><path /></svg>
-      {panels.map(({ uid, pinned }) => {
-        const c = content(uid);
-        if (!c) return null;
+      <svg ref={svg} className="insp-tethers" aria-hidden="true"><path /><path className="hot" /></svg>
+      {items.map(({ uid, pinned, c }) => {
         return (
-          <section key={uid} data-uid={uid} className={`insp-panel panel ${pinned ? 'pinned' : ''}`} aria-label={`${c.title} details`} onContextMenu={e => e.preventDefault()}>
-            <header className="insp-head" onPointerDown={drag(uid)}>
-              <div className="insp-title">
-                <strong>{c.title}</strong>
-                {c.subtitle && <span>{c.subtitle}</span>}
-              </div>
+          <section key={uid} data-uid={uid} ref={el => { if (el) els.current.set(uid, el); else els.current.delete(uid); }}
+            className={`insp-panel panel ${pinned ? 'pinned' : ''}`} aria-label={`${c.title} details`}
+            onContextMenu={e => e.preventDefault()} onPointerDownCapture={() => raise(uid)} onFocusCapture={() => raise(uid)}>
+            <header className="insp-head" onPointerDown={drag(uid)} title={c.subtitle}>
+              <strong className="insp-title">{c.title}</strong>
+              {c.badge && <span className="insp-badge">{c.badge}</span>}
               {c.partId && <Button className="insp-icon" title="Spacepedia article" aria-label={`${c.title} in Spacepedia`} onClick={() => setPedia(c.partId!)}><Icon name="book" size={14} /></Button>}
-              <Button className={`insp-icon ${pinned ? 'on' : ''}`} title={pinned ? 'Unpin (closes with the next selection)' : 'Pin: keep open while inspecting other parts'} aria-pressed={pinned} onClick={() => onPin(uid)}>
+              <Button className={`insp-icon ${pinned ? 'on' : ''}`} title={pinned ? 'Pinned: stays open while you inspect other parts' : 'Pin: keep open while inspecting other parts'} aria-label="Pin" aria-pressed={pinned} onClick={() => onPin(uid)}>
                 <PinGlyph />
               </Button>
-              <Button className="insp-icon" title="Close (Esc)" aria-label="Close" onClick={() => onClose(uid)}><Icon name="close" size={14} /></Button>
+              <Button className="insp-icon" title={closeOnEscape ? 'Close (Esc)' : 'Close'} aria-label="Close" onClick={() => onClose(uid)}><Icon name="close" size={14} /></Button>
             </header>
-            <div className="insp-body">{c.body}</div>
+            <div className="insp-body"><Body sig={c.sig}>{c.body}</Body></div>
           </section>
         );
       })}
       {pedia && <Suspense fallback={null}><PediaQuickLook partId={pedia} onClose={() => setPedia(null)} /></Suspense>}
     </div>
   );
+}
+
+/** A state toggle as a button: lit and labelled On while on. */
+export function OnOff({ label, on, disabled, onClick, onText = 'On', offText = 'Off' }: { label: string; on: boolean; disabled?: boolean; onClick: () => void; onText?: string; offText?: string }) {
+  return <button type="button" className={`insp-onoff ${on ? 'on' : ''}`} aria-label={label} aria-pressed={on} disabled={disabled} onClick={onClick}>
+    <i aria-hidden="true" />{on ? onText : offText}
+  </button>;
 }
 
 function PinGlyph() {
@@ -150,14 +235,21 @@ export function StatRows({ rows }: { rows: [string, ReactNode, ('good' | 'warn' 
   return <dl className="insp-stats">{rows.map(([k, v, tone]) => <div key={k}><dt>{k}</dt><dd className={`mono ${tone ?? ''}`}>{v}</dd></div>)}</dl>;
 }
 
-export function Bar({ label, value, max, color, right, tone }: { label: string; value: number; max: number; color: string; right?: string; tone?: 'warn' | 'bad' }) {
+/** One-line gauge: label, bar, value. `title` carries the full reading. */
+export function Bar({ label, value, max, color, right, tone, title }: { label: string; value: number; max: number; color: string; right?: string; tone?: 'warn' | 'bad'; title?: string }) {
   const f = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
   return (
-    <div className="insp-bar">
-      <div className="insp-bar-label"><span>{label}</span><span className={`mono ${tone ?? ''}`}>{right ?? `${value.toFixed(0)} / ${max.toFixed(0)}`}</span></div>
+    <div className="insp-bar" title={title ?? `${label}: ${value.toFixed(0)} / ${max.toFixed(0)}`}>
+      <span className="insp-bar-label">{label}</span>
       <div className="insp-bar-track"><div style={{ width: `${f * 100}%`, background: color }} /></div>
+      <span className={`insp-bar-value mono ${tone ?? ''}`}>{right ?? value.toFixed(0)}</span>
     </div>
   );
+}
+
+/** Small state tags (engine flamed out, parachute armed, docked…). */
+export function Chips({ chips }: { chips: { text: string; tone?: 'good' | 'warn' | 'bad'; title?: string }[] }) {
+  return chips.length ? <div className="insp-chips">{chips.map(c => <span key={c.text} className={`insp-tag ${c.tone ?? ''}`} title={c.title}>{c.text}</span>)}</div> : null;
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -180,7 +272,7 @@ export function TweakControls({ descriptors, tweaks, onChange, disabled }: { des
       }
       case 'toggle': {
         const v = (t[d.key] as boolean | undefined) ?? d.fallback;
-        return <label key={d.key} className="insp-row"><span>{d.label}</span><Toggle aria-label={d.label} checked={v} disabled={disabled} onChange={e => onChange({ [d.key]: e.target.checked })} /></label>;
+        return <div key={d.key} className="insp-row"><span>{d.label}</span><OnOff label={d.label} on={v} disabled={disabled} onClick={() => onChange({ [d.key]: !v })} /></div>;
       }
       case 'select':
         return <label key={d.key} className="insp-row"><span>{d.label}</span>
