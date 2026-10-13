@@ -885,3 +885,33 @@ Owner decisions 2026-10-13 (both recommended options).
   shadow map, bloom, tone map, SMAA/FXAA, upscale) instead of the frame query; `gpuMs` is their sum and adaptive
   keeps working. The report gains a `GPU passes (ms)` line so a Mac snapshot shows where its time goes. Off when
   the overlay is closed; no per-frame allocation (closures are made once per composer).
+
+## Zen/Firefox ascent at 120 Hz (2026-10-13, op/zenascent)
+- **Why Firefox drew ~2× the calls:** Firefox exposes no `WEBGL_multi_draw` (Windows Firefox 143 lists 14 WebGL 2
+  extensions, Chrome 31), so three's batched-mesh fallback issued one draw (plus a `_gl_DrawID` uniform) per terrain
+  and ocean chunk: 64 of the 136 draws at 10 km, 146 extra on the pad. The rest of the scene is identical.
+- **Chunk slot from `gl_VertexID`.** ChunkBatch indices are absolute (slot k = vertices [kV, (k+1)V)), so the chunk
+  shaders read the slot as `gl_VertexID / CHUNK_SLOT_VERTS` (define set by ChunkBatch before the first compile)
+  instead of three's per-draw indirect lookup. Adjacent visible slots merge into one draw range; the per-frame
+  indirect-texture upload is gone (1×1 placeholder, three binds one anyway). Rendering unchanged (Firefox and
+  Chrome screenshots, same triangles).
+- **Compaction keeps live slots contiguous:** each frame up to 4 of the highest live slots move into the lowest free
+  ones (GPU `copyBufferSubData` within the buffer + the 16-float matrix). LOD churn otherwise left 9 terrain ranges
+  for 40 chunks. Result: terrain and ocean are one draw each in Firefox, as in Chrome.
+- **Triangles: no bug.** At the same canvas and altitude Firefox and Chrome select the same chunks (733,253 tris
+  at 10 km, 1600×915). The owner's 1.42 M (Zen) vs 963 k (Chrome) come from canvas height (LOD follows device
+  pixels) and altitude (Chrome snapshot at 20–40 km; 10 km is 1.21 M at 3488×2048).
+- **Adaptive resolution targets the display rate when uncapped.** It used a fixed 60 fps budget when uncapped, so
+  a 120 Hz stream alternating 8.3/16.7 ms (~100 fps) was "within budget" and never reacted — in any browser,
+  not because GPU time is n/a in Firefox. Now: the budget is the display interval, estimated from the 20th
+  percentile of each window's intervals (a lone short catch-up interval no longer tightens it).
+  - Chasing >60 fps never lowers the scale below ×0.75 (`highRateMin`); below 60 fps the full range to ×0.5 applies.
+  - Above 60 fps the GPU timer does not decide over/headroom (the Mac's Chrome read 10.2 ms per frame while
+    holding 120 fps — Apple timer queries overlap pipelined frames); it still sizes steps and detects CPU-bound frames.
+  - After 8 windows over budget at the ×0.75 floor, a 3-window trial at ×1.00 compares steady mean intervals: no
+    more than 7% worse → keep ×1.00 and pause reductions (20 s doubling); else back to the floor, next trial after
+    30 s doubling to 10 min. Reason: a loading transient during the reduction made the episode check believe it
+    helped, stranding ×0.75 where resolution did not matter (seen in Firefox).
+  - Owner-visible: on a 120 Hz Mac that misses vsync on GPU load, the 3D resolution now drops (×0.9…×0.75) to hold
+    120; if the misses are not pixel-bound (compositor), it tries a reduction, sees no gain and returns to ×1.00,
+    with brief retries spaced 20 → 160 s apart. A frame cap of 60 keeps the old behaviour.

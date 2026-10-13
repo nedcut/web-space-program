@@ -2272,3 +2272,52 @@ Windows Firefox (1600×915 DPR 1, ASAP, 30 km paused, three pairs): mean frame i
 costs are spread out: post chain ~0.76 ms (SMAA the largest), terrain + ocean ~0.6 ms for ~740k triangles, clouds
 ~0.2 ms. Next step: an F8 report from the Mac with the new per-pass line to see whether Apple is fragment- or
 geometry-bound there before touching terrain LOD.
+
+# Zen/Firefox ascent at 120 Hz — 2026-10-13 (`op/zenascent`)
+
+Owner's F8 (Zen, M4 Pro, Medium, adaptive on, 3568×2112, ascent): 100.7 fps, p50 8.5 / p95 17.0 ms (frames alternate
+8.3/16.7 ms), CPU 1.95 ms, GPU n/a, 219 draws, 1.42 M tris, adaptive ×1.00. Mac Chrome mid-climb: 93 draws, 963 k tris.
+
+## Findings
+
+- **Draws:** Windows Firefox 143 exposes 14 WebGL 2 extensions, Chrome 155 31, incl. `WEBGL_multi_draw`. Without it
+  three draws a ChunkBatch as one call per chunk. Per-object attribution (one frame, `renderBufferDirect` hook,
+  `C:\wsp-tools\drv-ff\zen\probe.js`) at 10 km, 1600×915: terrain 40 + ocean 24 calls; everything else equals Chrome.
+- **Triangles:** same canvas + altitude → same selection in both browsers (733,253 at 10 km, 2,043,998 on the pad,
+  Firefox 1600×915). The owner's difference is canvas height and altitude, not a browser path.
+- **Adaptive:** uncapped used a fixed 60 fps budget, so ~100 fps on a 120 Hz display was never over budget.
+
+## Change
+
+Chunk shaders take the slot from `gl_VertexID` → adjacent slots merge into one draw range; up to 4 slot moves per
+frame keep live slots contiguous; no indirect-texture upload per frame. Adaptive budget = display interval when
+uncapped, ×0.75 floor while ≥60 fps holds, GPU timer ignored for over/headroom above 60 fps, full-resolution trial at
+the floor (DECISIONS.md).
+
+## Before / after
+
+Windows Firefox 143, ASAP (`layout.frame_rate = 0`), 1600×915 DPR 1, Medium, adaptive off, Selene, assist climb
+paused at each altitude, 8 s window, 3 interleaved runs, medians (`~/.t3/projects/wsp-traces/zenascent/ab-ff.log`):
+
+| Scene | Draws | Tris | Frame p50 (ms) | Frame p95 (ms) | fps |
+|---|---:|---:|---:|---:|---:|
+| Pad | 248 → **102** | 2,043,998 | 5.44 → 4.20 | 8.60 → 6.52 | 173 → 220 |
+| 10 km | 136 → **74** | 733,253 | 4.72 → 3.64 | 6.18 → 5.14 | 209 → 261 |
+| 20 km | 121 → **59** | 733,073 | 4.72 → 4.14 | 5.98 → 5.54 | 209 → 235 |
+
+Firefox ASAP intervals are noisy run to run (±20%); the draw counts are exact. Chrome at the same size draws 97 / 74
+(pad / 10 km) before and after: Firefox now matches it.
+
+Chrome 155 CDP, 3488×2048 (the Mac's canvas), fenced GPU ms, 3 interleaved pairs, medians
+(`ab-cdp.log`, `C:\wsp-tools\bench\zenascent\zen-ab-*.json`): pad 3.027 → 2.938, 10 km 2.606 → 2.568, 20 km 2.287 →
+2.251 (fewer multi-draw entries, no indirect upload). Draws/tris unchanged.
+
+Adaptive, Firefox with `layout.frame_rate = 120` (on this PC Windows' timer caps it at ~64 Hz), 2400×1315, adaptive
+on, pad, GPU load = composer rendered k× per frame, 70 s:
+- k = 1 (frames not pixel-bound): 1 → 0.85 → 0.75, no gain → back to ×1.00; retries 40 s later, then further apart.
+- k = 8: branch settles at ×0.6, 62 fps, no oscillation after the first 2 s. Main: ×0.5, ~51 fps. (An intermediate
+  branch build that trialled ×1.00 from ×0.5 oscillated; the trial is now only from the ×0.75 high-rate floor.)
+
+**Only the owner's Mac can confirm:** whether Zen's 8.3/16.7 ms alternation is GPU (pixel-bound → adaptive now holds
+120 at ×0.75–0.9) or the compositor (→ adaptive tries, sees no gain and returns to ×1.00), and how much the ~120 fewer
+draw calls save on Firefox's macOS GL path. No true 120 Hz vsync is available on the test PC.
