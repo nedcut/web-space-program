@@ -9,7 +9,7 @@ import { neutralInput } from '../../src/sim/vessel';
 import { propagate } from '../../src/sim/orbit';
 import type { CraftDef } from '../../src/sim/vessel/types';
 import {
-  ascentGuidance, coastUntil, executeNode, landingController, localFrame, planCircularization, planCourseCorrection,
+  ascentGuidance, coastUntil, planFreeReturn, executeNode, landingController, localFrame, planCircularization, planCourseCorrection,
   planPeriapsisChange, planTransferToBody, propulsion, runAutopilot, type Autopilot,
 } from '../../src/game/autopilot';
 import { length, normalize, scale } from '../../src/util/vec3';
@@ -167,6 +167,24 @@ export function toMoon(w: World, biomes: Set<string>, minStage = 0, periapsis = 
   coastUntil(w, (mcc ?? plan).encounterTime + 600, { stopOnSoi: true });
   doScience(w); trackBiome(w, biomes);
   return w.active!.body === 'moon' ? null : 'missed the Moon';
+}
+
+/** Free-return Moon flyby: the Moon swings the craft back into Earth's atmosphere without a return burn. */
+export function freeReturnFlyby(w: World, biomes: Set<string>, minStage = 0): string | null {
+  const t = Date.now();
+  const plan = planFreeReturn(w, 'moon', {});
+  if (process.env.CAREER_DEBUG) console.log('free return plan', plan && { pe: plan.periapsisAltitude, perigee: plan.returnPerigee, dv: plan.dv }, Date.now() - t, 'ms');
+  if (!plan) return 'no free return found';
+  const tli = executeNode(w, plan.node, { minStage });
+  if (!runAutopilot(w, tli, { maxTime: 2e6 })) return `TLI: ${tli.error}`;
+  const mcc = planCourseCorrection(w, 'moon', plan.periapsisAltitude, w.ut + 1800);
+  if (mcc) { const m = executeNode(w, mcc.node, { minStage }); runAutopilot(w, m, { maxTime: 1e5 }); }
+  coastUntil(w, (mcc ?? plan).encounterTime + 600, { stopOnSoi: true });
+  doScience(w); trackBiome(w, biomes);
+  if (w.active!.body !== 'moon') return 'missed the Moon';
+  coastUntil(w, w.ut + 20 * 86400, { stopOnSoi: true });
+  if (process.env.CAREER_DEBUG) console.log('after flyby', w.active!.body, w.orbitSummary(w.active!).pe);
+  return w.active!.body === 'earth' ? null : 'did not come back to Earth';
 }
 
 /** In the Moon's SOI: optionally capture, then burn home and coast back into Earth's SOI. */

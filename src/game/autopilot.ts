@@ -15,7 +15,7 @@
  * Steering always goes through SAS 'maneuver' mode with an explicit inertial direction.
  */
 export { nelderMead } from '../util/nelderMead';
-export { planTransferToBody, planCourseCorrection } from './planning/transfers';
+export { planTransferToBody, planCourseCorrection, planFreeReturn } from './planning/transfers';
 export type { TransferPlan, TransferOptions } from './planning/transfers';
 import type { World, WorldVessel } from './world';
 import { PHYSICS_DT } from './world';

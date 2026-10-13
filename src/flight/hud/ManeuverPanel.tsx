@@ -26,7 +26,7 @@ function storedOpen(): string | null {
 }
 
 /** The last transfer the planner installed, shown as a timeline card while its node exists. */
-interface PlanCard { target: string; nodeId: number; encounterTime: number; periapsis: number; captureDv?: number }
+interface PlanCard { target: string; nodeId: number; encounterTime: number; periapsis: number; captureDv?: number; returnPerigee?: number }
 
 const WarpGlyph = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden><path d="M2 3l6 5-6 5zM8 3l6 5-6 5z" /></svg>;
 const FrameGlyph = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" /></svg>;
@@ -98,14 +98,15 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
 
   const installed = (target: string, plan: TransferPlan, captureDv?: number) => {
     const node = world.nodes[0];
-    if (node) setCard({ target, nodeId: node.id, encounterTime: plan.encounterTime, periapsis: plan.periapsisAltitude, captureDv });
+    if (node) setCard({ target, nodeId: node.id, encounterTime: plan.encounterTime, periapsis: plan.periapsisAltitude, captureDv, returnPerigee: plan.returnPerigee });
     setPlanMsg('');
   };
-  const planTransfer = async (id: string, departure?: number, captureDv?: number) => {
+  const planTransfer = async (id: string, departure?: number, captureDv?: number, freeReturn = false) => {
     setPlanMsg('');
     try {
-      const { result: plan, snapshot } = await planner.run('transfer', { target: id, ...(departure !== undefined ? { options: { departure } } : {}) });
-      if (!plan) { setPlanMsg(departure !== undefined ? 'That departure did not refine to an encounter. Try another option.' : 'No transfer window found'); return; }
+      const options = { ...(departure !== undefined ? { departure } : {}), ...(freeReturn ? { freeReturn } : {}) };
+      const { result: plan, snapshot } = await planner.run('transfer', { target: id, ...(Object.keys(options).length ? { options } : {}) });
+      if (!plan) { setPlanMsg(freeReturn ? 'No free return found from this orbit. Plan a normal transfer instead.' : departure !== undefined ? 'That departure did not refine to an encounter. Try another option.' : 'No transfer window found'); return; }
       applyPlanningResult(world, snapshot, plan);
       const node = world.nodes[0];
       if (map && node) { map.selectNode(node.id); map.frameTransfer(id); }
@@ -154,13 +155,17 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
           { label: 'Now' },
           { label: 'Burn', value: Number.isFinite(burn) ? shortDuration(burn) : 'no engine', tone: 'burn', title: `Node ${whenTitle(planNode.time, world.ut)}\nBurn ${Number.isFinite(burn) ? formatDuration(burn) : '— (no active engine)'}, start ${formatCountdown(startIn)}` },
           { label: target, value: `Pe ${formatDistance(card.periapsis)}`, tone: 'arrive', title: `Encounter ${whenTitle(card.encounterTime, world.ut)}\nPeriapsis ${formatDistance(card.periapsis)}${card.captureDv ? `\nCapture ~${dvText(card.captureDv)} (estimate)` : ''}` },
+          ...(card.returnPerigee !== undefined ? [{ label: world.universe.body(world.universe.body(card.target).parent!).name, value: `Pe ${formatDistance(card.returnPerigee)}`, tone: 'arrive' as const,
+            title: `Free return: the flyby bends the path home with no return burn.\nEntry periapsis ${formatDistance(card.returnPerigee)}. Fix small errors with a correction burn on the way.` }] : []),
         ]}
-        gaps={[shortDuration(startIn), shortDuration(card.encounterTime - planNode.time)]} />
+        gaps={[shortDuration(startIn), shortDuration(card.encounterTime - planNode.time), ...(card.returnPerigee !== undefined ? ['flyby'] : [])]} />
       {map && <button className="btn small primary" disabled={!!planner.progress} title="Warp to the burn. Flight assist → Execute next node can fly it." onClick={() => map.warpToNode(planNode.id)}>Warp to burn</button>}
     </div>;
   }
 
   const chartButton = options && charts(options.target) ? <button className="btn ghost small pl-icon" disabled={!!planner.progress} title="Transfer window chart (departure date × flight time)" aria-label="Transfer window chart" onClick={() => setTransferTarget(options.target)}><ChartGlyph /></button> : null;
+  const moon = options && world.universe.body(options.target).parent === body.id;
+  const freeReturnButton = moon ? <button className="btn small" disabled={!!planner.progress} title="Plan a flyby that swings back home without a return burn (crewed first flights)" onClick={() => planTransfer(options.target, undefined, undefined, true)}>Free return</button> : null;
   const frameButton = options && map ? <button className="btn ghost small pl-icon" title="Show whole transfer" aria-label="Show whole transfer" onClick={() => map.frameTransferOverview(options.target)}><FrameGlyph /></button> : null;
 
   return (
@@ -226,7 +231,7 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
           <progress aria-label="Transfer planning progress" value={planner.progress.fraction} max={1} />
         </div>}
         {planMsg && <div className="mp-msg">{planMsg}</div>}
-        {options && <DepartureOptions world={world} options={options} busy={!!planner.progress} tools={<>{chartButton}{frameButton}</>}
+        {options && <DepartureOptions world={world} options={options} busy={!!planner.progress} tools={<>{freeReturnButton}{chartButton}{frameButton}</>}
           onPick={w => planTransfer(options.target, w.departure, w.captureDv)} />}
       </div>
     </div>

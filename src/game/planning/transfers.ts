@@ -20,6 +20,8 @@ export interface TransferPlan {
   /** Predicted periapsis altitude at the target (above its datum radius), m. */
   periapsisAltitude: number;
   dv: number;
+  /** Free-return plans: altitude of the closest approach to the parent after the flyby, m. */
+  returnPerigee?: number;
 }
 
 export interface TransferOptions {
@@ -31,6 +33,8 @@ export interface TransferOptions {
   window?: number;
   /** Plan the departure option nearest this UT (one of a previous plan's `windows`) instead of choosing one. */
   departure?: number;
+  /** Moons only: choose the flyby periapsis that falls back into the parent's atmosphere (see `planFreeReturn`). */
+  freeReturn?: boolean;
 }
 
 /**
@@ -229,6 +233,7 @@ function firstWindowTransfer(world: PlanningWorld, targetId: string, opts: Trans
  * the option nearest that UT instead. Exactly one node is added on success, none on failure.
  */
 export function planTransferToBody(world: PlanningWorld, targetId: string, opts: TransferOptions = {}, report?: PlanningProgressReporter): TransferPlan | null {
+  if (opts.freeReturn) return planFreeReturn(world, targetId, { ...opts, freeReturn: false }, report);
   const u = world.universe;
   const wv = world.active!;
   const o = world.orbitOf(wv);
@@ -339,3 +344,88 @@ export function planCourseCorrection(world: PlanningWorld, targetId: string, per
   return { node, patches: ev.patches, encounterTime: ev.encounterTime, periapsisAltitude: ev.periapsis, dv: Math.hypot(...res.x) };
 }
 
+
+/** Altitude of the closest approach to `centralId` after the flyby in `patches` (null if it never comes back). */
+function returnPerigee(patches: TrajectoryPatch[], targetId: string, centralId: string, radius: number): number | null {
+  const i = patches.findIndex(p => p.nextBody === targetId && p.endReason === 'soiEnter');
+  const back = patches[i + 2];
+  if (i < 0 || !back || back.orbit.body !== centralId || patches[i + 1].nextBody !== centralId) return null;
+  return periapsisRadius(back.orbit) - radius;
+}
+
+/**
+ * Free-return transfer to a moon: the flyby periapsis is chosen so the moon's gravity bends the path back into the
+ * parent's atmosphere for a one-pass entry (no burn needed to come home). A 1-D search over the flyby periapsis,
+ * each step a full `planTransferToBody` on a throwaway node; the chosen plan's node is added to the world.
+ * Null when the target is not a moon of the current body or no periapsis brings the craft back.
+ */
+export function planFreeReturn(world: PlanningWorld, targetId: string, opts: TransferOptions = {}, report?: PlanningProgressReporter): TransferPlan | null {
+  const u = world.universe;
+  const central = u.body(world.orbitOf(world.active!).body);
+  const target = u.body(targetId);
+  if (target.parent !== central.id) return null;
+  const entry = arrivalPeriapsisAltitude(world, targetId, central.id, world.ut);
+  const scratch: PlanningWorld = { ...world, universe: u, ut: world.ut, active: world.active, orbitOf: v => world.orbitOf(v), relativeState: v => world.relativeState(v),
+    addNode: time => ({ id: -1, time, prograde: 0, normal: 0, radial: 0 }) };
+  let departure = opts.departure;
+  const orbit = world.orbitOf(world.active!);
+  /** Return perigee for a node (prograde/normal/radial at `time`), with the predicted patches. */
+  const evaluate = (n: Pick<ManeuverNode, 'time' | 'prograde' | 'normal' | 'radial'>, flight: number) => {
+    const s = propagate(orbit, n.time);
+    const patches = predictTrajectory({ ephem: u.ephem, bodies: u.bodies, initialBody: central.id, state: { position: s.position, velocity: add(s.velocity, maneuverToInertialDv(s, n as ManeuverNode)) },
+      t0: n.time, horizon: flight * 4 + 86400, maxPatches: 4 });
+    const perigee = returnPerigee(patches, targetId, central.id, central.radius);
+    return perigee === null ? null : { perigee, patches };
+  };
+  const attempt = (pe: number) => {
+    const plan = planTransferToBody(scratch, targetId, { ...opts, periapsisAltitude: pe, departure });
+    if (!plan) return null;
+    departure ??= plan.node.time;
+    const e = evaluate(plan.node, plan.encounterTime - plan.node.time);
+    return e && { plan, ...e };
+  };
+  // Low flybys swing the craft out; wide ones fall short of the parent. The return perigee falls as the flyby widens.
+  let lo = Math.max(opts.periapsisAltitude ?? 0, target.radius * 0.1, 10000), hi = target.soi * 0.5;
+  report?.('Searching free return', 0);
+  const a = attempt(lo), b = attempt(hi);
+  if (!a || !b || a.perigee < entry || b.perigee > entry) return null;
+  let best = Math.abs(a.perigee - entry) < Math.abs(b.perigee - entry) ? a : b;
+  // Coarse: flyby periapsis (each step a full transfer plan, accurate to the planner's periapsis tolerance).
+  for (let k = 0; k < 10 && Math.abs(best.perigee - entry) > central.radius * 0.5; k++) {
+    report?.('Searching free return', (k + 1) / 12);
+    const mid = attempt((lo + hi) / 2);
+    if (!mid) { hi = (lo + hi) / 2; continue; }
+    if (Math.abs(mid.perigee - entry) < Math.abs(best.perigee - entry)) best = mid;
+    if (mid.perigee > entry) lo = (lo + hi) / 2; else hi = (lo + hi) / 2;
+  }
+  // Fine: trim the departure burn's prograde component until the return perigee sits in the entry corridor.
+  report?.('Trimming the return', 11 / 12);
+  const n0 = best.plan.node, flight = best.plan.encounterTime - n0.time;
+  const at = (d: number) => evaluate({ ...n0, prograde: n0.prograde + d }, flight);
+  const f0 = best.perigee - entry;
+  let dLo = 0, dHi = NaN;
+  for (const step of [0.05, 0.1, 0.2, 0.5, 1, 2, 4, 8]) {
+    for (const d of [step, -step]) {
+      const e = at(d);
+      if (e && Math.sign(e.perigee - entry) !== Math.sign(f0)) { dHi = d; break; }
+    }
+    if (!Number.isNaN(dHi)) break;
+  }
+  let final = { node: n0, ...best };
+  if (!Number.isNaN(dHi)) {
+    for (let k = 0; k < 30; k++) {
+      const d = (dLo + dHi) / 2, e = at(d);
+      if (!e) { dHi = d; continue; }
+      final = { node: { ...n0, prograde: n0.prograde + d }, plan: best.plan, ...e };
+      if (Math.abs(e.perigee - entry) < 500) break;
+      if (Math.sign(e.perigee - entry) === Math.sign(f0)) dLo = d; else dHi = d;
+    }
+  }
+  if (Math.abs(final.perigee - entry) > Math.max(5000, entry * 0.5)) return null;
+  const arrival = final.patches.findIndex(p => p.nextBody === targetId && p.endReason === 'soiEnter');
+  const node = world.addNode(final.node.time);
+  node.prograde = final.node.prograde; node.normal = final.node.normal; node.radial = final.node.radial;
+  const dv = Math.hypot(node.prograde, node.normal, node.radial);
+  return { ...best.plan, node, dv, patches: final.patches, returnPerigee: final.perigee,
+    encounterTime: final.patches[arrival].endTime, periapsisAltitude: periapsisRadius(final.patches[arrival + 1].orbit) - target.radius };
+}

@@ -12,7 +12,7 @@ import { TECH_NODES } from '../../src/data/technology';
 import { buildChallengingOrbiter, buildFoundationOrbiter, buildMoonLander, buildOrbiter, buildRealOrbiter, buildSoundingRocket } from '../../src/editor/stockCrafts';
 import type { ScalePreset } from '../../src/sim/bodies/scale';
 import type { CraftDef } from '../../src/sim/vessel/types';
-import { captureMoon, deorbitAndRecover, descend, doScience, hop, landMoon, moonAscent, moonHome, sensor, toMoon, toOrbit, buy } from './flights';
+import { freeReturnFlyby, captureMoon, deorbitAndRecover, descend, doScience, hop, landMoon, moonAscent, moonHome, sensor, toMoon, toOrbit, buy } from './flights';
 
 export interface LedgerRow { flight: number; name: string; ok: boolean; note: string; cost: number; funds: number; science: number; reputation: number; days: number; research: string; contracts: string }
 
@@ -103,7 +103,7 @@ export function playCareer(preset: ScalePreset = 'standard', log = (s: string) =
     const craft = sensor(buildOrbiter());
     const { cost, problem } = buy(w, craft);
     let err = problem;
-    if (!err) err = toOrbit(w, biomes, 90000, 2) ?? toMoon(w, biomes, 2, 900000) ?? moonHome(w, biomes, 0) ?? deorbitAndRecover(w, biomes);
+    if (!err) err = toOrbit(w, biomes, 90000, 2) ?? freeReturnFlyby(w, biomes, 0) ?? deorbitAndRecover(w, biomes);
     record('Meridian Moon flyby', !err, err ?? [...biomes].join(', '), cost, research(['propulsion-1', 'structures-0', 'structures-1', 'guidance-0']));
   }
   desk(() => true);
