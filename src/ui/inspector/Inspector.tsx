@@ -3,6 +3,7 @@ import { Button, Slider, Toggle } from '../components';
 import { Icon } from '../components/Icon';
 import { LIGHT_COLORS, type TweakDescriptor } from '../../sim/vessel/tweaks';
 import type { PartTweaks, RcsAxes, WheelMode } from '../../sim/vessel/types';
+import { frameProfiler as prof } from '../../util/frameProfiler';
 import './inspector.css';
 
 /**
@@ -45,6 +46,7 @@ export function InspectorLayer({ panels, anchor, content, onClose, onPin, insets
       raf = requestAnimationFrame(loop);
       const root = host.current, lines = svg.current;
       if (!root || !lines) return;
+      const t0 = prof.now();
       const W = root.clientWidth, H = root.clientHeight;
       const m = insetsRef.current;
       const els = [...root.querySelectorAll<HTMLElement>('.insp-panel')];
@@ -88,6 +90,7 @@ export function InspectorLayer({ panels, anchor, content, onClose, onPin, insets
       });
       const p = lines.firstElementChild as SVGPathElement | null;
       if (p && p.getAttribute('d') !== path) p.setAttribute('d', path);
+      prof.add('hud', t0);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);

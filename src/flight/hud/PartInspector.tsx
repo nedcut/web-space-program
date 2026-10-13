@@ -12,12 +12,14 @@ import { game } from '../../game/store';
 import { canControlFrom, controlPartUid, freeSeats, stationModules } from '../../sim/vessel';
 import { seatCapacity } from '../../sim/crew/crew';
 import { berths } from './StationPanel';
+import { useRenderProfile } from './useRenderProfile';
 
 const fmtKN = (n: number) => (n < 1000 ? `${n.toFixed(0)} N` : `${(n / 1000).toFixed(n < 1e5 ? 1 : 0)} kN`);
 const CHUTE_PHASE: Record<string, string> = { stowed: 'Stowed', armed: 'Armed — waiting for air', semi: 'Partly open', full: 'Fully open', cut: 'Cut away' };
 
 /** Flight part inspectors: right-click / long-press a part of the active vessel. */
 export function FlightInspector({ controller: c, panels, setPanels }: { controller: FlightController; panels: InspectorPanelProps[]; setPanels: (fn: (p: InspectorPanelProps[]) => InspectorPanelProps[]) => void }) {
+  useRenderProfile();
   const [, refresh] = useState(0);
   useEffect(() => c.onPartPick(uid => setPanels(p => [...p.filter(x => x.pinned && x.uid !== uid), { uid, pinned: p.find(x => x.uid === uid)?.pinned ?? false }])), [c, setPanels]);
   // Live readouts at ~6 Hz; panels of parts that left the active vessel close themselves.
