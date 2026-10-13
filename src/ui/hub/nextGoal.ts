@@ -25,7 +25,7 @@ interface Step { milestone: string | null; title: string; craft: Partial<Record<
 const STEPS: Step[] = [
   { milestone: 'first-orbit', title: 'Reach orbit', craft: { standard: 'stock-firstlight', challenging: 'stock-meridian-challenging', real: 'stock-meridian-real' },
     how: 'Tip east at about 50 m/s, cut the engines once apoapsis is above the atmosphere, then burn prograde at apoapsis (Maneuver planner · Circularize).' },
-  { milestone: 'first-moon-flyby', title: 'Fly to the Moon', craft: { standard: 'stock-meridian', challenging: 'stock-meridian-challenging', real: 'stock-meridian-real' },
+  { milestone: 'first-moon-flyby', title: 'Fly to the Moon', craft: { standard: 'stock-meridian', challenging: 'stock-meridian-challenging', real: 'stock-selene-real' },
     how: 'From a parking orbit, open the map\'s Maneuver planner and plan a transfer to the Moon. Use “Free return” to come home without stopping.' },
   { milestone: 'first-moon', title: 'Land on the Moon', craft: { standard: 'stock-selene', challenging: 'stock-selene-challenging', real: 'stock-selene-real' },
     how: 'Capture into a low lunar orbit, drop the transfer stage and descend; the Flight assist app can fly the landing. Bring the capsule home.' },

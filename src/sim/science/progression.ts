@@ -42,10 +42,11 @@ export function generateContracts(seed: number, batch = 0, advanced = false, cre
   const offer = (kind: ContractKind, target: string, title: string, f: number, b?: string): Contract => {
     // Home-planet test flights and field surveys use the same small rockets on every scale: no scale bonus.
     const m = target === 'earth' && (kind === 'return' || kind === 'science') ? f : f * creditsMultiplier;
-    return { id: `survey-${batch}-${kind}`, kind, title, body: target, biome: b, status: 'offered',
-      advance: Math.round((kind === 'science' ? 3000 : kind === 'flyby' ? 10000 : 5000) * m),
+    const advance = Math.round((kind === 'science' ? 3000 : kind === 'flyby' ? 10000 : 5000) * m);
+    // Failing or abandoning forfeits the advance: accept-and-abandon must never make money.
+    return { id: `survey-${batch}-${kind}`, kind, title, body: target, biome: b, status: 'offered', advance,
       reward: Math.round((kind === 'science' ? 10000 : kind === 'flyby' ? 20000 : kind === 'orbit' ? 18000 : 12000) * m),
-      penalty: Math.round(3000 * m), reputation: 3 * f, landed: false };
+      penalty: advance, reputation: 3 * f, landed: false };
   };
   const expedition = readiness.orbit && !readiness.landing
     ? offer('flyby', 'moon', 'Enter the Moon sphere of influence', 2)

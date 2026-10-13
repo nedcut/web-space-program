@@ -67,6 +67,9 @@ describe('contract desk', () => {
     expect(orbit100.reward).toBe(orbit1.reward * 100);
     expect(Number.isInteger(at(careerScaleMultiplier('challenging'))[0].advance)).toBe(true);
     expect(newProgression(careerScaleMultiplier('challenging')).funds).toBe(614400);
+    // Accepting then abandoning never makes money, at any scale or batch.
+    for (const m of [1, 10.24, 100]) for (let batch = 0; batch < 6; batch++)
+      for (const c of generateContracts(7, batch, batch > 3, m, { orbit: batch > 1, lunar: batch > 2, landing: batch > 2 })) expect(c.penalty).toBeGreaterThanOrEqual(c.advance);
   });
 });
 
