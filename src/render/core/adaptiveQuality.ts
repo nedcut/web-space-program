@@ -161,7 +161,8 @@ export class AdaptiveQuality {
       if (this.scale <= floor && !holding) this.episode = null;
       // Still missing the display rate at the floor. The episode test can be fooled by a transient (loading
       // during the reduction), so after a while try full resolution again and compare steady intervals.
-      if (meets60 && this.scale <= floor && !holding && this.scale < 1) {
+      // Only a reduction made to chase >60 fps (it stops exactly at the floor); a lower scale was needed for 60 fps.
+      if (meets60 && this.scale <= floor && this.scale >= this.highRateMin - 1e-9 && !holding && this.scale < 1) {
         this.floorWindows++; this.floorSum += meanMs;
         if (this.floorWindows >= 8 && this.probeBlockedMs <= 0) {
           this.probe = { floorScale: this.scale, floorMean: this.floorSum / this.floorWindows, windows: 0, sum: 0 };

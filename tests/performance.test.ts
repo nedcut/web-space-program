@@ -94,6 +94,11 @@ describe('adaptive scale', () => {
     // Below 60 fps the full range applies again.
     for (let t = 0; t < 20000;) { const ms = 20 + 30 * q.scale * q.scale; q.update(ms, true, undefined, 2); t += ms; }
     expect(q.scale).toBeLessThan(0.75);
+    // Once that lower scale makes 60 fps again it stays: no full-resolution trial below the >60 fps floor.
+    let changes = 0;
+    for (let t = 0; t < 120000;) { const ms = 10 + 30 * q.scale * q.scale; if (q.update(ms, true, undefined, 2)) changes++; t += ms; }
+    expect(q.scale).toBe(0.5);
+    expect(changes).toBe(0);
     // Not pixel-bound (frame times ignore the scale): the resolution is restored, as at 60 Hz.
     const r = new AdaptiveQuality();
     for (let t = 0, i = 0; t < 12000; i++) { const ms = i % 6 === 5 ? 16.7 : 8.33; r.update(ms, true, undefined, 2); t += ms; }
