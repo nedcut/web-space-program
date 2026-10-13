@@ -2208,3 +2208,67 @@ on main.
 After a further merge of main `4a648dbc` (vtxpack, mapmarkers), there was a Firefox smoke run only, not an A/B.
 Selene orbit measured 858 GL calls per frame, 4.72 ms mean frame interval and 2.0 ms CPU. The context-loss check
 passed again (batched vs individual ≤ 0.006 % pixels before and after the restore).
+
+# Mid-climb GPU — 2026-10-13 (`op/climbgpu`)
+
+Owner's Mac (M4 Pro, Zen, Medium, adaptive on, DPR 2, 3488×2048), F8 at 20–40 km: 120 fps, GPU 10.23 ms, 93 draws,
+963k triangles, "3D scale 0.70". The 0.70 is Medium's Retina scale (internal/device), not an adaptive reduction; the
+overlay now prints the adaptive multiplier separately.
+
+## Method
+
+Windows Chrome 155 over CDP 9333 (RTX 3060 Ti), production builds, viewport 1744×1024 CSS at DPR 2 = **3488×2048
+canvas** (the Mac's), Medium, adaptive off, Selene. New `gpu-passes.mjs` cases `climb10/20/30/40`: the "Launch to
+orbit" assist at 4× physics warp, paused when the vessel is that high above the terrain (pad → 30 km in ~75 s of
+game time). Fenced GPU ms = timer query over 20 back-to-back renders, median of 5 batches. Families (`--families 1`)
+now also record the draws/triangles each family removes and `shadowForced` (shadow map redrawn every render, as for a
+rotating climbing vessel). Wrappers outside git: `~/.t3/projects/wsp-traces/climbgpu/{run,ab,ff}.sh`; raw JSON
+`C:\wsp-tools\bench\climbgpu\`, screenshots `C:\wsp-tools\shots\climbgpu\` (`ab1-A1-*` before, `ab1-B1-*` after).
+
+## Baseline breakdown (fenced ms, hidden-family differences, one profiling run)
+
+| Scene | Frame | Sky | Post (empty scene) | Terrain | Ocean | Clouds | Glare | Vessel | Shadow forced | Tris |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Pad | 3.06 | 0.35 | 0.58 | 0.55 | 0.17 | 0.15 | 0.06 | 0.81 | +0.09 | 2.61 M |
+| 10 km | 2.61 | 0.58 | 0.58 | 0.67 | 0.37 | 0.09 | 0.09 | 0.06 | 0 | 1.21 M |
+| 20 km | 2.47 | 0.63 | 0.58 | 0.52 | 0.30 | 0.13 | 0.10 | 0.07 | 0 | 1.04 M |
+| 30 km | 2.37 | **0.68** | 0.58 | 0.44 | 0.23 | 0.17 | 0.10 | 0.04 | +0.01 | 0.96 M |
+| 40 km | 2.30 | **0.71** | 0.58 | 0.36 | 0.17 | 0.21 | 0.09 | 0.06 | 0 | 0.85 M |
+
+At 30 km the terrain draws 479k and the ocean 261k triangles; 58 draws in Chrome (multi-draw batches), 114 in Firefox.
+Knobs at 30 km: Low atmosphere (8 view steps) 2.37 → 1.99 (sky 0.68 → 0.36, linear in steps); Low terrain detail
+2.37 → 2.11 (triangles 959k → 515k).
+
+## Change
+
+Sky-shell rays that miss the ground take `clamp(ceil(16·6·exp(−h_low/2H)), 4, 16)` steps (`h_low` = altitude of the
+ray's closest approach, H = max(Rayleigh, Mie) scale height); thick hazes keep the full march. See DECISIONS.md for the
+error analysis. Plus F8 per-pass GPU timing (overlay only).
+
+## Before / after (three interleaved pairs, medians, fenced GPU ms; per-pass in the running loop)
+
+| Scene | Frame | Scene pass | Bloom | Tone map | SMAA | Upscale | Draws | Tris |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Pad | 3.063 → 3.053 | 2.434 → 2.424 | 0.173 | 0.058 | 0.364 | 0.497 | 98 | 2,612,655 |
+| 10 km | 2.607 → 2.605 | 2.271 → 2.278 | 0.171 | 0.058 | 0.334 | 0.177 | 75 | 1,211,974 |
+| 20 km | 2.469 → **2.305** (−7%) | 2.115 → 1.921 | 0.170 | 0.057 | 0.334 | 0.180 | 60 | 1,037,714 |
+| 30 km | 2.346 → **2.002** (−15%) | 1.973 → 1.572 | 0.170 | 0.057 | 0.334 | 0.196 | 58 | 958,690 |
+| 40 km | 2.307 → **1.906** (−17%) | 1.897 → 1.443 | 0.170 | 0.057 | 0.335 | 0.207 | 58 | 845,538 |
+| Orbit 150 km | 2.543 → 2.537 | 2.147 → 2.131 | 0.168 | 0.055 | 0.337 | 0.250 | 51 | 1,089,921 |
+| Map | 0.545 → 0.527 | — | — | — | — | — | 20 | 37,076 |
+
+Individual samples: 30 km A 2.346/2.363/2.346, B 1.998/2.016/2.002; 40 km A 2.307/2.321/2.304, B 1.896/1.906/1.907.
+At 30 km the sky family fell 0.68 → 0.31 ms. Post passes, draws and triangles are unchanged; no CPU work was added.
+
+Same-frame visual check (paused, full-resolution capture, sky shader recompiled with the old rule): max channel
+difference 2/255 at 30 km (mean 0.04), 1/255 at 40 km and in orbit; at 10/20 km and on the pad the differences are
+the animated plume/vegetation, at the level of a same-shader repeat capture.
+
+Windows Firefox (1600×915 DPR 1, ASAP, 30 km paused, three pairs): mean frame interval 3.37/3.46/3.37 →
+3.34/3.31/3.30 ms, 114 draws. Firefox is CPU-bound on this desktop at this size, so this shows parity, not the GPU win.
+
+**Expected on the Mac:** if the M4 Pro scales like the 3060 Ti (its 30 km frame is ~4.4× longer), 30 km drops by
+~1.5 ms (10.2 → ~8.7 ms), 40 km a little more; pad unchanged. Unverified on Apple hardware. The remaining mid-climb
+costs are spread out: post chain ~0.76 ms (SMAA the largest), terrain + ocean ~0.6 ms for ~740k triangles, clouds
+~0.2 ms. Next step: an F8 report from the Mac with the new per-pass line to see whether Apple is fragment- or
+geometry-bound there before touching terrain LOD.

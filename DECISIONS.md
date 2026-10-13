@@ -840,3 +840,32 @@ Owner: getting around a docked complex felt clunky ("navigating the space statio
 - **Perf (F8 overlay open, Medium, 1600×915, 10 s, 2 reps):** pad 3.54 / 2.76 ms CPU per frame, 244 draws; orbit 2.42 / 3.01 ms,
   126 draws. wp5's Firefox A/B recorded pad 3.34 ms / 260 draws, orbit 2.65 ms / 153 draws: within the ±0.4 ms noise between runs.
   Firefox under automation still paces at ~30 ms p50.
+
+## Mid-climb GPU: the sky march follows the ray's density (2026-10-13, op/climbgpu)
+- **"3D scale 0.70" on Medium is not an adaptive drop.** Medium renders at a 0.7 Retina scale and the edge upscaler
+  rebuilds device resolution; `effectiveRenderScale` (internal / device) is 0.70 with adaptive at ×1.00. The owner's
+  pad and mid-climb snapshots (0.70) were at the preset; orbit with the map read 1.00 because the map draws at
+  device resolution. The F8 overlay and copied report now show the adaptive multiplier separately
+  (`3D scale 0.70, adaptive ×1.00`), so a real reduction is visible as ×0.9 etc.
+- **Where the mid-climb GPU time went** (RTX 3060 Ti, Chrome, 3488×2048 canvas = the owner's Mac, Medium, adaptive off,
+  Selene paused under the ascent assist at 30 km, material families hidden in turn): sky shell 0.68 ms of 2.35, post
+  chain 0.58 (SMAA 0.32, upscale 0.20, bloom 0.17, tone map 0.06), terrain 0.44 (479k tris), ocean 0.23 (261k tris),
+  clouds 0.17, glare 0.10, vessel 0.04, shadow map ≤0.03 even when forced to redraw every frame. The sky grows with
+  altitude (0.58 → 0.71 ms from 10 to 40 km) because more of the screen is sky and every sky pixel marched 16 steps.
+- **Sky steps follow the density at the ray's lowest point.** For rays that do not hit the ground, steps =
+  `clamp(ceil(16 · 6 · exp(−h_low / 2H)), 4, 16)` where `h_low` is the altitude of the ray's closest approach within
+  the segment and `H = max(Hr, Hm)`. Full 16 steps whenever the ray reaches within ~3.6 scale heights of the
+  ground (all rays from the pad and low climb, limb rays from orbit). A numeric check of the shader's integrator
+  (Earth, standard and real scale, camera 0.2–110 km, sun −4°…60°, 6,000+ directions) puts the change within
+  0.3% of the brightest sky value (≤ 2% relative where the sky is brighter than 5% of that), and it adds no error
+  against a 400-step reference beyond the existing 16-step march. Same-frame captures: max 2/255 at 30 km, 1/255
+  at 40 km and in orbit. Thick hazes (`uStepScale > 1`: Venus, Titan) keep the full march.
+- **Rejected after measuring or checking:** a coarser LOD for chunks fully under deep water (Earth's selected chunks
+  at 30 km nearly all contain land or end at the datum, so it never fired); quadratic step placement around the
+  perigee (more accurate with fewer steps, but it visibly changes the approved low-altitude sky); terrain Low LOD
+  at altitude (−0.26 ms, half the triangles, but visibly coarser relief and per-vertex colour); shadow-map
+  changes (≤0.03 ms).
+- **F8 per-pass GPU timing.** While the overlay is open, each composer pass has its own timer query (scene incl.
+  shadow map, bloom, tone map, SMAA/FXAA, upscale) instead of the frame query; `gpuMs` is their sum and adaptive
+  keeps working. The report gains a `GPU passes (ms)` line so a Mac snapshot shows where its time goes. Off when
+  the overlay is closed; no per-frame allocation (closures are made once per composer).
