@@ -295,8 +295,7 @@ export default function FlightScene() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Part details panels close with Esc (most recent first) before Esc pauses.
-  useEscape(() => setPanels(p => p.slice(0, -1)), panels.length > 0 && !paused, 'panel');
+  // Part windows close with Esc (topmost first) before Esc pauses: FlightInspector registers that itself.
 
   const navball = useCallback(() => ctrl.current?.navball() ?? null, []);
   const partScreen = useCallback((uid: number) => ctrl.current?.partScreenPosition(uid) ?? null, []);

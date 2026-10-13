@@ -917,3 +917,36 @@ Owner decisions 2026-10-13 (both recommended options).
   zoom-out stops at the box. Max distance 170 m. Fog starts beyond the camera distance.
 - **Frame (F, toolbar button)** fits the craft plus set-aside pieces, centres on them and keeps a gentle pitch. If the hall is too
   small to back off (the ~75 m real-scale stacks), the field of view widens (45° → at most 68°) instead.
+
+## Part windows stay put; gauges instead of text (2026-10-13, op/popout)
+- **Root cause of the left/right jump (reproduced, Firefox and CDP Chrome).** `InspectorLayer` re-placed every window every
+  frame from its part's projected position: "flip to the left near the right edge" had no hysteresis, and "try the other
+  side if it overlaps an earlier window" re-ran per frame too. A part sitting at the threshold (`x > W − 350 − 264 − 46`,
+  1124 px at 1784 wide) or two windows whose overlap toggled as the camera zoomed/shook flipped the window 350–540 px,
+  several times a second. Recorded per frame (Selene in orbit, side-on, zoom with a 9 Hz shake, 14 s): 4–17 jumps per
+  window at 1440×900 and 1784×1056 in both browsers, e.g. anchor 1117 → 1124 px moved the window 1163 → 814 px in one frame;
+  with the anchor still at 871 px a second window went 562 → 1089 → 560 px within 100 ms. Dragging "fixed" it only because a
+  manual offset skipped the avoidance pass. Fixed build: 0 jumps, 0 moved frames in the same runs (pad, ascent, orbit,
+  zoom, pitch, three windows). Drivers `C:\wsp-tools\drv-ff\popout-ff.mjs`, `C:\wsp-tools\drv\popout.mjs` (+ `popout-page.js`);
+  results and shots in `C:\wsp-tools\shots\popout\`.
+- **A window is placed once, when it opens, and then stays in screen space** (`src/ui/inspector/placement.ts`, tested). Beside
+  the part, right side first (left if the right is under the HUD margins), then stacked beside already open windows; when the
+  free area is full, a one-off scan picks the spot covering least of other windows (×8), real HUD boxes (×8, the same selector
+  as the HUD pointer-events rule) and the inset margins, then nearest the part. Only a drag, the window's own size change or a
+  viewport change (clamped back on screen; growing again does not move it back) move it. The leader line (ring on the part
+  plus a line to the nearest window edge, brighter for the topmost window) follows the part instead. Chosen over "follow the
+  part with hysteresis": a following window shakes with the ascent camera and is hard to click.
+- **Esc closes the topmost window** (the last one opened or clicked), through the shared Escape stack; Esc pauses only when no
+  window is open. Previously it closed the last opened one.
+- **Less text:** one-line header (name, ×N symmetry badge, manufacturer in the tooltip); one-line gauges (label | bar | value)
+  for temperature (K), load, thrust and every resource, with the full reading in the tooltip; small tags for Isp, ignitions,
+  flame-out, parachute phase, docked, stored science, radiation damage; two-state systems (engine, extend/retract, drill,
+  converter, tweak toggles such as crossfeed or gimbal lock) are On/Off buttons that show the state; actions that do not
+  apply now are hidden instead of "— unavailable". The editor's windows share the layer, header and toggles.
+- **Cost (CDP Chrome, Selene in orbit, three windows, 10 s, two interleaved A/B runs at 1440×900 and 1784×1056):** the HUD
+  (React) section, which now also counts the part windows' renders and per-frame loop (instrumented first, on both builds),
+  fell from 0.49–0.56 to 0.055–0.075 ms/frame; CPU avg 1.98–2.37 → 1.49–1.64 ms. The old loop read `offsetWidth/Height` of
+  every window each frame (a forced layout); the new one only projects part positions (allocation-free `partScreenInto`) and
+  rewrites the SVG path when something moved by ¼ px. Window bodies are memoised on a signature of their displayed values, so
+  the 6 Hz refresh skips unchanged windows (at least one refresh a second for slower state).
+- Not done: windows that the viewport shrink clamps can end up overlapping each other (they stay fully on screen).
