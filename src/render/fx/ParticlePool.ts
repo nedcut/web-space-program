@@ -58,7 +58,7 @@ export class ParticlePool {
         uniform float time; uniform vec3 groundNormal; uniform float groundOffset; uniform vec3 glowColor;
         varying float groundHeight; varying float radius; varying vec3 tint; varying float alpha; varying float hot;
         varying vec2 local; varying float span; varying vec2 axis; varying float phase; varying float erosion; varying vec3 glow;
-        varying vec3 cloud; varying float round;
+        varying vec3 cloud; varying float round; varying vec3 segAxis;
         // Columns billow out quickly behind the nozzle, then spread steadily; puffs grow linearly.
         float grow(float size, float age) { return size * mix(.43, .5, column.w) * (1. + column.w * 2.5 * (1. - exp(-age * 1.2)) + max(0.,params.w)*age); }
         float fade(float age) {
@@ -102,6 +102,8 @@ export class ParticlePool {
           // Noise lives in the smoke's own frame (billboard point minus air drift): view-independent, continuous across
           // joints, so billows neither swim with the camera nor alias when a column is seen end-on.
           // column.xyz: the node's float64-derived offset from its column's first node (puffs: a random seed).
+          float segLength = length(segment.xyz);
+          segAxis = segLength > 1e-3 ? segment.xyz / segLength : vec3(0.);
           cloud = column.xyz + transpose(mat3(modelViewMatrix)) * (eyePosition.xyz - modelViewMatrix[3].xyz) - p;
           span = len; radius = r;
           float age = mix(ageA, max(0.,ageB), t);
@@ -120,7 +122,7 @@ export class ParticlePool {
         uniform vec3 sunDirection; uniform vec3 sunColor; uniform vec3 skyColor; uniform float time;
         varying float groundHeight; varying float radius; varying vec3 tint; varying float alpha; varying float hot;
         varying vec2 local; varying float span; varying vec2 axis; varying float phase; varying float erosion; varying vec3 glow;
-        varying vec3 cloud; varying float round;
+        varying vec3 cloud; varying float round; varying vec3 segAxis;
         // Arithmetic hash (no sin): stable precision on mobile/Apple GPUs and cheap.
         float hash(vec3 p) { p = fract(p * .1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
         float vnoise(vec3 p) {
@@ -138,10 +140,14 @@ export class ParticlePool {
           // Joint cross-fade weights (1 inside the segment, linear across each overlapping end; puffs unaffected).
           float joint = mix(clamp((local.x + cap) / (2.*cap), 0., 1.) * clamp((span + cap - local.x) / (2.*cap), 0., 1.), 1., round);
           // Two octaves of value noise in radii plus a low-frequency bulge, each fading out before it aliases.
-          vec3 np = cloud / max(radius, 1e-3) + vec3(phase, phase * .37, time * .03);
+          // End-on columns drop the along-axis part of the noise coordinate: the stacked caps then share one coherent
+          // ragged silhouette (normalised by radius) instead of layering into bands.
+          vec3 c = cloud / max(radius, 1e-3);
+          c -= segAxis * dot(c, segAxis) * round * .85;
+          vec3 np = c + vec3(phase, phase * .37, time * .03);
           float fw = length(fwidth(np));
-          float o1 = 1. - smoothstep(.2, .5, fw * 1.1), o2 = 1. - smoothstep(.2, .5, fw * 2.6);
-          float n = .5 + (vnoise(np * 1.1) - .5) * .7 * o1 + (vnoise(np * 2.6 + 7.1) - .5) * .4 * o2;
+          float o1 = 1. - smoothstep(.2, .5, fw * 1.7), o2 = 1. - smoothstep(.2, .5, fw * 3.9);
+          float n = .5 + (vnoise(np * 1.7) - .5) * .75 * o1 + (vnoise(np * 3.9 + 7.1) - .5) * .45 * o2;
           float bulge = 1. + (vnoise(np * .45 + 3.3) - .5) * .5 * (1. - smoothstep(.2, .5, fw * .45));
           float body = 1. - r2 / (bulge * bulge);
           // Zero at the quad border whatever the noise does: no hard cuts.

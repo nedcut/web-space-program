@@ -5,7 +5,7 @@ import type { QualityId } from '../core/quality';
 import { rcsEnabled, rcsMask } from '../../sim/vessel/tweaks';
 import { DebrisPool } from './DebrisPool';
 import { FairingPanels } from './FairingPanels';
-import { TRAIL_OPACITY, trailStyle } from './eventDesign';
+import { TRAIL_OPACITY, trailStyle, type TrailStyle } from './eventDesign';
 import { ParticlePool } from './ParticlePool';
 
 type BurstEvent = Extract<VesselEvent, { type: 'partDestroyed' | 'decouple' | 'structuralFailure' }>;
@@ -36,6 +36,7 @@ export class FlightFx {
   private readonly columnExhaust = new THREE.Vector3();
   private readonly offset = new THREE.Vector3();
   private readonly seed3 = new THREE.Vector3();
+  private readonly style: TrailStyle = { life: 0, size: 0, growth: 0, opacity: 0 };
   private readonly sunRadiance = new THREE.Color();
   private readonly sky = new THREE.Color();
   private readonly glow = new THREE.Color();
@@ -235,7 +236,7 @@ export class FlightFx {
     const c = this.column;
     if (reset) c.active = false;
     if (thrust<=0 || density<=.004) { c.active = false; return; }
-    const style = trailStyle(thrust,density,solid/thrust);
+    const style = trailStyle(thrust,density,solid/thrust,this.style);
     const alpha = style.opacity*throttle*opacity/thrust;
     if (alpha<=.002) { c.active = false; return; }
     this.columnExhaust.normalize();
