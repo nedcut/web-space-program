@@ -20,14 +20,15 @@ export class ParticlePool {
   private expires = 0;
   /** Dirty spans of the burst and trail regions, uploaded as separate ranges. */
   private readonly dirty = [Infinity, -1, Infinity, -1];
-  private readonly uploadRanges = Array.from({ length: 12 }, () => ({ start: 0, count: 0 }));
-  private readonly attributeNames = ['spawnPosition','velocity','params','color','acceleration','segment'] as const;
+  private readonly attributeNames = ['spawnPosition','velocity','params','color','acceleration','segment','column'] as const;
+  private readonly uploadRanges = Array.from({ length: this.attributeNames.length * 2 }, () => ({ start: 0, count: 0 }));
   private readonly positions: Float32Array;
   private readonly velocities: Float32Array;
   private readonly params: Float32Array;
   private readonly colors: Float32Array;
   private readonly accelerations: Float32Array;
   private readonly segments: Float32Array;
+  private readonly columns: Float32Array;
   constructor(readonly capacity: number) {
     this.burstCapacity=capacity<128 ? capacity : Math.floor(capacity/4);
     this.positions = new Float32Array(capacity * 3);
@@ -36,12 +37,13 @@ export class ParticlePool {
     this.colors = new Float32Array(capacity * 4);
     this.accelerations = new Float32Array(capacity * 3);
     this.segments = new Float32Array(capacity * 4);
+    this.columns = new Float32Array(capacity * 3);
     const quad = new THREE.PlaneGeometry(1, 1);
     const geometry = new THREE.InstancedBufferGeometry();
     geometry.index = quad.index;
     geometry.setAttribute('position', quad.attributes.position);
     geometry.instanceCount = capacity;
-    for (const [name, array, size] of [['spawnPosition', this.positions, 3], ['velocity', this.velocities, 3], ['params', this.params, 4], ['color', this.colors, 4], ['acceleration', this.accelerations, 3], ['segment', this.segments, 4]] as const) {
+    for (const [name, array, size] of [['spawnPosition', this.positions, 3], ['velocity', this.velocities, 3], ['params', this.params, 4], ['color', this.colors, 4], ['acceleration', this.accelerations, 3], ['segment', this.segments, 4], ['column', this.columns, 3]] as const) {
       geometry.setAttribute(name, new THREE.InstancedBufferAttribute(array, size).setUsage(THREE.DynamicDrawUsage));
     }
     const material = new THREE.ShaderMaterial({ transparent: true, depthWrite: false,
@@ -52,12 +54,18 @@ export class ParticlePool {
         #include <common>
         #include <logdepthbuf_pars_vertex>
         attribute vec3 spawnPosition; attribute vec3 velocity; attribute vec3 acceleration;
-        attribute vec4 params; attribute vec4 color; attribute vec4 segment;
+        attribute vec4 params; attribute vec4 color; attribute vec4 segment; attribute vec3 column;
         uniform float time; uniform vec3 groundNormal; uniform float groundOffset; uniform vec3 glowColor;
         varying float groundHeight; varying float radius; varying vec3 tint; varying float alpha; varying float hot;
         varying vec2 local; varying float span; varying vec2 axis; varying float phase; varying float erosion; varying vec3 glow;
-        float grow(float size, float age) { return size * .5 * (1. + max(0.,params.w)*age); }
-        float fade(float age) { float life = age / max(.001, params.y); return step(0.,age) * (1.-step(1.,life)) * pow(max(0.,1.-life),1.3) * min(1.,age*8.); }
+        varying float along; varying float round;
+        // Columns billow out quickly behind the nozzle, then spread steadily; puffs grow linearly.
+        float grow(float size, float age) { return size * mix(.43, .5, column.z) * (1. + column.z * 1.2 * (1. - exp(-age * 1.5)) + max(0.,params.w)*age); }
+        float fade(float age) {
+          float life = age / max(.001, params.y);
+          float body = column.z > .5 ? 1. - life*life : pow(max(0.,1.-life),1.3);
+          return step(0.,age) * (1.-step(1.,life)) * body * min(1.,age*8.);
+        }
         void main() {
           float ageA = max(0., time - params.x);
           float ageB = ageA - segment.w;
@@ -76,27 +84,30 @@ export class ParticlePool {
           vec2 perp = vec2(-axis.y, axis.x);
           float t = position.x + .5;
           float r = mix(rA, rB, t);
-          // End caps only where the segment is short on screen (puffs, end-on columns); long joints stay flat and seamless.
-          float cap = r * (1. - smoothstep(0., 2.*r, len));
+          // Round caps only where the segment is short on screen (puffs, end-on columns). Long column joints overlap by
+          // a fraction of a radius and cross-fade linearly, so chained segments read as one seamless body.
+          round = 1. - smoothstep(0., 2.*r, len);
+          float cap = r * mix(column.z * .6, 1.3, round);
           vec4 mv = vec4(0.,0.,0.,1.);
           float s = mix(-cap, len + cap, t);
-          mv.xy = a.xy + axis * s + perp * position.y * 2. * r;
+          mv.xy = a.xy + axis * s + perp * position.y * 2.6 * r;
           mv.z = mix(a.z, b.z, clamp(s / max(len,1e-4), 0., 1.));
           float eye = smoothstep(2.*r, 4.*r + 1., -mv.z) * step(0., -a.z - nearA*.99) * step(0., -b.z - nearB*.99);
           mv.xyz *= valid;
           gl_Position = projectionMatrix * mv;
           vec3 groundView = (modelViewMatrix * vec4(groundNormal * groundOffset, 1.)).xyz;
           groundHeight = dot(mv.xyz - groundView, normalize((viewMatrix * vec4(groundNormal,0.)).xyz));
-          local = vec2(s, position.y * 2.);
+          local = vec2(s, position.y * 2.6);
+          along = mix(column.x, column.y, clamp(s / max(len,1e-4), 0., 1.)) + s - clamp(s, 0., len);
           span = len; radius = r;
           float age = mix(ageA, max(0.,ageB), t);
           float life = age / max(.001, params.y);
           alpha = valid * eye * color.a * mix(fade(ageA), fade(ageB), t);
           // Fire cools from a hot core to orange embers; smoke remains non-emissive apart from engine glow.
           tint = mix(color.rgb, color.rgb * vec3(1.,.16,.025), hot * smoothstep(.1,1.,life));
-          glow = glowColor * exp(-age * 5.) * (1. - hot);
+          glow = glowColor * exp(-age * 8.) * (1. - hot);
           erosion = smoothstep(.15, 1., life);
-          phase = params.x * 17.31 + dot(velocity,vec3(.13,.17,.19));
+          phase = (1. - column.z) * (params.x * 17.31 + dot(velocity,vec3(.13,.17,.19)));
           #include <logdepthbuf_vertex>
         }`,
       fragmentShader: `
@@ -105,6 +116,7 @@ export class ParticlePool {
         uniform vec3 sunDirection; uniform vec3 sunColor; uniform vec3 skyColor; uniform float time;
         varying float groundHeight; varying float radius; varying vec3 tint; varying float alpha; varying float hot;
         varying vec2 local; varying float span; varying vec2 axis; varying float phase; varying float erosion; varying vec3 glow;
+        varying float along; varying float round;
         float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float vnoise(vec2 p) {
           vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
@@ -113,14 +125,18 @@ export class ParticlePool {
         void main() {
           if(alpha < .002) discard;
           #include <logdepthbuf_fragment>
-          float along = max(0., -local.x) + max(0., local.x - span);
-          vec2 q = vec2(along / max(radius,1e-3), local.y);
-          float r2 = dot(q,q); if(r2 > 1.) discard;
-          // Two octaves of smooth value noise in a frame that slides along the column: lumpy, evolving billows.
-          vec2 np = vec2(local.x / max(radius,1e-3) * .9 + phase, local.y * 1.3 + phase * .37);
-          float n = vnoise(np * 1.6 + time * .03) * .65 + vnoise(np * 3.7 - time * .05) * .35;
+          float beyond = (max(0., -local.x) + max(0., local.x - span)) * round;
+          vec2 q = vec2(beyond / max(radius,1e-3), local.y);
+          float r2 = dot(q,q); if(r2 > 1.69) discard;
+          // Joint cross-fade: linear ramps across each overlapping end (1 inside the segment; round puffs unaffected).
+          float cap = radius * mix(.6, 1.3, round);
+          float joint = mix(clamp((local.x + cap) / (2.*cap), 0., 1.) * clamp((span + cap - local.x) / (2.*cap), 0., 1.), 1., round);
+          // Two octaves of smooth value noise, continuous along the column (distance from its start in radii):
+          // lumpy, slowly evolving billows with a ragged silhouette.
+          vec2 np = vec2(along / max(radius,1e-3) * .8 + phase, local.y * 1.1 + phase * .37);
+          float n = vnoise(np * 1.4 + time * .04) * .65 + vnoise(np * 3.3 - time * .07) * .35;
           float body = 1. - r2;
-          float density = smoothstep(.0, .55 + .3*erosion, body * (.55 + .9*n) - erosion * .35);
+          float density = smoothstep(0., .6 + .3*erosion, body + (n - .5) * .9 - erosion * .3) * joint;
           // Fire / sparks: emissive, simple soft disc.
           vec3 color;
           if (hot > .5) color = tint * (.8 + .4*n);
@@ -160,12 +176,14 @@ export class ParticlePool {
     this.params[k] = time; this.params[k+1] = life; this.params[k+2] = size; this.params[k+3] = growth;
     this.colors[k] = color.r; this.colors[k+1] = color.g; this.colors[k+2] = color.b; this.colors[k+3] = opacity;
     this.segments[k] = 0; this.segments[k+1] = 0; this.segments[k+2] = 0; this.segments[k+3] = 0;
+    this.columns[j] = 0; this.columns[j+1] = 0; this.columns[j+2] = 0;
     this.markDirty(i);
     return i;
   }
   /** Stretch a particle into a segment ending `offset` metres away at a node `delay` s younger (trail heads). */
-  setSegment(index: number, offset: Vec3, delay: number, opacity?: number) {
-    const k = index * 4;
+  setSegment(index: number, offset: Vec3, delay: number, opacity?: number, from = 0, to = 0) {
+    const k = index * 4, j = index * 3;
+    this.columns[j] = from; this.columns[j+1] = to; this.columns[j+2] = 1;
     this.segments[k] = offset.x; this.segments[k+1] = offset.y; this.segments[k+2] = offset.z; this.segments[k+3] = delay;
     if (opacity !== undefined) this.colors[k+3] = opacity;
     this.markDirty(index);

@@ -30,7 +30,7 @@ export class FlightFx {
    * The vessel's single smoke column: a chain of segment particles in the air frame. `node` is the newest node,
    * drifted with the air; `head` is the particle stretched from it to the current nozzle every frame.
    */
-  private readonly column = { active: false, head: -1, node: new THREE.Vector3(), time: 0 };
+  private readonly column = { active: false, head: -1, node: new THREE.Vector3(), time: 0, distance: 0 };
   private readonly columnNozzle = new THREE.Vector3();
   private readonly columnExhaust = new THREE.Vector3();
   private readonly offset = new THREE.Vector3();
@@ -219,7 +219,7 @@ export class FlightFx {
       this.light.intensity=Math.min(900,lightWeight);
     }
     // Young smoke beside the flame picks up its colour (most visible at dusk and night).
-    if(lightWeight>0) this.glow.copy(this.engineLightColor).multiplyScalar(Math.min(1.2,lightWeight/250)/lightWeight);
+    if(lightWeight>0) this.glow.copy(this.engineLightColor).multiplyScalar(Math.min(.5,lightWeight/600)/lightWeight);
     else this.glow.setRGB(0,0,0);
     this.pool.update(origin,this.clock,pixelScale);
     this.pool.ground(v.position,this.up,altitude);
@@ -244,13 +244,13 @@ export class FlightFx {
       c.node.addScaledVector(this.velocity,this.lastStep);
       this.offset.copy(this.point).sub(c.node);
       const age = this.clock-c.time, length = this.offset.length();
-      if ((age>=interval && length>=style.size*.5) || age>=style.life*.4 || length>600) {
-        this.pool.setSegment(c.head,this.offset,age,alpha);
-        c.active = false;
-      } else { this.pool.setSegment(c.head,this.offset,age,alpha); return; }
-    }
+      this.pool.setSegment(c.head,this.offset,age,alpha,c.distance,c.distance+length);
+      if (!((age>=interval && length>=style.size*.5) || age>=style.life*.4 || length>600)) return;
+      c.distance += length;
+    } else c.distance = 0;
     column.copy(solid/thrust>.3 ? solidSmoke : clean/thrust>.5 ? vapour : fuelSmoke);
     c.head = this.pool.emit(this.point,this.velocity,this.clock,style.life,style.size,style.growth,column,undefined,alpha,true);
+    this.pool.setSegment(c.head,this.offset.set(0,0,0),0,alpha,c.distance,c.distance);
     c.node.copy(this.point); c.time = this.clock; c.active = true;
   }
   /** Sun and sky light for smoke shading; `sun` is the direction towards the sun in scene space. */

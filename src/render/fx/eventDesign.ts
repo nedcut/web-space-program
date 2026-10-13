@@ -13,7 +13,7 @@ export function structuralStressPunch(stress: number): number {
   return Math.min(.25, .08 * Math.max(0, stress));
 }
 /** Peak opacity of an ascent smoke column by propellant: solids are dense white, clean fuels a faint vapour. */
-export const TRAIL_OPACITY: Readonly<Record<string, number>> = { solid: .85, kerolox: .45, methalox: .3, hydrolox: .22, monoprop: .15 };
+export const TRAIL_OPACITY: Readonly<Record<string, number>> = { solid: 1, kerolox: .75, methalox: .55, hydrolox: .35, monoprop: .2 };
 /**
  * Render-only shape of an ascent smoke column deposited in air of `density` kg/m³ by `thrust` N.
  * Thin air dissipates and spreads smoke faster; it fades out entirely towards vacuum.
