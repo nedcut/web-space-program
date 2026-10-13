@@ -17,6 +17,8 @@ import { NavballCluster } from './NavballCluster';
 import { StagingStack } from './StagingStack';
 import { Altimeter, TimeControl } from './TopBar';
 import { AppToolbar, AppWindow, useAppEscape, useApps, type AppId, type HudApp, type ToolbarAction } from './AppLauncher';
+import { ResizeGrip, useWinSizes } from './Resizable';
+import { limits as sizeLimits } from './windowSize';
 import { CrewCards } from './CrewCards';
 import { PortHighlight, type PartScreenInto, type PortMark } from './PortHighlight';
 import type { StagePartGlyph } from './glyphs';
@@ -248,6 +250,8 @@ export interface HudDockSlots {
 }
 
 const ENGINEERING_KEY = 'wsp.hud.engineeringStrip.v1';
+/** Map planner column width (the column's CSS width is the default). Height follows the column. */
+const PLANNER_LIMITS = sizeLimits({ minW: 240, maxW: 480 });
 const ORBIT_KEY = 'wsp.hud.orbitStrip.v1';
 
 export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadConnected, shortcutsEnabled = true, partScreen, partScreenInto }: {
@@ -262,6 +266,8 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
   const distance = (m: number) => imperial ? (!Number.isFinite(m) ? '—' : Math.abs(m) < 1609.344 ? `${(m / 0.3048).toFixed(0)} ft` : `${(m / 1609.344).toFixed(2)} mi`) : formatDistance(m);
   const speed = useCallback((v: number) => imperial ? `${(v * 2.236936).toFixed(1)} mph` : formatSpeed(v), [imperial]);
   const apps = useApps();
+  const { sizes, setSize } = useWinSizes();
+  const leftRef = useRef<HTMLDivElement>(null);
   const [engineeringStrip, setEngineeringStrip] = useState(() => { try { return sessionStorage.getItem(ENGINEERING_KEY) === '1'; } catch { return false; } });
   const toggleEngineering = () => setEngineeringStrip(v => { try { sessionStorage.setItem(ENGINEERING_KEY, v ? '0' : '1'); } catch { /* storage unavailable */ } return !v; });
   const [orbitStrip, setOrbitStrip] = useState(() => { try { return sessionStorage.getItem(ORBIT_KEY) === '1'; } catch { return false; } });
@@ -336,14 +342,17 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
   return (
     <div className="overlay hud" style={{ width: `${100 / settings.hudScale}%`, height: `${100 / settings.hudScale}%`, transform: `scale(${settings.hudScale})`, transformOrigin: 'top left' }}>
       {/* Top-left: time warp and clocks; in map view the maneuver planner; docking indicator; staging at the bottom. */}
-      <div className={`hud-left${t.mapMode ? ' map' : ''}`}>
+      <div ref={leftRef} className={`hud-left${t.mapMode ? ' map' : ''}`} style={t.mapMode && sizes.planner?.w ? { width: sizes.planner.w } : undefined}>
         <TimeControl t={t} cb={cb} />
         {dock?.onboarding}
         {dock?.recovery}
         {engineeringStrip && !t.eva && t.engineering && <EngineeringStrip data={t.engineering} speed={speed} />}
         {!dock?.onboarding && !t.mapMode && t.feel.alerts.length === 0 && t.messages.length === 0 && <FlightHint hint={t.feel.hint} onDismiss={cb.onDismissHint} />}
         {gamepadConnected && <div className="hud-pad mono">GAMEPAD</div>}
-        {t.mapMode && dock?.maneuver}
+        {t.mapMode && dock?.maneuver && <div className="mp-host">
+          {dock.maneuver}
+          <ResizeGrip edge="r" target={() => leftRef.current} limits={PLANNER_LIMITS} size={sizes.planner} onResize={s => setSize('planner', s)} label="Resize maneuver planner" focusable />
+        </div>}
         <div className="hud-left-fill" />
         {/* In map view this block also keeps the planner above the navball cluster's SAS column. */}
         <div className="hud-left-bottom">
@@ -370,11 +379,11 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
       <div className="hud-right">
         <AppToolbar apps={hudApps} open={apps.state.open} onToggle={apps.toggle} actions={actions} />
         <div className="app-stack">
-          {docked.map(a => <AppWindow key={a.id} app={a} scale={settings.hudScale} escTarget={a.id === escTarget} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} />)}
+          {docked.map(a => <AppWindow key={a.id} app={a} scale={settings.hudScale} escTarget={a.id === escTarget} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} size={sizes[a.id]} onResize={size => setSize(a.id, size)} />)}
         </div>
         <CrewCards crew={t.crew} eva={t.eva} mapMode={t.mapMode} noControl={t.noControl} cameraMode={t.feel.cameraMode} cb={stableCb} />
       </div>
-      {floating.map(a => <AppWindow key={a.id} app={a} pos={apps.state.pos[a.id]} scale={settings.hudScale} escTarget={a.id === escTarget} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} />)}
+      {floating.map(a => <AppWindow key={a.id} app={a} pos={apps.state.pos[a.id]} scale={settings.hudScale} escTarget={a.id === escTarget} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} size={sizes[a.id]} onResize={size => setSize(a.id, size)} />)}
 
       {/* Lower-left instruments leave the vessel and its plume in the clear. */}
       {/* Docking mode: the alignment readout sits beside the navball, where the eyes already are. */}

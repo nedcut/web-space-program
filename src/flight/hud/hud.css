@@ -86,7 +86,7 @@
   box-shadow: var(--shadow-panel); color: var(--text); font: 11.5px/1.35 var(--sans); text-align: left; pointer-events: none;
 }
 .app-stack { flex: 0 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; scrollbar-width: thin; pointer-events: none !important; }
-.app-win { display: flex; flex-direction: column; max-height: min(62vh, 560px); flex-shrink: 0; overflow: hidden; }
+.app-win { position: relative; display: flex; flex-direction: column; max-height: min(62vh, 560px); flex-shrink: 0; overflow: hidden; }
 /* Docked windows share the column between the toolbar and the crew/MAP dock: each shrinks (its body scrolls)
    down to a readable minimum before the column itself scrolls, so none slides under MAP/AUTO or the crew. */
 .app-stack > .app-win { flex: 0 1 auto; min-height: 110px; }
@@ -97,7 +97,28 @@
 .app-win-head > span { flex: 1; }
 .app-win-close { width: 22px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--text-dim); cursor: pointer; font-size: 16px; line-height: 1; }
 .app-win-close:hover { color: var(--text); background: var(--surface-soft); }
-.app-win-body { overflow-y: auto; min-height: 0; padding: 8px 10px; scrollbar-width: thin; }
+.app-win-body { flex: 1 1 auto; overflow-y: auto; min-height: 0; min-width: 0; padding: 8px 10px; scrollbar-width: thin; }
+.app-win-reset { font-size: 13px; }
+
+/* ------------------------------------------------------------ resize grips (app windows, map planner column) */
+.rs-grip { position: absolute; z-index: 2; touch-action: none; }
+.rs-l, .rs-r { top: 0; bottom: 10px; width: 6px; cursor: ew-resize; }
+.rs-l { left: 0; }
+.rs-r { right: 0; }
+.rs-b { left: 10px; right: 10px; bottom: 0; height: 6px; cursor: ns-resize; }
+.rs-bl, .rs-br { bottom: 0; width: 14px; height: 14px; border-radius: 2px; }
+.rs-bl { left: 0; cursor: nesw-resize; }
+.rs-br { right: 0; cursor: nwse-resize; }
+/* Corner marks appear on hover/focus only: the HUD stays quiet while flying. */
+.rs-bl::after, .rs-br::after { content: ''; position: absolute; bottom: 3px; width: 7px; height: 7px; opacity: 0; transition: opacity .12s; border-bottom: 2px solid var(--text-dim); }
+.rs-bl::after { left: 3px; border-left: 2px solid var(--text-dim); }
+.rs-br::after { right: 3px; border-right: 2px solid var(--text-dim); }
+.app-win:hover > .rs-grip::after, .rs-grip:focus-visible::after { opacity: 1; }
+.rs-grip:hover::after { border-color: var(--accent); }
+.rs-grip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.rs-l:hover, .rs-r:hover, .rs-b:hover, .resizing > .rs-grip:active { background: var(--accent-soft); }
+.app-win.resizing, .hud-left.resizing { user-select: none; }
+.app-win.resizing { max-height: none; }
 .app-win-body > .panel { background: none !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; padding: 0 !important; max-height: none !important; }
 .app-win-body .flight-data-title > .label { display: none; }
 .app-empty { font-size: 12px; color: var(--text-dim); }
@@ -272,7 +293,13 @@ html[data-ui-hidden='true'] :is(.tutorial-panel, .scenario-flight, .multiplayer-
 .hud-left-bottom { display: flex; flex-direction: column; justify-content: flex-end; min-height: 0; flex: 0 1 auto; pointer-events: none !important; }
 /* The navball cluster's G meter and SAS column reach ~215px up inside this column's width: keep the planner above. */
 .hud-left.map > .hud-left-bottom { min-height: 212px; }
-.hud-left > .panel.mp { flex: 0 100 auto; min-height: 210px; width: 100%; padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+/* The planner's host carries the column-width grip (the panel's contents are the map package's). */
+.hud-left > .mp-host { flex: 0 100 auto; width: 100%; min-height: 0; position: relative; display: flex; flex-direction: column; }
+.hud-left > .mp-host:has(> .panel.mp) { min-height: 210px; }
+.mp-host > .panel.mp { flex: 0 1 auto; min-height: 0; width: 100%; padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.mp-host > .rs-r { bottom: 0; right: -5px; width: 8px; }
+.mp-host:not(:has(> .panel.mp)) > .rs-grip { display: none; }
+.mp-host > .rs-r:focus-visible { outline-offset: 0; }
 .mp-nodes { flex: 0 0 auto; max-height: 112px; overflow-y: auto; display: grid; gap: 4px; font-size: 12px; scrollbar-width: thin; }
 .mp-node { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; }
 .mp-scroll { flex: 0 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-right: -6px; padding-right: 6px; scrollbar-width: thin; }
