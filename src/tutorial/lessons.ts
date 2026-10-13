@@ -51,7 +51,7 @@ export function lunarTrainer(): CraftDef {
   return { ...craft, name: 'Selene Training Lander', parts: craft.parts.filter(p => !removed.has(p.uid)).map(p => ({ ...p, stage: p.partId === 'chute-main' || p.partId === 'dec-1' ? 0 : 1 })) };
 }
 const map = step('map', 'Press {map} to open the map. The orbit line shows where you will coast without thrust.', c => !!c.flight?.mapMode, '[data-tutorial="map"]');
-const node = step('node', 'Choose Circularize @ Ap in the maneuver planner. A node describes a future change in velocity; the burn readout beside the navball counts down to it, and Execute next node in the Flight assist app can fly it.', c => !!c.world?.nodes.length, '[data-tutorial="maneuver"]');
+const node = step('node', 'In the maneuver planner choose Circularize → Ap. A node describes a future change in velocity; the burn readout beside the navball counts down to it, and Execute next node in the Flight assist app can fly it.', c => !!c.world?.nodes.length, '[data-tutorial="maneuver"]');
 export const LESSONS: Lesson[] = [
   { id: 'building', title: 'Building your first rocket', description: 'Assemble, stage and launch a small rocket.', scene: 'editor', craft: () => null, steps: [
     step('pod', 'Welcome! I’m Flight Director Ama Okafor. Pick a command pod from the palette, then click in the building area to place it.', modulePresent('command'), '.vab-palette'),
@@ -83,7 +83,7 @@ export const LESSONS: Lesson[] = [
     step('orbit', 'Execute the circularisation burn near Ap. Finish when Pe also clears the atmosphere: now the whole orbit stays in space.', stableOrbit),
   ] },
   { id: 'moon-transfer', title: 'Maneuver nodes & going to the Moon', description: 'Plan a transfer, encounter the Moon and capture.', scene: 'flight', craft: buildMoonLander, setup: w => placeInCircularOrbit(w, w.active!, 'earth', 90000), steps: [map,
-    step('transfer', 'In the maneuver planner choose Moon, then Plan transfer. Review the node time and burn; Execute next node in the Flight assist app can perform it.', c => !!c.world?.nodes.length, '[data-tutorial="maneuver"]'),
+    step('transfer', 'In the maneuver planner pick Moon under Transfer, then a departure. Review the node time and burn; Execute next node in the Flight assist app can perform it.', c => !!c.world?.nodes.length, '[data-tutorial="maneuver"]'),
     step('encounter', 'Look for the Moon encounter on the predicted path. Execute your transfer node, then coast with time warp. The prediction should enter the Moon’s sphere of influence.', c => !!c.world?.active && (c.world.active.body === 'moon' || c.world.trajectory().some(p => p.orbit.body === 'moon' || p.nextBody === 'moon'))),
     step('arrival', 'Coast to lunar arrival. Time warp stops at encounters; check which body owns your orbit.', c => c.world?.active?.body === 'moon'),
     step('capture', 'At lunar periapsis, burn retrograde or plan Circularize @ Pe. Slow down until the lunar orbit is bound and its periapsis stays above the surface.', c => c.world?.active?.body === 'moon' && stableOrbit(c)),

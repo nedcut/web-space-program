@@ -12,6 +12,10 @@ import { nodeSummary } from './nodeInfo';
 import { useEscape } from '../../ui/nav/escape';
 import { altKeyLabel, mapKeyHelp } from '../../ui/map/nodeKeys';
 import type { FlightMap } from './FlightMap';
+import { SasIcon, type SasGlyph } from '../hud/glyphs';
+import { DvBudget } from '../hud/PlannerBits';
+import { budgetStages, shortCountdown, shortDuration } from '../hud/plannerFormat';
+import '../hud/planner.css';
 
 const BODY_KIND = { star: 'Star', planet: 'Planet', dwarf: 'Dwarf planet', moon: 'Moon', asteroid: 'Asteroid', comet: 'Comet' } as const;
 
@@ -123,8 +127,8 @@ function MapKeysHelp({ onClose }: { onClose(): void }) {
   </div>;
 }
 
-const AXES: { axis: 'prograde' | 'normal' | 'radial'; label: string }[] = [
-  { axis: 'prograde', label: 'Prograde' }, { axis: 'normal', label: 'Normal' }, { axis: 'radial', label: 'Radial' },
+const AXES: { axis: 'prograde' | 'normal' | 'radial'; label: string; glyph: SasGlyph }[] = [
+  { axis: 'prograde', label: 'Prograde', glyph: 'prograde' }, { axis: 'normal', label: 'Normal', glyph: 'normal' }, { axis: 'radial', label: 'Radial', glyph: 'radialOut' },
 ];
 
 /** Numeric Δv field: shows the live value, edits commit on Enter/blur. */
@@ -165,36 +169,42 @@ function NodeMenu({ controller: c, node }: { controller: FlightController; node:
   const s = nodeSummary(w, node);
   const set = (axis: 'prograde' | 'normal' | 'radial', v: number) => { node[axis] = v; w.nodes = [...w.nodes]; };
   const step = c.map.fineTune ? 0.1 : 1;
-  const index = [...w.nodes].sort((a, b) => a.time - b.time).indexOf(node) + 1;
+  const sorted = [...w.nodes].sort((a, b) => a.time - b.time);
+  const index = sorted.indexOf(node) + 1;
+  // Δv the earlier nodes use first, so the budget shows what is left for this one.
+  const before = sorted.slice(0, index - 1).reduce((t, n) => t + Math.hypot(n.prograde, n.normal, n.radial), 0);
+  const keys = `↑↓ prograde · →← normal · ${altKeyLabel()}+↑↓ radial · Shift ×10 · ${altKeyLabel()}+→← next node · Del delete`;
+  const burnOk = Number.isFinite(s.burn);
   return <div ref={ref} className="panel map-node-menu" role="dialog" aria-label="Maneuver node" onPointerDown={e => e.stopPropagation()} onWheel={e => e.stopPropagation()}>
-    <div className="map-menu-head" style={{ marginBottom: 0 }}>
-      <strong>Node {index}{w.nodes.length > 1 ? ` of ${w.nodes.length}` : ''} · {formatCountdown(node.time - w.ut)}</strong>
+    <div className="map-menu-head" style={{ marginBottom: 0 }} title={`Node at ${formatCountdown(node.time - w.ut)}\nKeys: ${keys}`}>
+      <strong>Node {index}{w.nodes.length > 1 ? `/${w.nodes.length}` : ''} · <span className="pl-num">{shortCountdown(node.time - w.ut)}</span></strong>
       <button className="btn ghost small" aria-label="Close node menu" onClick={() => ui.closeMenus()}>×</button>
     </div>
-    {AXES.map(({ axis, label }) => <div className="row" key={axis}>
-      <span className="label" style={{ color: AXIS_COLORS[axis] }}>{label}</span>
+    {AXES.map(({ axis, label, glyph }) => <div className="row" key={axis}>
+      <span className="axis" style={{ color: AXIS_COLORS[axis] }}><SasIcon mode={glyph} size={15} color={AXIS_COLORS[axis]} />{label}</span>
       <button className="btn small" aria-label={`${label} −${step}`} onClick={() => set(axis, node[axis] - step)}>−</button>
       <DvField label={label} value={node[axis]} onCommit={v => set(axis, v)} />
       <button className="btn small" aria-label={`${label} +${step}`} onClick={() => set(axis, node[axis] + step)}>+</button>
     </div>)}
-    <div className="summary mono">
-      <span>Δv</span><span>{formatSpeed(s.dv)}</span>
-      <span>Burn</span><span>{Number.isFinite(s.burn) ? `${formatDuration(s.burn)} (start ${formatCountdown(node.time - w.ut - s.burn / 2)})` : 'no active engine'}</span>
-      <span>After</span><span style={{ color: '#ff9d3c' }}>Ap {Number.isFinite(s.ap) ? formatDistance(s.ap) : 'escape'} · Pe {formatDistance(s.pe)}</span>
+    <div className="summary">
+      <span>Δv</span><span className="pl-num strong">{formatSpeed(s.dv)}</span>
+      <span>Burn</span><span className="pl-num" title={burnOk ? `Burn ${formatDuration(s.burn)}, start ${formatCountdown(node.time - w.ut - s.burn / 2)}` : 'No active engine or next powered stage'}>
+        {burnOk ? <>{shortDuration(s.burn)} <span className="dim">start {shortCountdown(node.time - w.ut - s.burn / 2)}</span></> : 'no active engine'}</span>
+      <span>After</span><span className="pl-num" style={{ color: '#ff9d3c' }}>Ap {Number.isFinite(s.ap) ? formatDistance(s.ap) : 'escape'} · Pe {formatDistance(s.pe)}</span>
       {s.encounter && <><span>Encounter</span><span style={{ color: s.encounterPe !== undefined && s.encounterPe < 0 ? 'var(--bad)' : 'var(--good)' }}>
         {w.universe.body(s.encounter).name}{s.encounterPe !== undefined ? ` · Pe ${s.encounterPe < 0 ? 'impact' : formatDistance(s.encounterPe)}` : ''}
       </span></>}
     </div>
+    <DvBudget stages={budgetStages(s.stages)} need={s.dv} before={before} />
     <div className="actions">
       <button className="btn small" disabled={!Number.isFinite(s.orbitPeriod) || node.time - s.orbitPeriod < w.ut + 5} onClick={() => ui.shiftOrbit(node.id, -1)}>−1 orbit</button>
       <button className="btn small" disabled={!Number.isFinite(s.orbitPeriod)} onClick={() => ui.shiftOrbit(node.id, 1)}>+1 orbit</button>
       <button className="btn small" disabled={!!c.network || !!c.assist} onClick={() => ui.warpToNode(node.id)}>Warp to</button>
     </div>
     <div className="actions">
-      <label className="fine"><input type="checkbox" checked={c.map.fineTune} onChange={e => { c.map.fineTune = e.target.checked; refresh(); }} style={{ width: 'auto' }} /> Fine tune</label>
+      <label className="fine" title="Steps and handle drags ÷10"><input type="checkbox" checked={c.map.fineTune} onChange={e => { c.map.fineTune = e.target.checked; refresh(); }} style={{ width: 'auto' }} /> Fine tune</label>
       <button className="btn small" onClick={() => { node.prograde = node.normal = node.radial = 0; w.nodes = [...w.nodes]; }}>Zero</button>
       <button className="btn small danger" title="Delete (Del)" onClick={() => ui.deleteNode(node.id)}>Delete</button>
     </div>
-    <div className="keys">↑↓ prograde · →← normal · {altKeyLabel()}+↑↓ radial · Shift ×10 · {altKeyLabel()}+→← next node</div>
   </div>;
 }
