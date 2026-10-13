@@ -51,7 +51,7 @@ export function generateContracts(seed: number, batch = 0, advanced = false, cre
     ? offer('flyby', 'moon', 'Enter the Moon sphere of influence', 2)
     : readiness.landing || advanced
       ? offer('return', body === 'earth' ? 'moon' : body, `Surface expedition and return · ${label(body === 'earth' ? 'moon' : body)}`, Math.max(2, factor))
-      : offer('return', 'earth', 'Test flight · land or splash down and recover', 1);
+      : offer('return', 'earth', 'Test flight · Earth', 1);
   return [offer('orbit', body, `Establish orbit · ${label(body)}`, factor), expedition,
     offer('science', scienceBody, `Field survey · ${label(scienceBody)} / ${biome}`, scienceBody === 'earth' ? 1 : factor, biome)];
 }

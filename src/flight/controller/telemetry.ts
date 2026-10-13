@@ -7,7 +7,8 @@ import { RESOURCES } from '../../data/resources';
 import { RESOURCE_COLORS } from '../../ui/inspector/resources';
 import { flightData, flightPredictions } from '../../game/flightData';
 import { cachedStageDeltaV } from '../../game/stageDeltaVCache';
-import { maxRailsIndexAt, RAILS_WARP, warpLabel } from '../../game/timewarp';
+import { maxRailsIndexAt, RAILS_WARP, warpLabel, warpRate } from '../../game/timewarp';
+import { scienceReady } from '../../game/science';
 import { type WorldVessel } from '../../game/world';
 import { ACTION_GROUP_IDS, controlPartUid, dockedPorts, freePorts, GROUP_LABELS, groupBindings, lightOn, type PortInfo, type StageDeltaV } from '../../sim/vessel';
 import { bindingLabel } from '../../input/bindings';
@@ -134,6 +135,14 @@ export function targetOptions(this: FlightController, _internals: FlightControll
   return [...out.slice(0, 12), ...bodies];
 }
 
+
+// Biome lookups sample terrain: refresh the Science light at 2 Hz (telemetry runs at 10 Hz).
+let readyCache = { vessel: '', ut: -Infinity, count: 0 };
+function readyScience(w: FlightController['world'], wv: WorldVessel): number {
+  if (wv.state.id !== readyCache.vessel || Math.abs(w.ut - readyCache.ut) >= 0.5 * Math.max(1, warpRate(w.warp)))
+    readyCache = { vessel: wv.state.id, ut: w.ut, count: scienceReady(w, wv) };
+  return readyCache.count;
+}
 
 export function telemetry(this: FlightController, internals: FlightControllerInternals, wv: WorldVessel): Telemetry {
   const w = this.world;
@@ -286,6 +295,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     },
     met,
     inclination,
+    scienceReady: readyScience(w, wv),
     stageLocked: this.stageLocked,
     vesselName: st.name,
     flightData: flightData(w, wv, dvs, internals.predictions),

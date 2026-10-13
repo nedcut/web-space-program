@@ -78,6 +78,8 @@ export interface Telemetry {
   trim?: { pitch: number; yaw: number; roll: number; held: boolean } | null;
   crew: Astronaut[];
   noControl: boolean;
+  /** Experiments aboard that would add science here (lights the Science app). */
+  scienceReady?: number;
   /** Active astronaut: jetpack gas (kg), jetpack switch, boarding state, feet on the ground (or water). */
   eva: { fuel: number; jetpack: boolean; canBoard: boolean; boardHint: string | null; landed: boolean } | null;
   ut: number;
@@ -315,7 +317,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
       {dock?.resources}
     </> },
     { id: 'flightData', title: `Flight data (${bindingLabel('flightData')})`, icon: 'flightData', width: 290, shrink: 8, limits: { minW: 240 }, content: <FlightDataPanel data={t.flightData} onClose={() => apps.close('flightData')} /> },
-    { id: 'science', title: 'Science', icon: 'science', shrink: 3, content: dock?.science ?? null },
+    { id: 'science', title: t.scienceReady ? `Science · ${t.scienceReady} new here` : 'Science', icon: 'science', badge: t.scienceReady ? 'on' : null, shrink: 3, content: dock?.science ?? null },
     { id: 'crew', title: t.eva ? 'EVA' : `Crew (${t.crew.length})`, icon: 'crew', badge: t.noControl ? 'warn' : null, content: <CrewPanel t={t} cb={cb} /> },
     { id: 'alarms', title: 'Mission alarms', icon: 'alarm', badge: dock?.alarmActive ? 'warn' : null, content: dock?.alarms ?? null },
     { id: 'assist', title: 'Flight assist', icon: 'assist', badge: dock?.assistActive ? 'on' : null, content: dock?.assist ?? null },

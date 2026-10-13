@@ -21,6 +21,8 @@ export function instruments(w: World, v: WorldVessel) {
     return ids.flatMap(id => {
       const e = EXPERIMENTS.find(e => e.id === id);
       return e ? [{ uid: p.uid, experiment: id, name: e.name, part: p.def.name,
+        /** Science this run would add (halved per previous run of the subject). */
+        value: scienceValue(e.base, bodyMultiplier(w.universe.body(c.body)), w.progression.archive[subjectKey(e, c)]?.runs ?? 0),
         available: experimentAvailable(e, c, !!w.universe.body(c.body).atmosphere),
         recorded: v.state.parts.some(part => part.scienceData?.some(d => d.subject === subjectKey(e, c))) }] : [];
     });
@@ -90,6 +92,11 @@ export function progressionEvent(w: World, event: ProgressEvent) {
     if (w.mode === 'career') { w.progression.funds += Math.round(milestone[3] * careerScaleMultiplier(w.universe.preset)); w.progression.reputation += 5; w.refreshContracts(); }
     w.message(`${milestone[1]} · +${milestone[2]} science${w.mode === 'career' ? ` · +${Math.round(milestone[3] * careerScaleMultiplier(w.universe.preset)).toLocaleString()} cr` : ''}`, 'info', 10);
   }
+}
+/** Experiments aboard that would add science right now (the Science app's toolbar light). */
+export function scienceReady(w: World, v: WorldVessel): number {
+  if (w.mode === 'sandbox' || !w.canControl(v.state)) return 0;
+  return instruments(w, v).filter(i => i.available && !i.recorded && i.value >= 0.05).length;
 }
 /** Called after every fixed physics step and after rails propagation. */
 export function evaluateProgression(w: World) {
