@@ -816,3 +816,27 @@ Owner: getting around a docked complex felt clunky ("navigating the space statio
 - **Direction comes from legs and retractable wheels only, and "all down → raise, else lower".** `gearState` used "any bay/leg/wheel down", so an open bay (or one stray leg) made G send "up" to a vessel the pilot expected to lower. Bays still follow the toggle (the cargo/service bay descriptions say so) but only decide the direction on a vessel with no legs or wheels.
 - **Rapid and paused presses alternate.** `toggleGear` remembers its last request until the vessel state reflects it, so presses made before the sim applied the previous one (zero-step frames, pause menu) flip each time instead of repeating the same direction. The message follows the direction actually sent (group-only vessels always said "Gear up" before).
 - Not changed: multiplayer. The client already sends the frame's `gear` immediately and the host applies it on its next tick; the host path has no zero-step frames.
+
+## Firefox QA of 2026-10-12 merges; HUD windows stay on screen (2026-10-12, op/ffqa)
+- **Docked app windows stop above the map readout.** The map readout card (`.map-readout`, screen px, above MAP) sits outside the
+  scaled HUD, so a tall docked window (Flight data) ran under it at 1440×900. The card now publishes its height as
+  `--map-readout-h` on `<html>` (ResizeObserver: fires on size changes only), the HUD root carries `--hud-scale`, and in map
+  view `.hud-right.map .crew-dock` grows to cover the card (`(h + 66px) / scale − 10px`, MAP stays at the bottom), so the
+  column's flex shrink keeps every docked window above it. Floating windows are the player's choice and are not pushed.
+- **Floating windows stay fully on screen.** Dragging clamps the whole window (was: down to 40 px of the title, and the
+  right edge only for the starting width). After a move, a resize (size change), on load (a position saved in a larger
+  window) and on browser `resize`, `clampPos` (`windowSize.ts`, tested) pulls the window back in; when it is larger than the
+  viewport the top-left wins so the title bar stays reachable. Not while a drag or resize is in progress. The clamp is not
+  undone when the browser grows again (the window keeps the clamped spot). Nothing runs per frame.
+- **Firefox walkthrough (Windows Firefox, production build, 1440×900 and 1600×900): everything on today's list passes.**
+  No console errors in any run. Drivers `C:\wsp-tools\drv-ff\ffqa-*.mjs` (lib `ffqa-lib.mjs`), shots and
+  `results.jsonl` in `C:\wsp-tools\shots\ffqa\`. Alt+Left/Right in the map cycles nodes and leaves `location`/history alone.
+- **Driver limits found (not app bugs):** in this puppeteer/Firefox BiDi setup a synthesized Enter or Space never activates a
+  focused `<button>`, even on a blank `data:` page, so "Enter on a focused button" (Launch Pad row, Esc-menu items) is not
+  testable there; Enter handled in `keydown` (search fields) works. `page.setViewport` logs an unsupported
+  `setScreenOrientationOverride` error but does resize the viewport. Pointer moves outside the viewport throw.
+- **Known Firefox difference, not changed:** Firefox sends no pointer events to disabled buttons, so the editor's disabled
+  Undo/Redo show no toolbar tooltip on hover (Chrome does). Small; would need a wrapper or a hit test.
+- **Perf (F8 overlay open, Medium, 1600×915, 10 s, 2 reps):** pad 3.54 / 2.76 ms CPU per frame, 244 draws; orbit 2.42 / 3.01 ms,
+  126 draws. wp5's Firefox A/B recorded pad 3.34 ms / 260 draws, orbit 2.65 ms / 153 draws: within the ±0.4 ms noise between runs.
+  Firefox under automation still paces at ~30 ms p50.
