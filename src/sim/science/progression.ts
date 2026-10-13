@@ -39,12 +39,14 @@ export function generateContracts(seed: number, batch = 0, advanced = false, cre
   const scienceBody = readiness.landing || advanced ? body : 'earth';
   const scienceBiomes = BIOMES[scienceBody] ?? GENERIC_BIOMES;
   const biome = batch === 0 ? 'Launch Complex' : scienceBiomes[Math.floor(random() * scienceBiomes.length)];
-  const offer = (kind: ContractKind, target: string, title: string, f: number, b?: string): Contract => ({
-    id: `survey-${batch}-${kind}`, kind, title, body: target, biome: b, status: 'offered',
-    advance: Math.round((kind === 'science' ? 3000 : kind === 'flyby' ? 10000 : 5000) * f * creditsMultiplier),
-    reward: Math.round((kind === 'science' ? 10000 : kind === 'flyby' ? 20000 : kind === 'orbit' ? 18000 : 12000) * f * creditsMultiplier),
-    penalty: Math.round(3000 * f * creditsMultiplier), reputation: 3 * f, landed: false,
-  });
+  const offer = (kind: ContractKind, target: string, title: string, f: number, b?: string): Contract => {
+    // Home-planet test flights and field surveys use the same small rockets on every scale: no scale bonus.
+    const m = target === 'earth' && (kind === 'return' || kind === 'science') ? f : f * creditsMultiplier;
+    return { id: `survey-${batch}-${kind}`, kind, title, body: target, biome: b, status: 'offered',
+      advance: Math.round((kind === 'science' ? 3000 : kind === 'flyby' ? 10000 : 5000) * m),
+      reward: Math.round((kind === 'science' ? 10000 : kind === 'flyby' ? 20000 : kind === 'orbit' ? 18000 : 12000) * m),
+      penalty: Math.round(3000 * m), reputation: 3 * f, landed: false };
+  };
   const expedition = readiness.orbit && !readiness.landing
     ? offer('flyby', 'moon', 'Enter the Moon sphere of influence', 2)
     : readiness.landing || advanced

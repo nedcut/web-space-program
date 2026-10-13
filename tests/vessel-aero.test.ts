@@ -104,6 +104,30 @@ describe('parachutes', () => {
     expect(v.parts).toHaveLength(2);
   });
 
+  it('opens only at the rated load (not at the cut threshold) and stays reefed until the load falls', () => {
+    const env = flatEarthEnv({ scaleHeight: Infinity, surface: 'none' });
+    // q ≈ 31 kPa: above the 25 kPa rating, below the 37.5 kPa cut. It used to open here and tear a step later.
+    const v = buildVessel(stackCraft([{ partId: 'chute', stage: 0 }, 'capsule']), TEST_CATALOG, {
+      orientation: NOSE_UP, position: { x: 0, y: 0, z: 5000 }, velocity: { x: 0, y: 0, z: -225 },
+    });
+    activateNextStage(v);
+    stepVessel(v, neutralInput(), env, 0);
+    expect(v.parts[0].chute!.phase).toBe('armed');
+    // Below the deploy altitude at 120 m/s (q ≈ 8.8 kPa): reefed, not full, until slower.
+    const low = buildVessel(stackCraft([{ partId: 'chute', stage: 0 }, 'capsule']), TEST_CATALOG, {
+      orientation: NOSE_UP, position: { x: 0, y: 0, z: 600 }, velocity: { x: 0, y: 0, z: -120 },
+    });
+    activateNextStage(low);
+    const phases: string[] = [];
+    for (let i = 0; i < 50 * 60 && low.situation !== 'landed'; i++) {
+      stepVessel(low, neutralInput(), flatEarthEnv(), i * 0.02);
+      if (phases.at(-1) !== low.parts[0].chute!.phase) phases.push(low.parts[0].chute!.phase);
+      if (low.parts[0].chute!.phase === 'full') { expect(-low.velocity.z).toBeLessThan(95); break; }
+    }
+    expect(phases).toEqual(['semi', 'full']);
+    expect(low.parts).toHaveLength(2);
+  });
+
   it('does not deploy while dynamic pressure is above 1.5x the rated maximum; cuts if overloaded', () => {
     const env = flatEarthEnv({ scaleHeight: Infinity, surface: 'none' });
     const v = buildVessel(stackCraft([{ partId: 'chute', stage: 0 }, 'capsule']), TEST_CATALOG, {

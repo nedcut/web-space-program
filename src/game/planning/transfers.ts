@@ -384,22 +384,41 @@ export function planFreeReturn(world: PlanningWorld, targetId: string, opts: Tra
     const e = evaluate(plan.node, plan.encounterTime - plan.node.time);
     return e && { plan, ...e };
   };
-  // Low flybys swing the craft out; wide ones fall short of the parent. The return perigee falls as the flyby widens.
-  let lo = Math.max(opts.periapsisAltitude ?? 0, target.radius * 0.1, 10000), hi = target.soi * 0.5;
+  // The return perigee changes monotonically with the flyby periapsis on each side of the moon; which way depends
+  // on the approach. Sample log-spaced periapses for a sign change, then bisect it.
   report?.('Searching free return', 0);
-  const a = attempt(lo), b = attempt(hi);
-  if (!a || !b || a.perigee < entry || b.perigee > entry) return null;
-  let best = Math.abs(a.perigee - entry) < Math.abs(b.perigee - entry) ? a : b;
+  const lo0 = Math.max(opts.periapsisAltitude ?? 0, target.radius * 0.1, 10000), hi0 = target.soi * 0.5;
+  let samples: { pe: number; r: NonNullable<ReturnType<typeof attempt>> }[] = [];
+  let lo = NaN, hi = NaN;
+  // Which side of the moon a departure passes is fixed by its timing: try the planner's departure options in turn.
+  let candidates: (number | undefined)[] = [departure];
+  for (let c = 0; c < candidates.length && c < 4 && Number.isNaN(lo); c++) {
+    departure = candidates[c];
+    samples = [];
+    for (let k = 0; k <= 6; k++) {
+      const pe = lo0 * Math.pow(hi0 / lo0, k / 6);
+      const r = attempt(pe);
+      report?.('Searching free return', (c * 7 + k + 1) / 36);
+      if (!r) continue;
+      if (c === 0 && k === 0) candidates = [departure, ...(r.plan.windows ?? []).map(w => w.departure).filter(t => Math.abs(t - r.plan.node.time) > 600)];
+      const prev = samples.at(-1);
+      samples.push({ pe, r });
+      if (prev && Math.sign(prev.r.perigee - entry) !== Math.sign(r.perigee - entry)) { lo = prev.pe; hi = pe; break; }
+    }
+  }
+  if (Number.isNaN(lo)) return null;
+  const sLo = Math.sign(samples.at(-2)!.r.perigee - entry);
+  let best = samples.slice(-2).reduce((x, y) => Math.abs(y.r.perigee - entry) < Math.abs(x.r.perigee - entry) ? y : x).r;
   // Coarse: flyby periapsis (each step a full transfer plan, accurate to the planner's periapsis tolerance).
-  for (let k = 0; k < 10 && Math.abs(best.perigee - entry) > central.radius * 0.5; k++) {
-    report?.('Searching free return', (k + 1) / 12);
-    const mid = attempt((lo + hi) / 2);
-    if (!mid) { hi = (lo + hi) / 2; continue; }
+  for (let k = 0; k < 8 && Math.abs(best.perigee - entry) > central.radius * 0.5; k++) {
+    report?.('Searching free return', (k + 28) / 36);
+    const pe = Math.sqrt(lo * hi), mid = attempt(pe);
+    if (!mid) { hi = pe; continue; }
     if (Math.abs(mid.perigee - entry) < Math.abs(best.perigee - entry)) best = mid;
-    if (mid.perigee > entry) lo = (lo + hi) / 2; else hi = (lo + hi) / 2;
+    if (Math.sign(mid.perigee - entry) === sLo) lo = pe; else hi = pe;
   }
   // Fine: trim the departure burn's prograde component until the return perigee sits in the entry corridor.
-  report?.('Trimming the return', 11 / 12);
+  report?.('Trimming the return', 15 / 16);
   const n0 = best.plan.node, flight = best.plan.encounterTime - n0.time;
   const at = (d: number) => evaluate({ ...n0, prograde: n0.prograde + d }, flight);
   const f0 = best.perigee - entry;

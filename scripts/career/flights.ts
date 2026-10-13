@@ -6,7 +6,7 @@ import { World } from '../../src/game/world';
 import { PART_CATALOG } from '../../src/data/parts';
 import { launchCost, launchProblem } from '../../src/data/technology';
 import { neutralInput } from '../../src/sim/vessel';
-import { propagate } from '../../src/sim/orbit';
+import { periapsisRadius, propagate, stateToElements } from '../../src/sim/orbit';
 import type { CraftDef } from '../../src/sim/vessel/types';
 import {
   ascentGuidance, coastUntil, planFreeReturn, executeNode, landingController, localFrame, planCircularization, planCourseCorrection,
@@ -68,20 +68,36 @@ function stageAll(w: World) {
   for (let i = 0; i < 8 && w.active && w.active.state.nextStage >= 0; i++) w.stageActive();
 }
 
-/** Hold retrograde (surface) and fall to the ground or sea; stages everything once descending in air. */
+/** Rails-warp to the next atmosphere entry (after a skip-out or from orbit). */
+function coastToEntry(w: World) {
+  const wv = w.active!, body = w.universe.body(wv.body), top = (body.atmosphere?.height ?? 0) * 1.02;
+  const orbit = w.orbitOf(wv);
+  let t = w.ut;
+  while (length(propagate(orbit, t).position) - body.radius > top && t < w.ut + 3e6) t += 5;
+  coastUntil(w, t);
+}
+
+/** Hold retrograde (surface) and fall to the ground or sea; stages everything once descending in air. Skips warp. */
 export function descend(w: World, biomes: Set<string>, maxTime = 4000): boolean {
-  const wv = w.active!;
-  const atmo = w.universe.body(wv.body).atmosphere?.height ?? 0;
+  const atmo = w.universe.body(w.active!.body).atmosphere?.height ?? 0;
   let staged = false;
-  return fly(w, maxTime, (w) => {
-    const f = localFrame(w, w.active!);
-    if (!staged && f.altitude < atmo && length(f.surfVel) > 1) { stageAll(w); staged = true; }
-    const v = length(f.surfVel) > 1 ? normalize(f.surfVel) : f.up;
-    return neutralInput({ sas: 'maneuver', maneuverDirection: scale(v, -1), throttle: 0 });
-  }, (w) => {
+  const down = (w: World) => {
     const s = w.active!.state;
     return (s.situation === 'landed' || s.situation === 'splashed') && length(localFrame(w, w.active!).surfVel) < 0.5;
-  }, biomes);
+  };
+  for (let pass = 0; pass < 4 && w.active; pass++) {
+    const ok = fly(w, maxTime, (w) => {
+      const f = localFrame(w, w.active!);
+      if (!staged && f.altitude < atmo && length(f.surfVel) > 1) { stageAll(w); staged = true; }
+      const v = length(f.surfVel) > 1 ? normalize(f.surfVel) : f.up;
+      return neutralInput({ sas: 'maneuver', maneuverDirection: scale(v, -1), throttle: 0 });
+    }, (w) => down(w) || (staged && localFrame(w, w.active!).altitude > atmo * 1.05 && dotUp(w) > 0), biomes);
+    if (!w.active) return false;
+    if (down(w)) return true;
+    if (!ok) return false;
+    coastToEntry(w);
+  }
+  return !!w.active && down(w);
 }
 
 /**
@@ -169,6 +185,25 @@ export function toMoon(w: World, biomes: Set<string>, minStage = 0, periapsis = 
   return w.active!.body === 'moon' ? null : 'missed the Moon';
 }
 
+/** A player's trim on the way home: drag the prograde handle of a node until the periapsis reads `target`. */
+export function fixPerigee(w: World, target: number, minStage = 0): string | null {
+  const wv = w.active!;
+  const R = w.universe.body(wv.body).radius;
+  if (Math.abs(w.orbitSummary(wv).pe - target) < 2000) return null;
+  const o = w.orbitOf(wv), t = w.ut + 600, s = propagate(o, t);
+  const dir = normalize(s.velocity);
+  const peWith = (x: number) => periapsisRadius(stateToElements(o.mu, o.body, s.position, { x: s.velocity.x + dir.x * x, y: s.velocity.y + dir.y * x, z: s.velocity.z + dir.z * x }, t)) - R;
+  let lo = -60, hi = 60;
+  const sLo = Math.sign(peWith(lo) - target);
+  if (sLo === Math.sign(peWith(hi) - target)) return 'perigee out of trim range';
+  for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (Math.sign(peWith(m) - target) === sLo) lo = m; else hi = m; }
+  const node = w.addNode(t); node.prograde = (lo + hi) / 2;
+  const burn = executeNode(w, node, { minStage, matchEnergy: false });
+  if (!runAutopilot(w, burn, { maxTime: 1e5 })) return `perigee trim: ${burn.error}`;
+  if (process.env.CAREER_DEBUG) console.log('trimmed perigee', w.orbitSummary(wv).pe, 'with', node.prograde);
+  return null;
+}
+
 /** Free-return Moon flyby: the Moon swings the craft back into Earth's atmosphere without a return burn. */
 export function freeReturnFlyby(w: World, biomes: Set<string>, minStage = 0): string | null {
   const t = Date.now();
@@ -184,7 +219,8 @@ export function freeReturnFlyby(w: World, biomes: Set<string>, minStage = 0): st
   if (w.active!.body !== 'moon') return 'missed the Moon';
   coastUntil(w, w.ut + 20 * 86400, { stopOnSoi: true });
   if (process.env.CAREER_DEBUG) console.log('after flyby', w.active!.body, w.orbitSummary(w.active!).pe);
-  return w.active!.body === 'earth' ? null : 'did not come back to Earth';
+  if (w.active!.body !== 'earth') return 'did not come back to Earth';
+  return fixPerigee(w, arrivalPeriapsisAltitude(w, 'moon', 'earth', w.ut), minStage);
 }
 
 /** In the Moon's SOI: optionally capture, then burn home and coast back into Earth's SOI. */

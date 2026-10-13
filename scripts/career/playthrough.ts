@@ -77,6 +77,14 @@ export function playCareer(preset: ScalePreset = 'standard', log = (s: string) =
     desk((kind, body) => body === 'earth');
     const r = orbitFlight('Scale orbiter', sensor(preset === 'real' ? buildRealOrbiter() : buildChallengingOrbiter()), 2);
     record('Scale orbiter', !r.err, r.err ?? [...r.biomes].join(', ').slice(0, 200), r.cost, research([]));
+    desk((kind, body) => body === 'earth' || kind === 'flyby');
+    {
+      const biomes = new Set<string>();
+      const { cost, problem } = buy(w, sensor(preset === 'real' ? buildRealOrbiter() : buildChallengingOrbiter()));
+      let err = problem;
+      if (!err) err = toOrbit(w, biomes, preset === 'challenging' ? 140000 : 220000, 2) ?? freeReturnFlyby(w, biomes, 0) ?? deorbitAndRecover(w, biomes);
+      record('Scale orbiter Moon flyby', !err, err ?? [...biomes].join(', ').slice(0, 200), cost, research([]));
+    }
     const expedition = preset === 'real' ? 775 : 595;
     const spent = TECH_NODES.filter(n => p.unlocked.includes(n.id)).reduce((n, t) => n + t.cost, 0);
     log(`end: funds ${Math.round(p.funds)} science ${p.science.toFixed(1)} (spent ${spent}; expedition path needs ${expedition}) rep ${p.reputation} unlocked ${p.unlocked.join(' ')} milestones ${p.milestones.join(' ')}`);
