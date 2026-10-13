@@ -1,6 +1,7 @@
 import { updateSiteShadow } from '../../render/site/shadows';
 import { maxDrawingEdge } from '../../render/core/drawingLimits';
 import { PhotoCamera } from '../../render/core/PhotoCamera';
+import { frameProfiler } from '../../util/frameProfiler';
 import * as THREE from 'three';
 import { game } from '../../game/store';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -195,6 +196,9 @@ export class HubScene {
     this.disposers.push(() => window.removeEventListener('pointermove', onMove), () => window.removeEventListener('click', onClick));
 
     if (import.meta.env?.DEV) (window as unknown as { __hub?: HubScene }).__hub = this;
+    // Same profiler as flight (F8 there): `__perf.enabled = true` measures the hub frame (render = submit,
+    // planets, input = hover picking). One boolean check per call when off.
+    (window as unknown as { __perf?: typeof frameProfiler }).__perf = frameProfiler;
 
     const ro = new ResizeObserver(() => this.resize());
     ro.observe(host);
@@ -250,6 +254,7 @@ export class HubScene {
     const cap = game.get().settings.frameRateCap;
     if (cap && now - this.last < 1000 / cap - .5) return;
     const frameMs = now - this.last;
+    frameProfiler.beginFrame(now);
     const dt = Math.min(0.1, frameMs / 1000);
     this.last = now;
     if (!this.photo.active) this.elapsed += dt;
@@ -261,6 +266,7 @@ export class HubScene {
       this.framesRendered++;
       if (!this.revealed && this.framesRendered >= 3 && ((this.planets.isSurfaceReady?.('earth') ?? true) || performance.now() - this.startedAt > HUB_REVEAL_TIMEOUT_MS)) this.reveal();
     }
+    frameProfiler.endFrame();
   };
 
   /** Build every program in slices (a few ms per frame) instead of in the first visible frames. */
@@ -334,7 +340,9 @@ export class HubScene {
     sc.updateProjectionMatrix();
 
     updateSiteShadow(this.sun, this.pipeline.renderer.shadowMap.enabled);
+    let p0 = frameProfiler.now();
     this.planets.update({ t, origin, camera: this.camera, sunPos, dt, focusBody: 'earth', viewportHeight: this.pipeline.lodViewportHeight, switchViewportHeight: this.pipeline.lodSwitchViewportHeight });
+    frameProfiler.add('planets', p0);
     const camSim = add(origin, { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z });
     const eclipse = this.planets.sunVisibility?.(camSim, sunPos) ?? 1;
     const tint = this.planets.sunTint?.(camSim, sunPos) ?? [1, 1, 1];
@@ -354,6 +362,7 @@ export class HubScene {
     this.glare.update(this.camera, sd, eclipse, tint);
 
     // Hover picking.
+    p0 = frameProfiler.now();
     let hit: SiteObjectId | null = null;
     if (this.pointer && !this.photo.active) {
       this.raycaster.setFromCamera(this.pointer, this.camera);
@@ -367,7 +376,10 @@ export class HubScene {
       document.body.style.cursor = hit ? 'pointer' : '';
     }
 
+    frameProfiler.add('input', p0);
+    p0 = frameProfiler.now();
     if (submit) this.pipeline.render(this.scene, this.camera);
+    frameProfiler.add('render', p0);
   }
 
   dispose() {
