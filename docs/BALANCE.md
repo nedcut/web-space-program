@@ -5,6 +5,44 @@ Reproduce the tables with `npx tsx scripts/balance-analysis.ts`. Flight regressi
 `npx vitest run --maxWorkers=2`. No physics parameters, resource densities, engine ratings,
 or deterministic trace fixtures were changed.
 
+## Flown career playthrough — 2026-10-13 (op/career)
+
+`npx tsx scripts/career/playthrough.ts standard|challenging|real` plays a new career through the real `World`:
+contract desk (accept what can be flown, decline the rest), stock craft, autopilot building blocks for the
+flying, the Science app's experiments in every situation, recovery and research. It is a diligent player who
+never crashes; each flight is minutes of CPU. `tests/career-playthrough.test.ts` keeps the key steps green.
+
+Standard, after this pass (all flights succeed; science column is banked after the research bought):
+
+| # | Flight | Cost cr | Science earned | Science banked | Funds after | Game day | Research bought |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | Kestrel hop, straight up (314 km apex) | 5,848 | 112 | 92 | 91,994 | 0 | propulsion-0, energy-0 |
+| 2 | Kestrel hop again | 5,848 | 56 | 138 | 118,988 | 0 | discovery-0 |
+| 3 | Firstlight orbit (starting parts) and return | 7,636 | 88 | 226 | 166,048 | 0 | — |
+| 4 | Meridian free-return Moon flyby, entry trim 0.7 m/s | 11,050 | 133 | 269 | 278,667 | 3.0 | propulsion-1, structures-0/1, guidance-0 |
+| 5 | Selene crewed Moon landing and return | 31,157 | 235 | 504 | 335,175 | 6.8 | — |
+
+Before this pass, the same route failed on flight 1: the Kestrel flown straight up lost its crew (also with the
+engines cut at 100 or 150 km apoapsis; only arcs tipped ≥ 30° survived), and the planner's Moon transfer
+(30 km periapsis) flung a Meridian into solar orbit — it cannot capture and return.
+A Mars window from a Standard parking orbit (day 12): next in 66 days, 1,164 m/s, 84-day flight (Venus: 31 days,
+1,129 m/s); a Meridian upper stage has 1,448 m/s left in orbit, and probe cores (Precision Attitude, 135 science
+cumulative) are affordable right after the Moon landing. Planned, not flown.
+
+Challenging / Real (route: Kestrel hops at 0°, 30°, 60°, then the scale's stock orbiter, then a free-return
+flyby with it):
+
+| Scale | Hops to the orbiter's 280 science | Orbit flight | Moon flyby | Science banked / spent | Expedition needs | Funds after |
+| --- | ---: | --- | --- | --- | ---: | ---: |
+| Challenging | 3 | flight 4 | flight 5 (Meridian Challenging, free return) | 128 / 290 | 595 | 2.06 M (from 614 k) |
+| Real | 3 | flight 4 | not possible: Meridian Real has no Δv for TLI | 84 / 290 | 775 | 11.8 M (from 6 M) |
+
+On Real the next ~400 science must come from Earth biomes and orbital situations before any lunar hardware.
+Before this pass hop 1 alone paid ~300 k (Challenging) / ~3 M (Real) from scale-multiplied Earth contracts.
+
+What a diligent Standard player meets: Moon landing on flight 5, everything researched for it by flight 3; funds
+never constrain (335 k unspent after the landing). Not retuned here: see the owner recommendations in PROGRESS.md.
+
 ## Findings and scope
 
 Selene's old launch warning was misleading as an assessment of its normal controlled ascent.

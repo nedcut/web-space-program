@@ -1059,6 +1059,8 @@ Owner decisions 2026-10-13 (both recommended options).
   The Science app's toolbar button lights (and its title says "N new here") when an experiment aboard would pay
   in the current situation; refreshed at 2 Hz of real time, not per frame. Run buttons show the value; the
   situation reads "Flying low · Grasslands" instead of `flyingLow`. Commission cards say which hardware counts.
+- **Debrief recovery value is the hardware refund** (`World.lastRecoveryRefund`); a contract reward paid by the
+  recovery (e.g. the Earth test flight) shows under credits earned instead of inflating "Recovery value".
 - **Not changed (owner's call):** science income and tech costs (a diligent player lands on the Moon on flight 5
   on Standard), funds as a constraint (nothing to spend surplus on), larger-scale science grind, bare-pod
   aerodynamic trim. See the career report in PROGRESS.md.

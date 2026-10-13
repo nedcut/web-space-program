@@ -1,6 +1,53 @@
 # Progress Report
 
-_Last updated: 2026-10-09_
+_Last updated: 2026-10-13_
+
+## Career playthrough (2026-10-13, op/career)
+
+A new career, flown from the first screen. Headless: `npx tsx scripts/career/playthrough.ts standard|challenging|real`
+(real World, contracts, science, recovery). Browser: CDP Chrome (new career → commissions → Kestrel straight up,
+SAS off → chute → recovery → debrief) and a Firefox spot check. Numbers and tables: docs/BALANCE.md; rules: DECISIONS.md.
+
+**Fixed (ranked by impact):**
+1. **The first rocket killed its crew.** Flown straight up, the stock Kestrel reached 315–420 km and the capsule hit
+   the sea at ~250 m/s. Three causes: capsules tumbled apex-first (no blunt-body trim in the aero model), chutes
+   opened exactly at their tear-off load and were cut a step later, and a full canopy at speed ripped off. Now
+   capsules trim heat-shield first, chutes open at their rating and stay reefed until slow, and the Kestrel carries
+   the starter heat shield. Straight up with SAS off: recovered in the browser (314 km, +56 science).
+2. **The first crewed Moon flyby stranded its crew** (planner's 30 km periapsis slingshots to solar orbit; a
+   Meridian can't capture and return). New **Free return** button in the maneuver planner (Moon departures).
+3. **No "what next".** Hub "Next goal" card: commissions → sounding hop → orbit → Moon → planets, with the stock
+   craft and the research/science still missing.
+4. **Money exploits:** accept-then-abandon paid (advance > penalty: +1.4 M per Real flyby offer); three identical
+   test-flight contracts paid out on one hop; Earth hops paid 300 k / 3 M on Challenging / Real. All closed.
+5. **Contract desk:** splashdowns now count as landing (sea recoveries failed "land and return"); stale offers are
+   replaced when the program gains capability (the Moon offer used to need declining everything); clearer titles
+   and briefs ("Test flight · Earth", "on the pad counts").
+6. **Challenging/Real started with nothing launchable** in the Launch Pad picker: the Kestrel is now stock there too.
+7. **Science app:** its toolbar button lights ("Science · 1 new here") when an experiment would pay; Run buttons show
+   the value; "Flying low · Grasslands" instead of `flyingLow`.
+8. Debrief counted a contract reward paid at recovery as "Recovery value"; main menu said 60,000 cr on every scale;
+   614,399.99… cr funds.
+
+**Not fixed — recommendations for you:**
+- **Pacing (taste):** a diligent Standard player lands on the Moon on flight 5 (game day 7) and has everything for it
+  by flight 3 (first hop alone: 112 science; Selene path costs 110). Recommend tier costs about ×2–3 for tiers 1–3
+  (e.g. 15/60/200/400) and a Kerbin-like situation multiplier for home-planet science (landed 0.3 … high space 1.0),
+  then re-run the playthrough. Not done: it reshapes the whole tree and the larger-scale plans.
+- **Money has no sink** (335 k unspent after the Moon landing on Standard; 2 M / 12 M on Challenging / Real).
+  Recommend facility upgrades (pad mass limit, part count, tracking range) or crew hiring as the sink before
+  tightening rewards.
+- **Real scale grind:** the Real orbiter can't reach the Moon; ~400 more science must come from Earth biomes before
+  the 775-science expedition hardware. Recommend a mid-tier Real lunar probe stock craft or cheaper Real lunar path.
+- **Entry corridor guidance:** a free return still needs a ~1 m/s trim on the way home (29.6 km perigee skips out;
+  target ~21 km). Recommend an "Entry trim" button / corridor band on the periapsis readout.
+- **Bare pods** (no heat shield) still tumble apex-first; fine physically but could use a hint.
+- Contracts remain four kinds with 20-year deadlines; far-body offers gate on propulsion-3 + energy-2.
+
+**Unverified:** Mars/Venus probe planned only (windows from LEO), not flown. Challenging/Real Moon landings not
+re-flown in the playthrough (existing mission tests cover them). In a puppeteer Firefox run, Enter on the focused
+Launch Pad picker row did not launch (clicking did; Chrome Enter works) — likely the driver, not checked by hand.
+Screenshots: `C:\wsp-tools\shots\career\{before,after,after2,ff}\`.
 
 ## EVA round 2 (2026-10-09, op/eva2)
 
