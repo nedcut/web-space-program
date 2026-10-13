@@ -1,6 +1,13 @@
 # Progress Report
 
-_Last updated: 2026-10-09_
+## Sharp Saturn title screen (2026-10-13)
+
+- Replaced the forced-Low live backdrop with an original **3840 × 2400 still** rendered once using the game's Ultra shaders/geometry and antialiasing. The WebP is **172 KB**, included in offline precaching.
+- The menu now creates **zero canvases** and runs **no background rendering or animation loop**. The old half-CSS-resolution preset (plus an unreset GPU-tier multiplier) was stretching big pixels across the Retina screen.
+- Checked image sharpness/cropping in Chromium at DPR 2, 1280×800 and 1728×1024; confirmed no planetary renderer/worker requests. Typecheck, build and lint pass; **1,870 tests pass, one skipped**. Mac/Zen is not directly tested.
+- Reproduce the art with `npm run dev` → `/scripts/art/menu-portrait.html`; download to `public/menu/saturn.webp`. Spacepedia still uses its live planet previews.
+
+_Last updated: 2026-10-13_
 
 ## EVA round 2 (2026-10-09, op/eva2)
 

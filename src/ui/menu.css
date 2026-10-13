@@ -1,4 +1,5 @@
 /* Main menu front door: Continue, New program, Load (UX-2). Tokens only. */
+.menu-backdrop { width: 100%; height: 100%; object-fit: cover; object-position: right center; pointer-events: none; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .menu-version { position: absolute; bottom: var(--space-4); right: var(--space-5); }
 
