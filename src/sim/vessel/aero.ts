@@ -241,6 +241,9 @@ export interface ChuteContext {
   altitudeAGL: number;
 }
 
+/** Fraction of the rated load at which a reefed canopy may open fully. */
+const FULL_OPEN_LOAD = 0.2;
+
 /** Advance parachute state machines (arming, semi/full deploy animation, cutting on overload). */
 export function updateParachutes(v: VesselState, ctx: ChuteContext, dt: number, events: VesselEvent[]): void {
   for (const p of v.parts) {
@@ -250,7 +253,8 @@ export function updateParachutes(v: VesselState, ctx: ChuteContext, dt: number, 
     const overload = ctx.dynamicPressure > 1.5 * m.maxQ;
     const prev = c.phase;
     if (c.phase === 'armed') {
-      if (ctx.air.pressure >= (p.tweaks?.chuteMinPressure ?? m.minPressure) && !overload) {
+      // Open only at the rated load: opening right at the cut threshold tore the canopy off a step later.
+      if (ctx.air.pressure >= (p.tweaks?.chuteMinPressure ?? m.minPressure) && ctx.dynamicPressure <= m.maxQ) {
         c.phase = 'semi';
         c.progress = 0;
       }
@@ -263,7 +267,8 @@ export function updateParachutes(v: VesselState, ctx: ChuteContext, dt: number, 
         const e = smoothstep(0, 1, c.progress);
         if (c.phase === 'semi') {
           c.cda = m.semiCdA * e;
-          if (ctx.altitudeAGL <= (p.tweaks?.chuteDeployAltitude ?? m.deployAltitude)) {
+          // Reefed until the drag has bled off speed: a full canopy at the semi load would tear the chute away.
+          if (ctx.altitudeAGL <= (p.tweaks?.chuteDeployAltitude ?? m.deployAltitude) && ctx.dynamicPressure <= FULL_OPEN_LOAD * m.maxQ) {
             c.phase = 'full';
             c.progress = 0;
           }
