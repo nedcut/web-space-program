@@ -39,7 +39,7 @@ describe('first flights', () => {
     for (const preset of ['standard', 'challenging', 'real'] as const) {
       const universe = new Universe(preset);
       const stock = STOCK_CRAFTS.filter(s => s.scale === preset).map(s => ({ id: s.id, craft: s.build() }));
-      const options = launchOptions({ pad: null, saved: [], stock, mode: 'career', progression: newProgression(careerScaleMultiplier(preset)), earth: universe.body('earth') });
+      const options = launchOptions({ pad: null, saved: [], stock, mode: 'career', progression: newProgression(careerScaleMultiplier(preset)), earth: universe.body('earth'), preset });
       expect(options.some(o => !o.blocked && !o.warning), preset).toBe(true);
     }
   }, 240_000);

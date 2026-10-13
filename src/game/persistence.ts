@@ -123,7 +123,7 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
   world.surveyedBodies = [...(data.surveyedBodies ?? [])];
   world.progression = structuredClone(data.progression ?? newProgression(careerScaleMultiplier(world.universe.preset)));
   // Programs saved before facility upgrades keep everything they could launch (see LEGACY_FACILITIES).
-  if (!data.progression?.facilities) world.progression.facilities = { ...LEGACY_FACILITIES };
+  if (data.progression && !data.progression.facilities) world.progression.facilities = { ...LEGACY_FACILITIES };
   if (world.mode === 'career' && !world.progression.contracts.length) world.refreshContracts();
   world.crew = structuredClone(data.crew ?? []);
   world.crewSeed = data.crewSeed ?? world.crewSeed;
