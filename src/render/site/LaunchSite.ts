@@ -1399,7 +1399,8 @@ export class LaunchSite {
     const at = id ? this.ringAt.get(id) : undefined;
     if (this.highlightRing) {
       this.highlightRing.visible = !!at;
-      if (at) { this.highlightRing.position.copy(at.position); this.highlightRing.scale.setScalar(at.scale); }
+      // Site meshes have frozen matrices (see the batching pass): update the moved ring's by hand.
+      if (at) { this.highlightRing.position.copy(at.position); this.highlightRing.scale.setScalar(at.scale); this.highlightRing.updateMatrix(); }
     }
     if (this.surfaceUniforms) this.surfaceUniforms.uVabGlow.value.set(id === 'vab' ? 0x2a6fa8 : 0x000000).multiplyScalar(id === 'vab' ? 0.55 : 0);
   }

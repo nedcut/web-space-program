@@ -14,12 +14,14 @@ export function DebriefCard({ debrief: d, onOpenLog, onLaunchAgain, onDismiss }:
   const ref = useRef<HTMLElement>(null);
   useEscape(onDismiss, true, 'panel');
   useEffect(() => focusFirst(ref.current), []);
+  const earned = d.funds === null ? null : d.funds - (d.recoveryValue ?? 0);
   const rows: [string, string][] = [
     ['Max altitude', formatDistance(d.maxAltitude)],
     ...(d.furthest ? [['Furthest', d.furthest] as [string, string]] : []),
     ['Flight time', formatDuration(d.duration)],
     ...(d.science !== null && Math.abs(d.science) > 0.05 ? [['Science', signed(d.science, 1)] as [string, string]] : []),
-    ...(d.funds !== null && Math.abs(d.funds) >= 1 ? [['Credits', `${signed(Math.round(d.funds))} cr`] as [string, string]] : []),
+    // Credits other than the recovery refund (contract rewards), so the refund is not counted twice.
+    ...(earned !== null && Math.abs(earned) >= 1 ? [['Credits earned', `${signed(Math.round(earned))} cr`] as [string, string]] : []),
     ...(d.reputation !== null && Math.abs(d.reputation) >= 0.5 ? [['Reputation', signed(Math.round(d.reputation))] as [string, string]] : []),
     ...(d.recoveryValue !== null ? [['Recovery value', `${Math.round(d.recoveryValue).toLocaleString()} cr`] as [string, string]] : []),
   ];

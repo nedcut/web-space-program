@@ -102,3 +102,4 @@
 .hub-menu-list .btn { text-align: left; display: flex; align-items: center; justify-content: space-between; }
 .hub-load { width: min(820px, calc(100vw - 32px)); }
 .hub-load > .ui-modal-heading { display: none; }
+.hub-launch-more { align-self: flex-start; margin-top: 4px; }

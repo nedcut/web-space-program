@@ -728,3 +728,48 @@ Owner: getting around a docked complex felt clunky ("navigating the space statio
 - **Terminate** now uses `ConfirmModal` (Enter confirms, Esc cancels) instead of a hand-built modal. The context menu uses UX-8's `info: false` and drops the old 'Fly' relabel; its subtitle shows the vessel kind.
 - **"Fly left the camera far away" (audit shot 49) is not a camera bug.** Re-run on main in CDP Chrome (orbit scenario → node → hub → Tracking → Fly): the camera sits at 26.9 m (`framingDistance` of the 8.4 m bounding radius) at 0, 2 and 6 s, and the vessel is framed normally. In shot 49 the two "streaks" are exactly where the Meridian's solar arrays are: the hull had not drawn yet, because the audit driver took the screenshot 8 s after the click without waiting for `sceneReady`. The real defect in that shot was the "Drag the colored node handles…" hint showing in flight view. That hint is now only offered in map view (`flight/controller/telemetry.ts`, one condition; outside UX-5's files).
 - **Cost:** nothing per frame. The list is rebuilt on Tracking's existing 4 Hz UI refresh: one orbit summary per flying vessel (previously two) plus one pass over alarms.
+
+## UX-3 Space Center hub (2026-10-12, op/ux3)
+- **Post-flight debrief card replaces the exit notice.** `exitTo('spaceCenter')` (and Recover) builds a `FlightDebrief`
+  from the report named by `World.latestReportId` (`flight/exit.ts` → `ui/hub/debrief.ts`, pure and tested) and hands it
+  to the hub through a one-slot module variable (not the store: it holds a craft and is never persisted). The card shows
+  outcome and where the vessel was left, max altitude, furthest reach (other worlds beat Earth, landed > orbit > flyby),
+  flight time, science / credits / reputation gained since the flight was set up (after the launch cost; mode-aware),
+  recovery value (career), crew aboard at exit, and any queued notice. Buttons: Open Flight Log (focused; the Log already
+  opens the latest report), Launch again (only for a flight that launched a craft; same launch rules), Dismiss (Esc).
+  The card is shown once: leaving the hub drops it. "Credits earned" excludes the recovery refund so it is not counted
+  twice. Kicker wording matches the Flight Log arrival banner ("Back from flight · recovered"); that banner no longer
+  appears, because no exit goes to the Flight Log any more (code left in place, UX-4a's file).
+- **Every facility has a building.** Integration Hall = assembly building, Launch Pad = pad, Fleet Tracking = tracking
+  dish, Flight Log = operations offices, Research Lab = workshop hangar, Mission Control = launch-control blockhouse
+  (`ui/hub/facilities.ts`; `LaunchSite` pick boxes, `SiteObjectId` widened). Buildings for facilities closed in the
+  current mode still label themselves ("Mission Control · Career programs only") and a click explains instead of
+  entering. The pad's ground ring now moves and scales to whichever building is hovered (the assembly building keeps its
+  glow); site meshes have frozen matrices, so the ring's matrix is updated by hand.
+- **Hover label next to the pointer**, not anchored to the building: no per-frame projection. Picking runs only after a
+  pointer move, at most every 50 ms, against six boxes; clicks pick again at the click point. Known trade-off: if the
+  pointer rests while the slow camera pendulum drifts (≤ ~15 px/s), the label can be stale until the next move; the
+  click itself is always right. Hovering or focusing a tile rings its building (UI → `HubScene.highlight`).
+- **Launch Pad tile/pad click opens a quick picker** (lazy chunk): the Integration Hall's vehicle first, then saved
+  designs (newest first), then stock craft for this scale; stock that needs research waits behind one "Show N" toggle.
+  Rows show parts · mass · vacuum Δv, a lift-off TWR warning, and blockers (no control, research, funds — the editor's
+  rules). Enter/click flies; "Edit" opens it in the Integration Hall. Launching something else while the Integration
+  Hall holds a draft that is in neither the library nor stock asks first (Save draft and launch / Launch without
+  saving / Cancel). Saved craft from the hub: tile → row = 2 clicks (was 5 through the editor). No thumbnails: they
+  need the editor's offscreen WebGL renderer, a second context next to the hub scene.
+- **Esc on the hub opens a menu** (Resume first and focused, Program: Save as… / Load…, Options: Settings /
+  Spacepedia, Leave: Main menu) at the `screen` layer, so the debrief (`panel`) and dialogs close first and photo mode
+  keeps its Esc. The bottom row is now Menu (Esc) · Spacepedia · Photo mode · Settings; Save as… and Main menu moved
+  into the menu, Load… is new on the hub (the main menu's load panel in a dialog).
+- **Hub profiling:** HubScene feeds the shared `frameProfiler` (`window.__perf`, same as flight's F8): render, planets,
+  input sections. Cost when off: one boolean check per call.
+- **Cost (CDP Chrome, 1600×900, medium, `?scene=spaceCenter&hubCraft=stock-meridian`, 10 s windows, 2 runs × 2
+  builds):** `input` (hover picking) idle pointer over the scene 0.022 → 0.002 ms/frame (no ray while the pointer
+  rests; before it raycast every frame), sweeping 0.008–0.013 → 0.014 ms/frame (six boxes at ≤ 20 Hz). Frame CPU
+  before 2.6–3.2 ms, after 2.7–2.8 ms idle / 2.8 ms sweeping: run-to-run noise, `render` dominates (2.0–2.6 ms).
+- **Evidence:** `C:\wsp-tools\shots\ux3\after\` (driver `C:\wsp-tools\drv\ux3-verify.mjs`, perf `ux3-perf.mjs`): hover
+  labels found for all six buildings; clicks on dish → tracking, blockhouse → missions, offices → flightlog; Esc menu
+  (focus on Resume), Save as… prompt, Load dialog, Esc closes each; key 2 → picker (focus on first launchable) → Enter
+  → flight in 2.5 s; fly 10 s → pause → Space Center → debrief "In flight over Earth · 1064 m · Earth · suborbital ·
+  crew"; Esc dismisses it before the menu; recover on the pad → "Recovered on Earth · Recovery value 5,067 cr";
+  Open Flight Log → Flight Log. No console errors.

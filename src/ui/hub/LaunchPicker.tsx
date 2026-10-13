@@ -38,7 +38,11 @@ export default function LaunchPicker({ onClose }: { onClose: () => void }) {
   const options = useMemo(() => launchOptions({ pad, saved: saved ?? [], stock, mode, progression, earth }),
     [pad, saved, stock, mode, progression, earth]);
   const blurb = new Map(stock.map(s => [`stock:${s.id}`, s.blurb]));
-  const visible = options.filter(o => matchesQuery(`${o.craft.name} ${SOURCE[o.source]} ${blurb.get(o.key) ?? ''}`, query));
+  const matching = options.filter(o => matchesQuery(`${o.craft.name} ${SOURCE[o.source]} ${blurb.get(o.key) ?? ''}`, query));
+  // Stock designs this program cannot fly yet (research) wait behind one toggle instead of filling the list.
+  const [showLocked, setShowLocked] = useState(false);
+  const locked = matching.filter(o => o.source === 'stock' && o.blocked);
+  const visible = showLocked ? matching : matching.filter(o => !locked.includes(o));
 
   // The editor draft lives only in the Integration Hall; launching something else replaces it there.
   const draftAtRisk = (craft: CraftDef) => !!pad?.parts.length && craft !== pad && saved !== null
@@ -72,8 +76,10 @@ export default function LaunchPicker({ onClose }: { onClose: () => void }) {
             <Button className="btn small ghost" onClick={() => edit(o.craft)} aria-label={`Open ${o.craft.name} in the ${facilityLabel('editor')}`}>Edit</Button>
           </div>
         ))}
+        {locked.length > 0 && <Button className="btn ghost small hub-launch-more" aria-expanded={showLocked} onClick={() => setShowLocked(v => !v)}>
+          {showLocked ? 'Hide' : 'Show'} {locked.length} stock vehicle{locked.length > 1 ? 's' : ''} that need{locked.length > 1 ? '' : 's'} research</Button>}
         {saved === null && <div className="hub-launch-empty">Reading the craft library…</div>}
-        {saved !== null && !visible.length && <div className="hub-launch-empty">{options.length ? 'No vehicles match.' : 'No vehicles yet.'}</div>}
+        {saved !== null && !matching.length && <div className="hub-launch-empty">{options.length ? 'No vehicles match.' : 'No vehicles yet.'}</div>}
       </div>
       {replace && <Modal title="Replace the Integration Hall draft?" onClose={() => setReplace(null)} className="ui-modal-small">
         <div className="ui-modal-body">“{pad?.name}” is not in your craft library. Launching “{replace.name}” replaces it in the {facilityLabel('editor')}.</div>
