@@ -55,7 +55,12 @@ const draws = (b: ChunkBatch) => {
   const cam = new THREE.PerspectiveCamera(60, 1, 0.1, 1e4);
   cam.position.set(0, 0, 50); cam.updateMatrixWorld();
   b.mesh.onBeforeRender(null as never, null as never, cam, null as never, null as never, null as never);
-  return (b.mesh as unknown as { _multiDrawCount: number })._multiDrawCount;
+  return b.drawnChunks;
+};
+/** Draw ranges of the last draw list as [first slot, slot count]. */
+const ranges = (b: ChunkBatch) => {
+  const m = b.mesh as unknown as { _multiDrawStarts: Int32Array; _multiDrawCounts: Int32Array; _multiDrawCount: number };
+  return Array.from({ length: m._multiDrawCount }, (_, i) => [m._multiDrawStarts[i] / (I * 4), m._multiDrawCounts[i] / I]);
 };
 
 describe('visible terrain chunk batches', () => {
@@ -82,6 +87,37 @@ describe('visible terrain chunk batches', () => {
     expect(draws(batch)).toBe(1);
     batch.dispose(); mesh.geometry.dispose(); material.dispose();
     expect(gl.live.size).toBe(0);
+  });
+
+  it('merges adjacent visible slots into one draw range and sizes the shader slot to the chunk', () => {
+    const gl = new FakeGL(), material = new THREE.ShaderMaterial();
+    const batch = new ChunkBatch(material, gl as never, V, I);
+    expect(material.defines.CHUNK_SLOT_VERTS).toBe(V);
+    const meshes = Array.from({ length: 6 }, (_, i) => source(i + 1));
+    for (const mesh of meshes) batch.place(mesh, true);
+    expect(draws(batch)).toBe(6);
+    expect(ranges(batch)).toEqual([[0, 6]]);
+    batch.release(meshes[2]);
+    // Culled (behind the camera at z = 50) also splits a run.
+    meshes[4].position.set(0, 0, 100); meshes[4].updateMatrix(); batch.place(meshes[4], true);
+    expect(draws(batch)).toBe(4);
+    expect(ranges(batch)).toEqual([[0, 2], [3, 1], [5, 1]]);
+    // Compaction moves the highest live slot (5) into the hole (2), GPU-side, matrix included; nothing else moves.
+    const matrix = (slot: number) => Array.from(((batch.mesh as unknown as { _matricesTexture: THREE.DataTexture })._matricesTexture.image.data as Float32Array).subarray(slot * 16, slot * 16 + 16));
+    batch.maintain(0);
+    expect(slotOf(batch, meshes[5])).toBe(2);
+    expect(colorOf(batch, 2)).toBe(6);
+    expect(matrix(2)).toEqual(meshes[5].matrix.elements);
+    expect(slotOf(batch, meshes[4])).toBe(4);
+    expect(draws(batch)).toBe(4);
+    expect(ranges(batch)).toEqual([[0, 4]]); // slot 4 (meshes[4]) is still culled
+    meshes[4].position.set(0, 0, 0); meshes[4].updateMatrix(); batch.place(meshes[4], true);
+    expect(draws(batch)).toBe(5);
+    expect(ranges(batch)).toEqual([[0, 5]]);
+    const other = new THREE.ShaderMaterial();
+    batch.setMaterial(other);
+    expect(other.defines.CHUNK_SLOT_VERTS).toBe(V);
+    batch.dispose(); for (const mesh of meshes) mesh.geometry.dispose(); material.dispose(); other.dispose();
   });
 
   it('culls on the bounding sphere centre, not the chunk origin the matrix translates', () => {

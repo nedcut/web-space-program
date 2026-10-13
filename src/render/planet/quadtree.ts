@@ -142,8 +142,8 @@ export class Quadtree {
   setMaterials(terrain: THREE.Material, ocean?: THREE.Material): void {
     this.opts.terrainMaterial = terrain;
     this.opts.oceanMaterial = ocean;
-    if (this.terrainBatch) this.terrainBatch.mesh.material = terrain;
-    if (this.oceanBatch && ocean) this.oceanBatch.mesh.material = ocean;
+    this.terrainBatch?.setMaterial(terrain);
+    if (ocean) this.oceanBatch?.setMaterial(ocean);
     const visit = (n: ChunkNode) => {
       if (n.mesh) n.mesh.material = terrain;
       if (n.oceanMesh && ocean) n.oceanMesh.material = ocean;
