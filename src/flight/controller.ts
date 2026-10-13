@@ -1267,6 +1267,7 @@ export class FlightController {
     this.sunLight.intensity = 3.2 * eclipse;
     // Sky fill: brighter in thick air (scattered skylight), dim in space (planetshine + starlight).
     const airFrac = Math.min(1, air.density / 1.0);
+    this.effects.lighting(sd, camera, this.sunLight.color, this.sunLight.intensity, airFrac);
     const envBody = u.body(wv.body);
     const envRel = sub(origin, bodyState.position);
     const envDist = Math.max(envBody.radius, length(envRel));

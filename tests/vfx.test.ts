@@ -142,21 +142,27 @@ it('gates RCS puffs on enabled controls and available monopropellant', () => {
   fx.dispose();
 });
 
-it('deposits continuous long-lived trail cells by surface-relative travel, ignoring solar translation', () => {
+it('stretches one continuous column segment by surface-relative travel, ignoring solar translation', () => {
   const fx=new FlightFx('medium'), v=buildVessel(buildMoonLander(),PART_CATALOG);
   const p=v.parts.find(p=>p.engine)!; p.engine!.thrust=100000; p.engine!.throttle=1;
   const wind=new THREE.Vector3(30000,0,0), surface=new THREE.Vector3(), center=new THREE.Vector3(0,-1000,0);
   v.velocity={x:30000,y:0,z:0};
   const update=(ut:number)=>fx.update(v,v.position,center,wind,'earth',1000,1,0,surface,.1,1000,ut,[[.3,.3,.3]]);
+  const segment=fx.pool.object.geometry.attributes.segment, length=(i:number)=>Math.hypot(segment.getX(i),segment.getY(i),segment.getZ(i));
   update(0);
   for(let i=1;i<=20;i++){v.position.x+=3000; center.x+=3000; update(i*.1);}
-  expect(fx.pool.object.visible).toBe(false);
+  // Moving with the air: a single head particle (slot 128 opens the trail region) that has barely stretched.
+  expect(fx.pool.object.geometry.attributes.params.getY(129)).toBe(0);
+  expect(length(128)).toBeLessThan(2);
   surface.set(0,120,0); v.velocity.y=120;
   v.position.x+=3000; center.x+=3000; v.position.y+=36; update(2.1);
-  expect(fx.pool.object.visible).toBe(true);
-  const params=fx.pool.object.geometry.attributes.params;
-  expect(params.getY(128)).toBe(90);
+  expect(length(128)).toBeGreaterThan(30);
+  expect(segment.getW(128)).toBeCloseTo(2.1);
+  expect(fx.pool.object.geometry.attributes.params.getY(128)).toBeGreaterThan(60);
   expect(fx.pool.object.geometry.attributes.velocity.getX(128)).toBe(30000);
+  // Engine cutoff leaves the last segment in place to dissipate.
+  p.engine!.thrust=0; v.position.y+=36; update(2.2);
+  expect(length(128)).toBeGreaterThan(30); expect(length(128)).toBeLessThan(40);
   fx.dispose();
 });
 

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { flightEndReady, LOSS_REPLAY_MS, scheduleFlightEnd } from '../src/flight/lossPresentation';
-import { explosionDiameter, impactPunch, separationPunch, trailCells } from '../src/render/fx/eventDesign';
+import { explosionDiameter, impactPunch, separationPunch, trailStyle } from '../src/render/fx/eventDesign';
 import { DebrisPool } from '../src/render/fx/DebrisPool';
 import { FlightCamera } from '../src/flight/camera';
 import { thrustGain } from '../src/audio/design';
@@ -45,10 +45,11 @@ describe('weight and payoff', () => {
     expect(loud(9000)/loud(3300000)).toBeLessThan(.35);
     expect(thrustGain(9000)).toBeGreaterThan(0);
   });
-  it('fills distance cells rather than frame-count cells, with a missed-frame cap', () => {
-    expect(trailCells(300,20,24)).toBe(15);
-    expect(trailCells(1e6,20,24)).toBe(24);
-    expect(trailCells(0,20,24)).toBe(0);
+  it('thins, spreads and shortens ascent smoke in thin air; solids are denser', () => {
+    const sea=trailStyle(1e6,1.225,0), thin=trailStyle(1e6,.05,0), solid=trailStyle(1e6,1.225,1);
+    expect(thin.life).toBeLessThan(sea.life); expect(thin.growth).toBeGreaterThan(sea.growth);
+    expect(trailStyle(1e6,.004,0).opacity).toBe(0); expect(trailStyle(1e6,.03,0).opacity).toBe(1); expect(sea.opacity).toBe(1);
+    expect(solid.size).toBeGreaterThan(sea.size);
   });
   it('spawns at least five template fragments, rebases in float64, retires and reuses them', () => {
     const pool = new DebrisPool(), source = new THREE.CylinderGeometry(1,1,2);

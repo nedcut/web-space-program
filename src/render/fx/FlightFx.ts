@@ -5,7 +5,7 @@ import type { QualityId } from '../core/quality';
 import { rcsEnabled, rcsMask } from '../../sim/vessel/tweaks';
 import { DebrisPool } from './DebrisPool';
 import { FairingPanels } from './FairingPanels';
-import { trailCells } from './eventDesign';
+import { TRAIL_OPACITY, trailStyle, type TrailStyle } from './eventDesign';
 import { ParticlePool } from './ParticlePool';
 
 type BurstEvent = Extract<VesselEvent, { type: 'partDestroyed' | 'decouple' | 'structuralFailure' }>;
@@ -15,6 +15,10 @@ export function isBurstEvent(event: VesselEvent): event is BurstEvent {
 
 export const FX_BUDGET = { low: { count: 128, rate: 12 }, medium: { count: 512, rate: 40 }, high: { count: 1024, rate: 80 }, ultra: { count: 2048, rate: 120 } } as const;
 const smoke = new THREE.Color(.38,.36,.32), steam = new THREE.Color(.8,.82,.85), fire = new THREE.Color(8,2,.15);
+const eclipseFree = (sunIntensity: number) => Math.min(1, sunIntensity/3);
+/** Column albedo: bright alumina-white solids, a warm grey for hydrocarbons, near-white vapour for clean fuels. */
+const solidSmoke = new THREE.Color(.86,.85,.83), fuelSmoke = new THREE.Color(.62,.6,.57), vapour = new THREE.Color(.88,.9,.93), column = new THREE.Color();
+const skyDay = new THREE.Color(.3,.38,.52), skySpace = new THREE.Color(.025,.028,.035);
 const blue = new THREE.Color(.3,.45,1), warm = new THREE.Color(1,.36,.08);
 const spark = new THREE.Color(10,4,.6), dust = new THREE.Color();
 /** One bounded pool for the active flight. Simulation events remain authoritative. */
@@ -23,7 +27,20 @@ export class FlightFx {
   pool: ParticlePool;
   readonly debris = new DebrisPool();
   readonly fairingPanels = new FairingPanels();
-  private readonly trails = new Map<number, { position: THREE.Vector3; credit: number }>();
+  /**
+   * The vessel's single smoke column: a chain of segment particles in the air frame. `node` is the newest node,
+   * drifted with the air; `head` is the particle stretched from it to the current nozzle every frame.
+   */
+  private readonly column = { active: false, head: -1, node: new THREE.Vector3(), time: 0, start: new THREE.Vector3() };
+  private readonly columnNozzle = new THREE.Vector3();
+  private readonly columnExhaust = new THREE.Vector3();
+  private readonly offset = new THREE.Vector3();
+  private readonly seed3 = new THREE.Vector3();
+  private readonly style: TrailStyle = { life: 0, size: 0, growth: 0, opacity: 0 };
+  private readonly sunRadiance = new THREE.Color();
+  private readonly sky = new THREE.Color();
+  private readonly glow = new THREE.Color();
+  private readonly dimGlow = new THREE.Color();
   /**
    * Burst flash. It stays visible at zero intensity between bursts: toggling visibility would change
    * the scene's light count, which is part of every shader key, and recompile all lit materials
@@ -34,7 +51,6 @@ export class FlightFx {
   private readonly velocity = new THREE.Vector3();
   private readonly up = new THREE.Vector3();
   private readonly ambientVelocity = new THREE.Vector3();
-  private readonly trailStart = new THREE.Vector3();
   private readonly nozzle = new THREE.Vector3();
   private readonly engineRotation = new THREE.Quaternion();
   private readonly tangent = new THREE.Vector3();
@@ -64,6 +80,7 @@ export class FlightFx {
     if(quality===this.quality) return;
     this.pool.dispose(); this.quality=quality;
     this.pool=new ParticlePool(FX_BUDGET[quality].count); this.root.add(this.pool.object);
+    this.column.active=false;
   }
   burst(position: Vec3, structural = false, inheritedVelocity?: Vec3, diameter = 9) {
     const count = Math.floor(FX_BUDGET[this.quality].rate * (structural ? .4 : 1));
@@ -91,7 +108,7 @@ export class FlightFx {
     const teleported = this.lastUt !== undefined && this.lastOrigin.distanceToSquared(origin)>1e12;
     this.lastUt = simulationTime; this.lastOrigin.copy(origin);
     // Rails/teleports must not stretch old trails across interplanetary distances.
-    if(elapsed>1 || teleported) { this.pool.clear(); this.debris.clear(); this.fairingPanels.clear(); this.trails.clear(); this.flash=0; }
+    if(elapsed>1 || teleported) { this.pool.clear(); this.debris.clear(); this.fairingPanels.clear(); this.column.active=false; this.flash=0; }
     const step = Math.min(1,elapsed); this.lastStep=step; this.clock += step;
     this.density = density;
     this.up.copy(v.position).sub(bodyPosition).normalize();
@@ -120,6 +137,8 @@ export class FlightFx {
     this.engineLightPosition.set(0,0,0); this.engineLightColor.setRGB(0,0,0);
     let emitters = 0;
     let contact = false;
+    let columnThrust = 0, columnSolid = 0, columnOpacity = 0, columnVapour = 0, columnThrottle = 0;
+    this.columnNozzle.set(0,0,0); this.columnExhaust.set(0,0,0);
     for (const p of v.parts) {
       if(p.leg?.deployed || (p.wheel && p.wheel.compression>0)) contact = true;
       if(emitters>=8) continue;
@@ -147,26 +166,16 @@ export class FlightFx {
       const nozzleAltitude = altitude + this.point.copy(this.nozzle).sub(v.position).dot(this.up);
       const reachesGround = downward>.25 && nozzleAltitude<35*downward && nozzleAltitude>-2;
       const strength = throttle * Math.max(0,1-nozzleAltitude/35);
-      let trail = this.trails.get(p.uid);
-      const fresh = !trail;
-      if (!trail) { trail = { position: this.nozzle.clone(), credit: 0 }; this.trails.set(p.uid,trail); }
-      // Measure travel in the air frame: solar translation alone is ~30 km/s even on the pad.
-      this.trailStart.copy(trail.position);
-      if (!fresh) this.trailStart.addScaledVector(this.ambientVelocity,step);
-      const travelled = this.trailStart.distanceTo(this.nozzle);
-      const scale=this.quality==='low' ? 4 : 1;
-      const spacing = Math.max(30*scale, Math.min(60*scale, Math.sqrt(p.engine.thrust/100000)*12));
-      trail.credit += travelled;
-      const cells = trailCells(trail.credit,spacing,24);
-      trail.credit = Math.min(spacing, trail.credit-cells*spacing);
-      for (let i=0;i<cells;i++) {
-        if (density <= .01 || jet || engine.plume === 'ion' || emitters > 1 || throttle <= 0) continue;
-        this.point.lerpVectors(this.trailStart,this.nozzle,(i+1)/cells).addScaledVector(this.exhaust,4);
-        // Deposit in the rotating air frame, not with the rocket's ascent velocity.
-        this.velocity.copy(this.ambientVelocity).addScaledVector(this.up,.4);
-        this.pool.emit(this.point,this.velocity,this.clock,90,spacing*2,.015,solid||engine.plume==='hydrolox'?steam:smoke);
+      if (!jet && engine.plume!=='ion' && throttle>0) {
+        const weight = p.engine.thrust;
+        columnThrust += weight; columnThrottle = Math.max(columnThrottle,throttle);
+        if (solid) columnSolid += weight;
+        columnOpacity += (TRAIL_OPACITY[engine.plume ?? 'kerolox'] ?? .45) * weight;
+        if (engine.plume==='hydrolox') columnVapour += weight;
+        // Offsets from the vessel keep the float64 sum precise at solar-system distances.
+        this.columnNozzle.x += (this.nozzle.x-v.position.x)*weight; this.columnNozzle.y += (this.nozzle.y-v.position.y)*weight; this.columnNozzle.z += (this.nozzle.z-v.position.z)*weight;
+        this.columnExhaust.addScaledVector(this.exhaust,weight);
       }
-      trail.position.copy(this.nozzle);
       for(let i=0;i<count;i++) {
         // Combustion smoke belongs to an atmosphere. Clean fuels condense into pale vapour.
         if(density>.01 && (contrail || altitude<80) && this.random()<throttle) {
@@ -184,6 +193,7 @@ export class FlightFx {
         }
       }
     }
+    this.updateColumn(v,columnThrust,columnSolid,columnOpacity,columnVapour,columnThrottle,density,teleported||elapsed>1);
     if(altitude<6 && contact) {
       for(let i=0;i<count;i++) {
         this.point.copy(v.position).addScaledVector(this.up,-Math.max(0,altitude-1));
@@ -198,7 +208,6 @@ export class FlightFx {
       this.velocity.copy(v.velocity).addScaledVector(airVelocity,-.22);
       this.pool.emit(this.point,this.velocity,this.clock,.25+this.random()*.5,.15+this.random()*.4,0,body==='titan'?fire:spark);
     }
-    for (const uid of this.trails.keys()) if (!(v.cache.byUid.get(uid)?.engine?.thrust ?? 0)) this.trails.delete(uid);
     this.debris.update(origin,step,this.gravity,v.position,this.up,altitude,this.ambientVelocity);
     this.fairingPanels.update(origin,step,this.gravity,v.position,this.up,altitude,this.ambientVelocity,density);
     this.flash *= Math.exp(-step*8);
@@ -213,8 +222,50 @@ export class FlightFx {
       }
       this.light.intensity=Math.min(900,lightWeight);
     }
+    // Young smoke beside the flame picks up its colour (most visible at dusk and night).
+    if(lightWeight>0) this.glow.copy(this.engineLightColor).multiplyScalar(Math.min(.5,lightWeight/600)/lightWeight);
+    else this.glow.setRGB(0,0,0);
     this.pool.update(origin,this.clock,pixelScale);
     this.pool.ground(v.position,this.up,altitude);
+  }
+  /**
+   * Extend the ascent smoke column. Nodes are deposited at a fixed time cadence sized to the trail region, and the
+   * head segment is stretched to the nozzle every frame, so the column stays attached and gap-free at any speed.
+   */
+  private updateColumn(v: VesselState, thrust: number, solid: number, opacity: number, clean: number, throttle: number, density: number, reset: boolean) {
+    const c = this.column;
+    if (reset) c.active = false;
+    if (thrust<=0 || density<=.004) { c.active = false; return; }
+    const style = trailStyle(thrust,density,solid/thrust,this.style);
+    const alpha = style.opacity*throttle*opacity/thrust;
+    if (alpha<=.002) { c.active = false; return; }
+    this.columnExhaust.normalize();
+    this.point.copy(this.columnNozzle).divideScalar(thrust).add(v.position).addScaledVector(this.columnExhaust,2+style.size*.5);
+    // Deposit in the rotating air frame, not with the rocket's ascent velocity.
+    this.velocity.copy(this.ambientVelocity).addScaledVector(this.up,.4);
+    const interval = Math.max(.2, style.life/(Math.max(8,this.pool.trailCapacity)*.8));
+    if (c.active) {
+      c.node.addScaledVector(this.velocity,this.lastStep); c.start.addScaledVector(this.velocity,this.lastStep);
+      this.offset.copy(this.point).sub(c.node);
+      const age = this.clock-c.time, length = this.offset.length();
+      this.pool.setSegment(c.head,this.offset,age,alpha);
+      if (!((age>=interval && length>=style.size*.5) || age>=style.life*.4 || length>600)) return;
+    } else c.start.copy(this.point);
+    column.copy(solid/thrust>.3 ? solidSmoke : clean/thrust>.5 ? vapour : fuelSmoke);
+    c.head = this.pool.emit(this.point,this.velocity,this.clock,style.life,style.size,style.growth,column,undefined,alpha,true);
+    this.pool.setSegment(c.head,this.offset.set(0,0,0),0,alpha,this.seed3.copy(this.point).sub(c.start));
+    c.node.copy(this.point); c.time = this.clock; c.active = true;
+  }
+  /** Sun and sky light for smoke shading; `sun` is the direction towards the sun in scene space. */
+  lighting(sun: THREE.Vector3, camera: THREE.Camera, sunColor: THREE.Color, sunIntensity: number, air: number) {
+    const elevation = sun.dot(this.up);
+    this.sunRadiance.copy(sunColor).multiplyScalar(sunIntensity/Math.PI);
+    const day = Math.min(1,Math.max(0,(elevation+.08)/.3));
+    // Skylight tracks daylight and air; a low sun reddens it slightly.
+    this.sky.copy(skyDay).lerp(sunColor,.25*(1-day)).multiplyScalar(day*Math.min(1,air*1.5)).add(skySpace);
+    // Flame light on young smoke only shows against a dim sky.
+    this.dimGlow.copy(this.glow).multiplyScalar(1-.75*day*eclipseFree(sunIntensity));
+    this.pool.light(sun,camera,this.sunRadiance,this.sky,this.dimGlow);
   }
   /** Render-only nozzle selection mirrors the sim mixer; never consumes propellant. */
   rcs(v: VesselState, enabled: boolean, translation: {tx:number;ty:number;tz:number}) {

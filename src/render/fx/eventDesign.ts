@@ -12,7 +12,21 @@ export function impactPunch(mass: number, speed: number): number {
 export function structuralStressPunch(stress: number): number {
   return Math.min(.25, .08 * Math.max(0, stress));
 }
-/** Number of overlapping trail cells to fill, bounded even when a frame is missed. */
-export function trailCells(distance: number, spacing: number, budget: number): number {
-  return Math.min(budget, Math.floor(Math.max(0, distance) / spacing));
+/** Peak opacity of an ascent smoke column by propellant: solids are dense white, clean fuels a faint vapour. */
+export const TRAIL_OPACITY: Readonly<Record<string, number>> = { solid: 1, kerolox: .75, methalox: .55, hydrolox: .35, monoprop: .2 };
+export interface TrailStyle { life: number; size: number; growth: number; opacity: number }
+/**
+ * Render-only shape of an ascent smoke column deposited in air of `density` kg/m³ by `thrust` N, written into
+ * `out` (called every frame; no allocation). Thin air dissipates and spreads smoke faster; it fades out towards vacuum.
+ */
+export function trailStyle(thrust: number, density: number, solidShare: number, out: TrailStyle = { life: 0, size: 0, growth: 0, opacity: 0 }): TrailStyle {
+  const air = Math.sqrt(Math.min(1, Math.max(0, density) / 1.225));
+  const fade = Math.min(1, Math.max(0, (density - .004) / .026));
+  out.life = 20 + 70 * air;
+  /** Birth diameter, m. */
+  out.size = (2 + 2.2 * Math.sqrt(Math.max(0, thrust) / 1e5)) * (1 + .4 * solidShare);
+  /** Linear radius growth per second of age. */
+  out.growth = (.45 + .25 * solidShare) * (1 + 1.5 * (1 - air));
+  out.opacity = fade * fade * (3 - 2 * fade);
+  return out;
 }
