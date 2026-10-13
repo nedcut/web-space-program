@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SHADER_TIME_PERIOD, loopingSpeed, shaderTime } from '../src/render/planet/uniforms';
+import { SHADER_TIME_PERIOD, WAVE_RATE_CAP, WaveClock, loopingSpeed, shaderTime } from '../src/render/planet/uniforms';
 
 describe('shaderTime', () => {
   it('keeps the shader clock float32-precise at real UT', () => {
@@ -36,5 +36,31 @@ describe('loopingSpeed', () => {
     // One 60 Hz frame across the wrap moves the pattern as little as any other frame (fraction of a tile).
     const step = Math.abs(phase(after) - phase(before));
     expect(Math.min(step, 1 - step)).toBeLessThan(1e-3);
+  });
+});
+
+describe('WaveClock', () => {
+  const ut0 = 8.1e8 + 0.25;
+  it('is exactly shaderTime(UT) at and below the cap', () => {
+    const clock = new WaveClock(), dt = 1 / 128; // exact steps: UT rounding never reads as over the cap
+    for (let i = 0, ut = ut0; i < 2000; i++, ut += (1 + (i % 4)) * dt) expect(clock.update(ut, dt)).toBe(shaderTime(ut));
+  });
+  it('advances at most WAVE_RATE_CAP× real time under warp and wraps float32-safely', () => {
+    const clock = new WaveClock(), dt = 1 / 60;
+    let prev = clock.update(ut0, dt);
+    for (let i = 1; i < 1e5; i++) {
+      const t = clock.update(ut0 + i * 10000 * dt, dt);
+      let step = t - prev;
+      if (step < 0) step += SHADER_TIME_PERIOD;
+      expect(step).toBeCloseTo(WAVE_RATE_CAP * dt, 6);
+      expect(t).toBeGreaterThanOrEqual(0);
+      expect(t).toBeLessThan(SHADER_TIME_PERIOD);
+      prev = t;
+    }
+  });
+  it('limits backward jumps (reverts) the same way', () => {
+    const clock = new WaveClock(), dt = 1 / 60;
+    const a = clock.update(ut0, dt), b = clock.update(ut0 - 3600, dt);
+    expect(b - a).toBeCloseTo(-WAVE_RATE_CAP * dt, 6);
   });
 });

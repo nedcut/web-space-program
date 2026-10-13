@@ -23,6 +23,29 @@ export function loopingSpeed(speed: number, tile: number): number {
   return (Math.round((speed * SHADER_TIME_PERIOD) / tile) * tile) / SHADER_TIME_PERIOD;
 }
 
+/** Fastest rate (× real time) at which the sea's waves follow simulation time. */
+export const WAVE_RATE_CAP = 4;
+
+/**
+ * Wave clock that follows UT but at most {@link WAVE_RATE_CAP}× real time. At high warp one frame's UT step (167 s
+ * at 10 000×) moved every wave layer by many tiles, so the sea decorrelated each frame and strobed. The clock keeps
+ * the UT reading minus the warp it skipped (`lag`, float64), so up to the cap it is exactly `shaderTime(ut)` and the
+ * wrap at {@link SHADER_TIME_PERIOD} stays seamless. Cosmetic only: two clients (or a replay) can show different waves.
+ */
+export class WaveClock {
+  private lag = 0;
+  private last = NaN;
+  /** `dt`: real seconds since the last frame. Returns the float32-safe shader time. */
+  update(ut: number, dt: number): number {
+    const d = ut - this.last, max = WAVE_RATE_CAP * dt;
+    // Excess beyond the cap either way (reverts and quickloads step back); NaN on the first frame adds nothing.
+    if (d > max) this.lag += d - max;
+    else if (d < -max) this.lag += d + max;
+    this.last = ut;
+    return shaderTime(ut - this.lag);
+  }
+}
+
 /** Uniform objects shared by every material of one planet (updated once per frame). */
 export interface PlanetUniforms {
   uPlanetCenter: THREE.IUniform<THREE.Vector3>;
@@ -56,6 +79,8 @@ export interface PlanetUniforms {
   uRingOuter: THREE.IUniform<number>;
   uRingProfile: THREE.IUniform<THREE.Texture | null>;
   uTime: THREE.IUniform<number>;
+  /** Sea wave clock: {@link shaderTime} of UT, with warp beyond {@link WAVE_RATE_CAP}× real time held back (see {@link WaveClock}). */
+  uWaveTime: THREE.IUniform<number>;
   /** Body rotation (body-fixed → render frame) for object-space effects. */
   uBodyRot: THREE.IUniform<THREE.Matrix3>;
   /** Baked cloud cube map (body-fixed, drifting) — see cloudMap.ts; null when the body has no clouds. */
@@ -108,6 +133,7 @@ export function createPlanetUniforms(radius: number, atmo: AtmosphereParams | nu
     uRingOuter: { value: 2 },
     uRingProfile: { value: dummy() },
     uTime: { value: 0 },
+    uWaveTime: { value: 0 },
     uBodyRot: { value: new THREE.Matrix3() },
     uCloudMap: { value: null },
     uCloudRot: { value: new THREE.Matrix3() },

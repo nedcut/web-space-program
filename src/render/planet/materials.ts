@@ -735,6 +735,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
       uniform vec3 uSeabed;
       uniform vec3 uDeep;
       uniform vec3 uShallow;
+      uniform float uWaveTime;
       ${GLSL_AERIAL_FRAG}
       varying vec3 vSkyRefl;
       varying vec3 vWorldPos;
@@ -787,7 +788,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         #endif
         if (depth <= 0.0) discard;
         vec3 V = toCam / dist;
-        float t = uTime;
+        float t = uWaveTime;
         float fade1 = 1.0 - smoothstep(200.0, 2000.0, dist);
         float fade2 = 1.0 - smoothstep(2000.0, 30000.0, dist);
         #if OCEAN_QUALITY == 0

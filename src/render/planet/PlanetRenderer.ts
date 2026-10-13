@@ -13,7 +13,7 @@ import type { Quat } from '../../util/quat';
 import { QUALITY_PRESETS, type QualitySettings } from '../core/quality';
 import { screenSpaceFactor } from '../core/camera';
 import { computeAtmosphereParams, buildTransmittanceLUT, type AtmosphereParams } from './atmosphereParams';
-import { createPlanetUniforms, registerPlanetUniforms, shaderTime, unregisterPlanetUniforms, type PlanetUniforms } from './uniforms';
+import { createPlanetUniforms, registerPlanetUniforms, shaderTime, unregisterPlanetUniforms, WaveClock, type PlanetUniforms } from './uniforms';
 import {
   createTerrainMaterial,
   createOceanMaterial,
@@ -146,6 +146,7 @@ export class PlanetRenderer {
   private lut: THREE.DataTexture | null = null;
   private frame = 0;
   private timeAcc = 0;
+  private readonly waveClock = new WaveClock();
   private sunIlluminance: number;
   private sunRadiance: number;
   private readonly terrainKey: string;
@@ -447,6 +448,7 @@ export class PlanetRenderer {
     u.uCamCAtm.value = (camDist - Ra) * (camDist + Ra);
     u.uCamCGround.value = (camDist - R) * (camDist + R);
     u.uTime.value = shaderTime(time);
+    u.uWaveTime.value = this.waveClock.update(time, p.dt);
 
     const q = p.bodyRotation;
     this.rotQ.set(q.x, q.y, q.z, q.w);
