@@ -40,7 +40,8 @@ import { pauseMenuVisible } from './modals';
 import { saveErrorText } from '../game/storageErrors';
 import { PauseMenu, type PauseMenuModel } from './hud/PauseMenu';
 import { useEscape } from '../ui/nav/escape';
-import { flightExitNotice } from './exit';
+import { flightDebrief } from './exit';
+import { setPendingDebrief, type ProgramTotals } from '../ui/hub/debrief';
 
 export default function FlightScene() {
   useRenderProfile();
@@ -82,6 +83,8 @@ export default function FlightScene() {
   const initial = useRef<ReturnType<typeof game.get>['resumeWorld']>(null);
   /** Craft launched by this flight (null when resuming a saved flight): enables the revert options. */
   const launched = useRef<CraftDef | null>(null);
+  /** Program totals once the flight is set up (after any launch cost), for the hub debrief. */
+  const startTotals = useRef<ProgramTotals | null>(null);
   const [mountKey, setMountKey] = useState(0);
 
   useEffect(() => {
@@ -130,6 +133,7 @@ export default function FlightScene() {
         setError((e as Error).message);
         return;
       }
+      startTotals.current = { science: c.world.progression.science, funds: c.world.progression.funds, reputation: c.world.progression.reputation };
       if (!g.multiplayer && !c.world.active) {
         c.dispose();
         audio.silenceFlight();
@@ -312,17 +316,23 @@ export default function FlightScene() {
   }, [uiHidden]);
 
   /** Leave flight: keep the universe (vessels stay where they are) and autosave. */
-  const exitTo = (scene: 'spaceCenter' | 'editor') => {
+  const exitTo = (scene: 'spaceCenter' | 'editor', recovery?: { crew: string[]; value: number | null }) => {
     if (getScenarioRun()) return endScenario();
     if (getTutorial()) return endTutorial();
     const c = ctrl.current;
     if (c) {
+      const crew = recovery?.crew ?? c.world.crewFor().map(a => a.name);
       if (scene === 'spaceCenter') {
         if (c.world.active) { c.world.recordFlight(c.world.active, c.world.ut, true); c.world.logFlightEvent(c.world.active, 'checkpoint', 'Returned to Space Center'); const r = c.world.flightlog.records.find(r => r.vesselId === c.world.activeId && !r.outcome); if (r) c.world.latestReportId = r.id; }
       }
       c.quicksave('autosave', 'spaceCenter');
       game.set({ ut: c.world.ut, mode: c.world.mode, resumeWorld: c.snapshot() });
-      if (scene === 'spaceCenter') game.set({ notice: flightExitNotice(c.world, game.get().notice) });
+      if (scene === 'spaceCenter') {
+        // The hub shows a debrief card for the report; without a report, any queued notice stays a notice.
+        const debrief = flightDebrief(c.world, { before: startTotals.current, crew, recoveryValue: recovery?.value ?? null, craft: launched.current, note: game.get().notice });
+        setPendingDebrief(debrief);
+        if (debrief) game.set({ notice: null });
+      }
     }
     game.set({ scene });
   };
@@ -330,14 +340,10 @@ export default function FlightScene() {
   const recover = () => {
     const w = ctrl.current?.world;
     if (!w?.active) return;
-    const name = w.active.state.name;
-    const before = { funds: w.progression.funds, science: w.progression.science };
+    const crew = w.crewFor().map(a => a.name);
+    const funds = w.progression.funds;
     if (!w.recoverActive()) return;
-    const parts = [`${name} recovered`];
-    if (w.mode === 'career' && w.progression.funds !== before.funds) parts.push(`${Math.round(w.progression.funds - before.funds).toLocaleString()} cr refunded`);
-    if (w.progression.science > before.science + 1e-6) parts.push(`+${(w.progression.science - before.science).toFixed(1)} science`);
-    game.set({ notice: parts.join(' · ') });
-    exitTo('spaceCenter');
+    exitTo('spaceCenter', { crew, value: w.mode === 'career' ? w.progression.funds - funds : null });
   };
   /** Revert: throw away this flight and return to the editor with the universe as it was before launch. */
   const revert = () => {

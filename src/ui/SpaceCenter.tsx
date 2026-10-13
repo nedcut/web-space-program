@@ -1,20 +1,29 @@
 import { Icon } from './components/Icon';
-import { Panel, Button, PromptModal } from './components';
-import { photoMode } from '../game/photoMode';
+import { Panel, Button, Kbd, Modal, PromptModal } from './components';
+import { photoMode, usePhotoMode } from '../game/photoMode';
 import { openProgram } from '../game/program';
 import { saveNamedWorld } from '../game/persistence';
 import { saveErrorText } from '../game/storageErrors';
-import { launchProblem } from '../data/technology';
-import { PART_CATALOG } from '../data/parts';
 import { newProgression } from '../sim/science/progression';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { game, launchableCraft, useGame } from '../game/store';
-import { HubBackdrop } from './hub/HubBackdrop';
+import type { SiteObjectId } from '../render/site/LaunchSite';
+import { HubBackdrop, type BuildingLabel } from './hub/HubBackdrop';
+import { DebriefCard } from './hub/DebriefCard';
+import { HubMenu, type HubMenuAction } from './hub/HubMenu';
+import { pendingDebrief, setPendingDebrief, type FlightDebrief } from './hub/debrief';
+import { facilityForBuilding, hubFacilities, type HubFacility, type HubFacilityId } from './hub/facilities';
+import { launchBlocker } from './hub/quickLaunch';
 import { SettingsPanel } from './MainMenu';
+import { SaveLoadDialog } from './SaveLoadDialog';
 import { formatDate } from './format';
 import { arrowNav } from './nav/arrowNav';
-import { facilityLabel } from './nav/scenes';
+import { useEscape } from './nav/escape';
 import './nav/nav.css';
+
+const LaunchPicker = lazy(() => import('./hub/LaunchPicker'));
+const ICON: Record<HubFacilityId, string> = { editor: 'build', launch: 'rocket', flightlog: 'log', tracking: 'orbit', research: 'science', missions: 'groups' };
+type Overlay = 'menu' | 'settings' | 'save' | 'load' | 'launch' | null;
 
 /** Hub screen over a live 3D view of the launch complex. */
 export function SpaceCenter() {
@@ -22,50 +31,71 @@ export function SpaceCenter() {
   const p = useGame(s => s.resumeWorld?.progression);
   const [notice, setNotice] = useState(() => game.get().notice ?? '');
   useEffect(() => { if (game.get().notice) game.set({ notice: null }); }, []);
+  const [debrief, setDebrief] = useState<FlightDebrief | null>(pendingDebrief);
+  useEffect(() => setPendingDebrief(null), []);
   const ut = useGame((s) => s.ut);
   const craft = useGame((s) => launchableCraft(s.craft));
-  const [settings, setSettings] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [overlay, setOverlay] = useState<Overlay>(null);
+  const [highlight, setHighlight] = useState<SiteObjectId | null>(null);
+  const photo = usePhotoMode().active;
 
-  const tiles = [
-    { id: 'editor', title: facilityLabel('editor'), desc: 'Design and build rockets', onClick: () => game.set({ scene: 'editor' }) },
-    {
-      id: 'launch',
-      title: craft?.type === 'SPH' ? 'Runway' : 'Launch Pad',
-      desc: craft ? `Ready: ${craft.name}` : 'Build a vehicle first',
-      disabled: !craft,
-      onClick: () => {
-        if (!craft) return;
-        const problem = launchProblem(craft, PART_CATALOG, mode, p ?? newProgression());
-        if (problem) setNotice(problem);
-        else game.set({ scene: 'flight', launchPending: true });
-      },
-    },
-    { id: 'flightlog', title: facilityLabel('flightlog'), desc: 'Flight reports, history and achievements', onClick: () => game.set({ scene: 'flightlog' }) },
-    { id: 'tracking', title: facilityLabel('tracking'), desc: 'Track vessels and explore the solar system', onClick: () => game.set({ scene: 'tracking' }) },
-    ...(mode !== 'sandbox' ? [{ id: 'research', title: facilityLabel('research'), desc: `${(p?.science ?? 0).toFixed(1)} science · Explore the technology tree`, onClick: () => game.set({ scene: 'research' }) }] : []),
-    ...(mode === 'career' ? [{ id: 'missions', title: facilityLabel('missions'), desc: 'Commission expeditions and track contracts', onClick: () => game.set({ scene: 'missions' }) }] : []),
-  ];
+  const all = hubFacilities(mode, craft?.type === 'SPH');
+  const tiles = all.filter(f => !f.closed);
+  const describe = (f: HubFacility) =>
+    f.id === 'launch' ? (craft ? `Ready: ${craft.name} · or pick another` : 'Pick a vehicle and fly')
+      : f.id === 'research' ? `${(p?.science ?? 0).toFixed(1)} science · ${f.desc}` : f.desc;
+  const enter = (id: HubFacilityId) => {
+    if (id === 'launch') setOverlay('launch');
+    else game.set({ scene: id });
+  };
+  const launchAgain = (c: FlightDebrief['craft']) => {
+    if (!c) return;
+    const problem = launchBlocker(c, mode, p ?? newProgression());
+    if (problem) { setDebrief(null); setNotice(`${c.name}: ${problem}`); }
+    else game.set({ craft: c, scene: 'flight', launchPending: true });
+  };
+
+  // Latest values for the 3D scene's callbacks and the key listener (registered once).
+  const live = useRef({ all, tiles, enter });
+  live.current = { all, tiles, enter };
+  const onPick = (id: SiteObjectId) => {
+    const f = facilityForBuilding(live.current.all, id);
+    if (!f) return;
+    if (f.closed) setNotice(`${f.title} opens in ${f.closed.toLowerCase()}.`);
+    else live.current.enter(f.id);
+  };
+  const label = (id: SiteObjectId): BuildingLabel | null => {
+    const f = facilityForBuilding(live.current.all, id);
+    if (!f) return null;
+    const key = live.current.tiles.indexOf(f);
+    return f.closed ? { title: f.title, detail: `${f.closed} only`, closed: true } : { title: f.title, detail: describe(f), key: key >= 0 ? String(key + 1) : undefined };
+  };
 
   // Number keys enter the facility on the matching tile (shown on each tile).
-  const tilesRef = useRef(tiles);
-  tilesRef.current = tiles;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || photoMode.get().active || document.querySelector('[data-settings-modal], dialog[open]')) return;
       if (/^(INPUT|SELECT|TEXTAREA)$/.test((e.target as HTMLElement).tagName)) return;
-      const tile = /^Digit[1-9]$/.test(e.code) ? tilesRef.current[+e.code.slice(5) - 1] : undefined;
-      if (!tile || tile.disabled) return;
+      const tile = /^Digit[1-9]$/.test(e.code) ? live.current.tiles[+e.code.slice(5) - 1] : undefined;
+      if (!tile) return;
       e.preventDefault();
-      tile.onClick();
+      live.current.enter(tile.id);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Esc opens the hub menu (the debrief card, when shown, takes the first Esc).
+  useEscape(() => setOverlay('menu'), overlay === null && !photo, 'screen');
+  const act = (a: HubMenuAction) => {
+    if (a === 'pedia') void import('./Spacepedia').then(m => m.openPedia('spaceCenter'));
+    else if (a === 'menu') game.set({ scene: 'menu' });
+    else setOverlay(a);
+  };
+
   return (
     <div className="fullscreen">
-      <HubBackdrop />
+      <HubBackdrop onPick={onPick} label={label} highlight={highlight} />
       <div className="fullscreen photo-hide hub-composition">
         <div className="hub-header">
           <div>
@@ -76,31 +106,38 @@ export function SpaceCenter() {
         </div>
         <div style={{ marginTop: 16, textShadow: '0 1px 6px rgba(0,0,0,0.8)' }} className="mono">{mode.toUpperCase()}{mode === 'career' && ` · ${(p?.funds ?? 60000).toLocaleString()} cr · ${p?.reputation ?? 0} reputation`}</div>
         <div style={{ flex: 1 }} />
+        {debrief && <DebriefCard debrief={debrief}
+          onOpenLog={() => game.set({ scene: 'flightlog' })}
+          onLaunchAgain={debrief.craft ? () => launchAgain(debrief.craft) : null}
+          onDismiss={() => setDebrief(null)} />}
         {notice && <Panel role="status" className="panel" style={{ alignSelf: 'flex-start', padding: '8px 14px', marginBottom: 12, background: 'rgba(8, 13, 22, 0.85)' }}>{notice}</Panel>}
-        <div className="hub-tiles" onKeyDown={e => arrowNav(e)}>
+        <div className="hub-tiles" onKeyDown={e => arrowNav(e)} onMouseLeave={() => setHighlight(null)} onBlur={() => setHighlight(null)}>
           {tiles.map((t, i) => (
             <Button
               key={t.id}
               className="panel btn hub-tile"
-              disabled={t.disabled}
-              onClick={t.onClick}
+              onClick={() => enter(t.id)}
+              onMouseEnter={() => setHighlight(t.building)}
+              onFocus={() => setHighlight(t.building)}
               aria-keyshortcuts={String(i + 1)}
             >
-              <Icon name={t.id === 'editor' ? 'build' : t.id === 'launch' ? 'rocket' : t.id === 'tracking' ? 'orbit' : t.id === 'research' ? 'science' : 'log'} size={24} />
-              <strong>{t.title}</strong><small>{t.desc}</small><span className="kbd hub-key" aria-hidden="true">{i + 1}</span>
+              <Icon name={ICON[t.id]} size={24} />
+              <strong>{t.title}</strong><small>{describe(t)}</small><span className="kbd hub-key" aria-hidden="true">{i + 1}</span>
             </Button>
           ))}
         </div>
         <div className="hub-actions">
-          <Button className="btn small" onClick={() => setSaving(true)}>Save as…</Button>
-          <Button className="btn small" onClick={() => game.set({ scene: 'menu' })}>Main menu</Button>
-          <Button className="btn" onClick={() => void import('./Spacepedia').then(m => m.openPedia('spaceCenter'))}>Spacepedia</Button>
+          <Button className="btn small" onClick={() => setOverlay('menu')}>Menu <Kbd>Esc</Kbd></Button>
+          <Button className="btn small" onClick={() => act('pedia')}>Spacepedia</Button>
           <Button className="btn small" onClick={() => photoMode.open()}>Photo mode</Button>
-          <Button className="btn small" onClick={() => setSettings((v) => !v)}>Settings</Button>
+          <Button className="btn small" onClick={() => setOverlay('settings')}>Settings</Button>
         </div>
-        {settings && <SettingsPanel onClose={() => setSettings(false)} />}
-        {saving && <PromptModal title="Save program" label="Save slot name" initial="Program save" onCancel={() => setSaving(false)}
-          onSubmit={name => { setSaving(false); try { saveNamedWorld(name, openProgram()); setNotice('Program saved.'); } catch (e) { setNotice(saveErrorText(e)); } }} />}
+        {overlay === 'menu' && <HubMenu onClose={() => setOverlay(null)} act={act} />}
+        {overlay === 'settings' && <SettingsPanel onClose={() => setOverlay(null)} />}
+        {overlay === 'load' && <Modal title="Load a program" onClose={() => setOverlay(null)} className="hub-load"><SaveLoadDialog onClose={() => setOverlay(null)} /></Modal>}
+        {overlay === 'launch' && <Suspense fallback={null}><LaunchPicker onClose={() => setOverlay(null)} /></Suspense>}
+        {overlay === 'save' && <PromptModal title="Save program" label="Save slot name" initial="Program save" onCancel={() => setOverlay(null)}
+          onSubmit={name => { setOverlay(null); try { saveNamedWorld(name, openProgram()); setNotice('Program saved.'); } catch (e) { setNotice(saveErrorText(e)); } }} />}
       </div>
     </div>
   );

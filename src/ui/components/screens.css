@@ -56,3 +56,49 @@
 .hub-preparing { display: flex; align-items: center; justify-content: center; pointer-events: none; animation: hub-preparing-pulse 1.6s ease-in-out infinite alternate; }
 @keyframes hub-preparing-pulse { from { opacity: 0.35; } to { opacity: 0.8; } }
 :root[data-reduce-motion="true"] .hub-preparing { animation: none; opacity: 0.7; }
+
+/* Space Center (UX-3): building hover label, debrief card, Launch Pad picker, Esc menu. */
+.hub-hover { position: fixed; left: 0; top: 0; z-index: 5; pointer-events: none; display: grid; grid-template-columns: auto auto; align-items: center; gap: 2px 10px; padding: 8px 12px; max-width: 260px; border: 1px solid var(--accent-border); border-radius: var(--radius-sm); background: rgba(8, 15, 25, .9); box-shadow: var(--shadow-panel); opacity: 0; transition: opacity var(--duration-ui) var(--ease-ui); }
+.hub-hover.on { opacity: 1; }
+.hub-hover strong { font-size: var(--type-sm); font-weight: 600; }
+.hub-hover .kbd { justify-self: end; }
+.hub-hover small { grid-column: 1 / -1; color: var(--text-dim); font-size: var(--type-xs); line-height: 1.4; }
+.hub-hover.closed { border-color: var(--panel-border); }
+.hub-hover.closed strong { color: var(--text-dim); }
+:root[data-reduce-motion="true"] .hub-hover { transition: none; }
+.hub-debrief { align-self: flex-start; width: min(560px, 100%); margin-bottom: var(--space-3); padding: var(--space-4) var(--space-5); border-color: var(--accent-border); background: linear-gradient(90deg, var(--accent-soft), transparent 60%), var(--panel-solid); box-shadow: var(--shadow-panel); }
+.hub-debrief.lost { border-color: color-mix(in srgb, var(--bad) 55%, transparent); }
+.hub-debrief > .label { color: var(--accent); }
+.hub-debrief h3 { margin: 4px 0 2px; font-size: var(--type-lg); font-weight: 500; }
+.hub-debrief-status { margin: 0 0 var(--space-3); color: var(--good); font-size: var(--type-sm); }
+.hub-debrief.lost .hub-debrief-status { color: var(--bad); }
+.hub-debrief-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: var(--space-2) var(--space-4); margin: 0; }
+.hub-debrief-stats dt { color: var(--text-dim); font-size: var(--type-xs); }
+.hub-debrief-stats dd { margin: 2px 0 0; font-size: var(--type-sm); }
+.hub-debrief-crew, .hub-debrief-note { margin: var(--space-3) 0 0; font-size: var(--type-sm); }
+.hub-debrief-crew .label { margin-right: 6px; }
+.hub-debrief-note { color: var(--warn); }
+.hub-debrief-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-4); }
+.hub-launch { width: min(720px, calc(100vw - 32px)); }
+.hub-launch-bar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+.hub-launch-bar input { flex: 1; }
+.hub-launch-error { color: var(--bad); font-size: var(--type-sm); }
+.hub-launch-list { display: flex; flex-direction: column; gap: 6px; max-height: min(60vh, 560px); overflow-y: auto; padding-right: 4px; }
+.hub-launch-item { display: flex; align-items: stretch; gap: 6px; }
+.hub-launch-item > .btn { align-self: center; }
+.hub-launch-row { flex: 1; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; text-align: left; padding: 10px 12px; border: 1px solid var(--panel-border); border-radius: var(--radius-sm); background: var(--surface-soft); color: var(--text); font: inherit; cursor: pointer; }
+.hub-launch-row:hover:not(:disabled), .hub-launch-row:focus-visible { border-color: var(--accent-border); background: var(--accent-soft); }
+.hub-launch-row:disabled { cursor: default; opacity: .6; }
+.hub-launch-item.pad .hub-launch-row { border-color: var(--accent-border); }
+.hub-launch-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hub-launch-name strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-launch-info { color: var(--text-dim); font-size: var(--type-xs); align-self: center; }
+.hub-launch-blocked, .hub-launch-warn { grid-column: 1 / -1; font-size: var(--type-xs); }
+.hub-launch-blocked { color: var(--bad); }
+.hub-launch-warn { color: var(--warn); }
+.hub-launch-empty { padding: var(--space-5); color: var(--text-dim); text-align: center; }
+.hub-menu-list { display: flex; flex-direction: column; gap: 6px; min-width: 260px; }
+.hub-menu-list .label { margin-top: var(--space-2); }
+.hub-menu-list .btn { text-align: left; display: flex; align-items: center; justify-content: space-between; }
+.hub-load { width: min(820px, calc(100vw - 32px)); }
+.hub-load > .ui-modal-heading { display: none; }

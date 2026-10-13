@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { pauseMenuGroups, type PauseMenuModel } from '../src/flight/hud/PauseMenu';
 import { appEscapeEngaged } from '../src/flight/hud/AppLauncher';
-import { flightExitNotice } from '../src/flight/exit';
 import { createEscapeStack } from '../src/ui/nav/escape';
-import type { FlightRecord } from '../src/game/flightlog/recorder';
 
 const base: PauseMenuModel = { lost: false, practice: null, canRecover: false, canRevert: true, hasQuicksave: true };
 const items = (m: Partial<PauseMenuModel>) => Object.fromEntries(pauseMenuGroups({ ...base, ...m }).map(g => [g.id, g.items]));
@@ -72,16 +70,5 @@ describe('flight Escape order', () => {
     expect(stack.handle(e)).toBe(true);
     expect(e.stopImmediatePropagation).toHaveBeenCalled();
     expect(run).toHaveBeenCalledOnce();
-  });
-});
-
-describe('flight exit notice', () => {
-  const record = { id: 'r1', name: 'Meridian Orbiter', stats: { maxAltitude: 85_200, maxSpeed: 0, maxG: 0, dvSpent: 0, distance: 0 } } as FlightRecord;
-  it('points the hub at the flight report', () => {
-    expect(flightExitNotice({ latestReportId: 'r1', flightlog: { records: [record] } }, null)).toMatch(/^Meridian Orbiter: flight report in the Flight Log \(max altitude 85\.2 km\)$/);
-  });
-  it('extends a recovery summary and keeps it when there is no report', () => {
-    expect(flightExitNotice({ latestReportId: 'r1', flightlog: { records: [record] } }, 'Meridian Orbiter recovered')).toBe('Meridian Orbiter recovered · report in the Flight Log');
-    expect(flightExitNotice({ latestReportId: null, flightlog: { records: [] } }, 'x')).toBe('x');
   });
 });
