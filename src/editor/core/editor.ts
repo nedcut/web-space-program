@@ -11,7 +11,12 @@ import { deserializeCraft, serializeCraft } from './serialization';
 export type Symmetry = { mode: 'radial'; count: 1 | 2 | 3 | 4 | 6 | 8 } | { mode: 'mirror'; count?: 2 };
 export interface LinkHit { uid: number; point: Vec3; normal: Vec3 }
 /** `manualStaging`: the player has arranged the stages; edits insert new parts instead of re-staging everything. */
-export interface EditorSnapshot { craft: CraftDef; held?: HeldAssembly; linkStart?: { partId: string; hit: LinkHit }; manualStaging?: boolean }
+/** `detached`: assemblies set aside in the hall (craft-frame transforms, no stages). They are not part of the craft:
+ * staging, stats and launch ignore them until they are picked up and attached again. */
+export interface EditorSnapshot { craft: CraftDef; held?: HeldAssembly; detached?: HeldAssembly[]; linkStart?: { partId: string; hit: LinkHit }; manualStaging?: boolean }
+/** Where a held assembly is spliced into an occupied stack joint: `childUid`/`childNodeId` meet the parent node (as in
+ * `attachHeld`); the part that sat there re-attaches to `throughUid`/`throughNodeId`, pushed along with its subtree. */
+export interface SpliceTarget { parentUid: number; parentNodeId: string; childUid: number; childNodeId: string; throughUid: number; throughNodeId: string }
 export interface EditorOptions {
   /** Automatic stager (default: assembly-aware `autoStage`). */
   stager?: Stager;
@@ -73,6 +78,7 @@ export class CraftEditor {
   get manualStaging(): boolean { return !!this.state.manualStaging; }
   get craft(): CraftDef { return copy(this.state.craft); }
   get held(): HeldAssembly | undefined { return copy(this.state.held); }
+  get detached(): HeldAssembly[] { return copy(this.state.detached ?? []); }
   get linkStart() { return copy(this.state.linkStart); }
   get canUndo(): boolean { return this.past.length > 0; }
   get canRedo(): boolean { return this.future.length > 0; }
@@ -120,7 +126,15 @@ export class CraftEditor {
     if (!p) throw new Error(`Unknown part uid: ${uid}`);
     return p;
   }
-  private nextUid(): number { return 1 + Math.max(0, ...this.state.craft.parts.map(p => p.uid), ...(this.state.held?.parts.map(p => p.uid) ?? [])); }
+  /** Uids stay unique across the craft, the held assembly and the set-aside pieces. */
+  private maxUid(): number {
+    let max = 0;
+    for (const p of this.state.craft.parts) max = Math.max(max, p.uid);
+    for (const p of this.state.held?.parts ?? []) max = Math.max(max, p.uid);
+    for (const a of this.state.detached ?? []) for (const p of a.parts) max = Math.max(max, p.uid);
+    return max;
+  }
+  private nextUid(): number { return 1 + this.maxUid(); }
   private newPart(partId: string): PartInstance {
     requirePart(this.catalog, partId);
     return { uid: this.nextUid(), partId, position: v3(), rotation: qIdentity() };
@@ -180,7 +194,7 @@ export class CraftEditor {
     let nextGroup = 1 + Math.max(0, ...this.state.craft.parts.map(p => p.symmetryGroup ?? 0), ...parts.map(p => p.symmetryGroup ?? 0));
     const across = new Map<number, number>();
     if (copies > 1) for (const p of parts) if (!internal(p.symmetryGroup)) across.set(p.uid, nextGroup++);
-    let nextUid = 1 + Math.max(0, ...this.state.craft.parts.map(p => p.uid), ...parts.map(p => p.uid), ...(this.state.held?.parts.map(p => p.uid) ?? []));
+    let nextUid = 1 + Math.max(this.maxUid(), ...parts.map(p => p.uid));
     const mirror = this.symmetry.mode === 'mirror';
     for (let i = 0; i < copies; i++) {
       const uids = new Map(parts.map(p => [p.uid, i === 0 ? p.uid : nextUid++]));
@@ -313,34 +327,72 @@ export class CraftEditor {
   }
   /**
    * Pick up a part with its subtree. `symmetric`: also remove its symmetry counterparts' subtrees; the held assembly
-   * records the set's symmetry so placement re-creates it.
+   * records the set's symmetry so placement re-creates it. The rest of the craft is re-staged (a stage left empty by
+   * the pick-up is removed); held parts lose their stage and are staged again when attached.
    */
   detachSubtree(uid: number, symmetric = false): HeldAssembly {
+    return this.update(() => this.takeSubtree(uid, symmetric));
+  }
+  private takeSubtree(uid: number, symmetric: boolean): HeldAssembly {
+    if (this.state.held) throw new Error('An assembly is already held');
+    this.part(uid);
+    const all = this.state.craft.parts;
+    const ids = descendants(all, uid);
+    const removed = new Set(ids);
+    const set = symmetric ? counterpartMaps(all, uid) : [];
+    for (const c of set.slice(1)) for (const id of descendants(all, c.part.uid)) removed.add(id);
+    const linked = new Set(all.filter(p => p.link && (removed.has(p.link.sourceUid) || removed.has(p.link.targetUid))).map(p => p.uid));
+    const parts = copy(all.filter(p => ids.has(p.uid) && !linked.has(p.uid)));
+    // A link mount picked directly becomes ordinary held hardware; endpoints are chosen anew.
+    for (const p of parts) { if (p.link) delete p.link; delete p.stage; }
+    const root = parts.find(p => p.uid === uid)!;
+    delete root.parent; delete root.attachNode; delete root.parentNode;
+    this.state.craft.parts = all.filter(p => !removed.has(p.uid) && !linked.has(p.uid));
+    // Break groups that straddle the detached boundary, retaining wholly detached groups.
+    const outsideGroups = new Set(this.state.craft.parts.map(p => p.symmetryGroup));
+    for (const p of parts) if (outsideGroups.has(p.symmetryGroup)) delete p.symmetryGroup;
+    delete this.state.linkStart;
+    this.state.held = { rootUid: uid, parts };
+    if (set.length > 1) {
+      const sym = groupSymmetry(all, uid);
+      this.state.held.symmetry = sym.mode === 'mirror' ? sym : { mode: 'radial', count: set.length };
+    }
+    if (this.state.craft.parts.length) this.settle();
+    return this.state.held;
+  }
+  /**
+   * Whether `detachPart` can take just this part: it must hang from a parent by a stack node and carry at most one
+   * stack-attached child (which then closes the gap). Surface-mounted parts on it go with it.
+   */
+  canDetachPart(uid: number): boolean {
+    const p = this.state.craft.parts.find(q => q.uid === uid);
+    if (!p || p.parent === undefined || p.attachNode === 'srf' || p.link) return false;
+    return this.state.craft.parts.filter(c => c.parent === uid && c.attachNode !== 'srf').length <= 1;
+  }
+  /**
+   * Pick up only this part (with what is surface-mounted on it); the stack it held re-attaches to its parent's node,
+   * moved to close the gap. Symmetry counterparts are handled the same way when `symmetric`.
+   */
+  detachPart(uid: number, symmetric = false): HeldAssembly {
     return this.update(() => {
-      if (this.state.held) throw new Error('An assembly is already held');
-      this.part(uid);
-      const all = this.state.craft.parts;
-      const ids = descendants(all, uid);
-      const removed = new Set(ids);
-      const set = symmetric ? counterpartMaps(all, uid) : [];
-      for (const c of set.slice(1)) for (const id of descendants(all, c.part.uid)) removed.add(id);
-      const linked = new Set(all.filter(p => p.link && (removed.has(p.link.sourceUid) || removed.has(p.link.targetUid))).map(p => p.uid));
-      const parts = copy(all.filter(p => ids.has(p.uid) && !linked.has(p.uid)));
-      // A link mount picked directly becomes ordinary held hardware; endpoints are chosen anew.
-      for (const p of parts) if (p.link) delete p.link;
-      const root = parts.find(p => p.uid === uid)!;
-      delete root.parent; delete root.attachNode; delete root.parentNode;
-      this.state.craft.parts = all.filter(p => !removed.has(p.uid) && !linked.has(p.uid));
-      // Break groups that straddle the detached boundary, retaining wholly detached groups.
-      const outsideGroups = new Set(this.state.craft.parts.map(p => p.symmetryGroup));
-      for (const p of parts) if (outsideGroups.has(p.symmetryGroup)) delete p.symmetryGroup;
-      delete this.state.linkStart;
-      this.state.held = { rootUid: uid, parts };
-      if (set.length > 1) {
-        const sym = groupSymmetry(all, uid);
-        this.state.held.symmetry = sym.mode === 'mirror' ? sym : { mode: 'radial', count: set.length };
+      if (!this.canDetachPart(uid)) throw new Error('This part holds more than one stack; pick it up with its attached parts');
+      const targets = symmetric ? counterpartMaps(this.state.craft.parts, uid).map(c => c.part.uid) : [uid];
+      // Bridge each target's stack child over to the target's parent node first.
+      for (const t of targets) {
+        if (!this.canDetachPart(t)) continue;
+        const part = this.part(t), parent = this.part(part.parent!);
+        const child = this.state.craft.parts.find(c => c.parent === t && c.attachNode !== 'srf');
+        if (!child) continue;
+        const subtree = descendants(this.state.craft.parts, child.uid);
+        const moved = transformAssembly({ rootUid: child.uid, parts: this.state.craft.parts.filter(p => subtree.has(p.uid)) },
+          alignNodes(worldNode(child, this.node(child, child.attachNode!)), worldNode(parent, this.node(parent, part.parentNode!))));
+        const byUid = new Map(moved.parts.map(p => [p.uid, p]));
+        this.state.craft.parts = this.state.craft.parts.map(p => byUid.get(p.uid) ?? p);
+        const bridged = this.part(child.uid);
+        // The parent's node is shared for a moment: the part leaves it below.
+        bridged.parent = parent.uid; bridged.parentNode = part.parentNode;
       }
-      return this.state.held;
+      return this.takeSubtree(uid, symmetric);
     });
   }
   /** Alt-click: hold a copy of a part's subtree (fresh uids, same stages); a symmetric source is placed as a set. */
@@ -397,19 +449,122 @@ export class CraftEditor {
    * surface mounts, the symmetry setting) re-create the set. */
   attachHeld(parentUid: number, parentNodeId: string, childNodeId: string, childUid?: number): PartInstance {
     return this.update(() => {
-      const held = this.requireHeld();
-      const uid = childUid ?? held.rootUid;
-      const parent = this.part(parentUid); this.assertFree(parentUid, parentNodeId);
-      const child = held.parts.find(p => p.uid === uid);
-      if (!child || !freeAttachNodes(held, this.catalog).some(n => n.uid === uid && n.id === childNodeId)) throw new Error('Held node is missing or occupied');
-      const delta = alignNodes(worldNode(child, this.node(child, childNodeId)), worldNode(parent, this.node(parent, parentNodeId)));
-      const moved = transformAssembly({ rootUid: uid, parts: rootAt(held.parts, uid) }, delta);
-      const root = moved.parts.find(p => p.uid === uid)!;
-      root.parent = parentUid; root.parentNode = parentNodeId; root.attachNode = childNodeId;
-      delete this.state.held;
-      this.replicate(moved.parts, uid, parent, true);
+      const uid = childUid ?? this.requireHeld().rootUid;
+      this.placeHeldAt(parentUid, parentNodeId, childNodeId, uid, true);
       this.settle();
       return this.part(uid);
+    });
+  }
+  /** Move the held assembly onto a free parent node and add it (with symmetry copies); returns where copies start. */
+  private placeHeldAt(parentUid: number, parentNodeId: string, childNodeId: string, uid: number, skipOccupied: boolean): { start: number; size: number; order: number[] } {
+    const held = this.requireHeld();
+    const parent = this.part(parentUid); this.assertFree(parentUid, parentNodeId);
+    const child = held.parts.find(p => p.uid === uid);
+    if (!child || !freeAttachNodes(held, this.catalog).some(n => n.uid === uid && n.id === childNodeId)) throw new Error('Held node is missing or occupied');
+    const delta = alignNodes(worldNode(child, this.node(child, childNodeId)), worldNode(parent, this.node(parent, parentNodeId)));
+    const moved = transformAssembly({ rootUid: uid, parts: rootAt(held.parts, uid) }, delta);
+    const root = moved.parts.find(p => p.uid === uid)!;
+    root.parent = parentUid; root.parentNode = parentNodeId; root.attachNode = childNodeId;
+    delete this.state.held;
+    const start = this.state.craft.parts.length;
+    this.replicate(moved.parts, uid, parent, skipOccupied);
+    return { start, size: moved.parts.length, order: moved.parts.map(p => p.uid) };
+  }
+  /**
+   * Insert the held assembly into an occupied stack joint: it takes the parent's node and the part that sat there (with
+   * its subtree) re-attaches to the held assembly's through node, moved out of the way. Symmetric parents splice every
+   * counterpart's joint the same way. One undo step.
+   */
+  spliceHeld(t: SpliceTarget): PartInstance {
+    return this.update(() => this.spliceInner(t));
+  }
+  /** Insert a new part into an occupied stack joint (see `spliceHeld`). */
+  insertPart(partId: string, t: Omit<SpliceTarget, 'childUid' | 'throughUid'>, rotation: Quat = qIdentity()): PartInstance {
+    return this.update(() => {
+      if (this.state.held) throw new Error('An assembly is already held');
+      const part = this.newPart(partId); part.rotation = qNormalize(rotation);
+      this.state.held = { rootUid: part.uid, parts: [part] };
+      return this.spliceInner({ ...t, childUid: part.uid, throughUid: part.uid });
+    });
+  }
+  private spliceInner(t: SpliceTarget): PartInstance {
+    const held = this.requireHeld();
+    if (t.throughUid === t.childUid && t.throughNodeId === t.childNodeId) throw new Error('Choose a part with two stack nodes');
+    if (!held.parts.some(p => p.uid === t.throughUid) || !freeAttachNodes(held, this.catalog).some(n => n.uid === t.throughUid && n.id === t.throughNodeId)) throw new Error('Held node is missing or occupied');
+    const parent = this.part(t.parentUid);
+    const counterparts = parent.symmetryGroup === undefined ? [parent] : [parent, ...this.state.craft.parts.filter(p => p.symmetryGroup === parent.symmetryGroup && p.uid !== parent.uid)];
+    // Lift each counterpart's occupant (and its subtree) off the joint.
+    const lifted = new Map<number, PartInstance[]>();
+    for (const c of counterparts) {
+      const occupant = this.state.craft.parts.find(p => p.parent === c.uid && p.parentNode === t.parentNodeId && p.attachNode !== 'srf');
+      if (!occupant) continue;
+      const ids = descendants(this.state.craft.parts, occupant.uid);
+      lifted.set(c.uid, this.state.craft.parts.filter(p => ids.has(p.uid)));
+      this.state.craft.parts = this.state.craft.parts.filter(p => !ids.has(p.uid));
+    }
+    if (!lifted.has(parent.uid)) throw new Error('That joint is free: attach normally');
+    const { start, size, order } = this.placeHeldAt(t.parentUid, t.parentNodeId, t.childNodeId, t.childUid, false);
+    const throughIndex = order.indexOf(t.throughUid), rootIndex = order.indexOf(t.childUid);
+    const placed = this.state.craft.parts.slice(start);
+    for (let i = 0; i * size < placed.length; i++) {
+      const through = placed[i * size + throughIndex], host = placed[i * size + rootIndex].parent!;
+      const subtree = lifted.get(host);
+      if (!subtree) continue;
+      lifted.delete(host);
+      const occupant = subtree.find(p => p.parent === host)!;
+      const moved = transformAssembly({ rootUid: occupant.uid, parts: subtree },
+        alignNodes(worldNode(occupant, this.node(occupant, occupant.attachNode!)), worldNode(through, this.node(through, t.throughNodeId))));
+      const root = moved.parts.find(p => p.uid === occupant.uid)!;
+      root.parent = through.uid; root.parentNode = t.throughNodeId;
+      this.state.craft.parts.push(...moved.parts);
+    }
+    if (lifted.size) throw new Error('Symmetry copies could not be inserted');
+    this.settle();
+    return this.part(t.childUid);
+  }
+  /**
+   * Set the held assembly aside in the hall: it keeps its parts but leaves the craft (no stages; ignored by stats and
+   * launch). `rotation` (about the held root) is applied first, then the root is moved to `position` (craft frame).
+   */
+  parkHeld(position: Vec3, rotation: Quat = qIdentity()): HeldAssembly {
+    return this.update(() => {
+      if (![position.x, position.y, position.z].every(Number.isFinite)) throw new Error('Invalid position');
+      const held = this.requireHeld();
+      const root = held.parts.find(p => p.uid === held.rootUid)!;
+      const q = qNormalize(rotation);
+      const turned = transformAssembly(held, { rotation: q, position: sub(root.position, qRotate(q, root.position)) });
+      const turnedRoot = turned.parts.find(p => p.uid === held.rootUid)!;
+      const parked = transformAssembly(turned, { rotation: qIdentity(), position: sub(position, turnedRoot.position) });
+      for (const p of parked.parts) delete p.stage;
+      delete this.state.held;
+      (this.state.detached ??= []).push(parked);
+      if (this.state.craft.parts.length) this.settle();
+      return parked;
+    });
+  }
+  /** Pick a set-aside assembly up again; `uid` (one of its parts) becomes the held root. */
+  pickUpDetached(index: number, uid?: number): HeldAssembly {
+    return this.update(() => {
+      if (this.state.held) throw new Error('An assembly is already held');
+      const list = this.state.detached ?? [];
+      const assembly = list[index];
+      if (!assembly) throw new Error('No such detached piece');
+      const rootUid = uid ?? assembly.rootUid;
+      if (!assembly.parts.some(p => p.uid === rootUid)) throw new Error(`Unknown part uid: ${rootUid}`);
+      list.splice(index, 1);
+      if (!list.length) delete this.state.detached;
+      delete this.state.linkStart;
+      this.state.held = { rootUid, parts: rootAt(assembly.parts, rootUid), ...(assembly.symmetry ? { symmetry: assembly.symmetry } : {}) };
+      return this.state.held;
+    });
+  }
+  /** Delete a set-aside assembly. */
+  discardDetached(index: number): void {
+    this.update(() => {
+      const list = this.state.detached ?? [];
+      if (!list[index]) throw new Error('No such detached piece');
+      list.splice(index, 1);
+      if (!list.length) delete this.state.detached;
     });
   }
   attachHeldAtSnap(candidate: SnapCandidate): PartInstance { return this.attachHeld(candidate.parent.uid, candidate.parent.id, candidate.child.id, candidate.child.uid); }
