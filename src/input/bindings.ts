@@ -72,8 +72,8 @@ export function saveBindings(bindings: Bindings, storage?: Pick<Storage, 'setIte
 }
 /** Inputs that take no text: a focused switch, slider or button must not swallow flight or editor keys. */
 const NON_TEXT_INPUTS = ['checkbox', 'radio', 'range', 'button', 'submit', 'reset', 'color', 'file', 'image'];
-export const TYPING_SELECTOR = `input${NON_TEXT_INPUTS.map(t => `:not([type="${t}"])`).join('')}, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [data-settings-modal]`;
-/** Keyboard focus is in a text field, list box or the settings modal: keys belong to it, not to game controls. */
+export const TYPING_SELECTOR = `input${NON_TEXT_INPUTS.map(t => `:not([type="${t}"])`).join('')}, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [data-settings-modal], [data-key-owner]`;
+/** Keyboard focus is in a text field, list box, the settings modal or a key-owning control (resize grip): keys belong to it, not to game controls. */
 export function isTyping(target: EventTarget | null): boolean {
   return typeof HTMLElement !== 'undefined' && target instanceof HTMLElement && !!target.closest(TYPING_SELECTOR);
 }

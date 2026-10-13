@@ -785,3 +785,28 @@ Owner: getting around a docked complex felt clunky ("navigating the space statio
   → flight in 2.5 s; fly 10 s → pause → Space Center → debrief "In flight over Earth · 1064 m · Earth · suborbital ·
   crew"; Esc dismisses it before the menu; recover on the pad → "Recovered on Earth · Recovery value 5,067 cr";
   Open Flight Log → Flight Log. No console errors.
+
+## Resizable HUD windows (2026-10-12, op/winresize)
+- **App windows resize from the edges that face the scene.** Docked windows (the right column is right-aligned) have
+  left-edge, bottom-edge and bottom-left-corner grips; floating windows have right, bottom and bottom-right grips.
+  Width and height are independent: a width-only drag leaves the height natural (CSS). Docked windows still shrink
+  in a full column (flex), so a tall chosen height never pushes others under MAP/AUTO; the body scrolls.
+- **Limits per app** via `HudApp.limits` (defaults 200–560 × 110–900 HUD px; Flight data min width 240). The map
+  planner column is 240–480 px (the CSS width, 262 / 236 px, stays the default). The planner contents belong to
+  the map package (op/lesstext was rewriting them), so the grip sits on a new `.mp-host` wrapper in `Hud.tsx` and
+  resizes the `.hud-left` column only in map view; the panel already reflows through its container queries.
+- **Remembered per window** in `localStorage` `wsp.hud.winSize.v1` (`flight/hud/windowSize.ts`, defensive parse).
+  Open/position state stays in sessionStorage as before.
+- **Reset:** the ⤡ header button (shown only when a size is stored), double-click on a grip, Home on a focused grip,
+  or double-click on a docked window's title (on a floating one the title double-click still docks it).
+- **Keyboard:** the corner grip (and the planner grip) is focusable (`role="separator"`). Arrows move the grip
+  (16 px, Shift 64 px), each key changing one dimension from the stored size, so a window the column squeezed does
+  not ratchet smaller. While it has focus, flight and map-node keys are ignored: `[data-key-owner]` was added to
+  `TYPING_SELECTOR` in `input/bindings.ts` (a one-selector edit outside the package).
+- **Clicking a docked title no longer undocks it.** UX-7's move handler committed a float position on every
+  pointer-up, so a click (or the first half of a double-click) detached the window where it stood. A move now needs
+  more than 3 px.
+- **Cost:** nothing per frame. Pointer listeners act only during a drag; the drag writes `style.width/height` at most
+  once per animation frame and commits React state on release. A CDP Chrome A/B with UX-7's profiler driver (pad and
+  orbit, two apps open, 4 × 12 s each) gave a HUD React section mean of 0.028 ms on main and 0.029 ms on the branch,
+  with the same CPU avg/p95 (noise).

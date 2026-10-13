@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { AppIcon, type AppGlyph } from './glyphs';
 import { useEscape } from '../../ui/nav/escape';
 import { isTyping, matches } from '../../input/bindings';
+import { ResizeGrip } from './Resizable';
+import { limits as sizeLimits, type SizeLimits, type WinSize } from './windowSize';
 
 export type AppId = 'alarms' | 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms' | 'station';
 
@@ -19,6 +21,8 @@ export interface HudApp {
    * readouts use more so short ones (resource bars, alarms) keep their rows.
    */
   shrink?: number;
+  /** Resize limits in HUD px (defaults: 200–560 wide, 110–900 tall). */
+  limits?: Partial<SizeLimits>;
 }
 
 /** Extra toolbar buttons that act rather than open a window (orbit strip, settings, help). */
@@ -112,10 +116,14 @@ export function AppToolbar({ apps, open, onToggle, actions }: { apps: HudApp[]; 
   );
 }
 
-/** A draggable app window. Undragged windows stack under the toolbar; dragging detaches one (double-click the title to re-dock). */
-export function AppWindow({ app, pos, scale, escTarget = false, onClose, onMove, onDock }: { app: HudApp; pos?: { x: number; y: number }; scale: number; escTarget?: boolean; onClose(): void; onMove(x: number, y: number): void; onDock(): void }) {
+/**
+ * A draggable, resizable app window. Undragged windows stack under the toolbar; dragging detaches one (double-click
+ * the title to re-dock). Docked windows resize from the left and bottom edges (the column is right-aligned),
+ * floating ones from the right and bottom; the corner grip takes arrow keys. Sizes are remembered per app.
+ */
+export function AppWindow({ app, pos, scale, escTarget = false, size, onClose, onMove, onDock, onResize }: { app: HudApp; pos?: { x: number; y: number }; scale: number; escTarget?: boolean; size?: WinSize; onClose(): void; onMove(x: number, y: number): void; onDock(): void; onResize(size: WinSize | null): void }) {
   const ref = useRef<HTMLElement>(null);
-  const drag = useRef<{ dx: number; dy: number; id: number; x: number; y: number; style: string; scale: number; left: number; top: number; maxX: number; maxY: number } | null>(null);
+  const drag = useRef<{ dx: number; dy: number; id: number; x: number; y: number; x0: number; y0: number; style: string; scale: number; left: number; top: number; maxX: number; maxY: number } | null>(null);
   const frame = useRef(0);
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
   const paint = () => {
@@ -130,9 +138,10 @@ export function AppWindow({ app, pos, scale, escTarget = false, onClose, onMove,
     const r = el.getBoundingClientRect(), h = host.getBoundingClientRect();
     const effectiveScale = h.width / Math.max(1, host.clientWidth) || scale;
     drag.current = { dx: (e.clientX - r.left) / effectiveScale, dy: (e.clientY - r.top) / effectiveScale, id: e.pointerId,
-      x: (r.left - h.left) / effectiveScale, y: (r.top - h.top) / effectiveScale, style: el.style.cssText,
+      x: (r.left - h.left) / effectiveScale, y: (r.top - h.top) / effectiveScale, x0: 0, y0: 0, style: el.style.cssText,
       scale: effectiveScale, left: h.left, top: h.top,
       maxX: h.width / effectiveScale - el.offsetWidth, maxY: h.height / effectiveScale - 40 };
+    drag.current.x0 = drag.current.x; drag.current.y0 = drag.current.y;
     // Keep the same DOM node/capture while undocking. Persist and reparent only on release.
     el.style.position = 'fixed';
     el.style.zIndex = '12';
@@ -154,19 +163,36 @@ export function AppWindow({ app, pos, scale, escTarget = false, onClose, onMove,
     cancelAnimationFrame(frame.current); frame.current = 0;
     if (ref.current) ref.current.style.cssText = d.style;
     drag.current = null;
-    onMove(d.x, d.y);
+    // A click (or the first half of a double-click) on a docked title must not undock it.
+    if (Math.abs(d.x - d.x0) + Math.abs(d.y - d.y0) > 3) onMove(d.x, d.y);
   };
+  const lim = sizeLimits(app.limits);
+  const sized = size?.w !== undefined || size?.h !== undefined;
+  const target = () => ref.current;
+  const label = `Resize ${app.title}`;
   return (
     <section ref={ref} className={`app-win panel ${pos ? 'floating' : ''}`} aria-label={app.title}
-      style={{ width: app.width ?? 270, ...(pos ? { left: pos.x, top: pos.y } : { flexShrink: app.shrink ?? 1 }) }}>
-      <header className="app-win-head" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up} onDoubleClick={onDock}
-        title="Drag to move · double-click to dock under the toolbar">
+      style={{ width: size?.w ?? app.width ?? 270, ...(size?.h !== undefined ? { height: size.h, maxHeight: 'none' } : null),
+        ...(pos ? { left: pos.x, top: pos.y } : { flexShrink: app.shrink ?? 1 }) }}>
+      <header className="app-win-head" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up}
+        onDoubleClick={() => pos ? onDock() : sized && onResize(null)}
+        title={pos ? 'Drag to move · double-click to dock under the toolbar' : `Drag out to float${sized ? ' · double-click to reset the size' : ''}`}>
         <AppIcon name={app.icon} size={14} />
         <span>{app.title}</span>
         {escTarget && <kbd className="kbd app-win-esc" title="Esc closes this window">Esc</kbd>}
+        {sized && <button type="button" className="app-win-close app-win-reset" onClick={() => onResize(null)} aria-label={`Reset ${app.title} size`} title="Reset size">⤡</button>}
         <button type="button" className="app-win-close" onClick={onClose} aria-label={`Close ${app.title}`}>×</button>
       </header>
       <div className="app-win-body">{app.content}</div>
+      {pos ? <>
+        <ResizeGrip edge="r" target={target} limits={lim} size={size} onResize={onResize} label={label} />
+        <ResizeGrip edge="b" target={target} limits={lim} size={size} onResize={onResize} label={label} />
+        <ResizeGrip edge="br" target={target} limits={lim} size={size} onResize={onResize} label={label} focusable />
+      </> : <>
+        <ResizeGrip edge="l" target={target} limits={lim} size={size} onResize={onResize} label={label} />
+        <ResizeGrip edge="b" target={target} limits={lim} size={size} onResize={onResize} label={label} />
+        <ResizeGrip edge="bl" target={target} limits={lim} size={size} onResize={onResize} label={label} focusable />
+      </>}
     </section>
   );
 }
