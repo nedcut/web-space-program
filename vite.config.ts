@@ -5,7 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { relative } from 'node:path';
 
+// Cross-origin isolation lets the terrain workers share one SharedArrayBuffer Earth grid (src/game/earthLoader.ts).
+// Every asset is same-origin, so require-corp costs nothing; static hosts get the same pair from public/_headers.
+const isolationHeaders = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' };
+
 export default defineConfig({
+  server: { headers: isolationHeaders },
+  preview: { headers: isolationHeaders },
   // Keep optimizer artifacts local when worktrees share installed dependencies.
   cacheDir: '.vite-cache',
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)), ...(process.env.WSP_PROFILE === '1' ? { 'react-dom/client': 'react-dom/profiling' } : {}) } },

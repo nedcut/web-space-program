@@ -1,0 +1,5 @@
+# Cross-origin isolation: terrain workers share one Earth height grid (SharedArrayBuffer).
+# Without these headers the game still works, with a 16 MiB copy per worker.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
