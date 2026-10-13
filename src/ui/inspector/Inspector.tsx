@@ -5,7 +5,7 @@ import { LIGHT_COLORS, type TweakDescriptor } from '../../sim/vessel/tweaks';
 import type { PartTweaks, RcsAxes, WheelMode } from '../../sim/vessel/types';
 import { frameProfiler as prof } from '../../util/frameProfiler';
 import { useEscape } from '../nav/escape';
-import { createPlacements, leader, type Insets, type Point } from './placement';
+import { createPlacements, leader, type Insets, type Point, type Rect } from './placement';
 import './inspector.css';
 
 export type { Insets } from './placement';
@@ -32,7 +32,7 @@ const Body = memo(({ children }: { sig?: string; children: ReactNode }) => <>{ch
 /** Leader-line ring radius around the part (px). */
 const RING = 6;
 
-export function InspectorLayer({ panels, anchor, anchorInto, content, onClose, onPin, insets = { top: 8, right: 8, bottom: 8, left: 8 }, closeOnEscape = false }: {
+export function InspectorLayer({ panels, anchor, anchorInto, content, onClose, onPin, insets = { top: 8, right: 8, bottom: 8, left: 8 }, obstacles, closeOnEscape = false }: {
   panels: InspectorPanelProps[];
   /** Part centre in CSS px relative to the layer, or null when off-screen. */
   anchor: (uid: number) => Point | null;
@@ -43,6 +43,8 @@ export function InspectorLayer({ panels, anchor, anchorInto, content, onClose, o
   onPin: (uid: number) => void;
   /** Screen margins kept clear when a window opens (fixed toolbars and side panels). */
   insets?: Insets;
+  /** Screen boxes (client px) a new window should avoid covering when the free area is full; read once per open. */
+  obstacles?: () => Rect[];
   /** Esc closes the topmost window. */
   closeOnEscape?: boolean;
 }) {
@@ -62,6 +64,8 @@ export function InspectorLayer({ panels, anchor, anchorInto, content, onClose, o
   anchorIntoRef.current = anchorInto;
   const insetsRef = useRef(insets);
   insetsRef.current = insets;
+  const obstaclesRef = useRef(obstacles);
+  obstaclesRef.current = obstacles;
   const items = panels.flatMap(p => { const c = content(p.uid); return c ? [{ ...p, c }] : []; });
 
   const view = () => ({ w: host.current?.clientWidth ?? 0, h: host.current?.clientHeight ?? 0 });
@@ -112,10 +116,15 @@ export function InspectorLayer({ panels, anchor, anchorInto, content, onClose, o
     book.retain(open);
     for (const uid of order.current.keys()) if (!open.has(uid)) order.current.delete(uid);
     const v = view();
+    let blocks: Rect[] | undefined;
     for (const uid of open) {
       const el = els.current.get(uid);
       if (!el || book.has(uid)) continue;
-      book.open(uid, anchorRef.current(uid), { w: el.offsetWidth, h: el.offsetHeight }, v, insetsRef.current);
+      if (!blocks && obstaclesRef.current && host.current) {
+        const o = host.current.getBoundingClientRect();
+        blocks = obstaclesRef.current().map(r => ({ x: r.x - o.left, y: r.y - o.top, w: r.w, h: r.h }));
+      }
+      book.open(uid, anchorRef.current(uid), { w: el.offsetWidth, h: el.offsetHeight }, v, insetsRef.current, blocks);
       write(uid);
       raise(uid);
       observer.current?.observe(el);

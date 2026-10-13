@@ -44,6 +44,13 @@ describe('placeWindow', () => {
       others.push(p);
     }
   });
+  it('avoids the HUD boxes it is told about when crowded', () => {
+    const v = { w: 1440, h: 900 }, tall = { w: 264, h: 366 };
+    const altimeter = { x: 630, y: 8, w: 180, h: 70 };
+    const others: Rect[] = [{ x: 410, y: 112, w: 264, h: 366 }, { x: 766, y: 402, w: 264, h: 125 }];
+    const p = { ...placeWindow({ x: 720, y: 330 }, tall, v, insets, others, [altimeter]), ...tall };
+    for (const o of [...others, altimeter]) expect(overlap(p, o)).toBe(false);
+  });
   it('covers as little as possible when the screen is full', () => {
     const small = { w: 600, h: 400 };
     const others = [{ x: 8, y: 8, w: 400, h: 384 }];

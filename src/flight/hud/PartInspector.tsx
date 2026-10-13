@@ -15,6 +15,9 @@ import { berths } from './StationPanel';
 import { useRenderProfile } from './useRenderProfile';
 
 const fmtKN = (n: number) => (n < 1000 ? `${n.toFixed(0)} N` : `${(n / 1000).toFixed(n < 1e5 ? 1 : 0)} kN`);
+/** The HUD's interactive boxes (same list as the pointer-events rule in hud.css): new windows avoid them when crowded. */
+const HUD_BOXES = '.hud-left > *:not(.hud-left-fill):not(.hud-left-bottom), .hud-left-bottom > *, .hud-top > *:not(.hud-messages), .hud-right > .app-bar, .app-stack > *, .crew-dock > *, .hud-bottom > *, .hud > .app-win';
+const hudBoxes = () => [...document.querySelectorAll(HUD_BOXES)].map(e => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; }).filter(r => r.w > 0 && r.h > 0);
 const fmtAmount = (n: number) => n.toFixed(n < 10 ? 1 : 0);
 const CHUTE_PHASE: Record<string, { text: string; tone?: 'good' | 'warn' }> = {
   stowed: { text: 'Chute stowed' }, armed: { text: 'Chute armed', tone: 'warn' }, semi: { text: 'Chute partly open', tone: 'good' }, full: { text: 'Chute open', tone: 'good' }, cut: { text: 'Chute cut', tone: 'warn' },
@@ -67,7 +70,7 @@ export function FlightInspector({ controller: c, panels, setPanels }: { controll
     };
   };
   if (c.mapMode) return null;
-  return <InspectorLayer panels={panels} anchor={anchor} anchorInto={anchorInto} content={content} closeOnEscape
+  return <InspectorLayer panels={panels} anchor={anchor} anchorInto={anchorInto} content={content} obstacles={hudBoxes} closeOnEscape
     onClose={uid => setPanels(p => p.filter(x => x.uid !== uid))}
     onPin={uid => setPanels(p => p.map(x => (x.uid === uid ? { ...x, pinned: !x.pinned } : x)))}
     insets={{ top: 110, right: 350, bottom: game.get().settings.navballSize + 70, left: 240 }} />;

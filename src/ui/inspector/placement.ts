@@ -43,9 +43,10 @@ function clampFree(pos: Point, size: Size, view: Size, m: Insets): Point {
 /**
  * Position for a newly opened window. Beside the part on the side with room (right first), then the other side;
  * when those collide with `others` (windows already open), stacked below or above them; failing that, wherever on
- * screen it covers the least of other windows and the HUD. A part off screen (`anchor` null) opens it near the centre.
+ * screen it covers the least of other windows and the HUD (`obstacles`, the HUD's boxes, when known; else the inset
+ * margins). A part off screen (`anchor` null) opens it near the centre.
  */
-export function placeWindow(anchor: Point | null, size: Size, view: Size, insets: Insets, others: readonly Rect[]): Point {
+export function placeWindow(anchor: Point | null, size: Size, view: Size, insets: Insets, others: readonly Rect[], obstacles?: readonly Rect[]): Point {
   const a = anchor ?? { x: view.w / 2, y: view.h / 2 };
   const y0 = a.y - LIFT - size.h / 2;
   const right = { x: a.x + SIDE_GAP, y: y0 }, left = { x: a.x - SIDE_GAP - size.w, y: y0 };
@@ -71,8 +72,10 @@ export function placeWindow(anchor: Point | null, size: Size, view: Size, insets
     for (let x = SPACING; x <= view.w - size.w - SPACING; x += step) {
       const r = { x, y, ...size };
       let cover = 0;
-      for (const o of others) cover += area(r, { x: o.x - SPACING, y: o.y - SPACING, w: o.w + 2 * SPACING, h: o.h + 2 * SPACING });
-      const hud = size.w * size.h - area(r, hudFree);
+      for (const o of others) cover += area(r, pad(o));
+      const margins = size.w * size.h - area(r, hudFree);
+      let hud = margins;
+      if (obstacles) { hud = margins / 4; for (const o of obstacles) hud += 8 * area(r, pad(o)); }
       const dx = Math.max(x - a.x, 0, a.x - x - size.w), dy = Math.max(y - a.y, 0, a.y - y - size.h);
       const score = 8 * cover + hud + 40 * Math.hypot(dx, dy);
       if (score < bestScore) { bestScore = score; best = { x, y }; }
@@ -81,6 +84,7 @@ export function placeWindow(anchor: Point | null, size: Size, view: Size, insets
   return best;
 }
 
+const pad = (o: Rect): Rect => ({ x: o.x - SPACING, y: o.y - SPACING, w: o.w + 2 * SPACING, h: o.h + 2 * SPACING });
 const area = (a: Rect, b: Rect) =>
   Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
 
@@ -97,11 +101,11 @@ export function createPlacements() {
     get: (uid: number) => map.get(uid),
     has: (uid: number) => map.has(uid),
     /** Place a window that just opened (no-op when it already has a place). */
-    open(uid: number, anchor: Point | null, size: Size, view: Size, insets: Insets): Placement {
+    open(uid: number, anchor: Point | null, size: Size, view: Size, insets: Insets, obstacles?: readonly Rect[]): Placement {
       const had = map.get(uid);
       if (had) return had;
       const others = [...map.values()];
-      const p = placeWindow(anchor, size, view, insets, others);
+      const p = placeWindow(anchor, size, view, insets, others, obstacles);
       const placed = { ...p, ...size, moved: false };
       map.set(uid, placed);
       return placed;
