@@ -1,24 +1,47 @@
+import type { ReactNode } from 'react';
 import type { World } from '../../game/world';
 import type { TransferWindow } from '../../game/planning/windows';
 import { formatDate, formatDuration } from '../../ui/format';
+import { dvText, shortDate, shortDuration } from './plannerFormat';
 
-/** Estimates stay selectable until the worker verifies an encounter and the existing apply path installs its node. */
-export function DepartureOptions({ world, options, busy, onPick }: {
-  world: World; options: { target: string; windows: TransferWindow[] }; busy: boolean; onPick(w: TransferWindow): void;
-}) {
-  const cost = (w: TransferWindow) => w.dv + (w.captureDv ?? 0);
-  const live = options.windows.filter(w => w.departure > world.ut + 120)
+const cost = (w: TransferWindow) => w.dv + (w.captureDv ?? 0);
+
+/** Options that are still ahead, "go now" first then cheapest first, and the cheapest of them. */
+export function liveOptions(windows: readonly TransferWindow[], ut: number): { live: TransferWindow[]; best?: TransferWindow } {
+  const live = windows.filter(w => w.departure > ut + 120)
     .sort((a, b) => Number(b.kind === 'now') - Number(a.kind === 'now') || cost(a) - cost(b));
+  return { live, best: live.length ? live.reduce((a, b) => cost(a) < cost(b) ? a : b) : undefined };
+}
+
+/**
+ * One row per departure: name, wait and total Δv on the first line, a departure + capture Δv bar (scaled to the
+ * dearest option) and the trip time on the second. Dates and exact figures are in the row tooltip.
+ * Estimates stay selectable until the worker verifies an encounter and the existing apply path installs its node.
+ */
+export function DepartureOptions({ world, options, busy, onPick, tools }: {
+  world: World; options: { target: string; windows: TransferWindow[] }; busy: boolean; onPick(w: TransferWindow): void; tools?: ReactNode;
+}) {
+  const { live, best } = liveOptions(options.windows, world.ut);
   if (!live.length) return null;
-  const best = live.reduce((a, b) => cost(a) < cost(b) ? a : b);
-  return <div style={{ display: 'grid', gap: 4, fontSize: 12 }} aria-label="Departure options">
-    <div className="label">Upcoming windows · {world.universe.body(options.target).name}</div>
-    <div style={{ color: 'var(--text-dim)' }}>Best by departure + capture Δv. Estimates; select to verify and create a node.</div>
-    {live.map(w => <button key={w.departure} className="btn ghost small" disabled={busy}
-      style={{ textAlign: 'left', whiteSpace: 'normal' }} title="Plan this departure (verifies the encounter)" onClick={() => onPick(w)}>
-      <div>{w.kind === 'now' ? 'Go now (with plane change) · next orbit' : 'Transfer window'}{w === best ? ' · best Δv' : ''}</div>
-      <div className="mono">Depart {formatDate(w.departure)} · wait {formatDuration(w.departure - world.ut)}</div>
-      <div className="mono">Departure ~{w.dv.toFixed(0)} m/s · capture {w.captureDv === undefined ? '—' : `~${w.captureDv.toFixed(0)} m/s`} · flight {formatDuration(w.timeOfFlight)}</div>
-    </button>)}
+  const max = Math.max(...live.map(cost), 1);
+  const name = world.universe.body(options.target).name;
+  return <div className="dep" aria-label="Departure options">
+    <div className="dep-head">
+      <span className="label" title="Estimates ranked by departure + capture Δv. Pick one to verify the encounter and create its node.">Departures · {name}</span>
+      {tools}
+    </div>
+    {live.map(w => {
+      const title = `${w.kind === 'now' ? 'Go now with a plane change, on the next orbit' : 'Transfer window'}${w === best ? ' (lowest Δv)' : ''}\n`
+        + `Depart ${formatDate(w.departure)} · wait ${formatDuration(w.departure - world.ut)}\n`
+        + `Departure ~${dvText(w.dv)} · capture ${w.captureDv === undefined ? '—' : `~${dvText(w.captureDv)}`} · flight ${formatDuration(w.timeOfFlight)}\n`
+        + 'Click to verify and create the node';
+      return <button key={w.departure} className={`dep-opt${w === best ? ' best' : ''}`} disabled={busy} title={title} aria-label={title.replace(/\n/g, '. ')} onClick={() => onPick(w)}>
+        <span className="dep-name">{w.kind === 'now' ? 'Go now' : 'Window'}{w === best && <span className="pl-star" aria-hidden>★</span>}</span>
+        <span className="dep-wait pl-num">in {shortDuration(w.departure - world.ut)}</span>
+        <span className="dep-dv pl-num">{dvText(cost(w))}</span>
+        <span className="dep-bar"><i className="now" style={{ width: `${(w.dv / max) * 100}%` }} />{w.captureDv !== undefined && <i className="cap" style={{ width: `${(w.captureDv / max) * 100}%` }} />}</span>
+        <span className="dep-trip pl-num"><span className="dep-date">{shortDate(w.departure)} · </span>{shortDuration(w.timeOfFlight)} trip</span>
+      </button>;
+    })}
   </div>;
 }
