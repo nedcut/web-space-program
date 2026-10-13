@@ -77,6 +77,7 @@ export function recoverScience(w: World, v: WorldVessel) {
   const refundFraction = 0.2 + 0.8 * Math.exp(-distance / (w.universe.body('earth').radius * 0.3));
   const refund = w.mode === 'career' ? Math.floor(v.state.parts.reduce((sum, p) => sum + (p.purchaseCost ?? 0), 0) * refundFraction) : 0;
   w.progression.funds += refund;
+  w.lastRecoveryRefund = refund;
   w.onRecovered(v);
   w.message(`Recovered · +${science.toFixed(1)} science · ${refund.toLocaleString()} cr`);
 }

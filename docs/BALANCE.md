@@ -122,7 +122,7 @@ current craft can be declined; no specific locked part is required by an early c
 Stock hardware and advisories (vacuum Δv is not a destination guarantee)
 | Craft | Scale | Cost cr | Δv m/s | Earth launch TWR | Required research | Advisories |
 | --- | --- | --- | --- | --- | --- | --- |
-| Kestrel Sounding Rocket | standard | 5068 | 2722 | 3.41 | foundation | none |
+| Kestrel Sounding Rocket | standard | 5668 | 2536 | 3.26 | foundation | none |
 | Meridian Orbiter | standard | 10870 | 4962 | 1.40 | propulsion-0, energy-0 | none |
 | Selene Lunar Lander | standard | 30977 | 7162 | 1.81 | propulsion-0, propulsion-1, structures-0, structures-1, guidance-0, energy-0 | none |
 | Swift Jet | standard | 11080 | 12416 | 1.36 | aviation-0, aviation-1, aviation-2, aviation-3, guidance-0 | chute |
@@ -143,6 +143,8 @@ Stock hardware and advisories (vacuum Δv is not a destination guarantee)
 | Atlaswake Heavy Lifter | standard | 93991 | 11753 | 2.41 | propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, aviation-0, guidance-0, guidance-3 | none |
 | Beaconseed Relay Launcher | standard | 33621 | 10946 | 1.80 | propulsion-1, propulsion-2, structures-0, structures-2, aviation-0, guidance-0, guidance-3, energy-0, energy-1 | none |
 | Alembic Laboratory | standard | 122384 | 8818 | 2.35 | propulsion-0, propulsion-1, propulsion-2, propulsion-3, structures-0, structures-2, structures-3, guidance-0, guidance-1, guidance-3, energy-1, energy-2, discovery-3 | chute |
+| Kestrel Sounding Rocket | challenging | 5668 | 2536 | 3.26 | foundation | none |
+| Kestrel Sounding Rocket | real | 5668 | 2536 | 3.26 | foundation | none |
 | Meridian Challenging Orbiter | challenging | 42925 | 8135 | 3.97 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-2, energy-0 | none |
 | Selene Challenging Expedition | challenging | 157177 | 15106 | 1.73 | propulsion-0, propulsion-1, propulsion-2, structures-0, structures-1, structures-2, structures-3, guidance-2, energy-0 | none |
 | Ringrunner Real Saturn Probe | real | 1473660 | 18843 | 1.30 | propulsion-2, propulsion-3, structures-0, structures-2, structures-3, aviation-0, guidance-2, guidance-3, energy-2, energy-3 | none |
@@ -169,15 +171,15 @@ Scale requirements (circular speed; launch allowances are planning assumptions)
 Scripted Standard campaign: full vehicle cost lost each flight, full recovered science, no salvage credited. Surface/flight contexts are chosen deliberately; this is not a novice success-rate model.
 | Mission | Objective | Cost cr | Science earned | Science bank | Funds after | Research purchased |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Pad survey / short hop | 5248 | 46.0 | 36.0 | 84752 | discovery-0 |
-| 2 | Low atmosphere / grassland hop | 6148 | 100.0 | 116.0 | 95604 | propulsion-0, energy-0 |
-| 3 | High atmosphere / splashdown | 5498 | 52.0 | 168.0 | 107106 | — |
-| 4 | First orbit | 7636 | 36.0 | 159.0 | 154470 | propulsion-1, structures-0 |
-| 5 | Orbital repeat / technique | 7636 | 8.0 | 167.0 | 169834 | — |
-| 6 | Higher orbit survey | 11050 | 16.0 | 183.0 | 181784 | — |
-| 7 | New surface research | 6148 | 74.0 | 212.0 | 175636 | structures-1, guidance-0 |
-| 8 | Orbit practice | 11050 | 0.0 | 212.0 | 187586 | — |
-| 9 | New field site | 6148 | 74.0 | 286.0 | 181438 | — |
-| 10 | Departure rehearsal | 11050 | 0.0 | 286.0 | 193388 | — |
-| 11 | Moon flyby | 11050 | 83.0 | 369.0 | 305338 | — |
-| 12 | Lunar science follow-up | 11050 | 48.0 | 417.0 | 317288 | — |
+| 1 | Pad survey / short hop | 5848 | 46.0 | 36.0 | 84152 | discovery-0 |
+| 2 | Low atmosphere / grassland hop | 6748 | 100.0 | 116.0 | 94404 | propulsion-0, energy-0 |
+| 3 | High atmosphere / splashdown | 6098 | 52.0 | 168.0 | 105306 | — |
+| 4 | First orbit | 7636 | 36.0 | 159.0 | 152670 | propulsion-1, structures-0 |
+| 5 | Orbital repeat / technique | 7636 | 8.0 | 167.0 | 168034 | — |
+| 6 | Higher orbit survey | 11050 | 16.0 | 183.0 | 179984 | — |
+| 7 | New surface research | 6748 | 74.0 | 212.0 | 186236 | structures-1, guidance-0 |
+| 8 | Orbit practice | 11050 | 0.0 | 212.0 | 198186 | — |
+| 9 | New field site | 6748 | 74.0 | 286.0 | 191438 | — |
+| 10 | Departure rehearsal | 11050 | 0.0 | 286.0 | 203388 | — |
+| 11 | Moon flyby | 11050 | 83.0 | 369.0 | 315338 | — |
+| 12 | Lunar science follow-up | 11050 | 48.0 | 417.0 | 327288 | — |

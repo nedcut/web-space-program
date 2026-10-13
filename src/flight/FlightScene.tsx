@@ -340,9 +340,9 @@ export default function FlightScene() {
     const w = ctrl.current?.world;
     if (!w?.active) return;
     const crew = w.crewFor().map(a => a.name);
-    const funds = w.progression.funds;
     if (!w.recoverActive()) return;
-    exitTo('spaceCenter', { crew, value: w.mode === 'career' ? w.progression.funds - funds : null });
+    // Hardware refund only: contract rewards paid on recovery show as credits earned.
+    exitTo('spaceCenter', { crew, value: w.mode === 'career' ? w.lastRecoveryRefund : null });
   };
   /** Revert: throw away this flight and return to the editor with the universe as it was before launch. */
   const revert = () => {

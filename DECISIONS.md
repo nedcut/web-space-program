@@ -1023,11 +1023,20 @@ Owner decisions 2026-10-13 (both recommended options).
   `maxQ` (a full canopy at the reefed load tore the chute off its joint). Cut stays at 1.5×. No part ratings
   changed. Measured: the stock Kestrel flown straight up at full throttle (420 km apex) went from crew lost
   to recovered.
-- **Kestrel carries the starter heat shield** (+600 cr, +120 kg; 5,248 → 5,848 cr). A bare Lantern pod trims
-  apex-first in a steep descent (SAS loses it at ~65 kPa), falls at ~250 m/s and dies even with a working chute;
-  with the shield it trims blunt-end first and survives every arc tried (vertical, 20–60°, full or partial burn).
-  Kestrel is also listed as stock on Challenging and Real (ids `stock-kestrel-challenging`/`-real`), which had
-  no launchable stock craft at the start.
+- **Capsules trim heat-shield first.** Aerodynamic forces act at part centres, so nothing gave a capsule its
+  real blunt-body stability: every capsule tumbled to apex-first, fell at ~250 m/s and hit the sea before the chute
+  could open (SAS held it only until ~65 kPa). A heat shield whose axial face leads now carries a blunt-face drag
+  along the flow through its sphere centre, 2 shield radii behind the face (`BLUNT_CENTRE`; real capsules ≈ 2.4),
+  blended in between 30° and 70° off the axis. A spent stack decoupler left under the shield (decouplers stay with
+  the upper stage) is folded into the shield's face for drag only (`cache.aeroExposed`, built at topology
+  rebuild; heating still uses `exposed`). No per-step cost beyond one module check per part. Result: the Kestrel
+  flown straight up (315 km apex) with SAS off comes down shield-first and lands under its chute.
+- **Lunar-return entry corridor 25 kPa** (`ENTRY_DYNAMIC_PRESSURE`, was 15 kPa): a stable shield-first capsule
+  has less drag than the old tumbling one and skipped out on Real at 15 kPa. 25 kPa captures in one pass on every
+  scale at 3.7 / 4.9 / 7.8 g (Standard / Challenging / Real).
+- **Kestrel carries the starter heat shield** (+600 cr, +120 kg; 5,248 → 5,848 cr), so the first craft has a
+  blunt face; it is also listed as stock on Challenging and Real (ids `stock-kestrel-challenging`/`-real`), which
+  had no launchable stock craft at the start.
 - **Contract desk.** (1) A splashdown counts as landing (`landed` progress event), so the Earth test flight
   completes on a sea recovery. (2) Offers never duplicate an active commission (kind + body + biome): three
   identical Earth test flights used to all pay out on one hop. (3) Offers are drawn for a capability key

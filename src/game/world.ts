@@ -164,6 +164,8 @@ export class World {
   flightlog = newRecorder();
   achievementProfile = loadAchievements();
   latestReportId: string | null = null;
+  /** Hardware refund credited by the last recovery (career), excluding contract rewards it triggered. */
+  lastRecoveryRefund = 0;
   checkAchievements(r: FlightRecord) {
     const earned = awardAchievements(this.achievementProfile.unlocked, r, this.achievementProfile.flags, this.ut);
     if (earned.length) { saveAchievements(this.achievementProfile); for (const a of earned) this.message(`Achievement · ${a.name}`, 'info', 8); }

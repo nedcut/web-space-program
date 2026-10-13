@@ -33,6 +33,9 @@ describe('first flights', () => {
     expect(r.ok, r.note).toBe(true);
     expect([...r.biomes].some(b => b.startsWith('earth/splashed'))).toBe(true);
     expect(c.status).toBe('completed');
+    // The debrief's recovery value is the hardware refund, not the contract reward paid at recovery.
+    expect(w.lastRecoveryRefund).toBeGreaterThan(0);
+    expect(w.lastRecoveryRefund).toBeLessThanOrEqual(r.cost);
     for (const preset of ['standard', 'challenging', 'real'] as const) {
       const universe = new Universe(preset);
       const stock = STOCK_CRAFTS.filter(s => s.scale === preset).map(s => ({ id: s.id, craft: s.build() }));
