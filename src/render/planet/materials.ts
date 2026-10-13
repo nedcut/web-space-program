@@ -1181,6 +1181,14 @@ export function createSkyMaterial(u: PlanetUniforms, q: QualitySettings): THREE.
         // aerial perspective; the shell only shows there through gaps (streaming, cutouts). Log-depth fragment
         // writes defeat early-Z, so these hidden pixels would otherwise pay the full march: use a short one.
         int steps = min(VIEW_STEPS * uStepScale, 64);
+        // Optically thin rays (lowest point several scale heights up: from high in the climb or from orbit) are
+        // smooth and faint; 16 steps there match 4 within 0.3% of the brightest sky. Steps follow the density
+        // at the ray's lowest point. Thick hazes (uStepScale > 1) keep the full march.
+        if (!hitGround && uStepScale == 1) {
+          float hp = length(uCamRel + rd * clamp(-b, t0, t1)) - uPlanetRadius;
+          float k = 6.0 * exp(-0.5 * hp / max(uHr, uHm));
+          steps = clamp(int(ceil(float(steps) * k)), min(steps, 4), steps);
+        }
         integrateScattering(uCamRel, rd, t0, t1, hitGround ? min(steps, 4) : steps, L, T);
         float meanT = dot(T, vec3(1.0 / 3.0));
         // Chromatic correction for the Sun disc behind the shell: blended result becomes T * sun.
