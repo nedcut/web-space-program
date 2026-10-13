@@ -64,7 +64,7 @@ export function nextGoal(p: Progression, mode: GameMode, scale: ScalePresetId): 
   if (mode === 'career' && active === 0 && offered > 0 && !p.milestones.length && !Object.keys(p.archive).length)
     return { title: 'Take your first commissions', detail: 'Accept the offers you can fly: their advances pay for the first rockets, and a field survey at the launch complex can be done on the pad.', action: 'missions', actionLabel: 'Mission Control', aside: null };
   if (!Object.keys(p.archive).length && !p.milestones.length)
-    return { title: 'Fly a sounding rocket', detail: 'Launch the stock Kestrel. In the Science app, run the thermometer and crew report on the pad, in the air and in space. Stage the parachute on the way down, then recover the capsule.', action: 'launch', actionLabel: 'Launch Pad', aside };
+    return { title: 'Fly a sounding rocket', detail: 'Launch the stock Kestrel. When the Science app lights up, open it and run the crew report (and any instruments you fitted): on the pad, in the air and in space. Stage the parachute on the way down, then recover the capsule.', action: 'launch', actionLabel: 'Launch Pad', aside };
   const step = STEPS.find(s => !s.milestone || !p.milestones.includes(s.milestone));
   if (!step) return { title: 'Explore the planets', detail: 'Plan a Mars or Venus window in the map\'s Maneuver planner (Transfer windows). Probe cores come with Precision Attitude; long-range antennas with Long Range Telemetry.', action: 'research', actionLabel: 'Research Lab', aside };
   const stockId = step.craft[scale];

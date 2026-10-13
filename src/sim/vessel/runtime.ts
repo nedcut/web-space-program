@@ -282,6 +282,11 @@ export interface VesselCache {
   feed: Map<number, number[][]>;
   /** Exposed face areas per part in part frame: [+X,-X,+Y,-Y,+Z,-Z], m^2. */
   exposed: Map<number, number[]>;
+  /**
+   * Aerodynamic exposure where it differs from `exposed`: a heat shield's face counts as open when only a spent
+   * decoupler covers it (the decoupler's far face is then folded into the shield's blunt face). Heating keeps `exposed`.
+   */
+  aeroExposed?: Map<number, number[]>;
   /** Parts enclosed by an attached fairing shell (no aerodynamic forces). */
   shielded?: Set<number>;
   /** Body-frame point at which a part's aerodynamic force acts when not its centre (fairing shells). */

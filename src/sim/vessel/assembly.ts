@@ -8,7 +8,7 @@ import type { PartState, VesselCache, VesselState } from './runtime';
 import { m3AddInPlace, m3FromQuat, m3Inverse, m3ParallelAxis, m3RotateTensor, m3Zero } from './mat3';
 import { localInertia, shapeRadius } from './shapes';
 import { DEFAULT_RESOURCE_DEFS, buildFeedGroups, partMass } from './resources';
-import { computeExposedAreas, fairingShielding } from './aero';
+import { computeExposedAreas, bluntShieldExposure, fairingShielding } from './aero';
 import { retractablePanel } from './tweaks';
 
 export interface BuildOptions {
@@ -206,6 +206,7 @@ export function rebuildTopology(v: VesselState): void {
   for (const p of v.parts) if (p.engine) c.feed.set(p.uid, buildFeedGroups(v, p.uid));
   const shielding = fairingShielding(v);
   c.exposed = computeExposedAreas(v, shielding);
+  c.aeroExposed = bluntShieldExposure(v, c.exposed);
   if (shielding.shells.size) {
     c.shielded = shielding.shielded;
     c.aeroCentre = new Map([...shielding.shells].map(([uid, s]) => [uid, s.centre]));

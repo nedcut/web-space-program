@@ -23,6 +23,8 @@ export const STALL_ANGLE = 0.3;
 export const STALL_WIDTH = 0.12;
 /** Oswald efficiency * aspect ratio used for induced drag. */
 export const EFFECTIVE_ASPECT = 5;
+/** Sphere-centre distance behind a heat shield's face, in shield radii (capsule heat shields are ~2.4). */
+export const BLUNT_CENTRE = 2;
 /** Parachute deploy animation time per phase, s. */
 export const CHUTE_DEPLOY_TIME = 3;
 
@@ -116,6 +118,39 @@ export function computeExposedAreas(v: VesselState, shielding: FairingShielding 
   return out;
 }
 
+/**
+ * Heat shields whose axial face is covered only by a spent stack decoupler (decouplers stay with the upper stage):
+ * the shield is still the capsule's blunt face, so for drag the decoupler's open far face is folded into it.
+ * Returns undefined when no shield qualifies (the common case), so `exposed` is used unchanged.
+ */
+export function bluntShieldExposure(v: VesselState, exposed: Map<number, number[]>): Map<number, number[]> | undefined {
+  let out: Map<number, number[]> | undefined;
+  for (const p of v.parts) {
+    if (!p.def.modules.some(m => m.type === 'heatShield')) continue;
+    for (const n of v.parts) {
+      // Neighbour stacked on the shield, either way round, through an axial node.
+      const childOfShield = n.parent === p.uid;
+      if (!childOfShield && p.parent !== n.uid) continue;
+      const [shieldNode, otherNode] = childOfShield ? [n.parentNode, n.attachNode] : [p.attachNode, p.parentNode];
+      if (!shieldNode || shieldNode === 'srf' || !otherNode || otherNode === 'srf') continue;
+      if (!n.def.modules.some(m => m.type === 'decoupler' && !m.radial)) continue;
+      // The decoupler must be the end of the stack: nothing else attached to it.
+      if (v.parts.some(o => o !== p && (o.parent === n.uid || (n.parent === o.uid && o !== p)))) continue;
+      const sDir = p.def.attachNodes.find(a => a.id === shieldNode)?.direction;
+      const dDir = n.def.attachNodes.find(a => a.id === otherNode)?.direction;
+      if (!sDir || !dDir) continue;
+      const sf = faceIndex(sDir), df = faceIndex(dDir), far = df ^ 1;
+      if (sf !== 2 && sf !== 3) continue;
+      const shieldFull = faceAreas(p.def)[sf], farFull = faceAreas(n.def)[far];
+      if (farFull <= 0 || (exposed.get(n.uid)?.[far] ?? 0) < 0.5 * farFull) continue;
+      out ??= new Map([...exposed].map(([uid, a]) => [uid, [...a]]));
+      out.get(p.uid)![sf] = shieldFull;
+      out.get(n.uid)![far] = 0;
+    }
+  }
+  return out;
+}
+
 export interface AeroContext {
   air: AtmosphereSample;
   /** Air velocity relative to the COM, body frame (= R^T (wind - v)) negated: vessel velocity through air. */
@@ -165,7 +200,7 @@ export function computeAeroForces(v: VesselState, ctx: AeroContext, loads?: Part
     const vp = qRotate(qConj(p.rotation), vb);
     const sp = length(vp);
     if (sp < 1e-9) continue;
-    const exposed = v.cache.exposed.get(p.uid) ?? faceAreas(p.def);
+    const exposed = v.cache.aeroExposed?.get(p.uid) ?? v.cache.exposed.get(p.uid) ?? faceAreas(p.def);
     const wing = p.def.modules.find((m): m is LiftingSurfaceModule => m.type === 'liftingSurface');
     const comps = [vp.x, vp.y, vp.z];
     const fp = [0, 0, 0];
@@ -200,10 +235,25 @@ export function computeAeroForces(v: VesselState, ctx: AeroContext, loads?: Part
       fPart = add(fPart, scale(vhat, -q * wing.area * cd));
     }
 
+    let at = v.cache.aeroCentre?.get(p.uid) ?? p.position;
+    // Heat shield leading: a blunt spherical segment. Its drag acts along the flow through the segment's sphere
+    // centre, well behind the face, so a capsule trims heat-shield first like the real thing (the per-part-centre
+    // model made every capsule fly apex-first, too fast for its parachute).
+    if (p.def.modules.some(m => m.type === 'heatShield')) {
+      const front = vp.y > 0 ? 2 : 3;
+      const full = faceAreas(p.def)[front];
+      const w = full > 0 && exposed[front] > 0.5 * full ? smoothstep(0.3, 0.7, Math.abs(vp.y) / sp) : 0;
+      if (w > 0) {
+        const blunt = scale(vp, -0.5 * rho * sp * p.def.dragCoefficient.axial * exposed[front] * machMul);
+        fPart = add(scale(fPart, 1 - w), scale(blunt, w));
+        const r = Math.sqrt(full / Math.PI);
+        at = add(at, qRotate(p.rotation, { x: 0, y: (front === 3 ? 1 : -1) * BLUNT_CENTRE * r * w, z: 0 }));
+      }
+    }
+
     if (p.chute && p.chute.cda > 0) fPart = add(fPart, scale(vp, -0.5 * rho * sp * p.chute.cda));
 
     const fb = qRotate(p.rotation, fPart);
-    const at = v.cache.aeroCentre?.get(p.uid) ?? p.position;
     loads?.push({ partUid: p.uid, point: at, force: fb });
     force = add(force, fb);
     torque = add(torque, cross(sub(at, v.com), fb));

@@ -2,8 +2,12 @@ import { sampleAtmosphere } from '../../sim/atmosphere';
 import { length } from '../../util/vec3';
 import type { PlanningWorld } from './context';
 
-/** Dynamic pressure at the vacuum periapsis that captures a capsule in one pass (measured 9–12 kPa on all scales). */
-export const ENTRY_DYNAMIC_PRESSURE = 15000;
+/**
+ * Dynamic pressure at the vacuum periapsis that captures a capsule in one pass. Capsules trim heat-shield first
+ * (less drag than the old tumbling entry): 25 kPa captures on every scale at 3.7 / 4.9 / 7.8 g (Standard /
+ * Challenging / Real); 15 kPa skipped out on Real.
+ */
+export const ENTRY_DYNAMIC_PRESSURE = 25000;
 
 /**
  * Default periapsis altitude when planning a transfer from `centralId` to `targetId`. Returning from a moon to an

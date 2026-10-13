@@ -1014,3 +1014,42 @@ Owner decisions 2026-10-13 (both recommended options).
   ~0.1 ms both. No per-frame allocation (`trailStyle` writes into a reused object). Scripts:
   `scripts/bench/smoke-shots.mjs` (checkpoint screenshots), `scripts/bench/smoke/{cost,pool}.js` (gpu-passes
   `--eval`). Pad liftoff billows, ground dust and pad steam are unchanged apart from the new lighting.
+
+## Career playthrough fixes (2026-10-13, op/career)
+
+- **Parachutes open at their rated load, then stay reefed until slow.** An armed chute used to open at 1.5× its
+  rated dynamic pressure, which is exactly the cut threshold, so on a fast descent it opened and was cut on the
+  next step. It now opens at ≤ 1× `maxQ` and goes from reefed to full only below `deployAltitude` **and** ≤ 0.2×
+  `maxQ` (a full canopy at the reefed load tore the chute off its joint). Cut stays at 1.5×. No part ratings
+  changed. Measured: the stock Kestrel flown straight up at full throttle (420 km apex) went from crew lost
+  to recovered.
+- **Kestrel carries the starter heat shield** (+600 cr, +120 kg; 5,248 → 5,848 cr). A bare Lantern pod trims
+  apex-first in a steep descent (SAS loses it at ~65 kPa), falls at ~250 m/s and dies even with a working chute;
+  with the shield it trims blunt-end first and survives every arc tried (vertical, 20–60°, full or partial burn).
+  Kestrel is also listed as stock on Challenging and Real (ids `stock-kestrel-challenging`/`-real`), which had
+  no launchable stock craft at the start.
+- **Contract desk.** (1) A splashdown counts as landing (`landed` progress event), so the Earth test flight
+  completes on a sea recovery. (2) Offers never duplicate an active commission (kind + body + biome): three
+  identical Earth test flights used to all pay out on one hop. (3) Offers are drawn for a capability key
+  (orbit / lunar / landing / advanced); when it changes (milestone, research) unaccepted offers are replaced
+  automatically, and opening Mission Control fills an empty desk. Stored as optional `Progression.offerKey`.
+  (4) Abandoning or failing forfeits the advance (`penalty = advance`); before, accept-then-abandon netted
+  +2,000 cr per orbit offer and +1.4 M cr per Real flyby offer. (5) Home-planet test flights and field surveys
+  no longer get the scale credit multiplier: they use the same 6 k rocket on every scale but paid 300 k
+  (Challenging) / 3 M (Real) per hop. Orbit, Moon and far-body offers and milestones keep D-016 scaling.
+  Contract values and starting funds are rounded (614,399.99… → 614,400).
+- **Free return.** `planFreeReturn` (also `TransferOptions.freeReturn`, and a "Free return" button in the
+  maneuver planner's Moon departure list) searches the flyby periapsis so the Moon bends the path back into the
+  one-pass entry corridor (`arrivalPeriapsisAltitude`). Coarse: log-spaced flyby periapses for a sign change in
+  return perigee, retrying the planner's other departure options when the default passes the wrong side;
+  then bisection; fine: bisection on the departure burn's prograde component until the return perigee is within
+  500 m. 3–12 s in the planner worker. Reason: the default 30 km periapsis slingshots a Meridian into solar
+  orbit and a Meridian cannot capture and return, so the first crewed Moon flyby stranded its crew.
+- **Guidance.** A "Next goal" card on the hub (pure `nextGoal()`: first commissions → sounding hop → orbit →
+  Moon flyby → Moon landing → planets, naming the stock craft, the research nodes and science still missing).
+  The Science app's toolbar button lights (and its title says "N new here") when an experiment aboard would pay
+  in the current situation; refreshed at 2 Hz of real time, not per frame. Run buttons show the value; the
+  situation reads "Flying low · Grasslands" instead of `flyingLow`. Commission cards say which hardware counts.
+- **Not changed (owner's call):** science income and tech costs (a diligent player lands on the Moon on flight 5
+  on Standard), funds as a constraint (nothing to spend surplus on), larger-scale science grind, bare-pod
+  aerodynamic trim. See the career report in PROGRESS.md.

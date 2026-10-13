@@ -78,7 +78,7 @@ function coastToEntry(w: World) {
 }
 
 /** Hold retrograde (surface) and fall to the ground or sea; stages everything once descending in air. Skips warp. */
-export function descend(w: World, biomes: Set<string>, maxTime = 4000): boolean {
+export function descend(w: World, biomes: Set<string>, maxTime = 4000, sas = true): boolean {
   const atmo = w.universe.body(w.active!.body).atmosphere?.height ?? 0;
   let staged = false;
   const down = (w: World) => {
@@ -90,7 +90,7 @@ export function descend(w: World, biomes: Set<string>, maxTime = 4000): boolean 
       const f = localFrame(w, w.active!);
       if (!staged && f.altitude < atmo && length(f.surfVel) > 1) { stageAll(w); staged = true; }
       const v = length(f.surfVel) > 1 ? normalize(f.surfVel) : f.up;
-      return neutralInput({ sas: 'maneuver', maneuverDirection: scale(v, -1), throttle: 0 });
+      return sas ? neutralInput({ sas: 'maneuver', maneuverDirection: scale(v, -1), throttle: 0 }) : neutralInput({ throttle: 0 });
     }, (w) => down(w) || (staged && localFrame(w, w.active!).altitude > atmo * 1.05 && dotUp(w) > 0), biomes);
     if (!w.active) return false;
     if (down(w)) return true;
@@ -104,7 +104,7 @@ export function descend(w: World, biomes: Set<string>, maxTime = 4000): boolean 
  * Sounding hop: full throttle until burnout or until the apoapsis reaches `cutoff` (the coast hint's advice),
  * pitching over `pitch` degrees east once moving; coast, descend under chute, science throughout.
  */
-export function hop(w: World, craft: CraftDef, opts: { cutoff?: number; pitch?: number } = {}): FlightResult {
+export function hop(w: World, craft: CraftDef, opts: { cutoff?: number; pitch?: number; sas?: boolean } = {}): FlightResult {
   const biomes = new Set<string>();
   const { cost, problem } = buy(w, craft);
   if (problem) return { ok: false, note: problem, cost, biomes };
@@ -124,9 +124,7 @@ export function hop(w: World, craft: CraftDef, opts: { cutoff?: number; pitch?: 
     const f = localFrame(w, w.active!);
     return f.altitude < (w.universe.body('earth').atmosphere!.height) && length(f.surfVel) > 50 && dotUp(w) < 0;
   }, biomes);
-  const top = Math.max(0, ...[0]);
-  void top;
-  const down = descend(w, biomes);
+  const down = descend(w, biomes, 4000, opts.sas ?? true);
   if (!down || !w.active) return { ok: false, note: 'lost on descent', cost, biomes };
   doScience(w); trackBiome(w, biomes);
   w.recoverActive();

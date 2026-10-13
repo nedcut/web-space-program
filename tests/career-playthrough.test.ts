@@ -15,9 +15,10 @@ import { buy, hop, sensor, toOrbit } from '../scripts/career/flights';
 const career = (preset: 'standard' | 'challenging' | 'real' = 'standard') => new World(new Universe(preset), PART_CATALOG, DEFAULT_START_UT, 'career');
 
 describe('first flights', () => {
-  it('the stock Kestrel flown straight up at full throttle comes home with its science', () => {
+  it('the stock Kestrel flown straight up at full throttle, SAS off, comes home with its science', () => {
+    // The pilot only stages the parachute: the capsule must trim heat-shield first by itself.
     const w = career();
-    const r = hop(w, sensor(buildSoundingRocket()));
+    const r = hop(w, sensor(buildSoundingRocket()), { sas: false });
     expect(r.ok, r.note).toBe(true);
     expect([...r.biomes].some(b => b.includes('/spaceHigh/'))).toBe(true);
     expect(w.progression.science).toBeGreaterThan(40);
