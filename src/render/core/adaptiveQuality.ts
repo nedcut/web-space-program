@@ -24,7 +24,9 @@
  *   window's intervals rather than its single fastest one (a lone short interval after a late frame must not
  *   tighten the budget). Reductions that only chase a rate above 60 fps stop at `highRateMin`; below 60 fps the
  *   full range applies. A 120 Hz frame stream alternating 8.3/16.7 ms (~100 fps) is therefore over budget, also
- *   in Firefox, which has no GPU timer queries.
+ *   in Firefox, which has no GPU timer queries. Still over budget at that floor for 8 windows → a 3-window trial at
+ *   full scale; the steady mean intervals decide (≤7% worse at full scale → keep it and pause reductions, else back
+ *   to the floor and trial again after 30 s, doubling to 10 min).
  */
 export class AdaptiveQuality {
   scale = 1;
@@ -56,6 +58,13 @@ export class AdaptiveQuality {
   private downBlockedMs = 0;
   private downBlockMs = 20000;
   private holdMs = 0;
+  /** Windows spent over budget at the >60 fps floor, and their summed mean interval. */
+  private floorWindows = 0;
+  private floorSum = 0;
+  /** Full-resolution trial from the floor: the floor's scale and mean interval, windows measured at full scale. */
+  private probe: { floorScale: number; floorMean: number; windows: number; sum: number } | null = null;
+  private probeBlockedMs = 0;
+  private probeBlockMs = 30000;
 
   /** Ignore frames for the next `ms` of frame time (a known transient stall, not sustained load). */
   hold(ms: number): void {
@@ -73,13 +82,14 @@ export class AdaptiveQuality {
    */
   update(frameMs: number, enabled: boolean, gpuMs?: number, cpuMs?: number): boolean {
     const previous = this.scale;
-    if (!enabled) { this.scale = 1; this.resetWindow(); this.bad = 0; this.goodMs = 0; this.episode = null; this.downBlockedMs = 0; return previous !== this.scale; }
+    if (!enabled) { this.scale = 1; this.probe = null; this.floorWindows = 0; this.floorSum = 0; this.resetWindow(); this.bad = 0; this.goodMs = 0; this.episode = null; this.downBlockedMs = 0; return previous !== this.scale; }
     if (!Number.isFinite(frameMs) || frameMs <= 0 || frameMs >= 250) { this.resetWindow(); return false; }
     if (this.holdMs > 0) { this.holdMs -= frameMs; return false; }
     this.frames++;
     this.elapsed += frameMs;
     this.sinceUpMs += frameMs;
     this.downBlockedMs = Math.max(0, this.downBlockedMs - frameMs);
+    this.probeBlockedMs = Math.max(0, this.probeBlockedMs - frameMs);
     if (this.frames <= this.intervals.length) this.intervals[this.frames - 1] = frameMs;
     if (frameMs > this.targetMs * 1.5) this.slow++;
     if (frameMs > 25) this.slow60++;
@@ -108,6 +118,26 @@ export class AdaptiveQuality {
     const windowMs = this.elapsed;
     this.resetWindow();
 
+    // Full-resolution trial (see below): keep whichever of floor / full scale has the better steady frame interval.
+    const probe = this.probe;
+    if (probe) {
+      probe.sum += meanMs;
+      if (++probe.windows < 3) return false;
+      this.probe = null;
+      if (probe.sum / probe.windows > probe.floorMean * 1.07) {
+        // Pixel-bound after all: back to the floor, trial again later.
+        this.scale = probe.floorScale;
+        this.probeBlockedMs = this.probeBlockMs;
+        this.probeBlockMs = Math.min(600000, this.probeBlockMs * 2);
+      } else {
+        // Resolution was not the limit (compositor, main thread, a vsync source that cannot reach the rate).
+        this.downBlockedMs = this.downBlockMs;
+        this.downBlockMs = Math.min(160000, this.downBlockMs * 2);
+      }
+      this.bad = 0; this.goodMs = 0;
+      return previous !== this.scale;
+    }
+
     const ep = this.episode;
     if (ep) {
       ep.since++;
@@ -124,10 +154,22 @@ export class AdaptiveQuality {
 
     // Paused after a useless episode, or holding a ≥0.25 reduction until it has been judged.
     const holding = !!this.episode && this.episode.from - this.scale >= 0.25 - 1e-9;
+    if (!over || this.scale > floor) { this.floorWindows = 0; this.floorSum = 0; }
     if (over && (this.downBlockedMs > 0 || holding || this.scale <= floor)) {
       this.bad = 0; this.goodMs = 0;
       // Stopped at the >60 fps floor: a later reduction (below 60 fps) is judged from here, not from above it.
       if (this.scale <= floor && !holding) this.episode = null;
+      // Still missing the display rate at the floor. The episode test can be fooled by a transient (loading
+      // during the reduction), so after a while try full resolution again and compare steady intervals.
+      if (meets60 && this.scale <= floor && !holding && this.scale < 1) {
+        this.floorWindows++; this.floorSum += meanMs;
+        if (this.floorWindows >= 8 && this.probeBlockedMs <= 0) {
+          this.probe = { floorScale: this.scale, floorMean: this.floorSum / this.floorWindows, windows: 0, sum: 0 };
+          this.floorWindows = 0; this.floorSum = 0;
+          this.scale = 1;
+          return previous !== this.scale;
+        }
+      }
     } else if (over) {
       this.goodMs = 0;
       // Severe overload acts after one window; marginal overload needs two in a row.

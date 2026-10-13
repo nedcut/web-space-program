@@ -98,6 +98,14 @@ describe('adaptive scale', () => {
     const r = new AdaptiveQuality();
     for (let t = 0, i = 0; t < 12000; i++) { const ms = i % 6 === 5 ? 16.7 : 8.33; r.update(ms, true, undefined, 2); t += ms; }
     expect(r.scale).toBe(1);
+    // A loading transient during the reduction makes it look useful; the full-resolution trial at the floor
+    // finds that frame times do not depend on the scale and restores it.
+    const l = new AdaptiveQuality();
+    for (let t = 0, i = 0; t < 4000; i++) { const ms = i % 2 ? 24 : 8.33; l.update(ms, true, undefined, 2); t += ms; }
+    for (let t = 0, i = 0; t < 8000; i++) { const ms = i % 6 === 5 ? 16.7 : 8.33; l.update(ms, true, undefined, 2); t += ms; }
+    expect(l.scale).toBe(0.75);
+    for (let t = 0, i = 0; t < 20000; i++) { const ms = i % 6 === 5 ? 16.7 : 8.33; l.update(ms, true, undefined, 2); t += ms; }
+    expect(l.scale).toBe(1);
     // Holding 120 fps while the timer query reads more than the interval (pipelined frames): no reduction.
     const m = new AdaptiveQuality();
     for (let t = 0; t < 10000; t += 8.33) m.update(8.33, true, 10.2, 2);
