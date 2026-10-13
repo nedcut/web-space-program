@@ -1015,6 +1015,15 @@ Owner decisions 2026-10-13 (both recommended options).
   `scripts/bench/smoke-shots.mjs` (checkpoint screenshots), `scripts/bench/smoke/{cost,pool}.js` (gpu-passes
   `--eval`). Pad liftoff billows, ground dust and pad steam are unchanged apart from the new lighting.
 
+
+## Static Saturn title-screen art (2026-10-13)
+
+- Owner questioned whether the menu should render a planet at all; use a high-resolution still for this almost-static composition. Supersedes the live-menu crossfade in “Spacepedia / Saturn portrait”; Spacepedia retains its interactive renderer.
+- The old menu forced Low quality (DPR capped at 1, renderScale 0.5, browser stretch), plus the pipeline's initial GPU-tier adaptive multiplier without ever updating/resetting it. At DPR 2 the inspected 1280×800 menu rendered into 384×240 on the weak-tier preview GPU (0.3 internal pixel ratio), explaining the enlarged pixels.
+- Export the original Saturn/Titan/Enceladus scene once at 3840×2400 with Ultra geometry/detail, native resolution, MSAA + SMAA; freeze time and wait for moon surface bakes. Ship the 175,998-byte WebP as public/menu/saturn.webp. scripts/art/menu-portrait.html and .ts reproduce the asset with the game's own renderer, without third-party imagery.
+- MenuBackdrop is a decorative high-priority image with right-aligned cover cropping. No menu WebGL context, shader compilation, worker bakes or animation loop; the existing PWA precache includes the image. Reduced motion is intrinsic to the still. GPU buffer-size limits only apply during art export.
+- Verified in the collaborative Chromium preview at DPR 2, 1280×800 and 1728×1024: decoded image 3840×2400, zero canvases, no planetPreview/PlanetRenderer/chunkWorker module requests. No claim of owner-device or Firefox testing.
+
 ## Career playthrough fixes (2026-10-13, op/career)
 
 - **Parachutes open at their rated load, then stay reefed until slow.** An armed chute used to open at 1.5× its
