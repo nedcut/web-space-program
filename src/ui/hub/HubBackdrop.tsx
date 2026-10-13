@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { game, useGame } from '../../game/store';
 import type { SiteObjectId } from '../../render/site/LaunchSite';
 import { MenuBackdrop } from '../MenuBackdrop';
+import { LevelPips } from './FacilityUpgrade';
 import type { HubScene } from './HubScene';
 
 /** What the hover label says about a building (null = not a facility). */
-export interface BuildingLabel { title: string; detail: string; key?: string; closed?: boolean }
+export interface BuildingLabel { title: string; detail: string; key?: string; closed?: boolean; level?: number; perk?: string }
 
 /**
  * Live 3D launch-complex backdrop for the Space Center (falls back to the 2D backdrop if WebGL fails).
@@ -80,7 +81,8 @@ export function HubBackdrop({ onPick, label, highlight = null }: {
       <div ref={host} className="fullscreen" style={{ background: '#05070c' }} />
       {!ready && <div className="fullscreen hub-preparing label" role="status">Preparing the launch complex…</div>}
       <div ref={tip} className={`hub-hover photo-hide${info ? ' on' : ''}${info?.closed ? ' closed' : ''}`} aria-hidden="true">
-        {info && <><strong>{info.title}</strong>{info.key && <span className="kbd">{info.key}</span>}<small>{info.detail}</small></>}
+        {info && <><strong>{info.title}</strong>{info.key && <span className="kbd">{info.key}</span>}<small>{info.detail}</small>
+          {info.level !== undefined && <span className="hub-hover-level"><LevelPips level={info.level} />{info.perk && <span className="mono">{info.perk}</span>}</span>}</>}
       </div>
     </>
   );

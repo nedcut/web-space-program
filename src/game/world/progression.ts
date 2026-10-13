@@ -1,6 +1,7 @@
 import { careerScaleMultiplier } from '../../sim/bodies/scale';
 import { unlockTech as unlockTechModel } from '../../data/technology';
 import { acceptContract as acceptContractModel, failContract, generateContracts, offerKey, requestRecoveryGrant as requestRecoveryGrantModel, sameObjective, type ProgressEvent } from '../../sim/science/progression';
+import { contractRewardFactor, contractSlots, facilityPerk, upgradeFacility as upgradeFacilityModel, ownedLevel, type FacilityId } from '../../sim/science/facilities';
 import { instruments, progressionEvent, runExperiment as runExperimentModel, scienceContext as scienceContextModel, transmitScience as transmitScienceModel } from '../science';
 import type { World, WorldVessel } from '../world';
 
@@ -24,7 +25,7 @@ export function refreshContracts(this: World): boolean {
   if (offered && p.offerKey === key) return false;
   if (offered) p.contracts = p.contracts.filter(c => c.status !== 'offered');
   p.offerKey = key;
-  const fresh = generateContracts(p.contractSeed, p.contractBatch++, advanced, careerScaleMultiplier(this.universe.preset), readiness);
+  const fresh = generateContracts(p.contractSeed, p.contractBatch++, advanced, careerScaleMultiplier(this.universe.preset), readiness, contractRewardFactor(p, this.mode));
   p.contracts.push(...fresh.filter(c => !p.contracts.some(a => a.status === 'active' && sameObjective(a, c))));
   return true;
 }
@@ -37,7 +38,19 @@ export function requestRecoveryGrant(this: World): boolean {
   return granted;
 }
 
-export function acceptContract(this: World, id: string) { return this.mode === 'career' && acceptContractModel(this.progression, id, this.ut); }
+export function acceptContract(this: World, id: string) { return this.mode === 'career' && acceptContractModel(this.progression, id, this.ut, contractSlots(this.progression, this.mode)); }
+
+
+const FACILITY_NAME: Record<FacilityId, string> = { pad: 'Launch Pad', hall: 'Integration Hall', control: 'Mission Control', lab: 'Research Lab' };
+/** Buy the next level of a Space Center facility (career funds). */
+export function upgradeFacility(this: World, id: FacilityId): boolean {
+  const ok = upgradeFacilityModel(this.progression, this.mode, id, careerScaleMultiplier(this.universe.preset));
+  if (ok) {
+    const level = ownedLevel(this.progression, id), perk = facilityPerk(id, level, this.universe.preset);
+    this.message(`${FACILITY_NAME[id]} upgraded to level ${level} · ${perk.value} ${perk.meaning}`);
+  }
+  return ok;
+}
 
 
 export function abandonContract(this: World, id: string) {

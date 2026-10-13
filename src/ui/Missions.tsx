@@ -3,11 +3,11 @@ import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { useState } from 'react';
 import { SceneHeader } from './nav/SceneHeader';
 import { openProgram, saveProgram } from '../game/program';
+import { contractSlots } from '../sim/science/facilities';
 import { MISSION_FILTERS, contractCounts, visibleContracts, type MissionFilter } from './missionsView';
 import type { Contract } from '../sim/science/progression';
 import './progression.css';
 
-const MAX_ACTIVE = 3;
 const FILTER_LABELS: Record<MissionFilter, string> = { open: 'Open', all: 'All', active: 'Active', offered: 'Offered', completed: 'Completed', failed: 'Declined / failed' };
 const KIND_LABELS: Record<Contract['kind'], string> = { return: 'Surface expedition', flyby: 'Lunar reconnaissance', orbit: 'Orbital operations', science: 'Field research' };
 
@@ -39,7 +39,8 @@ export default function Missions() {
   const counts = contractCounts(p.contracts);
   const shown = visibleContracts(p.contracts, filter);
   const grantFloor = 8000 * careerScaleMultiplier(world.universe.preset);
-  const full = counts.active >= MAX_ACTIVE;
+  const slots = contractSlots(p, world.mode);
+  const full = counts.active >= slots;
   return <main className="program-screen">
     <SceneHeader scene="missions" kicker="Coastal Launch Complex · Expedition desk" title="Mission Control" subtitle="Accept a commission. Advance the program. Bring your discoveries home."
       onLeave={() => saveProgram(world)} aside={<div className="program-balance"><strong>{p.funds.toLocaleString()}</strong><span className="label">credits · {p.reputation} reputation</span></div>} />
@@ -47,7 +48,7 @@ export default function Missions() {
       <div className="mission-toolbar">
         <div className="seg" role="group" aria-label="Show commissions">{MISSION_FILTERS.filter(f => f !== 'failed' || counts.failed).map(f =>
           <Button key={f} className={filter === f ? 'on' : ''} aria-pressed={filter === f} onClick={() => setFilter(f)}>{FILTER_LABELS[f]} · {counts[f]}</Button>)}</div>
-        <span className="label mission-slots">{counts.active} / {MAX_ACTIVE} active</span>
+        <span className="label mission-slots">{counts.active} / {slots} active</span>
         <div className="mission-actions">
           <Button className="btn" disabled={counts.offered > 0} title={counts.offered ? 'Accept or decline the current offers first' : undefined} onClick={() => update(() => world.refreshContracts())}>Request new offers</Button>
           <Button className="btn" disabled={p.funds >= grantFloor} title={p.funds >= grantFloor ? `Available when credits fall below ${grantFloor.toLocaleString()}` : `Restores ${grantFloor.toLocaleString()} credits for 5 reputation`}
@@ -64,7 +65,7 @@ export default function Missions() {
         <p className="label">{c.status === 'active' && c.deadline ? `${Math.max(0, (c.deadline - world.ut) / 86400).toFixed(0)} days remaining` : c.status === 'offered' ? '20-year deadline from acceptance' : c.status === 'completed' ? '✓ Reward credited' : declined(c) ? 'Offer declined · no penalty' : 'Penalty applied'}</p>
         {c.status === 'offered' && <div className="mission-card-actions">
           <Button className="btn" onClick={() => update(() => { world.abandonContract(c.id); })}>Decline</Button>
-          <Button className="btn primary" disabled={full} title={full ? `${MAX_ACTIVE} commissions already active` : undefined} onClick={() => update(() => { world.acceptContract(c.id); })}>Accept · +{c.advance.toLocaleString()} cr</Button>
+          <Button className="btn primary" disabled={full} title={full ? `${slots} commissions already active · upgrade Mission Control for more` : undefined} onClick={() => update(() => { world.acceptContract(c.id); })}>Accept · +{c.advance.toLocaleString()} cr</Button>
         </div>}
         {c.status === 'active' && <div className="mission-card-actions"><Button className="btn ghost" onClick={() => setAbandoning(c)}>Abandon…</Button></div>}
       </Card>)}</section>}

@@ -34,7 +34,7 @@ export interface FlightResult { ok: boolean; note: string; cost: number; biomes:
 
 /** Buy and put a craft on the pad; null with the blocker when the program cannot. */
 export function buy(w: World, craft: CraftDef): { cost: number; problem: string | null } {
-  const problem = launchProblem(craft, PART_CATALOG, 'career', w.progression);
+  const problem = launchProblem(craft, PART_CATALOG, 'career', w.progression, w.universe.preset);
   if (problem) return { cost: 0, problem };
   const cost = launchCost(craft, PART_CATALOG);
   w.launch(craft);

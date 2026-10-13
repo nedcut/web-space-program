@@ -1,5 +1,6 @@
 import { BIOMES, GENERIC_BIOMES } from './biomes';
 import type { ArchiveEntry } from './experiments';
+import { NEW_PROGRAM_FACILITIES, type FacilityLevels } from './facilities';
 export type GameMode = 'sandbox' | 'science' | 'career';
 export type ContractKind = 'orbit' | 'return' | 'science' | 'flyby';
 export interface Contract {
@@ -14,6 +15,8 @@ export interface Progression {
   contracts: Contract[]; contractSeed: number; contractBatch: number; milestones: string[];
   /** Capability the current offers were drawn for (see `offerKey`); new capability replaces stale offers. */
   offerKey?: string;
+  /** Facility upgrade levels (careers). Absent in programs saved before upgrades: see `LEGACY_FACILITIES`. */
+  facilities?: FacilityLevels;
 }
 export type ProgressEvent =
   | { type: 'orbit' | 'landed' | 'soi'; body: string; vesselId: string }
@@ -21,7 +24,7 @@ export type ProgressEvent =
   | { type: 'recovered'; body: string; vesselId: string; visited: string[] };
 export function newProgression(creditsMultiplier = 1): Progression {
   return { science: 0, funds: Math.round(60000 * creditsMultiplier), reputation: 0, unlocked: ['foundation'], archive: {}, nextDataId: 1,
-    contracts: [], contractSeed: 20300720, contractBatch: 0, milestones: [] };
+    contracts: [], contractSeed: 20300720, contractBatch: 0, milestones: [], facilities: { ...NEW_PROGRAM_FACILITIES } };
 }
 export interface ContractReadiness { orbit: boolean; lunar: boolean; landing: boolean }
 export const offerKey = (advanced: boolean, r: ContractReadiness) => `${+advanced}${+r.orbit}${+r.lunar}${+r.landing}`;
@@ -29,7 +32,7 @@ export const offerKey = (advanced: boolean, r: ContractReadiness) => `${+advance
 export const sameObjective = (a: Contract, b: Contract) => a.kind === b.kind && a.body === b.body && a.biome === b.biome;
 /** Offers follow demonstrated capability; no lunar surface return in a new program. */
 export function generateContracts(seed: number, batch = 0, advanced = false, creditsMultiplier = 1,
-  readiness: ContractReadiness = { orbit: false, lunar: false, landing: false }): Contract[] {
+  readiness: ContractReadiness = { orbit: false, lunar: false, landing: false }, rewardFactor = 1): Contract[] {
   let n = (seed + Math.imul(batch, 2654435761)) >>> 0;
   const random = () => { n = (Math.imul(n, 1664525) + 1013904223) >>> 0; return n / 4294967296; };
   const bodies = advanced ? ['moon', 'mars', 'titan', 'enceladus'] : readiness.lunar ? ['earth', 'moon'] : ['earth'];
@@ -45,7 +48,7 @@ export function generateContracts(seed: number, batch = 0, advanced = false, cre
     const advance = Math.round((kind === 'science' ? 3000 : kind === 'flyby' ? 10000 : 5000) * m);
     // Failing or abandoning forfeits the advance: accept-and-abandon must never make money.
     return { id: `survey-${batch}-${kind}`, kind, title, body: target, biome: b, status: 'offered', advance,
-      reward: Math.round((kind === 'science' ? 10000 : kind === 'flyby' ? 20000 : kind === 'orbit' ? 18000 : 12000) * m),
+      reward: Math.round((kind === 'science' ? 10000 : kind === 'flyby' ? 20000 : kind === 'orbit' ? 18000 : 12000) * m * rewardFactor),
       penalty: advance, reputation: 3 * f, landed: false };
   };
   const expedition = readiness.orbit && !readiness.landing
@@ -65,9 +68,9 @@ export function requestRecoveryGrant(p: Progression, creditsMultiplier = 1): boo
   p.funds = floor; p.reputation -= 5;
   return true;
 }
-export function acceptContract(p: Progression, id: string, ut: number): boolean {
+export function acceptContract(p: Progression, id: string, ut: number, slots = 3): boolean {
   const c = p.contracts.find(c => c.id === id);
-  if (!c || c.status !== 'offered' || p.contracts.filter(c => c.status === 'active').length >= 3) return false;
+  if (!c || c.status !== 'offered' || p.contracts.filter(c => c.status === 'active').length >= slots) return false;
   c.status = 'active'; c.deadline = ut + 20 * 365.25 * 86400; p.funds += c.advance;
   return true;
 }

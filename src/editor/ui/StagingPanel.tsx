@@ -7,6 +7,7 @@ import { getThumbnail } from '../scene/thumbnails';
 import { Icon } from './icons';
 import { fmtDv, fmtKg } from './partInfo';
 import { useThumbnails } from './Palette';
+import { FacilityUnblock, useFacilityBlock } from '../../ui/hub/FacilityUpgrade';
 
 interface Chip { key: string; uids: number[]; partId: string }
 type DragItem = { kind: 'part'; uid: number } | { kind: 'stage'; index: number };
@@ -18,6 +19,7 @@ export function StagingPanel({ session, view }: { session: EditorSession; view: 
   const [dragOver, setDragOver] = useState<number | 'new' | null>(null);
   const [dragging, setDragging] = useState<DragItem | null>(null);
   const { checks, busy } = usePreflightChecks(view.craft, view.stageStats.get(0));
+  const block = useFacilityBlock(view.craft);
   const byUid = new Map(view.craft.parts.map((p) => [p.uid, p]));
   const stages = [...view.stages].reverse();
   const hasEngine = view.craft.parts.some(p => CATALOG.get(p.partId)?.modules.some(m => m.type === 'engine'));
@@ -74,10 +76,12 @@ export function StagingPanel({ session, view }: { session: EditorSession; view: 
           </Button>
         </div>
       </div>
-      {hasEngine && (
-        <details className="preflight-checks" open={checks.length > 0}>
-          <summary title="Advisory checks; you can still launch">Pre-flight · {busy ? 'checking…' : checks.length ? `${checks.length} to review` : 'ready'}</summary>
-          <div className="preflight-list">{checks.map(c => <div key={c.id}>
+      {(hasEngine || block) && (
+        <details className="preflight-checks" open={checks.length > 0 || !!block}>
+          <summary title="Advisory checks; you can still launch">Pre-flight · {busy ? 'checking…' : checks.length || block ? `${checks.length + (block ? 1 : 0)} to review` : 'ready'}</summary>
+          <div className="preflight-list">
+            {block && <div className="preflight-block"><span>Can't launch: {block.reason}.</span><FacilityUnblock block={block} /></div>}
+            {checks.map(c => <div key={c.id}>
             <span>{c.text}</span>{c.uids.length > 0 && <button className="btn small" title="Highlight these parts in the craft" onClick={() => session.select(c.uids)}>Show me</button>}
           </div>)}</div>
         </details>

@@ -411,3 +411,8 @@
 .vab-cursor-label { color: var(--accent); }
 .vab-detached-badge[hidden], .vab-cursor-label[hidden] { display: none; }
 .preflight-detached { padding: 6px 10px; border-bottom: 1px solid var(--panel-border); font-size: 12px; color: var(--text-dim); }
+.vab-stat .over { color: var(--warn); font-weight: 600; }
+.vab-launch.blocked { opacity: .55; }
+.vab-unblock { height: 38px; flex-shrink: 0; white-space: nowrap; }
+.preflight-block { color: var(--warn); }
+.preflight-block .btn { margin-top: 4px; }
