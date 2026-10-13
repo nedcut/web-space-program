@@ -885,3 +885,37 @@ Owner decisions 2026-10-13 (both recommended options).
   shadow map, bloom, tone map, SMAA/FXAA, upscale) instead of the frame query; `gpuMs` is their sum and adaptive
   keeps working. The report gains a `GPU passes (ms)` line so a Mac snapshot shows where its time goes. Off when
   the overlay is closed; no per-frame allocation (closures are made once per composer).
+
+## Ascent smoke column (2026-10-13, op/smoke)
+
+- **One chained column, still one draw.** The ascent trail is no longer a row of 30–60 m round cells (which left
+  a gap behind the flame at speed, filled the chase camera with a flat grey blob and read as a uniform rope).
+  Each trail particle is now a camera-facing ribbon *segment* from its node to the next, younger node; the
+  newest segment is re-stretched to the thrust-weighted nozzle centroid every frame, so the column is attached
+  and gap-free at any speed or frame time. Nodes are deposited on a time cadence sized to the reserved trail
+  region (Medium ≈ 0.27 s, Low ≈ 1.1 s) once the vessel has moved half a column width through the air, so
+  hovering does not stack puffs and solar translation is still ignored. All rocket engines feed one column
+  (thrust-weighted position, colour and opacity); jets and ion engines do not.
+- **Look.** Each end grows with its own age (fast billow-out over ~2 s, then steady spread) and fades as
+  1−life²; thin air spreads and dissipates faster (life 90 s at sea level → ~30 s near 0.03 kg/m³) and the
+  column fades out between 0.03 and 0.004 kg/m³ (nothing in vacuum; the plume remains). Opacity by
+  propellant: solid 1, kerolox .75, methalox .55, hydrolox .35; solids are alumina-white and wider. Smoke is lit
+  by the sun colour/intensity (wrap diffuse on a tube/sphere normal, forward scatter at thin edges looking
+  sunward) plus a sky ambient that follows daylight, air and a low sun's tint; the engine light's colour glows
+  on smoke younger than ~0.2 s, damped in daylight. Billows are 3D value noise (arithmetic hash, no `sin`) in
+  the smoke's own frame, seeded per node by its float64 offset from the column's first node (continuous across
+  joints, immune to anchor rebasing). Octaves fade by `fwidth` before they alias; end-on segments drop the
+  along-axis noise component so stacked caps share one ragged silhouette instead of banding.
+- **Joints.** Long segments overlap by 0.6 radius and cross-fade as 1−(1−a)^w, which sums exactly to the
+  segment opacity under "over" blending (a linear cross-fade left a visible thin band). Short/end-on segments
+  get round caps; a window guarantees zero alpha at every quad border (no hard cuts).
+- **Overdraw bound.** Segment ends are clipped to ≥ 2 radii in front of the eye and fade from 4 to 2 radii, so no
+  particle can fill the screen when the camera sits in or behind the column (old cells did). Uploads use
+  separate dirty ranges for the burst and trail regions; the only per-frame upload is the head segment.
+- **Cost.** CDP Chrome (RTX 3060 Ti, 2940×1840): draws unchanged (one particle draw); scene pass ascent
+  1.841→1.827 ms, climb10 1.914→1.896, climb20 1.48→1.478 (noise). Particle draw cost (fenced, shown minus
+  hidden) worst view 0.30 ms before / 0.31 ms after, chase 0.04–0.07 ms both. Firefox ASAP climb, medium,
+  scale 1: mean frame interval 9.38/8.92 ms before vs 9.73/7.26 ms after (run-to-run noise), `fx` CPU section
+  ~0.1 ms both. No per-frame allocation (`trailStyle` writes into a reused object). Scripts:
+  `scripts/bench/smoke-shots.mjs` (checkpoint screenshots), `scripts/bench/smoke/{cost,pool}.js` (gpu-passes
+  `--eval`). Pad liftoff billows, ground dust and pad steam are unchanged apart from the new lighting.
