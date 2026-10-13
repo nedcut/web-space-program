@@ -885,3 +885,35 @@ Owner decisions 2026-10-13 (both recommended options).
   shadow map, bloom, tone map, SMAA/FXAA, upscale) instead of the frame query; `gpuMs` is their sum and adaptive
   keeps working. The report gains a `GPU passes (ms)` line so a Mac snapshot shows where its time goes. Off when
   the overlay is closed; no per-frame allocation (closures are made once per composer).
+
+## Assembly hall: set aside, insert between, bigger hall, camera box (2026-10-13, op/editorbench)
+- **What the owner saw**: picking up the lower stack (it rides on the cursor; it could not be put down off the craft)
+  left the stage that fired its engine behind, empty, so pre-flight said "First stage has no engine". Picking up now
+  re-stages the rest of the craft (empty stages removed in manual staging), and held parts lose their stage numbers so
+  they are staged fresh when attached again.
+- **Set aside**: clicking empty space with a held part or assembly parks it in the hall (`EditorSnapshot.detached`,
+  craft frame). It is not part of the craft: staging, Δv, stats, pre-flight and launch ignore it. Parked pieces are
+  ghosted (translucent blue-grey) with a "Set aside · won't launch" badge; the staging panel adds one line
+  ("1 set-aside piece · won't launch"). Click a piece to pick it up (the clicked part becomes the held root), Del deletes
+  the hovered piece (with Undo). Launch with pieces set aside warns once ("…stays in the hall… Press Launch again"),
+  like the other launch warnings. Undo/redo cover park, pick-up and delete.
+- **Set-aside pieces are not saved** (kept for the session, through undo/redo; gone on load/new/exit/launch). Saving
+  them would need an editor-only field in the craft file format; left for later.
+- **Pick up just one part**: Ctrl+click (⌘+click on macOS; Ctrl+click is right-click there) takes only the part plus
+  what is surface-mounted on it, when it hangs by a stack node and holds at most one stack; the stack below/above it
+  closes the gap onto the parent's node. Otherwise it falls back to the whole subtree with a short note. Hover shows
+  which parts a click takes. Plain click is labelled "pick up with attached" (tooltip and hint bar).
+- **Insert between**: dropping a held part/assembly on an occupied stack joint splices it in: it takes the parent's
+  node and the part that sat there (with its subtree) re-attaches to the held part's far node (the free stack node most
+  opposite the attaching one, same part preferred), pushed out of the way. One undo step; symmetric parents splice every
+  counterpart. While hovering, the pushed parts move to their new place, the joint marker pulses and the cursor reads
+  "Insert here". A free node at the same distance wins over a joint.
+- **Bigger hall** (owner: "make the whole int hall bigger"): 160 × 160 × 120 m (was 72 × 68 × 56). Crafts stay true
+  size. Same meshes and materials (hall: 24 draw calls before and after in the same view; ~30k vs ~12k triangles, no new
+  lights). Floor textures cover the central 84 m at the old texel density and mirror-repeat outward (markings kept
+  inside the tile). Catwalks/props stay people-sized; door, gantry and crane scale with the hall.
+- **Camera box**: the orbit distance is clamped by a ray against a box inside the hall (clear of side catwalks and wall
+  props, in front of the rear gantry, under the crane). Continuous in yaw/pitch, so orbiting stays smooth; wheel
+  zoom-out stops at the box. Max distance 170 m. Fog starts beyond the camera distance.
+- **Frame (F, toolbar button)** fits the craft plus set-aside pieces, centres on them and keeps a gentle pitch. If the hall is too
+  small to back off (the ~75 m real-scale stacks), the field of view widens (45° → at most 68°) instead.

@@ -558,7 +558,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   const trim: THREE.BufferGeometry[] = [];
   const lamps: THREE.BufferGeometry[] = [];
   const cyan: THREE.BufferGeometry[] = [];
-  const colSpacing = 8.5;
+  const colSpacing = 12;
   for (let z = -HZ + 4; z <= HZ - 2; z += colSpacing) {
     frame.push(...iBeam(H, 0.9, -HX + 0.5, z, 0));
     frame.push(...iBeam(H, 0.9, HX - 0.5, z, 0));

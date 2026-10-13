@@ -39,16 +39,17 @@ const MIN_DIST = 3, MAX_DIST = 170;
 /** Normal vertical field of view; frameCraft widens it (up to MAX_FOV) only when the hall is too small to back off. */
 const BASE_FOV = 45, MAX_FOV = 68;
 /** Pieces set aside in the hall: washed-out blue-grey so they read as "not part of the craft". */
-const DETACHED_TINT = { key: 'detached', color: 0x55657c, intensity: 0.55 };
+const DETACHED_TINT = { key: 'detached', color: 0x3c5a7a, intensity: 0.45, opacity: 0.55 };
 const PARK_TINT = { key: 'park', color: 0x55657c, intensity: 0.45 };
 
 const tintCaches = new Map<string, WeakMap<THREE.Material, THREE.Material>>();
-function tinted(m: THREE.Material, key: string, color: number, intensity: number): THREE.Material {
+function tinted(m: THREE.Material, key: string, color: number, intensity: number, opacity = 1): THREE.Material {
   let cache = tintCaches.get(key);
   if (!cache) tintCaches.set(key, (cache = new WeakMap()));
   let c = cache.get(m);
   if (!c) {
     c = m.clone();
+    if (opacity < 1) { c.transparent = true; c.opacity = Math.min(c.opacity, opacity); }
     const e = c as THREE.MeshStandardMaterial;
     if (e.emissive) {
       e.emissive = new THREE.Color(color);
@@ -58,7 +59,7 @@ function tinted(m: THREE.Material, key: string, color: number, intensity: number
   }
   return c;
 }
-function setTint(root: THREE.Object3D, tint: { key: string; color: number; intensity: number } | null) {
+function setTint(root: THREE.Object3D, tint: { key: string; color: number; intensity: number; opacity?: number } | null) {
   if (root.userData.editorTint === (tint?.key ?? 'none')) return;
   root.userData.editorTint = tint?.key ?? 'none';
   root.traverse((o) => {
@@ -67,7 +68,7 @@ function setTint(root: THREE.Object3D, tint: { key: string; color: number; inten
     let base = untintedMaterials.get(mesh);
     if (!base) { base = mesh.material; untintedMaterials.set(mesh, base); }
     if (!tint) mesh.material = base;
-    else mesh.material = Array.isArray(base) ? base.map((b) => tinted(b, tint.key, tint.color, tint.intensity)) : tinted(base, tint.key, tint.color, tint.intensity);
+    else mesh.material = Array.isArray(base) ? base.map((b) => tinted(b, tint.key, tint.color, tint.intensity, tint.opacity)) : tinted(base, tint.key, tint.color, tint.intensity, tint.opacity);
   });
 }
 
@@ -312,6 +313,8 @@ export class EditorView {
     const centre = empty ? new THREE.Vector3(0, this.lift, 0) : box.getCenter(new THREE.Vector3());
     this.gPanX = centre.x; this.gPanZ = centre.z;
     this.clampPan();
+    // A view from below or straight down cannot fit a tall stack; keep a gentle elevation.
+    this.gPitch = THREE.MathUtils.clamp(this.gPitch, 0.08, 0.5);
     this.gTargetY = centre.y + h * 0.03;
     this.clampTarget();
     const need = (fov: number) => {

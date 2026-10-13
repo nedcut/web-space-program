@@ -10,7 +10,7 @@ import { IS_MAC, type EditorView } from '../scene/EditorView';
 import type { EditorTool } from '../session';
 
 const TOOL_TIPS: Record<EditorTool, string> = {
-  place: `Click: pick up · ${IS_MAC ? '⌥' : 'Alt'}+click: copy`, offset: 'Click: move with the gizmo', rotate: 'Click: rotate with the gizmo', reroot: 'Click: make root',
+  place: `Click: pick up with attached · ${IS_MAC ? '⌘' : 'Ctrl'}+click: just this part · ${IS_MAC ? '⌥' : 'Alt'}+click: copy`, offset: 'Click: move with the gizmo', rotate: 'Click: rotate with the gizmo', reroot: 'Click: make root',
 };
 import { RESOURCE_SHORT, fmtKN, fmtKg } from './partInfo';
 
