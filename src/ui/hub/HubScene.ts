@@ -1,6 +1,7 @@
 import { updateSiteShadow } from '../../render/site/shadows';
 import { maxDrawingEdge } from '../../render/core/drawingLimits';
 import { PhotoCamera } from '../../render/core/PhotoCamera';
+import { frameProfiler } from '../../util/frameProfiler';
 import * as THREE from 'three';
 import { game } from '../../game/store';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -30,6 +31,8 @@ export interface HubSceneOptions {
   craft: CraftDef | null;
   /** Called when a building is clicked. */
   onPick?: (id: SiteObjectId) => void;
+  /** Called after the pointer moved over the scene with the building under it (null = none) and its position. */
+  onHover?: (id: SiteObjectId | null, clientX: number, clientY: number) => void;
   /** Called once when the scene is ready and fades in. */
   onReady?: () => void;
 }
@@ -98,8 +101,15 @@ export class HubScene {
   private elapsed = 0;
   private disposers: (() => void)[] = [];
   private raycaster = new THREE.Raycaster();
-  private pointer: THREE.Vector2 | null = null;
+  /** Pointer in NDC; `pointerOn` is false off the scene or over UI. Picking runs only after it moves. */
+  private pointer = new THREE.Vector2();
+  private pointerOn = false;
+  private pointerClient = { x: 0, y: 0 };
+  private pickDirty = false;
+  private lastPick = 0;
   private hovered: SiteObjectId | null = null;
+  /** Highlight requested by the UI (a hovered or focused tile); the pointer's building wins. */
+  private uiHighlight: SiteObjectId | null = null;
   private warmColor = new THREE.Color(1.0, 0.68, 0.4);
   /** Camera pendulum phase (dev: ?hubPhase=<rad>). */
   private camPhase = 0;
@@ -179,22 +189,28 @@ export class HubScene {
     }
 
     const onMove = (e: PointerEvent) => {
-      if (this.isUi(e.target)) {
-        this.pointer = null;
-        return;
-      }
-      const r = host.getBoundingClientRect();
-      this.pointer = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      this.pointerClient.x = e.clientX;
+      this.pointerClient.y = e.clientY;
+      const on = !this.isUi(e.target);
+      if (on) this.setPointer(e.clientX, e.clientY);
+      if (on || this.pointerOn) this.pickDirty = true;
+      this.pointerOn = on;
     };
     const onClick = (e: MouseEvent) => {
-      if (this.photo.active || this.isUi(e.target) || !this.hovered) return;
-      this.opts.onPick?.(this.hovered);
+      if (this.photo.active || this.isUi(e.target)) return;
+      // Pick at the click itself: the hover result can be one throttle interval old.
+      this.setPointer(e.clientX, e.clientY);
+      const id = this.pick();
+      if (id) this.opts.onPick?.(id);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('click', onClick);
     this.disposers.push(() => window.removeEventListener('pointermove', onMove), () => window.removeEventListener('click', onClick));
 
     if (import.meta.env?.DEV) (window as unknown as { __hub?: HubScene }).__hub = this;
+    // Same profiler as flight (F8 there): `__perf.enabled = true` measures the hub frame (render = submit,
+    // planets, input = hover picking). One boolean check per call when off.
+    (window as unknown as { __perf?: typeof frameProfiler }).__perf = frameProfiler;
 
     const ro = new ResizeObserver(() => this.resize());
     ro.observe(host);
@@ -232,6 +248,38 @@ export class HubScene {
     this.opts.onPick = fn;
   }
 
+  /** Highlight a building from the UI (tile hover/focus); null clears. */
+  highlight(id: SiteObjectId | null) {
+    this.uiHighlight = id;
+    this.site.setHighlight(this.hovered ?? id);
+  }
+
+  private setPointer(clientX: number, clientY: number) {
+    const r = this.host.getBoundingClientRect();
+    this.pointer.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+  }
+
+  private pick(): SiteObjectId | null {
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const hits = this.raycaster.intersectObjects(this.site.pickables, false);
+    return (hits[0]?.object.userData.siteId as SiteObjectId | undefined) ?? null;
+  }
+
+  /** Hover picking only after the pointer moved, at most every 50 ms (one ray against six boxes). */
+  private updateHover(now: number) {
+    if (!this.pickDirty || now - this.lastPick < 50) return;
+    this.pickDirty = false;
+    this.lastPick = now;
+    const hit = this.pointerOn && !this.photo.active ? this.pick() : null;
+    if (hit !== this.hovered) {
+      this.hovered = hit;
+      this.site.setHighlight(hit ?? this.uiHighlight);
+      this.host.style.cursor = hit ? 'pointer' : '';
+      document.body.style.cursor = hit ? 'pointer' : '';
+    }
+    this.opts.onHover?.(hit, this.pointerClient.x, this.pointerClient.y);
+  }
+
   private isUi(target: EventTarget | null): boolean {
     const el = target as HTMLElement | null;
     return !!el?.closest?.('button, .panel, input, select, a');
@@ -250,6 +298,7 @@ export class HubScene {
     const cap = game.get().settings.frameRateCap;
     if (cap && now - this.last < 1000 / cap - .5) return;
     const frameMs = now - this.last;
+    frameProfiler.beginFrame(now);
     const dt = Math.min(0.1, frameMs / 1000);
     this.last = now;
     if (!this.photo.active) this.elapsed += dt;
@@ -261,6 +310,7 @@ export class HubScene {
       this.framesRendered++;
       if (!this.revealed && this.framesRendered >= 3 && ((this.planets.isSurfaceReady?.('earth') ?? true) || performance.now() - this.startedAt > HUB_REVEAL_TIMEOUT_MS)) this.reveal();
     }
+    frameProfiler.endFrame();
   };
 
   /** Build every program in slices (a few ms per frame) instead of in the first visible frames. */
@@ -334,7 +384,9 @@ export class HubScene {
     sc.updateProjectionMatrix();
 
     updateSiteShadow(this.sun, this.pipeline.renderer.shadowMap.enabled);
+    let p0 = frameProfiler.now();
     this.planets.update({ t, origin, camera: this.camera, sunPos, dt, focusBody: 'earth', viewportHeight: this.pipeline.lodViewportHeight, switchViewportHeight: this.pipeline.lodSwitchViewportHeight });
+    frameProfiler.add('planets', p0);
     const camSim = add(origin, { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z });
     const eclipse = this.planets.sunVisibility?.(camSim, sunPos) ?? 1;
     const tint = this.planets.sunTint?.(camSim, sunPos) ?? [1, 1, 1];
@@ -353,21 +405,12 @@ export class HubScene {
     this.stars.update(this.camera, this.pipeline.pixelRatio);
     this.glare.update(this.camera, sd, eclipse, tint);
 
-    // Hover picking.
-    let hit: SiteObjectId | null = null;
-    if (this.pointer && !this.photo.active) {
-      this.raycaster.setFromCamera(this.pointer, this.camera);
-      const hits = this.raycaster.intersectObjects(this.site.pickables, false);
-      hit = (hits[0]?.object.userData.siteId as SiteObjectId | undefined) ?? null;
-    }
-    if (hit !== this.hovered) {
-      this.hovered = hit;
-      this.site.setHighlight(hit);
-      this.host.style.cursor = hit ? 'pointer' : '';
-      document.body.style.cursor = hit ? 'pointer' : '';
-    }
-
+    p0 = frameProfiler.now();
+    this.updateHover(performance.now());
+    frameProfiler.add('input', p0);
+    p0 = frameProfiler.now();
     if (submit) this.pipeline.render(this.scene, this.camera);
+    frameProfiler.add('render', p0);
   }
 
   dispose() {

@@ -25,7 +25,16 @@ export interface SiteUniverse {
   readonly ephem: Pick<Ephemeris, 'getBodyState' | 'bodyRotation'>;
 }
 
-export type SiteObjectId = 'pad' | 'vab';
+/** Pickable buildings on the hub: pad, assembly building, tracking dish, launch control, offices, workshop. */
+export type SiteObjectId = 'pad' | 'vab' | 'dish' | 'control' | 'offices' | 'workshop';
+
+/** Smaller buildings that get a pick volume and the ground ring on hover: centre, heading, footprint, height. */
+const PICK_BUILDINGS: readonly { id: SiteObjectId; x: number; z: number; yaw: number; w: number; d: number; h: number }[] = [
+  { id: 'dish', x: 330, z: -240, yaw: 0, w: 22, d: 22, h: 26 },
+  { id: 'control', x: 150, z: 95, yaw: -0.5, w: 34, d: 22, h: 14 },
+  { id: 'offices', x: 205, z: 150, yaw: -0.55, w: 48, d: 20, h: 16 },
+  { id: 'workshop', x: 250, z: 105, yaw: -0.55, w: 32, d: 24, h: 13 },
+];
 
 /** Layout constants (local pad frame, metres: +X east, +Y up, +Z south). */
 export const SITE_LAYOUT = {
@@ -230,6 +239,8 @@ export class LaunchSite {
   private readonly vesselLocal = new THREE.Vector3();
   private readonly equipmentVessel = { state: null as unknown as VesselState, com: this.vesselLocal, held: false, firing: false };
   private highlighted: SiteObjectId | null = null;
+  /** Ground-ring placement (site-local) per pickable that uses the ring. */
+  private ringAt = new Map<SiteObjectId, { position: THREE.Vector3; scale: number }>();
   private readonly tmpQ = new THREE.Quaternion();
   private readonly tmpM = new THREE.Matrix4();
 
@@ -1359,11 +1370,22 @@ export class LaunchSite {
     vab.userData.siteId = 'vab';
     this.root.add(pad, vab);
     this.pickables.push(pad, vab);
-    // Glowing ring + soft light curtain shown when the pad is hovered.
+    this.ringAt.set('pad', { position: new THREE.Vector3(0, 0.35, 0), scale: 1 });
+    // Support buildings: one box each (a few extra metres so small or distant ones are easy to hit).
+    for (const b of PICK_BUILDINGS) {
+      const m = this.frameAt(b.x, b.z, b.yaw);
+      const box = new THREE.Mesh(this.track(new THREE.BoxGeometry(b.w + 4, b.h + 4, b.d + 4).translate(0, (b.h + 4) / 2 - 1, 0)), inv);
+      box.applyMatrix4(m);
+      box.userData.siteId = b.id;
+      this.root.add(box);
+      this.pickables.push(box);
+      this.ringAt.set(b.id, { position: new THREE.Vector3().setFromMatrixPosition(m).add(V(0, 0.35, 0)), scale: (Math.hypot(b.w, b.d) / 2 + 4) / 26.5 });
+    }
+    // Glowing ring + soft light curtain shown around the hovered pad or building (the assembly building glows instead).
     const ringMat = this.track(new THREE.MeshBasicMaterial({ color: new THREE.Color(0.36, 0.78, 1).multiplyScalar(4), transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
-    const ring = new THREE.Mesh(this.track(new THREE.RingGeometry(25, 28, 96).rotateX(-Math.PI / 2).translate(0, 0.35, 0)), ringMat);
+    const ring = new THREE.Mesh(this.track(new THREE.RingGeometry(25, 28, 96).rotateX(-Math.PI / 2)), ringMat);
     const curtainMat = this.track(new THREE.MeshBasicMaterial({ color: new THREE.Color(0.36, 0.78, 1).multiplyScalar(1.5), transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
-    ring.add(new THREE.Mesh(this.track(new THREE.CylinderGeometry(26.5, 26.5, 10, 96, 1, true).translate(0, 5.3, 0)), curtainMat));
+    ring.add(new THREE.Mesh(this.track(new THREE.CylinderGeometry(26.5, 26.5, 10, 96, 1, true).translate(0, 4.95, 0)), curtainMat));
     ring.visible = false;
     ring.renderOrder = 2;
     this.root.add(ring);
@@ -1374,7 +1396,12 @@ export class LaunchSite {
   setHighlight(id: SiteObjectId | null) {
     if (id === this.highlighted) return;
     this.highlighted = id;
-    if (this.highlightRing) this.highlightRing.visible = id === 'pad';
+    const at = id ? this.ringAt.get(id) : undefined;
+    if (this.highlightRing) {
+      this.highlightRing.visible = !!at;
+      // Site meshes have frozen matrices (see the batching pass): update the moved ring's by hand.
+      if (at) { this.highlightRing.position.copy(at.position); this.highlightRing.scale.setScalar(at.scale); this.highlightRing.updateMatrix(); }
+    }
     if (this.surfaceUniforms) this.surfaceUniforms.uVabGlow.value.set(id === 'vab' ? 0x2a6fa8 : 0x000000).multiplyScalar(id === 'vab' ? 0.55 : 0);
   }
 
