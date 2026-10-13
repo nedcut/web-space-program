@@ -10,7 +10,7 @@ import { deleteCraft, listCrafts, saveCraft } from '../game/saves';
 import type { ActionGroupId, CraftDef, PartActionId, PartInstance, PartTweaks, ResourceId } from '../sim/vessel/types';
 import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../util/quat';
 import { sub, v3, type Vec3 } from '../util/vec3';
-import { CraftEditor, craftStats, descendants, getStageList, type CraftStats, type LinkHit, type PartTransform, type Stage, type Subassembly } from './core';
+import { CraftEditor, craftStats, descendants, getStageList, type CraftStats, type HeldAssembly, type LinkHit, type PartTransform, type Stage, type Subassembly } from './core';
 import { STOCK_CRAFTS } from './stockCrafts';
 import { computeStageStats, type StageStats } from './ui/dv';
 import { saveErrorText } from '../game/storageErrors';
@@ -41,7 +41,11 @@ export type Placement =
       /** Hit point and outward surface normal on the parent (craft frame). */
       point: Vec3;
       normal: Vec3;
-    };
+    }
+  /** Insert into an occupied stack joint: the part there re-attaches to the held part's `throughNode`. */
+  | { kind: 'splice'; parentUid: number; parentNode: string; childUid: number; childNode: string; throughUid: number; throughNode: string }
+  /** Set aside in the hall, held root at `position` (craft frame). */
+  | { kind: 'park'; position: Vec3 };
 
 export type SymmetryMode = 'radial' | 'mirror';
 
@@ -66,6 +70,8 @@ export interface SessionView {
   totalDvVac: number;
   totalDvAsl: number;
   held: HeldState | null;
+  /** Assemblies set aside in the hall (craft frame). Not launched, staged or counted. */
+  detached: HeldAssembly[];
   linkStart?: { partId: string; hit: LinkHit };
   symmetry: SymmetryCount;
   /** Radial (around the craft's long axis) or mirror (across the craft's YZ plane; count 1 = off, 2 = on). */
@@ -123,6 +129,8 @@ export class EditorSession {
   private savedSymmetry: { count: SymmetryCount; mode: SymmetryMode } | null = null;
   private name: string;
   private launchWarnedAt = -Infinity;
+  private detachedWarnedAt = -Infinity;
+  private parkHintShown = false;
   private scaleNotices = new Set<string>();
   private held: HeldState | null = null;
   private symmetry: SymmetryCount = 1;
@@ -190,6 +198,8 @@ export class EditorSession {
     if (same) craft = this.snap.craft;
     const reference = this.referenceUniverse();
     const stats = same ? this.snap.stats : craftStats(craft, CATALOG, DENSITIES);
+    let detached = this.editor.detached;
+    if (this.snap && snapshotEqual(detached, this.snap.detached)) detached = this.snap.detached;
     const stages = same ? this.snap.stages : getStageList(craft);
     const stageStats = same ? this.snap.stageStats : computeStageStats(craft, CATALOG, reference.universe.body(this.dvBody));
     let totalDvVac = 0, totalDvAsl = 0;
@@ -202,7 +212,7 @@ export class EditorSession {
     this.snap = {
       ...this.uiFields(craft),
       dirty: this.isDirty(craft),
-      craft, name: this.name, stages, stageStats, stats, totalDvVac, totalDvAsl,
+      craft, name: this.name, stages, stageStats, stats, totalDvVac, totalDvAsl, detached,
       held: this.held, linkStart: this.editor.linkStart, symmetry: this.symmetry, symmetryMode: this.symmetryMode, craftType: craft.type,
       showCoM: this.showCoM, showCoT: this.showCoT, showCoL: this.showCoL,
       canUndo: this.editor.canUndo || this.held?.kind === 'new', canRedo: this.editor.canRedo,
@@ -395,6 +405,11 @@ export class EditorSession {
     if (this.held) this.cancelHeld();
     const craft = this.currentCraft();
     if (!craft.parts.length) return this.toast('Build something first!', 'warn');
+    const loose = this.snap.detached.length;
+    if (loose && performance.now() - this.detachedWarnedAt > 8000) {
+      this.detachedWarnedAt = performance.now();
+      return this.toast(`${loose === 1 ? '1 set-aside piece stays' : `${loose} set-aside pieces stay`} in the hall and won't launch. Press Launch again to fly without ${loose === 1 ? 'it' : 'them'}.`, 'warn');
+    }
     const hasCommand = craft.parts.some((p) => CATALOG.get(p.partId)?.modules.some((m) => m.type === 'command' && m.controllable !== false));
     if (!hasCommand) return this.toast('Launch blocked: the craft needs a command pod or probe core', 'bad');
     const g = game.get();
@@ -459,14 +474,33 @@ export class EditorSession {
     return !!ok;
   }
 
-  pickUp(uid: number) {
+  /** `partOnly`: take just this part where possible; the stack it held closes the gap (see `CraftEditor.detachPart`). */
+  pickUp(uid: number, partOnly = false) {
     if (this.held) return;
     const part = this.editor.craft.parts.find(p => p.uid === uid);
     if (part?.link) {
       this.deletePart(uid); this.pickNew(part.partId); return;
     }
+    if (partOnly && !this.editor.canDetachPart(uid)) {
+      this.toast(part?.parent === undefined ? 'The root part comes up with the whole craft' : 'This part holds more than one stack: picked up with its attached parts', 'info');
+      partOnly = false;
+    }
     // Core marks the change; syncHeld() converts it into an 'assembly' hold. A symmetric set comes up together.
-    if (this.guard(() => this.editor.detachSubtree(uid, true))) { this.adoptHeldSymmetry(); this.touch(); }
+    if (this.guard(() => partOnly ? this.editor.detachPart(uid, true) : this.editor.detachSubtree(uid, true))) { this.adoptHeldSymmetry(); this.touch(); }
+  }
+  canPickUpPartOnly(uid: number): boolean { return this.editor.canDetachPart(uid); }
+
+  /** Pick a set-aside piece up again (`uid`: the part clicked becomes the held root). */
+  pickUpDetached(index: number, uid?: number) {
+    if (this.held) return;
+    if (this.guard(() => this.editor.pickUpDetached(index, uid))) { this.adoptHeldSymmetry(); this.touch(); }
+  }
+  discardDetached(index: number) {
+    const piece = this.snap.detached[index];
+    if (!piece || !this.guard(() => (this.editor.discardDetached(index), true))) return;
+    this.toast(`Deleted a set-aside piece (${piece.parts.length} part${piece.parts.length > 1 ? 's' : ''})`, 'info', {
+      label: 'Undo', run: () => { if (!this.held && this.editor.detached.length === this.snap.detached.length) this.editor.undo(); },
+    });
   }
 
   /** Alt-click: hold a copy of the part's subtree (a symmetric source is placed as a set). */
@@ -628,6 +662,24 @@ export class EditorSession {
     const h = this.held;
     if (!h || this.isLinkPlacement()) return false;
     const ok = this.guard(() => {
+      if (p.kind === 'park') {
+        // A new part is held by the core first so the set-aside piece keeps a part instance (one Undo removes both).
+        if (h.kind === 'new') this.editor.holdAssembly({ rootUid: 1, parts: [{ uid: 1, partId: h.partId, position: v3(), rotation: qIdentity() }] });
+        this.editor.parkHeld(p.position, h.rotation);
+        return true;
+      }
+      if (p.kind === 'splice') {
+        const parent = this.editor.craft.parts.find((x) => x.uid === p.parentUid);
+        if (parent?.symmetryGroup !== undefined && this.symmetryMode === 'mirror') this.editor.setSymmetry({ mode: 'mirror' });
+        else this.editor.setSymmetry({ mode: 'radial', count: 1 });
+        const at = { parentUid: p.parentUid, parentNodeId: p.parentNode, childNodeId: p.childNode, throughNodeId: p.throughNode };
+        if (h.kind === 'new') this.editor.insertPart(h.partId, at, h.rotation);
+        else {
+          if (Math.abs(h.rotation.w) < 1 - 1e-9) this.editor.rotateHeld(h.rotation);
+          this.editor.spliceHeld({ ...at, childUid: p.childUid, throughUid: p.throughUid });
+        }
+        return true;
+      }
       if (h.kind === 'new') {
         if (p.kind === 'root') this.editor.addRoot(h.partId);
         else if (p.kind === 'stack') {
@@ -663,7 +715,11 @@ export class EditorSession {
       this.held = null;
       this.touch();
     }
-    if (ok && typeof document !== 'undefined') document.dispatchEvent(new Event('wsp:part-attach'));
+    if (ok && p.kind === 'park' && !this.parkHintShown) {
+      this.parkHintShown = true;
+      this.toast('Set aside: it won\'t launch. Click it to pick it up again, then attach it to a node.', 'info');
+    }
+    if (ok && p.kind !== 'park' && typeof document !== 'undefined') document.dispatchEvent(new Event('wsp:part-attach'));
     return !!ok;
   }
 

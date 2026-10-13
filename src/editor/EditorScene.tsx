@@ -71,6 +71,7 @@ export default function EditorScene() {
         onLoad={() => setShowLoad(true)}
         onImport={() => setImportSource({})}
         onNew={() => { if (session.getSnapshot().dirty) setConfirmNew(true); else session.newCraft(); }}
+        onFrame={() => viewRef.current?.frameCraft()}
       />
       {view.mode === 'actions' ? <ActionGroupsPanel session={session} view={view} /> : <Palette session={session} view={view} />}
       <StagingPanel session={session} view={view} />
@@ -99,6 +100,8 @@ export default function EditorScene() {
             <Hint k="X">{view.symmetryMode === 'mirror' ? (view.symmetry > 1 ? 'mirror on' : 'mirror off') : `symmetry ×${view.symmetry}`}</Hint>
             <Hint k="R">radial / mirror</Hint>
             <Hint k={ALT}>no surface</Hint>
+            <Hint k="Joint">insert between</Hint>
+            <Hint k="Empty space">set aside</Hint>
             <Hint k="Esc">cancel</Hint>
             <Hint k={DEL}>discard</Hint>
           </>
@@ -120,7 +123,8 @@ export default function EditorScene() {
           </>
         ) : (
           <>
-            <Hint k="Click">pick up</Hint>
+            <Hint k="Click">pick up with attached</Hint>
+            <Hint k={`${IS_MAC ? '⌘' : 'Ctrl'}+Click`}>just the part</Hint>
             <Hint k={`${ALT}+Click`}>copy</Hint>
             <Hint k={IS_MAC ? 'Ctrl+Click' : 'Right-click'}>details</Hint>
             <Hint k="Drag">orbit</Hint>

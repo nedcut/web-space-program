@@ -82,6 +82,11 @@ export function StagingPanel({ session, view }: { session: EditorSession; view: 
           </div>)}</div>
         </details>
       )}
+      {view.detached.length > 0 && (
+        <div className="preflight-detached" title="Pieces set aside in the hall are not part of the craft: staging, Δv and pre-flight ignore them. Click one to pick it up and attach it.">
+          {view.detached.length === 1 ? '1 set-aside piece' : `${view.detached.length} set-aside pieces`} · won't launch
+        </div>
+      )}
       <div className="vab-stage-list">
         {dragging?.kind === 'part' && (
           <div className={`vab-stage new ${dragOver === 'new' ? 'over' : ''}`} onDragOver={over('new')} onDragLeave={() => setDragOver(null)} onDrop={(e) => drop('new', e)}>

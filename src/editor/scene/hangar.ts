@@ -8,7 +8,23 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
  * A couple of dozen draw calls total, no extra render passes.
  */
 
-export const HANGAR = { halfX: 36, halfZ: 34, height: 56 } as const;
+/** Sized for the largest stock stacks (~75 m tall, ~20 m wide) with room to orbit the camera and set pieces aside. */
+export const HANGAR = { halfX: 80, halfZ: 80, height: 120 } as const;
+/** Door opening in the back (-Z) wall. */
+const DOOR_W = 64, DOOR_H = 100;
+/** Overhead crane runway height; the camera stays below it (see `CAMERA_BOX`). */
+const CRANE_Y = HANGAR.height - 14;
+/** Rear service gantry (in front of the doors): columns at ±GANTRY_X, bridge at GANTRY_H. */
+const GANTRY_X = DOOR_W / 2 - 3, GANTRY_H = 62, GANTRY_Z = -HANGAR.halfZ + 7;
+/**
+ * Where the orbit camera may go: inside the walls, clear of the side catwalks, wall props, rear gantry and crane.
+ * The view clamps its orbit distance by a ray against this box, so no hall geometry gets between camera and craft.
+ */
+export const CAMERA_BOX = {
+  minX: -HANGAR.halfX + 12, maxX: HANGAR.halfX - 12,
+  minY: 0.8, maxY: CRANE_Y - 4,
+  minZ: GANTRY_Z + 3, maxZ: HANGAR.halfZ - 6,
+} as const;
 
 /** Assembly platform (turntable) radius and height. */
 const PLATFORM_R = 6.5;
@@ -41,10 +57,13 @@ function rng(seed: number) {
 }
 
 const FLOOR_W = HANGAR.halfX * 2;
+/** The floor textures cover this central square at full detail and mirror-repeat beyond it (seamless epoxy; the
+ * markings are kept inside it), so the bigger hall keeps the texel density of the old 72 m one. */
+const TEX_W = 84;
 
 /** Painted markings shared by the colour and roughness maps (paint is a touch rougher than the epoxy). */
 function paintMarkings(g: CanvasRenderingContext2D, S: number, paint: (c: string) => string) {
-  const px = S / FLOOR_W;
+  const px = S / TEX_W;
   const cx = S / 2, cy = S / 2;
   const pad = 9 * px;
   // Hazard ring around the assembly pad.
@@ -69,14 +88,15 @@ function paintMarkings(g: CanvasRenderingContext2D, S: number, paint: (c: string
     const l0 = pad - (i % 9 === 0 ? 1.6 : i % 3 === 0 ? 1.1 : 0.85) * px, l1 = pad - 0.6 * px;
     g.beginPath(); g.moveTo(cx + Math.cos(a) * l0, cy + Math.sin(a) * l0); g.lineTo(cx + Math.cos(a) * l1, cy + Math.sin(a) * l1); g.stroke();
   }
-  // Dashed amber lanes toward the doors (-Z = top of the texture) and white walkway borders.
+  // Dashed amber lanes toward the doors (-Z = top of the texture; the mirrored repeat carries them on) and white
+  // walkway borders on the texture's side edges (mirrored onto themselves).
   g.fillStyle = paint('rgba(217,169,48,0.9)');
   const lane = 15 * px;
   for (const sx of [-1, 1]) {
-    for (let y = 1.5 * px; y < cy - outer - 1 * px; y += 1.6 * px) g.fillRect(cx + sx * lane - 0.1 * px, y, 0.2 * px, 0.9 * px);
+    for (let y = 0.35 * px; y < cy - outer - 1 * px; y += 1.6 * px) g.fillRect(cx + sx * lane - 0.1 * px, y, 0.2 * px, 0.9 * px);
   }
   g.fillStyle = paint('rgba(225,233,243,0.6)');
-  for (const sx of [-1, 1]) g.fillRect(cx + sx * (FLOOR_W / 2 - 6) * px - 0.08 * px, 0, 0.16 * px, S);
+  for (const sx of [-1, 1]) g.fillRect(cx + sx * (TEX_W / 2) * px - 0.08 * px, 0, 0.16 * px, S);
   // Stencilled bay marker in front of the pad.
   g.save();
   g.translate(cx, cy + pad + 3.2 * px);
@@ -94,7 +114,7 @@ function floorTexture(maxAniso: number): THREE.Texture {
   const S = 2048;
   const { c, g } = canvas(S, S);
   const r = rng(7);
-  const px = S / FLOOR_W;
+  const px = S / TEX_W;
   // Base: dark slate epoxy with soft cloudy mottling and fine aggregate speckle.
   g.fillStyle = '#252d37';
   g.fillRect(0, 0, S, S);
@@ -112,21 +132,9 @@ function floorTexture(maxAniso: number): THREE.Texture {
   // Slab joints every 6 m (cut lines).
   g.strokeStyle = 'rgba(18,22,28,0.4)';
   g.lineWidth = 1.5;
-  for (let m = 0; m <= FLOOR_W; m += 6) {
+  for (let m = 0; m <= TEX_W; m += 6) {
     g.beginPath(); g.moveTo(m * px, 0); g.lineTo(m * px, S); g.stroke();
     g.beginPath(); g.moveTo(0, m * px); g.lineTo(S, m * px); g.stroke();
-  }
-  // Ambient occlusion toward the walls.
-  const edge = 3 * px;
-  for (const [x0, y0, x1, y1, rx, ry, rw, rh] of [
-    [0, 0, edge, 0, 0, 0, edge, S], [S, 0, S - edge, 0, S - edge, 0, edge, S],
-    [0, 0, 0, edge, 0, 0, S, edge], [0, S, 0, S - edge, 0, S - edge, S, edge],
-  ] as const) {
-    const gr = g.createLinearGradient(x0, y0, x1, y1);
-    gr.addColorStop(0, 'rgba(10,12,16,0.55)');
-    gr.addColorStop(1, 'rgba(10,12,16,0)');
-    g.fillStyle = gr;
-    g.fillRect(rx, ry, rw, rh);
   }
   const cx = S / 2, cy = S / 2;
   // Central assembly pad: darker, finer-finish disc.
@@ -155,6 +163,7 @@ function floorTexture(maxAniso: number): THREE.Texture {
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping;
   t.anisotropy = maxAniso;
   return t;
 }
@@ -184,10 +193,10 @@ function floorRoughness(maxAniso: number): THREE.Texture {
     const rad = 8 + r() * 26;
     g.beginPath(); g.arc(r() * S, r() * S, rad, r() * 6, r() * 6 + 2 + r() * 3); g.stroke();
   }
-  const px = S / FLOOR_W;
+  const px = S / TEX_W;
   g.strokeStyle = grey(0.5);
   g.lineWidth = 1;
-  for (let m = 0; m <= FLOOR_W; m += 6) {
+  for (let m = 0; m <= TEX_W; m += 6) {
     g.beginPath(); g.moveTo(m * px, 0); g.lineTo(m * px, S); g.stroke();
     g.beginPath(); g.moveTo(0, m * px); g.lineTo(S, m * px); g.stroke();
   }
@@ -196,6 +205,7 @@ function floorRoughness(maxAniso: number): THREE.Texture {
   g.beginPath(); g.arc(S / 2, S / 2, 9 * px, 0, Math.PI * 2); g.fill();
   paintMarkings(g, S, () => grey(0.6));
   const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping;
   t.anisotropy = maxAniso;
   return t;
 }
@@ -384,6 +394,8 @@ function merged(geos: THREE.BufferGeometry[], mat: THREE.Material, track: <T ext
 
 /** Probe position for the floor reflections (just above the floor, at the hall centre). */
 const PROBE = new THREE.Vector3(0, 2, 0);
+/** Side catwalk levels (people scale; independent of the hall height). */
+const CATWALK_Y = [14, 34] as const;
 
 /**
  * Patch a standard material so its env-map lookups are box-projected onto the hall's walls (parallax-corrected
@@ -446,7 +458,11 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
     color: 0x778795,
   }));
   boxProjected(floorMat, 0.22);
-  const floor = new THREE.Mesh(track(new THREE.PlaneGeometry(FLOOR_W, FLOOR_W)), floorMat);
+  const floorGeo = track(new THREE.PlaneGeometry(FLOOR_W, FLOOR_W));
+  // UVs span the whole floor in TEX_W tiles centred on the pad (MirroredRepeat keeps the epoxy seamless).
+  const uv = floorGeo.getAttribute('uv');
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5 + (uv.getX(i) - 0.5) * FLOOR_W / TEX_W, 0.5 + (uv.getY(i) - 0.5) * FLOOR_W / TEX_W);
+  const floor = new THREE.Mesh(floorGeo, floorMat);
   floor.rotation.x = -Math.PI / 2;
   // The deck uses the soft footprint below; reserve filtered shadow-map sampling for craft self-shadowing.
   floor.receiveShadow = false;
@@ -502,7 +518,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   addWall(HZ * 2, H, new THREE.Vector3(HX, H / 2, 0), -Math.PI / 2);
   addWall(HX * 2, H, new THREE.Vector3(0, H / 2, HZ), Math.PI);
   // Back wall (-Z) with the door opening: two side sections + lintel.
-  const doorW = 34, doorH = 46;
+  const doorW = DOOR_W, doorH = DOOR_H;
   const sideW = HX - doorW / 2;
   addWall(sideW, H, new THREE.Vector3(-HX + sideW / 2, H / 2, -HZ), 0);
   addWall(sideW, H, new THREE.Vector3(HX - sideW / 2, H / 2, -HZ), 0);
@@ -553,7 +569,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   for (const x of [-doorW / 2 - 0.8, doorW / 2 + 0.8]) frame.push(...iBeam(H, 1.4, x, -HZ + 0.7, Math.PI / 2));
   accent.push(boxAt(doorW + 3.2, 1.6, 1.6, 0, doorH + 0.8, -HZ + 0.8));
   // Horizontal wall girders
-  for (const y of [18, 36]) {
+  for (const y of [H * 0.3, H * 0.6]) {
     frame.push(boxAt(0.6, 0.8, HZ * 2, -HX + 1.0, y, 0));
     frame.push(boxAt(0.6, 0.8, HZ * 2, HX - 1.0, y, 0));
     frame.push(boxAt(HX * 2, 0.8, 0.6, 0, y, HZ - 1.0));
@@ -585,7 +601,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
 
   // Catwalks along both side walls at two levels, with railings and a cyan edge light.
   const grate: THREE.BufferGeometry[] = [];
-  for (const y of [12, 26]) {
+  for (const y of CATWALK_Y) {
     for (const sx of [-1, 1]) {
       const x = sx * (HX - 2.6);
       grate.push(boxAt(3.4, 0.18, HZ * 2 - 4, x, y, 0));
@@ -599,37 +615,37 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
     }
   }
   // Overhead crane bridge across the hall
-  const craneZ = 6;
-  accent.push(boxAt(HX * 2 - 3, 1.6, 1.0, 0, 44, craneZ - 1.3));
-  accent.push(boxAt(HX * 2 - 3, 1.6, 1.0, 0, 44, craneZ + 1.3));
-  frame.push(boxAt(3.2, 1.4, 3.6, 9, 43.3, craneZ));
-  frame.push(boxAt(0.08, 14, 0.08, 9, 36, craneZ));
-  frame.push(boxAt(1.2, 0.8, 0.6, 9, 29, craneZ));
+  const craneZ = 10;
+  accent.push(boxAt(HX * 2 - 3, 2.4, 1.4, 0, CRANE_Y, craneZ - 2));
+  accent.push(boxAt(HX * 2 - 3, 2.4, 1.4, 0, CRANE_Y, craneZ + 2));
+  frame.push(boxAt(4.8, 2, 5.4, 14, CRANE_Y - 1, craneZ));
+  frame.push(boxAt(0.1, 6, 0.1, 14, CRANE_Y - 5, craneZ));
+  frame.push(boxAt(1.6, 1, 0.8, 14, CRANE_Y - 8.5, craneZ));
   // Crane rails on the side girders
-  frame.push(boxAt(0.8, 0.6, HZ * 2, -HX + 1.6, 43, 0));
-  frame.push(boxAt(0.8, 0.6, HZ * 2, HX - 1.6, 43, 0));
+  frame.push(boxAt(0.8, 0.6, HZ * 2, -HX + 1.6, CRANE_Y - 1.2, 0));
+  frame.push(boxAt(0.8, 0.6, HZ * 2, HX - 1.6, CRANE_Y - 1.2, 0));
 
   // Rear service gantry: original ochre lifting bridge and recessed work bays.
   // Fold into existing material batches; no extra lights, shadow casters or passes.
   const service: THREE.BufferGeometry[] = [];
-  const serviceZ = -HZ + 7;
-  for (const x of [-15, 15]) {
-    frame.push(...iBeam(30, 0.65, x, serviceZ));
-    trim.push(boxAt(2.4, 0.5, 2.6, x, 0.25, serviceZ));
-    service.push(boxAt(0.8, 5, 0.8, x, 3, serviceZ));
-    for (let y = 7; y < 28; y += 5) {
+  const serviceZ = GANTRY_Z, gx = GANTRY_X, gh = GANTRY_H;
+  for (const x of [-gx, gx]) {
+    frame.push(...iBeam(gh, 0.9, x, serviceZ));
+    trim.push(boxAt(3, 0.5, 3.2, x, 0.25, serviceZ));
+    service.push(boxAt(1, 5, 1, x, 3, serviceZ));
+    for (let y = 7; y < gh - 3; y += 5) {
       frame.push(strut(new THREE.Vector3(x, y, serviceZ), new THREE.Vector3(x, y + 3, serviceZ - 3), 0.18));
     }
   }
-  service.push(boxAt(31, 1.15, 0.8, 0, 29, serviceZ));
-  trim.push(boxAt(31, 0.18, 1.4, 0, 28.35, serviceZ));
-  for (const x of [-12, 12]) {
-    trim.push(boxAt(2.2, 0.8, 1.6, x, 28, serviceZ));
-    frame.push(boxAt(0.045, 7, 0.045, x - 0.2, 24.2, serviceZ), boxAt(0.045, 7, 0.045, x + 0.2, 24.2, serviceZ));
-    service.push(boxAt(0.75, 0.7, 0.55, x, 20.6, serviceZ));
+  service.push(boxAt(gx * 2 + 1, 1.6, 1, 0, gh - 1, serviceZ));
+  trim.push(boxAt(gx * 2 + 1, 0.22, 1.8, 0, gh - 1.9, serviceZ));
+  for (const x of [-gx * 0.8, gx * 0.8]) {
+    trim.push(boxAt(2.6, 1, 2, x, gh - 2.2, serviceZ));
+    frame.push(boxAt(0.05, 9, 0.05, x - 0.2, gh - 7.2, serviceZ), boxAt(0.05, 9, 0.05, x + 0.2, gh - 7.2, serviceZ));
+    service.push(boxAt(0.9, 0.8, 0.6, x, gh - 12, serviceZ));
   }
   // Low service bays make the hall feel occupied even around a small starter craft.
-  for (const x of [-24, -8, 8, 24]) {
+  for (const x of [-doorW / 2 - 22, -doorW / 2 - 8, doorW / 2 + 8, doorW / 2 + 22]) {
     trim.push(boxAt(5.5, 3.8, 0.5, x, 1.9, -HZ + 0.5));
     lamps.push(boxAt(4.8, 0.08, 0.12, x, 4.2, -HZ + 0.9));
     service.push(boxAt(0.15, 3.8, 0.6, x - 2.85, 1.9, -HZ + 0.6));
@@ -641,7 +657,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   // Linear LED high-bay runs along Z under the trusses: dark housing + emissive diffuser, between each truss pair.
   const lampY = H - 5.2;
   for (let z = -HZ + 4; z + colSpacing <= HZ - 2; z += colSpacing) {
-    for (let x = -HX + 8; x <= HX - 8; x += 8) {
+    for (let x = -HX + 10; x <= HX - 10; x += 12) {
       const len = colSpacing - 2.2, zc = z + colSpacing / 2;
       trim.push(boxAt(0.9, 0.3, len + 0.2, x, lampY + 0.2, zc));
       lamps.push(boxAt(0.7, 0.06, len, x, lampY + 0.02, zc));
@@ -650,7 +666,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   }
   // Clerestory glazing high on the side walls: cool daylight panes between the columns, with mullions.
   const glass: THREE.BufferGeometry[] = [];
-  const gy0 = 46.5, gy1 = 52.5;
+  const gy0 = H - 12, gy1 = H - 5;
   for (const sx of [-1, 1]) {
     const x = sx * (HX - 0.04);
     for (let z = -HZ + 4; z + colSpacing <= HZ - 2; z += colSpacing) {
@@ -664,7 +680,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
   const glassMat = track(new THREE.MeshBasicMaterial({ color: new THREE.Color(0x9cc4ec).multiplyScalar(0.55) }));
   group.add(merged(glass, glassMat, track));
   // Wall-washer strips above each catwalk.
-  for (const sx of [-1, 1]) for (const y of [12, 26]) lamps.push(boxAt(0.1, 0.15, HZ * 2 - 6, sx * (HX - 0.3), y + 3.2, 0));
+  for (const sx of [-1, 1]) for (const y of CATWALK_Y) lamps.push(boxAt(0.1, 0.15, HZ * 2 - 6, sx * (HX - 0.3), y + 3.2, 0));
 
   const frameMesh = merged(frame, steelMat, track);
   frameMesh.receiveShadow = true;
@@ -680,13 +696,13 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
 
   // ---------------------------------------------------------------- signage
   const sign = new THREE.Mesh(
-    track(new THREE.PlaneGeometry(26, 6.5)),
+    track(new THREE.PlaneGeometry(44, 11)),
     track(new THREE.MeshBasicMaterial({ map: track(signTexture('WSP', 'INTEGRATION HALL · BAY 1')), transparent: true, depthWrite: false, toneMapped: false, color: 0xb0b8c4 })),
   );
-  sign.position.set(-4, doorH + 5.5, -HZ + 0.05);
+  sign.position.set(-6, doorH + (H - doorH) / 2, -HZ + 0.05);
   group.add(sign);
   const sign2 = sign.clone();
-  sign2.position.set(-HX + 0.06, 32, 6);
+  sign2.position.set(-HX + 0.06, CATWALK_Y[1] + 14, 6);
   sign2.rotation.y = Math.PI / 2;
   sign2.scale.setScalar(0.7);
   group.add(sign2);
@@ -695,7 +711,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
     track(new THREE.PlaneGeometry(12, 3)),
     track(new THREE.MeshBasicMaterial({ map: track(signTexture('01', 'HIGH BAY')), transparent: true, depthWrite: false, color: 0x71818e })),
   );
-  baySign.position.set(-24, 9, -HZ + 0.15);
+  baySign.position.set(-doorW / 2 - 15, 9, -HZ + 0.15);
   group.add(baySign);
 
   // ---------------------------------------------------------------- props: tool carts, crates
@@ -741,7 +757,7 @@ export function buildHangar(renderer: THREE.WebGLRenderer): Hangar {
       const pmrem = new THREE.PMREMGenerator(renderer);
       // Called again after a context restore: the previous probe is blank by then.
       reflectionProbe?.dispose();
-      const rt = reflectionProbe = track(pmrem.fromScene(scene, 0, 0.1, 250, { size: 256, position: PROBE }));
+      const rt = reflectionProbe = track(pmrem.fromScene(scene, 0, 0.1, 400, { size: 256, position: PROBE }));
       pmrem.dispose();
       hidden.forEach((o, i) => (o.visible = vis[i]));
       for (const m of [floorMat, platMat]) {

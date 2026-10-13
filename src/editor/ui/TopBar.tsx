@@ -18,7 +18,7 @@ export function keyOf(action: Action) {
   return IS_MAC ? label.replace(/Ctrl\+/g, '⌘').replace(/Backspace/g, '⌫') : label;
 }
 
-export function TopBar({ session, view, onLoad, onNew, onImport }: { session: EditorSession; view: SessionView; onLoad(): void; onNew(): void; onImport(): void }) {
+export function TopBar({ session, view, onLoad, onNew, onImport, onFrame }: { session: EditorSession; view: SessionView; onLoad(): void; onNew(): void; onImport(): void; onFrame(): void }) {
   const [share, setShare] = useState<{ code: string; error: string } | null>(null);
   // Narrow windows collapse the file and overlay groups into this menu so Launch always fits.
   const [menu, setMenu] = useState<null | { id: 'more' | 'share'; left: number }>(null);
@@ -124,6 +124,7 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
           <Button className={`vab-ibtn ${view.showCoM ? 'on com' : ''}`} aria-pressed={view.showCoM} aria-label="Centre of mass" data-tip="Show centre of mass" onClick={() => session.toggleCoM()}><Icon name="com" /></Button>
           <Button className={`vab-ibtn ${view.showCoT ? 'on cot' : ''}`} aria-pressed={view.showCoT} aria-label="Centre of thrust" data-tip="Show centre of thrust" onClick={() => session.toggleCoT()}><Icon name="cot" /></Button>
           <Button className={`vab-ibtn ${view.showCoL ? 'on col' : ''}`} aria-pressed={view.showCoL} aria-label="Centre of lift" data-tip="Show centre of lift" onClick={() => session.toggleCoL()}><LiftGlyph /></Button>
+          <Button className="vab-ibtn" aria-label="Frame craft" data-tip="Zoom to fit the craft and any set-aside pieces" data-keys={keyOf('editorFrame')} onClick={onFrame}><FrameGlyph /></Button>
         </Group>
         <Group label="Mode">
           <Button className={`vab-ibtn ${view.mode === 'actions' ? 'on' : ''}`} aria-pressed={view.mode === 'actions'} aria-label="Action groups" data-tip="Action groups: assign part actions to keys (Abort, Gear, Lights, 1–0…)" onClick={() => session.setMode(view.mode === 'actions' ? 'build' : 'actions')}>
@@ -157,6 +158,7 @@ export function TopBar({ session, view, onLoad, onNew, onImport }: { session: Ed
           {item('Centre of mass', () => session.toggleCoM(), { checked: view.showCoM })}
           {item('Centre of thrust', () => session.toggleCoT(), { checked: view.showCoT })}
           {item('Centre of lift', () => session.toggleCoL(), { checked: view.showCoL })}
+          {item('Frame craft', onFrame, { keys: keyOf('editorFrame') })}
         </div>
       )}
       <div ref={tip.el} className="vab-tip" role="tooltip" hidden />
@@ -263,6 +265,15 @@ function MirrorGlyph({ on }: { on: boolean }) {
       <line x1="12" y1="3" x2="12" y2="21" strokeDasharray="2 2" />
       <path d="M9 7 L4 12 L9 17 Z" fill={on ? 'currentColor' : 'none'} />
       <path d="M15 7 L20 12 L15 17 Z" fill={on ? 'currentColor' : 'none'} />
+    </svg>
+  );
+}
+
+function FrameGlyph() {
+  return (
+    <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+      <path d="M4 9 V4 H9 M15 4 H20 V9 M20 15 V20 H15 M9 20 H4 V15" />
+      <path d="M12 7.5 L14 12 L12 16.5 L10 12 Z" />
     </svg>
   );
 }

@@ -10,13 +10,13 @@ import { getQuality } from '../../render/core/quality';
 import type { PartInstance } from '../../sim/vessel/types';
 import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../../util/quat';
 import { add, sub, v3, type Vec3 } from '../../util/vec3';
-import { alignNodes, counterpartMaps, freeAttachNodes, mirrorPosition, mirrorRotation, partPivot, snapAngle, transformedParts, type PartTransform, type WorldAttachNode } from '../core';
+import { alignNodes, counterpartMaps, descendants, freeAttachNodes, mirrorPosition, mirrorRotation, partPivot, snapAngle, transformedParts, worldNode, type PartTransform, type Transform, type WorldAttachNode } from '../core';
 import { axisVector, TransformGizmo, type GizmoHandle } from './gizmo';
 import { CATALOG, type EditorSession, type Placement, type SessionView } from '../session';
 import { surfaceTransform } from '../surface';
 import { StudioEnvironment } from '../../render/core/studioEnv';
 import { onContextRestored } from '../../render/core/contextRecovery';
-import { buildHangar, HANGAR, type Hangar } from './hangar';
+import { buildHangar, CAMERA_BOX, type Hangar } from './hangar';
 import { createPartMesh, variantKey } from './partMesh';
 import { engineShrouds } from '../../sim/vessel/shroud';
 import { partMeshParams, prepareEngineSoot, releaseSoot, setLightAppearance, setPartDetail } from '../../render/parts';
@@ -32,8 +32,15 @@ const toQ = (q: Quat, out = new THREE.Quaternion()) => out.set(q.x, q.y, q.z, q.
 const fromV = (v: THREE.Vector3): Vec3 => v3(v.x, v.y, v.z);
 /** macOS: Ctrl+click is the secondary click; Option is Alt. */
 export const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-/** Horizontal pan limit around the hall's turntable, m. */
-const PAN_LIMIT = 22;
+/** Horizontal pan limit around the hall's turntable, m (room for pieces set aside beside the craft). */
+const PAN_LIMIT = 40;
+/** Orbit distance limits, m; the hall's camera box usually clamps first. */
+const MIN_DIST = 3, MAX_DIST = 170;
+/** Normal vertical field of view; frameCraft widens it (up to MAX_FOV) only when the hall is too small to back off. */
+const BASE_FOV = 45, MAX_FOV = 68;
+/** Pieces set aside in the hall: washed-out blue-grey so they read as "not part of the craft". */
+const DETACHED_TINT = { key: 'detached', color: 0x55657c, intensity: 0.55 };
+const PARK_TINT = { key: 'park', color: 0x55657c, intensity: 0.45 };
 
 const tintCaches = new Map<string, WeakMap<THREE.Material, THREE.Material>>();
 function tinted(m: THREE.Material, key: string, color: number, intensity: number): THREE.Material {
@@ -78,7 +85,7 @@ const GROUP_TINT = { key: 'group', color: 0x9b6bff, intensity: 0.6 };
 export class EditorView {
   readonly renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
-  private camera = new THREE.PerspectiveCamera(45, 1, 0.1, 400);
+  private camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 500);
   private hangar: Hangar;
   private envRT: StudioEnvironment;
   private unwatchContext: () => void;
@@ -114,6 +121,29 @@ export class EditorView {
   private yaw = 0.55; private pitch = 0.18; private dist = 18; private targetY = 6;
   private gYaw = 0.55; private gPitch = 0.18; private gDist = 18; private gTargetY = 6;
   private panX = 0; private panZ = 0; private gPanX = 0; private gPanZ = 0;
+  private fov = BASE_FOV; private gFov = BASE_FOV;
+  /** Orbit distance actually used last frame (after the hall clamp). */
+  private viewDist = 18;
+  private readonly fitBox = new THREE.Box3();
+  private readonly scratchBox = new THREE.Box3();
+  private readonly scratchV = new THREE.Vector3();
+  /** Key light aim (world Y of the craft centre) and distance scale, sized to the craft in syncCraft. */
+  private keyAimY = 7; private keyScale = 1;
+  // Set-aside (detached) pieces.
+  private detachedGroup = new THREE.Group();
+  private detachedObjs: { obj: THREE.Object3D; index: number; uid: number }[] = [];
+  private lastDetached: SessionView['detached'] | null = null;
+  /** Craft-frame bounds of the set-aside pieces (empty when none). */
+  private detachedBox = new THREE.Box3();
+  private detachedAnchors: THREE.Vector3[] = [];
+  private badges: HTMLDivElement[] = [];
+  private hoverDetached: number | null = null;
+  /** Ctrl (⌘ on macOS) held: pick up just the part. */
+  private partOnlyDown = false;
+  /** Craft parts moved to preview an insert, restored when the preview ends. */
+  private splicePreview: number[] = [];
+  private cursorLabel: HTMLDivElement;
+  private cursorText = '';
   private readonly target = new THREE.Vector3();
   private readonly camPos = new THREE.Vector3();
   // Offset/rotate tools
@@ -137,6 +167,11 @@ export class EditorView {
   private snapKey: string | null = null;
   private craftNodes: WorldAttachNode[] = [];
   private heldNodes: WorldAttachNode[] = [];
+  /** Occupied stack joints (the parent's node, with the part sitting on it) for inserting between. */
+  private jointNodes: (WorldAttachNode & { occupant: number })[] = [];
+  /** For each held node, the held node on the far side that the displaced part re-attaches to (held space). */
+  private heldThrough = new Map<WorldAttachNode, WorldAttachNode>();
+  private spliceMarker: { mesh: THREE.Mesh; key: string; base: number } | null = null;
   private lastCraft: SessionView['craft'] | null = null;
   private lastHeldSig = '';
   private lastLoad = -1;
@@ -231,7 +266,11 @@ export class EditorView {
       this.renderedKey = '';
     });
     this.scene.add(this.craftGroup);
-    this.craftGroup.add(this.heldGroup, this.ghostGroup, this.nodeGroup, this.links.root, this.linkPreview);
+    this.craftGroup.add(this.detachedGroup, this.heldGroup, this.ghostGroup, this.nodeGroup, this.links.root, this.linkPreview);
+    this.cursorLabel = document.createElement('div');
+    this.cursorLabel.className = 'vab-cursor-label';
+    this.cursorLabel.hidden = true;
+    container.appendChild(this.cursorLabel);
     this.linkPreview.visible = false;
     this.heldGroup.add(this.heldMeshes);
 
@@ -260,29 +299,62 @@ export class EditorView {
   }
 
   // ------------------------------------------------------------------ public API (for UI / dev hooks)
+  /**
+   * Zoom to fit the craft and any set-aside pieces. When the hall is too small to back off far enough (the largest
+   * stacks), the field of view widens instead.
+   */
   frameCraft(instant = false) {
+    const box = this.fitBounds();
+    const empty = box.isEmpty();
+    this.craftGroup.updateMatrixWorld(true);
+    const size = empty ? this.scratchV.set(7, 7, 7) : box.getSize(this.scratchV);
+    const h = size.y, w = Math.max(size.x, size.z);
+    const centre = empty ? new THREE.Vector3(0, this.lift, 0) : box.getCenter(new THREE.Vector3());
+    this.gPanX = centre.x; this.gPanZ = centre.z;
+    this.clampPan();
+    this.gTargetY = centre.y + h * 0.03;
+    this.clampTarget();
+    const need = (fov: number) => {
+      const fovV = (fov * DEG) / 2, fovH = Math.atan(Math.tan(fovV) * this.camera.aspect);
+      return Math.max((h / 2 + 1.2) / Math.tan(fovV), (w / 2 + 1.5) / Math.tan(fovH), 7) * 1.08 + w / 2;
+    };
+    const room = this.room(this.gYaw, this.gPitch, this.gPanX, this.gTargetY, this.gPanZ);
+    let fov = BASE_FOV;
+    while (need(fov) > room && fov < MAX_FOV) fov += 1;
+    this.gFov = fov;
+    this.gDist = THREE.MathUtils.clamp(Math.min(need(fov), room), MIN_DIST + 2, MAX_DIST);
+    if (instant) { this.dist = this.gDist; this.targetY = this.gTargetY; this.panX = this.gPanX; this.panZ = this.gPanZ; this.fov = this.gFov; this.applyFov(); }
+  }
+
+  /** World-space bounds of the craft plus set-aside pieces (empty box when there is nothing). */
+  private fitBounds(): THREE.Box3 {
     const s = this.session.getSnapshot().stats;
-    const empty = !s.partCount;
-    // Vertical extent in the hall: craft Y (VAB) or craft Z (SPH, built horizontally).
-    const h = empty ? 7 : this.horizontal ? s.depth : s.height;
-    const w = empty ? 7 : this.horizontal ? Math.max(s.width, s.height) : Math.max(s.width, s.depth);
-    const centreY = empty ? this.lift : this.lift + (this.horizontal ? (s.bounds.min.z + s.bounds.max.z) / 2 : (s.bounds.min.y + s.bounds.max.y) / 2);
-    const fovV = (this.camera.fov * DEG) / 2;
-    const fovH = Math.atan(Math.tan(fovV) * this.camera.aspect);
-    const needV = (h / 2 + 1.2) / Math.tan(fovV);
-    const needH = (w / 2 + 1.5) / Math.tan(fovH);
-    this.gDist = THREE.MathUtils.clamp(Math.max(needV, needH, 7) * 1.12 + w / 2, 5, 60);
-    // Nudge up a little: the top bar covers part of the viewport.
-    this.gTargetY = centreY + h * 0.03;
-    this.gPanX = 0; this.gPanZ = 0;
-    if (instant) { this.dist = this.gDist; this.targetY = this.gTargetY; this.panX = this.gPanX; this.panZ = this.gPanZ; }
+    const box = this.fitBox.makeEmpty();
+    if (s.partCount) box.set(toV(s.bounds.min, this.scratchBox.min), toV(s.bounds.max, this.scratchBox.max));
+    box.union(this.detachedBox);
+    if (box.isEmpty()) return box;
+    this.craftGroup.updateMatrixWorld(true);
+    return box.applyMatrix4(this.craftGroup.matrixWorld);
+  }
+
+  /** Free orbit distance from the target along a view direction before leaving the hall's camera box. */
+  private room(yaw: number, pitch: number, tx: number, ty: number, tz: number): number {
+    const cp = Math.cos(pitch);
+    const t = Math.min(MAX_DIST, slab(Math.sin(yaw) * cp, tx, CAMERA_BOX.minX, CAMERA_BOX.maxX),
+      slab(Math.sin(pitch), ty, CAMERA_BOX.minY, CAMERA_BOX.maxY), slab(Math.cos(yaw) * cp, tz, CAMERA_BOX.minZ, CAMERA_BOX.maxZ));
+    return Math.max(1, t - 0.5);
+  }
+
+  private applyFov() {
+    this.camera.fov = this.fov;
+    this.camera.updateProjectionMatrix();
   }
 
   /** Dev hook: set the orbit camera directly (radians / metres; targetY relative to the floor). */
   setView(v: { yaw?: number; pitch?: number; dist?: number; targetY?: number }, instant = true) {
     if (v.yaw !== undefined) this.gYaw = v.yaw;
     if (v.pitch !== undefined) this.gPitch = v.pitch;
-    if (v.dist !== undefined) this.gDist = v.dist;
+    if (v.dist !== undefined) this.gDist = THREE.MathUtils.clamp(v.dist, MIN_DIST, MAX_DIST);
     if (v.targetY !== undefined) this.gTargetY = v.targetY;
     if (instant) { this.yaw = this.gYaw; this.pitch = this.gPitch; this.dist = this.gDist; this.targetY = this.gTargetY; }
   }
@@ -294,6 +366,11 @@ export class EditorView {
       this.horizontal = snap.craftType === 'SPH';
       this.craftGroup.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.horizontal ? -Math.PI / 2 : 0);
       this.lastCraft = null;
+    }
+    if (snap.detached !== this.lastDetached) {
+      this.lastDetached = snap.detached;
+      this.syncDetached(snap);
+      this.lastCraft = null; // lift and shadows include the set-aside pieces
     }
     if (snap.craft !== this.lastCraft) {
       this.lastCraft = snap.craft;
@@ -384,8 +461,9 @@ export class EditorView {
     // Keep the craft's lowest point above the floor; shift the camera with it so the view doesn't jump.
     const s = snap.stats;
     // Lowest point (craft -Y in the VAB, craft -Z in the SPH where wheels hang below) stays above the floor.
-    const low = this.horizontal ? s.bounds.min.z : s.bounds.min.y;
-    let newLift = s.partCount ? Math.max(this.horizontal ? 0.6 : 3, (this.horizontal ? 0.3 : 1.0) - low) : 3;
+    let low = this.horizontal ? s.bounds.min.z : s.bounds.min.y;
+    if (!this.detachedBox.isEmpty()) low = Math.min(s.partCount ? low : Infinity, this.horizontal ? this.detachedBox.min.z : this.detachedBox.min.y);
+    let newLift = s.partCount || !this.detachedBox.isEmpty() ? Math.max(this.horizontal ? 0.6 : 3, (this.horizontal ? 0.3 : 1.0) - low) : 3;
     // While something is held, never lower the craft (the held assembly lives in craft space too).
     if (snap.held) newLift = Math.max(newLift, this.lift);
     const d = newLift - this.lift;
@@ -404,6 +482,13 @@ export class EditorView {
     toV(s.centreOfMass, this.com.position);
     if (s.centreOfThrust) toV(s.centreOfThrust, this.cot.position);
     if (s.centreOfLift) toV(s.centreOfLift, this.col.position);
+    // Key light: aim at the craft centre; its shadow frustum covers the craft and the pieces beside it.
+    const span = Math.max(s.height, s.width, s.depth, this.detachedBox.isEmpty() ? 0 : this.detachedBox.getSize(this.scratchV).length());
+    this.keyScale = Math.max(1, span / 30);
+    this.keyAimY = this.lift + (s.partCount ? (this.horizontal ? (b.min.z + b.max.z) / 2 : (b.min.y + b.max.y) / 2) : 4);
+    const sc = this.key.shadow.camera, k = this.keyScale;
+    sc.left = -24 * k; sc.right = 24 * k; sc.top = 24 * k; sc.bottom = -24 * k; sc.near = 5; sc.far = 110 * k;
+    sc.updateProjectionMatrix();
     const scale = THREE.MathUtils.clamp((this.horizontal ? Math.max(s.height, s.width) : s.height) / 14, 0.6, 2.2);
     this.com.scale.setScalar(scale);
     this.cot.scale.setScalar(scale);
@@ -512,6 +597,67 @@ export class EditorView {
     else { this.lastCraft = null; this.sync(); }
   }
 
+  // ------------------------------------------------------------------ set-aside pieces
+  /** Rebuild the set-aside meshes and badges (only when the list changes: park, pick up, undo). */
+  private syncDetached(snap: SessionView) {
+    for (const d of this.detachedObjs) d.obj.removeFromParent();
+    this.detachedObjs = [];
+    this.detachedBox.makeEmpty();
+    this.detachedAnchors = [];
+    this.hoverDetached = null;
+    this.craftGroup.updateMatrixWorld(true);
+    const toCraft = this.craftGroup.matrixWorld.clone().invert();
+    snap.detached.forEach((a, index) => {
+      const shrouds = engineShrouds(a.parts, p => CATALOG.get(p.partId));
+      const box = new THREE.Box3();
+      for (const p of a.parts) {
+        const def = CATALOG.get(p.partId)!;
+        const obj = createPartMesh(def, partMeshParams(def, p.tweaks, shrouds.get(p.uid)));
+        obj.userData.uid = p.uid;
+        obj.userData.detached = index;
+        toV(p.position, obj.position);
+        toQ(p.rotation, obj.quaternion);
+        setTint(obj, DETACHED_TINT);
+        this.detachedGroup.add(obj);
+        this.detachedObjs.push({ obj, index, uid: p.uid });
+        // Bounds in the craft frame (the group sits at the craft origin).
+        obj.updateMatrixWorld(true);
+        box.union(this.scratchBox.setFromObject(obj).applyMatrix4(toCraft));
+      }
+      this.detachedBox.union(box);
+      // Badge anchor: above the piece (craft +Y in the VAB, craft +Z in the SPH where +Z is up).
+      const c = box.getCenter(new THREE.Vector3());
+      if (this.horizontal) c.z = box.max.z + 0.3; else c.y = box.max.y + 0.3;
+      this.detachedAnchors.push(c);
+    });
+    while (this.badges.length > snap.detached.length) this.badges.pop()!.remove();
+    while (this.badges.length < snap.detached.length) {
+      const el = document.createElement('div');
+      el.className = 'vab-detached-badge';
+      el.textContent = "Set aside · won't launch";
+      this.container.appendChild(el);
+      this.badges.push(el);
+    }
+    this.renderer.shadowMap.needsUpdate = true;
+    this.visualVersion++;
+  }
+
+  /** Keep the set-aside badges above their pieces (only on rendered frames). */
+  private placeBadges() {
+    const el = this.renderer.domElement;
+    for (let i = 0; i < this.badges.length; i++) {
+      const v = this.craftGroup.localToWorld(this.scratchV.copy(this.detachedAnchors[i])).project(this.camera);
+      const b = this.badges[i];
+      const hidden = v.z > 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1;
+      if (b.hidden !== hidden) b.hidden = hidden;
+      if (!hidden) b.style.transform = `translate(${((v.x + 1) / 2) * el.clientWidth}px, ${((1 - v.y) / 2) * el.clientHeight}px) translate(-50%, -130%)`;
+    }
+  }
+
+  private applyDetachedHighlights() {
+    for (const d of this.detachedObjs) setTint(d.obj, d.index === this.hoverDetached ? HOVER_TINT : DETACHED_TINT);
+  }
+
   // ------------------------------------------------------------------ held assembly
   private buildHeld() {
     delete this.heldGroup.userData.editorTint;
@@ -563,6 +709,9 @@ export class EditorView {
     const snap = this.session.getSnapshot();
     this.snapKey = null;
     this.linkPreview.visible = false;
+    this.clearSplicePreview(snap);
+    if (this.spliceMarker) this.spliceMarker.mesh.visible = false;
+    this.setCursorLabel('');
     if (this.session.isLinkPlacement()) {
       this.placement = null; this.heldGroup.visible = false; this.ghostGroup.visible = false;
       const hit = this.surfaceHit(), start = snap.linkStart?.hit;
@@ -600,7 +749,20 @@ export class EditorView {
       const rootDef = CATALOG.get(root.partId)!;
       // 1) Stack snapping in screen space.
       const best = this.findStackSnap(C);
-      if (best) {
+      if (best?.through && best.occupant !== undefined) {
+        const t = alignNodes(best.childAt, best.parent);
+        D = t.rotation;
+        T = add(qRotate(t.rotation, C), t.position);
+        placement = { kind: 'splice', parentUid: best.parent.uid, parentNode: best.parent.id, childUid: best.child.uid, childNode: best.child.id, throughUid: best.through.uid, throughNode: best.through.id };
+        ghosts = this.counterpartGhosts(best.parent.uid, D, T, false);
+        this.previewSplice(snap, best.parent.uid, best.occupant, best.through, D, T);
+        if (this.spliceMarker) {
+          this.snapKey = 'splice';
+          toV(best.parent.position, this.spliceMarker.mesh.position);
+          this.spliceMarker.mesh.visible = true;
+        }
+        this.setCursorLabel('Insert here');
+      } else if (best) {
         const t = alignNodes(best.childAt, best.parent);
         D = t.rotation;
         T = add(qRotate(t.rotation, C), t.position);
@@ -622,10 +784,20 @@ export class EditorView {
         }
       }
     }
+    if (!placement && craft.parts.length && this.mouseInside) {
+      // 3) Empty space: set the assembly aside here, resting no lower than the floor.
+      toQ(D, this.heldGroup.quaternion);
+      toV(T, this.heldGroup.position);
+      this.heldGroup.updateMatrixWorld(true);
+      const below = 0.05 - this.scratchBox.setFromObject(this.heldMeshes).min.y;
+      if (below > 0) T = this.horizontal ? add(T, v3(0, 0, below)) : add(T, v3(0, below, 0));
+      placement = { kind: 'park', position: T };
+      this.setCursorLabel('Set aside');
+    }
     this.placement = placement;
     toQ(D, this.heldGroup.quaternion);
     toV(T, this.heldGroup.position);
-    setTint(this.heldGroup, placement ? (placement.kind === 'root' ? null : SNAP_TINT) : BAD_TINT);
+    setTint(this.heldGroup, placement ? (placement.kind === 'root' ? null : placement.kind === 'park' ? PARK_TINT : SNAP_TINT) : BAD_TINT);
     this.ensureGhosts(ghosts.length);
     this.ghostGroup.visible = ghosts.length > 0 && this.heldGroup.visible;
     ghosts.forEach((g, i) => {
@@ -669,27 +841,88 @@ export class EditorView {
     return out;
   }
 
-  private findStackSnap(C: Vec3): { child: WorldAttachNode; childAt: WorldAttachNode; parent: WorldAttachNode } | null {
+  /** Best node to snap to: a free craft node, or an occupied joint to insert into (`through`/`occupant` set). */
+  private findStackSnap(C: Vec3): { child: WorldAttachNode; childAt: WorldAttachNode; parent: WorldAttachNode; through?: WorldAttachNode; occupant?: number } | null {
     const heldNodes = this.heldNodes;
     if (!heldNodes.length) return null;
     const craftNodes = this.craftNodes;
-    let best: { child: WorldAttachNode; childAt: WorldAttachNode; parent: WorldAttachNode; rank: number } | null = null;
+    let best: { child: WorldAttachNode; childAt: WorldAttachNode; parent: WorldAttachNode; through?: WorldAttachNode; occupant?: number; rank: number } | null = null;
     const pa = new THREE.Vector2(), pb = new THREE.Vector2();
+    const facing = (a: WorldAttachNode, b: WorldAttachNode) => a.direction.x * b.direction.x + a.direction.y * b.direction.y + a.direction.z * b.direction.z;
     for (const h of heldNodes) {
       const childAt: WorldAttachNode = { ...h, position: add(h.position, C) };
       if (!this.toScreen(childAt.position, pa)) continue;
       for (const c of craftNodes) {
         // Keep the player's orientation: only nodes that face each other (within ~60 degrees).
-        const facing = h.direction.x * c.direction.x + h.direction.y * c.direction.y + h.direction.z * c.direction.z;
-        if (facing > -0.5) continue;
+        if (facing(h, c) > -0.5) continue;
         if (!this.toScreen(c.position, pb)) continue;
         const d = pa.distanceTo(pb);
         if (d > SNAP_PX) continue;
         const rank = d + (h.size === c.size ? 0 : SNAP_PX * 0.6);
         if (!best || rank < best.rank) best = { child: h, childAt, parent: c, rank };
       }
+      // Occupied joints: insert between (a free node at the same distance wins).
+      const through = this.heldThrough.get(h);
+      if (!through) continue;
+      for (const j of this.jointNodes) {
+        if (facing(h, j) > -0.5) continue;
+        if (!this.toScreen(j.position, pb)) continue;
+        const d = pa.distanceTo(pb);
+        if (d > SNAP_PX * 0.75) continue;
+        const rank = d + SNAP_PX * 0.2 + (h.size === j.size ? 0 : SNAP_PX * 0.6);
+        if (!best || rank < best.rank) best = { child: h, childAt, parent: j, through, occupant: j.occupant, rank };
+      }
     }
     return best;
+  }
+
+  /** Undo an insert preview: put the parts it pushed back where the craft has them. */
+  private clearSplicePreview(snap: SessionView) {
+    if (!this.splicePreview.length) return;
+    for (const uid of this.splicePreview) {
+      const p = snap.craft.parts.find(q => q.uid === uid), e = this.partObjs.get(uid);
+      if (p && e) { toV(p.position, e.obj.position); toQ(p.rotation, e.obj.quaternion); }
+    }
+    this.splicePreview = [];
+  }
+
+  /**
+   * Insert preview: push the part on the joint (and its subtree, on every symmetric counterpart) to where it will
+   * re-attach, on the held part's far node. `D`/`T` place held space in the craft frame.
+   */
+  private previewSplice(snap: SessionView, parentUid: number, occupantUid: number, through: WorldAttachNode, D: Quat, T: Vec3) {
+    const parts = snap.craft.parts;
+    const parent = parts.find(p => p.uid === parentUid)!, occupant = parts.find(p => p.uid === occupantUid)!;
+    const at = { position: add(qRotate(D, through.position), T), direction: qRotate(D, through.direction) };
+    const sets: { parent: PartInstance; occupant: PartInstance; position: Vec3; direction: Vec3 }[] = [{ parent, occupant, ...at }];
+    if (parent.symmetryGroup !== undefined) for (const c of parts) {
+      if (c.symmetryGroup !== parent.symmetryGroup || c.uid === parent.uid) continue;
+      const o = parts.find(p => p.parent === c.uid && p.parentNode === occupant.parentNode && p.attachNode !== 'srf');
+      if (!o) continue;
+      const delta = qMul(c.rotation, qConj(parent.rotation));
+      sets.push({ parent: c, occupant: o, position: add(c.position, qRotate(delta, sub(at.position, parent.position))), direction: qRotate(delta, at.direction) });
+    }
+    for (const set of sets) {
+      const def = CATALOG.get(set.occupant.partId)!, node = def.attachNodes.find(n => n.id === set.occupant.attachNode);
+      if (!node) continue;
+      const t: Transform = alignNodes(worldNode(set.occupant, node), { ...through, position: set.position, direction: set.direction });
+      for (const uid of descendants(parts, set.occupant.uid)) {
+        const p = parts.find(q => q.uid === uid), e = this.partObjs.get(uid);
+        if (!p || !e) continue;
+        toV(add(qRotate(t.rotation, p.position), t.position), e.obj.position);
+        toQ(qNormalize(qMul(t.rotation, p.rotation)), e.obj.quaternion);
+        this.splicePreview.push(uid);
+      }
+    }
+  }
+
+  private setCursorLabel(text: string) {
+    if (text !== this.cursorText) {
+      this.cursorText = text;
+      this.cursorLabel.textContent = text;
+      this.cursorLabel.hidden = !text;
+    }
+    if (text) this.cursorLabel.style.transform = `translate(${this.mousePx.x + 18}px, ${this.mousePx.y + 20}px)`;
   }
 
   private toScreen(p: Vec3, out: THREE.Vector2): boolean {
@@ -713,15 +946,17 @@ export class EditorView {
     return fromV(hit);
   }
 
-  private pickPart(): { uid: number; hit: THREE.Intersection } | null {
+  /** Nearest part under the cursor; `detached` is the set-aside piece's index when `withDetached` and one is hit. */
+  private pickPart(withDetached = false): { uid: number; hit: THREE.Intersection; detached?: number } | null {
     this.raycaster.setFromCamera(this.mouse, this.camera);
     const objs = [...this.partObjs.values()].map((e) => e.obj);
     if (!this.session.isLinkPlacement()) objs.push(this.links.root);
+    if (withDetached) objs.push(this.detachedGroup);
     const hits = this.raycaster.intersectObjects(objs, true);
     for (const h of hits) {
       let o: THREE.Object3D | null = h.object;
       while (o && o.userData.uid === undefined) o = o.parent;
-      if (o) return { uid: o.userData.uid as number, hit: h };
+      if (o) return { uid: o.userData.uid as number, hit: h, ...(o.userData.detached !== undefined ? { detached: o.userData.detached as number } : {}) };
     }
     return null;
   }
@@ -769,7 +1004,28 @@ export class EditorView {
     const snap = this.session.getSnapshot();
     this.craftNodes = freeAttachNodes(snap.craft, CATALOG).filter(n => n.id !== 'srf');
     this.heldNodes = freeAttachNodes({ parts: this.heldParts }, CATALOG).filter(n => n.id !== 'srf');
+    this.jointNodes = [];
+    this.heldThrough.clear();
+    this.spliceMarker = null;
     if (!snap.held || this.session.isLinkPlacement()) return;
+    const byUid = new Map(snap.craft.parts.map(p => [p.uid, p]));
+    for (const c of snap.craft.parts) {
+      if (c.parent === undefined || !c.attachNode || c.attachNode === 'srf' || c.link) continue;
+      const parent = byUid.get(c.parent), node = parent && CATALOG.get(parent.partId)?.attachNodes.find(n => n.id === c.parentNode);
+      if (parent && node) this.jointNodes.push({ ...worldNode(parent, node), occupant: c.uid });
+    }
+    // The far node: roughly opposite the near one, preferring the same part (a tank's other end).
+    for (const h of this.heldNodes) {
+      let best: WorldAttachNode | undefined, score = Infinity;
+      for (const o of this.heldNodes) {
+        if (o === h) continue;
+        const dot = h.direction.x * o.direction.x + h.direction.y * o.direction.y + h.direction.z * o.direction.z;
+        if (dot > -0.5) continue;
+        const sc = dot + (o.uid === h.uid ? -10 : 0);
+        if (sc < score) { score = sc; best = o; }
+      }
+      if (best) this.heldThrough.set(h, best);
+    }
     const add = (n: WorldAttachNode, parent: THREE.Object3D, key: string) => {
       const mesh = new THREE.Mesh(this.markerGeo, this.markerMat);
       mesh.renderOrder = 11;
@@ -786,6 +1042,11 @@ export class EditorView {
     };
     for (const n of this.craftNodes) add(n, this.nodeGroup, `${n.uid}:${n.id}`);
     for (const n of this.heldNodes) add(n, this.heldGroup, `h${n.uid}:${n.id}`);
+    if (this.jointNodes.length && this.heldThrough.size) {
+      add(this.jointNodes[0], this.nodeGroup, 'splice');
+      this.spliceMarker = this.nodeMarkers[this.nodeMarkers.length - 1];
+      this.spliceMarker.mesh.visible = false;
+    }
   }
 
   // ------------------------------------------------------------------ highlights
@@ -799,25 +1060,30 @@ export class EditorView {
     const snap = this.session.getSnapshot();
     let set = new Set<number>();
     let uid: number | null = null;
+    let detached: number | null = null;
     if (!snap.held && this.mouseInside && !this.drag) {
       this.raycaster.setFromCamera(this.mouse, this.camera);
       const handle = this.gizmo?.pick(this.raycaster) ?? null;
       if (this.gizmo?.setHot(handle)) this.visualVersion++;
       this.gizmoHover = handle;
-      const p = handle ? null : this.pickPart();
-      if (p) {
+      const p = handle ? null : this.pickPart(snap.mode === 'build' && snap.tool === 'place');
+      if (p?.detached !== undefined) detached = p.detached;
+      else if (p) {
         uid = p.uid;
         // Highlight what a click would pick up: the part and its subtree (just the part in action-group mode).
         set = new Set([uid]);
         // Place/offset/rotate act on the whole symmetric set: highlight every counterpart too.
         if (snap.mode === 'build' && snap.tool !== 'reroot') for (const c of counterpartMaps(snap.craft.parts, uid, !this.altDown || snap.tool !== 'place')) set.add(c.part.uid);
+        // Ctrl/⌘ (place tool): just the part and what is surface-mounted on it, when it can come out alone.
+        const only = snap.mode === 'build' && snap.tool === 'place' && this.partOnlyDown && !this.altDown && this.session.canPickUpPartOnly(uid) ? new Set(set) : null;
         let grew = snap.mode === 'build' && snap.tool !== 'reroot';
         while (grew) {
           grew = false;
-          for (const q of snap.craft.parts) if (q.parent !== undefined && set.has(q.parent) && !set.has(q.uid)) { set.add(q.uid); grew = true; }
+          for (const q of snap.craft.parts) if (q.parent !== undefined && set.has(q.parent) && !set.has(q.uid) && !(only?.has(q.parent) && q.attachNode !== 'srf')) { set.add(q.uid); grew = true; }
         }
       }
     }
+    if (detached !== this.hoverDetached) { this.hoverDetached = detached; this.applyDetachedHighlights(); this.visualVersion++; }
     const changed = set.size !== this.hoverSet.size || [...set].some((u) => !this.hoverSet.has(u));
     if (changed) { this.hoverSet = set; this.applyHighlights(); }
     this.session.setHover(uid);
@@ -880,6 +1146,7 @@ export class EditorView {
     this.mousePx = { x: e.clientX - r.left, y: e.clientY - r.top };
     this.mouse.set((this.mousePx.x / r.width) * 2 - 1, -(this.mousePx.y / r.height) * 2 + 1);
     this.altDown = e.altKey;
+    this.partOnlyDown = IS_MAC ? e.metaKey : e.ctrlKey;
   }
 
   private onPointerDown = (e: PointerEvent) => {
@@ -949,6 +1216,9 @@ export class EditorView {
   private pan(amount: number) {
     this.gPanX += Math.cos(this.yaw) * amount;
     this.gPanZ -= Math.sin(this.yaw) * amount;
+    this.clampPan();
+  }
+  private clampPan() {
     const r = Math.hypot(this.gPanX, this.gPanZ);
     if (r > PAN_LIMIT) { this.gPanX *= PAN_LIMIT / r; this.gPanZ *= PAN_LIMIT / r; }
   }
@@ -970,14 +1240,20 @@ export class EditorView {
       }
       return;
     }
-    const pick = this.pickPart();
+    const pick = this.pickPart(snap.mode === 'build' && snap.tool === 'place');
+    if (pick?.detached !== undefined) {
+      this.hoverDetached = null;
+      if (alt) this.session.toast('Pick the piece up, then Alt+click it to copy', 'info');
+      else this.session.pickUpDetached(pick.detached, pick.uid);
+      return;
+    }
     if (pick && snap.mode === 'actions') { this.session.openPanel(pick.uid); return; }
     if (snap.tool === 'offset' || snap.tool === 'rotate') { this.session.setGizmo(pick?.uid ?? null); return; }
     if (snap.tool === 'reroot') { if (pick) this.session.reRoot(pick.uid); return; }
     if (pick) {
       this.hoverSet.clear();
       if (alt) this.session.copyPart(pick.uid);
-      else this.session.pickUp(pick.uid);
+      else this.session.pickUp(pick.uid, this.partOnlyDown);
     }
   }
 
@@ -1004,26 +1280,32 @@ export class EditorView {
     this.updateMouse(e);
     const unit = e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 600 : 1;
     const dx = e.deltaX * unit, dy = e.deltaY * unit;
+    // Zooming out stops at the hall's camera box (no dead travel to unwind when zooming back in).
+    const far = () => Math.max(MIN_DIST, Math.min(MAX_DIST, this.room(this.gYaw, this.gPitch, this.gPanX, this.gTargetY, this.gPanZ)));
     if (e.ctrlKey) {
-      this.gDist = THREE.MathUtils.clamp(this.gDist * Math.exp(THREE.MathUtils.clamp(dy, -60, 60) * 0.01), 3, 60);
+      this.gDist = THREE.MathUtils.clamp(this.gDist * Math.exp(THREE.MathUtils.clamp(dy, -60, 60) * 0.01), MIN_DIST, Math.max(this.gDist, far()));
     } else if (e.shiftKey) {
       this.gTargetY -= THREE.MathUtils.clamp((dy || dx) / 100, -1.5, 1.5) * Math.max(0.4, this.dist * 0.06);
       this.clampTarget();
     } else if (Math.abs(dx) > Math.abs(dy)) {
       this.pan(THREE.MathUtils.clamp(dx / 100, -1.5, 1.5) * Math.max(0.3, this.dist * 0.05));
     } else {
-      this.gDist = THREE.MathUtils.clamp(this.gDist * Math.pow(1.12, THREE.MathUtils.clamp(dy / 100, -1.5, 1.5)), 3, 60);
+      this.gDist = THREE.MathUtils.clamp(this.gDist * Math.pow(1.12, THREE.MathUtils.clamp(dy / 100, -1.5, 1.5)), MIN_DIST, dy > 0 ? Math.max(Math.min(this.gDist, MAX_DIST), far()) : MAX_DIST);
     }
   };
 
   private clampTarget() {
-    const top = this.lift + Math.max(4, this.session.getSnapshot().stats.bounds.max.y + 2);
-    this.gTargetY = THREE.MathUtils.clamp(this.gTargetY, 0.5, Math.min(HANGAR.height - 4, top));
+    const s = this.session.getSnapshot().stats;
+    let high = s.partCount ? (this.horizontal ? s.bounds.max.z : s.bounds.max.y) : 0;
+    if (!this.detachedBox.isEmpty()) high = Math.max(high, this.horizontal ? this.detachedBox.max.z : this.detachedBox.max.y);
+    const top = this.lift + Math.max(4, high + 2);
+    this.gTargetY = THREE.MathUtils.clamp(this.gTargetY, 0.5, Math.min(CAMERA_BOX.maxY - 2, top));
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
     if (isTyping(e.target) || e.repeat) return;
     this.altDown = e.altKey;
+    this.partOnlyDown = IS_MAC ? e.metaKey : e.ctrlKey;
     const s = this.session;
     const held = s.getSnapshot().held;
     if (matches('editorRedo', e)) { e.preventDefault(); s.redo(); return; }
@@ -1041,6 +1323,7 @@ export class EditorView {
     if (matches('editorDelete', e)) {
       e.preventDefault();
       if (held) s.deleteHeld();
+      else if (this.hoverDetached !== null) s.discardDetached(this.hoverDetached);
       else if (s.getSnapshot().hoverUid !== null) s.deletePart(s.getSnapshot().hoverUid!, true);
       return;
     }
@@ -1082,6 +1365,7 @@ export class EditorView {
 
   private onKeyUp = (e: KeyboardEvent) => {
     this.altDown = e.altKey;
+    this.partOnlyDown = IS_MAC ? e.metaKey : e.ctrlKey;
   };
 
   // ------------------------------------------------------------------ frame loop
@@ -1111,23 +1395,29 @@ export class EditorView {
     this.targetY += (this.gTargetY - this.targetY) * k;
     this.panX += (this.gPanX - this.panX) * k;
     this.panZ += (this.gPanZ - this.panZ) * k;
+    if (Math.abs(this.gFov - this.fov) > 1e-3) { this.fov += (this.gFov - this.fov) * k; this.applyFov(); }
     const target = this.target.set(this.panX, this.targetY, this.panZ);
     const cp = Math.cos(this.pitch);
-    const pos = this.camPos.set(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp).multiplyScalar(this.dist).add(target);
-    // Stay inside the hall.
-    pos.x = THREE.MathUtils.clamp(pos.x, -HANGAR.halfX + 2, HANGAR.halfX - 2);
-    pos.z = THREE.MathUtils.clamp(pos.z, -HANGAR.halfZ + 2, HANGAR.halfZ - 2);
-    pos.y = THREE.MathUtils.clamp(pos.y, 0.6, HANGAR.height - 3);
+    // Hall collision: shorten the orbit along the view ray so the camera stays in the open part of the hall (never
+    // behind walls, catwalks, the rear gantry or above the crane). Continuous in yaw/pitch, so orbiting stays smooth.
+    const dist = this.viewDist = Math.min(this.dist, this.room(this.yaw, this.pitch, target.x, target.y, target.z));
+    const pos = this.camPos.set(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp).multiplyScalar(dist).add(target);
+    pos.x = THREE.MathUtils.clamp(pos.x, CAMERA_BOX.minX, CAMERA_BOX.maxX);
+    pos.y = THREE.MathUtils.clamp(pos.y, CAMERA_BOX.minY, CAMERA_BOX.maxY);
+    pos.z = THREE.MathUtils.clamp(pos.z, CAMERA_BOX.minZ, CAMERA_BOX.maxZ);
     this.camera.position.copy(pos);
     this.camera.lookAt(target);
+    // Haze starts beyond the craft: big crafts viewed from far stay clear, the far walls still recede.
+    const fog = this.scene.fog as THREE.Fog;
+    fog.near = 26 + dist * 0.85; fog.far = fog.near + 140;
     // Shadow frustum follows the craft.
-    this.key.target.position.set(0, this.lift + 4, 0);
-    this.key.position.set(KEY_OFFSET.x, this.lift + 4 + KEY_OFFSET.y, KEY_OFFSET.z);
+    this.key.target.position.set(0, this.keyAimY, 0);
+    this.key.position.set(KEY_OFFSET.x * this.keyScale, this.keyAimY + KEY_OFFSET.y * this.keyScale, KEY_OFFSET.z * this.keyScale);
 
     const t0 = performance.now();
     // Raycasts only when something that affects them changed (mouse, camera, craft, held state, Alt).
     const cp2 = this.camera.position;
-    const key = `${this.mouse.x.toFixed(4)},${this.mouse.y.toFixed(4)},${cp2.x.toFixed(3)},${cp2.y.toFixed(3)},${cp2.z.toFixed(3)},${this.visualVersion},${this.altDown},${this.mouseInside},${!!this.drag}`;
+    const key = `${this.mouse.x.toFixed(4)},${this.mouse.y.toFixed(4)},${cp2.x.toFixed(3)},${cp2.y.toFixed(3)},${cp2.z.toFixed(3)},${this.visualVersion},${this.altDown},${this.partOnlyDown},${this.mouseInside},${!!this.drag}`;
     if (key !== this.frameKey) {
       this.frameKey = key;
       this.updateHover();
@@ -1137,13 +1427,14 @@ export class EditorView {
     const t1 = performance.now();
     // The hangar is static: skip GPU work while nothing moves (re-render at 2 Hz as a safety net).
     const settling = Math.abs(this.gYaw - this.yaw) + Math.abs(this.gPitch - this.pitch) + Math.abs(this.gTargetY - this.targetY) + Math.abs(this.gDist - this.dist) / Math.max(1, this.dist)
-      + Math.abs(this.gPanX - this.panX) + Math.abs(this.gPanZ - this.panZ) > 1e-5;
+      + Math.abs(this.gPanX - this.panX) + Math.abs(this.gPanZ - this.panZ) + Math.abs(this.gFov - this.fov) * 0.01 > 1e-5;
     const changed = key !== this.renderedKey || settling || !!this.snapKey;
     this.idleFor = changed ? 0 : this.idleFor + dt;
     if (!changed && this.idleFor < 0.5) return;
     if (!changed) this.idleFor = 0;
     this.renderedKey = key;
     this.updateNodePresentation();
+    if (this.badges.length) this.placeBadges();
     this.gizmo?.updateScale(this.camera, this.renderer.domElement.clientHeight);
     this.renderer.render(this.scene, this.camera);
     const t2 = performance.now();
@@ -1195,6 +1486,8 @@ export class EditorView {
     el.removeEventListener('wheel', this.onWheel);
     el.removeEventListener('contextmenu', preventDefault);
     this.unwatchContext();
+    for (const b of this.badges) b.remove();
+    this.cursorLabel.remove();
     this.hangar.dispose();
     this.envRT.dispose();
     this.links.dispose();
@@ -1213,3 +1506,5 @@ export class EditorView {
 }
 
 const preventDefault = (e: Event) => e.preventDefault();
+/** Ray parameter where a ray from `o` along `d` leaves the slab [lo, hi] (Infinity when parallel). */
+const slab = (d: number, o: number, lo: number, hi: number) => d > 1e-6 ? (hi - o) / d : d < -1e-6 ? (lo - o) / d : Infinity;
