@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { bindingLabel, isTyping, matches } from '../../input/bindings';
 import { frameProfiler as prof } from '../../util/frameProfiler';
 import type { FlightData } from '../../game/flightData';
@@ -340,7 +340,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
   const portMarks = useDockingMarks(dockingShown ? t.docking : null);
 
   return (
-    <div className="overlay hud" style={{ width: `${100 / settings.hudScale}%`, height: `${100 / settings.hudScale}%`, transform: `scale(${settings.hudScale})`, transformOrigin: 'top left' }}>
+    <div className="overlay hud" style={{ width: `${100 / settings.hudScale}%`, height: `${100 / settings.hudScale}%`, transform: `scale(${settings.hudScale})`, transformOrigin: 'top left', '--hud-scale': settings.hudScale } as CSSProperties}>
       {/* Top-left: time warp and clocks; in map view the maneuver planner; docking indicator; staging at the bottom. */}
       <div ref={leftRef} className={`hud-left${t.mapMode ? ' map' : ''}`} style={t.mapMode && sizes.planner?.w ? { width: sizes.planner.w } : undefined}>
         <TimeControl t={t} cb={cb} />
@@ -376,7 +376,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
       </div>
 
       {/* Top-right: application toolbar, its docked windows; bottom-right: crew portraits, map and camera. */}
-      <div className="hud-right">
+      <div className={`hud-right${t.mapMode ? ' map' : ''}`}>
         <AppToolbar apps={hudApps} open={apps.state.open} onToggle={apps.toggle} actions={actions} />
         <div className="app-stack">
           {docked.map(a => <AppWindow key={a.id} app={a} scale={settings.hudScale} escTarget={a.id === escTarget} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} size={sizes[a.id]} onResize={size => setSize(a.id, size)} />)}

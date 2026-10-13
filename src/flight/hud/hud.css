@@ -130,6 +130,9 @@
 
 /* ------------------------------------------------------------ bottom-right: crew and view buttons */
 .crew-dock { margin-top: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none !important; flex-shrink: 0; }
+/* Map view: the dock grows to cover the map readout card (screen px, above MAP; height measured in MapOverlay), so
+   docked windows shrink above it instead of sliding under it. */
+.hud-right.map .crew-dock { justify-content: flex-end; min-height: calc((var(--map-readout-h, 110px) + 66px) / var(--hud-scale, 1) - 10px); }
 .crew-views { display: flex; gap: 6px; }
 .view-btn { display: flex; align-items: center; gap: 6px; padding: 6px 11px; font-size: 11.5px; letter-spacing: .06em; border-radius: var(--radius-sm); border: 1px solid var(--panel-border); background: var(--panel); color: var(--text); cursor: pointer; }
 .view-btn:hover { border-color: var(--accent-border); }

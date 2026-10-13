@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampSize, dragSize, keySize, limits, parseSizes, withSize, KEY_STEP, KEY_STEP_COARSE } from '../src/flight/hud/windowSize';
+import { clampPos, clampSize, dragSize, keySize, limits, parseSizes, withSize, KEY_STEP, KEY_STEP_COARSE } from '../src/flight/hud/windowSize';
 
 const lim = limits({ minW: 200, maxW: 500, minH: 100, maxH: 600 });
 const start = { w: 270, h: 300 };
@@ -45,5 +45,22 @@ describe('window resize', () => {
     expect(s).toEqual({ resources: { w: 300 } });
     expect(withSize(s, 'resources', null)).toEqual({});
     expect(withSize(s, 'resources', {})).toEqual({});
+  });
+});
+
+describe('floating window position', () => {
+  const host = { w: 1440, h: 900 };
+  it('keeps a window that fits unchanged (same object)', () => {
+    const p = { x: 100, y: 200 };
+    expect(clampPos(p, { w: 270, h: 300 }, host)).toBe(p);
+  });
+  it('pulls a window hanging off the right or bottom edge fully back in', () => {
+    expect(clampPos({ x: 1300, y: 800 }, { w: 270, h: 300 }, host)).toEqual({ x: 1170, y: 600 });
+  });
+  it('pulls a window off the top-left back to the origin', () => {
+    expect(clampPos({ x: -40, y: -10 }, { w: 270, h: 300 }, host)).toEqual({ x: 0, y: 0 });
+  });
+  it('keeps the title bar on screen when the window is larger than the viewport', () => {
+    expect(clampPos({ x: 50, y: 50 }, { w: 270, h: 1200 }, host)).toEqual({ x: 50, y: 0 });
   });
 });

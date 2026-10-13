@@ -100,7 +100,16 @@ const ReadoutView = memo(function ReadoutView({ controller: c, title, path, orbi
   const ui = c.mapUi;
   const [help, setHelp] = useState(false);
   useEscape(() => setHelp(false), help, 'panel');
-  return <div className="panel map-readout" aria-label="Map focus">
+  const ref = useRef<HTMLDivElement>(null);
+  // Publish the card's height so the HUD's docked app windows stop above it (fires on size changes only).
+  useEffect(() => {
+    const el = ref.current, root = document.documentElement;
+    if (!el) return;
+    const ro = new ResizeObserver(() => root.style.setProperty('--map-readout-h', `${Math.ceil(el.offsetHeight)}px`));
+    ro.observe(el);
+    return () => { ro.disconnect(); root.style.removeProperty('--map-readout-h'); };
+  }, []);
+  return <div ref={ref} className="panel map-readout" aria-label="Map focus">
     {help && <MapKeysHelp onClose={() => setHelp(false)} />}
     <span className="title">{title}</span>
     <div className="map-readout-head">

@@ -81,3 +81,13 @@ export function withSize(store: SizeStore, id: string, size: WinSize | null): Si
   else next[id] = size;
   return next;
 }
+
+/**
+ * Position that keeps a floating window of size `win` fully inside a `host` area (all in HUD px). When the window is
+ * larger than the host, its top-left corner wins (the title bar stays reachable). Returns `pos` itself if it fits.
+ */
+export function clampPos(pos: { x: number; y: number }, win: { w: number; h: number }, host: { w: number; h: number }): { x: number; y: number } {
+  const x = Math.round(Math.max(0, Math.min(host.w - win.w, pos.x)));
+  const y = Math.round(Math.max(0, Math.min(host.h - win.h, pos.y)));
+  return x === pos.x && y === pos.y ? pos : { x, y };
+}

@@ -3,7 +3,7 @@ import { AppIcon, type AppGlyph } from './glyphs';
 import { useEscape } from '../../ui/nav/escape';
 import { isTyping, matches } from '../../input/bindings';
 import { ResizeGrip } from './Resizable';
-import { limits as sizeLimits, type SizeLimits, type WinSize } from './windowSize';
+import { clampPos, limits as sizeLimits, type SizeLimits, type WinSize } from './windowSize';
 
 export type AppId = 'alarms' | 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms' | 'station';
 
@@ -125,6 +125,8 @@ export function AppWindow({ app, pos, scale, escTarget = false, size, onClose, o
   const ref = useRef<HTMLElement>(null);
   const drag = useRef<{ dx: number; dy: number; id: number; x: number; y: number; x0: number; y0: number; style: string; scale: number; left: number; top: number; maxX: number; maxY: number } | null>(null);
   const frame = useRef(0);
+  const onMoveRef = useRef(onMove);
+  onMoveRef.current = onMove;
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
   const paint = () => {
     frame.current = 0;
@@ -140,7 +142,7 @@ export function AppWindow({ app, pos, scale, escTarget = false, size, onClose, o
     drag.current = { dx: (e.clientX - r.left) / effectiveScale, dy: (e.clientY - r.top) / effectiveScale, id: e.pointerId,
       x: (r.left - h.left) / effectiveScale, y: (r.top - h.top) / effectiveScale, x0: 0, y0: 0, style: el.style.cssText,
       scale: effectiveScale, left: h.left, top: h.top,
-      maxX: h.width / effectiveScale - el.offsetWidth, maxY: h.height / effectiveScale - 40 };
+      maxX: Math.max(0, h.width / effectiveScale - el.offsetWidth), maxY: Math.max(0, h.height / effectiveScale - el.offsetHeight) };
     drag.current.x0 = drag.current.x; drag.current.y0 = drag.current.y;
     // Keep the same DOM node/capture while undocking. Persist and reparent only on release.
     el.style.position = 'fixed';
@@ -166,6 +168,22 @@ export function AppWindow({ app, pos, scale, escTarget = false, size, onClose, o
     // A click (or the first half of a double-click) on a docked title must not undock it.
     if (Math.abs(d.x - d.x0) + Math.abs(d.y - d.y0) > 3) onMove(d.x, d.y);
   };
+  // A floating window stays fully on screen: after a move or resize, on load (a position saved in a larger window)
+  // and when the browser window shrinks. Runs on those events only, never per frame.
+  const px = pos?.x, py = pos?.y;
+  useEffect(() => {
+    if (px === undefined || py === undefined) return;
+    const fit = () => {
+      const el = ref.current, host = el?.closest('.overlay') as HTMLElement | null | undefined;
+      if (!el || !host || drag.current || el.classList.contains('resizing')) return;
+      const p = { x: px, y: py };
+      const next = clampPos(p, { w: el.offsetWidth, h: el.offsetHeight }, { w: host.clientWidth, h: host.clientHeight });
+      if (next !== p) onMoveRef.current(next.x, next.y);
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [px, py, size?.w, size?.h]);
   const lim = sizeLimits(app.limits);
   const sized = size?.w !== undefined || size?.h !== undefined;
   const target = () => ref.current;
