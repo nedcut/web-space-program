@@ -37,13 +37,13 @@ export class ParticlePool {
     this.colors = new Float32Array(capacity * 4);
     this.accelerations = new Float32Array(capacity * 3);
     this.segments = new Float32Array(capacity * 4);
-    this.columns = new Float32Array(capacity * 3);
+    this.columns = new Float32Array(capacity * 4);
     const quad = new THREE.PlaneGeometry(1, 1);
     const geometry = new THREE.InstancedBufferGeometry();
     geometry.index = quad.index;
     geometry.setAttribute('position', quad.attributes.position);
     geometry.instanceCount = capacity;
-    for (const [name, array, size] of [['spawnPosition', this.positions, 3], ['velocity', this.velocities, 3], ['params', this.params, 4], ['color', this.colors, 4], ['acceleration', this.accelerations, 3], ['segment', this.segments, 4], ['column', this.columns, 3]] as const) {
+    for (const [name, array, size] of [['spawnPosition', this.positions, 3], ['velocity', this.velocities, 3], ['params', this.params, 4], ['color', this.colors, 4], ['acceleration', this.accelerations, 3], ['segment', this.segments, 4], ['column', this.columns, 4]] as const) {
       geometry.setAttribute(name, new THREE.InstancedBufferAttribute(array, size).setUsage(THREE.DynamicDrawUsage));
     }
     const material = new THREE.ShaderMaterial({ transparent: true, depthWrite: false,
@@ -54,16 +54,16 @@ export class ParticlePool {
         #include <common>
         #include <logdepthbuf_pars_vertex>
         attribute vec3 spawnPosition; attribute vec3 velocity; attribute vec3 acceleration;
-        attribute vec4 params; attribute vec4 color; attribute vec4 segment; attribute vec3 column;
+        attribute vec4 params; attribute vec4 color; attribute vec4 segment; attribute vec4 column;
         uniform float time; uniform vec3 groundNormal; uniform float groundOffset; uniform vec3 glowColor;
         varying float groundHeight; varying float radius; varying vec3 tint; varying float alpha; varying float hot;
         varying vec2 local; varying float span; varying vec2 axis; varying float phase; varying float erosion; varying vec3 glow;
-        varying float along; varying float round;
+        varying vec3 cloud; varying float round;
         // Columns billow out quickly behind the nozzle, then spread steadily; puffs grow linearly.
-        float grow(float size, float age) { return size * mix(.43, .5, column.z) * (1. + column.z * 1.2 * (1. - exp(-age * 1.5)) + max(0.,params.w)*age); }
+        float grow(float size, float age) { return size * mix(.43, .5, column.w) * (1. + column.w * 2.5 * (1. - exp(-age * 1.2)) + max(0.,params.w)*age); }
         float fade(float age) {
           float life = age / max(.001, params.y);
-          float body = column.z > .5 ? 1. - life*life : pow(max(0.,1.-life),1.3);
+          float body = column.w > .5 ? 1. - life*life : pow(max(0.,1.-life),1.3);
           return step(0.,age) * (1.-step(1.,life)) * body * min(1.,age*8.);
         }
         void main() {
@@ -86,19 +86,23 @@ export class ParticlePool {
           float r = mix(rA, rB, t);
           // Round caps only where the segment is short on screen (puffs, end-on columns). Long column joints overlap by
           // a fraction of a radius and cross-fade linearly, so chained segments read as one seamless body.
-          round = 1. - smoothstep(0., 2.*r, len);
-          float cap = r * mix(column.z * .6, 1.3, round);
+          round = 1. - smoothstep(0., 2.*max(rA,rB), len);
+          float cap = r * mix(column.w * .6, 1.3, round);
           vec4 mv = vec4(0.,0.,0.,1.);
           float s = mix(-cap, len + cap, t);
           mv.xy = a.xy + axis * s + perp * position.y * 2.6 * r;
           mv.z = mix(a.z, b.z, clamp(s / max(len,1e-4), 0., 1.));
           float eye = smoothstep(2.*r, 4.*r + 1., -mv.z) * step(0., -a.z - nearA*.99) * step(0., -b.z - nearB*.99);
+          vec4 eyePosition = mv;
           mv.xyz *= valid;
           gl_Position = projectionMatrix * mv;
           vec3 groundView = (modelViewMatrix * vec4(groundNormal * groundOffset, 1.)).xyz;
           groundHeight = dot(mv.xyz - groundView, normalize((viewMatrix * vec4(groundNormal,0.)).xyz));
           local = vec2(s, position.y * 2.6);
-          along = mix(column.x, column.y, clamp(s / max(len,1e-4), 0., 1.)) + s - clamp(s, 0., len);
+          // Noise lives in the smoke's own frame (billboard point minus air drift): view-independent, continuous across
+          // joints, so billows neither swim with the camera nor alias when a column is seen end-on.
+          // column.xyz: the node's float64-derived offset from its column's first node (puffs: a random seed).
+          cloud = column.xyz + transpose(mat3(modelViewMatrix)) * (eyePosition.xyz - modelViewMatrix[3].xyz) - p;
           span = len; radius = r;
           float age = mix(ageA, max(0.,ageB), t);
           float life = age / max(.001, params.y);
@@ -107,7 +111,7 @@ export class ParticlePool {
           tint = mix(color.rgb, color.rgb * vec3(1.,.16,.025), hot * smoothstep(.1,1.,life));
           glow = glowColor * exp(-age * 8.) * (1. - hot);
           erosion = smoothstep(.15, 1., life);
-          phase = (1. - column.z) * (params.x * 17.31 + dot(velocity,vec3(.13,.17,.19)));
+          phase = (1. - column.w) * (params.x * 17.31 + dot(velocity,vec3(.13,.17,.19)));
           #include <logdepthbuf_vertex>
         }`,
       fragmentShader: `
@@ -116,27 +120,33 @@ export class ParticlePool {
         uniform vec3 sunDirection; uniform vec3 sunColor; uniform vec3 skyColor; uniform float time;
         varying float groundHeight; varying float radius; varying vec3 tint; varying float alpha; varying float hot;
         varying vec2 local; varying float span; varying vec2 axis; varying float phase; varying float erosion; varying vec3 glow;
-        varying float along; varying float round;
-        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-        float vnoise(vec2 p) {
-          vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
-          return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+        varying vec3 cloud; varying float round;
+        // Arithmetic hash (no sin): stable precision on mobile/Apple GPUs and cheap.
+        float hash(vec3 p) { p = fract(p * .1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+        float vnoise(vec3 p) {
+          vec3 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+          return mix(mix(mix(hash(i), hash(i+vec3(1,0,0)), f.x), mix(hash(i+vec3(0,1,0)), hash(i+vec3(1,1,0)), f.x), f.y),
+                     mix(mix(hash(i+vec3(0,0,1)), hash(i+vec3(1,0,1)), f.x), mix(hash(i+vec3(0,1,1)), hash(i+vec3(1,1,1)), f.x), f.y), f.z);
         }
         void main() {
           if(alpha < .002) discard;
           #include <logdepthbuf_fragment>
-          float beyond = (max(0., -local.x) + max(0., local.x - span)) * round;
-          vec2 q = vec2(beyond / max(radius,1e-3), local.y);
-          float r2 = dot(q,q); if(r2 > 1.69) discard;
-          // Joint cross-fade: linear ramps across each overlapping end (1 inside the segment; round puffs unaffected).
           float cap = radius * mix(.6, 1.3, round);
+          float beyond = (max(0., -local.x) + max(0., local.x - span)) / max(cap,1e-3);
+          vec2 q = vec2(beyond * 1.3 * round, local.y);
+          float r2 = dot(q,q); if(r2 > 1.6) discard;
+          // Joint cross-fade weights (1 inside the segment, linear across each overlapping end; puffs unaffected).
           float joint = mix(clamp((local.x + cap) / (2.*cap), 0., 1.) * clamp((span + cap - local.x) / (2.*cap), 0., 1.), 1., round);
-          // Two octaves of smooth value noise, continuous along the column (distance from its start in radii):
-          // lumpy, slowly evolving billows with a ragged silhouette.
-          vec2 np = vec2(along / max(radius,1e-3) * .8 + phase, local.y * 1.1 + phase * .37);
-          float n = vnoise(np * 1.4 + time * .04) * .65 + vnoise(np * 3.3 - time * .07) * .35;
-          float body = 1. - r2;
-          float density = smoothstep(0., .6 + .3*erosion, body + (n - .5) * .9 - erosion * .3) * joint;
+          // Two octaves of value noise in radii plus a low-frequency bulge, each fading out before it aliases.
+          vec3 np = cloud / max(radius, 1e-3) + vec3(phase, phase * .37, time * .03);
+          float fw = length(fwidth(np));
+          float o1 = 1. - smoothstep(.2, .5, fw * 1.1), o2 = 1. - smoothstep(.2, .5, fw * 2.6);
+          float n = .5 + (vnoise(np * 1.1) - .5) * .7 * o1 + (vnoise(np * 2.6 + 7.1) - .5) * .4 * o2;
+          float bulge = 1. + (vnoise(np * .45 + 3.3) - .5) * .5 * (1. - smoothstep(.2, .5, fw * .45));
+          float body = 1. - r2 / (bulge * bulge);
+          // Zero at the quad border whatever the noise does: no hard cuts.
+          float window = (1. - smoothstep(.75, 1., beyond)) * (1. - smoothstep(1.05, 1.3, abs(local.y)));
+          float density = smoothstep(0., .6 + .3*erosion, body + (n - .5) * .9 - erosion * .3) * window;
           // Fire / sparks: emissive, simple soft disc.
           vec3 color;
           if (hot > .5) color = tint * (.8 + .4*n);
@@ -149,7 +159,9 @@ export class ParticlePool {
             color = tint * (sunColor * (wrap * (.65 + .35*n) + forward) + skyColor * (.75 + .25*normal.y)) + glow;
           }
           float softGround = smoothstep(-.1, max(.3,radius*.35), groundHeight);
-          gl_FragColor = vec4(color, alpha * density * softGround);
+          // Overlapping joint ends combine to exactly the segment opacity under 'over' blending: 1-(1-a)^w.
+          float a = min(.999, alpha * density * softGround);
+          gl_FragColor = vec4(color, 1. - pow(1. - a, joint));
         }` });
     this.object = new THREE.Mesh(geometry, material);
     this.object.name = 'flight-particles';
@@ -176,14 +188,15 @@ export class ParticlePool {
     this.params[k] = time; this.params[k+1] = life; this.params[k+2] = size; this.params[k+3] = growth;
     this.colors[k] = color.r; this.colors[k+1] = color.g; this.colors[k+2] = color.b; this.colors[k+3] = opacity;
     this.segments[k] = 0; this.segments[k+1] = 0; this.segments[k+2] = 0; this.segments[k+3] = 0;
-    this.columns[j] = 0; this.columns[j+1] = 0; this.columns[j+2] = 0;
+    this.columns[k] = (i*7919)%4001; this.columns[k+1] = (i*104729)%3989; this.columns[k+2] = (time*977)%3967; this.columns[k+3] = 0;
     this.markDirty(i);
     return i;
   }
   /** Stretch a particle into a segment ending `offset` metres away at a node `delay` s younger (trail heads). */
-  setSegment(index: number, offset: Vec3, delay: number, opacity?: number, from = 0, to = 0) {
-    const k = index * 4, j = index * 3;
-    this.columns[j] = from; this.columns[j+1] = to; this.columns[j+2] = 1;
+  setSegment(index: number, offset: Vec3, delay: number, opacity?: number, seed?: Vec3) {
+    const k = index * 4;
+    if (seed) { this.columns[k] = seed.x; this.columns[k+1] = seed.y; this.columns[k+2] = seed.z; }
+    this.columns[k+3] = 1;
     this.segments[k] = offset.x; this.segments[k+1] = offset.y; this.segments[k+2] = offset.z; this.segments[k+3] = delay;
     if (opacity !== undefined) this.colors[k+3] = opacity;
     this.markDirty(index);

@@ -15,6 +15,7 @@ export function isBurstEvent(event: VesselEvent): event is BurstEvent {
 
 export const FX_BUDGET = { low: { count: 128, rate: 12 }, medium: { count: 512, rate: 40 }, high: { count: 1024, rate: 80 }, ultra: { count: 2048, rate: 120 } } as const;
 const smoke = new THREE.Color(.38,.36,.32), steam = new THREE.Color(.8,.82,.85), fire = new THREE.Color(8,2,.15);
+const eclipseFree = (sunIntensity: number) => Math.min(1, sunIntensity/3);
 /** Column albedo: bright alumina-white solids, a warm grey for hydrocarbons, near-white vapour for clean fuels. */
 const solidSmoke = new THREE.Color(.86,.85,.83), fuelSmoke = new THREE.Color(.62,.6,.57), vapour = new THREE.Color(.88,.9,.93), column = new THREE.Color();
 const skyDay = new THREE.Color(.3,.38,.52), skySpace = new THREE.Color(.025,.028,.035);
@@ -30,13 +31,15 @@ export class FlightFx {
    * The vessel's single smoke column: a chain of segment particles in the air frame. `node` is the newest node,
    * drifted with the air; `head` is the particle stretched from it to the current nozzle every frame.
    */
-  private readonly column = { active: false, head: -1, node: new THREE.Vector3(), time: 0, distance: 0 };
+  private readonly column = { active: false, head: -1, node: new THREE.Vector3(), time: 0, start: new THREE.Vector3() };
   private readonly columnNozzle = new THREE.Vector3();
   private readonly columnExhaust = new THREE.Vector3();
   private readonly offset = new THREE.Vector3();
+  private readonly seed3 = new THREE.Vector3();
   private readonly sunRadiance = new THREE.Color();
   private readonly sky = new THREE.Color();
   private readonly glow = new THREE.Color();
+  private readonly dimGlow = new THREE.Color();
   /**
    * Burst flash. It stays visible at zero intensity between bursts: toggling visibility would change
    * the scene's light count, which is part of every shader key, and recompile all lit materials
@@ -241,16 +244,15 @@ export class FlightFx {
     this.velocity.copy(this.ambientVelocity).addScaledVector(this.up,.4);
     const interval = Math.max(.2, style.life/(Math.max(8,this.pool.trailCapacity)*.8));
     if (c.active) {
-      c.node.addScaledVector(this.velocity,this.lastStep);
+      c.node.addScaledVector(this.velocity,this.lastStep); c.start.addScaledVector(this.velocity,this.lastStep);
       this.offset.copy(this.point).sub(c.node);
       const age = this.clock-c.time, length = this.offset.length();
-      this.pool.setSegment(c.head,this.offset,age,alpha,c.distance,c.distance+length);
+      this.pool.setSegment(c.head,this.offset,age,alpha);
       if (!((age>=interval && length>=style.size*.5) || age>=style.life*.4 || length>600)) return;
-      c.distance += length;
-    } else c.distance = 0;
+    } else c.start.copy(this.point);
     column.copy(solid/thrust>.3 ? solidSmoke : clean/thrust>.5 ? vapour : fuelSmoke);
     c.head = this.pool.emit(this.point,this.velocity,this.clock,style.life,style.size,style.growth,column,undefined,alpha,true);
-    this.pool.setSegment(c.head,this.offset.set(0,0,0),0,alpha,c.distance,c.distance);
+    this.pool.setSegment(c.head,this.offset.set(0,0,0),0,alpha,this.seed3.copy(this.point).sub(c.start));
     c.node.copy(this.point); c.time = this.clock; c.active = true;
   }
   /** Sun and sky light for smoke shading; `sun` is the direction towards the sun in scene space. */
@@ -260,7 +262,9 @@ export class FlightFx {
     const day = Math.min(1,Math.max(0,(elevation+.08)/.3));
     // Skylight tracks daylight and air; a low sun reddens it slightly.
     this.sky.copy(skyDay).lerp(sunColor,.25*(1-day)).multiplyScalar(day*Math.min(1,air*1.5)).add(skySpace);
-    this.pool.light(sun,camera,this.sunRadiance,this.sky,this.glow);
+    // Flame light on young smoke only shows against a dim sky.
+    this.dimGlow.copy(this.glow).multiplyScalar(1-.75*day*eclipseFree(sunIntensity));
+    this.pool.light(sun,camera,this.sunRadiance,this.sky,this.dimGlow);
   }
   /** Render-only nozzle selection mirrors the sim mixer; never consumes propellant. */
   rcs(v: VesselState, enabled: boolean, translation: {tx:number;ty:number;tz:number}) {

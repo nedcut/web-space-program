@@ -26,7 +26,7 @@ export function trailStyle(thrust: number, density: number, solidShare: number) 
     /** Birth diameter, m. */
     size: (2 + 2.2 * Math.sqrt(Math.max(0, thrust) / 1e5)) * (1 + .4 * solidShare),
     /** Linear radius growth per second of age. */
-    growth: (.28 + .2 * solidShare) * (1 + 1.5 * (1 - air)),
+    growth: (.45 + .25 * solidShare) * (1 + 1.5 * (1 - air)),
     opacity: fade * fade * (3 - 2 * fade),
   };
 }
