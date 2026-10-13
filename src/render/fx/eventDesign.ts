@@ -20,7 +20,7 @@ export const TRAIL_OPACITY: Readonly<Record<string, number>> = { solid: 1, kerol
  */
 export function trailStyle(thrust: number, density: number, solidShare: number) {
   const air = Math.sqrt(Math.min(1, Math.max(0, density) / 1.225));
-  const fade = Math.min(1, Math.max(0, (density - .01) / .07));
+  const fade = Math.min(1, Math.max(0, (density - .004) / .026));
   return {
     life: 20 + 70 * air,
     /** Birth diameter, m. */

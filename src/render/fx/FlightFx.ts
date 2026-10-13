@@ -234,7 +234,7 @@ export class FlightFx {
   private updateColumn(v: VesselState, thrust: number, solid: number, opacity: number, clean: number, throttle: number, density: number, reset: boolean) {
     const c = this.column;
     if (reset) c.active = false;
-    if (thrust<=0 || density<=.01) { c.active = false; return; }
+    if (thrust<=0 || density<=.004) { c.active = false; return; }
     const style = trailStyle(thrust,density,solid/thrust);
     const alpha = style.opacity*throttle*opacity/thrust;
     if (alpha<=.002) { c.active = false; return; }

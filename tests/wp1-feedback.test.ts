@@ -48,7 +48,7 @@ describe('weight and payoff', () => {
   it('thins, spreads and shortens ascent smoke in thin air; solids are denser', () => {
     const sea=trailStyle(1e6,1.225,0), thin=trailStyle(1e6,.05,0), solid=trailStyle(1e6,1.225,1);
     expect(thin.life).toBeLessThan(sea.life); expect(thin.growth).toBeGreaterThan(sea.growth);
-    expect(trailStyle(1e6,.01,0).opacity).toBe(0); expect(sea.opacity).toBe(1);
+    expect(trailStyle(1e6,.004,0).opacity).toBe(0); expect(trailStyle(1e6,.03,0).opacity).toBe(1); expect(sea.opacity).toBe(1);
     expect(solid.size).toBeGreaterThan(sea.size);
   });
   it('spawns at least five template fragments, rebases in float64, retires and reuses them', () => {
