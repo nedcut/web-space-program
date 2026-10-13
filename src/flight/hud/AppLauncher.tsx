@@ -123,7 +123,7 @@ export function AppToolbar({ apps, open, onToggle, actions }: { apps: HudApp[]; 
  */
 export function AppWindow({ app, pos, scale, escTarget = false, size, onClose, onMove, onDock, onResize }: { app: HudApp; pos?: { x: number; y: number }; scale: number; escTarget?: boolean; size?: WinSize; onClose(): void; onMove(x: number, y: number): void; onDock(): void; onResize(size: WinSize | null): void }) {
   const ref = useRef<HTMLElement>(null);
-  const drag = useRef<{ dx: number; dy: number; id: number; x: number; y: number; style: string; scale: number; left: number; top: number; maxX: number; maxY: number } | null>(null);
+  const drag = useRef<{ dx: number; dy: number; id: number; x: number; y: number; x0: number; y0: number; style: string; scale: number; left: number; top: number; maxX: number; maxY: number } | null>(null);
   const frame = useRef(0);
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
   const paint = () => {
@@ -138,9 +138,10 @@ export function AppWindow({ app, pos, scale, escTarget = false, size, onClose, o
     const r = el.getBoundingClientRect(), h = host.getBoundingClientRect();
     const effectiveScale = h.width / Math.max(1, host.clientWidth) || scale;
     drag.current = { dx: (e.clientX - r.left) / effectiveScale, dy: (e.clientY - r.top) / effectiveScale, id: e.pointerId,
-      x: (r.left - h.left) / effectiveScale, y: (r.top - h.top) / effectiveScale, style: el.style.cssText,
+      x: (r.left - h.left) / effectiveScale, y: (r.top - h.top) / effectiveScale, x0: 0, y0: 0, style: el.style.cssText,
       scale: effectiveScale, left: h.left, top: h.top,
       maxX: h.width / effectiveScale - el.offsetWidth, maxY: h.height / effectiveScale - 40 };
+    drag.current.x0 = drag.current.x; drag.current.y0 = drag.current.y;
     // Keep the same DOM node/capture while undocking. Persist and reparent only on release.
     el.style.position = 'fixed';
     el.style.zIndex = '12';
@@ -162,7 +163,8 @@ export function AppWindow({ app, pos, scale, escTarget = false, size, onClose, o
     cancelAnimationFrame(frame.current); frame.current = 0;
     if (ref.current) ref.current.style.cssText = d.style;
     drag.current = null;
-    onMove(d.x, d.y);
+    // A click (or the first half of a double-click) on a docked title must not undock it.
+    if (Math.abs(d.x - d.x0) + Math.abs(d.y - d.y0) > 3) onMove(d.x, d.y);
   };
   const lim = sizeLimits(app.limits);
   const sized = size?.w !== undefined || size?.h !== undefined;

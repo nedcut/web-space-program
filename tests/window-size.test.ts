@@ -24,13 +24,18 @@ describe('window resize', () => {
     expect(clampSize({ w: Number.NaN, h: 150.6 }, lim)).toEqual({ h: 151 });
   });
   it('arrow keys move the grip; Shift is coarse; Home resets; other keys pass through', () => {
-    expect(keySize(start, 'bl', 'ArrowLeft', false, lim)).toEqual({ w: 270 + KEY_STEP, h: 300 });
-    expect(keySize(start, 'br', 'ArrowLeft', false, lim)).toEqual({ w: 270 - KEY_STEP, h: 300 });
-    expect(keySize(start, 'br', 'ArrowDown', true, lim)).toEqual({ w: 270, h: 300 + KEY_STEP_COARSE });
+    expect(keySize(start, 'bl', 'ArrowLeft', false, lim)).toEqual({ w: 270 + KEY_STEP });
+    expect(keySize(start, 'br', 'ArrowLeft', false, lim)).toEqual({ w: 270 - KEY_STEP });
+    expect(keySize(start, 'br', 'ArrowDown', true, lim)).toEqual({ h: 300 + KEY_STEP_COARSE });
     expect(keySize(start, 'r', 'ArrowDown', false, lim)).toBeNull();
     expect(keySize(start, 'r', 'ArrowRight', false, lim)).toEqual({ w: 270 + KEY_STEP });
     expect(keySize(start, 'r', 'Home', false, lim)).toBe('reset');
     expect(keySize(start, 'r', 'a', false, lim)).toBeNull();
+  });
+  it('keys step from the stored size, not a squeezed measured one', () => {
+    // Docked column squeezed a stored 400 px window to 300 px: ↑ shrinks from 400, the width stays stored.
+    expect(keySize(start, 'bl', 'ArrowUp', false, lim, { w: 320, h: 400 })).toEqual({ w: 320, h: 400 - KEY_STEP });
+    expect(keySize(start, 'bl', 'ArrowLeft', false, lim, { h: 400 })).toEqual({ w: 270 + KEY_STEP, h: 400 });
   });
   it('parses stored sizes defensively and removes reset entries', () => {
     expect(parseSizes('not json')).toEqual({});

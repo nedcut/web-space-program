@@ -39,20 +39,19 @@ export function dragSize(start: { w: number; h: number }, edge: ResizeEdge, dx: 
 
 /**
  * Keyboard resize on a grip: arrows move the grip (so on a left-edge grip ← widens), Shift for a coarse step,
- * Home resets. Returns the new size, 'reset', or null when the key is not a resize key.
+ * Home resets. A key changes one dimension, starting from the stored size (`keep`) or else the measured one
+ * (`cur`), so a window the docked column has squeezed does not ratchet smaller. Returns the new size, 'reset',
+ * or null when the key is not a resize key for this grip.
  */
 export function keySize(cur: { w: number; h: number }, edge: ResizeEdge, key: string, shift: boolean, lim: SizeLimits, keep: WinSize = {}): WinSize | 'reset' | null {
   if (key === 'Home') return 'reset';
   const step = shift ? KEY_STEP_COARSE : KEY_STEP;
   const sw = widthSign(edge), sh = heightSign(edge);
-  let dx = 0, dy = 0;
-  if (key === 'ArrowLeft') dx = -step;
-  else if (key === 'ArrowRight') dx = step;
-  else if (key === 'ArrowUp') dy = -step;
-  else if (key === 'ArrowDown') dy = step;
-  else return null;
-  if ((dx && !sw) || (dy && !sh)) return null;
-  return dragSize(cur, edge, dx, dy, lim, keep);
+  const horizontal = key === 'ArrowLeft' || key === 'ArrowRight', vertical = key === 'ArrowUp' || key === 'ArrowDown';
+  if ((horizontal && !sw) || (vertical && !sh) || (!horizontal && !vertical)) return null;
+  const d = key === 'ArrowLeft' || key === 'ArrowUp' ? -step : step;
+  if (horizontal) return clampSize({ w: (keep.w ?? cur.w) + sw * d, h: keep.h }, lim);
+  return clampSize({ w: keep.w, h: (keep.h ?? cur.h) + d }, lim);
 }
 
 export const SIZES_KEY = 'wsp.hud.winSize.v1';

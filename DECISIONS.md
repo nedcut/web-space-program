@@ -728,3 +728,28 @@ Owner: getting around a docked complex felt clunky ("navigating the space statio
 - **Terminate** now uses `ConfirmModal` (Enter confirms, Esc cancels) instead of a hand-built modal. The context menu uses UX-8's `info: false` and drops the old 'Fly' relabel; its subtitle shows the vessel kind.
 - **"Fly left the camera far away" (audit shot 49) is not a camera bug.** Re-run on main in CDP Chrome (orbit scenario → node → hub → Tracking → Fly): the camera sits at 26.9 m (`framingDistance` of the 8.4 m bounding radius) at 0, 2 and 6 s, and the vessel is framed normally. In shot 49 the two "streaks" are exactly where the Meridian's solar arrays are: the hull had not drawn yet, because the audit driver took the screenshot 8 s after the click without waiting for `sceneReady`. The real defect in that shot was the "Drag the colored node handles…" hint showing in flight view. That hint is now only offered in map view (`flight/controller/telemetry.ts`, one condition; outside UX-5's files).
 - **Cost:** nothing per frame. The list is rebuilt on Tracking's existing 4 Hz UI refresh: one orbit summary per flying vessel (previously two) plus one pass over alarms.
+
+## Resizable HUD windows (2026-10-12, op/winresize)
+- **App windows resize from the edges that face the scene.** Docked windows (the right column is right-aligned) have
+  left-edge, bottom-edge and bottom-left-corner grips; floating windows have right, bottom and bottom-right grips.
+  Width and height are independent: a width-only drag leaves the height natural (CSS). Docked windows still shrink
+  in a full column (flex), so a tall chosen height never pushes others under MAP/AUTO; the body scrolls.
+- **Limits per app** via `HudApp.limits` (defaults 200–560 × 110–900 HUD px; Flight data min width 240). The map
+  planner column is 240–480 px (the CSS width, 262 / 236 px, stays the default). The planner contents belong to
+  the map package (op/lesstext was rewriting them), so the grip sits on a new `.mp-host` wrapper in `Hud.tsx` and
+  resizes the `.hud-left` column only in map view; the panel already reflows through its container queries.
+- **Remembered per window** in `localStorage` `wsp.hud.winSize.v1` (`flight/hud/windowSize.ts`, defensive parse).
+  Open/position state stays in sessionStorage as before.
+- **Reset:** the ⤡ header button (shown only when a size is stored), double-click on a grip, Home on a focused grip,
+  or double-click on a docked window's title (on a floating one the title double-click still docks it).
+- **Keyboard:** the corner grip (and the planner grip) is focusable (`role="separator"`). Arrows move the grip
+  (16 px, Shift 64 px), each key changing one dimension from the stored size, so a window the column squeezed does
+  not ratchet smaller. While it has focus, flight and map-node keys are ignored: `[data-key-owner]` was added to
+  `TYPING_SELECTOR` in `input/bindings.ts` (a one-selector edit outside the package).
+- **Clicking a docked title no longer undocks it.** UX-7's move handler committed a float position on every
+  pointer-up, so a click (or the first half of a double-click) detached the window where it stood. A move now needs
+  more than 3 px.
+- **Cost:** nothing per frame. Pointer listeners act only during a drag; the drag writes `style.width/height` at most
+  once per animation frame and commits React state on release. A CDP Chrome A/B with UX-7's profiler driver (pad and
+  orbit, two apps open, 4 × 12 s each) gave a HUD React section mean of 0.028 ms on main and 0.029 ms on the branch,
+  with the same CPU avg/p95 (noise).
