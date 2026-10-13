@@ -9,6 +9,8 @@ const SHRINK_BELOW = 0.4;
 const SHRINK_DELAY_MS = 8000;
 /** Capacity after a shrink, relative to the peak live count seen while waiting. */
 const SHRINK_HEADROOM = 1.5;
+/** Live slots moved per frame into lower free slots, so the live ones stay one contiguous draw range. */
+const COMPACT_MOVES = 4;
 
 interface Attr { name: string; type: number; itemSize: number; bytes: number; normalized: boolean }
 interface Buffers { attrs: WebGLBuffer[]; index: WebGLBuffer; capacity: number }
@@ -145,6 +147,7 @@ export class ChunkBatch {
    * Moving slots and copying buffers is GPU-side; the CPU cost is a few GL calls per moved slot.
    */
   maintain(now = performance.now()): void {
+    this.compact(COMPACT_MOVES);
     const cap = this.capacity;
     const live = this.slots.size;
     // Nothing drawn (far LOD): release the buffers entirely after the delay.
@@ -155,6 +158,44 @@ export class ChunkBatch {
     this.lowSince = -1;
     const target = this.lowPeak === 0 ? 0 : Math.max(MIN_SLOTS, Math.ceil(this.lowPeak * SHRINK_HEADROOM));
     if (target < cap) this.resize(target);
+  }
+
+  /**
+   * Move up to `maxMoves` of the highest live slots into the lowest free ones (GPU-side copies; index ranges depend
+   * only on the slot id). LOD changes free slots all over the batch; without this each hole splits a draw range,
+   * and without WEBGL_multi_draw every range is a draw call.
+   */
+  private compact(maxMoves: number): void {
+    if (this.lost || !this.bufs) return;
+    const gl = this.gl, attrs = this.attrs!, V = this.vertices;
+    const matrices = this.matrices.image.data as Float32Array;
+    let top = this.count - 1;
+    for (let moves = 0; moves < maxMoves && this.free.length; moves++) {
+      if (!this.freeSorted) { this.free.sort((a, b) => b - a); this.freeSorted = true; }
+      while (top >= 0 && !this.sources[top]) top--;
+      const hole = this.free[this.free.length - 1];
+      if (top < 0 || hole > top) break;
+      this.free.pop();
+      for (let a = 0; a < attrs.length; a++) {
+        const stride = V * attrs[a].itemSize * attrs[a].bytes;
+        // Same buffer for read and write is allowed for non-overlapping ranges.
+        gl.bindBuffer(gl.COPY_READ_BUFFER, this.bufs.attrs[a]);
+        gl.bindBuffer(gl.COPY_WRITE_BUFFER, this.bufs.attrs[a]);
+        gl.copyBufferSubData(gl.COPY_READ_BUFFER, gl.COPY_WRITE_BUFFER, top * stride, hole * stride, stride);
+      }
+      gl.bindBuffer(gl.COPY_READ_BUFFER, null);
+      gl.bindBuffer(gl.COPY_WRITE_BUFFER, null);
+      matrices.copyWithin(hole * 16, top * 16, top * 16 + 16);
+      this.matrices.needsUpdate = true;
+      const src = this.sources[top]!;
+      this.slots.set(src, hole);
+      this.sources[hole] = src;
+      this.sources[top] = null;
+      this.radii[hole] = this.radii[top];
+      this.centres.copyWithin(hole * 3, top * 3, top * 3 + 3);
+      this.free.push(top);
+      this.freeSorted = false;
+    }
   }
 
   private allocate(source: THREE.Mesh): number {

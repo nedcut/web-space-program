@@ -102,6 +102,18 @@ describe('visible terrain chunk batches', () => {
     meshes[4].position.set(0, 0, 100); meshes[4].updateMatrix(); batch.place(meshes[4], true);
     expect(draws(batch)).toBe(4);
     expect(ranges(batch)).toEqual([[0, 2], [3, 1], [5, 1]]);
+    // Compaction moves the highest live slot (5) into the hole (2), GPU-side, matrix included; nothing else moves.
+    const matrix = (slot: number) => Array.from(((batch.mesh as unknown as { _matricesTexture: THREE.DataTexture })._matricesTexture.image.data as Float32Array).subarray(slot * 16, slot * 16 + 16));
+    batch.maintain(0);
+    expect(slotOf(batch, meshes[5])).toBe(2);
+    expect(colorOf(batch, 2)).toBe(6);
+    expect(matrix(2)).toEqual(meshes[5].matrix.elements);
+    expect(slotOf(batch, meshes[4])).toBe(4);
+    expect(draws(batch)).toBe(4);
+    expect(ranges(batch)).toEqual([[0, 4]]); // slot 4 (meshes[4]) is still culled
+    meshes[4].position.set(0, 0, 0); meshes[4].updateMatrix(); batch.place(meshes[4], true);
+    expect(draws(batch)).toBe(5);
+    expect(ranges(batch)).toEqual([[0, 5]]);
     const other = new THREE.ShaderMaterial();
     batch.setMaterial(other);
     expect(other.defines.CHUNK_SLOT_VERTS).toBe(V);
