@@ -207,7 +207,8 @@ vec3 octDecode(vec2 e) {
 const GLSL_CHUNK_POSITION = /* glsl */ `
   vec4 localPosition = vec4(position, 1.0);
   #ifdef USE_BATCHING
-    localPosition = getBatchingMatrix(getIndirectIndex(gl_DrawID)) * localPosition;
+    // ChunkBatch: slot k owns vertices [k·V, (k+1)·V) and the indices are absolute (no per-draw lookup).
+    localPosition = getBatchingMatrix(float(uint(gl_VertexID) / uint(CHUNK_SLOT_VERTS))) * localPosition;
   #endif
   vec4 wp = modelMatrix * localPosition;
 `;

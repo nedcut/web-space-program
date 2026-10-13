@@ -20,20 +20,30 @@
  *   frame fits the next interval.
  * - Frames over 250 ms (loading, tab switch, debugger) are ignored, and so is everything during `hold` (after a
  *   WebGL context restore every program recompiles over a few seconds of slow but sub-250 ms frames).
+ * - Uncapped, the budget is the display interval (8.3 ms at 120 Hz), estimated from the fastest fifth of each
+ *   window's intervals rather than its single fastest one (a lone short interval after a late frame must not
+ *   tighten the budget). Reductions that only chase a rate above 60 fps stop at `highRateMin`; below 60 fps the
+ *   full range applies. A 120 Hz frame stream alternating 8.3/16.7 ms (~100 fps) is therefore over budget, also
+ *   in Firefox, which has no GPU timer queries.
  */
 export class AdaptiveQuality {
   scale = 1;
   /** Intentional frame pacing must not be mistaken for GPU overload. */
   frameRateCap = 0;
   readonly min = 0.5;
+  /** Lowest scale used to reach a frame rate above 60 fps (uncapped high-refresh display). */
+  readonly highRateMin = 0.75;
   /** Estimated display refresh interval (ms); a slowly relaxing minimum of observed intervals. */
   refreshMs = 1000 / 60;
   private elapsed = 0;
   private frames = 0;
   private slow = 0;
+  /** Frames that would also miss a 60 fps budget (> 25 ms). */
+  private slow60 = 0;
+  /** This window's frame intervals (for the display-interval estimate); extra frames beyond its length are not kept. */
+  private readonly intervals = new Float32Array(512);
   private gpuSum = 0;
   private gpuN = 0;
-  private windowMin = Infinity;
   private bad = 0;
   private goodMs = 0;
   private cooldownMs = 4000;
@@ -70,22 +80,31 @@ export class AdaptiveQuality {
     this.elapsed += frameMs;
     this.sinceUpMs += frameMs;
     this.downBlockedMs = Math.max(0, this.downBlockedMs - frameMs);
-    if (frameMs < this.windowMin) this.windowMin = frameMs;
+    if (this.frames <= this.intervals.length) this.intervals[this.frames - 1] = frameMs;
     if (frameMs > this.targetMs * 1.5) this.slow++;
+    if (frameMs > 25) this.slow60++;
     if (gpuMs !== undefined && Number.isFinite(gpuMs) && gpuMs >= 0) { this.gpuSum += gpuMs; this.gpuN++; }
     if (cpuMs !== undefined && Number.isFinite(cpuMs) && cpuMs >= 0) { this.cpuSum += cpuMs; this.cpuN++; }
     if (this.elapsed < 1000) return false;
 
     // Track the display interval: drop to faster observed rates at once, relax ~0.2% per window.
-    this.refreshMs = Math.min(1000 / 30, Math.max(1000 / 240, Math.min(this.refreshMs * 1.002, this.windowMin)));
+    const fast = lowQuantile(this.intervals, Math.min(this.frames, this.intervals.length), 0.2);
+    this.refreshMs = Math.min(1000 / 30, Math.max(1000 / 240, Math.min(this.refreshMs * 1.002, fast)));
     const slowFrac = this.slow / this.frames;
     const gpu = this.gpuN ? this.gpuSum / this.gpuN : NaN;
     const cpu = this.cpuN ? this.cpuSum / this.cpuN : NaN;
     const cpuBusy = !Number.isFinite(cpu) || cpu > this.targetMs * 0.7;
     const gpuIdle = Number.isFinite(gpu) && gpu < this.targetMs * 0.6 && cpuBusy;
     const meanMs = this.elapsed / this.frames;
-    const over = !gpuIdle && (slowFrac >= 0.2 || meanMs > this.targetMs * 1.12 || (Number.isFinite(gpu) && gpu >= this.targetMs * 0.9));
-    const headroom = slowFrac <= 0.02 && meanMs <= this.targetMs * 1.05 && (!Number.isFinite(gpu) || gpu < this.targetMs * 0.6);
+    // Above 60 fps only missed frames count: timer queries overlap pipelined frames (the owner's Mac Chrome read
+    // 10.2 ms of GPU per frame while holding 120 fps). GPU time still sizes the steps and detects CPU-bound frames.
+    const highRate = this.targetMs < 1000 / 60 - 0.5;
+    const gpuBudget = highRate ? NaN : gpu;
+    const over = !gpuIdle && (slowFrac >= 0.2 || meanMs > this.targetMs * 1.12 || gpuBudget >= this.targetMs * 0.9);
+    // Over budget only relative to a >60 fps display rate: lower the resolution, but not below highRateMin.
+    const meets60 = highRate && this.slow60 / this.frames < 0.2 && meanMs <= (1000 / 60) * 1.12;
+    const floor = meets60 ? this.highRateMin : this.min;
+    const headroom = slowFrac <= 0.02 && meanMs <= this.targetMs * 1.05 && !(gpuBudget >= this.targetMs * 0.6);
     const windowMs = this.elapsed;
     this.resetWindow();
 
@@ -105,19 +124,21 @@ export class AdaptiveQuality {
 
     // Paused after a useless episode, or holding a ≥0.25 reduction until it has been judged.
     const holding = !!this.episode && this.episode.from - this.scale >= 0.25 - 1e-9;
-    if (over && (this.downBlockedMs > 0 || holding)) {
+    if (over && (this.downBlockedMs > 0 || holding || this.scale <= floor)) {
       this.bad = 0; this.goodMs = 0;
+      // Stopped at the >60 fps floor: a later reduction (below 60 fps) is judged from here, not from above it.
+      if (this.scale <= floor && !holding) this.episode = null;
     } else if (over) {
       this.goodMs = 0;
       // Severe overload acts after one window; marginal overload needs two in a row.
-      const severe = slowFrac > 0.5 || meanMs > this.targetMs * 1.5 || (Number.isFinite(gpu) && gpu > this.targetMs * 1.3);
+      const severe = slowFrac > 0.5 || meanMs > this.targetMs * 1.5 || gpuBudget > this.targetMs * 1.3;
       if (++this.bad >= (severe ? 1 : 2)) {
         this.bad = 0;
         // GPU time scales with pixel count (scale²): jump straight to the predicted scale for ~80% of the
         // budget when timings are available, otherwise take fixed steps.
         const predicted = Number.isFinite(gpu) && gpu > 0 ? this.scale * Math.sqrt((this.targetMs * 0.8) / gpu) : NaN;
         const step = Number.isFinite(predicted) ? Math.min(0.35, Math.max(0.1, this.scale - predicted)) : slowFrac > 0.5 ? 0.15 : 0.1;
-        const next = Math.max(this.min, +(this.scale - step).toFixed(2));
+        const next = Math.max(floor, +(this.scale - step).toFixed(2));
         if (next < this.scale) {
           // An increase that had to be undone quickly: wait longer before trying again.
           if (this.sinceUpMs < 6000) this.cooldownMs = Math.min(60000, this.cooldownMs * 2);
@@ -144,10 +165,27 @@ export class AdaptiveQuality {
     return previous !== this.scale;
   }
 
-  /** Frame-time goal: cap/display interval. Unlimited retains the default 60 fps adaptive target. */
-  get targetMs(): number { return Math.max(this.refreshMs, 1000 / (this.frameRateCap || 60)); }
+  /** Frame-time goal: the cap's interval (never faster than the display), or the display interval when uncapped. */
+  get targetMs(): number { return this.frameRateCap ? Math.max(this.refreshMs, 1000 / this.frameRateCap) : this.refreshMs; }
 
   private resetWindow(): void {
-    this.elapsed = 0; this.frames = 0; this.slow = 0; this.gpuSum = 0; this.gpuN = 0; this.cpuSum = 0; this.cpuN = 0; this.windowMin = Infinity;
+    this.elapsed = 0; this.frames = 0; this.slow = 0; this.slow60 = 0; this.gpuSum = 0; this.gpuN = 0; this.cpuSum = 0; this.cpuN = 0;
   }
+}
+
+/** The q-quantile of a[0..n) (n > 0), by in-place selection (reorders the prefix; no allocation). */
+function lowQuantile(a: Float32Array, n: number, q: number): number {
+  const k = Math.min(n - 1, Math.floor(q * n));
+  let lo = 0, hi = n - 1;
+  while (lo < hi) {
+    const pivot = a[(lo + hi) >> 1];
+    let i = lo, j = hi;
+    while (i <= j) {
+      while (a[i] < pivot) i++;
+      while (a[j] > pivot) j--;
+      if (i <= j) { const t = a[i]; a[i] = a[j]; a[j] = t; i++; j--; }
+    }
+    if (k <= j) hi = j; else if (k >= i) lo = i; else break;
+  }
+  return a[k];
 }

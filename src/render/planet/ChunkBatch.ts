@@ -28,7 +28,10 @@ function glType(gl: WebGL2RenderingContext, array: THREE.TypedArray): number {
 
 /**
  * Visible chunks only, in reusable fixed-size slots drawn with one multi-draw call (three's batching shader path:
- * `isBatchedMesh`, matrices + indirect textures). Unlike three's BatchedMesh there is no CPU copy of the batch:
+ * `isBatchedMesh`, matrices texture). The chunk shaders find a vertex's slot as `gl_VertexID / CHUNK_SLOT_VERTS`
+ * (indices are absolute, so in an indexed draw gl_VertexID is the vertex's index), not through three's
+ * per-draw indirect lookup: visible slots that are adjacent merge into one draw range. Without WEBGL_multi_draw
+ * (Firefox) three issues one draw call per range, so this turns one call per chunk into one per run of slots. Unlike three's BatchedMesh there is no CPU copy of the batch:
  * each slot is written with `bufferSubData` straight from the chunk's own arrays (which the terrain cache keeps
  * anyway), and resizes copy GPU-side. Capacity follows demand: ×1.5 when full, and back down once the live
  * count has stayed low for a while (orbit after the pad), so neither the GPU buffers nor a capacity ratchet
@@ -60,10 +63,12 @@ export class ChunkBatch {
   private readonly onRestored = () => { this.restore(); };
   /** Bytes of GPU vertex + index storage at the current capacity (diagnostics). */
   gpuBytes = 0;
+  /** Chunks in the last draw list (ranges are `_multiDrawCount`; diagnostics). */
+  drawnChunks = 0;
 
   constructor(material: THREE.Material, private readonly gl: WebGL2RenderingContext, private readonly vertices: number, private readonly indices: number) {
     this.scratch = new Uint32Array(indices);
-    const mesh = new THREE.Mesh(ChunkBatch.emptyGeometry(), material);
+    const mesh = new THREE.Mesh(ChunkBatch.emptyGeometry(), ChunkBatch.slotMaterial(material, vertices));
     const m = mesh as THREE.Mesh & Record<string, unknown>;
     // three's renderer draws any `isBatchedMesh` object with these fields through its batching program variant.
     m.isBatchedMesh = true;
@@ -83,6 +88,14 @@ export class ChunkBatch {
     gl.canvas.addEventListener('webglcontextlost', this.onLost);
     gl.canvas.addEventListener('webglcontextrestored', this.onRestored);
   }
+
+  /** Chunk materials read the slot from gl_VertexID: they must know the slot size before their first compile. */
+  private static slotMaterial(material: THREE.Material, vertices: number): THREE.Material {
+    if (material instanceof THREE.ShaderMaterial) material.defines.CHUNK_SLOT_VERTS = vertices;
+    return material;
+  }
+
+  setMaterial(material: THREE.Material): void { this.mesh.material = ChunkBatch.slotMaterial(material, this.vertices); }
 
   /** Slots the GPU buffers hold. */
   get capacity(): number { return this.bufs?.capacity ?? 0; }
@@ -294,12 +307,12 @@ export class ChunkBatch {
   private makeTextures(capacity: number): void {
     this.matrices?.dispose();
     this.indirect?.dispose();
-    // Same layouts as three's BatchedMesh (batching_pars_vertex): 4 RGBA float texels per matrix, one uint per draw.
+    // Same matrix layout as three's BatchedMesh (batching_pars_vertex): 4 RGBA float texels per matrix. The chunk
+    // shaders never read the indirect (draw → slot) texture; three binds one anyway, so it stays a 1×1 placeholder.
     const ms = Math.max(4, Math.ceil(Math.sqrt(capacity * 4) / 4) * 4);
     this.matrices = new THREE.DataTexture(new Float32Array(ms * ms * 4), ms, ms, THREE.RGBAFormat, THREE.FloatType);
     this.matrices.needsUpdate = true;
-    const is = Math.ceil(Math.sqrt(capacity));
-    this.indirect = new THREE.DataTexture(new Uint32Array(is * is), is, is, THREE.RedIntegerFormat, THREE.UnsignedIntType);
+    this.indirect = new THREE.DataTexture(new Uint32Array(1), 1, 1, THREE.RedIntegerFormat, THREE.UnsignedIntType);
     this.indirect.needsUpdate = true;
     const m = this.mesh as THREE.Mesh & Record<string, unknown>;
     m._matricesTexture = this.matrices;
@@ -308,14 +321,17 @@ export class ChunkBatch {
     m._multiDrawCounts = new Int32Array(capacity);
   }
 
-  /** Per-camera draw list: live slots whose bounding sphere meets the frustum (as BatchedMesh per-object culling). */
+  /**
+   * Per-camera draw list: live slots whose bounding sphere meets the frustum (as BatchedMesh per-object culling),
+   * with adjacent slots merged into one range.
+   */
   private prepareDraws(camera: THREE.Camera): void {
     const m = this.mesh as THREE.Mesh & { _multiDrawStarts: Int32Array; _multiDrawCounts: Int32Array; _multiDrawCount: number };
-    const starts = m._multiDrawStarts, counts = m._multiDrawCounts, ids = this.indirect.image.data as Uint32Array;
+    const starts = m._multiDrawStarts, counts = m._multiDrawCounts;
     const mat = this.matrices.image.data as Float32Array, c = this.centres;
     _matrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(this.mesh.matrixWorld);
     _frustum.setFromProjectionMatrix(_matrix, camera.coordinateSystem, camera.reversedDepth);
-    let n = 0;
+    let n = 0, chunks = 0, last = -2;
     if (!this.lost) {
       for (let s = 0; s < this.count; s++) {
         if (!this.sources[s]) continue;
@@ -326,14 +342,14 @@ export class ChunkBatch {
           mat[o + 14] + mat[o + 2] * x + mat[o + 6] * y + mat[o + 10] * z);
         _sphere.radius = this.radii[s];
         if (!_frustum.intersectsSphere(_sphere)) continue;
-        starts[n] = s * this.indices * 4;
-        counts[n] = this.indices;
-        ids[n] = s;
-        n++;
+        chunks++;
+        if (s === last + 1) counts[n - 1] += this.indices;
+        else { starts[n] = s * this.indices * 4; counts[n] = this.indices; n++; }
+        last = s;
       }
     }
     m._multiDrawCount = n;
-    this.indirect.needsUpdate = true;
+    this.drawnChunks = chunks;
   }
 
   /** Context restored: every GL buffer is gone. Recreate them and re-upload the live slots from the chunks. */

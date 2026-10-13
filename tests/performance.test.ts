@@ -79,6 +79,49 @@ describe('adaptive scale', () => {
     for (let t = 0, i = 0; t < 2100; i++) { const ms = i % 2 ? 24.9 : 16.7; q.update(ms, true); t += ms; }
     expect(q.scale).toBe(0.9);
   });
+  it('uncapped on a 120 Hz display: 8.3/16.7 ms alternation is over budget, down to 0.75 while 60 fps holds', () => {
+    // As the owner's Zen ascent: 8.3/16.7 ms intervals, no GPU timer, idle main thread. Pixel-bound: the share of
+    // missed frames is 0.5·scale², still over budget at 0.75.
+    const q = new AdaptiveQuality();
+    for (let t = 0, acc = 0; t < 30000;) {
+      acc += 0.5 * q.scale * q.scale;
+      const ms = acc >= 1 ? 16.7 : 8.33;
+      if (acc >= 1) acc -= 1;
+      q.update(ms, true, undefined, 2); t += ms;
+    }
+    expect(q.targetMs).toBeCloseTo(8.33, 1);
+    expect(q.scale).toBe(0.75); // reductions that only chase >60 fps stop at highRateMin
+    // Below 60 fps the full range applies again.
+    for (let t = 0; t < 20000;) { const ms = 20 + 30 * q.scale * q.scale; q.update(ms, true, undefined, 2); t += ms; }
+    expect(q.scale).toBeLessThan(0.75);
+    // Not pixel-bound (frame times ignore the scale): the resolution is restored, as at 60 Hz.
+    const r = new AdaptiveQuality();
+    for (let t = 0, i = 0; t < 12000; i++) { const ms = i % 6 === 5 ? 16.7 : 8.33; r.update(ms, true, undefined, 2); t += ms; }
+    expect(r.scale).toBe(1);
+    // Holding 120 fps while the timer query reads more than the interval (pipelined frames): no reduction.
+    const m = new AdaptiveQuality();
+    for (let t = 0; t < 10000; t += 8.33) m.update(8.33, true, 10.2, 2);
+    expect(m.scale).toBe(1);
+  });
+  it('settles at 120 Hz on a pixel-bound GPU without oscillating, and ignores lone short intervals', () => {
+    const q = new AdaptiveQuality();
+    // GPU cost 9.5·scale² ms: fits 8.33 ms below scale ~0.93; above it one frame in four misses.
+    const trace: number[] = [];
+    for (let t = 0, i = 0; t < 180000; i++) {
+      const fits = 9.5 * q.scale * q.scale <= 8.33;
+      const ms = fits ? 8.33 : i % 4 === 3 ? 16.7 : 8.33;
+      if (q.update(ms, true, undefined, 2)) trace.push(q.scale);
+      t += ms;
+    }
+    expect(q.scale).toBeGreaterThanOrEqual(0.8);
+    expect(q.scale).toBeLessThan(1);
+    expect(trace.length).toBeLessThan(12); // failed increases back off (cooldown doubles)
+    // 60 Hz display with 3% catch-up intervals (a late frame followed by a 4 ms one): budget stays 16.7 ms.
+    const r = new AdaptiveQuality();
+    for (let t = 0, i = 0; t < 20000; i++) { const ms = i % 33 === 0 ? 4 : 16.7; r.update(ms, true, undefined, 2); t += ms; }
+    expect(r.targetMs).toBeGreaterThan(16);
+    expect(r.scale).toBe(1);
+  });
   it('recovers with headroom after a cooldown and backs off after oscillation', () => {
     const q = new AdaptiveQuality();
     run(q, 33.4, 1.05);
