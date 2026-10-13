@@ -219,7 +219,7 @@ export function freeReturnFlyby(w: World, biomes: Set<string>, minStage = 0): st
   if (w.active!.body !== 'moon') return 'missed the Moon';
   coastUntil(w, w.ut + 20 * 86400, { stopOnSoi: true });
   if (process.env.CAREER_DEBUG) console.log('after flyby', w.active!.body, w.orbitSummary(w.active!).pe);
-  if (w.active!.body !== 'earth') return 'did not come back to Earth';
+  if ((w.active!.body as string) !== 'earth') return 'did not come back to Earth';
   return fixPerigee(w, arrivalPeriapsisAltitude(w, 'moon', 'earth', w.ut), minStage);
 }
 
