@@ -169,6 +169,8 @@ export class FlightController {
   private evaJumpPending = false;
   /** Gear command from G (applied once, then left to the vessel state). */
   private gearPending: boolean | undefined = undefined;
+  /** Latest G press (true = down) until the vessel's state reflects it; the world applies it on its next physics step. */
+  private gearWanted: { vesselId: string; down: boolean } | undefined = undefined;
   /** One-shot part actions / action groups / flight settings for the next input sent to the authority. */
   private pendingCommands: VesselCommand[] = [];
   private brakesWere = false;
@@ -856,16 +858,24 @@ export class FlightController {
     } else if (Math.ceil(this.countdown) !== before) this.audio?.uiClick();
   }
 
-  /** G: raise / lower landing gear and legs. */
+  /**
+   * G: raise / lower landing gear and legs. The direction comes from the previous press while the vessel has not yet
+   * caught up with it (rapid or paused presses must alternate), else from the vessel: all gear down -> raise, otherwise lower.
+   */
   toggleGear() {
     if (!this.world.canControl()) return;
     const wv = this.world.active;
     if (!wv) return;
-    const cur = gearState(wv.state);
-    if (cur === undefined && !this.hasBindings('gear')) return;
-    if (cur !== undefined) this.gearPending = !cur;
-    if (this.hasBindings('gear')) this.fireGroup('gear', !(cur ?? wv.state.groupState?.gear ?? false));
-    this.world.message(this.gearPending ? 'Gear down' : 'Gear up');
+    const hardware = gearState(wv.state);
+    const bound = this.hasBindings('gear');
+    if (hardware === undefined && !bound) return;
+    const actual = hardware ?? wv.state.groupState?.gear ?? false;
+    const wanted = this.gearWanted?.vesselId === wv.state.id && this.gearWanted.down !== actual ? this.gearWanted.down : undefined;
+    const down = !(wanted ?? actual);
+    this.gearWanted = { vesselId: wv.state.id, down };
+    if (hardware !== undefined) this.gearPending = down;
+    if (bound) this.fireGroup('gear', down);
+    this.world.message(down ? 'Gear down' : 'Gear up');
   }
 
   subscribe(fn: (t: Telemetry) => void) {
@@ -938,6 +948,7 @@ export class FlightController {
       this.input.state.throttle = 0;
       this.stagePending = false;
       this.gearPending = undefined;
+      this.gearWanted = undefined;
       this.pendingCommands = [];
       if (this.assist) this.cancelAssist('Assist stopped: no signal or command authority');
     }
