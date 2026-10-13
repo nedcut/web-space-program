@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEscape } from './nav/escape';
 import { arrowNav, focusFirst } from './nav/arrowNav';
 import { game, DEFAULT_START_UT } from '../game/store';
-import { SCALE_PRESETS, type ScalePresetId } from '../sim/bodies/scale';
+import { SCALE_PRESETS, careerScaleMultiplier, type ScalePresetId } from '../sim/bodies/scale';
 import { MenuBackdrop } from './MenuBackdrop';
 import { UnsupportedNotice } from './Unsupported';
 import { resumeSave } from '../game/persistence';
@@ -30,7 +30,7 @@ const MODES = ['Sandbox', 'Science', 'Career'] as const;
 const MODE_INFO: Record<GameMode, string> = {
   sandbox: 'All parts available. Build freely, without costs.',
   science: 'Explore, collect science and unlock new technology. Unlimited construction.',
-  career: 'Grow a funded program through research, contracts and expeditions. Starts with 60,000 cr.',
+  career: 'Grow a funded program through research, contracts and expeditions.',
 };
 
 function startProgram(mode: GameMode, scale: ScalePresetId) {
@@ -93,7 +93,7 @@ export function MainMenu() {
               <h2 className="menu-panel-title">New program</h2>
               <div className="label menu-field-label">Program mode</div>
               <Segmented label="Program mode" options={MODES} value={MODES.find(m => m.toLowerCase() === mode)!} onChange={m => setMode(m.toLowerCase() as GameMode)} className="menu-mode" />
-              <p className="menu-mode-blurb">{MODE_INFO[mode]}</p>
+              <p className="menu-mode-blurb">{MODE_INFO[mode]}{mode === 'career' && ` Starts with ${Math.round(60000 * careerScaleMultiplier(scale)).toLocaleString()} cr.`}</p>
               <fieldset className="menu-scales">
                 <legend className="label menu-field-label">Solar system scale</legend>
                 {(Object.keys(SCALE_PRESETS) as ScalePresetId[]).map(id => (

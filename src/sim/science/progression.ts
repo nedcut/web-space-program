@@ -12,16 +12,21 @@ export interface Progression {
   science: number; funds: number; reputation: number; unlocked: string[];
   archive: Record<string, ArchiveEntry>; nextDataId: number;
   contracts: Contract[]; contractSeed: number; contractBatch: number; milestones: string[];
+  /** Capability the current offers were drawn for (see `offerKey`); new capability replaces stale offers. */
+  offerKey?: string;
 }
 export type ProgressEvent =
   | { type: 'orbit' | 'landed' | 'soi'; body: string; vesselId: string }
   | { type: 'science'; body: string; biome: string; vesselId: string }
   | { type: 'recovered'; body: string; vesselId: string; visited: string[] };
 export function newProgression(creditsMultiplier = 1): Progression {
-  return { science: 0, funds: 60000 * creditsMultiplier, reputation: 0, unlocked: ['foundation'], archive: {}, nextDataId: 1,
+  return { science: 0, funds: Math.round(60000 * creditsMultiplier), reputation: 0, unlocked: ['foundation'], archive: {}, nextDataId: 1,
     contracts: [], contractSeed: 20300720, contractBatch: 0, milestones: [] };
 }
 export interface ContractReadiness { orbit: boolean; lunar: boolean; landing: boolean }
+export const offerKey = (advanced: boolean, r: ContractReadiness) => `${+advanced}${+r.orbit}${+r.lunar}${+r.landing}`;
+/** Same objective: completing one would complete the other with the same flight. */
+export const sameObjective = (a: Contract, b: Contract) => a.kind === b.kind && a.body === b.body && a.biome === b.biome;
 /** Offers follow demonstrated capability; no lunar surface return in a new program. */
 export function generateContracts(seed: number, batch = 0, advanced = false, creditsMultiplier = 1,
   readiness: ContractReadiness = { orbit: false, lunar: false, landing: false }): Contract[] {
@@ -36,14 +41,15 @@ export function generateContracts(seed: number, batch = 0, advanced = false, cre
   const biome = batch === 0 ? 'Launch Complex' : scienceBiomes[Math.floor(random() * scienceBiomes.length)];
   const offer = (kind: ContractKind, target: string, title: string, f: number, b?: string): Contract => ({
     id: `survey-${batch}-${kind}`, kind, title, body: target, biome: b, status: 'offered',
-    advance: (kind === 'science' ? 3000 : kind === 'flyby' ? 10000 : 5000) * f * creditsMultiplier,
-    reward: (kind === 'science' ? 10000 : kind === 'flyby' ? 20000 : kind === 'orbit' ? 18000 : 12000) * f * creditsMultiplier,
-    penalty: 3000 * f * creditsMultiplier, reputation: 3 * f, landed: false,
+    advance: Math.round((kind === 'science' ? 3000 : kind === 'flyby' ? 10000 : 5000) * f * creditsMultiplier),
+    reward: Math.round((kind === 'science' ? 10000 : kind === 'flyby' ? 20000 : kind === 'orbit' ? 18000 : 12000) * f * creditsMultiplier),
+    penalty: Math.round(3000 * f * creditsMultiplier), reputation: 3 * f, landed: false,
   });
   const expedition = readiness.orbit && !readiness.landing
     ? offer('flyby', 'moon', 'Enter the Moon sphere of influence', 2)
-    : offer('return', readiness.landing || advanced ? (body === 'earth' ? 'moon' : body) : 'earth',
-      `Surface expedition and return · ${label(readiness.landing || advanced ? (body === 'earth' ? 'moon' : body) : 'earth')}`, readiness.landing || advanced ? Math.max(2, factor) : 1);
+    : readiness.landing || advanced
+      ? offer('return', body === 'earth' ? 'moon' : body, `Surface expedition and return · ${label(body === 'earth' ? 'moon' : body)}`, Math.max(2, factor))
+      : offer('return', 'earth', 'Test flight · land or splash down and recover', 1);
   return [offer('orbit', body, `Establish orbit · ${label(body)}`, factor), expedition,
     offer('science', scienceBody, `Field survey · ${label(scienceBody)} / ${biome}`, scienceBody === 'earth' ? 1 : factor, biome)];
 }
@@ -51,7 +57,7 @@ export function generateContracts(seed: number, batch = 0, advanced = false, cre
  * Restores a modest flight budget; reputation is the cost, so bankruptcy never blocks play.
  */
 export function requestRecoveryGrant(p: Progression, creditsMultiplier = 1): boolean {
-  const floor = 8000 * creditsMultiplier;
+  const floor = Math.round(8000 * creditsMultiplier);
   if (p.funds >= floor) return false;
   p.funds = floor; p.reputation -= 5;
   return true;

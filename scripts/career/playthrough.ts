@@ -9,7 +9,7 @@ import { Universe } from '../../src/game/universe';
 import { PART_CATALOG } from '../../src/data/parts';
 import { DEFAULT_START_UT } from '../../src/game/store';
 import { TECH_NODES } from '../../src/data/technology';
-import { buildFoundationOrbiter, buildMoonLander, buildOrbiter, buildSoundingRocket } from '../../src/editor/stockCrafts';
+import { buildChallengingOrbiter, buildFoundationOrbiter, buildMoonLander, buildOrbiter, buildRealOrbiter, buildSoundingRocket } from '../../src/editor/stockCrafts';
 import type { ScalePreset } from '../../src/sim/bodies/scale';
 import type { CraftDef } from '../../src/sim/vessel/types';
 import { captureMoon, deorbitAndRecover, descend, doScience, hop, landMoon, moonAscent, moonHome, sensor, toMoon, toOrbit, buy } from './flights';
@@ -55,11 +55,33 @@ export function playCareer(preset: ScalePreset = 'standard', log = (s: string) =
     const { cost, problem } = buy(w, craft);
     if (problem) return { cost, err: problem, biomes };
     doScience(w);
-    const err = toOrbit(w, biomes, 90000 * (preset === 'standard' ? 1 : preset === 'challenging' ? 1.35 : 1.8), minStage) ?? deorbitAndRecover(w, biomes);
+    const err = toOrbit(w, biomes, preset === 'standard' ? 90000 : preset === 'challenging' ? 140000 : 220000, minStage) ?? deorbitAndRecover(w, biomes);
     return { cost, err, biomes };
   };
 
   log(`== ${preset}: funds ${p.funds}, offers: ${p.contracts.map(c => c.title).join(' | ')}`);
+  if (preset !== 'standard') {
+    // Larger scales: no starting orbital stock craft. Hop (varying the arc) until the scale orbiter's research
+    // is bought, then orbit; the expedition hardware's science bill is reported against what flights earned.
+    const orbitPath = ['propulsion-0', 'energy-0', 'discovery-0', 'structures-0', 'propulsion-1', 'structures-1', 'propulsion-2', 'structures-2'];
+    const anyOk = (kind: string, body: string, biome?: string) => body === 'earth' && kind !== 'orbit' && (kind !== 'science' || biome === 'Launch Complex' || biome === 'Oceans' || biome === 'Shores');
+    desk(anyOk);
+    const pitches = [0, 30, 60, 15, 45, 75, 5, 20, 40, 50];
+    for (let i = 0; i < pitches.length && !p.unlocked.includes('structures-2'); i++) {
+      const craft = sensor(buildSoundingRocket());
+      if (p.unlocked.includes('discovery-0')) { sensor(craft, 'sensor-pressure', 1); sensor(craft, 'sensor-seismic', 2); }
+      const r = hop(w, craft, { pitch: pitches[i] });
+      record(`Kestrel hop ${i + 1} (${pitches[i]}°)`, r.ok, r.note.slice(0, 160), r.cost, research(orbitPath));
+      desk(anyOk);
+    }
+    desk((kind, body) => body === 'earth');
+    const r = orbitFlight('Scale orbiter', sensor(preset === 'real' ? buildRealOrbiter() : buildChallengingOrbiter()), 2);
+    record('Scale orbiter', !r.err, r.err ?? [...r.biomes].join(', ').slice(0, 200), r.cost, research([]));
+    const expedition = preset === 'real' ? 775 : 595;
+    const spent = TECH_NODES.filter(n => p.unlocked.includes(n.id)).reduce((n, t) => n + t.cost, 0);
+    log(`end: funds ${Math.round(p.funds)} science ${p.science.toFixed(1)} (spent ${spent}; expedition path needs ${expedition}) rep ${p.reputation} unlocked ${p.unlocked.join(' ')} milestones ${p.milestones.join(' ')}`);
+    return { rows, world: w };
+  }
   const earthOnly = (kind: string, body: string, biome?: string) => body === 'earth' && (kind !== 'science' || biome === 'Launch Complex' || biome === 'Oceans' || biome === 'Shores');
   desk(earthOnly);
 
@@ -81,7 +103,7 @@ export function playCareer(preset: ScalePreset = 'standard', log = (s: string) =
     const craft = sensor(buildOrbiter());
     const { cost, problem } = buy(w, craft);
     let err = problem;
-    if (!err) err = toOrbit(w, biomes, 90000, 2) ?? toMoon(w, biomes, 2, 60000) ?? moonHome(w, biomes, 0) ?? deorbitAndRecover(w, biomes);
+    if (!err) err = toOrbit(w, biomes, 90000, 2) ?? toMoon(w, biomes, 2, 900000) ?? moonHome(w, biomes, 0) ?? deorbitAndRecover(w, biomes);
     record('Meridian Moon flyby', !err, err ?? [...biomes].join(', '), cost, research(['propulsion-1', 'structures-0', 'structures-1', 'guidance-0']));
   }
   desk(() => true);

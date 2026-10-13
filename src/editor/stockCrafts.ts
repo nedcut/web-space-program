@@ -635,6 +635,9 @@ export const STOCK_CRAFTS: StockCraft[] = ([
     id: `stock-${id}`, name, blurb: `${blurb} · research required`,
     scale: 'standard' as const, build, launchBody, needsResearch: true,
   })),
+  // The sounding rocket reaches space on every scale: larger programs start with it too.
+  { scale: 'challenging', id: 'stock-kestrel-challenging', name: 'Kestrel Sounding Rocket', blurb: 'Suborbital test hop · starting equipment', build: () => buildSoundingRocket() },
+  { scale: 'real', id: 'stock-kestrel-real', name: 'Kestrel Sounding Rocket', blurb: 'Suborbital test hop · starting equipment', build: () => buildSoundingRocket() },
   { scale: 'challenging', id: 'stock-meridian-challenging', name: 'Meridian Challenging Orbiter', blurb: 'Challenging scale · orbital launcher and return capsule', build: () => buildChallengingOrbiter() },
   { scale: 'challenging', id: 'stock-selene-challenging', name: 'Selene Challenging Expedition', blurb: 'Challenging scale · Moon landing and return expedition', build: () => buildChallengingMoonLander() },
   { scale: 'real', id: 'stock-ringrunner-real', name: 'Ringrunner Real Saturn Probe', blurb: 'Real scale · isotope-powered nuclear Saturn flyby', build: () => buildRealRingrunner() },

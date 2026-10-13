@@ -1,18 +1,32 @@
 import { careerScaleMultiplier } from '../../sim/bodies/scale';
 import { unlockTech as unlockTechModel } from '../../data/technology';
-import { acceptContract as acceptContractModel, failContract, generateContracts, requestRecoveryGrant as requestRecoveryGrantModel, type ProgressEvent } from '../../sim/science/progression';
+import { acceptContract as acceptContractModel, failContract, generateContracts, offerKey, requestRecoveryGrant as requestRecoveryGrantModel, sameObjective, type ProgressEvent } from '../../sim/science/progression';
 import { instruments, progressionEvent, runExperiment as runExperimentModel, scienceContext as scienceContextModel, transmitScience as transmitScienceModel } from '../science';
 import type { World, WorldVessel } from '../world';
 
 
-export function refreshContracts(this: World) {
-  if (this.mode !== 'career' || this.progression.contracts.some(c => c.status === 'offered')) return;
+/**
+ * Fill the desk. Offers are drawn for the program's demonstrated capability: when that changes (first orbit,
+ * new research…) unaccepted offers are replaced; otherwise new offers come only once the desk is clear.
+ * Offers that duplicate an active commission are skipped (one flight must not complete both).
+ */
+export function refreshContracts(this: World): boolean {
+  if (this.mode !== 'career') return false;
   const p = this.progression;
-  p.contracts.push(...generateContracts(p.contractSeed, p.contractBatch++, p.milestones.includes('first-moon') && p.unlocked.includes('propulsion-3') && p.unlocked.includes('energy-2'), careerScaleMultiplier(this.universe.preset), {
+  const advanced = p.milestones.includes('first-moon') && p.unlocked.includes('propulsion-3') && p.unlocked.includes('energy-2');
+  const readiness = {
     orbit: p.milestones.includes('first-orbit') && p.unlocked.includes('propulsion-0'),
     lunar: p.milestones.includes('first-moon-flyby') && p.unlocked.includes('propulsion-1'),
     landing: p.milestones.includes('first-moon-flyby') && p.unlocked.includes('structures-1') && p.unlocked.includes('propulsion-1'),
-  }));
+  };
+  const key = offerKey(advanced, readiness);
+  const offered = p.contracts.some(c => c.status === 'offered');
+  if (offered && p.offerKey === key) return false;
+  if (offered) p.contracts = p.contracts.filter(c => c.status !== 'offered');
+  p.offerKey = key;
+  const fresh = generateContracts(p.contractSeed, p.contractBatch++, advanced, careerScaleMultiplier(this.universe.preset), readiness);
+  p.contracts.push(...fresh.filter(c => !p.contracts.some(a => a.status === 'active' && sameObjective(a, c))));
+  return true;
 }
 
 
@@ -34,7 +48,11 @@ export function abandonContract(this: World, id: string) {
 }
 
 
-export function unlockTech(this: World, id: string) { return this.mode !== 'sandbox' && unlockTechModel(this.progression, id); }
+export function unlockTech(this: World, id: string) {
+  const ok = this.mode !== 'sandbox' && unlockTechModel(this.progression, id);
+  if (ok) this.refreshContracts();
+  return ok;
+}
 
 
 export function scienceContext(this: World, v = this.active) { return v ? scienceContextModel(this, v) : null; }

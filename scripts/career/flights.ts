@@ -13,6 +13,7 @@ import {
   planPeriapsisChange, planTransferToBody, propulsion, runAutopilot, type Autopilot,
 } from '../../src/game/autopilot';
 import { length, normalize, scale } from '../../src/util/vec3';
+import { arrivalPeriapsisAltitude } from '../../src/game/planning/arrival';
 
 export const sensor = (craft: CraftDef, partId = 'sensor-thermal', k = 0): CraftDef => {
   craft.parts.push({ uid: 1000 + k, partId, parent: craft.parts[0].uid, attachNode: 'srf', position: { x: 0.7, y: k * 0.2, z: 0 }, rotation: { x: 0, y: 0, z: 0, w: 1 } });
@@ -170,7 +171,17 @@ export function toMoon(w: World, biomes: Set<string>, minStage = 0, periapsis = 
 
 /** In the Moon's SOI: optionally capture, then burn home and coast back into Earth's SOI. */
 export function moonHome(w: World, biomes: Set<string>, minStage = 0): string | null {
-  const tei = planTransferToBody(w, 'earth', { periapsisAltitude: w.universe.body('earth').atmosphere!.height * 0.35 });
+  const o = w.orbitOf(w.active!);
+  if (o.e >= 1) {
+    // Flyby: ride the hyperbola out of the Moon's SOI, then fix the Earth periapsis for entry.
+    coastUntil(w, w.ut + 30 * 86400, { stopOnSoi: true });
+    if (process.env.CAREER_DEBUG) console.log('after flyby coast', w.active!.body, w.orbitSummary(w.active!).pe, w.orbitSummary(w.active!).ap);
+    if (w.active!.body !== 'earth') return 'flyby did not return to Earth SOI';
+    const fix = executeNode(w, planPeriapsisChange(w, arrivalPeriapsisAltitude(w, 'moon', 'earth', w.ut)), { minStage });
+    if (!runAutopilot(w, fix, { maxTime: 3e6 })) return `periapsis fix: ${fix.error}`;
+    return null;
+  }
+  const tei = planTransferToBody(w, 'earth', { periapsisAltitude: arrivalPeriapsisAltitude(w, w.active!.body, 'earth', w.ut) });
   if (!tei) return 'no return transfer found';
   const burn = executeNode(w, tei.node, { minStage });
   if (!runAutopilot(w, burn, { maxTime: 1e6 })) return `TEI: ${burn.error}`;

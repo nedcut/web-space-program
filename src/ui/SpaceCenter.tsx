@@ -5,7 +5,7 @@ import { openProgram } from '../game/program';
 import { saveNamedWorld } from '../game/persistence';
 import { saveErrorText } from '../game/storageErrors';
 import { newProgression } from '../sim/science/progression';
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { game, launchableCraft, useGame } from '../game/store';
 import type { SiteObjectId } from '../render/site/LaunchSite';
 import { HubBackdrop, type BuildingLabel } from './hub/HubBackdrop';
@@ -14,6 +14,7 @@ import { HubMenu, type HubMenuAction } from './hub/HubMenu';
 import { pendingDebrief, setPendingDebrief, type FlightDebrief } from './hub/debrief';
 import { facilityForBuilding, hubFacilities, type HubFacility, type HubFacilityId } from './hub/facilities';
 import { launchBlocker } from './hub/quickLaunch';
+import { nextGoal } from './hub/nextGoal';
 import { SettingsPanel } from './MainMenu';
 import { SaveLoadDialog } from './SaveLoadDialog';
 import { formatDate } from './format';
@@ -38,6 +39,11 @@ export function SpaceCenter() {
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [highlight, setHighlight] = useState<SiteObjectId | null>(null);
   const photo = usePhotoMode().active;
+  const scale = useGame(s => s.scalePreset);
+  // Program state only changes between visits; recompute on milestones, research and the contract desk.
+  const goal = useMemo(() => p ? nextGoal(p, mode, scale) : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [p, mode, scale, p?.milestones.length, p?.unlocked.length, p?.contracts.length, Math.floor(p?.science ?? 0)]);
 
   const all = hubFacilities(mode, craft?.type === 'SPH');
   const tiles = all.filter(f => !f.closed);
@@ -105,6 +111,15 @@ export function SpaceCenter() {
           <div className="mono" style={{ color: 'var(--text)', textShadow: '0 1px 6px rgba(0,0,0,0.8)' }}>{formatDate(ut)}</div>
         </div>
         <div style={{ marginTop: 16, textShadow: '0 1px 6px rgba(0,0,0,0.8)' }} className="mono">{mode.toUpperCase()}{mode === 'career' && ` · ${(p?.funds ?? 60000).toLocaleString()} cr · ${p?.reputation ?? 0} reputation`}</div>
+        {goal && !debrief && <section className="panel hub-goal" aria-label="Next goal">
+          <div className="label">Next goal</div>
+          <h3>{goal.title}</h3>
+          <p>{goal.detail}</p>
+          <div className="hub-goal-actions">
+            <Button className="btn small primary" onClick={() => enter(goal.action)}>{goal.actionLabel}</Button>
+            {goal.aside && <Button className="btn small ghost" onClick={() => enter('missions')}>{goal.aside}</Button>}
+          </div>
+        </section>}
         <div style={{ flex: 1 }} />
         {debrief && <DebriefCard debrief={debrief}
           onOpenLog={() => game.set({ scene: 'flightlog' })}

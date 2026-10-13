@@ -66,6 +66,11 @@
 .hub-hover.closed { border-color: var(--panel-border); }
 .hub-hover.closed strong { color: var(--text-dim); }
 :root[data-reduce-motion="true"] .hub-hover { transition: none; }
+.hub-goal { align-self: flex-start; width: min(440px, 100%); margin-top: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--panel-solid); box-shadow: var(--shadow-panel); }
+.hub-goal > .label { color: var(--accent); }
+.hub-goal h3 { margin: 4px 0 4px; font-size: var(--type-base); font-weight: 500; }
+.hub-goal p { margin: 0; color: var(--text-dim); font-size: var(--type-sm); line-height: 1.45; }
+.hub-goal-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-3); }
 .hub-debrief { align-self: flex-start; width: min(560px, 100%); margin-bottom: var(--space-3); padding: var(--space-4) var(--space-5); border-color: var(--accent-border); background: linear-gradient(90deg, var(--accent-soft), transparent 60%), var(--panel-solid); box-shadow: var(--shadow-panel); }
 .hub-debrief.lost { border-color: color-mix(in srgb, var(--bad) 55%, transparent); }
 .hub-debrief > .label { color: var(--accent); }

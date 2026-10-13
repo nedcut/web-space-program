@@ -87,8 +87,8 @@ export function progressionEvent(w: World, event: ProgressEvent) {
     : event.type === 'soi' && event.body === 'saturn' ? ['first-saturn', 'First Saturn arrival', 150, 100000] as const : null;
   if (milestone && !w.progression.milestones.includes(milestone[0])) {
     w.progression.milestones.push(milestone[0]); w.progression.science += milestone[2];
-    if (w.mode === 'career') { w.progression.funds += milestone[3] * careerScaleMultiplier(w.universe.preset); w.progression.reputation += 5; }
-    w.message(`${milestone[1]} · +${milestone[2]} science${w.mode === 'career' ? ` · +${milestone[3] * careerScaleMultiplier(w.universe.preset)} cr` : ''}`, 'info', 10);
+    if (w.mode === 'career') { w.progression.funds += Math.round(milestone[3] * careerScaleMultiplier(w.universe.preset)); w.progression.reputation += 5; w.refreshContracts(); }
+    w.message(`${milestone[1]} · +${milestone[2]} science${w.mode === 'career' ? ` · +${Math.round(milestone[3] * careerScaleMultiplier(w.universe.preset)).toLocaleString()} cr` : ''}`, 'info', 10);
   }
 }
 /** Called after every fixed physics step and after rails propagation. */
@@ -98,7 +98,7 @@ export function evaluateProgression(w: World) {
   for (const v of w.vessels.values()) {
     if (v.state.destroyed) continue;
     w.onEnteredSoi(v);
-    if (v.mode !== 'prelaunch' && v.state.situation === 'landed') {
+    if (v.mode !== 'prelaunch' && (v.state.situation === 'landed' || v.state.situation === 'splashed')) {
       w.onLanded(v);
     }
     if (v.mode === 'prelaunch' || v.state.situation !== 'flying') continue;
