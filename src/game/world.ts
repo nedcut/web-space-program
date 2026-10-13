@@ -535,13 +535,15 @@ export class World {
     if (input.stage) this.stageRequested = true;
     if (input.gear !== undefined) this.gearRequested = input.gear;
     if (input.commands?.length) this.pendingCommands = [...this.pendingCommands, ...input.commands].slice(0, MAX_COMMANDS);
-    if ((this.stageRequested || this.pendingCommands.length || this.gearRequested !== undefined) && this.warp.mode === 'rails' && rate > 1) {
+    if ((this.stageRequested || this.pendingCommands.length) && this.warp.mode === 'rails' && rate > 1) {
       // Staging during rails warp: drop out of warp; the request is consumed by the next physics step.
       this.warp = { mode: 'rails', index: 0 };
       return;
     }
 
     if (this.warp.mode === 'rails' && rate > 1) {
+      // Autopilots hold gear every tick: it must neither drop the warp nor wait for physics to resume.
+      this.gearRequested = undefined;
       this.renderHistory.invalidate();
       for (const wv of this.vessels.values()) this.pack(wv);
       let target = this.ut + realDt * rate;
