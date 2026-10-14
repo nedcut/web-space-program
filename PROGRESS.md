@@ -17,7 +17,7 @@ sandbox and science have no limits). Rules and numbers: DECISIONS.md "Facility u
 - Old careers keep everything they could launch (pad and hall load at level 3).
 - Headless playthrough: Standard Moon landing still flight 5, day 6.8; 290 k spent on upgrades (77 k left instead of
   335 k). Challenging/Real timelines unchanged; 1 M / 6 M spent.
-- **Not verified:** Firefox/Zen (Chrome only); a hall-limit block in the browser (covered by tests); prices are a
+- Browser: Chrome (whole flow) and Firefox (hub card, confirm, purchase). **Not verified:** Zen; a hall-limit block in the browser (covered by tests); prices are a
   first pass — money is still not tight after the landing, by design (owner asked to keep progression fast).
 Screenshots: `C:\wsp-tools\shots\facilities\after\`.
 
