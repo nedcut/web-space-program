@@ -107,7 +107,7 @@ function solve3(A: number[], b: number[]): number[] | null {
    * runway (body +Y along the runway, +Z up), ready to taxi.
    */
 export function launch(this: World, internals: WorldInternals, craft: CraftDef, site: 'pad' | 'runway' = craft.type === 'SPH' ? 'runway' : 'pad', keepExisting = false): WorldVessel {
-  const problem = launchProblem(craft, this.catalog, this.mode, this.progression);
+  const problem = launchProblem(craft, this.catalog, this.mode, this.progression, this.universe.preset);
   if (problem) throw new Error(problem);
   // Validate assembly before charging or clearing the launch site.
   buildVessel(craft, this.catalog, { id: 'validation', resourceDefs: RESOURCES });

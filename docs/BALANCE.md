@@ -63,6 +63,22 @@ Standard, after this pass (all flights succeed; science column is banked after t
 Before this pass, the same route failed on flight 1: the Kestrel flown straight up lost its crew (also with the
 engines cut at 100 or 150 km apoapsis; only arcs tipped ≥ 30° survived), and the planner's Moon transfer
 (30 km periapsis) flung a Meridian into solar orbit — it cannot capture and return.
+**With facility upgrades (op/facilities, same route).** The playthrough now buys the upgrade a launch needs right
+before it and invests surplus in the Research Lab, then Mission Control, keeping 40 k × the credit multiplier in reserve.
+
+| # | Flight | Funds after (was) | Science banked (was) | Game day | Upgrades bought |
+| --- | --- | ---: | ---: | ---: | --- |
+| 1 | Kestrel hop | 51,994 (91,994) | 92 (92) | 0 | Mission Control 2 (40 k) |
+| 2 | Kestrel hop again | 78,988 (118,988) | 138 (138) | 0 | — |
+| 3 | Firstlight orbit | 79,048 (166,048) | 226 (226) | 0 | Research Lab 2 (60 k) |
+| 4 | Meridian Moon flyby | 54,667 (278,667) | 284 (269) | 3.0 | Mission Control 3 (150 k) |
+| 5 | Selene Moon landing | 77,175 (335,175) | 546 (504) | 6.8 | Launch Pad 2 (40 k, needed for the 53 t Selene) |
+
+Challenging: same flights and timeline (orbit flight 4, free-return flyby flight 5, day 14); Mission Control 2
+(410 k) and Research Lab 2 (614 k) bought; 1.05 M left (was 2.06 M). Real: same timeline (orbiter flight 4; the Meridian
+Real still cannot reach the Moon); Research Lab 2 (6 M) bought; 5.8 M left (was 11.8 M). Neither larger-scale route
+reaches a lander in the playthrough, which would need a level-2 pad and hall (666 k / 6.5 M).
+
 A Mars window from a Standard parking orbit (day 12): next in 66 days, 1,164 m/s, 84-day flight (Venus: 31 days,
 1,129 m/s); a Meridian upper stage has 1,448 m/s left in orbit, and probe cores (Precision Attitude, 135 science
 cumulative) are affordable right after the Moon landing. Planned, not flown.

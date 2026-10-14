@@ -3,6 +3,7 @@ import { draftForSave, game, loadLastCraft, reportSaveError } from './store';
 import { SLOTS_KEY, commitSaveSlot, deferSaveWrite, flushSaveWrites, listSaveSlots, sceneForSave, saveSlotJson, type SaveScene, type SaveSlot } from './saveSlots';
 import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { newProgression, type GameMode, type Progression } from '../sim/science/progression';
+import { LEGACY_FACILITIES } from '../sim/science/facilities';
 import type { Astronaut, PlantedFlag } from '../sim/crew/crew';
 import type { VesselState } from '../sim/vessel/runtime';
 import type { PartDef } from '../sim/vessel/types';
@@ -121,6 +122,8 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
   world.transmitting = [...(data.transmitting ?? [])];
   world.surveyedBodies = [...(data.surveyedBodies ?? [])];
   world.progression = structuredClone(data.progression ?? newProgression(careerScaleMultiplier(world.universe.preset)));
+  // Programs saved before facility upgrades keep everything they could launch (see LEGACY_FACILITIES).
+  if (data.progression && !data.progression.facilities) world.progression.facilities = { ...LEGACY_FACILITIES };
   if (world.mode === 'career' && !world.progression.contracts.length) world.refreshContracts();
   world.crew = structuredClone(data.crew ?? []);
   world.crewSeed = data.crewSeed ?? world.crewSeed;

@@ -413,7 +413,7 @@ export class EditorSession {
     const hasCommand = craft.parts.some((p) => CATALOG.get(p.partId)?.modules.some((m) => m.type === 'command' && m.controllable !== false));
     if (!hasCommand) return this.toast('Launch blocked: the craft needs a command pod or probe core', 'bad');
     const g = game.get();
-    const problem = launchProblem(craft, CATALOG, g.mode, g.resumeWorld?.progression ?? newProgression());
+    const problem = launchProblem(craft, CATALOG, g.mode, g.resumeWorld?.progression ?? newProgression(), g.scalePreset);
     if (problem) return this.toast(problem, 'bad');
     const stock = STOCK_CRAFTS.find(s => s.id === craft.stockId);
     const noticeKey = `${stock?.id}:${g.scalePreset}`;

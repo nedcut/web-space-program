@@ -15,6 +15,9 @@ import { pendingDebrief, setPendingDebrief, type FlightDebrief } from './hub/deb
 import { facilityForBuilding, hubFacilities, type HubFacility, type HubFacilityId } from './hub/facilities';
 import { launchBlocker } from './hub/quickLaunch';
 import { nextGoal } from './hub/nextGoal';
+import { FacilitiesCard } from './hub/FacilitiesCard';
+import { FacilityUnblock, LevelPips, upgradableFor } from './hub/FacilityUpgrade';
+import { facilityPerk, ownedLevel } from '../sim/science/facilities';
 import { SettingsPanel } from './MainMenu';
 import { SaveLoadDialog } from './SaveLoadDialog';
 import { formatDate } from './format';
@@ -43,7 +46,10 @@ export function SpaceCenter() {
   // Program state only changes between visits; recompute on milestones, research and the contract desk.
   const goal = useMemo(() => p ? nextGoal(p, mode, scale) : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [p, mode, scale, p?.milestones.length, p?.unlocked.length, p?.contracts.length, Math.floor(p?.science ?? 0)]);
+    [p, mode, scale, p?.milestones.length, p?.unlocked.length, p?.contracts.length, Math.floor(p?.science ?? 0), p?.facilities]);
+  const career = mode === 'career' && !!p;
+  /** Level of the facility behind a hub entry (career, upgradable facilities only). */
+  const levelOf = (id: HubFacilityId) => { const f = upgradableFor(id); return career && f ? { level: ownedLevel(p!, f), perk: facilityPerk(f, ownedLevel(p!, f), scale) } : null; };
 
   const all = hubFacilities(mode, craft?.type === 'SPH');
   const tiles = all.filter(f => !f.closed);
@@ -56,14 +62,14 @@ export function SpaceCenter() {
   };
   const launchAgain = (c: FlightDebrief['craft']) => {
     if (!c) return;
-    const problem = launchBlocker(c, mode, p ?? newProgression());
+    const problem = launchBlocker(c, mode, p ?? newProgression(), scale);
     if (problem) { setDebrief(null); setNotice(`${c.name}: ${problem}`); }
     else game.set({ craft: c, scene: 'flight', launchPending: true });
   };
 
   // Latest values for the 3D scene's callbacks and the key listener (registered once).
-  const live = useRef({ all, tiles, enter });
-  live.current = { all, tiles, enter };
+  const live = useRef({ all, tiles, enter, levelOf });
+  live.current = { all, tiles, enter, levelOf };
   const onPick = (id: SiteObjectId) => {
     const f = facilityForBuilding(live.current.all, id);
     if (!f) return;
@@ -74,7 +80,9 @@ export function SpaceCenter() {
     const f = facilityForBuilding(live.current.all, id);
     if (!f) return null;
     const key = live.current.tiles.indexOf(f);
-    return f.closed ? { title: f.title, detail: `${f.closed} only`, closed: true } : { title: f.title, detail: describe(f), key: key >= 0 ? String(key + 1) : undefined };
+    if (f.closed) return { title: f.title, detail: `${f.closed} only`, closed: true };
+    const lv = live.current.levelOf(f.id);
+    return { title: f.title, detail: describe(f), key: key >= 0 ? String(key + 1) : undefined, level: lv?.level, perk: lv ? `${lv.perk.value} ${lv.perk.meaning}` : undefined };
   };
 
   // Number keys enter the facility on the matching tile (shown on each tile).
@@ -111,15 +119,20 @@ export function SpaceCenter() {
           <div className="mono" style={{ color: 'var(--text)', textShadow: '0 1px 6px rgba(0,0,0,0.8)' }}>{formatDate(ut)}</div>
         </div>
         <div style={{ marginTop: 16, textShadow: '0 1px 6px rgba(0,0,0,0.8)' }} className="mono">{mode.toUpperCase()}{mode === 'career' && ` · ${(p?.funds ?? 60000).toLocaleString()} cr · ${p?.reputation ?? 0} reputation`}</div>
+        <div className="hub-cards">
         {goal && !debrief && <section className="panel hub-goal" aria-label="Next goal">
           <div className="label">Next goal</div>
           <h3>{goal.title}</h3>
           <p>{goal.detail}</p>
           <div className="hub-goal-actions">
-            <Button className="btn small primary" onClick={() => enter(goal.action)}>{goal.actionLabel}</Button>
+            {goal.upgrade
+              ? <FacilityUnblock block={goal.upgrade} className="btn small primary" onBought={() => setNotice('')} />
+              : <Button className="btn small primary" onClick={() => enter(goal.action)}>{goal.actionLabel}</Button>}
             {goal.aside && <Button className="btn small ghost" onClick={() => enter('missions')}>{goal.aside}</Button>}
           </div>
         </section>}
+        {career && !debrief && <FacilitiesCard onHighlight={setHighlight} onNotice={setNotice} />}
+        </div>
         <div style={{ flex: 1 }} />
         {debrief && <DebriefCard debrief={debrief}
           onOpenLog={() => game.set({ scene: 'flightlog' })}
@@ -138,6 +151,7 @@ export function SpaceCenter() {
             >
               <Icon name={ICON[t.id]} size={24} />
               <strong>{t.title}</strong><small>{describe(t)}</small><span className="kbd hub-key" aria-hidden="true">{i + 1}</span>
+              {levelOf(t.id) && <LevelPips level={levelOf(t.id)!.level} />}
             </Button>
           ))}
         </div>

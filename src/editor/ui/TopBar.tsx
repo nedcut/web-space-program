@@ -11,6 +11,7 @@ import { Icon } from './icons';
 import { fmtDv, fmtKg } from './partInfo';
 import { CRAFT_TYPE_LABELS } from '../craftTypeLabels';
 import { useEscape } from '../../ui/nav/escape';
+import { FacilityUnblock, useFacilityBlock } from '../../ui/hub/FacilityUpgrade';
 
 /** Current key label for an editor action (Ctrl shown as ⌘ on macOS). */
 export function keyOf(action: Action) {
@@ -57,6 +58,7 @@ export function TopBar({ session, view, onLoad, onNew, onImport, onFrame }: { se
   const mode = useGame(s => s.mode);
   const funds = useGame(s => s.resumeWorld?.progression?.funds ?? 60000);
   const cost = launchCost(view.craft, PART_CATALOG);
+  const block = useFacilityBlock(view.craft);
   const s = view.stats;
   const save = keyOf('editorSave');
   return (
@@ -134,15 +136,16 @@ export function TopBar({ session, view, onLoad, onNew, onImport, onFrame }: { se
         <div className="vab-stats mono">
           {/* Δv first: narrower windows drop Parts, then Height (media rules count children). */}
           <Stat label="Δv" value={fmtDv(view.totalDvVac)} accent />
-          <Stat label="Mass" value={fmtKg(s.totalMass)} />
-          <Stat label="Parts" value={String(s.partCount)} />
+          <Stat label="Mass" value={fmtKg(s.totalMass)} over={block?.facility === 'pad' ? block.reason : undefined} />
+          <Stat label="Parts" value={String(s.partCount)} over={block?.facility === 'hall' ? block.reason : undefined} />
           {view.craftType === 'SPH' ? <Stat label="Length" value={`${s.height.toFixed(1)} m`} /> : <Stat label="Height" value={`${s.height.toFixed(1)} m`} />}
         </div>
       </div>
       <div className="vab-more">
         <Button className={`vab-ibtn ${menu?.id === 'more' ? 'on' : ''} ${view.dirty ? 'pending' : ''}`} data-menu aria-label="More tools" data-tip={view.dirty ? 'File, sharing and overlays · unsaved changes' : 'File, sharing and overlays'} aria-haspopup="menu" aria-expanded={menu?.id === 'more'} onClick={e => openMenu('more', e.currentTarget)}><Icon name="more" /></Button>
       </div>
-      <Button className="btn primary vab-launch" data-tip={mode === 'career' ? `${cost.toLocaleString()} cr launch cost · ${funds.toLocaleString()} cr available` : 'Roll out to the launch site'} onClick={() => session.launch()}>
+      {block && <FacilityUnblock block={block} compact className="btn small warn vab-unblock" />}
+      <Button className={`btn primary vab-launch${block ? ' blocked' : ''}`} data-tip={block ? block.message : mode === 'career' ? `${cost.toLocaleString()} cr launch cost · ${funds.toLocaleString()} cr available` : 'Roll out to the launch site'} onClick={() => session.launch()}>
         <Icon name="launch" size={17} /> Launch{mode === 'career' && <span className="vab-launch-cost">{cost.toLocaleString()} cr</span>}
       </Button>
       {menu?.id === 'share' && <div className="vab-menu vab-more-menu panel" role="menu" aria-label="Share" style={{ left: menu.left }}>{shareItems}</div>}
@@ -250,11 +253,11 @@ function SnapGlyph({ on }: { on: boolean }) {
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function Stat({ label, value, accent, over }: { label: string; value: string; accent?: boolean; over?: string }) {
   return (
-    <div className="vab-stat">
+    <div className="vab-stat" data-tip={over}>
       <span className="label">{label}</span>
-      <span className={accent ? 'accent' : ''}>{value}</span>
+      <span className={over ? 'over' : accent ? 'accent' : ''}>{value}</span>
     </div>
   );
 }

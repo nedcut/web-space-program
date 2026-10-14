@@ -12,6 +12,7 @@ import { Badge, Button, Modal } from '../components';
 import { arrowNav } from '../nav/arrowNav';
 import { facilityLabel } from '../nav/scenes';
 import { launchOptions, type LaunchOption } from './quickLaunch';
+import { FacilityUnblock } from './FacilityUpgrade';
 
 const SOURCE: Record<LaunchOption['source'], string> = { pad: 'In the Integration Hall', saved: 'Saved', stock: 'Stock' };
 const same = (a: CraftDef, b: CraftDef) => JSON.stringify(a) === JSON.stringify(b);
@@ -35,13 +36,13 @@ export default function LaunchPicker({ onClose }: { onClose: () => void }) {
   const earth = useMemo(() => new Universe(scale).body('earth'), [scale]);
   const stock = useMemo(() => STOCK_CRAFTS.filter(s => s.scale === scale).map(s => ({ id: s.id, craft: s.build(), blurb: s.blurb })), [scale]);
   // Stage simulation per craft: once per library load, not per keystroke.
-  const options = useMemo(() => launchOptions({ pad, saved: saved ?? [], stock, mode, progression, earth }),
-    [pad, saved, stock, mode, progression, earth]);
+  const options = useMemo(() => launchOptions({ pad, saved: saved ?? [], stock, mode, progression, earth, preset: scale }),
+    [pad, saved, stock, mode, progression, earth, scale]);
   const blurb = new Map(stock.map(s => [`stock:${s.id}`, s.blurb]));
   const matching = options.filter(o => matchesQuery(`${o.craft.name} ${SOURCE[o.source]} ${blurb.get(o.key) ?? ''}`, query));
   // Stock designs this program cannot fly yet (research) wait behind one toggle instead of filling the list.
   const [showLocked, setShowLocked] = useState(false);
-  const locked = matching.filter(o => o.source === 'stock' && o.blocked);
+  const locked = matching.filter(o => o.source === 'stock' && o.blocked?.startsWith('Research'));
   const visible = showLocked ? matching : matching.filter(o => !locked.includes(o));
 
   // The editor draft lives only in the Integration Hall; launching something else replaces it there.
@@ -73,6 +74,7 @@ export default function LaunchPicker({ onClose }: { onClose: () => void }) {
               <span className="mono hub-launch-info">{o.info}</span>
               {o.blocked ? <span className="hub-launch-blocked">{o.blocked}</span> : o.warning && <span className="hub-launch-warn">{o.warning}</span>}
             </button>
+            {o.facility && o.blocked === o.facility.message && <FacilityUnblock block={o.facility} />}
             <Button className="btn small ghost" onClick={() => edit(o.craft)} aria-label={`Open ${o.craft.name} in the ${facilityLabel('editor')}`}>Edit</Button>
           </div>
         ))}

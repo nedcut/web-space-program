@@ -1,3 +1,4 @@
+import { scienceBonus } from '../sim/science/facilities';
 import { careerScaleMultiplier } from '../sim/bodies/scale';
 import type { World, WorldVessel } from './world';
 import { biomeAt, situationAt } from '../sim/science/biomes';
@@ -49,10 +50,12 @@ export function runExperiment(w: World, uid: number, experiment: string): Scienc
 function credit(w: World, data: ScienceData, fraction: number): number {
   const amount = Math.max(0, data.value * fraction - data.credited);
   data.credited += amount;
-  w.progression.science += amount;
+  // The lab's bonus pays on top of the result; the subject's archive keeps the base value.
+  const gained = amount * (1 + scienceBonus(w.progression, w.mode));
+  w.progression.science += gained;
   const entry = w.progression.archive[data.subject];
   if (entry) entry.science += amount;
-  return amount;
+  return gained;
 }
 export function transmitScience(w: World): number {
   const v = w.active;

@@ -2,6 +2,10 @@ import { ISRU_PARTS } from './isru';
 import { PART_DEFS } from './parts';
 import type { CraftDef, PartDef } from '../sim/vessel/types';
 import type { GameMode, Progression } from '../sim/science/progression';
+import type { ScalePresetId } from '../sim/bodies/scale';
+import { RESOURCES } from './resources';
+import { fairingMassDelta } from '../sim/vessel/fairing';
+import { facilityLevel, hallPartLimit, levelFor, padMassLimit, type FacilityId } from '../sim/science/facilities';
 export interface TechNode { id: string; name: string; cost: number; requires: string[]; parts: string[]; column: number; row: number }
 const starters = new Set(['pod-lantern-1', 'tank-0-short', 'tank-1-short', 'tank-1-mid', 'eng-gust', 'eng-sirocco', 'srb-sparkler',
   'dec-0', 'dec-1', 'fin-keel', 'chute-main', 'shield-1', 'battery-brick', 'antenna-thread', 'sensor-thermal']);
@@ -77,10 +81,44 @@ export function unlockTech(p: Progression, id: string): boolean {
 export function launchCost(craft: CraftDef, catalog: Map<string, PartDef>): number {
   return craft.parts.reduce((total, part) => total + (catalog.get(part.partId)?.cost ?? 0), 0);
 }
-export function launchProblem(craft: CraftDef, catalog: Map<string, PartDef>, mode: GameMode, p: Progression): string | null {
+/** Wet mass at launch (kg): dry mass, fairing shells and loaded resources, as the editor's stats count it. */
+export function launchMass(craft: CraftDef, catalog: Map<string, PartDef>): number {
+  let mass = 0;
+  for (const part of craft.parts) {
+    const def = catalog.get(part.partId);
+    if (!def) continue;
+    mass += def.dryMass + fairingMassDelta(def, part.tweaks);
+    for (const [id, capacity] of Object.entries(def.resources) as [keyof typeof RESOURCES, number][])
+      mass += (part.resources?.[id] ?? capacity ?? 0) * (RESOURCES[id]?.density ?? 0);
+  }
+  return mass;
+}
+/** A Space Center limit the craft exceeds: which facility, the level it needs, and why. */
+export interface FacilityBlock { facility: Extract<FacilityId, 'pad' | 'hall'>; level: number; reason: string; message: string }
+const t = (kg: number) => `${(kg / 1000).toLocaleString('en-US', { maximumFractionDigits: kg < 100_000 ? 1 : 0 })} t`;
+export function facilityProblem(craft: CraftDef, catalog: Map<string, PartDef>, mode: GameMode, p: Progression, preset: ScalePresetId): FacilityBlock | null {
+  if (mode !== 'career') return null;
+  const parts = craft.parts.length, hall = facilityLevel(p, mode, 'hall');
+  if (parts > hallPartLimit(hall)) {
+    const level = levelFor('hall', parts, preset);
+    const reason = `${parts} parts, over the Integration Hall's ${hallPartLimit(hall)}-part limit`;
+    return { facility: 'hall', level, reason, message: `${reason}. Upgrade it to level ${level}.` };
+  }
+  const mass = launchMass(craft, catalog), pad = facilityLevel(p, mode, 'pad');
+  if (mass > padMassLimit(pad, preset)) {
+    const level = levelFor('pad', mass, preset);
+    const reason = `${t(mass)}, over the Launch Pad's ${t(padMassLimit(pad, preset))} limit`;
+    return { facility: 'pad', level, reason, message: `${reason}. Upgrade it to level ${level}.` };
+  }
+  return null;
+}
+/** Why the program cannot launch this craft now (research, Space Center limits, funds), else null. */
+export function launchProblem(craft: CraftDef, catalog: Map<string, PartDef>, mode: GameMode, p: Progression, preset: ScalePresetId = 'standard'): string | null {
   if (!craft.parts.length) return 'Build a vehicle first.';
   const locked = craft.parts.find(part => !partUnlocked(part.partId, mode, p));
   if (locked) return `Research required: ${catalog.get(locked.partId)?.name ?? locked.partId}`;
+  const facility = facilityProblem(craft, catalog, mode, p, preset);
+  if (facility) return facility.message;
   if (mode === 'career' && launchCost(craft, catalog) > p.funds) return `Insufficient funds: launch costs ${launchCost(craft, catalog).toLocaleString()} cr.`;
   return null;
 }

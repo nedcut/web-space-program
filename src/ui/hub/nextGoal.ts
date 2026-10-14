@@ -1,4 +1,7 @@
-import { TECH_NODES, partUnlocked } from '../../data/technology';
+import { TECH_NODES, facilityProblem, partUnlocked, type FacilityBlock } from '../../data/technology';
+import { PART_CATALOG } from '../../data/parts';
+import { careerScaleMultiplier } from '../../sim/bodies/scale';
+import { contractSlots, costToLevel } from '../../sim/science/facilities';
 import { STOCK_CRAFTS } from '../../editor/stockCrafts';
 import type { ScalePresetId } from '../../sim/bodies/scale';
 import type { GameMode, Progression } from '../../sim/science/progression';
@@ -18,6 +21,8 @@ export interface NextGoal {
   actionLabel: string;
   /** Secondary note (e.g. offers waiting in Mission Control). */
   aside: string | null;
+  /** A facility upgrade is the blocker: the primary button offers it instead of `action`. */
+  upgrade?: FacilityBlock;
 }
 
 interface Step { milestone: string | null; title: string; craft: Partial<Record<ScalePresetId, string>>; how: string; howOn?: Partial<Record<ScalePresetId, string>> }
@@ -53,6 +58,7 @@ export function researchFor(stockId: string, p: Pick<Progression, 'unlocked'>, m
 }
 const emptyProgress: Progression = { science: 0, funds: 0, reputation: 0, unlocked: [], archive: {}, nextDataId: 1, contracts: [], contractSeed: 0, contractBatch: 0, milestones: [] };
 
+const FACILITY_NAME = { pad: 'Launch Pad', hall: 'Integration Hall' } as const;
 const nodeName = (id: string) => TECH_NODES.find(n => n.id === id)?.name ?? id;
 const craftName = (id: string) => STOCK_CRAFTS.find(s => s.id === id)?.name ?? id;
 const list = (names: string[]) => names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
@@ -61,7 +67,7 @@ export function nextGoal(p: Progression, mode: GameMode, scale: ScalePresetId): 
   if (mode === 'sandbox') return null;
   const offered = p.contracts.filter(c => c.status === 'offered').length;
   const active = p.contracts.filter(c => c.status === 'active').length;
-  const aside = mode === 'career' && offered > 0 && active < 3 ? `${offered} commission${offered > 1 ? 's' : ''} waiting in Mission Control` : null;
+  const aside = mode === 'career' && offered > 0 && active < contractSlots(p, mode) ? `${offered} commission${offered > 1 ? 's' : ''} waiting in Mission Control` : null;
   if (mode === 'career' && active === 0 && offered > 0 && !p.milestones.length && !Object.keys(p.archive).length)
     return { title: 'Take your first commissions', detail: 'Accept the offers you can fly: their advances pay for the first rockets, and a field survey at the launch complex can be done on the pad.', action: 'missions', actionLabel: 'Mission Control', aside: null };
   if (!Object.keys(p.archive).length && !p.milestones.length)
@@ -76,6 +82,14 @@ export function nextGoal(p: Progression, mode: GameMode, scale: ScalePresetId): 
       return { title: step.title, detail: `Research ${names} (${research.cost} science) to fly the ${craftName(stockId!)}.`, action: 'research', actionLabel: 'Research Lab', aside };
     const short = Math.ceil(research.cost - p.science);
     return { title: step.title, detail: `The ${craftName(stockId!)} needs ${names}: ${short} more science. New situations and biomes pay best: hop to space, splash down, fly over new terrain.`, action: 'launch', actionLabel: 'Launch Pad', aside };
+  }
+  const stock = stockId ? STOCK_CRAFTS.find(s => s.id === stockId) : undefined;
+  const block = stock ? facilityProblem(stock.build(), PART_CATALOG, mode, p, scale) : null;
+  if (block) {
+    const cost = costToLevel(p, block.facility, block.level, careerScaleMultiplier(scale));
+    const funds = p.funds >= cost ? `${cost.toLocaleString()} cr` : `${cost.toLocaleString()} cr, ${(cost - p.funds).toLocaleString()} cr more than you have`;
+    return { title: step.title, detail: `The ${craftName(stockId!)} is ${block.reason}. Upgrade the ${FACILITY_NAME[block.facility]} to level ${block.level} (${funds}).`,
+      action: block.facility === 'pad' ? 'launch' : 'editor', actionLabel: 'Upgrade', aside, upgrade: block };
   }
   return { title: step.title, detail: `${stockId ? `The ${craftName(stockId)} is ready. ` : ''}${step.howOn?.[scale] ?? step.how}`, action: 'launch', actionLabel: 'Launch Pad', aside };
 }
