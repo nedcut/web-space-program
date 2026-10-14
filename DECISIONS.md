@@ -1073,3 +1073,45 @@ Owner decisions 2026-10-13 (both recommended options).
 - **Not changed (owner's call):** science income and tech costs (a diligent player lands on the Moon on flight 5
   on Standard), funds as a constraint (nothing to spend surplus on), larger-scale science grind, bare-pod
   aerodynamic trim. See the career report in PROGRESS.md.
+
+## Real lunar probe, probe flight computer, Entry trim (2026-10-13, op/lunartrim)
+
+- **Pebble Probe Core moves to Remote Navigation (guidance-1)** from Precision Attitude (guidance-2). No part stats
+  change. The Standard and Challenging routes do not buy guidance-1, so their progression is unchanged (headless
+  playthrough: Challenging identical to main; Standard identical through the Moon flyby).
+- **Tern Lunar Probe** (stock, Real, `stock-tern-real`): Pebble core, Gyre 0 wheel, Spindle tank and Wisp engine (a
+  kick stage that stays with the probe: finishes the TLI, captures, trims), Thread antenna, thermometer, battery,
+  two Sunfold arrays, on the same three launcher stages as the Meridian Real. 83,698 cr, 14,446 m/s vacuum, research
+  = the Real orbiter's 280 + guidance-0/1 (325). The core's own 300 N·m wheel cannot turn the 4.8 t upper stage for
+  the transfer burn, hence the Gyre 0 (same node). No new parts. The hub's Real "Fly to the Moon" goal now names it.
+- **Probe flight computer (amends D-015).** Problem found while flying the Tern: on Real, Earth hides all three
+  ground stations ~400 s after launch, ~9 minutes before apoapsis, and a disconnected probe gets zero throttle, so no
+  uncrewed craft could circularise or fly a TLI (the same holds for any probe in low orbit on every scale, e.g. the
+  Ringrunner Real). Rule now: the maneuver nodes a vessel has while it has command authority are *uploaded*; out of
+  contact, a node-execution program (Flight assist → Execute next node, or the headless `executeNode`) flying an
+  uploaded node keeps throttle, attitude and staging. Manual input stays locked; a node added offline is not
+  uploaded until the next contact (the planner shows its index in amber with an explanation). Mechanism:
+  `ControlInput.program` (node id) set by `executeNode`, `World.uploadedNode`, authority check in `World.tick`/
+  `physicsStep`; the flight scene keeps such an assist running on signal loss. Not saved: after a reload out of
+  contact the probe waits for the next pass. Light-time delay is still not modelled.
+- **Entry trim** (maneuver planner, worker operation `entry`, `game/planning/entry.ts`). The button appears when the
+  trajectory (after any planned nodes) comes down into an atmosphere: an arrival from another sphere of influence or
+  an eccentric return with periapsis below 2× the atmosphere height, or any orbit whose periapsis is in the air (a
+  parking orbit is not an entry). Corridor model: a point mass flying the conic's energy and angular momentum through
+  the body's atmosphere with drag only, using the vessel's hypersonic C_d·A/m from the flight aero model in a
+  retrograde attitude, measured on a copy with every remaining stage fired (what enters is the capsule, not the
+  stack). Skip edge = highest periapsis that still gets deep; steep edge = 10 g peak. No fitted constants: it matches
+  the rigid-body integrator's skip edge for the stock capsule within 0.5 km (Standard/Challenging/Real 23.8/38.0/
+  59.1 km vs measured 24.2/38.3/~60) and peak g within ~10%. The planned point is the 25 kPa lunar-return design
+  pressure, clamped to [steep + 25 %, shallow − 15 %] of the corridor: a 29 kPa point (25 % below the skip edge, the
+  first version) overheated the Meridian's side-mounted thermometer and lost 49 science on the Standard flyby;
+  heating itself is not modelled. Burn: minimum-norm Newton solve over prograde/normal/radial at three candidate
+  times (two minutes after the last existing node, ten minutes into the arrival sphere, the return leg's apoapsis);
+  the cheapest wins; existing nodes are kept and flown first. The card shows Δv, a corridor gauge (steep · safe ·
+  skip, current periapsis hollow, planned solid) and the timeline. ~0.25 s in the worker (Chrome and Firefox).
+- Measured: Moon returns 15 km too shallow / 8 km too steep need 0.4–1.3 m/s; flown with the real integrator they
+  capture in one pass on every scale with hypersonic peak 3.3 / 4.7 / 7.8 g (Standard / Challenging / Real). The
+  8 g reading after that on Standard is the parachute opening below 1 km/s, unrelated.
+- Headless career script (`scripts/career`): the free-return flyby uses the Entry trim instead of the old perigee
+  bisection; probes plan circularisation at engine cutoff (still in contact) and the TLI during a station pass;
+  transmissions coast on rails while the Moon blocks the link. Crewed flights are flown exactly as before.

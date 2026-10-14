@@ -141,9 +141,10 @@ export function toOrbit(w: World, biomes: Set<string>, apoapsis: number, minStag
   // Plan the circularisation as soon as the engines cut (a probe still has the launch site's signal then, so its
   // flight computer gets the node; at apoapsis it is usually out of contact).
   let planned: ReturnType<typeof planCircularization> | null = null;
+  const probe = !w.active!.state.parts.some(p => p.crew?.length);
   const ok = runAutopilot(w, asc, { maxTime: 1200, onTick: (w) => {
     if (tick() % 25 === 0) { doScience(w); trackBiome(w, biomes); }
-    if (!planned && asc.status === 'coast' && !w.nodes.length) planned = planCircularization(w, 'apoapsis');
+    if (!planned && probe && asc.status === 'coast' && !w.nodes.length) planned = planCircularization(w, 'apoapsis');
   } });
   if (!ok) return `ascent: ${asc.error}`;
   const circ = executeNode(w, planned && w.nodes.includes(planned) ? planned : planCircularization(w, 'apoapsis'), { minStage });
@@ -195,7 +196,7 @@ export function toMoon(w: World, biomes: Set<string>, minStage = 0, periapsis = 
   }
   if (process.env.CAREER_DEBUG) console.log('TLI node in', plan.node.time - w.ut, 'uploaded', w.uploadedNode(plan.node.id), 'connected', w.canControl());
   const tli = executeNode(w, plan.node, { minStage });
-  if (!runAutopilot(w, tli, { maxTime: 2e6, onTick: (w) => { if (process.env.CAREER_DEBUG && tick() % 500 === 0) console.log('  TLI', tli.status, 'conn', w.canControl(), 'up', w.uploadedNode(plan!.node.id), 'nodes', w.nodes.map(n => n.id)); } })) return `TLI: ${tli.error}`;
+  if (!runAutopilot(w, tli, { maxTime: 2e6, onTick: (w) => { if (process.env.CAREER_DEBUG && tick() % 500 === 0) console.log('  TLI', tli.status, 'conn', w.canControl(), 'up', w.uploadedNode(plan!.node.id), 'warp', JSON.stringify(w.warp), 'physics', [...w.vessels.values()].filter(v => v.mode === 'physics').map(v => `${v.state.name}:${v.state.situation}`).join(',')); } })) return `TLI: ${tli.error}`;
   const mcc = planCourseCorrection(w, 'moon', periapsis, w.ut + 1800);
   if (mcc) { const m = executeNode(w, mcc.node, { minStage }); runAutopilot(w, m, { maxTime: 1e5 }); }
   coastUntil(w, (mcc ?? plan).encounterTime + 600, { stopOnSoi: true });
@@ -296,13 +297,19 @@ export function moonAscent(w: World, biomes: Set<string>, minStage = 0): string 
 }
 
 /** Transmit everything aboard and keep the link up (physics ticks) until the job finishes. */
-export function transmitAll(w: World, maxTime = 3600): number {
+export function transmitAll(w: World, maxTime = 4 * 3600): number {
   const before = w.progression.science;
   w.transmitScience();
-  for (let t = 0; t < maxTime && w.transmitting.includes(w.active!.state.id); t += 0.25) {
-    w.warp = { mode: 'rails', index: 0 };
-    w.tick(0.25, neutralInput({ sas: 'stabilityAssist' }));
+  // Sends at ~1 science/s while linked; behind the Moon the job pauses, so coast on rails until the link returns.
+  const end = w.ut + maxTime;
+  let last = w.progression.science, stalled = 0;
+  while (w.ut < end && w.transmitting.includes(w.active!.state.id) && stalled < 120) {
+    if (w.connection(w.active!.state).connected) {
+      w.warp = { mode: 'rails', index: 0 }; w.tick(0.25, neutralInput({ sas: 'stabilityAssist' }));
+      stalled = w.progression.science > last ? 0 : stalled + 0.25; last = w.progression.science;
+    } else coastUntil(w, w.ut + 60);
   }
+  if (process.env.CAREER_DEBUG) console.log('transmitted', (w.progression.science - before).toFixed(1), 'stalled', stalled, 'still', w.transmitting.length);
   return w.progression.science - before;
 }
 

@@ -52,7 +52,8 @@ than importing `World`. `LaunchSite` already follows that structural-input patte
   `deployables.ts` moves retractable arrays/antennas, runs their extend-above-atmosphere automation and tears extended
   ones off in heavy air load or heat (via `breakJoints`).
 - `sim/hazards`: pressure ratings/overload, equipment heat soak, dipole-like radiation dose and Sun occlusion; `game/world/hazards.ts` integrates packed exposure and roster dose.
-- `sim/comms/network.ts`: range/occlusion/relay routing; `sim/science`: biomes, experiments and progression;
+- `sim/comms/network.ts`: range/occlusion/relay routing (a probe out of contact may still fly a maneuver node it
+  received while connected: `ControlInput.program` + `World.uploadedNode`, see DECISIONS op/lunartrim); `sim/science`: biomes, experiments and progression;
   `sim/resources/deposits.ts`: deterministic concentrations; `sim/crew/crew.ts`: roster/seats/control authority.
 
 ### Application and rendering modules
@@ -163,6 +164,10 @@ applied explicitly with fresh World node IDs, after rejecting stale vessel/traje
 returns home; transfer results carry them as `windows`, and `options.departure` re-plans a chosen one.
 The worker's `windows` operation lists moon/return and planet-to-planet estimates without allocating nodes;
 map destination selection and the porkchop dialog reuse that operation before explicit row selection.
+`planning/entry.ts` is the Entry trim: a point-mass, drag-only pass through the atmosphere (the vessel's own
+hypersonic C_d·A/m, measured on a copy with its remaining stages fired) gives the one-pass corridor (skip edge,
+10 g steep edge); the worker's `entry` operation plans the smallest burn after the existing nodes that puts the
+returning periapsis at the 25 kPa design point inside it, and `applyEntryTrim` adds it without clearing nodes.
 `sim/vessel/burnTime.ts` shares stage-by-stage rocket-equation duration and the executor's activation allowance
 with Flight Data, node summary and navball. The countdown centres on time to deliver half the Δv across stages,
 using existing cached `StageDeltaV` readouts and no new per-frame staging projection.
