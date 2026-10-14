@@ -20,13 +20,14 @@ export interface NextGoal {
   aside: string | null;
 }
 
-interface Step { milestone: string | null; title: string; craft: Partial<Record<ScalePresetId, string>>; how: string }
+interface Step { milestone: string | null; title: string; craft: Partial<Record<ScalePresetId, string>>; how: string; howOn?: Partial<Record<ScalePresetId, string>> }
 
 const STEPS: Step[] = [
   { milestone: 'first-orbit', title: 'Reach orbit', craft: { standard: 'stock-firstlight', challenging: 'stock-meridian-challenging', real: 'stock-meridian-real' },
     how: 'Tip east at about 50 m/s, cut the engines once apoapsis is above the atmosphere, then burn prograde at apoapsis (Maneuver planner · Circularize).' },
-  { milestone: 'first-moon-flyby', title: 'Fly to the Moon', craft: { standard: 'stock-meridian', challenging: 'stock-meridian-challenging', real: 'stock-selene-real' },
-    how: 'From a parking orbit, open the map\'s Maneuver planner and plan a transfer to the Moon. Use “Free return” to come home without stopping.' },
+  { milestone: 'first-moon-flyby', title: 'Fly to the Moon', craft: { standard: 'stock-meridian', challenging: 'stock-meridian-challenging', real: 'stock-tern-real' },
+    how: 'From a parking orbit, open the map\'s Maneuver planner and plan a transfer to the Moon. Use “Free return” to come home without stopping.',
+    howOn: { real: 'A probe flies only the nodes it received while a ground station could hear it: plan the transfer during a pass (signal bars lit), then Flight assist → Execute next node. Capture into a low lunar orbit and run the instruments over each region; transmit as you go.' } },
   { milestone: 'first-moon', title: 'Land on the Moon', craft: { standard: 'stock-selene', challenging: 'stock-selene-challenging', real: 'stock-selene-real' },
     how: 'Capture into a low lunar orbit, drop the transfer stage and descend; the Flight assist app can fly the landing. Bring the capsule home.' },
 ];
@@ -66,7 +67,7 @@ export function nextGoal(p: Progression, mode: GameMode, scale: ScalePresetId): 
   if (!Object.keys(p.archive).length && !p.milestones.length)
     return { title: 'Fly a sounding rocket', detail: 'Launch the stock Kestrel. When the Science app lights up, open it and run the crew report (and any instruments you fitted): on the pad, in the air and in space. Stage the parachute on the way down, then recover the capsule.', action: 'launch', actionLabel: 'Launch Pad', aside };
   const step = STEPS.find(s => !s.milestone || !p.milestones.includes(s.milestone));
-  if (!step) return { title: 'Explore the planets', detail: 'Plan a Mars or Venus window in the map\'s Maneuver planner (Transfer windows). Probe cores come with Precision Attitude; long-range antennas with Long Range Telemetry.', action: 'research', actionLabel: 'Research Lab', aside };
+  if (!step) return { title: 'Explore the planets', detail: 'Plan a Mars or Venus window in the map\'s Maneuver planner (Transfer windows). Probe cores come with Remote Navigation; long-range antennas with Long Range Telemetry.', action: 'research', actionLabel: 'Research Lab', aside };
   const stockId = step.craft[scale];
   const research = stockId ? researchFor(stockId, p, mode) : { nodes: [], cost: 0 };
   if (research.nodes.length) {
@@ -76,5 +77,5 @@ export function nextGoal(p: Progression, mode: GameMode, scale: ScalePresetId): 
     const short = Math.ceil(research.cost - p.science);
     return { title: step.title, detail: `The ${craftName(stockId!)} needs ${names}: ${short} more science. New situations and biomes pay best: hop to space, splash down, fly over new terrain.`, action: 'launch', actionLabel: 'Launch Pad', aside };
   }
-  return { title: step.title, detail: `${stockId ? `The ${craftName(stockId)} is ready. ` : ''}${step.how}`, action: 'launch', actionLabel: 'Launch Pad', aside };
+  return { title: step.title, detail: `${stockId ? `The ${craftName(stockId)} is ready. ` : ''}${step.howOn?.[scale] ?? step.how}`, action: 'launch', actionLabel: 'Launch Pad', aside };
 }

@@ -540,6 +540,37 @@ function buildScaleOrbiter(preset: 'real' | 'challenging', catalog: PartCatalog)
   return b.done();
 }
 
+/**
+ * Real-scale uncrewed lunar orbiter: a Pebble core on a small Wisp kick stage (it stays attached: TLI top-up,
+ * lunar capture and orbit trims) above the Meridian Real launcher. Research: the orbiter's plus Remote Navigation.
+ */
+export function buildRealLunarProbe(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Tern Lunar Probe', 'Real scale: uncrewed Moon orbiter. The launcher reaches orbit and starts the transfer; the probe\'s own kick stage finishes it and captures at the Moon. Transmits its science.');
+  const core = b.root('probe-pebble');
+  // The core's own wheel cannot turn the launcher's upper stage for the transfer burn.
+  const wheel = b.stack(core, 'wheel-gyre-0');
+  const kick = b.stack(wheel, 'tank-0-long');
+  b.radial(core, 'battery-brick', 1, 0, 0);
+  b.radial(core, 'antenna-thread', 1, 0, 180);
+  b.radial(core, 'sensor-thermal', 1, 0, 90);
+  b.radial(kick, 'solar-fold', 2, 0.1, 45);
+  const wisp = b.stack(kick, 'eng-wisp');
+  const sep = b.stack(wisp, 'dec-0');
+  const adapter = b.stack(sep, 'adapt-0-1');
+  const upper = b.stack(adapter, 'tank-1-long');
+  const engine = b.stack(upper, 'eng-zephyr');
+  const sep1 = b.stack(engine, 'dec-1');
+  const wide1 = b.stack(sep1, 'adapt-1-2');
+  const middle = b.stack(wide1, 'tank-2-long');
+  const sustainer = b.stack(middle, 'eng-harmattan');
+  const sep2 = b.stack(sustainer, 'dec-2');
+  const wide2 = b.stack(sep2, 'adapt-2-3');
+  const booster = b.stack(wide2, 'tank-3-long');
+  const booster2 = b.stack(booster, 'tank-3-long');
+  b.stack(booster2, 'eng-tempest');
+  return b.done();
+}
+
 /** Direct-ascent lunar expedition: independent descent and return propulsion. */
 export function buildRealMoonLander(catalog: PartCatalog = PART_CATALOG): CraftDef {
   return buildScaleMoonLander('real', catalog);
@@ -642,6 +673,7 @@ export const STOCK_CRAFTS: StockCraft[] = ([
   { scale: 'challenging', id: 'stock-selene-challenging', name: 'Selene Challenging Expedition', blurb: 'Challenging scale · Moon landing and return expedition', build: () => buildChallengingMoonLander() },
   { scale: 'real', id: 'stock-ringrunner-real', name: 'Ringrunner Real Saturn Probe', blurb: 'Real scale · isotope-powered nuclear Saturn flyby', build: () => buildRealRingrunner() },
   { scale: 'real', id: 'stock-meridian-real', name: 'Meridian Real Orbiter', blurb: 'Real scale · orbital launcher and return capsule', build: () => buildRealOrbiter() },
+  { scale: 'real', id: 'stock-tern-real', name: 'Tern Lunar Probe', blurb: 'Real scale · uncrewed Moon orbiter · transmits its science', build: () => buildRealLunarProbe() },
   { scale: 'real', id: 'stock-selene-real', name: 'Selene Real Expedition', blurb: 'Real scale · five-metre Moon landing and return expedition', build: () => buildRealMoonLander() },
   { scale: 'standard', id: 'stock-firstlight', name: 'Firstlight Orbiter', blurb: 'Starting equipment · Standard-scale orbit', build: () => buildFoundationOrbiter() },
 ] satisfies StockCraft[]).map(stock => ({

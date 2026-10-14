@@ -950,7 +950,8 @@ export class FlightController {
       this.gearPending = undefined;
       this.gearWanted = undefined;
       this.pendingCommands = [];
-      if (this.assist) this.cancelAssist('Assist stopped: no signal or command authority');
+      // A probe's flight computer keeps flying a node burn it was given while in contact.
+      if (this.assist && !this.world.uploadedNode(this.assist.nodeId)) this.cancelAssist('Assist stopped: no signal or command authority');
     }
     const s = this.input.state;
     const wv = this.world.active;

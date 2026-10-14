@@ -9,10 +9,11 @@ import { Universe } from '../../src/game/universe';
 import { PART_CATALOG } from '../../src/data/parts';
 import { DEFAULT_START_UT } from '../../src/game/store';
 import { TECH_NODES } from '../../src/data/technology';
-import { buildChallengingOrbiter, buildFoundationOrbiter, buildMoonLander, buildOrbiter, buildRealOrbiter, buildSoundingRocket } from '../../src/editor/stockCrafts';
+import { buildChallengingOrbiter, buildFoundationOrbiter, buildMoonLander, buildOrbiter, buildRealLunarProbe, buildRealOrbiter, buildSoundingRocket } from '../../src/editor/stockCrafts';
+import { researchFor } from '../../src/ui/hub/nextGoal';
 import type { ScalePreset } from '../../src/sim/bodies/scale';
 import type { CraftDef } from '../../src/sim/vessel/types';
-import { freeReturnFlyby, captureMoon, deorbitAndRecover, descend, doScience, hop, landMoon, moonAscent, moonHome, sensor, toMoon, toOrbit, buy } from './flights';
+import { freeReturnFlyby, captureMoon, deorbitAndRecover, descend, doScience, hop, landMoon, moonAscent, moonHome, sensor, toMoon, toOrbit, buy, probeLunarOrbit } from './flights';
 
 export interface LedgerRow { flight: number; name: string; ok: boolean; note: string; cost: number; funds: number; science: number; reputation: number; days: number; research: string; contracts: string }
 
@@ -77,17 +78,36 @@ export function playCareer(preset: ScalePreset = 'standard', log = (s: string) =
     desk((kind, body) => body === 'earth');
     const r = orbitFlight('Scale orbiter', sensor(preset === 'real' ? buildRealOrbiter() : buildChallengingOrbiter()), 2);
     record('Scale orbiter', !r.err, r.err ?? [...r.biomes].join(', ').slice(0, 200), r.cost, research([]));
-    desk((kind, body) => body === 'earth' || kind === 'flyby');
-    {
+    if (preset === 'real') {
+      // Real: the Meridian Real cannot reach the Moon. Remote Navigation's probe core makes the Tern lunar orbiter the
+      // next science source; instruments are researched as science allows, then probes fly until the expedition is paid.
+      desk((kind, body) => body === 'earth' || (body === 'moon' && (kind === 'flyby' || kind === 'orbit')));
+      for (let i = 0; i < 6; i++) {
+        const got = research(['guidance-0', 'guidance-1', 'discovery-1', 'discovery-2']);
+        const need = researchFor('stock-selene-real', p, 'career');
+        if (need.cost <= p.science) { log(`expedition affordable: ${need.nodes.join(' ')} (${need.cost})`); break; }
+        const craft = sensor(buildRealLunarProbe());
+        if (p.unlocked.includes('discovery-1')) sensor(craft, 'sensor-magnetic', 1);
+        if (p.unlocked.includes('discovery-2')) sensor(craft, 'sensor-gravity', 2);
+        const biomes = new Set<string>();
+        const { cost, problem } = buy(w, craft);
+        const err = problem ?? probeLunarOrbit(w, biomes, 220000);
+        const moon = [...biomes].filter(b => b.startsWith('moon/'));
+        record(`Tern lunar orbiter ${i + 1}`, !err, err ?? `${moon.length} Moon situations/biomes: ${moon.join(', ')}`.slice(0, 220), cost, got);
+        if (err) break;
+        desk((kind, body) => body === 'earth' || (body === 'moon' && (kind === 'flyby' || kind === 'orbit')));
+      }
+    } else {
+      desk((kind, body) => body === 'earth' || kind === 'flyby');
       const biomes = new Set<string>();
-      const { cost, problem } = buy(w, sensor(preset === 'real' ? buildRealOrbiter() : buildChallengingOrbiter()));
+      const { cost, problem } = buy(w, sensor(buildChallengingOrbiter()));
       let err = problem;
-      if (!err) err = toOrbit(w, biomes, preset === 'challenging' ? 140000 : 220000, 2) ?? freeReturnFlyby(w, biomes, 0) ?? deorbitAndRecover(w, biomes);
+      if (!err) err = toOrbit(w, biomes, 140000, 2) ?? freeReturnFlyby(w, biomes, 0) ?? deorbitAndRecover(w, biomes);
       record('Scale orbiter Moon flyby', !err, err ?? [...biomes].join(', ').slice(0, 200), cost, research([]));
     }
     const expedition = preset === 'real' ? 775 : 595;
     const spent = TECH_NODES.filter(n => p.unlocked.includes(n.id)).reduce((n, t) => n + t.cost, 0);
-    log(`end: funds ${Math.round(p.funds)} science ${p.science.toFixed(1)} (spent ${spent}; expedition path needs ${expedition}) rep ${p.reputation} unlocked ${p.unlocked.join(' ')} milestones ${p.milestones.join(' ')}`);
+    log(`end: funds ${Math.round(p.funds)} science ${p.science.toFixed(1)} (spent ${spent}; expedition path needs ${expedition}; still to research ${researchFor(preset === 'real' ? 'stock-selene-real' : 'stock-selene-challenging', p, 'career').cost}) rep ${p.reputation} unlocked ${p.unlocked.join(' ')} milestones ${p.milestones.join(' ')}`);
     return { rows, world: w };
   }
   const earthOnly = (kind: string, body: string, biome?: string) => body === 'earth' && (kind !== 'science' || biome === 'Launch Complex' || biome === 'Oceans' || biome === 'Shores');

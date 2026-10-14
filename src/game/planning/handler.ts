@@ -3,6 +3,7 @@ import { transferWindows } from './windows';
 import { landingPrediction } from './landing';
 import { Universe } from '../universe';
 import { planTransferToBody } from './transfers';
+import { planEntryTrim } from './entry';
 import { planInterplanetaryTransfer, planCourseCorrectionToBody, porkchopRows, interplanetaryWindows } from '../interplanetary';
 import type { PlanningWorld } from './context';
 import type { PlannerEvent, PlannerMessage, PlanningSnapshot } from './protocol';
@@ -64,6 +65,7 @@ export function createPlannerHandler(send: (event: PlannerEvent) => void, yieldT
             ? interplanetaryWindows(world, target.id) : transferWindows(world, target.id, { earliest: world.ut + 300 });
           break;
         }
+        case 'entry': result = planEntryTrim(world, snapshot.nodes, message.args, report); break;
         case 'transfer': result = planTransferToBody(world, message.args.target, message.args.options, report); break;
         case 'interplanetary': result = planInterplanetaryTransfer(world, message.args.target, message.args.options, report); break;
         case 'correction': result = planCourseCorrectionToBody(world, message.args.target, message.args.options, report); break;

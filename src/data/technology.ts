@@ -55,6 +55,8 @@ for (const [id, ids] of Object.entries({
   'propulsion-2': ['tank-3-mid', 'tank-3-long', 'eng-tempest', 'eng-foehn'],
   'structures-0': ['adapt-1-2'],
   'structures-1': ['leg-stilt', 'leg-strider'],
+  // The light probe core opens an uncrewed Moon path on Real before the crewed expedition hardware (775 science).
+  'guidance-1': ['probe-pebble'],
 })) {
   for (const node of TECH_NODES) node.parts = node.parts.filter(part => !ids.includes(part));
   TECH_NODES.find(node => node.id === id)!.parts.push(...ids);

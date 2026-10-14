@@ -69,6 +69,9 @@ export interface ControlInput {
   maneuverDirection?: Vec3;
   /** Optional one-shot commands (part actions, action groups, flight tweaks), applied once by the authority. */
   commands?: VesselCommand[];
+  /** Set by a node-execution program: the id of the maneuver node it flies (a probe's flight computer may fly an
+   * uploaded node without signal, see `World.uploadedNode`). */
+  program?: number;
 }
 
 /** Flight-adjustable tweak keys (the rest are editor-only). */

@@ -63,6 +63,8 @@ export interface Autopilot {
   done: boolean;
   /** Set when the controller gives up (e.g. out of fuel); `done` stays false. */
   error?: string;
+  /** Node-execution programs: the maneuver node being flown. */
+  nodeId?: number;
   update(world: World): AutopilotStep;
   /**
    * Commands that undo temporary vessel settings the program made (e.g. a thrust limiter for a fine trim). The
@@ -723,6 +725,10 @@ export function executeNode(world: World, node: ManeuverNode, opts: ExecuteNodeO
       return { input: steer(steerDir, throttleForFraction(fraction, p.minThrottle || 0)) };
     },
   };
+  // Every input the program sends names its node: a probe out of contact still flies a node it had uploaded.
+  const update = ap.update.bind(ap);
+  ap.nodeId = node.id;
+  ap.update = (w) => { const step = update(w); step.input = { ...step.input, program: node.id }; return step; };
   return ap;
 }
 

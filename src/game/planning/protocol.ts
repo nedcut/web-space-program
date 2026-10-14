@@ -17,6 +17,7 @@ export interface PlanningOperations {
   transfer: { args: { target: string; options?: TransferOptions }; result: TransferPlan | null };
   interplanetary: { args: { target: string; options?: InterplanetaryOptions }; result: InterplanetaryPlan | null };
   correction: { args: { target: string; options: CourseCorrectionOptions }; result: TransferPlan | null };
+  entry: { args: import('./entry').EntryTrimOptions; result: import('./entry').EntryTrimPlan | null };
   porkchop: { args: { from: string; target: string; departures: SearchRange; flights: SearchRange }; result: (PorkchopPoint | null)[] };
 }
 export type PlanningOperation = keyof PlanningOperations;

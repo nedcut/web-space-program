@@ -2,11 +2,13 @@ import { usePlanner } from './usePlanner';
 import { DepartureOptions } from './DepartureOptions';
 import type { TransferWindow as DepartureWindow } from '../../game/planning/windows';
 import type { TransferPlan } from '../../game/planning/transfers';
-import { applyPlanningResult } from '../../game/planning/apply';
+import { applyEntryTrim, applyPlanningResult } from '../../game/planning/apply';
+import { enteringDragPerMass, findEntry, type EntryTrimPlan } from '../../game/planning/entry';
 import { TransferWindow } from './TransferWindow';
 import { memo, useEffect, useRef, useState } from 'react';
 import type { World } from '../../game/world';
 import { timeToApoapsis, timeToPeriapsis } from '../../sim/orbit';
+import { length } from '../../util/vec3';
 import { formatCountdown, formatDistance, formatDuration } from '../../ui/format';
 import { planCircularization } from '../../game/autopilot';
 import { useRenderProfile } from './useRenderProfile';
@@ -15,7 +17,7 @@ import type { FlightMap } from '../map/FlightMap';
 import { burnTime, vacuumStages } from '../map/nodeInfo';
 import { AXIS_COLORS } from '../../render/map/mapIcons';
 import { SasIcon } from './glyphs';
-import { DvBudget, Timeline } from './PlannerBits';
+import { CorridorGauge, DvBudget, Timeline } from './PlannerBits';
 import { budgetStages, dvText, shortCountdown, shortDuration, whenTitle } from './plannerFormat';
 import './planner.css';
 
@@ -27,6 +29,8 @@ function storedOpen(): string | null {
 
 /** The last transfer the planner installed, shown as a timeline card while its node exists. */
 interface PlanCard { target: string; nodeId: number; encounterTime: number; periapsis: number; captureDv?: number; returnPerigee?: number }
+/** The last entry trim the planner installed, shown with its corridor gauge while its node exists. */
+interface TrimCard { nodeId: number; plan: EntryTrimPlan }
 
 const WarpGlyph = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden><path d="M2 3l6 5-6 5zM8 3l6 5-6 5z" /></svg>;
 const FrameGlyph = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" /></svg>;
@@ -46,6 +50,7 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
   const planner = usePlanner(world);
   const [planMsg, setPlanMsg] = useState('');
   const [card, setCard] = useState<PlanCard | null>(null);
+  const [trim, setTrim] = useState<TrimCard | null>(null);
   const [transferTarget, setTransferTarget] = useState<string | null>(null);
   const [options, setOptions] = useState<{ target: string; windows: DepartureWindow[] } | null>(null);
 
@@ -134,7 +139,24 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
       setPlanMsg((e as Error).message);
     }
   };
+  const planEntryTrim = async () => {
+    setPlanMsg('');
+    try {
+      const { result: plan, snapshot } = await planner.run('entry', { dragPerMass: enteringDragPerMass(wv.state) });
+      if (!plan) { setPlanMsg('No trim found: the return is outside what a small correction can fix.'); return; }
+      applyEntryTrim(world, snapshot, plan);
+      const node = world.nodes.find(n => Math.abs(n.time - plan.node.time) < 1e-6 && n.prograde === plan.node.prograde);
+      if (node) { setTrim({ nodeId: node.id, plan }); map?.selectNode(node.id); }
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') setPlanMsg((e as Error).message);
+    }
+  };
+  // The trajectory comes down into air (after any planned nodes): offer the trim while still above the atmosphere.
+  const atmoTop = body.atmosphere ? body.radius + body.atmosphere.height : 0;
+  const entry = (!atmoTop || length(world.relativeState(wv).position) > atmoTop) ? findEntry(world.trajectory(), id => world.universe.body(id)) : null;
   const nodes = [...world.nodes].sort((a, b) => a.time - b.time);
+  // A probe out of contact flies only the nodes it received while it had signal.
+  const offline = !world.canControl(wv.state);
   const nodeDv = (n: { prograde: number; normal: number; radial: number }) => Math.hypot(n.prograde, n.normal, n.radial);
   const planNode = card ? nodes.find(n => n.id === card.nodeId) : undefined;
   const stages = nodes.length ? vacuumStages(world) : [];
@@ -163,6 +185,26 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
     </div>;
   }
 
+  const trimNode = trim ? nodes.find(n => n.id === trim.nodeId) : undefined;
+  let trimView = null;
+  if (trim && trimNode) {
+    const p = trim.plan, where = world.universe.body(p.body).name, dv = nodeDv(trimNode), burn = burnTime(world, dv, stages);
+    trimView = <div className="mp-card" aria-label={`${where} entry trim`}>
+      <div className="mp-card-head">
+        <span className="mp-card-title">Entry trim · {where}</span>
+        <span className="pl-num">{dv < 10 ? `${dv.toFixed(2)} m/s` : dvText(dv)}</span>
+        <span />
+      </div>
+      <CorridorGauge steep={p.corridor.steep} shallow={p.corridor.shallow} current={p.before} planned={p.after} gLimit={p.corridor.gLimit} />
+      <Timeline stops={[
+        { label: 'Now' },
+        { label: 'Trim', value: Number.isFinite(burn) ? shortDuration(burn) : 'no engine', tone: 'burn', title: `Node ${whenTitle(trimNode.time, world.ut)}` },
+        { label: 'Entry', value: `Pe ${formatDistance(p.after)}`, tone: 'arrive', title: `Periapsis ${whenTitle(p.entryTime, world.ut)}: ${formatDistance(p.after)} (was ${formatDistance(p.before)})` },
+      ]} gaps={[shortDuration(trimNode.time - world.ut), shortDuration(p.entryTime - trimNode.time)]} />
+      {map && <button className="btn small primary" disabled={!!planner.progress} title="Warp to the burn. Flight assist → Execute next node can fly it." onClick={() => map.warpToNode(trimNode.id)}>Warp to burn</button>}
+    </div>;
+  }
+
   const chartButton = options && charts(options.target) ? <button className="btn ghost small pl-icon" disabled={!!planner.progress} title="Transfer window chart (departure date × flight time)" aria-label="Transfer window chart" onClick={() => setTransferTarget(options.target)}><ChartGlyph /></button> : null;
   const moon = options && world.universe.body(options.target).parent === body.id;
   const freeReturnButton = moon ? <button className="btn small" disabled={!!planner.progress} title="Plan a flyby that swings back home without a return burn (crewed first flights)" onClick={() => planTransfer(options.target, undefined, undefined, true)}>Free return</button> : null;
@@ -175,18 +217,19 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
     <div className="panel mp">
       {header}
       {nodes.length > 0 && <div className="mp-nodes">
-        {nodes.map((n, i) => <div key={n.id} className="mp-node">
-          <button className="btn ghost small mp-node-main" onClick={() => map?.openNode(n.id)} title={`Node ${i + 1}: ${nodeDv(n).toFixed(1)} m/s at ${whenTitle(n.time, world.ut)}\nClick to edit`}>
+        {nodes.map((n, i) => { const unsent = offline && !world.uploadedNode(n.id); return <div key={n.id} className={`mp-node${unsent ? ' unsent' : ''}`}>
+          <button className="btn ghost small mp-node-main" onClick={() => map?.openNode(n.id)} title={`Node ${i + 1}: ${nodeDv(n).toFixed(1)} m/s at ${whenTitle(n.time, world.ut)}${unsent ? '\nNot sent: no signal. The probe gets this node at its next station pass; until then it cannot fly it.' : offline ? '\nSent to the probe: its flight computer can fly this node without signal.' : ''}\nClick to edit`}>
             <span className="mp-idx">{i + 1}</span>
             <span className="pl-num">{nodeDv(n).toFixed(1)}<span className="unit">m/s</span></span>
             <span className="pl-num dim">{shortCountdown(n.time - world.ut)}</span>
           </button>
           {map && <button className="btn small pl-icon" aria-label={`Warp to node ${i + 1}`} title="Warp to node" onClick={() => map.warpToNode(n.id)}><WarpGlyph /></button>}
           <button className="btn small danger pl-icon" aria-label={`Delete node ${i + 1}`} title="Delete node" onClick={() => map ? map.deleteNode(n.id) : world.removeNode(n.id)}>×</button>
-        </div>)}
+        </div>; })}
       </div>}
       {nodes.length > 0 && <DvBudget stages={budgetStages(stages)} need={need} extra={planNode ? card?.captureDv : undefined} />}
       {cardView}
+      {trimView}
       <div className="mp-scroll">
         {world.preciseGravity && <div className="mp-note" title="The map shows the precise (n-body) path; planners use patched conics. Allow correction burns.">Precise path · plans use patched conics</div>}
         {nodes.length === 0 && <div className="mp-hint" title="Drag a node's handles to shape it; click the node for exact values. Arrow keys nudge the selected node (? in the map readout lists all keys).">
@@ -208,6 +251,12 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
           <button className="btn small" aria-label="Circularize @ Ap" title="Replace nodes with a circularization burn at apoapsis" onClick={() => planCirc('apoapsis')} disabled={orbit.e >= 1}>Ap</button>
           <button className="btn small" aria-label="Circularize @ Pe" title="Replace nodes with a circularization burn at periapsis" onClick={() => planCirc('periapsis')}>Pe</button>
         </div>
+        {entry && <div className="mp-row">
+          <span className="mp-row-label">Entry</span>
+          <button className="btn small" disabled={!!planner.progress} aria-label="Entry trim"
+            title={`Plan the smallest burn that puts the ${world.universe.body(entry.body).name} periapsis (now ${formatDistance(entry.periapsis)}) in this craft's entry corridor: deep enough not to skip out, shallow enough for heat and g.`}
+            onClick={planEntryTrim}>Entry trim</button>
+        </div>}
         {targets.length > 0 && <div className="mp-row">
           <span className="mp-row-label">Transfer</span>
           <select

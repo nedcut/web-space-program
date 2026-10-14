@@ -112,3 +112,17 @@
 .pc-read { display: flex; flex-wrap: wrap; gap: 4px 16px; min-height: 36px; align-content: center; font-size: 12px; }
 .pc-read > span { white-space: nowrap; }
 .pc-read b { font-weight: 600; }
+
+/* Entry corridor gauge: steep | safe band | skip, current (hollow) and planned (solid) periapsis ticks. */
+.cg { display: grid; gap: 2px; font-size: 10.5px; }
+.cg-bar { position: relative; height: 8px; border-radius: 3px; overflow: hidden; background: #ffffff0d; }
+.cg-bar i { position: absolute; top: 0; bottom: 0; }
+.cg-steep { left: 0; background: repeating-linear-gradient(135deg, #ff929466 0 3px, transparent 3px 6px); }
+.cg-ok { background: var(--good-soft); border-left: 1px solid var(--good); border-right: 1px solid var(--good); }
+.cg-skip { right: 0; background: repeating-linear-gradient(45deg, #f1c97b55 0 3px, transparent 3px 6px); }
+.cg-bar b { position: absolute; top: -1px; bottom: -1px; width: 6px; margin-left: -3px; border-radius: 2px; }
+.cg-now { border: 1.5px solid var(--text); background: transparent; box-sizing: border-box; }
+.cg-plan { background: var(--accent); box-shadow: 0 0 0 1px #0b1726; }
+.cg-text { display: flex; justify-content: space-between; gap: 6px; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Probe out of contact: a node it has not received yet. */
+.mp-node.unsent .mp-idx { background: var(--warn); }

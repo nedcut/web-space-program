@@ -507,6 +507,27 @@ export class World {
     this.warp = next;
   }
 
+  /**
+   * Probe flight computer (D-015 amendment): the nodes the active vessel had while it last had command authority.
+   * Out of contact, a node-execution program may still fly one of them; everything else stays locked.
+   */
+  private uploads: { vessel: string; nodes: Set<number> } | null = null;
+
+  /** True when `nodeId` was uploaded to the active vessel while it had signal and still exists. */
+  uploadedNode(nodeId: number | undefined, v = this.active?.state): boolean {
+    return nodeId !== undefined && !!v && this.uploads?.vessel === v.id && this.uploads.nodes.has(nodeId) && this.nodes.some(n => n.id === nodeId) && hasControl(v);
+  }
+
+  /** Command authority for this step's input: a link (or crew), or a program flying an uploaded node. */
+  private commanded(v: VesselState | undefined, input: ControlInput): boolean {
+    if (this.canControl(v)) {
+      if (v && v === this.active?.state && (this.uploads?.vessel !== v.id || this.uploads.nodes.size !== this.nodes.length || this.nodes.some(n => !this.uploads!.nodes.has(n.id))))
+        this.uploads = { vessel: v.id, nodes: new Set(this.nodes.map(n => n.id)) };
+      return true;
+    }
+    return this.uploadedNode(input.program, v);
+  }
+
   private disconnectedInput(v?: VesselState): ControlInput {
     return neutralInput({ sas: v && hasControl(v) && v.sas.mode !== 'off' ? 'stabilityAssist' : 'off' });
   }
@@ -514,7 +535,7 @@ export class World {
   /** Advance the simulation by `realDt` seconds of wall time with the given control input for the active vessel. */
   tick(realDt: number, input: ControlInput) {
     this.discoverLandmarks();
-    if (!this.canControl()) { input = this.disconnectedInput(this.active?.state); this.stageRequested = false; this.evaJumpRequested = false; this.gearRequested = undefined; this.pendingCommands = []; }
+    if (!this.commanded(this.active?.state, input)) { input = this.disconnectedInput(this.active?.state); this.stageRequested = false; this.evaJumpRequested = false; this.gearRequested = undefined; this.pendingCommands = []; }
     realDt = Math.min(realDt, 0.25);
     const now = performance.now();
     this.messages = this.messages.filter((m) => m.expires > now);
@@ -674,7 +695,8 @@ export class World {
     for (const wv of [...this.vessels.values()]) {
       if (wv.state.destroyed) continue;
       const isActive = inputs ? inputs.has(wv.state.id) : wv === active;
-      let vesselInput = isActive && !this.canControl(wv.state) ? this.disconnectedInput(wv.state) : inputs?.get(wv.state.id) ?? input;
+      const given = inputs?.get(wv.state.id) ?? input;
+      let vesselInput = isActive && !this.commanded(wv.state, given) ? this.disconnectedInput(wv.state) : given;
       if (isActive && vesselInput.commands?.length) {
         if (wv.state.eva || wv.state.destroyed) vesselInput = { ...vesselInput, commands: undefined };
         else {

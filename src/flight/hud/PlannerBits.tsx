@@ -50,3 +50,27 @@ export function Timeline({ stops, gaps }: { stops: readonly TimelineStop[]; gaps
     ])}
   </div>;
 }
+
+/**
+ * Entry corridor: vacuum periapsis altitude from deep (left: too steep, heat and g) to high (right: skips back out),
+ * with the safe band between. Ticks mark the current periapsis (hollow) and the planned one (solid); values off the
+ * scale sit at its ends.
+ */
+export function CorridorGauge({ steep, shallow, current, planned, gLimit }: { steep: number; shallow: number; current: number; planned?: number; gLimit: number }) {
+  const width = Math.max(1, shallow - steep), lo = steep - width * 0.6, hi = shallow + width * 0.6;
+  const at = (alt: number) => pct(Math.max(lo, Math.min(hi, alt)) - lo, hi - lo);
+  const zone = (alt: number) => alt < steep ? `too steep (over ${gLimit} g)` : alt > shallow ? 'too shallow (skips out)' : 'in the corridor';
+  const km = (alt: number) => `${(alt / 1000).toFixed(1)} km`;
+  const title = [`Periapsis now ${km(current)}: ${zone(current)}`, ...(planned !== undefined ? [`Planned ${km(planned)}: ${zone(planned)}`] : []),
+    `Corridor ${km(steep)} – ${km(shallow)}`].join('\n');
+  return <div className="cg" title={title} role="img" aria-label={title.replaceAll('\n', '. ')}>
+    <div className="cg-bar">
+      <i className="cg-steep" style={{ width: at(steep) }} />
+      <i className="cg-ok" style={{ left: at(steep), width: pct(width, hi - lo) }} />
+      <i className="cg-skip" style={{ left: at(shallow) }} />
+      <b className="cg-now" style={{ left: at(current) }} />
+      {planned !== undefined && <b className="cg-plan" style={{ left: at(planned) }} />}
+    </div>
+    <div className="cg-text"><span>steep</span><span>{km(steep)} – {km(shallow)}</span><span>skip</span></div>
+  </div>;
+}

@@ -6,7 +6,7 @@ import { World } from '../../src/game/world';
 import { PART_CATALOG } from '../../src/data/parts';
 import { launchCost, launchProblem } from '../../src/data/technology';
 import { neutralInput } from '../../src/sim/vessel';
-import { periapsisRadius, propagate, stateToElements } from '../../src/sim/orbit';
+import { period, periapsisRadius, propagate, stateToElements } from '../../src/sim/orbit';
 import type { CraftDef } from '../../src/sim/vessel/types';
 import {
   ascentGuidance, coastUntil, planFreeReturn, executeNode, landingController, localFrame, planCircularization, planCourseCorrection,
@@ -14,6 +14,7 @@ import {
 } from '../../src/game/autopilot';
 import { length, normalize, scale } from '../../src/util/vec3';
 import { arrivalPeriapsisAltitude } from '../../src/game/planning/arrival';
+import { enteringDragPerMass, planEntryTrim, type EntryTrimPlan } from '../../src/game/planning/entry';
 
 export const sensor = (craft: CraftDef, partId = 'sensor-thermal', k = 0): CraftDef => {
   craft.parts.push({ uid: 1000 + k, partId, parent: craft.parts[0].uid, attachNode: 'srf', position: { x: 0.7, y: k * 0.2, z: 0 }, rotation: { x: 0, y: 0, z: 0, w: 1 } });
@@ -137,8 +138,15 @@ const dotUp = (w: World) => { const f = localFrame(w, w.active!); return f.surfV
 export function toOrbit(w: World, biomes: Set<string>, apoapsis: number, minStage = 0): string | null {
   const science = (ap: Autopilot, t: number) => runAutopilot(w, ap, { maxTime: t, onTick: (w) => { if (tick() % 25 === 0) { doScience(w); trackBiome(w, biomes); } } });
   const asc = ascentGuidance(w, { targetApoapsis: apoapsis, minStage });
-  if (!science(asc, 1200)) return `ascent: ${asc.error}`;
-  const circ = executeNode(w, planCircularization(w, 'apoapsis'), { minStage });
+  // Plan the circularisation as soon as the engines cut (a probe still has the launch site's signal then, so its
+  // flight computer gets the node; at apoapsis it is usually out of contact).
+  let planned: ReturnType<typeof planCircularization> | null = null;
+  const ok = runAutopilot(w, asc, { maxTime: 1200, onTick: (w) => {
+    if (tick() % 25 === 0) { doScience(w); trackBiome(w, biomes); }
+    if (!planned && asc.status === 'coast' && !w.nodes.length) planned = planCircularization(w, 'apoapsis');
+  } });
+  if (!ok) return `ascent: ${asc.error}`;
+  const circ = executeNode(w, planned && w.nodes.includes(planned) ? planned : planCircularization(w, 'apoapsis'), { minStage });
   if (!science(circ, 3000)) return `circularise: ${circ.error}`;
   doScience(w); trackBiome(w, biomes);
   return null;
@@ -172,10 +180,22 @@ function hasFuelLeft(w: World) {
 
 /** Earth parking orbit → transfer to the Moon (with a course correction) → into its SOI. */
 export function toMoon(w: World, biomes: Set<string>, minStage = 0, periapsis = 30000): string | null {
-  const plan = planTransferToBody(w, 'moon', { periapsisAltitude: periapsis });
+  // A probe flies only nodes it received while in contact: plan during a station pass.
+  for (let k = 0; k < 4320 && !w.canControl(); k++) coastUntil(w, w.ut + 60);
+  let plan = planTransferToBody(w, 'moon', { periapsisAltitude: periapsis });
   if (!plan) return 'no Moon transfer found';
+  coastUntil(w, w.ut + 1);
+  // Still not uploaded (contact lost before the node was sent): plan a later one at the next pass.
+  for (let k = 0; k < 8 && !w.uploadedNode(plan.node.id) && !w.canControl(); k++) {
+    coastUntil(w, plan.node.time - 900);
+    if (w.uploadedNode(plan.node.id) || w.canControl()) break;
+    w.removeNode(plan.node.id);
+    plan = planTransferToBody(w, 'moon', { periapsisAltitude: periapsis, earliest: w.ut + 1200 });
+    if (!plan) return 'no Moon transfer found';
+  }
+  if (process.env.CAREER_DEBUG) console.log('TLI node in', plan.node.time - w.ut, 'uploaded', w.uploadedNode(plan.node.id), 'connected', w.canControl());
   const tli = executeNode(w, plan.node, { minStage });
-  if (!runAutopilot(w, tli, { maxTime: 2e6 })) return `TLI: ${tli.error}`;
+  if (!runAutopilot(w, tli, { maxTime: 2e6, onTick: (w) => { if (process.env.CAREER_DEBUG && tick() % 500 === 0) console.log('  TLI', tli.status, 'conn', w.canControl(), 'up', w.uploadedNode(plan!.node.id), 'nodes', w.nodes.map(n => n.id)); } })) return `TLI: ${tli.error}`;
   const mcc = planCourseCorrection(w, 'moon', periapsis, w.ut + 1800);
   if (mcc) { const m = executeNode(w, mcc.node, { minStage }); runAutopilot(w, m, { maxTime: 1e5 }); }
   coastUntil(w, (mcc ?? plan).encounterTime + 600, { stopOnSoi: true });
@@ -218,7 +238,17 @@ export function freeReturnFlyby(w: World, biomes: Set<string>, minStage = 0): st
   coastUntil(w, w.ut + 20 * 86400, { stopOnSoi: true });
   if (process.env.CAREER_DEBUG) console.log('after flyby', w.active!.body, w.orbitSummary(w.active!).pe);
   if ((w.active!.body as string) !== 'earth') return 'did not come back to Earth';
-  return fixPerigee(w, arrivalPeriapsisAltitude(w, 'moon', 'earth', w.ut), minStage);
+  return entryTrim(w, minStage).err;
+}
+
+/** The planner's Entry trim: smallest burn that puts the returning periapsis in this vessel's corridor; flown. */
+export function entryTrim(w: World, minStage = 0): { err: string | null; plan: EntryTrimPlan | null } {
+  const plan = planEntryTrim(w, [...w.nodes], { dragPerMass: enteringDragPerMass(w.active!.state) });
+  if (process.env.CAREER_DEBUG) console.log('entry trim', plan && { dv: plan.dv, before: plan.before, after: plan.after, corridor: plan.corridor, in: plan.node.time - w.ut });
+  if (!plan) return { err: 'no entry trim', plan };
+  const burn = executeNode(w, plan.node, { minStage, matchEnergy: false });
+  if (!runAutopilot(w, burn, { maxTime: 3e6 })) return { err: `entry trim: ${burn.error}`, plan };
+  return { err: null, plan };
 }
 
 /** In the Moon's SOI: optionally capture, then burn home and coast back into Earth's SOI. */
@@ -262,5 +292,35 @@ export function moonAscent(w: World, biomes: Set<string>, minStage = 0): string 
   const c = executeNode(w, planCircularization(w, 'apoapsis'), { minStage });
   if (!runAutopilot(w, c, { maxTime: 1e5 })) return `lunar circularise: ${c.error}`;
   doScience(w); trackBiome(w, biomes);
+  return null;
+}
+
+/** Transmit everything aboard and keep the link up (physics ticks) until the job finishes. */
+export function transmitAll(w: World, maxTime = 3600): number {
+  const before = w.progression.science;
+  w.transmitScience();
+  for (let t = 0; t < maxTime && w.transmitting.includes(w.active!.state.id); t += 0.25) {
+    w.warp = { mode: 'rails', index: 0 };
+    w.tick(0.25, neutralInput({ sas: 'stabilityAssist' }));
+  }
+  return w.progression.science - before;
+}
+
+/**
+ * Uncrewed lunar orbiter (Tern): parking orbit → Moon transfer (launcher stage, then the probe's kick stage) →
+ * capture into a low orbit → a day of orbits running every instrument over new biomes, transmitting as it goes.
+ */
+export function probeLunarOrbit(w: World, biomes: Set<string>, parking: number, periapsis = 100000, orbits = 6): string | null {
+  const err = toOrbit(w, biomes, parking, 2) ?? toMoon(w, biomes, 0, periapsis);
+  if (err) return err;
+  doScience(w); transmitAll(w);
+  const cap = captureMoon(w, biomes, 0);
+  if (cap) return cap;
+  const o = w.orbitOf(w.active!), step = period(o) / 24;
+  for (let k = 0; k < orbits * 24; k++) {
+    coastUntil(w, w.ut + step);
+    trackBiome(w, biomes);
+    if (doScience(w)) transmitAll(w);
+  }
   return null;
 }
