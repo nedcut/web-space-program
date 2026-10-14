@@ -1114,4 +1114,10 @@ Owner decisions 2026-10-13 (both recommended options).
   8 g reading after that on Standard is the parachute opening below 1 km/s, unrelated.
 - Headless career script (`scripts/career`): the free-return flyby uses the Entry trim instead of the old perigee
   bisection; probes plan circularisation at engine cutoff (still in contact) and the TLI during a station pass;
-  transmissions coast on rails while the Moon blocks the link. Crewed flights are flown exactly as before.
+  transmissions coast on rails while the Moon blocks the link; a probe arriving below 50 km (the course correction
+  left one on an impact course) raises its lunar periapsis with a radial burn before capture. Crewed flights are
+  flown exactly as before.
+- **`warpToward` no longer spins on a held clock.** Headless only (`runAutopilot`): when a pending mission alarm (here
+  the impact warning) caps rails advancement at the current time, the tick made no progress and the loop never
+  ended. It now acknowledges the alarm and lets the program step at 1×. The flight scene's assist driver was not
+  changed (not reproduced there).

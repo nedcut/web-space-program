@@ -5,6 +5,44 @@ Reproduce the tables with `npx tsx scripts/balance-analysis.ts`. Flight regressi
 `npx vitest run --maxWorkers=2`. No physics parameters, resource densities, engine ratings,
 or deterministic trace fixtures were changed.
 
+## Real lunar probe and Entry trim — 2026-10-13 (op/lunartrim)
+
+Real used to stall after orbit: the Meridian Real cannot reach the Moon and the expedition needs 775 science, so
+~400 more had to come from Earth biomes. Now the **Tern Lunar Probe** (stock, Real) needs only the orbiter's research
+plus Remote Navigation (guidance-0/1, 45 science; the Pebble core moved there from Precision Attitude), and is
+affordable right after the first Real orbit (84 science banked). Tern: 83,698 cr, 14,446 m/s vacuum (launcher
+3,822 + 4,372 + 4,092, kick stage 2,160). It reaches a ~400 km lunar orbit with ~1 km/s to spare.
+
+Real playthrough (`npx tsx scripts/career/playthrough.ts real`), before → after this pass:
+
+| # | Flight | Cost cr | Science earned | Banked | Game day | Research bought |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| 1–3 | Kestrel hops 0° / 30° / 60° | 5,848–6,748 | 290 total | 49 | 0 | the Meridian Real path (280) |
+| 4 | Meridian Real orbit | 84,512 | 35 | 84 | 0.1 | — |
+| 5 *before* | Meridian Real Moon flyby | — | — | 84 | — | fails: no Δv for TLI; next source = ~400 Earth science |
+| 5 | Tern 1: lunar orbit, thermometer + magnetometer | 84,778 | 85 (incl. 35 first-arrival milestone) | 89 | 17 | guidance-0/1, discovery-1 (80) |
+| 6 | Tern 2 (same instruments, repeats) | 84,778 | 25 | 114 | 32 | — |
+| 7 | Tern 3 + gravity gradiometer | 86,178 | 134 | 158 | 36 | discovery-2 (90) |
+| 8 | Tern 4 (orbit stayed above the low-space line) | 86,178 | 24 | 182 | 46 | — |
+| 9 | Tern 5 | 86,178 | 55 | 237 | 64 | — |
+| 10 | Tern 6 (new: Polar Craters) | 86,178 | 54 | 291 | 75 | — |
+
+The Moon is now the next science source on Real (earned per probe: 25–134; science is transmitted at 40 %, the
+Thread antenna's rate), but the expedition is still 450 science of research away after six probes (291 banked):
+~3 more probe flights or Earth field work. Funds never constrain (24 M cr). Each probe reaches only 3–5 Moon
+regions from its near-equatorial orbit; an inclined/polar orbit or a better antenna (Lattice, 65 %) pays more.
+
+Standard and Challenging: unchanged. Challenging reproduces main exactly (Meridian Challenging free-return flyby
+on flight 5, 128.5 science, 2.06 M cr). Standard is identical through the Meridian flyby (flight 4: 269 science,
+day 3); the Selene landing lands in another biome after the new Entry trim (480 vs 504 science banked, day 5.9 vs
+6.8): a path difference, not a pacing change.
+
+Entry trim (maneuver planner): a Moon return 15 km too shallow / 8 km too steep needs 0.4–1.3 m/s; after the trim the
+real integrator captures in one pass on every scale with hypersonic peak 3.3 / 4.7 / 7.8 g. Corridor for the stock
+capsule (lunar return): Standard 5.2–23.8 km, Challenging 22.8–38.0 km, Real 45.7–59.1 km; planned 19.7 / 33.9 /
+57.1 km (25 kPa). `npx tsx scripts/career/corridor-model.ts` prints these; `scripts/career/corridor-sweep.ts`
+measures the full-integrator reference; `scripts/career/trim-check.ts <scale>` flies trim + entry.
+
 ## Flown career playthrough — 2026-10-13 (op/career)
 
 `npx tsx scripts/career/playthrough.ts standard|challenging|real` plays a new career through the real `World`:

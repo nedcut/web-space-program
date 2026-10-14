@@ -2,6 +2,22 @@
 
 _Last updated: 2026-10-13_
 
+## Real lunar probe and Entry trim (2026-10-13, op/lunartrim)
+
+- **Real scale has a Moon probe.** New stock **Tern Lunar Probe** (Real): uncrewed lunar orbiter on the Meridian Real
+  launcher with its own kick stage; needs only Remote Navigation on top of the orbiter's research (the Pebble probe
+  core moved there). Flown headless: six probes take banked science from 84 to 291 by day 75 (Moon orbit science,
+  transmitted). The crewed expedition is still ~160 science further away. Hub "Fly to the Moon" on Real names it.
+- **Probes keep flying planned burns out of contact.** On Real a probe lost the ground stations ~6 minutes after
+  launch and could never circularise. Now a node the probe received while it had signal is flown by Flight assist →
+  Execute next node even without signal; manual control stays locked. Nodes it hasn't received show an amber number.
+- **Entry trim** button in the maneuver planner whenever the path comes back down into an atmosphere: plans the
+  smallest burn (typically 0.3–1.3 m/s after a free return) that puts the periapsis in this craft's corridor, with a
+  gauge (steep · safe · skip, now vs planned). Verified in Chrome and Firefox on Standard and Real; flown headless,
+  the trimmed capsule captures in one pass on every scale (peak 3.3 / 4.7 / 7.8 g).
+- Standard and Challenging progression unchanged. Details: DECISIONS.md, docs/BALANCE.md.
+- Screenshots: `C:\wsp-tools\shots\lunartrim\{after,after-real,ff}\`.
+
 ## Career playthrough (2026-10-13, op/career)
 
 A new career, flown from the first screen. Headless: `npx tsx scripts/career/playthrough.ts standard|challenging|real`

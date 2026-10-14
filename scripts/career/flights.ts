@@ -6,7 +6,7 @@ import { World } from '../../src/game/world';
 import { PART_CATALOG } from '../../src/data/parts';
 import { launchCost, launchProblem } from '../../src/data/technology';
 import { neutralInput } from '../../src/sim/vessel';
-import { period, periapsisRadius, propagate, stateToElements } from '../../src/sim/orbit';
+import { inertialDvToManeuver, period, periapsisRadius, propagate, stateToElements } from '../../src/sim/orbit';
 import type { CraftDef } from '../../src/sim/vessel/types';
 import {
   ascentGuidance, coastUntil, planFreeReturn, executeNode, landingController, localFrame, planCircularization, planCourseCorrection,
@@ -321,10 +321,31 @@ export function probeLunarOrbit(w: World, biomes: Set<string>, parking: number, 
   const err = toOrbit(w, biomes, parking, 2) ?? toMoon(w, biomes, 0, periapsis);
   if (err) return err;
   doScience(w); transmitAll(w);
+  const dbg = (s: string) => { if (process.env.CAREER_DEBUG) console.log(`  probe ${s} body=${w.active!.body} pe=${w.orbitSummary(w.active!).pe.toFixed(0)} ap=${w.orbitSummary(w.active!).ap.toFixed(0)} warp=${JSON.stringify(w.warp)} vessels=${w.vessels.size} t=${(Date.now() / 1000 % 10000).toFixed(0)}`); };
+  dbg('arrived');
+  // The course correction can leave the arrival low (even on the surface): raise the periapsis before capturing.
+  if (w.orbitSummary(w.active!).pe < periapsis * 0.5) {
+    const o = w.orbitOf(w.active!), t = w.ut + 300, st = propagate(o, t), R = w.universe.body('moon').radius;
+    // Radial-out raises a hyperbolic periapsis most per m/s; bisect it.
+    const r = normalize(st.position);
+    const peWith = (x: number) => periapsisRadius(stateToElements(o.mu, o.body, st.position, { x: st.velocity.x + r.x * x, y: st.velocity.y + r.y * x, z: st.velocity.z + r.z * x }, t)) - R;
+    let lo = 0, hi = 50;
+    while (peWith(hi) < periapsis && hi < 800) hi *= 2;
+    for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (peWith(m) < periapsis) lo = m; else hi = m; }
+    const node = w.addNode(t);
+    const s0 = propagate(o, t);
+    const c = inertialDvToManeuver(s0, { x: r.x * hi, y: r.y * hi, z: r.z * hi });
+    node.prograde = c.prograde; node.normal = c.normal; node.radial = c.radial;
+    const fix = executeNode(w, node, { minStage: 0, matchEnergy: false });
+    if (!runAutopilot(w, fix, { maxTime: 1e5 })) return `periapsis fix: ${fix.error}`;
+    dbg('periapsis fixed');
+  }
   const cap = captureMoon(w, biomes, 0);
+  dbg(`captured ${cap}`);
   if (cap) return cap;
   const o = w.orbitOf(w.active!), step = period(o) / 24;
   for (let k = 0; k < orbits * 24; k++) {
+    if (k % 24 === 0) dbg(`orbit ${k / 24}`);
     coastUntil(w, w.ut + step);
     trackBiome(w, biomes);
     if (doScience(w)) transmitAll(w);

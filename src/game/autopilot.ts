@@ -189,7 +189,11 @@ export function warpToward(world: World, until: number, input: ControlInput): bo
   for (let i = 1; i < RAILS_WARP.length; i++) if (RAILS_WARP[i] * FRAME <= remaining) idx = i;
   if (idx === 0) return false;
   world.warp = { mode: 'rails', index: idx };
+  const before = world.ut;
   world.tick(Math.min(FRAME, remaining / RAILS_WARP[idx]), input);
+  // A mission alarm holding warp (e.g. an impact warning) stops the clock: the program already knows, so answer
+  // it and let the caller step at 1× rather than spin here forever.
+  if (world.ut === before) { world.alarmClock.acknowledge(); return false; }
   return true;
 }
 
