@@ -17,6 +17,9 @@ export const FACILITY_ICON: Record<FacilityId, string> = { pad: 'rocket', hall: 
 export const HUB_FACILITY: Record<FacilityId, HubFacilityId> = { pad: 'launch', hall: 'editor', control: 'missions', lab: 'research' };
 export const upgradableFor = (id: HubFacilityId) => (Object.keys(HUB_FACILITY) as FacilityId[]).find(f => HUB_FACILITY[f] === id) ?? null;
 
+/** 40,000 → "40k cr", 4,096,000 → "4.1M cr": button-sized prices (the confirm shows the exact amount). */
+export const shortCr = (cr: number) => cr >= 1e6 ? `${+(cr / 1e6).toFixed(1)}M cr` : cr >= 1e4 ? `${Math.round(cr / 1e3)}k cr` : `${cr.toLocaleString()} cr`;
+
 /** Filled/empty level pips (●●○). */
 export function LevelPips({ level, max = MAX_FACILITY_LEVEL, label }: { level: number; max?: number; label?: string }) {
   return <span className="fac-pips" role="img" aria-label={label ?? `Level ${level} of ${max}`}>
@@ -65,7 +68,7 @@ export function useFacilityBlock(craft: CraftDef | null): FacilityBlock | null {
 }
 
 /** One-click path past a facility limit: "Launch Pad → level 2 · 40,000 cr" opens the confirm; buys every level needed. */
-export function FacilityUnblock({ block, className = 'btn small warn', onBought }: { block: FacilityBlock; className?: string; onBought?: () => void }) {
+export function FacilityUnblock({ block, className = 'btn small warn', compact = false, onBought }: { block: FacilityBlock; className?: string; compact?: boolean; onBought?: () => void }) {
   const p = useGame(s => s.resumeWorld?.progression);
   const preset = useGame(s => s.scalePreset);
   const [open, setOpen] = useState(false);
@@ -75,8 +78,9 @@ export function FacilityUnblock({ block, className = 'btn small warn', onBought 
   return <>
     <Button className={className} disabled={!offer.affordable}
       title={offer.affordable ? block.message : `${block.message} Costs ${offer.cost.toLocaleString()} cr.`}
+      aria-label={`Upgrade the ${FACILITY_TITLE[offer.id]} to level ${offer.to}, ${offer.cost.toLocaleString()} credits`}
       onClick={() => setOpen(true)}>
-      <Icon name={FACILITY_ICON[offer.id]} size={14} /> {FACILITY_TITLE[offer.id]} <LevelPips level={offer.to} /> {offer.cost.toLocaleString()} cr
+      <Icon name={FACILITY_ICON[offer.id]} size={14} />{!compact && ` ${FACILITY_TITLE[offer.id]} `}<LevelPips level={offer.to} /> {compact ? shortCr(offer.cost) : `${offer.cost.toLocaleString()} cr`}
     </Button>
     {error && <span role="alert" className="fac-error">{error}</span>}
     {open && <UpgradeConfirm offer={offer} preset={preset} onCancel={() => setOpen(false)}

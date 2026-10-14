@@ -4,7 +4,7 @@ import { FACILITY_IDS, facilityPerk, ownedLevel, type FacilityId } from '../../s
 import type { SiteObjectId } from '../../render/site/LaunchSite';
 import { Button } from '../components';
 import { Icon } from '../components/Icon';
-import { FACILITY_ICON, FACILITY_TITLE, LevelPips, UpgradeConfirm, upgradeOffer, type UpgradeOffer } from './FacilityUpgrade';
+import { FACILITY_ICON, FACILITY_TITLE, LevelPips, shortCr, UpgradeConfirm, upgradeOffer, type UpgradeOffer } from './FacilityUpgrade';
 
 const BUILDING: Record<FacilityId, SiteObjectId> = { pad: 'pad', hall: 'vab', control: 'control', lab: 'workshop' };
 
@@ -24,12 +24,12 @@ export function FacilitiesCard({ onHighlight, onNotice }: { onHighlight: (id: Si
       const next = offer && facilityPerk(id, offer.to, preset);
       return <div key={id} className="hub-fac-row" onMouseEnter={() => onHighlight(BUILDING[id])}>
         <Icon name={FACILITY_ICON[id]} size={18} />
-        <span className="hub-fac-name">{FACILITY_TITLE[id]}<LevelPips level={level} /></span>
+        <span className="hub-fac-name">{FACILITY_TITLE[id]}</span><LevelPips level={level} />
         <span className="hub-fac-perk mono" title={now.meaning}>{now.value}{next && <span className="hub-fac-next"> → {next.value}</span>}</span>
         {offer
           ? <Button className="btn small" disabled={!offer.affordable} onFocus={() => onHighlight(BUILDING[id])}
             title={`${next!.value} ${next!.meaning}${offer.affordable ? '' : ' · not enough funds'}`} aria-label={`Upgrade ${FACILITY_TITLE[id]} to level ${offer.to}, ${offer.cost.toLocaleString()} credits`}
-            onClick={() => setConfirm(offer)}>{short(offer.cost)}</Button>
+            onClick={() => setConfirm(offer)}>{shortCr(offer.cost)}</Button>
           : <span className="hub-fac-max label">Max</span>}
       </div>;
     })}
@@ -37,6 +37,3 @@ export function FacilitiesCard({ onHighlight, onNotice }: { onHighlight: (id: Si
       onDone={e => { setConfirm(null); onNotice(e ?? `${FACILITY_TITLE[confirm.id]} upgraded to level ${confirm.to}.`); }} />}
   </section>;
 }
-
-/** 40,000 → "40k", 4,096,000 → "4.1M": button-sized prices (the confirm shows the exact amount). */
-export const short = (cr: number) => cr >= 1e6 ? `${+(cr / 1e6).toFixed(1)}M cr` : cr >= 1e4 ? `${Math.round(cr / 1e3)}k cr` : `${cr.toLocaleString()} cr`;

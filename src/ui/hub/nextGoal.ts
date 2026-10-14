@@ -87,7 +87,7 @@ export function nextGoal(p: Progression, mode: GameMode, scale: ScalePresetId): 
   if (block) {
     const cost = costToLevel(p, block.facility, block.level, careerScaleMultiplier(scale));
     const funds = p.funds >= cost ? `${cost.toLocaleString()} cr` : `${cost.toLocaleString()} cr, ${(cost - p.funds).toLocaleString()} cr more than you have`;
-    return { title: step.title, detail: `The ${craftName(stockId!)} needs a level-${block.level} ${FACILITY_NAME[block.facility]} (${funds}). ${block.reason}.`,
+    return { title: step.title, detail: `The ${craftName(stockId!)} is ${block.reason}. Upgrade the ${FACILITY_NAME[block.facility]} to level ${block.level} (${funds}).`,
       action: block.facility === 'pad' ? 'launch' : 'editor', actionLabel: 'Upgrade', aside, upgrade: block };
   }
   return { title: step.title, detail: `${stockId ? `The ${craftName(stockId)} is ready. ` : ''}${step.how}`, action: 'launch', actionLabel: 'Launch Pad', aside };

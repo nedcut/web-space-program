@@ -114,8 +114,9 @@
 .fac-pips i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--accent-border); }
 .fac-pips i.on { background: var(--accent); border-color: var(--accent); }
 .btn.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); border-color: color-mix(in srgb, var(--warn) 55%, transparent); color: var(--warn); display: inline-flex; align-items: center; gap: 6px; }
-.btn.warn .fac-pips i { border-color: currentColor; }
-.btn.warn .fac-pips i.on { background: currentColor; }
+.btn.warn .fac-pips i, .btn.primary .fac-pips i { border-color: currentColor; }
+.btn.warn .fac-pips i.on, .btn.primary .fac-pips i.on { background: currentColor; }
+.btn.primary .fac-pips { margin: 0 2px; }
 .fac-error { color: var(--bad); font-size: var(--type-xs); }
 .fac-confirm { display: grid; grid-template-columns: auto auto auto auto; align-items: center; justify-items: center; gap: var(--space-2) var(--space-3); color: var(--accent); }
 .fac-confirm .ui-icon { grid-row: span 3; }
@@ -123,11 +124,11 @@
 .fac-confirm strong { color: var(--text); }
 .fac-confirm-funds { margin: var(--space-3) 0 0; color: var(--text-dim); font-size: var(--type-sm); }
 .hub-cards { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); flex-wrap: wrap; }
-.hub-facilities { width: min(400px, 100%); margin-top: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--panel-solid); box-shadow: var(--shadow-panel); display: grid; gap: 6px; }
+.hub-facilities { width: min(460px, 100%); margin-top: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--panel-solid); box-shadow: var(--shadow-panel); display: grid; gap: 6px; }
 .hub-facilities > .label { color: var(--accent); }
-.hub-fac-row { display: grid; grid-template-columns: 20px 1fr auto 72px; align-items: center; gap: var(--space-2); font-size: var(--type-sm); }
+.hub-fac-row { display: grid; grid-template-columns: 20px 1fr auto auto 72px; align-items: center; gap: var(--space-2); font-size: var(--type-sm); }
 .hub-fac-row .ui-icon { color: var(--accent); }
-.hub-fac-name { display: flex; align-items: center; gap: 8px; }
+.hub-fac-name { white-space: nowrap; }
 .hub-fac-perk { color: var(--text); font-size: var(--type-xs); text-align: right; }
 .hub-fac-next { color: var(--text-dim); }
 .hub-fac-row .btn { justify-self: stretch; }

@@ -144,7 +144,7 @@ export function TopBar({ session, view, onLoad, onNew, onImport, onFrame }: { se
       <div className="vab-more">
         <Button className={`vab-ibtn ${menu?.id === 'more' ? 'on' : ''} ${view.dirty ? 'pending' : ''}`} data-menu aria-label="More tools" data-tip={view.dirty ? 'File, sharing and overlays · unsaved changes' : 'File, sharing and overlays'} aria-haspopup="menu" aria-expanded={menu?.id === 'more'} onClick={e => openMenu('more', e.currentTarget)}><Icon name="more" /></Button>
       </div>
-      {block && <FacilityUnblock block={block} className="btn small warn vab-unblock" />}
+      {block && <FacilityUnblock block={block} compact className="btn small warn vab-unblock" />}
       <Button className={`btn primary vab-launch${block ? ' blocked' : ''}`} data-tip={block ? block.message : mode === 'career' ? `${cost.toLocaleString()} cr launch cost · ${funds.toLocaleString()} cr available` : 'Roll out to the launch site'} onClick={() => session.launch()}>
         <Icon name="launch" size={17} /> Launch{mode === 'career' && <span className="vab-launch-cost">{cost.toLocaleString()} cr</span>}
       </Button>

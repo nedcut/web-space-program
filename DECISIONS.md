@@ -1073,3 +1073,51 @@ Owner decisions 2026-10-13 (both recommended options).
 - **Not changed (owner's call):** science income and tech costs (a diligent player lands on the Moon on flight 5
   on Standard), funds as a constraint (nothing to spend surplus on), larger-scale science grind, bare-pod
   aerodynamic trim. See the career report in PROGRESS.md.
+
+## Facility upgrades: the career money sink (2026-10-13, op/facilities)
+
+- **Four upgradable facilities, three levels each** (`sim/science/facilities.ts`, pure; stored as optional
+  `Progression.facilities`). Every level adds a perk; level 1 is what careers had before, except the two launch
+  limits:
+
+  | Facility | Level 1 | Level 2 | Level 3 | Price L2 / L3 (Standard) |
+  | --- | --- | --- | --- | ---: |
+  | Launch Pad (pad and runway): heaviest wet launch mass | 20 t / 100 t / 300 t | 150 t / 1,000 t / 6,000 t | no limit | 40 k / 180 k |
+  | Integration Hall: parts per vehicle | 30 | 100 | no limit | 25 k / 120 k |
+  | Mission Control: active commissions | 3 | 4 | 5, offers drawn at L3 pay +25 % reward | 40 k / 150 k |
+  | Research Lab: bonus on credited science (recovery, transmission) | +0 % | +15 % | +30 % | 60 k / 200 k |
+
+  Pad masses are per scale (Standard / Challenging / Real). Prices multiply by the D-016 career credit multiplier
+  (`(s/0.1)²`: ×10.24 Challenging, ×100 Real), like starting funds and Moon/orbit contracts. The lab bonus is not
+  written into the subject archive (diminishing returns keep using base values) and does not apply to milestone
+  science. Skipped: Tracking Station (no perk that is not a nerf today: ground stations already reach Saturn) and
+  crew (no hiring system). Hall perks are a part limit only; action groups and editing stay available at every
+  level (nothing players use today is taken away).
+- **Level 1 flies the Moon route up to the first flyby on every scale** (Kestrel, Firstlight, Meridian; Meridian
+  Challenging 75 t, Meridian Real 220 t). The Moon landers need a level-2 pad (Selene 53 t; Selene Challenging
+  670 t / 35 parts and Selene Real 4,792 t / 92 parts also need a level-2 hall). Those upgrades cost 40 k on
+  Standard (flight 5 has ~280 k), 666 k Challenging, 6.5 M Real — inside what each route has earned by then.
+  Heavy Standard stock (Hearthlight, Homeward, Atlaswake, Alembic ~240 t) needs a level-3 pad.
+- **Enforced in `launchProblem`** (research → facility limits → funds), so `World.launch`, the editor, the hub
+  picker and debrief "Launch again" share it. `launchProblem` takes the scale preset (default `'standard'`);
+  `facilityProblem` returns `{ facility, level, reason, message }` for UI. Launch mass is computed in
+  `data/technology.launchMass` exactly like the editor's `craftStats` (test checks every stock craft).
+- **Modes:** sandbox and science read every facility at level 3 (no limits) and get no lab bonus or Mission
+  Control perk; upgrades can only be bought in careers. Multiplayer rooms are sandbox worlds, so the server needs no
+  change; `World.launch` is still the single authority if career rooms ever exist.
+- **Old saves:** a saved progression without `facilities` loads as pad 3, hall 3, Mission Control 1, lab 1
+  (`LEGACY_FACILITIES`): no saved design stops flying and nothing is gained for free beyond that. The pure readers
+  treat a missing record the same way. New programs start at level 1 everywhere.
+- **UI.** Hub: a Facilities card (career) with level pips, current → next perk and a price button per facility
+  (confirm dialog: pips before → after, perk before → after, balance before → after); level pips on the tiles and
+  in the building hover label (with the current perk). Clicking a building still enters the facility (the ux3 flow
+  and number keys are unchanged); the upgrade lives on the card. Editor: a compact warn button (icon, pips, price)
+  appears left of Launch, the over-limit Mass/Parts stat turns amber, and Pre-flight lists "Can't launch: 53 t,
+  over the Launch Pad's 20 t limit." with the full button. Launch Pad picker: blocked rows carry the same button;
+  stock rows only hide behind "need research" when research blocks them. "Next goal" names the upgrade (price and
+  shortfall) when a facility is the blocker and its primary button buys it. Every button opens the same confirm and
+  buys all levels needed in one autosave. Mission Control shows "n / slots active".
+- **Playthrough** (`scripts/career/playthrough.ts`): buys what a launch needs right before it, then invests in the
+  lab, then Mission Control, while funds stay above a reserve of 40 k × multiplier. Standard: Moon landing still
+  flight 5, day 6.8 (unchanged); 290 k spent on upgrades, 77 k left after the landing (was 335 k). Tables in
+  docs/BALANCE.md.

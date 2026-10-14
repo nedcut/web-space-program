@@ -99,13 +99,13 @@ export function facilityProblem(craft: CraftDef, catalog: Map<string, PartDef>, 
   const parts = craft.parts.length, hall = facilityLevel(p, mode, 'hall');
   if (parts > hallPartLimit(hall)) {
     const level = levelFor('hall', parts, preset);
-    const reason = `${parts} parts: the Integration Hall handles ${hallPartLimit(hall)}`;
+    const reason = `${parts} parts, over the Integration Hall's ${hallPartLimit(hall)}-part limit`;
     return { facility: 'hall', level, reason, message: `${reason}. Upgrade it to level ${level}.` };
   }
   const mass = launchMass(craft, catalog), pad = facilityLevel(p, mode, 'pad');
   if (mass > padMassLimit(pad, preset)) {
     const level = levelFor('pad', mass, preset);
-    const reason = `${t(mass)}: the Launch Pad takes ${t(padMassLimit(pad, preset))}`;
+    const reason = `${t(mass)}, over the Launch Pad's ${t(padMassLimit(pad, preset))} limit`;
     return { facility: 'pad', level, reason, message: `${reason}. Upgrade it to level ${level}.` };
   }
   return null;

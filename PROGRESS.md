@@ -2,6 +2,25 @@
 
 _Last updated: 2026-10-13_
 
+## Facility upgrades (2026-10-13, op/facilities)
+
+Money now has a purpose: four Space Center facilities have three levels each, bought with funds (career only;
+sandbox and science have no limits). Rules and numbers: DECISIONS.md "Facility upgrades"; ledgers: docs/BALANCE.md.
+- **Launch Pad**: heaviest launch (Standard 20 t → 150 t → no limit; scaled up on Challenging/Real). The Selene needs
+  level 2 (40 k on Standard).
+- **Integration Hall**: parts per vehicle 30 → 100 → no limit (larger-scale Selenes need level 2).
+- **Mission Control**: 3 → 4 → 5 active commissions; level 3 offers pay +25 %.
+- **Research Lab**: +15 % / +30 % science on every result.
+- Where: hub Facilities card (pips, perk now → next, price, confirm), pips on tiles and building labels. A craft over a
+  limit says so in the editor (amber stat, Pre-flight line, upgrade button next to Launch), in the Launch Pad picker
+  and in "Next goal", each with a one-click upgrade.
+- Old careers keep everything they could launch (pad and hall load at level 3).
+- Headless playthrough: Standard Moon landing still flight 5, day 6.8; 290 k spent on upgrades (77 k left instead of
+  335 k). Challenging/Real timelines unchanged; 1 M / 6 M spent.
+- **Not verified:** Firefox/Zen (Chrome only); a hall-limit block in the browser (covered by tests); prices are a
+  first pass — money is still not tight after the landing, by design (owner asked to keep progression fast).
+Screenshots: `C:\wsp-tools\shots\facilities\after\`.
+
 ## Career playthrough (2026-10-13, op/career)
 
 A new career, flown from the first screen. Headless: `npx tsx scripts/career/playthrough.ts standard|challenging|real`
