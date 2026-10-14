@@ -6,8 +6,8 @@ _Last updated: 2026-10-13_
 
 - **Real scale has a Moon probe.** New stock **Tern Lunar Probe** (Real): uncrewed lunar orbiter on the Meridian Real
   launcher with its own kick stage; needs only Remote Navigation on top of the orbiter's research (the Pebble probe
-  core moved there). Flown headless: six probes take banked science from 84 to 291 by day 75 (Moon orbit science,
-  transmitted). The crewed expedition is still ~160 science further away. Hub "Fly to the Moon" on Real names it.
+  core moved there). Flown headless: six probes take banked science from 84 to 334 by day 75 (Moon orbit science,
+  transmitted; 291 without the Lab 2 upgrade). The crewed expedition is still ~120 science further away. Hub "Fly to the Moon" on Real names it.
 - **Probes keep flying planned burns out of contact.** On Real a probe lost the ground stations ~6 minutes after
   launch and could never circularise. Now a node the probe received while it had signal is flown by Flight assist →
   Execute next node even without signal; manual control stays locked. Nodes it hasn't received show an amber number.

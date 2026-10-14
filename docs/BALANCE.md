@@ -29,7 +29,8 @@ Real playthrough (`npx tsx scripts/career/playthrough.ts real`), before → afte
 
 The Moon is now the next science source on Real (earned per probe: 25–134; science is transmitted at 40 %, the
 Thread antenna's rate), but the expedition is still 450 science of research away after six probes (291 banked):
-~3 more probe flights or Earth field work. Funds never constrain (24 M cr). Each probe reaches only 3–5 Moon
+~3 more probe flights or Earth field work. Funds never constrain (24 M cr). After merging the facility upgrades
+(op/facilities: the script buys Lab 2 with the Moon money) the same six probes bank 334 science, 116 short. Each probe reaches only 3–5 Moon
 regions from its near-equatorial orbit; an inclined/polar orbit or a better antenna (Lattice, 65 %) pays more.
 
 Standard and Challenging: unchanged. Challenging reproduces main exactly (Meridian Challenging free-return flyby
