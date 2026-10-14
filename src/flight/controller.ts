@@ -89,6 +89,8 @@ const graphicsKeyOf = (s: { quality: string; shadows: boolean; bloom: boolean; r
 /** Bottom-HUD and top-HUD extents (CSS px at HUD scale 1) used to frame the vessel in the clear band between them. */
 const HUD_TOP_PX = 64;
 const HUD_BOTTOM_EXTRA_PX = 70;
+/** Frame time after the loading screen lifts that adaptive resolution still ignores (stragglers: uploads, chunks). */
+const LOAD_SETTLE_MS = 2000;
 
 export class FlightController {
   private stressOverlay = false;
@@ -929,6 +931,9 @@ export class FlightController {
         this.sunLight.shadow.map = null;
       }
     }
+    // Loading frames (chunk builds, texture uploads, shader warm-up) are not GPU load: judged as such they sank
+    // the scale to its floor before the loading screen lifted. Keep holding until shortly after it has.
+    if (!this.network && !this.sceneReady) this.pipeline.holdAdaptive(LOAD_SETTLE_MS);
     this.pipeline.updateAdaptive(frameMs, settings.adaptiveQuality, settings.frameRateCap);
     if (!this.paused && settings.autoSaveInterval > 0) {
       this.autosaveTimer += dt;

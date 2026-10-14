@@ -1,0 +1,173 @@
+{
+ "label": "hd520-med-noshadow",
+ "base": "http://localhost:5315",
+ "local": false,
+ "noRaster": false,
+ "noSubmission": false,
+ "dpr": 1,
+ "throttle": 1,
+ "quality": "medium",
+ "seconds": 8,
+ "size": "1280x720",
+ "date": "2026-10-14T21:18:52.488Z",
+ "cases": {
+  "pad": {
+   "fps": 46.07,
+   "frames": 367,
+   "frameP50": 16.67,
+   "frameP95": 33.33,
+   "frameP99": 33.34,
+   "frameMax": 133.33,
+   "hitches25": 103,
+   "hitches50": 2,
+   "cpuMs": 5.08,
+   "cpuP95": 6.49,
+   "sections": {
+    "input": 0.21,
+    "sim": 0.33,
+    "vessels": 0.06,
+    "fx": 0.08,
+    "planets": 0.8,
+    "map": 0,
+    "render": 3.22,
+    "telemetry": 0.15,
+    "audio": 0.03,
+    "navball": 0.07,
+    "hud": 0.09
+   },
+   "scriptMsPerFrame": 5.85,
+   "taskMsPerFrame": 6.99,
+   "layoutsPerSec": 5.61,
+   "styleRecalcsPerSec": 4.99,
+   "layoutMsPerSec": 2.76,
+   "styleMsPerSec": 0.68,
+   "sampleSeconds": 8.02,
+   "longTasks": 0,
+   "longTasksPerMin": 0,
+   "longTaskMsPerMin": 0,
+   "longTaskMax": 0,
+   "heapMB": 51.04,
+   "heapGrowthMBPerMin": 160.3,
+   "domNodes": 587,
+   "listeners": 5209,
+   "reactCommitsPerSec": 14.6,
+   "reactRendersPerSec": 161.57,
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "imageryDecode.worker": {
+     "created": 0,
+     "out": 4,
+     "in": 0
+    }
+   },
+   "gl": {
+    "calls": 98,
+    "tris": 1431719,
+    "programs": 86,
+    "geometries": 80,
+    "textures": 89,
+    "canvas": "1280x720",
+    "scale": 0.6,
+    "gpuMs": 20.707357684150125,
+    "gpuName": "ANGLE (Intel, Mesa Intel(R) HD Graphics 520 (SKL GT2), OpenGL ES 3.2)",
+    "glError": 0
+   },
+   "readyMs": 16556,
+   "marks": {
+    "wsp:flight:construct": 2185,
+    "wsp:flight:shaderWarmup": 8049,
+    "wsp:flight:firstFrame": 8568,
+    "wsp:flight:construct:start": 1864,
+    "wsp:flight:ready": 15986
+   }
+  },
+  "orbit": {
+   "fps": 55.61,
+   "frames": 443,
+   "frameP50": 16.67,
+   "frameP95": 33.33,
+   "frameP99": 33.34,
+   "frameMax": 83.33,
+   "hitches25": 26,
+   "hitches50": 4,
+   "cpuMs": 5.46,
+   "cpuP95": 10.35,
+   "sections": {
+    "input": 0.22,
+    "sim": 0.64,
+    "vessels": 0.08,
+    "fx": 0.13,
+    "planets": 0.65,
+    "map": 0,
+    "render": 2.99,
+    "telemetry": 0.2,
+    "audio": 0.04,
+    "navball": 0.32,
+    "hud": 0.1
+   },
+   "scriptMsPerFrame": 7.02,
+   "taskMsPerFrame": 8.58,
+   "layoutsPerSec": 1.12,
+   "styleRecalcsPerSec": 5.61,
+   "layoutMsPerSec": 0.74,
+   "styleMsPerSec": 0.77,
+   "sampleSeconds": 8.02,
+   "longTasks": 0,
+   "longTasksPerMin": 0,
+   "longTaskMsPerMin": 0,
+   "longTaskMax": 0,
+   "heapMB": 50.27,
+   "heapGrowthMBPerMin": 119.43,
+   "domNodes": 600,
+   "listeners": 3216,
+   "reactCommitsPerSec": 14.47,
+   "reactRendersPerSec": 190.5,
+   "workers": {
+    "worker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "chunkWorker": {
+     "created": 0,
+     "out": 0,
+     "in": 0
+    },
+    "imageryDecode.worker": {
+     "created": 0,
+     "out": 4,
+     "in": 0
+    }
+   },
+   "gl": {
+    "calls": 51,
+    "tris": 560877,
+    "programs": 86,
+    "geometries": 50,
+    "textures": 87,
+    "canvas": "1280x720",
+    "scale": 0.6,
+    "gpuMs": 15.953344559564561,
+    "gpuName": "ANGLE (Intel, Mesa Intel(R) HD Graphics 520 (SKL GT2), OpenGL ES 3.2)",
+    "glError": 0
+   },
+   "readyMs": 14019,
+   "marks": {
+    "wsp:flight:construct": 2191,
+    "wsp:flight:shaderWarmup": 7174,
+    "wsp:flight:firstFrame": 7749,
+    "wsp:flight:construct:start": 1871,
+    "wsp:flight:ready": 13392
+   }
+  }
+ }
+}

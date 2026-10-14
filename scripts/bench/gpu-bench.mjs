@@ -384,7 +384,7 @@ if (cases.includes('saturn')) await flightCase('saturn', '/?mission=ring-skimmer
 
 if (cases.includes('editor')) {
   const { context, page, cdp } = await newPage();
-  log(`starting ${name}`);
+  log(`starting editor`);
   try {
     const t0 = Date.now();
     await page.goto(`${base}/?scene=editor&stock=stock-ringrunner-real`);
