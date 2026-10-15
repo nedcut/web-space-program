@@ -507,7 +507,9 @@ export class EditorSession {
    * piece stood, bottoms level. Swapping the craft back restores it with its staging.
    */
   swapDetached(index: number) {
-    if (this.held) this.cancelHeld();
+    // Cancelling a hold can put a piece back into the list: find this one again afterwards.
+    const rootUid = this.snap.detached[index]?.rootUid;
+    if (this.held) { this.cancelHeld(); index = this.snap.detached.findIndex(p => p.rootUid === rootUid); }
     const piece = this.snap.detached[index];
     if (!piece) return;
     const craft = this.editor.craft;
@@ -531,7 +533,7 @@ export class EditorSession {
     }
     const index = this.snap.detached.findIndex(p => p.craft);
     if (index < 0) return false;
-    this.toast(`"${this.name}" is set aside: swap it back onto the stand to ${what} it.`, 'warn', { label: 'Swap back', run: () => { const i = this.snap.detached.findIndex(p => p.craft); if (i >= 0) this.swapDetached(i); } });
+    this.toast(`"${this.name}" is set aside: swap it back onto the stand to ${what} it.`, 'warn', { label: 'Swap back', run: () => { if (this.held) this.cancelHeld(); const i = this.snap.detached.findIndex(p => p.craft); if (i >= 0) this.swapDetached(i); } });
     return true;
   }
   /** Delete a set-aside piece, or only `uid` and what hangs from it. */

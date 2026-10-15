@@ -225,3 +225,23 @@ describe('deleting from set-aside pieces', () => {
     expect(ed.detached[0].parts).toHaveLength(3);
   });
 });
+
+describe('session: swap back while holding a piece', () => {
+  it('swaps the craft back, not the piece the cancelled hold returned to the list', async () => {
+    const { EditorSession } = await import('../src/editor/session');
+    const session = new EditorSession(STOCK_CRAFTS.find(s => s.id === 'stock-kestrel')!.build());
+    const craftRoot = session.getSnapshot().craft.parts.find(p => p.parent === undefined)!.uid;
+    const leaf = () => session.getSnapshot().craft.parts.find(p => p.parent !== undefined && !session.getSnapshot().craft.parts.some(q => q.parent === p.uid))!;
+    // Two pieces set aside: A, then B.
+    session.pickUp(leaf().uid); session.place({ kind: 'park', position: v3(6, 0, 0) });
+    session.pickUp(leaf().uid); session.place({ kind: 'park', position: v3(-6, 0, 0) });
+    session.swapDetached(1); // edit B; the craft takes index 1
+    expect(session.getSnapshot().detached[1].craft).toBeDefined();
+    session.takeFromDetached(0, session.getSnapshot().detached[0].rootUid); // hold A
+    void session.save(); // refused while the craft is set aside; offers Swap back
+    const toast = session.getSnapshot().toasts.find(t => t.action?.label === 'Swap back')!;
+    toast.action!.run();
+    expect(session.getSnapshot().craft.parts.some(p => p.uid === craftRoot)).toBe(true);
+    expect(session.getSnapshot().detached.some(p => p.craft)).toBe(false);
+  });
+});
