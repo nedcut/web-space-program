@@ -69,10 +69,19 @@ These machine-local artifacts are deliberately outside git.
 `docs/progress/2026-10-archive.md` preserves all 1,288 original PROGRESS.md lines
 verbatim; original/archive SHA-256:
 `e9919b8358727d8cbdf32ea803bc0cfc9a18d82e1333497f92142ca5c236d793`.
-The new report is 104 lines. `vitest list --json --maxWorkers=2` collected
-1,276 tests across 214 files. Exported catalog counts are 44 stock entries
+The new report is 104 lines. The complete `vitest run --maxWorkers=2` passed
+2,000 tests with one skipped across 214 files in 616.88 seconds on the shared local
+machine. `vitest list` reports fewer entries because parameterized cases expand
+during execution. Lint, `tsc --noEmit`, the production build and the Pages size
+check also passed. Exported catalog counts are 44 stock entries
 (32 Standard, 5 Challenging, 7 Real), 173 parts, 61 bodies.
 
-Unverified: Cloudflare production HTTPS/edge caching and credential-enabled deploy,
+The exact workflow configuration gate was exercised locally with neither secret,
+one secret, and both dummy secrets: all exited zero; only both enabled deployment.
+The extra PWA cross-deployment lifecycle probe could not acquire the shared GPU
+lock in two bounded attempts; the existing update code is unchanged.
+
+Unverified: cross-deployment PWA update/reload behaviour,
+Cloudflare production HTTPS/edge caching and credential-enabled deploy,
 main artifact upload/secret-absent deploy skip on a real main push, custom domains,
 Mac/Zen/Safari performance and multiplayer hosting. PR previews are deferred.
