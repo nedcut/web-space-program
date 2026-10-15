@@ -77,6 +77,8 @@ import { FlightInput } from './input';
 import { actionAllowedWhileSuspended } from './modals';
 import { saveErrorText } from '../game/storageErrors';
 import { createPlanetLayer, type PlanetLayer } from './planets';
+import { requestBiomeMap } from '../game/biomeMaps';
+import { biomeObjectives } from '../game/biomeObjectives';
 
 
 const graphicsKeyOf = (s: { quality: string; shadows: boolean; bloom: boolean; renderScale: number }) =>
@@ -126,6 +128,8 @@ export class FlightController {
   /** Map focus, menus and maneuver-node commands. */
   readonly mapUi: FlightMap;
   mapMode = false;
+  /** Last refresh of the map's objective biomes (contracts change rarely; checked once a second). */
+  private objectivesAt = -Infinity;
   paused = false;
   /** A modal (the Controls reference) covers the flight: flight input is suspended but the sim keeps running. */
   modalOpen = false;
@@ -309,6 +313,7 @@ export class FlightController {
     this.hatchMarker = new HatchMarker(labelHost);
     this.map = new MapView(universe.bodies, universe.ephem, labelHost, q, universe);
     this.map.setVisible(false);
+    this.map.setBiomeSource(requestBiomeMap);
     this.mapUi = new FlightMap(this);
     // The navball cluster owns the bottom centre in flight; the map overlay shows the focus path instead.
     this.map.showBreadcrumb = false;
@@ -1543,6 +1548,7 @@ export class FlightController {
     }
     for (const id of this.mapOrbits.keys()) if (!w.vessels.has(id)) this.mapOrbits.delete(id);
     this.map.setExtraOrbits(extras);
+    if (now - this.objectivesAt > 1000) { this.objectivesAt = now; this.map.setBiomeTargets(biomeObjectives(w.progression)); }
     const kind = w.targetKind();
     this.map.setTarget(kind ? { kind, id: w.targetId! } : null);
     const ca = kind && !w.preciseGravity ? w.closestApproach() : null;

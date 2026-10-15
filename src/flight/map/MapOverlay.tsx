@@ -16,6 +16,8 @@ import { SasIcon, type SasGlyph } from '../hud/glyphs';
 import { DvBudget } from '../hud/PlannerBits';
 import { budgetStages, shortCountdown, shortDuration } from '../hud/plannerFormat';
 import '../hud/planner.css';
+import { MapLayers } from '../../ui/map/MapLayers';
+import { biomeObjectives } from '../../game/biomeObjectives';
 
 const BODY_KIND = { star: 'Star', planet: 'Planet', dwarf: 'Dwarf planet', moon: 'Moon', asteroid: 'Asteroid', comet: 'Comet' } as const;
 
@@ -89,13 +91,14 @@ function MapReadout({ controller: c }: { controller: FlightController }) {
     }
   } catch { /* degenerate orbit */ }
   const title = f ? `Viewing ${ui.name(f)}` : `Viewing ${body?.name ?? 'body'} · ${wv?.state.name ?? 'vessel'}`;
-  return <ReadoutView controller={c} title={title} path={path} orbit={orbit}
+  return <ReadoutView controller={c} title={title} path={path} orbit={orbit} bodyId={focusBody}
     landing={!landingPredictionApplies(wv) ? 'n/a' : ui.landing.enabled ? ui.landing.attitude : 'off'} status={ui.landing.status} />;
 }
 
 /** The readout's DOM, re-rendered only when one of its strings changes. */
-const ReadoutView = memo(function ReadoutView({ controller: c, title, path, orbit, landing, status }: {
+const ReadoutView = memo(function ReadoutView({ controller: c, title, path, orbit, landing, status, bodyId }: {
   controller: FlightController; title: string; path: string; orbit: string | null; landing: 'n/a' | 'off' | 'hold' | 'retrograde'; status: string | null | undefined;
+  bodyId: string | undefined;
 }) {
   const ui = c.mapUi;
   const [help, setHelp] = useState(false);
@@ -125,6 +128,8 @@ const ReadoutView = memo(function ReadoutView({ controller: c, title, path, orbi
       else l.enabled = false;
     }}>Landing: {landing === 'off' ? 'off' : landing === 'hold' ? 'hold attitude' : 'surface retrograde'}</button>}
     {status && <span role="status">{status}</span>}
+    <MapLayers map={c.map} bodyId={bodyId} bodyName={id => c.world.universe.bodies.get(id)?.name ?? id}
+      objectives={() => biomeObjectives(c.world.progression)} onShow={(body, biome) => ui.showBiome(body, biome)} />
   </div>;
 });
 
