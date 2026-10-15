@@ -139,8 +139,8 @@ export class FlightMap {
     else if (this.autoFrame.update(active.body, i === UNDECIDED ? null : patches[i], this.c.map.zoomCount, performance.now(), thrusting)) this.frameActive(patches);
     if (ascent) {
       if (thrusting) this.c.map.distance = Math.max(this.c.map.distance, ascent.distance);
-      // Rotating the camera below the centre's horizon must not leave it inside the body.
-      this.c.map.distance = Math.max(this.c.map.distance, this.minDistance());
+      // Rotating the camera below the centre's horizon must not leave it inside the body, even mid-zoom.
+      this.c.map.holdDistanceAtLeast(this.minDistance());
       return { position: add(bodyState.position, ascent.centre), focusId: `ascent:${active.body}`, referenceBody: active.body };
     }
     // The local body remains central; enlarge the frame only if a burn carries the vessel out of view.

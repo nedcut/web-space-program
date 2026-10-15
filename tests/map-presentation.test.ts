@@ -104,4 +104,18 @@ describe('map presentation', () => {
     expect(map.camera.position.length()).toBeLessThan(6e11);
     map.dispose();
   });
+
+  it('holds the rendered camera distance at a clearance limit while the zoom eases', () => {
+    vi.stubGlobal('document', { createElement: host });
+    const bodies = createUniverse('standard'), ephem = createEphemeris(bodies);
+    const map = new MapView(bodies, ephem, host() as unknown as HTMLElement);
+    const focus = ephem.getBodyState('earth', 0).position;
+    const frame = () => map.update({ t: 0, focusId: 'ascent:earth', referenceBody: 'earth', focus, viewport: { width: 1280, height: 800 } });
+    map.distance = 1e5; frame(); frame();
+    expect(map.camera.position.length()).toBeCloseTo(1e5, -2);
+    // The limit jumps (the camera turned below the horizon): the very next frame is already outside it.
+    map.holdDistanceAtLeast(2e6); frame();
+    expect(map.camera.position.length()).toBeGreaterThanOrEqual(2e6 * (1 - 1e-9));
+    expect(map.distance).toBe(2e6);
+  }, 60_000);
 });

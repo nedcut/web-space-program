@@ -1732,6 +1732,15 @@ export class MapView {
   /** Show the built-in focus breadcrumb (hosts with their own focus readout turn it off). */
   showBreadcrumb = true;
 
+  /**
+   * Keep the camera at least `d` from the focus, including the eased distance actually rendered (a host clearance
+   * limit that changes as the camera turns must not be crossed while the zoom catches up).
+   */
+  holdDistanceAtLeast(d: number) {
+    if (this.distance < d) this.distance = d;
+    if (this.renderedDistance < d) this.renderedDistance = d;
+  }
+
   /** Start the eased camera distance from `d` (e.g. a zoom-out transition when the map opens). */
   animateFrom(d: number) {
     if (d > 0 && Number.isFinite(d)) this.renderedDistance = d;
