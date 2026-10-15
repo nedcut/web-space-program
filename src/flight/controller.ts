@@ -437,6 +437,8 @@ export class FlightController {
           this.effects.deployment(this.effectPosition,vessel.state.velocity);
         }
       }
+      // Before the audio early-return: docking mode must clear even without sound.
+      this.dockingMode = dockingModeAfterEvent(this.dockingMode, e, this.world.activeId);
       if (!this.audio) return;
       if (e.type === 'structuralWarning' && e.vesselId === this.world.activeId) this.audio.structuralCreak(e.loadFraction);
       const source = this.world.vessels.get(e.vesselId);
@@ -452,7 +454,6 @@ export class FlightController {
       if (e.type === 'partDestroyed') this.audio.explosion(Math.max(1,(this.views.get(e.vesselId)?.eventPart(e.partUid)?.mass ?? 1000)/500), eventDistance, active?.state.telemetry.staticPressure ?? 0, e.vesselId === this.world.activeId);
       if (e.vesselId === this.world.activeId && e.type === 'chute' && (e.phase === 'semi' || e.phase === 'full')) this.audio.chuteDeploy();
       if (e.type === 'docked' && (e.vesselId === this.world.activeId || e.otherId === this.world.activeId)) this.audio.docking();
-      this.dockingMode = dockingModeAfterEvent(this.dockingMode, e, this.world.activeId);
       if (e.type === 'undocked' && e.vesselId === this.world.activeId) this.audio.decouple();
     };
 
