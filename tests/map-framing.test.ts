@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Orbit, TrajectoryPatch } from '../src/sim/orbit/api';
-import { AutoFramer, NO_TRANSITION, UNDECIDED, ascentAngles, ascentFrame, ascentPhase, firstTransition, orbitFrameDistance, pathFrameDistance } from '../src/flight/map/framing';
+import { AutoFramer, NO_TRANSITION, UNDECIDED, ascentAngles, ascentFrame, ascentMinDistance, ascentPhase, firstTransition, orbitFrameDistance, pathFrameDistance } from '../src/flight/map/framing';
 import { patchDrawnNow } from '../src/render/map/framing';
 
 const orbit = (body: string, e = 0.1): Orbit => ({ body, a: 7e6, e, i: 0, lan: 0, argPe: 0, m0: 0, epoch: 0, mu: 4e14 });
@@ -151,5 +151,23 @@ describe('map framing: ascent view', () => {
     const d = v3(Math.cos(yaw) * Math.cos(pitch), Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch));
     expect(d.z).toBeGreaterThan(0.9); // the orbit normal
     expect(d.x).toBeGreaterThan(0.2); // tilted towards local up, so the camera is outside the body at any distance
+  });
+
+  it('keeps the camera outside the body when the apoapsis is far round it', () => {
+    // At periapsis 40 km up, just over circular speed: the apoapsis is on the far side, still in the ascent phase.
+    const r = v3(R + 4e4, 0, 0), v = v3(0, Math.sqrt(mu / (R + 4e4)) * 1.005, 0);
+    expect(ascentPhase(true, false, r, v, mu, clear)).toBe(true);
+    const { centre } = ascentFrame(r, v, mu, R);
+    // On the surface, on the vessel's side of the body.
+    expect(Math.hypot(centre.x, centre.y, centre.z)).toBeCloseTo(R, -1);
+    expect(centre.x).toBeGreaterThan(0.9 * R);
+    const camera = (yaw: number, pitch: number) => {
+      const d = ascentMinDistance(centre, yaw, pitch, R), cp = Math.cos(pitch);
+      return Math.hypot(centre.x + d * Math.cos(yaw) * cp, centre.y + d * Math.sin(yaw) * cp, centre.z + d * Math.sin(pitch));
+    };
+    for (const yaw of [0, 1, 2, 3, 4, 5, 6]) for (const pitch of [-1.5, -0.7, 0, 0.7, 1.5]) expect(camera(yaw, pitch)).toBeGreaterThanOrEqual(R);
+    // From above the centre's horizon the player can still zoom in close.
+    const { yaw, pitch } = ascentAngles(r, v);
+    expect(ascentMinDistance(centre, yaw, pitch, R)).toBeCloseTo(0.15 * R, -3);
   });
 });

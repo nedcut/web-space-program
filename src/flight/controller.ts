@@ -1277,8 +1277,8 @@ export class FlightController {
     // Night vision lights what the camera looks at, strongest in full shadow so daylight shading is untouched.
     const dark = this.nightVision ? 1 - eclipse : 0;
     this.ambient.intensity = 0.12 + 1.4 * dark;
+    // Always in the scene (intensity 0 when off): toggling visibility would change the light count and recompile shaders.
     this.nightLight.intensity = 2.2 * dark;
-    this.nightLight.visible = dark > 0;
     if (dark > 0) {
       this.nightLight.position.copy(camera.position);
       camera.getWorldDirection(this.nightLight.target.position).add(camera.position);

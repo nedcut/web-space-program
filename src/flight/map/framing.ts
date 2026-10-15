@@ -22,13 +22,13 @@ export function ascentPhase(was: boolean, landed: boolean, r: Vec3, v: Vec3, mu:
 }
 
 /**
- * Ascent view: centred between the vessel and its apoapsis, framing both over a stretch of the horizon. Returns the
- * body-relative centre and the frame distance.
+ * Ascent view: centred between the vessel and its apoapsis (moved towards the vessel up to the surface when the
+ * apoapsis is far round the body), framing both over a stretch of the horizon. Returns the body-relative centre and the frame distance.
  */
 export function ascentFrame(r: Vec3, v: Vec3, mu: number, radius: number): { centre: Vec3; distance: number } {
   const ev = eccentricity(r, v, mu), e = length(ev), a = 1 / (2 / length(r) - dot(v, v) / mu);
   const ap = e > 1e-9 && a > 0 ? scale(ev, -a * (1 + e) / e) : r;
-  const centre = scale(add(r, ap), 0.5);
+  const centre = aboveSurface(scale(add(r, ap), 0.5), r, radius);
   return { centre, distance: Math.max(radius * 0.8, distance(r, ap) * 1.5) };
 }
 
@@ -37,6 +37,25 @@ export function ascentAngles(r: Vec3, v: Vec3): { yaw: number; pitch: number } {
   const up = normalize(r), h = cross(r, v);
   const d = normalize(length(h) > 0 ? add(normalize(h), scale(up, 0.3)) : up);
   return { yaw: Math.atan2(d.y, d.x), pitch: Math.max(-1.55, Math.min(1.55, Math.asin(Math.max(-1, Math.min(1, d.z))))) };
+}
+
+/**
+ * Closest map camera distance from an ascent `centre` (at or above the surface) for the camera direction `yaw`/`pitch`:
+ * looking from above the centre's horizon any distance stays outside the body; from below, the camera must stay
+ * beyond the far side.
+ */
+export function ascentMinDistance(centre: Vec3, yaw: number, pitch: number, radius: number): number {
+  const cp = Math.cos(pitch), up = centre.x * Math.cos(yaw) * cp + centre.y * Math.sin(yaw) * cp + centre.z * Math.sin(pitch);
+  return up >= 0 ? radius * 0.15 : length(centre) + radius * 1.05;
+}
+
+/** `mid` if it is above the surface, else the point where the segment from `mid` to the vessel `r` reaches it. */
+function aboveSurface(mid: Vec3, r: Vec3, radius: number): Vec3 {
+  if (length(mid) >= radius) return mid;
+  if (length(r) <= radius) return r;
+  const d = sub(r, mid), a = dot(d, d), b = dot(mid, d), c = dot(mid, mid) - radius * radius;
+  const t = (-b + Math.sqrt(b * b - a * c)) / a;
+  return add(mid, scale(d, t));
 }
 
 function eccentricity(r: Vec3, v: Vec3, mu: number): Vec3 {

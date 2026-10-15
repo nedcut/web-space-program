@@ -9,7 +9,7 @@ import { formatDistance, formatSpeed } from '../../util/format';
 import { add, length, sub, type Vec3 } from '../../util/vec3';
 import type { TrajectoryPatch } from '../../sim/orbit/api';
 import { patchState } from '../../sim/orbit/numericalPrediction';
-import { AutoFramer, UNDECIDED, ascentAngles, ascentFrame, ascentPhase, firstTransition, pathFrameDistance } from './framing';
+import { AutoFramer, UNDECIDED, ascentAngles, ascentFrame, ascentMinDistance, ascentPhase, firstTransition, pathFrameDistance } from './framing';
 import { nodeSummary, patchAtNode } from './nodeInfo';
 import { cycleNodeId, nodeKeyCommand, nudged } from '../../ui/map/nodeKeys';
 
@@ -139,6 +139,8 @@ export class FlightMap {
     else if (this.autoFrame.update(active.body, i === UNDECIDED ? null : patches[i], this.c.map.zoomCount, performance.now(), thrusting)) this.frameActive(patches);
     if (ascent) {
       if (thrusting) this.c.map.distance = Math.max(this.c.map.distance, ascent.distance);
+      // Rotating the camera below the centre's horizon must not leave it inside the body.
+      this.c.map.distance = Math.max(this.c.map.distance, this.minDistance());
       return { position: add(bodyState.position, ascent.centre), focusId: `ascent:${active.body}`, referenceBody: active.body };
     }
     // The local body remains central; enlarge the frame only if a burn carries the vessel out of view.
@@ -235,8 +237,8 @@ export class FlightMap {
     if (f?.kind === 'body' && w.universe.bodies.has(f.id)) return w.universe.body(f.id).radius * 1.15;
     if (!w.active) return 1500;
     const radius = w.universe.body(w.active.body).radius;
-    // The ascent view centres near the surface; zoom stays as close as it does above the body's centre.
-    return radius * (this.ascent && !f ? 0.15 : 1.15);
+    const map = this.c.map;
+    return this.ascent && !f ? ascentMinDistance(this.ascent.centre, map.yaw, map.pitch, radius) : radius * 1.15;
   }
 
   /** Focus objects in Tab order. */
