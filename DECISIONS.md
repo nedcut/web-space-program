@@ -1416,4 +1416,9 @@ Owner decisions 2026-10-13 (both recommended options).
   including where the imagery water mask lies over dry mesh terrain. Require
   positive physical depth for seabed/surf and fade resolved seabed detail with the
   existing near-water range. Keep coast geometry and imagery masks unchanged.
-- Acceptance measurements and final visual review are pending in this worktree.
+- Final acceptance covers 14 paired preview views and eight day/midnight flight
+  cases. The largest Medium flight GPU increase is +0.55% on RTX 3060 Ti, with
+  no measured regression above 1%; four Firefox smoke cases pass. Water pixel
+  diagnostics confirm no emission on sampled lakes/coastal water. See
+  [validation evidence](docs/performance/nightcity.md). Mac/Zen and sustained
+  120 Hz remain unverified; source resolution limits close night detail.

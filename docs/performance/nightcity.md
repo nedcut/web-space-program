@@ -56,7 +56,7 @@ The first three are at 3 km altitude / −30° pitch, the next two at 10/50 km /
 Each capture waits for terrain ready, global 8k and another 15 seconds.
 
 Drivers: `C:\wsp-tools\drv\nightcity-accepted.mjs`, `nightcity-patch.json`,
-`nightcity-flight-eval.js`, `nightcity-flight-pair.mjs` (same flight fixtures in day and night),
+`nightcity-flight-eval.js`, `nightcity-midnight.mjs`, `nightcity-flight-pair.mjs` (same flight fixtures in day and night),
 `nightcity-check-final.mjs`, and `C:\wsp-tools\drv-ff\nightcity-final.mjs`. Commands use `flock /tmp/wsp-gpu.lock`
 with `timeout 600` **inside** the lock. No simultaneous GPU runs.
 
@@ -123,10 +123,34 @@ Daylight measurements (`flight-final.json`):
 
 | Scene | Before (ms) | After (ms) | Change |
 | --- | ---: | ---: | ---: |
-
 | pad | 2.4275 | 2.4409 | +0.55% |
 | climb10 | 2.0761 | 2.0626 | -0.65% |
 | climb50 | 1.4766 | 1.4650 | -0.79% |
 | orbit | 2.0087 | 1.9952 | -0.68% |
 
-Midnight timings and final Firefox smoke results follow after the runs.
+Midnight measurements (`flight-midnight.json`), solar elevation about −45.5°:
+
+| Scene | Before (ms) | After (ms) | Change |
+| --- | ---: | ---: | ---: |
+| pad | 2.1072 | 2.0887 | -0.88% |
+| climb10 | 2.0149 | 2.0183 | +0.17% |
+| climb50 | 1.8398 | 1.8367 | -0.17% |
+| orbit | 2.0407 | 2.0413 | +0.03% |
+
+All eight daylight/midnight flight cases have valid GPU samples and no console,
+page or GL errors. The largest increase is +0.55% (0.0134 ms) at the daylight pad;
+there is no measured regression above 1% on this GPU. The midnight runner saved
+all four cases and screenshots, then its shell returned SIGTERM during teardown;
+the recorded measurements are complete. Logs: `/tmp/nightcity-flight-final.log`
+and `/tmp/nightcity-midnight.log`.
+
+Firefox 143 on Windows passed all four final production smoke cases: Orlando
+3 km daytime, Orlando 500 m daytime, Florida 50 km night and Paris 50 km night.
+All loaded 8K imagery, with no page/console errors and GL error 0. Evidence:
+`firefox.json` and `/tmp/nightcity-firefox-clean.log`; runner exited successfully.
+The isolated test profile disables service workers to prevent the previously
+registered navigation fallback from routing preview fixtures to the main app.
+This is shader compatibility evidence, not a service-worker acceptance test.
+
+Mac M-series, macOS Zen and sustained 120 Hz remain unverified. Close-up night
+structure remains limited by the source Black Marble resolution.

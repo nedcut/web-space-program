@@ -1250,9 +1250,10 @@ shader files; no assets, simulation, map, worker or loading changes.
 Lint, typecheck, build and the full 208-file suite pass (1,936 tests, one skipped);
 30 material tests also pass after the final mask adjustment. All 14 final-build
 preview comparisons rendered without GL errors. Medium RTX 3060 Ti timings are
-flat/faster apart from +0.38% orbital sampling noise. Full-flight daylight checks
-are within +0.56% or faster. Midnight flight and final Firefox smoke checks are
-still queued on the shared GPU. Mac/Zen and 120 Hz remain unverified.
+flat/faster apart from +0.38% orbital sampling noise. All eight full-flight day/midnight
+checks are within +0.55% or faster; no measured regression exceeds 1% on this GPU.
+Firefox passed four final smoke cases with 8K imagery and no GL errors. Mac/Zen
+and sustained 120 Hz remain unverified; close night detail is source-limited.
 
 Evidence and decisions: `docs/performance/nightcity.md`. Committed locally on
 `cx/nightcity`; not pushed or merged.
