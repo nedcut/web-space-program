@@ -112,6 +112,8 @@ export interface WheelModule {
   steerAngle?: number;
   /** Drive motor torque, N*m (absent = free rolling). */
   motorTorque?: number;
+  /** Drive motor top speed, m/s: drive force fades to zero as the wheel rolls this fast (absent = no limit). */
+  maxDriveSpeed?: number;
   /** Can be raised (G key). Fixed gear is always down. */
   retractable: boolean;
 }

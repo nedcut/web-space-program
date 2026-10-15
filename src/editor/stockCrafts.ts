@@ -5,6 +5,7 @@ import { qFromAxisAngle, qRotate, type Quat } from '../util/quat';
 import { v3, type Vec3 } from '../util/vec3';
 import { autoStageByDepth, CraftEditor, type PartCatalog } from './core';
 import { surfaceTransform } from './surface';
+import { buildCricket, buildFizzwick, buildPackmule, buildSaltstreak, buildSkipjack, buildTrekker } from './stock/fun';
 
 /**
  * Pre-built stock crafts, assembled programmatically through CraftEditor so attach positions, symmetry
@@ -19,8 +20,16 @@ export interface StockCraft {
   /** Destination hardware is deployed there; Earth launchers are complete stacks. */
   launchBody?: string;
   needsResearch?: boolean;
+  /** Picker group; derived from the craft type and launch body when absent (see `stock/guide.ts`). */
+  category?: StockCategory;
+  /** Part ids (or short labels) this design is a good example of, shown as "Features". */
+  tags?: string[];
+  /** One-line "try this" suggestion for the player. */
+  tip?: string;
   build(): CraftDef;
 }
+
+export type StockCategory = 'first' | 'orbit' | 'worlds' | 'aircraft' | 'fun';
 
 type Sym = 1 | 2 | 3 | 4 | 6 | 8 | 'mirror';
 
@@ -639,6 +648,40 @@ export function buildPebblecatcher(catalog: PartCatalog = PART_CATALOG): CraftDe
   return b.done();
 }
 
+/** Picker presentation for the original stock designs (new entries set these fields inline). */
+const STOCK_GUIDE: Record<string, Pick<StockCraft, 'category' | 'tags' | 'tip'>> = {
+  'stock-kestrel': { category: 'first', tags: ['pod-lantern-1', 'chute-main', 'eng-sirocco', 'fin-keel'], tip: 'Launch straight up, stage the capsule after burnout and let the parachute bring you home.' },
+  'stock-firstlight': { category: 'first', tags: ['eng-gust', 'eng-sirocco', 'shield-1'], tip: 'Lean east from 1 km and keep leaning; coast to an apoapsis above 70 km and burn there to circularize.' },
+  'stock-meridian': { category: 'first', tags: ['eng-zephyr', 'solar-fold', 'shield-1'], tip: 'Reach orbit with fuel to spare, stay a few laps, then burn retrograde over the ocean to come home.' },
+  'stock-tender': { category: 'orbit', tags: ['dock-1', 'rcs-nudge', 'mono-bagel'], tip: 'Target a docking port, line up from 50 m and close in at under 1 m/s on RCS.' },
+  'stock-hearthlight': { category: 'orbit', tags: ['cabin-wayfarer', 'solar-grand-1', 'antenna-relay', 'eng-monsoon'], tip: 'Put it in orbit, then send the Homeward ferry up to dock and crew it.' },
+  'stock-homeward': { category: 'orbit', tags: ['pod-harbor-3', 'dock-2', 'chute-radial-heavy'], tip: 'Rendezvous with your station: match orbits from below and finish the approach on RCS.' },
+  'stock-alembic': { category: 'orbit', tags: ['lab-crucible', 'solar-grand-1', 'dock-1'], tip: 'Dock it to Hearthlight and bring scientists aboard to process experiment data.' },
+  'stock-longreach': { category: 'orbit', tags: ['eng-hearth', 'radiator-1', 'cabin-wayfarer'], tip: 'Low thrust, huge efficiency: refuel in orbit, then plan a long burn towards Mars.' },
+  'stock-atlaswake': { category: 'orbit', tags: ['tank-4-long', 'eng-monsoon', 'adapt-3-4'], tip: 'Open it in the Integration Hall and swap the nose cone for your own payload.' },
+  'stock-beaconseed': { category: 'orbit', tags: ['antenna-relay', 'eng-doldrum', 'eng-chinook'], tip: 'Launch two or three, spaced around the same orbit, for continuous coverage.' },
+  'stock-swift': { category: 'aircraft', tags: ['jet-kittiwake', 'wing-broadleaf', 'gear-bogie', 'tail-hawk'], tip: 'Fly a circuit and land back on the runway: line up early and come in slow and shallow.' },
+  'stock-daybreak': { category: 'aircraft', tags: ['jet-shrike', 'eng-needle', 'intake-snout'], tip: 'Climb on jets as high as they will take you, stage the aerospike, then shut the jets down.' },
+  'stock-moonmoth': { category: 'aircraft', tags: ['rover-wheel-0', 'generator-isotope', 'scanner-assay'], tip: 'Practise driving on the runway first; the monopropellant thruster gives it a hop.' },
+  'stock-selene': { category: 'worlds', tags: ['leg-strider', 'eng-doldrum', 'eng-chinook'], tip: 'From low orbit, burn prograde as the Moon rises over the horizon and watch for the encounter marker.' },
+  'stock-moonmoth-lander': { category: 'worlds', tags: ['dec-radial', 'rover-chassis', 'leg-strider'], tip: 'Land on the legs, release the rover, then roll it wheels-down with attitude control.' },
+  'stock-bedrock': { category: 'worlds', tags: ['drill-burrow', 'converter-foundry', 'regolith-hopper', 'leg-colossus'], tip: 'Land on flat ground, deploy the drills and run the Foundry to refill the tanks.' },
+  'stock-emberleaf': { category: 'worlds', tags: ['shield-2', 'chute-heavy', 'eng-radial-spray'], tip: 'Keep the shield forward through entry; the chutes only slow you so much, so finish on the engines.' },
+  'stock-hazewalker': { category: 'worlds', tags: ['chute-radial-heavy', 'generator-isotope', 'sensor-thermal'], tip: "Titan's thick air and weak gravity make for a long, gentle drift under the chutes." },
+  'stock-frostwhisker': { category: 'worlds', tags: ['sensor-exposure', 'antenna-horizon', 'leg-stilt'], tip: "Pass low over Enceladus's south pole to fly through the plume." },
+  'stock-pebblecatcher': { category: 'worlds', tags: ['sensor-sample', 'rcs-nudge', 'leg-stilt'], tip: "Bennu barely pulls: touch down at walking pace with RCS taps, then collect a sample." },
+  'stock-ringrunner': { category: 'worlds', tags: ['eng-foehn', 'battery-drum', 'wheel-gyre-1'], tip: 'Pick a Saturn transfer window in the planner before you leave Earth orbit.' },
+  'stock-gossamer': { category: 'worlds', tags: ['antenna-horizon', 'generator-isotope', 'eng-foehn'], tip: 'Capture into a Saturn orbit that stays above the rings, then relay science home.' },
+  'stock-kestrel-challenging': { category: 'first', tags: ['pod-lantern-1', 'chute-main', 'eng-sirocco', 'fin-keel'], tip: 'Launch straight up, stage the capsule after burnout and let the parachute bring you home.' },
+  'stock-kestrel-real': { category: 'first', tags: ['pod-lantern-1', 'chute-main', 'eng-sirocco', 'fin-keel'], tip: 'Launch straight up, stage the capsule after burnout and let the parachute bring you home.' },
+  'stock-meridian-challenging': { category: 'first', tags: ['eng-tempest', 'eng-harmattan', 'eng-zephyr'], tip: 'A longer, flatter climb than on Standard: start leaning early and keep the nose near prograde.' },
+  'stock-meridian-real': { category: 'first', tags: ['eng-tempest', 'eng-harmattan', 'eng-zephyr'], tip: 'Orbit takes 7.8 km/s here: lean early, keep the nose near prograde and waste nothing.' },
+  'stock-selene-challenging': { category: 'worlds', tags: ['srb-thunderclap', 'wheel-reaction-2', 'eng-foehn'], tip: 'Descent and ascent stages are separate: leave the descent stage on the Moon.' },
+  'stock-selene-real': { category: 'worlds', tags: ['srb-thunderclap', 'dec-radial', 'eng-foehn'], tip: 'Descent and ascent stages are separate: leave the descent stage on the Moon.' },
+  'stock-ringrunner-real': { category: 'worlds', tags: ['eng-hearth', 'interstage-4', 'generator-isotope'], tip: 'Plan a flyby rather than a capture, and trim the approach late in the cruise.' },
+  'stock-tern-real': { category: 'worlds', tags: ['probe-pebble', 'eng-wisp', 'wheel-gyre-0'], tip: "The launcher starts the Moon transfer; the probe's own kick stage finishes it and captures." },
+};
+
 export const STOCK_CRAFTS: StockCraft[] = ([
   { scale: 'standard', id: 'stock-kestrel', name: 'Kestrel Sounding Rocket', blurb: 'Suborbital test hop · 1 stage + capsule', build: () => buildSoundingRocket() },
   { scale: 'standard', id: 'stock-meridian', name: 'Meridian Orbiter', blurb: 'Standard scale · two stages to low orbit and back', build: () => buildOrbiter() },
@@ -676,7 +719,21 @@ export const STOCK_CRAFTS: StockCraft[] = ([
   { scale: 'real', id: 'stock-tern-real', name: 'Tern Lunar Probe', blurb: 'Real scale · uncrewed Moon orbiter · transmits its science', build: () => buildRealLunarProbe() },
   { scale: 'real', id: 'stock-selene-real', name: 'Selene Real Expedition', blurb: 'Real scale · five-metre Moon landing and return expedition', build: () => buildRealMoonLander() },
   { scale: 'standard', id: 'stock-firstlight', name: 'Firstlight Orbiter', blurb: 'Starting equipment · Standard-scale orbit', build: () => buildFoundationOrbiter() },
+  // Aircraft, rovers and fun craft (stock/fun.ts).
+  { scale: 'standard', id: 'stock-fizzwick', name: 'Fizzwick Bundle', blurb: 'Starting equipment · six solids and a core, all lit at once', category: 'fun',
+    tags: ['srb-sparkler', 'eng-gust', 'fin-keel'], tip: 'Fly straight up and watch the ring of Sparklers burn out together; stage the capsule at the top.', build: () => buildFizzwick() },
+  { scale: 'standard', id: 'stock-skipjack', name: 'Skipjack Stunt Plane', blurb: 'Runway · nimble aerobatic jet with elevon canards', category: 'aircraft', needsResearch: true,
+    tags: ['wing-swept', 'ctrl-elevon', 'fuse-spar-short'], tip: 'Climb to 1 km, then pull back hard for a loop or roll with A/D.', build: () => buildSkipjack() },
+  { scale: 'standard', id: 'stock-saltstreak', name: 'Saltstreak Jet Dragster', blurb: 'Runway · crewed rover with a turbofan on the back', category: 'fun', needsResearch: true,
+    tags: ['rover-wheel-1', 'rover-chassis', 'jet-kittiwake', 'fuse-spar-short'], tip: 'Race the runway and brake before the grass. Brave? Raise its thrust limiter in the Integration Hall.', build: () => buildSaltstreak() },
+  { scale: 'standard', id: 'stock-trekker', name: 'Trekker Field Lab', blurb: 'Six-wheel science rover · every surface instrument', category: 'aircraft', needsResearch: true,
+    tags: ['sensor-seismic', 'sensor-magnetic', 'sensor-gravity', 'sensor-pressure', 'panel-1'], tip: 'Drive to a different biome and run all five instruments for a pile of science.', build: () => buildTrekker() },
+  { scale: 'standard', id: 'stock-packmule', name: 'Packmule Freighter', blurb: 'Runway · twin-jet cargo plane with a rover in its bay', category: 'aircraft', needsResearch: true,
+    tags: ['bay-cargo-2', 'fuse-tailcone', 'fuelcell-1', 'dec-radial'], tip: 'Land somewhere new, open the bay with 1, stage to drop the rover and drive it out.', build: () => buildPackmule() },
+  { scale: 'standard', id: 'stock-cricket', name: 'Cricket Hopper', blurb: 'Crewed hover rig · radial engines and landing legs', category: 'fun', needsResearch: true,
+    tags: ['eng-radial-rill', 'leg-strider', 'light-area'], tip: 'Hover at about half throttle, drift sideways a few metres, then land back on the legs.', build: () => buildCricket() },
 ] satisfies StockCraft[]).map(stock => ({
+  ...STOCK_GUIDE[stock.id],
   ...stock,
   build: () => wireStockGroups({ ...stock.build(), stockId: stock.id }),
 }));
