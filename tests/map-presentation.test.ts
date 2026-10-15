@@ -105,17 +105,27 @@ describe('map presentation', () => {
     map.dispose();
   });
 
-  it('holds the rendered camera distance at a clearance limit while the zoom eases', () => {
+  it('never renders from inside the reference body: turning, easing or a focus change', () => {
     vi.stubGlobal('document', { createElement: host });
     const bodies = createUniverse('standard'), ephem = createEphemeris(bodies);
     const map = new MapView(bodies, ephem, host() as unknown as HTMLElement);
-    const focus = ephem.getBodyState('earth', 0).position;
-    const frame = () => map.update({ t: 0, focusId: 'ascent:earth', referenceBody: 'earth', focus, viewport: { width: 1280, height: 800 } });
-    map.distance = 1e5; frame(); frame();
-    expect(map.camera.position.length()).toBeCloseTo(1e5, -2);
-    // The limit jumps (the camera turned below the horizon): the very next frame is already outside it.
-    map.holdDistanceAtLeast(2e6); frame();
-    expect(map.camera.position.length()).toBeGreaterThanOrEqual(2e6 * (1 - 1e-9));
-    expect(map.distance).toBe(2e6);
+    const earth = ephem.getBodyState('earth', 0).position, R = bodies.get('earth')!.radius;
+    const surface = { x: earth.x + R, y: earth.y, z: earth.z };
+    const sphere = (map as unknown as { bodies: Map<string, { sphere: THREE.Object3D }> }).bodies.get('earth')!.sphere;
+    const frame = (focusId: string, focus: typeof earth) => {
+      map.update({ t: 0, focusId, referenceBody: 'earth', focus, viewport: { width: 1280, height: 800 } });
+      return map.camera.position.distanceTo(sphere.position) / R;
+    };
+    // Close above a surface focus, looking down: allowed.
+    map.yaw = 0; map.pitch = 0; map.distance = 0.15 * R; frame('ascent:earth', surface);
+    expect(frame('ascent:earth', surface)).toBeCloseTo(1.15, 3);
+    // Turned to look up from below the surface: the very next frame is outside, on the far side.
+    map.yaw = Math.PI;
+    expect(frame('ascent:earth', surface)).toBeGreaterThanOrEqual(1.01 - 1e-9);
+    // Back above and close, then the focus swings to the centre (reaching orbit) while the zoom eases out.
+    map.yaw = 0; map.distance = 0.15 * R;
+    for (let i = 0; i < 5; i++) frame('ascent:earth', surface);
+    map.distance = 3 * R;
+    for (let i = 0; i < 30; i++) expect(frame('earth', earth)).toBeGreaterThanOrEqual(1.01 - 1e-9);
   }, 60_000);
 });

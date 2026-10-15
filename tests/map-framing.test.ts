@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Orbit, TrajectoryPatch } from '../src/sim/orbit/api';
 import { AutoFramer, NO_TRANSITION, UNDECIDED, ascentAngles, ascentFrame, ascentMinDistance, ascentPhase, firstTransition, orbitFrameDistance, pathFrameDistance } from '../src/flight/map/framing';
-import { patchDrawnNow } from '../src/render/map/framing';
+import { clearDistance, patchDrawnNow } from '../src/render/map/framing';
 
 const orbit = (body: string, e = 0.1): Orbit => ({ body, a: 7e6, e, i: 0, lan: 0, argPe: 0, m0: 0, epoch: 0, mu: 4e14 });
 const patch = (body: string, endReason: TrajectoryPatch['endReason'], nextBody?: string, startTime = 0): TrajectoryPatch =>
@@ -169,5 +169,17 @@ describe('map framing: ascent view', () => {
     // From above the centre's horizon the player can still zoom in close.
     const { yaw, pitch } = ascentAngles(r, v);
     expect(ascentMinDistance(centre, yaw, pitch, R)).toBeCloseTo(0.15 * R, -3);
+  });
+});
+
+describe('map framing: camera clearance', () => {
+  const body = { x: -10, y: 0, z: 0 };
+  it('keeps a camera outside the body where it is', () => {
+    expect(clearDistance(5, 1, 0, 0, body, 9)).toBe(5);
+    expect(clearDistance(0.5, 0, 0, 1, body, 9)).toBe(0.5);
+  });
+  it('moves a camera inside the body out to its far side', () => {
+    // Looking along -x from 1 unit outside a radius-9 sphere centred 10 units away: exits at 19.
+    expect(clearDistance(3, -1, 0, 0, body, 9)).toBeCloseTo(19, 9);
   });
 });
