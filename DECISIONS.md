@@ -1634,3 +1634,10 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   Chrome, prod, Standard, 4 opens × 3 interleaved runs: main (36 cards) first open 126–175 ms, reopen 58–92 ms; this
   branch (44 cards) first open 160–162 ms, reopen 9–16 ms. The hub launch picker still builds its scale's stock on
   open (this branch adds four Standard rows there, ~8 ms); its craft goes straight to flight, so it is not cached here.
+
+## Shipping automation (2026-10-15, op/ship)
+
+- CI pins Node 24.14.1 through `.nvmrc`, caches npm downloads, and checks lint,
+  types, the full Vitest suite and the production build on pushes and pull requests.
+  Two test workers bound memory use on GitHub runners and match local validation.
+  Main builds retain the checked `dist` artifact for seven days.
