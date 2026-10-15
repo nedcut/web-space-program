@@ -82,4 +82,3 @@ export interface MapHandlers {
   /** Right click on the active trajectory at `time`. */
   orbitMenu?(time: number, at: MapPoint): void;
 }
-

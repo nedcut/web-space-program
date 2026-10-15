@@ -17,12 +17,12 @@ none receives a `MapView` or `FlightController` reference.
 | `render/map/MapFrame.ts` | Projection scratch; explicit catalog, ephemeris and camera dependencies | `scenePosition`, `toScreen`, `patchFrameTime`, `framedBodyPosition` | 63 |
 | `render/map/MapLines.ts` | Line material registry, shared uniforms, trajectory snapshots/version, landing and communications buffers | Line creation/removal, resize/frame/occluder updates, trajectory/landing/comms updates; read-only trajectory version | 232 |
 | `render/map/MapMarkers.ts` | Orbit marker cache, DOM/position/caption pools, pins, approach geometry and scratch | `update`, `pick`, `tooltip`, `menu`, `togglePin`, `setApproach`, `setWarmup` | 233 |
-| `render/map/mapTypes.ts` | None; original input/event contracts moved unchanged | Map data types | 85 |
+| `render/map/mapTypes.ts` | None; original input/event contracts moved unchanged | Map data types | 84 |
 | `flight/controller.ts` | Simulation/input orchestration, view lifecycle, FX/event routing, telemetry and public commands | Existing public controller API | 1409 |
 | `render/map/MapView.ts` | Bodies/fleet, camera gestures, node dragging/gizmo and update/disposal ordering | Existing public map API | 1410 |
 
-The two original files total 3,587 lines; the resulting runtime modules total 3,763:
-**net +176 lines (4.9%)**. This is above the approximate +150-line guide, and both
+The two original files total 3,587 lines; the resulting runtime modules total 3,762:
+**net +175 lines (4.9%)**. This is above the approximate +150-line guide, and both
 owners remain above 1,000 lines. These limits are reported explicitly rather than
 met by moving orchestration into methods with access to the entire owner.
 
