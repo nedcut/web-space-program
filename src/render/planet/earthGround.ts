@@ -27,8 +27,7 @@ float earthRegionWeight(EarthUV r, float dist) {
   return uEarthRegionView * smoothstep(250.0, 750.0, dist) * smoothstep(0.0, 0.04, min(edge.x, edge.y))
     * (1.0 - smoothstep(uPlanetRadius * 0.12, uPlanetRadius * 0.16, dist));
 }
-vec3 earthGroundColour(vec3 c, float density, EarthUV uv, float hd, float dist, out vec4 lights) {
-  lights = vec4(0.0);
+vec3 earthGroundColour(vec3 c, float density, EarthUV uv, float hd, float dist) {
   // Keep the imagery's land-cover colours. Fine canopy only modulates their brightness.
   c *= 1.0 + hd * 0.4;
   if (density < 0.008) return c;
@@ -45,11 +44,40 @@ vec3 earthGroundColour(vec3 c, float density, EarthUV uv, float hd, float dist, 
   vec2 flip = mod(cell, 2.0) * 2.0 - 1.0;
   vec2 offset = fract(cell.yx * vec2(0.754877666, 0.569840296));
   vec4 tile = textureGrad(uEarthUrbanDetail, fract(p) * flip + offset, dx * flip * 1.5, dy * flip * 1.5);
-  // Roof tone selects lamp colour; G stores intermittent road/parcel lamps.
-  lights = vec4(tile.r, tile.g, tile.a, detail);
   float urban = density * smoothstep(0.12, 0.55, tile.a + density * 0.35);
   vec3 roofs = mix(c * vec3(0.55, 0.60, 0.62), vec3(dot(c, vec3(0.3, 0.6, 0.1))) * vec3(1.4, 1.3, 1.18), tile.r);
   roofs += vec3(0.025, 0.023, 0.022) * tile.r;
   return mix(c, roofs, urban * tile.b * detail * 0.65);
+}
+
+vec3 earthGroundLights(EarthUV uv, float dist) {
+  vec2 dx = uv.dx, dy = uv.dy;
+  #ifndef EARTH_REGION_FAR
+    float near = 1.0 - smoothstep(14000.0, 16000.0, dist);
+    // Broaden the 4096 x 2560 district map nearby; resolved lamps carry the detail.
+    dx += vec2(2.0 / 4096.0, 0.0) * near;
+    dy += vec2(0.0, 2.0 / 2560.0) * near;
+  #endif
+  float s = textureGrad(uEarthRegionNight, uv.uv, dx, dy).r;
+  vec3 radiance = earthLightRadiance(s, dist);
+  #if defined(USE_DETAIL) && !defined(EARTH_REGION_FAR)
+    if (near > 0.0 && s > 0.008) {
+      // Larger night parcels keep street structure resolved through the 10 km view.
+      vec2 scale = vec2(0.618, 0.4363) * (uPlanetRadius / 6144.0);
+      dx = uv.dx * scale; dy = uv.dy * scale;
+      float footprint = max(length(dx), length(dy)) * 2048.0;
+      float detail = near * (1.0 - smoothstep(4.0, 12.0, footprint));
+      if (detail > 0.0) {
+        vec2 p = uv.uv * scale, cell = floor(p);
+        vec2 flip = mod(cell, 2.0) * 2.0 - 1.0;
+        vec2 offset = fract(cell.yx * vec2(0.754877666, 0.569840296));
+        vec4 tile = textureGrad(uEarthUrbanDetail, fract(p) * flip + offset, dx * flip * 1.5, dy * flip * 1.5);
+        float occupied = smoothstep(0.08, 0.65, s + tile.a * 0.35);
+        vec3 tint = mix(vec3(1.0, 0.32, 0.055), vec3(0.85, 0.9, 1.0), smoothstep(0.25, 0.75, tile.r));
+        radiance = mix(radiance, radiance * 0.025 + tint * tile.g * occupied * s * 5.0, detail);
+      }
+    }
+  #endif
+  return radiance;
 }
 `;

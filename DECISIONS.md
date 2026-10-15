@@ -1425,15 +1425,21 @@ Owner decisions 2026-10-13 (both recommended options).
 
 ## Close regional night streets (2026-10-15, cx/nightcity round two)
 
-- The first round's close Black Marble exposure still drew bright, square district
-  texels. Reuse the existing irregular parcel texture's lamp channel from the
-  daytime detail fetch, with mapped night intensity controlling occupancy and
-  brightness. Darken the diffuse base and separate sodium road lamps from cooler
-  parcel lights. Filter the close district envelope more broadly; retain the
-  existing detail-distance handover and the full water exclusion.
-- Keep accepted high-altitude networks, daytime tiles and lake treatment. No new
-  texture assets, draws or per-frame CPU allocations. The detail is illustrative,
-  not surveyed street data.
+- The first round's close Black Marble exposure drew bright, square district
+  texels. Use the existing irregular parcel texture's lamp channel, with filtered
+  Black Marble intensity controlling occupancy and brightness. Darken the diffuse
+  base and separate sodium road lamps from cooler parcel lights. Enlarge the night
+  parcels to remain resolved at 10 km, then blend into the accepted mapped network
+  over 14-16 km viewing distance. Keep the full water exclusion.
+- The daylight urban polygon must not gate night detail: doing so leaves bright
+  washed-out borders around otherwise dark street textures. Night occupancy uses
+  the light map. These streets are illustrative, not surveyed data.
+- Trade nighttime canopy, regional colour and roof shading for street detail.
+  Global colour already fetched for the water mask supplies the faint ambient
+  base. Skip direct sunlight work only in the nearby regional terrain program
+  when the sun is more than six degrees below the local horizon; preserve sky
+  light and planetshine. Daylight and the far regional program retain their paths.
+  No new texture assets, draws or per-frame CPU allocations.
 - Defer Paris daytime tint: Natural Earth urban coverage is only packed in the
   regional Gulf asset at runtime. Global Black Marble is radiance, not a built-up
   mask; using it as one would also grey roads and non-city light sources. Adding

@@ -49,7 +49,13 @@ vec3 shadeSurface(vec3 albedo, vec3 N, vec3 V, vec3 rel) {
   float f = mix(mu0, ls, uAirless) / ATMO_PI;
   vec3 up = normalize(rel);
   float geo = smoothstep(-0.03, 0.03, dot(up, L));
-  vec3 sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(geo)) * ringShadow(rel) * cloudShadow(rel);
+  vec3 sunT = vec3(0.0);
+  #if defined(EARTH_REGION) && !defined(EARTH_REGION_FAR)
+    // Regional surface terrain is planet-shadowed with the Sun this far below
+    // the horizon. Keep sky/planetshine, but skip the zero direct-light work.
+    if (dot(up, L) > -0.11)
+  #endif
+  sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(geo)) * ringShadow(rel) * cloudShadow(rel);
   vec3 direct = uSunColor * sunT * f * gSurfaceShadow;
   vec3 amb = skyAmbient(rel, N) / ATMO_PI;
   vec3 planetshine = uPlanetshineColor * max(dot(N, uPlanetshineDir), 0.0) / ATMO_PI;
@@ -472,7 +478,6 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             nDx = dFdx(nDir); nDy = dFdy(nDir);
           }
           float urbanDensity = 0.0;
-          vec4 streetLights = vec4(0.0);
           #else
           // Only distant or night-side terrain uses imagery. Both conditions are smooth across the screen, so
           // quads agree on the branch and the derivatives inside it stay well defined (taken before any discard).
@@ -506,7 +511,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           float hd = 0.0;
           #ifdef EARTH_REGION
           // At this distance regional imagery owns the colour; canopy and local normals are zero.
-          if (regionW < 1.0 || dist < 10000.0)
+          if ((regionW < 1.0 || dist < 10000.0) && (dot(up, uSunDir) > -0.11 || dist < 750.0))
           #endif
           {
           vec3 w = abs(nBF); w = pow(w, vec3(4.0)); w /= (w.x + w.y + w.z);
@@ -607,15 +612,22 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             vec4 dayW = regionW >= 1.0 && dist <= uEarthBlend.x ? vec4(0.0) : earthTex(uEarthDay, eUV);
             vec3 c = dayW.rgb;
             if (regionW > 0.0) {
-              vec4 regional = textureGrad(uEarthRegionDay, regionUV.uv, regionUV.dx, regionUV.dy);
-              c = mix(c, regional.rgb, regionW);
-              urbanDensity = regional.a;
+              #ifndef EARTH_REGION_FAR
+              // At full night the global colour already fetched for water is enough
+              // for the tiny ambient floor. Spend the local fetch on lamps instead.
+              if (dot(up, uSunDir) > -0.11 || dist >= 16000.0)
+              #endif
+              {
+                vec4 regional = textureGrad(uEarthRegionDay, regionUV.uv, regionUV.dx, regionUV.dy);
+                c = mix(c, regional.rgb, regionW);
+                urbanDensity = regional.a;
+              }
             }
             vec3 img = earthAlbedo(c);
             #if defined(USE_DETAIL) && !defined(EARTH_REGION_FAR)
               img *= 1.0 + hd * 0.6 * uDetailStrength * (1.0 - regionW);
-              if (regionW > 0.0) {
-                img = mix(img, earthGroundColour(img, urbanDensity, regionUV, hd, dist, streetLights), regionW);
+              if (regionW > 0.0 && dot(up, uSunDir) > -0.11) {
+                img = mix(img, earthGroundColour(img, urbanDensity, regionUV, hd, dist), regionW);
               }
             #endif
             float distantImagery = smoothstep(uEarthBlend.x, uEarthBlend.y, dist);
@@ -680,22 +692,8 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           col += lightsImg * (1.0 - lightWaterW) * (1.0 - regionW);
           if (regionW > 0.0 && uEarthNightOn > 0.5 && sunAlt < 0.025) {
             float night = 1.0 - smoothstep(-0.11, 0.025, sunAlt);
-            // Below the detail handover, broaden the district map by one mip level.
-            // Its texels control lamp density, rather than drawing luminous paving.
-            float closeLights = streetLights.a;
-            vec2 nightDx = regionUV.dx, nightDy = regionUV.dy;
-            if (closeLights > 0.0) {
-              vec2 texel = 1.0 / vec2(textureSize(uEarthRegionNight, 0));
-              nightDx = mix(nightDx, vec2(max(length(nightDx), texel.x * 2.0), 0.0), closeLights);
-              nightDy = mix(nightDy, vec2(0.0, max(length(nightDy), texel.y * 2.0)), closeLights);
-            }
-            float s = textureGrad(uEarthRegionNight, regionUV.uv, nightDx, nightDy).r;
-            vec3 radiance = earthLightRadiance(s, dist);
-            float occupied = smoothstep(0.08, 0.65, s + streetLights.b * 0.35);
-            vec3 lampTint = mix(vec3(1.0, 0.32, 0.055), vec3(0.85, 0.9, 1.0), smoothstep(0.25, 0.75, streetLights.r));
-            vec3 lamps = lampTint * streetLights.g * occupied * s * 5.0;
-            radiance = mix(radiance, radiance * 0.025 + lamps, closeLights);
-            col += radiance * night * regionW * (1.0 - lightWaterW)
+            // Night parcels replace the unlit daytime roof fetch above.
+            col += earthGroundLights(regionUV, dist) * night * regionW * (1.0 - lightWaterW)
               * (1.0 - 0.75 * smoothstep(0.2, 0.9, cloudCover(rel)));
           }
           #else
