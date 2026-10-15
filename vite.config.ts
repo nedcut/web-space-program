@@ -40,7 +40,7 @@ export default defineConfig({
         icons: [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml' }],
       },
       // Earth imagery packs (8k/16k) are fetched on demand and kept in their own Cache Storage bucket.
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,jpg,webp,glsl,json,i16,md}'], globIgnores: ['**/earth/imagery/packs/**'], maximumFileSizeToCacheInBytes: 20_000_000 },
+      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,jpg,webp,glsl,json,i16,u4,md}'], globIgnores: ['**/earth/imagery/packs/**'], maximumFileSizeToCacheInBytes: 20_000_000 },
     }),
   ],
   test: { include: ['tests/**/*.test.ts', 'src/**/*.test.ts'], environment: 'node', setupFiles: ['./scripts/earth-data/register.ts'] },

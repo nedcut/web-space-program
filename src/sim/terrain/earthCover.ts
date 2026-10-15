@@ -1,23 +1,30 @@
-/** Approximate geographic climate/cover regions; not measured vegetation or political boundaries. */
-export type EarthCover = 'Oceans' | 'Shores' | 'Grasslands' | 'Deserts' | 'Mountains' | 'Ice Caps' | 'Forests' | 'Rainforests' | 'Tundra';
-function ellipse(lat: number, lon: number, la: number, lo: number, ry: number, rx: number): boolean {
-  return ((lat - la) / ry) ** 2 + ((lon - lo) / rx) ** 2 < 1;
+import { EARTH_COVER, earthData } from './earthData';
+
+/** Land-cover classes stored in cover.u4, in index order (must match scripts/earth-data/cover.mjs and the manifest). */
+export const COVER_CLASSES = ['Grasslands', 'Deserts', 'Forests', 'Rainforests', 'Tundra', 'Ice Caps', 'Wetlands', 'Lakes'] as const;
+export type CoverClass = typeof COVER_CLASSES[number];
+/** Measured land cover (MODIS/NLCD classes, see public/earth/manifest.json) plus elevation rules for sea, shore, peaks. */
+export type EarthCover = CoverClass | 'Oceans' | 'Shores' | 'Mountains';
+
+/** Land-cover class of the 0.125° cell containing latitude/longitude (degrees). */
+export function coverClass(lat: number, lon: number): CoverClass {
+  return COVER_CLASSES[earthData().coverCell(Math.floor((lon + 180) * EARTH_COVER.perDegree), Math.floor((90 - lat) * EARTH_COVER.perDegree))];
 }
+/** Peaks above this always count as ice; lower glaciers come from the measured snow/ice class. */
+const PEAK_ICE = 5500;
+
 export function earthCover(lat: number, lon: number, elevation: number, coastal = false): EarthCover {
+  // No lake bed is this deep (Baikal ≈ −1190 m, Caspian ≈ −1020 m): open sea skips the cover lookup.
+  if (elevation < -1500) return 'Oceans';
+  if (lat < -60) return elevation < 0 ? 'Oceans' : 'Ice Caps';
+  if (elevation > PEAK_ICE) return 'Ice Caps';
+  const land = coverClass(lat, lon);
+  // Lakes keep their name over lake-bed bathymetry (Great Lakes, Caspian) and over lakes the height grid shows flat.
+  if (land === 'Lakes') return land;
   if (elevation < 0) return 'Oceans';
-  if (lat < -60 || (lat > 60 && lon > -73 && lon < -12 && elevation > 500)) return 'Ice Caps';
-  const snowline = Math.max(800, 5100 - Math.abs(lat) * 50);
-  if (elevation > snowline) return 'Ice Caps';
+  if (land === 'Ice Caps') return land;
+  if (land === 'Wetlands') return land;
   if (elevation < 25 && coastal) return 'Shores';
   if (elevation > 2200) return 'Mountains';
-  if (Math.abs(lat) > 66 || (lat > 58 && elevation > 700)) return 'Tundra';
-  if (ellipse(lat, lon, 24, 12, 10, 29) || ellipse(lat, lon, 24, 46, 10, 14)
-    || ellipse(lat, lon, -25, 134, 10, 15) || ellipse(lat, lon, -24, 16, 12, 4)
-    || ellipse(lat, lon, -24, -69, 10, 3) || ellipse(lat, lon, 41, 96, 7, 21)
-    || ellipse(lat, lon, 34, -114, 8, 7)) return 'Deserts';
-  if (ellipse(lat, lon, -4, -63, 10, 17) || ellipse(lat, lon, 0, 24, 7, 12)
-    || (lat > -12 && lat < 20 && lon > 94 && lon < 155)) return 'Rainforests';
-  if (lat > 45 || (lon > -90 && lon < -60 && lat > 25 && lat < 48)
-    || (lon > 100 && lat > 20 && lat < 45) || (lon > 140 && lat < -20)) return 'Forests';
-  return 'Grasslands';
+  return land;
 }

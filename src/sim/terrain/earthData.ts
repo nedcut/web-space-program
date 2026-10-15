@@ -6,12 +6,18 @@ export const EARTH_HEIGHT = 2048;
  * south. Inside the outer `margin` degrees it blends into the global grid, so its edges are seamless.
  */
 export const CAPE_PATCH = { west: -87.75, north: 31, perDegree: 240, width: 1980, height: 1620, margin: .25 } as const;
+/**
+ * Land-cover classes (public/earth/cover.u4, built by scripts/earth-data/cover.mjs): 0.125° cells, rows north to south,
+ * two 4-bit class indices per byte (even column in the low nibble). Class names live in earthCover.ts.
+ */
+export const EARTH_COVER = { width: 2880, height: 1440, perDegree: 8 } as const;
 /** Host files, concatenated in this order into the one buffer given to installEarthData. */
 export const EARTH_FILES = [
   { path: 'height.i16', bytes: EARTH_WIDTH * EARTH_HEIGHT * 2 },
   { path: 'height-cape.i16', bytes: CAPE_PATCH.width * CAPE_PATCH.height * 2 },
+  { path: 'cover.u4', bytes: EARTH_COVER.width * EARTH_COVER.height / 2 },
 ] as const;
-export const EARTH_DATA_BYTES = EARTH_FILES[0].bytes + EARTH_FILES[1].bytes;
+export const EARTH_DATA_BYTES = EARTH_FILES[0].bytes + EARTH_FILES[1].bytes + EARTH_FILES[2].bytes;
 export interface EarthSample {
   range: number;
   /** Any corner of the containing cell is on the other side of sea level (per cell, steps at cell edges). */
@@ -34,6 +40,8 @@ export class EarthGrid {
   readonly values: Int16Array;
   /** Florida patch values (the second file). */
   readonly patch: Int16Array;
+  /** Packed land-cover classes (the third file). */
+  readonly cover: Uint8Array;
   private readonly north: number;
   private readonly south: number;
   constructor(readonly buffer: ArrayBufferLike) {
@@ -42,6 +50,7 @@ export class EarthGrid {
     if (new Uint8Array(new Uint16Array([1]).buffer)[0] !== 1) throw new Error('Earth grid requires little-endian host');
     this.values = new Int16Array(buffer, 0, EARTH_WIDTH * EARTH_HEIGHT);
     this.patch = new Int16Array(buffer, EARTH_FILES[0].bytes, PW * PH);
+    this.cover = new Uint8Array(buffer, EARTH_FILES[0].bytes + EARTH_FILES[1].bytes, EARTH_FILES[2].bytes);
     let north = 0, south = 0;
     for (let x = 0; x < EARTH_WIDTH; x++) {
       north += this.values[x]; south += this.values[(EARTH_HEIGHT - 1) * EARTH_WIDTH + x];
@@ -81,6 +90,12 @@ export class EarthGrid {
       out.range = (ra + (rb - ra) * fx) * (1 - fy) + (rc + (rd - rc) * fx) * fy;
     }
     return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
+  }
+  /** Land-cover class index of cover cell (x, y); x wraps, y clamps. */
+  coverCell(x: number, y: number): number {
+    const cx = x < 0 ? x + EARTH_COVER.width : x >= EARTH_COVER.width ? x - EARTH_COVER.width : x;
+    const i = Math.max(0, Math.min(EARTH_COVER.height - 1, y)) * EARTH_COVER.width + cx, b = this.cover[i >> 1];
+    return cx & 1 ? b >> 4 : b & 15;
   }
   /** Metres above geoid. Inputs are body-fixed unit vectors. No allocations in the hot path. */
   sample(x: number, y: number, z: number, out?: EarthSample): number {
@@ -141,6 +156,6 @@ export function installEarthData(buffer: ArrayBufferLike): EarthGrid {
   return grid;
 }
 export function earthData(): EarthGrid {
-  if (!grid) throw new Error('Earth data not loaded: host must install public/earth/height.i16 + height-cape.i16 before creating terrain');
+  if (!grid) throw new Error('Earth data not loaded: host must install the public/earth EARTH_FILES before creating terrain');
   return grid;
 }

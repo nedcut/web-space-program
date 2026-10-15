@@ -1,5 +1,5 @@
-import { earthData } from '../earthData';
-import { earthCover } from '../earthCover';
+import { EARTH_COVER, earthData } from '../earthData';
+import { COVER_CLASSES, type EarthCover } from '../earthCover';
 import type { RGB } from '../api';
 import { fbm, ridged, octavesFor, smoothstep, mix } from '../fbm';
 import { latLonToUnit } from '../geo';
@@ -131,26 +131,46 @@ export function earthPreset(ctx: PresetContext): PresetResult {
     if (clearance < LAUNCH_SITE.blend) h = mix(h, plateau, (1 - smoothstep(0, LAUNCH_SITE.blend, clearance)) * smoothstep(0, 1, metres));
     return h;
   };
-  const palette: Record<ReturnType<typeof earthCover>, RGB> = {
+  const palette: Record<EarthCover, RGB> = {
     Oceans: [.16, .14, .11], Shores: [.34, .30, .19], Grasslands: [.13, .17, .055],
     Deserts: [.5, .35, .19], Mountains: [.20, .18, .15], 'Ice Caps': [.78, .8, .84],
     Forests: [.045, .085, .03], Rainforests: [.025, .065, .02], Tundra: [.25, .25, .20],
+    Wetlands: [.06, .095, .045], Lakes: [.10, .11, .08],
   };
+  /** Render-only snow on high ground (science ice uses measured cover, see earthCover). */
+  const snowline = (lat: number) => Math.max(800, 5100 - Math.abs(lat) * 50);
+  const landPalette = COVER_CLASSES.map(name => palette[name]), ICE = COVER_CLASSES.indexOf('Ice Caps');
+  const perDegree = EARTH_COVER.perDegree;
   return {
     height, maxHeight: 9200 * verticalScale + COAST_LIFT.lift, minHeight: -12200 * verticalScale - COAST_LIFT.lift,
     colorAt: (x, y, z, h, out) => {
       const lat = Math.asin(Math.max(-1, Math.min(1, z))) * 180 / Math.PI;
       const lon = Math.atan2(y, x) * 180 / Math.PI;
       const metres = grid.sample(x, y, z, variation);
-      const cover = earthCover(lat, lon, (h - coastLift(metres)) / verticalScale);
-      const c = palette[cover];
-      const v = cover === 'Ice Caps' ? 1 : 1 + .10 * noise.noise(x * 1700, y * 1700, z * 1700);
+      const elevation = (h - coastLift(metres)) / verticalScale;
+      let r = 0, g = 0, b = 0, ice = 0;
+      const fixed = elevation < 0 ? palette.Oceans : lat < -60 || elevation > snowline(lat) ? palette['Ice Caps']
+        : elevation > 2200 ? palette.Mountains : undefined;
+      if (fixed) {
+        r = fixed[0]; g = fixed[1]; b = fixed[2];
+        if (fixed === palette['Ice Caps']) ice = 1;
+      } else {
+        // Bilinear blend of the four nearest cover cells: class borders fade across one cell instead of stepping.
+        const fx = (lon + 180) * perDegree - .5, fy = (90 - lat) * perDegree - .5;
+        const ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy;
+        for (let k = 0; k < 4; k++) {
+          const cls = grid.coverCell(ix + (k & 1), iy + (k >> 1)), c = landPalette[cls];
+          const w = (k & 1 ? tx : 1 - tx) * (k >> 1 ? ty : 1 - ty);
+          r += c[0] * w; g += c[1] * w; b += c[2] * w;
+          if (cls === ICE) ice += w;
+        }
+      }
+      const v = ice === 1 ? 1 : 1 + .10 * (1 - ice) * noise.noise(x * 1700, y * 1700, z * 1700);
       // Beaches fade with the interpolated grid height and coast weight instead of switching per ETOPO cell,
       // which drew stair-stepped sand blocks along every coastline.
-      const sand = cover === 'Oceans' || cover === 'Ice Caps' ? 0
-        : (variation.shore ?? 0) * (1 - smoothstep(0, 12, metres));
+      const sand = elevation < 0 ? 0 : (1 - ice) * (variation.shore ?? 0) * (1 - smoothstep(0, 12, metres));
       const s = palette.Shores;
-      return setRGB(out, mix(c[0], s[0], sand) * v, mix(c[1], s[1], sand) * v, mix(c[2], s[2], sand) * v);
+      return setRGB(out, mix(r, s[0], sand) * v, mix(g, s[1], sand) * v, mix(b, s[2], sand) * v);
     },
   };
 }

@@ -1433,3 +1433,33 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   orbit) returns to following the vessel, which reframes its orbit on every reopen as before. A focus that no longer
   exists (vessel gone) falls back to following.
 
+## Earth biomes from measured land cover (2026-10-15, op/landcover)
+
+- **Source.** Earth cover classes come from NASA MODIS MCD12Q1 v6.1 IGBP 2023 (NASA data, no restrictions), fetched as
+  eight 0.025° GIBS WMS tiles and decoded exactly through the GIBS colormap (no Earthdata login needed). ESA CCI was
+  avoided (CC-BY). Natural Earth 10m lakes (PD) mark lakes; the Caspian (sea in Natural Earth) is flood-filled from
+  MODIS water. Inputs are pinned by URL + SHA-256 in `scripts/earth-data/cover.mjs`; a rebuild is byte-identical.
+- **Florida uses USGS NLCD 2021 (public domain) inside the `CAPE_PATCH` bounds.** At 500 m MODIS calls Merritt Island
+  and most Florida marsh savanna or water, so the pad had no wetlands. NLCD maps woody/emergent wetlands at 30 m;
+  the ring 3 playable km from the pad is now mostly Wetlands on all three scales.
+- **Grid.** 2880×1440 (0.125°, ~14 km), 4-bit classes, 2.07 MB, appended to the one Earth buffer as a third
+  `EARTH_FILES` entry, so workers, SharedArrayBuffer, Node register and the server need no new plumbing (+2 MB per
+  non-isolated worker, +2 MB first download; PWA precaches `*.u4`). Votes: 5×5 MODIS samples per cell, permanent
+  wetlands weighted 2× (they are a mosaic with water at 500 m); latitude splits rainforest (evergreen broadleaf
+  < 30°) and tundra (open shrub ≥ 55°, grass/barren ≥ 60°); boreal (savanna) woodland ≥ 50° is Forests; crops and
+  urban are Grasslands. Sea cells take the nearest land class, then two 5×5 majority passes and a minimum region of
+  40 cells (8 for lakes and wetlands, so Lake Okeechobee survives; tested). The first in-game globe shot with 3×3 /
+  8 cells still read as forest/grassland speckle over Europe and Siberia.
+- **Biome rules.** Lakes (new) > deep sea > Antarctica/peaks > 5500 m ice > Oceans > measured ice > Wetlands (new)
+  > Shores > Mountains (> 2200 m) > measured class. The latitude snowline no longer makes science ice: it made the
+  whole Tibetan plateau "Ice Caps"; it is now Mountains. The snowline stays as a render-only colour rule, so ground
+  snow looks unchanged. Old hand-placed ellipses and latitude bands are gone.
+- **Saves/contracts.** All ten previous Earth IDs keep their names and order; `Wetlands`, `Lakes` are appended, so
+  archives, decay keys, onboard data and accepted contracts stay valid. Contract biome picks for a given seed change
+  (list length grew); stored contracts keep their biome string. Every Earth biome is reachable (tested).
+- **Terrain colour.** `earthPreset.colorAt` blends the four nearest cells' palette colours bilinearly instead of
+  hard class edges (a step would be a 1.4 km straight colour edge on Standard). New Wetlands/Lakes colours are dark
+  olive. Seen from altitude the imagery dominates as before.
+- **Cost.** `earthCover` in-process paired: 42.6 → 42.7 ns random points, 34.9 → 33.1 ns spatially coherent; deep
+  sea skips the lookup. Cross-process `biomeAt` and chunk-build runs were within noise (machine load 16–19).
+  Earth biome-map build 6.3 → 5.3 s in Node.

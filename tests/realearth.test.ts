@@ -133,7 +133,7 @@ describe('real Earth geography', () => {
       // Vero Beach: low land inside the global grid's coastal band, beyond the Launch Complex radius on every scale.
       expect(biomeAt(earth, t, latLonToUnit(27.6, -80.38))).toBe('Shores');
       expect(biomeAt(earth, t, latLonToUnit(28.5, -80.4))).toBe('Oceans');
-      expect(biomeAt(earth, t, latLonToUnit(28.5, -81.6))).toBe('Forests');
+      expect(biomeAt(earth, t, latLonToUnit(28.5, -81.6))).toBe('Grasslands');
     }
   });
   it('is continuous across antimeridian and converges to one height at each pole', () => {
@@ -156,7 +156,7 @@ describe('real Earth geography', () => {
   });
   it('uses real cover regions and retains every legacy science ID', () => {
     const u = new Universe('real'), t = u.terrain('earth');
-    for (const [lat, lon, name] of [[24, 15, 'Deserts'], [-80, 0, 'Ice Caps'], [0, -30, 'Oceans'], [-4, -63, 'Rainforests'], [50, 10, 'Forests']] as const) {
+    for (const [lat, lon, name] of [[24, 15, 'Deserts'], [-80, 0, 'Ice Caps'], [0, -30, 'Oceans'], [-4, -63, 'Rainforests'], [60, 90, 'Forests']] as const) {
       expect(biomeAt(u.body('earth'), t, latLonToUnit(lat, lon))).toBe(name);
     }
     for (const id of ['Oceans', 'Shores', 'Grasslands', 'Deserts', 'Mountains', 'Ice Caps', 'Launch Complex']) expect(BIOMES.earth).toContain(id);

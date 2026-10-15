@@ -49,6 +49,77 @@
       "resampling": "none: native source pixels, rounded to nearest metre",
       "convention": "rows north to south; pixel centre longitude west + (x + 0.5) / 240, latitude north - (y + 0.5) / 240",
       "use": "Regional detail for Florida. Loaded after height.i16 into one buffer; sampled inside the bounds and blended into the global grid over its outer margin."
+    },
+    {
+      "path": "cover.u4",
+      "width": 2880,
+      "height": 1440,
+      "bytes": 2073600,
+      "sha256": "0b76fef844da46ce95ebea76c0a55466f7dc3580fec06b4e71c6c486e7f41540",
+      "source": {
+        "title": "NASA MODIS Combined (Terra + Aqua) MCD12Q1 v6.1 IGBP land cover, 2023, via NASA GIBS; Natural Earth 1:10m lakes v5.1.2",
+        "license": "MODIS: NASA data, no restrictions on use (public domain). Natural Earth: public domain.",
+        "inputs": [
+          {
+            "url": "https://gibs.earthdata.nasa.gov/colormaps/v1.3/MODIS_IGBP_Land_Cover_Type.xml",
+            "sha256": "29a9b5fe6d976a0ea5da12c46d9accfe20a1807b3f602d36d940663d6e854ef7"
+          },
+          {
+            "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=MODIS_Combined_L3_IGBP_Land_Cover_Type_Annual&CRS=EPSG%3A4326&BBOX=0%2C-180%2C90%2C-90&WIDTH=3600&HEIGHT=3600&FORMAT=image%2Fpng&TIME=2023-01-01",
+            "sha256": "52b1224a25c039c929331fe8b2df50048099e374a5598cb6e292634c7ec72c8f"
+          },
+          {
+            "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=MODIS_Combined_L3_IGBP_Land_Cover_Type_Annual&CRS=EPSG%3A4326&BBOX=0%2C-90%2C90%2C0&WIDTH=3600&HEIGHT=3600&FORMAT=image%2Fpng&TIME=2023-01-01",
+            "sha256": "8aec04828dfa8c901ba661f9e0f5df2d28d03394ed8ff39e8f36097a2554786d"
+          },
+          {
+            "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=MODIS_Combined_L3_IGBP_Land_Cover_Type_Annual&CRS=EPSG%3A4326&BBOX=0%2C0%2C90%2C90&WIDTH=3600&HEIGHT=3600&FORMAT=image%2Fpng&TIME=2023-01-01",
+            "sha256": "f3a70dd1e24d27d7beec67734c06f50f54c155e2696c2214343dc29b91123450"
+          },
+          {
+            "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=MODIS_Combined_L3_IGBP_Land_Cover_Type_Annual&CRS=EPSG%3A4326&BBOX=0%2C90%2C90%2C180&WIDTH=3600&HEIGHT=3600&FORMAT=image%2Fpng&TIME=2023-01-01",
+            "sha256": "946605b31066e59f50f14227a7f5b9836315b243edcf29165a7ace5edb0534c0"
+          },
+          {
+            "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=MODIS_Combined_L3_IGBP_Land_Cover_Type_Annual&CRS=EPSG%3A4326&BBOX=-90%2C-180%2C0%2C-90&WIDTH=3600&HEIGHT=3600&FORMAT=image%2Fpng&TIME=2023-01-01",
+            "sha256": "f54f284180c122696529057b41e621e0e87840dfe19c1881cb9fc6f1e61ff3e2"
+          },
+          {
+            "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=MODIS_Combined_L3_IGBP_Land_Cover_Type_Annual&CRS=EPSG%3A4326&BBOX=-90%2C-90%2C0%2C0&WIDTH=3600&HEIGHT=3600&FORMAT=image%2Fpng&TIME=2023-01-01",
+            "sha256": "4af9a7758ce0f9bf3793f6b659e9c7e20ce9298ffe5bde05700686ad4e7de32a"
+          },
+          {
+            "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=MODIS_Combined_L3_IGBP_Land_Cover_Type_Annual&CRS=EPSG%3A4326&BBOX=-90%2C0%2C0%2C90&WIDTH=3600&HEIGHT=3600&FORMAT=image%2Fpng&TIME=2023-01-01",
+            "sha256": "8d5c56eb45da03b4bc5350491bc816722f5d08c4999d21a5285d330411772755"
+          },
+          {
+            "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=MODIS_Combined_L3_IGBP_Land_Cover_Type_Annual&CRS=EPSG%3A4326&BBOX=-90%2C90%2C0%2C180&WIDTH=3600&HEIGHT=3600&FORMAT=image%2Fpng&TIME=2023-01-01",
+            "sha256": "466af95a76185e6aad9a4735e80b1a99d2544b967949ee9bd82d634064a958f7"
+          },
+          {
+            "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_lakes.geojson",
+            "sha256": "2d036f53dedec578001c5c30c2959ee7d4eebc1306900fa4367c49929ec8f2d9"
+          },
+          {
+            "url": "https://www.mrlc.gov/geoserver/mrlc_display/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=NLCD_2021_Land_Cover_L48&STYLES=&CRS=EPSG%3A4326&BBOX=24.25%2C-87.75%2C31%2C-79.5&FORMAT=image%2Fpng&WIDTH=3300&HEIGHT=2700",
+            "sha256": "b2896980beafe8fe023ff78edf6601be80acded2652c298774aab7f3c65e8b6e"
+          }
+        ]
+      },
+      "classes": [
+        "Grasslands",
+        "Deserts",
+        "Forests",
+        "Rainforests",
+        "Tundra",
+        "Ice Caps",
+        "Wetlands",
+        "Lakes"
+      ],
+      "encoding": "two 4-bit class indices per byte, even column in the low nibble; index into `classes`",
+      "convention": "rows north to south; cell centre longitude -180 + (x + 0.5) * 0.125, latitude 90 - (y + 0.5) * 0.125",
+      "derivation": "MODIS sampled at 0.025° (WMS nearest), 5 × 5 votes per cell (permanent wetlands weighted 2×; latitude splits tundra/rainforest); lakes where Natural Earth lakes (+ Caspian flood fill) cover over half the cell; sea and unclassified cells take the nearest land class; 2 majority passes over 5 × 5 cells; regions under 40 cells (lakes, wetlands: 8) merged into their main neighbour.",
+      "use": "Science biome and terrain colour classes over land. Loaded after the height files into one buffer. Sea, shores, mountains and snowline stay elevation rules at runtime."
     }
   ],
   "projection": "equirectangular EPSG:4326 geographic coordinates",
@@ -62,5 +133,5 @@
     "v": "(90 - latitudeDegrees) / 180",
     "sampling": "wrap longitude; bilinear float64; outer half-row blends to the mean polar row at each pole"
   },
-  "limits": "Approx. 9.8 km equatorial spacing (Florida: ~460 m, see height-cape.i16). Narrow islands, coastlines, summits and trenches are smoothed. Ice surface, not bedrock. Climate/cover classes are approximate geographic rules, not measured land cover. The flattened launch-complex footprint is an explicit gameplay override."
+  "limits": "Approx. 9.8 km equatorial spacing (Florida: ~460 m, see height-cape.i16). Narrow islands, coastlines, summits and trenches are smoothed. Ice surface, not bedrock. Land-cover classes (cover.u4) are 0.125° (~14 km) majority cells from MODIS IGBP 2023 (NLCD 2021 over Florida), smoothed for gameplay; elevation rules add sea, shores, mountains and peak ice. The flattened launch-complex footprint is an explicit gameplay override."
 }

@@ -10,6 +10,8 @@ const STYLE: Record<string, { color: string; alpha: number }> = {
   Forests: { color: '#2fae57', alpha: 0.55 },
   Rainforests: { color: '#18e0b0', alpha: 0.6 },
   Tundra: { color: '#a9b8c9', alpha: 0.5 },
+  Wetlands: { color: '#9a7cff', alpha: 0.6 },
+  Lakes: { color: '#5fd0ff', alpha: 0.55 },
   Highlands: { color: '#e0c98f', alpha: 0.45 },
   'Lowland Maria': { color: '#6b80b0', alpha: 0.5 },
   'Polar Craters': { color: '#7fd8ff', alpha: 0.5 },

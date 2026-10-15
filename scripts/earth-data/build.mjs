@@ -51,8 +51,9 @@ const manifest = {
   files: [{ path: 'height.i16', width, height, bytes: bytes.length, sha256: sha256(bytes), encoding: 'int16 little-endian, signed metres above EGM2008 geoid; negative bathymetry', resampling: 'bilinear pixel-centre sampling, rounded to nearest metre' }],
   projection: 'equirectangular EPSG:4326 geographic coordinates',
   convention: { rows: 'north to south', columns: 'west to east', pixelCenterLongitudeDegrees: '-180 + (x + 0.5) * 360 / width', pixelCenterLatitudeDegrees: '90 - (y + 0.5) * 180 / height', unitVector: 'x=cos(lat)*cos(lon), y=cos(lat)*sin(lon), z=sin(lat); angles in radians (sim/terrain/geo.ts latLonToUnit)', u: '(longitudeDegrees + 180) / 360', v: '(90 - latitudeDegrees) / 180', sampling: 'wrap longitude; bilinear float64; outer half-row blends to the mean polar row at each pole' },
-  limits: 'Approx. 9.8 km equatorial spacing (Florida: ~460 m, see height-cape.i16). Narrow islands, coastlines, summits and trenches are smoothed. Ice surface, not bedrock. Climate/cover classes are approximate geographic rules, not measured land cover. The flattened launch-complex footprint is an explicit gameplay override.',
+  limits: 'Approx. 9.8 km equatorial spacing (Florida: ~460 m, see height-cape.i16). Narrow islands, coastlines, summits and trenches are smoothed. Ice surface, not bedrock. Land-cover classes (cover.u4) are 0.125° (~14 km) majority cells from MODIS IGBP 2023 (NLCD 2021 over Florida), smoothed for gameplay; elevation rules add sea, shores, mountains and peak ice. The flattened launch-complex footprint is an explicit gameplay override.',
 };
 await writeFile(new URL('manifest.json', output), JSON.stringify(manifest, null, 2) + '\n');
 console.log(manifest.files[0]);
 await import('./patch.mjs');
+await import('./cover.mjs');
