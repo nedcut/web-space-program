@@ -82,12 +82,12 @@ export function siteClearance(x: number, z: number): number {
 }
 
 /**
- * Pad-frame position of a body-fixed unit direction (inverse of siteLocalToUnit), or undefined beyond `reach`
- * metres of the pad. Writes into `out` to keep terrain sampling allocation-free.
+ * Pad-frame position of a body-fixed unit direction (inverse of siteLocalToUnit), or undefined when the direction's
+ * cosine to the pad is below `minDot`. Writes into `out` to keep terrain sampling allocation-free.
  */
-export function unitToSiteLocal(x: number, y: number, z: number, radius: number, reach: number, out: { x: number; z: number }): typeof out | undefined {
+export function unitToSiteLocal(x: number, y: number, z: number, radius: number, minDot: number, out: { x: number; z: number }): typeof out | undefined {
   const u = x * SITE_U.x + y * SITE_U.y + z * SITE_U.z;
-  if (u < Math.cos(reach / radius)) return undefined;
+  if (u < minDot) return undefined;
   out.x = radius * (x * SITE_E.x + y * SITE_E.y + z * SITE_E.z) / u;
   out.z = radius * (x * SITE_S.x + y * SITE_S.y + z * SITE_S.z) / u;
   return out;
@@ -99,10 +99,10 @@ export function earthPreset(ctx: PresetContext): PresetResult {
   const noise = ctx.noise(4), variation = { range: 0, coastal: false, shore: 0 };
   const frequency = 4096 / (2 * Math.PI);
   const octaves = Math.min(5, octavesFor(ctx.radius, frequency, ctx.minWavelength, 2, 5));
-  const plateau = launchPlateau(ctx.relief), reach = SITE_REACH + LAUNCH_SITE.blend, local = { x: 0, z: 0 };
+  const plateau = launchPlateau(ctx.relief), nearDot = Math.cos((SITE_REACH + LAUNCH_SITE.blend) / ctx.radius), local = { x: 0, z: 0 };
   const height = (x: number, y: number, z: number): number => {
     let clearance = Infinity;
-    if (unitToSiteLocal(x, y, z, ctx.radius, reach, local)) {
+    if (unitToSiteLocal(x, y, z, ctx.radius, nearDot, local)) {
       clearance = siteClearance(local.x, local.z);
       if (clearance <= 0) return plateau;
     }
