@@ -20,7 +20,7 @@ function label(n) {
     try { maps.set(base, new TraceMap(fs.readFileSync(`${build}/assets/${base}.map`, 'utf8'))); } catch { maps.set(base, null); }
   }
   const m = maps.get(base);
-  const o = m && originalPositionFor(m, { line: c.lineNumber + 1, column: c.columnNumber });
+  const o = m && c.lineNumber >= 0 && originalPositionFor(m, { line: c.lineNumber + 1, column: c.columnNumber });
   return o?.source ? `${o.source.replace(/^.*\/src\//, 'src/').replace(/^.*node_modules\//, '')}:${o.line} ${o.name ?? c.functionName}` : `${base}:${c.lineNumber + 1} ${c.functionName}`;
 }
 const labels = new Map();

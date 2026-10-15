@@ -26,6 +26,12 @@ export class ProceduralCubeMap {
   private readonly quad: THREE.Mesh;
   /** Compiled by the flight warm-up until the bake finishes. */
   private unregister: (() => void) | null;
+  /**
+   * The bake program, linked off the main thread before the first strip: drawing with a program the driver is
+   * still compiling blocks on its link status (seconds for the cloud and sky shaders on an old iGPU, in scenes
+   * whose warm-up does not include off-screen passes, such as the Space Center).
+   */
+  private program: 'pending' | 'compiling' | 'ready' = 'pending';
 
   constructor(size: number, bakeGlsl: string, opts: ProceduralCubeOptions = {}) {
     this.size = size;
@@ -84,6 +90,7 @@ export class ProceduralCubeMap {
     if (this.done) return true;
     // While the context is lost the draw is dropped: do not count the strip as baked.
     if (contextIsLost(renderer)) return false;
+    if (this.program !== 'ready' && !this.compile(renderer)) return false;
     const perFace = Math.ceil(this.size / this.strip);
     const face = Math.floor(this.next / perFace);
     const row = (this.next % perFace) * this.strip;
@@ -109,6 +116,26 @@ export class ProceduralCubeMap {
     renderer.autoClear = prevAutoClear;
     if (last) { this.unregister?.(); this.unregister = null; }
     return last;
+  }
+
+  /** Start the async compile on first use; true once strips can draw without stalling. */
+  private compile(renderer: THREE.WebGLRenderer): boolean {
+    if (typeof renderer.compileAsync !== 'function') this.program = 'ready';
+    if (this.program === 'pending') {
+      this.program = 'compiling';
+      // Compiled against the cube target, as drawn: the output colour space is part of the program key.
+      const prev = renderer.getRenderTarget(), prevFace = renderer.getActiveCubeFace(), prevMip = renderer.getActiveMipmapLevel();
+      renderer.setRenderTarget(this.target);
+      const ready = () => { this.program = 'ready'; };
+      try {
+        renderer.compileAsync(this.quad, this.camera, this.scene).then(ready, ready);
+      } catch {
+        ready();
+      } finally {
+        renderer.setRenderTarget(prev, prevFace, prevMip);
+      }
+    }
+    return this.program === 'ready';
   }
 
   dispose(): void {

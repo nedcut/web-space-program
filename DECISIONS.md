@@ -1170,6 +1170,18 @@ Owner decisions 2026-10-13 (both recommended options).
   lab, then Mission Control, while funds stay above a reserve of 40 k × multiplier. Standard: Moon landing still
   flight 5, day 6.8 (unchanged); 290 k spent on upgrades, 77 k left after the landing (was 335 k). Tables in
   docs/BALANCE.md.
+- **Low-end laptop pass (2026-10-14, HD 520):** Soot bake uses per-seed streak tables, an exact exp-free cutoff
+  test and lazy normals (bit-identical, ~5×). Flight holds adaptive resolution until 2 s after `sceneReady`;
+  weak GPUs on a ≤ 0.5 render scale start adaptive at 1.0. Numbers and open findings in
+  `docs/performance/hd520/README.md`.
+- **Gated audio layers (2026-10-14):** pooled continuous Web Audio layers are disconnected from the mix while
+  silent and reconnected on the first audible update; their filter/pitch params are only automated while
+  connected. Silent connected loops cost ~25 % of a core on an HD 520 laptop. Vegetation LOD skips repacking a
+  level whose cell lies wholly inside its band and was already fully packed.
+- **Procedural cube bakes compile asynchronously (2026-10-14):** `ProceduralCubeMap.step` starts `compileAsync`
+  against its cube target on first use and draws no strip until the program is linked, so no scene blocks on
+  the bake shaders (the Space Center warm-up does not cover off-screen passes; it froze ~2 s at reveal on an
+  HD 520).
 - **Night vision and ascent map view (2026-10-14):** Night vision (NIGHT VIS lamp by the altimeter, or F7;
   off by default, not persisted) is render-only: a camera headlight plus a stronger hemisphere fill, both scaled by
   `1 − sunVisibility`, so it does nothing in full sun and is safe to leave on. Planet terrain shaders ignore it.

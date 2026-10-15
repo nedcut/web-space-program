@@ -88,8 +88,9 @@ class NodeDouble {
   type = ''; loop = false; buffer: unknown;
   onended: (() => void) | null = null;
   stopped = false; disconnected = false;
-  connect(node: NodeDouble) { return node; }
-  disconnect() { this.disconnected = true; }
+  outputs = new Set<NodeDouble>();
+  connect(node: NodeDouble) { this.outputs.add(node); return node; }
+  disconnect() { this.disconnected = true; this.outputs.clear(); }
   start() {}
   stop() { this.stopped = true; }
 }
@@ -448,4 +449,41 @@ it('reuses the event audio graphs through a destruction cascade and makes no son
     audio.update({...state,engines:[],mach:1.01,rcsActive:0});
     expect(audio.diagnostics().nodes).toBe(before);
   } finally { audio.dispose(); vi.unstubAllGlobals(); vi.useRealTimers(); }
+});
+
+it('keeps silent continuous layers out of the audio graph and reconnects them when they sound', async () => {
+  vi.stubGlobal('AudioContext', ContextDouble);
+  const audio = new GameAudio();
+  try {
+    audio.resume(); await Promise.resolve();
+    const ctx = ContextDouble.latest;
+    // Pooled layers are looping noise source -> filter -> gain; count the ones whose gain feeds the mix.
+    const connected = () => ctx.nodes.filter(n => n.loop && [...n.outputs].some(f => [...f.outputs].some(g => g.outputs.size > 0))).length;
+    expect(connected()).toBe(0);
+    audio.update(state);
+    const flying = connected();
+    // Kerolox roar and rumble, wind, buffet and plasma: not the other engine types, mechanics or neighbours.
+    expect(flying).toBe(5);
+    const quiet: AudioState = { ...state, engines: [], ambientPressure: 0, dynamicPressure: 0, reentryHeat: 0, rcsActive: 0 };
+    audio.update(quiet);
+    expect(connected()).toBe(flying); // still fading out
+    ctx.currentTime += 1;
+    audio.update(quiet);
+    expect(connected()).toBe(0);
+    audio.update(state);
+    expect(connected()).toBe(flying);
+  } finally { audio.dispose(); vi.unstubAllGlobals(); }
+});
+
+it('builds the reverb impulse after the first gesture, not inside it', async () => {
+  vi.useFakeTimers(); vi.stubGlobal('AudioContext', ContextDouble);
+  const created = vi.spyOn(ContextDouble.prototype, 'createBuffer');
+  const audio = new GameAudio();
+  try {
+    audio.resume();
+    const stereo = () => created.mock.calls.filter(([channels]) => channels === 2).length;
+    expect(stereo()).toBe(0);
+    vi.advanceTimersByTime(100);
+    expect(stereo()).toBe(1);
+  } finally { audio.dispose(); created.mockRestore(); vi.unstubAllGlobals(); vi.useRealTimers(); }
 });
