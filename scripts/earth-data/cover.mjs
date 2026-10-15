@@ -19,8 +19,12 @@ const SUB = 5, SW = W * SUB, SH = H * SUB, TILE = 3600;
 const YEAR = '2023-01-01';
 /** Permanent wetlands are usually a mosaic with open water and savanna at 500 m; weight them so marsh regions survive the vote. */
 const WETLAND_WEIGHT = 2;
-/** Regions smaller than this many cells merge into their dominant neighbour (no speckle when flying over). */
-const MIN_REGION = 8;
+/** Regions smaller than this many cells merge into their dominant neighbour (no speckle on the map or in flight). */
+const MIN_REGION = 40;
+/** Lakes and marshes are small by nature; they keep a lower minimum (Lake Okeechobee is ~12 cells). */
+const MIN_WATER_REGION = 8;
+/** Majority filter radius (cells) and passes. */
+const MAJORITY_RADIUS = 2, MAJORITY_PASSES = 2;
 /** Caspian Sea: absent from Natural Earth lakes (mapped as sea there); flood-filled from MODIS water inside this box. */
 const CASPIAN = { seed: [42, 50.5], south: 36, north: 48, west: 46, east: 56 };
 
@@ -253,14 +257,14 @@ const neighbours = (i, visit) => {
   }
 }
 
-// 5. Two 3 × 3 majority passes (centre counts double; ties keep the centre), then merge regions below MIN_REGION.
-for (let pass = 0; pass < 2; pass++) {
+// 5. Majority passes over a (2r + 1)² window (centre counts double; ties keep the centre), then merge small regions.
+for (let pass = 0; pass < MAJORITY_PASSES; pass++) {
   const next = new Uint8Array(cells);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     counts.fill(0);
-    for (let dy = -1; dy <= 1; dy++) {
+    for (let dy = -MAJORITY_RADIUS; dy <= MAJORITY_RADIUS; dy++) {
       const yy = Math.min(H - 1, Math.max(0, y + dy));
-      for (let dx = -1; dx <= 1; dx++) counts[cells[yy * W + (x + dx + W) % W]] += dx || dy ? 1 : 2;
+      for (let dx = -MAJORITY_RADIUS; dx <= MAJORITY_RADIUS; dx++) counts[cells[yy * W + (x + dx + W) % W]] += dx || dy ? 1 : 2;
     }
     let best = cells[y * W + x];
     for (let k = 0; k < CLASSES.length; k++) if (counts[k] > counts[best]) best = k;
@@ -279,7 +283,7 @@ for (let round = 0; round < 8; round++) {
       if (cells[j] === cls) { if (label[j] < 0) { label[j] = start; members.push(j); } }
       else border[cells[j]]++;
     });
-    if (members.length >= MIN_REGION) continue;
+    if (members.length >= (cls === C.Lakes || cls === C.Wetlands ? MIN_WATER_REGION : MIN_REGION)) continue;
     let best = cls, most = 0;
     for (let k = 0; k < CLASSES.length; k++) if (border[k] > most) { most = border[k]; best = k; }
     if (best === cls) continue;
@@ -310,7 +314,7 @@ manifest.files.push({
   classes: CLASSES,
   encoding: 'two 4-bit class indices per byte, even column in the low nibble; index into `classes`',
   convention: 'rows north to south; cell centre longitude -180 + (x + 0.5) * 0.125, latitude 90 - (y + 0.5) * 0.125',
-  derivation: `MODIS sampled at 0.025° (WMS nearest), 5 × 5 votes per cell (permanent wetlands weighted ${WETLAND_WEIGHT}×; latitude splits tundra/rainforest); lakes where Natural Earth lakes (+ Caspian flood fill) cover over half the cell; sea and unclassified cells take the nearest land class; two 3 × 3 majority passes; regions under ${MIN_REGION} cells merged into their main neighbour.`,
+  derivation: `MODIS sampled at 0.025° (WMS nearest), 5 × 5 votes per cell (permanent wetlands weighted ${WETLAND_WEIGHT}×; latitude splits tundra/rainforest); lakes where Natural Earth lakes (+ Caspian flood fill) cover over half the cell; sea and unclassified cells take the nearest land class; ${MAJORITY_PASSES} majority passes over ${2 * MAJORITY_RADIUS + 1} × ${2 * MAJORITY_RADIUS + 1} cells; regions under ${MIN_REGION} cells (lakes, wetlands: ${MIN_WATER_REGION}) merged into their main neighbour.`,
   use: 'Science biome and terrain colour classes over land. Loaded after the height files into one buffer. Sea, shores, mountains and snowline stay elevation rules at runtime.',
 });
 await writeFile(manifestUrl, JSON.stringify(manifest, null, 2) + '\n');

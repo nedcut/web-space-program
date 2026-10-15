@@ -66,13 +66,14 @@ describe('Earth land cover', () => {
     expect(named.has('Wetlands')).toBe(true);
   });
 
-  it('is deterministic and free of speckle: every class region spans at least 8 cells', () => {
+  it('is free of speckle: regions span at least 40 cells (lakes and wetlands 8)', () => {
     const { width: W, height: H } = EARTH_COVER, grid = earthData();
     const cells = new Uint8Array(W * H);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) cells[y * W + x] = grid.coverCell(x, y);
     expect(grid.coverCell(-1, 5)).toBe(cells[5 * W + W - 1]);
     const seen = new Uint8Array(W * H);
-    let smallest = Infinity;
+    const LAKES = COVER_CLASSES.indexOf('Lakes'), WETLANDS = COVER_CLASSES.indexOf('Wetlands');
+    let smallest = Infinity, smallestWater = Infinity;
     for (let start = 0; start < W * H; start++) {
       if (seen[start]) continue;
       const stack = [start], cls = cells[start];
@@ -85,8 +86,10 @@ describe('Earth land cover', () => {
           if (j >= 0 && !seen[j] && cells[j] === cls) { seen[j] = 1; stack.push(j); }
         }
       }
-      smallest = Math.min(smallest, size);
+      if (cls === LAKES || cls === WETLANDS) smallestWater = Math.min(smallestWater, size);
+      else smallest = Math.min(smallest, size);
     }
-    expect(smallest).toBeGreaterThanOrEqual(8);
+    expect(smallest).toBeGreaterThanOrEqual(40);
+    expect(smallestWater).toBeGreaterThanOrEqual(8);
   });
 });

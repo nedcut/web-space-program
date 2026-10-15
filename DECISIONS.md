@@ -1413,8 +1413,9 @@ Owner decisions 2026-10-13 (both recommended options).
   non-isolated worker, +2 MB first download; PWA precaches `*.u4`). Votes: 5×5 MODIS samples per cell, permanent
   wetlands weighted 2× (they are a mosaic with water at 500 m); latitude splits rainforest (evergreen broadleaf
   < 30°) and tundra (open shrub ≥ 55°, grass/barren ≥ 60°); boreal (savanna) woodland ≥ 50° is Forests; crops and
-  urban are Grasslands. Sea cells take the nearest land class, then two 3×3 majority passes and a minimum region of
-  8 cells (tested): no speckle.
+  urban are Grasslands. Sea cells take the nearest land class, then two 5×5 majority passes and a minimum region of
+  40 cells (8 for lakes and wetlands, so Lake Okeechobee survives; tested). The first in-game globe shot with 3×3 /
+  8 cells still read as forest/grassland speckle over Europe and Siberia.
 - **Biome rules.** Lakes (new) > deep sea > Antarctica/peaks > 5500 m ice > Oceans > measured ice > Wetlands (new)
   > Shores > Mountains (> 2200 m) > measured class. The latitude snowline no longer makes science ice: it made the
   whole Tibetan plateau "Ice Caps"; it is now Mountains. The snowline stays as a render-only colour rule, so ground

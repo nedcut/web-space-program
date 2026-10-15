@@ -55,7 +55,7 @@
       "width": 2880,
       "height": 1440,
       "bytes": 2073600,
-      "sha256": "11156f09a864a374550a8757c420eb6a65c5156ea0bb706fd1fde1154f58dcb6",
+      "sha256": "0b76fef844da46ce95ebea76c0a55466f7dc3580fec06b4e71c6c486e7f41540",
       "source": {
         "title": "NASA MODIS Combined (Terra + Aqua) MCD12Q1 v6.1 IGBP land cover, 2023, via NASA GIBS; Natural Earth 1:10m lakes v5.1.2",
         "license": "MODIS: NASA data, no restrictions on use (public domain). Natural Earth: public domain.",
@@ -118,7 +118,7 @@
       ],
       "encoding": "two 4-bit class indices per byte, even column in the low nibble; index into `classes`",
       "convention": "rows north to south; cell centre longitude -180 + (x + 0.5) * 0.125, latitude 90 - (y + 0.5) * 0.125",
-      "derivation": "MODIS sampled at 0.025° (WMS nearest), 5 × 5 votes per cell (permanent wetlands weighted 2×; latitude splits tundra/rainforest); lakes where Natural Earth lakes (+ Caspian flood fill) cover over half the cell; sea and unclassified cells take the nearest land class; two 3 × 3 majority passes; regions under 8 cells merged into their main neighbour.",
+      "derivation": "MODIS sampled at 0.025° (WMS nearest), 5 × 5 votes per cell (permanent wetlands weighted 2×; latitude splits tundra/rainforest); lakes where Natural Earth lakes (+ Caspian flood fill) cover over half the cell; sea and unclassified cells take the nearest land class; 2 majority passes over 5 × 5 cells; regions under 40 cells (lakes, wetlands: 8) merged into their main neighbour.",
       "use": "Science biome and terrain colour classes over land. Loaded after the height files into one buffer. Sea, shores, mountains and snowline stay elevation rules at runtime."
     }
   ],
