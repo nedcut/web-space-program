@@ -1434,12 +1434,13 @@ Owner decisions 2026-10-13 (both recommended options).
 - The daylight urban polygon must not gate night detail: doing so leaves bright
   washed-out borders around otherwise dark street textures. Night occupancy uses
   the light map. These streets are illustrative, not surveyed data.
-- Trade nighttime canopy, regional colour and roof shading for street detail.
-  Global colour already fetched for the water mask supplies the faint ambient
-  base. Skip direct sunlight work only in the nearby regional terrain program
-  when the sun is more than six degrees below the local horizon; preserve sky
-  light and planetshine. Daylight and the far regional program retain their paths.
-  No new texture assets, draws or per-frame CPU allocations.
+- Fully covered regional terrain at full night takes a direct ambient-plus-lamps
+  path between 750 m and 16 km viewing distance. Global colour fetched for the
+  water mask supplies the faint ambient base. Preserve sky light, planetshine,
+  cloud attenuation and aerial haze; omit the planet-shadowed direct sun and
+  daytime canopy/roof/material work. Twilight, pack boundaries, daylight and the
+  far regional program keep the ordinary surface path. The night-light setting
+  still disables lamps. No new texture assets, draws or per-frame CPU allocations.
 - Defer Paris daytime tint: Natural Earth urban coverage is only packed in the
   regional Gulf asset at runtime. Global Black Marble is radiance, not a built-up
   mask; using it as one would also grey roads and non-city light sources. Adding

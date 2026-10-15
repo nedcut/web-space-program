@@ -49,13 +49,7 @@ vec3 shadeSurface(vec3 albedo, vec3 N, vec3 V, vec3 rel) {
   float f = mix(mu0, ls, uAirless) / ATMO_PI;
   vec3 up = normalize(rel);
   float geo = smoothstep(-0.03, 0.03, dot(up, L));
-  vec3 sunT = vec3(0.0);
-  #if defined(EARTH_REGION) && !defined(EARTH_REGION_FAR)
-    // Regional surface terrain is planet-shadowed with the Sun this far below
-    // the horizon. Keep sky/planetshine, but skip the zero direct-light work.
-    if (dot(up, L) > -0.11)
-  #endif
-  sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(geo)) * ringShadow(rel) * cloudShadow(rel);
+  vec3 sunT = (uHasAtmo > 0.5 ? sunTransmittance(rel) : vec3(geo)) * ringShadow(rel) * cloudShadow(rel);
   vec3 direct = uSunColor * sunT * f * gSurfaceShadow;
   vec3 amb = skyAmbient(rel, N) / ATMO_PI;
   vec3 planetshine = uPlanetshineColor * max(dot(N, uPlanetshineDir), 0.0) / ATMO_PI;
@@ -504,6 +498,24 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         vec3 nBF = normalize(vNormalBF);
         vec3 N = normalize(uBodyRot * nBF);
         vec3 up = normalize(rel);
+        #if defined(EARTH_REGION) && !defined(EARTH_REGION_FAR)
+          // Fully night-side regional terrain needs ambient light and lamps, not
+          // the daytime material path. Keep the full-resolution water exclusion.
+          if (regionW >= 1.0 && dist > 750.0 && dist < 16000.0 && dot(up, uSunDir) < -0.11) {
+            eUV.uv = regionUV.uv / vec2(9.0, 7.2) + vec2(80.0 / 360.0, 55.0 / 180.0);
+            eUV.dx = regionUV.dx / vec2(9.0, 7.2); eUV.dy = regionUV.dy / vec2(9.0, 7.2);
+            vec4 dayW = earthTex(uEarthDay, eUV);
+            float water = earthCoast(earthWater(dayW.a, dayW.rgb), eUV);
+            vec3 ambient = skyAmbient(rel, N) / ATMO_PI + uAmbientFloor
+              + uPlanetshineColor * max(dot(N, uPlanetshineDir), 0.0) / ATMO_PI;
+            vec3 col = earthAlbedo(dayW.rgb) * ambient;
+            if (uEarthNightOn > 0.5) col += earthGroundLights(regionUV, dist)
+              * (1.0 - 0.75 * smoothstep(0.2, 0.9, cloudCover(rel)));
+            col *= 1.0 - water;
+            gl_FragColor = vec4(col * vAerialT + vAerialL, 1.0);
+            return;
+          }
+        #endif
         float slope = 1.0 - dot(N, up);
         vec3 albedo = vColor;
         float rockT = smoothstep(0.18, 0.42, slope) * uRockBlend;
@@ -511,7 +523,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           float hd = 0.0;
           #ifdef EARTH_REGION
           // At this distance regional imagery owns the colour; canopy and local normals are zero.
-          if ((regionW < 1.0 || dist < 10000.0) && (dot(up, uSunDir) > -0.11 || dist < 750.0))
+          if (regionW < 1.0 || dist < 10000.0)
           #endif
           {
           vec3 w = abs(nBF); w = pow(w, vec3(4.0)); w /= (w.x + w.y + w.z);
@@ -612,21 +624,14 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             vec4 dayW = regionW >= 1.0 && dist <= uEarthBlend.x ? vec4(0.0) : earthTex(uEarthDay, eUV);
             vec3 c = dayW.rgb;
             if (regionW > 0.0) {
-              #ifndef EARTH_REGION_FAR
-              // At full night the global colour already fetched for water is enough
-              // for the tiny ambient floor. Spend the local fetch on lamps instead.
-              if (dot(up, uSunDir) > -0.11 || dist >= 16000.0)
-              #endif
-              {
-                vec4 regional = textureGrad(uEarthRegionDay, regionUV.uv, regionUV.dx, regionUV.dy);
-                c = mix(c, regional.rgb, regionW);
-                urbanDensity = regional.a;
-              }
+              vec4 regional = textureGrad(uEarthRegionDay, regionUV.uv, regionUV.dx, regionUV.dy);
+              c = mix(c, regional.rgb, regionW);
+              urbanDensity = regional.a;
             }
             vec3 img = earthAlbedo(c);
             #if defined(USE_DETAIL) && !defined(EARTH_REGION_FAR)
               img *= 1.0 + hd * 0.6 * uDetailStrength * (1.0 - regionW);
-              if (regionW > 0.0 && dot(up, uSunDir) > -0.11) {
+              if (regionW > 0.0) {
                 img = mix(img, earthGroundColour(img, urbanDensity, regionUV, hd, dist), regionW);
               }
             #endif
@@ -692,7 +697,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           col += lightsImg * (1.0 - lightWaterW) * (1.0 - regionW);
           if (regionW > 0.0 && uEarthNightOn > 0.5 && sunAlt < 0.025) {
             float night = 1.0 - smoothstep(-0.11, 0.025, sunAlt);
-            // Night parcels replace the unlit daytime roof fetch above.
+            // At twilight and patch edges, retain the ordinary surface path.
             col += earthGroundLights(regionUV, dist) * night * regionW * (1.0 - lightWaterW)
               * (1.0 - 0.75 * smoothstep(0.2, 0.9, cloudCover(rel)));
           }
