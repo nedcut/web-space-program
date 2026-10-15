@@ -18,7 +18,8 @@ _Last updated: 2026-10-15_
   flight assist and warp. Saves, craft sharing, photography, flight records,
   science, research, communications, mining and optional precise gravity exist.
   Earth uses measured geography, imagery and biomes; Saturn has rings and moons.
-- **Checks:** lint, TypeScript, full headless suite and production build run on
+- **Checks:** 1,276 collected tests across 214 files. Lint, TypeScript, the full
+  headless suite and production build run on
   every push and pull request. CI evidence and hosting checks: [shipping report](docs/SHIPPING.md).
 - **Known limits:** no public URL until owner setup; multiplayer needs its separate
   experimental LAN server. Career progression is proven through the Moon; longer

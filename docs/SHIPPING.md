@@ -69,7 +69,8 @@ These machine-local artifacts are deliberately outside git.
 `docs/progress/2026-10-archive.md` preserves all 1,288 original PROGRESS.md lines
 verbatim; original/archive SHA-256:
 `e9919b8358727d8cbdf32ea803bc0cfc9a18d82e1333497f92142ca5c236d793`.
-The new report is 103 lines. Exported catalog counts are 44 stock entries
+The new report is 104 lines. `vitest list --json --maxWorkers=2` collected
+1,276 tests across 214 files. Exported catalog counts are 44 stock entries
 (32 Standard, 5 Challenging, 7 Real), 173 parts, 61 bodies.
 
 Unverified: Cloudflare production HTTPS/edge caching and credential-enabled deploy,
