@@ -74,3 +74,26 @@ The paired CDP harness is adapted from round one; only its artifact paths and th
 projection helper access changed. Both builds use the same main baseline and public
 assets. `build-identity.json` verifies both HTML entries and all 85 hashed assets per
 build in the shared preview directory.
+
+## Browser lifecycle and lighting checks
+
+Production CDP Chrome, Windows/RTX 3060 Ti, Medium, 1600×900. Both baseline and
+candidate pass the same driver (`split2-flight-smoke.mjs`):
+
+- Enter tower mode on Selene's pad; the eye stays finite and the mode remains tower.
+- Move the paused orbit fixture behind Earth, using actual planet occlusion. Sun
+  intensity is 0; night vision changes fill 0.12 → 1.52 and headlight 0 → 2.2 in both
+  builds. The sky environment remains present.
+- Force main-renderer WebGL loss/restoration. Both restore the environment and night
+  lights and increment the shadow cache's rendered count on restoration (24 → 25
+  before, 25 → 26 after). Warm-up completes; no page errors occur.
+
+`C:\wsp-tools\shots\split2\{before,after}-{tower,night,restored}.png` and
+`flight-smoke.json` contain the evidence. The tower view still leaves Selene partly
+behind the gantry in **both** builds; this pre-existing presentation issue was not
+changed. These checks do not establish pixel identity: scene time, camera easing and
+imagery streaming differ between captures.
+
+The final rebuild is byte-identical to the staged candidate in all 149 files
+(`final-build-identity.json`). Both served HTML entries and 85 hashed assets per build
+also match their saved builds over HTTP (`served-build-identity.json`).
