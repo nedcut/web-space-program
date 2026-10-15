@@ -1475,3 +1475,56 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
 - **Cost.** `earthCover` in-process paired: 42.6 → 42.7 ns random points, 34.9 → 33.1 ns spatially coherent; deep
   sea skips the lookup. Cross-process `biomeAt` and chunk-build runs were within noise (machine load 16–19).
   Earth biome-map build 6.3 → 5.3 s in Node.
+
+## Flight night cities and lake rims (2026-10-15, cx/nightcity)
+
+- Use Black Marble's mapped intensity for night-city cores and connecting light
+  networks at all ranges. Remove the unrelated procedural street grid and tiled
+  lamps from loaded-imagery emission. Nearby districts use a restrained exposure;
+  unresolved lights gain brightness from 10 to 60 km. Regional and global shading
+  share this curve and cloud attenuation. City emission uses the full sampled
+  water mask, separately from the daylight distance blend: using that blend for
+  night emission leaked light onto mapped shore water during the handover.
+- Vary the daytime urban tile by reflecting and offsetting each neighbourhood,
+  keeping one explicitly filtered fetch. Natural Earth/Black Marble coverage still
+  controls density; reduce the illustrative roof overlay to preserve source colour.
+  No new assets, downloads, draws or per-frame CPU work.
+- The pale lake fill/rims came from mesh depths clamped to zero in the seabed blend,
+  including where the imagery water mask lies over dry mesh terrain. Require
+  positive physical depth for seabed/surf and fade resolved seabed detail with the
+  existing near-water range. Keep coast geometry and imagery masks unchanged.
+- Final acceptance covers 14 paired preview views and eight day/midnight flight
+  cases. The largest Medium flight GPU increase is +0.55% on RTX 3060 Ti, with
+  no measured regression above 1%; four Firefox smoke cases pass. Water pixel
+  diagnostics confirm no emission on sampled lakes/coastal water. See
+  [validation evidence](docs/performance/nightcity.md). Mac/Zen and sustained
+  120 Hz remain unverified; source resolution limits close night detail.
+
+## Close regional night streets (2026-10-15, cx/nightcity round two)
+
+- The first round's close Black Marble exposure drew bright, square district
+  texels. Use the existing irregular parcel texture's lamp channel, with filtered
+  Black Marble intensity controlling occupancy and brightness. Darken the diffuse
+  base and separate sodium road lamps from cooler parcel lights. Enlarge the night
+  parcels to remain resolved at 10 km, then blend into the accepted mapped network
+  over 14-16 km viewing distance. Keep the full water exclusion.
+- The daylight urban polygon must not gate night detail: doing so leaves bright
+  washed-out borders around otherwise dark street textures. Night occupancy uses
+  the light map. These streets are illustrative, not surveyed data.
+- Fully covered regional terrain at full night takes a direct ambient-plus-lamps
+  path between 750 m and 16 km viewing distance. Global colour fetched for the
+  water mask supplies the faint ambient base. Preserve sky light, planetshine,
+  cloud attenuation and aerial haze; omit the planet-shadowed direct sun and
+  daytime canopy/roof/material work. Twilight, pack boundaries, daylight and the
+  far regional program keep the ordinary surface path. The night-light setting
+  still disables lamps. No new texture assets, draws or per-frame CPU allocations.
+- A shared day/night program added about 1.3% to the measured daytime 10 km case.
+  Add a fourth prewarmed terrain variant for night, keeping the daytime shader
+  free of the new work. An allocation-free camera/sun dot product selects it
+  before sunset (0.08 sine solar elevation), while all surfaces within the 16 km
+  detail range are still daylit. The existing warmup, restoration and disposal
+  lists include it. This adds one program, not another texture or draw call.
+- Defer Paris daytime tint: Natural Earth urban coverage is only packed in the
+  regional Gulf asset at runtime. Global Black Marble is radiance, not a built-up
+  mask; using it as one would also grey roads and non-city light sources. Adding
+  a global urban asset and its loading contract is outside this focused fix.
