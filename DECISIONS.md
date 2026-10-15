@@ -1646,3 +1646,10 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   before owner setup. No PR code receives deployment credentials; PR previews are
   deferred. Cloudflare project/token/secrets and the first production publish
   remain explicit owner steps in `docs/DEPLOY.md`.
+- Production manifests omit optional imagery levels whose monthly tiles are not
+  present, before PWA precache hashing. Ultra then selects the highest packaged
+  level without requesting missing 16k files. Local builds containing the complete
+  optional pack retain it. This adds build-time work only.
+- Pages headers keep hashed assets immutable and revalidate entry points and Earth
+  assets. A real 404 page and root-only PWA navigation fallback preserve missing
+  asset errors and unknown-path 404s. CI enforces 25 MiB/file and 20,000 files.
