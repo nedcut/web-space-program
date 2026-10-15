@@ -43,6 +43,11 @@ Medium is GPU-bound (CPU ≈ 6 ms/frame); its pad cost is mostly resolution-inde
 - **First click builds the music reverb afterwards** (`GameAudio.initialize`): the 3.5 s impulse response is set
   on the convolver in an idle callback. The first gesture's task 122–135 ms → 55–70 ms (3 of 3 each); the impulse
   then costs a separate ~70 ms idle task. Music fades in over seconds, so the late reverb is inaudible.
+- **Part AO rasterisation does less arithmetic per sample** (`ao.ts`): the row term of each barycentric sample is
+  hoisted (the same left-to-right sums) and the voxel write is inlined. Byte-identical colours for all 173
+  parts at both detail levels; whole-catalogue template build 8.8–9.0 s → 7.3–7.5 s in Node
+  (`npx tsx scripts/bench/partao.ts [--dump hashes.json]`). A sparser sampler halved the time but missed
+  12.5 % of the voxels on random triangles (corner-clipped cells) and visibly changed AO, so it was dropped.
 - `gpu-bench.mjs --profile 1` saves a CPU profile per measured window (for `cpu-profile-report.mjs`).
 
 ## Open findings (not changed)
