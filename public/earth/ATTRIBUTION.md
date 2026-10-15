@@ -7,7 +7,17 @@ Licence: **CC0 1.0 Universal Public Domain Dedication**. NOAA waives potential c
 
 Florida regional patch (`height-cape.i16`): the same ETOPO 2022 release, 15 arc-second ice-surface tiles N30W090 and N45W090, native pixels without resampling; tile URLs and hashes are in manifest.json.
 
-Game derivative: resampled signed elevation/bathymetry; a flattened launch-complex footprint and deterministic sub-grid detail. Geographic climate classes are original approximations, not a satellite land-cover dataset. Not for navigation or surveying.
+Game derivative: resampled signed elevation/bathymetry; a flattened launch-complex footprint and deterministic sub-grid detail. Not for navigation or surveying.
+
+## Land cover (`cover.u4`)
+
+Built by `scripts/earth-data/cover.mjs`; request URLs and SHA-256 hashes are in manifest.json.
+
+- **NASA MODIS Combined (Terra + Aqua) Land Cover Type, MCD12Q1 v6.1, IGBP classification, 2023** (NASA LP DAAC; Friedl, M., Sulla-Menashe, D., doi: https://doi.org/10.5067/MODIS/MCD12Q1.061), served by NASA Global Imagery Browse Services (GIBS) and decoded through the GIBS colormap. NASA data, no restrictions on use. Credit: *NASA EOSDIS LP DAAC / NASA GIBS*.
+- **USGS National Land Cover Database (NLCD) 2021**, conterminous United States, via the MRLC WMS, used for Florida only. U.S. Government work, public domain. Credit: *U.S. Geological Survey / MRLC*.
+- **Natural Earth** 1:10m lakes v5.1.2, for lake classes. Public domain.
+
+Game derivative: 0.125° majority classes mapped to the game's biome names (latitude splits tundra and rainforest), lakes, nearest-land fill over the sea, majority smoothing and a minimum region size. Not a scientific land-cover product.
 
 # Earth imagery attribution (`imagery/`)
 

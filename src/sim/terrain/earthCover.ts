@@ -14,11 +14,15 @@ export function coverClass(lat: number, lon: number): CoverClass {
 const PEAK_ICE = 5500;
 
 export function earthCover(lat: number, lon: number, elevation: number, coastal = false): EarthCover {
+  // No lake bed is this deep (Baikal ≈ −1190 m, Caspian ≈ −1020 m): open sea skips the cover lookup.
+  if (elevation < -1500) return 'Oceans';
+  if (lat < -60) return elevation < 0 ? 'Oceans' : 'Ice Caps';
+  if (elevation > PEAK_ICE) return 'Ice Caps';
   const land = coverClass(lat, lon);
   // Lakes keep their name over lake-bed bathymetry (Great Lakes, Caspian) and over lakes the height grid shows flat.
   if (land === 'Lakes') return land;
   if (elevation < 0) return 'Oceans';
-  if (lat < -60 || land === 'Ice Caps' || elevation > PEAK_ICE) return 'Ice Caps';
+  if (land === 'Ice Caps') return land;
   if (land === 'Wetlands') return land;
   if (elevation < 25 && coastal) return 'Shores';
   if (elevation > 2200) return 'Mountains';

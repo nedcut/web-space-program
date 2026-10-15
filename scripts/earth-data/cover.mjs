@@ -25,7 +25,10 @@ const MIN_REGION = 8;
 const CASPIAN = { seed: [42, 50.5], south: 36, north: 48, west: 46, east: 56 };
 
 const COLORMAP_URL = 'https://gibs.earthdata.nasa.gov/colormaps/v1.3/MODIS_IGBP_Land_Cover_Type.xml';
+const COLORMAP_SHA = '29a9b5fe6d976a0ea5da12c46d9accfe20a1807b3f602d36d940663d6e854ef7';
 const LAKES_URL = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_lakes.geojson';
+const LAKES_SHA = '2d036f53dedec578001c5c30c2959ee7d4eebc1306900fa4367c49929ec8f2d9';
+const NLCD_SHA = 'b2896980beafe8fe023ff78edf6601be80acded2652c298774aab7f3c65e8b6e';
 /**
  * Florida (the CAPE_PATCH bounds) votes with USGS NLCD 2021 instead: MODIS calls Merritt Island and most Florida marsh
  * savanna or water at 500 m, NLCD maps woody and emergent wetlands at 30 m. Sampled at 1/400° (WMS nearest).
@@ -40,8 +43,17 @@ const tileUrl = (south, west) => 'https://gibs.earthdata.nasa.gov/wms/epsg4326/b
   SERVICE: 'WMS', REQUEST: 'GetMap', VERSION: '1.3.0', LAYERS: 'MODIS_Combined_L3_IGBP_Land_Cover_Type_Annual', CRS: 'EPSG:4326',
   BBOX: `${south},${west},${south + 90},${west + 90}`, WIDTH: String(TILE), HEIGHT: String(TILE), FORMAT: 'image/png', TIME: YEAR,
 });
-const TILES = [];
-for (const south of [0, -90]) for (const west of [-180, -90, 0, 90]) TILES.push({ south, west });
+/** 90° × 90° tiles of 3600 × 3600 samples, north row first, west to east. */
+const TILES = [
+  { south: 0, west: -180, sha256: '52b1224a25c039c929331fe8b2df50048099e374a5598cb6e292634c7ec72c8f' },
+  { south: 0, west: -90, sha256: '8aec04828dfa8c901ba661f9e0f5df2d28d03394ed8ff39e8f36097a2554786d' },
+  { south: 0, west: 0, sha256: 'f3a70dd1e24d27d7beec67734c06f50f54c155e2696c2214343dc29b91123450' },
+  { south: 0, west: 90, sha256: '946605b31066e59f50f14227a7f5b9836315b243edcf29165a7ace5edb0534c0' },
+  { south: -90, west: -180, sha256: 'f54f284180c122696529057b41e621e0e87840dfe19c1881cb9fc6f1e61ff3e2' },
+  { south: -90, west: -90, sha256: '4af9a7758ce0f9bf3793f6b659e9c7e20ce9298ffe5bde05700686ad4e7de32a' },
+  { south: -90, west: 0, sha256: '8d5c56eb45da03b4bc5350491bc816722f5d08c4999d21a5285d330411772755' },
+  { south: -90, west: 90, sha256: '466af95a76185e6aad9a4735e80b1a99d2544b967949ee9bd82d634064a958f7' },
+];
 
 const cache = new URL('./.cache/cover/', import.meta.url), output = new URL('../../public/earth/', import.meta.url);
 await mkdir(cache, { recursive: true });
@@ -58,13 +70,10 @@ async function source(name, url, expected) {
     await writeFile(path, bytes);
   }
   const hash = sha256(bytes);
-  if (expected && hash !== expected) throw Error(`${name} checksum mismatch; remove the cached file or review changed upstream data`);
+  if (hash !== expected) throw Error(`${name} checksum mismatch; remove the cached file or review changed upstream data`);
   sources.push({ url, sha256: hash });
   return bytes;
 }
-// Inputs are pinned by the hashes recorded in the manifest by the previous build (a first build records them).
-const previous = JSON.parse(await readFile(new URL('manifest.json', output), 'utf8')).files.find(f => f.path === 'cover.u4');
-const pinned = new Map((previous?.source?.inputs ?? []).map(s => [s.url, s.sha256]));
 
 /** Minimal PNG decoder for GIBS output: 8-bit RGB/RGBA/palette, non-interlaced. Returns RGBA. */
 function decodePng(buf) {
@@ -100,14 +109,14 @@ function decodePng(buf) {
 }
 
 // 1. MODIS IGBP classes (0/17 water, 1–16 land, 255 fill) at 0.025°, decoded through the pinned GIBS colormap.
-const colormap = (await source('colormap.xml', COLORMAP_URL, pinned.get(COLORMAP_URL))).toString();
+const colormap = (await source('colormap.xml', COLORMAP_URL, COLORMAP_SHA)).toString();
 const igbp = new Map();
 for (const [, rgb, values] of colormap.matchAll(/rgb="(\d+,\d+,\d+)"[^>]*?sourceValue="([\d,]+)"/g)) igbp.set(rgb, +values.split(',').at(-1));
 if (igbp.size !== 18) throw Error(`Unexpected colormap: ${igbp.size} entries`);
 const modis = new Uint8Array(SW * SH).fill(255);
 for (const tile of TILES) {
   const url = tileUrl(tile.south, tile.west);
-  const png = decodePng(await source(`igbp-${YEAR.slice(0, 4)}-${tile.south}-${tile.west}.png`, url, pinned.get(url)));
+  const png = decodePng(await source(`igbp-${YEAR.slice(0, 4)}-${tile.south}-${tile.west}.png`, url, tile.sha256));
   if (png.width !== TILE || png.height !== TILE) throw Error('Unexpected tile size');
   const ox = (tile.west + 180) * PER_DEG, oy = -tile.south * PER_DEG;
   for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
@@ -121,7 +130,7 @@ for (const tile of TILES) {
 
 // 2. Lake mask at source resolution: Natural Earth 1:10m lakes (even-odd scanline fill at sample centres), plus the Caspian.
 const lake = new Uint8Array(SW * SH);
-const lakes = JSON.parse((await source('ne_10m_lakes.geojson', LAKES_URL, pinned.get(LAKES_URL))).toString());
+const lakes = JSON.parse((await source('ne_10m_lakes.geojson', LAKES_URL, LAKES_SHA)).toString());
 for (const feature of lakes.features) {
   const polygons = feature.geometry.type === 'Polygon' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
   for (const rings of polygons) {
@@ -158,7 +167,7 @@ for (const feature of lakes.features) {
 
 // NLCD legend colours (official class palette) → game class; open water and no-data (white) abstain.
 const counts = new Float64Array(CLASSES.length);
-const nlcd = await source('nlcd-2021-florida.png', NLCD_URL, pinned.get(NLCD_URL)).then(decodePng);
+const nlcd = await source('nlcd-2021-florida.png', NLCD_URL, NLCD_SHA).then(decodePng);
 const NLCD = new Map(Object.entries({
   '71,107,160': -1, '255,255,255': -1, // 11 open water, outside coverage
   '221,201,201': C.Grasslands, '216,147,130': C.Grasslands, '237,0,0': C.Grasslands, '170,0,0': C.Grasslands, // 21–24 developed
