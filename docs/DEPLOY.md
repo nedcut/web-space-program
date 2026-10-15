@@ -8,12 +8,10 @@ never deploy. PR previews are deferred to keep credentials out of PR execution.
 
 ## One-time owner setup
 
-1. In Cloudflare, select the account that will own the game. Copy its Account ID
-   from the dashboard. Create a **Pages** project using **Direct Upload**, named
-   exactly `web-space-program`, with production branch `main`. Alternatively, after
-   authenticating locally with `npx wrangler login`, run:
-   `npx wrangler pages project create web-space-program --production-branch=main`.
-   Choose Direct Upload rather than Git integration: GitHub Actions builds the site.
+1. In Cloudflare, select the account that will own the game and copy its Account ID
+   from the dashboard. You don't need to create the Pages project: the deploy job
+   creates the Direct Upload project `web-space-program` (production branch `main`)
+   on its first run. Don't connect Git integration; GitHub Actions builds the site.
 2. Under **My Profile → API Tokens → Create Custom Token**, grant account permission
    **Cloudflare Pages: Edit**, limited to that account. No zone permissions are needed.
 3. From this repository, set the two GitHub Actions repository secrets interactively:

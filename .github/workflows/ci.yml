@@ -69,6 +69,17 @@ jobs:
         with:
           name: dist
           path: dist
+      # First deploy: create the Direct Upload project if the account doesn't have it yet.
+      - name: Ensure Pages project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if npx --yes wrangler@4 pages project list | grep -qw web-space-program; then
+            echo 'Pages project exists.'
+          else
+            npx --yes wrangler@4 pages project create web-space-program --production-branch=main
+          fi
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
