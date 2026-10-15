@@ -1641,3 +1641,8 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   types, the full Vitest suite and the production build on pushes and pull requests.
   Two test workers bound memory use on GitHub runners and match local validation.
   Main builds retain the checked `dist` artifact for seven days.
+- Deployment consumes the successful main CI artifact. A separate configuration
+  gate checks only whether both secrets exist, so a new repository remains green
+  before owner setup. No PR code receives deployment credentials; PR previews are
+  deferred. Cloudflare project/token/secrets and the first production publish
+  remain explicit owner steps in `docs/DEPLOY.md`.
