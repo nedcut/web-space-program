@@ -109,7 +109,7 @@ interface BodyLayer {
   terrain: Terrain | null;
 }
 
-interface LabelEl { el: HTMLDivElement; text: string; color: string; box: LabelBox }
+interface LabelEl { el: HTMLDivElement; textEl: HTMLElement; text: string; color: string; box: LabelBox }
 
 function makeMaterial(texture: THREE.Texture, width: number, height: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
@@ -306,6 +306,7 @@ export class SurfaceLayers {
     let item = pool[i];
     if (!item) {
       const el = document.createElement('div');
+      let textEl: HTMLElement = el;
       Object.assign(el.style, { position: 'absolute', left: '0', top: '0', whiteSpace: 'nowrap', textShadow: LABEL_SHADOW, pointerEvents: 'none',
         font: city ? '500 11px system-ui, sans-serif' : '650 10.5px system-ui, sans-serif', letterSpacing: city ? '.01em' : '.08em',
         textTransform: city ? 'none' : 'uppercase', display: 'none' });
@@ -313,10 +314,11 @@ export class SurfaceLayers {
         const dot = document.createElement('span');
         Object.assign(dot.style, { display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', background: '#ffe9b8', boxShadow: '0 0 0 1.5px #02050ccc', marginRight: '5px', verticalAlign: '1px' });
         el.appendChild(dot);
-        el.appendChild(document.createElement('span'));
+        textEl = document.createElement('span');
+        el.appendChild(textEl);
       }
       this.host.appendChild(el);
-      item = pool[i] = { el, text: '', color: '', box: { x: 0, y: 0, width: 0, height: 16 } };
+      item = pool[i] = { el, textEl, text: '', color: '', box: { x: 0, y: 0, width: 0, height: 16 } };
     }
     return item;
   }
@@ -324,7 +326,7 @@ export class SurfaceLayers {
   private setText(item: LabelEl, text: string, city: boolean) {
     if (item.text === text) return;
     item.text = text;
-    (city ? item.el.lastChild as HTMLElement : item.el).textContent = text;
+    item.textEl.textContent = text;
     item.box.width = text.length * (city ? 6.2 : 7.4) + (city ? 18 : 10);
   }
 

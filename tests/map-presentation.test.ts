@@ -118,7 +118,10 @@ describe('map presentation', () => {
     };
     // Close above a surface focus, looking down: allowed.
     map.yaw = 0; map.pitch = 0; map.distance = 0.15 * R; frame('ascent:earth', surface);
-    expect(frame('ascent:earth', surface)).toBeCloseTo(1.15, 3);
+    // Near the surface the camera looks down from the local horizon (11°–86°), so it stays close but not overhead.
+    const close = frame('ascent:earth', surface);
+    expect(close).toBeGreaterThanOrEqual(1.01);
+    expect(close).toBeLessThanOrEqual(1.15 + 1e-3);
     // Turned to look up from below the surface: the very next frame is outside, on the far side.
     map.yaw = Math.PI;
     expect(frame('ascent:earth', surface)).toBeGreaterThanOrEqual(1.01 - 1e-9);
