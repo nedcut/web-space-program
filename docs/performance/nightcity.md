@@ -1,5 +1,8 @@
 # Flight Earth city and lake polish
 
+Close-night follow-up: [round two](nightcity-r2.md) supersedes the close-detail
+limitation below; this document retains the round-one distant/day/lake evidence.
+
 Base: `87b49595`, branch `cx/nightcity`. Runtime changes are confined to
 `src/render/planet/{materials,earthGround}.ts`. No map, simulation, data, asset,
 worker, loading, draw-count or frame-allocation changes.

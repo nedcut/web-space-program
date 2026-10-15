@@ -1257,3 +1257,32 @@ and sustained 120 Hz remain unverified; close night detail is source-limited.
 
 Evidence and decisions: `docs/performance/nightcity.md`. Committed locally on
 `cx/nightcity`; not pushed or merged.
+
+### Close night-city streets — cx/nightcity round two (2026-10-15)
+
+Close Gulf night views now resolve warm streets and cooler point lights over dark
+blocks. A softly filtered Black Marble envelope controls density; the daylight
+urban polygon no longer creates abrupt night-detail edges. Night detail remains
+resolved through the 10 km view and blends to the accepted network at 14–16 km
+surface range. Daytime tiles, lake rims, and distant lighting are retained.
+
+A fourth prewarmed terrain program keeps daylight cost unchanged. Runtime changes
+are limited to `materials.ts`, `earthGround.ts`, and `PlanetRenderer.ts`; no assets,
+map/sim changes, added draws, or frame allocations. GPU preview night improvements
+on RTX 3060 Ti are Orlando 3 km −9.32%, Orlando 10 km −4.30%, and Cape −12.67%.
+Full-flight midnight 10 km improves 7.12%; daytime changes are within +0.47%.
+The +1.01% distant midnight control repeated at −0.06%, so it is not a reproducible
+regression. All original values remain in the report.
+
+Lint, typecheck, production build and the full 208-file suite pass (1,936 tests,
+one skipped, clean exit). All 14 paired preview views and eight flight fixtures
+have valid GPU samples and GL error 0. Twelve reversed fragment sources match
+round one exactly. Firefox passes four smoke cases. The new program rewarms after
+context loss; baseline and current both have a pending transient GL 1282 during
+forced recovery, then fresh/resumed frames are clean.
+
+Evidence: `docs/performance/nightcity-r2.md` and
+`/mnt/c/wsp-tools/shots/nightcity/r2-accepted/`. Paris daytime tint is deferred
+because the runtime urban mask is Gulf-only; non-Gulf close night detail remains
+unchanged. Mac/Zen, sustained 120 Hz and incremental cold-compile cost are unmeasured.
+Committed on `cx/nightcity`; not pushed or merged.
