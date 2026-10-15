@@ -13,10 +13,19 @@ import { setRGB, type PresetContext, type PresetResult } from './common';
  */
 export const LAUNCH_SITE = { lat: 28.5, lon: -80.83, elevation: 6, blend: 400, sceneryRadius: 3000 } as const;
 /**
- * Plateau height in playable metres for a body with Earth's scaled `relief`: `elevation` scaled like the grid, but at
- * least 3 m, clear of the ocean shader's ±2 m shoreline noise (shallow water would speckle a lower plateau).
+ * Playable metres added to land (subtracted from sea floor) near sea level, ramping in over the first `ramp` real
+ * metres of elevation or depth. The ocean shader moves its shoreline by up to ±2 m of noise; scaled relief puts
+ * low coasts (Florida, deltas) within that band, which flooded land and bared lagoon floors. Beyond the ramp,
+ * land and sea floor sit `lift` metres clear of it on every scale; the coastline itself (height 0) stays put.
  */
-export const launchPlateau = (relief: number): number => Math.max(3, LAUNCH_SITE.elevation * (relief / 8800));
+export const COAST_LIFT = { lift: 2.5, ramp: 1 } as const;
+/** The coast lift (playable m, signed) for an unscaled grid elevation `metres`. */
+export function coastLift(metres: number): number {
+  const t = Math.min(1, Math.abs(metres) / COAST_LIFT.ramp);
+  return Math.sign(metres) * COAST_LIFT.lift * t * t * (3 - 2 * t);
+}
+/** Plateau height in playable metres for a body with Earth's scaled `relief`: land at `elevation`, coast lift included. */
+export const launchPlateau = (relief: number): number => LAUNCH_SITE.elevation * (relief / 8800) + coastLift(LAUNCH_SITE.elevation);
 
 /**
  * Pad flame pit in the pad's local frame (metres: +X east, +Z south): a square hole of half size `half` centred
@@ -117,7 +126,7 @@ export function earthPreset(ctx: PresetContext): PresetResult {
     const rolling = fbm(noise, x * frequency, y * frequency, z * frequency, octaves);
     const crests = mountain > 0 ? 2 * ridged(noise, x * frequency, y * frequency, z * frequency, octaves) - 1 : 0;
     const detail = amplitude * mix(rolling, crests, mountain);
-    let h = (metres + detail) * verticalScale;
+    let h = (metres + detail) * verticalScale + coastLift(metres);
     // Land beside the site eases to the plateau; water keeps its own depth, so the site never adds coastline.
     if (clearance < LAUNCH_SITE.blend) h = mix(h, plateau, (1 - smoothstep(0, LAUNCH_SITE.blend, clearance)) * smoothstep(0, 1, metres));
     return h;
@@ -128,12 +137,12 @@ export function earthPreset(ctx: PresetContext): PresetResult {
     Forests: [.045, .085, .03], Rainforests: [.025, .065, .02], Tundra: [.25, .25, .20],
   };
   return {
-    height, maxHeight: 9200 * verticalScale, minHeight: -12200 * verticalScale,
+    height, maxHeight: 9200 * verticalScale + COAST_LIFT.lift, minHeight: -12200 * verticalScale - COAST_LIFT.lift,
     colorAt: (x, y, z, h, out) => {
       const lat = Math.asin(Math.max(-1, Math.min(1, z))) * 180 / Math.PI;
       const lon = Math.atan2(y, x) * 180 / Math.PI;
       const metres = grid.sample(x, y, z, variation);
-      const cover = earthCover(lat, lon, h / verticalScale);
+      const cover = earthCover(lat, lon, (h - coastLift(metres)) / verticalScale);
       const c = palette[cover];
       const v = cover === 'Ice Caps' ? 1 : 1 + .10 * noise.noise(x * 1700, y * 1700, z * 1700);
       // Beaches fade with the interpolated grid height and coast weight instead of switching per ETOPO cell,

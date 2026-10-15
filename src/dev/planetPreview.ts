@@ -17,9 +17,10 @@ import { PlanetRenderer } from '../render/planet';
 
 await loadEarthData();
 
-const SCALE = SCALE_PRESETS.standard;
 const DEG = Math.PI / 180;
 const params = new URLSearchParams(location.search);
+/** `scale=<standard|challenging|real>` picks the scale preset (default Standard). */
+const SCALE = SCALE_PRESETS[(params.get('scale') ?? 'standard') as keyof typeof SCALE_PRESETS] ?? SCALE_PRESETS.standard;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const PREVIEW_IDS = ['bennu', 'ryugu', 'itokawa', '67p', 'halley', 'vesta', 'earth', 'moon', 'mars', 'saturn', 'titan', 'jupiter', 'io', 'europa', 'enceladus', 'mercury', 'venus', 'uranus', 'neptune', 'callisto', 'iapetus', 'sun'];

@@ -1194,8 +1194,18 @@ Owner decisions 2026-10-13 (both recommended options).
   `scripts/earth-data/patch.mjs` from two pinned tiles (URL + SHA-256 in the manifest). Hosts concatenate it after
   `height.i16` into the one buffer `installEarthData` already takes, so the worker / SharedArrayBuffer path is
   unchanged (+6.4 MB per non-isolated worker). `EarthGrid.sample` uses the patch inside its bounds, easing to the
-  global grid over a 0.25° margin (height, roughness and shore weight all blend; seams are tested). Outside the
-  bounds the global path is the previous code, bit for bit.
+  global grid over a 0.25° margin (height and roughness blend; seams are tested). The coast flags (`coastal` for the
+  Shores biome, `shore` for beach colour) stay on the global grid: the patch's one-pixel coast ring drew blocky sand
+  outlines from altitude (finer than the terrain vertices) and shrank Shores to a 460 m line. Outside the bounds
+  the global path is the previous code, bit for bit.
+- **Coast lift (all of Earth, all scales):** below ~4 km the ocean mesh draws the coast, moving its shoreline by up
+  to ±2 m of noise. Scaled relief (s^0.8: ×0.16 Standard, ×0.40 Challenging) put low coasts inside that band, so
+  the patch's real Florida lowlands (Merritt Island, the mainland shore, lagoons 1–3 m deep) rendered as speckled
+  shallow water and bared lagoon floors; deltas elsewhere (Netherlands) did the same before the patch. Heights now
+  add `coastLift(metres)`: +2.5 playable m on land and −2.5 m on sea floor, ramped in over the first 1 real m, so
+  the coastline (height 0) stays where the data puts it and only ground within 1 m of sea level is left to the
+  noise. Biomes and the cover palette subtract the lift exactly, so biome boundaries do not move. Cost: Cape-region
+  chunk builds +6% (shared box, noisy), others unchanged.
 - **D-006 amendment, site move:** the pad moves 0.23° west to **28.5° N, 80.83° W**, the mainland shore of the Indian
   River (22 km in real geography; 2.2 km of playable distance on Standard). Latitude, and so launch inclination,
   is unchanged. No spot on Merritt Island or the Cape works on every scale: on Standard the runway's east end and
@@ -1205,9 +1215,9 @@ Owner decisions 2026-10-13 (both recommended options).
 - **Footprint plateau:** only the complex's own ground is flat: capsules for the pad hub (520 m), crawlerway +
   assembly building, service road, taxiway and runway with blast pads (`SITE_GROUND`, `siteClearance`). Within
   400 m of it, land eases toward the plateau; water keeps its depth, so the site never adds coastline. Plateau
-  height is 6 real metres scaled with relief like the grid, but at least 3 m (`launchPlateau`): 3 m on Standard and
-  Challenging, 6 m on Real (was a flat 10 m). The floor keeps the plateau clear of the ocean shader's ±2 m
-  shoreline noise where the Standard runway crosses the Indian River. Site vegetation skips water; the planet scatter exclusion keeps its 3 km disc
+  height is land at 6 real metres including the coast lift (`launchPlateau`): 3.45 m on Standard, 4.9 m on
+  Challenging, 8.5 m on Real (was a flat 10 m), clear of the ocean's shoreline noise where the Standard runway
+  crosses the Indian River. Site vegetation skips water; the planet scatter exclusion keeps its 3 km disc
   (`LAUNCH_SITE.sceneryRadius`).
 - **Compatibility:** saved vessels landed at the old pad position are now beside the Banana River (they keep their
   body-fixed coordinates). Comms station, 'Launch Complex' biome, recovery distance and runway spawn all follow

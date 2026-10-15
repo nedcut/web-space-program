@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { Worker } from 'node:worker_threads';
 import { CAPE_PATCH, EarthGrid, EARTH_DATA_BYTES, EARTH_FILES, earthData } from '../src/sim/terrain/earthData';
-import { createTerrain, latLonToUnit, LAUNCH_SITE, launchPlateau, RUNWAY, siteClearance, siteLocalToUnit } from '../src/sim/terrain';
+import { COAST_LIFT, createTerrain, latLonToUnit, LAUNCH_SITE, launchPlateau, RUNWAY, siteClearance, siteLocalToUnit } from '../src/sim/terrain';
 import { Universe } from '../src/game/universe';
 import { biomeAt, BIOMES } from '../src/sim/science/biomes';
 import { buildChunk } from '../src/render/planet/chunkBuilder';
@@ -105,6 +105,35 @@ describe('real Earth geography', () => {
         expect(t.heightAt(p.x, p.y, p.z)).toBeLessThanOrEqual(0);
       }
       expect(water).toBeGreaterThan(100);
+    }
+  });
+  it('keeps low coasts clear of the ocean shoreline noise at every scale', () => {
+    // The ocean shader moves its shoreline by up to ±2 m. Florida's low land and shallow lagoons (a few real metres,
+    // scaled down) must stay outside that band once the data is COAST_LIFT.ramp from sea level, or water speckles land.
+    const site = latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon);
+    for (const scale of ['standard', 'challenging', 'real'] as const) {
+      const u = new Universe(scale), t = u.terrain('earth'), r = u.body('earth').radius;
+      let land = 0, water = 0;
+      for (let lat = 27; lat <= 29.5; lat += .013) for (let lon = -81.2; lon <= -80.2; lon += .011) {
+        const p = point(lat, lon), metres = earthData().sample(...p);
+        if (Math.acos(Math.min(1, p[0] * site.x + p[1] * site.y + p[2] * site.z)) * r < 4000) continue;
+        const h = t.heightAt(...p);
+        expect(Math.sign(h)).toBe(Math.sign(metres));
+        if (Math.abs(metres) < COAST_LIFT.ramp) continue;
+        expect(Math.abs(h)).toBeGreaterThanOrEqual(COAST_LIFT.lift);
+        if (metres > 0) land++; else water++;
+      }
+      expect(land).toBeGreaterThan(1000);
+      expect(water).toBeGreaterThan(1000);
+    }
+  });
+  it('keeps the Shores band of the global grid along the Florida coast', () => {
+    for (const scale of ['standard', 'challenging', 'real'] as const) {
+      const u = new Universe(scale), t = u.terrain('earth'), earth = u.body('earth');
+      // Vero Beach: low land inside the global grid's coastal band, beyond the Launch Complex radius on every scale.
+      expect(biomeAt(earth, t, latLonToUnit(27.6, -80.38))).toBe('Shores');
+      expect(biomeAt(earth, t, latLonToUnit(28.5, -80.4))).toBe('Oceans');
+      expect(biomeAt(earth, t, latLonToUnit(28.5, -81.6))).toBe('Forests');
     }
   });
   it('is continuous across antimeridian and converges to one height at each pole', () => {

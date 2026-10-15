@@ -62,20 +62,13 @@ export class EarthGrid {
     return (this.values[row + left] > 0) !== v || (this.values[row + right] > 0) !== v
       || (this.values[up * EARTH_WIDTH + ix] > 0) !== v || (this.values[down * EARTH_WIDTH + ix] > 0) !== v ? 1 : 0;
   }
-  /** Patch counterparts of roughness/coastCorner: same rules on the patch lattice, clamped at its edges. */
+  /** Patch counterpart of roughness: same rule on the patch lattice, clamped at its edges. */
   private patchRoughness(ix: number, iy: number): number {
     const v = this.patch, left = Math.max(0, ix - 1), right = Math.min(PW - 1, ix + 1);
     const up = Math.max(0, iy - 1), down = Math.min(PH - 1, iy + 1);
     return Math.max(Math.abs(v[iy * PW + left] - v[iy * PW + right]), Math.abs(v[up * PW + ix] - v[down * PW + ix]));
   }
-  private patchCoast(ix: number, iy: number): number {
-    const v = this.patch, row = iy * PW, land = v[row + ix] > 0;
-    const left = Math.max(0, ix - 1), right = Math.min(PW - 1, ix + 1);
-    const up = Math.max(0, iy - 1), down = Math.min(PH - 1, iy + 1);
-    return (v[row + left] > 0) !== land || (v[row + right] > 0) !== land
-      || (v[up * PW + ix] > 0) !== land || (v[down * PW + ix] > 0) !== land ? 1 : 0;
-  }
-  /** Bilinear patch sample at longitude/latitude (radians) inside the patch. */
+  /** Bilinear patch height at longitude/latitude (radians) inside the patch; `out` receives only its range. */
   private samplePatch(lon: number, lat: number, out: EarthSample | undefined): number {
     const px = (lon - P_WEST) * P_PER_RADIAN - .5, py = (P_NORTH - lat) * P_PER_RADIAN - .5;
     const ix = Math.max(0, Math.min(PW - 2, Math.floor(px))), iy = Math.max(0, Math.min(PH - 2, Math.floor(py)));
@@ -86,10 +79,6 @@ export class EarthGrid {
       const ra = this.patchRoughness(ix, iy), rb = this.patchRoughness(ix + 1, iy);
       const rc = this.patchRoughness(ix, iy + 1), rd = this.patchRoughness(ix + 1, iy + 1);
       out.range = (ra + (rb - ra) * fx) * (1 - fy) + (rc + (rd - rc) * fx) * fy;
-      out.coastal = Math.min(a, b, c, d) <= 0 && Math.max(a, b, c, d) > 0;
-      const sa = this.patchCoast(ix, iy), sb = this.patchCoast(ix + 1, iy);
-      const sc = this.patchCoast(ix, iy + 1), sd = this.patchCoast(ix + 1, iy + 1);
-      out.shore = (sa + (sb - sa) * fx) * (1 - fy) + (sc + (sd - sc) * fx) * fy;
     }
     return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
   }
@@ -100,19 +89,24 @@ export class EarthGrid {
     if (lon > P_WEST && lon < P_EAST && lat < P_NORTH && lat > P_SOUTH) return this.samplePatched(lon, lat, out);
     return this.sampleGlobal(lon, lat, out);
   }
-  /** Inside the patch bounds: weight 1 inside, easing to 0 across the outer margin (separable, smooth corners). */
+  /**
+   * Inside the patch bounds: weight 1 inside, easing to 0 across the outer margin (separable, smooth corners).
+   * `coastal` and `shore` stay on the global grid: a one-pixel patch coast ring is finer than the terrain vertices
+   * seen from altitude (blocky beach colour) and would shrink the Shores biome to a 460 m line.
+   */
   private samplePatched(lon: number, lat: number, out: EarthSample | undefined): number {
     const w = smooth(Math.min(lon - P_WEST, P_EAST - lon) / P_MARGIN) * smooth(Math.min(P_NORTH - lat, lat - P_SOUTH) / P_MARGIN);
-    if (w === 1) return this.samplePatch(lon, lat, out);
-    const detail = this.samplePatch(lon, lat, out && patchOut), h = this.sampleGlobal(lon, lat, out);
-    if (out) {
-      out.range += (patchOut.range - out.range) * w;
-      out.shore = (out.shore ?? 0) + ((patchOut.shore ?? 0) - (out.shore ?? 0)) * w;
-      if (w >= .5) out.coastal = patchOut.coastal;
+    const detail = this.samplePatch(lon, lat, out && patchOut);
+    if (w === 1) {
+      if (out) { this.sampleGlobal(lon, lat, out, false); out.range = patchOut.range; }
+      return detail;
     }
+    const h = this.sampleGlobal(lon, lat, out);
+    if (out) out.range += (patchOut.range - out.range) * w;
     return h + (detail - h) * w;
   }
-  private sampleGlobal(lon: number, lat: number, out: EarthSample | undefined): number {
+  /** `withRange` false skips the roughness (callers that only need the coast flags). */
+  private sampleGlobal(lon: number, lat: number, out: EarthSample | undefined, withRange = true): number {
     const px = (lon / (2 * Math.PI) + .5) * EARTH_WIDTH - .5;
     const py = (.5 - lat / Math.PI) * EARTH_HEIGHT - .5;
     const ix = Math.floor(px), fx = px - ix;
@@ -126,10 +120,12 @@ export class EarthGrid {
     if (py < 0) { polar = Math.max(0, 1 + 2 * py); h = this.north + (h - this.north) * polar; }
     if (py > EARTH_HEIGHT - 1) { polar = Math.max(0, 1 - 2 * (py - EARTH_HEIGHT + 1)); h = this.south + (h - this.south) * polar; }
     if (out) {
-      // Interpolate vertex roughness too: a per-cell range would step at every cell edge.
-      const ra = this.roughness(x0, iy), rb = this.roughness(x1, iy);
-      const rc = this.roughness(x0, iy + 1), rd = this.roughness(x1, iy + 1);
-      out.range = ((ra + (rb - ra) * fx) * (1 - fy) + (rc + (rd - rc) * fx) * fy) * polar;
+      if (withRange) {
+        // Interpolate vertex roughness too: a per-cell range would step at every cell edge.
+        const ra = this.roughness(x0, iy), rb = this.roughness(x1, iy);
+        const rc = this.roughness(x0, iy + 1), rd = this.roughness(x1, iy + 1);
+        out.range = ((ra + (rb - ra) * fx) * (1 - fy) + (rc + (rd - rc) * fx) * fy) * polar;
+      }
       out.coastal = Math.min(a, b, c, d) <= 0 && Math.max(a, b, c, d) > 0;
       const sa = this.coastCorner(x0, iy), sb = this.coastCorner(x1, iy);
       const sc = this.coastCorner(x0, iy + 1), sd = this.coastCorner(x1, iy + 1);
