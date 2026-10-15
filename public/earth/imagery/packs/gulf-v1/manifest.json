@@ -15,8 +15,14 @@
       "r": "urban fraction",
       "g": "reserved",
       "b": "Black Marble luminance"
+    },
+    "urbanDetail": {
+      "r": "roof tone",
+      "g": "lamps",
+      "b": "built fraction"
     }
   },
+  "urbanDetail": "Original procedural 256px tile; not surveyed streets or buildings",
   "sources": [
     {
       "name": "bmng.png",
@@ -50,6 +56,11 @@
       "path": "settlements.webp",
       "bytes": 2888268,
       "sha256": "1a5a171cd220ec2b545b4c11f1c421676dbc9af3182968ac85b14cdbdf6aeb7c"
+    },
+    {
+      "path": "urban-detail.webp",
+      "bytes": 2512,
+      "sha256": "0e92f5092c42b2826d03a653716589fec1101023db9f59dfe288f4158d30cdbf"
     }
   ]
 }

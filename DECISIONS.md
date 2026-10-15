@@ -1207,3 +1207,9 @@ Owner decisions 2026-10-13 (both recommended options).
   global and regional colour. A body-fixed hemisphere guard rejects interpolated UVs
   across date-line triangles. Hidden seafloor returns before regional lookups; rural
   fragments skip roof/street arithmetic. No extra per-frame CPU work or allocation.
+- Diagnostic A/B separated the remaining costs: regional imagery was unintentionally
+  bringing the distant imagery water treatment onto near terrain, and procedural
+  roofs/streets added fragment arithmetic. Preserve the original distance-based water
+  handover (including the launch site's coarse-grid land fallback). Bake an original
+  256² urban tile (2.5 KB) for roofs, yards and intermittent lamps; hardware mipmaps
+  filter it instead of per-pixel grid hashes. Global coast/height data is unchanged.

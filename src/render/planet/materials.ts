@@ -560,11 +560,15 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
               if (regionW > 0.0) {
                 vec2 p = regionUV.uv * vec2(0.618, 0.4363) * uPlanetRadius;
                 vec2 footprint = (abs(regionUV.dx) + abs(regionUV.dy)) * vec2(0.618, 0.4363) * uPlanetRadius;
-                img = mix(img, earthGroundColour(img, settlement.r, settlement.b, p, footprint, cover, hd, roads), regionW);
+                img = mix(img, earthGroundColour(img, settlement.r, settlement.b, p, footprint, cover, hd, regionUV.dx * vec2(0.618, 0.4363) * uPlanetRadius, regionUV.dy * vec2(0.618, 0.4363) * uPlanetRadius, roads), regionW);
               }
             #endif
-            waterW = earthCoast(earthWater(dayW.a, dayW.rgb), eUV) * wImg;
-            albedo = mix(albedo, mix(img, earthWaterAlbedo(c), waterW), wImg);
+            float distantImagery = smoothstep(uEarthBlend.x, uEarthBlend.y, dist);
+            // The regional pack supplies colour, not a new water surface on the coarse launch/coast grid.
+            waterW = earthCoast(earthWater(dayW.a, dayW.rgb), eUV) * distantImagery;
+            if (waterW > 0.0) img = mix(img, earthWaterAlbedo(c), waterW);
+            float landImagery = wImg * (1.0 - dayW.a * (1.0 - distantImagery));
+            albedo = mix(albedo, img, landImagery);
           }
         #endif
         #ifdef SURFACE_SHADOWS

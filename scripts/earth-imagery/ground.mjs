@@ -57,7 +57,24 @@ for (let i=0; i<width*height; i++) {
 }
 await save('day.webp', await sharp(rgb,{raw:{width,height,channels:3}}).webp({quality:90,effort:6}).toBuffer());
 await save('settlements.webp', await sharp(data,{raw:{width,height,channels:3}}).webp({lossless:true,effort:6}).toBuffer());
+// Original repeating urban detail: roofs, green yards and intermittent street lamps. Hardware mips
+// average sub-pixel buildings/lamps without per-fragment grid hashes or analytic filtering.
+const tileSize = 256, tile = Buffer.alloc(tileSize * tileSize * 3);
+const random = (x, y) => { let n = Math.imul(x + 17, 1597334677) ^ Math.imul(y + 23, 3812015801); n = Math.imul(n ^ (n >>> 15), 1597334677); return (n >>> 0) / 4294967296; };
+for (let y = 0; y < tileSize; y++) for (let x = 0; x < tileSize; x++) {
+  const parcelX = Math.floor(x / 8), parcelY = Math.floor(y / 8);
+  const seed = random(parcelX, parcelY);
+  const px = x % 8, py = y % 8;
+  const road = x % 32 < 2 || y % 32 < 2;
+  const roof = !road && px >= 2 && px < 5 + (seed > 0.6 ? 1 : 0) && py >= 2 && py < 6 && seed > 0.15;
+  const lamp = road && ((x % 32 === 1 && y % 8 === 1) || (y % 32 === 1 && x % 8 === 1));
+  const i = (y * tileSize + x) * 3;
+  tile[i] = Math.round((roof ? 0.35 + seed * 0.6 : road ? 0.12 : 0.2) * 255);
+  tile[i+1] = lamp ? 255 : roof && seed > 0.7 ? 36 : 0;
+  tile[i+2] = roof ? 255 : road ? 100 : 0;
+}
+await save('urban-detail.webp', await sharp(tile, {raw:{width:tileSize,height:tileSize,channels:3}}).webp({lossless:true,effort:6}).toBuffer());
 await save('manifest.json', Buffer.from(JSON.stringify({version:1,width,height,bounds,
   projection:'EPSG:4326, pixel centres, rows north to south',
   description:'Static NASA GIBS Blue Marble Next Generation regional colour; 2016 Black Marble lights; Natural Earth 5.1.2 urban polygons. Street and land-cover detail in the game is illustrative, not surveyed.',
-  channels:{settlements:{r:'urban fraction',g:'reserved',b:'Black Marble luminance'}},sources,files},null,2)+'\n'));
+  channels:{settlements:{r:'urban fraction',g:'reserved',b:'Black Marble luminance'},urbanDetail:{r:'roof tone',g:'lamps',b:'built fraction'}},urbanDetail:'Original procedural 256px tile; not surveyed streets or buildings',sources,files},null,2)+'\n'));

@@ -221,6 +221,7 @@ export interface EarthImageryUniforms {
   uEarthRegionDay: THREE.IUniform<THREE.Texture>;
   uEarthRegionData: THREE.IUniform<THREE.Texture>;
   uEarthRegionOn: THREE.IUniform<number>;
+  uEarthUrbanDetail: THREE.IUniform<THREE.Texture>;
   /** 1 once real imagery is bound. */
   uEarthImagery: THREE.IUniform<number>;
   /** 1 when night-light imagery is bound and enabled. */
@@ -283,6 +284,7 @@ export class EarthImagery {
       uEarthRegionDay: { value: placeholder(true) },
       uEarthRegionData: { value: placeholder(false) },
       uEarthRegionOn: { value: 0 },
+      uEarthUrbanDetail: { value: placeholder(false) },
       uEarthImagery: { value: 0 },
       uEarthNightOn: { value: 0 },
       uEarthBlend: { value: new THREE.Vector2(1e9, 2e9) },
@@ -363,19 +365,22 @@ export class EarthImagery {
     const generation = ++this.regionGeneration;
     const day = acquireStrips(root() + 'packs/gulf-v1/day.webp', 'regionDay');
     const data = acquireStrips(root() + 'packs/gulf-v1/settlements.webp', 'regionData');
-    const keys = [day.key, data.key];
+    const detail = acquireStrips(root() + 'packs/gulf-v1/urban-detail.webp', 'regionData');
+    const keys = [day.key, data.key, detail.key];
     this.regionKeys = keys;
     this.loading = true;
-    Promise.all([day.promise, data.promise]).then(([d, s]) => {
+    Promise.all([day.promise, data.promise, detail.promise]).then(([d, s, t]) => {
       if (this.disposed || generation !== this.regionGeneration) return;
       this.loading = false;
-      const uploads = [new StripUpload(d, 'regionDay'), new StripUpload(s, 'regionData')];
+      const uploads = [new StripUpload(d, 'regionDay'), new StripUpload(s, 'regionData'), new StripUpload(t, 'regionData')];
       this.regionTextures = uploads.map(up => up.texture);
       for (const t of this.regionTextures) { t.wrapS = THREE.ClampToEdgeWrapping; t.anisotropy = ANISOTROPY[this.opts.quality]; }
+      uploads[2].texture.wrapS = uploads[2].texture.wrapT = THREE.RepeatWrapping;
       this.jobs = uploads.map(up => Object.assign((r: THREE.WebGLRenderer) => up.step(r), { heavy: () => up.heavy }));
       this.jobs.push(() => {
         this.uniforms.uEarthRegionDay.value = uploads[0].texture;
         this.uniforms.uEarthRegionData.value = uploads[1].texture;
+        this.uniforms.uEarthUrbanDetail.value = uploads[2].texture;
         this.uniforms.uEarthRegionOn.value = 1;
         keys.forEach(releaseStrips);
         this.regionKeys = [];
@@ -402,6 +407,7 @@ export class EarthImagery {
     this.uniforms.uEarthRegionOn.value = 0;
     this.uniforms.uEarthRegionDay.value = placeholder(true);
     this.uniforms.uEarthRegionData.value = placeholder(false);
+    this.uniforms.uEarthUrbanDetail.value = placeholder(false);
   }
 
   /** Upload water and lights, then per tile: upload colour strips and merge them into the target in strips. */

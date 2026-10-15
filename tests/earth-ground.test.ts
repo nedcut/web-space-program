@@ -57,7 +57,7 @@ it('retains global imagery when the optional pack is unavailable without repeate
   expect(imagery.ready).toBe(true);
   expect(imagery.uniforms.uEarthImagery.value).toBe(1);
   expect(imagery.uniforms.uEarthRegionOn.value).toBe(0);
-  expect(fetcher.mock.calls.filter(([url]) => url.includes('gulf-v1'))).toHaveLength(2);
+  expect(fetcher.mock.calls.filter(([url]) => url.includes('gulf-v1'))).toHaveLength(3);
   imagery.dispose();
 });
 
@@ -78,13 +78,13 @@ it('releases a pending pack after disposal and never binds its late result', asy
     return strips();
   });
   await advance(imagery);
-  expect(pending).toHaveLength(2);
+  expect(pending).toHaveLength(3);
   imagery.dispose();
   pending.forEach(r => r());
   await advance(imagery, 4);
   expect(imagery.uniforms.uEarthRegionOn.value).toBe(0);
-  // Three global images plus the two late regional images each relinquish their decoded data.
-  expect(decoded.release).toHaveBeenCalledTimes(5);
+  // Three global images plus the three late regional images each relinquish their decoded data.
+  expect(decoded.release).toHaveBeenCalledTimes(6);
 });
 
 it('ships the exact derivatives recorded in the regional provenance manifest', () => {
