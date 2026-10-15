@@ -15,6 +15,9 @@ Wayland, DPR 1, 1280×720 viewport, on AC. Real GPU: `gpu-bench.mjs` against a l
 Medium is GPU-bound (CPU ≈ 6 ms/frame); its pad cost is mostly resolution-independent (~1.4 M triangles even at
 0.6 scale). Low holds 60 fps with headroom; 0.75 scale also holds 60.
 
+After this pass (Low, same laptop, `final-low`): pad / orbit 60 fps (GPU 8.9 / 8.5 ms), ascent 59.7, moon 59.9;
+cold flight load ready 7.3–7.8 s, warm 6.3 s.
+
 ## Fixed in this pass
 
 - **Engine soot bake ~5× faster, bit-identical** (`render/parts/soot.ts`): the streak hash takes 29 values per
