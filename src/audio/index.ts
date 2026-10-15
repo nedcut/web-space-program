@@ -207,7 +207,15 @@ export class GameAudio {
       this.musicGain.gain.value = 0;
       this.musicGain.connect(this.master);
       this.reverb = this.track(ctx.createConvolver());
-      this.reverb.buffer = this.makeImpulse();
+      // Preparing the 3.5 s impulse response was the slowest step of the first click (~0.1-0.2 s on an old
+      // laptop). Music fades in over seconds, so the reverb can arrive in a later idle turn.
+      const reverb = this.reverb;
+      const attach = () => {
+        if (this.reverb !== reverb) return;
+        try { reverb.buffer = this.makeImpulse(); } catch (error) { this.fail(error); }
+      };
+      if (typeof requestIdleCallback === 'function') requestIdleCallback(attach, { timeout: 1000 });
+      else setTimeout(attach, 50);
       const wet = this.track(ctx.createGain());
       wet.gain.value = 0.45;
       this.reverb.connect(wet).connect(this.musicGain);

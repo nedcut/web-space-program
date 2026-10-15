@@ -474,3 +474,16 @@ it('keeps silent continuous layers out of the audio graph and reconnects them wh
     expect(connected()).toBe(flying);
   } finally { audio.dispose(); vi.unstubAllGlobals(); }
 });
+
+it('builds the reverb impulse after the first gesture, not inside it', async () => {
+  vi.useFakeTimers(); vi.stubGlobal('AudioContext', ContextDouble);
+  const created = vi.spyOn(ContextDouble.prototype, 'createBuffer');
+  const audio = new GameAudio();
+  try {
+    audio.resume();
+    const stereo = () => created.mock.calls.filter(([channels]) => channels === 2).length;
+    expect(stereo()).toBe(0);
+    vi.advanceTimersByTime(100);
+    expect(stereo()).toBe(1);
+  } finally { audio.dispose(); created.mockRestore(); vi.unstubAllGlobals(); vi.useRealTimers(); }
+});

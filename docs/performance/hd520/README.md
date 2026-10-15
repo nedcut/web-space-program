@@ -40,6 +40,9 @@ Medium is GPU-bound (CPU ≈ 6 ms/frame); its pad cost is mostly resolution-inde
   first strip while the driver was still compiling, blocking on the link status. Scenes whose warm-up skips
   off-screen passes paid it on screen: the Space Center froze 2.1–3.0 s at reveal in 5 of 5 loads, 0 of 5 now
   (`onFirstUse` in a 20 s load profile 2.4 s → 0.2 s). Each bake now `compileAsync`s against its target first.
+- **First click builds the music reverb afterwards** (`GameAudio.initialize`): the 3.5 s impulse response is set
+  on the convolver in an idle callback. The first gesture's task 122–135 ms → 55–70 ms (3 of 3 each); the impulse
+  then costs a separate ~70 ms idle task. Music fades in over seconds, so the late reverb is inaudible.
 - `gpu-bench.mjs --profile 1` saves a CPU profile per measured window (for `cpu-profile-report.mjs`).
 
 ## Open findings (not changed)
@@ -51,10 +54,7 @@ Medium is GPU-bound (CPU ≈ 6 ms/frame); its pad cost is mostly resolution-inde
 - Low could default to 0.75 render scale on this GPU class (adaptive still drops it under load).
 - Ascent allocates ~72 MB/min at Low (GC ~19 ms/s); no long tasks.
 - `rails/1e6` is ~2.6 ms/tick: hazard sub-stepping at max warp (`advancePackedHazards`), affordable.
-- First user gesture builds the audio graph synchronously (~125 ms keydown/click on this laptop): assigning the
-  3.5 s stereo reverb impulse to the convolver alone is 115–185 ms, the noise buffers 40–60 ms. In normal play
-  this is the first menu click. Deferring the reverb buffer or a shorter impulse would cut it (the latter
-  changes the music's sound).
+- The first gesture still builds the rest of the audio graph synchronously (~55–70 ms, mostly noise buffers).
 - The music reverb costs ~11 % of a core in every scene (~5.5 % on the audio thread, ~6 % on its two convolution
   threads); music oscillators and the UI bus ~4 %. A shorter (the tail past 2.75 s is below −40 dB) or mono
   impulse, or an algorithmic reverb, would cut it but changes the music's sound. It also runs at music volume 0.
