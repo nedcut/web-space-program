@@ -106,10 +106,14 @@ export class FlightMap {
 
   closeInfo() { this.menus = { ...this.menus, info: null }; this.emit(); }
 
-  /** Map opened or closed: follow the active vessel again and drop menus. */
+  /**
+   * Map opened or closed: drop menus. A focus the player picked stays, with its view, until they change it (for the
+   * flight scene's lifetime, not saved); following the active vessel frames its orbit again.
+   */
   reset() {
-    this.focus = null;
-    this.frameOrbit();
+    const f = this.focus, w = this.world;
+    if (f && !(f.kind === 'body' ? w.universe.bodies.has(f.id) : f.id !== w.activeId && w.vessels.has(f.id))) this.focus = null;
+    if (!this.focus) this.frameOrbit();
     this.menus = { node: null, context: null, info: null };
     this.emit();
   }
@@ -148,12 +152,8 @@ export class FlightMap {
       const dx = origin.x - bodyState.position.x, dy = origin.y - bodyState.position.y, dz = origin.z - bodyState.position.z;
       this.c.map.distance = Math.max(this.c.map.distance, Math.sqrt(dx * dx + dy * dy + dz * dz) * 2.8);
     }
-    // Zoomed in towards the body, the focus slides from its centre to the vessel, so a close view looks at the ground
-    // round the vessel (MapView frames the camera in the local horizon there) instead of an arbitrary spot below.
-    const R = w.universe.body(active.body).radius, k = 1 - smoothstep(R * 1.6, R * 3, this.c.map.viewDistance);
-    const c = bodyState.position;
-    const position = k > 0 ? { x: c.x + (origin.x - c.x) * k, y: c.y + (origin.y - c.y) * k, z: c.z + (origin.z - c.z) * k } : c;
-    return { position, focusId: active.body, referenceBody: active.body };
+    // Zooming never moves the focus: close views come from zooming towards the cursor (MapView) round the centre.
+    return { position: bodyState.position, focusId: active.body, referenceBody: active.body };
   }
 
   /** Biome to show once its map has been built (see showBiome). */
@@ -268,14 +268,13 @@ export class FlightMap {
   /** Closest allowed camera distance for the current focus. */
   minDistance(): number {
     const w = this.world, f = this.focus;
-    if (f?.kind === 'body' && w.universe.bodies.has(f.id)) return w.universe.body(f.id).radius * 1.15;
+    if (f?.kind === 'body' && w.universe.bodies.has(f.id)) return centredMinDistance(w.universe.body(f.id));
     const v = f?.kind === 'vessel' ? w.vessels.get(f.id) ?? w.active : w.active;
     if (!v) return 1500;
     const b = w.universe.body(v.body);
     const map = this.c.map;
-    if (this.ascent && !f) return ascentMinDistance(this.ascent.centre, map.yaw, map.pitch, b.radius);
+    if (!f || f.id === w.activeId) return this.ascent ? ascentMinDistance(this.ascent.centre, map.yaw, map.pitch, b.radius) : centredMinDistance(b);
     const r = length(sub(v.state.position, w.universe.ephem.getBodyState(b.id, w.ut).position));
-    // Near the surface the camera looks down from the local horizon, so it can come close to a regional view.
     return b.radius * (b.solidSurface && r < b.radius * 1.6 ? 0.12 : 1.15);
   }
 
@@ -483,7 +482,7 @@ export class FlightMap {
   }
 }
 
-function smoothstep(e0: number, e1: number, x: number) {
-  const k = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
-  return k * k * (3 - 2 * k);
+/** Closest camera distance from a body's centre: a regional view 0.1 R above solid ground, 0.15 R above cloud tops. */
+function centredMinDistance(b: { radius: number; solidSurface?: boolean }): number {
+  return b.radius * (b.solidSurface ? 1.1 : 1.15);
 }

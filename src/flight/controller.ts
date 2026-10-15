@@ -722,15 +722,10 @@ export class FlightController {
     this.pipeline.setMapMode(this.mapMode);
     this.mapUi.reset();
     this.flashFade();
-    if (this.mapMode) {
-      const wv = this.world.active;
-      if (wv) {
-        const r = this.world.universe.body(wv.body).radius;
-        this.mapUi.frameOrbit();
-        // Pull back from just above the vessel's body so the switch reads as zooming out, not a cut.
-        if (!game.get().settings.reduceMotion) this.map.animateFrom(r * 1.6);
-      }
-    }
+    // Following the vessel (reset framed its orbit): pull back from just above its body so the switch reads as
+    // zooming out, not a cut. A focus the player picked reopens on the view they left.
+    const wv = this.world.active;
+    if (this.mapMode && wv && !this.mapUi.focus && !game.get().settings.reduceMotion) this.map.animateFrom(this.world.universe.body(wv.body).radius * 1.6);
   }
 
   private fadeEl: HTMLDivElement | null = null;

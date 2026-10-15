@@ -1,4 +1,4 @@
-import { clearDistance, patchDrawnNow, smallBodyVisible } from './framing';
+import { aimAt, clearDistance, patchDrawnNow, pickSphere, smallBodyVisible } from './framing';
 import { patchState } from '../../sim/orbit/numericalPrediction';
 import { createTerrain } from '../../sim/terrain';
 import { CometEffects } from '../planet/CometEffects';
@@ -574,6 +574,7 @@ export class MapView {
     this.pitch = Math.max(-1.55, Math.min(1.55, Math.asin(Math.max(-1, Math.min(1, d.z)))));
     this.distance = body.radius * radii;
     this.zoomCount++;
+    this.zoomAnchor = null;
   }
 
   /** Highlight the navigation target (its orbit and icon); null clears. */
@@ -902,12 +903,23 @@ export class MapView {
     this.previousFocus.x = u.focus.x; this.previousFocus.y = u.focus.y; this.previousFocus.z = u.focus.z;
     this.focusIdentity = identity;
     this.renderFocus.x = u.focus.x+this.focusOffset.x; this.renderFocus.y = u.focus.y+this.focusOffset.y; this.renderFocus.z = u.focus.z+this.focusOffset.z;
+    const eased = this.renderedDistance;
     this.renderedDistance = this.renderedDistance ? Math.exp(Math.log(this.renderedDistance) + (Math.log(this.distance)-Math.log(this.renderedDistance))*blend) : this.distance;
-    // Never render from inside the reference body (an off-centre focus while turning, easing or changing focus).
+    this.orbitRate = ORBIT_RATE;
     const ref = u.referenceBody ? this.bodies.get(u.referenceBody) : undefined;
+    if (!ref) this.zoomAnchor = null;
     if (ref) {
-      const bp = this.ephem.getBodyState(ref.body.id, u.t).position, cp = Math.cos(this.pitch);
+      const bp = this.ephem.getBodyState(ref.body.id, u.t).position, R = ref.body.radius;
       const rel = { x: bp.x-this.renderFocus.x, y: bp.y-this.renderFocus.y, z: bp.z-this.renderFocus.z };
+      // Looking at the body's centre: the wheel zooms towards the point under the cursor, and close to the ground a
+      // drag turns the globe about as fast as the ground under the cursor moves (not the far-out orbiting rate).
+      if (Math.hypot(rel.x, rel.y, rel.z) < R * 1e-6) {
+        this.orbitRate = Math.min(ORBIT_RATE, this.camera.fov * Math.PI / 180 / Math.max(1, u.viewport.height) * Math.max(0, this.renderedDistance - R) / R);
+        if (this.zoomAnchor && eased) this.turnToCursor(eased, this.renderedDistance, R);
+      } else this.zoomAnchor = null;
+      if (Math.abs(Math.log(this.renderedDistance / this.distance)) < 1e-4) this.zoomAnchor = null;
+      // Never render from inside the reference body (an off-centre focus while turning, easing or changing focus).
+      const cp = Math.cos(this.pitch);
       const clear = clearDistance(this.renderedDistance, Math.cos(this.yaw)*cp, Math.sin(this.yaw)*cp, Math.sin(this.pitch), rel, ref.body.radius*1.01);
       if (clear > this.renderedDistance) { this.renderedDistance = clear; this.distance = Math.max(this.distance, clear); }
     }
@@ -1152,53 +1164,44 @@ export class MapView {
   }
 
   /**
-   * Orbit the camera round the focus. Far out, yaw/pitch are inertial (ecliptic) angles. Zoomed in on a point near a
-   * body's surface (a landed or low vessel), they become angles in that point's local frame instead, the pitch
-   * mapped to 11°–86° above the horizon, so the view looks down on the ground around the focus rather than
-   * through the planet. Either way the camera is kept outside the body.
+   * Orbit the camera round the focus. Yaw/pitch are inertial (ecliptic) angles at every zoom: zooming only changes the
+   * distance, never the direction the camera looks from. The camera is kept outside the reference body.
    */
   private placeCamera(u: MapUpdate) {
-    const d = this.renderedDistance, cy = Math.cos(this.yaw), sy = Math.sin(this.yaw), cp = Math.cos(this.pitch);
-    let x = cy * cp, y = sy * cp, z = Math.sin(this.pitch), ux = 0, uy = 0, uz = 1;
+    const d = this.renderedDistance, cp = Math.cos(this.pitch);
+    const x = Math.cos(this.yaw) * cp, y = Math.sin(this.yaw) * cp, z = Math.sin(this.pitch);
+    this.camera.position.set(x * d, y * d, z * d);
     this.surfaceBlend = 0;
     const ref = u.referenceBody ? this.bodies.get(u.referenceBody)?.body : undefined;
-    let rx = 0, ry = 0, rz = 0, r = 0;
-    if (ref?.solidSurface) {
+    if (ref) {
       const c = this.ephem.getBodyState(ref.id, u.t).position;
-      rx = u.focus.x - c.x; ry = u.focus.y - c.y; rz = u.focus.z - c.z; r = Math.hypot(rx, ry, rz);
-      const R = ref.radius;
-      // Fades in as the focus nears the surface (a vessel; the following focus slides there as the view zooms in).
-      const blend = (1 - smoothstep(R * 2.2, R * 4, d)) * smoothstep(R * 0.3, R * 0.9, r) * (1 - smoothstep(R * 1.25, R * 1.6, r));
-      this.surfaceBlend = blend;
-      if (blend > 0) {
-        const upX = rx / r, upY = ry / r, upZ = rz / r;
-        // East and north from the body's spin axis (body-fixed +Z).
-        const q = this.ephem.bodyRotation(ref.id, u.t);
-        const pole = this.poleScratch.set(0, 0, 1).applyQuaternion(this.quatScratch.set(q.x, q.y, q.z, q.w));
-        let ex = pole.y * upZ - pole.z * upY, ey = pole.z * upX - pole.x * upZ, ez = pole.x * upY - pole.y * upX;
-        const el = Math.hypot(ex, ey, ez);
-        if (el < 1e-6) { ex = 1; ey = 0; ez = 0; } else { ex /= el; ey /= el; ez /= el; }
-        const nx = upY * ez - upZ * ey, ny = upZ * ex - upX * ez, nz = upX * ey - upY * ex;
-        const lp = 0.2 + (this.pitch + 1.55) / 3.1 * 1.3, lc = Math.cos(lp), ls = Math.sin(lp);
-        // Heading offset: the default yaw puts the camera south of the focus, so north is up on screen.
-        const hc = Math.cos(this.yaw + LOCAL_HEADING), hs = Math.sin(this.yaw + LOCAL_HEADING);
-        const lx = lc * (hc * ex + hs * nx) + ls * upX, ly = lc * (hc * ey + hs * ny) + ls * upY, lz = lc * (hc * ez + hs * nz) + ls * upZ;
-        x += (lx - x) * blend; y += (ly - y) * blend; z += (lz - z) * blend;
-        const len = Math.hypot(x, y, z);
-        if (len < 1e-3) { x = lx; y = ly; z = lz; } else { x /= len; y /= len; z /= len; }
-        ux += (upX - ux) * blend; uy += (upY - uy) * blend; uz += (upZ - uz) * blend;
-      }
-    }
-    this.camera.position.set(x * d, y * d, z * d);
-    if (r > 0) {
+      const rx = u.focus.x - c.x, ry = u.focus.y - c.y, rz = u.focus.z - c.z;
       // Never inside the body: push the camera out along the body radius through it.
-      const R = ref!.radius * 1.01, cx = x * d + rx, cyy = y * d + ry, cz = z * d + rz, cr = Math.hypot(cx, cyy, cz);
-      if (cr < R) this.camera.position.set(cx * R / cr - rx, cyy * R / cr - ry, cz * R / cr - rz);
+      const R = ref.radius * 1.01, cx = x * d + rx, cy = y * d + ry, cz = z * d + rz, cr = Math.hypot(cx, cy, cz);
+      if (cr < R) this.camera.position.set(cx * R / cr - rx, cy * R / cr - ry, cz * R / cr - rz);
+      this.surfaceBlend = 1 - smoothstep(ref.radius * 1.25, ref.radius * 1.6, cr);
     }
-    this.camera.up.set(ux, uy, uz).normalize();
+    this.camera.up.set(0, 0, 1);
     this.camera.lookAt(0, 0, 0);
   }
-  /** How far the camera has turned to the local horizon of a near-surface focus (0 = inertial view). */
+  /**
+   * Zoom towards the cursor round a body's centre: turn the camera so the ground first under the cursor stays under
+   * it at the eased distance `r1`. `r0` is the distance of the frame the player saw when the wheel turned.
+   */
+  private turnToCursor(r0: number, r1: number, radius: number) {
+    const a = this.zoomAnchor!, tanH = Math.tan(this.camera.fov * Math.PI / 360);
+    const sx = a.x * tanH * this.camera.aspect, sy = a.y * tanH;
+    if (!a.picked) {
+      a.picked = pickSphere(this.yaw, this.pitch, r0, radius, sx, sy, a.ground);
+      if (!a.picked) { this.zoomAnchor = null; return; }
+    }
+    if (!aimAt(this, r1, a.ground, sx, sy)) this.zoomAnchor = null;
+  }
+  /** Cursor (normalised device coordinates) of the last wheel zoom while it eases; null when not zooming to a point. */
+  private zoomAnchor: { x: number; y: number; picked: boolean; ground: Vec3 } | null = null;
+  /** Drag turn rate, radians per pixel. */
+  private orbitRate = ORBIT_RATE;
+  /** How close the camera is to the reference body's surface (1 = looking at the ground; fades other orbit lines). */
   private surfaceBlend = 0;
   private readonly poleScratch = new THREE.Vector3();
   private readonly quatScratch = new THREE.Quaternion();
@@ -1745,8 +1748,9 @@ export class MapView {
           d.moved = true; lx = d.x; ly = d.y; this.tooltip.style.display = 'none';
         }
         if (!d.moved) return;
-        this.yaw -= (e.clientX - lx) * 0.005;
-        this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch + (e.clientY - ly) * 0.005));
+        this.zoomAnchor = null;
+        this.yaw -= (e.clientX - lx) * this.orbitRate;
+        this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch + (e.clientY - ly) * this.orbitRate));
         lx = e.clientX; ly = e.clientY;
         return;
       }
@@ -1810,6 +1814,8 @@ export class MapView {
       const factor = wheelZoomFactor(e.deltaY, e.deltaMode, e.ctrlKey, el.clientHeight || 800);
       this.distance = Math.max(minDistance(), Math.min(5e13, this.distance * factor));
       this.zoomCount++;
+      const p = local(e), w = el.clientWidth || 1, h = el.clientHeight || 1;
+      this.zoomAnchor = { x: p.x / w * 2 - 1, y: 1 - p.y / h * 2, picked: false, ground: { x: 0, y: 0, z: 0 } };
     };
     const menu = (e: Event) => e.preventDefault();
     const leave = () => { this.pointer.inside = false; if (!this.drag) this.setHover(NONE); };
@@ -1893,8 +1899,8 @@ export class MapView {
 }
 
 type SurfaceFrameArgs = Parameters<SurfaceLayers['update']>[0];
-/** Default map yaw (0.6) plus this is −90°: the near-surface view starts looking north. */
-const LOCAL_HEADING = -Math.PI / 2 - 0.6;
+/** Drag turn rate far from a surface, radians per pixel. */
+const ORBIT_RATE = 0.005;
 
 function smoothstep(e0: number, e1: number, x: number) {
   const k = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
