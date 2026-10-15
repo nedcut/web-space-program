@@ -192,6 +192,18 @@ describe('editing set-aside pieces', () => {
     ed.undo();
     expect(ed.craft.parts).toHaveLength(3);
   });
+  it('only the craft carries the craft mark: swapping back clears it, picking the craft up keeps it', () => {
+    const { editor: ed, uids } = rocket();
+    ed.detachSubtree(uids[4]); ed.parkHeld(v3(8, -3, 0));
+    ed.swapDetached(0, v3(-10, 0, 0));
+    // Pick the parked craft up whole and set it down elsewhere: still the craft.
+    expect(ed.takeFromDetached(0, uids[0]).craft).toBeDefined();
+    ed.parkHeld(v3(-12, 0, 0));
+    expect(ed.detached[0].craft).toBeDefined();
+    ed.swapDetached(0, v3(10, 0, 0));
+    expect(ed.craft.parts.some(p => p.uid === uids[0])).toBe(true);
+    expect(ed.detached.some(p => p.craft)).toBe(false);
+  });
   it('a set-aside piece takes the stand when the craft is empty', () => {
     const { editor: ed, uids } = rocket();
     ed.detachSubtree(uids[0]); ed.parkHeld(v3(5, 0, 0));

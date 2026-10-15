@@ -1196,5 +1196,6 @@ Owner decisions 2026-10-13 (both recommended options).
   (attach, offset/rotate, re-root, inspector). The craft is set aside beside it (on the piece's side, bottoms level),
   keeping its stages and staging mode (`SetAsidePiece.craft`), and its card reads "Swap back". While the craft is set
   aside, Save and Launch are refused with a "Swap back" action: they would otherwise write or fly the piece under the
-  craft's name. Only one swap at a time (Edit on stand is disabled on other pieces meanwhile).
+  craft's name (also while the craft is held). Picking the set-aside craft up whole keeps its mark (its staging
+  then resets to automatic); attaching it to the stand merges it and clears the mark. Only one swap at a time (Edit on stand is disabled on other pieces meanwhile).
 - Set-aside pieces are still not saved with the craft (unchanged).

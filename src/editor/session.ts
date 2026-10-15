@@ -525,9 +525,13 @@ export class EditorSession {
   }
   /** Saving or launching would use the piece on the stand while the craft itself is set aside. */
   private craftSwappedOut(what: 'save' | 'launch'): boolean {
+    if (this.editor.held?.craft) {
+      this.toast(`"${this.name}" is in your hands: set it aside or attach it before you ${what}.`, 'warn');
+      return true;
+    }
     const index = this.snap.detached.findIndex(p => p.craft);
     if (index < 0) return false;
-    this.toast(`"${this.name}" is set aside: swap it back onto the stand to ${what} it.`, 'warn', { label: 'Swap back', run: () => this.swapDetached(index) });
+    this.toast(`"${this.name}" is set aside: swap it back onto the stand to ${what} it.`, 'warn', { label: 'Swap back', run: () => { const i = this.snap.detached.findIndex(p => p.craft); if (i >= 0) this.swapDetached(i); } });
     return true;
   }
   /** Delete a set-aside piece, or only `uid` and what hangs from it. */
