@@ -235,7 +235,11 @@ export function gatherContacts(v: VesselState, env: Environment, t: number, h: n
           fwd = fl > 1e-6 ? scale(fwd, 1 / fl) : v3();
           // Drive motor (rovers): force along the heading, limited by grip.
           if (m.motorTorque && wheelCtl.throttle !== 0 && fl > 1e-6) {
-            const drive = Math.max(-1, Math.min(1, wheelCtl.throttle)) * Math.min(m.motorTorque / m.radius, TYRE_MU * F);
+            const command = Math.max(-1, Math.min(1, wheelCtl.throttle));
+            // A motor spinning with the wheel fades out towards its top speed; reversing against the roll keeps full force.
+            const roll = dot(vrel, fwd) * Math.sign(command);
+            const fade = m.maxDriveSpeed && roll > 0 ? Math.max(0, 1 - roll / m.maxDriveSpeed) : 1;
+            const drive = command * fade * Math.min(m.motorTorque / m.radius, TYRE_MU * F);
             const Fd = scale(fwd, drive);
             record(p.uid, rW, Fd);
             out.force = add(out.force, Fd);

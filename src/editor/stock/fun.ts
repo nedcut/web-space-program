@@ -31,7 +31,7 @@ export function buildSkipjack(catalog: PartCatalog = PART_CATALOG): CraftDef {
   const fuse = b.stack(cockpit, 'fuse-spar-short');
   const jet = b.stack(fuse, 'jet-kittiwake');
   b.radial(fuse, 'intake-gill', 'mirror', 0.1, 55);
-  const wing = b.radial(jet, 'wing-swept', 'mirror', 0.35, 90, qFromAxisAngle(v3(0, 0, 1), (2 * Math.PI) / 180));
+  const wing = b.radial(fuse, 'wing-swept', 'mirror', 0, 90, qFromAxisAngle(v3(0, 0, 1), (2 * Math.PI) / 180));
   b.radial(cockpit, 'ctrl-elevon', 'mirror', -0.6, 90);
   b.radial(jet, 'ctrl-elevon', 'mirror', -0.95, 90);
   b.radial(jet, 'tail-hawk', 1, -0.5, 0);
@@ -41,17 +41,23 @@ export function buildSkipjack(catalog: PartCatalog = PART_CATALOG): CraftDef {
   return b.done();
 }
 
-/** Dune racer: canopy cockpit on a two-deck chassis, four big Boulder wheels, fixed solar panels and lamps. */
-export function buildSandpiper(catalog: PartCatalog = PART_CATALOG): CraftDef {
-  const b = new Builder(catalog, 'Sandpiper Dune Racer', 'Crewed four-wheel buggy for the flats around the runway. W/S drive, A/D steer, B brakes.', 'SPH');
+/** Land-speed dragster: canopy cockpit on two rover decks, Boulder wheels and a turbofan pushing from behind. */
+export function buildSaltstreak(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Saltstreak Jet Dragster', 'Turbofan on wheels, delivered at 40 % thrust. Hold B, stage the jet, open the throttle and release; brake before the runway ends.', 'SPH');
   const front = b.root('rover-chassis');
   b.stack(front, 'cockpit-skylark', 'top');
   const rear = b.stack(front, 'rover-chassis');
-  // Wheels sit 0.2 m inside each deck end so the tyres clear the cockpit and each other.
-  wheels(b, [[front, 0.2], [rear, -0.2]]);
-  b.surface(rear, 'solar-patch', v3(0.4, b.part(rear).position.y, 0.175), v3(0, 0, 1), 'mirror');
-  b.surface(rear, 'light-area', v3(0, b.part(rear).position.y - 1, 0), v3(0, -1, 0), 1);
-  return b.done();
+  // Front tyres stay under the deck, clear of the cockpit; the rear pair sits under the jet's weight.
+  wheels(b, [[front, 0.6], [rear, -0.3]]);
+  const fuse = b.stack(rear, 'fuse-spar-short');
+  const jet = b.stack(fuse, 'jet-kittiwake');
+  b.radial(fuse, 'intake-gill', 'mirror', 0, 60);
+  b.radial(fuse, 'tail-hawk', 1, 0, 0);
+  b.surface(front, 'light-area', v3(0, b.part(front).position.y + 0.6, 0.175), v3(0, 0, 1), 1);
+  // Delivered at 40 % thrust: a stop inside the runway. Full thrust is the player's dare.
+  const craft = b.done();
+  craft.parts.find(p => p.uid === jet)!.tweaks = { thrustLimit: 0.4 };
+  return craft;
 }
 
 /** Three rover decks end to end on six Boulder wheels, carrying every surface instrument. */
@@ -61,7 +67,7 @@ export function buildTrekker(catalog: PartCatalog = PART_CATALOG): CraftDef {
   b.stack(front, 'probe-pebble', 'top');
   const middle = b.stack(front, 'rover-chassis');
   const rear = b.stack(middle, 'rover-chassis');
-  wheels(b, [[front, 0], [middle, 0], [rear, 0]]);
+  outriggerWheels(b, [[front, 0], [middle, 0], [rear, 0]]);
   const top = (deck: number, x: number, dy: number, id: string) => b.surface(deck, id, v3(x, b.part(deck).position.y + dy, 0.175), v3(0, 0, 1), 1);
   top(front, 0.45, 0.5, 'sensor-pressure');
   top(front, -0.45, 0.5, 'sensor-thermal');
@@ -79,9 +85,19 @@ function wheels(b: Builder, at: [number, number][]) {
   for (const [deck, dy] of at) b.surface(deck, 'rover-wheel-1', v3(0.75, b.part(deck).position.y + dy, -0.175), v3(0, 0, -1), 'mirror');
 }
 
+/** Boulder wheels hung from deck-panel outriggers: a 2.5 m track instead of the deck's 1.5 m, so turns stay upright. */
+function outriggerWheels(b: Builder, at: [number, number][]) {
+  for (const [deck, dy] of at) {
+    const y = b.part(deck).position.y + dy;
+    const panel = b.surface(deck, 'panel-1', v3(0.75, y, -0.175), v3(0, 0, -1), 'mirror');
+    // The mirrored panel takes its copy of the wheel automatically.
+    b.surface(panel, 'rover-wheel-1', v3(1.25, y, -0.255), v3(0, 0, -1), 'mirror');
+  }
+}
+
 /** Hover test rig: four throttleable radial engines, sturdy legs and floodlamps. */
 export function buildCricket(catalog: PartCatalog = PART_CATALOG): CraftDef {
-  const b = new Builder(catalog, 'Cricket Hopper', 'Crewed hover rig. Throttle to about 60 % to hang in the air, nudge sideways and set down on the legs.');
+  const b = new Builder(catalog, 'Cricket Hopper', 'Crewed hover rig. Throttle to about 45 % to hang in the air, lean to drift and set down on the legs.');
   const pod = b.root('pod-lantern-1');
   b.stack(pod, 'chute-main', 'top');
   const tank = b.stack(pod, 'tank-1-mid');
