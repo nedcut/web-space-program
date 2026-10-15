@@ -43,11 +43,13 @@ describe('launch stability advisory', () => {
     expect(preflightChecks(tail, PART_CATALOG).some(c => c.id === 'aero')).toBe(true);
   });
   it('audits every stock craft with editor stage readouts; remaining advisories identify missing parachutes or low Earth TWR', () => {
-    const withoutChutes = ['stock-swift', 'stock-hearthlight', 'stock-longreach', 'stock-daybreak', 'stock-alembic'];
+    const withoutChutes = ['stock-swift', 'stock-hearthlight', 'stock-longreach', 'stock-daybreak', 'stock-alembic', 'stock-skipjack', 'stock-sandpiper'];
+    // Rovers drive on their wheels: no engine at all.
+    const wheelsOnly = ['stock-sandpiper', 'stock-trekker'];
     for (const stock of STOCK_CRAFTS) {
       const c = stock.build();
       const first = computeStageStats(c, PART_CATALOG, new Universe(stock.scale).body('earth')).get(0);
-      const expected = [...(c.type === 'VAB' && first && first.twrAsl < 1 ? ['twr'] : []), ...(withoutChutes.includes(stock.id) ? ['chute'] : [])];
+      const expected = [...(wheelsOnly.includes(stock.id) ? ['first-engine'] : []), ...(c.type === 'VAB' && first && first.twrAsl < 1 ? ['twr'] : []), ...(withoutChutes.includes(stock.id) ? ['chute'] : [])];
       expect(preflightChecks(c, PART_CATALOG, first).map(c => c.id), stock.id).toEqual(expected);
       if (expected.includes('twr')) expect(first!.twrAsl).toBeLessThan(1);
       if (withoutChutes.includes(stock.id)) expect(c.parts.some(p => PART_CATALOG.get(p.partId)!.modules.some(m => m.type === 'parachute'))).toBe(false);
