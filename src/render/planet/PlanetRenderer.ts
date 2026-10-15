@@ -442,6 +442,10 @@ export class PlanetRenderer {
     const crx = cam.position.x - bx, cry = cam.position.y - by, crz = cam.position.z - bz;
     const camDist2 = crx * crx + cry * cry + crz * crz;
     const camDist = Math.sqrt(camDist2);
+    if (this.imagery) {
+      // Preserve the local pad/scatter material on the ground; fade in the regional view during liftoff.
+      this.imagery.uniforms.uEarthRegionView.value = camDist < R * 1.16 ? THREE.MathUtils.smoothstep(camDist - R, 50, 150) : 0;
+    }
     u.uPlanetCenter.value.set(bx, by, bz);
     u.uCamRel.value.set(crx, cry, crz);
     const Ra = this.atmosphere?.atmosphereRadius ?? R;

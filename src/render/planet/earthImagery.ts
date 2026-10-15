@@ -221,6 +221,8 @@ export interface EarthImageryUniforms {
   uEarthRegionDay: THREE.IUniform<THREE.Texture>;
   uEarthRegionNight: THREE.IUniform<THREE.Texture>;
   uEarthRegionOn: THREE.IUniform<number>;
+  /** Camera range weight; supplied by the existing planet update. */
+  uEarthRegionView: THREE.IUniform<number>;
   uEarthUrbanDetail: THREE.IUniform<THREE.Texture>;
   /** 1 once real imagery is bound. */
   uEarthImagery: THREE.IUniform<number>;
@@ -285,6 +287,7 @@ export class EarthImagery {
       uEarthRegionDay: { value: placeholder(true) },
       uEarthRegionNight: { value: placeholder(false) },
       uEarthRegionOn: { value: 0 },
+      uEarthRegionView: { value: 1 },
       uEarthUrbanDetail: { value: placeholder(false) },
       uEarthImagery: { value: 0 },
       uEarthNightOn: { value: 0 },

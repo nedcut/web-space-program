@@ -1279,3 +1279,23 @@ Owner decisions 2026-10-13 (both recommended options).
 - Bump the regional asset directory to `gulf-v2` so Cache Storage cannot serve the
   old footprint/detail under new shader semantics. No additional per-frame CPU work.
 - Visual/performance acceptance is still in progress; see the round-two handoff.
+- Round-two shader cost: use a bounded polynomial projection in the Gulf instead of
+  vertex atan/asin (Chebyshev interpolation of atan(t)/t over t² = 0..0.58² and
+  asin(z + 0.38) over z = -0.26..0.24). Other directions retain spherical projection.
+  A real WebGL Float32 transform-feedback check against exact spherical UVs at
+  16,261 Gulf positions measured at most 0.141 m error on Standard Earth.
+- Canopy detail fades from 3–10 km; local roof/street detail fades with its projected
+  footprint and stops sampling once unresolved. Full regional coverage beyond
+  10 km bypasses the old terrain colour/normal work that it overwrites. Keep full
+  regional colour to 0.12 Earth radii, then blend out by 0.16 radii (76–102 km on
+  Standard), avoiding a large band that shades both global and regional detail.
+- The existing planet update supplies one allocation-free camera range weight:
+  regional shading fades in at 50–150 m camera altitude, preserving pad/scatter
+  material below that range, and is rejected beyond the regional distance limit.
+  Per-fragment 250–750 m local-material blending remains. All requested 0.5–30 km
+  views receive full camera weight. This does not alter simulation or map rendering.
+- GPU acceptance uses alternating baseline/current shader pairs in a frozen production
+  scene. Warm the GPU at batch throughput after each F8 window before collecting
+  timer queries; otherwise initial query samples include clock ramp-up. The final
+  table uses eight balanced rounds, twenty 30-draw samples per variant. Acceptance
+  remains pending until the final four-scene run completes.

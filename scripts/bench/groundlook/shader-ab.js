@@ -18,7 +18,7 @@
   const draw = () => p.render(f.scene, f.cam.camera);
   window.__perf.reset(); window.__perf.enabled = true;
   try {
-    for (const version of ['before','after','after','before','before','after']) {
+    for (const version of ['before','after','after','before','after','before','before','after']) {
       for (const m of materials) {
         m.fragmentShader = version === 'before' ? window.__groundlookBaseline : originals.get(m).fragment;
         m.vertexShader = version === 'before' ? window.__groundlookVertex : originals.get(m).vertex;
@@ -29,6 +29,10 @@
       window.__perf.reset();
       await sleep(1500);
       const f8 = window.__perf.summary();
+      // Warm at batch throughput after the ordinary-rendering F8 window: otherwise the
+      // first timer queries include GPU clock ramp-up after the vsync-limited loop.
+      for (let i=0;i<120;i++) draw();
+      gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);
       const samples = [];
       for (let j=0;j<5;j++) {
         draw(); gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);
@@ -41,7 +45,7 @@
       }
       results.push({version,samples,f8});
     }
-    return {results, region: [...materials][0].uniforms.uEarthRegionOn.value};
+    return {results, region: [...materials][0].uniforms.uEarthRegionOn.value, regionView: [...materials][0].uniforms.uEarthRegionView?.value, canvas: [r.domElement.width, r.domElement.height], resolution: p.plan};
   } finally {
     for (const m of materials) { m.fragmentShader = originals.get(m).fragment; m.vertexShader = originals.get(m).vertex; m.needsUpdate = true; }
     f.paused = paused; p.gpuTimer = timer;

@@ -103,7 +103,7 @@ for (let t=0; t<tileSize; t++) for (let j=-2; j<=2; j++) {
   paint((bend+470+j)%tileSize,t,55,random() > 0.4 ? Math.round(50+random()*100) : 0,230);
 }
 await save('urban-detail.webp', await sharp(tile, {raw:{width:tileSize,height:tileSize,channels:4}}).webp({lossless:true,effort:6}).toBuffer());
-await save('manifest.json', Buffer.from(JSON.stringify({version:1,width,height,bounds,
+await save('manifest.json', Buffer.from(JSON.stringify({version:2,width,height,bounds,
   projection:'EPSG:4326, pixel centres, rows north to south',
   description:'Static NASA GIBS Blue Marble Next Generation regional colour; 2016 Black Marble lights; Natural Earth 5.1.2 urban polygons. Street and land-cover detail in the game is illustrative, not surveyed.',
-  channels:{urban:'soft urban coverage times (0.2 + 0.8 * night luminance ^ 0.8); merged into day alpha at runtime',night:'Black Marble luminance',urbanDetail:{r:'roof tone',g:'lamps',b:'built fraction',a:'neighbourhood density'}},urbanDetail:'Original procedural 2048px tile; not surveyed streets or buildings',sources,files},null,2)+'\n'));
+  channels:{urban:'soft urban coverage times (0.2 + 0.8 * night luminance ^ 0.8), limited by imagery land colour; merged into day alpha at runtime',night:'Black Marble luminance',urbanDetail:{r:'roof tone',g:'lamps',b:'built fraction',a:'neighbourhood density'}},urbanDetail:'Original procedural 2048px tile; not surveyed streets or buildings',sources,files},null,2)+'\n'));

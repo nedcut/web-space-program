@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "width": 4096,
   "height": 2560,
   "bounds": {
@@ -11,7 +11,7 @@
   "projection": "EPSG:4326, pixel centres, rows north to south",
   "description": "Static NASA GIBS Blue Marble Next Generation regional colour; 2016 Black Marble lights; Natural Earth 5.1.2 urban polygons. Street and land-cover detail in the game is illustrative, not surveyed.",
   "channels": {
-    "urban": "soft urban coverage times (0.2 + 0.8 * night luminance ^ 0.8); merged into day alpha at runtime",
+    "urban": "soft urban coverage times (0.2 + 0.8 * night luminance ^ 0.8), limited by imagery land colour; merged into day alpha at runtime",
     "night": "Black Marble luminance",
     "urbanDetail": {
       "r": "roof tone",

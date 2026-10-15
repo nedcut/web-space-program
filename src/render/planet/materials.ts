@@ -8,7 +8,7 @@ import { getDetailTexture } from './textures';
 import { GLSL_CUTOUT, type TerrainCutoutUniforms } from './cutout';
 import { GLSL_EARTH_IMAGERY, type EarthImageryUniforms } from './earthImagery';
 import { GLSL_CRATERS } from './craters';
-import { GLSL_EARTH_GROUND } from './earthGround';
+import { GLSL_EARTH_GROUND, GLSL_EARTH_REGION_UV } from './earthGround';
 
 /** Surface lighting shared by terrain / far sphere: Lambert ↔ Lommel–Seeliger (airless regolith). */
 const GLSL_SHADE = /* glsl */ `
@@ -317,6 +317,8 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       uniform sampler2D uEarthDay;
       uniform float uEarthImagery;
       uniform float uEarthRegionOn;
+      uniform float uEarthRegionView;
+      ${GLSL_EARTH_REGION_UV}
       varying float vCovered;
       varying vec2 vGroundCoord;
       #endif
@@ -336,15 +338,22 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           vCovered = 0.0;
           vec3 relV = wp.xyz - uPlanetCenter;
           float hV = length(relV) - uPlanetRadius;
-          vec3 nV = normalize(transpose(uBodyRot) * relV);
-          vec2 uvV = vec2(atan(nV.y, nV.x) * (0.5 / ATMO_PI) + 0.5, 0.5 - asin(clamp(nV.z, -1.0, 1.0)) / ATMO_PI);
-          // The patch never crosses the antimeridian. Reject that hemisphere before interpolation.
-          vGroundCoord = nV.x > -0.5 ? (uvV - vec2(80.0 / 360.0, 55.0 / 180.0)) * vec2(9.0, 7.2) : vec2(-10.0);
           #ifdef EARTH_RICH
             const float COAST_TEST = 1200.0; // coast sky reflection needs the mask above the datum too
           #else
             const float COAST_TEST = -10.0;  // only the covered test: land vertices skip the lookup
           #endif
+          bool regionNear = uEarthRegionOn > 0.5 && uEarthRegionView > 0.0;
+          vGroundCoord = vec2(-10.0);
+          vec2 uvV = vec2(0.0);
+          if (regionNear || (uEarthImagery > 0.5 && hV < COAST_TEST)) {
+            vec3 nV = normalize(transpose(uBodyRot) * relV);
+            bool gulf = nV.y < -0.7 && abs(nV.x / nV.y) < 0.58 && nV.z > 0.12 && nV.z < 0.62;
+            uvV = regionNear && gulf ? earthRegionProjection(nV)
+              : vec2(atan(nV.y, nV.x) * (0.5 / ATMO_PI) + 0.5, 0.5 - asin(clamp(nV.z, -1.0, 1.0)) / ATMO_PI);
+            // Reject date-line triangles before interpolating the regional coordinates.
+            if (regionNear && nV.x > -0.5) vGroundCoord = (uvV - vec2(80.0 / 360.0, 55.0 / 180.0)) * vec2(9.0, 7.2);
+          }
           if (uEarthImagery > 0.5 && hV < COAST_TEST) {
             vec4 coarse = textureLod(uEarthDay, uvV, 5.0);
             float waterNear = coarse.a;
@@ -426,19 +435,23 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         ${GLSL_LOGDEPTH_FRAG}
         vec3 rel = vWorldPos - uPlanetCenter;
         #ifdef EARTH_IMAGERY
-          // Regional geography persists close up. Take direction derivatives before any terrain discard;
-          // analytic UV gradients keep later regional branches independent of texture derivative control flow.
+          // Gradients are computed before any discard. The regional interior does not need
+          // per-fragment spherical coordinates or the global imagery's direction derivatives.
+          EarthUV eUV;
+          EarthUV regionUV;
+          regionUV.uv = vGroundCoord;
+          regionUV.dx = vec2(0.0); regionUV.dy = vec2(0.0);
+          float regionW = 0.0;
+          if (uEarthRegionView > 0.0) {
+            regionUV.dx = dFdx(vGroundCoord); regionUV.dy = dFdy(vGroundCoord);
+            regionW = earthRegionWeight(regionUV, length(cameraPosition - vWorldPos));
+          }
           vec3 nDir = vec3(0.0, 0.0, 1.0), nDx = vec3(0.0), nDy = vec3(0.0);
-          bool imgUsed = uEarthImagery > 0.5 && (length(cameraPosition - vWorldPos) > uEarthBlend.x * 0.9 || dot(rel, uSunDir) < 0.04 * length(rel));
-          if (imgUsed) {
+          bool imgUsed = uEarthImagery > 0.5 && (regionW > 0.0 || length(cameraPosition - vWorldPos) > uEarthBlend.x * 0.9 || dot(rel, uSunDir) < 0.04 * length(rel));
+          if (imgUsed && regionW < 1.0) {
             nDir = normalize(transpose(uBodyRot) * rel);
             nDx = dFdx(nDir); nDy = dFdy(nDir);
           }
-          EarthUV eUV;
-          EarthUV regionUV;
-          regionUV.uv = vGroundCoord.xy;
-          regionUV.dx = dFdx(vGroundCoord.xy); regionUV.dy = dFdy(vGroundCoord.xy);
-          float regionW = 0.0;
           float urbanDensity = 0.0;
           float roads = 0.0;
         #endif
@@ -452,12 +465,6 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         #endif
         vec3 toCam = cameraPosition - vWorldPos;
         float dist = length(toCam);
-        #ifdef EARTH_IMAGERY
-          // Covered seafloor has already returned: never pay for spherical UVs or region tests there.
-          // The vertex mask also rejects date-line triangles on the opposite hemisphere.
-          regionW = earthRegionWeight(regionUV, dist);
-          if (regionW > 0.0) imgUsed = true;
-        #endif
         vec3 V = toCam / dist;
         vec3 nBF = normalize(vNormalBF);
         vec3 N = normalize(uBodyRot * nBF);
@@ -466,11 +473,16 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         vec3 albedo = vColor;
         float rockT = smoothstep(0.18, 0.42, slope) * uRockBlend;
         #ifdef USE_DETAIL
+          float hd = 0.0;
+          #ifdef EARTH_IMAGERY
+          // At this distance regional imagery owns the colour; canopy and local normals are zero.
+          if (regionW < 1.0 || dist < 10000.0)
+          #endif
+          {
           vec3 w = abs(nBF); w = pow(w, vec3(4.0)); w /= (w.x + w.y + w.z);
           float f1 = 1.0 - smoothstep(60.0, 400.0, dist);
           float f2 = 1.0 - smoothstep(500.0, 3000.0, dist);
           float f3 = 1.0 - smoothstep(6000.0, 40000.0, dist);
-          float hd = 0.0;
           float cover = 0.5;
           vec3 g = vec3(0.0);
           // Three octaves. vDetail repeats every 1024 m, so the coarse pair would show a 256 m tile 20+ times from
@@ -495,11 +507,15 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             if (regionW > 0.0) {
               // Satellite imagery supplies the coarse structure: one canopy fetch replaces six triplanar taps.
               // Fade both colour and normals continuously at the pack boundary.
-              vec2 scale = vec2(0.618, 0.4363) * (uPlanetRadius / 263.0);
-              vec4 s = textureGrad(uDetailTex, regionUV.uv * scale, regionUV.dx * scale, regionUV.dy * scale);
+              float canopy = 1.0 - smoothstep(3000.0, 10000.0, dist);
+              vec4 s = vec4(0.5);
+              if (canopy > 0.0) {
+                vec2 scale = vec2(0.618, 0.4363) * (uPlanetRadius / 263.0);
+                s = textureGrad(uDetailTex, regionUV.uv * scale, regionUV.dx * scale, regionUV.dy * scale);
+              }
               sMid = mix(sMid, s, regionW);
               cover = mix(cover, s.a, regionW);
-              hd = mix(hd, (s.r - 0.5) * f3, regionW);
+              hd = mix(hd, (s.r - 0.5) * canopy, regionW);
               g *= 1.0 - regionW;
             }
             #endif
@@ -524,6 +540,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           vec3 gt = g - dot(g, nBF) * nBF;
           nBF = normalize(nBF - gt * 1.6 * uDetailStrength);
           N = normalize(uBodyRot * nBF);
+          }
         #endif
         #ifdef CRATER_DETAIL
           if (dist < 3200.0) {
@@ -547,7 +564,6 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             // atan/asin at close range; terrain subdivision keeps their error below the ~1 km source texel.
             eUV.uv = regionUV.uv / vec2(9.0, 7.2) + vec2(80.0 / 360.0, 55.0 / 180.0);
             eUV.dx = regionUV.dx / vec2(9.0, 7.2); eUV.dy = regionUV.dy / vec2(9.0, 7.2);
-            nDir = normalize(transpose(uBodyRot) * rel);
           } else if (imgUsed) eUV = earthUVd(nDir, nDx, nDy);
             // Interior land needs only the merged regional colour/urban fetch. At patch/coast edges
             // retain the global water and seasonal blend, preserving the original ocean contract.
@@ -567,7 +583,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             #endif
             float distantImagery = smoothstep(uEarthBlend.x, uEarthBlend.y, dist);
             // The regional pack supplies colour, not a new water surface on the coarse launch/coast grid.
-            waterW = earthCoast(earthWater(dayW.a, dayW.rgb), eUV) * distantImagery;
+            if (distantImagery > 0.0) waterW = earthCoast(earthWater(dayW.a, dayW.rgb), eUV) * distantImagery;
             if (waterW > 0.0) img = mix(img, earthWaterAlbedo(c), waterW);
             float landImagery = max(regionW, wImg * (1.0 - dayW.a * (1.0 - distantImagery)));
             albedo = mix(albedo, img, landImagery);
@@ -580,6 +596,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         #ifdef EARTH_IMAGERY
           // Coasts follow the imagery from altitude: water the terrain mesh still has above its datum.
           if (waterW > 0.0) {
+            nDir = transpose(uBodyRot) * up;
             vec3 sunT = sunTransmittance(rel) * cloudShadow(rel);
             vec3 skyAmb = skyAmbient(rel, up);
             #ifdef EARTH_RICH
