@@ -1,7 +1,7 @@
 /** Flight terrain only. Regional imagery is north-first, matching the global EarthUV contract. */
 export const GLSL_EARTH_GROUND = /* glsl */ `
 uniform sampler2D uEarthRegionDay;
-uniform sampler2D uEarthRegionData;
+uniform sampler2D uEarthRegionNight;
 uniform float uEarthRegionOn;
 uniform sampler2D uEarthUrbanDetail;
 float earthRegionWeight(EarthUV r, float dist) {

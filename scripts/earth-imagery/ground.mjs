@@ -50,13 +50,11 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${
 const u = await sharp(Buffer.from(svg)).removeAlpha().extractChannel(0).raw().toBuffer();
 const n = await sharp(night).removeAlpha().greyscale().raw().toBuffer();
 const rgb = await sharp(day).removeAlpha().raw().toBuffer();
-const data = Buffer.alloc(width*height*3);
-for (let i=0; i<width*height; i++) {
-  // No coast/height override: regional green is unused; alpha is kept opaque to avoid premultiplication.
-  data[3*i]=u[i]; data[3*i+1]=0; data[3*i+2]=n[i];
-}
+const density = Buffer.alloc(width*height);
+for (let i=0; i<width*height; i++) density[i] = Math.round(u[i] * (0.5 + n[i] / 510));
 await save('day.webp', await sharp(rgb,{raw:{width,height,channels:3}}).webp({quality:90,effort:6}).toBuffer());
-await save('settlements.webp', await sharp(data,{raw:{width,height,channels:3}}).webp({lossless:true,effort:6}).toBuffer());
+await save('urban.webp', await sharp(density,{raw:{width,height,channels:1}}).webp({lossless:true,effort:6}).toBuffer());
+await save('night.webp', await sharp(n,{raw:{width,height,channels:1}}).webp({lossless:true,effort:6}).toBuffer());
 // Original repeating urban detail: roofs, green yards and intermittent street lamps. Hardware mips
 // average sub-pixel buildings/lamps without per-fragment grid hashes or analytic filtering.
 const tileSize = 256, tile = Buffer.alloc(tileSize * tileSize * 3);
@@ -77,4 +75,4 @@ await save('urban-detail.webp', await sharp(tile, {raw:{width:tileSize,height:ti
 await save('manifest.json', Buffer.from(JSON.stringify({version:1,width,height,bounds,
   projection:'EPSG:4326, pixel centres, rows north to south',
   description:'Static NASA GIBS Blue Marble Next Generation regional colour; 2016 Black Marble lights; Natural Earth 5.1.2 urban polygons. Street and land-cover detail in the game is illustrative, not surveyed.',
-  channels:{settlements:{r:'urban fraction',g:'reserved',b:'Black Marble luminance'},urbanDetail:{r:'roof tone',g:'lamps',b:'built fraction'}},urbanDetail:'Original procedural 256px tile; not surveyed streets or buildings',sources,files},null,2)+'\n'));
+  channels:{urban:'urban fraction times (0.5 + 0.5 * night luminance); merged into day alpha at runtime',night:'Black Marble luminance',urbanDetail:{r:'roof tone',g:'lamps',b:'built fraction'}},urbanDetail:'Original procedural 256px tile; not surveyed streets or buildings',sources,files},null,2)+'\n'));

@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import type { ImageStrips } from '../src/render/planet/imageStrips';
@@ -32,7 +32,7 @@ async function advance(imagery: { step(r: THREE.WebGLRenderer): void }, frames =
   for (let i = 0; i < frames; i++) { await new Promise(r => setTimeout(r, 0)); imagery.step(renderer); }
 }
 
-afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); vi.clearAllMocks(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); vi.clearAllMocks(); vi.restoreAllMocks(); });
 
 it('streams the regional textures after the global level, then rebuilds them after context loss', async () => {
   const { imagery } = await setup();
@@ -40,9 +40,9 @@ it('streams the regional textures after the global level, then rebuilds them aft
   expect(imagery.uniforms.uEarthRegionOn.value).toBe(1);
   expect(imagery.levelId).toBe('8k');
   const day = imagery.uniforms.uEarthRegionDay.value;
-  const dispose = vi.spyOn(day, 'dispose');
+  const dispose = vi.spyOn(THREE.WebGLRenderTarget.prototype, 'dispose');
   imagery.restoreContext();
-  expect(dispose).toHaveBeenCalledOnce();
+  expect(dispose.mock.contexts.some(target => target instanceof THREE.WebGLRenderTarget && target.texture === day)).toBe(true);
   expect(imagery.uniforms.uEarthRegionOn.value).toBe(0);
   await advance(imagery);
   expect(imagery.uniforms.uEarthRegionOn.value).toBe(1);
@@ -57,7 +57,7 @@ it('retains global imagery when the optional pack is unavailable without repeate
   expect(imagery.ready).toBe(true);
   expect(imagery.uniforms.uEarthImagery.value).toBe(1);
   expect(imagery.uniforms.uEarthRegionOn.value).toBe(0);
-  expect(fetcher.mock.calls.filter(([url]) => url.includes('gulf-v1'))).toHaveLength(3);
+  expect(fetcher.mock.calls.filter(([url]) => url.includes('gulf-v1'))).toHaveLength(4);
   imagery.dispose();
 });
 
@@ -78,13 +78,13 @@ it('releases a pending pack after disposal and never binds its late result', asy
     return strips();
   });
   await advance(imagery);
-  expect(pending).toHaveLength(3);
+  expect(pending).toHaveLength(4);
   imagery.dispose();
   pending.forEach(r => r());
   await advance(imagery, 4);
   expect(imagery.uniforms.uEarthRegionOn.value).toBe(0);
-  // Three global images plus the three late regional images each relinquish their decoded data.
-  expect(decoded.release).toHaveBeenCalledTimes(6);
+  // Three global images plus the four late regional images each relinquish their decoded data.
+  expect(decoded.release).toHaveBeenCalledTimes(7);
 });
 
 it('ships the exact derivatives recorded in the regional provenance manifest', () => {

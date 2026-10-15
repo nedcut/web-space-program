@@ -1220,3 +1220,9 @@ Owner decisions 2026-10-13 (both recommended options).
 - Regional imagery fades in from 250–750 m viewing distance, preserving local pad/
   scatter detail below that range. The small urban tile uses a diffuse city glow plus
   brighter intermittent lamps; night brightness is illustrative, not calibrated radiance.
+- Final packing: merge regional colour with urban density in alpha using the existing
+  frame-budgeted sRGB merge pass; keep regional night light luminance in an R8 texture.
+  Interior land takes one regional fetch (global colour/water is only needed at blend
+  boundaries), and the night map is sampled only on the night side. This reduces
+  steady regional GPU storage from about 107 MiB to 67 MiB including mipmaps. Urban
+  edge coverage and core density share the alpha channel and are visual approximations.

@@ -441,7 +441,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           regionUV.uv = vGroundCoord.xy;
           regionUV.dx = dFdx(vGroundCoord.xy); regionUV.dy = dFdy(vGroundCoord.xy);
           float regionW = 0.0;
-          vec3 settlement = vec3(0.0);
+          float urbanDensity = 0.0;
           float roads = 0.0;
         #endif
         #ifdef USE_CUTOUT
@@ -551,11 +551,14 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             eUV.dx = regionUV.dx / vec2(9.0, 7.2); eUV.dy = regionUV.dy / vec2(9.0, 7.2);
             nDir = normalize(transpose(uBodyRot) * rel);
           } else if (imgUsed) eUV = earthUVd(nDir, nDx, nDy);
-            vec4 dayW = earthTex(uEarthDay, eUV);
+            // Interior land needs only the merged regional colour/urban fetch. At patch/coast edges
+            // retain the global water and seasonal blend, preserving the original ocean contract.
+            vec4 dayW = regionW >= 1.0 ? vec4(0.0) : earthTex(uEarthDay, eUV);
             vec3 c = dayW.rgb;
             if (regionW > 0.0) {
-              c = mix(c, textureGrad(uEarthRegionDay, regionUV.uv, regionUV.dx, regionUV.dy).rgb, regionW);
-              settlement = textureGrad(uEarthRegionData, regionUV.uv, regionUV.dx, regionUV.dy).rgb;
+              vec4 regional = textureGrad(uEarthRegionDay, regionUV.uv, regionUV.dx, regionUV.dy);
+              c = mix(c, regional.rgb, regionW);
+              urbanDensity = regional.a;
             }
             vec3 img = earthAlbedo(c);
             #ifdef USE_DETAIL
@@ -563,7 +566,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
               if (regionW > 0.0) {
                 vec2 p = regionUV.uv * vec2(0.618, 0.4363) * uPlanetRadius;
                 vec2 footprint = (abs(regionUV.dx) + abs(regionUV.dy)) * vec2(0.618, 0.4363) * uPlanetRadius;
-                img = mix(img, earthGroundColour(img, settlement.r, settlement.b, p, footprint, cover, hd, regionUV.dx * vec2(0.618, 0.4363) * uPlanetRadius, regionUV.dy * vec2(0.618, 0.4363) * uPlanetRadius, roads), regionW);
+                img = mix(img, earthGroundColour(img, smoothstep(0.02, 0.5, urbanDensity), max(0.0, urbanDensity * 2.0 - 1.0), p, footprint, cover, hd, regionUV.dx * vec2(0.618, 0.4363) * uPlanetRadius, regionUV.dy * vec2(0.618, 0.4363) * uPlanetRadius, roads), regionW);
               }
             #endif
             float distantImagery = smoothstep(uEarthBlend.x, uEarthBlend.y, dist);
@@ -604,7 +607,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           col += lightsImg * (1.0 - streets) * (1.0 - waterW) * (1.0 - regionW);
           if (regionW > 0.0 && uEarthNightOn > 0.5 && sunAlt < 0.025) {
             float night = 1.0 - smoothstep(-0.11, 0.025, sunAlt);
-            float s = settlement.b;
+            float s = textureGrad(uEarthRegionNight, regionUV.uv, regionUV.dx, regionUV.dy).r;
             float glow = s * s * (0.35 + 0.65 * s);
             vec3 tint = mix(vec3(1.0, 0.52, 0.2), vec3(1.0, 0.8, 0.58), s);
             // Mapped brightness locates the cores; filtered roads break up resolved urban footprints.
