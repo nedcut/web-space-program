@@ -66,36 +66,53 @@ function engineLength(owner: THREE.Object3D, toFrame: THREE.Matrix4, p: THREE.Ve
   return len;
 }
 
+/** Streak hash lattice: 29 cells around the axis (index 29 wraps to 0), one table per seed. */
+function streakTable(seed: number): Float64Array {
+  const t = new Float64Array(30);
+  for (let k = 0; k < 30; k++) {
+    const v = Math.sin(((k % 29) + 1) * 127.1 + seed * 311.7) * 43758.5453;
+    t[k] = v - Math.floor(v);
+  }
+  return t;
+}
+const STREAK_3 = streakTable(3), STREAK_7 = streakTable(7);
+
 /** Angular streak noise around the plume axis, 0..1. */
-function streak(phi: number, seed: number): number {
-  const h = (k: number) => {
-    const v = Math.sin(((((k % 29) + 29) % 29) + 1) * 127.1 + seed * 311.7) * 43758.5453;
-    return v - Math.floor(v);
-  };
+function streak(phi: number, h: Float64Array): number {
   const x = ((phi / (2 * Math.PI)) % 1 + 1) % 1 * 29;
   const i = Math.floor(x), f = x - i, t = f * f * (3 - 2 * f);
-  return h(i) * (1 - t) + h(i + 1) * t;
+  return h[i] * (1 - t) + h[i + 1] * t;
 }
 
-/** Soot at a craft-frame point with normal n from one source (0..1, before amplitude). */
-function sootAt(s: Source, x: THREE.Vector3, n: THREE.Vector3): number {
+/** Below this a source's contribution is ignored; LN_CUT bounds the exponents that guarantee it. */
+const CUT = 1e-3;
+const LN_CUT = 7; // exp(-7) ≈ 9.1e-4 < CUT
+
+/**
+ * Soot at a craft-frame point from one source (0..1, before amplitude). The normal is only needed past the
+ * cutoff, so `normal()` is called lazily; 0 is returned without evaluating exponentials whenever the
+ * contribution is provably below CUT (the caller would discard it anyway).
+ */
+function sootAt(s: Source, x: THREE.Vector3, normal: () => THREE.Vector3): number {
   _v.subVectors(x, s.p);
   const a = _v.dot(s.d);
   _q.copy(_v).addScaledVector(s.d, -a);
   const rho = _q.length();
-  const facing = n.dot(s.d);
   if (a <= 0) {
     // full strength along the engine bay, decaying above it
     const h = Math.max(0, -a - s.len);
     const out = Math.max(0, rho - 1.15 * s.r);
+    if (h / (0.75 * s.r + 0.36) + out / (1.3 * s.r + 0.45) > LN_CUT) return 0;
     // far field fades out: the stage itself shields hardware well above its engine bay
     const k = Math.exp(-h / (0.75 * s.r + 0.36) - (h / (1.6 + s.r)) ** 4) * Math.exp(-out / (1.3 * s.r + 0.45));
-    return k * (0.85 + 0.15 * Math.max(0, facing));
+    return k * (0.85 + 0.15 * Math.max(0, normal().dot(s.d)));
   }
   // cone plus a near-field wall jet: exhaust hitting a surface close to the exit spreads radially along it
+  const wMax = s.r * 1.1 + a * 0.24 + (1.2 + 1.5 * s.r);
+  if (a / (7 * s.r + 2.5) + (rho / wMax) ** 2 > LN_CUT) return 0;
   const w = s.r * 1.1 + a * 0.24 + (1.2 + 1.5 * s.r) * Math.exp(-a / (2 * s.r + 0.4));
   const k = 0.8 * Math.exp(-a / (7 * s.r + 2.5)) * Math.exp(-((rho / w) ** 2));
-  return k * (0.4 + 0.6 * Math.max(0, -facing));
+  return k * (0.4 + 0.6 * Math.max(0, -normal().dot(s.d)));
 }
 
 /** Upper bound of a source's soot anywhere within a bounding sphere (for culling). */
@@ -163,19 +180,27 @@ export function prepareEngineSoot(parts: THREE.Object3D[], frame: THREE.Object3D
         _n.getNormalMatrix(_m);
         const pos = mesh.geometry.getAttribute('position');
         const nor = mesh.geometry.getAttribute('normal');
+        let vi = 0, nReady = false;
+        const normal = () => {
+          if (!nReady) {
+            if (nor) n.fromBufferAttribute(nor, vi).applyMatrix3(_n).normalize();
+            else n.set(0, 0, 0);
+            nReady = true;
+          }
+          return n;
+        };
         const dark = new Float32Array(pos.count);
         let any = false;
         for (let i = 0; i < pos.count; i++) {
           x.fromBufferAttribute(pos, i).applyMatrix4(_m);
-          if (nor) n.fromBufferAttribute(nor, i).applyMatrix3(_n).normalize();
-          else n.set(0, 0, 0);
+          vi = i; nReady = false;
           let keep = 1;
           for (const s of near) {
-            const k = sootAt(s, x, n);
-            if (k < 1e-3) continue;
+            const k = sootAt(s, x, normal);
+            if (k < CUT) continue;
             // streaks: angular noise around the plume axis (sootAt leaves the radial offset in _q)
             const phi = Math.atan2(_q.dot(s.w), _q.dot(s.u));
-            const st = 0.45 + 0.8 * streak(phi, 3) * (0.55 + 0.45 * streak(phi * 2.7, 7));
+            const st = 0.45 + 0.8 * streak(phi, STREAK_3) * (0.55 + 0.45 * streak(phi * 2.7, STREAK_7));
             keep *= 1 - Math.min(1, s.amp * k * st);
           }
           const v = Math.min(0.9, 1 - keep);

@@ -110,7 +110,9 @@ export class RenderPipeline {
     const tier = classifyGpu(this.gpuName);
     const start = resolutionPlan(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, opts.quality, 1, false, 1);
     const reduced = start.lod > start.internal * 1.2;
-    this.adaptive.scale = tier === 'strong' ? 1 : tier === 'mid' ? (reduced ? 1 : 0.75) : 0.6;
+    // Low already halves the render scale for weak GPUs; a further 0.6 started flight at ~0.3× although such GPUs
+    // hold 60 fps at Low's own scale (Intel HD 520: ~9 ms GPU at 720p), and climbing back took ~15 s.
+    this.adaptive.scale = tier === 'strong' ? 1 : tier === 'mid' ? (reduced ? 1 : 0.75) : opts.quality.renderScale <= 0.5 ? 1 : 0.6;
     this.buildComposer();
   }
 
@@ -310,6 +312,9 @@ export class RenderPipeline {
     if (this.adaptive.update(frameMs, enabled, gpu, this.cpuMs)) this.setSize(this.width, this.height);
     this.frameStart = performance.now();
   }
+
+  /** Ignore frame timings for the next `ms` of frames (loading, a known stall): they are not sustained load. */
+  holdAdaptive(ms: number): void { this.adaptive.hold(ms); }
 
   /** Adaptive resolution multiplier (1 = no adaptive reduction; the preset's Retina scale is separate). */
   get adaptiveScale(): number { return this.adaptive.scale; }

@@ -95,10 +95,6 @@ function bakeGroup(entries: Entry[], strength: number) {
   const ox = box.min.x - 3 * cell, oy = box.min.y - 3 * cell, oz = box.min.z - 3 * cell;
   const grid = new Uint8Array(nx * ny * nz);
   const inv = 1 / cell;
-  const mark = (x: number, y: number, z: number) => {
-    const i = Math.floor((x - ox) * inv), j = Math.floor((y - oy) * inv), k = Math.floor((z - oz) * inv);
-    grid[(k * ny + j) * nx + i] = 1;
-  };
 
   // Rasterise occluding triangles by barycentric sampling at under a cell's spacing.
   entries.forEach((e, ei) => {
@@ -114,11 +110,15 @@ function bakeGroup(entries: Entry[], strength: number) {
       const acx = p[c] - p[a], acy = p[c + 1] - p[a + 1], acz = p[c + 2] - p[a + 2];
       const l = Math.max(Math.hypot(abx, aby, abz), Math.hypot(acx, acy, acz), Math.hypot(abx - acx, aby - acy, abz - acz));
       const n = Math.min(600, Math.max(1, Math.ceil(l / (cell * 0.6))));
-      for (let i = 0; i <= n; i++)
+      for (let i = 0; i <= n; i++) {
+        // Same sums as p[a] + ab·u + ac·v (left to right), with the row's first term hoisted.
+        const u = i / n, rx = p[a] + abx * u, ry = p[a + 1] + aby * u, rz = p[a + 2] + abz * u;
         for (let j = 0; i + j <= n; j++) {
-          const u = i / n, v = j / n;
-          mark(p[a] + abx * u + acx * v, p[a + 1] + aby * u + acy * v, p[a + 2] + abz * u + acz * v);
+          const v = j / n;
+          const gi = Math.floor((rx + acx * v - ox) * inv), gj = Math.floor((ry + acy * v - oy) * inv), gk = Math.floor((rz + acz * v - oz) * inv);
+          grid[(gk * ny + gj) * nx + gi] = 1;
         }
+      }
     }
   });
 
