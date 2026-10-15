@@ -1196,3 +1196,8 @@ Owner decisions 2026-10-13 (both recommended options).
 - Keep this in flight terrain shading, with no map UI, simulation elevations, coastline
   geometry or launch-site edits. No 3D city instances: they would add streaming/draw cost.
   Reuse the imagery decoder and frame-budgeted strip upload, restore and disposal paths.
+- First real-GPU images rejected the initial bright, broad city grid and overexposed
+  night glow. Use small filtered roofs, green suburbs and Black Marble core density;
+  dim the diffuse glow and resolve narrow streets only while the footprint permits.
+  Inside the regional patch, one planar canopy fetch replaces six coarse triplanar
+  noise taps; retain the finer nearby normal detail and blend continuously at edges.
