@@ -71,8 +71,6 @@ Focused map checks: 27 tests across presentation, maneuver interaction and zoom 
 - `npm run build`: passed.
 - `git diff --check`: passed.
 
-Browser results are recorded below after completion.
-
 Evidence directory: `/home/nedcut/.t3/projects/wsp-traces/split2/`.
 The paired CDP harness is adapted from round one; only its artifact paths and the moved
 projection helper access changed. Both builds use the same main baseline and public
@@ -101,3 +99,47 @@ imagery streaming differ between captures.
 The final rebuild is byte-identical to the staged candidate in all 149 files
 (`final-build-identity.json`). Both served HTML entries and 85 hashed assets per build
 also match their saved builds over HTTP (`served-build-identity.json`).
+
+## Paired browser CPU and interactions
+
+`split2-paired-direct.mjs` completed successfully under `/tmp/wsp-gpu.lock` in one
+process, in baseline/candidate/baseline/candidate order. Each sample uses a fresh
+browser context, the same Medium settings and stock Selene route, then 12 seconds
+of collection. The table reports the final 240-frame ring buffer, about four seconds
+at the observed 60 Hz. Map is the orbit scenario; ascent uses the orbit assist and
+reaches about 1.73–1.74 km altitude. F8 instrumentation is enabled in both builds.
+
+| Pair / route | Mean CPU ms before → after | CPU p95 ms before → after | Draws before → after | GPU ms before → after |
+| --- | ---: | ---: | ---: | ---: |
+| 1 / map | 1.250 → 1.060 | 1.8 → 1.5 | 20 → 20 | 0.150 → 0.145 |
+| 1 / ascent | 2.460 → 4.142 | 3.6 → 6.7 | 120 → 120 | 1.624 → 1.611 |
+| 2 / map | 1.805 → 1.764 | 2.7 → 2.5 | 20 → 20 | 0.155 → 0.156 |
+| 2 / ascent | 4.217 → 3.997 | 6.6 → 6.2 | 120 → 120 | 1.627 → 1.703 |
+
+These data **do not establish CPU performance parity**. The first ascent pair is
+68.4% slower after; the second is 5.2% faster. Baseline CPU itself rises substantially
+between pairs, including unchanged simulation and render sections. Six concurrent
+career simulations were observed consuming roughly 120–127% CPU each during the
+later samples (`concurrent-cpu-load.txt`); shared-host CPU contention is a plausible
+confounder, despite exclusive browser/GPU access. A quiet-host comparison remains
+necessary to resolve small regressions. No claim of improvement is made. GPU values
+are the pipeline's smoothed timer readings at capture, not fenced paired GPU means.
+
+All eight recorded windows have zero >25 ms or >50 ms frame hitches, frame p95 of
+16.7–16.8 ms and no page errors. Draw counts are unchanged. An earlier interrupted
+run lost lock ownership and is excluded entirely; its files live under `interrupted/`.
+The completed run's raw rows and arithmetic are in `perf-pairs.log` and
+`perf-summary.json`; screenshots are under `C:\wsp-tools\shots\split2\` with
+`before-pair1`, `after`, `before-pair2` and `after-pair2` prefixes.
+
+The candidate additionally passes actual mouse/keyboard interaction checks: create a
+maneuver node, drag its prograde handle, slide its time, increment prograde with the
+keyboard, delete it, pin a periapsis marker, open its context menu, zoom, and retain
+Earth focus. The prograde drag gives 1.213 m/s, the time slide moves 54.162 seconds,
+and the keyboard increment gives 2.213 m/s. Flight exit disposes the controller and
+returns to the hub without a page error. These assertions and captures are in
+`after.json`, `after-node.png`, `after-pin.png`, `after-zoom.png` and `after-exit.png`.
+
+No intentional player-visible behavior changed. Remaining evidence gaps are a
+quiet-host CPU comparison, M-series/macOS, Zen/Firefox, and 120 Hz; this Windows
+Chrome/RTX 3060 Ti run does not verify them.
