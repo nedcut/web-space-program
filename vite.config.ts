@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { relative } from 'node:path';
+import { relative, resolve } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 // Cross-origin isolation lets the terrain workers share one SharedArrayBuffer Earth grid (src/game/earthLoader.ts).
 // Every asset is same-origin, so require-corp costs nothing; static hosts get the same pair from public/_headers.
@@ -29,6 +30,28 @@ export default defineConfig({
       },
     }] : []),
     react(),
+    {
+      name: 'available-earth-imagery',
+      apply: 'build',
+      writeBundle(options) {
+        // Advertise optional levels only when their entire pack is in this build.
+        // Runs before PWA closeBundle so its manifest hash covers the final JSON.
+        const dir = resolve(options.dir ?? 'dist', 'earth/imagery');
+        const path = resolve(dir, 'manifest.json');
+        const manifest = JSON.parse(readFileSync(path, 'utf8'));
+        manifest.levels = manifest.levels.filter((level: { optional?: boolean; day: string; tiles: number }) => {
+          if (!level.optional) return true;
+          for (let month = 1; month <= 12; month++) {
+            for (let tile = 0; tile < level.tiles; tile++) {
+              const file = level.day.replace('{MM}', String(month).padStart(2, '0')).replace('{T}', String(tile));
+              if (!existsSync(resolve(dir, file))) return false;
+            }
+          }
+          return true;
+        });
+        writeFileSync(path, JSON.stringify(manifest, null, 2) + '\n');
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
@@ -40,7 +63,7 @@ export default defineConfig({
         icons: [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml' }],
       },
       // Earth imagery packs (8k/16k) are fetched on demand and kept in their own Cache Storage bucket.
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,jpg,webp,glsl,json,i16,u4,md}'], globIgnores: ['**/earth/imagery/packs/**'], maximumFileSizeToCacheInBytes: 20_000_000 },
+      workbox: { navigateFallbackAllowlist: [/^\/(?:\?.*)?$/], globPatterns: ['**/*.{js,css,html,svg,png,jpg,webp,glsl,json,i16,u4,md}'], globIgnores: ['**/earth/imagery/packs/**'], maximumFileSizeToCacheInBytes: 20_000_000 },
     }),
   ],
   test: { include: ['tests/**/*.test.ts', 'src/**/*.test.ts'], environment: 'node', setupFiles: ['./scripts/earth-data/register.ts'] },

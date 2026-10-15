@@ -1634,3 +1634,28 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   Chrome, prod, Standard, 4 opens × 3 interleaved runs: main (36 cards) first open 126–175 ms, reopen 58–92 ms; this
   branch (44 cards) first open 160–162 ms, reopen 9–16 ms. The hub launch picker still builds its scale's stock on
   open (this branch adds four Standard rows there, ~8 ms); its craft goes straight to flight, so it is not cached here.
+
+## Shipping automation (2026-10-15, op/ship)
+
+- CI pins Node 24.14.1 through `.nvmrc`, caches npm downloads, and checks lint,
+  types, the full Vitest suite and the production build on pushes and pull requests.
+  Two test workers bound memory use on GitHub runners and match local validation.
+  Main builds retain the checked `dist` artifact for seven days.
+- Deployment consumes the successful main CI artifact. A separate configuration
+  gate checks only whether both secrets exist, so a new repository remains green
+  before owner setup. No PR code receives deployment credentials; PR previews are
+  deferred. Cloudflare project/token/secrets and the first production publish
+  remain explicit owner steps in `docs/DEPLOY.md`.
+- Production manifests omit optional imagery levels whose monthly tiles are not
+  present, before PWA precache hashing. Ultra then selects the highest packaged
+  level without requesting missing 16k files. Local builds containing the complete
+  optional pack retain it. This adds build-time work only.
+- Pages headers keep hashed assets immutable and revalidate entry points and Earth
+  assets. A real 404 page and root-only PWA navigation fallback preserve missing
+  asset errors and unknown-path 404s. CI enforces 25 MiB/file and 20,000 files.
+- Preserve the entire pre-shipping PROGRESS.md byte-for-byte as the October archive;
+  replace it with a short current entry point and dated wave summaries. Catalog
+  counts come from exported code, not old progress reports. Current limitations
+  remain visible rather than being hidden by the shipping narrative.
+- Ignore Wrangler's generated local state in git and ESLint; local Pages emulation
+  creates generated middleware under `.wrangler/` that is not project source.

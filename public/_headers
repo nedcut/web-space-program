@@ -3,3 +3,19 @@
 /*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
+
+# Vite content hashes change whenever bytes change.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# HTML and unversioned files must revalidate after a deploy.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/sw.js
+  Cache-Control: no-cache
+/registerSW.js
+  Cache-Control: no-cache
+/earth/*
+  Cache-Control: no-cache
