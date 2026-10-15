@@ -39,7 +39,10 @@ export function planDeparture(w: World, target: string, periapsis?: number, depa
   if (!plan) return `no ${target} transfer found`;
   if (departure === undefined) {
     const budget = dvLeft(w) * 0.9, options = [...(plan.windows ?? [])].sort((a, b) => a.departure - b.departure);
-    const pick = options.find(o => o.dv + 0.5 * (o.captureDv ?? 0) <= budget) ?? options.filter(o => o.dv <= budget).sort((a, b) => a.dv - b.dv)[0];
+    // Flyby only: the earliest option within 10 % of the cheapest affordable departure (not a "go now" plane change,
+    // not a season two years out for a few percent).
+    const flybys = options.filter(o => o.dv <= budget), cheapest = Math.min(...flybys.map(o => o.dv));
+    const pick = options.find(o => o.dv + 0.5 * (o.captureDv ?? 0) <= budget) ?? flybys.find(o => o.dv <= cheapest * 1.1);
     if (!pick && plan.dv > budget) return `the ${target} transfer needs ${plan.dv.toFixed(0)} m/s, ${dvLeft(w).toFixed(0)} aboard`;
     if (pick && Math.abs(pick.departure - plan.node.time) > 86400) {
       w.removeNode(plan.node.id);
@@ -112,7 +115,7 @@ export function flyby(w: World, biomes: Set<string>): number {
     trackBiome(w, biomes);
     if (doScience(w)) transmitAll(w);
   }
-  transmitAll(w);
+  sendHome(w);
   return w.progression.science - before;
 }
 
@@ -146,12 +149,11 @@ export function capture(w: World, biomes: Set<string>, apoapsis: number, minStag
   const dvTo = (ra: number) => v - Math.sqrt(o.mu * (2 / rp - 2 / (rp + ra)));
   const have = dvLeft(w) * 0.95;
   let ra = Math.max(rp, body.radius + apoapsis);
-  const top = body.radius + Math.min(body.soi * 0.6, 1e12) ;
+  const top = body.radius + body.soi * 0.6;
   if (dvTo(ra) > have) {
+    // Short of a low orbit: the cheapest capture (a long ellipse), keeping what is left for later.
     if (dvTo(top) > have) return { err: `capture needs ${dvTo(top).toFixed(0)} m/s, ${dvLeft(w).toFixed(0)} aboard`, dv: 0 };
-    let lo = ra, hi = top;
-    for (let k = 0; k < 50; k++) { const m = (lo + hi) / 2; if (dvTo(m) > have) lo = m; else hi = m; }
-    ra = hi;
+    ra = top;
   }
   const node = w.addNode(t);
   node.prograde = -dvTo(ra);
@@ -162,9 +164,17 @@ export function capture(w: World, biomes: Set<string>, apoapsis: number, minStag
   return { err: null, dv: burn.dvUsed() };
 }
 
+/** Send everything aboard, first waiting (up to `maxDays`) for a link: the Sun or the planet can block it for weeks. */
+export function sendHome(w: World, maxDays = 60): number {
+  for (let k = 0; k < maxDays * 24 && !w.canControl(); k++) coastUntil(w, w.ut + 3600);
+  return w.canControl() ? transmitAll(w) : 0;
+}
+
 /** Stay `orbits` orbits (at most `maxDays`), running every instrument over each new region and transmitting. */
 export function survey(w: World, biomes: Set<string>, orbits: number, maxDays = 30): number {
   const before = w.progression.science;
+  // Instruments only answer over a live link: a probe arriving behind the Sun waits for it to clear.
+  sendHome(w);
   const T = Math.min(period(w.orbitOf(w.active!)), maxDays * 86400 / orbits), step = T / 24;
   for (let k = 0; k < orbits * 24; k++) {
     coastUntil(w, w.ut + step);
@@ -172,7 +182,7 @@ export function survey(w: World, biomes: Set<string>, orbits: number, maxDays = 
     trackBiome(w, biomes);
     if (doScience(w)) transmitAll(w);
   }
-  transmitAll(w);
+  sendHome(w);
   return w.progression.science - before;
 }
 
