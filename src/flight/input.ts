@@ -14,7 +14,7 @@ export interface FlightInputState {
 }
 
 export type ActionGroupKey = 'actionGroup1' | 'actionGroup2' | 'actionGroup3' | 'actionGroup4' | 'actionGroup5' | 'actionGroup6' | 'actionGroup7' | 'actionGroup8' | 'actionGroup9' | 'actionGroup10';
-export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'focusPrev' | 'toggleCamMode' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag' | 'toggleGear' | 'stressOverlay' | 'toggleLights' | 'abort' | 'stageLock' | 'sasHold' | 'sasHoldRelease' | 'trimReset' | 'evaJump' | ActionGroupKey;
+export type FlightAction = 'stage' | 'toggleSas' | 'toggleRcs' | 'map' | 'warpUp' | 'warpDown' | 'warpStop' | 'menu' | 'focusNext' | 'focusPrev' | 'toggleCamMode' | 'quicksave' | 'quickload' | 'eva' | 'board' | 'plantFlag' | 'toggleGear' | 'stressOverlay' | 'nightVision' | 'toggleLights' | 'abort' | 'stageLock' | 'sasHold' | 'sasHoldRelease' | 'trimReset' | 'evaJump' | ActionGroupKey;
 
 /** Keyboard attitude ramp: a 0.2 s tap reaches 20%; a deliberate one-second hold gets full authority. */
 export const KEY_RAMP_RATE = 1;
@@ -27,7 +27,7 @@ export const THROTTLE_RATE = 0.8;
 export const FINE_THROTTLE_RATE = 0.2;
 
 export const ACTION_GROUP_KEYS: ActionGroupKey[] = ['actionGroup1', 'actionGroup2', 'actionGroup3', 'actionGroup4', 'actionGroup5', 'actionGroup6', 'actionGroup7', 'actionGroup8', 'actionGroup9', 'actionGroup10'];
-const FLIGHT_ACTIONS: FlightAction[] = ['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'focusNext', 'focusPrev', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'board', 'plantFlag', 'toggleGear', 'stressOverlay', 'toggleLights', 'abort', 'stageLock', 'sasHold', 'evaJump', ...ACTION_GROUP_KEYS];
+const FLIGHT_ACTIONS: FlightAction[] = ['stage', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'focusNext', 'focusPrev', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'board', 'plantFlag', 'toggleGear', 'stressOverlay', 'nightVision', 'toggleLights', 'abort', 'stageLock', 'sasHold', 'evaJump', ...ACTION_GROUP_KEYS];
 /** Vessel-only actions that a walking astronaut ignores (Space jumps on EVA; it never stages the craft left behind). */
 const VESSEL_ONLY = new Set<FlightAction>(['stage', 'abort', 'toggleLights', 'stageLock', 'sasHold']);
 /** Astronaut-only actions: a piloted vessel ignores them. */

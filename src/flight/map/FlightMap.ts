@@ -6,10 +6,10 @@ import { CLOSEST_APPROACH_LEAD, focusCycle, mapContextActions, pathPointWarpTime
 import { formatDuration } from '../../util/format';
 import { isTyping, matches } from '../../input/bindings';
 import { formatDistance, formatSpeed } from '../../util/format';
-import { length, sub, type Vec3 } from '../../util/vec3';
+import { add, length, sub, type Vec3 } from '../../util/vec3';
 import type { TrajectoryPatch } from '../../sim/orbit/api';
 import { patchState } from '../../sim/orbit/numericalPrediction';
-import { AutoFramer, UNDECIDED, firstTransition, pathFrameDistance } from './framing';
+import { AutoFramer, UNDECIDED, ascentAngles, ascentFrame, ascentPhase, firstTransition, pathFrameDistance } from './framing';
 import { nodeSummary, patchAtNode } from './nodeInfo';
 import { cycleNodeId, nodeKeyCommand, nudged } from '../../ui/map/nodeKeys';
 
@@ -31,6 +31,9 @@ const FOCUS_KINDS = new Set(['star', 'planet', 'dwarf', 'moon']);
 export class FlightMap {
   /** Focused object; null frames the active vessel around its body. */
   focus: MapObject | null = null;
+  /** Active vessel and body of an ascent in progress ('' once in orbit), and its current view. */
+  private ascentKey = '';
+  private ascent: { centre: Vec3; distance: number } | null = null;
   readonly landing: LandingPredictionDriver;
   menus: MapMenus = { node: null, context: null, info: null };
   private listeners = new Set<() => void>();
@@ -128,8 +131,16 @@ export class FlightMap {
     const thrusting = active.state.telemetry.thrust > 0;
     // Following the vessel: frame the new primary after an SOI change, and an encounter/escape (or its loss on
     // capture) as it appears on the flown path, unless the player has zoomed since.
+    const ascentWas = this.ascentKey;
+    const ascent = this.ascentView(active);
     const i = firstTransition(patches, active.body);
-    if (this.autoFrame.update(active.body, i === UNDECIDED ? null : patches[i], this.c.map.zoomCount, performance.now(), thrusting)) this.frameActive(patches);
+    // Reaching orbit (or landing again) changes what the map centres on: frame the new view.
+    if (this.ascentKey !== ascentWas) this.frameActive(patches);
+    else if (this.autoFrame.update(active.body, i === UNDECIDED ? null : patches[i], this.c.map.zoomCount, performance.now(), thrusting)) this.frameActive(patches);
+    if (ascent) {
+      if (thrusting) this.c.map.distance = Math.max(this.c.map.distance, ascent.distance);
+      return { position: add(bodyState.position, ascent.centre), focusId: `ascent:${active.body}`, referenceBody: active.body };
+    }
     // The local body remains central; enlarge the frame only if a burn carries the vessel out of view.
     if (thrusting) {
       const dx = origin.x - bodyState.position.x, dy = origin.y - bodyState.position.y, dz = origin.z - bodyState.position.z;
@@ -160,17 +171,37 @@ export class FlightMap {
 
   /** Frame the active vessel's orbit and the first SOI change on its path (map opened, "Frame active orbit"). */
   frameOrbit() {
-    if (!this.world.active) return;
+    const v = this.world.active;
+    if (!v) return;
     this.focus = null;
     this.frameActive(this.world.mapTrajectory());
+    if (this.ascent) {
+      const rs = this.world.relativeState(v);
+      Object.assign(this.c.map, ascentAngles(rs.position, rs.velocity));
+    }
   }
 
   private frameActive(patches: readonly TrajectoryPatch[]) {
     const v = this.world.active;
     if (!v) return;
     const i = firstTransition(patches, v.body), transition = patches[i];
-    this.c.map.distance = this.vesselFrameDistance(v, transition);
+    const ascent = this.ascentView(v);
+    this.c.map.distance = ascent ? ascent.distance : this.vesselFrameDistance(v, transition);
     this.autoFrame.framed(v.body, i === UNDECIDED ? null : transition, this.c.map.zoomCount, performance.now());
+  }
+
+  /**
+   * From the ground until orbit the active vessel's view is centred between it and its apoapsis instead of on the
+   * body's centre (which puts a climbing rocket at the bottom edge of the frame). Null once it has reached orbit.
+   */
+  private ascentView(v: WorldVessel): { centre: Vec3; distance: number } | null {
+    const w = this.world, b = w.universe.body(v.body), rs = w.relativeState(v);
+    const key = `${v.state.id}:${v.body}`;
+    const landed = v.mode === 'prelaunch' || v.state.situation !== 'flying';
+    const on = ascentPhase(this.ascentKey === key, landed, rs.position, rs.velocity, b.gm, b.radius + (b.atmosphere?.height ?? 0));
+    this.ascentKey = on ? key : '';
+    this.ascent = on ? ascentFrame(rs.position, rs.velocity, b.gm, b.radius) : null;
+    return this.ascent;
   }
 
   /** Local orbit of `v`, widened to include the SOI change ending patch `p` (an encounter or escape). */
@@ -202,7 +233,10 @@ export class FlightMap {
   minDistance(): number {
     const w = this.world, f = this.focus;
     if (f?.kind === 'body' && w.universe.bodies.has(f.id)) return w.universe.body(f.id).radius * 1.15;
-    return w.active ? w.universe.body(w.active.body).radius * 1.15 : 1500;
+    if (!w.active) return 1500;
+    const radius = w.universe.body(w.active.body).radius;
+    // The ascent view centres near the surface; zoom stays as close as it does above the body's centre.
+    return radius * (this.ascent && !f ? 0.15 : 1.15);
   }
 
   /** Focus objects in Tab order. */

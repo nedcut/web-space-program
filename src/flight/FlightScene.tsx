@@ -416,6 +416,7 @@ export default function FlightScene() {
             onActionGroup: (g) => ctrl.current?.fireGroup(g as ActionGroupId),
             onAbort: () => ctrl.current?.abort(),
             onToggleLights: () => ctrl.current?.toggleLights(),
+            onToggleNightVision: () => ctrl.current?.toggleNightVision(),
             onWarp: (d) => ctrl.current?.changeWarp(d),
             onMap: () => ctrl.current?.toggleMap(),
             onMenu: () => setPaused(true),

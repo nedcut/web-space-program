@@ -154,6 +154,8 @@ export interface Telemetry {
   inclination: number;
   /** Stage lock (Alt+L) engaged. */
   stageLocked: boolean;
+  /** Night vision (render-only fill light in shadow). */
+  nightVision: boolean;
   vesselName: string;
 }
 
@@ -195,6 +197,7 @@ export interface HudCallbacks {
   onActionGroup?(group: string): void;
   onAbort?(): void;
   onToggleLights?(): void;
+  onToggleNightVision?(): void;
   /** Alt+L: lock / unlock staging. */
   onStageLock?(): void;
   /** Staging icon click: open the part's details panel. */

@@ -4,7 +4,7 @@ export const DEFAULT_BINDINGS = {
   translateRight: ['KeyL'], translateLeft: ['KeyJ'], translateForward: ['KeyI'], translateBack: ['KeyK'], translateUp: ['KeyH'], translateDown: ['KeyN'],
   throttleUp: ['ShiftLeft', 'ShiftRight'], throttleDown: ['ControlLeft', 'ControlRight'], throttleFull: ['KeyZ'], throttleCut: ['KeyX'],
   stage: ['Space'], toggleSas: ['KeyT'], toggleRcs: ['KeyR'], map: ['KeyM'], warpUp: ['Period'], warpDown: ['Comma'], warpStop: ['Slash'],
-  menu: ['Escape'], help: ['Shift+F1'], screenshot: ['F1'], hideUi: ['F2'], flightResults: ['F3'], perfOverlay: ['F8'], flightData: ['Shift+F3'], stressOverlay: ['F4'], photoMode: ['KeyP'],
+  menu: ['Escape'], help: ['Shift+F1'], screenshot: ['F1'], hideUi: ['F2'], flightResults: ['F3'], perfOverlay: ['F8'], flightData: ['Shift+F3'], stressOverlay: ['F4'], nightVision: ['F7'], photoMode: ['KeyP'],
   focusNext: ['BracketRight'], focusPrev: ['BracketLeft'], toggleCamMode: ['KeyV'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyO'], board: ['Enter', 'NumpadEnter'], plantFlag: ['KeyF'],
   toggleGear: ['KeyG'], brakes: ['KeyB'], toggleLights: ['KeyU'], abort: ['Backspace'], stageLock: ['Alt+KeyL'], sasHold: ['KeyF'],
   mapFocusNext: ['Tab'], mapFocusHome: ['Home', 'Backquote'],
@@ -18,7 +18,7 @@ export const DEFAULT_BINDINGS = {
 } satisfies Record<string, string[]>;
 export type Action = keyof typeof DEFAULT_BINDINGS;
 export type Bindings = Record<Action, string[]>;
-const SHARED_ACTIONS = new Set<Action>(['cameraLeft', 'cameraRight', 'cameraUp', 'cameraDown', 'cameraZoomIn', 'cameraZoomOut', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'help', 'perfOverlay', 'flightData', 'stressOverlay', 'photoMode', 'screenshot', 'hideUi', 'flightResults', 'focusNext', 'focusPrev', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'toggleGear', 'precision', 'precisionHold']);
+const SHARED_ACTIONS = new Set<Action>(['cameraLeft', 'cameraRight', 'cameraUp', 'cameraDown', 'cameraZoomIn', 'cameraZoomOut', 'toggleSas', 'toggleRcs', 'map', 'warpUp', 'warpDown', 'warpStop', 'menu', 'help', 'perfOverlay', 'flightData', 'stressOverlay', 'nightVision', 'photoMode', 'screenshot', 'hideUi', 'flightResults', 'focusNext', 'focusPrev', 'toggleCamMode', 'quicksave', 'quickload', 'eva', 'toggleGear', 'precision', 'precisionHold']);
 export const BINDINGS_KEY = 'wsp.bindings.v1';
 /**
  * Layout revision of the default map. Layout 2 moved to the classic KSP 1.12 flight defaults: lights U, EVA O,

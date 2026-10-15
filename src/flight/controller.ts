@@ -92,6 +92,8 @@ const HUD_BOTTOM_EXTRA_PX = 70;
 
 export class FlightController {
   private stressOverlay = false;
+  /** Night vision: a camera headlight plus flat fill that fades in as the sun is eclipsed (render-only). */
+  nightVision = false;
   private readonly systems: FlightControllerInternals = ((owner: FlightController) => ({
     get assistWarped() { return owner.assistWarped; },
     set assistWarped(value: boolean) { owner.assistWarped = value; },
@@ -185,6 +187,7 @@ export class FlightController {
   private readonly envBounce: [number, number, number] = [0, 0, 0];
   private sunLight = new THREE.DirectionalLight(0xffffff, 3.2);
   private ambient = new THREE.HemisphereLight(0x8899bb, 0x221a10, 0.12);
+  private nightLight = new THREE.DirectionalLight(0xdfe8ff, 0);
   private planets: PlanetLayer;
   private site: LaunchSite | null = null;
   private flags = new FlagView();
@@ -279,7 +282,7 @@ export class FlightController {
     this.scene.add(this.stars.group);
     this.glare = new SunGlare();
     this.scene.add(this.glare.mesh);
-    this.scene.add(this.sunLight, this.sunLight.target, this.ambient);
+    this.scene.add(this.sunLight, this.sunLight.target, this.ambient, this.nightLight, this.nightLight.target);
     this.effects = new FlightFx(getQuality(quality).particleQuality);
     this.scene.add(this.condensation.object, this.surfaceDust.mesh);
     this.scene.add(this.effects.root, this.reentry.object, this.flags.root);
@@ -335,6 +338,7 @@ export class FlightController {
           case 'toggleLights': this.toggleLights(); break;
           case 'abort': this.abort(); break;
           case 'stressOverlay': this.stressOverlay = !this.stressOverlay; this.world.message(this.stressOverlay ? 'Stress overlay: green = low, yellow = near limit, red = overloaded' : 'Stress overlay off'); break;
+          case 'nightVision': this.toggleNightVision(); break;
           case 'toggleGear': this.toggleGear(); break;
           case 'map': this.toggleMap(); break;
           case 'warpUp': this.changeWarp(1); break;
@@ -585,6 +589,10 @@ export class FlightController {
       this.world.message(n ? `Action group ${group.slice(6)}` : `Action group ${group.slice(6)} is empty — assign actions in the editor`, n ? 'info' : 'warn', 2);
     }
     this.command({ kind: 'group', group, ...(state === undefined ? {} : { state }) });
+  }
+  toggleNightVision() {
+    this.nightVision = !this.nightVision;
+    this.world.message(this.nightVision ? 'Night vision on: the view brightens when the sun is hidden' : 'Night vision off', 'info', 2);
   }
   toggleLights() {
     const v = this.world.active?.state;
@@ -1266,6 +1274,15 @@ export class FlightController {
     const tmax = Math.max(1e-6, tint[0], tint[1], tint[2]);
     this.sunLight.color.setRGB(tint[0] / tmax, tint[1] / tmax, tint[2] / tmax);
     this.sunLight.intensity = 3.2 * eclipse;
+    // Night vision lights what the camera looks at, strongest in full shadow so daylight shading is untouched.
+    const dark = this.nightVision ? 1 - eclipse : 0;
+    this.ambient.intensity = 0.12 + 1.4 * dark;
+    this.nightLight.intensity = 2.2 * dark;
+    this.nightLight.visible = dark > 0;
+    if (dark > 0) {
+      this.nightLight.position.copy(camera.position);
+      camera.getWorldDirection(this.nightLight.target.position).add(camera.position);
+    }
     // Sky fill: brighter in thick air (scattered skylight), dim in space (planetshine + starlight).
     const airFrac = Math.min(1, air.density / 1.0);
     this.effects.lighting(sd, camera, this.sunLight.color, this.sunLight.intensity, airFrac);

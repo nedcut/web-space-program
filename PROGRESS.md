@@ -1,6 +1,15 @@
 # Progress Report
 
-_Last updated: 2026-10-13_
+_Last updated: 2026-10-14_
+
+## Night vision and launch map view (2026-10-14)
+
+- **Night vision (NIGHT VIS button next to the altimeter, or F7).** On the night side the vessel and pad were
+  black. It adds a camera headlight and flat fill that fade in as the sun is hidden, so parts can be seen and
+  clicked. It has no effect in daylight.
+- **Map during launch.** The map used to centre on Earth's centre, leaving a climbing rocket at the edge. From the
+  pad until the orbit clears the atmosphere it now centres between the rocket and its apoapsis, viewed side-on over
+  the horizon. Once in orbit it returns to centring on the planet.
 
 ## Real lunar probe and Entry trim (2026-10-13, op/lunartrim)
 
