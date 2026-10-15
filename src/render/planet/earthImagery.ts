@@ -92,6 +92,7 @@ function maxTextureSize(): number {
 }
 
 type Kind = 'day' | 'water' | 'night' | 'clouds';
+type UploadKind = Kind | 'regionDay' | 'regionData';
 /** One unit of GPU streaming work; `heavy` units (allocation, mips, first render-target use) only start a frame. */
 type Job = ((renderer: THREE.WebGLRenderer) => boolean) & { heavy?: () => boolean };
 
@@ -109,10 +110,10 @@ function urlsOf(level: ManifestLevel, kind: Kind, month: number): string[] {
 }
 
 /** Decoded strips of one image, shared by URL between renderers (reference counted). */
-function acquireStrips(url: string, kind: Kind): { key: string; promise: Promise<Strips> } {
+function acquireStrips(url: string, kind: UploadKind): { key: string; promise: Promise<Strips> } {
   let entry = decoded.get(url);
   if (!entry) {
-    const promise = fetchBlob(url, url.includes('/packs/')).then(blob => decodeImagery(blob, STRIP_BYTES, kind === 'day' ? 4 : 1));
+    const promise = fetchBlob(url, url.includes('/packs/')).then(blob => decodeImagery(blob, STRIP_BYTES, kind === 'day' || kind === 'regionDay' || kind === 'regionData' ? 4 : 1));
     entry = { refs: 0, promise };
     decoded.set(url, entry);
     promise.catch(() => { if (decoded.get(url) === entry) decoded.delete(url); });
@@ -133,14 +134,14 @@ class StripUpload {
   readonly texture: THREE.DataTexture;
   private next = -1;
   private readonly at = new THREE.Vector2();
-  constructor(private readonly src: Strips, kind: Kind) {
-    const red = kind !== 'day';
-    const mips = kind === 'night' || kind === 'clouds';
+  constructor(private readonly src: Strips, kind: UploadKind) {
+    const red = kind !== 'day' && kind !== 'regionDay' && kind !== 'regionData';
+    const mips = kind === 'night' || kind === 'clouds' || kind === 'regionDay' || kind === 'regionData';
     const t = new THREE.DataTexture(null, src.width, src.height, red ? THREE.RedFormat : THREE.RGBAFormat, THREE.UnsignedByteType);
     t.source.dataReady = false; // storage only: strips fill it
     t.needsUpdate = true; // version 1, so initTexture allocates (version 0 textures are never uploaded)
     t.name = `earth:${kind}`;
-    t.colorSpace = kind === 'day' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    t.colorSpace = kind === 'day' || kind === 'regionDay' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     t.wrapS = THREE.RepeatWrapping;
     t.wrapT = THREE.ClampToEdgeWrapping;
     t.magFilter = THREE.LinearFilter;
@@ -217,6 +218,9 @@ export interface EarthImageryUniforms {
   /** RGB = sRGB colour, A = water fraction (merged on the GPU). */
   uEarthDay: THREE.IUniform<THREE.Texture>;
   uEarthNight: THREE.IUniform<THREE.Texture>;
+  uEarthRegionDay: THREE.IUniform<THREE.Texture>;
+  uEarthRegionData: THREE.IUniform<THREE.Texture>;
+  uEarthRegionOn: THREE.IUniform<number>;
   /** 1 once real imagery is bound. */
   uEarthImagery: THREE.IUniform<number>;
   /** 1 when night-light imagery is bound and enabled. */
@@ -247,6 +251,10 @@ export class EarthImagery {
   private target: ManifestLevel | null = null;
   private shown: { level: ManifestLevel; month: number; rt: THREE.WebGLRenderTarget; night: THREE.Texture | null } | null = null;
   private loading = false;
+  private regionRequested = false;
+  private regionGeneration = 0;
+  private regionTextures: THREE.Texture[] = [];
+  private regionKeys: string[] = [];
   /** GPU work for the next level/month: one unit per frame; null when idle. */
   private jobs: Job[] | null = null;
   private wantedMonth = -1;
@@ -272,6 +280,9 @@ export class EarthImagery {
     this.uniforms = {
       uEarthDay: { value: placeholder(true) },
       uEarthNight: { value: placeholder(false) },
+      uEarthRegionDay: { value: placeholder(true) },
+      uEarthRegionData: { value: placeholder(false) },
+      uEarthRegionOn: { value: 0 },
       uEarthImagery: { value: 0 },
       uEarthNightOn: { value: 0 },
       uEarthBlend: { value: new THREE.Vector2(1e9, 2e9) },
@@ -321,7 +332,7 @@ export class EarthImagery {
     if (this.loading || this.jobs || this.disposed || !this.target || this.wantedMonth < 0) return;
     const level = this.nextLevel();
     if (!level) { this.settled = true; return; }
-    if (this.shown && this.shown.level === level && this.shown.month === this.wantedMonth) { this.settled = true; return; }
+    if (this.shown && this.shown.level === level && this.shown.month === this.wantedMonth) { this.settled = true; this.loadRegion(); return; }
     this.loading = true;
     const month = this.wantedMonth;
     // Water masks above 8k cost more memory than they add: Ultra pairs 16k colour with the 8k mask.
@@ -343,6 +354,54 @@ export class EarthImagery {
       this.failedLevels.add(level.id);
       this.pump();
     });
+  }
+
+  /** Optional flight-only pack. Failed downloads retain the global imagery; no loading-screen gate. */
+  private loadRegion(): void {
+    if (this.regionRequested || this.opts.maxLevel || this.opts.quality === 'low') return;
+    this.regionRequested = true;
+    const generation = ++this.regionGeneration;
+    const day = acquireStrips(root() + 'packs/gulf-v1/day.webp', 'regionDay');
+    const data = acquireStrips(root() + 'packs/gulf-v1/settlements.webp', 'regionData');
+    const keys = [day.key, data.key];
+    this.regionKeys = keys;
+    this.loading = true;
+    Promise.all([day.promise, data.promise]).then(([d, s]) => {
+      if (this.disposed || generation !== this.regionGeneration) return;
+      this.loading = false;
+      const uploads = [new StripUpload(d, 'regionDay'), new StripUpload(s, 'regionData')];
+      this.regionTextures = uploads.map(up => up.texture);
+      for (const t of this.regionTextures) { t.wrapS = THREE.ClampToEdgeWrapping; t.anisotropy = ANISOTROPY[this.opts.quality]; }
+      this.jobs = uploads.map(up => Object.assign((r: THREE.WebGLRenderer) => up.step(r), { heavy: () => up.heavy }));
+      this.jobs.push(() => {
+        this.uniforms.uEarthRegionDay.value = uploads[0].texture;
+        this.uniforms.uEarthRegionData.value = uploads[1].texture;
+        this.uniforms.uEarthRegionOn.value = 1;
+        keys.forEach(releaseStrips);
+        this.regionKeys = [];
+        return true;
+      });
+    }, () => {
+      if (this.disposed || generation !== this.regionGeneration) return;
+      this.loading = false;
+      keys.forEach(releaseStrips);
+      this.regionKeys = [];
+      this.pump();
+    });
+  }
+
+  private releaseRegion(): void {
+    this.regionGeneration++;
+    // Only cancel the pack's pending fetch; global fetch ownership stays with pump().
+    if (this.regionKeys.length) this.loading = false;
+    this.regionKeys.forEach(releaseStrips);
+    this.regionKeys = [];
+    this.regionTextures.forEach(t => t.dispose());
+    this.regionTextures = [];
+    this.regionRequested = false;
+    this.uniforms.uEarthRegionOn.value = 0;
+    this.uniforms.uEarthRegionDay.value = placeholder(true);
+    this.uniforms.uEarthRegionData.value = placeholder(false);
   }
 
   /** Upload water and lights, then per tile: upload colour strips and merge them into the target in strips. */
@@ -533,6 +592,7 @@ export class EarthImagery {
    */
   restoreContext(): void {
     if (this.disposed) return;
+    this.releaseRegion();
     const held = this.held;
     this.held = [];
     this.jobs = null;
@@ -564,6 +624,7 @@ export class EarthImagery {
 
   dispose(): void {
     this.disposed = true;
+    this.releaseRegion();
     this.jobs = null;
     this.held.forEach(releaseStrips);
     this.held = [];

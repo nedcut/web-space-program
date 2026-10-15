@@ -8,6 +8,7 @@ import { getDetailTexture } from './textures';
 import { GLSL_CUTOUT, type TerrainCutoutUniforms } from './cutout';
 import { GLSL_EARTH_IMAGERY, type EarthImageryUniforms } from './earthImagery';
 import { GLSL_CRATERS } from './craters';
+import { GLSL_EARTH_GROUND } from './earthGround';
 
 /** Surface lighting shared by terrain / far sphere: Lambert ↔ Lommel–Seeliger (airless regolith). */
 const GLSL_SHADE = /* glsl */ `
@@ -371,6 +372,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       ${GLSL_SITE_SHADOW}
       #ifdef EARTH_IMAGERY
       varying float vCovered;
+      ${GLSL_EARTH_GROUND}
       #endif
       #ifdef EARTH_RICH
       varying vec3 vSkyRefl;
@@ -422,12 +424,21 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           // Only distant or night-side terrain uses imagery. Both conditions are smooth across the screen, so
           // quads agree on the branch and the derivatives inside it stay well defined (taken before any discard).
           vec3 nDir = vec3(0.0, 0.0, 1.0), nDx = vec3(0.0), nDy = vec3(0.0);
-          bool imgUsed = uEarthImagery > 0.5 && (length(cameraPosition - vWorldPos) > uEarthBlend.x * 0.9 || dot(rel, uSunDir) < 0.04 * length(rel));
+          bool imgUsed = uEarthImagery > 0.5 && (uEarthRegionOn > 0.5 || length(cameraPosition - vWorldPos) > uEarthBlend.x * 0.9 || dot(rel, uSunDir) < 0.04 * length(rel));
           if (imgUsed) {
             nDir = normalize(transpose(uBodyRot) * rel);
             nDx = dFdx(nDir); nDy = dFdy(nDir);
           }
           EarthUV eUV;
+          EarthUV regionUV;
+          float regionW = 0.0;
+          if (imgUsed) {
+            eUV = earthUVd(nDir, nDx, nDy);
+            regionUV = earthRegionUV(eUV);
+            regionW = earthRegionWeight(regionUV, length(cameraPosition - vWorldPos));
+          }
+          vec3 settlement = vec3(0.0);
+          float roads = 0.0;
         #endif
         #ifdef USE_CUTOUT
         applyCutout(vWorldPos);
@@ -501,7 +512,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         albedo = mix(albedo, uRockColor * (0.85 + 0.3 * albedo / max(max(albedo.r, albedo.g), 0.05)), rockT);
         #ifdef EARTH_IMAGERY
           // Imagery owns the colour wherever a texel is small on screen; the close-up palette takes over below.
-          float wImg = imgUsed ? smoothstep(uEarthBlend.x, uEarthBlend.y, dist) : 0.0;
+          float wImg = imgUsed ? max(regionW, smoothstep(uEarthBlend.x, uEarthBlend.y, dist)) : 0.0;
           // Terrain well below the datum is always under the opaque ocean (log depth defeats early-Z, so
           // these hidden fragments would otherwise pay for the imagery too).
           float waterW = 0.0;
@@ -513,6 +524,16 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             #ifdef USE_DETAIL
               img *= 1.0 + hd * 0.6 * uDetailStrength;
             #endif
+            if (regionW > 0.0) {
+              vec3 regional = earthAlbedo(textureGrad(uEarthRegionDay, regionUV.uv, regionUV.dx, regionUV.dy).rgb);
+              settlement = textureGrad(uEarthRegionData, regionUV.uv, regionUV.dx, regionUV.dy).rgb;
+              vec2 p = regionUV.uv * vec2(0.618, 0.4363) * uPlanetRadius;
+              vec2 footprint = (abs(regionUV.dx) + abs(regionUV.dy)) * vec2(0.618, 0.4363) * uPlanetRadius;
+              #ifdef USE_DETAIL
+                regional = earthGroundColour(regional, settlement.r, p, footprint, cover, hd, roads);
+              #endif
+              img = mix(img, regional, regionW);
+            }
             waterW = earthCoast(earthWater(dayW.a, c), eUV) * wImg;
             albedo = mix(albedo, mix(img, earthWaterAlbedo(c), waterW), wImg);
           }
@@ -544,8 +565,17 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           if (imgUsed && sunAlt < 0.025) lightsImg = earthNightLights(earthUVd(nDir, nDx, nDy), sunAlt, rel);
           // Close up, the procedural street texture breaks the 3 km light pixels into streets.
           float streets = 1.0 - smoothstep(uEarthBlend.x * 0.5, uEarthBlend.x * 2.0, dist);
-          col += lightsImg * (1.0 - streets) * (1.0 - waterW);
-          if (streets > 0.0 && dot(lightsImg, lightsImg) > 0.0) col += earthEmission(nDir, length(rel) - uPlanetRadius, sunAlt) * streets * min(1.0, lightsImg.r * 3.0);
+          col += lightsImg * (1.0 - streets) * (1.0 - waterW) * (1.0 - regionW);
+          if (regionW > 0.0 && uEarthNightOn > 0.5) {
+            float night = 1.0 - smoothstep(-0.11, 0.025, sunAlt);
+            float s = settlement.b;
+            float glow = s * s * (0.35 + 0.65 * s);
+            vec3 tint = mix(vec3(1.0, 0.52, 0.2), vec3(1.0, 0.8, 0.58), s);
+            // Mapped brightness locates the cores; filtered roads break up resolved urban footprints.
+            col += tint * glow * (0.65 + roads * 2.5) * night * 2.0 * regionW * (1.0 - waterW)
+              * (1.0 - 0.75 * smoothstep(0.2, 0.9, cloudCover(rel)));
+          }
+          if (streets > 0.0 && regionW < 1.0 && dot(lightsImg, lightsImg) > 0.0) col += earthEmission(nDir, length(rel) - uPlanetRadius, sunAlt) * streets * min(1.0, lightsImg.r * 3.0) * (1.0 - regionW);
         #else
           col += earthEmission(normalize(transpose(uBodyRot) * rel), length(rel) - uPlanetRadius, dot(up, uSunDir));
         #endif
