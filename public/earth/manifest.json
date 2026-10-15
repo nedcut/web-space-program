@@ -62,5 +62,5 @@
     "v": "(90 - latitudeDegrees) / 180",
     "sampling": "wrap longitude; bilinear float64; outer half-row blends to the mean polar row at each pole"
   },
-  "limits": "Approx. 9.8 km equatorial spacing. Narrow islands, coastlines, summits and trenches are smoothed. Ice surface, not bedrock. Climate/cover classes are approximate geographic rules, not measured land cover. Launch plateau is an explicit gameplay override."
+  "limits": "Approx. 9.8 km equatorial spacing (Florida: ~460 m, see height-cape.i16). Narrow islands, coastlines, summits and trenches are smoothed. Ice surface, not bedrock. Climate/cover classes are approximate geographic rules, not measured land cover. The flattened launch-complex footprint is an explicit gameplay override."
 }
