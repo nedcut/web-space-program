@@ -64,3 +64,30 @@ describe('terrain worker failure', () => {
     pool.dispose();
   });
 });
+
+describe('terrain worker scheduling', () => {
+  it('keeps chunk builds off workers that are baking and leaves one worker free of bakes', async () => {
+    stub();
+    const universe = createUniverse('standard');
+    const pool = new TerrainWorkerPool(3);
+    for (const id of ['moon', 'mars', 'mercury']) pool.register(id, universe.get(id)!, createTerrain(universe.get(id)!), 6);
+    const [a, b, c] = MockWorker.created;
+    const last = (w: MockWorker) => w.postMessage.mock.calls.at(-1)![0];
+    const moon = pool.bake('moon', 16);
+    expect(last(a).type).toBe('bake');
+    pool.bake('mars', 16).catch(() => {});
+    expect(last(b).type).toBe('bake');
+    pool.bake('mercury', 16).catch(() => {});
+    expect(last(c).type).toBe('init'); // queued: worker c stays free for chunks
+    const params = { face: 0, level: 0, x: 0, y: 0, res: 4, radius: 1, ocean: false } as never;
+    for (let i = 0; i < 2; i++) pool.buildChunk('moon', params).catch(() => {});
+    expect([last(c).type, c.postMessage.mock.calls.filter(m => m[0].type === 'build').length]).toEqual(['build', 2]);
+    expect(a.postMessage.mock.calls.filter(m => m[0].type === 'build')).toHaveLength(0);
+    // The Moon bake finishing starts the queued one on that worker.
+    const result = { width: 16, height: 8, data: new Uint8Array(512), minHeight: 0, maxHeight: 1, ms: 0 };
+    a.onmessage!({ data: { type: 'bake', id: last(a).id, result } });
+    await expect(moon).resolves.toBe(result);
+    expect(last(a)).toMatchObject({ type: 'bake', key: 'mercury' });
+    pool.dispose();
+  });
+});

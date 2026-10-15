@@ -12,6 +12,7 @@ interface Pending {
   resolve: (v: unknown) => void;
   reject: (e: unknown) => void;
   worker: number;
+  bake: boolean;
 }
 
 /**
@@ -22,6 +23,9 @@ export class TerrainWorkerPool {
   private static _shared: TerrainWorkerPool | null = null;
   private workers: (Worker | null)[] = [];
   private inflight: number[] = [];
+  /** Bakes running per worker: a multi-second far-LOD bake must not hold chunk builds queued behind it. */
+  private workerBakes: number[] = [];
+  private bakeQueue: { run: () => void; reject: (e: unknown) => void }[] = [];
   private pending = new Map<number, Pending>();
   private nextId = 1;
   /** Sent to every (re)spawned worker once an Earth terrain is registered. */
@@ -44,7 +48,7 @@ export class TerrainWorkerPool {
       try {
         const hc = typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 4;
         const n = Math.max(1, Math.min(workerCount, hc - 1));
-        for (let i = 0; i < n; i++) { this.workers.push(this.spawn(i)); this.inflight.push(0); }
+        for (let i = 0; i < n; i++) { this.workers.push(this.spawn(i)); this.inflight.push(0); this.workerBakes.push(0); }
       } catch (e) {
         console.warn('[terrain worker] unavailable, using main thread', e);
         this.workers = [];
@@ -79,7 +83,7 @@ export class TerrainWorkerPool {
     if (!w || this.disposed) return;
     w.terminate();
     for (const [id, p] of this.pending) if (p.worker === i) { this.pending.delete(id); p.reject(new Error(`Terrain worker failed: ${reason}`)); }
-    this.inflight[i] = 0;
+    this.inflight[i] = 0; this.workerBakes[i] = 0;
     const respawn = this.respawns < MAX_RESPAWNS;
     if (respawn) this.respawns++;
     this.workers[i] = respawn ? this.trySpawn(i) : null;
@@ -88,6 +92,7 @@ export class TerrainWorkerPool {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('wsp:worker-warning', { detail: `Terrain worker failed (${reason}) and was ${outcome === 'restarted' ? 'restarted' : 'stopped'}` }));
     }
+    this.drainBakes();
   }
 
   private trySpawn(i: number): Worker | null {
@@ -118,20 +123,26 @@ export class TerrainWorkerPool {
     for (const w of this.workers) w?.postMessage({ type: 'init', key, body, minWavelength });
   }
 
-  private pickWorker(): number {
+  /** Least-loaded worker; chunk builds prefer workers without a bake running. */
+  private pickWorker(build: boolean): number {
     let best = -1;
-    for (let i = 0; i < this.workers.length; i++) {
-      if (this.workers[i] && (best < 0 || this.inflight[i] < this.inflight[best])) best = i;
+    for (let pass = build ? 0 : 1; pass < 2 && best < 0; pass++) {
+      for (let i = 0; i < this.workers.length; i++) {
+        if (!this.workers[i] || (pass === 0 && this.workerBakes[i] > 0)) continue;
+        if (best < 0 || this.inflight[i] < this.inflight[best]) best = i;
+      }
     }
     return best;
   }
 
-  private send<T>(msg: Record<string, unknown>): Promise<T> {
+  private send<T>(msg: Record<string, unknown> & { type: 'build' | 'bake' }): Promise<T> {
     const id = this.nextId++;
-    const wi = this.pickWorker();
+    const bake = msg.type === 'bake';
+    const wi = this.pickWorker(!bake);
     this.inflight[wi]++;
+    if (bake) this.workerBakes[wi]++;
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, worker: wi });
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, worker: wi, bake });
       this.workers[wi]!.postMessage({ ...msg, id });
     });
   }
@@ -141,8 +152,16 @@ export class TerrainWorkerPool {
     if (!p) return;
     this.pending.delete(data.id);
     this.inflight[wi] = Math.max(0, this.inflight[wi] - 1);
+    if (p.bake) { this.workerBakes[wi] = Math.max(0, this.workerBakes[wi] - 1); this.drainBakes(); }
     if (data.type === 'error') p.reject(new Error(data.error));
     else p.resolve(data.type === 'chunk' ? data.data : data.result);
+  }
+
+  /** At most all-but-one workers bake at once, so one always takes chunk builds. */
+  private drainBakes(): void {
+    const running = this.workerBakes.reduce((a, b) => a + b, 0);
+    let free = Math.max(1, this.workerCount - 1) - running;
+    while (this.bakeQueue.length && (free-- > 0 || !this.available)) this.bakeQueue.shift()!.run();
   }
 
   buildChunk(key: string, params: ChunkBuildParams): Promise<ChunkData> {
@@ -170,8 +189,12 @@ export class TerrainWorkerPool {
     if (pending) return pending;
     const terrain = this.terrains.get(key);
     if (!terrain) return Promise.reject(new Error(`terrain ${key} not registered`));
-    const task = this.available ? this.send<BakeResult>({ type: 'bake', key, width })
-      : Promise.resolve(bakeEquirect(terrain, width));
+    const task = new Promise<BakeResult>((resolve, reject) => {
+      this.bakeQueue.push({ reject, run: () => {
+        (this.available ? this.send<BakeResult>({ type: 'bake', key, width }) : Promise.resolve(bakeEquirect(terrain, width))).then(resolve, reject);
+      } });
+      this.drainBakes();
+    });
     const promise = task.then(result => {
       const bytes = result.data.byteLength;
       if (!this.disposed && bytes <= this.bakeCacheBytes) {
@@ -194,6 +217,8 @@ export class TerrainWorkerPool {
     for (const w of this.workers) w?.terminate();
     this.workers = [];
     for (const p of this.pending.values()) p.reject(new Error('disposed'));
+    for (const q of this.bakeQueue) q.reject(new Error('disposed'));
+    this.bakeQueue = [];
     this.pending.clear();
     if (TerrainWorkerPool._shared === this) TerrainWorkerPool._shared = null;
   }
