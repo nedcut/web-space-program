@@ -16,6 +16,7 @@ const clamp = (x: number) => Math.max(-1, Math.min(1, x));
 /** Earth flight from the craft's default site (pad or runway), with attitude readouts relative to local up. */
 function fly(craft: CraftDef) {
   const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
+  requireIntactFlight(world);
   const wv = world.launch(craft);
   const ground = () => world.universe.surfaceInfo('earth', wv.state.position, world.ut).heightAboveTerrain;
   const up = () => normalize(world.relativeState(wv).position);
