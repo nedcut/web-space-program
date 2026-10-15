@@ -1405,7 +1405,9 @@ Owner decisions 2026-10-13 (both recommended options).
   networks at all ranges. Remove the unrelated procedural street grid and tiled
   lamps from loaded-imagery emission. Nearby districts use a restrained exposure;
   unresolved lights gain brightness from 10 to 60 km. Regional and global shading
-  share this curve, cloud attenuation and the existing water exclusion.
+  share this curve and cloud attenuation. City emission uses the full sampled
+  water mask, separately from the daylight distance blend: using that blend for
+  night emission leaked light onto mapped shore water during the handover.
 - Vary the daytime urban tile by reflecting and offsetting each neighbourhood,
   keeping one explicitly filtered fetch. Natural Earth/Black Marble coverage still
   controls density; reduce the illustrative roof overlay to preserve source colour.

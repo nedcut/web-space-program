@@ -585,6 +585,9 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         #endif
         albedo = mix(albedo, uRockColor * (0.85 + 0.3 * albedo / max(max(albedo.r, albedo.g), 0.05)), rockT);
         #ifdef EARTH_IMAGERY
+          // Daylight blends mesh and imagery water with distance. Emission must
+          // use the full sampled mask, including during that handover.
+          float lightWaterW = 0.0;
           #ifdef EARTH_REGION
           // Imagery owns the colour wherever a texel is small on screen; the close-up palette takes over below.
           float wImg = imgUsed ? max(regionW, smoothstep(uEarthBlend.x, uEarthBlend.y, dist)) : 0.0;
@@ -616,7 +619,10 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             #endif
             float distantImagery = smoothstep(uEarthBlend.x, uEarthBlend.y, dist);
             // The regional pack supplies colour, not a new water surface on the coarse launch/coast grid.
-            if (distantImagery > 0.0) waterW = earthCoast(earthWater(dayW.a, dayW.rgb), eUV) * distantImagery;
+            if (distantImagery > 0.0) {
+              lightWaterW = earthCoast(earthWater(dayW.a, dayW.rgb), eUV);
+              waterW = lightWaterW * distantImagery;
+            }
             if (waterW > 0.0) img = mix(img, earthWaterAlbedo(c), waterW);
             float landImagery = max(regionW, wImg * (1.0 - dayW.a * (1.0 - distantImagery)));
             albedo = mix(albedo, img, landImagery);
@@ -635,7 +641,8 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             #ifdef USE_DETAIL
               img *= 1.0 + hd * 0.6 * uDetailStrength;
             #endif
-            waterW = earthCoast(earthWater(dayW.a, c), eUV) * wImg;
+            lightWaterW = earthCoast(earthWater(dayW.a, c), eUV);
+            waterW = lightWaterW * wImg;
             albedo = mix(albedo, mix(img, earthWaterAlbedo(c), waterW), wImg);
           }
           #endif
@@ -669,20 +676,20 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           float sunAlt = dot(up, uSunDir);
           vec3 lightsImg = vec3(0.0);
           if (imgUsed && regionW < 1.0 && sunAlt < 0.025) lightsImg = earthNightLights(earthUVd(nDir, nDx, nDy), sunAlt, rel, dist);
-          col += lightsImg * (1.0 - waterW) * (1.0 - regionW);
+          col += lightsImg * (1.0 - lightWaterW) * (1.0 - regionW);
           if (regionW > 0.0 && uEarthNightOn > 0.5 && sunAlt < 0.025) {
             float night = 1.0 - smoothstep(-0.11, 0.025, sunAlt);
             float s = textureGrad(uEarthRegionNight, regionUV.uv, regionUV.dx, regionUV.dy).r;
             // Black Marble supplies cores, connecting filaments and suburban falloff.
             // Match global radiance at the regional handover; do not stamp tiled lamps over it.
-            col += earthLightRadiance(s, dist) * night * regionW * (1.0 - waterW)
+            col += earthLightRadiance(s, dist) * night * regionW * (1.0 - lightWaterW)
               * (1.0 - 0.75 * smoothstep(0.2, 0.9, cloudCover(rel)));
           }
           #else
           float sunAlt = dot(up, uSunDir);
           vec3 lightsImg = vec3(0.0);
           if (imgUsed && sunAlt < 0.025) lightsImg = earthNightLights(earthUVd(nDir, nDx, nDy), sunAlt, rel, dist);
-          col += lightsImg * (1.0 - waterW);
+          col += lightsImg * (1.0 - lightWaterW);
           #endif
         #else
           col += earthEmission(normalize(transpose(uBodyRot) * rel), length(rel) - uPlanetRadius, dot(up, uSunDir));
