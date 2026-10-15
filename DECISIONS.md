@@ -1213,3 +1213,7 @@ Owner decisions 2026-10-13 (both recommended options).
   handover (including the launch site's coarse-grid land fallback). Bake an original
   256² urban tile (2.5 KB) for roofs, yards and intermittent lamps; hardware mipmaps
   filter it instead of per-pixel grid hashes. Global coast/height data is unchanged.
+- Reject regional work over water with a vertex-sampled global water mask. This keeps
+  the launch plateau's close-range palette and avoids decoding/shading an unused
+  regional land colour behind opaque site/water surfaces. The regional mask remains
+  render-only; terrain/science/physics and the global ocean mask are not edited.

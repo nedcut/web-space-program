@@ -316,6 +316,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       uniform mat3 uBodyRot;
       uniform sampler2D uEarthDay;
       uniform float uEarthImagery;
+      uniform float uEarthRegionOn;
       varying float vCovered;
       varying vec3 vGroundCoord;
       #endif
@@ -337,7 +338,10 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           float hV = length(relV) - uPlanetRadius;
           vec3 nV = normalize(transpose(uBodyRot) * relV);
           vec2 uvV = vec2(atan(nV.y, nV.x) * (0.5 / ATMO_PI) + 0.5, 0.5 - asin(clamp(nV.z, -1.0, 1.0)) / ATMO_PI);
-          vGroundCoord = vec3((uvV - vec2(80.0 / 360.0, 55.0 / 180.0)) * vec2(9.0, 7.2), nV.x);
+          // This is a land pack. The existing water mask rejects sea/launch-plateau fragments before
+          // their pixel shader pays for the regional colour, data or procedural land-cover work.
+          float land = uEarthRegionOn > 0.5 && nV.x > -0.5 ? 1.0 - textureLod(uEarthDay, uvV, 0.0).a : 0.0;
+          vGroundCoord = vec3((uvV - vec2(80.0 / 360.0, 55.0 / 180.0)) * vec2(9.0, 7.2), land);
           #ifdef EARTH_RICH
             const float COAST_TEST = 1200.0; // coast sky reflection needs the mask above the datum too
           #else
@@ -452,9 +456,8 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         float dist = length(toCam);
         #ifdef EARTH_IMAGERY
           // Covered seafloor has already returned: never pay for spherical UVs or region tests there.
-          // A date-line triangle interpolates across the UV wrap. Its body-fixed X stays negative,
-          // so it cannot accidentally interpolate into the Gulf patch on the opposite hemisphere.
-          regionW = vGroundCoord.z > -0.5 ? earthRegionWeight(regionUV, dist) : 0.0;
+          // The vertex mask also rejects date-line triangles on the opposite hemisphere.
+          regionW = earthRegionWeight(regionUV, dist) * vGroundCoord.z;
           if (regionW > 0.0) {
             // The patch is far from the date line and poles. Interpolated geographic UVs avoid per-pixel
             // atan/asin at close range; terrain subdivision keeps their error below the ~1 km source texel.
