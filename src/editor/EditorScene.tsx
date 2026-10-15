@@ -100,6 +100,7 @@ export default function EditorScene() {
             <Hint k="X">{view.symmetryMode === 'mirror' ? (view.symmetry > 1 ? 'mirror on' : 'mirror off') : `symmetry ×${view.symmetry}`}</Hint>
             <Hint k="R">radial / mirror</Hint>
             <Hint k={ALT}>no surface</Hint>
+            <Hint k="C">surface snap {view.angleSnap ? 'on' : 'off'}</Hint>
             <Hint k="Joint">insert between</Hint>
             <Hint k="Empty space">set aside</Hint>
             <Hint k="Esc">cancel</Hint>

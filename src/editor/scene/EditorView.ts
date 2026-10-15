@@ -163,6 +163,7 @@ export class EditorView {
   private mouseInside = false;
   private drag: { button: number; x: number; y: number; moved: boolean; id: number; pan: boolean } | null = null;
   private altDown = false;
+  private shiftDown = false;
   private raycaster = new THREE.Raycaster();
   private placement: Placement | null = null;
   private snapKey: string | null = null;
@@ -774,7 +775,7 @@ export class EditorView {
         ghosts = this.counterpartGhosts(best.parent.uid, D, T, false);
       } else if (rootDef.surfaceAttachable && !this.altDown && this.mouseInside) {
         // 2) Surface attachment by raycast.
-        const hit = this.surfaceHit();
+        const hit = this.surfaceHit(snap.angleSnap);
         if (hit) {
           const parent = craft.parts.find((p) => p.uid === hit.uid)!;
           const up = qRotate(parent.rotation, UP);
@@ -964,8 +965,11 @@ export class EditorView {
     return null;
   }
 
-  /** Surface hit in craft frame with a clean analytic normal for cylindrical parents. */
-  private surfaceHit(): { uid: number; point: Vec3; normal: Vec3 } | null {
+  /**
+   * Surface hit in craft frame with a clean analytic normal for cylindrical parents.
+   * `grid` snaps cylinder hits to 15° around the axis and 5 cm along it (Shift: 5° / 1 cm).
+   */
+  private surfaceHit(grid = false): { uid: number; point: Vec3; normal: Vec3 } | null {
     const pick = this.pickPart();
     if (!pick) return null;
     const part = this.session.getSnapshot().craft.parts.find((p) => p.uid === pick.uid);
@@ -982,11 +986,16 @@ export class EditorView {
     let n = fromV(normal);
     if (def.shape.kind === 'cylinder') {
       const inv = qConj(part.rotation);
-      const lp = qRotate(inv, sub(point, part.position));
+      let lp = qRotate(inv, sub(point, part.position));
       const ln = qRotate(inv, n);
       const h = def.shape.height;
       if (Math.abs(ln.y) < 0.75 && Math.abs(lp.y) < h / 2) {
         const rho = Math.hypot(lp.x, lp.z) || 1;
+        if (grid) {
+          const a = snapAngle(Math.atan2(lp.z, lp.x), (this.shiftDown ? 5 : 15) * DEG);
+          const step = this.shiftDown ? 0.01 : 0.05;
+          lp = v3(Math.cos(a) * rho, THREE.MathUtils.clamp(Math.round(lp.y / step) * step, -h / 2, h / 2), Math.sin(a) * rho);
+        }
         const t = lp.y / h + 0.5;
         const r = def.shape.radiusBottom + (def.shape.radiusTop - def.shape.radiusBottom) * t;
         const slope = (def.shape.radiusBottom - def.shape.radiusTop) / h;
@@ -1149,6 +1158,7 @@ export class EditorView {
     this.mousePx = { x: e.clientX - r.left, y: e.clientY - r.top };
     this.mouse.set((this.mousePx.x / r.width) * 2 - 1, -(this.mousePx.y / r.height) * 2 + 1);
     this.altDown = e.altKey;
+    this.shiftDown = e.shiftKey;
     this.partOnlyDown = IS_MAC ? e.metaKey : e.ctrlKey;
   }
 
@@ -1189,7 +1199,7 @@ export class EditorView {
       this.pan(-(dx / h) * this.dist * 1.1);
       this.gTargetY += (dy / h) * this.dist * 1.1;
       this.clampTarget();
-    } else if (d.button === 2 || (d.button === 0 && !this.session.getSnapshot().held)) {
+    } else if (d.button === 0 || d.button === 2) {
       this.gYaw -= dx * 0.006;
       this.gPitch = THREE.MathUtils.clamp(this.gPitch + dy * 0.005, -0.35, 1.35);
     }
@@ -1308,6 +1318,7 @@ export class EditorView {
   private onKeyDown = (e: KeyboardEvent) => {
     if (isTyping(e.target) || e.repeat) return;
     this.altDown = e.altKey;
+    this.shiftDown = e.shiftKey;
     this.partOnlyDown = IS_MAC ? e.metaKey : e.ctrlKey;
     const s = this.session;
     const held = s.getSnapshot().held;
@@ -1368,6 +1379,7 @@ export class EditorView {
 
   private onKeyUp = (e: KeyboardEvent) => {
     this.altDown = e.altKey;
+    this.shiftDown = e.shiftKey;
     this.partOnlyDown = IS_MAC ? e.metaKey : e.ctrlKey;
   };
 
@@ -1418,9 +1430,9 @@ export class EditorView {
     this.key.position.set(KEY_OFFSET.x * this.keyScale, this.keyAimY + KEY_OFFSET.y * this.keyScale, KEY_OFFSET.z * this.keyScale);
 
     const t0 = performance.now();
-    // Raycasts only when something that affects them changed (mouse, camera, craft, held state, Alt).
+    // Raycasts only when something that affects them changed (mouse, camera, craft, held state, Alt, Shift, snap).
     const cp2 = this.camera.position;
-    const key = `${this.mouse.x.toFixed(4)},${this.mouse.y.toFixed(4)},${cp2.x.toFixed(3)},${cp2.y.toFixed(3)},${cp2.z.toFixed(3)},${this.visualVersion},${this.altDown},${this.partOnlyDown},${this.mouseInside},${!!this.drag}`;
+    const key = `${this.mouse.x.toFixed(4)},${this.mouse.y.toFixed(4)},${cp2.x.toFixed(3)},${cp2.y.toFixed(3)},${cp2.z.toFixed(3)},${this.visualVersion},${this.altDown},${this.shiftDown},${this.session.getSnapshot().angleSnap},${this.partOnlyDown},${this.mouseInside},${!!this.drag}`;
     if (key !== this.frameKey) {
       this.frameKey = key;
       this.updateHover();
