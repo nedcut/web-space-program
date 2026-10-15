@@ -213,7 +213,8 @@ export class FlightMap {
     this.frameActive(this.world.mapTrajectory());
     if (this.ascent) {
       const rs = this.world.relativeState(v);
-      Object.assign(this.c.map, ascentAngles(rs.position, rs.velocity));
+      const north = qRotate(this.world.universe.ephem.bodyRotation(v.body, this.world.ut), { x: 0, y: 0, z: 1 });
+      Object.assign(this.c.map, ascentAngles(rs.position, rs.velocity, north));
     }
   }
 

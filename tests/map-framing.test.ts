@@ -146,11 +146,15 @@ describe('map framing: ascent view', () => {
     expect(high.distance).toBeGreaterThan(0.8 * R);
   });
 
-  it('looks from beside the ascent plane and above the horizon', () => {
-    const { yaw, pitch } = ascentAngles(v3(R, 0, 0), v3(0, 465, 0));
+  it('looks from beside the ascent plane, above the horizon, from the south so north is up', () => {
+    const north = v3(0, 0, 1);
+    const { yaw, pitch } = ascentAngles(v3(R, 0, 0), v3(0, 465, 0), north);
     const d = v3(Math.cos(yaw) * Math.cos(pitch), Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch));
-    expect(d.z).toBeGreaterThan(0.9); // the orbit normal
-    expect(d.x).toBeGreaterThan(0.2); // tilted towards local up, so the camera is outside the body at any distance
+    expect(d.z).toBeLessThan(-0.75); // along the orbit normal, on the side away from the north pole
+    expect(d.x).toBeGreaterThan(0.5); // tilted towards local up, so the camera is outside the body at any distance
+    // A westward ascent: the orbit normal points south, the camera still sits on the south side.
+    const west = ascentAngles(v3(R, 0, 0), v3(0, -465, 0), north);
+    expect(Math.sin(west.pitch)).toBeLessThan(-0.75);
   });
 
   it('keeps the camera outside the body when the apoapsis is far round it', () => {
@@ -167,7 +171,7 @@ describe('map framing: ascent view', () => {
     };
     for (const yaw of [0, 1, 2, 3, 4, 5, 6]) for (const pitch of [-1.5, -0.7, 0, 0.7, 1.5]) expect(camera(yaw, pitch)).toBeGreaterThanOrEqual(R);
     // From above the centre's horizon the player can still zoom in close.
-    const { yaw, pitch } = ascentAngles(r, v);
+    const { yaw, pitch } = ascentAngles(r, v, v3(0, 0, 1));
     expect(ascentMinDistance(centre, yaw, pitch, R)).toBeCloseTo(0.15 * R, -3);
   });
 });
