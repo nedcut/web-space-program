@@ -1213,3 +1213,19 @@ Craft previews in the load dialog now pause/retry after WebGL loss and never cac
   checks confirm terrain switches and context recovery reuse prewarmed programs.
 - Local commits on `cx/groundlook`; no push or merge. Measurement method, media
   paths, verification and limitations: [groundlook evidence](docs/performance/groundlook.md).
+
+## Water night glow — groundlook round three (2026-10-15)
+
+- Integrated main `853c4465` into `cx/groundlook`. Removed the ocean shader's
+  city-light emission, which made Orlando lakes and Cape lagoons glow orange.
+  Terrain streets and the distant globe now respect their existing water masks.
+  Land city lights remain visible; no added textures, draws or CPU frame work.
+- Before/after day and night evidence covers Orlando and the relocated Cape at
+  3 km. Pale daytime fill/rims persist without groundlook: the existing ocean
+  seabed blend causes them. This night fix leaves that separate issue unchanged.
+- Production Medium paired GPU changes on RTX 3060 Ti: pad -0.31%, 10 km -0.15%,
+  30 km +0.35%, orbit -0.49% (all within ±1%). Requested daytime views are within
+  ±1%; night views improve 1.46% / 2.63% after removing water emission.
+- Evidence and validation: [round-three handoff](docs/performance/groundlook-r3.md).
+- Lint, TypeScript, build and the two-worker suite passed (208 files, 1,922 tests,
+  one skipped). Distant-globe night smoke passed. Mac/Zen remains unmeasured.

@@ -1359,3 +1359,17 @@ Owner decisions 2026-10-13 (both recommended options).
   from becoming the first compile after context loss.
 - Include the base material among hidden warmup representatives too, so returning
   from a regional view after context restoration also reuses a compiled program.
+
+## Water excludes city emission (2026-10-15, cx/groundlook round three)
+
+- The integrated Orlando/Cape night glow came from the ocean shader adding the
+  global Black Marble map at 60% strength to every water fragment. That term
+  predates regional groundlook (`36ae7880`) and treated coarse coastal light
+  spill as emissive water. Remove it; keep the existing reflected sky/sun light.
+- Apply the already-computed water weight to procedural terrain streets and far
+  sphere night lights too. Regional terrain glow already uses this weight. No
+  new textures, samples, draws, allocations, coast geometry or daylight shading.
+- Pale daylight lake fill/rims remain with regional groundlook disabled and in
+  the unchanged ocean shader; disabling its seabed blend removes them. Keep that
+  separate from this night emission fix. Diagnostic captures and GPU/validation
+  evidence: `docs/performance/groundlook-r3.md`.

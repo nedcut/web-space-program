@@ -678,7 +678,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             col += tint * glow * (0.035 + roads * 3.0) * night * 0.65 * regionW * (1.0 - waterW)
               * (1.0 - 0.75 * smoothstep(0.2, 0.9, cloudCover(rel)));
           }
-          if (streets > 0.0 && earthRegionWeight(regionUV, max(dist, 750.0)) <= 0.0 && dot(lightsImg, lightsImg) > 0.0) col += earthEmission(nDir, length(rel) - uPlanetRadius, sunAlt) * streets * min(1.0, lightsImg.r * 3.0) * (1.0 - regionW);
+          if (streets > 0.0 && earthRegionWeight(regionUV, max(dist, 750.0)) <= 0.0 && dot(lightsImg, lightsImg) > 0.0) col += earthEmission(nDir, length(rel) - uPlanetRadius, sunAlt) * streets * min(1.0, lightsImg.r * 3.0) * (1.0 - regionW) * (1.0 - waterW);
           #else
           float sunAlt = dot(up, uSunDir);
           vec3 lightsImg = vec3(0.0);
@@ -686,7 +686,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           // Close up, the procedural street texture breaks the 3 km light pixels into streets.
           float streets = 1.0 - smoothstep(uEarthBlend.x * 0.5, uEarthBlend.x * 2.0, dist);
           col += lightsImg * (1.0 - streets) * (1.0 - waterW);
-          if (streets > 0.0 && dot(lightsImg, lightsImg) > 0.0) col += earthEmission(nDir, length(rel) - uPlanetRadius, sunAlt) * streets * min(1.0, lightsImg.r * 3.0);
+          if (streets > 0.0 && dot(lightsImg, lightsImg) > 0.0) col += earthEmission(nDir, length(rel) - uPlanetRadius, sunAlt) * streets * min(1.0, lightsImg.r * 3.0) * (1.0 - waterW);
           #endif
         #else
           col += earthEmission(normalize(transpose(uBodyRot) * rel), length(rel) - uPlanetRadius, dot(up, uSunDir));
@@ -1001,10 +1001,7 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         vec3 bed = uSeabed * lightIn * exp(-max(meshDepth, 0.0) * vec3(0.45, 0.12, 0.06));
         col = mix(col, bed + vSkyRefl * F, shallowW);
         col += lightIn * 0.4 * (1.0 - uHydrocarbon) * (1.0 - smoothstep(0.0, 0.6, meshDepth)) * fade1;
-        #ifdef EARTH_IMAGERY
-          // Lit ships, platforms and coastal cities over water pixels of the light map.
-          if (dot(up, uSunDir) < 0.025) col += earthNightLights(earthUVd(upBF, nDx, nDy), dot(up, uSunDir), rel) * 0.6;
-        #endif
+        // Water reflects its lighting; coarse city-light texels are not surface emission.
         col = col * vAerialT + vAerialL;
         gl_FragColor = vec4(col, 1.0);
       }`,
@@ -1115,8 +1112,8 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
           col = mix(col, shadeWater(waterAlbedo, up, up, V, rel, earthSkyReflApprox(skyAmb, up, V), coxMunkAlpha(seaWind(n, rel)), sunT, skyAmb), waterW);
         }
         #ifdef EARTH_IMAGERY
-          if (uEarthImagery > 0.5) col += earthNightLights(eUV, dot(up, uSunDir), rel);
-          else col += earthEmission(n, h, dot(up, uSunDir));
+          if (uEarthImagery > 0.5) col += earthNightLights(eUV, dot(up, uSunDir), rel) * (1.0 - waterW);
+          else col += earthEmission(n, h, dot(up, uSunDir)) * (1.0 - waterW);
         #else
           col += earthEmission(n, h, dot(up, uSunDir)) * (1.0 - waterW);
         #endif
