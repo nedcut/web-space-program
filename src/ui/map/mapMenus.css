@@ -40,3 +40,16 @@
 .map-keys dd { margin: 0; color: var(--text-dim); line-height: 1.35; }
 .map-readout .path { color: var(--text); }
 .map-readout .hint { color: var(--text-dim); font-size: 10.5px; margin-top: 3px; line-height: 1.45; }
+/* Map layers (biomes, cities) and objective shortcuts, inside the map readout / tracking overlays panel. */
+.map-layers { display: grid; gap: 3px; margin-top: 4px; pointer-events: auto; }
+.map-layers-toggles { display: flex; gap: 4px; }
+.map-layers-toggles .btn.small { flex: 1; text-align: center; padding: 2px 6px; }
+.map-layers-toggles .btn.on { color: #062333; background: linear-gradient(180deg, #8adff1, #65bed7); border-color: var(--accent); }
+.map-layers .map-objective { display: flex; align-items: center; gap: 6px; color: #ffd25c; padding: 2px 4px; }
+.map-layers .map-objective span:nth-child(2) { flex: 1; }
+.map-layers .map-show { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; opacity: .8; }
+.map-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 4px; }
+.map-legend .btn.small { display: flex; align-items: center; gap: 5px; padding: 1px 3px; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.map-swatch { flex: none; width: 9px; height: 9px; border-radius: 2px; border: 1.5px solid transparent; box-sizing: border-box; }
+.map-swatch.target { border-radius: 50%; border-width: 2px; }
+.map-layers-note { color: var(--text-dim); font-size: 10.5px; }

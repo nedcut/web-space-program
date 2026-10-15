@@ -6,7 +6,8 @@ import { CLOSEST_APPROACH_LEAD, focusCycle, mapContextActions, pathPointWarpTime
 import { formatDuration } from '../../util/format';
 import { isTyping, matches } from '../../input/bindings';
 import { formatDistance, formatSpeed } from '../../util/format';
-import { length, sub, type Vec3 } from '../../util/vec3';
+import { length, scale, sub, type Vec3 } from '../../util/vec3';
+import { qConj, qRotate } from '../../util/quat';
 import type { TrajectoryPatch } from '../../sim/orbit/api';
 import { patchState } from '../../sim/orbit/numericalPrediction';
 import { AutoFramer, UNDECIDED, firstTransition, pathFrameDistance } from './framing';
@@ -120,6 +121,7 @@ export class FlightMap {
    */
   focusFrame(active: WorldVessel, origin: Vec3, patches: readonly TrajectoryPatch[]): { position: Vec3; focusId: string; referenceBody: string } {
     const f = this.focus, w = this.world;
+    if (this.pendingBiome) this.lookAtPendingBiome();
     if (f?.kind === 'body' && w.universe.bodies.has(f.id)) return { position: w.universe.ephem.getBodyState(f.id, w.ut).position, focusId: f.id, referenceBody: f.id };
     const v = f?.kind === 'vessel' && f.id !== w.activeId ? w.vessels.get(f.id) : undefined;
     if (v) return { position: v.state.position, focusId: `vessel:${v.state.id}`, referenceBody: v.body };
@@ -135,7 +137,41 @@ export class FlightMap {
       const dx = origin.x - bodyState.position.x, dy = origin.y - bodyState.position.y, dz = origin.z - bodyState.position.z;
       this.c.map.distance = Math.max(this.c.map.distance, Math.sqrt(dx * dx + dy * dy + dz * dz) * 2.8);
     }
-    return { position: bodyState.position, focusId: active.body, referenceBody: active.body };
+    // Zoomed in towards the body, the focus slides from its centre to the vessel, so a close view looks at the ground
+    // round the vessel (MapView frames the camera in the local horizon there) instead of an arbitrary spot below.
+    const R = w.universe.body(active.body).radius, k = 1 - smoothstep(R * 1.6, R * 3, this.c.map.viewDistance);
+    const c = bodyState.position;
+    const position = k > 0 ? { x: c.x + (origin.x - c.x) * k, y: c.y + (origin.y - c.y) * k, z: c.z + (origin.z - c.z) * k } : c;
+    return { position, focusId: active.body, referenceBody: active.body };
+  }
+
+  /** Biome to show once its map has been built (see showBiome). */
+  private pendingBiome: { body: string; biome: string } | null = null;
+
+  /**
+   * Turn the map to a biome of `body`: focus the body and look down on the region of that biome nearest the
+   * active vessel (or its largest). Waits for the body's biome map when it is still being built.
+   */
+  showBiome(body: string, biome: string) {
+    this.setFocus({ kind: 'body', id: body });
+    this.pendingBiome = { body, biome };
+    this.lookAtPendingBiome();
+  }
+
+  private lookAtPendingBiome() {
+    const p = this.pendingBiome, w = this.world;
+    if (!p) return;
+    if (this.focus?.kind !== 'body' || this.focus.id !== p.body) { this.pendingBiome = null; return; }
+    const v = w.active;
+    let near: Vec3 | undefined;
+    if (v && v.body === p.body) {
+      const rel = sub(v.state.position, w.universe.ephem.getBodyState(p.body, w.ut).position);
+      near = qRotate(qConj(w.universe.ephem.bodyRotation(p.body, w.ut)), rel);
+    }
+    const anchor = this.c.map.biomeAnchor(p.body, p.biome, near && length(near) > 0 ? scale(near, 1 / length(near)) : undefined);
+    if (!anchor) return;
+    this.pendingBiome = null;
+    this.c.map.lookAtSurface(p.body, anchor, w.ut);
   }
 
   /** Change focus (null = active vessel) and frame the new object. */
@@ -202,7 +238,11 @@ export class FlightMap {
   minDistance(): number {
     const w = this.world, f = this.focus;
     if (f?.kind === 'body' && w.universe.bodies.has(f.id)) return w.universe.body(f.id).radius * 1.15;
-    return w.active ? w.universe.body(w.active.body).radius * 1.15 : 1500;
+    const v = f?.kind === 'vessel' ? w.vessels.get(f.id) ?? w.active : w.active;
+    if (!v) return 1500;
+    const b = w.universe.body(v.body), r = length(sub(v.state.position, w.universe.ephem.getBodyState(b.id, w.ut).position));
+    // Near the surface the camera looks down from the local horizon, so it can come close to a regional view.
+    return b.radius * (b.solidSurface && r < b.radius * 1.6 ? 0.12 : 1.15);
   }
 
   /** Focus objects in Tab order. */
@@ -407,4 +447,9 @@ export class FlightMap {
     const node = this.world.nodes.find(n => n.id === id);
     return !!node && !!patchAtNode(this.world.trajectory(), node);
   }
+}
+
+function smoothstep(e0: number, e1: number, x: number) {
+  const k = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+  return k * k * (3 - 2 * k);
 }

@@ -2,6 +2,7 @@ import { BIOMES, GENERIC_BIOMES, biomeAt } from './biomes';
 import type { Body } from '../bodies/types';
 import type { Terrain } from '../terrain/api';
 import type { Vec3 } from '../../util/vec3';
+import { LAUNCH_SITE, latLonToUnit } from '../terrain';
 
 /**
  * Biome classification sampled on an equirectangular grid (row 0 at the north pole, column 0 at longitude −180°,
@@ -154,5 +155,12 @@ export function biomeRegions(grid: BiomeGrid, minArea = 0.002, maxRegions = 48):
 export function buildBiomeMap(body: Body, terrain: Terrain, size = biomeGridSize(body)): BiomeMap {
   const grid = createBiomeGrid(body, size.width, size.height);
   fillBiomeRows(grid, body, terrain, 0, size.height);
-  return { ...grid, regions: biomeRegions(grid) };
+  const regions = biomeRegions(grid);
+  // The launch complex disc (2.5 km) can fall between cell centres: it is still a biome a player may be sent to.
+  if (body.id === 'earth' && !regions.some(r => grid.names[r.biome] === 'Launch Complex')) {
+    let index = grid.names.indexOf('Launch Complex');
+    if (index < 0) index = grid.names.push('Launch Complex') - 1;
+    regions.push({ biome: index, area: Math.PI * (2500 / body.radius) ** 2, anchor: latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon) });
+  }
+  return { ...grid, regions };
 }
