@@ -1,10 +1,8 @@
+import { FlightLighting } from './controller/FlightLighting';
 import { HUD_BLOCKS } from './hud/hudBlocks';
 import { SpeedModeTracker } from './speedMode';
 import { dockingModeAfterEvent } from './dockingMode';
 import { explosionDiameter, separationPunch, impactPunch, structuralStressPunch } from '../render/fx/eventDesign';
-import { updateSiteShadow } from '../render/site/shadows';
-import { maxDrawingEdge } from '../render/core/drawingLimits';
-import { ShadowMapCache } from '../render/core/shadowCache';
 import { onContextRestored } from '../render/core/contextRecovery';
 import { stageExplanation } from './cues';
 import { actionAvailable, partActions } from '../sim/vessel/actions';
@@ -15,7 +13,6 @@ import { FlightFx, isBurstEvent } from '../render/fx/FlightFx';
 
 import { PhotoCamera } from '../render/core/PhotoCamera';
 import * as THREE from 'three';
-import { SkyEnvironment, surfaceBounce } from '../render/core/skyEnv';
 import { releasePartTexturePixels, restorePartTexturePixels, setPartDetail } from '../render/parts';
 import type { GameAudio } from '../audio';
 import { PART_CATALOG } from '../data/parts';
@@ -34,8 +31,6 @@ import type { ExtraOrbit } from '../render/map/MapView';
 import { MapView } from '../render/map/MapView';
 import { FlightMap } from './map/FlightMap';
 import { LaunchSite, launchSiteDistance, type PadVessel } from '../render/site/LaunchSite';
-import { Starfield } from '../render/sky/Starfield';
-import { SunGlare } from '../render/sky/SunGlare';
 import { FlagView } from '../render/vessel/FlagView';
 import { ReentryFx } from '../render/vessel/ReentryFx';
 import { VesselView } from '../render/vessel/VesselView';
@@ -124,8 +119,6 @@ export class FlightController {
   readonly input: FlightInput;
   readonly pipeline: RenderPipeline;
   readonly scene = flightScene();
-  /** Skips the sun's depth pass while every caster and the light are unchanged (pad, attitude hold, pause). */
-  private readonly shadowCache = new ShadowMapCache();
   private unwatchContext: (() => void) | null = null;
   readonly cam = new FlightCamera();
   readonly map: MapView;
@@ -186,14 +179,7 @@ export class FlightController {
   private partPickListeners = new Set<(uid: number) => void>();
   private readonly raycaster = new THREE.Raycaster();
   private views = new Map<string, VesselView>();
-  private stars: Starfield;
-  private glare: SunGlare;
-  private skyEnv!: SkyEnvironment;
-  private readonly envUp = new THREE.Vector3();
-  private readonly envBounce: [number, number, number] = [0, 0, 0];
-  private sunLight = new THREE.DirectionalLight(0xffffff, 3.2);
-  private ambient = new THREE.HemisphereLight(0x8899bb, 0x221a10, 0.12);
-  private nightLight = new THREE.DirectionalLight(0xdfe8ff, 0);
+  private lighting: FlightLighting;
   private planets: PlanetLayer;
   private site: LaunchSite | null = null;
   private flags = new FlagView();
@@ -285,37 +271,21 @@ export class FlightController {
 
     const q = getQuality(quality);
     setPartDetail(q.partDetail);
-    this.stars = new Starfield({ count: q.stars.count, milkyWay: q.stars.milkyWay, seed: 7 });
-    this.scene.add(this.stars.group);
-    this.glare = new SunGlare();
-    this.scene.add(this.glare.mesh);
-    this.scene.add(this.sunLight, this.sunLight.target, this.ambient, this.nightLight, this.nightLight.target);
+    this.lighting = new FlightLighting(this.scene, this.pipeline.renderer, universe, q);
     this.effects = new FlightFx(getQuality(quality).particleQuality);
     this.scene.add(this.condensation.object, this.surfaceDust.mesh);
     this.scene.add(this.effects.root, this.reentry.object, this.flags.root);
-    this.sunLight.castShadow = true;
-    const shadowSize = Math.min(q.shadowMapSize || 512, maxDrawingEdge(this.pipeline.renderer));
-    this.sunLight.shadow.mapSize.set(shadowSize, shadowSize);
     // The pipeline was just built from these settings; do not rebuild it on the first frame.
     if (game.get().settings.quality === quality) this.graphicsKey = graphicsKeyOf(game.get().settings);
-    this.sunLight.shadow.bias = -0.00002;
-    this.sunLight.shadow.normalBias = 0.02;
-    // Soft PCF (Vogel disk); three r186 PCFShadowMap honours the radius.
-    this.sunLight.shadow.radius = 2.5;
-
-    // Image-based fill light so sunlit-from-behind vessels aren't pitch black. Scaled by air density each frame.
-    // Procedural sky/planetshine environment, re-baked as altitude, attitude and sun change.
-    this.skyEnv = new SkyEnvironment(this.pipeline.renderer);
     // A restored context has an empty shadow depth map: the cache would otherwise keep skipping the redraw.
     this.unwatchContext = onContextRestored(this.pipeline.renderer, () => {
-      this.shadowCache.invalidate();
+      this.lighting.invalidate();
       // Rewarm inactive terrain variants too, before a later altitude/region switch can use them.
       window.clearTimeout(this.warmupTimer);
       this.warmupGeneration++;
       this.warmup = 'pending';
       this.framesRendered = 0;
     });
-    this.scene.environmentIntensity = 1;
 
     this.planets = createPlanetLayer(this.scene, universe, quality, this.pipeline.renderer);
 
@@ -941,12 +911,7 @@ export class FlightController {
       const quality = getQuality(settings.quality);
       this.pipeline.setQuality(quality);
       this.effects.setQuality(quality.particleQuality);
-      const size = Math.min(quality.shadowMapSize || 512, maxDrawingEdge(this.pipeline.renderer));
-      if (this.sunLight.shadow.mapSize.x !== size) {
-        this.sunLight.shadow.mapSize.set(size, size);
-        this.sunLight.shadow.map?.dispose();
-        this.sunLight.shadow.map = null;
-      }
+      this.lighting.setQuality(quality);
     }
     // Loading frames (chunk builds, texture uploads, shader warm-up) are not GPU load: judged as such they sank
     // the scale to its floor before the loading screen lifted. Keep holding until shortly after it has.
@@ -1247,30 +1212,8 @@ export class FlightController {
       for (const [id, label] of this.playerLabels) if (!live.has(id)) { label.remove(); this.playerLabels.delete(id); }
     }
 
-    // Sun light: directional, shadow frustum hugging the active vessel.
-    const sd = new THREE.Vector3(sunDir.x, sunDir.y, sunDir.z);
-    // Cover the tower, trench and low-sun ground shadows near the launch complex.
-    const nearSite = wv.body === 'earth' && !!this.site && this.site.root.position.length() < 600;
-    const r = Math.max(nearSite ? 210 : 10, wv.state.cache.boundingRadius * 2.5);
-    this.sunLight.position.copy(sd).multiplyScalar(r * 4);
-    this.sunLight.target.position.set(0, 0, 0);
-    const sc = this.sunLight.shadow.camera as THREE.OrthographicCamera;
-    // Depth range reaches well past the vessel so long low-sun shadows on the ground are not clipped; airless
-    // descents need the vessel's shadow on the ground from several km up.
-    const far = r * 4 + Math.max(r * 8, wv.body === 'earth' ? 1500 : 6000);
-    if (sc.right !== r || sc.far !== far) {
-      sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 0.1; sc.far = far;
-      sc.updateProjectionMatrix();
-      // Biases scale with the shadow texel size (acne-free without peter-panning at any vessel size).
-      const texel = (2 * r) / this.sunLight.shadow.mapSize.x;
-      this.sunLight.shadow.normalBias = texel * 1.2;
-      this.sunLight.shadow.bias = -0.00002;
-    }
-
-    // Ground receivers sample the vessel's shadow map only while the ground is within its depth range (orbit
-    // frames skip the per-fragment lookup entirely).
-    const shadowReachesGround = groundAltitude < sc.far;
-    updateSiteShadow(this.sunLight, this.pipeline.renderer.shadowMap.enabled && shadowReachesGround);
+    this.lighting.placeSun(sunDir, wv.state.cache.boundingRadius, wv.body,
+      wv.body === 'earth' && !!this.site && this.site.root.position.length() < 600, groundAltitude);
     t0 = prof.now();
     // A lunar flight or distant orbit must not construct and warm hundreds of hidden site meshes.
     // Use the same body-fixed location as LaunchSite; a 50 km margin prepares inbound scenery early.
@@ -1287,58 +1230,14 @@ export class FlightController {
     this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.lodViewportHeight, switchViewportHeight: this.pipeline.lodSwitchViewportHeight });
     const eclipse = this.planets.sunVisibility?.(origin, sunPos) ?? 1;
     const tint = this.planets.sunTint?.(origin, sunPos) ?? [1, 1, 1];
-    const tmax = Math.max(1e-6, tint[0], tint[1], tint[2]);
-    this.sunLight.color.setRGB(tint[0] / tmax, tint[1] / tmax, tint[2] / tmax);
-    this.sunLight.intensity = 3.2 * eclipse;
-    // Night vision lights what the camera looks at, strongest in full shadow so daylight shading is untouched.
-    const dark = this.nightVision ? 1 - eclipse : 0;
-    this.ambient.intensity = 0.12 + 1.4 * dark;
-    // Always in the scene (intensity 0 when off): toggling visibility would change the light count and recompile shaders.
-    this.nightLight.intensity = 2.2 * dark;
-    if (dark > 0) {
-      this.nightLight.position.copy(camera.position);
-      camera.getWorldDirection(this.nightLight.target.position).add(camera.position);
-    }
-    // Sky fill: brighter in thick air (scattered skylight), dim in space (planetshine + starlight).
-    const airFrac = Math.min(1, air.density / 1.0);
-    this.effects.lighting(sd, camera, this.sunLight.color, this.sunLight.intensity, airFrac);
-    const envBody = u.body(wv.body);
-    const envRel = sub(origin, bodyState.position);
-    const envDist = Math.max(envBody.radius, length(envRel));
-    // Ground bounce from the terrain under the vessel: mid palette albedo on land, the darkest (water) entry over liquid.
-    const colors = envBody.surface.colors;
-    const terrain = envBody.solidSurface ? u.terrain(wv.body) : null;
-    // The surface under the vessel is max(liquid level, terrain): at the liquid level means over liquid.
-    const datumAltitude = length(sub(wv.state.position, bodyState.position)) - envBody.radius;
-    const liquidLevel = terrain?.liquid?.level ?? 0;
-    const overLiquid = !!terrain?.ocean && Math.abs(datumAltitude - groundAltitude - liquidLevel) < 0.01;
-    const bounce = envBody.solidSurface ? surfaceBounce({
-      albedo: (overLiquid ? colors[0] : colors[1] ?? colors[0]) ?? [0.3, 0.3, 0.3],
-      altitude: datumAltitude, radius: envBody.radius, daylight: eclipse,
-      sunColor: [this.sunLight.color.r, this.sunLight.color.g, this.sunLight.color.b], airless: !envBody.atmosphere,
-    }, this.envBounce) : undefined;
-    this.scene.environment = this.skyEnv.update(
-      {
-        up: this.envUp.set(envRel.x, envRel.y, envRel.z).normalize(),
-        sun: sd,
-        air: airFrac,
-        daylight: eclipse,
-        ground: envBody.surface.colors[0] ?? [0.3, 0.3, 0.3],
-        skyTint: envBody.atmosphere?.tint,
-        bodyAngle: Math.asin(Math.min(1, envBody.radius / envDist)),
-        bounce,
-      },
-      performance.now(),
-    );
-    this.scene.environmentIntensity = 0.85 + 0.35 * airFrac;
-    this.stars.update(camera, this.pipeline.pixelRatio);
-    this.glare.update(camera, sd, eclipse);
+    this.lighting.update(wv, origin, bodyState.position, groundAltitude, air.density,
+      camera, eclipse, tint, this.nightVision, this.pipeline.pixelRatio, this.effects);
     prof.add('planets', t0);
     t0 = prof.now();
     // The scene opts out of the renderer's automatic pass (see flightScene): update once, then decide shadows.
     this.scene.updateMatrixWorld();
     if (submit) {
-      this.shadowCache.update(this.scene, this.sunLight, this.pipeline.renderer.shadowMap.enabled);
+      this.lighting.updateShadows();
       this.pipeline.render(this.scene, camera);
     }
     prof.add('render', t0);
@@ -1646,16 +1545,13 @@ export class FlightController {
     this.planets.dispose();
     this.site?.dispose();
     this.map.dispose();
-    this.stars.dispose();
-    this.glare.dispose();
+    this.lighting.dispose();
     this.reentry.dispose();
     this.effects.dispose();
     this.condensation.dispose();
     this.surfaceDust.dispose();
     this.flags.dispose();
     this.unwatchContext?.();
-    this.skyEnv.dispose();
-    this.scene.environment = null;
     this.hatchMarker.dispose();
     this.labelHost.remove();
     this.fadeEl?.remove();
