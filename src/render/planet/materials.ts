@@ -250,15 +250,21 @@ const GLSL_IMAGERY_DECL = /* glsl */ `
 ${GLSL_EARTH_IMAGERY}
 /**
  * Black Marble city lights: sRGB-encoded radiance, decoded and lifted to HDR. Sodium-orange in dim suburbs,
- * whiter in saturated cores; dimmed and spread under cloud. Close-up street texture comes from earthEmission.
+ * whiter in saturated cores; dimmed under cloud. Mapped radiance supplies the network at every range.
  */
-vec3 earthNightLights(EarthUV e, float sunAltitude, vec3 rel) {
+vec3 earthLightRadiance(float s, float dist) {
+  float L = s * s * (0.35 + 0.65 * s);
+  vec3 tint = mix(vec3(1.0, 0.52, 0.2), vec3(1.0, 0.8, 0.58), smoothstep(0.45, 1.0, s));
+  // Resolved light-map texels represent districts, not luminous paving. Keep their
+  // radiance restrained nearby, then lift the unresolved network from high altitude.
+  float gain = mix(0.22, 2.0, smoothstep(10000.0, 60000.0, dist));
+  return tint * L * gain;
+}
+vec3 earthNightLights(EarthUV e, float sunAltitude, vec3 rel, float dist) {
   float night = 1.0 - smoothstep(-0.11, 0.025, sunAltitude);
   if (night <= 0.0 || uEarthNightOn < 0.5) return vec3(0.0);
   float s = textureGrad(uEarthNight, e.uv, e.dx, e.dy).r;
-  float L = s * s * (0.35 + 0.65 * s);
-  vec3 tint = mix(vec3(1.0, 0.52, 0.2), vec3(1.0, 0.8, 0.58), smoothstep(0.45, 1.0, s));
-  return tint * L * night * 1.6 * (1.0 - 0.75 * smoothstep(0.2, 0.9, cloudCover(rel)));
+  return earthLightRadiance(s, dist) * night * (1.0 - 0.75 * smoothstep(0.2, 0.9, cloudCover(rel)));
 }
 #endif
 `;
@@ -466,7 +472,6 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             nDx = dFdx(nDir); nDy = dFdy(nDir);
           }
           float urbanDensity = 0.0;
-          float roads = 0.0;
           #else
           // Only distant or night-side terrain uses imagery. Both conditions are smooth across the screen, so
           // quads agree on the branch and the derivatives inside it stay well defined (taken before any discard).
@@ -606,10 +611,8 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             #if defined(USE_DETAIL) && !defined(EARTH_REGION_FAR)
               img *= 1.0 + hd * 0.6 * uDetailStrength * (1.0 - regionW);
               if (regionW > 0.0) {
-                img = mix(img, earthGroundColour(img, urbanDensity, regionUV, hd, dist, roads), regionW);
+                img = mix(img, earthGroundColour(img, urbanDensity, regionUV, hd, dist), regionW);
               }
-            #else
-              roads = urbanDensity * 0.015;
             #endif
             float distantImagery = smoothstep(uEarthBlend.x, uEarthBlend.y, dist);
             // The regional pack supplies colour, not a new water surface on the coarse launch/coast grid.
@@ -665,28 +668,21 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           #ifdef EARTH_REGION
           float sunAlt = dot(up, uSunDir);
           vec3 lightsImg = vec3(0.0);
-          if (imgUsed && regionW < 1.0 && sunAlt < 0.025) lightsImg = earthNightLights(earthUVd(nDir, nDx, nDy), sunAlt, rel);
-          // Close up, the procedural street texture breaks the 3 km light pixels into streets.
-          float streets = 1.0 - smoothstep(uEarthBlend.x * 0.5, uEarthBlend.x * 2.0, dist);
-          col += lightsImg * (1.0 - streets) * (1.0 - waterW) * (1.0 - regionW);
+          if (imgUsed && regionW < 1.0 && sunAlt < 0.025) lightsImg = earthNightLights(earthUVd(nDir, nDx, nDy), sunAlt, rel, dist);
+          col += lightsImg * (1.0 - waterW) * (1.0 - regionW);
           if (regionW > 0.0 && uEarthNightOn > 0.5 && sunAlt < 0.025) {
             float night = 1.0 - smoothstep(-0.11, 0.025, sunAlt);
             float s = textureGrad(uEarthRegionNight, regionUV.uv, regionUV.dx, regionUV.dy).r;
-            float glow = s * s * (0.35 + 0.65 * s);
-            vec3 tint = mix(vec3(1.0, 0.45, 0.16), vec3(1.0, 0.64, 0.30), s);
-            // Mapped brightness locates the cores; filtered roads break up resolved urban footprints.
-            col += tint * glow * (0.035 + roads * 3.0) * night * 0.65 * regionW * (1.0 - waterW)
+            // Black Marble supplies cores, connecting filaments and suburban falloff.
+            // Match global radiance at the regional handover; do not stamp tiled lamps over it.
+            col += earthLightRadiance(s, dist) * night * regionW * (1.0 - waterW)
               * (1.0 - 0.75 * smoothstep(0.2, 0.9, cloudCover(rel)));
           }
-          if (streets > 0.0 && earthRegionWeight(regionUV, max(dist, 750.0)) <= 0.0 && dot(lightsImg, lightsImg) > 0.0) col += earthEmission(nDir, length(rel) - uPlanetRadius, sunAlt) * streets * min(1.0, lightsImg.r * 3.0) * (1.0 - regionW) * (1.0 - waterW);
           #else
           float sunAlt = dot(up, uSunDir);
           vec3 lightsImg = vec3(0.0);
-          if (imgUsed && sunAlt < 0.025) lightsImg = earthNightLights(earthUVd(nDir, nDx, nDy), sunAlt, rel);
-          // Close up, the procedural street texture breaks the 3 km light pixels into streets.
-          float streets = 1.0 - smoothstep(uEarthBlend.x * 0.5, uEarthBlend.x * 2.0, dist);
-          col += lightsImg * (1.0 - streets) * (1.0 - waterW);
-          if (streets > 0.0 && dot(lightsImg, lightsImg) > 0.0) col += earthEmission(nDir, length(rel) - uPlanetRadius, sunAlt) * streets * min(1.0, lightsImg.r * 3.0) * (1.0 - waterW);
+          if (imgUsed && sunAlt < 0.025) lightsImg = earthNightLights(earthUVd(nDir, nDx, nDy), sunAlt, rel, dist);
+          col += lightsImg * (1.0 - waterW);
           #endif
         #else
           col += earthEmission(normalize(transpose(uBodyRot) * rel), length(rel) - uPlanetRadius, dot(up, uSunDir));
@@ -993,14 +989,15 @@ export function createOceanMaterial(u: PlanetUniforms, q: QualitySettings, seabe
         #endif
         vec3 col = shadeWater(water, up, N, V, rel, skyR, alpha, sunT, skyAmb);
         vec3 lightIn = uSunColor * sunT * max(dot(up, L), 0.0) / ATMO_PI + skyAmb / ATMO_PI;
-        // Seabed and surf follow the mesh's own shoreline; from altitude the imagery carries the shallows.
-        float shallowW = 1.0 - smoothstep(0.0, 6.0, max(meshDepth, 0.0));
+        // Resolve the seabed only nearby and only below the physical water surface.
+        // Imagery may put a lake over positive mesh heights: those are not zero-depth sand.
+        float shallowW = (1.0 - smoothstep(0.0, 6.0, meshDepth)) * smoothstep(0.0, 0.5, meshDepth) * fade1;
         #ifdef EARTH_IMAGERY
           shallowW *= 1.0 - wImg;
         #endif
         vec3 bed = uSeabed * lightIn * exp(-max(meshDepth, 0.0) * vec3(0.45, 0.12, 0.06));
         col = mix(col, bed + vSkyRefl * F, shallowW);
-        col += lightIn * 0.4 * (1.0 - uHydrocarbon) * (1.0 - smoothstep(0.0, 0.6, meshDepth)) * fade1;
+        col += lightIn * 0.4 * (1.0 - uHydrocarbon) * (1.0 - smoothstep(0.0, 0.6, meshDepth)) * smoothstep(0.0, 0.1, meshDepth) * fade1;
         // Water reflects its lighting; coarse city-light texels are not surface emission.
         col = col * vAerialT + vAerialL;
         gl_FragColor = vec4(col, 1.0);
@@ -1112,7 +1109,7 @@ export function createFarSphereMaterial(u: PlanetUniforms, q: QualitySettings, o
           col = mix(col, shadeWater(waterAlbedo, up, up, V, rel, earthSkyReflApprox(skyAmb, up, V), coxMunkAlpha(seaWind(n, rel)), sunT, skyAmb), waterW);
         }
         #ifdef EARTH_IMAGERY
-          if (uEarthImagery > 0.5) col += earthNightLights(eUV, dot(up, uSunDir), rel) * (1.0 - waterW);
+          if (uEarthImagery > 0.5) col += earthNightLights(eUV, dot(up, uSunDir), rel, dist) * (1.0 - waterW);
           else col += earthEmission(n, h, dot(up, uSunDir)) * (1.0 - waterW);
         #else
           col += earthEmission(n, h, dot(up, uSunDir)) * (1.0 - waterW);

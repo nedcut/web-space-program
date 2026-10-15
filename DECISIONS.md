@@ -1398,3 +1398,20 @@ Owner decisions 2026-10-13 (both recommended options).
   craft's name (also while the craft is held). Picking the set-aside craft up whole keeps its mark (its staging
   then resets to automatic); attaching it to the stand merges it and clears the mark. Only one swap at a time (Edit on stand is disabled on other pieces meanwhile).
 - Set-aside pieces are still not saved with the craft (unchanged).
+
+## Flight night cities and lake rims (2026-10-15, cx/nightcity)
+
+- Use Black Marble's mapped intensity for night-city cores and connecting light
+  networks at all ranges. Remove the unrelated procedural street grid and tiled
+  lamps from loaded-imagery emission. Nearby districts use a restrained exposure;
+  unresolved lights gain brightness from 10 to 60 km. Regional and global shading
+  share this curve, cloud attenuation and the existing water exclusion.
+- Vary the daytime urban tile by reflecting and offsetting each neighbourhood,
+  keeping one explicitly filtered fetch. Natural Earth/Black Marble coverage still
+  controls density; reduce the illustrative roof overlay to preserve source colour.
+  No new assets, downloads, draws or per-frame CPU work.
+- The pale lake fill/rims came from mesh depths clamped to zero in the seabed blend,
+  including where the imagery water mask lies over dry mesh terrain. Require
+  positive physical depth for seabed/surf and fade resolved seabed detail with the
+  existing near-water range. Keep coast geometry and imagery masks unchanged.
+- Acceptance measurements and final visual review are pending in this worktree.
