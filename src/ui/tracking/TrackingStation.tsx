@@ -25,6 +25,8 @@ import { loadTrackingPrefs, saveTrackingPrefs, type TrackingPrefs } from './pref
 import { KindIcon } from './KindIcon';
 import '../nav/nav.css';
 import './tracking.css';
+import { MapLayers } from '../map/MapLayers';
+import { biomeObjectives } from '../../game/biomeObjectives';
 
 const distance = (n: number) => Number.isFinite(n) ? formatDistance(n) : '∞';
 const rowId = (id: string) => `trk-row-${id}`;
@@ -305,6 +307,8 @@ export default function TrackingStation() {
         <section className="panel tracking-overlays"><div className="label">Map overlays</div>
           <label className="label"><input type="checkbox" checked={overlay} onChange={e => updateSettings({ commsOverlay: e.target.checked })} /> Signal links · red weak / green strong</label>
           <label className="label"><input type="checkbox" checked={world.showLagrangePoints} onChange={e => { world.showLagrangePoints = e.target.checked; update(); }} /> Lagrange points</label>
+          {view.current && <MapLayers map={view.current.mapView} bodyId={body.id} bodyName={id => world.universe.bodies.get(id)?.name ?? id}
+            objectives={() => biomeObjectives(world.progression)} onShow={(b, biome) => view.current?.showBiome(b, biome)} />}
         </section>
         <details className="panel tracking-bodies" open><summary className="label">Celestial bodies</summary>{tree(world.universe.body(world.universe.sunId))}</details>
         <section className="panel tracking-info"><div className="label">{focus.kind === 'vessel' ? 'Reference body' : 'Focused body'} · {world.universe.preset} scale</div><nav aria-label="Focus path" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>{bodyBreadcrumbs(body, world.universe.bodies).map((b,i) => <span key={b.id}>{i > 0 && ' › '}<Button className="btn ghost small" aria-current={b.id === body.id ? 'location' : undefined} onClick={() => view.current?.setFocus({ kind: 'body', id: b.id })}>{b.name}</Button></span>)}</nav><h2>{body.name}</h2><p className="tracking-muted">{body.description ?? 'No description available.'}</p><dl>

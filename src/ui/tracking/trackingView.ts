@@ -5,6 +5,10 @@ import { game, applyCommsSettings } from '../../game/store';
 import type { World } from '../../game/world';
 import { RAILS_WARP } from '../../game/timewarp';
 import { neutralInput } from '../../sim/vessel';
+import { requestBiomeMap } from '../../game/biomeMaps';
+import { biomeObjectives } from '../../game/biomeObjectives';
+import { qConj, qRotate } from '../../util/quat';
+import { length, scale, sub } from '../../util/vec3';
 
 export type TrackingFocus = { kind: 'body' | 'vessel'; id: string };
 
@@ -31,6 +35,7 @@ export class TrackingView {
     Object.assign(canvas.style, { width: '100%', height: '100%', display: 'block' });
     host.appendChild(canvas);
     this.map = new MapView(world.universe.bodies, world.universe.ephem, host, getQuality(game.get().settings.quality), world.universe);
+    this.map.setBiomeSource(requestBiomeMap);
     this.focus = { kind: 'body', id: world.universe.sunId };
     this.setFocus(this.focus);
     this.detach = this.map.attachControls(canvas, () => this.focus.kind === 'body' ? world.universe.body(this.focus.id).radius * 1.2 : 1500);
@@ -68,6 +73,28 @@ export class TrackingView {
     this.focused(focus);
   }
 
+  get mapView(): MapView { return this.map; }
+
+  private pendingBiome: { body: string; biome: string } | null = null;
+
+  /** Focus a body and look down on its region of `biome` nearest the active vessel (once the map is built). */
+  showBiome(body: string, biome: string) {
+    this.setFocus({ kind: 'body', id: body });
+    this.pendingBiome = { body, biome };
+  }
+
+  private lookAtPendingBiome() {
+    const p = this.pendingBiome, w = this.world;
+    if (!p) return;
+    if (this.focus.kind !== 'body' || this.focus.id !== p.body) { this.pendingBiome = null; return; }
+    const v = w.active?.body === p.body ? w.active : undefined;
+    const rel = v ? qRotate(qConj(w.universe.ephem.bodyRotation(p.body, w.ut)), sub(v.state.position, w.universe.ephem.getBodyState(p.body, w.ut).position)) : undefined;
+    const anchor = this.map.biomeAnchor(p.body, p.biome, rel && length(rel) > 0 ? scale(rel, 1 / length(rel)) : undefined);
+    if (!anchor) return;
+    this.pendingBiome = null;
+    this.map.lookAtSurface(p.body, anchor, w.ut);
+  }
+
   private describe(pick: MapPick): string | null {
     if (pick.kind !== 'vessel') return null;
     const v = this.world.vessels.get(pick.id);
@@ -98,11 +125,13 @@ export class TrackingView {
         orbit: !world.preciseGravity && v.state.situation === 'flying' && v.mode !== 'prelaunch' ? world.orbitOf(v) : undefined,
       }));
       this.lastOrbits = now;
+      this.map.setBiomeTargets(biomeObjectives(world.progression));
     }
     // Refresh positions each frame without rebuilding the conics.
     for (let i = this.fleet.length-1; i >= 0; i--) if (!world.vessels.has(this.fleet[i].id)) this.fleet.splice(i,1);
     for (const item of this.fleet) item.position = world.vessels.get(item.id)!.state.position;
     this.map.setExtraOrbits(this.fleet);
+    if (this.pendingBiome) this.lookAtPendingBiome();
     const focus = this.focus.kind === 'vessel'
       ? world.vessels.get(this.focus.id)!.state.position
       : world.universe.ephem.getBodyState(this.focus.id, world.ut).position;

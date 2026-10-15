@@ -85,7 +85,7 @@ than importing `World`. `LaunchSite` already follows that structural-input patte
   hash of the drawing code); `render/planet`: renderer,
   atmosphere/effects, cube-sphere quadtree, worker-built chunks, textures and rings. `planet/scatter/` streams
   deterministic render-only decoration. `render/site`: launch complex/aerial/textures; `render/sky`: stars and
-  sun glare; `render/map`: conics/markers/gizmos (`MapView` plus pure `maneuverGizmo.ts`/`orbitMarkers.ts` math; gestures reach the host through `MapView.handlers`; `flight/map/FlightMap` owns flight map focus, menus and node commands, `ui/map` the shared context menu/actions used by the Tracking Station); `render/vessel`: vessel meshes, flags and re-entry effects;
+  sun glare; `render/map`: conics/markers/gizmos (`MapView` plus pure `maneuverGizmo.ts`/`orbitMarkers.ts` math; `surfaceLayers.ts` draws the biome overlay, objective highlights and city labels from `sim/science/biomeMap.ts` grids built by the `game/biomeMaps.ts` worker; gestures reach the host through `MapView.handlers`; `flight/map/FlightMap` owns flight map focus, menus and node commands, `ui/map` the shared context menu/actions used by the Tracking Station); `render/vessel`: vessel meshes, flags and re-entry effects;
   `render/parts/builders`: category geometry and expedition/ISRU hardware.
 - `net/protocol.ts` and `snapshots.ts` define transport, `net/client.ts` predicts/reconciles owned vessels;
   `server/{index,server,room}.ts` owns room lifetime, control ownership, launch queues and authoritative ticks.

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Universe } from '../game/universe';
 import { MapView } from '../render/map/MapView';
 import { DEFAULT_START_UT } from '../game/store';
+import { requestBiomeMap } from '../game/biomeMaps';
 
 await loadEarthData();
 
@@ -16,10 +17,15 @@ document.body.appendChild(renderer.domElement);
 const map = new MapView(bodies, ephem, document.body, undefined, universe);
 let focusId = params.get('focus') ?? 'sun';
 map.distance = +(params.get('dist') ?? 6e11);
+map.setBiomeSource(requestBiomeMap);
+map.setBiomeOverlay(params.get('biomes') === '1');
+if (params.get('target')) { const [body, biome] = params.get('target')!.split(':'); map.setBiomeTargets([{ body, biome, label: `${biome} — contract target` }]); }
+(window as unknown as { __map: MapView }).__map = map; // automation
 map.attachControls(renderer.domElement, () => (bodies.get(focusId)!.radius * 1.5));
 const ui = document.getElementById('ui')!;
 const sel = document.createElement('select');
 for (const b of bodies.values()) sel.add(new Option(b.name, b.id, false, b.id === focusId));
+(window as unknown as { __setFocus: (id: string) => void }).__setFocus = id => { focusId = id; };
 sel.onchange = () => { focusId = sel.value; map.distance = Math.max(bodies.get(focusId)!.radius * 6, 1e6); };
 ui.appendChild(sel);
 let t = Number(params.get('ut') ?? DEFAULT_START_UT);
