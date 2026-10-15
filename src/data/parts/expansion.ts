@@ -83,6 +83,6 @@ export const expansion: PartDef[] = [
     shape: box(0.56,2.8,0.56), attachNodes: [srfNode(0.56,0.42)], meshParams: { scale: 2.8 },
     modules: [landingLegModule(2.8, 400000, 40000, 0.7)] },
   ...[0,1].map(i => { const p = landingGear({ id: `rover-wheel-${i}`, name: i ? 'Boulder Powered Rover Wheel' : 'Pebble Powered Rover Wheel', description: 'Fixed powered terrain wheel with steering, a sprung hub and independent braking. On the ground, W/S drive forward/reverse, A/D steer and B brakes.', dryMass: i ? 110 : 35, cost: i ? 850 : 350, radius: i ? 0.48 : 0.25, strut: i ? 0.55 : 0.3, fold: 0, spring: i ? 80000 : 25000, damper: i ? 7000 : 2500, travel: i ? 0.3 : 0.15, brakeTorque: i ? 1800 : 350, steerDeg: 30, crashTolerance: 18 });
-    return { ...p, modules: p.modules.map(m => m.type === 'wheel' ? { ...m, motorTorque: i ? 1500 : 250, ...(i ? { maxDriveSpeed: 20 } : {}) } : m) }; }),
+    return { ...p, modules: p.modules.map(m => m.type === 'wheel' ? { ...m, motorTorque: i ? 1500 : 250, maxDriveSpeed: i ? 20 : 12 } : m) }; }),
   { ...hardware('rover-chassis', 'Trailhead Rover Chassis', 'structural', 220, 1200, box(1.5,2,0.35), 'framework', [], { style: 'chassis' }, 1), resources: { electricCharge: 800 } },
 ];

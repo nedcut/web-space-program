@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PART_CATALOG } from '../src/data/parts';
-import { buildCricket, buildFizzwick, buildSaltstreak, buildSkipjack, buildTrekker } from '../src/editor/stock/fun';
+import { buildCricket, buildFizzwick, buildPackmule, buildSaltstreak, buildSkipjack, buildTrekker } from '../src/editor/stock/fun';
 import { DEFAULT_START_UT } from '../src/game/store';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
@@ -85,6 +85,46 @@ describe('fun stock craft do what their blurbs say', () => {
     expect(around).toBe(true);
     expect(f.ground()).toBeGreaterThan(100);
   }, 120000);
+
+  it('Packmule takes off loaded and climbs away', () => {
+    const f = fly(buildPackmule());
+    const right0 = normalize(cross(f.att().nose, f.up()));
+    f.tick({ stage: true });
+    let liftoff = NaN, run = 0, wasLanded = false;
+    for (let i = 0; i < 50 * 150 && f.ground() < 300; i++) {
+      const a = f.att(), w = f.wv.state.angularVelocity, speed = f.speed(), onGround = f.wv.state.situation === 'landed';
+      if (onGround) { run += speed * 0.02; wasLanded = true; } else if (wasLanded && Number.isNaN(liftoff) && f.ground() > 5) liftoff = speed;
+      f.tick({ throttle: 1, pitch: clamp(0.12 * ((speed > 75 ? 10 : 0) - a.pitch) - 1.5 * w.x), roll: clamp(0.08 * a.bank - w.y),
+        yaw: onGround ? clamp(-4 * dot(a.nose, right0)) : 0, gear: f.ground() > 40 ? false : undefined });
+      expect(f.wv.state.destroyed).toBe(false);
+    }
+    console.log(`Packmule liftoff ${liftoff.toFixed(1)} m/s after ${run.toFixed(0)} m, pitch ${f.att().pitch.toFixed(1)}°`);
+    expect(f.ground()).toBeGreaterThan(300);
+    expect(run).toBeLessThan(2000);
+    expect(f.wv.state.parts.length).toBe(buildPackmule().parts.length);
+  }, 120000);
+
+  it('Packmule opens its bay on 1, drops the rover, and the rover drives out from under it', () => {
+    const f = fly(buildPackmule());
+    f.tick({ brakes: true }, 100);
+    const bay = f.wv.state.parts.find(p => p.partId === 'bay-cargo-2')!;
+    f.tick({ brakes: true, commands: [{ kind: 'group', group: 'custom1' }] });
+    f.tick({ brakes: true }, 100);
+    expect(bay.bayOpen).toBe(true);
+    // Stage 1 lights the jets (left idle); stage 0 releases the rover.
+    f.tick({ brakes: true, stage: true }); f.tick({ brakes: true }, 10); f.tick({ brakes: true, stage: true });
+    f.tick({ brakes: true }, 150);
+    const rover = [...f.world.vessels.values()].find(v => v !== f.wv && v.state.parts.some(p => p.partId === 'probe-pebble'))!;
+    expect(rover).toBeTruthy();
+    expect(f.world.switchTo(rover.state.id)).toBe(true);
+    for (let i = 0; i < 50 * 8; i++) f.world.tick(0.02, neutralInput({ wheelThrottle: 1 }));
+    const gap = length(v3(...(['x', 'y', 'z'] as const).map(k => rover.state.position[k] - f.wv.state.position[k]) as [number, number, number]));
+    const contact = rover.state.parts.filter(p => p.wheel?.inContact).length;
+    console.log(`rover ${gap.toFixed(1)} m from the plane, ${contact} wheels down, ${rover.state.situation}`);
+    expect(rover.state.destroyed).toBe(false);
+    expect(contact).toBe(4);
+    expect(gap).toBeGreaterThan(8);
+  }, 60000);
 
   for (const [name, build, minSpeed] of [['Trekker', buildTrekker, 15]] as const) {
     it(`${name} drives off down the runway and turns, wheels on the ground`, () => {

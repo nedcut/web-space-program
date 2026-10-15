@@ -5,7 +5,7 @@ import { qFromAxisAngle, qRotate, type Quat } from '../util/quat';
 import { v3, type Vec3 } from '../util/vec3';
 import { autoStageByDepth, CraftEditor, type PartCatalog } from './core';
 import { surfaceTransform } from './surface';
-import { buildCricket, buildFizzwick, buildSaltstreak, buildSkipjack, buildTrekker } from './stock/fun';
+import { buildCricket, buildFizzwick, buildPackmule, buildSaltstreak, buildSkipjack, buildTrekker } from './stock/fun';
 
 /**
  * Pre-built stock crafts, assembled programmatically through CraftEditor so attach positions, symmetry
@@ -723,11 +723,13 @@ export const STOCK_CRAFTS: StockCraft[] = ([
   { scale: 'standard', id: 'stock-fizzwick', name: 'Fizzwick Bundle', blurb: 'Starting equipment · six solids and a core, all lit at once', category: 'fun',
     tags: ['srb-sparkler', 'eng-gust', 'fin-keel'], tip: 'Fly straight up and watch the ring of Sparklers burn out together; stage the capsule at the top.', build: () => buildFizzwick() },
   { scale: 'standard', id: 'stock-skipjack', name: 'Skipjack Stunt Plane', blurb: 'Runway · nimble aerobatic jet with elevon canards', category: 'aircraft', needsResearch: true,
-    tags: ['wing-swept', 'ctrl-elevon', 'fuse-spar-short', 'gear-skid'], tip: 'Climb to 1 km, then pull back hard for a loop or roll with A/D.', build: () => buildSkipjack() },
+    tags: ['wing-swept', 'ctrl-elevon', 'fuse-spar-short'], tip: 'Climb to 1 km, then pull back hard for a loop or roll with A/D.', build: () => buildSkipjack() },
   { scale: 'standard', id: 'stock-saltstreak', name: 'Saltstreak Jet Dragster', blurb: 'Runway · crewed rover with a turbofan on the back', category: 'fun', needsResearch: true,
     tags: ['rover-wheel-1', 'rover-chassis', 'jet-kittiwake', 'fuse-spar-short'], tip: 'Race the runway and brake before the grass. Brave? Raise its thrust limiter in the Integration Hall.', build: () => buildSaltstreak() },
   { scale: 'standard', id: 'stock-trekker', name: 'Trekker Field Lab', blurb: 'Six-wheel science rover · every surface instrument', category: 'aircraft', needsResearch: true,
     tags: ['sensor-seismic', 'sensor-magnetic', 'sensor-gravity', 'sensor-pressure', 'panel-1'], tip: 'Drive to a different biome and run all five instruments for a pile of science.', build: () => buildTrekker() },
+  { scale: 'standard', id: 'stock-packmule', name: 'Packmule Freighter', blurb: 'Runway · twin-jet cargo plane with a rover in its bay', category: 'aircraft', needsResearch: true,
+    tags: ['bay-cargo-2', 'fuse-tailcone', 'fuelcell-1', 'dec-radial'], tip: 'Land somewhere new, open the bay with 1, stage to drop the rover and drive it out.', build: () => buildPackmule() },
   { scale: 'standard', id: 'stock-cricket', name: 'Cricket Hopper', blurb: 'Crewed hover rig · radial engines and landing legs', category: 'fun', needsResearch: true,
     tags: ['eng-radial-rill', 'leg-strider', 'light-area'], tip: 'Hover at about half throttle, drift sideways a few metres, then land back on the legs.', build: () => buildCricket() },
 ] satisfies StockCraft[]).map(stock => ({

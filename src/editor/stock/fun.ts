@@ -24,9 +24,9 @@ export function buildFizzwick(catalog: PartCatalog = PART_CATALOG): CraftDef {
   return b.done();
 }
 
-/** Stub fuselage, swept wings, all-moving elevon canards and tailplanes; beacon lamps on the wingtips. */
+/** Stub fuselage, swept wings, all-moving elevon canards and tailplanes. */
 export function buildSkipjack(catalog: PartCatalog = PART_CATALOG): CraftDef {
-  const b = new Builder(catalog, 'Skipjack Stunt Plane', 'Light, overpowered aerobatic jet. Rotate at 55 m/s; loops and rolls need only a little stick.', 'SPH');
+  const b = new Builder(catalog, 'Skipjack Stunt Plane', 'Light, overpowered aerobatic jet. Rotate at 60 m/s; it loops and rolls on a little stick.', 'SPH');
   const cockpit = b.root('cockpit-skylark');
   const fuse = b.stack(cockpit, 'fuse-spar-short');
   const jet = b.stack(fuse, 'jet-kittiwake');
@@ -35,9 +35,10 @@ export function buildSkipjack(catalog: PartCatalog = PART_CATALOG): CraftDef {
   b.radial(cockpit, 'ctrl-elevon', 'mirror', -0.6, 90);
   b.radial(jet, 'ctrl-elevon', 'mirror', -0.95, 90);
   b.radial(jet, 'tail-hawk', 1, -0.5, 0);
+  // Swift's tricycle layout: steerable nose wheel, braked mains under the wings just behind the centre of mass.
   b.radial(cockpit, 'gear-trundle', 1, -0.45, 180);
   const w = b.part(wing);
-  b.surface(wing, 'gear-skid', v3(w.position.x - 0.9, w.position.y - 0.3, w.position.z - 0.06), v3(0, 0, -1), 'mirror');
+  b.surface(wing, 'gear-bogie', v3(w.position.x - 1, w.position.y - 0.65, w.position.z - 0.06), v3(0, 0, -1), 'mirror');
   return b.done();
 }
 
@@ -105,4 +106,47 @@ export function buildCricket(catalog: PartCatalog = PART_CATALOG): CraftDef {
   b.radial(tank, 'leg-strider', 4, -0.2, 0);
   b.radial(pod, 'light-area', 4, -0.4, 45);
   return b.done();
+}
+
+/**
+ * Twin-jet freighter: fuel spar behind the cockpit, a 2.5 m cargo bay carrying a small fuel-cell rover on a side latch,
+ * podded turbofans under the wings and a tailcone. Land, open the bay, release the rover and drive it out.
+ */
+export function buildPackmule(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Packmule Freighter', 'Twin-jet cargo plane with a rover in its bay. Rotate at 80 m/s. After landing, press 1 to open the bay and stage to drop the rover.', 'SPH');
+  const cockpit = b.root('cockpit-skylark');
+  const fuel = b.stack(cockpit, 'fuse-spar');
+  const taper = b.stack(fuel, 'adapt-1-2');
+  const bay = b.stack(taper, 'bay-cargo-2');
+  const narrow = b.stack(bay, 'adapt-1-2', 'bottom', 'bottom');
+  b.stack(narrow, 'fuse-tailcone', 'top', 'top');
+  b.radial(fuel, 'intake-gill', 'mirror', -0.6, 70);
+  b.radial(taper, 'ctrl-elevon', 'mirror', -0.3, 90);
+  b.radial(bay, 'wing-broadleaf', 'mirror', 0.6, 90, qFromAxisAngle(v3(0, 0, 1), (3 * Math.PI) / 180));
+  // Pods hang just under the wing: low enough to clear it, high enough not to lift the nose at full thrust.
+  b.radial(bay, 'jet-kittiwake', 'mirror', -0.2, 115);
+  b.radial(narrow, 'tail-hawk', 1, 0, 0);
+  b.radial(narrow, 'tail-hawk', 'mirror', 0, 90);
+  // Bogie nose gear on the taper, mounted as deep as the mains so the fuselage sits level.
+  b.radial(taper, 'gear-bogie', 1, -0.31, 180);
+  const y = b.part(bay).position.y;
+  // Mains 0.75 m behind the centre of mass (the pods' thrust line is below it), inboard of the pods.
+  b.surface(bay, 'gear-bogie', v3(0.6, y + 0.1, -Math.sqrt(1.25 ** 2 - 0.6 ** 2)), v3(0, 0, -1), 'mirror');
+  // Rover: latch under the bay roof, a fuel thimble as its nose, deck, probe core at the back and four Pebble wheels.
+  // The deck rides 0.15 m below the bay axis so the tyres stay inside the bay's curved floor.
+  const latch = b.surface(bay, 'dec-radial', v3(0, y + 1.2, -0.15 + 0.3125 + 0.24), v3(0, 0, -1), 1);
+  const nose = b.outward(latch, 'tank-0-short');
+  const deck = b.stack(nose, 'rover-chassis', 'bottom', 'top');
+  b.stack(deck, 'probe-pebble');
+  const dy = b.part(deck).position.y, dz = b.part(deck).position.z;
+  for (const at of [-0.55, 0.55]) b.surface(deck, 'rover-wheel-0', v3(0.75, dy + at, dz - 0.175), v3(0, 0, -1), 'mirror');
+  b.surface(deck, 'fuelcell-1', v3(0, dy - 0.5, dz + 0.175), v3(0, 0, 1), 1);
+  for (const p of b.ed.craft.parts) {
+    if (p.partId === 'jet-kittiwake') b.stages.set(p.partId, 1);
+    if (p.partId === 'dec-radial') b.stages.set(p.partId, 0);
+  }
+  const craft = b.done();
+  // Action group 1 opens and closes the bay doors.
+  craft.parts.find(p => p.uid === bay)!.actions = { custom1: ['deploy.toggle'] };
+  return craft;
 }

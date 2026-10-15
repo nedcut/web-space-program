@@ -43,7 +43,7 @@ describe('launch stability advisory', () => {
     expect(preflightChecks(tail, PART_CATALOG).some(c => c.id === 'aero')).toBe(true);
   });
   it('audits every stock craft with editor stage readouts; remaining advisories identify missing parachutes or low Earth TWR', () => {
-    const withoutChutes = ['stock-swift', 'stock-hearthlight', 'stock-longreach', 'stock-daybreak', 'stock-alembic', 'stock-skipjack', 'stock-saltstreak'];
+    const withoutChutes = ['stock-swift', 'stock-hearthlight', 'stock-longreach', 'stock-daybreak', 'stock-alembic', 'stock-skipjack', 'stock-saltstreak', 'stock-packmule'];
     // Rovers drive on their wheels: no engine at all.
     const wheelsOnly = ['stock-trekker'];
     for (const stock of STOCK_CRAFTS) {
