@@ -22,6 +22,7 @@ export interface QuadtreeOptions {
   ocean: boolean;
   pool: TerrainWorkerPool;
   terrainMaterial: THREE.Material;
+  terrainWarmupMaterials?: THREE.ShaderMaterial[];
   oceanMaterial?: THREE.Material;
   maxInFlight: number;
   buildBudgetMs: number;
@@ -108,6 +109,7 @@ export class Quadtree {
   private nextSelected = new Set<ChunkNode>();
   private readonly terrainBatch?: ChunkBatch;
   private readonly oceanBatch?: ChunkBatch;
+  private readonly warmupGeometry?: THREE.BufferGeometry;
   /** One index buffer (CPU and GPU) for every land and ocean chunk: they share the grid + skirt pattern. */
   private readonly index: THREE.BufferAttribute;
   stats = { selected: 0, meshes: 0, cacheMB: 0, inflight: 0, queued: 0, builtTotal: 0, lastBuildMs: 0 };
@@ -128,6 +130,22 @@ export class Quadtree {
     if (opts.batch && opts.oceanMaterial) {
       this.oceanBatch = new ChunkBatch(opts.oceanMaterial, opts.batch, vertices, indices);
       this.group.add(this.oceanBatch.mesh);
+    }
+    if (opts.terrainWarmupMaterials?.length) {
+      const geometry = this.warmupGeometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
+      geometry.setAttribute('aNormalOct', new THREE.BufferAttribute(new Int16Array(6), 2, true));
+      geometry.setAttribute('aColor', new THREE.BufferAttribute(new Uint8Array(12), 4, true));
+      for (const material of opts.terrainWarmupMaterials) {
+        const proxy = new THREE.Mesh(geometry, material);
+        if (opts.batch) {
+          material.defines.CHUNK_SLOT_VERTS = vertices;
+          Object.assign(proxy, { isBatchedMesh: true, _colorsTexture: null });
+        }
+        proxy.name = 'terrain-program-warmup';
+        proxy.visible = false;
+        this.group.add(proxy);
+      }
     }
   }
 
@@ -476,5 +494,6 @@ export class Quadtree {
     for (const r of this.roots) this.disposeNode(r, true);
     this.terrainBatch?.dispose();
     this.oceanBatch?.dispose();
+    this.warmupGeometry?.dispose();
   }
 }

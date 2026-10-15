@@ -16,6 +16,7 @@ import { computeAtmosphereParams, buildTransmittanceLUT, type AtmosphereParams }
 import { createPlanetUniforms, registerPlanetUniforms, shaderTime, unregisterPlanetUniforms, WaveClock, type PlanetUniforms } from './uniforms';
 import {
   createTerrainMaterial,
+  type TerrainMaterialOptions,
   createOceanMaterial,
   createFarSphereMaterial,
   createGasGiantMaterial,
@@ -112,6 +113,7 @@ export class PlanetRenderer {
   private pool: TerrainWorkerPool | null = null;
   private scatter: SurfaceScatter | null = null;
   private quadtree: Quadtree | null = null;
+  private terrainVariants: { base: THREE.ShaderMaterial; detail: THREE.ShaderMaterial; far: THREE.ShaderMaterial; active: THREE.ShaderMaterial; ocean?: THREE.ShaderMaterial } | null = null;
   private farSphere: THREE.Mesh | null = null;
   private farMaterial: THREE.ShaderMaterial | null = null;
   private farTexture: THREE.DataTexture | null = null;
@@ -311,7 +313,7 @@ export class PlanetRenderer {
       lunar: [0.13, 0.125, 0.12],
     };
     const rock = rockByPreset[preset] ?? (this.body.surface?.colors?.[0] as [number, number, number]) ?? [0.15, 0.14, 0.13];
-    const terrainMat = createTerrainMaterial(this.uniforms, q, {
+    const terrainOptions: TerrainMaterialOptions = {
       rockColor: rock,
       rockBlend: preset === 'earth' ? 1 : preset === 'mars' ? 0.6 : 0.35,
       airless,
@@ -321,12 +323,19 @@ export class PlanetRenderer {
       cutout: terrainCutout(this.body.id),
       craters: preset === 'lunar' || preset === 'mercury' || preset === 'rocky',
       surfaceShadows: preset !== 'earth' && this.body.id !== 'earth',
-    });
+    };
+    const terrainMat = createTerrainMaterial(this.uniforms, q, terrainOptions);
     this.materials.push(terrainMat);
     let oceanMat: THREE.ShaderMaterial | undefined;
     if (ocean) {
       oceanMat = createOceanMaterial(this.uniforms, { ...q, atmosphere: QUALITY_PRESETS[q.earth.oceanQuality].atmosphere }, [0.35, 0.31, 0.22], terrain?.liquid?.kind === 'hydrocarbon');
       this.materials.push(oceanMat);
+    }
+    if (this.imagery && q.earth.textureQuality !== 'low') {
+      const detail = createTerrainMaterial(this.uniforms, q, { ...terrainOptions, regional: 'detail' });
+      const far = createTerrainMaterial(this.uniforms, q, { ...terrainOptions, regional: 'far' });
+      this.terrainVariants = { base: terrainMat, detail, far, active: terrainMat, ocean: oceanMat };
+      this.materials.push(detail, far);
     }
     const R = this.body.radius;
     // Max depth so vertex spacing at the finest level ≈ minVertexSpacing.
@@ -342,6 +351,7 @@ export class PlanetRenderer {
       ocean,
       pool: this.pool,
       terrainMaterial: terrainMat,
+      terrainWarmupMaterials: this.terrainVariants ? [this.terrainVariants.base, this.terrainVariants.detail, this.terrainVariants.far] : undefined,
       oceanMaterial: oceanMat,
       maxInFlight: q.terrain.maxInFlight,
       buildBudgetMs: q.terrain.buildBudgetMs,
@@ -442,6 +452,10 @@ export class PlanetRenderer {
     const crx = cam.position.x - bx, cry = cam.position.y - by, crz = cam.position.z - bz;
     const camDist2 = crx * crx + cry * cry + crz * crz;
     const camDist = Math.sqrt(camDist2);
+    if (this.imagery) {
+      // Preserve the local pad/scatter material on the ground; fade in the regional view during liftoff.
+      this.imagery.uniforms.uEarthRegionView.value = camDist < R * 1.16 ? THREE.MathUtils.smoothstep(camDist - R, 50, 150) : 0;
+    }
     u.uPlanetCenter.value.set(bx, by, bz);
     u.uCamRel.value.set(crx, cry, crz);
     const Ra = this.atmosphere?.atmosphereRadius ?? R;
@@ -494,6 +508,19 @@ export class PlanetRenderer {
     const inv = this.inverseRotation.copy(this.rotQ).invert();
     const camBF = this.tmpV.set(crx, cry, crz).applyQuaternion(inv);
     const camBFx = camBF.x, camBFy = camBF.y, camBFz = camBF.z;
+
+    if (this.terrainVariants && this.imagery) {
+      const variants = this.terrainVariants;
+      // Latitude/longitude margins contain every point within the pack's 0.16-radius draw range.
+      const nearGulf = camBFy < 0 && camBFx > camBFy * 0.425 && camBFx < -camBFy * 0.933
+        && camBFz > 0 && camBFz < camDist * 0.708;
+      const regional = nearGulf && this.imagery.uniforms.uEarthRegionOn.value > 0.5 && this.imagery.uniforms.uEarthRegionView.value > 0;
+      const material = regional ? (camDist - R - (this.terrain?.maxHeight ?? 0) >= 16000 ? variants.far : variants.detail) : variants.base;
+      if (material !== variants.active) {
+        this.quadtree?.setMaterials(material, variants.ocean);
+        variants.active = material;
+      }
+    }
 
     this.surfaceFeatures?.update(this.scatterOffset.set(bx, by, bz), this.rotQ, cam.position, time, u.uSunDir.value);
     this.scatter?.update([camBFx, camBFy, camBFz], this.scatterOffset.set(bx, by, bz), this.rotQ);

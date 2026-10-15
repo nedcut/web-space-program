@@ -1228,6 +1228,56 @@ Owner decisions 2026-10-13 (both recommended options).
   zero, so no coordinate fix was needed. From altitude the coast follows the mask, so the Indian River under the
   Standard-scale runway still reads as water from orbit and as land on the ground.
 
+## Regional flight ground imagery (2026-10-14, cx/groundlook)
+
+- Stream one static Gulf/Caribbean colour patch (100–60°W, 10–35°N, 4096×2560,
+  ~1.09 km north/south samples) from NASA GIBS Blue Marble Next Generation. This gives
+  ~4.5× the linear detail of global 8k with bounded texture storage, instead of raising
+  the global resolution or shipping twelve large 500 m monthly tiles. Global seasonal
+  imagery remains the fallback and the distant view. The patch is a static composite.
+- Natural Earth v5.1.2 urban polygons locate urban fabric; NASA Black Marble 2016 supplies
+  regional night brightness. Procedural blocks/streets and vegetation are illustrative
+  texture detail, not surveyed buildings or a scientific land-cover classification.
+- Keep this in flight terrain shading, with no map UI, simulation elevations, coastline
+  geometry or launch-site edits. No 3D city instances: they would add streaming/draw cost.
+  Reuse the imagery decoder and frame-budgeted strip upload, restore and disposal paths.
+- First real-GPU images rejected the initial bright, broad city grid and overexposed
+  night glow. Use small filtered roofs, green suburbs and Black Marble core density;
+  dim the diffuse glow and resolve narrow streets only while the footprint permits.
+  Inside the regional patch, one planar canopy fetch replaces six coarse triplanar
+  noise taps; retain the finer nearby normal detail and blend continuously at edges.
+- The initial paired shader measurement still found a small GPU regression. Move the
+  regional spherical coordinate calculation to terrain vertices, keep the global
+  antimeridian-safe path outside the patch, and share the reflectance curve between
+  global and regional colour. A body-fixed hemisphere guard rejects interpolated UVs
+  across date-line triangles. Hidden seafloor returns before regional lookups; rural
+  fragments skip roof/street arithmetic. No extra per-frame CPU work or allocation.
+- Diagnostic A/B separated the remaining costs: regional imagery was unintentionally
+  bringing the distant imagery water treatment onto near terrain, and procedural
+  roofs/streets added fragment arithmetic. Preserve the original distance-based water
+  handover (including the launch site's coarse-grid land fallback). Bake an original
+  256² urban tile (2.5 KB) for roofs, yards and intermittent lamps; hardware mipmaps
+  filter it instead of per-pixel grid hashes. Global coast/height data is unchanged.
+- Reject regional work over water with a vertex-sampled global water mask. This keeps
+  the launch plateau's close-range palette and avoids decoding/shading an unused
+  regional land colour behind opaque site/water surfaces. The regional mask remains
+  render-only; terrain/science/physics and the global ocean mask are not edited.
+- Regional imagery fades in from 250–750 m viewing distance, preserving local pad/
+  scatter detail below that range. The small urban tile uses a diffuse city glow plus
+  brighter intermittent lamps; night brightness is illustrative, not calibrated radiance.
+- Final packing: merge regional colour with urban density in alpha using the existing
+  frame-budgeted sRGB merge pass; keep regional night light luminance in an R8 texture.
+  Interior land takes one regional fetch (global colour/water is only needed at blend
+  boundaries), and the night map is sampled only on the night side. This reduces
+  steady regional GPU storage from about 107 MiB to 67 MiB including mipmaps. Urban
+  edge coverage and core density share the alpha channel and are visual approximations.
+- Final acceptance is **not met**: paired production Medium GPU medians on RTX
+  3060 Ti are pad 2.415→2.453 ms, 10 km 2.131→2.253, 30 km 1.765→1.700 and orbit
+  2.019→2.124. The repeated 10 km regression prevents a no-slowdown claim. Keep
+  the implementation/evidence on `cx/groundlook` for the lead; do not waive the
+  performance requirement or silently move the feature to a different quality.
+  Method, screenshots and remaining acceptance: `docs/performance/groundlook.md`.
+
 ## Map biomes, objective targets, cities, near-surface map (2026-10-14, op/mapbiomes)
 
 - **Biome overlay = the science rules, sampled.** `sim/science/biomeMap.ts` classifies an equirectangular grid with
@@ -1256,3 +1306,56 @@ Owner decisions 2026-10-13 (both recommended options).
 - **Map Earth imagery** follows the flight texture setting instead of always Low (2k): Medium+ now gets the bundled
   4k level (farOnly cap), ~+24 MB GPU for the map's own copy; sharing the flight renderer's 8k imagery was not
   done because the flight layer disposes it when Earth is far away.
+
+## Regional ground review, round two (2026-10-14, cx/groundlook)
+
+- Keep the regional BMNG colour resolution. Replace the saturated grey city overlay
+  with imagery-tinted roofs and a softened Natural Earth coverage mask weighted by
+  Black Marble brightness and source water/vegetation colour. The original 384 m
+  repeating grid is replaced by an offline 2048px irregular parcel/street texture
+  over 3072 m: variable blocks, unbuilt parcels and sparse curved arterials.
+  Road lighting is intermittent and density-weighted; individual streets remain
+  illustrative, not geographically surveyed. Explicit gradients filter the detail.
+- Remove the vertex water-mask rejection of the regional pack: it excluded the Cape
+  rural comparison entirely. Regional colour owns the close land handoff even when
+  the coarse global water mask disagrees. The existing distance-based water shading
+  and physical coast geometry remain unchanged. Stop the old procedural emission
+  inside the covered region; its coarse grid created the detached glowing crosses.
+- Bump the regional asset directory to `gulf-v2` so Cache Storage cannot serve the
+  old footprint/detail under new shader semantics. No additional per-frame CPU work.
+- Round-two results supersede the round-one rejection above; see the current handoff.
+- Round-two shader cost: use a bounded polynomial projection in the Gulf instead of
+  vertex atan/asin (Chebyshev interpolation of atan(t)/t over t² = 0..0.58² and
+  asin(z + 0.38) over z = -0.26..0.24). Other directions retain spherical projection.
+  A real WebGL Float32 transform-feedback check against exact spherical UVs at
+  16,261 Gulf positions measured at most 0.141 m error on Standard Earth.
+- Canopy detail fades from 3–10 km; local roof/street detail fades with its projected
+  footprint and stops sampling once unresolved. Full regional coverage beyond
+  10 km bypasses the old terrain colour/normal work that it overwrites. Keep full
+  regional colour to 0.12 Earth radii, then blend out by 0.16 radii (76–102 km on
+  Standard), avoiding a large band that shades both global and regional detail.
+- The existing planet update supplies one allocation-free camera range weight:
+  regional shading fades in at 50–150 m camera altitude, preserving pad/scatter
+  material below that range, and is rejected beyond the regional distance limit.
+  Per-fragment 250–750 m local-material blending remains. All requested 0.5–30 km
+  views receive full camera weight. This does not alter simulation or map rendering.
+- GPU acceptance uses alternating baseline/current shader pairs in a frozen production
+  scene. Warm the GPU at batch throughput after each F8 window before collecting
+  timer queries; otherwise initial query samples include clock ramp-up. The final
+  table uses eight balanced rounds, twenty 30-draw samples per variant. Acceptance
+  on RTX 3060 Ti is pad −0.23%, 10 km +1.02%, 30 km +1.20%, orbit +0.64%: within
+  the requested approximately 1% / maximum 2% limits on this GPU.
+
+- Keep three prewarmed terrain programs: original global shading at the pad, outside
+  the Gulf and at orbital distance; regional detail nearby; regional colour/lights
+  without local detail once every visible surface is at least 16 km away. Local
+  detail fades from 10–16 km before that switch. Merely branching inside one large
+  shader retained measurable pad/orbit overhead, so use existing quadtree material
+  switching with no added draws or frame allocations. Hidden compile proxies carry
+  the same batch/attribute configuration as terrain and own only a tiny geometry.
+- Minimal flight-controller lifecycle change: context restoration restarts sliced
+  warmup, including inactive regional programs. A generation token cancels stale
+  warmup completion after another restoration. This prevents a later terrain switch
+  from becoming the first compile after context loss.
+- Include the base material among hidden warmup representatives too, so returning
+  from a regional view after context restoration also reuses a compiled program.

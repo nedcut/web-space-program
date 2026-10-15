@@ -1,0 +1,66 @@
+[
+  {
+    "name": "fl-600k",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=12&dec=20&month=7&alt=600000&lat=24&lon=-80&head=0&pitch=-80"
+  },
+  {
+    "name": "fl-120k",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=12&dec=20&month=7&alt=120000&lat=27.5&lon=-80.0&head=0&pitch=-80"
+  },
+  {
+    "name": "fl-30k",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=12&dec=20&month=7&alt=30000&lat=28.3&lon=-80.6&head=0&pitch=-85"
+  },
+  {
+    "name": "fl-8k-oblique",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=12&dec=20&month=7&alt=7500&lat=28.3&lon=-80.75&head=80&pitch=-22"
+  },
+  {
+    "name": "fl-1k",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=12&dec=20&month=7&alt=1200&lat=28.45&lon=-80.7&head=60&pitch=-15"
+  },
+  {
+    "name": "orlando-day",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=12&dec=20&month=7&alt=3000&lat=28.54&lon=-81.38&head=0&pitch=-65"
+  },
+  {
+    "name": "orlando-night",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=0&dec=20&month=7&alt=3000&lat=28.54&lon=-81.38&head=0&pitch=-65"
+  },
+  {
+    "name": "miami-day",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=12&dec=20&month=7&alt=3000&lat=25.77&lon=-80.19&head=0&pitch=-65"
+  },
+  {
+    "name": "tampa-day",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=12&dec=20&month=7&alt=3000&lat=27.95&lon=-82.46&head=0&pitch=-65"
+  },
+  {
+    "name": "dateline",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=12&dec=20&alt=120000&lat=22&lon=180&pitch=-85"
+  },
+  {
+    "name": "orlando-500m-day",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=12&dec=20&month=7&alt=500&lat=28.54&lon=-81.38&head=0&pitch=-65"
+  },
+  {
+    "name": "orlando-500m-night",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=0&dec=20&month=7&alt=500&lat=28.54&lon=-81.38&head=0&pitch=-65"
+  },
+  {
+    "name": "orlando-1k-day",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=12&dec=20&month=7&alt=1000&lat=28.54&lon=-81.38&head=0&pitch=-65"
+  },
+  {
+    "name": "orlando-1k-night",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=0&dec=20&month=7&alt=1000&lat=28.54&lon=-81.38&head=0&pitch=-65"
+  },
+  {
+    "name": "orlando-10k-day",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=12&dec=20&month=7&alt=10000&lat=28.54&lon=-81.38&head=0&pitch=-65"
+  },
+  {
+    "name": "orlando-10k-night",
+    "query": "body=earth&ui=0&settle=1&quality=medium&hour=0&dec=20&month=7&alt=10000&lat=28.54&lon=-81.38&head=0&pitch=-65"
+  }
+]

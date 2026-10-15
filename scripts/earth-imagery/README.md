@@ -15,3 +15,9 @@ builds `packs/16k/` (≈ 73 MB, git-ignored): host it next to the app for Ultra;
 Conventions: equirectangular, rows north → south, `u = lon/2π + 0.5`, `v = 0.5 − lat/π` (the same as
 `public/earth/manifest.json`). Day images are RGB only; the water fraction is a separate lossless greyscale image
 (merged into the colour texture's alpha on the GPU at load). Sea ice is blended over water in the monthly colour.
+
+Regional flight pack: `node scripts/earth-imagery/ground.mjs` builds the Gulf/Caribbean
+colour and urban/night channels from NASA GIBS and Natural Earth. Sources are cached
+in `.cache/ground/`; output and provenance live in `packs/gulf-v2/`. The colour is a
+static composite at ~1 km, independent of the global monthly pyramid. It is fetched
+on demand, not precached with the application.

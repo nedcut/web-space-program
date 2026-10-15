@@ -1,0 +1,69 @@
+{
+  "version": 2,
+  "width": 4096,
+  "height": 2560,
+  "bounds": {
+    "west": -100,
+    "east": -60,
+    "south": 10,
+    "north": 35
+  },
+  "projection": "EPSG:4326, pixel centres, rows north to south",
+  "description": "Static NASA GIBS Blue Marble Next Generation regional colour; 2016 Black Marble lights; Natural Earth 5.1.2 urban polygons. Street and land-cover detail in the game is illustrative, not surveyed.",
+  "channels": {
+    "urban": "soft urban coverage times (0.2 + 0.8 * night luminance ^ 0.8), limited by imagery land colour; merged into day alpha at runtime",
+    "night": "Black Marble luminance",
+    "urbanDetail": {
+      "r": "roof tone",
+      "g": "lamps",
+      "b": "built fraction",
+      "a": "neighbourhood density"
+    }
+  },
+  "urbanDetail": "Original procedural 2048px tile; not surveyed streets or buildings",
+  "sources": [
+    {
+      "name": "bmng.png",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=BlueMarble_NextGeneration&CRS=EPSG%3A4326&BBOX=10%2C-100%2C35%2C-60&WIDTH=4096&HEIGHT=2560&FORMAT=image%2Fpng",
+      "bytes": 7848005,
+      "sha256": "9bb18997568fb87f4cd625e5e815e3ee02638328c760190bfbaaf64d8c7c9695",
+      "licence": "Public domain (NASA)"
+    },
+    {
+      "name": "black-marble-2016.png",
+      "url": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=VIIRS_Black_Marble&CRS=EPSG%3A4326&BBOX=10%2C-100%2C35%2C-60&WIDTH=4096&HEIGHT=2560&FORMAT=image%2Fpng&TIME=2016-01-01",
+      "bytes": 8739958,
+      "sha256": "babe9fe9beb9aadc36cb4f76fa049a4a0a3c3247070c3eb2b2c1e587eaa9e8d0",
+      "licence": "Public domain (NASA)"
+    },
+    {
+      "name": "urban.geojson",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_urban_areas.geojson",
+      "bytes": 27943663,
+      "sha256": "5136ffd816a9b28c0f295e6797b4c03eaa421be80d78b90f542db4a932dd4497",
+      "licence": "Public domain (Natural Earth)"
+    }
+  ],
+  "files": [
+    {
+      "path": "day.webp",
+      "bytes": 774416,
+      "sha256": "ea307b5eb2406479f1ba0292e0a5c9a01b7b209589cf3c55b81fc90a5b1abaed"
+    },
+    {
+      "path": "urban.webp",
+      "bytes": 109966,
+      "sha256": "362008614e63dad1e3cf353d69fbb5dd29cd5cfb6d924922f57dd5e5adb139ea"
+    },
+    {
+      "path": "night.webp",
+      "bytes": 2816714,
+      "sha256": "e0bf99deb06bbc611d5dea1ac6e3cff1cfecf374ccc2110e2ac49afcd4996cf1"
+    },
+    {
+      "path": "urban-detail.webp",
+      "bytes": 1454872,
+      "sha256": "17e0249d57e36e5e6c036c0a3f20e3ef7371a7806faa6efd92fd3b1357581a1f"
+    }
+  ]
+}
