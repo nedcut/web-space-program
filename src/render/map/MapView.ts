@@ -1,4 +1,8 @@
-import { aimAt, clearDistance, patchDrawnNow, pickSphere, smallBodyVisible } from './framing';
+import { MapMarkers } from './MapMarkers';
+import { MapLines, WIDTH, snapshotOrbit, sameOrbit, place } from './MapLines';
+import { MapFrame } from './MapFrame';
+import type { MapUpdate, ExtraOrbit, MapTarget, MapApproach, MapPick, MapPoint, MapHandlers } from './mapTypes';
+import { aimAt, clearDistance, pickSphere, smallBodyVisible } from './framing';
 import { patchState } from '../../sim/orbit/numericalPrediction';
 import { createTerrain } from '../../sim/terrain';
 import { CometEffects } from '../planet/CometEffects';
@@ -7,36 +11,31 @@ import { PlanetRenderer, type PlanetUpdateParams } from '../planet/PlanetRendere
 import { QUALITY_PRESETS, type QualitySettings } from '../core/quality';
 import { SCALE_PRESETS } from '../../sim/bodies/scale';
 import { BodyIcons } from './BodyIcons';
-import { BODY_LOOK, GIZMO_LOOK, OrbitStyle, PLANNED_LOOK, TRAJECTORY_LOOK, orbitUniforms, type OrbitLook } from './OrbitStyle';
+import { BODY_LOOK, GIZMO_LOOK, PLANNED_LOOK, TRAJECTORY_LOOK, orbitUniforms } from './OrbitStyle';
 import { adaptiveSamples, sampleConic } from './conicSampling';
 import { createMapStars, createSoiShell } from './mapBackdrop';
 import { familyColor, placeLabel, type LabelBox } from './presentation';
-import type { Network } from '../../sim/comms/network';
 import { concentrationAt } from '../../sim/resources/deposits';
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
-import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
-import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 
-/** Map line widths, CSS px (the map renders at device resolution, so these are 2 device px per unit on Retina). */
-const WIDTH = { active: 3, future: 2.5, planned: 2.75, planet: 1.6, moon: 1.4, highlight: 2.6, fleet: 1.6, fleetTarget: 2.4, gizmo: 2 };
 import type { Body } from '../../sim/bodies/types';
 import type { Ephemeris } from '../../sim/orbit/ephemeris';
 import type { Orbit, TrajectoryPatch, ManeuverNode } from '../../sim/orbit/api';
 import { maneuverToInertialDv } from '../../sim/orbit/maneuver';
 import { formatDistance, formatDuration } from '../../util/format';
 import { elementsToState, periapsisRadius, apoapsisRadius, period } from '../../sim/orbit/kepler';
-import { add, length, sub, type Vec3 } from '../../util/vec3';
+import { length, type Vec3 } from '../../util/vec3';
 import {
   GIZMO_HANDLES, applyHandle, applyWheel, closestOnPolyline, handlePull, handleScreenDirection, handleStretch, screenPolyline, slideWindow,
   wheelZoomFactor,
   type GizmoAxis, type GizmoHandle, type ScreenPolyline,
 } from './maneuverGizmo';
-import { firstPlannedPatch, markerCaption, markerDetail, orbitMarkers, patchDrawnClosed, type OrbitMarker } from './orbitMarkers';
+import { patchDrawnClosed } from './orbitMarkers';
 import { AXIS_COLORS, NODE_COLOR, PLANNED_COLOR, handleTexture, nodeTexture } from './mapIcons';
-import { GLYPH_PX, LABEL_SHADOW, cssHex, glyphForKey, markerGlyphSvg, type MarkerGlyph } from './markerGlyphs';
+import { LABEL_SHADOW, cssHex } from './markerGlyphs';
 import { setPosition, setStyle } from './styleWriter';
-import { coveredIndex, nodeClearSpot, nudgeClear, overlapsAny } from './hudAvoid';
+import { nodeClearSpot } from './hudAvoid';
 import { HudRectCache } from './hudRects';
 import { SurfaceLayers, type BiomeTarget, type LegendEntry } from './surfaceLayers';
 import type { BiomeMap } from '../../sim/science/biomeMap';
@@ -54,86 +53,7 @@ import type { BiomeMap } from '../../sim/science/biomeMap';
  * wins hit-testing over handles, slides along the orbit. Clicks, double-clicks and right-clicks on
  * bodies, vessels and orbit lines are reported through `handlers` so the host UI can open menus or change focus.
  */
-export interface MapMarkerInput {
-  body: string;
-  position: Vec3;
-  /** Caption drawn next to the marker. */
-  label: string;
-  color: string;
-  /** Stable identity (keeps a pinned marker pinned across frames). */
-  key?: string;
-  /** Hover / pinned detail (defaults to the label). */
-  detail?: string;
-  /** UT of the event the marker stands for (enables "warp here"). */
-  time?: number;
-}
-
-export interface MapUpdate {
-  landing?: { body: string; points: Vec3[]; times: number[]; impact: { time: number; position: Vec3; speed: number } | null };
-  comms?: Network;
-  t: number;
-  /** Optional stable identity enables focus animation while the object moves. */
-  focusId?: string;
-  /** Body ancestry to display when the focus is a vessel. */
-  referenceBody?: string;
-  /** Heliocentric position of the focused object (float64). */
-  focus: Vec3;
-  /** Active vessel trajectory (patched conics) and its heliocentric position. */
-  vessel?: { id?: string; position: Vec3; patches: TrajectoryPatch[]; nodes: ManeuverNode[] };
-  markers?: MapMarkerInput[];
-  viewport: { width: number; height: number };
-}
-
-export interface ExtraOrbit {
-  id: string;
-  position: Vec3;
-  orbit?: Orbit;
-}
-
-/** Navigation target highlight. */
-export interface MapTarget {
-  kind: 'vessel' | 'body';
-  id: string;
-}
-
-/** Closest-approach markers: positions relative to `body` at the approach time, plus a label. */
-export interface MapApproach {
-  body: string;
-  positionA: Vec3;
-  positionB: Vec3;
-  label: string;
-  /** Hover / pinned detail (defaults to the label). */
-  detail?: string;
-  /** UT of closest approach. */
-  time?: number;
-}
-
-/** A body or vessel under the cursor. */
-export interface MapPick { kind: 'body' | 'vessel'; id: string }
-/** CSS pixels relative to the map's element. */
-export interface MapPoint { x: number; y: number }
-
-/** Callbacks from map gestures. Absent handlers disable the gesture (e.g. node editing in Fleet Tracking). */
-export interface MapHandlers {
-  /** Click on the active trajectory: add a maneuver node at `time`. Enables ghost nodes and the gizmo. */
-  placeNode?(time: number): void;
-  /** A node's Δv or time was changed by a gizmo gesture. */
-  nodesChanged?(): void;
-  /** Click on a node centre (without dragging it). */
-  nodeClicked?(id: number, at: MapPoint): void;
-  /** Left click or right click on a body/vessel icon or orbit. */
-  objectMenu?(pick: MapPick, at: MapPoint): void;
-  /** Double click on a body/vessel icon or orbit. */
-  focus?(pick: MapPick): void;
-  /** Click on empty space (close menus). */
-  emptyClick?(): void;
-  /** Extra tooltip lines for a hovered body/vessel (distance, relative speed…). */
-  describe?(pick: MapPick): string | null;
-  /** Right click on an orbit marker (Ap, Pe, encounter, closest approach…). */
-  markerMenu?(marker: { key: string; label: string; time?: number; pinned: boolean }, at: MapPoint): void;
-  /** Right click on the active trajectory at `time`. */
-  orbitMenu?(time: number, at: MapPoint): void;
-}
+export type { MapMarkerInput, MapUpdate, ExtraOrbit, MapTarget, MapApproach, MapPick, MapPoint, MapHandlers } from './mapTypes';
 
 type Hover =
   | { kind: 'none' }
@@ -150,7 +70,6 @@ type Drag =
       /** Grab offset, true point minus drawn icon (non-zero when the icon is nudged out from under a HUD panel). */
       offX: number; offY: number };
 
-const EMPTY_MARKERS: MapMarkerInput[] = [];
 const EMPTY_PATCHES: TrajectoryPatch[] = [];
 const EMPTY_NODES: ManeuverNode[] = [];
 const NONE: Hover = { kind: 'none' };
@@ -177,28 +96,6 @@ function altKeyName(): string {
   return typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? 'Option' : 'Alt';
 }
 
-function snapshotOrbit(o: Orbit): Orbit {
-  return { ...o, stateAtEpoch: o.stateAtEpoch ? { position: { ...o.stateAtEpoch.position }, velocity: { ...o.stateAtEpoch.velocity } } : undefined };
-}
-function sameOrbit(a: Orbit, b: Orbit) {
-  return a.body === b.body && a.a === b.a && a.e === b.e && a.i === b.i && a.lan === b.lan
-    && a.argPe === b.argPe && a.m0 === b.m0 && a.epoch === b.epoch && a.mu === b.mu && a.p === b.p
-    && (!a.stateAtEpoch && !b.stateAtEpoch || !!a.stateAtEpoch && !!b.stateAtEpoch
-      && a.stateAtEpoch.position.x === b.stateAtEpoch.position.x && a.stateAtEpoch.position.y === b.stateAtEpoch.position.y && a.stateAtEpoch.position.z === b.stateAtEpoch.position.z
-      && a.stateAtEpoch.velocity.x === b.stateAtEpoch.velocity.x && a.stateAtEpoch.velocity.y === b.stateAtEpoch.velocity.y && a.stateAtEpoch.velocity.z === b.stateAtEpoch.velocity.z);
-}
-
-/** Current-trajectory patch colours (first patch, then patches after SOI changes). */
-const PATCH_COLORS = [0x5cc8ff, 0xd066ff, 0x6fe39a, 0xffe066, 0xff6b6b];
-/** Planned (post-node) patch colours. */
-const PLANNED_COLORS = [PLANNED_COLOR, 0xffd25c, 0xff7a5c, 0xffb3e0];
-
-/** Line colour of trajectory patch `i` (current family, or planned family after the first node). */
-function patchColor(i: number, planned: number): number {
-  return i >= planned ? PLANNED_COLORS[(i - planned) % PLANNED_COLORS.length] : PATCH_COLORS[i % PATCH_COLORS.length];
-}
-const IMPACT_CSS = '#ff5c5c';
-
 interface BodyVisual {
   body: Body;
   sphere: THREE.Mesh;
@@ -214,26 +111,6 @@ interface BodyVisual {
   lineStyle: number;
 }
 
-/** A marker drawn this frame (pooled). */
-interface ShownMarker {
-  key: string; body: string; position: Vec3; caption: string; color: string; priority: number;
-  orbit?: OrbitMarker; detail?: string; dotOnly?: boolean; time?: number; glyph: MarkerGlyph;
-  /** Body placement time (encounter patches); undefined = now. */
-  frameTime?: number;
-}
-interface MarkerElement {
-  root: HTMLDivElement; dot: HTMLDivElement; text: HTMLDivElement; box: LabelBox; content: string; color: string; glyph: string;
-  /** Thin line from a nudged glyph back to its true point, as last written (rounded to 0.01 rad / 1 px). */
-  leader: HTMLDivElement; leaderA: number; leaderL: number;
-  /** Caption sits left of the glyph (the right side runs under a HUD panel). */
-  flipped: boolean;
-  /** Caption placement box, re-measured only when its text changes. */
-  caption: LabelBox; measured: string; lines: number;
-}
-
-const EMPTY_RECTS: LabelBox[] = [];
-/** A marker within this many px of a HUD block counts as covered by it; a nudged marker stands this far clear. */
-const HUD_COVER_PX = 6, HUD_CLEAR_PX = 10;
 /**
  * Maneuver nodes stand this far clear of HUD blocks (icon radius plus a little); the selected node's whole gizmo
  * (handles at HANDLE_OFFSET plus their icon) does. Closer nodes are drawn at the nearest clear spot with a leader.
@@ -289,18 +166,18 @@ export function pointerOnMap(el: HTMLElement, target: EventTarget | null, x: num
 }
 
 export class MapView {
+  private readonly frame: MapFrame;
+  private readonly lines: MapLines;
+  private readonly markers: MapMarkers;
   private field?: AsteroidFieldView;
   private comets = new Map<string, CometEffects>();
   private au = 149597870700;
   readonly scene = new THREE.Scene();
   private bodyIcons: BodyIcons;
-  private orbitStyle = new OrbitStyle();
   private projected = new THREE.Vector3();
   private labelBoxes: LabelBox[] = [];
   private iconBoxes: LabelBox[] = [];
   private labelCount = 0;
-  /** Accepted labels after marker captions (surface labels place after these). */
-  private markerLabelCount = 0;
   /** Biome overlay, objective highlights and city labels. */
   readonly surface: SurfaceLayers;
   private orderedBodies: BodyVisual[] = [];
@@ -319,9 +196,6 @@ export class MapView {
   private sunId: string;
   private sunGlow: THREE.Sprite;
   private planetParams: PlanetUpdateParams;
-  private commsNodes = new Map<string, Vec3>();
-  private linkColor = new THREE.Color();
-  private commsLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, depthTest: false }));
   readonly camera = new THREE.PerspectiveCamera(50, 1, 1, 1e15);
   /** Spherical camera coords around focus. */
   yaw = 0.6;
@@ -339,11 +213,6 @@ export class MapView {
   private resourceTextures = new Map<string, THREE.DataTexture>();
   private resourceBodies = new Set<string>();
   private bodies = new Map<string, BodyVisual>();
-  private vesselLines: Line2[] = [];
-  private landingLine?: Line2;
-  private landingData?: MapUpdate['landing'];
-  private landingAnchor?: Vec3;
-  private landingPosition: Vec3 = { x: 0, y: 0, z: 0 };
   private vesselIcon: THREE.Sprite;
   private nodeIcons: THREE.Sprite[] = [];
   private nodeScreen = new Map<number, MapPoint>();
@@ -365,23 +234,10 @@ export class MapView {
   private spritePx = .001;
   private lastUpdate: MapUpdate | null = null;
   private frameUpdate: MapUpdate = { t: 0, focus: this.renderFocus, viewport: { width: 1, height: 1 } };
-  private lastPatches: TrajectoryPatch[] = [];
-  private patchVersion = 0;
-  private orbitMarks: OrbitMarker[] = [];
-  private orbitMarksKey = '';
-  private shown: ShownMarker[] = [];
-  private shownCount = 0;
-  private markerEls: MarkerElement[] = [];
-  /** Per marker element: its caption won placement this frame. */
-  private captioned: boolean[] = [];
-  private markerScreen: { key: string; x: number; y: number }[] = [];
-  private markerScreenCount = 0;
   private hudRects: HudRectCache | null = null;
-  private readonly nudgeAt = { x: 0, y: 0 };
   /** HUD rectangles measured this frame; `obstacles` also counts the spots reserved by nudged nodes/markers. */
   private hudCount = 0;
   private obstacles = 0;
-  private pinned = new Set<string>();
   private trajectoryPolys: TrajectoryPoly[] = [];
   private polysVersion = -1;
   private polysTime = -Infinity;
@@ -395,31 +251,12 @@ export class MapView {
   private quiet: MapPoint | null = null;
   private element: HTMLElement | null = null;
   private labels: HTMLDivElement;
-  private materials: LineMaterial[] = [];
-  /** Viewport (CSS px) last written to every line material's `resolution`. */
-  private resolutionWidth = 1;
-  private resolutionHeight = 1;
   private sunLight = new THREE.PointLight(0xffffff, 3, 0, 0);
   private extraOrbits: ExtraOrbit[] = [];
   private extras = new Map<string, { icon: THREE.Sprite; line?: Line2; orbit?: Orbit; targeted: boolean }>();
   private target: MapTarget | null = null;
   private highlightedBody: { vis: BodyVisual; color: number; width: number } | null = null;
-  private approach: MapApproach | null = null;
-  private approachLine: THREE.Line;
   private warmObjects: THREE.Object3D[] = [];
-
-  private scenePosition(p: Vec3, body: string, u: MapUpdate, out = new THREE.Vector3(), time = u.t) {
-    const b = this.framedBodyPosition(body, u, time);
-    return out.set(b.x + p.x - u.focus.x, b.y + p.y - u.focus.y, b.z + p.z - u.focus.z);
-  }
-
-  /** Screen position (CSS px) of a scene-space point; NaN when behind the camera. */
-  private toScreen(v: THREE.Vector3, u: MapUpdate, out: MapPoint): MapPoint {
-    const p = this.projected.copy(v).project(this.camera);
-    if (!(p.z < 1 && p.z > -1)) { out.x = out.y = NaN; return out; }
-    out.x = (p.x * .5 + .5) * u.viewport.width; out.y = (-p.y * .5 + .5) * u.viewport.height;
-    return out;
-  }
 
   /** The node showing the gizmo: the selected node, else the next upcoming one. */
   private gizmoNode(u: MapUpdate): ManeuverNode | undefined {
@@ -427,42 +264,6 @@ export class MapView {
     let pick = this.selectedNodeId !== null ? nodes.find(n => n.id === this.selectedNodeId) : undefined;
     if (!pick) for (const n of nodes) if (n.time >= u.t - 60 && (!pick || n.time < pick.time)) pick = n;
     return pick;
-  }
-
-  private readonly parentOf = (id: string) => this.bodies.get(id)?.body.parent;
-
-  /**
-   * Time at which a patch's central body is placed (see patchDrawnNow). A patch inside an encountered body (a moon,
-   * a destination planet, or a later return to the body being left) is drawn around where that body will be at the
-   * encounter, so the arc continues from the encounter point instead of jumping to today's position.
-   */
-  private patchFrameTime(u: MapUpdate, patch: TrajectoryPatch | undefined): number {
-    const patches = u.vessel?.patches;
-    if (!patch || !patches?.length) return u.t;
-    const k = patches.indexOf(patch);
-    if (k >= 0) return patchDrawnNow(patches, k, u.focusId, this.parentOf) ? u.t : Math.max(u.t, patch.startTime);
-    // A patch from an earlier prediction (a drag in progress): present frame if its body is a reference ancestor.
-    if (patch.orbit.body === u.focusId) return u.t;
-    for (let id: string | undefined = patches[0].orbit.body; id; id = this.parentOf(id)) if (id === patch.orbit.body) return u.t;
-    return Math.max(u.t, patch.startTime);
-  }
-
-  /**
-   * Heliocentric draw position of `body` at `time` in the vessel's frame: the body keeps its offset from the
-   * nearest reference ancestor (one of the vessel's current body's parents, or that body itself for a moon of it)
-   * at that time, while the ancestor itself stays where it is now. A moon at encounter is drawn where it will be
-   * relative to its planet; a later return to the current body, where that body will be relative to its parent.
-   */
-  private framedBodyPosition(body: string, u: MapUpdate, time: number): Vec3 {
-    const now = this.ephem.getBodyState(body, u.t).position;
-    if (time === u.t) return now;
-    const first = u.vessel?.patches[0]?.orbit.body;
-    let anchor: string | undefined;
-    for (let id: string | undefined = this.parentOf(body); id && !anchor; id = this.bodies.get(id)?.body.parent)
-      for (let ref: string | undefined = first; ref; ref = this.bodies.get(ref)?.body.parent) if (ref === id) { anchor = id; break; }
-    if (!anchor) return now;
-    const then = this.ephem.getBodyState(body, time).position, a0 = this.ephem.getBodyState(anchor, time).position, a1 = this.ephem.getBodyState(anchor, u.t).position;
-    return { x: a1.x + then.x - a0.x, y: a1.y + then.y - a0.y, z: a1.z + then.z - a0.z };
   }
 
   private patchAt(u: MapUpdate, time: number) {
@@ -604,7 +405,7 @@ export class MapView {
 
   /** Closest-approach markers (null hides them). */
   setApproach(a: MapApproach | null) {
-    this.approach = a;
+    this.markers.setApproach(a);
   }
 
   /** Additional fleet conics and icons; positions are heliocentric float64, conics body-relative. */
@@ -625,7 +426,7 @@ export class MapView {
     if (!u) return null;
     let best = 13, hit: MapPick | null = null;
     const test = (obj: THREE.Object3D, pick: MapPick, radius = 13) => {
-      const s = this.toScreen(obj.position, u, this.pickPoint), d = Math.hypot(s.x - x, s.y - y);
+      const s = this.frame.toScreen(obj.position, u, this.pickPoint), d = Math.hypot(s.x - x, s.y - y);
       if (d < Math.min(best, radius)) { best = d; hit = pick; }
     };
     // Bodies first: a vessel sharing a body's icon position only wins when strictly closer.
@@ -651,19 +452,12 @@ export class MapView {
     return null;
   }
 
-  private removeLine(line: Line2) {
-    this.scene.remove(line);
-    line.geometry.dispose();
-    line.material.dispose();
-    this.materials = this.materials.filter((m) => m !== line.material);
-  }
-
   private updateExtras(u: MapUpdate) {
     for (const [id, vis] of this.extras) {
       let found = false;
       for (const orbit of this.extraOrbits) if (orbit.id === id) { found = true; break; }
       if (found) continue;
-      if (vis.line) this.removeLine(vis.line);
+      if (vis.line) this.lines.remove(vis.line);
       this.scene.remove(vis.icon);
       vis.icon.material.dispose();
       this.extras.delete(id);
@@ -687,20 +481,20 @@ export class MapView {
       const o = item.orbit;
       // Orbit elements are stable on rails; callers can throttle conic updates in physics.
       if (!!o !== !!vis.orbit || (o && vis.orbit && !sameOrbit(o, vis.orbit))) {
-        if (vis.line) this.removeLine(vis.line);
+        if (vis.line) this.lines.remove(vis.line);
         vis.line = undefined;
         if (o) {
           const pts = sampleConic(o, this.bodies.get(o.body)?.body.soi ?? Infinity, u.t, null);
           if (pts.length > 1) {
-            vis.line = vis.targeted ? this.makeLine(pts, TARGET_COLOR, WIDTH.fleetTarget, 0.95, BODY_LOOK) : this.makeLine(pts, EXTRA_COLOR, WIDTH.fleet, 0.8, BODY_LOOK);
+            vis.line = vis.targeted ? this.lines.create(pts, TARGET_COLOR, WIDTH.fleetTarget, 0.95, BODY_LOOK) : this.lines.create(pts, EXTRA_COLOR, WIDTH.fleet, 0.8, BODY_LOOK);
             vis.line.renderOrder = 2;
           }
         }
         vis.orbit = o ? snapshotOrbit(o) : undefined;
       }
-      this.place(vis.icon, item.position, u.focus);
+      place(vis.icon, item.position, u.focus);
       vis.icon.scale.setScalar(ICON_PX.fleet * this.spritePx);
-      if (vis.line && o) this.place(vis.line, this.ephem.getBodyState(o.body, u.t).position, u.focus);
+      if (vis.line && o) place(vis.line, this.ephem.getBodyState(o.body, u.t).position, u.focus);
     }
   }
 
@@ -711,6 +505,8 @@ export class MapView {
     private quality: QualitySettings = QUALITY_PRESETS.medium,
     field?: FieldSource,
   ) {
+    this.frame = new MapFrame(bodies, ephem, this.camera);
+    this.lines = new MapLines(this.scene, bodies, ephem, this.frame);
     this.au = bodies.get('earth')?.orbit?.a ?? 149597870700;
     if (field) this.field = new AsteroidFieldView(field, bodies.get('sun')!.gm, this.au / 149597870700, this.scene);
     this.scene.background = new THREE.Color(0x03060d);
@@ -785,7 +581,7 @@ export class MapView {
         const T = b.orbitalPeriod ?? 2 * Math.PI * Math.sqrt(o.a ** 3 / o.mu);
         // Adaptive in time: eccentric comets and dwarfs stay smooth around perihelion.
         const pts = adaptiveSamples(t => this.ephem.getRelativeState(b.id, t).position, 0, T, { initial: 192, maxPoints: 1200 });
-        vis.orbitLine = this.makeLine(pts, vis.familyColor, b.kind === 'moon' ? WIDTH.moon : WIDTH.planet, b.kind === 'moon' ? .6 : .6, BODY_LOOK);
+        vis.orbitLine = this.lines.create(pts, vis.familyColor, b.kind === 'moon' ? WIDTH.moon : WIDTH.planet, b.kind === 'moon' ? .6 : .6, BODY_LOOK);
         vis.orbitLine.renderOrder = 1;
       }
       this.bodies.set(b.id, vis);
@@ -799,15 +595,11 @@ export class MapView {
     this.ghost = new THREE.Sprite(new THREE.SpriteMaterial({ map: nodeTexture('ghost'), sizeAttenuation: false, depthTest: false, transparent: true }));
     this.ghost.renderOrder = 14; this.ghost.visible = false;
     this.scene.add(this.ghost);
-    const approachGeometry = new THREE.BufferGeometry();
-    approachGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-    this.approachLine = new THREE.Line(approachGeometry, new THREE.LineBasicMaterial({ color: TARGET_COLOR, transparent: true, opacity: .7, depthTest: false }));
-    this.approachLine.frustumCulled = false; this.approachLine.visible = false; this.approachLine.renderOrder = 13;
-    this.scene.add(this.approachLine);
+    this.markers = new MapMarkers(this.scene, this.labels, bodies, this.frame);
     // Gizmo shafts reuse the orbit-line program; created up front so opening the map never compiles shaders.
     for (const handle of GIZMO_HANDLES) {
       const color = new THREE.Color(AXIS_COLORS[handle.axis]).getHex();
-      const line = this.makeLine([{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }], color, WIDTH.gizmo, .8, GIZMO_LOOK);
+      const line = this.lines.create([{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }], color, WIDTH.gizmo, .8, GIZMO_LOOK);
       line.visible = false; line.renderOrder = 14;
       const icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: handleTexture(handle.axis, handle.sign), sizeAttenuation: false, depthTest: false, transparent: true }));
       icon.renderOrder = 15; icon.visible = false;
@@ -816,75 +608,11 @@ export class MapView {
     }
     // Dashed trajectory variants (future patch, planned patch) for shader warm-up; never shown otherwise.
     for (const look of [TRAJECTORY_LOOK, PLANNED_LOOK]) {
-      const line = this.makeLine([{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }], PLANNED_COLOR, WIDTH.planned, 1, look);
+      const line = this.lines.create([{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }], PLANNED_COLOR, WIDTH.planned, 1, look);
       line.material.dashed = true; line.visible = false;
       this.warmObjects.push(line);
     }
-    this.warmObjects.push(this.approachLine, this.ghost, this.surface.warmObject, ...this.gizmo.flatMap(g => [g.line, g.icon]));
-  }
-
-  private makeLine(pts: Vec3[], color: number, width: number, opacity: number, look: OrbitLook): Line2 {
-    const pos = new Float32Array(pts.length * 3);
-    pts.forEach((p, i) => pos.set([p.x, p.y, p.z], i * 3));
-    const geom = new LineGeometry();
-    geom.setPositions(pos);
-    const mat = new LineMaterial({ color, linewidth: width, transparent: true, opacity, depthWrite: false });
-    mat.resolution.set(this.resolutionWidth, this.resolutionHeight);
-    this.orbitStyle.configure(mat, look);
-    this.materials.push(mat);
-    const line = new Line2(geom, mat);
-    line.computeLineDistances();
-    line.frustumCulled = false;
-    this.scene.add(line);
-    return line;
-  }
-
-  private place(obj: THREE.Object3D, helio: Vec3, focus: Vec3) {
-    obj.position.set(helio.x-focus.x, helio.y-focus.y, helio.z-focus.z);
-  }
-
-  /**
-   * Rebuild vessel trajectory lines whose patch changed. Only changed patches are rebuilt: during a burn the current
-   * conic changes every frame while its continuation does not.
-   */
-  private updateVesselLines(patches: TrajectoryPatch[], bodies: Map<string, BodyVisual>) {
-    const planned = firstPlannedPatch(patches);
-    const lastPlanned = firstPlannedPatch(this.lastPatches);
-    const same = (i: number) => {
-      const p = patches[i], previous = this.lastPatches[i];
-      return !!previous && p.startTime === previous.startTime && p.endTime === previous.endTime && p.endReason === previous.endReason
-        && p.samples === previous.samples && sameOrbit(p.orbit, previous.orbit)
-        && patchColor(i, planned) === patchColor(i, lastPlanned) && (i >= planned) === (i >= lastPlanned);
-    };
-    let unchanged = patches.length === this.lastPatches.length;
-    for (let i = 0; unchanged && i < patches.length; i++) unchanged = same(i);
-    if (unchanged) return;
-    const keep = patches.map((_, i) => same(i));
-    this.lastPatches = patches.map(p => ({ ...p, orbit: snapshotOrbit(p.orbit) }));
-    this.patchVersion++;
-    for (let i = 0; i < this.vesselLines.length; i++) if (!keep[i]) this.removeLine(this.vesselLines[i]);
-    this.vesselLines = patches.map((p, i) => {
-      if (keep[i]) return this.vesselLines[i];
-      const soi = bodies.get(p.orbit.body)?.body.soi ?? Infinity;
-      // The current orbit stays a full ellipse past a node (as the planned orbit does), so both read at a glance.
-      const closed = patchDrawnClosed(p);
-      const pts = p.samples ? p.samples.map(s => s.position) : sampleConic(p.orbit, soi, p.startTime, closed ? null : p.endTime);
-      if (pts.length === 1) pts.push(pts[0]);
-      // Localize numerical vertices in Float64 before conversion to GPU Float32 buffers.
-      const anchor = p.samples ? pts[0] : undefined;
-      const isPlanned = i >= planned;
-      const color = patchColor(i, planned);
-      // Planned patches stay bright wherever they go (an encounter far from the vessel is what is being planned).
-      const line = this.makeLine(anchor ? pts.map(point => sub(point, anchor)) : pts, color,
-        i === 0 ? WIDTH.active : isPlanned ? WIDTH.planned : WIDTH.future, 1, isPlanned ? PLANNED_LOOK : TRAJECTORY_LOOK);
-      line.userData.numericAnchor = anchor;
-      // Dashes are sized in screen pixels each frame (see update), so they read the same at every zoom.
-      line.material.dashed = i > 0;
-      line.material.dashSize = isPlanned ? 14 : 10; line.material.gapSize = isPlanned ? 7 : 7;
-      line.renderOrder = isPlanned ? 4 : 3;
-      line.userData.body = p.orbit.body; line.userData.patch = i;
-      return line;
-    });
+    this.warmObjects.push(this.ghost, this.surface.warmObject, ...this.gizmo.flatMap(g => [g.line, g.icon]));
   }
 
   update(u: MapUpdate) {
@@ -927,71 +655,11 @@ export class MapView {
     this.lastUpdate = this.frameUpdate;
     Object.assign(this.frameUpdate, u); this.frameUpdate.focus = this.renderFocus; u = this.frameUpdate;
     const { t, focus } = u;
-    const landing = u.landing;
-    if (landing !== this.landingData) {
-      this.landingData = landing;
-      if (landing && landing.points.length > 1) {
-        this.landingAnchor = landing.points[0];
-        const points = landing.points.map(p => sub(p, this.landingAnchor!));
-        if (!this.landingLine) {
-          this.landingLine = this.makeLine(points, 0xffac66, WIDTH.active, .95, TRAJECTORY_LOOK);
-          this.landingLine.renderOrder = 4; // Keep the drag path legible where it overlaps the live conic.
-        }
-        else {
-          const coords: number[] = [];
-          for (const p of points) coords.push(p.x, p.y, p.z);
-          this.landingLine.geometry.setPositions(coords);
-          this.landingLine.computeLineDistances();
-        }
-      }
-    }
-    if (this.landingLine) {
-      this.landingLine.visible = !!landing && landing.points.length > 1;
-      if (landing && this.landingAnchor) {
-        const bodyPosition = this.ephem.getBodyState(landing.body, t).position, anchor = this.landingAnchor;
-        this.landingPosition.x = bodyPosition.x + anchor.x;
-        this.landingPosition.y = bodyPosition.y + anchor.y;
-        this.landingPosition.z = bodyPosition.z + anchor.z;
-        this.place(this.landingLine, this.landingPosition, focus);
-      }
-    }
+    this.lines.updateLanding(u);
     if (this.field) { const visible = u.referenceBody === this.sunId; this.field.setVisible(visible); if (visible) this.field.update(t, focus); }
     for (const [id, fx] of this.comets) fx.update(this.ephem.getBodyState(id, t).position, this.ephem.getBodyState('sun', t).position, focus, this.bodies.get(id)!.body.radius, this.au, t, smallBodyVisible(this.bodies.get(id)!.body.kind, u.referenceBody === this.sunId, this.target?.id === id || identity === id));
-    if (!this.commsLines.parent) { this.scene.add(this.commsLines); this.commsLines.renderOrder = 5; }
-    this.commsLines.visible = !!u.comms;
-    if (u.comms) {
-      const nodes = this.commsNodes; nodes.clear();
-      for (const node of u.comms.nodes) nodes.set(node.id, node.position);
-      const count = u.comms.links.length * 2;
-      let position = this.commsLines.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
-      let color = this.commsLines.geometry.getAttribute('color') as THREE.BufferAttribute | undefined;
-      if (!position || position.count < count) {
-        this.commsLines.geometry.dispose();
-        this.commsLines.geometry = new THREE.BufferGeometry();
-        const capacity = Math.max(16, count * 2);
-        position = new THREE.BufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
-        color = new THREE.BufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
-        this.commsLines.geometry.setAttribute('position', position);
-        this.commsLines.geometry.setAttribute('color', color);
-      }
-      let index = 0;
-      for (const link of u.comms.links) {
-        this.linkColor.setHSL(link.strength * 0.33, 0.85, 0.55);
-        for (let endpoint = 0; endpoint < 2; endpoint++) {
-          const p = nodes.get(endpoint === 0 ? link.a : link.b)!;
-          position.setXYZ(index, p.x - focus.x, p.y - focus.y, p.z - focus.z);
-          color!.setXYZ(index++, this.linkColor.r, this.linkColor.g, this.linkColor.b);
-        }
-      }
-      position.needsUpdate = true; color!.needsUpdate = true;
-      this.commsLines.geometry.setDrawRange(0, count);
-      this.commsLines.frustumCulled = false;
-    }
-    // Line materials take the viewport at creation (makeLine); existing ones only need it again on resize.
-    if (u.viewport.width !== this.resolutionWidth || u.viewport.height !== this.resolutionHeight) {
-      this.resolutionWidth = u.viewport.width; this.resolutionHeight = u.viewport.height;
-      for (const m of this.materials) m.resolution.set(this.resolutionWidth, this.resolutionHeight);
-    }
+    this.lines.updateComms(u);
+    this.lines.resize(u);
     this.camera.aspect = u.viewport.width / u.viewport.height;
 
     // Camera around focus (focus is at the scene origin).
@@ -1005,17 +673,14 @@ export class MapView {
     this.ghost.scale.setScalar(ICON_PX.ghost * this.spritePx);
 
     const sunPosition = this.ephem.getBodyState(this.sunId, t).position;
-    this.place(this.sunLight, sunPosition, focus);
-    this.place(this.sunGlow, sunPosition, focus);
+    place(this.sunLight, sunPosition, focus);
+    place(this.sunGlow, sunPosition, focus);
     const glowSize = Math.max(this.bodies.get(this.sunId)!.body.radius*5, this.sunGlow.position.distanceTo(this.camera.position)*.025);
     this.sunGlow.scale.setScalar(glowSize);
     const v = this.projected;
     const w = u.viewport.width, h = u.viewport.height;
-    let iconCount = 0, labelCount = 0, occluderCount = 0;
-    this.orbitStyle.uniforms.mapDistance.value = this.renderedDistance;
-    this.orbitStyle.uniforms.mapVessel.value.set(u.vessel ? u.vessel.position.x-focus.x : 0,
-      u.vessel ? u.vessel.position.y-focus.y : 0, u.vessel ? u.vessel.position.z-focus.z : 0);
-    this.orbitStyle.uniforms.mapViewport.value.set(w, h);
+    let iconCount = 0, labelCount = 0;
+    this.lines.beginFrame(u, this.renderedDistance);
     /** CSS px per world metre at unit distance from the camera. */
     const pxPerWorld1 = h / (2 * Math.tan(this.camera.fov * Math.PI / 360));
     const diagonal = Math.hypot(w, h);
@@ -1023,11 +688,11 @@ export class MapView {
     params.origin = focus; params.sunPosition = sunPosition; params.time = t; params.dt = dt; params.viewportHeight = h;
     for (const vis of this.orderedBodies) {
       const pos = this.ephem.getBodyState(vis.body.id, t).position;
-      this.place(vis.sphere, pos, focus);
-      this.place(vis.icon, pos, focus);
+      place(vis.sphere, pos, focus);
+      place(vis.icon, pos, focus);
       const parent = vis.body.parent ? this.bodies.get(vis.body.parent) : undefined;
       const parentPosition = parent ? this.ephem.getBodyState(parent.body.id, t).position : undefined;
-      if (vis.orbitLine && parentPosition) this.place(vis.orbitLine, parentPosition, focus);
+      if (vis.orbitLine && parentPosition) place(vis.orbitLine, parentPosition, focus);
       const dist = vis.sphere.position.distanceTo(this.camera.position);
       const angular = vis.body.radius / Math.max(dist, 1);
       const orbitPx = vis.body.orbit ? vis.body.orbit.a / Math.max(dist, 1) * pxPerWorld1 : 1e9;
@@ -1082,7 +747,7 @@ export class MapView {
         if (rotation) { params.bodyPosition = pos; params.bodyRotation = rotation; vis.renderer.update(params); }
       }
       this.surface.placeBody(vis.body.id, vis.sphere.position, resolved && !resource ? rotation : undefined);
-      if (resolved && occluderCount < 12) this.orbitStyle.occluders[occluderCount++].set(vis.sphere.position.x, vis.sphere.position.y, vis.sphere.position.z, vis.body.radius);
+      if (resolved) this.lines.occlude(vis.sphere.position, vis.body.radius);
       vis.icon.visible = visible && angular < .009;
 
       if (vis.orbitLine) {
@@ -1123,7 +788,6 @@ export class MapView {
     }
     this.labelCount = labelCount;
     this.bodyIcons.finish(iconCount);
-    this.orbitStyle.uniforms.mapCount.value = occluderCount;
     this.updateSoiShells(u);
     const breadcrumbId = u.referenceBody ?? identity;
     const focusBody = this.bodies.get(breadcrumbId);
@@ -1141,22 +805,15 @@ export class MapView {
     // Vessel
     this.vesselIcon.visible = !!u.vessel;
     if (u.vessel) {
-      this.place(this.vesselIcon, u.vessel.position, focus);
-      this.updateVesselLines(u.vessel.patches, this.bodies);
-      for (const line of this.vesselLines) {
-        const id = line.userData.body as string;
-        const bodyPosition = this.framedBodyPosition(id, u, this.patchFrameTime(u, u.vessel.patches[line.userData.patch as number]));
-        this.place(line, line.userData.numericAnchor ? add(bodyPosition, line.userData.numericAnchor) : bodyPosition, focus);
-        // Screen-space dashes: dash lengths are px at the focus distance, whatever the conic's size.
-        if (line.material.dashed) line.material.dashScale = pxPerWorld1 / Math.max(this.renderedDistance, 1e-3);
-      }
-    } else this.updateVesselLines(EMPTY_PATCHES, this.bodies);
+      place(this.vesselIcon, u.vessel.position, focus);
+    }
+    this.lines.updateTrajectory(u, this.renderedDistance, pxPerWorld1);
     this.hudCount = this.obstacles = this.hudRects ? this.hudRects.refresh(this.labels, now) : 0;
     this.updateNodes(u);
     this.updateGizmo(u, dt);
-    this.updateMarkers(u);
+    const markerLabelCount = this.markers.update(u, this.lines.patchVersion, this.labelBoxes, this.labelCount, this.hudRects?.rects, this.hudCount, this.obstacles);
     const frame = this.surfaceFrame;
-    frame.width = w; frame.height = h; frame.pxPerWorld1 = pxPerWorld1; frame.boxes = this.labelBoxes; frame.count = this.markerLabelCount;
+    frame.width = w; frame.height = h; frame.pxPerWorld1 = pxPerWorld1; frame.boxes = this.labelBoxes; frame.count = markerLabelCount;
     this.surface.update(frame);
     if (this.pointer.inside && !this.drag && now - this.lastHoverAt > 100) this.setHover(this.computeHover(this.pointer.x, this.pointer.y));
     else if (this.drag?.kind === 'handle' && now - this.lastHoverAt > 80) this.setHover({ kind: 'handle', index: this.drag.index, nodeId: this.drag.nodeId });
@@ -1214,7 +871,7 @@ export class MapView {
       for (let i = 0; i < k; i++) if (this.soiShells[i].userData.body === vis.body.id) return;
       const shell = this.soiShells[k++];
       shell.visible = true; shell.userData.body = vis.body.id;
-      this.scenePosition(ZERO, vis.body.id, u, shell.position, time); shell.scale.setScalar(vis.body.soi);
+      this.frame.scenePosition(ZERO, vis.body.id, u, shell.position, time); shell.scale.setScalar(vis.body.soi);
       shell.material.uniforms.uOpacity.value = opacity;
       // Where the encountered body will be: a ghost ring in its family colour.
       if (time !== u.t && ghosts < this.encounterGhosts.length) {
@@ -1229,7 +886,7 @@ export class MapView {
     const patches = u.vessel?.patches ?? EMPTY_PATCHES;
     for (let i = 0; i < patches.length; i++) {
       const p = patches[i];
-      if (p.endReason === 'soiEnter' && p.nextBody && p.endTime > u.t) show(this.bodies.get(p.nextBody), .6, this.patchFrameTime(u, patches[i + 1]));
+      if (p.endReason === 'soiEnter' && p.nextBody && p.endTime > u.t) show(this.bodies.get(p.nextBody), .6, this.frame.patchFrameTime(u, patches[i + 1]));
     }
     for (let i = k; i < this.soiShells.length; i++) this.soiShells[i].visible = false;
     for (let i = ghosts; i < this.encounterGhosts.length; i++) this.encounterGhosts[i].visible = false;
@@ -1259,9 +916,9 @@ export class MapView {
       if (s.material.map !== texture) s.material.map = texture;
       const hovered = (this.hover.kind === 'node' && this.hover.id === n.id) || (this.drag?.kind === 'node' && this.drag.nodeId === n.id);
       s.scale.setScalar((hovered ? ICON_PX.nodeHover : ICON_PX.node) * this.spritePx);
-      this.scenePosition(patchState(patch, n.time).position, patch.orbit.body, u, s.position, this.patchFrameTime(u, patch));
+      this.frame.scenePosition(patchState(patch, n.time).position, patch.orbit.body, u, s.position, this.frame.patchFrameTime(u, patch));
       s.userData.nodeId = n.id;
-      const truth = this.toScreen(s.position, u, this.nodeTruePoints[k] ??= { x: 0, y: 0 }), point = this.nodePoints[k] ??= { x: 0, y: 0 };
+      const truth = this.frame.toScreen(s.position, u, this.nodeTruePoints[k] ??= { x: 0, y: 0 }), point = this.nodePoints[k] ??= { x: 0, y: 0 };
       point.x = truth.x; point.y = truth.y;
       this.nodeTrue.set(n.id, truth);
       this.nodeScreen.set(n.id, point);
@@ -1323,11 +980,11 @@ export class MapView {
       this.gizmoState = patchState(patch, node.time);
       this.gizmoDirs = { prograde: maneuverToInertialDv(this.gizmoState, { prograde: 1, normal: 0, radial: 0 }), normal: maneuverToInertialDv(this.gizmoState, { prograde: 0, normal: 1, radial: 0 }), radial: maneuverToInertialDv(this.gizmoState, { prograde: 0, normal: 0, radial: 1 }) };
     }
-    const base = this.scenePosition(this.gizmoState!.position, patch.orbit.body, u, this.gizmoBase, this.patchFrameTime(u, patch));
+    const base = this.frame.scenePosition(this.gizmoState!.position, patch.orbit.body, u, this.gizmoBase, this.frame.patchFrameTime(u, patch));
     // A node nudged out from under a HUD panel carries its gizmo with it.
     const shown = this.nodeScreen.get(node.id), truth = this.nodeTrue.get(node.id);
     if (shown && truth && (shown.x !== truth.x || shown.y !== truth.y)) this.fromScreen(shown.x, shown.y, base, u, base);
-    this.toScreen(base, u, this.gizmoCenter);
+    this.frame.toScreen(base, u, this.gizmoCenter);
     const worldPerPx = 2 * base.distanceTo(this.camera.position) * Math.tan(this.camera.fov * Math.PI / 360) / Math.max(1, u.viewport.height);
     // Constant screen size, but never much larger than the orbit the node sits on: zoomed far out a full-size
     // gizmo would bury the very trajectory being planned. Too small to edit: only the node marker remains.
@@ -1347,7 +1004,7 @@ export class MapView {
       // one still too short points at the camera and is hidden. The held handle keeps its stretch while dragged.
       if (!held) {
         g.icon.position.copy(base).addScaledVector(direction, offset * worldPerPx);
-        const s = this.toScreen(g.icon.position, u, g.screen);
+        const s = this.frame.toScreen(g.icon.position, u, g.screen);
         g.stretch = handleStretch(Math.hypot(s.x - this.gizmoCenter.x, s.y - this.gizmoCenter.y), offset);
       }
       const px = (offset + (held ? Math.max(-offset * .7, Math.min(130, drag.pull)) : 0)) * g.stretch;
@@ -1356,7 +1013,7 @@ export class MapView {
       g.line.scale.set(1, Math.max(1e-9, px * worldPerPx), 1);
       g.icon.position.copy(base).addScaledVector(direction, px * worldPerPx);
       g.icon.scale.setScalar((held || (this.hover.kind === 'handle' && this.hover.index === i) ? this.gizmoIconPx * 1.25 : this.gizmoIconPx) * this.spritePx);
-      this.toScreen(g.icon.position, u, g.screen);
+      this.frame.toScreen(g.icon.position, u, g.screen);
       const armPx = Math.hypot(g.screen.x - this.gizmoCenter.x, g.screen.y - this.gizmoCenter.y);
       g.visible = g.line.visible = g.icon.visible = show && (held || armPx >= HANDLE_MIN_PX);
     }
@@ -1365,13 +1022,13 @@ export class MapView {
   private updateGhost(u: MapUpdate) {
     const h = this.hover, patch = h.kind === 'orbit' && !this.drag ? u.vessel?.patches[h.patch] : undefined;
     this.ghost.visible = !!patch;
-    if (patch && h.kind === 'orbit') this.scenePosition(patchState(patch, h.time).position, patch.orbit.body, u, this.ghost.position, this.patchFrameTime(u, patch));
+    if (patch && h.kind === 'orbit') this.frame.scenePosition(patchState(patch, h.time).position, patch.orbit.body, u, this.ghost.position, this.frame.patchFrameTime(u, patch));
   }
 
   /** Sample the placeable part of each trajectory patch (from now, up to the next node or one revolution). */
   private rebuildTrajectoryPolys(u: MapUpdate) {
     const patches = u.vessel?.patches ?? EMPTY_PATCHES;
-    this.polysVersion = this.patchVersion; this.polysTime = u.t;
+    this.polysVersion = this.lines.patchVersion; this.polysTime = u.t;
     let count = 0;
     for (let i = 0; i < patches.length; i++) {
       const p = patches[i];
@@ -1392,20 +1049,19 @@ export class MapView {
 
   private readonly scratch = new THREE.Vector3();
   private readonly scratchPoint: MapPoint = { x: 0, y: 0 };
-  private readonly markerCentre: MapPoint = { x: 0, y: 0 };
   /** Closest point of the active trajectory (future only) to a CSS-pixel position. */
   private hitTrajectory(x: number, y: number): { time: number; patch: number; distance: number } | null {
     const u = this.lastUpdate;
     if (!u?.vessel?.patches.length || !this.handlers.placeNode) return null;
-    if (this.polysVersion !== this.patchVersion || Math.abs(u.t - this.polysTime) > 1) this.rebuildTrajectoryPolys(u);
+    if (this.polysVersion !== this.lines.patchVersion || Math.abs(u.t - this.polysTime) > 1) this.rebuildTrajectoryPolys(u);
     let best: { time: number; patch: number; distance: number } | null = null;
     const line = this.screenLine;
     for (const poly of this.trajectoryPolys) {
-      const b = this.framedBodyPosition(poly.body, u, this.patchFrameTime(u, u.vessel.patches[poly.patch]));
+      const b = this.frame.framedBodyPosition(poly.body, u, this.frame.patchFrameTime(u, u.vessel.patches[poly.patch]));
       line.n = poly.count;
       for (let k = 0; k < poly.count; k++) {
         this.scratch.set(b.x + poly.points[k * 3] - u.focus.x, b.y + poly.points[k * 3 + 1] - u.focus.y, b.z + poly.points[k * 3 + 2] - u.focus.z);
-        const s = this.toScreen(this.scratch, u, this.scratchPoint);
+        const s = this.frame.toScreen(this.scratch, u, this.scratchPoint);
         line.x[k] = s.x; line.y[k] = s.y; line.t[k] = poly.times[k];
       }
       const hit = closestOnPolyline(line, x, y);
@@ -1432,13 +1088,13 @@ export class MapView {
     if (!u || !node) return;
     const [lo, hi] = slideWindow(node.time, d.period, d.earliest, d.latest);
     if (!(hi > lo)) return;
-    const b = this.framedBodyPosition(d.patch.orbit.body, u, this.patchFrameTime(u, d.patch)), line = this.screenLine;
+    const b = this.frame.framedBodyPosition(d.patch.orbit.body, u, this.frame.patchFrameTime(u, d.patch)), line = this.screenLine;
     const sample = (t0: number, t1: number, n: number) => {
       line.n = n + 1;
       for (let k = 0; k <= n; k++) {
         const time = t0 + (t1 - t0) * k / n, s = patchState(d.patch, time).position;
         this.scratch.set(b.x + s.x - u.focus.x, b.y + s.y - u.focus.y, b.z + s.z - u.focus.z);
-        const p = this.toScreen(this.scratch, u, this.scratchPoint);
+        const p = this.frame.toScreen(this.scratch, u, this.scratchPoint);
         line.x[k] = p.x; line.y[k] = p.y; line.t[k] = time;
       }
       // ~6 px of preference across the window keeps the node on its current revolution where the orbit overlaps.
@@ -1452,165 +1108,13 @@ export class MapView {
     this.handlers.nodesChanged?.();
   }
 
-  // ---------- Orbit markers ----------
-
-  private bodyName = (id: string) => this.bodies.get(id)?.body.name ?? id;
-  private bodyRadius = { radius: (id: string) => this.bodies.get(id)?.body.radius ?? 0, soi: (id: string) => this.bodies.get(id)?.body.soi ?? Infinity };
-
-  private pushMarker(key: string, body: string, position: Vec3, caption: string, color: string, priority: number, glyph: MarkerGlyph, orbit?: OrbitMarker, detail?: string, dotOnly = false, time?: number) {
-    const m = this.shown[this.shownCount] ??= { key: '', body: '', position, caption: '', color: '', priority: 0, glyph: 'dot' };
-    m.key = key; m.body = body; m.position = position; m.caption = caption; m.color = color; m.priority = priority;
-    m.orbit = orbit; m.detail = detail; m.dotOnly = dotOnly; m.time = time ?? orbit?.time; m.glyph = glyph; m.frameTime = undefined;
-    this.shownCount++;
-    return m;
-  }
-
-  private markerElement(i: number): MarkerElement {
-    let el = this.markerEls[i];
-    if (el) return el;
-    const root = document.createElement('div'), dot = document.createElement('div'), text = document.createElement('div'), leader = document.createElement('div');
-    Object.assign(root.style, { position: 'absolute', left: '0', top: '0', pointerEvents: 'none', display: 'none' });
-    Object.assign(leader.style, { position: 'absolute', left: '0', top: '0', width: '1px', height: '1px', transformOrigin: '0 0', display: 'none', opacity: '.65' });
-    Object.assign(dot.style, { position: 'absolute', left: `${-GLYPH_PX / 2}px`, top: `${-GLYPH_PX / 2}px`, width: `${GLYPH_PX}px`, height: `${GLYPH_PX}px`, lineHeight: '0' });
-    Object.assign(text.style, { position: 'absolute', left: `${GLYPH_PX / 2 + 3}px`, top: '-9px', font: '600 12px system-ui, sans-serif', whiteSpace: 'pre', textShadow: LABEL_SHADOW, lineHeight: '17px', letterSpacing: '.02em' });
-    root.appendChild(leader); root.appendChild(dot); root.appendChild(text);
-    this.labels.appendChild(root);
-    el = { root, dot, text, leader, leaderA: NaN, leaderL: -1, flipped: false, box: { x: 0, y: 0, width: 0, height: 17 }, content: '', color: '', glyph: '', caption: { x: 0, y: 0, width: 0, height: 0 }, measured: '', lines: 0 };
-    this.markerEls[i] = el;
-    return el;
-  }
-
-  private markerDetailText(m: ShownMarker, t: number) {
-    return m.orbit ? markerDetail(m.orbit, t, this.bodyName) : m.detail ?? m.caption;
-  }
-
-  private updateMarkers(u: MapUpdate) {
-    const patches = u.vessel?.patches ?? EMPTY_PATCHES;
-    const key = `${this.patchVersion}:${patches.length ? Math.floor(u.t) : 0}`;
-    if (key !== this.orbitMarksKey) {
-      this.orbitMarksKey = key;
-      try { this.orbitMarks = orbitMarkers(patches, u.t, this.bodyRadius); } catch { this.orbitMarks = []; }
-    }
-    this.shownCount = 0;
-    const planned = firstPlannedPatch(patches);
-    for (const m of this.orbitMarks) {
-      const apsis = m.kind === 'ap' || m.kind === 'pe';
-      // Markers take the colour of the trajectory they sit on; an encounter takes the colour of the patch inside
-      // the encountered body, so marker and arc read as one.
-      const color = m.kind === 'impact' ? IMPACT_CSS : cssHex(patchColor(m.kind === 'encounter' ? m.patch + 1 : m.patch, planned));
-      this.pushMarker(m.key, m.body, m.position, markerCaption(m, this.bodyName), color, apsis ? 1 : 2, m.kind, m).frameTime = this.patchFrameTime(u, patches[m.patch]);
-    }
-    const markers = u.markers ?? EMPTY_MARKERS;
-    for (let i = 0; i < markers.length; i++) {
-      const m = markers[i], key = m.key ?? `ext:${i}`;
-      this.pushMarker(key, m.body, m.position, m.label, m.color, 1, glyphForKey(key), undefined, m.detail, false, m.time);
-    }
-    const a = this.approach && this.bodies.has(this.approach.body) ? this.approach : null;
-    if (a) {
-      this.pushMarker('ca', a.body, a.positionA, a.label, TARGET_CSS, 2, 'approach', undefined, a.detail, false, a.time);
-      this.pushMarker('ca:target', a.body, a.positionB, '', TARGET_CSS, 0, 'dot', undefined, a.detail, true, a.time);
-    }
-    this.approachLine.visible = !!a;
-    if (a) {
-      const pos = this.approachLine.geometry.getAttribute('position') as THREE.BufferAttribute;
-      this.scenePosition(a.positionA, a.body, u, this.scratch); pos.setXYZ(0, this.scratch.x, this.scratch.y, this.scratch.z);
-      this.scenePosition(a.positionB, a.body, u, this.scratch); pos.setXYZ(1, this.scratch.x, this.scratch.y, this.scratch.z);
-      pos.needsUpdate = true;
-    }
-    // Dots for every marker; captions in priority order (pinned first), decluttered against body labels.
-    this.markerScreenCount = 0;
-    const hudCount = this.hudCount, hudRects = this.hudRects?.rects ?? EMPTY_RECTS;
-    let obstacles = this.obstacles;
-    for (let i = 0; i < this.shownCount; i++) {
-      const m = this.shown[i], el = this.markerElement(i);
-      const s = this.toScreen(this.scenePosition(m.position, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.scratchPoint);
-      let on = s.x > -20 && s.y > -20 && s.x < u.viewport.width + 20 && s.y < u.viewport.height + 20;
-      // Apsides of an orbit that is only a few pixels across are noise piled on the body icon: hide them until
-      // the orbit is large enough to tell apart (pinned markers stay).
-      // The focused body's own flyby periapsis always shows (it is what an encounter is planned for).
-      if (on && (m.glyph === 'ap' || m.glyph === 'pe') && !this.pinned.has(m.key) && !(m.glyph === 'pe' && m.body === u.focusId && m.body !== patches[0]?.orbit.body)) {
-        const sx = s.x, sy = s.y, c = this.toScreen(this.scenePosition(ZERO, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.markerCentre);
-        on = !(Math.hypot(c.x - sx, c.y - sy) < 16);
-        s.x = sx; s.y = sy;
-      }
-      setStyle(el.root, 'display', on ? 'block' : 'none');
-      el.box.x = NaN;
-      if (!on) continue;
-      // A marker under a HUD panel moves to the nearest clear spot, joined to its true point by a thin leader line;
-      // the spot is reserved so a second covered marker does not land on top of it.
-      let px = s.x, py = s.y, nudged = false;
-      if (hudCount && coveredIndex(hudRects, hudCount, px, py, HUD_COVER_PX) >= 0
-        && nudgeClear(hudRects, obstacles, px, py, u.viewport.width, u.viewport.height, HUD_CLEAR_PX, this.nudgeAt)) {
-        px = this.nudgeAt.x; py = this.nudgeAt.y; nudged = true;
-        const spot = hudRects[obstacles++] ??= { x: 0, y: 0, width: GLYPH_PX, height: GLYPH_PX };
-        spot.x = px - GLYPH_PX / 2; spot.y = py - GLYPH_PX / 2; spot.width = GLYPH_PX; spot.height = GLYPH_PX;
-      }
-      setPosition(el.root, px, py);
-      if (el.color !== m.color || el.glyph !== m.glyph) {
-        el.color = m.color; el.glyph = m.glyph;
-        el.dot.innerHTML = markerGlyphSvg(m.glyph, m.color); el.text.style.color = m.color; el.leader.style.background = m.color;
-      }
-      setStyle(el.leader, 'display', nudged ? 'block' : 'none');
-      if (nudged) {
-        const dx = s.x - px, dy = s.y - py, a = Math.round(Math.atan2(dy, dx) * 100), len = Math.round(Math.hypot(dx, dy));
-        if (a !== el.leaderA || len !== el.leaderL) { el.leaderA = a; el.leaderL = len; el.leader.style.transform = `rotate(${a / 100}rad) scaleX(${len})`; }
-      }
-      el.box.x = px; el.box.y = py;
-      const hit = this.markerScreen[this.markerScreenCount++] ??= { key: '', x: 0, y: 0 };
-      hit.key = m.key; hit.x = px; hit.y = py;
-    }
-    for (let i = this.shownCount; i < this.markerEls.length; i++) setStyle(this.markerEls[i].root, 'display', 'none');
-    // Captions: shown below only if they win placement this frame.
-    const captioned = this.captioned;
-    captioned.fill(false);
-    let labelCount = this.labelCount;
-    for (let pass = 3; pass >= 0; pass--) for (let i = 0; i < this.shownCount; i++) {
-      const m = this.shown[i], el = this.markerEls[i], pinned = this.pinned.has(m.key);
-      if (Number.isNaN(el.box.x) || (pinned ? 3 : m.priority) !== pass || m.dotOnly && !pinned) continue;
-      const content = pinned ? this.markerDetailText(m, u.t) : m.caption;
-      if (!content) continue;
-      const box = el.caption;
-      if (el.measured !== content) {
-        el.measured = content;
-        let lines = 0, longest = 0;
-        for (let start = 0; start <= content.length; lines++) {
-          let end = content.indexOf('\n', start);
-          if (end < 0) end = content.length;
-          longest = Math.max(longest, end - start);
-          start = end + 1;
-        }
-        box.width = longest * 7 + 12; el.lines = lines;
-      }
-      box.x = el.box.x + GLYPH_PX / 2 + 3; box.y = el.box.y - 9; box.height = el.lines * 17 + (pinned ? 6 : 0);
-      // A caption that would run under a HUD panel flips to the glyph's other side.
-      const flip = hudCount > 0 && overlapsAny(box, hudRects, hudCount, 2);
-      if (flip) box.x = el.box.x - GLYPH_PX / 2 - 3 - box.width;
-      if (!pinned && (!placeLabel(box, this.labelBoxes, labelCount) || (flip && overlapsAny(box, hudRects, hudCount, 2)))) continue;
-      this.labelBoxes[labelCount++] = box;
-      captioned[i] = true;
-      if (el.flipped !== flip) {
-        el.flipped = flip;
-        Object.assign(el.text.style, flip ? { left: 'auto', right: `${GLYPH_PX / 2 + 3}px`, textAlign: 'right' } : { left: `${GLYPH_PX / 2 + 3}px`, right: 'auto', textAlign: 'left' });
-      }
-      if (el.content !== content) { el.content = content; el.text.textContent = content; }
-      setStyle(el.text, 'background', pinned ? '#0a1525dd' : 'none');
-      setStyle(el.text, 'border', pinned ? `1px solid ${m.color}55` : 'none');
-      setStyle(el.text, 'borderRadius', pinned ? '6px' : '0');
-      setStyle(el.text, 'padding', pinned ? '3px 7px' : '0');
-    }
-    for (let i = 0; i < this.markerEls.length; i++) setStyle(this.markerEls[i].text, 'display', i < this.shownCount && captioned[i] ? 'block' : 'none');
-    this.markerLabelCount = labelCount;
-  }
-
   // ---------- Hover, tooltips and gestures ----------
 
   private computeHover(x: number, y: number): Hover {
     const man = this.hitManeuver(x, y);
     if (man.kind !== 'none') return man;
-    for (let i = 0; i < this.markerScreenCount; i++) {
-      const m = this.markerScreen[i];
-      if (Math.hypot(m.x - x, m.y - y) < GLYPH_PX / 2 + 3) return { kind: 'marker', key: m.key };
-    }
+    const marker = this.markers.pick(x, y);
+    if (marker !== null) return { kind: 'marker', key: marker };
     const object = this.pickObject(x, y, false);
     if (object) return { kind: 'object', pick: object };
     const orbit = this.hitTrajectory(x, y);
@@ -1636,10 +1140,7 @@ export class MapView {
         if (!node) return null;
         return `Maneuver · Δv ${Math.hypot(node.prograde, node.normal, node.radial).toFixed(1)} m/s\nT−${formatDuration(node.time - u.t)}\nClick for options · drag along the orbit to move`;
       }
-      case 'marker': {
-        for (let i = 0; i < this.shownCount; i++) if (this.shown[i].key === h.key) return `${this.markerDetailText(this.shown[i], u.t)}\n${this.pinned.has(h.key) ? 'Click to unpin' : 'Click to pin'}`;
-        return null;
-      }
+      case 'marker': return this.markers.tooltip(h.key, u.t);
       case 'object': {
         if (h.pick.kind === 'body') {
           const surface = this.surface.describe(this.pointer.x, this.pointer.y, { camera: this.camera, width: u.viewport.width, height: u.viewport.height });
@@ -1770,7 +1271,7 @@ export class MapView {
       } else if (d.kind === 'camera' && !d.moved) {
         const h = this.computeHover(p.x, p.y);
         if (h.kind === 'marker' && d.button === 0) {
-          if (!this.pinned.delete(h.key)) this.pinned.add(h.key);
+          this.markers.togglePin(h.key);
         } else if (h.kind === 'object' && (d.button === 0 || d.button === 2)) {
           this.quiet = { x: p.x, y: p.y };
           this.handlers.objectMenu?.(h.pick, { x: p.x, y: p.y });
@@ -1778,9 +1279,9 @@ export class MapView {
           const now = performance.now();
           if (now - this.lastPlaced > 450) { this.lastPlaced = now; this.handlers.placeNode?.(h.time); }
         } else if (h.kind === 'marker' && d.button === 2 && this.handlers.markerMenu) {
-          const m = this.shown.slice(0, this.shownCount).find(x => x.key === h.key);
+          const m = this.markers.menu(h.key);
           this.quiet = { x: p.x, y: p.y };
-          if (m) this.handlers.markerMenu({ key: m.key, label: m.orbit ? (m.orbit.kind === 'ap' ? 'Apoapsis' : m.orbit.kind === 'pe' ? 'Periapsis' : markerCaption(m.orbit, this.bodyName)) : m.key.startsWith('ca') ? 'Closest approach' : m.caption, time: m.time, pinned: this.pinned.has(m.key) }, { x: p.x, y: p.y });
+          if (m) this.handlers.markerMenu(m, { x: p.x, y: p.y });
         } else if (h.kind === 'orbit' && d.button === 2 && this.handlers.orbitMenu) {
           this.quiet = { x: p.x, y: p.y };
           this.handlers.orbitMenu(h.time, { x: p.x, y: p.y });
@@ -1845,11 +1346,12 @@ export class MapView {
    * (false), so the first node, gizmo or planned trajectory does not stall on a program compile.
    */
   setWarmup(on: boolean) {
+    this.markers.setWarmup(on);
     for (const o of this.warmObjects) o.visible = on;
   }
 
   /** Pin or unpin an orbit marker's detail label. */
-  togglePin(key: string) { if (!this.pinned.delete(key)) this.pinned.add(key); }
+  togglePin(key: string) { this.markers.togglePin(key); }
 
   /** Show the built-in focus breadcrumb (hosts with their own focus readout turn it off). */
   showBreadcrumb = true;

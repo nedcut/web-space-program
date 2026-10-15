@@ -53,7 +53,7 @@ const probe = () => page.evaluate(() => new Promise(resolve => {
     const sort = m => Object.entries(m).sort((a, b) => b[1] - a[1]);
     let meshes = 0, objs = 0, shadowCasters = 0;
     window.__flight.scene.traverse(o => { objs++; if (o.isMesh) { meshes++; if (o.castShadow && o.visible) shadowCasters++; } });
-    resolve({ shadow: JSON.stringify(window.__flight.shadowCache?.stats), draws: window.__flight.pipeline.stats.calls, objs, meshes, shadowCasters, byRoot: sort(byRoot), byKind: sort(byKind).slice(0, 25) });
+    resolve({ shadow: JSON.stringify(window.__flight.lighting.shadowCache?.stats), draws: window.__flight.pipeline.stats.calls, objs, meshes, shadowCasters, byRoot: sort(byRoot), byKind: sort(byKind).slice(0, 25) });
   });
 }));
 const show = (name, d) => { console.log('=====', name, 'shadow', d.shadow, 'draws', d.draws, 'objects', d.objs, 'meshes', d.meshes, 'shadowCasters', d.shadowCasters); for (const [k, v] of d.byRoot) console.log(String(v).padStart(5), k); console.log('-- by material'); for (const [k, v] of d.byKind) console.log(String(v).padStart(5), k); };

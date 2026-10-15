@@ -33,7 +33,7 @@ try {
     const actual = await page.evaluate(() => {
       const c = window.__flight, p = c.pipeline, gl = p.renderer.getContext();
       return { quality: p.quality, pixelRatio: p.renderer.getPixelRatio(), samples: p.composer.renderTarget1.samples,
-        particles: c.effects.pool.capacity, shadows: p.renderer.shadowMap.enabled, shadowSize: c.sunLight.shadow.mapSize.x,
+        particles: c.effects.pool.capacity, shadows: p.renderer.shadowMap.enabled, shadowSize: c.lighting.sunLight.shadow.mapSize.x,
         gpu: p.gpuName, glError: gl.getError(), ut: c.world.ut };
     });
     if (actual.glError || actual.samples !== expected.msaaSamples || actual.shadows !== (expected.shadowMapSize > 0)) throw new Error(`render configuration failed: ${key}`);

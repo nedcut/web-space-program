@@ -1,21 +1,18 @@
+import { FlightCameraRig, HUD_TOP_PX } from './controller/FlightCameraRig';
+import { FlightLighting } from './controller/FlightLighting';
 import { HUD_BLOCKS } from './hud/hudBlocks';
 import { SpeedModeTracker } from './speedMode';
 import { dockingModeAfterEvent } from './dockingMode';
 import { explosionDiameter, separationPunch, impactPunch, structuralStressPunch } from '../render/fx/eventDesign';
-import { updateSiteShadow } from '../render/site/shadows';
-import { maxDrawingEdge } from '../render/core/drawingLimits';
-import { ShadowMapCache } from '../render/core/shadowCache';
 import { onContextRestored } from '../render/core/contextRecovery';
 import { stageExplanation } from './cues';
 import { actionAvailable, partActions } from '../sim/vessel/actions';
 import { CondensationFx } from '../render/fx/CondensationFx';
 import { SurfaceDust } from '../render/planet/surfaceDust';
-import { flightRumble } from '../audio/design';
 import { FlightFx, isBurstEvent } from '../render/fx/FlightFx';
 
 import { PhotoCamera } from '../render/core/PhotoCamera';
 import * as THREE from 'three';
-import { SkyEnvironment, surfaceBounce } from '../render/core/skyEnv';
 import { releasePartTexturePixels, restorePartTexturePixels, setPartDetail } from '../render/parts';
 import type { GameAudio } from '../audio';
 import { PART_CATALOG } from '../data/parts';
@@ -34,8 +31,6 @@ import type { ExtraOrbit } from '../render/map/MapView';
 import { MapView } from '../render/map/MapView';
 import { FlightMap } from './map/FlightMap';
 import { LaunchSite, launchSiteDistance, type PadVessel } from '../render/site/LaunchSite';
-import { Starfield } from '../render/sky/Starfield';
-import { SunGlare } from '../render/sky/SunGlare';
 import { FlagView } from '../render/vessel/FlagView';
 import { ReentryFx } from '../render/vessel/ReentryFx';
 import { VesselView } from '../render/vessel/VesselView';
@@ -57,12 +52,10 @@ import { shareUnchanged, snapshotEqual } from '../util/snapshotEqual';
 import { bindingLabel } from '../input/bindings';
 import { HatchMarker, HATCH_MARKER_RANGE } from './hatchMarker';
 import { BOARD_RANGE, BOARD_SPEED } from '../game/world/crew';
-import { add, cross, dot, length, normalize, scale, sub, type Vec3 } from '../util/vec3';
-import { qRotate } from '../util/quat';
+import { cross, dot, length, normalize, sub, type Vec3 } from '../util/vec3';
 import { type AssistId } from './assist';
-import { CAMERA_MODE_INFO, cameraModeInfo, FlightCamera, PivotSmoother, TouchdownKick } from './camera';
-import { hudLensShift, LiftoffDetector, speedFovBoost, towerAvailable, towerPlacement, towerRevertDistance } from './cameraFraming';
-import { warpRate } from '../game/timewarp';
+import { cameraModeInfo, FlightCamera } from './camera';
+import { towerAvailable } from './cameraFraming';
 import * as assist from './controller/assist';
 import * as audio from './controller/audio';
 import type { FlightControllerInternals } from './controller/internals';
@@ -88,9 +81,6 @@ const graphicsKeyOf = (s: { quality: string; shadows: boolean; bloom: boolean; r
  * Owns the flight scene: world simulation, rendering (flight + map), input, camera.
  * React only hosts the canvas and HUD; this class runs the frame loop.
  */
-/** Bottom-HUD and top-HUD extents (CSS px at HUD scale 1) used to frame the vessel in the clear band between them. */
-const HUD_TOP_PX = 64;
-const HUD_BOTTOM_EXTRA_PX = 70;
 /** Frame time after the loading screen lifts that adaptive resolution still ignores (stragglers: uploads, chunks). */
 const LOAD_SETTLE_MS = 2000;
 
@@ -124,10 +114,9 @@ export class FlightController {
   readonly input: FlightInput;
   readonly pipeline: RenderPipeline;
   readonly scene = flightScene();
-  /** Skips the sun's depth pass while every caster and the light are unchanged (pad, attitude hold, pause). */
-  private readonly shadowCache = new ShadowMapCache();
   private unwatchContext: (() => void) | null = null;
   readonly cam = new FlightCamera();
+  private cameraRig: FlightCameraRig;
   readonly map: MapView;
   /** Map focus, menus and maneuver-node commands. */
   readonly mapUi: FlightMap;
@@ -186,14 +175,7 @@ export class FlightController {
   private partPickListeners = new Set<(uid: number) => void>();
   private readonly raycaster = new THREE.Raycaster();
   private views = new Map<string, VesselView>();
-  private stars: Starfield;
-  private glare: SunGlare;
-  private skyEnv!: SkyEnvironment;
-  private readonly envUp = new THREE.Vector3();
-  private readonly envBounce: [number, number, number] = [0, 0, 0];
-  private sunLight = new THREE.DirectionalLight(0xffffff, 3.2);
-  private ambient = new THREE.HemisphereLight(0x8899bb, 0x221a10, 0.12);
-  private nightLight = new THREE.DirectionalLight(0xdfe8ff, 0);
+  private lighting: FlightLighting;
   private planets: PlanetLayer;
   private site: LaunchSite | null = null;
   private flags = new FlagView();
@@ -272,6 +254,7 @@ export class FlightController {
     const universe = this.world.universe;
     this.hints = new HintTracker(new Set(this.world.seenTips as import('./hints').HintId[]), seen => { this.world.seenTips = [...seen]; });
     this.input = new FlightInput();
+    this.cameraRig = new FlightCameraRig(this.world, this.cam, this.input.camera);
 
     this.pipeline = new RenderPipeline({ quality: getQuality(quality), toneMapping: 'aces', exposure: 1 });
     const canvas = this.pipeline.renderer.domElement;
@@ -285,37 +268,21 @@ export class FlightController {
 
     const q = getQuality(quality);
     setPartDetail(q.partDetail);
-    this.stars = new Starfield({ count: q.stars.count, milkyWay: q.stars.milkyWay, seed: 7 });
-    this.scene.add(this.stars.group);
-    this.glare = new SunGlare();
-    this.scene.add(this.glare.mesh);
-    this.scene.add(this.sunLight, this.sunLight.target, this.ambient, this.nightLight, this.nightLight.target);
+    this.lighting = new FlightLighting(this.scene, this.pipeline.renderer, universe, q);
     this.effects = new FlightFx(getQuality(quality).particleQuality);
     this.scene.add(this.condensation.object, this.surfaceDust.mesh);
     this.scene.add(this.effects.root, this.reentry.object, this.flags.root);
-    this.sunLight.castShadow = true;
-    const shadowSize = Math.min(q.shadowMapSize || 512, maxDrawingEdge(this.pipeline.renderer));
-    this.sunLight.shadow.mapSize.set(shadowSize, shadowSize);
     // The pipeline was just built from these settings; do not rebuild it on the first frame.
     if (game.get().settings.quality === quality) this.graphicsKey = graphicsKeyOf(game.get().settings);
-    this.sunLight.shadow.bias = -0.00002;
-    this.sunLight.shadow.normalBias = 0.02;
-    // Soft PCF (Vogel disk); three r186 PCFShadowMap honours the radius.
-    this.sunLight.shadow.radius = 2.5;
-
-    // Image-based fill light so sunlit-from-behind vessels aren't pitch black. Scaled by air density each frame.
-    // Procedural sky/planetshine environment, re-baked as altitude, attitude and sun change.
-    this.skyEnv = new SkyEnvironment(this.pipeline.renderer);
     // A restored context has an empty shadow depth map: the cache would otherwise keep skipping the redraw.
     this.unwatchContext = onContextRestored(this.pipeline.renderer, () => {
-      this.shadowCache.invalidate();
+      this.lighting.invalidate();
       // Rewarm inactive terrain variants too, before a later altitude/region switch can use them.
       window.clearTimeout(this.warmupTimer);
       this.warmupGeneration++;
       this.warmup = 'pending';
       this.framesRendered = 0;
     });
-    this.scene.environmentIntensity = 1;
 
     this.planets = createPlanetLayer(this.scene, universe, quality, this.pipeline.renderer);
 
@@ -941,12 +908,7 @@ export class FlightController {
       const quality = getQuality(settings.quality);
       this.pipeline.setQuality(quality);
       this.effects.setQuality(quality.particleQuality);
-      const size = Math.min(quality.shadowMapSize || 512, maxDrawingEdge(this.pipeline.renderer));
-      if (this.sunLight.shadow.mapSize.x !== size) {
-        this.sunLight.shadow.mapSize.set(size, size);
-        this.sunLight.shadow.map?.dispose();
-        this.sunLight.shadow.map = null;
-      }
+      this.lighting.setQuality(quality);
     }
     // Loading frames (chunk builds, texture uploads, shader warm-up) are not GPU load: judged as such they sank
     // the scale to its floor before the loading screen lifted. Keep holding until shortly after it has.
@@ -1215,7 +1177,7 @@ export class FlightController {
 
     // Camera
     if (this.photo.active) this.photo.update(photoDt);
-    else this.updateCamera(wv, origin, bodyState, airVel, t, dt);
+    else this.cameraRig.update(wv, origin, bodyState, airVel, t, dt, this.paused, this.uiHidden, this.viewport.height, this.site);
     const camera = this.cam.camera;
     this.hatchMarker.update(this.world.vessels, origin, camera, this.viewport.width, this.viewport.height, !this.uiHidden && !this.photo.active);
     const groundAltitude = u.surfaceInfo(wv.body, wv.state.position, t).heightAboveTerrain;
@@ -1247,30 +1209,8 @@ export class FlightController {
       for (const [id, label] of this.playerLabels) if (!live.has(id)) { label.remove(); this.playerLabels.delete(id); }
     }
 
-    // Sun light: directional, shadow frustum hugging the active vessel.
-    const sd = new THREE.Vector3(sunDir.x, sunDir.y, sunDir.z);
-    // Cover the tower, trench and low-sun ground shadows near the launch complex.
-    const nearSite = wv.body === 'earth' && !!this.site && this.site.root.position.length() < 600;
-    const r = Math.max(nearSite ? 210 : 10, wv.state.cache.boundingRadius * 2.5);
-    this.sunLight.position.copy(sd).multiplyScalar(r * 4);
-    this.sunLight.target.position.set(0, 0, 0);
-    const sc = this.sunLight.shadow.camera as THREE.OrthographicCamera;
-    // Depth range reaches well past the vessel so long low-sun shadows on the ground are not clipped; airless
-    // descents need the vessel's shadow on the ground from several km up.
-    const far = r * 4 + Math.max(r * 8, wv.body === 'earth' ? 1500 : 6000);
-    if (sc.right !== r || sc.far !== far) {
-      sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 0.1; sc.far = far;
-      sc.updateProjectionMatrix();
-      // Biases scale with the shadow texel size (acne-free without peter-panning at any vessel size).
-      const texel = (2 * r) / this.sunLight.shadow.mapSize.x;
-      this.sunLight.shadow.normalBias = texel * 1.2;
-      this.sunLight.shadow.bias = -0.00002;
-    }
-
-    // Ground receivers sample the vessel's shadow map only while the ground is within its depth range (orbit
-    // frames skip the per-fragment lookup entirely).
-    const shadowReachesGround = groundAltitude < sc.far;
-    updateSiteShadow(this.sunLight, this.pipeline.renderer.shadowMap.enabled && shadowReachesGround);
+    this.lighting.placeSun(sunDir, wv.state.cache.boundingRadius, wv.body,
+      wv.body === 'earth' && !!this.site && this.site.root.position.length() < 600, groundAltitude);
     t0 = prof.now();
     // A lunar flight or distant orbit must not construct and warm hundreds of hidden site meshes.
     // Use the same body-fixed location as LaunchSite; a 50 km margin prepares inbound scenery early.
@@ -1287,58 +1227,14 @@ export class FlightController {
     this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.lodViewportHeight, switchViewportHeight: this.pipeline.lodSwitchViewportHeight });
     const eclipse = this.planets.sunVisibility?.(origin, sunPos) ?? 1;
     const tint = this.planets.sunTint?.(origin, sunPos) ?? [1, 1, 1];
-    const tmax = Math.max(1e-6, tint[0], tint[1], tint[2]);
-    this.sunLight.color.setRGB(tint[0] / tmax, tint[1] / tmax, tint[2] / tmax);
-    this.sunLight.intensity = 3.2 * eclipse;
-    // Night vision lights what the camera looks at, strongest in full shadow so daylight shading is untouched.
-    const dark = this.nightVision ? 1 - eclipse : 0;
-    this.ambient.intensity = 0.12 + 1.4 * dark;
-    // Always in the scene (intensity 0 when off): toggling visibility would change the light count and recompile shaders.
-    this.nightLight.intensity = 2.2 * dark;
-    if (dark > 0) {
-      this.nightLight.position.copy(camera.position);
-      camera.getWorldDirection(this.nightLight.target.position).add(camera.position);
-    }
-    // Sky fill: brighter in thick air (scattered skylight), dim in space (planetshine + starlight).
-    const airFrac = Math.min(1, air.density / 1.0);
-    this.effects.lighting(sd, camera, this.sunLight.color, this.sunLight.intensity, airFrac);
-    const envBody = u.body(wv.body);
-    const envRel = sub(origin, bodyState.position);
-    const envDist = Math.max(envBody.radius, length(envRel));
-    // Ground bounce from the terrain under the vessel: mid palette albedo on land, the darkest (water) entry over liquid.
-    const colors = envBody.surface.colors;
-    const terrain = envBody.solidSurface ? u.terrain(wv.body) : null;
-    // The surface under the vessel is max(liquid level, terrain): at the liquid level means over liquid.
-    const datumAltitude = length(sub(wv.state.position, bodyState.position)) - envBody.radius;
-    const liquidLevel = terrain?.liquid?.level ?? 0;
-    const overLiquid = !!terrain?.ocean && Math.abs(datumAltitude - groundAltitude - liquidLevel) < 0.01;
-    const bounce = envBody.solidSurface ? surfaceBounce({
-      albedo: (overLiquid ? colors[0] : colors[1] ?? colors[0]) ?? [0.3, 0.3, 0.3],
-      altitude: datumAltitude, radius: envBody.radius, daylight: eclipse,
-      sunColor: [this.sunLight.color.r, this.sunLight.color.g, this.sunLight.color.b], airless: !envBody.atmosphere,
-    }, this.envBounce) : undefined;
-    this.scene.environment = this.skyEnv.update(
-      {
-        up: this.envUp.set(envRel.x, envRel.y, envRel.z).normalize(),
-        sun: sd,
-        air: airFrac,
-        daylight: eclipse,
-        ground: envBody.surface.colors[0] ?? [0.3, 0.3, 0.3],
-        skyTint: envBody.atmosphere?.tint,
-        bodyAngle: Math.asin(Math.min(1, envBody.radius / envDist)),
-        bounce,
-      },
-      performance.now(),
-    );
-    this.scene.environmentIntensity = 0.85 + 0.35 * airFrac;
-    this.stars.update(camera, this.pipeline.pixelRatio);
-    this.glare.update(camera, sd, eclipse);
+    this.lighting.update(wv, origin, bodyState.position, groundAltitude, air.density,
+      camera, eclipse, tint, this.nightVision, this.pipeline.pixelRatio, this.effects);
     prof.add('planets', t0);
     t0 = prof.now();
     // The scene opts out of the renderer's automatic pass (see flightScene): update once, then decide shadows.
     this.scene.updateMatrixWorld();
     if (submit) {
-      this.shadowCache.update(this.scene, this.sunLight, this.pipeline.renderer.shadowMap.enabled);
+      this.lighting.updateShadows();
       this.pipeline.render(this.scene, camera);
     }
     prof.add('render', t0);
@@ -1384,173 +1280,10 @@ export class FlightController {
     return la > 0 && lb > 0 ? Math.acos(Math.max(-1, Math.min(1, dot(a, b) / (la * lb)))) * 180 / Math.PI : NaN;
   }
 
-  private readonly camUp = new THREE.Vector3();
-  private readonly camQuat = new THREE.Quaternion();
-  private readonly camVel = new THREE.Vector3();
-  private readonly camNormal = new THREE.Vector3();
-  private readonly camProbe = { x: 0, y: 0, z: 0 };
-  private readonly camPivot = new THREE.Vector3();
-  private readonly pivotSmoother = new PivotSmoother();
-  private readonly touchdown = new TouchdownKick();
-
-  /** Feed the orbit camera its reference frame, framing size, terrain clearance and rumble for this frame. */
-  private updateCamera(wv: WorldVessel, origin: Vec3, bodyState: { position: Vec3; velocity: Vec3 }, airVel: Vec3, t: number, dt: number) {
-    const u = this.world.universe;
-    const body = u.body(wv.body);
-    const st = wv.state;
-    const r = sub(origin, bodyState.position);
-    const alt = length(r) - body.radius;
-    const up = normalize(r);
-    const orbVel = sub(st.velocity, bodyState.velocity);
-    const n = cross(r, orbVel);
-    const nLen = length(n);
-    const atmo = body.atmosphere?.height ?? 0;
-    const h0 = atmo > 0 ? atmo : Math.max(5000, body.radius * 0.03);
-    const flying = st.situation === 'flying' && wv.mode !== 'prelaunch';
-    const spaceBlend = flying ? Math.max(0, Math.min(1, (alt - h0) / h0)) : 0;
-    const inAir = st.telemetry.dynamicPressure > 200 || alt < h0 * 0.5;
-    const vel = inAir ? airVel : orbVel;
-    const tel = st.telemetry;
-    const agl = Number.isFinite(tel.altitudeAGL) ? tel.altitudeAGL : alt;
-    const settings = game.get().settings;
-    let rumble = 0;
-    const shake = cameraShakeScale(settings);
-    // No vibration while paused or under physics warp (a 4× rumble is noise, not feel).
-    if (shake > 0 && !this.paused && warpRate(this.world.warp) <= 1) {
-      rumble = flightRumble(tel.thrust, st.mass * body.surfaceGravity, agl, tel.dynamicPressure, tel.mach) * shake;
-      // Touchdown kick, growing with the vertical speed at contact (a gentle 1.5 m/s landing stays still).
-      const touchdown = this.touchdown.update(st.id, st.situation !== 'flying', dot(airVel, up), dt);
-      if (touchdown > 0) this.cam.addKick(touchdown * shake);
-    }
-    const probe = this.camProbe;
-    this.cam.drive.yaw = this.input.camera.yaw;
-    this.cam.drive.pitch = this.input.camera.pitch;
-    this.cam.drive.zoom = this.input.camera.zoom;
-    const q = st.orientation;
-    // Staging/docking move the COM (the scene origin) inside the vessel: ease the orbit point across instead of jumping.
-    const po = this.pivotSmoother.update(st.id, st.com, dt);
-    const pw = qRotate(q, po);
-    // Liftoff: the auto camera eases back from the pad framing (an automatic camera move, so not with reduced motion).
-    const grounded = st.situation !== 'flying' || wv.mode === 'prelaunch';
-    if (this.liftoff.update(st.id, grounded, tel.thrust > 0, this.paused ? 0 : dt) && !settings.reduceMotion) this.cam.startLiftoff();
-    if (this.cam.mode !== 'tower') this.tower = null;
-    const eye = this.cam.mode === 'tower' ? this.towerEye(wv, origin, bodyState.position, t, agl) : null;
-    if (this.cam.mode === 'tower' && !eye) {
-      this.cam.mode = 'auto';
-      this.world.message(`Camera: ${CAMERA_MODE_INFO.auto.label} — ${CAMERA_MODE_INFO.auto.hint}`, 'info', 2.5);
-    }
-    // Frame the middle of the parts' extent rather than the COM (build frame → scene, no allocation).
-    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
-    for (const p of st.parts) {
-      const pp = p.position;
-      if (pp.x < x0) x0 = pp.x; if (pp.x > x1) x1 = pp.x;
-      if (pp.y < y0) y0 = pp.y; if (pp.y > y1) y1 = pp.y;
-      if (pp.z < z0) z0 = pp.z; if (pp.z > z1) z1 = pp.z;
-    }
-    const mid = st.parts.length ? this.camMid.set((x0 + x1) / 2 - st.com.x - po.x, (y0 + y1) / 2 - st.com.y - po.y, (z0 + z1) / 2 - st.com.z - po.z)
-      .applyQuaternion(this.camQuat.set(q.x, q.y, q.z, q.w)) : undefined;
-    // Lift the vessel out from behind the navball cluster (HUD px scale with the HUD scale setting).
-    const hud = settings.hudScale;
-    const lensShift = this.uiHidden ? 0 : hudLensShift(this.viewport.height, HUD_TOP_PX * hud, (settings.navballSize + HUD_BOTTOM_EXTRA_PX) * hud);
-    this.cam.update({
-      pivot: this.camPivot.set(pw.x, pw.y, pw.z),
-      up: this.camUp.set(up.x, up.y, up.z),
-      vesselQuat: this.camQuat.set(q.x, q.y, q.z, q.w),
-      velocity: this.camVel.set(vel.x, vel.y, vel.z),
-      orbitNormal: nLen > 1e-6 ? this.camNormal.set(n.x / nLen, n.y / nLen, n.z / nLen) : null,
-      spaceBlend,
-      vesselId: st.id,
-      radius: st.cache.boundingRadius,
-      // Terrain sampling only matters when the camera could reach the ground.
-      clearance: body.solidSurface && agl < this.cam.distance * 1.5 + 50
-        ? (p) => {
-            probe.x = origin.x + p.x; probe.y = origin.y + p.y; probe.z = origin.z + p.z;
-            return u.surfaceInfo(wv.body, probe, t).heightAboveTerrain;
-          }
-        : undefined,
-      rumble,
-      motionEnabled: shake > 0,
-      lensShift,
-      frameCentre: mid,
-      fovBoost: settings.reduceMotion ? 0 : speedFovBoost(tel.dynamicPressure, spaceBlend),
-      eye,
-      eva: !!st.eva,
-    }, dt);
-  }
-
   /** F2 state from the HUD: with the UI hidden the vessel returns to screen centre. */
   uiHidden = false;
-  private readonly liftoff = new LiftoffDetector();
-  private readonly camEye = new THREE.Vector3();
-  private readonly camMid = new THREE.Vector3();
   /** Time spent choosing the last tower eye (ms; telemetry for perf checks). */
-  towerPickMs = 0;
-  /** Launch-site structure meshes (not instanced vegetation) that can block the tower camera's view. */
-  private towerBlockers(): THREE.Object3D[] {
-    const out: THREE.Object3D[] = [];
-    if (!this.site?.root.visible) return out;
-    this.site.root.updateMatrixWorld();
-    this.site.root.traverseVisible(o => {
-      const m = o as THREE.Mesh;
-      if (!m.isMesh || (o as THREE.InstancedMesh).isInstancedMesh) return;
-      // Skip invisible pick volumes and see-through effects (hover ring, light curtain).
-      const mat = Array.isArray(m.material) ? m.material[0] : m.material;
-      if (mat && mat.visible && !mat.transparent) out.push(o);
-    });
-    return out;
-  }
-  /** Tower camera anchor: body-fixed position (m) on the ground near where the mode was chosen. */
-  private tower: { id: string; body: string; fixed: Vec3 } | null = null;
-
-  /** Scene-space eye point of the tower camera, or null when it should hand back (far away, other vessel or body). */
-  private towerEye(wv: WorldVessel, origin: Vec3, bodyPos: Vec3, t: number, agl: number): THREE.Vector3 | null {
-    const u = this.world.universe;
-    const st = wv.state, radius = st.cache.boundingRadius;
-    let a = this.tower;
-    if (!a || a.id !== st.id || a.body !== wv.body) {
-      this.tower = null;
-      if (!towerAvailable(u.body(wv.body).solidSurface, agl, radius)) return null;
-      // Stand off horizontally, starting on the side the camera already looks from and stepping round in 45° bearings
-      // until the line of sight to the vessel clears the launch site's structures (a one-off test on mode entry).
-      const t0 = performance.now();
-      const rel = sub(origin, bodyPos);
-      const fixedRel = u.ephem.toBodyFixed(wv.body, rel, t);
-      const upF = normalize(fixedRel);
-      const c = this.cam.camera.position;
-      const look = u.ephem.toBodyFixed(wv.body, { x: c.x, y: c.y, z: c.z }, t);
-      let h = sub(look, scale(upF, dot(look, upF)));
-      if (length(h) < 1e-6) h = cross(upF, Math.abs(upF.z) < 0.9 ? { x: 0, y: 0, z: 1 } : { x: 1, y: 0, z: 0 });
-      h = normalize(h);
-      const side = cross(upF, h);
-      const place = towerPlacement(radius);
-      const rot = u.ephem.bodyRotation(wv.body, t);
-      const ground = sub(fixedRel, scale(upF, agl));
-      const blockers = this.towerBlockers();
-      let first: Vec3 | null = null;
-      for (let k = 0; k < 8; k++) {
-        const b = (k * Math.PI) / 4;
-        const dir = add(scale(h, Math.cos(b)), scale(side, Math.sin(b)));
-        const groundDir = normalize(add(ground, scale(dir, place.distance)));
-        const info = u.surfaceInfo(wv.body, add(bodyPos, qRotate(rot, scale(groundDir, length(fixedRel)))), t);
-        const fixed = scale(groundDir, info.r - info.heightAboveTerrain + place.height);
-        first ??= fixed;
-        if (!blockers.length) break;
-        const e = sub(add(bodyPos, qRotate(rot, fixed)), origin);
-        const d = length(e);
-        this.raycaster.ray.origin.set(e.x, e.y, e.z);
-        this.raycaster.ray.direction.set(-e.x / d, -e.y / d, -e.z / d);
-        this.raycaster.near = 0;
-        this.raycaster.far = Math.max(0, d - radius * 1.5);
-        if (!this.raycaster.intersectObjects(blockers, false).length) { first = fixed; break; }
-      }
-      this.raycaster.far = Infinity;
-      this.towerPickMs = performance.now() - t0;
-      a = this.tower = { id: st.id, body: wv.body, fixed: first! };
-    }
-    const eye = sub(add(bodyPos, qRotate(u.ephem.bodyRotation(wv.body, t), a.fixed)), origin);
-    if (length(eye) > towerRevertDistance(radius)) { this.tower = null; return null; }
-    return this.camEye.set(eye.x, eye.y, eye.z);
-  }
+  get towerPickMs() { return this.cameraRig.towerPickMs; }
 
   /** Fleet icons/conics, target highlight and closest-approach markers for the map view. */
   private updateMapTargets(active: WorldVessel) {
@@ -1646,16 +1379,13 @@ export class FlightController {
     this.planets.dispose();
     this.site?.dispose();
     this.map.dispose();
-    this.stars.dispose();
-    this.glare.dispose();
+    this.lighting.dispose();
     this.reentry.dispose();
     this.effects.dispose();
     this.condensation.dispose();
     this.surfaceDust.dispose();
     this.flags.dispose();
     this.unwatchContext?.();
-    this.skyEnv.dispose();
-    this.scene.environment = null;
     this.hatchMarker.dispose();
     this.labelHost.remove();
     this.fadeEl?.remove();

@@ -1659,3 +1659,19 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   remain visible rather than being hidden by the shipping narrative.
 - Ignore Wrangler's generated local state in git and ESLint; local Pages emulation
   creates generated middleware under `.wrangler/` that is not project source.
+
+## Map and flight state ownership (2026-10-15, op/split2)
+
+- Replace round one's owner-bound method split with a smaller set of collaborators:
+  flight lighting/shadow resources, camera continuity/tower state, map line caches,
+  map marker/pin pools, and shared map coordinate projection. Dependencies are explicit;
+  no new owner mirror type, double cast or owner-bound free function is introduced.
+- Keep simulation/render ordering and the coupled map drag/gizmo/zoom state in their
+  owners. Marker layout still follows body labels and node HUD reservations, then
+  surface labels. Preserve public imports and commands, including the docking-mode
+  fix already on main; leave existing assist/audio/scenario/telemetry bridges alone.
+- This is a smaller split: both owners remain about 1,400 lines. Do not chase a file
+  limit by recreating an unrestricted controller context. Per-frame data remains
+  reused; the lighting collaborator also reuses its sun-direction vector. Module
+  responsibilities, precise line delta, validation and limits live in
+  [the split report](docs/performance/split.md).
