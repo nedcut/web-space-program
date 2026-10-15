@@ -1558,3 +1558,41 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   (b) The first-frame main-thread task (~2 s): part AO/soot bakes, which are cached per session (the `?flight=`
   shortcut pays them, while editor → launch already has them), plus LaunchSite procedural textures (~0.5 s).
   (c) The 22.4 MiB Earth grid gates the menu: ~150 ms warm, ~3 s cold over the WSL port forward.
+
+## Stock fleet: launchers and spacecraft (2026-10-15, op/fleetspace)
+- **Seven new designs, nine picker entries** (`src/editor/stock/space.ts`, registered by `spaceStock()` at the end of
+  STOCK_CRAFTS; research-gated, original names). Each shows hardware no stock craft used before and is flown headlessly
+  in `tests/stock-fleetspace.test.ts`: Pipit Satellite Launcher (first satellite in a Clamshell 1 fairing, Sparkler
+  strap-ons with Spire 0 caps, Mistral upper, Candle kick motor; orbit plus 1.5× the Moon transfer), Lodestar Ion
+  Explorer (Whisper drive, xenon bottles, Sunwing arrays on an open truss in a Clamshell 2 fairing; 10.5 km/s ion Δv),
+  Cinderbloom Venus Lander (Kiln probe and shell only; reaches Venus, enters at 3.4 km/s, lands at ~8.5 m/s without
+  parachutes), Lamplighter Lunar Hopper (crewed; twin Rill radials, ladder, lamps, seismic sensor; lands, hops >200 m,
+  lands again and returns on a re-entry periapsis), Hopscotch Landing Demonstrator (Boreal methalox on Colossus legs;
+  listed on all three scales since Earth surface gravity and air match), Duskwing Mars Orbiter (Challenging; Crossbill
+  quad coupler with four Boreals, four Reed solids, Bastion avionics; Mars capture with 1.5+ km/s left and a verified
+  aerobraking pass) and Keystone Power Module (Real; Furnace solids, three Foehns in the Cradle interstage, Petal 500
+  fairing). Showcased parts: 94 → 134 of 173 on this branch.
+- **Name clash avoided:** fleetfun's branch uses `stock-cricket` for its hover rig, so the satellite launcher is Pipit.
+- **Picker metadata** (`category`/`tags`/`tip`) is set inline on these entries in fleetfun's shape, typed locally
+  (`StockGuide`) until that type lands; delete the local interface after the merge.
+- **Design rules learned the hard way:** a fairing must hang off a ≥1.25 m joint (a 0.625 m ring broke at max-Q);
+  a bulbous fairing over a narrower upper stage flips at Mach 1 (Lodestar needed a full-width 2.5 m stack); a bell engine
+  stacked straight between two 2.5 m barrels gets a smooth automatic skirt, so no hourglass adapters; a long lander
+  needs its own reaction wheel or the landing autopilot hovers for minutes chasing its site; Venus crushes every part
+  but the Kiln probe and shell, so the shield separator is mounted inverted and leaves with the shield.
+- **Existing designs:** Gossamer (its own Ringrunner-shaped stack; Ringrunner itself is byte-identical) and Beaconseed
+  now launch their dishes/relays in a Clamshell 2 fairing; both still reach orbit, Gossamer with 2.3× its Saturn departure.
+  Other stock rockets looked sound in editor/pad shots and are unchanged.
+- **Sim/editor fixes the ion probe exposed:** the stage Δv readout treats massless propellant (electric charge) as
+  resupplied, so ion stages show their xenon-limited Δv instead of ~2 m/s; the editor's "no fuel" check accepts
+  vessel-wide resources (xenon, monopropellant, charge) from any part, not just ancestors; an engine short only of
+  electric charge keeps running at whatever the supply allows instead of shutting down permanently (an ion drive in
+  Earth's shadow now pauses and resumes in sunlight). Engines that run out of a massful propellant flame out as before.
+- **Dead code noted, not changed:** the `p.stage = …` lines after `for (const p of b.ed.craft.parts)` in
+  Selene Challenging/Real and `realDelivery` mutate a copy (`CraftEditor.craft` returns one); they are no-ops whose
+  intended grouping happens to come from part depth anyway. New builders restage after `done()` (`finish()`).
+- **Picker cost:** building every stock craft (what the library does on open) is 63 ms for 39 entries vs 45 ms for
+  the previous 30 (Node). In the editor library (CDP Chrome, prod): first open 206 ms, then ~95 ms. `CraftThumbnail`'s
+  in-memory cache holds 32 images, now fewer than the 39 stock cards shown with "Show other scales"; the IndexedDB PNG
+  cache still avoids re-rendering, but a 64-entry cache (or memoising `STOCK_CRAFTS` builds) is the cheap fix if
+  reopening the library gets slow.

@@ -25,11 +25,13 @@ function finish(b: Builder, moves: [parts: number[], anchor: number][] = []): Cr
 }
 
 /** Uncrewed first satellite: a Pebble science sat with a solid kick motor in a clamshell fairing, methalox upper stage, solid strap-ons. */
-export function buildCricket(catalog: PartCatalog = PART_CATALOG): CraftDef {
-  const b = new Builder(catalog, 'Cricket Satellite Launcher',
+export function buildPipit(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Pipit Satellite Launcher',
     'A first satellite in a clamshell fairing. Four solid motors and a Sirocco core loft it, the Mistral methalox stage reaches orbit and the satellite\'s own Candle kick motor sends it on to the Moon.');
   const sat = b.root('probe-pebble');
+  // A dry Thimble tank is the satellite bus: no engine draws from it, so it carries no propellant.
   const bus = b.stack(sat, 'tank-0-short');
+  b.resources.set(bus, { liquidFuel: 0, oxidizer: 0 });
   b.radial(bus, 'solar-patch', 4, 0, 45);
   b.radial(bus, 'sensor-pressure', 1, 0, 0);
   b.radial(sat, 'antenna-thread', 1, 0, 180);
@@ -46,6 +48,7 @@ export function buildCricket(catalog: PartCatalog = PART_CATALOG): CraftDef {
   b.radial(core, 'fin-keel', 4, -0.4, 0);
   const latch = b.radial(core, 'dec-radial', 4, 0, 45);
   const motor = b.outward(latch, 'srb-sparkler');
+  b.stack(motor, 'nose-0', 'top');
   return finish(b, [[[sirocco], motor]]);
 }
 
@@ -81,11 +84,10 @@ export function buildLodestar(catalog: PartCatalog = PART_CATALOG): CraftDef {
   const release = b.stack(mount, 'dec-2');
   const fairing = b.stack(release, 'fairing-2');
   const upper = b.stack(fairing, 'tank-2-short');
-  const narrow = b.stack(upper, 'adapt-1-2', 'bottom', 'bottom');
-  const engine = b.stack(narrow, 'eng-zephyr', 'top', 'top');
-  const sep = b.stack(engine, 'dec-1');
-  const adapter = b.stack(sep, 'adapt-1-2');
-  const booster = b.stack(adapter, 'tank-2-long');
+  // The engine skirt fills the 2.5 m gap to the booster ring: one smooth barrel.
+  const engine = b.stack(upper, 'eng-zephyr');
+  const sep = b.stack(engine, 'dec-2');
+  const booster = b.stack(sep, 'tank-2-long');
   b.stack(booster, 'eng-chinook');
   b.radial(booster, 'fin-pivot', 4, -2.6, 45);
   return finish(b);
@@ -179,11 +181,9 @@ export function buildCinderbloom(catalog: PartCatalog = PART_CATALOG): CraftDef 
   b.radial(cruise, 'antenna-relay', 1, 0.2, 0);
   b.radial(cruise, 'rcs-linear', 4, -0.4, 45);
   b.radial(cruise, 'mono-pip', 2, -0.3, 0);
-  const narrow = b.stack(cruise, 'adapt-1-2', 'bottom', 'bottom');
-  const engine = b.stack(narrow, 'eng-zephyr', 'top', 'top');
-  const sep = b.stack(engine, 'dec-1');
-  const adapter = b.stack(sep, 'adapt-1-2');
-  const booster = b.stack(adapter, 'tank-2-long');
+  const engine = b.stack(cruise, 'eng-zephyr');
+  const sep = b.stack(engine, 'dec-2');
+  const booster = b.stack(sep, 'tank-2-long');
   b.stack(booster, 'eng-chinook');
   b.radial(booster, 'fin-pivot', 4, -2.6, 45);
   return finish(b);
@@ -226,23 +226,44 @@ export function buildLamplighter(catalog: PartCatalog = PART_CATALOG): CraftDef 
   return finish(b, [[[chinook], solid]]);
 }
 
+/**
+ * Picker presentation in the shape the stock picker uses (`category`/`tags`/`tip` on StockCraft, optional), declared
+ * here so these entries carry it whichever side of the stock fleet wave lands first.
+ */
+interface StockGuide { category?: 'first' | 'orbit' | 'worlds' | 'aircraft' | 'fun'; tags?: string[]; tip?: string }
+
 /** Picker entries, registered in STOCK_CRAFTS. A function so the import cycle with stockCrafts.ts is harmless. */
-export function spaceStock(): StockCraft[] {
+export function spaceStock(): (StockCraft & StockGuide)[] {
   const hop = (scale: ScalePresetId, suffix = '') => ({ scale, id: `stock-hopscotch${suffix}`, name: 'Hopscotch Landing Demonstrator',
-    blurb: 'Vertical take-off and landing hopper · research required', needsResearch: true, build: () => buildHopscotch() });
+    blurb: 'Vertical take-off and landing hopper · research required', needsResearch: true, category: 'fun' as const,
+    tags: ['eng-boreal', 'leg-colossus', 'light-area', 'light-beacon'],
+    tip: 'Full throttle for a few seconds, cut the engine at the top, then relight and ease the throttle to settle on the legs.',
+    build: () => buildHopscotch() });
   return [
-    { scale: 'standard', id: 'stock-cricket', name: 'Cricket Satellite Launcher', needsResearch: true, build: () => buildCricket(),
-      blurb: 'Uncrewed first satellite · fairing, solid strap-ons, kick motor · research required' },
+    { scale: 'standard', id: 'stock-pipit', name: 'Pipit Satellite Launcher', needsResearch: true, build: () => buildPipit(),
+      blurb: 'Uncrewed first satellite · fairing, solid strap-ons, kick motor · research required', category: 'orbit',
+      tags: ['fairing-1', 'eng-mistral', 'srb-candle', 'srb-sparkler', 'solar-patch', 'sensor-pressure'],
+      tip: 'Reach orbit on the Mistral stage, then release the satellite and light its Candle kick motor prograde for a Moon flyby.' },
     { scale: 'standard', id: 'stock-lodestar', name: 'Lodestar Ion Explorer', needsResearch: true, build: () => buildLodestar(),
-      blurb: 'Xenon ion probe · 10 km/s of patient thrust · research required' },
+      blurb: 'Xenon ion probe · 10 km/s of patient thrust · research required', category: 'worlds',
+      tags: ['eng-whisper', 'xenon-bottle', 'solar-wing', 'truss-octagonal', 'fairing-2', 'antenna-arc'],
+      tip: 'In orbit, drop the upper stage and leave the ion drive on under physics warp. It pauses in Earth\'s shadow and picks up again in sunlight.' },
     { scale: 'standard', id: 'stock-cinderbloom', name: 'Cinderbloom Venus Lander', needsResearch: true, build: () => buildCinderbloom(),
-      blurb: 'Venus surface lander · pressure shell, no parachutes · research required' },
+      blurb: 'Venus surface lander · pressure shell, no parachutes · research required', category: 'worlds',
+      tags: ['probe-kiln', 'shell-kiln', 'shield-2', 'rcs-linear'],
+      tip: 'Aim the Venus periapsis inside the air, drop the cruise stage, hold retrograde and release the shield once below 300 m/s.' },
     { scale: 'standard', id: 'stock-lamplighter', name: 'Lamplighter Lunar Hopper', needsResearch: true, build: () => buildLamplighter(),
-      blurb: 'Crewed Moon landing, hop and return · radial engines, lights, ladder · research required' },
+      blurb: 'Crewed Moon landing, hop and return · radial engines, lights, ladder · research required', category: 'worlds',
+      tags: ['eng-radial-rill', 'ladder-2', 'light-area', 'sensor-seismic', 'srb-roman-candle'],
+      tip: 'After the first landing, hop: a few seconds of thrust tilted a little sideways, then land again with the legs down.' },
     hop('standard'), hop('challenging', '-challenging'), hop('real', '-real'),
     { scale: 'challenging', id: 'stock-duskwing-challenging', name: 'Duskwing Mars Orbiter', needsResearch: true, build: () => buildDuskwing(),
-      blurb: 'Challenging scale · methalox Mars mapping orbiter · research required' },
+      blurb: 'Challenging scale · methalox Mars mapping orbiter · research required', category: 'worlds',
+      tags: ['coupler-2-x4', 'eng-boreal', 'srb-reed', 'probe-vault', 'scanner-meridian', 'sensor-gravity'],
+      tip: 'Capture into a long ellipse, then lower the periapsis to about 35 km: each pass through the air shrinks the orbit for free.' },
     { scale: 'real', id: 'stock-keystone-real', name: 'Keystone Power Module', needsResearch: true, build: () => buildKeystone(),
-      blurb: 'Real scale · station power truss in a five-metre fairing · research required' },
+      blurb: 'Real scale · station power truss in a five-metre fairing · research required', category: 'orbit',
+      tags: ['fairing-4', 'srb-furnace', 'interstage-4', 'wheel-reaction-3', 'battery-bank-3', 'radiator-2', 'rcs-quint'],
+      tip: 'Release the module in orbit, let the wings and radiators unfold, then dock later segments to its nose with the Flurry RCS blocks.' },
   ];
 }

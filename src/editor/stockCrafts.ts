@@ -201,8 +201,14 @@ export function buildSwift(catalog: PartCatalog = PART_CATALOG): CraftDef {
 export function buildRingrunner(catalog: PartCatalog = PART_CATALOG): CraftDef {
   const b = new Builder(catalog, 'Ringrunner Saturn Probe',
     'Three-stage Saturn explorer: heavy launcher, hydrolox departure stage, solar-powered orbital probe. Designed for the standard universe.');
+  ringrunner(b, false);
+  return b.done();
+}
+
+/** Ringrunner stack; `shrouded` puts the probe in a 2.5 m fairing (dropped when the departure stage lights). */
+function ringrunner(b: Builder, shrouded: boolean): number {
   const probe = b.root('probe-cairn');
-  b.stack(probe, 'nose-1', 'top');
+  if (!shrouded) b.stack(probe, 'nose-1', 'top');
   const battery = b.stack(probe, 'battery-drum');
   const wheel = b.stack(battery, 'wheel-gyre-1');
   const capture = b.stack(wheel, 'tank-1-long');
@@ -211,14 +217,14 @@ export function buildRingrunner(catalog: PartCatalog = PART_CATALOG): CraftDef {
   const engine = b.stack(capture, 'eng-zephyr');
   const dec = b.stack(engine, 'dec-1');
   const adapter = b.stack(dec, 'adapt-1-2');
-  const transfer = b.stack(adapter, 'tank-2-mid');
+  const transfer = b.stack(shrouded ? b.stack(adapter, 'fairing-2') : adapter, 'tank-2-mid');
   const foehn = b.stack(transfer, 'eng-foehn');
   const boosterDec = b.stack(foehn, 'dec-2');
   const top = b.stack(boosterDec, 'tank-2-short');
   const booster = b.stack(top, 'tank-2-long');
   b.stack(booster, 'eng-chinook');
   b.radial(booster, 'fin-pivot', 4, -2.6, 0);
-  return b.done();
+  return probe;
 }
 
 /** Small orbital tug for rendezvous & docking practice (spawned in orbit by `?scenario=rendezvous`). */
@@ -236,10 +242,10 @@ export function buildTender(catalog: PartCatalog = PART_CATALOG): CraftDef {
 }
 
 /** Complete two-stage delivery stack; keep payload propulsion behind its own separation ring. */
-function delivery(b: Builder, payloadEngine: number, heavy = false): void {
+function delivery(b: Builder, payloadEngine: number, heavy = false, shrouded = false): void {
   const dec = b.stack(payloadEngine, 'dec-1');
   const adapter = b.stack(dec, 'adapt-1-2');
-  const upper = b.stack(adapter, 'tank-2-mid');
+  const upper = b.stack(shrouded ? b.stack(adapter, 'fairing-2') : adapter, 'tank-2-mid');
   const engine = b.stack(upper, 'eng-foehn');
   const sep = b.stack(engine, 'dec-2');
   if (heavy) {
@@ -418,16 +424,13 @@ export function buildPlumeSampler(catalog: PartCatalog = PART_CATALOG): CraftDef
 }
 
 export function buildRingTour(catalog: PartCatalog = PART_CATALOG): CraftDef {
-  const craft = buildRingrunner(catalog);
-  const b = new Builder(catalog, 'Gossamer Ring Observatory', 'Saturn delivery rocket with an isotope-powered science probe and Horizon relay. Stay above the rings during the tour. Research required.', 'VAB', craft);
-  const core = craft.parts.find(p => p.partId === 'probe-cairn')!.uid;
+  const b = new Builder(catalog, 'Gossamer Ring Observatory',
+    'Three-stage Saturn ring-tour and deep-space relay. Isotope-powered probe in a payload fairing; standard universe. Research required.');
+  const core = ringrunner(b, true);
   b.radial(core, 'antenna-horizon', 1, 0, 0);
   b.radial(core, 'generator-isotope', 2, 0, 90);
   b.radial(core, 'sensor-thermal', 1, 0, 180);
-  const result = b.done();
-  result.name = 'Gossamer Ring Observatory';
-  result.description = 'Three-stage Saturn ring-tour and deep-space relay. Isotope-powered probe; standard universe. Research required.';
-  return result;
+  return b.done();
 }
 
 export function buildHeavyLifter(catalog: PartCatalog = PART_CATALOG): CraftDef {
@@ -447,14 +450,13 @@ export function buildHeavyLifter(catalog: PartCatalog = PART_CATALOG): CraftDef 
 }
 
 export function buildRelayLauncher(catalog: PartCatalog = PART_CATALOG): CraftDef {
-  const b = new Builder(catalog, 'Beaconseed Relay Launcher', 'Guided relay deployment stack: raise apoapsis, circularize with the payload motor and leave the Lattice array above the horizon. Research required.');
+  const b = new Builder(catalog, 'Beaconseed Relay Launcher', 'Guided relay deployment stack: raise apoapsis, circularize with the payload motor and leave the Lattice array above the horizon. The relay rides in a payload fairing. Research required.');
   const core = b.root('probe-cairn');
-  b.stack(core, 'nose-1', 'top');
   const tank = b.stack(core, 'tank-1-mid');
   b.radial(tank, 'antenna-relay', 2, 0.5, 90);
   b.radial(tank, 'solar-fold', 2, -0.2, 0);
   const engine = b.stack(tank, 'eng-doldrum');
-  delivery(b, engine);
+  delivery(b, engine, false, true);
   return b.done();
 }
 

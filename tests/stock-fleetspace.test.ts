@@ -1,11 +1,12 @@
+import { orbitState, placeOnState } from './helpers/orbits';
 import { requireIntactFlight } from './helpers/structural';
 import { describe, expect, it } from 'vitest';
 import { PART_CATALOG } from '../src/data/parts';
 import { removeEmptyStages } from '../src/editor/core';
 import {
-  buildCinderbloom, buildCricket, buildDuskwing, buildHopscotch, buildKeystone, buildLamplighter, buildLodestar,
+  buildCinderbloom, buildPipit, buildDuskwing, buildHopscotch, buildKeystone, buildLamplighter, buildLodestar,
 } from '../src/editor/stock/space';
-import { STOCK_CRAFTS } from '../src/editor/stockCrafts';
+import { buildRelayLauncher, buildRingTour, STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { DEFAULT_START_UT } from '../src/game/store';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
@@ -14,7 +15,7 @@ import {
   planCourseCorrection, planTransferToBody, propulsion, radarAltitude, runAutopilot, type Autopilot,
 } from '../src/game/autopilot';
 import type { ScalePresetId } from '../src/sim/bodies/scale';
-import { computeStageDeltaV, neutralInput } from '../src/sim/vessel';
+import { buildVessel, computeStageDeltaV, neutralInput } from '../src/sim/vessel';
 import { peakTemperature } from '../src/sim/vessel/heating';
 import type { CraftDef } from '../src/sim/vessel/types';
 import { qFromTo } from '../src/util/quat';
@@ -65,7 +66,7 @@ function cruise(world: World, target: string, periapsisAltitude: number, minStag
 
 describe('stock fleet: launchers and spacecraft', () => {
   it('registers every design once, with original names, on the scales it is built for', () => {
-    const ids = ['stock-cricket', 'stock-lodestar', 'stock-cinderbloom', 'stock-lamplighter', 'stock-hopscotch',
+    const ids = ['stock-pipit', 'stock-lodestar', 'stock-cinderbloom', 'stock-lamplighter', 'stock-hopscotch',
       'stock-hopscotch-challenging', 'stock-hopscotch-real', 'stock-duskwing-challenging', 'stock-keystone-real'];
     for (const id of ids) expect(STOCK_CRAFTS.filter(s => s.id === id), id).toHaveLength(1);
     expect(new Set(STOCK_CRAFTS.map(s => s.id)).size).toBe(STOCK_CRAFTS.length);
@@ -73,8 +74,8 @@ describe('stock fleet: launchers and spacecraft', () => {
     expect(STOCK_CRAFTS.find(s => s.id === 'stock-keystone-real')!.scale).toBe('real');
   });
 
-  it('Cricket reaches orbit with its kick motor and Mistral fuel to spare for the Moon', () => {
-    const { world } = launch('standard', buildCricket());
+  it('Pipit reaches orbit with its kick motor and Mistral fuel to spare for the Moon', () => {
+    const { world } = launch('standard', buildPipit());
     toOrbit(world, 85000, 0, 0.3);
     const moon = planTransferToBody(world, 'moon', { periapsisAltitude: 30000 });
     expect(moon).not.toBeNull();
@@ -223,7 +224,7 @@ describe('stock fleet: launchers and spacecraft', () => {
     let dropped = false, hottest = 0, touchdown = 0;
     for (let i = 0; i < 40000 && lander.state.situation !== 'landed'; i++) {
       const speed = length(world.surfaceVelocity(lander));
-      const stage = !dropped && speed < 300;
+      const stage: boolean = !dropped && speed < 300;
       dropped ||= stage;
       touchdown = speed;
       world.tick(0.1, neutralInput({ stage, sas: 'retrograde', sasReference: 'surface' }));
@@ -236,4 +237,36 @@ describe('stock fleet: launchers and spacecraft', () => {
     expect(touchdown).toBeLessThan(PART_CATALOG.get('shell-kiln')!.crashTolerance);
     expect(lander.state.parts.map(p => p.partId).sort()).toEqual(['probe-kiln', 'shell-kiln']);
   }, 300000);
+  it('Duskwing\'s orbiter aerobrakes at Mars: one pass through the thin air shrinks its orbit, intact', () => {
+    const full = buildDuskwing();
+    const release = Math.min(...full.parts.filter(p => p.partId === 'dec-2').map(p => p.uid));
+    const orbiter = removeEmptyStages({ ...full, parts: full.parts.filter(p => p.uid < release) });
+    const { world, vessel } = launch('challenging', orbiter);
+    placeOnState(world, vessel, 'mars', orbitState(world, 'mars', { pe: 35000, ap: 3000000, inc: 5, nu: 200 }));
+    world.switchTo(vessel.state.id);
+    const parts = vessel.state.parts.length;
+    const before = world.orbitSummary(vessel);
+    coastUntil(world, world.ut + before.timeToPe - 300);
+    for (let i = 0; i < 50 * 600; i++) world.tick(0.02, neutralInput({ sas: 'retrograde' }));
+    const after = world.orbitSummary(vessel);
+    expect(after.ap).toBeLessThan(before.ap * 0.7);
+    expect(after.pe).toBeGreaterThan(20000);
+    expect(vessel.state.parts).toHaveLength(parts);
+  }, 120000);
+
+  it('payloads with fragile antennas launch inside fairings (Gossamer, Beaconseed, Lodestar, Duskwing)', () => {
+    for (const craft of [buildRingTour(), buildRelayLauncher(), buildLodestar(), buildDuskwing()]) {
+      const v = buildVessel(craft, PART_CATALOG);
+      const exposed = v.parts.filter(p => p.def.modules.some(m => m.type === 'antenna' || m.type === 'solarPanel') && !v.cache.shielded?.has(p.uid));
+      expect(exposed.map(p => p.partId), craft.name).toEqual([]);
+    }
+  });
+
+  it('Gossamer still reaches orbit with its Saturn departure budget', () => {
+    const { world } = launch('standard', buildRingTour());
+    toOrbit(world, 85000);
+    const saturn = planTransferToBody(world, 'saturn');
+    expect(saturn).not.toBeNull();
+    expect(dvLeft(world)).toBeGreaterThan(saturn!.dv * 1.8);
+  }, 120000);
 });
