@@ -1066,7 +1066,8 @@ export class MapView {
       vis.icon.visible = visible && angular < .009;
 
       if (vis.orbitLine) {
-        vis.orbitLine.visible = visible;
+        // Looking at the ground, other bodies' orbits are only lines streaking across the view.
+        vis.orbitLine.visible = visible && this.surfaceBlend < 0.999;
         const hovered = this.hoverBody === vis, targeted = this.target?.kind === 'body' && this.target.id === vis.body.id;
         const style = (hovered ? 1 : 0) | (targeted ? 2 : 0);
         if (style !== vis.lineStyle) {
@@ -1074,7 +1075,7 @@ export class MapView {
           vis.orbitLine.material.color.setHex(targeted ? TARGET_COLOR : vis.familyColor);
           vis.orbitLine.material.linewidth = hovered || targeted ? WIDTH.highlight : vis.body.kind === 'moon' ? WIDTH.moon : WIDTH.planet;
         }
-        vis.orbitLine.material.opacity = (hovered || targeted ? .95 : .62) * Math.max(0, ringFade);
+        vis.orbitLine.material.opacity = (hovered || targeted ? .95 : .62) * Math.max(0, ringFade) * (1 - this.surfaceBlend);
         // An orbit far larger than the screen (e.g. the focused planet's path round the Sun) is faint and fades
         // towards the screen edges instead of slicing across the view as a straight line.
         const radiusPx = vis.body.orbit ? vis.body.orbit.a * (1 + vis.body.orbit.e) / Math.max(dist, 1) * pxPerWorld1 : 0;
@@ -1151,6 +1152,7 @@ export class MapView {
   private placeCamera(u: MapUpdate) {
     const d = this.renderedDistance, cy = Math.cos(this.yaw), sy = Math.sin(this.yaw), cp = Math.cos(this.pitch);
     let x = cy * cp, y = sy * cp, z = Math.sin(this.pitch), ux = 0, uy = 0, uz = 1;
+    this.surfaceBlend = 0;
     const ref = u.referenceBody ? this.bodies.get(u.referenceBody)?.body : undefined;
     let rx = 0, ry = 0, rz = 0, r = 0;
     if (ref?.solidSurface) {
@@ -1159,6 +1161,7 @@ export class MapView {
       const R = ref.radius;
       // Fades in as the focus nears the surface (a vessel; the following focus slides there as the view zooms in).
       const blend = (1 - smoothstep(R * 2.2, R * 4, d)) * smoothstep(R * 0.3, R * 0.9, r) * (1 - smoothstep(R * 1.25, R * 1.6, r));
+      this.surfaceBlend = blend;
       if (blend > 0) {
         const upX = rx / r, upY = ry / r, upZ = rz / r;
         // East and north from the body's spin axis (body-fixed +Z).
@@ -1187,6 +1190,8 @@ export class MapView {
     this.camera.up.set(ux, uy, uz).normalize();
     this.camera.lookAt(0, 0, 0);
   }
+  /** How far the camera has turned to the local horizon of a near-surface focus (0 = inertial view). */
+  private surfaceBlend = 0;
   private readonly poleScratch = new THREE.Vector3();
   private readonly quatScratch = new THREE.Quaternion();
 
