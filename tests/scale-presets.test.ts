@@ -4,7 +4,7 @@ import { World } from '../src/game/world';
 import { PART_CATALOG } from '../src/data/parts';
 import { SCALE_PRESETS, careerScaleMultiplier } from '../src/sim/bodies/scale';
 import { sampleAtmosphere } from '../src/sim/atmosphere';
-import { LAUNCH_SITE, RUNWAY, siteLocalToUnit } from '../src/sim/terrain/presets/earth';
+import { launchPlateau, RUNWAY, siteLocalToUnit } from '../src/sim/terrain/presets/earth';
 import { situationAt } from '../src/sim/science/biomes';
 import { maxRailsIndexAt } from '../src/game/timewarp';
 import { buildChunk } from '../src/render/planet/chunkBuilder';
@@ -26,7 +26,7 @@ it.each(['standard', 'challenging', 'real'] as const)('%s physical scale invaria
   const terrain = universe.terrain('earth');
   for (const [x, z] of [[0, 0], [-RUNWAY.length / 2, RUNWAY.z], [RUNWAY.length / 2, RUNWAY.z]]) {
     const d = siteLocalToUnit(x, z, earth.radius);
-    expect(terrain.heightAt(d.x, d.y, d.z)).toBeCloseTo(LAUNCH_SITE.elevation, 5);
+    expect(terrain.heightAt(d.x, d.y, d.z)).toBeCloseTo(launchPlateau(earth.surface.relief), 5);
   }
   expect(situationAt(earth, earth.atmosphere!.height * 0.24, 'flying')).toBe('flyingLow');
   expect(situationAt(earth, earth.atmosphere!.height * 1.1, 'flying')).toBe('spaceLow');

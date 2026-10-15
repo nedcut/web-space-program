@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Terrain } from '../../sim/terrain/api';
-import { latLonToUnit, LAUNCH_PAD_PIT, LAUNCH_SITE, RUNWAY } from '../../sim/terrain';
+import { latLonToUnit, LAUNCH_PAD_PIT, LAUNCH_SITE, RUNWAY, siteLocalToUnit } from '../../sim/terrain';
 import type { Ephemeris } from '../../sim/orbit/ephemeris';
 import type { Vec3 } from '../../util/vec3';
 import { qRotate } from '../../util/quat';
@@ -298,6 +298,12 @@ export class LaunchSite {
     if (this.terrain.ocean) h = Math.max(0, h);
     const r = this.universe.body(BODY).radius + h;
     return (dx * r - U.x * R0) * U.x + (dy * r - U.y * R0) * U.y + (dz * r - U.z * R0) * U.z;
+  }
+
+  /** Whether local (x, z) is at or below sea level (the site's surroundings keep their real rivers and lagoons). */
+  private wet(x: number, z: number): boolean {
+    const d = siteLocalToUnit(x, z, this.universe.body(BODY).radius);
+    return this.terrain.ocean && this.terrain.heightAt(d.x, d.y, d.z) <= 0.05;
   }
 
   /**
@@ -1169,7 +1175,7 @@ export class LaunchSite {
     const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
     const bushes: THREE.Matrix4[] = [];
     const pines: THREE.Matrix4[] = [];
-    const flatR = LAUNCH_SITE.flatRadius - 200;
+    const flatR = LAUNCH_SITE.sceneryRadius - 200;
     // Clustered placement: pick cluster centres, scatter members around them.
     for (let c = 0; c < 340; c++) {
       const a = rnd() * Math.PI * 2;
@@ -1180,7 +1186,7 @@ export class LaunchSite {
       const pineCluster = rnd() < 0.45;
       for (let i = 0; i < n; i++) {
         const x = cx + (rnd() - 0.5) * 2 * spread, z = cz + (rnd() - 0.5) * 2 * spread;
-        if (Math.hypot(x, z) < 175 || this.blocked(x, z)) continue;
+        if (Math.hypot(x, z) < 175 || this.blocked(x, z) || this.wet(x, z)) continue;
         const s = pineCluster ? 0.7 + rnd() * 0.7 : 0.6 + rnd() * 1.0;
         const y = this.groundY(x, z);
         const up = V(x, y + this.R0, z).normalize();

@@ -55,3 +55,4 @@ const manifest = {
 };
 await writeFile(new URL('manifest.json', output), JSON.stringify(manifest, null, 2) + '\n');
 console.log(manifest.files[0]);
+await import('./patch.mjs');

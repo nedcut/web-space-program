@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createTerrain, LAUNCH_SITE, latLonToUnit } from '../src/sim/terrain';
+import { createTerrain, LAUNCH_SITE, latLonToUnit, launchPlateau, siteClearance, siteLocalToUnit } from '../src/sim/terrain';
 import { Simplex3 } from '../src/sim/terrain/noise';
 import { scaleBodyDef, SCALE_PRESETS } from '../src/sim/bodies/scale';
 import type { BodyDef } from '../src/sim/bodies/types';
@@ -123,22 +123,22 @@ describe('createTerrain', () => {
     expect(f).toBeLessThan(0.5);
   });
 
-  it('launch site is a flat plateau at ~10 m with ocean to the east', () => {
+  it('launch site is a flat plateau over the whole complex with ocean to the east', () => {
     for (const scale of [SCALE_PRESETS.standard, SCALE_PRESETS.real]) {
       const earth = scaleBodyDef(body('earth', 'earth', 6371000, 8800, { surface: { preset: 'earth', relief: 8800, seed: 42, colors: [], ocean: true } }), scale);
       const t = createTerrain(earth);
-      const R = earth.radius;
+      const R = earth.radius, plateau = launchPlateau(earth.surface.relief);
       const c = latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon);
-      expect(t.heightAt(c.x, c.y, c.z)).toBeCloseTo(LAUNCH_SITE.elevation, 6);
-      // Sample a ring of points within the flat radius.
-      const dLat = (LAUNCH_SITE.flatRadius * 0.95) / R * (180 / Math.PI);
-      for (let k = 0; k < 16; k++) {
-        const a = (k / 16) * Math.PI * 2;
-        for (const f of [0.25, 0.6, 1]) {
-          const p = latLonToUnit(LAUNCH_SITE.lat + dLat * f * Math.sin(a), LAUNCH_SITE.lon + (dLat * f * Math.cos(a)) / Math.cos((LAUNCH_SITE.lat * Math.PI) / 180));
-          expect(Math.abs(t.heightAt(p.x, p.y, p.z) - LAUNCH_SITE.elevation)).toBeLessThan(0.01);
-        }
+      expect(t.heightAt(c.x, c.y, c.z)).toBeCloseTo(plateau, 9);
+      // Every site-ground point (pad hub, assembly building, roads, runway) is exactly flat.
+      let flat = 0;
+      for (let x = -1500; x <= 1500; x += 37) for (let z = -1300; z <= 1800; z += 37) {
+        if (siteClearance(x, z) > -1) continue;
+        const p = siteLocalToUnit(x, z, R);
+        expect(t.heightAt(p.x, p.y, p.z)).toBe(plateau);
+        flat++;
       }
+      expect(flat).toBeGreaterThan(1500);
       // Ocean within ~2.5 degrees east.
       let foundSea = false;
       for (let d = 0.1; d < 2.5; d += 0.05) {

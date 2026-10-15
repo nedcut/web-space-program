@@ -34,7 +34,7 @@ export function randomFor(seed: number, cell: Cell): () => number {
 }
 const site = latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon);
 export function surfaceClass(body: BodyDef, terrain: Terrain, d: [number, number, number], h: number, slope: number): 'none' | 'rock' | 'green' {
-  if (body.id === 'earth' && Math.hypot(d[0] - site.x, d[1] - site.y, d[2] - site.z) * body.radius < LAUNCH_SITE.flatRadius) return 'none';
+  if (body.id === 'earth' && Math.hypot(d[0] - site.x, d[1] - site.y, d[2] - site.z) * body.radius < LAUNCH_SITE.sceneryRadius) return 'none';
   if (terrain.ocean && h <= (terrain.liquid?.level ?? 0)) return 'none';
   if (body.id !== 'earth') return 'rock';
   const c: RGB = [0, 0, 0]; terrain.colorAt?.(...d, h, c);

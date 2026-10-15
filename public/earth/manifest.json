@@ -16,6 +16,39 @@
       "sha256": "e8002be84906b0083f980228bf8c72ae569299a99a40d51e10910401a8110131",
       "encoding": "int16 little-endian, signed metres above EGM2008 geoid; negative bathymetry",
       "resampling": "bilinear pixel-centre sampling, rounded to nearest metre"
+    },
+    {
+      "path": "height-cape.i16",
+      "width": 1980,
+      "height": 1620,
+      "bytes": 6415200,
+      "sha256": "bf51cfbcc7318c62425ac10b43419f584809af817a3be55cefa00bb495b41e96",
+      "source": {
+        "title": "NOAA NCEI ETOPO 2022 v1, 15 arc-second ice surface tiles",
+        "tiles": [
+          {
+            "url": "https://www.ngdc.noaa.gov/mgg/global/relief/ETOPO2022/data/15s/15s_surface_elev_gtif/ETOPO_2022_v1_15s_N45W090_surface.tif",
+            "sha256": "7132212ec84a2c0382802940622ea383fece86f5808e56a9d641100bac9319fb"
+          },
+          {
+            "url": "https://www.ngdc.noaa.gov/mgg/global/relief/ETOPO2022/data/15s/15s_surface_elev_gtif/ETOPO_2022_v1_15s_N30W090_surface.tif",
+            "sha256": "7dec8b97564d9cb940c864843f87b7ec364987a6bf9b0315cf575ad8f55c5925"
+          }
+        ],
+        "license": "CC0-1.0",
+        "doi": "https://doi.org/10.25921/fd45-gt74"
+      },
+      "bounds": {
+        "westLongitude": -87.75,
+        "northLatitude": 31,
+        "eastLongitude": -79.5,
+        "southLatitude": 24.25,
+        "stepDegrees": "1/240"
+      },
+      "encoding": "int16 little-endian, signed metres above EGM2008 geoid; negative bathymetry",
+      "resampling": "none: native source pixels, rounded to nearest metre",
+      "convention": "rows north to south; pixel centre longitude west + (x + 0.5) / 240, latitude north - (y + 0.5) / 240",
+      "use": "Regional detail for Florida. Loaded after height.i16 into one buffer; sampled inside the bounds and blended into the global grid over its outer margin."
     }
   ],
   "projection": "equirectangular EPSG:4326 geographic coordinates",
