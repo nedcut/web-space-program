@@ -10,7 +10,7 @@ import { deleteCraft, listCrafts, saveCraft } from '../game/saves';
 import type { ActionGroupId, CraftDef, PartActionId, PartInstance, PartTweaks, ResourceId } from '../sim/vessel/types';
 import { qConj, qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat } from '../util/quat';
 import { sub, v3, type Vec3 } from '../util/vec3';
-import { CraftEditor, craftStats, descendants, getStageList, type CraftStats, type HeldAssembly, type LinkHit, type PartTransform, type Stage, type Subassembly } from './core';
+import { CraftEditor, craftStats, descendants, getStageList, type CraftStats, type LinkHit, type PartTransform, type SetAsidePiece, type Stage, type Subassembly } from './core';
 import { STOCK_CRAFTS } from './stockCrafts';
 import { computeStageStats, type StageStats } from './ui/dv';
 import { saveErrorText } from '../game/storageErrors';
@@ -71,7 +71,7 @@ export interface SessionView {
   totalDvAsl: number;
   held: HeldState | null;
   /** Assemblies set aside in the hall (craft frame). Not launched, staged or counted. */
-  detached: HeldAssembly[];
+  detached: SetAsidePiece[];
   linkStart?: { partId: string; hit: LinkHit };
   symmetry: SymmetryCount;
   /** Radial (around the craft's long axis) or mirror (across the craft's YZ plane; count 1 = off, 2 = on). */
@@ -383,6 +383,7 @@ export class EditorSession {
   async save() {
     const craft = this.currentCraft();
     if (!craft.parts.length) return this.toast('Nothing to save yet', 'warn');
+    if (this.craftSwappedOut('save')) return;
     try {
       const baseline = { craft: this.editor.craft, name: this.name };
       await saveCraft(craft);
@@ -405,6 +406,7 @@ export class EditorSession {
     if (this.held) this.cancelHeld();
     const craft = this.currentCraft();
     if (!craft.parts.length) return this.toast('Build something first!', 'warn');
+    if (this.craftSwappedOut('launch')) return;
     const loose = this.snap.detached.length;
     if (loose && performance.now() - this.detachedWarnedAt > 8000) {
       this.detachedWarnedAt = performance.now();
@@ -495,10 +497,53 @@ export class EditorSession {
     if (this.held) return;
     if (this.guard(() => this.editor.pickUpDetached(index, uid))) { this.adoptHeldSymmetry(); this.touch(); }
   }
-  discardDetached(index: number) {
+  /** Take a part and what hangs from it off a set-aside piece (its root takes the whole piece). */
+  takeFromDetached(index: number, uid: number) {
+    if (this.held) return;
+    if (this.guard(() => this.editor.takeFromDetached(index, uid))) { this.adoptHeldSymmetry(); this.touch(); }
+  }
+  /**
+   * Put a set-aside piece on the stand to edit it with every tool; the craft is set aside beside it, on the side the
+   * piece stood, bottoms level. Swapping the craft back restores it with its staging.
+   */
+  swapDetached(index: number) {
+    // Cancelling a hold can put a piece back into the list: find this one again afterwards.
+    const rootUid = this.snap.detached[index]?.rootUid;
+    if (this.held) { this.cancelHeld(); index = this.snap.detached.findIndex(p => p.rootUid === rootUid); }
     const piece = this.snap.detached[index];
-    if (!piece || !this.guard(() => (this.editor.discardDetached(index), true))) return;
-    this.toast(`Deleted a set-aside piece (${piece.parts.length} part${piece.parts.length > 1 ? 's' : ''})`, 'info', {
+    if (!piece) return;
+    const craft = this.editor.craft;
+    const offset = v3();
+    if (craft.parts.length) {
+      const up = craft.type === 'SPH' ? 'z' : 'y';
+      const a = this.snap.stats.bounds, b = craftStats({ ...craft, parts: piece.parts }, CATALOG, DENSITIES).bounds;
+      const root = piece.parts.find(p => p.uid === piece.rootUid)!.position;
+      offset.x = b.min.x + b.max.x >= 0 ? b.max.x - root.x + 2 - a.min.x : b.min.x - root.x - 2 - a.max.x;
+      offset[up] = b.min[up] - root[up] - a.min[up];
+    }
+    if (!this.guard(() => (this.editor.swapDetached(index, offset), true))) return;
+    this.selectedUids = []; this.panels = []; this.gizmoUid = null;
+    this.toast(piece.craft ? `"${this.name}" is back on the stand` : `Editing the set-aside piece. "${this.name}" is set aside beside it: swap it back when you're done.`, 'info');
+  }
+  /** Saving or launching would use the piece on the stand while the craft itself is set aside. */
+  private craftSwappedOut(what: 'save' | 'launch'): boolean {
+    if (this.editor.held?.craft) {
+      this.toast(`"${this.name}" is in your hands: set it aside or attach it before you ${what}.`, 'warn');
+      return true;
+    }
+    const index = this.snap.detached.findIndex(p => p.craft);
+    if (index < 0) return false;
+    this.toast(`"${this.name}" is set aside: swap it back onto the stand to ${what} it.`, 'warn', { label: 'Swap back', run: () => { if (this.held) this.cancelHeld(); const i = this.snap.detached.findIndex(p => p.craft); if (i >= 0) this.swapDetached(i); } });
+    return true;
+  }
+  /** Delete a set-aside piece, or only `uid` and what hangs from it. */
+  discardDetached(index: number, uid?: number) {
+    const piece = this.snap.detached[index];
+    if (!piece) return;
+    const whole = uid === undefined || uid === piece.rootUid;
+    const count = whole ? piece.parts.length : descendants(piece.parts, uid).size;
+    if (!this.guard(() => (this.editor.discardDetached(index, uid), true))) return;
+    this.toast(`Deleted ${whole ? 'a set-aside piece' : 'from a set-aside piece'} (${count} part${count > 1 ? 's' : ''})`, 'info', {
       label: 'Undo', run: () => { if (!this.held && this.editor.detached.length === this.snap.detached.length) this.editor.undo(); },
     });
   }
@@ -717,7 +762,7 @@ export class EditorSession {
     }
     if (ok && p.kind === 'park' && !this.parkHintShown) {
       this.parkHintShown = true;
-      this.toast('Set aside: it won\'t launch. Click it to pick it up again, then attach it to a node.', 'info');
+      this.toast('Set aside: it won\'t launch. Click a part to pick it up with what hangs from it; the Set aside list in the staging panel shows each piece.', 'info');
     }
     if (ok && p.kind !== 'park' && typeof document !== 'undefined') document.dispatchEvent(new Event('wsp:part-attach'));
     return !!ok;

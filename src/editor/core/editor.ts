@@ -13,7 +13,10 @@ export interface LinkHit { uid: number; point: Vec3; normal: Vec3 }
 /** `manualStaging`: the player has arranged the stages; edits insert new parts instead of re-staging everything. */
 /** `detached`: assemblies set aside in the hall (craft-frame transforms, no stages). They are not part of the craft:
  * staging, stats and launch ignore them until they are picked up and attached again. */
-export interface EditorSnapshot { craft: CraftDef; held?: HeldAssembly; detached?: HeldAssembly[]; linkStart?: { partId: string; hit: LinkHit }; manualStaging?: boolean }
+export interface EditorSnapshot { craft: CraftDef; held?: SetAsidePiece; detached?: SetAsidePiece[]; linkStart?: { partId: string; hit: LinkHit }; manualStaging?: boolean }
+/** A set-aside (or held) assembly. `craft`: the craft set aside by `swapDetached` (it keeps its stages and staging
+ * mode). Picking it up whole keeps the mark (staging then resets to automatic); attaching it to the stand clears it. */
+export type SetAsidePiece = HeldAssembly & { craft?: { manualStaging: boolean } };
 /** Where a held assembly is spliced into an occupied stack joint: `childUid`/`childNodeId` meet the parent node (as in
  * `attachHeld`); the part that sat there re-attaches to `throughUid`/`throughNodeId`, pushed along with its subtree. */
 export interface SpliceTarget { parentUid: number; parentNodeId: string; childUid: number; childNodeId: string; throughUid: number; throughNodeId: string }
@@ -77,8 +80,8 @@ export class CraftEditor {
   /** The player arranged the stages (new parts are inserted rather than re-staged). */
   get manualStaging(): boolean { return !!this.state.manualStaging; }
   get craft(): CraftDef { return copy(this.state.craft); }
-  get held(): HeldAssembly | undefined { return copy(this.state.held); }
-  get detached(): HeldAssembly[] { return copy(this.state.detached ?? []); }
+  get held(): SetAsidePiece | undefined { return copy(this.state.held); }
+  get detached(): SetAsidePiece[] { return copy(this.state.detached ?? []); }
   get linkStart() { return copy(this.state.linkStart); }
   get canUndo(): boolean { return this.past.length > 0; }
   get canRedo(): boolean { return this.future.length > 0; }
@@ -433,7 +436,7 @@ export class CraftEditor {
       return held;
     });
   }
-  private requireHeld(): HeldAssembly { if (!this.state.held) throw new Error('No held assembly'); return this.state.held; }
+  private requireHeld(): SetAsidePiece { if (!this.state.held) throw new Error('No held assembly'); return this.state.held; }
   /** Translate held assembly by a craft-frame delta. */
   moveHeld(delta: Vec3): void { this.update(() => { this.state.held = transformAssembly(this.requireHeld(), { position: delta, rotation: qIdentity() }); }); }
   /** Rotate around held root by default, or an explicit craft-frame pivot. */
@@ -537,7 +540,7 @@ export class CraftEditor {
       const parked = transformAssembly(turned, { rotation: qIdentity(), position: sub(position, turnedRoot.position) });
       for (const p of parked.parts) delete p.stage;
       delete this.state.held;
-      (this.state.detached ??= []).push(parked);
+      (this.state.detached ??= []).push(held.craft ? { ...parked, craft: held.craft } : parked);
       if (this.state.craft.parts.length) this.settle();
       return parked;
     });
@@ -554,17 +557,74 @@ export class CraftEditor {
       list.splice(index, 1);
       if (!list.length) delete this.state.detached;
       delete this.state.linkStart;
-      this.state.held = { rootUid, parts: rootAt(assembly.parts, rootUid), ...(assembly.symmetry ? { symmetry: assembly.symmetry } : {}) };
+      const parts = rootAt(assembly.parts, rootUid);
+      for (const p of parts) delete p.stage;
+      this.state.held = { rootUid, parts, ...(assembly.symmetry ? { symmetry: assembly.symmetry } : {}), ...(assembly.craft ? { craft: { manualStaging: false } } : {}) };
       return this.state.held;
     });
   }
-  /** Delete a set-aside assembly. */
-  discardDetached(index: number): void {
+  /**
+   * Take a part and what hangs from it off a set-aside piece; the rest stays set aside. The piece's root takes it all.
+   * Struts and fuel lines between the two halves are removed; symmetry groups split across them are broken.
+   */
+  takeFromDetached(index: number, uid: number): SetAsidePiece {
+    return this.update(() => {
+      if (this.state.held) throw new Error('An assembly is already held');
+      delete this.state.linkStart;
+      return this.state.held = this.splitDetached(index, uid);
+    });
+  }
+  private splitDetached(index: number, uid: number): SetAsidePiece {
+    const list = this.state.detached ?? [];
+    const piece = list[index];
+    if (!piece) throw new Error('No such detached piece');
+    const part = piece.parts.find(p => p.uid === uid);
+    if (!part) throw new Error(`Unknown part uid: ${uid}`);
+    if (part.link) throw new Error('Choose a part, not a strut or fuel line');
+    const ids = new Set([...descendants(piece.parts, uid)].filter(id => !piece.parts.find(p => p.uid === id)!.link));
+    const side = (p: PartInstance) => !p.link ? (ids.has(p.uid) ? 'take' : 'keep')
+      : ids.has(p.link.sourceUid) && ids.has(p.link.targetUid) ? 'take' : !ids.has(p.link.sourceUid) && !ids.has(p.link.targetUid) ? 'keep' : 'drop';
+    const parts = copy(piece.parts.filter(p => side(p) === 'take'));
+    const rest = piece.parts.filter(p => side(p) === 'keep');
+    const restGroups = new Set(rest.map(p => p.symmetryGroup));
+    for (const p of parts) { delete p.stage; if (rest.length && restGroups.has(p.symmetryGroup)) delete p.symmetryGroup; }
+    const root = parts.find(p => p.uid === uid)!;
+    delete root.parent; delete root.attachNode; delete root.parentNode;
+    if (rest.length) list[index] = { rootUid: piece.rootUid, parts: rest, ...(piece.craft ? { craft: piece.craft } : {}) };
+    else { list.splice(index, 1); if (!list.length) delete this.state.detached; }
+    return { rootUid: uid, parts, ...(!rest.length && piece.symmetry ? { symmetry: piece.symmetry } : {}), ...(!rest.length && piece.craft ? { craft: { manualStaging: false } } : {}) };
+  }
+  /**
+   * Swap a set-aside piece with the craft so it can be edited with every tool: the piece becomes the craft (root at
+   * the origin, staged afresh) and the craft is set aside moved by `offset`, keeping its stages and staging mode, so
+   * swapping it back restores it. With an empty craft the piece simply takes its place.
+   */
+  swapDetached(index: number, offset: Vec3): void {
+    this.update(() => {
+      if (this.state.held) throw new Error('Place or drop the held part first');
+      if (![offset.x, offset.y, offset.z].every(Number.isFinite)) throw new Error('Invalid position');
+      const list = this.state.detached ?? [];
+      const piece = list[index];
+      if (!piece) throw new Error('No such detached piece');
+      const craft = this.state.craft.parts;
+      if (craft.length) {
+        const root = craft.find(p => p.parent === undefined && !p.link) ?? craft[0];
+        list[index] = { rootUid: root.uid, parts: craft.map(p => ({ ...p, position: add(p.position, offset) })), ...(piece.craft ? {} : { craft: { manualStaging: !!this.state.manualStaging } }) };
+      } else list.splice(index, 1);
+      if (!list.length) delete this.state.detached;
+      const origin = piece.parts.find(p => p.uid === piece.rootUid)!.position;
+      this.state.craft.parts = rootAt(piece.parts, piece.rootUid).map(p => ({ ...p, position: sub(p.position, origin) }));
+      if (piece.craft?.manualStaging) this.state.manualStaging = true; else delete this.state.manualStaging;
+      delete this.state.linkStart;
+      this.settle();
+    });
+  }
+  /** Delete a set-aside assembly, or only `uid` and what hangs from it. */
+  discardDetached(index: number, uid?: number): void {
     this.update(() => {
       const list = this.state.detached ?? [];
       if (!list[index]) throw new Error('No such detached piece');
-      list.splice(index, 1);
-      if (!list.length) delete this.state.detached;
+      this.splitDetached(index, uid ?? list[index].rootUid);
     });
   }
   attachHeldAtSnap(candidate: SnapCandidate): PartInstance { return this.attachHeld(candidate.parent.uid, candidate.parent.id, candidate.child.id, candidate.child.uid); }

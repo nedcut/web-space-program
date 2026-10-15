@@ -139,6 +139,9 @@ export class EditorView {
   private detachedAnchors: THREE.Vector3[] = [];
   private badges: HTMLDivElement[] = [];
   private hoverDetached: number | null = null;
+  /** Set-aside parts a click would take (the hovered part and what hangs from it). */
+  private hoverDetachedSet = new Set<number>();
+  private hoverDetachedUid: number | null = null;
   /** Ctrl (⌘ on macOS) held: pick up just the part. */
   private partOnlyDown = false;
   /** Craft parts moved to preview an insert, restored when the preview ends. */
@@ -401,6 +404,7 @@ export class EditorView {
     this.selectSet = new Set(snap.selectedUids);
     this.groupSet = new Set(snap.mode === 'actions' ? snap.groupUids : []);
     this.applyHighlights();
+    this.applyDetachedHighlights();
     if (!this.gizmoDrag) this.placeGizmo(snap);
     this.com.visible = snap.showCoM && snap.stats.partCount > 0;
     this.cot.visible = snap.showCoT && !!snap.stats.centreOfThrust;
@@ -608,7 +612,8 @@ export class EditorView {
     this.detachedObjs = [];
     this.detachedBox.makeEmpty();
     this.detachedAnchors = [];
-    this.hoverDetached = null;
+    this.hoverDetached = null; this.hoverDetachedUid = null;
+    this.hoverDetachedSet.clear();
     this.craftGroup.updateMatrixWorld(true);
     const toCraft = this.craftGroup.matrixWorld.clone().invert();
     snap.detached.forEach((a, index) => {
@@ -659,7 +664,7 @@ export class EditorView {
   }
 
   private applyDetachedHighlights() {
-    for (const d of this.detachedObjs) setTint(d.obj, d.index === this.hoverDetached ? HOVER_TINT : DETACHED_TINT);
+    for (const d of this.detachedObjs) setTint(d.obj, this.hoverDetachedSet.has(d.uid) || this.stageSet.has(d.uid) ? HOVER_TINT : DETACHED_TINT);
   }
 
   // ------------------------------------------------------------------ held assembly
@@ -1072,14 +1077,14 @@ export class EditorView {
     const snap = this.session.getSnapshot();
     let set = new Set<number>();
     let uid: number | null = null;
-    let detached: number | null = null;
+    let detached: number | null = null, detachedUid: number | null = null;
     if (!snap.held && this.mouseInside && !this.drag) {
       this.raycaster.setFromCamera(this.mouse, this.camera);
       const handle = this.gizmo?.pick(this.raycaster) ?? null;
       if (this.gizmo?.setHot(handle)) this.visualVersion++;
       this.gizmoHover = handle;
       const p = handle ? null : this.pickPart(snap.mode === 'build' && snap.tool === 'place');
-      if (p?.detached !== undefined) detached = p.detached;
+      if (p?.detached !== undefined) { detached = p.detached; detachedUid = p.uid; }
       else if (p) {
         uid = p.uid;
         // Highlight what a click would pick up: the part and its subtree (just the part in action-group mode).
@@ -1095,7 +1100,11 @@ export class EditorView {
         }
       }
     }
-    if (detached !== this.hoverDetached) { this.hoverDetached = detached; this.applyDetachedHighlights(); this.visualVersion++; }
+    if (detached !== this.hoverDetached || detachedUid !== this.hoverDetachedUid) {
+      this.hoverDetached = detached; this.hoverDetachedUid = detachedUid;
+      this.hoverDetachedSet = detached === null || detachedUid === null ? new Set() : descendants(snap.detached[detached].parts, detachedUid);
+      this.applyDetachedHighlights(); this.visualVersion++;
+    }
     const changed = set.size !== this.hoverSet.size || [...set].some((u) => !this.hoverSet.has(u));
     if (changed) { this.hoverSet = set; this.applyHighlights(); }
     this.session.setHover(uid);
@@ -1255,9 +1264,9 @@ export class EditorView {
     }
     const pick = this.pickPart(snap.mode === 'build' && snap.tool === 'place');
     if (pick?.detached !== undefined) {
-      this.hoverDetached = null;
+      this.hoverDetached = null; this.hoverDetachedUid = null; this.hoverDetachedSet.clear();
       if (alt) this.session.toast('Pick the piece up, then Alt+click it to copy', 'info');
-      else this.session.pickUpDetached(pick.detached, pick.uid);
+      else this.session.takeFromDetached(pick.detached, pick.uid);
       return;
     }
     if (pick && snap.mode === 'actions') { this.session.openPanel(pick.uid); return; }
@@ -1337,7 +1346,7 @@ export class EditorView {
     if (matches('editorDelete', e)) {
       e.preventDefault();
       if (held) s.deleteHeld();
-      else if (this.hoverDetached !== null) s.discardDetached(this.hoverDetached);
+      else if (this.hoverDetached !== null) s.discardDetached(this.hoverDetached, this.hoverDetachedUid ?? undefined);
       else if (s.getSnapshot().hoverUid !== null) s.deletePart(s.getSnapshot().hoverUid!, true);
       return;
     }
