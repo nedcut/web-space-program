@@ -4,7 +4,7 @@ _Last updated: 2026-10-15_
 
 ## Start here
 
-- **Public play URL:** pending owner Cloudflare setup. [Go-live steps](docs/DEPLOY.md).
+- **Play now:** <https://web-space-program.pages.dev> — every push to `main` that passes CI deploys there ([setup](docs/DEPLOY.md)).
 - **Play locally:** Node 24.14.1 (`nvm use`), `npm ci`, then `npm run play`.
   This builds and opens the production game. For development: `npm run dev`.
 - Start with **Training**, a quick-start mission, or **New Program → Sandbox**.
@@ -21,7 +21,7 @@ _Last updated: 2026-10-15_
 - **Checks:** 2,001 tests across 214 files (2,000 passed, one skipped locally). Lint, TypeScript, the full
   headless suite and production build run on
   every push and pull request. CI evidence and hosting checks: [shipping report](docs/SHIPPING.md).
-- **Known limits:** no public URL until owner setup; multiplayer needs its separate
+- **Known limits:** multiplayer needs its separate
   experimental LAN server. Career progression is proven through the Moon; longer
   career validation is a separate shipping-wave task. The hosted Ultra preset uses
   8k Earth imagery because the optional 16k pack is not in git. Close city streets

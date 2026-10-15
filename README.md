@@ -7,7 +7,7 @@ fly missions, explore worlds, and grow a science or career program.
 
 ## How to play
 
-**Public URL:** pending Cloudflare setup. [Owner go-live steps](docs/DEPLOY.md).
+**Play now:** <https://web-space-program.pages.dev> (deployed from `main` on every green push; [deploy setup](docs/DEPLOY.md)).
 
 For local play, install Node 24.14.1 (see `.nvmrc`), then:
 

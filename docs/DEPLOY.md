@@ -31,7 +31,9 @@ never deploy. PR previews are deferred to keep credentials out of PR execution.
    and a stock flight load, then replace the public URL placeholder in README.md and
    PROGRESS.md. Optionally add a custom domain in Pages → Custom domains.
 
-No account, project, token, secrets or production deployment is created by the
+Live since 2026-10-15 (first deploy: GitHub Actions run 38819648280).
+
+No account, token or secrets are created by the
 shipping implementation itself.
 
 ## Hosting contract
