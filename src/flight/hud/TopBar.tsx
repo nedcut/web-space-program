@@ -91,6 +91,7 @@ export function Altimeter({ t, cb, imperial }: { t: Telemetry; cb: HudCallbacks;
         {lamp('gear', 'GEAR', t.gear === null ? 'na' : t.gear === 'moving' ? 'warn' : t.gear === 'down' ? 'on' : 'off', `Landing gear / legs (${bindingLabel('toggleGear')})${t.gear === null ? ' — none fitted' : `: ${t.gear}`}`, vessel ? cb.onToggleGear : undefined)}
         {lamp('brakes', 'BRAKES', t.brakes === null ? 'na' : t.brakes ? 'bad' : 'off', `Wheel brakes (hold ${bindingLabel('brakes')})${t.brakes === null ? ' — no wheels' : ''}`)}
         {lamp('lights', 'LIGHTS', t.lights === null ? 'na' : t.lights ? 'on' : 'off', `Lights (${bindingLabel('toggleLights')})${t.lights === null ? ' — no lamps fitted' : ''}`, vessel ? cb.onToggleLights : undefined)}
+        {lamp('night', 'NIGHT VIS', t.nightVision ? 'on' : 'off', `Night vision (${bindingLabel('nightVision')}): see the vessel when the sun is hidden`, cb.onToggleNightVision)}
         {lamp('lock', 'STG LOCK', t.stageLocked ? 'warn' : 'off', `Stage lock (${bindingLabel('stageLock')})`, vessel ? cb.onStageLock : undefined)}
       </div>
       <button type="button" className="alt panel" onClick={flip} title={`${terrain ? 'Height above terrain' : 'Altitude above sea level'} · click for ${terrain ? 'sea level' : 'terrain'}`}>

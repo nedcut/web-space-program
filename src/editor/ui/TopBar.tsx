@@ -102,7 +102,7 @@ export function TopBar({ session, view, onLoad, onNew, onImport, onFrame }: { se
               <ToolGlyph tool={t.id} />
             </Button>
           ))}
-          <Button className={`vab-ibtn snap ${view.angleSnap ? 'on' : ''}`} aria-pressed={view.angleSnap} aria-label="Snap" data-tip={`Snap offsets to 5 cm and angles to 15° (hold Shift for 1 cm / 5°) · ${view.angleSnap ? 'on' : 'off'}`} data-keys={keyOf('editorAngleSnap')} onClick={() => session.toggleAngleSnap()}>
+          <Button className={`vab-ibtn snap ${view.angleSnap ? 'on' : ''}`} aria-pressed={view.angleSnap} aria-label="Snap" data-tip={`Snap offsets and surface placement to 5 cm and angles to 15° (hold Shift for 1 cm / 5°) · ${view.angleSnap ? 'on' : 'off'}`} data-keys={keyOf('editorAngleSnap')} onClick={() => session.toggleAngleSnap()}>
             <SnapGlyph on={view.angleSnap} />
           </Button>
         </Group>

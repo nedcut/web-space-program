@@ -1,4 +1,4 @@
-import { patchDrawnNow, smallBodyVisible } from './framing';
+import { clearDistance, patchDrawnNow, smallBodyVisible } from './framing';
 import { patchState } from '../../sim/orbit/numericalPrediction';
 import { createTerrain } from '../../sim/terrain';
 import { CometEffects } from '../planet/CometEffects';
@@ -858,6 +858,14 @@ export class MapView {
     this.focusIdentity = identity;
     this.renderFocus.x = u.focus.x+this.focusOffset.x; this.renderFocus.y = u.focus.y+this.focusOffset.y; this.renderFocus.z = u.focus.z+this.focusOffset.z;
     this.renderedDistance = this.renderedDistance ? Math.exp(Math.log(this.renderedDistance) + (Math.log(this.distance)-Math.log(this.renderedDistance))*blend) : this.distance;
+    // Never render from inside the reference body (an off-centre focus while turning, easing or changing focus).
+    const ref = u.referenceBody ? this.bodies.get(u.referenceBody) : undefined;
+    if (ref) {
+      const bp = this.ephem.getBodyState(ref.body.id, u.t).position, cp = Math.cos(this.pitch);
+      const rel = { x: bp.x-this.renderFocus.x, y: bp.y-this.renderFocus.y, z: bp.z-this.renderFocus.z };
+      const clear = clearDistance(this.renderedDistance, Math.cos(this.yaw)*cp, Math.sin(this.yaw)*cp, Math.sin(this.pitch), rel, ref.body.radius*1.01);
+      if (clear > this.renderedDistance) { this.renderedDistance = clear; this.distance = Math.max(this.distance, clear); }
+    }
     // The existing marker and picking paths use the same animated floating origin.
     this.lastUpdate = this.frameUpdate;
     Object.assign(this.frameUpdate, u); this.frameUpdate.focus = this.renderFocus; u = this.frameUpdate;

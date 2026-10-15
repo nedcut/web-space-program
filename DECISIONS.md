@@ -247,6 +247,7 @@ Decisions made autonomously while the owner was away. Each can be revisited.
 - **Subassemblies** are stored per device in `localStorage` (`wsp.subassemblies.v1`, 64 max, validated on read: known parts, one tree, valid tweaks). Saved parts are root-relative with no stage numbers and keep the set's symmetry. Drop a held assembly on the drawer (it returns to the craft) or save the selected part's subtree.
 - **Offset/rotate tools (2/3), re-root (4), place (1):** gizmo axes are the craft frame; offsets move the part's subtree, rotation pivots on the part's attachment point (surface contact or attach node). Counterparts follow: radial copies through the rotation between the pair, mirror pairs by reflection; Alt drags only the clicked part. Snap (C, default on): 5 cm / 15°, Shift 1 cm / 5°. During a drag only meshes move (pure `transformedParts` preview); the editor commits once on release, one undo step. In the rotate/offset tools W/S/A/D/Q/E turn by 15° or nudge by 5 cm. Attachment metadata is unchanged by offsets (KSP-like).
 - **Camera and input:** horizontal pan (Shift+drag, middle drag, horizontal two-finger swipe), F resets it. Wheel zoom is proportional to the delta so trackpads zoom smoothly; pinch (Ctrl+wheel) zooms; Shift+wheel pans vertically. On macOS Ctrl+click is the secondary click (part details) and hints show ⌥/⌫.
+- **Held-part camera and surface snap (2026-10-14):** left-drag orbits whether or not a part is held (a drag never places). With snap on (C), surface attach to cylinders lands on 15° around the axis and 5 cm along it from the part centre (Shift: 5° / 1 cm); box-shaped parents stay free.
 - **Safer delete:** Delete/Backspace on the hovered part deletes and shows an Undo toast (single undo, only if nothing changed since). The pre-flight review is hidden until the craft has an engine; its text wraps.
 - **Readouts:** a body picker (planets/moons with solid surfaces) sets gravity and surface pressure for the stage list; launch checks always use Earth. Stages show TWR at ignition → burnout and vehicle mass before → after the burn. The first stage reads at the body's surface, later stages in vacuum; airless bodies read vacuum only.
 - **Couplers:** five original multi-way couplers (1.25 m → 2/4 × 0.625 m, 2.5 m → 2/3/4 × 1.25 m) appended to the catalogue (existing order unchanged), placed explicitly in structures tiers 1–2. Sockets touch at the axis; the quad's outer sockets sit slightly proud of the stack.
@@ -1181,3 +1182,40 @@ Owner decisions 2026-10-13 (both recommended options).
   against its cube target on first use and draws no strip until the program is linked, so no scene blocks on
   the bake shaders (the Space Center warm-up does not cover off-screen passes; it froze ~2 s at reveal on an
   HD 520).
+- **Night vision and ascent map view (2026-10-14):** Night vision (NIGHT VIS lamp by the altimeter, or F7;
+  off by default, not persisted) is render-only: a camera headlight plus a stronger hemisphere fill, both scaled by
+  `1 − sunVisibility`, so it does nothing in full sun and is safe to leave on. Planet terrain shaders ignore it.
+  The flight map centres between the active vessel and its apoapsis from the ground until the periapsis clears the
+  atmosphere top (the surface on airless bodies) or the path escapes; a suborbital vessel only enters this view
+  while climbing below that height, so deorbits and entries keep the orbit view. Opening the map in this phase looks
+  from beside the orbit plane, tilted above the vessel's horizon (camera outside the body at any zoom); zoom reaches
+  0.15 R from that centre.
+
+## Stale build after a service-worker update (2026-10-14)
+
+- **Bug:** opening a production build after a rebuild ran the old cached build; the auto-updating service worker
+  (skipWaiting + clientsClaim) took over seconds later and dropped the old hashed chunks, so the next lazy scene
+  (Integration Hall, Tracking, ...) failed with "Failed to fetch dynamically imported module" and the crash screen.
+  Reproduced headlessly: build, load, rebuild, reload, wait, enter the Integration Hall.
+- **Fix** (`src/ui/staleBuild.ts`): when a replacement worker takes control while the player is on the main menu,
+  reload at once; elsewhere, a failed chunk (`vite:preloadError`) reloads the page onto the new build (back to the
+  main menu) instead of crashing. The error boundary renders nothing while that reload runs. A second chunk
+  failure within 10 s of such a reload shows the crash screen (offline or broken deploy, not a stale build).
+  Mid-flight scenes never auto-reload on the worker change alone.
+
+## Editing set-aside pieces (2026-10-14, feat/setaside-editing)
+- **Owner ask**: a better way to edit set-aside pieces, see what is in them and rearrange them.
+- **Set aside list** (staging panel, replaces the one-line count): one card per piece with its root part, part count,
+  mass and part chips (grouped, ×count). Hovering a card or chip highlights it in the hall; clicking a chip picks that
+  part up with what hangs from it. Buttons: Pick up (whole piece), Edit on stand, Delete (Undo toast).
+- **Click in the hall now splits a piece**: clicking a set-aside part takes it and what hangs from it, the rest stays
+  set aside (was: the whole piece, held by the clicked part). Matches "click: pick up with attached" on the craft; the
+  piece's root still takes everything, and hover shows exactly what a click takes. Del deletes the hovered part and
+  what hangs from it. Struts/fuel lines across the split are removed; split symmetry groups are broken.
+- **Edit on stand** swaps a piece with the craft (`CraftEditor.swapDetached`, one undo step) so every tool works on it
+  (attach, offset/rotate, re-root, inspector). The craft is set aside beside it (on the piece's side, bottoms level),
+  keeping its stages and staging mode (`SetAsidePiece.craft`), and its card reads "Swap back". While the craft is set
+  aside, Save and Launch are refused with a "Swap back" action: they would otherwise write or fly the piece under the
+  craft's name (also while the craft is held). Picking the set-aside craft up whole keeps its mark (its staging
+  then resets to automatic); attaching it to the stand merges it and clears the mark. Only one swap at a time (Edit on stand is disabled on other pieces meanwhile).
+- Set-aside pieces are still not saved with the craft (unchanged).
