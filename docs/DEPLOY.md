@@ -47,7 +47,7 @@ shipping implementation itself.
   The PWA auto-update and stale-build reload path remain enabled.
 - The hosted build omits the optional, gitignored 16k Earth imagery pack. Ultra uses
   the highest available imagery level; the rest of its quality settings still apply.
-- Query routes (`?flight=stock-kestrel`, `?scenario=orbit`, `?mission=moon-return`)
+- Query routes (`?flight=stock-kestrel`, `?flight=stock-kestrel&scenario=orbit`, `?mission=moon-return`)
   use the root HTML. Unknown paths return a small real 404 page with a link home;
   missing assets must not return the app's HTML.
 - Experimental multiplayer still requires a separately hosted WebSocket server.

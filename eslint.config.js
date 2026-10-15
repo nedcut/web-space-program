@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'dist-prof/**', 'dist-cpu-*/**', '.vite-cache/**', 'node_modules/**', 'coverage/**', '.tmp/**',
+  { ignores: ['dist/**', 'dist-prof/**', 'dist-cpu-*/**', '.vite-cache/**', '.wrangler/**', 'node_modules/**', 'coverage/**', '.tmp/**',
     // Snippets evaluated inside a page by the knob driver (expressions, not modules).
     'scripts/bench/knobs/*.js', 'scripts/bench/perfgpu/*.js', 'scripts/bench/earthgfx/*.js', 'scripts/bench/smoke/*.js'] },
   js.configs.recommended,

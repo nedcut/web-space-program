@@ -1653,3 +1653,9 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
 - Pages headers keep hashed assets immutable and revalidate entry points and Earth
   assets. A real 404 page and root-only PWA navigation fallback preserve missing
   asset errors and unknown-path 404s. CI enforces 25 MiB/file and 20,000 files.
+- Preserve the entire pre-shipping PROGRESS.md byte-for-byte as the October archive;
+  replace it with a short current entry point and dated wave summaries. Catalog
+  counts come from exported code, not old progress reports. Current limitations
+  remain visible rather than being hidden by the shipping narrative.
+- Ignore Wrangler's generated local state in git and ESLint; local Pages emulation
+  creates generated middleware under `.wrangler/` that is not project source.
