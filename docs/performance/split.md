@@ -55,12 +55,19 @@ new vector per frame. Camera drive input remains the same stable input object.
 
 The source audit compares parsed method bodies against `0f8fef3a`, ignoring only
 comments/formatting and enumerated receiver/argument renames. It matches 14 extracted
-bodies and 101 retained bodies. Constructors, frame integration and lighting blocks
-are reviewed separately; this is not a claim of automatic equivalence for the whole
+method bodies, both extracted lighting blocks and 101 retained bodies. Constructors
+and frame integration are reviewed separately; this is not a claim of automatic equivalence for the whole
 program. No tests or assertions were changed.
 
 Focused map checks: 27 tests across presentation, maneuver interaction and zoom passed.
-Final full checks and browser results are recorded below after completion.
+- `npm run lint`: passed, including simulation layering across 77 modules.
+- `npx tsc --noEmit`: passed.
+- `npx vitest run --maxWorkers=2`: 214 files passed; 2,000 tests passed and one skipped
+  (482.17 seconds).
+- `npm run build`: passed.
+- `git diff --check`: passed.
+
+Browser results are recorded below after completion.
 
 Evidence directory: `/home/nedcut/.t3/projects/wsp-traces/split2/`.
 The paired CDP harness is adapted from round one; only its artifact paths and the moved
