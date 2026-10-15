@@ -1,3 +1,4 @@
+import type { MapMarkerInput, MapUpdate, ExtraOrbit, MapTarget, MapApproach, MapPick, MapPoint, MapHandlers } from './mapTypes';
 import { aimAt, clearDistance, patchDrawnNow, pickSphere, smallBodyVisible } from './framing';
 import { patchState } from '../../sim/orbit/numericalPrediction';
 import { createTerrain } from '../../sim/terrain';
@@ -11,7 +12,6 @@ import { BODY_LOOK, GIZMO_LOOK, OrbitStyle, PLANNED_LOOK, TRAJECTORY_LOOK, orbit
 import { adaptiveSamples, sampleConic } from './conicSampling';
 import { createMapStars, createSoiShell } from './mapBackdrop';
 import { familyColor, placeLabel, type LabelBox } from './presentation';
-import type { Network } from '../../sim/comms/network';
 import { concentrationAt } from '../../sim/resources/deposits';
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
@@ -54,86 +54,7 @@ import type { BiomeMap } from '../../sim/science/biomeMap';
  * wins hit-testing over handles, slides along the orbit. Clicks, double-clicks and right-clicks on
  * bodies, vessels and orbit lines are reported through `handlers` so the host UI can open menus or change focus.
  */
-export interface MapMarkerInput {
-  body: string;
-  position: Vec3;
-  /** Caption drawn next to the marker. */
-  label: string;
-  color: string;
-  /** Stable identity (keeps a pinned marker pinned across frames). */
-  key?: string;
-  /** Hover / pinned detail (defaults to the label). */
-  detail?: string;
-  /** UT of the event the marker stands for (enables "warp here"). */
-  time?: number;
-}
-
-export interface MapUpdate {
-  landing?: { body: string; points: Vec3[]; times: number[]; impact: { time: number; position: Vec3; speed: number } | null };
-  comms?: Network;
-  t: number;
-  /** Optional stable identity enables focus animation while the object moves. */
-  focusId?: string;
-  /** Body ancestry to display when the focus is a vessel. */
-  referenceBody?: string;
-  /** Heliocentric position of the focused object (float64). */
-  focus: Vec3;
-  /** Active vessel trajectory (patched conics) and its heliocentric position. */
-  vessel?: { id?: string; position: Vec3; patches: TrajectoryPatch[]; nodes: ManeuverNode[] };
-  markers?: MapMarkerInput[];
-  viewport: { width: number; height: number };
-}
-
-export interface ExtraOrbit {
-  id: string;
-  position: Vec3;
-  orbit?: Orbit;
-}
-
-/** Navigation target highlight. */
-export interface MapTarget {
-  kind: 'vessel' | 'body';
-  id: string;
-}
-
-/** Closest-approach markers: positions relative to `body` at the approach time, plus a label. */
-export interface MapApproach {
-  body: string;
-  positionA: Vec3;
-  positionB: Vec3;
-  label: string;
-  /** Hover / pinned detail (defaults to the label). */
-  detail?: string;
-  /** UT of closest approach. */
-  time?: number;
-}
-
-/** A body or vessel under the cursor. */
-export interface MapPick { kind: 'body' | 'vessel'; id: string }
-/** CSS pixels relative to the map's element. */
-export interface MapPoint { x: number; y: number }
-
-/** Callbacks from map gestures. Absent handlers disable the gesture (e.g. node editing in Fleet Tracking). */
-export interface MapHandlers {
-  /** Click on the active trajectory: add a maneuver node at `time`. Enables ghost nodes and the gizmo. */
-  placeNode?(time: number): void;
-  /** A node's Δv or time was changed by a gizmo gesture. */
-  nodesChanged?(): void;
-  /** Click on a node centre (without dragging it). */
-  nodeClicked?(id: number, at: MapPoint): void;
-  /** Left click or right click on a body/vessel icon or orbit. */
-  objectMenu?(pick: MapPick, at: MapPoint): void;
-  /** Double click on a body/vessel icon or orbit. */
-  focus?(pick: MapPick): void;
-  /** Click on empty space (close menus). */
-  emptyClick?(): void;
-  /** Extra tooltip lines for a hovered body/vessel (distance, relative speed…). */
-  describe?(pick: MapPick): string | null;
-  /** Right click on an orbit marker (Ap, Pe, encounter, closest approach…). */
-  markerMenu?(marker: { key: string; label: string; time?: number; pinned: boolean }, at: MapPoint): void;
-  /** Right click on the active trajectory at `time`. */
-  orbitMenu?(time: number, at: MapPoint): void;
-}
+export type { MapMarkerInput, MapUpdate, ExtraOrbit, MapTarget, MapApproach, MapPick, MapPoint, MapHandlers } from './mapTypes';
 
 type Hover =
   | { kind: 'none' }
