@@ -340,7 +340,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           vec2 uvV = vec2(atan(nV.y, nV.x) * (0.5 / ATMO_PI) + 0.5, 0.5 - asin(clamp(nV.z, -1.0, 1.0)) / ATMO_PI);
           // This is a land pack. The existing water mask rejects sea/launch-plateau fragments before
           // their pixel shader pays for the regional colour, data or procedural land-cover work.
-          float land = uEarthRegionOn > 0.5 && nV.x > -0.5 ? 1.0 - textureLod(uEarthDay, uvV, 0.0).a : 0.0;
+          float land = uEarthRegionOn > 0.5 && nV.x > -0.5 ? 1.0 - smoothstep(0.0, 0.05, textureLod(uEarthDay, uvV, 0.0).a) : 0.0;
           vGroundCoord = vec3((uvV - vec2(80.0 / 360.0, 55.0 / 180.0)) * vec2(9.0, 7.2), land);
           #ifdef EARTH_RICH
             const float COAST_TEST = 1200.0; // coast sky reflection needs the mask above the datum too
@@ -458,14 +458,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           // Covered seafloor has already returned: never pay for spherical UVs or region tests there.
           // The vertex mask also rejects date-line triangles on the opposite hemisphere.
           regionW = earthRegionWeight(regionUV, dist) * vGroundCoord.z;
-          if (regionW > 0.0) {
-            // The patch is far from the date line and poles. Interpolated geographic UVs avoid per-pixel
-            // atan/asin at close range; terrain subdivision keeps their error below the ~1 km source texel.
-            eUV.uv = regionUV.uv / vec2(9.0, 7.2) + vec2(80.0 / 360.0, 55.0 / 180.0);
-            eUV.dx = regionUV.dx / vec2(9.0, 7.2); eUV.dy = regionUV.dy / vec2(9.0, 7.2);
-            nDir = normalize(transpose(uBodyRot) * rel);
-            imgUsed = true;
-          } else if (imgUsed) eUV = earthUVd(nDir, nDx, nDy);
+          if (regionW > 0.0) imgUsed = true;
         #endif
         vec3 V = toCam / dist;
         vec3 nBF = normalize(vNormalBF);
@@ -551,6 +544,13 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           // these hidden fragments would otherwise pay for the imagery too).
           float waterW = 0.0;
           if (wImg > 0.0) {
+          if (regionW > 0.0) {
+            // The patch is far from the date line and poles. Interpolated geographic UVs avoid per-pixel
+            // atan/asin at close range; terrain subdivision keeps their error below the ~1 km source texel.
+            eUV.uv = regionUV.uv / vec2(9.0, 7.2) + vec2(80.0 / 360.0, 55.0 / 180.0);
+            eUV.dx = regionUV.dx / vec2(9.0, 7.2); eUV.dy = regionUV.dy / vec2(9.0, 7.2);
+            nDir = normalize(transpose(uBodyRot) * rel);
+          } else if (imgUsed) eUV = earthUVd(nDir, nDx, nDy);
             vec4 dayW = earthTex(uEarthDay, eUV);
             vec3 c = dayW.rgb;
             if (regionW > 0.0) {
@@ -608,7 +608,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             float glow = s * s * (0.35 + 0.65 * s);
             vec3 tint = mix(vec3(1.0, 0.52, 0.2), vec3(1.0, 0.8, 0.58), s);
             // Mapped brightness locates the cores; filtered roads break up resolved urban footprints.
-            col += tint * glow * (0.025 + roads * 0.5) * night * 0.65 * regionW * (1.0 - waterW)
+            col += tint * glow * (0.16 + roads * 3.0) * night * 0.65 * regionW * (1.0 - waterW)
               * (1.0 - 0.75 * smoothstep(0.2, 0.9, cloudCover(rel)));
           }
           if (streets > 0.0 && regionW < 1.0 && dot(lightsImg, lightsImg) > 0.0) col += earthEmission(nDir, length(rel) - uPlanetRadius, sunAlt) * streets * min(1.0, lightsImg.r * 3.0) * (1.0 - regionW);

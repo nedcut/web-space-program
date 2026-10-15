@@ -6,7 +6,7 @@ uniform float uEarthRegionOn;
 uniform sampler2D uEarthUrbanDetail;
 float earthRegionWeight(EarthUV r, float dist) {
   vec2 edge = min(r.uv, 1.0 - r.uv);
-  return uEarthRegionOn * smoothstep(0.0, 0.04, min(edge.x, edge.y))
+  return uEarthRegionOn * smoothstep(250.0, 750.0, dist) * smoothstep(0.0, 0.04, min(edge.x, edge.y))
     * (1.0 - smoothstep(uPlanetRadius * 0.06, uPlanetRadius * 0.16, dist));
 }
 // Land-use cues follow the satellite palette. These small-scale patterns are illustrative, not surveyed.

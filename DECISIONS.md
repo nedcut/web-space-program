@@ -1217,3 +1217,6 @@ Owner decisions 2026-10-13 (both recommended options).
   the launch plateau's close-range palette and avoids decoding/shading an unused
   regional land colour behind opaque site/water surfaces. The regional mask remains
   render-only; terrain/science/physics and the global ocean mask are not edited.
+- Regional imagery fades in from 250–750 m viewing distance, preserving local pad/
+  scatter detail below that range. The small urban tile uses a diffuse city glow plus
+  brighter intermittent lamps; night brightness is illustrative, not calibrated radiance.
