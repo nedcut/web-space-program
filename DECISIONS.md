@@ -1312,3 +1312,5 @@ Owner decisions 2026-10-13 (both recommended options).
   warmup, including inactive regional programs. A generation token cancels stale
   warmup completion after another restoration. This prevents a later terrain switch
   from becoming the first compile after context loss.
+- Include the base material among hidden warmup representatives too, so returning
+  from a regional view after context restoration also reuses a compiled program.

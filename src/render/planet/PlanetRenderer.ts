@@ -351,7 +351,7 @@ export class PlanetRenderer {
       ocean,
       pool: this.pool,
       terrainMaterial: terrainMat,
-      terrainWarmupMaterials: this.terrainVariants ? [this.terrainVariants.detail, this.terrainVariants.far] : undefined,
+      terrainWarmupMaterials: this.terrainVariants ? [this.terrainVariants.base, this.terrainVariants.detail, this.terrainVariants.far] : undefined,
       oceanMaterial: oceanMat,
       maxInFlight: q.terrain.maxInFlight,
       buildBudgetMs: q.terrain.buildBudgetMs,
