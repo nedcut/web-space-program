@@ -1595,6 +1595,7 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   71 ms (22 cards) → 75 ms (28 cards). Launch picker: 38 → 45 ms. First opens: 151 → 158 ms and 386 → 378 ms
   (lazy chunk). Firefox after: library ~91 ms, launch picker ~65–81 ms. Stock craft are still built on open, which
   costs ~2 ms per craft in Node. Grouping adds no per-frame work, and thumbnails still use the idle queue.
-- **Existing quirk found, not fixed (fleetspace's area).** `CraftEditor.craft` returns a copy, so `p.stage = …` loops
-  over `b.ed.craft.parts` in `realDelivery` and the challenging Selene booster do nothing. Use `b.stages` or patch
-  the finished craft, as `buildSaltstreak` does for its thrust limiter.
+- **Builder pitfall.** `CraftEditor.craft` returns a copy, so mutating `b.part(uid)` or `b.ed.craft.parts` is lost.
+  The `p.stage = …` loops in `realDelivery` and the challenging Selene are no-ops. They are harmless today: the depth
+  stager already puts those boosters in their engines' stage (checked). To change a part, use `b.stages`/`b.resources`
+  or patch the finished craft, as `buildSaltstreak` does for its thrust limiter.
