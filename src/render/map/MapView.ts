@@ -1169,7 +1169,9 @@ export class MapView {
         if (el < 1e-6) { ex = 1; ey = 0; ez = 0; } else { ex /= el; ey /= el; ez /= el; }
         const nx = upY * ez - upZ * ey, ny = upZ * ex - upX * ez, nz = upX * ey - upY * ex;
         const lp = 0.2 + (this.pitch + 1.55) / 3.1 * 1.3, lc = Math.cos(lp), ls = Math.sin(lp);
-        const lx = lc * (cy * ex + sy * nx) + ls * upX, ly = lc * (cy * ey + sy * ny) + ls * upY, lz = lc * (cy * ez + sy * nz) + ls * upZ;
+        // Heading offset: the default yaw puts the camera south of the focus, so north is up on screen.
+        const hc = Math.cos(this.yaw + LOCAL_HEADING), hs = Math.sin(this.yaw + LOCAL_HEADING);
+        const lx = lc * (hc * ex + hs * nx) + ls * upX, ly = lc * (hc * ey + hs * ny) + ls * upY, lz = lc * (hc * ez + hs * nz) + ls * upZ;
         x += (lx - x) * blend; y += (ly - y) * blend; z += (lz - z) * blend;
         const len = Math.hypot(x, y, z);
         if (len < 1e-3) { x = lx; y = ly; z = lz; } else { x /= len; y /= len; z /= len; }
@@ -1878,6 +1880,8 @@ export class MapView {
 }
 
 type SurfaceFrameArgs = Parameters<SurfaceLayers['update']>[0];
+/** Default map yaw (0.6) plus this is −90°: the near-surface view starts looking north. */
+const LOCAL_HEADING = -Math.PI / 2 - 0.6;
 
 function smoothstep(e0: number, e1: number, x: number) {
   const k = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));

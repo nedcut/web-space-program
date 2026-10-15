@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { biomeIndexAt, hasBiomeMap, type BiomeMap } from '../../sim/science/biomeMap';
+import { biomeAt } from '../../sim/science/biomes';
+import { createTerrain } from '../../sim/terrain';
+import type { Terrain } from '../../sim/terrain/api';
 import { EARTH_CITIES } from '../../data/earthCities';
 import type { Body } from '../../sim/bodies/types';
 import type { Quat } from '../../util/quat';
@@ -42,7 +45,9 @@ const VERTEX = /* glsl */ `
 
 /**
  * Biome cells (R8 indices, row 0 north) looked up per fragment from the body-fixed direction, so there is no UV
- * seam. Region edges are found one or two screen pixels away, which keeps outlines crisp at every zoom.
+ * seam. Each fragment takes the biome with the largest bilinear weight among its four nearest cells, so close up
+ * the boundaries run as smooth contours instead of cell stair-steps; outlines come from screen-space derivatives
+ * of the result (one or two pixels wide at every zoom, no extra fetches).
  */
 const FRAGMENT = /* glsl */ `
   uniform sampler2D uCells;
@@ -55,21 +60,30 @@ const FRAGMENT = /* glsl */ `
   #include <common>
   #include <logdepthbuf_pars_fragment>
   int cellAt(vec2 c) {
-    int x = int(mod(floor(c.x), uSize.x));
-    int y = int(clamp(floor(c.y), 0.0, uSize.y - 1.0));
+    int x = int(mod(c.x, uSize.x));
+    int y = int(clamp(c.y, 0.0, uSize.y - 1.0));
     return int(texelFetch(uCells, ivec2(x, y), 0).r * 255.0 + 0.5);
+  }
+  int biomeAt(vec2 c) {
+    vec2 b = floor(c - 0.5), f = c - 0.5 - b;
+    int a00 = cellAt(b), a10 = cellAt(b + vec2(1.0, 0.0)), a01 = cellAt(b + vec2(0.0, 1.0)), a11 = cellAt(b + 1.0);
+    float w00 = (1.0 - f.x) * (1.0 - f.y), w10 = f.x * (1.0 - f.y), w01 = (1.0 - f.x) * f.y, w11 = f.x * f.y;
+    float s00 = w00 + (a10 == a00 ? w10 : 0.0) + (a01 == a00 ? w01 : 0.0) + (a11 == a00 ? w11 : 0.0);
+    float s10 = w10 + (a01 == a10 ? w01 : 0.0) + (a11 == a10 ? w11 : 0.0);
+    float s01 = w01 + (a11 == a01 ? w11 : 0.0);
+    int id = a00; float best = s00;
+    if (s10 > best) { best = s10; id = a10; }
+    if (s01 > best) { best = s01; id = a01; }
+    if (w11 > best) id = a11;
+    return id;
   }
   void main() {
     #include <logdepthbuf_fragment>
     vec3 d = normalize(vDir);
     float lon = atan(d.y, d.x), lat = asin(clamp(d.z, -1.0, 1.0));
     vec2 c = vec2((lon / 6.2831853 + 0.5) * uSize.x, (0.5 - lat / 3.14159265) * uSize.y);
-    // Longitude derivative away from the ±180° seam (the other branch has its seam on the far side).
-    float fx = min(fwidth(lon), fwidth(atan(-d.y, -d.x))) / 6.2831853 * uSize.x;
-    vec2 o = max(vec2(fx, fwidth(c.y)), vec2(1e-4)) * 1.5;
-    int id = cellAt(c);
-    bool edge = cellAt(c + vec2(o.x, 0.0)) != id || cellAt(c - vec2(o.x, 0.0)) != id
-      || cellAt(c + vec2(0.0, o.y)) != id || cellAt(c - vec2(0.0, o.y)) != id;
+    int id = biomeAt(c);
+    bool edge = fwidth(float(id)) > 0.0;
     vec4 base = uPalette[id];
     vec3 color = base.rgb;
     float alpha = uAll * min(1.0, base.a * (edge ? 1.8 : 1.0));
@@ -91,6 +105,8 @@ interface BodyLayer {
   center: THREE.Vector3;
   rotation: THREE.Quaternion;
   placed: boolean;
+  /** Created on the first hover: the exact classifier needs the body's terrain. */
+  terrain: Terrain | null;
 }
 
 interface LabelEl { el: HTMLDivElement; text: string; color: string; box: LabelBox }
@@ -158,7 +174,7 @@ export class SurfaceLayers {
     this.warmObject.visible = false; this.warmObject.frustumCulled = false;
     scene.add(this.warmObject);
     for (const body of bodies.values()) if (hasBiomeMap(body) || body.id === 'earth') {
-      this.layers.set(body.id, { body, map: null, requested: false, mesh: null, center: new THREE.Vector3(), rotation: new THREE.Quaternion(), placed: false });
+      this.layers.set(body.id, { body, map: null, requested: false, mesh: null, center: new THREE.Vector3(), rotation: new THREE.Quaternion(), placed: false, terrain: null });
     }
     this.cityDirs = new Float64Array(EARTH_CITIES.length * 3);
     EARTH_CITIES.forEach(([, lat, lon], i) => {
@@ -428,7 +444,9 @@ export class SurfaceLayers {
     }
     if (!hit) return null;
     const p = ray.at(best, this.v).sub(hit.center).applyQuaternion(this.inverse.copy(hit.rotation).invert());
-    const name = hit.map!.names[biomeIndexAt(hit.map!, p)];
+    // The exact biome under the cursor (what an experiment there records); smoothed colours show the area's main one.
+    let name = hit.map!.names[biomeIndexAt(hit.map!, p)];
+    try { name = biomeAt(hit.body, hit.terrain ??= createTerrain(hit.body), p); } catch { /* keep the map's cell */ }
     return this.isTarget(hit.body.id, name) ? `${name} · ${hit.body.name}\n${this.targetLabel(hit.body.id, name)}` : `${name} · ${hit.body.name}`;
   }
 

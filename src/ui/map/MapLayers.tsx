@@ -38,6 +38,8 @@ export function MapLayers({ map, bodyId, bodyName, objectives, onShow }: {
         <button key={e.name} className="btn ghost small" title={`Show ${e.name}`} onClick={() => onShow(bodyId, e.name)}>
           <span className="map-swatch" style={{ background: e.color, borderColor: e.target ? BIOME_TARGET_CSS : 'transparent' }} />{e.name}
         </button>)}</div>
-      : <span className="map-layers-note">{map.surface.mapsBody(bodyId) ? 'Mapping biomes…' : `${bodyName(bodyId)} has a single biome`}</span>)}
+      : null)}
+    {biomes && bodyId && legend && map.surface.biomeMap(bodyId)?.smoothed && <span className="map-layers-note">Colours show each area's main biome; hover for the exact one.</span>}
+    {biomes && bodyId && !legend && (<span className="map-layers-note">{map.surface.mapsBody(bodyId) ? 'Mapping biomes…' : `${bodyName(bodyId)} has a single biome`}</span>)}
   </div>;
 }

@@ -26,7 +26,11 @@ export interface BiomeRegion {
   anchor: Vec3;
 }
 
-export interface BiomeMap extends BiomeGrid { regions: BiomeRegion[] }
+export interface BiomeMap extends BiomeGrid {
+  regions: BiomeRegion[];
+  /** Cells show each area's main biome (majority filtered), not every sample: see `smoothBiomeGrid`. */
+  smoothed: boolean;
+}
 
 /** Bodies whose surface is one biome need no map. */
 export function biomeNames(body: Body): readonly string[] {
@@ -151,10 +155,40 @@ export function biomeRegions(grid: BiomeGrid, minArea = 0.002, maxRegions = 48):
   return regions.filter((r, i) => { const first = !seen.has(r.biome); seen.add(r.biome); return i < maxRegions || first; });
 }
 
+/**
+ * Majority (mode) filter over 3×3 neighbourhoods, wrapping in longitude; ties keep the cell's own biome. Slope-based
+ * rules (crater rims, canyons) change every few hundred metres, which at map scale is speckle: filtered cells show
+ * which biome dominates each area instead.
+ */
+export function smoothBiomeGrid(grid: BiomeGrid, passes = 2): void {
+  const { width: w, height: h } = grid;
+  const counts = new Uint8Array(Math.max(1, grid.names.length));
+  let src: Uint8Array = grid.cells, dst: Uint8Array = new Uint8Array(src.length);
+  for (let pass = 0; pass < passes; pass++) {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      counts.fill(0);
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= h) continue;
+        for (let dx = -1; dx <= 1; dx++) counts[src[yy * w + (x + dx + w) % w]]++;
+      }
+      const own = src[y * w + x];
+      let best = own;
+      for (let i = 0; i < counts.length; i++) if (counts[i] > counts[best]) best = i;
+      dst[y * w + x] = best;
+    }
+    [src, dst] = [dst, src];
+  }
+  if (src !== grid.cells) grid.cells.set(src);
+}
+
 /** Full grid plus regions: the work a worker does once per body. */
 export function buildBiomeMap(body: Body, terrain: Terrain, size = biomeGridSize(body)): BiomeMap {
   const grid = createBiomeGrid(body, size.width, size.height);
   fillBiomeRows(grid, body, terrain, 0, size.height);
+  // Earth's rules are geographic and already smooth; everywhere else slope rules speckle.
+  const smoothed = body.id !== 'earth';
+  if (smoothed) smoothBiomeGrid(grid);
   const regions = biomeRegions(grid);
   // The launch complex disc (2.5 km) can fall between cell centres: it is still a biome a player may be sent to.
   if (body.id === 'earth' && !regions.some(r => grid.names[r.biome] === 'Launch Complex')) {
@@ -162,5 +196,5 @@ export function buildBiomeMap(body: Body, terrain: Terrain, size = biomeGridSize
     if (index < 0) index = grid.names.push('Launch Complex') - 1;
     regions.push({ biome: index, area: Math.PI * (2500 / body.radius) ** 2, anchor: latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon) });
   }
-  return { ...grid, regions };
+  return { ...grid, regions, smoothed };
 }
