@@ -47,7 +47,8 @@ export function SpaceCenter() {
   // Program state only changes between visits; recompute on milestones, research and the contract desk.
   // Launch season hints for the planet goals: a few milliseconds of Lambert arcs, once per scale and program day.
   const day = Math.floor(ut / 86400);
-  const seasons = useMemo(() => p?.milestones.includes('first-moon-flyby') ? launchSeasons(scale, day * 86400) : {}, [scale, day, p?.milestones.length]);
+  const pastMoon = !!p?.milestones.includes('first-moon-flyby');
+  const seasons = useMemo(() => pastMoon ? launchSeasons(scale, day * 86400) : {}, [scale, day, pastMoon]);
   const goal = useMemo(() => p ? nextGoal(p, mode, scale, seasons) : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [p, mode, scale, seasons, p?.milestones.length, p?.unlocked.length, p?.contracts.length, Math.floor(p?.science ?? 0), p?.facilities]);

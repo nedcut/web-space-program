@@ -13,9 +13,11 @@ import { Builder, type StockCraft } from '../stockCrafts';
 export function buildPetrel(preset: ScalePresetId, catalog: PartCatalog = PART_CATALOG): CraftDef {
   const b = new Builder(catalog, 'Petrel Planetary Probe',
     'Uncrewed probe for Venus and Mars. The launcher reaches orbit and makes the departure burn; the probe\'s own kick stage trims the cruise and captures. Its Arcwatch dish keeps Earth in touch across the inner planets.');
+  const real = preset === 'real';
   const core = b.root('probe-pebble');
   const wheel = b.stack(core, 'wheel-gyre-0');
-  const kick = b.stack(wheel, 'tank-0-long');
+  // Real: a second kick tank and a longer upper stage (+0.8 km/s past orbit) pay for a Mars capture into a long ellipse.
+  const kick = real ? b.stack(b.stack(wheel, 'tank-0-long'), 'tank-0-long') : b.stack(wheel, 'tank-0-long');
   b.radial(core, 'battery-brick', 1, 0, 0);
   b.radial(core, 'antenna-arc', 1, 0, 180);
   b.radial(core, 'sensor-thermal', 1, 0, 90);
@@ -23,7 +25,7 @@ export function buildPetrel(preset: ScalePresetId, catalog: PartCatalog = PART_C
   const wisp = b.stack(kick, 'eng-wisp');
   const sep = b.stack(wisp, 'dec-0');
   const adapter = b.stack(sep, 'adapt-0-1');
-  const upper = b.stack(adapter, 'tank-1-long');
+  const upper = real ? b.stack(b.stack(adapter, 'tank-1-long'), 'tank-1-mid') : b.stack(adapter, 'tank-1-long');
   const engine = b.stack(upper, 'eng-zephyr');
   const sep1 = b.stack(engine, 'dec-1');
   if (preset === 'standard') {
@@ -33,7 +35,6 @@ export function buildPetrel(preset: ScalePresetId, catalog: PartCatalog = PART_C
     b.radial(t2, 'fin-keel', 4, -0.95, 45);
     return b.done();
   }
-  const real = preset === 'real';
   const wide1 = b.stack(sep1, 'adapt-1-2');
   const middle = b.stack(wide1, real ? 'tank-2-long' : 'tank-2-mid');
   const sustainer = b.stack(middle, 'eng-harmattan');

@@ -26,10 +26,10 @@ export interface Leg { departure: number; arrival: number; dv: number; trims: nu
 export interface Departure { target: string; time: number; periapsis: number; arrivalTime: number; encounter: number }
 
 /**
- * In a parking orbit, during a station pass: plan the transfer to `target` with the map planner. Its default is the
- * earliest option within a few percent of the cheapest; from its options list a player takes the earliest departure
- * the craft can pay for: departure plus an elliptical capture (about half the listed circular one), else departure
- * alone (a flyby) when no option leaves enough to capture. `departure` re-plans a chosen option. Leaves one node.
+ * In a parking orbit, during a station pass: plan the transfer to `target` with the map planner. From its options
+ * list a player takes the earliest departure the craft can pay for: departure plus an elliptical capture (about half
+ * the listed circular one), else departure alone (a flyby); the planner's own pick can be dearer than the craft
+ * (a 7.8 km/s "go now" for a 4.6 km/s Real probe). `departure` re-plans a chosen option. Leaves one node.
  */
 export function planDeparture(w: World, target: string, periapsis?: number, departure?: number): Departure | string {
   if (!awaitContact(w)) return 'no ground contact in parking orbit';
@@ -39,10 +39,11 @@ export function planDeparture(w: World, target: string, periapsis?: number, depa
   if (!plan) return `no ${target} transfer found`;
   if (departure === undefined) {
     const budget = dvLeft(w) * 0.9, options = [...(plan.windows ?? [])].sort((a, b) => a.departure - b.departure);
-    const pick = options.find(o => o.dv + 0.5 * (o.captureDv ?? 0) <= budget) ?? options.find(o => o.dv <= budget);
-    if (pick && pick.departure < plan.node.time - 30 * 86400) {
+    const pick = options.find(o => o.dv + 0.5 * (o.captureDv ?? 0) <= budget) ?? options.filter(o => o.dv <= budget).sort((a, b) => a.dv - b.dv)[0];
+    if (!pick && plan.dv > budget) return `the ${target} transfer needs ${plan.dv.toFixed(0)} m/s, ${dvLeft(w).toFixed(0)} aboard`;
+    if (pick && Math.abs(pick.departure - plan.node.time) > 86400) {
       w.removeNode(plan.node.id);
-      debug(`earlier option: ${((pick.departure - w.ut) / 86400).toFixed(0)} d, ${pick.dv.toFixed(0)} + ${(pick.captureDv ?? 0).toFixed(0)} m/s`);
+      debug(`option in ${((pick.departure - w.ut) / 86400).toFixed(0)} d instead: ${pick.dv.toFixed(0)} + ${(pick.captureDv ?? 0).toFixed(0)} m/s`);
       plan = planTransferToBody(w, target, { ...opts, departure: pick.departure }) ?? planTransferToBody(w, target, opts);
       if (!plan) return `no ${target} transfer found`;
     }
@@ -192,7 +193,7 @@ export function atmosphericLanding(w: World, biomes: Set<string>, shieldSpeed = 
     const s = w.active.state;
     if (s.situation === 'landed' || s.situation === 'splashed') break;
     const speed = length(w.surfaceVelocity(w.active));
-    const stage = !dropped && localFrame(w, w.active).altitude < top && speed < shieldSpeed;
+    const stage: boolean = !dropped && localFrame(w, w.active).altitude < top && speed < shieldSpeed;
     dropped ||= stage;
     w.warp = { mode: 'rails', index: 0 };
     w.tick(0.1, neutralInput({ stage, sas: 'retrograde', sasReference: 'surface' }));
