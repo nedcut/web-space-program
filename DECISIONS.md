@@ -1226,3 +1226,9 @@ Owner decisions 2026-10-13 (both recommended options).
   boundaries), and the night map is sampled only on the night side. This reduces
   steady regional GPU storage from about 107 MiB to 67 MiB including mipmaps. Urban
   edge coverage and core density share the alpha channel and are visual approximations.
+- Final acceptance is **not met**: paired production Medium GPU medians on RTX
+  3060 Ti are pad 2.415→2.453 ms, 10 km 2.131→2.253, 30 km 1.765→1.700 and orbit
+  2.019→2.124. The repeated 10 km regression prevents a no-slowdown claim. Keep
+  the implementation/evidence on `cx/groundlook` for the lead; do not waive the
+  performance requirement or silently move the feature to a different quality.
+  Method, screenshots and remaining acceptance: `docs/performance/groundlook.md`.
