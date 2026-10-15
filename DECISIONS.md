@@ -1201,3 +1201,9 @@ Owner decisions 2026-10-13 (both recommended options).
   dim the diffuse glow and resolve narrow streets only while the footprint permits.
   Inside the regional patch, one planar canopy fetch replaces six coarse triplanar
   noise taps; retain the finer nearby normal detail and blend continuously at edges.
+- The initial paired shader measurement still found a small GPU regression. Move the
+  regional spherical coordinate calculation to terrain vertices, keep the global
+  antimeridian-safe path outside the patch, and share the reflectance curve between
+  global and regional colour. A body-fixed hemisphere guard rejects interpolated UVs
+  across date-line triangles. Hidden seafloor returns before regional lookups; rural
+  fragments skip roof/street arithmetic. No extra per-frame CPU work or allocation.

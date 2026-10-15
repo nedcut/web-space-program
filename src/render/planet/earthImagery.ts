@@ -358,7 +358,7 @@ export class EarthImagery {
 
   /** Optional flight-only pack. Failed downloads retain the global imagery; no loading-screen gate. */
   private loadRegion(): void {
-    if (this.regionRequested || this.opts.maxLevel || this.opts.quality === 'low') return;
+    if (this.regionRequested || this.opts.maxLevel || this.opts.quality === 'low' || maxTextureSize() < 4096) return;
     this.regionRequested = true;
     const generation = ++this.regionGeneration;
     const day = acquireStrips(root() + 'packs/gulf-v1/day.webp', 'regionDay');

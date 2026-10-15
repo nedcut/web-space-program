@@ -317,6 +317,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       uniform sampler2D uEarthDay;
       uniform float uEarthImagery;
       varying float vCovered;
+      varying vec3 vGroundCoord;
       #endif
       void main() {
         ${GLSL_CHUNK_POSITION}
@@ -334,14 +335,15 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           vCovered = 0.0;
           vec3 relV = wp.xyz - uPlanetCenter;
           float hV = length(relV) - uPlanetRadius;
+          vec3 nV = normalize(transpose(uBodyRot) * relV);
+          vec2 uvV = vec2(atan(nV.y, nV.x) * (0.5 / ATMO_PI) + 0.5, 0.5 - asin(clamp(nV.z, -1.0, 1.0)) / ATMO_PI);
+          vGroundCoord = vec3((uvV - vec2(80.0 / 360.0, 55.0 / 180.0)) * vec2(9.0, 7.2), nV.x);
           #ifdef EARTH_RICH
             const float COAST_TEST = 1200.0; // coast sky reflection needs the mask above the datum too
           #else
             const float COAST_TEST = -10.0;  // only the covered test: land vertices skip the lookup
           #endif
           if (uEarthImagery > 0.5 && hV < COAST_TEST) {
-            vec3 nV = normalize(transpose(uBodyRot) * relV);
-            vec2 uvV = vec2(atan(nV.y, nV.x) * (0.5 / ATMO_PI) + 0.5, 0.5 - asin(clamp(nV.z, -1.0, 1.0)) / ATMO_PI);
             vec4 coarse = textureLod(uEarthDay, uvV, 5.0);
             float waterNear = coarse.a;
             #ifdef EARTH_RICH
@@ -372,6 +374,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       ${GLSL_SITE_SHADOW}
       #ifdef EARTH_IMAGERY
       varying float vCovered;
+      varying vec3 vGroundCoord;
       ${GLSL_EARTH_GROUND}
       #endif
       #ifdef EARTH_RICH
@@ -424,19 +427,16 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           // Regional geography persists close up. Take direction derivatives before any terrain discard;
           // analytic UV gradients keep later regional branches independent of texture derivative control flow.
           vec3 nDir = vec3(0.0, 0.0, 1.0), nDx = vec3(0.0), nDy = vec3(0.0);
-          bool imgUsed = uEarthImagery > 0.5 && (uEarthRegionOn > 0.5 || length(cameraPosition - vWorldPos) > uEarthBlend.x * 0.9 || dot(rel, uSunDir) < 0.04 * length(rel));
+          bool imgUsed = uEarthImagery > 0.5 && (length(cameraPosition - vWorldPos) > uEarthBlend.x * 0.9 || dot(rel, uSunDir) < 0.04 * length(rel));
           if (imgUsed) {
             nDir = normalize(transpose(uBodyRot) * rel);
             nDx = dFdx(nDir); nDy = dFdy(nDir);
           }
           EarthUV eUV;
           EarthUV regionUV;
+          regionUV.uv = vGroundCoord.xy;
+          regionUV.dx = dFdx(vGroundCoord.xy); regionUV.dy = dFdy(vGroundCoord.xy);
           float regionW = 0.0;
-          if (imgUsed) {
-            eUV = earthUVd(nDir, nDx, nDy);
-            regionUV = earthRegionUV(eUV);
-            regionW = earthRegionWeight(regionUV, length(cameraPosition - vWorldPos));
-          }
           vec3 settlement = vec3(0.0);
           float roads = 0.0;
         #endif
@@ -450,6 +450,20 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         #endif
         vec3 toCam = cameraPosition - vWorldPos;
         float dist = length(toCam);
+        #ifdef EARTH_IMAGERY
+          // Covered seafloor has already returned: never pay for spherical UVs or region tests there.
+          // A date-line triangle interpolates across the UV wrap. Its body-fixed X stays negative,
+          // so it cannot accidentally interpolate into the Gulf patch on the opposite hemisphere.
+          regionW = vGroundCoord.z > -0.5 ? earthRegionWeight(regionUV, dist) : 0.0;
+          if (regionW > 0.0) {
+            // The patch is far from the date line and poles. Interpolated geographic UVs avoid per-pixel
+            // atan/asin at close range; terrain subdivision keeps their error below the ~1 km source texel.
+            eUV.uv = regionUV.uv / vec2(9.0, 7.2) + vec2(80.0 / 360.0, 55.0 / 180.0);
+            eUV.dx = regionUV.dx / vec2(9.0, 7.2); eUV.dy = regionUV.dy / vec2(9.0, 7.2);
+            nDir = normalize(transpose(uBodyRot) * rel);
+            imgUsed = true;
+          } else if (imgUsed) eUV = earthUVd(nDir, nDx, nDy);
+        #endif
         vec3 V = toCam / dist;
         vec3 nBF = normalize(vNormalBF);
         vec3 N = normalize(uBodyRot * nBF);
@@ -534,24 +548,22 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           // these hidden fragments would otherwise pay for the imagery too).
           float waterW = 0.0;
           if (wImg > 0.0) {
-            eUV = earthUVd(nDir, nDx, nDy);
             vec4 dayW = earthTex(uEarthDay, eUV);
             vec3 c = dayW.rgb;
+            if (regionW > 0.0) {
+              c = mix(c, textureGrad(uEarthRegionDay, regionUV.uv, regionUV.dx, regionUV.dy).rgb, regionW);
+              settlement = textureGrad(uEarthRegionData, regionUV.uv, regionUV.dx, regionUV.dy).rgb;
+            }
             vec3 img = earthAlbedo(c);
             #ifdef USE_DETAIL
-              img *= 1.0 + hd * 0.6 * uDetailStrength;
+              img *= 1.0 + hd * 0.6 * uDetailStrength * (1.0 - regionW);
+              if (regionW > 0.0) {
+                vec2 p = regionUV.uv * vec2(0.618, 0.4363) * uPlanetRadius;
+                vec2 footprint = (abs(regionUV.dx) + abs(regionUV.dy)) * vec2(0.618, 0.4363) * uPlanetRadius;
+                img = mix(img, earthGroundColour(img, settlement.r, settlement.b, p, footprint, cover, hd, roads), regionW);
+              }
             #endif
-            if (regionW > 0.0) {
-              vec3 regional = earthAlbedo(textureGrad(uEarthRegionDay, regionUV.uv, regionUV.dx, regionUV.dy).rgb);
-              settlement = textureGrad(uEarthRegionData, regionUV.uv, regionUV.dx, regionUV.dy).rgb;
-              vec2 p = regionUV.uv * vec2(0.618, 0.4363) * uPlanetRadius;
-              vec2 footprint = (abs(regionUV.dx) + abs(regionUV.dy)) * vec2(0.618, 0.4363) * uPlanetRadius;
-              #ifdef USE_DETAIL
-                regional = earthGroundColour(regional, settlement.r, settlement.b, p, footprint, cover, hd, roads);
-              #endif
-              img = mix(img, regional, regionW);
-            }
-            waterW = earthCoast(earthWater(dayW.a, c), eUV) * wImg;
+            waterW = earthCoast(earthWater(dayW.a, dayW.rgb), eUV) * wImg;
             albedo = mix(albedo, mix(img, earthWaterAlbedo(c), waterW), wImg);
           }
         #endif
