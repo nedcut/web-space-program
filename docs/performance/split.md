@@ -57,7 +57,11 @@ The source audit compares parsed method bodies against `0f8fef3a`, ignoring only
 comments/formatting and enumerated receiver/argument renames. It matches 14 extracted
 method bodies, both extracted lighting blocks and 101 retained bodies. Constructors
 and frame integration are reviewed separately; this is not a claim of automatic equivalence for the whole
-program. No tests or assertions were changed.
+program. No tests or assertions were changed. Five existing benchmark diagnostics
+were updated to read the relocated private lighting/trajectory state:
+`cpu2-draws.mjs`, `gfxsettings-check.mjs`, `partsart.mjs`, `knobs/site.js` and
+`check-nbody-browser.mjs`. All five pass `node --check`, and lint passes after the
+updates. Their benchmark procedures were not otherwise changed.
 
 Focused map checks: 27 tests across presentation, maneuver interaction and zoom passed.
 - `npm run lint`: passed, including simulation layering across 77 modules.
