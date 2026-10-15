@@ -9,7 +9,7 @@ export function CrashOverlay({ error, onRecover }: { error: Error; onRecover: ()
   const [copyStatus, setCopyStatus] = useState('Copy report');
   const [loadError, setLoadError] = useState('');
   const canLoad = !game.get().multiplayer && !getTutorial() && !getScenarioRun() && safeHasQuicksave();
-  const report = `Web Space Program runtime report\n${new Date().toISOString()}\n${navigator.userAgent}\nScene: ${game.get().scene}\n${error.stack ?? error.message}`;
+  const report = `Web Space Program runtime report\n${new Date().toISOString()}\n${navigator.userAgent}\nScene: ${game.get().scene}\n${errorText(error)}`;
   const home = () => {
     if (getTutorial()) endTutorial();
     else if (getScenarioRun()) endScenario();
@@ -37,6 +37,12 @@ export function CrashOverlay({ error, onRecover }: { error: Error; onRecover: ()
       {loadError && <p>{loadError}</p>}
     </section>
   </div>;
+}
+
+/** Firefox stacks list frames only; keep the message in the report. */
+function errorText(error: Error): string {
+  const stack = error.stack ?? '';
+  return stack.includes(error.message) ? stack : `${error.name}: ${error.message}\n${stack}`;
 }
 
 /** The recovery screen must render even when storage itself is what failed. */

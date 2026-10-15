@@ -62,6 +62,20 @@ it('streams all porkchop rows in order, with data identical to the synchronous g
   expect(world.nodes).toEqual([]);
 });
 
+it('plans on this thread when the planning worker script fails to load, and reports worker exceptions', async () => {
+  const workers: { onerror: (e: { message: string }) => void; terminate: () => void }[] = [];
+  vi.stubGlobal('Worker', class { onerror!: (e: { message: string }) => void; postMessage() {} terminate = vi.fn(); constructor() { workers.push(this); } });
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  const world = parked();
+  const loadFailure = requestPlan('porkchop', planningSnapshot(world), { from: 'earth', target: 'saturn', ...ranges });
+  workers[0].onerror({ message: '' });
+  expect(workers[0].terminate).toHaveBeenCalled();
+  expect(await loadFailure.result).toEqual(porkchopGrid(world, 'earth', 'saturn', ranges.departures, ranges.flights));
+  const thrown = requestPlan('porkchop', planningSnapshot(world), { from: 'earth', target: 'saturn', ...ranges });
+  workers[1].onerror({ message: 'TypeError: x is undefined' });
+  await expect(thrown.result).rejects.toThrow('TypeError: x is undefined');
+});
+
 it('cancels in-process work between rows without emitting a result or more rows', async () => {
   const events: PlannerEvent[] = [];
   const handle = createPlannerHandler(event => {

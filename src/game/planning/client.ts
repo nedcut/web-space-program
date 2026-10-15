@@ -41,23 +41,30 @@ export function requestPlan<K extends PlanningOperation>(operation: K, snapshot:
     };
     options.signal?.addEventListener('abort', cancel, { once: true });
     if (options.signal?.aborted) { cancel(); return; }
+    // Isolate the fallback just like structured clone in postMessage.
+    const runInThread = () => {
+      const copy = structuredClone(request);
+      void import('./handler').then(({ createPlannerHandler }) => {
+        if (settled) return;
+        fallback = createPlannerHandler(receive);
+        return fallback(copy);
+      }).catch(error => receive({ type: 'error', id, name: 'Error', message: String(error) }));
+    };
     try {
       if (typeof Worker !== 'undefined') {
         worker = new Worker(new URL('./planner.worker.ts', import.meta.url), { type: 'module' });
         worker.onmessage = (event: MessageEvent<PlannerEvent>) => receive(event.data);
-        worker.onerror = event => receive({ type: 'error', id, name: 'Error', message: event.message || 'Planning worker failed' });
+        worker.onerror = event => {
+          if (event.message) return receive({ type: 'error', id, name: 'Error', message: event.message });
+          // The script itself did not load (network, dev server, stale build): plan on this thread instead.
+          console.error('[planning worker] script failed to load; planning on the main thread');
+          worker?.terminate(); worker = undefined;
+          if (!settled) runInThread();
+        };
         worker.onmessageerror = () => receive({ type: 'error', id, name: 'Error', message: 'Invalid planning worker response' });
         worker.postMessage({ type: 'earthData', ...earthDataMessage() });
         worker.postMessage(request);
-      } else {
-        // Isolate the fallback just like structured clone in postMessage.
-        const copy = structuredClone(request);
-        void import('./handler').then(({ createPlannerHandler }) => {
-          if (settled) return;
-          fallback = createPlannerHandler(receive);
-          return fallback(copy);
-        }).catch(error => receive({ type: 'error', id, name: 'Error', message: String(error) }));
-      }
+      } else runInThread();
     } catch (error) { receive({ type: 'error', id, name: 'Error', message: String(error) }); }
   });
   return { id, result, cancel };

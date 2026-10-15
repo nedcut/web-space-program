@@ -110,6 +110,8 @@ export default function FlightScene() {
       if (c && !c.network) { c.quicksave('autosave'); e.preventDefault(); }
     };
     const resume = () => audio?.resume();
+    // Recovered terrain worker failures (render/planet/workerPool.ts) stay visible without ending the flight.
+    const workerWarning = (e: Event) => c?.world.message((e as CustomEvent<string>).detail, 'warn');
     let readyTimer = 0;
     let bannerTimer = 0;
     let loaderTimer = 0;
@@ -189,6 +191,7 @@ export default function FlightScene() {
       unsub = cc.subscribe(setTele);
       // Leaving the page mid-flight: autosave and ask for confirmation (Ctrl+W / Ctrl+R are throttle-adjacent).
       window.addEventListener('beforeunload', beforeUnload);
+      window.addEventListener('wsp:worker-warning', workerWarning);
       Object.assign(window as unknown as Record<string, unknown>, { __flight: cc, __perf: frameProfiler });
       readyTimer = window.setInterval(() => {
         if (!cc.network && !cc.sceneReady) return;
@@ -213,6 +216,7 @@ export default function FlightScene() {
       window.clearTimeout(bannerTimer);
       window.clearTimeout(loaderTimer);
       window.removeEventListener('beforeunload', beforeUnload);
+      window.removeEventListener('wsp:worker-warning', workerWarning);
       window.removeEventListener('pointerdown', resume);
       window.removeEventListener('keydown', resume);
       cancelFlightEnd?.();

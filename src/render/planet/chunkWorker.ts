@@ -41,17 +41,20 @@ ctx.onmessage = async (ev: MessageEvent<InMsg>) => {
     terrains.set(msg.key, createTerrain(msg.body, { minWavelength: msg.minWavelength }));
     return;
   }
-  const terrain = terrains.get(msg.key);
-  if (!terrain) {
-    ctx.postMessage({ type: 'error', id: msg.id, error: `terrain ${msg.key} not initialised` });
-    return;
-  }
-  if (msg.type === 'build') {
-    const data = buildChunk(terrain, msg.params);
-    ctx.postMessage({ type: 'chunk', id: msg.id, data }, transferablesOf(data));
-  } else if (msg.type === 'bake') {
-    const result = bakeEquirect(terrain, msg.width);
-    ctx.postMessage({ type: 'bake', id: msg.id, result }, [result.data.buffer]);
+  // A failing request is reported with its ID (the caller retries); the worker and its terrains stay usable.
+  try {
+    const terrain = terrains.get(msg.key);
+    if (!terrain) throw new Error(`terrain ${msg.key} not initialised`);
+    if (msg.type === 'build') {
+      const data = buildChunk(terrain, msg.params);
+      ctx.postMessage({ type: 'chunk', id: msg.id, data }, transferablesOf(data));
+    } else if (msg.type === 'bake') {
+      const result = bakeEquirect(terrain, msg.width);
+      ctx.postMessage({ type: 'bake', id: msg.id, result }, [result.data.buffer]);
+    }
+  } catch (error) {
+    console.error('[terrain worker] request failed', error);
+    ctx.postMessage({ type: 'error', id: msg.id, error: error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error) });
   }
 };
 

@@ -3,7 +3,10 @@ import type { BodyDef } from '../../sim/bodies/types';
 import type { Terrain } from '../../sim/terrain/api';
 import { buildChunk, type ChunkBuildParams, type ChunkData } from './chunkBuilder';
 import { bakeEquirect, type BakeResult } from './bake';
-import { earthDataSource } from './earthSource';
+import { earthDataSource, type EarthDataMessage } from './earthSource';
+
+/** Worker replacements per session before a failing slot retires. */
+const MAX_RESPAWNS = 3;
 
 interface Pending {
   resolve: (v: unknown) => void;
@@ -17,14 +20,15 @@ interface Pending {
  */
 export class TerrainWorkerPool {
   private static _shared: TerrainWorkerPool | null = null;
-  private workers: Worker[] = [];
+  private workers: (Worker | null)[] = [];
   private inflight: number[] = [];
   private pending = new Map<number, Pending>();
   private nextId = 1;
-  private earthSent = false;
+  /** Sent to every (re)spawned worker once an Earth terrain is registered. */
+  private earthMessage: EarthDataMessage | null = null;
+  private respawns = 0;
   private terrains = new Map<string, Terrain>();
   private registered = new Map<string, { body: BodyDef; minWavelength: number }>();
-  readonly available: boolean;
   private disposed = false;
   private baked = new Map<string, BakeResult>();
   private baking = new Map<string, Promise<BakeResult>>();
@@ -36,32 +40,62 @@ export class TerrainWorkerPool {
   }
 
   constructor(workerCount: number, private readonly bakeCacheBytes = 16 * 1024 * 1024) {
-    let ok = false;
     if (typeof Worker !== 'undefined' && workerCount > 0) {
       try {
         const hc = typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 4;
         const n = Math.max(1, Math.min(workerCount, hc - 1));
-        for (let i = 0; i < n; i++) {
-          const w = new Worker(new URL('./chunkWorker.ts', import.meta.url), { type: 'module', name: `terrain-${i}` });
-          w.onmessage = (ev) => this.onMessage(i, ev.data);
-          w.onerror = (ev) => {
-            console.warn('[terrain worker] error', ev.message);
-            window.dispatchEvent(new CustomEvent('wsp:worker-error', { detail: `Terrain worker failed: ${ev.message}` }));
-          };
-          this.workers.push(w);
-          this.inflight.push(0);
-        }
-        ok = this.workers.length > 0;
+        for (let i = 0; i < n; i++) { this.workers.push(this.spawn(i)); this.inflight.push(0); }
       } catch (e) {
         console.warn('[terrain worker] unavailable, using main thread', e);
         this.workers = [];
       }
     }
-    this.available = ok;
+  }
+
+  /** False once no worker is usable: callers then build on the main thread under their frame budget. */
+  get available(): boolean {
+    return this.workers.some(w => w !== null);
+  }
+
+  /** A new worker receives the Earth grid and every registered terrain, in registration order. */
+  private spawn(i: number): Worker {
+    const w = new Worker(new URL('./chunkWorker.ts', import.meta.url), { type: 'module', name: `terrain-${i}` });
+    w.onmessage = (ev) => this.onMessage(i, ev.data);
+    w.onerror = (ev) => {
+      ev.preventDefault();
+      this.fail(i, ev.message ? `${ev.message} (${ev.filename}:${ev.lineno})` : 'worker script failed to load');
+    };
+    if (this.earthMessage) w.postMessage({ type: 'earthData', ...this.earthMessage });
+    for (const [key, { body, minWavelength }] of this.registered) w.postMessage({ type: 'init', key, body, minWavelength });
+    return w;
+  }
+
+  /**
+   * An uncaught worker error loses that worker's terrains and requests. Its callers see rejections and retry; the
+   * worker is replaced a few times per session, after which the slot retires (all retired: main-thread building).
+   */
+  private fail(i: number, reason: string): void {
+    const w = this.workers[i];
+    if (!w || this.disposed) return;
+    w.terminate();
+    for (const [id, p] of this.pending) if (p.worker === i) { this.pending.delete(id); p.reject(new Error(`Terrain worker failed: ${reason}`)); }
+    this.inflight[i] = 0;
+    const respawn = this.respawns < MAX_RESPAWNS;
+    if (respawn) this.respawns++;
+    this.workers[i] = respawn ? this.trySpawn(i) : null;
+    const outcome = this.workers[i] ? 'restarted' : this.available ? 'retired' : 'unavailable, using the main thread';
+    console.error(`[terrain worker] terrain-${i} failed: ${reason}; ${outcome}`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('wsp:worker-warning', { detail: `Terrain worker failed (${reason}) and was ${outcome === 'restarted' ? 'restarted' : 'stopped'}` }));
+    }
+  }
+
+  private trySpawn(i: number): Worker | null {
+    try { return this.spawn(i); } catch { return null; }
   }
 
   get workerCount(): number {
-    return this.workers.length;
+    return this.workers.filter(w => w !== null).length;
   }
 
   get totalInflight(): number {
@@ -72,22 +106,23 @@ export class TerrainWorkerPool {
     this.terrains.set(key, terrain);
     if (this.registered.has(key)) return;
     this.registered.set(key, { body, minWavelength });
-    if (this.workers.length && body.surface.preset === 'earth' && !this.earthSent) {
+    if (this.workers.length && body.surface.preset === 'earth' && !this.earthMessage) {
       // Blob structured cloning shares its immutable backing store. Materialise ArrayBuffers in the
       // workers instead of synchronously copying the 16 MiB grid once per worker on the render thread.
       // Prefer the host's fetched Blob; building a new one copies the grid again on this thread.
       const host = earthDataSource();
       const buffer = host ? undefined : earthData().buffer;
-      const source = host ? host() : buffer instanceof ArrayBuffer ? { blob: new Blob([buffer]) } : { buffer: buffer! };
-      for (const w of this.workers) w.postMessage({ type: 'earthData', ...source });
-      this.earthSent = true;
+      this.earthMessage = host ? host() : buffer instanceof ArrayBuffer ? { blob: new Blob([buffer]) } : { buffer: buffer! };
+      for (const w of this.workers) w?.postMessage({ type: 'earthData', ...this.earthMessage });
     }
-    for (const w of this.workers) w.postMessage({ type: 'init', key, body, minWavelength });
+    for (const w of this.workers) w?.postMessage({ type: 'init', key, body, minWavelength });
   }
 
   private pickWorker(): number {
-    let best = 0;
-    for (let i = 1; i < this.inflight.length; i++) if (this.inflight[i] < this.inflight[best]) best = i;
+    let best = -1;
+    for (let i = 0; i < this.workers.length; i++) {
+      if (this.workers[i] && (best < 0 || this.inflight[i] < this.inflight[best])) best = i;
+    }
     return best;
   }
 
@@ -97,7 +132,7 @@ export class TerrainWorkerPool {
     this.inflight[wi]++;
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, worker: wi });
-      this.workers[wi].postMessage({ ...msg, id });
+      this.workers[wi]!.postMessage({ ...msg, id });
     });
   }
 
@@ -156,7 +191,7 @@ export class TerrainWorkerPool {
   dispose(): void {
     this.disposed = true;
     this.baked.clear(); this.baking.clear(); this.bakedBytes = 0;
-    for (const w of this.workers) w.terminate();
+    for (const w of this.workers) w?.terminate();
     this.workers = [];
     for (const p of this.pending.values()) p.reject(new Error('disposed'));
     this.pending.clear();
