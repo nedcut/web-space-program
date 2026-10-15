@@ -11,8 +11,9 @@ async function load(isolated: boolean) {
   vi.stubGlobal('crossOriginIsolated', isolated);
   // Each host file is served separately; the loader joins them in EARTH_FILES order.
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    const split = EARTH_FILES[0].bytes;
-    return new Response(new Blob([url.endsWith(EARTH_FILES[0].path) ? bytes.subarray(0, split / 2) : bytes.subarray(split / 2)]));
+    const index = EARTH_FILES.findIndex(file => url.endsWith(file.path));
+    const start = EARTH_FILES.slice(0, index).reduce((sum, file) => sum + file.bytes, 0);
+    return new Response(new Blob([new Uint8Array(bytes.buffer, start, EARTH_FILES[index].bytes)]));
   }));
   const loader = await import('../src/game/earthLoader');
   const data = await import('../src/sim/terrain/earthData');

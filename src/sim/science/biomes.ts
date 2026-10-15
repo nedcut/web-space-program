@@ -8,7 +8,7 @@ import { add, cross, dot, normalize, scale, type Vec3 } from '../../util/vec3';
 export type Situation = 'landed' | 'splashed' | 'flyingLow' | 'flyingHigh' | 'spaceLow' | 'spaceHigh';
 export const BIOMES: Record<string, readonly string[]> = {
   ...Object.fromEntries(['vesta', 'pallas', 'hygiea', 'bennu', 'ryugu', 'itokawa', 'eros', 'psyche', 'halley', '67p'].map(id => [id, ['Surface']])),
-  earth: ['Oceans', 'Shores', 'Grasslands', 'Deserts', 'Mountains', 'Ice Caps', 'Launch Complex', 'Forests', 'Rainforests', 'Tundra'],
+  earth: ['Oceans', 'Shores', 'Grasslands', 'Deserts', 'Mountains', 'Ice Caps', 'Launch Complex', 'Forests', 'Rainforests', 'Tundra', 'Wetlands', 'Lakes'],
   moon: ['Highlands', 'Lowland Maria', 'Polar Craters', 'Crater Rims'],
   mars: ['Plains', 'Highlands', 'Canyons', 'Polar Caps', 'Volcanic Rise'],
   titan: ['Hydrocarbon Seas', 'Dunes', 'Highlands'],
