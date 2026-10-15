@@ -2,7 +2,7 @@ import { earthCover } from '../terrain/earthCover';
 import { earthData } from '../terrain/earthData';
 import type { Body } from '../bodies/types';
 import type { Terrain, RGB } from '../terrain/api';
-import { LAUNCH_SITE, latLonToUnit } from '../terrain';
+import { coastLift, LAUNCH_SITE, latLonToUnit } from '../terrain';
 import { add, cross, dot, normalize, scale, type Vec3 } from '../../util/vec3';
 
 export type Situation = 'landed' | 'splashed' | 'flyingLow' | 'flyingHigh' | 'spaceLow' | 'spaceHigh';
@@ -23,8 +23,8 @@ export function biomeAt(body: Body, terrain: Terrain, direction: Vec3): string {
   if (body.id === 'earth') {
     if (Math.acos(Math.min(1, dot(d, latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon)))) * body.radius < 2500) return 'Launch Complex';
     const sample = { range: 0, coastal: false };
-    earthData().sample(d.x, d.y, d.z, sample);
-    const elevation = terrain.heightAt(d.x, d.y, d.z) * 8800 / body.surface.relief;
+    const metres = earthData().sample(d.x, d.y, d.z, sample);
+    const elevation = (terrain.heightAt(d.x, d.y, d.z) - coastLift(metres)) * 8800 / body.surface.relief;
     return earthCover(Math.asin(d.z) * 180 / Math.PI, Math.atan2(d.y, d.x) * 180 / Math.PI, elevation, sample.coastal);
   }
   const h = terrain.heightAt(d.x, d.y, d.z);

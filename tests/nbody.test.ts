@@ -39,8 +39,9 @@ function worldOrbit(radius=4e6) {
 describe('precise gravity',()=>{
   it('keeps the OFF physics/rails/unpack trace bit for bit',()=>{
     // Golden trace of the patched-conic (OFF) mode. Originally generated before precise gravity existed;
-    // regenerated once when physics moved to the dominant body's translating frame (DECISIONS, op/moonxfer).
-    expect(createHash('sha256').update(JSON.stringify(gravityOffTrace())).digest('hex')).toBe('81ba66e65bba9ecf631aa04074efeacddb6f6c035d402694dd7ab70f4a5ea855');
+    // regenerated when physics moved to the dominant body's translating frame (DECISIONS, op/moonxfer), and when
+    // the launch site moved west (D-006 amendment): the trace keeps the pad launch orientation.
+    expect(createHash('sha256').update(JSON.stringify(gravityOffTrace())).digest('hex')).toBe('29ce805f2cdb8fd1bf7365d28b1f15e3ec75423e1318c1ac21d6ddca3d26acdf');
   });
   it('keeps each save isolated, defaults old saves off, and preserves numerical rails state',()=>{
     const {world,v}=worldOrbit();world.setPreciseGravity(true);world.showLagrangePoints=true;

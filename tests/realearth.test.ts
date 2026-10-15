@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { Worker } from 'node:worker_threads';
-import { EarthGrid, EARTH_DATA_BYTES, earthData } from '../src/sim/terrain/earthData';
-import { createTerrain, latLonToUnit, LAUNCH_SITE, RUNWAY, siteLocalToUnit } from '../src/sim/terrain';
+import { CAPE_PATCH, EarthGrid, EARTH_DATA_BYTES, EARTH_FILES, earthData } from '../src/sim/terrain/earthData';
+import { COAST_LIFT, createTerrain, latLonToUnit, LAUNCH_SITE, launchPlateau, RUNWAY, siteClearance, siteLocalToUnit } from '../src/sim/terrain';
 import { Universe } from '../src/game/universe';
 import { biomeAt, BIOMES } from '../src/sim/science/biomes';
 import { buildChunk } from '../src/render/planet/chunkBuilder';
@@ -21,32 +21,119 @@ const point = (lat: number, lon: number): [number, number, number] => {
 const elevation = (lat: number, lon: number) => earthData().sample(...point(lat, lon));
 
 describe('real Earth geography', () => {
-  it('loads the committed little-endian metre grid and verifies its manifest hash', () => {
-    const bytes = readFileSync(new URL('../public/earth/height.i16', import.meta.url));
+  it('loads the committed little-endian metre grids and verifies their manifest hashes', () => {
     const manifest = JSON.parse(readFileSync(new URL('../public/earth/manifest.json', import.meta.url), 'utf8'));
+    const parts = EARTH_FILES.map(file => {
+      const bytes = readFileSync(new URL(`../public/earth/${file.path}`, import.meta.url));
+      expect(bytes.length).toBe(file.bytes);
+      expect(createHash('sha256').update(bytes).digest('hex')).toBe(manifest.files.find((f: { path: string }) => f.path === file.path).sha256);
+      return bytes;
+    });
+    const bytes = Buffer.concat(parts);
     expect(bytes.length).toBe(EARTH_DATA_BYTES);
-    expect(createHash('sha256').update(bytes).digest('hex')).toBe(manifest.files[0].sha256);
     expect(() => new EarthGrid(new ArrayBuffer(4))).toThrow('bytes');
     const grid = new EarthGrid(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length));
     expect(grid.sample(...point(24, 15))).toBe(elevation(24, 15));
+    expect(grid.sample(...point(28.47, -80.56))).toBe(elevation(28.47, -80.56));
   });
-  it('puts measured mountains, trenches, deserts and oceans at real coordinates', () => {
-    expect(elevation(28, 86.9)).toBeGreaterThan(5500);
-    expect(elevation(11.35, 142.2)).toBeLessThan(-8500);
-    expect(elevation(24, 15)).toBeGreaterThan(0);
-    expect(elevation(0, -30)).toBeLessThan(-3000);
-    expect(elevation(-80, 0)).toBeGreaterThan(2000);
-    expect(elevation(28.5, -79.5)).toBeLessThan(-100);
+  it('resolves the Cape Canaveral barrier islands and lagoons from the 15 arc-second patch', () => {
+    // Cape Canaveral, Merritt Island and the mainland are land; the Banana and Indian Rivers between them are water.
+    expect(elevation(28.47, -80.56)).toBeGreaterThan(0);
+    expect(elevation(28.53, -80.68)).toBeGreaterThan(0);
+    expect(elevation(28.5, -80.83)).toBeGreaterThan(0);
+    expect(elevation(28.5, -80.61)).toBeLessThanOrEqual(0);
+    expect(elevation(28.5, -80.75)).toBeLessThanOrEqual(0);
+    expect(elevation(28.5, -80.5)).toBeLessThan(0);
+    // The global grid alone (bilinear on its 9.8 km cells) puts the Cape under the sea.
+    const g = earthData().values, px = (-80.56 / 360 + .5) * 4096 - .5, py = (90 - 28.47) / 180 * 2048 - .5;
+    const ix = Math.floor(px), iy = Math.floor(py), fx = px - ix, fy = py - iy, at = (x: number, y: number) => g[y * 4096 + x];
+    expect((at(ix, iy) * (1 - fx) + at(ix + 1, iy) * fx) * (1 - fy) + (at(ix, iy + 1) * (1 - fx) + at(ix + 1, iy + 1) * fx) * fy).toBeLessThan(0);
+  });
+  it('blends the patch into the global grid without seams', () => {
+    const P = CAPE_PATCH, east = P.west + P.width / P.perDegree, south = P.north - P.height / P.perDegree;
+    const out = { range: 0, shore: 0 }, inside = { range: 0, shore: 0 };
+    let worst = 0;
+    // Straddle each edge by a hair: the patch weight is zero there, so height, range and shore must agree.
+    const edges: [number, number, number, number][] = [];
+    for (let t = 0; t <= 1; t += 1 / 64) {
+      const lat = south + (P.north - south) * t, lon = P.west + (east - P.west) * t;
+      edges.push([lat, P.west - 1e-9, lat, P.west + 1e-9], [lat, east + 1e-9, lat, east - 1e-9]);
+      edges.push([P.north + 1e-9, lon, P.north - 1e-9, lon], [south - 1e-9, lon, south + 1e-9, lon]);
+    }
+    for (const [la0, lo0, la1, lo1] of edges) {
+      const a = earthData().sample(...point(la0, lo0), out), b = earthData().sample(...point(la1, lo1), inside);
+      worst = Math.max(worst, Math.abs(a - b));
+      expect(Math.abs(out.range - inside.range)).toBeLessThan(.01);
+      expect(Math.abs((out.shore ?? 0) - (inside.shore ?? 0))).toBeLessThan(.001);
+    }
+    expect(worst).toBeLessThan(.01);
+    // Through the blend margin and its inner edge, where sampling switches to the patch alone, there are no jumps:
+    // 1e-6 degree (0.1 m) steps change height by centimetres.
+    for (const lat of [25, 27.5, 30]) for (let lon = P.west; lon < P.west + P.margin + .01; lon += .0007) {
+      expect(Math.abs(elevation(lat, lon + 1e-6) - elevation(lat, lon))).toBeLessThan(.1);
+    }
+    for (const lat of [25, 27.5, 30]) {
+      const edge = P.west + P.margin;
+      expect(Math.abs(elevation(lat, edge + 1e-9) - elevation(lat, edge - 1e-9))).toBeLessThan(.001);
+    }
   });
   it('preserves the exact pad/runway on land and ocean eastward at all scales', () => {
     for (const scale of ['standard', 'challenging', 'real'] as const) {
       const u = new Universe(scale), t = u.terrain('earth'), r = u.body('earth').radius;
-      expect(t.heightAt(...point(LAUNCH_SITE.lat, LAUNCH_SITE.lon))).toBe(10);
+      const plateau = launchPlateau(u.body('earth').surface.relief);
+      expect(plateau).toBeGreaterThan(0);
+      expect(t.heightAt(...point(LAUNCH_SITE.lat, LAUNCH_SITE.lon))).toBe(plateau);
       for (const x of [-RUNWAY.length / 2, 0, RUNWAY.length / 2]) for (const z of [RUNWAY.z - 30, RUNWAY.z + 30]) {
-        const p = siteLocalToUnit(x, z, r); expect(t.heightAt(p.x, p.y, p.z)).toBe(10);
+        const p = siteLocalToUnit(x, z, r); expect(t.heightAt(p.x, p.y, p.z)).toBe(plateau);
       }
       expect(t.heightAt(...point(28.5, -79.5))).toBeLessThan(0);
       expect(t.heightAt(...point(28.5, -81.1))).toBeGreaterThan(0);
+      // Cape Canaveral stays land and the Atlantic beside it stays sea.
+      expect(t.heightAt(...point(28.47, -80.56))).toBeGreaterThan(0);
+      expect(t.heightAt(...point(28.47, -80.5))).toBeLessThan(0);
+    }
+  });
+  it('never raises water to land outside the flat site ground', () => {
+    for (const scale of ['standard', 'challenging', 'real'] as const) {
+      const u = new Universe(scale), t = u.terrain('earth'), r = u.body('earth').radius;
+      let water = 0;
+      for (let x = -6000; x <= 6000; x += 61) for (let z = -6000; z <= 6000; z += 61) {
+        if (siteClearance(x, z) <= 0) continue;
+        const p = siteLocalToUnit(x, z, r);
+        if (earthData().sample(p.x, p.y, p.z) > 0) continue;
+        water++;
+        expect(t.heightAt(p.x, p.y, p.z)).toBeLessThanOrEqual(0);
+      }
+      expect(water).toBeGreaterThan(100);
+    }
+  });
+  it('keeps low coasts clear of the ocean shoreline noise at every scale', () => {
+    // The ocean shader moves its shoreline by up to ±2 m. Florida's low land and shallow lagoons (a few real metres,
+    // scaled down) must stay outside that band once the data is COAST_LIFT.ramp from sea level, or water speckles land.
+    const site = latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon);
+    for (const scale of ['standard', 'challenging', 'real'] as const) {
+      const u = new Universe(scale), t = u.terrain('earth'), r = u.body('earth').radius;
+      let land = 0, water = 0;
+      for (let lat = 27; lat <= 29.5; lat += .013) for (let lon = -81.2; lon <= -80.2; lon += .011) {
+        const p = point(lat, lon), metres = earthData().sample(...p);
+        if (Math.acos(Math.min(1, p[0] * site.x + p[1] * site.y + p[2] * site.z)) * r < 4000) continue;
+        const h = t.heightAt(...p);
+        expect(Math.sign(h)).toBe(Math.sign(metres));
+        if (Math.abs(metres) < COAST_LIFT.ramp) continue;
+        expect(Math.abs(h)).toBeGreaterThanOrEqual(COAST_LIFT.lift);
+        if (metres > 0) land++; else water++;
+      }
+      expect(land).toBeGreaterThan(1000);
+      expect(water).toBeGreaterThan(1000);
+    }
+  });
+  it('keeps the Shores band of the global grid along the Florida coast', () => {
+    for (const scale of ['standard', 'challenging', 'real'] as const) {
+      const u = new Universe(scale), t = u.terrain('earth'), earth = u.body('earth');
+      // Vero Beach: low land inside the global grid's coastal band, beyond the Launch Complex radius on every scale.
+      expect(biomeAt(earth, t, latLonToUnit(27.6, -80.38))).toBe('Shores');
+      expect(biomeAt(earth, t, latLonToUnit(28.5, -80.4))).toBe('Oceans');
+      expect(biomeAt(earth, t, latLonToUnit(28.5, -81.6))).toBe('Forests');
     }
   });
   it('is continuous across antimeridian and converges to one height at each pole', () => {

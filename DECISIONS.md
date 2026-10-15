@@ -1183,6 +1183,51 @@ Owner decisions 2026-10-13 (both recommended options).
   failure within 10 s of such a reload shows the crash screen (offline or broken deploy, not a stale build).
   Mid-flight scenes never auto-reload on the worker change alone.
 
+## Launch region terrain: Florida height patch and footprint plateau (2026-10-14, op/capefix)
+
+- **Problem:** the launch plateau (3 km flat disc + 3.5 km blend at +10 m, centred at 28.5° N, 80.6° W) sat in the
+  Banana River lagoon. The disc is in playable metres, so on the Standard scale (s = 0.1) it covered ~65 km of real
+  Florida and raised a round island into the Atlantic (the "tumor" east of the Cape). The 9.8 km global grid also
+  had no Cape Canaveral or Merritt Island at all.
+- **Regional heights:** `public/earth/height-cape.i16` holds native ETOPO 2022 15 arc-second pixels (~460 m) for
+  24.25–31° N, 87.75–79.5° W (all of Florida), 1980 × 1620 int16 = 6.4 MB (2.2 MB gzipped), CC0. Built by
+  `scripts/earth-data/patch.mjs` from two pinned tiles (URL + SHA-256 in the manifest). Hosts concatenate it after
+  `height.i16` into the one buffer `installEarthData` already takes, so the worker / SharedArrayBuffer path is
+  unchanged (+6.4 MB per non-isolated worker). `EarthGrid.sample` uses the patch inside its bounds, easing to the
+  global grid over a 0.25° margin (height and roughness blend; seams are tested). The coast flags (`coastal` for the
+  Shores biome, `shore` for beach colour) stay on the global grid: the patch's one-pixel coast ring drew blocky sand
+  outlines from altitude (finer than the terrain vertices) and shrank Shores to a 460 m line. Outside the bounds
+  the global path is the previous code, bit for bit.
+- **Coast lift (all of Earth, all scales):** below ~4 km the ocean mesh draws the coast, moving its shoreline by up
+  to ±2 m of noise. Scaled relief (s^0.8: ×0.16 Standard, ×0.40 Challenging) put low coasts inside that band, so
+  the patch's real Florida lowlands (Merritt Island, the mainland shore, lagoons 1–3 m deep) rendered as speckled
+  shallow water and bared lagoon floors; deltas elsewhere (Netherlands) did the same before the patch. Heights now
+  add `coastLift(metres)`: +2.5 playable m on land and −2.5 m on sea floor, ramped in over the first 1 real m, so
+  the coastline (height 0) stays where the data puts it and only ground within 1 m of sea level is left to the
+  noise. Biomes and the cover palette subtract the lift exactly, so biome boundaries do not move. Cost: Cape-region
+  chunk builds +6% (shared box, noisy), others unchanged.
+- **D-006 amendment, site move:** the pad moves 0.23° west to **28.5° N, 80.83° W**, the mainland shore of the Indian
+  River (22 km in real geography; 2.2 km of playable distance on Standard). Latitude, and so launch inclination,
+  is unchanged. No spot on Merritt Island or the Cape works on every scale: on Standard the runway's east end and
+  the assembly building would reach the Atlantic (searched 28.2–28.8° N with the actual footprint at all three
+  scales). Here the whole complex stands on real land on Real and Challenging; on Standard ~19% of it crosses the
+  Indian River (the runway becomes a causeway) and nothing reaches the Atlantic.
+- **Footprint plateau:** only the complex's own ground is flat: capsules for the pad hub (520 m), crawlerway +
+  assembly building, service road, taxiway and runway with blast pads (`SITE_GROUND`, `siteClearance`). Within
+  400 m of it, land eases toward the plateau; water keeps its depth, so the site never adds coastline. Plateau
+  height is land at 6 real metres including the coast lift (`launchPlateau`): 3.45 m on Standard, 4.9 m on
+  Challenging, 8.5 m on Real (was a flat 10 m), clear of the ocean's shoreline noise where the Standard runway
+  crosses the Indian River. Site vegetation skips water; the planet scatter exclusion keeps its 3 km disc
+  (`LAUNCH_SITE.sceneryRadius`).
+- **Compatibility:** saved vessels landed at the old pad position are now beside the Banana River (they keep their
+  body-fixed coordinates). Comms station, 'Launch Complex' biome, recovery distance and runway spawn all follow
+  `LAUNCH_SITE`. The gravity-off golden trace in `tests/nbody.test.ts` was regenerated: it starts from the pad
+  launch orientation; restoring the old longitude reproduces the old hash exactly.
+- **Imagery water mask:** with the patch, the Natural Earth/Blue Marble water mask agrees with the terrain sign on
+  99.9% of non-coastal 8k mask pixels over Florida (34 disagreeing pixels, was 198); the best alignment shift is
+  zero, so no coordinate fix was needed. From altitude the coast follows the mask, so the Indian River under the
+  Standard-scale runway still reads as water from orbit and as land on the ground.
+
 ## Map biomes, objective targets, cities, near-surface map (2026-10-14, op/mapbiomes)
 
 - **Biome overlay = the science rules, sampled.** `sim/science/biomeMap.ts` classifies an equirectangular grid with
