@@ -12,8 +12,11 @@ import { setRGB, type PresetContext, type PresetResult } from './common';
  * surrounding land eases toward the plateau; `sceneryRadius` (m) bounds the site's own vegetation.
  */
 export const LAUNCH_SITE = { lat: 28.5, lon: -80.83, elevation: 6, blend: 400, sceneryRadius: 3000 } as const;
-/** Plateau height in playable metres for a body with Earth's scaled `relief`. */
-export const launchPlateau = (relief: number): number => LAUNCH_SITE.elevation * (relief / 8800);
+/**
+ * Plateau height in playable metres for a body with Earth's scaled `relief`: `elevation` scaled like the grid, but at
+ * least 3 m, clear of the ocean shader's ±2 m shoreline noise (shallow water would speckle a lower plateau).
+ */
+export const launchPlateau = (relief: number): number => Math.max(3, LAUNCH_SITE.elevation * (relief / 8800));
 
 /**
  * Pad flame pit in the pad's local frame (metres: +X east, +Z south): a square hole of half size `half` centred

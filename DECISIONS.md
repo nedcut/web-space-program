@@ -1205,8 +1205,9 @@ Owner decisions 2026-10-13 (both recommended options).
 - **Footprint plateau:** only the complex's own ground is flat: capsules for the pad hub (520 m), crawlerway +
   assembly building, service road, taxiway and runway with blast pads (`SITE_GROUND`, `siteClearance`). Within
   400 m of it, land eases toward the plateau; water keeps its depth, so the site never adds coastline. Plateau
-  height is 6 real metres scaled with relief like the grid (`launchPlateau`): 0.95 m on Standard, 6 m on Real
-  (was a flat 10 m). Site vegetation skips water; the planet scatter exclusion keeps its 3 km disc
+  height is 6 real metres scaled with relief like the grid, but at least 3 m (`launchPlateau`): 3 m on Standard and
+  Challenging, 6 m on Real (was a flat 10 m). The floor keeps the plateau clear of the ocean shader's ±2 m
+  shoreline noise where the Standard runway crosses the Indian River. Site vegetation skips water; the planet scatter exclusion keeps its 3 km disc
   (`LAUNCH_SITE.sceneryRadius`).
 - **Compatibility:** saved vessels landed at the old pad position are now beside the Banana River (they keep their
   body-fixed coordinates). Comms station, 'Launch Complex' biome, recovery distance and runway spawn all follow
