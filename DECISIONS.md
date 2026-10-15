@@ -1528,3 +1528,33 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   regional Gulf asset at runtime. Global Black Marble is radiance, not a built-up
   mask; using it as one would also grey roads and non-city light sources. Adding
   a global urban asset and its loading contract is outside this focused fix.
+
+## Worker failures and flight load (2026-10-15, op/workerfix)
+- **Owner crash ("Planning worker failed" / terrain worker overlay, Zen on macOS).** The report's frames name
+  `src/…` files with esbuild line numbers (no sourcemaps in prod), so the owner ran the Vite dev server. The planner
+  text is the message-less `onerror` branch, which Firefox fires only when a worker *script fails to load*. Exceptions
+  inside the async terrain `onmessage` become rejections and never reach `Worker.onerror` (checked in Firefox).
+  Blocking `planner.worker`/`chunkWorker` in real Firefox reproduces both owner messages on main ("Planning worker
+  failed", "Flight interrupted"). Why the dev server failed to serve the scripts (restart, mid-pull file, network) is
+  not provable from here.
+- **Recovery rather than crash.** A terrain worker error terminates that worker and rejects its requests; the quadtree
+  and the far bake already retry rejections. The worker respawns with the Earth grid and every registered terrain.
+  There are 3 respawns per session in total; after that, failing slots retire, and with none left the pool builds on
+  the main thread (`available` is now derived). The flight shows a warning message (`wsp:worker-warning`), and the
+  crash overlay no longer listens for worker errors. Request-level worker exceptions now come back with their
+  request ID and stack instead of leaving a promise pending forever. A planning worker that fails to load plans
+  on the main thread through the existing in-process handler; worker exceptions that carry a message are still
+  reported. The crash report now includes the error message, because Firefox's `Error.stack` lists frames only.
+- **Flight load: bakes no longer block chunk builds.** The pool sent chunk builds to the least-loaded worker, which
+  is often the one running a multi-second far-LOD bake. A Moon bake (3.1 s, Chrome Medium) held the first Earth
+  chunks and the loading screen behind it. Builds now prefer workers with no bake running, and at most n−1 workers
+  bake at once, with extra bakes queued in the pool. Chrome, prod, Medium, `?flight=stock-selene`: flight ready 8.0–8.9 s → 5.3–5.6 s on a loaded box, and 4.4–5.3 s → 3.0–3.3 s in an interleaved rerun on a quiet box.
+  Firefox: 21–24 s → 13–17 s.
+- **Not changed, measured.** The Earth wave did not regress loads in Chrome: flight ready was ~8 s and menu ~150 ms
+  warm, both before (e995b809) and after. Cold loads move 2.3 MB more (cape heights), and precache is 32.5 → 38.9 MB.
+  Remaining costs:
+  (a) Firefox shader warm-up, 8–15 s on the Windows box (ANGLE, no `KHR_parallel_shader_compile`). The time
+  accumulates as a GPU-process backlog across ~88 programs, so per-program waits mislead.
+  (b) The first-frame main-thread task (~2 s): part AO/soot bakes, which are cached per session (the `?flight=`
+  shortcut pays them, while editor → launch already has them), plus LaunchSite procedural textures (~0.5 s).
+  (c) The 22.4 MiB Earth grid gates the menu: ~150 ms warm, ~3 s cold over the WSL port forward.

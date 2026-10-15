@@ -12,16 +12,13 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
   };
   private onError = (event: ErrorEvent) => this.fail(event.error ?? event.message);
   private onRejection = (event: PromiseRejectionEvent) => this.fail(event.reason);
-  private onWorkerError = (event: Event) => this.fail((event as CustomEvent<string>).detail);
   componentDidMount() {
     window.addEventListener('error', this.onError);
     window.addEventListener('unhandledrejection', this.onRejection);
-    window.addEventListener('wsp:worker-error', this.onWorkerError);
   }
   componentWillUnmount() {
     window.removeEventListener('error', this.onError);
     window.removeEventListener('unhandledrejection', this.onRejection);
-    window.removeEventListener('wsp:worker-error', this.onWorkerError);
   }
   render() {
     if (this.state.error && reloadingForUpdate) return null;
