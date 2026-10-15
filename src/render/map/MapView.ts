@@ -25,7 +25,7 @@ import type { Orbit, TrajectoryPatch, ManeuverNode } from '../../sim/orbit/api';
 import { maneuverToInertialDv } from '../../sim/orbit/maneuver';
 import { formatDistance, formatDuration } from '../../util/format';
 import { elementsToState, periapsisRadius, apoapsisRadius, period } from '../../sim/orbit/kepler';
-import { add, length, sub, type Vec3 } from '../../util/vec3';
+import { length, type Vec3 } from '../../util/vec3';
 import {
   GIZMO_HANDLES, applyHandle, applyWheel, closestOnPolyline, handlePull, handleScreenDirection, handleStretch, screenPolyline, slideWindow,
   wheelZoomFactor,
