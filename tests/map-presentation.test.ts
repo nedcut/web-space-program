@@ -104,4 +104,28 @@ describe('map presentation', () => {
     expect(map.camera.position.length()).toBeLessThan(6e11);
     map.dispose();
   });
+
+  it('never renders from inside the reference body: turning, easing or a focus change', () => {
+    vi.stubGlobal('document', { createElement: host });
+    const bodies = createUniverse('standard'), ephem = createEphemeris(bodies);
+    const map = new MapView(bodies, ephem, host() as unknown as HTMLElement);
+    const earth = ephem.getBodyState('earth', 0).position, R = bodies.get('earth')!.radius;
+    const surface = { x: earth.x + R, y: earth.y, z: earth.z };
+    const sphere = (map as unknown as { bodies: Map<string, { sphere: THREE.Object3D }> }).bodies.get('earth')!.sphere;
+    const frame = (focusId: string, focus: typeof earth) => {
+      map.update({ t: 0, focusId, referenceBody: 'earth', focus, viewport: { width: 1280, height: 800 } });
+      return map.camera.position.distanceTo(sphere.position) / R;
+    };
+    // Close above a surface focus, looking down: allowed.
+    map.yaw = 0; map.pitch = 0; map.distance = 0.15 * R; frame('ascent:earth', surface);
+    expect(frame('ascent:earth', surface)).toBeCloseTo(1.15, 3);
+    // Turned to look up from below the surface: the very next frame is outside, on the far side.
+    map.yaw = Math.PI;
+    expect(frame('ascent:earth', surface)).toBeGreaterThanOrEqual(1.01 - 1e-9);
+    // Back above and close, then the focus swings to the centre (reaching orbit) while the zoom eases out.
+    map.yaw = 0; map.distance = 0.15 * R;
+    for (let i = 0; i < 5; i++) frame('ascent:earth', surface);
+    map.distance = 3 * R;
+    for (let i = 0; i < 30; i++) expect(frame('earth', earth)).toBeGreaterThanOrEqual(1.01 - 1e-9);
+  }, 60_000);
 });

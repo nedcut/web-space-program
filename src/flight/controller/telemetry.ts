@@ -297,6 +297,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     inclination,
     scienceReady: readyScience(w, wv),
     stageLocked: this.stageLocked,
+    nightVision: this.nightVision,
     vesselName: st.name,
     flightData: flightData(w, wv, dvs, internals.predictions),
     crew: w.crewFor(st),

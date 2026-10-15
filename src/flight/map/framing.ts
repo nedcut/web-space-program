@@ -1,10 +1,65 @@
 import type { Orbit, TrajectoryPatch } from '../../sim/orbit/api';
 import { firstPlannedPatch } from '../../render/map/orbitMarkers';
+import { add, cross, distance, dot, length, normalize, scale, sub, type Vec3 } from '../../util/vec3';
 
 /** Bound the entry frame to the local orbit; an escaping path has no finite apoapsis. */
 export function orbitFrameDistance(radius: number, currentRadius: number, orbit?: Orbit): number {
   const ap = orbit && orbit.e < 1 ? orbit.a * (1 + orbit.e) : currentRadius;
   return 2.8 * Math.max(radius * 1.2, currentRadius, Math.min(ap, Math.max(currentRadius * 3, radius * 4)));
+}
+
+/**
+ * Whether the map shows the ascent view: from the ground until the periapsis clears `clearance` (the atmosphere top,
+ * or the surface on an airless body) or the path escapes. A suborbital vessel enters it only while climbing below
+ * `clearance`, so a deorbit or a descent keeps the orbit view. `r`, `v` are body-relative.
+ */
+export function ascentPhase(was: boolean, landed: boolean, r: Vec3, v: Vec3, mu: number, clearance: number): boolean {
+  if (landed) return true;
+  const h = length(cross(r, v)), e = length(eccentricity(r, v, mu));
+  const escaping = dot(v, v) / 2 >= mu / length(r);
+  if (escaping || h * h / (mu * (1 + e)) > clearance) return false;
+  return was || dot(r, v) > 0 && length(r) < clearance;
+}
+
+/**
+ * Ascent view: centred between the vessel and its apoapsis (moved towards the vessel up to the surface when the
+ * apoapsis is far round the body), framing both over a stretch of the horizon. Returns the body-relative centre and the frame distance.
+ */
+export function ascentFrame(r: Vec3, v: Vec3, mu: number, radius: number): { centre: Vec3; distance: number } {
+  const ev = eccentricity(r, v, mu), e = length(ev), a = 1 / (2 / length(r) - dot(v, v) / mu);
+  const ap = e > 1e-9 && a > 0 ? scale(ev, -a * (1 + e) / e) : r;
+  const centre = aboveSurface(scale(add(r, ap), 0.5), r, radius);
+  return { centre, distance: Math.max(radius * 0.8, distance(r, ap) * 1.5) };
+}
+
+/** Map camera yaw/pitch that looks at the ascent from beside its plane and above the vessel's horizon (never from inside the body). */
+export function ascentAngles(r: Vec3, v: Vec3): { yaw: number; pitch: number } {
+  const up = normalize(r), h = cross(r, v);
+  const d = normalize(length(h) > 0 ? add(normalize(h), scale(up, 0.3)) : up);
+  return { yaw: Math.atan2(d.y, d.x), pitch: Math.max(-1.55, Math.min(1.55, Math.asin(Math.max(-1, Math.min(1, d.z))))) };
+}
+
+/**
+ * Closest map camera distance from an ascent `centre` (at or above the surface) for the camera direction `yaw`/`pitch`:
+ * looking from above the centre's horizon any distance stays outside the body; from below, the camera must stay
+ * beyond the far side.
+ */
+export function ascentMinDistance(centre: Vec3, yaw: number, pitch: number, radius: number): number {
+  const cp = Math.cos(pitch), up = centre.x * Math.cos(yaw) * cp + centre.y * Math.sin(yaw) * cp + centre.z * Math.sin(pitch);
+  return up >= 0 ? radius * 0.15 : length(centre) + radius * 1.05;
+}
+
+/** `mid` if it is above the surface, else the point where the segment from `mid` to the vessel `r` reaches it. */
+function aboveSurface(mid: Vec3, r: Vec3, radius: number): Vec3 {
+  if (length(mid) >= radius) return mid;
+  if (length(r) <= radius) return r;
+  const d = sub(r, mid), a = dot(d, d), b = dot(mid, d), c = dot(mid, mid) - radius * radius;
+  const t = (-b + Math.sqrt(b * b - a * c)) / a;
+  return add(mid, scale(d, t));
+}
+
+function eccentricity(r: Vec3, v: Vec3, mu: number): Vec3 {
+  return scale(sub(scale(r, dot(v, v) - mu / length(r)), scale(v, dot(r, v))), 1 / mu);
 }
 
 /** firstTransition: no SOI change on the flown path. */

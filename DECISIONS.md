@@ -1170,6 +1170,14 @@ Owner decisions 2026-10-13 (both recommended options).
   lab, then Mission Control, while funds stay above a reserve of 40 k × multiplier. Standard: Moon landing still
   flight 5, day 6.8 (unchanged); 290 k spent on upgrades, 77 k left after the landing (was 335 k). Tables in
   docs/BALANCE.md.
+- **Night vision and ascent map view (2026-10-14):** Night vision (NIGHT VIS lamp by the altimeter, or F7;
+  off by default, not persisted) is render-only: a camera headlight plus a stronger hemisphere fill, both scaled by
+  `1 − sunVisibility`, so it does nothing in full sun and is safe to leave on. Planet terrain shaders ignore it.
+  The flight map centres between the active vessel and its apoapsis from the ground until the periapsis clears the
+  atmosphere top (the surface on airless bodies) or the path escapes; a suborbital vessel only enters this view
+  while climbing below that height, so deorbits and entries keep the orbit view. Opening the map in this phase looks
+  from beside the orbit plane, tilted above the vessel's horizon (camera outside the body at any zoom); zoom reaches
+  0.15 R from that centre.
 
 ## Stale build after a service-worker update (2026-10-14)
 
