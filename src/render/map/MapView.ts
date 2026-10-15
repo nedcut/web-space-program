@@ -38,6 +38,8 @@ import { GLYPH_PX, LABEL_SHADOW, cssHex, glyphForKey, markerGlyphSvg, type Marke
 import { setPosition, setStyle } from './styleWriter';
 import { coveredIndex, nodeClearSpot, nudgeClear, overlapsAny } from './hudAvoid';
 import { HudRectCache } from './hudRects';
+import { SurfaceLayers, type BiomeTarget, type LegendEntry } from './surfaceLayers';
+import type { BiomeMap } from '../../sim/science/biomeMap';
 
 /**
  * Map view ("tracking" view): conic orbit lines for bodies and vessels, body spheres + icons,
@@ -297,6 +299,10 @@ export class MapView {
   private labelBoxes: LabelBox[] = [];
   private iconBoxes: LabelBox[] = [];
   private labelCount = 0;
+  /** Accepted labels after marker captions (surface labels place after these). */
+  private markerLabelCount = 0;
+  /** Biome overlay, objective highlights and city labels. */
+  readonly surface: SurfaceLayers;
   private orderedBodies: BodyVisual[] = [];
   private hoverBody: BodyVisual | null = null;
   private tooltip: HTMLDivElement;
@@ -533,6 +539,43 @@ export class MapView {
     }
   }
 
+  /** Where biome maps come from (the host's worker); without one there is no biome overlay. */
+  setBiomeSource(source: ((body: Body) => Promise<BiomeMap | null>) | null) { this.surface.setSource(source); }
+
+  /** Translucent biome regions, outlines and region names on every body with more than one biome. */
+  setBiomeOverlay(enabled: boolean) { this.surface.setBiomes(enabled); }
+
+  get biomeOverlayEnabled() { return this.surface.biomes; }
+
+  /** Earth city labels (on by default). */
+  setCityLabels(enabled: boolean) { this.surface.setCities(enabled); }
+
+  get cityLabelsEnabled() { return this.surface.cities; }
+
+  /** Biomes named by active objectives: always highlighted and labelled. */
+  setBiomeTargets(targets: readonly BiomeTarget[]) { this.surface.setTargets(targets); }
+
+  /** Biomes on a body's map (objectives first); null until the map has been built. */
+  biomeLegend(bodyId: string): LegendEntry[] | null { return this.surface.legend(bodyId); }
+
+  /** Body-fixed unit vector inside a biome region (nearest to `near` if given), or null. */
+  biomeAnchor(bodyId: string, biome: string, near?: Vec3): Vec3 | null { return this.surface.anchor(bodyId, biome, near); }
+
+  /**
+   * Turn the camera to look straight down on a body-fixed direction of `bodyId` from `radii` body radii out.
+   * Meant for a focus on that body's centre (inertial camera angles).
+   */
+  lookAtSurface(bodyId: string, direction: Vec3, t: number, radii = 2.6) {
+    const body = this.bodies.get(bodyId)?.body;
+    if (!body) return;
+    const q = this.ephem.bodyRotation(bodyId, t);
+    const d = this.poleScratch.set(direction.x, direction.y, direction.z).normalize().applyQuaternion(this.quatScratch.set(q.x, q.y, q.z, q.w));
+    this.yaw = Math.atan2(d.y, d.x);
+    this.pitch = Math.max(-1.55, Math.min(1.55, Math.asin(Math.max(-1, Math.min(1, d.z)))));
+    this.distance = body.radius * radii;
+    this.zoomCount++;
+  }
+
   /** Highlight the navigation target (its orbit and icon); null clears. */
   setTarget(t: MapTarget | null) {
     if (this.target?.id === t?.id && this.target?.kind === t?.kind) return;
@@ -574,6 +617,7 @@ export class MapView {
   }
 
   private readonly pickPoint: MapPoint = { x: 0, y: 0 };
+  private readonly surfaceFrame: SurfaceFrameArgs = { camera: this.camera, width: 1, height: 1, pxPerWorld1: 1, boxes: [], count: 0 };
   /** Body/vessel icon (or resolved sphere, or optionally orbit line) under a CSS-pixel position. */
   private pickObject(x: number, y: number, orbits: boolean): MapPick | null {
     const u = this.lastUpdate;
@@ -701,6 +745,7 @@ export class MapView {
     this.breadcrumb = document.createElement('div');
     Object.assign(this.breadcrumb.style, { position: 'absolute', bottom: '24px', left: '50%', transform: 'translateX(-50%)', padding: '8px 16px', color: '#c8d9ee', background: '#0a1525bb', border: '1px solid #7997ba33', borderRadius: '20px', font: '12px system-ui', letterSpacing: '.08em' });
     this.labels.appendChild(this.breadcrumb);
+    this.surface = new SurfaceLayers(this.scene, this.labels, bodies);
     for (const b of bodies.values()) {
       if (b.kind === 'comet') { const fx = new CometEffects(); this.comets.set(b.id, fx); this.scene.add(fx.root); }
       const isStar = b.kind === 'star';
@@ -774,7 +819,7 @@ export class MapView {
       line.material.dashed = true; line.visible = false;
       this.warmObjects.push(line);
     }
-    this.warmObjects.push(this.approachLine, this.ghost, ...this.gizmo.flatMap(g => [g.line, g.icon]));
+    this.warmObjects.push(this.approachLine, this.ghost, this.surface.warmObject, ...this.gizmo.flatMap(g => [g.line, g.icon]));
   }
 
   private makeLine(pts: Vec3[], color: number, width: number, opacity: number, look: OrbitLook): Line2 {
@@ -930,10 +975,7 @@ export class MapView {
     this.camera.aspect = u.viewport.width / u.viewport.height;
 
     // Camera around focus (focus is at the scene origin).
-    const cp = Math.cos(this.pitch);
-    this.camera.position.set(Math.cos(this.yaw) * cp * this.renderedDistance, Math.sin(this.yaw) * cp * this.renderedDistance, Math.sin(this.pitch) * this.renderedDistance);
-    this.camera.up.set(0, 0, 1);
-    this.camera.lookAt(0, 0, 0);
+    this.placeCamera(u);
     this.camera.near = Math.max(.1, this.renderedDistance * 1e-6);
     this.camera.far = this.renderedDistance * 1e6;
     this.camera.updateProjectionMatrix();
@@ -986,7 +1028,11 @@ export class MapView {
         vis.sphere.updateMatrix();
       }
       if (resolved && !vis.renderer) {
-        const quality = { ...QUALITY_PRESETS.low, bakedTextureWidth: this.quality.bakedTextureWidth };
+        // Earth imagery follows the flight setting (capped at the bundled 4k level by farOnly); 96+ segments keep the
+        // limb round when the camera is down near the surface.
+        const quality = { ...QUALITY_PRESETS.low, bakedTextureWidth: this.quality.bakedTextureWidth,
+          sphereSegments: Math.max(96, this.quality.sphereSegments),
+          earth: { ...QUALITY_PRESETS.low.earth, textureQuality: this.quality.earth.textureQuality, nightLights: this.quality.earth.nightLights } };
         const sunRadius = this.bodies.get(this.sunId)!.body.radius;
         const scale = { ...SCALE_PRESETS.standard, s: sunRadius / 696340000 };
         vis.renderer = new PlanetRenderer(vis.body, vis.body.solidSurface ? createTerrain(vis.body) : null,
@@ -1015,11 +1061,13 @@ export class MapView {
         vis.renderer.root.visible = resolved && !resource;
         if (rotation) { params.bodyPosition = pos; params.bodyRotation = rotation; vis.renderer.update(params); }
       }
+      this.surface.placeBody(vis.body.id, vis.sphere.position, resolved && !resource ? rotation : undefined);
       if (resolved && occluderCount < 12) this.orbitStyle.occluders[occluderCount++].set(vis.sphere.position.x, vis.sphere.position.y, vis.sphere.position.z, vis.body.radius);
       vis.icon.visible = visible && angular < .009;
 
       if (vis.orbitLine) {
-        vis.orbitLine.visible = visible;
+        // Looking at the ground, other bodies' orbits are only lines streaking across the view.
+        vis.orbitLine.visible = visible && this.surfaceBlend < 0.999;
         const hovered = this.hoverBody === vis, targeted = this.target?.kind === 'body' && this.target.id === vis.body.id;
         const style = (hovered ? 1 : 0) | (targeted ? 2 : 0);
         if (style !== vis.lineStyle) {
@@ -1027,7 +1075,7 @@ export class MapView {
           vis.orbitLine.material.color.setHex(targeted ? TARGET_COLOR : vis.familyColor);
           vis.orbitLine.material.linewidth = hovered || targeted ? WIDTH.highlight : vis.body.kind === 'moon' ? WIDTH.moon : WIDTH.planet;
         }
-        vis.orbitLine.material.opacity = (hovered || targeted ? .95 : .62) * Math.max(0, ringFade);
+        vis.orbitLine.material.opacity = (hovered || targeted ? .95 : .62) * Math.max(0, ringFade) * (1 - this.surfaceBlend);
         // An orbit far larger than the screen (e.g. the focused planet's path round the Sun) is faint and fades
         // towards the screen edges instead of slicing across the view as a straight line.
         const radiusPx = vis.body.orbit ? vis.body.orbit.a * (1 + vis.body.orbit.e) / Math.max(dist, 1) * pxPerWorld1 : 0;
@@ -1087,10 +1135,65 @@ export class MapView {
     this.updateNodes(u);
     this.updateGizmo(u, dt);
     this.updateMarkers(u);
+    const frame = this.surfaceFrame;
+    frame.width = w; frame.height = h; frame.pxPerWorld1 = pxPerWorld1; frame.boxes = this.labelBoxes; frame.count = this.markerLabelCount;
+    this.surface.update(frame);
     if (this.pointer.inside && !this.drag && now - this.lastHoverAt > 100) this.setHover(this.computeHover(this.pointer.x, this.pointer.y));
     else if (this.drag?.kind === 'handle' && now - this.lastHoverAt > 80) this.setHover({ kind: 'handle', index: this.drag.index, nodeId: this.drag.nodeId });
     this.updateGhost(u);
   }
+
+  /**
+   * Orbit the camera round the focus. Far out, yaw/pitch are inertial (ecliptic) angles. Zoomed in on a point near a
+   * body's surface (a landed or low vessel), they become angles in that point's local frame instead, the pitch
+   * mapped to 11°–86° above the horizon, so the view looks down on the ground around the focus rather than
+   * through the planet. Either way the camera is kept outside the body.
+   */
+  private placeCamera(u: MapUpdate) {
+    const d = this.renderedDistance, cy = Math.cos(this.yaw), sy = Math.sin(this.yaw), cp = Math.cos(this.pitch);
+    let x = cy * cp, y = sy * cp, z = Math.sin(this.pitch), ux = 0, uy = 0, uz = 1;
+    this.surfaceBlend = 0;
+    const ref = u.referenceBody ? this.bodies.get(u.referenceBody)?.body : undefined;
+    let rx = 0, ry = 0, rz = 0, r = 0;
+    if (ref?.solidSurface) {
+      const c = this.ephem.getBodyState(ref.id, u.t).position;
+      rx = u.focus.x - c.x; ry = u.focus.y - c.y; rz = u.focus.z - c.z; r = Math.hypot(rx, ry, rz);
+      const R = ref.radius;
+      // Fades in as the focus nears the surface (a vessel; the following focus slides there as the view zooms in).
+      const blend = (1 - smoothstep(R * 2.2, R * 4, d)) * smoothstep(R * 0.3, R * 0.9, r) * (1 - smoothstep(R * 1.25, R * 1.6, r));
+      this.surfaceBlend = blend;
+      if (blend > 0) {
+        const upX = rx / r, upY = ry / r, upZ = rz / r;
+        // East and north from the body's spin axis (body-fixed +Z).
+        const q = this.ephem.bodyRotation(ref.id, u.t);
+        const pole = this.poleScratch.set(0, 0, 1).applyQuaternion(this.quatScratch.set(q.x, q.y, q.z, q.w));
+        let ex = pole.y * upZ - pole.z * upY, ey = pole.z * upX - pole.x * upZ, ez = pole.x * upY - pole.y * upX;
+        const el = Math.hypot(ex, ey, ez);
+        if (el < 1e-6) { ex = 1; ey = 0; ez = 0; } else { ex /= el; ey /= el; ez /= el; }
+        const nx = upY * ez - upZ * ey, ny = upZ * ex - upX * ez, nz = upX * ey - upY * ex;
+        const lp = 0.2 + (this.pitch + 1.55) / 3.1 * 1.3, lc = Math.cos(lp), ls = Math.sin(lp);
+        // Heading offset: the default yaw puts the camera south of the focus, so north is up on screen.
+        const hc = Math.cos(this.yaw + LOCAL_HEADING), hs = Math.sin(this.yaw + LOCAL_HEADING);
+        const lx = lc * (hc * ex + hs * nx) + ls * upX, ly = lc * (hc * ey + hs * ny) + ls * upY, lz = lc * (hc * ez + hs * nz) + ls * upZ;
+        x += (lx - x) * blend; y += (ly - y) * blend; z += (lz - z) * blend;
+        const len = Math.hypot(x, y, z);
+        if (len < 1e-3) { x = lx; y = ly; z = lz; } else { x /= len; y /= len; z /= len; }
+        ux += (upX - ux) * blend; uy += (upY - uy) * blend; uz += (upZ - uz) * blend;
+      }
+    }
+    this.camera.position.set(x * d, y * d, z * d);
+    if (r > 0) {
+      // Never inside the body: push the camera out along the body radius through it.
+      const R = ref!.radius * 1.01, cx = x * d + rx, cyy = y * d + ry, cz = z * d + rz, cr = Math.hypot(cx, cyy, cz);
+      if (cr < R) this.camera.position.set(cx * R / cr - rx, cyy * R / cr - ry, cz * R / cr - rz);
+    }
+    this.camera.up.set(ux, uy, uz).normalize();
+    this.camera.lookAt(0, 0, 0);
+  }
+  /** How far the camera has turned to the local horizon of a near-surface focus (0 = inertial view). */
+  private surfaceBlend = 0;
+  private readonly poleScratch = new THREE.Vector3();
+  private readonly quatScratch = new THREE.Quaternion();
 
   /** Faint SOI boundary for the hovered body and for every body the predicted path enters. */
   private updateSoiShells(u: MapUpdate) {
@@ -1485,6 +1588,7 @@ export class MapView {
       setStyle(el.text, 'padding', pinned ? '3px 7px' : '0');
     }
     for (let i = 0; i < this.markerEls.length; i++) setStyle(this.markerEls[i].text, 'display', i < this.shownCount && captioned[i] ? 'block' : 'none');
+    this.markerLabelCount = labelCount;
   }
 
   // ---------- Hover, tooltips and gestures ----------
@@ -1526,6 +1630,10 @@ export class MapView {
         return null;
       }
       case 'object': {
+        if (h.pick.kind === 'body') {
+          const surface = this.surface.describe(this.pointer.x, this.pointer.y, { camera: this.camera, width: u.viewport.width, height: u.viewport.height });
+          if (surface) return surface;
+        }
         const extra = this.handlers.describe?.(h.pick) ?? null;
         if (h.pick.kind === 'vessel') return extra ?? h.pick.id;
         const b = this.bodies.get(h.pick.id)?.body;
@@ -1732,6 +1840,9 @@ export class MapView {
   /** Show the built-in focus breadcrumb (hosts with their own focus readout turn it off). */
   showBreadcrumb = true;
 
+  /** Camera distance drawn this frame (eased towards `distance`). */
+  get viewDistance() { return this.renderedDistance || this.distance; }
+
   /** Start the eased camera distance from `d` (e.g. a zoom-out transition when the map opens). */
   animateFrom(d: number) {
     if (d > 0 && Number.isFinite(d)) this.renderedDistance = d;
@@ -1757,6 +1868,7 @@ export class MapView {
     this.comets.clear();
     this.sunGlow.material.map?.dispose();
     for (const texture of this.resourceTextures.values()) texture.dispose();
+    this.surface.dispose();
     this.resourceTextures.clear();
     this.labels.remove();
     for (const vis of this.bodies.values()) {
@@ -1771,6 +1883,10 @@ export class MapView {
     });
   }
 }
+
+type SurfaceFrameArgs = Parameters<SurfaceLayers['update']>[0];
+/** Default map yaw (0.6) plus this is −90°: the near-surface view starts looking north. */
+const LOCAL_HEADING = -Math.PI / 2 - 0.6;
 
 function smoothstep(e0: number, e1: number, x: number) {
   const k = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
