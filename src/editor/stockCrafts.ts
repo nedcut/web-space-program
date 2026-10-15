@@ -6,6 +6,7 @@ import { v3, type Vec3 } from '../util/vec3';
 import { autoStageByDepth, CraftEditor, type PartCatalog } from './core';
 import { surfaceTransform } from './surface';
 import { buildCricket, buildFizzwick, buildPackmule, buildSaltstreak, buildSkipjack, buildTrekker } from './stock/fun';
+import { spaceStock } from './stock/space';
 
 /**
  * Pre-built stock crafts, assembled programmatically through CraftEditor so attach positions, symmetry
@@ -209,8 +210,14 @@ export function buildSwift(catalog: PartCatalog = PART_CATALOG): CraftDef {
 export function buildRingrunner(catalog: PartCatalog = PART_CATALOG): CraftDef {
   const b = new Builder(catalog, 'Ringrunner Saturn Probe',
     'Three-stage Saturn explorer: heavy launcher, hydrolox departure stage, solar-powered orbital probe. Designed for the standard universe.');
+  ringrunner(b, false);
+  return b.done();
+}
+
+/** Ringrunner stack; `shrouded` puts the probe in a 2.5 m fairing (dropped when the departure stage lights). */
+function ringrunner(b: Builder, shrouded: boolean): number {
   const probe = b.root('probe-cairn');
-  b.stack(probe, 'nose-1', 'top');
+  if (!shrouded) b.stack(probe, 'nose-1', 'top');
   const battery = b.stack(probe, 'battery-drum');
   const wheel = b.stack(battery, 'wheel-gyre-1');
   const capture = b.stack(wheel, 'tank-1-long');
@@ -219,14 +226,14 @@ export function buildRingrunner(catalog: PartCatalog = PART_CATALOG): CraftDef {
   const engine = b.stack(capture, 'eng-zephyr');
   const dec = b.stack(engine, 'dec-1');
   const adapter = b.stack(dec, 'adapt-1-2');
-  const transfer = b.stack(adapter, 'tank-2-mid');
+  const transfer = b.stack(shrouded ? b.stack(adapter, 'fairing-2') : adapter, 'tank-2-mid');
   const foehn = b.stack(transfer, 'eng-foehn');
   const boosterDec = b.stack(foehn, 'dec-2');
   const top = b.stack(boosterDec, 'tank-2-short');
   const booster = b.stack(top, 'tank-2-long');
   b.stack(booster, 'eng-chinook');
   b.radial(booster, 'fin-pivot', 4, -2.6, 0);
-  return b.done();
+  return probe;
 }
 
 /** Small orbital tug for rendezvous & docking practice (spawned in orbit by `?scenario=rendezvous`). */
@@ -244,10 +251,10 @@ export function buildTender(catalog: PartCatalog = PART_CATALOG): CraftDef {
 }
 
 /** Complete two-stage delivery stack; keep payload propulsion behind its own separation ring. */
-function delivery(b: Builder, payloadEngine: number, heavy = false): void {
+function delivery(b: Builder, payloadEngine: number, heavy = false, shrouded = false): void {
   const dec = b.stack(payloadEngine, 'dec-1');
   const adapter = b.stack(dec, 'adapt-1-2');
-  const upper = b.stack(adapter, 'tank-2-mid');
+  const upper = b.stack(shrouded ? b.stack(adapter, 'fairing-2') : adapter, 'tank-2-mid');
   const engine = b.stack(upper, 'eng-foehn');
   const sep = b.stack(engine, 'dec-2');
   if (heavy) {
@@ -426,16 +433,13 @@ export function buildPlumeSampler(catalog: PartCatalog = PART_CATALOG): CraftDef
 }
 
 export function buildRingTour(catalog: PartCatalog = PART_CATALOG): CraftDef {
-  const craft = buildRingrunner(catalog);
-  const b = new Builder(catalog, 'Gossamer Ring Observatory', 'Saturn delivery rocket with an isotope-powered science probe and Horizon relay. Stay above the rings during the tour. Research required.', 'VAB', craft);
-  const core = craft.parts.find(p => p.partId === 'probe-cairn')!.uid;
+  const b = new Builder(catalog, 'Gossamer Ring Observatory',
+    'Three-stage Saturn ring-tour and deep-space relay. Isotope-powered probe in a payload fairing; standard universe. Research required.');
+  const core = ringrunner(b, true);
   b.radial(core, 'antenna-horizon', 1, 0, 0);
   b.radial(core, 'generator-isotope', 2, 0, 90);
   b.radial(core, 'sensor-thermal', 1, 0, 180);
-  const result = b.done();
-  result.name = 'Gossamer Ring Observatory';
-  result.description = 'Three-stage Saturn ring-tour and deep-space relay. Isotope-powered probe; standard universe. Research required.';
-  return result;
+  return b.done();
 }
 
 export function buildHeavyLifter(catalog: PartCatalog = PART_CATALOG): CraftDef {
@@ -455,14 +459,13 @@ export function buildHeavyLifter(catalog: PartCatalog = PART_CATALOG): CraftDef 
 }
 
 export function buildRelayLauncher(catalog: PartCatalog = PART_CATALOG): CraftDef {
-  const b = new Builder(catalog, 'Beaconseed Relay Launcher', 'Guided relay deployment stack: raise apoapsis, circularize with the payload motor and leave the Lattice array above the horizon. Research required.');
+  const b = new Builder(catalog, 'Beaconseed Relay Launcher', 'Guided relay deployment stack: raise apoapsis, circularize with the payload motor and leave the Lattice array above the horizon. The relay rides in a payload fairing. Research required.');
   const core = b.root('probe-cairn');
-  b.stack(core, 'nose-1', 'top');
   const tank = b.stack(core, 'tank-1-mid');
   b.radial(tank, 'antenna-relay', 2, 0.5, 90);
   b.radial(tank, 'solar-fold', 2, -0.2, 0);
   const engine = b.stack(tank, 'eng-doldrum');
-  delivery(b, engine);
+  delivery(b, engine, false, true);
   return b.done();
 }
 
@@ -659,7 +662,7 @@ const STOCK_GUIDE: Record<string, Pick<StockCraft, 'category' | 'tags' | 'tip'>>
   'stock-alembic': { category: 'orbit', tags: ['lab-crucible', 'solar-grand-1', 'dock-1'], tip: 'Dock it to Hearthlight and bring scientists aboard to process experiment data.' },
   'stock-longreach': { category: 'orbit', tags: ['eng-hearth', 'radiator-1', 'cabin-wayfarer'], tip: 'Low thrust, huge efficiency: refuel in orbit, then plan a long burn towards Mars.' },
   'stock-atlaswake': { category: 'orbit', tags: ['tank-4-long', 'eng-monsoon', 'adapt-3-4'], tip: 'Open it in the Integration Hall and swap the nose cone for your own payload.' },
-  'stock-beaconseed': { category: 'orbit', tags: ['antenna-relay', 'eng-doldrum', 'eng-chinook'], tip: 'Launch two or three, spaced around the same orbit, for continuous coverage.' },
+  'stock-beaconseed': { category: 'orbit', tags: ['antenna-relay', 'fairing-2', 'eng-doldrum', 'eng-chinook'], tip: 'Launch two or three, spaced around the same orbit, for continuous coverage.' },
   'stock-swift': { category: 'aircraft', tags: ['jet-kittiwake', 'wing-broadleaf', 'gear-bogie', 'tail-hawk'], tip: 'Fly a circuit and land back on the runway: line up early and come in slow and shallow.' },
   'stock-daybreak': { category: 'aircraft', tags: ['jet-shrike', 'eng-needle', 'intake-snout'], tip: 'Climb on jets as high as they will take you, stage the aerospike, then shut the jets down.' },
   'stock-moonmoth': { category: 'aircraft', tags: ['rover-wheel-0', 'generator-isotope', 'scanner-assay'], tip: 'Practise driving on the runway first; the monopropellant thruster gives it a hop.' },
@@ -671,7 +674,7 @@ const STOCK_GUIDE: Record<string, Pick<StockCraft, 'category' | 'tags' | 'tip'>>
   'stock-frostwhisker': { category: 'worlds', tags: ['sensor-exposure', 'antenna-horizon', 'leg-stilt'], tip: "Pass low over Enceladus's south pole to fly through the plume." },
   'stock-pebblecatcher': { category: 'worlds', tags: ['sensor-sample', 'rcs-nudge', 'leg-stilt'], tip: "Bennu barely pulls: touch down at walking pace with RCS taps, then collect a sample." },
   'stock-ringrunner': { category: 'worlds', tags: ['eng-foehn', 'battery-drum', 'wheel-gyre-1'], tip: 'Pick a Saturn transfer window in the planner before you leave Earth orbit.' },
-  'stock-gossamer': { category: 'worlds', tags: ['antenna-horizon', 'generator-isotope', 'eng-foehn'], tip: 'Capture into a Saturn orbit that stays above the rings, then relay science home.' },
+  'stock-gossamer': { category: 'worlds', tags: ['antenna-horizon', 'generator-isotope', 'fairing-2', 'eng-foehn'], tip: 'Capture into a Saturn orbit that stays above the rings, then relay science home.' },
   'stock-kestrel-challenging': { category: 'first', tags: ['pod-lantern-1', 'chute-main', 'eng-sirocco', 'fin-keel'], tip: 'Launch straight up, stage the capsule after burnout and let the parachute bring you home.' },
   'stock-kestrel-real': { category: 'first', tags: ['pod-lantern-1', 'chute-main', 'eng-sirocco', 'fin-keel'], tip: 'Launch straight up, stage the capsule after burnout and let the parachute bring you home.' },
   'stock-meridian-challenging': { category: 'first', tags: ['eng-tempest', 'eng-harmattan', 'eng-zephyr'], tip: 'A longer, flatter climb than on Standard: start leaning early and keep the nose near prograde.' },
@@ -732,6 +735,8 @@ export const STOCK_CRAFTS: StockCraft[] = ([
     tags: ['bay-cargo-2', 'fuse-tailcone', 'fuelcell-1', 'dec-radial'], tip: 'Land somewhere new, open the bay with 1, stage to drop the rover and drive it out.', build: () => buildPackmule() },
   { scale: 'standard', id: 'stock-cricket', name: 'Cricket Hopper', blurb: 'Crewed hover rig · radial engines and landing legs', category: 'fun', needsResearch: true,
     tags: ['eng-radial-rill', 'leg-strider', 'light-area'], tip: 'Hover at about half throttle, drift sideways a few metres, then land back on the legs.', build: () => buildCricket() },
+  // Stock fleet wave, launchers and spacecraft (src/editor/stock/space.ts).
+  ...spaceStock(),
 ] satisfies StockCraft[]).map(stock => ({
   ...STOCK_GUIDE[stock.id],
   ...stock,

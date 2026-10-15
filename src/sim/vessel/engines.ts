@@ -214,6 +214,15 @@ export function gimbalDirection(v: VesselState, p: PartState, m: EngineModule, c
   return { dir, a: da, b: db };
 }
 
+/** Whether a propellant with mass (not electric charge) has run out for this engine. */
+function starvedOfMass(v: VesselState, uid: number, m: EngineModule): boolean {
+  for (const k in m.propellants) {
+    const res = k as ResourceId;
+    if ((m.propellants[res] ?? 0) > 0 && v.resourceDefs[res].density > 0 && availableResource(v, uid, res) <= 0) return true;
+  }
+  return false;
+}
+
 export interface ActuatorOutput {
   /** Sum of nozzle thrust magnitudes, including opposing rotational jets. */
   thrust?: number;
@@ -319,7 +328,9 @@ export function stepEngines(
       continue;
     }
     const f = drawPropellants(v, p.uid, propellantNeed(m, v.resourceDefs, mdot * dt));
-    if (f < 1) {
+    // Short only of electric charge (an ion drive in shadow): thrust follows the power supply and recovers with it.
+    const powerLimited = f < 1 && !starvedOfMass(v, p.uid, m);
+    if (f < 1 && !powerLimited) {
       st.ignited = false;
       st.flamedOut = true;
       events.push({ type: 'flameout', vesselId: v.id, partUid: p.uid });
@@ -327,7 +338,7 @@ export function stepEngines(
     st.massFlow = mdot * f;
     // Average thrust over the step (partial supply on the final step scales thrust).
     const thrust = st.massFlow * st.isp * G0;
-    st.thrust = f < 1 ? 0 : thrust;
+    st.thrust = f < 1 && !powerLimited ? 0 : thrust;
     const g = gimbalDirection(v, p, m, control, dt);
     st.gimbal.a = g.a; st.gimbal.b = g.b;
     const F = scale(g.dir, thrust);

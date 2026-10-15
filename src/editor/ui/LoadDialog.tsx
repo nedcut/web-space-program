@@ -29,6 +29,15 @@ function summary(craft: CraftDef, earth: ReturnType<Universe['body']>) {
   }
 }
 
+/** Stock designs are static: build them and their summaries once per scale, not on every library open (~2 ms each). */
+function buildStock(earth: ReturnType<Universe['body']>) {
+  return STOCK_CRAFTS.map((s) => {
+    const craft = s.build();
+    return { ...s, craft, info: summary(craft, earth), category: stockCategory(s, craft), features: stockFeatures(s, craft) };
+  });
+}
+const builtStock = new Map<string, ReturnType<typeof buildStock>>();
+
 const SCALE_NAME: Record<string, string> = { standard: 'Standard', challenging: 'Challenging', real: 'Real' };
 const when = (t: number) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(new Date(t).getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) });
 
@@ -41,10 +50,12 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
   const programProgress = useGame((s) => s.resumeWorld?.progression);
   const progression = useMemo(() => programProgress ?? newProgression(), [programProgress]);
   const earth = useMemo(() => new Universe(scale).body('earth'), [scale]);
-  const built = useMemo(() => STOCK_CRAFTS.map((s) => {
-    const craft = s.build();
-    return { ...s, craft, info: summary(craft, earth), category: stockCategory(s, craft), features: stockFeatures(s, craft) };
-  }), [earth]);
+  const built = useMemo(() => {
+    let list = builtStock.get(scale);
+    // Loading copies the craft (the editor deserializes it, merging clones its parts), so cached designs stay pristine.
+    if (!list) builtStock.set(scale, list = buildStock(earth));
+    return list;
+  }, [scale, earth]);
   // Research still missing per design: recomputed when the program unlocks something, not per keystroke.
   const stock = useMemo(() => built.map(s => ({ ...s, unlock: unlockText(unlockingResearch(s.craft, mode, progression)) })), [built, mode, progression]);
   const [group, setGroup] = useState<StockCategory | ''>('');

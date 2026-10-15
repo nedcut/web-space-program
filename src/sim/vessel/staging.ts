@@ -150,6 +150,12 @@ export interface StageDeltaV {
   isp: number;
 }
 
+/**
+ * Massless propellants (electric charge for ion drives) neither add Δv nor end a burn in the readout: generators and
+ * panels recharge them in flight, so the estimate is the propellant-limited Δv, as players expect.
+ */
+const massless = (sim: VesselState, res: ResourceId) => sim.resourceDefs[res].density === 0;
+
 function burnSimulation(sim: VesselState, stage: number, pressure: number, gravity: number): StageDeltaV {
   const startMass = sim.mass;
   const r: StageDeltaV = {
@@ -164,7 +170,7 @@ function burnSimulation(sim: VesselState, stage: number, pressure: number, gravi
       const m = engineModule(p);
       if (!p.engine || !m || !p.engine.ignited) continue;
       let ok = Object.keys(m.propellants).length > 0;
-      for (const k in m.propellants) if ((m.propellants[k as ResourceId] ?? 0) > 0 && availableResource(sim, p.uid, k as ResourceId) <= 0) ok = false;
+      for (const k in m.propellants) if ((m.propellants[k as ResourceId] ?? 0) > 0 && !massless(sim, k as ResourceId) && availableResource(sim, p.uid, k as ResourceId) <= 0) ok = false;
       if (ok) active.push(p);
       else {
         p.engine.ignited = false;
@@ -186,6 +192,7 @@ function burnSimulation(sim: VesselState, stage: number, pressure: number, gravi
       const need = propellantNeed(m, sim.resourceDefs, md);
       for (const k in need) {
         const res = k as ResourceId;
+        if (massless(sim, res)) continue;
         if (!ledgers.has(res)) ledgers.set(res, new Map());
         drawResource(sim, p.uid, res, (need[res] ?? 0) * eps, ledgers.get(res));
       }
@@ -198,7 +205,11 @@ function burnSimulation(sim: VesselState, stage: number, pressure: number, gravi
       }
     if (!isFinite(tEvt) || mdot <= 0) break;
     const m0 = sim.mass;
-    for (const p of active) drawPropellants(sim, p.uid, propellantNeed(engineModule(p)!, sim.resourceDefs, maxMassFlow(engineModule(p)!) * thrustLimit(p) * tEvt));
+    for (const p of active) {
+      const need = propellantNeed(engineModule(p)!, sim.resourceDefs, maxMassFlow(engineModule(p)!) * thrustLimit(p) * tEvt);
+      for (const k in need) if (massless(sim, k as ResourceId)) delete need[k as ResourceId];
+      drawPropellants(sim, p.uid, need);
+    }
     recomputeMassProperties(sim, false);
     const m1 = sim.mass;
     if (first) {
