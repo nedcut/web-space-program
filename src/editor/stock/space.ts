@@ -11,14 +11,15 @@ import { Builder, type StockCraft } from '../stockCrafts';
  */
 
 /**
- * Finish a design, firing every part listed in `moves` with `anchor`'s stage (the depth stager fires parts on side
- * latches a stage before the core they hang from), then drop the stages that empties.
+ * Finish a design, firing the listed parts (and their symmetry counterparts) with `anchor`'s stage, then drop the
+ * stages that empties. The depth stager fires parts on side latches a stage before the core they hang from.
  */
-function finish(b: Builder, moves: [partId: string, anchor: number][] = []): CraftDef {
+function finish(b: Builder, moves: [parts: number[], anchor: number][] = []): CraftDef {
   const craft = b.done();
-  for (const [partId, anchor] of moves) {
-    const stage = craft.parts.find(p => p.uid === anchor)!.stage;
-    for (const p of craft.parts) if (p.partId === partId) p.stage = stage;
+  const byUid = new Map(craft.parts.map(p => [p.uid, p]));
+  for (const [uids, anchor] of moves) {
+    const groups = new Set(uids.map(uid => byUid.get(uid)!.symmetryGroup).filter(g => g !== undefined));
+    for (const p of craft.parts) if (uids.includes(p.uid) || (p.symmetryGroup !== undefined && groups.has(p.symmetryGroup))) p.stage = byUid.get(anchor)!.stage;
   }
   return moves.length ? removeEmptyStages(craft) : craft;
 }
@@ -41,11 +42,11 @@ export function buildCricket(catalog: PartCatalog = PART_CATALOG): CraftDef {
   const sep = b.stack(kick, 'dec-1');
   const coreTop = b.stack(sep, 'tank-1-mid');
   const core = b.stack(coreTop, 'tank-1-mid');
-  b.stack(core, 'eng-sirocco');
+  const sirocco = b.stack(core, 'eng-sirocco');
   b.radial(core, 'fin-keel', 4, -0.4, 0);
   const latch = b.radial(core, 'dec-radial', 4, 0, 45);
   const motor = b.outward(latch, 'srb-sparkler');
-  return finish(b, [['eng-sirocco', motor]]);
+  return finish(b, [[[sirocco], motor]]);
 }
 
 /** Reusable vertical-landing test article: methalox hops on four long legs, floodlights for night flying. */
@@ -90,6 +91,141 @@ export function buildLodestar(catalog: PartCatalog = PART_CATALOG): CraftDef {
   return finish(b);
 }
 
+/**
+ * Challenging-scale Mars orbiter: Bastion avionics with mapping instruments on a methalox stack. Four Boreal engines on
+ * a quad coupler and four tall solids lift it; a Boreal transfer stage throws it to Mars.
+ */
+export function buildDuskwing(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Duskwing Mars Orbiter',
+    'Challenging scale: a mapping orbiter for Mars. Four Boreal engines and four Reed solids lift it; the transfer stage leaves Earth; the orbiter captures with a short burn and lowers its orbit by grazing the thin Martian air.');
+  const core = b.root('probe-vault');
+  b.radial(core, 'antenna-arc', 1, 0, 0);
+  b.radial(core, 'scanner-meridian', 1, 0, 180);
+  const tank = b.stack(core, 'tank-1-mid');
+  b.radial(tank, 'solar-wing', 2, 0.3, 90);
+  b.radial(tank, 'sensor-gravity', 1, -0.3, 0);
+  b.radial(tank, 'sensor-magnetic', 1, -0.3, 180);
+  const engine = b.stack(tank, 'eng-mistral');
+  const mount = b.stack(engine, 'adapt-0-2');
+  const release = b.stack(mount, 'dec-2');
+  const fairing = b.stack(release, 'fairing-2');
+  const transfer = b.stack(fairing, 'tank-2-mid');
+  const transferEngine = b.stack(transfer, 'eng-boreal');
+  const sep = b.stack(transferEngine, 'dec-2');
+  const coreTop = b.stack(sep, 'tank-2-long');
+  const coreBottom = b.stack(coreTop, 'tank-2-long');
+  const quad = b.stack(coreBottom, 'coupler-2-x4');
+  const cluster = ['bottom', 'bottom2', 'bottom3', 'bottom4'].map(node => b.stack(quad, 'eng-boreal', node, 'top'));
+  b.radial(coreBottom, 'fin-pivot', 4, -2.6, 0);
+  const latch = b.radial(coreBottom, 'dec-radial', 4, 0.6, 45);
+  const booster = b.outward(latch, 'srb-reed');
+  b.stack(booster, 'nose-1', 'top');
+  return finish(b, [[cluster, booster]]);
+}
+
+/**
+ * Real-scale station power module: a solar/radiator truss with a 3.75 m attitude ring and battery bank, launched in a
+ * 5 m fairing by a Monsoon core with four Furnace solids and a three-Foehn upper stage in the Cradle interstage.
+ */
+export function buildKeystone(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Keystone Power Module',
+    'Real scale: the first station segment. Four Furnace solids and a Monsoon core lift a five-metre fairing; three Foehn engines in the Cradle interstage reach orbit. The module docks nose-first with Flurry RCS blocks.');
+  const core = b.root('probe-cairn');
+  b.stack(core, 'dock-1', 'top');
+  b.radial(core, 'rcs-quint', 4, 0, 45);
+  const power = b.stack(core, 'truss-octagonal');
+  b.radial(power, 'solar-wing', 4, 0.35, 45);
+  b.radial(power, 'radiator-2', 2, -0.35, 0);
+  const service = b.stack(power, 'truss-octagonal');
+  b.radial(service, 'mono-pip', 4, 0.4, 45);
+  b.radial(service, 'light-area', 2, -0.5, 90);
+  b.radial(service, 'antenna-arc', 1, -0.5, 0);
+  const shoulder = b.stack(service, 'adapt-1-3');
+  const ring = b.stack(shoulder, 'wheel-reaction-3');
+  const bank = b.stack(ring, 'battery-bank-3');
+  const release = b.stack(bank, 'dec-3');
+  const flare = b.stack(release, 'adapt-3-4');
+  const fairing = b.stack(flare, 'fairing-4');
+  const upper = b.stack(fairing, 'tank-4-short');
+  const frame = b.stack(upper, 'interstage-4');
+  for (const node of ['engine', 'engine-left', 'engine-right']) b.stack(frame, 'eng-foehn', node, 'top');
+  const sep = b.stack(frame, 'dec-4');
+  const coreTop = b.stack(sep, 'tank-4-mid');
+  const coreBottom = b.stack(coreTop, 'tank-4-long');
+  const monsoon = b.stack(coreBottom, 'eng-monsoon');
+  b.radial(coreBottom, 'fin-pivot', 4, -4.2, 0);
+  const latch = b.radial(coreBottom, 'dec-radial', 4, 0, 45);
+  const booster = b.outward(latch, 'srb-furnace');
+  b.stack(booster, 'nose-2', 'top');
+  return finish(b, [[[monsoon], booster]]);
+}
+
+/**
+ * Standard-scale Venus lander: only the Kiln probe and its pressure shell are rated for the surface, so the entry
+ * shield, cruise stage and launcher all fall away. Dense air brakes the shell to a survivable fall without parachutes.
+ */
+export function buildCinderbloom(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Cinderbloom Venus Lander',
+    'Fly to Venus and dive straight in, broad shield first. Drop the shield below 1 km/s; the Kiln pressure shell then falls through the crushing air without parachutes and survives about half an hour on the surface.');
+  const probe = b.root('probe-kiln');
+  const shell = b.stack(probe, 'shell-kiln');
+  // Mounted upside down so the separation ring leaves with the shield: it is not rated for the surface pressure.
+  const release = b.stack(shell, 'dec-1', 'bottom', 'bottom');
+  const flare = b.stack(release, 'adapt-1-2', 'top', 'top');
+  const shield = b.stack(flare, 'shield-2');
+  const cruiseSep = b.stack(shield, 'dec-2');
+  const cruise = b.stack(cruiseSep, 'tank-2-short');
+  b.radial(cruise, 'solar-fold', 2, 0.2, 90);
+  b.radial(cruise, 'antenna-relay', 1, 0.2, 0);
+  b.radial(cruise, 'rcs-linear', 4, -0.4, 45);
+  b.radial(cruise, 'mono-pip', 2, -0.3, 0);
+  const narrow = b.stack(cruise, 'adapt-1-2', 'bottom', 'bottom');
+  const engine = b.stack(narrow, 'eng-zephyr', 'top', 'top');
+  const sep = b.stack(engine, 'dec-1');
+  const adapter = b.stack(sep, 'adapt-1-2');
+  const booster = b.stack(adapter, 'tank-2-long');
+  b.stack(booster, 'eng-chinook');
+  b.radial(booster, 'fin-pivot', 4, -2.6, 45);
+  return finish(b);
+}
+
+/**
+ * Crewed Moon hopper: a Lantern capsule on a lander with twin radial Rill engines, a ladder, floodlights and a seismic
+ * station, above a Zephyr transfer stage and a Chinook booster with two Roman Candle solids.
+ */
+export function buildLamplighter(catalog: PartCatalog = PART_CATALOG): CraftDef {
+  const b = new Builder(catalog, 'Lamplighter Lunar Hopper',
+    'Crewed Moon expedition with fuel to land, hop to a second site and fly home. Twin radial Rill engines leave room below the lander; floodlights and a ladder make night landings and moonwalks friendlier.');
+  const pod = b.root('pod-lantern-1');
+  b.stack(pod, 'chute-main', 'top');
+  const shield = b.stack(pod, 'shield-1');
+  const capsuleSep = b.stack(shield, 'dec-1');
+  // The capsule's own wheel turns the full lander too slowly to track a landing site.
+  const wheel = b.stack(capsuleSep, 'wheel-gyre-1');
+  const lander = b.stack(wheel, 'tank-1-long');
+  b.radial(lander, 'eng-radial-rill', 'mirror', -0.9, 90);
+  b.radial(lander, 'leg-strider', 4, -0.9, 45);
+  b.radial(lander, 'ladder-2', 1, 0.2, 0);
+  b.radial(lander, 'light-area', 2, 1.2, 90);
+  b.radial(lander, 'light-task', 1, -0.6, 180);
+  b.radial(lander, 'sensor-seismic', 1, 0.6, 180);
+  b.radial(lander, 'solar-fold', 2, 0.9, 0);
+  const landerSep = b.stack(lander, 'dec-1');
+  const transferTop = b.stack(landerSep, 'tank-1-mid');
+  const transfer = b.stack(transferTop, 'tank-1-long');
+  const zephyr = b.stack(transfer, 'eng-zephyr');
+  const boosterSep = b.stack(zephyr, 'dec-1');
+  const adapter = b.stack(boosterSep, 'adapt-1-2');
+  const boosterTop = b.stack(adapter, 'tank-2-short');
+  const booster = b.stack(boosterTop, 'tank-2-long');
+  const chinook = b.stack(booster, 'eng-chinook');
+  b.radial(booster, 'fin-pivot', 4, -2.6, 45);
+  const latch = b.radial(booster, 'dec-radial', 2, -0.5, 90);
+  const solid = b.outward(latch, 'srb-roman-candle');
+  b.stack(solid, 'nose-1', 'top');
+  return finish(b, [[[chinook], solid]]);
+}
+
 /** Picker entries, registered in STOCK_CRAFTS. A function so the import cycle with stockCrafts.ts is harmless. */
 export function spaceStock(): StockCraft[] {
   const hop = (scale: ScalePresetId, suffix = '') => ({ scale, id: `stock-hopscotch${suffix}`, name: 'Hopscotch Landing Demonstrator',
@@ -99,6 +235,14 @@ export function spaceStock(): StockCraft[] {
       blurb: 'Uncrewed first satellite · fairing, solid strap-ons, kick motor · research required' },
     { scale: 'standard', id: 'stock-lodestar', name: 'Lodestar Ion Explorer', needsResearch: true, build: () => buildLodestar(),
       blurb: 'Xenon ion probe · 10 km/s of patient thrust · research required' },
+    { scale: 'standard', id: 'stock-cinderbloom', name: 'Cinderbloom Venus Lander', needsResearch: true, build: () => buildCinderbloom(),
+      blurb: 'Venus surface lander · pressure shell, no parachutes · research required' },
+    { scale: 'standard', id: 'stock-lamplighter', name: 'Lamplighter Lunar Hopper', needsResearch: true, build: () => buildLamplighter(),
+      blurb: 'Crewed Moon landing, hop and return · radial engines, lights, ladder · research required' },
     hop('standard'), hop('challenging', '-challenging'), hop('real', '-real'),
+    { scale: 'challenging', id: 'stock-duskwing-challenging', name: 'Duskwing Mars Orbiter', needsResearch: true, build: () => buildDuskwing(),
+      blurb: 'Challenging scale · methalox Mars mapping orbiter · research required' },
+    { scale: 'real', id: 'stock-keystone-real', name: 'Keystone Power Module', needsResearch: true, build: () => buildKeystone(),
+      blurb: 'Real scale · station power truss in a five-metre fairing · research required' },
   ];
 }
