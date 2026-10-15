@@ -226,15 +226,9 @@ export function buildLamplighter(catalog: PartCatalog = PART_CATALOG): CraftDef 
   return finish(b, [[[chinook], solid]]);
 }
 
-/**
- * Picker presentation in the shape the stock picker uses (`category`/`tags`/`tip` on StockCraft, optional), declared
- * here so these entries carry it whichever side of the stock fleet wave lands first.
- */
-interface StockGuide { category?: 'first' | 'orbit' | 'worlds' | 'aircraft' | 'fun'; tags?: string[]; tip?: string }
-
 /** Picker entries, registered in STOCK_CRAFTS. A function so the import cycle with stockCrafts.ts is harmless. */
-export function spaceStock(): (StockCraft & StockGuide)[] {
-  const hop = (scale: ScalePresetId, suffix = '') => ({ scale, id: `stock-hopscotch${suffix}`, name: 'Hopscotch Landing Demonstrator',
+export function spaceStock(): StockCraft[] {
+  const hop = (scale: ScalePresetId, suffix: string) => ({ scale, id: `stock-hopscotch${suffix}`, name: 'Hopscotch Landing Demonstrator',
     blurb: 'Vertical take-off and landing hopper · research required', needsResearch: true, category: 'fun' as const,
     tags: ['eng-boreal', 'leg-colossus', 'light-area', 'light-beacon'],
     tip: 'Full throttle for a few seconds, cut the engine at the top, then relight and ease the throttle to settle on the legs.',
@@ -247,7 +241,7 @@ export function spaceStock(): (StockCraft & StockGuide)[] {
     { scale: 'standard', id: 'stock-lodestar', name: 'Lodestar Ion Explorer', needsResearch: true, build: () => buildLodestar(),
       blurb: 'Xenon ion probe · 10 km/s of patient thrust · research required', category: 'worlds',
       tags: ['eng-whisper', 'xenon-bottle', 'solar-wing', 'truss-octagonal', 'fairing-2', 'antenna-arc'],
-      tip: 'In orbit, drop the upper stage and leave the ion drive on under physics warp. It pauses in Earth\'s shadow and picks up again in sunlight.' },
+      tip: 'In orbit, drop the upper stage and leave the ion drive on under physics warp. It pauses in shadow and resumes in sunlight.' },
     { scale: 'standard', id: 'stock-cinderbloom', name: 'Cinderbloom Venus Lander', needsResearch: true, build: () => buildCinderbloom(),
       blurb: 'Venus surface lander · pressure shell, no parachutes · research required', category: 'worlds',
       tags: ['probe-kiln', 'shell-kiln', 'shield-2', 'rcs-linear'],
@@ -256,7 +250,8 @@ export function spaceStock(): (StockCraft & StockGuide)[] {
       blurb: 'Crewed Moon landing, hop and return · radial engines, lights, ladder · research required', category: 'worlds',
       tags: ['eng-radial-rill', 'ladder-2', 'light-area', 'sensor-seismic', 'srb-roman-candle'],
       tip: 'After the first landing, hop: a few seconds of thrust tilted a little sideways, then land again with the legs down.' },
-    hop('standard'), hop('challenging', '-challenging'), hop('real', '-real'),
+    // Standard scale already has the Cricket Hopper (stock/fun.ts); the larger scales had no vertical lander at all.
+    hop('challenging', '-challenging'), hop('real', '-real'),
     { scale: 'challenging', id: 'stock-duskwing-challenging', name: 'Duskwing Mars Orbiter', needsResearch: true, build: () => buildDuskwing(),
       blurb: 'Challenging scale · methalox Mars mapping orbiter · research required', category: 'worlds',
       tags: ['coupler-2-x4', 'eng-boreal', 'srb-reed', 'probe-vault', 'scanner-meridian', 'sensor-gravity'],
@@ -264,6 +259,6 @@ export function spaceStock(): (StockCraft & StockGuide)[] {
     { scale: 'real', id: 'stock-keystone-real', name: 'Keystone Power Module', needsResearch: true, build: () => buildKeystone(),
       blurb: 'Real scale · station power truss in a five-metre fairing · research required', category: 'orbit',
       tags: ['fairing-4', 'srb-furnace', 'interstage-4', 'wheel-reaction-3', 'battery-bank-3', 'radiator-2', 'rcs-quint'],
-      tip: 'Release the module in orbit, let the wings and radiators unfold, then dock later segments to its nose with the Flurry RCS blocks.' },
+      tip: 'Release the module in orbit, let the wings and radiators unfold, then dock later segments to its nose using the RCS blocks.' },
   ];
 }

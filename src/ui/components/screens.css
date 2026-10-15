@@ -108,6 +108,10 @@
 .hub-load { width: min(820px, calc(100vw - 32px)); }
 .hub-load > .ui-modal-heading { display: none; }
 .hub-launch-more { align-self: flex-start; margin-top: 4px; }
+.hub-launch-group { display: flex; flex-direction: column; gap: 6px; }
+.hub-launch-group-head { margin: 8px 0 0; font-size: var(--type-xs); font-weight: 600; }
+.hub-launch-tip, .hub-launch-features { grid-column: 1 / -1; font-size: var(--type-xs); color: var(--text-dim); }
+.hub-launch-tip { color: var(--text); opacity: .85; }
 
 /* Facility upgrades: level pips, hub card, confirm, one-click unblock (career). */
 .fac-pips { display: inline-flex; gap: 3px; vertical-align: middle; }

@@ -4,12 +4,12 @@ import { CraftThumbnail } from './CraftThumbnail';
 import { useEffect, useMemo, useState } from 'react';
 import { useGame } from '../../game/store';
 import { Universe } from '../../game/universe';
-import { partUnlocked } from '../../data/technology';
 import { newProgression } from '../../sim/science/progression';
 import type { CraftDef } from '../../sim/vessel/types';
 import { craftStats } from '../core';
 import { CATALOG, DENSITIES, type EditorSession } from '../session';
-import { STOCK_CRAFTS } from '../stockCrafts';
+import { STOCK_CRAFTS, type StockCategory } from '../stockCrafts';
+import { STOCK_CATEGORIES, groupStock, stockCategory, stockFeatures, unlockText, unlockingResearch } from '../stock/guide';
 import { computeStageStats } from './dv';
 import { Icon } from './icons';
 import { fmtDv, fmtKg } from './partInfo';
@@ -38,13 +38,16 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
   const [rev, setRev] = useState(0);
   const scale = useGame(s => s.scalePreset);
   const mode = useGame((s) => s.mode);
-  const progression = useGame((s) => s.resumeWorld?.progression) ?? newProgression();
-  const lockedCount = (c: CraftDef) => new Set(c.parts.map((p) => p.partId).filter((id) => !partUnlocked(id, mode, progression))).size;
+  const programProgress = useGame((s) => s.resumeWorld?.progression);
+  const progression = useMemo(() => programProgress ?? newProgression(), [programProgress]);
   const earth = useMemo(() => new Universe(scale).body('earth'), [scale]);
-  const stock = useMemo(() => STOCK_CRAFTS.map((s) => {
+  const built = useMemo(() => STOCK_CRAFTS.map((s) => {
     const craft = s.build();
-    return { ...s, craft, info: summary(craft, earth) };
+    return { ...s, craft, info: summary(craft, earth), category: stockCategory(s, craft), features: stockFeatures(s, craft) };
   }), [earth]);
+  // Research still missing per design: recomputed when the program unlocks something, not per keystroke.
+  const stock = useMemo(() => built.map(s => ({ ...s, unlock: unlockText(unlockingResearch(s.craft, mode, progression)) })), [built, mode, progression]);
+  const [group, setGroup] = useState<StockCategory | ''>('');
   const [saved, setSaved] = useState<LibraryCraft[] | null>(null);
   const [query, setQuery] = useState('');
   const [folder, setFolder] = useState('');
@@ -60,7 +63,10 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
   const update = (item: LibraryCraft, patch: Partial<LibraryCraft>) => refresh(saveLibraryItem({ ...item, ...patch, updatedAt: Date.now() }));
   const folders = [...new Set(library.map(x => x.folder).filter(Boolean))].sort();
   const visible = filterLibrary(library, { query, folder, sort });
-  const stockVisible = stock.filter(s => (allScales || s.scale === scale) && matchesQuery(`${s.name} ${s.blurb}`, query));
+  const stockMatching = stock.filter(s => (allScales || s.scale === scale)
+    && matchesQuery(`${s.name} ${s.blurb} ${s.features.join(' ')} ${s.tip ?? ''} ${STOCK_CATEGORIES.find(c => c.id === s.category)?.label}`, query));
+  const stockGroups = groupStock(stockMatching);
+  const stockVisible = group ? stockGroups.filter(g => g.id === group) : stockGroups;
   const otherScales = stock.filter(s => s.scale !== scale).length;
 
   // Merge: the other craft comes in as a held assembly (its root part on the cursor) instead of replacing this one.
@@ -125,16 +131,32 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
         <span className="label">Stock vehicles</span>
         {otherScales > 0 && <label className="vab-merge"><input type="checkbox" checked={allScales} onChange={e => setAllScales(e.target.checked)} /> Show other scales ({otherScales})</label>}
       </div>
-      <div className="vab-stock-grid" onKeyDown={e => arrowNav(e, '.vab-stock')}>
-        {stockVisible.map((s) => (
-          <button type="button" key={s.id} className="vab-stock" onClick={() => load(s.craft)}>
-            <div className="vab-stock-icon"><CraftThumbnail craft={s.craft} /></div>
-            <div className="vab-stock-name">{s.name}</div>
-            {s.scale !== scale && <span className="vab-stock-scale">Built for {SCALE_NAME[s.scale] ?? s.scale} scale</span>}
-            <div className="vab-stock-blurb">{s.blurb.replace(/ · research required$/, '').replace(new RegExp(`^${SCALE_NAME[scale]} scale · `), '')}</div>
-            <div className="vab-stock-info mono">{s.info}</div>
-            {lockedCount(s.craft) > 0 && <div className="vab-stock-locked">Needs research · {lockedCount(s.craft)} locked part type{lockedCount(s.craft) > 1 ? 's' : ''}</div>}
+      {stockGroups.length > 1 && <div className="vab-stock-chips" role="group" aria-label="Stock vehicle groups">
+        {[{ id: '' as const, label: 'All', items: stockMatching }, ...stockGroups].map(g => (
+          <button type="button" key={g.id} className="vab-stock-chip" aria-pressed={group === g.id} onClick={() => setGroup(g.id)}>
+            {g.label} <span className="vab-lib-count">{g.items.length}</span>
           </button>
+        ))}
+      </div>}
+      <div className="vab-stock-groups" onKeyDown={e => arrowNav(e, '.vab-stock')}>
+        {stockVisible.map(g => (
+          <section key={g.id} className="vab-stock-group" aria-label={g.label}>
+            <h3 className="vab-stock-group-head label">{g.label}</h3>
+            <div className="vab-stock-grid">
+              {g.items.map((s) => (
+                <button type="button" key={s.id} className="vab-stock" onClick={() => load(s.craft)}>
+                  <div className="vab-stock-icon"><CraftThumbnail craft={s.craft} /></div>
+                  <div className="vab-stock-name">{s.name}</div>
+                  {s.scale !== scale && <span className="vab-stock-scale">Built for {SCALE_NAME[s.scale] ?? s.scale} scale</span>}
+                  <div className="vab-stock-blurb">{s.blurb.replace(/ · research required$/, '').replace(new RegExp(`^${SCALE_NAME[scale]} scale · `), '')}</div>
+                  {s.features.length > 0 && <div className="vab-stock-features"><span>Features</span> {s.features.join(' · ')}</div>}
+                  {s.tip && <div className="vab-stock-tip"><span>Try this</span> {s.tip}</div>}
+                  <div className="vab-stock-info mono">{s.info}</div>
+                  {s.unlock && <div className="vab-stock-locked">Locked · {s.unlock}</div>}
+                </button>
+              ))}
+            </div>
+          </section>
         ))}
         {!stockVisible.length && <div className="vab-empty">No stock vehicles match.</div>}
       </div>

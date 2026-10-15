@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { PART_CATALOG } from '../src/data/parts';
 import { deserializeCraft, getStageList, serializeCraft, validateCraft } from '../src/editor/core';
 import { STOCK_CRAFTS } from '../src/editor/stockCrafts';
+import { STOCK_CATEGORIES, stockCategory, stockFeatures } from '../src/editor/stock/guide';
+import { TECH_NODES } from '../src/data/technology';
 import { computeStageStats, localEstimate } from '../src/editor/ui/dv';
 import { qRotate } from '../src/util/quat';
 import { Universe } from '../src/game/universe';
@@ -21,7 +23,9 @@ describe('stock crafts', () => {
       const local = [...localEstimate(craft, PART_CATALOG, getStageList(craft).length - 1).values()].reduce((a, x) => a + x.dvVac, 0);
       console.log(s.name, craft.parts.length, 'parts', Math.round(total), 'm/s (sim)', Math.round(local), 'm/s (local)',
         [...stats.entries()].map(([i, x]) => `S${i}:${Math.round(x.dvVac)}/${x.twrAsl.toFixed(2)}`).join(' '));
-      expect(total).toBeGreaterThan(s.needsResearch ? 0 : 2000);
+      const rover = !craft.parts.some(p => PART_CATALOG.get(p.partId)!.modules.some(m => m.type === 'engine'));
+      if (rover) expect(craft.parts.filter(p => PART_CATALOG.get(p.partId)!.modules.some(m => m.type === 'wheel' && m.motorTorque)).length).toBeGreaterThanOrEqual(4);
+      else expect(total).toBeGreaterThan(s.needsResearch ? 0 : 2000);
       if (!s.needsResearch) expect(Math.abs(total - local) / total).toBeLessThan(0.15);
       expect(craft.parts.some(p => PART_CATALOG.get(p.partId)!.modules.some(m => m.type === 'command' && m.controllable !== false))).toBe(true);
       for (const stage of getStageList(craft)) {
@@ -37,6 +41,24 @@ describe('stock crafts', () => {
       }
     });
   }
+
+  it('every stock craft has a picker group and a tip, and its features are parts it carries', () => {
+    for (const s of STOCK_CRAFTS) {
+      const craft = s.build();
+      expect(STOCK_CATEGORIES.map(c => c.id), s.id).toContain(stockCategory(s, craft));
+      expect(s.tip?.length, s.id).toBeGreaterThan(20);
+      expect(s.tip!.length, s.id).toBeLessThan(130);
+      for (const tag of s.tags ?? []) if (PART_CATALOG.has(tag)) expect(craft.parts.some(p => p.partId === tag), `${s.id} ${tag}`).toBe(true);
+      expect(stockFeatures(s, craft).length, s.id).toBeGreaterThan(0);
+    }
+  });
+
+  it('starting-equipment designs use only starting parts', () => {
+    const foundation = TECH_NODES.find(n => n.id === 'foundation')!.parts;
+    const starters = STOCK_CRAFTS.filter(s => s.blurb.startsWith('Starting equipment'));
+    expect(starters.map(s => s.id)).toEqual(expect.arrayContaining(['stock-firstlight', 'stock-fizzwick']));
+    for (const s of starters) for (const p of s.build().parts) expect(foundation, `${s.id} ${p.partId}`).toContain(p.partId);
+  });
 
   it('moon lander has enough delta-v for the mission', () => {
     const craft = STOCK_CRAFTS[2].build();

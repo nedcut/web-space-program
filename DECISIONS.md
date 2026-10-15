@@ -1559,8 +1559,49 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   shortcut pays them, while editor → launch already has them), plus LaunchSite procedural textures (~0.5 s).
   (c) The 22.4 MiB Earth grid gates the menu: ~150 ms warm, ~3 s cold over the WSL port forward.
 
+## Fun stock craft and the stock picker (2026-10-15, op/fleetfun)
+- **Six new stock designs** (`src/editor/stock/fun.ts`), each chosen to show parts no stock craft used, each flown
+  headlessly in `tests/stock-fun.test.ts`. **Fizzwick Bundle**: starting parts only, six Sparkler solids around a
+  Gust core, apex 444 km, the capsule comes home on its chute. **Skipjack Stunt Plane**: swept wings, elevon canards
+  and tailplanes; lifts off at ~71 m/s and completes a full-stick loop entered at ~180 m/s. **Saltstreak Jet
+  Dragster**: rover decks and Boulder wheels pushed by a turbofan. It ships with a 40 % thrust limiter: top speed is
+  85 m/s, and it stops 1.45 km after the start, inside the 2.5 km runway. At full thrust it passes 175 m/s and
+  breaks up. That is the player's dare, and the tip says how to raise the limit. **Trekker Field Lab**: three decks
+  on six Boulder wheels with every surface instrument. Deck-panel outriggers widen the track from 1.5 m to 2.5 m;
+  with the deck's own track it rolled over in a 10 m/s turn. **Packmule Freighter**: twin turbofans podded under the
+  wings and a cargo bay holding a fuel-cell rover on a side latch. Action group 1 opens the bay. It lifts off at
+  ~97 m/s, and the dropped rover drives out on all four wheels. **Cricket Hopper**: radial Rill engines, legs and
+  lamps; it hovers, drifts and lands upright.
+- **Rejected designs.** The Sandpiper buggy put its cockpit's centre of mass ahead of the front axle and flipped
+  under braking. A Skipjack taildragger on skid gear nosed over: the thrust line was ~1 m above the skids. Both are
+  documented here so nobody retries them. The skid gear and the delta wing are still not showcased.
+- **Wheel drive top speed.** Rover wheels pushed with constant force, so six Boulders reached 79 m/s in 15 s and
+  rolled over on braking. `WheelModule.maxDriveSpeed` is optional: motor force fades linearly to zero at that roll
+  speed, and driving against the roll keeps full force. Boulder is 20 m/s and Pebble 12 m/s. Moonmoth uses Pebble,
+  and its drive test (> 0.3 m/s) is unchanged. Gear, jets and every other wheel are untouched.
+- **Picker metadata.** `StockCraft` gains optional `category` (`first` / `orbit` / `worlds` / `aircraft` / `fun`),
+  `tags` and `tip`. `tags` lists part ids, which the pickers show by catalogue name; free text also works. The
+  original designs get theirs from a `STOCK_GUIDE` table in `stockCrafts.ts`; new entries set the fields inline.
+  `stock/guide.ts` derives a category when one is missing: SPH → aircraft, a non-Earth launch body → worlds, otherwise
+  orbit. It falls back to the three costliest non-tank parts for features. It names the research nodes that still
+  lock a design, in the format "Research A, B and 2 more". A test requires every stock craft to have a tip, and
+  every part id in its tags to be on the craft.
+- **Craft library.** Stock cards are grouped by role under headings, with filter chips (All, First flights, Orbit &
+  stations, Moon & planets, Aircraft & rovers, Just for fun). Each card shows "Features" and "Try this" lines, and
+  locked cards show "Locked · Research …" instead of a count of locked part types. Search also matches features,
+  tips and group names. **Launch picker.** Your own vehicles come first, then stock rows under the same headings, each
+  with its tip and features. A research-locked stock row names the research nodes instead of the first locked part.
+- **Picker cost (production, Chrome CDP, career, median of 5 opens, click to first frame with cards).** Library:
+  71 ms (22 cards) → 75 ms (28 cards). Launch picker: 38 → 45 ms. First opens: 151 → 158 ms and 386 → 378 ms
+  (lazy chunk). Firefox after: library ~91 ms, launch picker ~65–81 ms. Stock craft are still built on open, which
+  costs ~2 ms per craft in Node. Grouping adds no per-frame work, and thumbnails still use the idle queue.
+- **Builder pitfall.** `CraftEditor.craft` returns a copy, so mutating `b.part(uid)` or `b.ed.craft.parts` is lost.
+  The `p.stage = …` loops in `realDelivery` and the challenging Selene are no-ops. They are harmless today: the depth
+  stager already puts those boosters in their engines' stage (checked). To change a part, use `b.stages`/`b.resources`
+  or patch the finished craft, as `buildSaltstreak` does for its thrust limiter.
+
 ## Stock fleet: launchers and spacecraft (2026-10-15, op/fleetspace)
-- **Seven new designs, nine picker entries** (`src/editor/stock/space.ts`, registered by `spaceStock()` at the end of
+- **Seven new designs, eight picker entries** (`src/editor/stock/space.ts`, registered by `spaceStock()` at the end of
   STOCK_CRAFTS; research-gated, original names). Each shows hardware no stock craft used before and is flown headlessly
   in `tests/stock-fleetspace.test.ts`: Pipit Satellite Launcher (first satellite in a Clamshell 1 fairing, Sparkler
   strap-ons with Spire 0 caps, Mistral upper, Candle kick motor; orbit plus 1.5× the Moon transfer), Lodestar Ion
@@ -1568,13 +1609,12 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   Cinderbloom Venus Lander (Kiln probe and shell only; reaches Venus, enters at 3.4 km/s, lands at ~8.5 m/s without
   parachutes), Lamplighter Lunar Hopper (crewed; twin Rill radials, ladder, lamps, seismic sensor; lands, hops >200 m,
   lands again and returns on a re-entry periapsis), Hopscotch Landing Demonstrator (Boreal methalox on Colossus legs;
-  listed on all three scales since Earth surface gravity and air match), Duskwing Mars Orbiter (Challenging; Crossbill
+  Challenging and Real only: Standard already has fleetfun's Cricket Hopper, the larger scales had no vertical lander), Duskwing Mars Orbiter (Challenging; Crossbill
   quad coupler with four Boreals, four Reed solids, Bastion avionics; Mars capture with 1.5+ km/s left and a verified
   aerobraking pass) and Keystone Power Module (Real; Furnace solids, three Foehns in the Cradle interstage, Petal 500
   fairing). Showcased parts: 94 → 134 of 173 on this branch.
 - **Name clash avoided:** fleetfun's branch uses `stock-cricket` for its hover rig, so the satellite launcher is Pipit.
-- **Picker metadata** (`category`/`tags`/`tip`) is set inline on these entries in fleetfun's shape, typed locally
-  (`StockGuide`) until that type lands; delete the local interface after the merge.
+- **Picker metadata** (`category`/`tags`/`tip`) is set inline on these entries; Gossamer and Beaconseed list `fairing-2`.
 - **Design rules learned the hard way:** a fairing must hang off a ≥1.25 m joint (a 0.625 m ring broke at max-Q);
   a bulbous fairing over a narrower upper stage flips at Mach 1 (Lodestar needed a full-width 2.5 m stack); a bell engine
   stacked straight between two 2.5 m barrels gets a smooth automatic skirt, so no hourglass adapters; a long lander
@@ -1588,11 +1628,9 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   vessel-wide resources (xenon, monopropellant, charge) from any part, not just ancestors; an engine short only of
   electric charge keeps running at whatever the supply allows instead of shutting down permanently (an ion drive in
   Earth's shadow now pauses and resumes in sunlight). Engines that run out of a massful propellant flame out as before.
-- **Dead code noted, not changed:** the `p.stage = …` lines after `for (const p of b.ed.craft.parts)` in
-  Selene Challenging/Real and `realDelivery` mutate a copy (`CraftEditor.craft` returns one); they are no-ops whose
-  intended grouping happens to come from part depth anyway. New builders restage after `done()` (`finish()`).
-- **Picker cost:** building every stock craft (what the library does on open) is 63 ms for 39 entries vs 45 ms for
-  the previous 30 (Node). In the editor library (CDP Chrome, prod): first open 206 ms, then ~95 ms. `CraftThumbnail`'s
-  in-memory cache holds 32 images, now fewer than the 39 stock cards shown with "Show other scales"; the IndexedDB PNG
-  cache still avoids re-rendering, but a 64-entry cache (or memoising `STOCK_CRAFTS` builds) is the cheap fix if
-  reopening the library gets slow.
+- **Picker cost:** building every stock craft (what the library does on open) is ~2 ms per design in Node. Craft
+  library, CDP Chrome, prod, Standard, 4 opens, two interleaved runs: main with fleetfun (36 cards) first open
+  131–158 ms, reopen 58–74 ms; this branch first open 149–159 ms, reopen 69–85 ms, i.e. about +10 ms per reopen.
+  `CraftThumbnail`'s in-memory cache holds 32 images, fewer than the cards shown with "Show other scales"; the
+  IndexedDB PNG cache still avoids re-rendering, but a larger cache or memoised `STOCK_CRAFTS` builds is the cheap
+  fix if the library grows further.

@@ -66,8 +66,7 @@ function cruise(world: World, target: string, periapsisAltitude: number, minStag
 
 describe('stock fleet: launchers and spacecraft', () => {
   it('registers every design once, with original names, on the scales it is built for', () => {
-    const ids = ['stock-pipit', 'stock-lodestar', 'stock-cinderbloom', 'stock-lamplighter', 'stock-hopscotch',
-      'stock-hopscotch-challenging', 'stock-hopscotch-real', 'stock-duskwing-challenging', 'stock-keystone-real'];
+    const ids = ['stock-pipit', 'stock-lodestar', 'stock-cinderbloom', 'stock-lamplighter', 'stock-hopscotch-challenging', 'stock-hopscotch-real', 'stock-duskwing-challenging', 'stock-keystone-real'];
     for (const id of ids) expect(STOCK_CRAFTS.filter(s => s.id === id), id).toHaveLength(1);
     expect(new Set(STOCK_CRAFTS.map(s => s.id)).size).toBe(STOCK_CRAFTS.length);
     expect(STOCK_CRAFTS.find(s => s.id === 'stock-duskwing-challenging')!.scale).toBe('challenging');
@@ -106,7 +105,7 @@ describe('stock fleet: launchers and spacecraft', () => {
   }, 180000);
 
   it('Hopscotch climbs, falls back and lands upright on its legs', () => {
-    const { world, vessel } = launch('standard', buildHopscotch());
+    const { world, vessel } = launch('challenging', buildHopscotch());
     const parts = vessel.state.parts.length;
     world.tick(0.02, neutralInput({ throttle: 1, stage: true, sas: 'stabilityAssist' }));
     let peak = 0;
