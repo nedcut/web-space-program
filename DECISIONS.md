@@ -1628,9 +1628,9 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   vessel-wide resources (xenon, monopropellant, charge) from any part, not just ancestors; an engine short only of
   electric charge keeps running at whatever the supply allows instead of shutting down permanently (an ion drive in
   Earth's shadow now pauses and resumes in sunlight). Engines that run out of a massful propellant flame out as before.
-- **Picker cost:** building every stock craft (what the library does on open) is ~2 ms per design in Node. Craft
-  library, CDP Chrome, prod, Standard, 4 opens, two interleaved runs: main with fleetfun (36 cards) first open
-  131–158 ms, reopen 58–74 ms; this branch first open 149–159 ms, reopen 69–85 ms, i.e. about +10 ms per reopen.
-  `CraftThumbnail`'s in-memory cache holds 32 images, fewer than the cards shown with "Show other scales"; the
-  IndexedDB PNG cache still avoids re-rendering, but a larger cache or memoised `STOCK_CRAFTS` builds is the cheap
-  fix if the library grows further.
+- **Picker cost.** Building every stock craft costs ~2 ms per design (Node), and the library rebuilt all of them on
+  every open. It now builds them (with summaries, groups and features) once per scale per session; loading copies the
+  craft (the editor deserializes it, merging clones its parts), so cached designs stay pristine. Craft library, CDP
+  Chrome, prod, Standard, 4 opens × 3 interleaved runs: main (36 cards) first open 126–175 ms, reopen 58–92 ms; this
+  branch (44 cards) first open 160–162 ms, reopen 9–16 ms. The hub launch picker still builds its scale's stock on
+  open (this branch adds four Standard rows there, ~8 ms); its craft goes straight to flight, so it is not cached here.
