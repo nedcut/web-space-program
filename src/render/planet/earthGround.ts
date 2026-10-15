@@ -50,6 +50,7 @@ vec3 earthGroundColour(vec3 c, float density, EarthUV uv, float hd, float dist) 
   return mix(c, roofs, urban * tile.b * detail * 0.65);
 }
 
+#ifdef EARTH_REGION_NIGHT
 vec3 earthGroundLights(EarthUV uv, float dist) {
   vec2 dx = uv.dx, dy = uv.dy;
   #ifndef EARTH_REGION_FAR
@@ -80,4 +81,5 @@ vec3 earthGroundLights(EarthUV uv, float dist) {
   #endif
   return radiance;
 }
+#endif
 `;

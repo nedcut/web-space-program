@@ -273,7 +273,7 @@ vec3 earthNightLights(EarthUV e, float sunAltitude, vec3 rel, float dist) {
 
 export interface TerrainMaterialOptions {
   /** Prewarmed flight-only regional variants; absent retains the global terrain program. */
-  regional?: 'detail' | 'far';
+  regional?: 'detail' | 'night' | 'far';
   rockColor: [number, number, number];
   rockBlend: number;
   airless: number;
@@ -292,7 +292,7 @@ export interface TerrainMaterialOptions {
 export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: TerrainMaterialOptions): THREE.ShaderMaterial {
   const img = imagery(u, q);
   return new THREE.ShaderMaterial({
-    defines: { ...defines(q, u), ...img.defines, ...(o.regional ? { EARTH_REGION: 1 } : {}), ...(o.regional === 'far' ? { EARTH_REGION_FAR: 1 } : {}), ...(o.detail ? { USE_DETAIL: 1 } : {}), ...(o.cutout ? { USE_CUTOUT: 1 } : {}),
+    defines: { ...defines(q, u), ...img.defines, ...(o.regional ? { EARTH_REGION: 1 } : {}), ...(o.regional === 'far' ? { EARTH_REGION_FAR: 1 } : {}), ...(o.regional === 'night' ? { EARTH_REGION_NIGHT: 1 } : {}), ...(o.detail ? { USE_DETAIL: 1 } : {}), ...(o.cutout ? { USE_CUTOUT: 1 } : {}),
       ...(o.craters && o.detail && q.terrain.craterScales > 0 ? { CRATER_DETAIL: 1, CRATER_SCALES: q.terrain.craterScales } : {}), ...(o.surfaceShadows ? { SURFACE_SHADOWS: 1 } : {}) },
     uniforms: {
       ...u,
@@ -498,7 +498,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         vec3 nBF = normalize(vNormalBF);
         vec3 N = normalize(uBodyRot * nBF);
         vec3 up = normalize(rel);
-        #if defined(EARTH_REGION) && !defined(EARTH_REGION_FAR)
+        #ifdef EARTH_REGION_NIGHT
           // Fully night-side regional terrain needs ambient light and lamps, not
           // the daytime material path. Keep the full-resolution water exclusion.
           if (regionW >= 1.0 && dist > 750.0 && dist < 16000.0 && dot(up, uSunDir) < -0.11) {
@@ -697,8 +697,13 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           col += lightsImg * (1.0 - lightWaterW) * (1.0 - regionW);
           if (regionW > 0.0 && uEarthNightOn > 0.5 && sunAlt < 0.025) {
             float night = 1.0 - smoothstep(-0.11, 0.025, sunAlt);
-            // At twilight and patch edges, retain the ordinary surface path.
-            col += earthGroundLights(regionUV, dist) * night * regionW * (1.0 - lightWaterW)
+            #ifdef EARTH_REGION_NIGHT
+              vec3 radiance = earthGroundLights(regionUV, dist);
+            #else
+              float s = textureGrad(uEarthRegionNight, regionUV.uv, regionUV.dx, regionUV.dy).r;
+              vec3 radiance = earthLightRadiance(s, dist);
+            #endif
+            col += radiance * night * regionW * (1.0 - lightWaterW)
               * (1.0 - 0.75 * smoothstep(0.2, 0.9, cloudCover(rel)));
           }
           #else

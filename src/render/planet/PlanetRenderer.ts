@@ -113,7 +113,7 @@ export class PlanetRenderer {
   private pool: TerrainWorkerPool | null = null;
   private scatter: SurfaceScatter | null = null;
   private quadtree: Quadtree | null = null;
-  private terrainVariants: { base: THREE.ShaderMaterial; detail: THREE.ShaderMaterial; far: THREE.ShaderMaterial; active: THREE.ShaderMaterial; ocean?: THREE.ShaderMaterial } | null = null;
+  private terrainVariants: { base: THREE.ShaderMaterial; detail: THREE.ShaderMaterial; night: THREE.ShaderMaterial; far: THREE.ShaderMaterial; active: THREE.ShaderMaterial; ocean?: THREE.ShaderMaterial } | null = null;
   private farSphere: THREE.Mesh | null = null;
   private farMaterial: THREE.ShaderMaterial | null = null;
   private farTexture: THREE.DataTexture | null = null;
@@ -333,9 +333,10 @@ export class PlanetRenderer {
     }
     if (this.imagery && q.earth.textureQuality !== 'low') {
       const detail = createTerrainMaterial(this.uniforms, q, { ...terrainOptions, regional: 'detail' });
+      const night = createTerrainMaterial(this.uniforms, q, { ...terrainOptions, regional: 'night' });
       const far = createTerrainMaterial(this.uniforms, q, { ...terrainOptions, regional: 'far' });
-      this.terrainVariants = { base: terrainMat, detail, far, active: terrainMat, ocean: oceanMat };
-      this.materials.push(detail, far);
+      this.terrainVariants = { base: terrainMat, detail, night, far, active: terrainMat, ocean: oceanMat };
+      this.materials.push(detail, night, far);
     }
     const R = this.body.radius;
     // Max depth so vertex spacing at the finest level ≈ minVertexSpacing.
@@ -351,7 +352,7 @@ export class PlanetRenderer {
       ocean,
       pool: this.pool,
       terrainMaterial: terrainMat,
-      terrainWarmupMaterials: this.terrainVariants ? [this.terrainVariants.base, this.terrainVariants.detail, this.terrainVariants.far] : undefined,
+      terrainWarmupMaterials: this.terrainVariants ? [this.terrainVariants.base, this.terrainVariants.detail, this.terrainVariants.night, this.terrainVariants.far] : undefined,
       oceanMaterial: oceanMat,
       maxInFlight: q.terrain.maxInFlight,
       buildBudgetMs: q.terrain.buildBudgetMs,
@@ -515,7 +516,16 @@ export class PlanetRenderer {
       const nearGulf = camBFy < 0 && camBFx > camBFy * 0.425 && camBFx < -camBFy * 0.933
         && camBFz > 0 && camBFz < camDist * 0.708;
       const regional = nearGulf && this.imagery.uniforms.uEarthRegionOn.value > 0.5 && this.imagery.uniforms.uEarthRegionView.value > 0;
-      const material = regional ? (camDist - R - (this.terrain?.maxHeight ?? 0) >= 16000 ? variants.far : variants.detail) : variants.base;
+      let material = variants.base;
+      if (regional) {
+        if (camDist - R - (this.terrain?.maxHeight ?? 0) >= 16000) material = variants.far;
+        else {
+          // Switch before sunset: every point within the 16 km detail range is
+          // still daylit here, so changing prewarmed programs cannot pop lamps.
+          const sun = u.uSunDir.value;
+          material = crx * sun.x + cry * sun.y + crz * sun.z < camDist * 0.08 ? variants.night : variants.detail;
+        }
+      }
       if (material !== variants.active) {
         this.quadtree?.setMaterials(material, variants.ocean);
         variants.active = material;

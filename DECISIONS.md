@@ -1441,6 +1441,12 @@ Owner decisions 2026-10-13 (both recommended options).
   daytime canopy/roof/material work. Twilight, pack boundaries, daylight and the
   far regional program keep the ordinary surface path. The night-light setting
   still disables lamps. No new texture assets, draws or per-frame CPU allocations.
+- A shared day/night program added about 1.3% to the measured daytime 10 km case.
+  Add a fourth prewarmed terrain variant for night, keeping the daytime shader
+  free of the new work. An allocation-free camera/sun dot product selects it
+  before sunset (0.08 sine solar elevation), while all surfaces within the 16 km
+  detail range are still daylit. The existing warmup, restoration and disposal
+  lists include it. This adds one program, not another texture or draw call.
 - Defer Paris daytime tint: Natural Earth urban coverage is only packed in the
   regional Gulf asset at runtime. Global Black Marble is radiance, not a built-up
   mask; using it as one would also grey roads and non-city light sources. Adding
