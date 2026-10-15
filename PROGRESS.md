@@ -1239,3 +1239,20 @@ Craft previews in the load dialog now pause/retry after WebGL loss and never cac
 - Evidence and validation: [round-three handoff](docs/performance/groundlook-r3.md).
 - Lint, TypeScript, build and the two-worker suite passed (208 files, 1,922 tests,
   one skipped). Distant-globe night smoke passed. Mac/Zen remains unmeasured.
+
+### Flight Earth polish — cx/nightcity (2026-10-15)
+
+Mapped Black Marble night networks now replace the repeating light grid, daytime
+neighbourhood detail varies per tile, and pale lake seabed rims/fill are removed.
+Emission uses the unfaded water mask. Runtime changes stay in the two planet
+shader files; no assets, simulation, map, worker or loading changes.
+
+Lint, typecheck, build and the full 208-file suite pass (1,936 tests, one skipped);
+30 material tests also pass after the final mask adjustment. All 14 final-build
+preview comparisons rendered without GL errors. Medium RTX 3060 Ti timings are
+flat/faster apart from +0.38% orbital sampling noise. Full-flight daylight checks
+are within +0.56% or faster. Midnight flight and final Firefox smoke checks are
+still queued on the shared GPU. Mac/Zen and 120 Hz remain unverified.
+
+Evidence and decisions: `docs/performance/nightcity.md`. Committed locally on
+`cx/nightcity`; not pushed or merged.
