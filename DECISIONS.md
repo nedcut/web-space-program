@@ -1182,3 +1182,17 @@ Owner decisions 2026-10-13 (both recommended options).
   main menu) instead of crashing. The error boundary renders nothing while that reload runs. A second chunk
   failure within 10 s of such a reload shows the crash screen (offline or broken deploy, not a stale build).
   Mid-flight scenes never auto-reload on the worker change alone.
+
+## Regional flight ground imagery (2026-10-14, cx/groundlook)
+
+- Stream one static Gulf/Caribbean colour patch (100–60°W, 10–35°N, 4096×2560,
+  ~1.09 km north/south samples) from NASA GIBS Blue Marble Next Generation. This gives
+  ~4.5× the linear detail of global 8k with bounded texture storage, instead of raising
+  the global resolution or shipping twelve large 500 m monthly tiles. Global seasonal
+  imagery remains the fallback and the distant view. The patch is a static composite.
+- Natural Earth v5.1.2 urban polygons locate urban fabric; NASA Black Marble 2016 supplies
+  regional night brightness. Procedural blocks/streets and vegetation are illustrative
+  texture detail, not surveyed buildings or a scientific land-cover classification.
+- Keep this in flight terrain shading, with no map UI, simulation elevations, coastline
+  geometry or launch-site edits. No 3D city instances: they would add streaming/draw cost.
+  Reuse the imagery decoder and frame-budgeted strip upload, restore and disposal paths.
