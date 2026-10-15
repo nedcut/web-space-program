@@ -27,7 +27,8 @@ float earthRegionWeight(EarthUV r, float dist) {
   return uEarthRegionView * smoothstep(250.0, 750.0, dist) * smoothstep(0.0, 0.04, min(edge.x, edge.y))
     * (1.0 - smoothstep(uPlanetRadius * 0.12, uPlanetRadius * 0.16, dist));
 }
-vec3 earthGroundColour(vec3 c, float density, EarthUV uv, float hd, float dist) {
+vec3 earthGroundColour(vec3 c, float density, EarthUV uv, float hd, float dist, out vec4 lights) {
+  lights = vec4(0.0);
   // Keep the imagery's land-cover colours. Fine canopy only modulates their brightness.
   c *= 1.0 + hd * 0.4;
   if (density < 0.008) return c;
@@ -44,6 +45,8 @@ vec3 earthGroundColour(vec3 c, float density, EarthUV uv, float hd, float dist) 
   vec2 flip = mod(cell, 2.0) * 2.0 - 1.0;
   vec2 offset = fract(cell.yx * vec2(0.754877666, 0.569840296));
   vec4 tile = textureGrad(uEarthUrbanDetail, fract(p) * flip + offset, dx * flip * 1.5, dy * flip * 1.5);
+  // Roof tone selects lamp colour; G stores intermittent road/parcel lamps.
+  lights = vec4(tile.r, tile.g, tile.a, detail);
   float urban = density * smoothstep(0.12, 0.55, tile.a + density * 0.35);
   vec3 roofs = mix(c * vec3(0.55, 0.60, 0.62), vec3(dot(c, vec3(0.3, 0.6, 0.1))) * vec3(1.4, 1.3, 1.18), tile.r);
   roofs += vec3(0.025, 0.023, 0.022) * tile.r;
