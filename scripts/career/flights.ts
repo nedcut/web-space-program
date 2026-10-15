@@ -45,7 +45,7 @@ export function buy(w: World, craft: CraftDef): { cost: number; problem: string 
 let ticks = 0;
 const tick = () => ticks++;
 
-function trackBiome(w: World, biomes: Set<string>) {
+export function trackBiome(w: World, biomes: Set<string>) {
   const c = w.scienceContext();
   if (c) biomes.add(`${c.body}/${c.situation}/${c.biome}`);
 }
