@@ -4,14 +4,15 @@
  * Probes only act while a ground station hears them (or on nodes uploaded while it did), exactly as in flight.
  */
 import type { World } from '../../src/game/world';
-import { coastUntil, executeNode, localFrame, planCourseCorrection, planTransferToBody, runAutopilot } from '../../src/game/autopilot';
+import { coastUntil, executeNode, localFrame, planTransferToBody, runAutopilot } from '../../src/game/autopilot';
+import { planCourseCorrectionToBody, type InterplanetaryPlan } from '../../src/game/interplanetary';
 import { computeStageDeltaV, neutralInput } from '../../src/sim/vessel';
 import { inertialDvToManeuver, period, periapsisRadius, propagate, stateToElements, timeToPeriapsis } from '../../src/sim/orbit';
 import { length, normalize } from '../../src/util/vec3';
 import { doScience, trackBiome, transmitAll } from './flights';
 
 export const dvLeft = (w: World) => computeStageDeltaV(w.active!.state, 0, 9.81).reduce((a, s) => a + s.dvVac, 0);
-const debug = (s: string) => { if (process.env.CAREER_DEBUG) console.log(`  ${s}`); };
+const debug = (s: string) => { if (process.env.CAREER_DEBUG) console.log(`  [${(performance.now() / 1000).toFixed(0)} s] ${s}`); };
 
 /** Coast on rails until a ground station hears the active vessel; false when none does within `max` seconds. */
 export function awaitContact(w: World, max = 2 * 86400): boolean {
@@ -24,6 +25,7 @@ export interface Leg { departure: number; arrival: number; dv: number; trims: nu
 /** Departure at the planner's window, course corrections on the way, arrival in `target`'s sphere of influence. */
 export function toPlanet(w: World, biomes: Set<string>, target: string, minStage = 0, periapsis?: number): { err: string | null; leg?: Leg } {
   if (!awaitContact(w)) return { err: 'no ground contact in parking orbit' };
+  debug(`contact; planning ${target}`);
   const plan = planTransferToBody(w, target, periapsis === undefined ? {} : { periapsisAltitude: periapsis });
   if (!plan) return { err: `no ${target} transfer found` };
   const pe = plan.periapsisAltitude, departure = plan.node.time;
@@ -31,16 +33,21 @@ export function toPlanet(w: World, biomes: Set<string>, target: string, minStage
   const burn = executeNode(w, plan.node, { minStage });
   if (!runAutopilot(w, burn, { maxTime: plan.node.time - w.ut + 1e5 })) return { err: `departure: ${burn.error}` };
   const dv = burn.dvUsed();
+  debug(`departed: ${dv.toFixed(0)} m/s (${burn.status}), e ${w.orbitOf(w.active!).e.toFixed(3)} ap ${(w.orbitSummary(w.active!).ap / 1000).toFixed(0)} km, Δv left ${dvLeft(w).toFixed(0)}`);
   coastUntil(w, w.ut + 120 * 86400, { stopOnSoi: true });
+  // The map planner's heliocentric correction (Lambert to the planet at the planned arrival, then refined).
+  const arrivalTime = (plan as InterplanetaryPlan).arrivalTime ?? plan.encounterTime;
   let encounter = plan.encounterTime, trims = 0, trimDv = 0;
   for (const fraction of [0.05, 0.6, 0.9]) {
     // A correction is planned now and uploaded now: out of contact the probe cannot receive it.
     if (!w.canControl()) { debug(`trim ${fraction}: no contact`); continue; }
-    const trim = planCourseCorrection(w, target, pe, w.ut + (encounter - w.ut) * fraction, 300);
+    if (w.active!.body !== w.universe.sunId) break;
+    const trim = planCourseCorrectionToBody(w, target, { time: w.ut + (encounter - w.ut) * fraction, arrivalTime, periapsisAltitude: pe, maxDv: 500 });
     if (!trim) { debug(`trim ${fraction}: none needed/found`); continue; }
     const t = executeNode(w, trim.node, { minStage });
     if (!runAutopilot(w, t, { maxTime: trim.node.time - w.ut + 1e5 })) return { err: `course correction: ${t.error}` };
     trims++; trimDv += t.dvUsed();
+    debug(`trim ${fraction}: ${t.dvUsed().toFixed(1)} m/s (planned ${trim.dv.toFixed(1)}), periapsis ${(trim.periapsisAltitude / 1000).toFixed(0)} km`);
     encounter = trim.encounterTime;
   }
   coastUntil(w, encounter + 600, { stopOnSoi: true });
@@ -51,18 +58,19 @@ export function toPlanet(w: World, biomes: Set<string>, target: string, minStage
   return { err: null, leg: { departure, arrival: w.ut, dv, trims, trimDv, contact } };
 }
 
-/** Move the arrival periapsis to `altitude` with a small radial burn ten minutes from now (bisection). */
+/** Move the arrival periapsis to `altitude` with a burn along the horizontal velocity ten minutes from now (bisection). */
 export function setArrivalPeriapsis(w: World, altitude: number, minStage = 0): string | null {
   const o = w.orbitOf(w.active!), t = w.ut + 600, s = propagate(o, t), R = w.universe.body(o.body).radius;
-  const r = normalize(s.position);
-  const peWith = (x: number) => periapsisRadius(stateToElements(o.mu, o.body, s.position, { x: s.velocity.x + r.x * x, y: s.velocity.y + r.y * x, z: s.velocity.z + r.z * x }, t)) - R;
+  // The periapsis follows the angular momentum: push along (or against) the velocity's horizontal part.
+  const r = normalize(s.position), radial = s.velocity.x * r.x + s.velocity.y * r.y + s.velocity.z * r.z;
+  const h = normalize({ x: s.velocity.x - radial * r.x, y: s.velocity.y - radial * r.y, z: s.velocity.z - radial * r.z });
+  const peWith = (x: number) => periapsisRadius(stateToElements(o.mu, o.body, s.position, { x: s.velocity.x + h.x * x, y: s.velocity.y + h.y * x, z: s.velocity.z + h.z * x }, t)) - R;
   const want = Math.sign(altitude - peWith(0)) || 1;
-  // Radial out raises a hyperbolic periapsis, radial in lowers it; widen until the target is bracketed.
-  let lo = 0, hi = 20 * want;
+  let lo = 0, hi = 5 * want;
   while (Math.sign(altitude - peWith(hi)) === want && Math.abs(hi) < 2000) hi *= 2;
   for (let k = 0; k < 50; k++) { const m = (lo + hi) / 2; if (Math.sign(altitude - peWith(m)) === want) lo = m; else hi = m; }
   const node = w.addNode(t);
-  const c = inertialDvToManeuver(s, { x: r.x * hi, y: r.y * hi, z: r.z * hi });
+  const c = inertialDvToManeuver(s, { x: h.x * hi, y: h.y * hi, z: h.z * hi });
   node.prograde = c.prograde; node.normal = c.normal; node.radial = c.radial;
   const burn = executeNode(w, node, { minStage, matchEnergy: false });
   if (!runAutopilot(w, burn, { maxTime: 1e5 })) return `periapsis change: ${burn.error}`;

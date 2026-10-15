@@ -87,16 +87,25 @@ export function recoverScience(w: World, v: WorldVessel) {
 export function progressionEvent(w: World, event: ProgressEvent) {
   if (w.mode === 'sandbox') return;
   if (w.mode === 'career') for (const message of evaluateContracts(w.progression, event)) w.message(message, 'info', 9);
-  const milestone = event.type === 'orbit' && event.body === 'earth' ? ['first-orbit', 'First Earth orbit', 20, 15000] as const
-    : event.type === 'soi' && event.body === 'moon' ? ['first-moon-flyby', 'First Moon arrival', 35, 40000] as const
-    : event.type === 'landed' && event.body === 'moon' ? ['first-moon', 'First Moon landing', 50, 30000] as const
-    : event.type === 'soi' && event.body === 'saturn' ? ['first-saturn', 'First Saturn arrival', 150, 100000] as const : null;
-  if (milestone && !w.progression.milestones.includes(milestone[0])) {
-    w.progression.milestones.push(milestone[0]); w.progression.science += milestone[2];
-    if (w.mode === 'career') { w.progression.funds += Math.round(milestone[3] * careerScaleMultiplier(w.universe.preset)); w.progression.reputation += 5; w.refreshContracts(); }
-    w.message(`${milestone[1]} · +${milestone[2]} science${w.mode === 'career' ? ` · +${Math.round(milestone[3] * careerScaleMultiplier(w.universe.preset)).toLocaleString()} cr` : ''}`, 'info', 10);
+  const milestone = MILESTONES.find(m => m.event === event.type && m.body === event.body);
+  if (milestone && !w.progression.milestones.includes(milestone.id)) {
+    const credits = Math.round(milestone.credits * careerScaleMultiplier(w.universe.preset));
+    w.progression.milestones.push(milestone.id); w.progression.science += milestone.science;
+    if (w.mode === 'career') { w.progression.funds += credits; w.progression.reputation += 5; w.refreshContracts(); }
+    w.message(`${milestone.label} · +${milestone.science} science${w.mode === 'career' ? ` · +${credits.toLocaleString()} cr` : ''}`, 'info', 10);
   }
 }
+/** First-time achievements: science, and credits scaled like orbital contracts (career). */
+export const MILESTONES: readonly { id: string; event: ProgressEvent['type']; body: string; label: string; science: number; credits: number }[] = [
+  { id: 'first-orbit', event: 'orbit', body: 'earth', label: 'First Earth orbit', science: 20, credits: 15000 },
+  { id: 'first-moon-flyby', event: 'soi', body: 'moon', label: 'First Moon arrival', science: 35, credits: 40000 },
+  { id: 'first-moon', event: 'landed', body: 'moon', label: 'First Moon landing', science: 50, credits: 30000 },
+  { id: 'first-venus', event: 'soi', body: 'venus', label: 'First Venus arrival', science: 60, credits: 60000 },
+  { id: 'first-mars', event: 'soi', body: 'mars', label: 'First Mars arrival', science: 60, credits: 60000 },
+  { id: 'first-venus-landing', event: 'landed', body: 'venus', label: 'First Venus landing', science: 80, credits: 50000 },
+  { id: 'first-mars-landing', event: 'landed', body: 'mars', label: 'First Mars landing', science: 80, credits: 50000 },
+  { id: 'first-saturn', event: 'soi', body: 'saturn', label: 'First Saturn arrival', science: 150, credits: 100000 },
+];
 /** Experiments aboard that would add science right now (the Science app's toolbar light). */
 export function scienceReady(w: World, v: WorldVessel): number {
   if (w.mode === 'sandbox' || !w.canControl(v.state)) return 0;
