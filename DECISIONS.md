@@ -1170,3 +1170,15 @@ Owner decisions 2026-10-13 (both recommended options).
   lab, then Mission Control, while funds stay above a reserve of 40 k × multiplier. Standard: Moon landing still
   flight 5, day 6.8 (unchanged); 290 k spent on upgrades, 77 k left after the landing (was 335 k). Tables in
   docs/BALANCE.md.
+
+## Stale build after a service-worker update (2026-10-14)
+
+- **Bug:** opening a production build after a rebuild ran the old cached build; the auto-updating service worker
+  (skipWaiting + clientsClaim) took over seconds later and dropped the old hashed chunks, so the next lazy scene
+  (Integration Hall, Tracking, ...) failed with "Failed to fetch dynamically imported module" and the crash screen.
+  Reproduced headlessly: build, load, rebuild, reload, wait, enter the Integration Hall.
+- **Fix** (`src/ui/staleBuild.ts`): when a replacement worker takes control while the player is on the main menu,
+  reload at once; elsewhere, a failed chunk (`vite:preloadError`) reloads the page onto the new build (back to the
+  main menu) instead of crashing. The error boundary renders nothing while that reload runs. A second chunk
+  failure within 10 s of such a reload shows the crash screen (offline or broken deploy, not a stale build).
+  Mid-flight scenes never auto-reload on the worker change alone.

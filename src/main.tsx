@@ -7,7 +7,9 @@ import { RootErrorBoundary } from './ui/ErrorBoundary';
 import { game } from './game/store';
 import { autoConfigureGraphics, GRAPHICS_PROFILE } from './render/core/quality';
 import { preloadTextureCache } from './render/core/textureCache';
+import { installStaleBuildRecovery } from './ui/staleBuild';
 
+installStaleBuildRecovery(() => game.get().scene === 'menu');
 const root = document.getElementById('root')!;
 root.textContent = 'Loading Earth geography…';
 // Fetch the 16 MiB grid while the application chunk downloads and evaluates.

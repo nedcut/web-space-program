@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from 'react';
 import { CrashOverlay } from './CrashOverlay';
+import { reloadingForUpdate } from './staleBuild';
 
 /** Unmounting a failed scene disposes its animation loops, inputs, audio and workers. */
 export class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -23,6 +24,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
     window.removeEventListener('wsp:worker-error', this.onWorkerError);
   }
   render() {
+    if (this.state.error && reloadingForUpdate) return null;
     return this.state.error ? <CrashOverlay error={this.state.error} onRecover={() => this.setState({ error: null })} /> : this.props.children;
   }
 }
