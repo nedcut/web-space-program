@@ -1278,7 +1278,7 @@ Owner decisions 2026-10-13 (both recommended options).
   inside the covered region; its coarse grid created the detached glowing crosses.
 - Bump the regional asset directory to `gulf-v2` so Cache Storage cannot serve the
   old footprint/detail under new shader semantics. No additional per-frame CPU work.
-- Visual/performance acceptance is still in progress; see the round-two handoff.
+- Round-two results supersede the round-one rejection above; see the current handoff.
 - Round-two shader cost: use a bounded polynomial projection in the Gulf instead of
   vertex atan/asin (Chebyshev interpolation of atan(t)/t over t² = 0..0.58² and
   asin(z + 0.38) over z = -0.26..0.24). Other directions retain spherical projection.
@@ -1298,4 +1298,17 @@ Owner decisions 2026-10-13 (both recommended options).
   scene. Warm the GPU at batch throughput after each F8 window before collecting
   timer queries; otherwise initial query samples include clock ramp-up. The final
   table uses eight balanced rounds, twenty 30-draw samples per variant. Acceptance
-  remains pending until the final four-scene run completes.
+  on RTX 3060 Ti is pad −0.23%, 10 km +1.02%, 30 km +1.20%, orbit +0.64%: within
+  the requested approximately 1% / maximum 2% limits on this GPU.
+
+- Keep three prewarmed terrain programs: original global shading at the pad, outside
+  the Gulf and at orbital distance; regional detail nearby; regional colour/lights
+  without local detail once every visible surface is at least 16 km away. Local
+  detail fades from 10–16 km before that switch. Merely branching inside one large
+  shader retained measurable pad/orbit overhead, so use existing quadtree material
+  switching with no added draws or frame allocations. Hidden compile proxies carry
+  the same batch/attribute configuration as terrain and own only a tiny geometry.
+- Minimal flight-controller lifecycle change: context restoration restarts sliced
+  warmup, including inactive regional programs. A generation token cancels stale
+  warmup completion after another restoration. This prevents a later terrain switch
+  from becoming the first compile after context loss.

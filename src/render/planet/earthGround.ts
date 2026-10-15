@@ -27,7 +27,7 @@ float earthRegionWeight(EarthUV r, float dist) {
   return uEarthRegionView * smoothstep(250.0, 750.0, dist) * smoothstep(0.0, 0.04, min(edge.x, edge.y))
     * (1.0 - smoothstep(uPlanetRadius * 0.12, uPlanetRadius * 0.16, dist));
 }
-vec3 earthGroundColour(vec3 c, float density, EarthUV uv, float hd, out float roads) {
+vec3 earthGroundColour(vec3 c, float density, EarthUV uv, float hd, float dist, out float roads) {
   roads = 0.0;
   // Keep the imagery's land-cover colours. Fine canopy only modulates their brightness.
   c *= 1.0 + hd * 0.4;
@@ -35,7 +35,7 @@ vec3 earthGroundColour(vec3 c, float density, EarthUV uv, float hd, out float ro
   vec2 scale = vec2(0.618, 0.4363) * (uPlanetRadius / 3072.0);
   vec2 dx = uv.dx * scale, dy = uv.dy * scale;
   float footprint = max(length(dx), length(dy)) * 2048.0;
-  float detail = 1.0 - smoothstep(4.0, 12.0, footprint);
+  float detail = (1.0 - smoothstep(4.0, 12.0, footprint)) * (1.0 - smoothstep(10000.0, 16000.0, dist));
   roads = density * 0.015;
   if (detail <= 0.0) return c;
   // A conservative gradient prevents narrow local streets/roofs aliasing at grazing angles.

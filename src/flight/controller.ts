@@ -228,6 +228,7 @@ export class FlightController {
    */
   private warmup: 'pending' | 'compiling' | 'done' = 'pending';
   private warmupTimer = 0;
+  private warmupGeneration = 0;
   private startedAt = performance.now();
 
   /**
@@ -301,7 +302,14 @@ export class FlightController {
     // Procedural sky/planetshine environment, re-baked as altitude, attitude and sun change.
     this.skyEnv = new SkyEnvironment(this.pipeline.renderer);
     // A restored context has an empty shadow depth map: the cache would otherwise keep skipping the redraw.
-    this.unwatchContext = onContextRestored(this.pipeline.renderer, () => this.shadowCache.invalidate());
+    this.unwatchContext = onContextRestored(this.pipeline.renderer, () => {
+      this.shadowCache.invalidate();
+      // Rewarm inactive terrain variants too, before a later altitude/region switch can use them.
+      window.clearTimeout(this.warmupTimer);
+      this.warmupGeneration++;
+      this.warmup = 'pending';
+      this.framesRendered = 0;
+    });
     this.scene.environmentIntensity = 1;
 
     this.planets = createPlanetLayer(this.scene, universe, quality, this.pipeline.renderer);
@@ -1079,11 +1087,13 @@ export class FlightController {
 
   private startWarmup(wv: WorldVessel) {
     this.warmup = 'compiling';
+    const generation = ++this.warmupGeneration;
+    const cancelled = () => this.warmup !== 'compiling' || generation !== this.warmupGeneration;
     const start = performance.now();
     const r = this.pipeline.renderer;
     const finish = () => {
+      if (cancelled()) return;
       window.clearTimeout(this.warmupTimer);
-      if (this.warmup !== 'compiling') return;
       this.warmup = 'done';
       performance.measure('wsp:flight:shaderWarmup', { start });
     };
@@ -1096,18 +1106,18 @@ export class FlightController {
       this.map.setWarmup(true);
       const map = compileInSlices(r, [this.map.scene], this.map.camera, this.map.scene, {
         renderTarget: null,
-        cancelled: () => this.warmup !== 'compiling',
+        cancelled,
       }).finally(() => this.map.setWarmup(false));
       // The flight scene has ~90 programs: build them a few ms per frame so the loading screen keeps animating.
       const flight = compileInSlices(r, [this.scene], this.cam.camera, this.scene, {
         renderTarget: this.pipeline.composer.readBuffer,
-        cancelled: () => this.warmup !== 'compiling',
+        cancelled,
       });
       // Off-screen bakes/merges would otherwise compile on their first (mid-flight) step. They draw lightless scenes
       // into render targets, and light counts are part of three's program key: compile against an empty scene.
       const offscreen = compileInSlices(r, [offscreenWarmup], this.cam.camera, new THREE.Scene(), {
         renderTarget: this.pipeline.composer.readBuffer,
-        cancelled: () => this.warmup !== 'compiling',
+        cancelled,
       });
       Promise.all([map, flight, offscreen]).then(finish, finish);
       // Never hold the loading screen on a driver that does not report completion.
