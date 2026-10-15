@@ -1,5 +1,6 @@
+import { MapFrame } from './MapFrame';
 import type { MapMarkerInput, MapUpdate, ExtraOrbit, MapTarget, MapApproach, MapPick, MapPoint, MapHandlers } from './mapTypes';
-import { aimAt, clearDistance, patchDrawnNow, pickSphere, smallBodyVisible } from './framing';
+import { aimAt, clearDistance, pickSphere, smallBodyVisible } from './framing';
 import { patchState } from '../../sim/orbit/numericalPrediction';
 import { createTerrain } from '../../sim/terrain';
 import { CometEffects } from '../planet/CometEffects';
@@ -210,6 +211,7 @@ export function pointerOnMap(el: HTMLElement, target: EventTarget | null, x: num
 }
 
 export class MapView {
+  private readonly frame: MapFrame;
   private field?: AsteroidFieldView;
   private comets = new Map<string, CometEffects>();
   private au = 149597870700;
@@ -329,61 +331,12 @@ export class MapView {
   private approachLine: THREE.Line;
   private warmObjects: THREE.Object3D[] = [];
 
-  private scenePosition(p: Vec3, body: string, u: MapUpdate, out = new THREE.Vector3(), time = u.t) {
-    const b = this.framedBodyPosition(body, u, time);
-    return out.set(b.x + p.x - u.focus.x, b.y + p.y - u.focus.y, b.z + p.z - u.focus.z);
-  }
-
-  /** Screen position (CSS px) of a scene-space point; NaN when behind the camera. */
-  private toScreen(v: THREE.Vector3, u: MapUpdate, out: MapPoint): MapPoint {
-    const p = this.projected.copy(v).project(this.camera);
-    if (!(p.z < 1 && p.z > -1)) { out.x = out.y = NaN; return out; }
-    out.x = (p.x * .5 + .5) * u.viewport.width; out.y = (-p.y * .5 + .5) * u.viewport.height;
-    return out;
-  }
-
   /** The node showing the gizmo: the selected node, else the next upcoming one. */
   private gizmoNode(u: MapUpdate): ManeuverNode | undefined {
     const nodes = u.vessel?.nodes ?? EMPTY_NODES;
     let pick = this.selectedNodeId !== null ? nodes.find(n => n.id === this.selectedNodeId) : undefined;
     if (!pick) for (const n of nodes) if (n.time >= u.t - 60 && (!pick || n.time < pick.time)) pick = n;
     return pick;
-  }
-
-  private readonly parentOf = (id: string) => this.bodies.get(id)?.body.parent;
-
-  /**
-   * Time at which a patch's central body is placed (see patchDrawnNow). A patch inside an encountered body (a moon,
-   * a destination planet, or a later return to the body being left) is drawn around where that body will be at the
-   * encounter, so the arc continues from the encounter point instead of jumping to today's position.
-   */
-  private patchFrameTime(u: MapUpdate, patch: TrajectoryPatch | undefined): number {
-    const patches = u.vessel?.patches;
-    if (!patch || !patches?.length) return u.t;
-    const k = patches.indexOf(patch);
-    if (k >= 0) return patchDrawnNow(patches, k, u.focusId, this.parentOf) ? u.t : Math.max(u.t, patch.startTime);
-    // A patch from an earlier prediction (a drag in progress): present frame if its body is a reference ancestor.
-    if (patch.orbit.body === u.focusId) return u.t;
-    for (let id: string | undefined = patches[0].orbit.body; id; id = this.parentOf(id)) if (id === patch.orbit.body) return u.t;
-    return Math.max(u.t, patch.startTime);
-  }
-
-  /**
-   * Heliocentric draw position of `body` at `time` in the vessel's frame: the body keeps its offset from the
-   * nearest reference ancestor (one of the vessel's current body's parents, or that body itself for a moon of it)
-   * at that time, while the ancestor itself stays where it is now. A moon at encounter is drawn where it will be
-   * relative to its planet; a later return to the current body, where that body will be relative to its parent.
-   */
-  private framedBodyPosition(body: string, u: MapUpdate, time: number): Vec3 {
-    const now = this.ephem.getBodyState(body, u.t).position;
-    if (time === u.t) return now;
-    const first = u.vessel?.patches[0]?.orbit.body;
-    let anchor: string | undefined;
-    for (let id: string | undefined = this.parentOf(body); id && !anchor; id = this.bodies.get(id)?.body.parent)
-      for (let ref: string | undefined = first; ref; ref = this.bodies.get(ref)?.body.parent) if (ref === id) { anchor = id; break; }
-    if (!anchor) return now;
-    const then = this.ephem.getBodyState(body, time).position, a0 = this.ephem.getBodyState(anchor, time).position, a1 = this.ephem.getBodyState(anchor, u.t).position;
-    return { x: a1.x + then.x - a0.x, y: a1.y + then.y - a0.y, z: a1.z + then.z - a0.z };
   }
 
   private patchAt(u: MapUpdate, time: number) {
@@ -546,7 +499,7 @@ export class MapView {
     if (!u) return null;
     let best = 13, hit: MapPick | null = null;
     const test = (obj: THREE.Object3D, pick: MapPick, radius = 13) => {
-      const s = this.toScreen(obj.position, u, this.pickPoint), d = Math.hypot(s.x - x, s.y - y);
+      const s = this.frame.toScreen(obj.position, u, this.pickPoint), d = Math.hypot(s.x - x, s.y - y);
       if (d < Math.min(best, radius)) { best = d; hit = pick; }
     };
     // Bodies first: a vessel sharing a body's icon position only wins when strictly closer.
@@ -632,6 +585,7 @@ export class MapView {
     private quality: QualitySettings = QUALITY_PRESETS.medium,
     field?: FieldSource,
   ) {
+    this.frame = new MapFrame(bodies, ephem, this.camera);
     this.au = bodies.get('earth')?.orbit?.a ?? 149597870700;
     if (field) this.field = new AsteroidFieldView(field, bodies.get('sun')!.gm, this.au / 149597870700, this.scene);
     this.scene.background = new THREE.Color(0x03060d);
@@ -1066,7 +1020,7 @@ export class MapView {
       this.updateVesselLines(u.vessel.patches, this.bodies);
       for (const line of this.vesselLines) {
         const id = line.userData.body as string;
-        const bodyPosition = this.framedBodyPosition(id, u, this.patchFrameTime(u, u.vessel.patches[line.userData.patch as number]));
+        const bodyPosition = this.frame.framedBodyPosition(id, u, this.frame.patchFrameTime(u, u.vessel.patches[line.userData.patch as number]));
         this.place(line, line.userData.numericAnchor ? add(bodyPosition, line.userData.numericAnchor) : bodyPosition, focus);
         // Screen-space dashes: dash lengths are px at the focus distance, whatever the conic's size.
         if (line.material.dashed) line.material.dashScale = pxPerWorld1 / Math.max(this.renderedDistance, 1e-3);
@@ -1135,7 +1089,7 @@ export class MapView {
       for (let i = 0; i < k; i++) if (this.soiShells[i].userData.body === vis.body.id) return;
       const shell = this.soiShells[k++];
       shell.visible = true; shell.userData.body = vis.body.id;
-      this.scenePosition(ZERO, vis.body.id, u, shell.position, time); shell.scale.setScalar(vis.body.soi);
+      this.frame.scenePosition(ZERO, vis.body.id, u, shell.position, time); shell.scale.setScalar(vis.body.soi);
       shell.material.uniforms.uOpacity.value = opacity;
       // Where the encountered body will be: a ghost ring in its family colour.
       if (time !== u.t && ghosts < this.encounterGhosts.length) {
@@ -1150,7 +1104,7 @@ export class MapView {
     const patches = u.vessel?.patches ?? EMPTY_PATCHES;
     for (let i = 0; i < patches.length; i++) {
       const p = patches[i];
-      if (p.endReason === 'soiEnter' && p.nextBody && p.endTime > u.t) show(this.bodies.get(p.nextBody), .6, this.patchFrameTime(u, patches[i + 1]));
+      if (p.endReason === 'soiEnter' && p.nextBody && p.endTime > u.t) show(this.bodies.get(p.nextBody), .6, this.frame.patchFrameTime(u, patches[i + 1]));
     }
     for (let i = k; i < this.soiShells.length; i++) this.soiShells[i].visible = false;
     for (let i = ghosts; i < this.encounterGhosts.length; i++) this.encounterGhosts[i].visible = false;
@@ -1180,9 +1134,9 @@ export class MapView {
       if (s.material.map !== texture) s.material.map = texture;
       const hovered = (this.hover.kind === 'node' && this.hover.id === n.id) || (this.drag?.kind === 'node' && this.drag.nodeId === n.id);
       s.scale.setScalar((hovered ? ICON_PX.nodeHover : ICON_PX.node) * this.spritePx);
-      this.scenePosition(patchState(patch, n.time).position, patch.orbit.body, u, s.position, this.patchFrameTime(u, patch));
+      this.frame.scenePosition(patchState(patch, n.time).position, patch.orbit.body, u, s.position, this.frame.patchFrameTime(u, patch));
       s.userData.nodeId = n.id;
-      const truth = this.toScreen(s.position, u, this.nodeTruePoints[k] ??= { x: 0, y: 0 }), point = this.nodePoints[k] ??= { x: 0, y: 0 };
+      const truth = this.frame.toScreen(s.position, u, this.nodeTruePoints[k] ??= { x: 0, y: 0 }), point = this.nodePoints[k] ??= { x: 0, y: 0 };
       point.x = truth.x; point.y = truth.y;
       this.nodeTrue.set(n.id, truth);
       this.nodeScreen.set(n.id, point);
@@ -1244,11 +1198,11 @@ export class MapView {
       this.gizmoState = patchState(patch, node.time);
       this.gizmoDirs = { prograde: maneuverToInertialDv(this.gizmoState, { prograde: 1, normal: 0, radial: 0 }), normal: maneuverToInertialDv(this.gizmoState, { prograde: 0, normal: 1, radial: 0 }), radial: maneuverToInertialDv(this.gizmoState, { prograde: 0, normal: 0, radial: 1 }) };
     }
-    const base = this.scenePosition(this.gizmoState!.position, patch.orbit.body, u, this.gizmoBase, this.patchFrameTime(u, patch));
+    const base = this.frame.scenePosition(this.gizmoState!.position, patch.orbit.body, u, this.gizmoBase, this.frame.patchFrameTime(u, patch));
     // A node nudged out from under a HUD panel carries its gizmo with it.
     const shown = this.nodeScreen.get(node.id), truth = this.nodeTrue.get(node.id);
     if (shown && truth && (shown.x !== truth.x || shown.y !== truth.y)) this.fromScreen(shown.x, shown.y, base, u, base);
-    this.toScreen(base, u, this.gizmoCenter);
+    this.frame.toScreen(base, u, this.gizmoCenter);
     const worldPerPx = 2 * base.distanceTo(this.camera.position) * Math.tan(this.camera.fov * Math.PI / 360) / Math.max(1, u.viewport.height);
     // Constant screen size, but never much larger than the orbit the node sits on: zoomed far out a full-size
     // gizmo would bury the very trajectory being planned. Too small to edit: only the node marker remains.
@@ -1268,7 +1222,7 @@ export class MapView {
       // one still too short points at the camera and is hidden. The held handle keeps its stretch while dragged.
       if (!held) {
         g.icon.position.copy(base).addScaledVector(direction, offset * worldPerPx);
-        const s = this.toScreen(g.icon.position, u, g.screen);
+        const s = this.frame.toScreen(g.icon.position, u, g.screen);
         g.stretch = handleStretch(Math.hypot(s.x - this.gizmoCenter.x, s.y - this.gizmoCenter.y), offset);
       }
       const px = (offset + (held ? Math.max(-offset * .7, Math.min(130, drag.pull)) : 0)) * g.stretch;
@@ -1277,7 +1231,7 @@ export class MapView {
       g.line.scale.set(1, Math.max(1e-9, px * worldPerPx), 1);
       g.icon.position.copy(base).addScaledVector(direction, px * worldPerPx);
       g.icon.scale.setScalar((held || (this.hover.kind === 'handle' && this.hover.index === i) ? this.gizmoIconPx * 1.25 : this.gizmoIconPx) * this.spritePx);
-      this.toScreen(g.icon.position, u, g.screen);
+      this.frame.toScreen(g.icon.position, u, g.screen);
       const armPx = Math.hypot(g.screen.x - this.gizmoCenter.x, g.screen.y - this.gizmoCenter.y);
       g.visible = g.line.visible = g.icon.visible = show && (held || armPx >= HANDLE_MIN_PX);
     }
@@ -1286,7 +1240,7 @@ export class MapView {
   private updateGhost(u: MapUpdate) {
     const h = this.hover, patch = h.kind === 'orbit' && !this.drag ? u.vessel?.patches[h.patch] : undefined;
     this.ghost.visible = !!patch;
-    if (patch && h.kind === 'orbit') this.scenePosition(patchState(patch, h.time).position, patch.orbit.body, u, this.ghost.position, this.patchFrameTime(u, patch));
+    if (patch && h.kind === 'orbit') this.frame.scenePosition(patchState(patch, h.time).position, patch.orbit.body, u, this.ghost.position, this.frame.patchFrameTime(u, patch));
   }
 
   /** Sample the placeable part of each trajectory patch (from now, up to the next node or one revolution). */
@@ -1322,11 +1276,11 @@ export class MapView {
     let best: { time: number; patch: number; distance: number } | null = null;
     const line = this.screenLine;
     for (const poly of this.trajectoryPolys) {
-      const b = this.framedBodyPosition(poly.body, u, this.patchFrameTime(u, u.vessel.patches[poly.patch]));
+      const b = this.frame.framedBodyPosition(poly.body, u, this.frame.patchFrameTime(u, u.vessel.patches[poly.patch]));
       line.n = poly.count;
       for (let k = 0; k < poly.count; k++) {
         this.scratch.set(b.x + poly.points[k * 3] - u.focus.x, b.y + poly.points[k * 3 + 1] - u.focus.y, b.z + poly.points[k * 3 + 2] - u.focus.z);
-        const s = this.toScreen(this.scratch, u, this.scratchPoint);
+        const s = this.frame.toScreen(this.scratch, u, this.scratchPoint);
         line.x[k] = s.x; line.y[k] = s.y; line.t[k] = poly.times[k];
       }
       const hit = closestOnPolyline(line, x, y);
@@ -1353,13 +1307,13 @@ export class MapView {
     if (!u || !node) return;
     const [lo, hi] = slideWindow(node.time, d.period, d.earliest, d.latest);
     if (!(hi > lo)) return;
-    const b = this.framedBodyPosition(d.patch.orbit.body, u, this.patchFrameTime(u, d.patch)), line = this.screenLine;
+    const b = this.frame.framedBodyPosition(d.patch.orbit.body, u, this.frame.patchFrameTime(u, d.patch)), line = this.screenLine;
     const sample = (t0: number, t1: number, n: number) => {
       line.n = n + 1;
       for (let k = 0; k <= n; k++) {
         const time = t0 + (t1 - t0) * k / n, s = patchState(d.patch, time).position;
         this.scratch.set(b.x + s.x - u.focus.x, b.y + s.y - u.focus.y, b.z + s.z - u.focus.z);
-        const p = this.toScreen(this.scratch, u, this.scratchPoint);
+        const p = this.frame.toScreen(this.scratch, u, this.scratchPoint);
         line.x[k] = p.x; line.y[k] = p.y; line.t[k] = time;
       }
       // ~6 px of preference across the window keeps the node on its current revolution where the orbit overlaps.
@@ -1419,7 +1373,7 @@ export class MapView {
       // Markers take the colour of the trajectory they sit on; an encounter takes the colour of the patch inside
       // the encountered body, so marker and arc read as one.
       const color = m.kind === 'impact' ? IMPACT_CSS : cssHex(patchColor(m.kind === 'encounter' ? m.patch + 1 : m.patch, planned));
-      this.pushMarker(m.key, m.body, m.position, markerCaption(m, this.bodyName), color, apsis ? 1 : 2, m.kind, m).frameTime = this.patchFrameTime(u, patches[m.patch]);
+      this.pushMarker(m.key, m.body, m.position, markerCaption(m, this.bodyName), color, apsis ? 1 : 2, m.kind, m).frameTime = this.frame.patchFrameTime(u, patches[m.patch]);
     }
     const markers = u.markers ?? EMPTY_MARKERS;
     for (let i = 0; i < markers.length; i++) {
@@ -1434,8 +1388,8 @@ export class MapView {
     this.approachLine.visible = !!a;
     if (a) {
       const pos = this.approachLine.geometry.getAttribute('position') as THREE.BufferAttribute;
-      this.scenePosition(a.positionA, a.body, u, this.scratch); pos.setXYZ(0, this.scratch.x, this.scratch.y, this.scratch.z);
-      this.scenePosition(a.positionB, a.body, u, this.scratch); pos.setXYZ(1, this.scratch.x, this.scratch.y, this.scratch.z);
+      this.frame.scenePosition(a.positionA, a.body, u, this.scratch); pos.setXYZ(0, this.scratch.x, this.scratch.y, this.scratch.z);
+      this.frame.scenePosition(a.positionB, a.body, u, this.scratch); pos.setXYZ(1, this.scratch.x, this.scratch.y, this.scratch.z);
       pos.needsUpdate = true;
     }
     // Dots for every marker; captions in priority order (pinned first), decluttered against body labels.
@@ -1444,13 +1398,13 @@ export class MapView {
     let obstacles = this.obstacles;
     for (let i = 0; i < this.shownCount; i++) {
       const m = this.shown[i], el = this.markerElement(i);
-      const s = this.toScreen(this.scenePosition(m.position, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.scratchPoint);
+      const s = this.frame.toScreen(this.frame.scenePosition(m.position, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.scratchPoint);
       let on = s.x > -20 && s.y > -20 && s.x < u.viewport.width + 20 && s.y < u.viewport.height + 20;
       // Apsides of an orbit that is only a few pixels across are noise piled on the body icon: hide them until
       // the orbit is large enough to tell apart (pinned markers stay).
       // The focused body's own flyby periapsis always shows (it is what an encounter is planned for).
       if (on && (m.glyph === 'ap' || m.glyph === 'pe') && !this.pinned.has(m.key) && !(m.glyph === 'pe' && m.body === u.focusId && m.body !== patches[0]?.orbit.body)) {
-        const sx = s.x, sy = s.y, c = this.toScreen(this.scenePosition(ZERO, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.markerCentre);
+        const sx = s.x, sy = s.y, c = this.frame.toScreen(this.frame.scenePosition(ZERO, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.markerCentre);
         on = !(Math.hypot(c.x - sx, c.y - sy) < 16);
         s.x = sx; s.y = sy;
       }
