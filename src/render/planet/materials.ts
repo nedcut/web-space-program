@@ -318,7 +318,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       uniform float uEarthImagery;
       uniform float uEarthRegionOn;
       varying float vCovered;
-      varying vec3 vGroundCoord;
+      varying vec2 vGroundCoord;
       #endif
       void main() {
         ${GLSL_CHUNK_POSITION}
@@ -338,10 +338,8 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           float hV = length(relV) - uPlanetRadius;
           vec3 nV = normalize(transpose(uBodyRot) * relV);
           vec2 uvV = vec2(atan(nV.y, nV.x) * (0.5 / ATMO_PI) + 0.5, 0.5 - asin(clamp(nV.z, -1.0, 1.0)) / ATMO_PI);
-          // This is a land pack. The existing water mask rejects sea/launch-plateau fragments before
-          // their pixel shader pays for the regional colour, data or procedural land-cover work.
-          float land = uEarthRegionOn > 0.5 && nV.x > -0.5 ? 1.0 - smoothstep(0.0, 0.05, textureLod(uEarthDay, uvV, 0.0).a) : 0.0;
-          vGroundCoord = vec3((uvV - vec2(80.0 / 360.0, 55.0 / 180.0)) * vec2(9.0, 7.2), land);
+          // The patch never crosses the antimeridian. Reject that hemisphere before interpolation.
+          vGroundCoord = nV.x > -0.5 ? (uvV - vec2(80.0 / 360.0, 55.0 / 180.0)) * vec2(9.0, 7.2) : vec2(-10.0);
           #ifdef EARTH_RICH
             const float COAST_TEST = 1200.0; // coast sky reflection needs the mask above the datum too
           #else
@@ -378,7 +376,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
       ${GLSL_SITE_SHADOW}
       #ifdef EARTH_IMAGERY
       varying float vCovered;
-      varying vec3 vGroundCoord;
+      varying vec2 vGroundCoord;
       ${GLSL_EARTH_GROUND}
       #endif
       #ifdef EARTH_RICH
@@ -457,7 +455,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
         #ifdef EARTH_IMAGERY
           // Covered seafloor has already returned: never pay for spherical UVs or region tests there.
           // The vertex mask also rejects date-line triangles on the opposite hemisphere.
-          regionW = earthRegionWeight(regionUV, dist) * vGroundCoord.z;
+          regionW = earthRegionWeight(regionUV, dist);
           if (regionW > 0.0) imgUsed = true;
         #endif
         vec3 V = toCam / dist;
@@ -553,7 +551,7 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
           } else if (imgUsed) eUV = earthUVd(nDir, nDx, nDy);
             // Interior land needs only the merged regional colour/urban fetch. At patch/coast edges
             // retain the global water and seasonal blend, preserving the original ocean contract.
-            vec4 dayW = regionW >= 1.0 ? vec4(0.0) : earthTex(uEarthDay, eUV);
+            vec4 dayW = regionW >= 1.0 && dist <= uEarthBlend.x ? vec4(0.0) : earthTex(uEarthDay, eUV);
             vec3 c = dayW.rgb;
             if (regionW > 0.0) {
               vec4 regional = textureGrad(uEarthRegionDay, regionUV.uv, regionUV.dx, regionUV.dy);
@@ -564,16 +562,14 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             #ifdef USE_DETAIL
               img *= 1.0 + hd * 0.6 * uDetailStrength * (1.0 - regionW);
               if (regionW > 0.0) {
-                vec2 p = regionUV.uv * vec2(0.618, 0.4363) * uPlanetRadius;
-                vec2 footprint = (abs(regionUV.dx) + abs(regionUV.dy)) * vec2(0.618, 0.4363) * uPlanetRadius;
-                img = mix(img, earthGroundColour(img, smoothstep(0.02, 0.5, urbanDensity), max(0.0, urbanDensity * 2.0 - 1.0), p, footprint, cover, hd, regionUV.dx * vec2(0.618, 0.4363) * uPlanetRadius, regionUV.dy * vec2(0.618, 0.4363) * uPlanetRadius, roads), regionW);
+                img = mix(img, earthGroundColour(img, urbanDensity, regionUV, hd, roads), regionW);
               }
             #endif
             float distantImagery = smoothstep(uEarthBlend.x, uEarthBlend.y, dist);
             // The regional pack supplies colour, not a new water surface on the coarse launch/coast grid.
             waterW = earthCoast(earthWater(dayW.a, dayW.rgb), eUV) * distantImagery;
             if (waterW > 0.0) img = mix(img, earthWaterAlbedo(c), waterW);
-            float landImagery = wImg * (1.0 - dayW.a * (1.0 - distantImagery));
+            float landImagery = max(regionW, wImg * (1.0 - dayW.a * (1.0 - distantImagery)));
             albedo = mix(albedo, img, landImagery);
           }
         #endif
@@ -609,12 +605,12 @@ export function createTerrainMaterial(u: PlanetUniforms, q: QualitySettings, o: 
             float night = 1.0 - smoothstep(-0.11, 0.025, sunAlt);
             float s = textureGrad(uEarthRegionNight, regionUV.uv, regionUV.dx, regionUV.dy).r;
             float glow = s * s * (0.35 + 0.65 * s);
-            vec3 tint = mix(vec3(1.0, 0.52, 0.2), vec3(1.0, 0.8, 0.58), s);
+            vec3 tint = mix(vec3(1.0, 0.45, 0.16), vec3(1.0, 0.64, 0.30), s);
             // Mapped brightness locates the cores; filtered roads break up resolved urban footprints.
-            col += tint * glow * (0.16 + roads * 3.0) * night * 0.65 * regionW * (1.0 - waterW)
+            col += tint * glow * (0.035 + roads * 3.0) * night * 0.65 * regionW * (1.0 - waterW)
               * (1.0 - 0.75 * smoothstep(0.2, 0.9, cloudCover(rel)));
           }
-          if (streets > 0.0 && regionW < 1.0 && dot(lightsImg, lightsImg) > 0.0) col += earthEmission(nDir, length(rel) - uPlanetRadius, sunAlt) * streets * min(1.0, lightsImg.r * 3.0) * (1.0 - regionW);
+          if (streets > 0.0 && earthRegionWeight(regionUV, max(dist, 750.0)) <= 0.0 && dot(lightsImg, lightsImg) > 0.0) col += earthEmission(nDir, length(rel) - uPlanetRadius, sunAlt) * streets * min(1.0, lightsImg.r * 3.0) * (1.0 - regionW);
         #else
           col += earthEmission(normalize(transpose(uBodyRot) * rel), length(rel) - uPlanetRadius, dot(up, uSunDir));
         #endif

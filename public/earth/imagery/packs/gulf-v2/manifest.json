@@ -11,15 +11,16 @@
   "projection": "EPSG:4326, pixel centres, rows north to south",
   "description": "Static NASA GIBS Blue Marble Next Generation regional colour; 2016 Black Marble lights; Natural Earth 5.1.2 urban polygons. Street and land-cover detail in the game is illustrative, not surveyed.",
   "channels": {
-    "urban": "urban fraction times (0.5 + 0.5 * night luminance); merged into day alpha at runtime",
+    "urban": "soft urban coverage times (0.2 + 0.8 * night luminance ^ 0.8); merged into day alpha at runtime",
     "night": "Black Marble luminance",
     "urbanDetail": {
       "r": "roof tone",
       "g": "lamps",
-      "b": "built fraction"
+      "b": "built fraction",
+      "a": "neighbourhood density"
     }
   },
-  "urbanDetail": "Original procedural 256px tile; not surveyed streets or buildings",
+  "urbanDetail": "Original procedural 2048px tile; not surveyed streets or buildings",
   "sources": [
     {
       "name": "bmng.png",
@@ -51,8 +52,8 @@
     },
     {
       "path": "urban.webp",
-      "bytes": 60356,
-      "sha256": "441a221b3e3a7ab12584a59db6b4d1df3d4c886b6221599df7a579bb2c320847"
+      "bytes": 109966,
+      "sha256": "362008614e63dad1e3cf353d69fbb5dd29cd5cfb6d924922f57dd5e5adb139ea"
     },
     {
       "path": "night.webp",
@@ -61,8 +62,8 @@
     },
     {
       "path": "urban-detail.webp",
-      "bytes": 2512,
-      "sha256": "0e92f5092c42b2826d03a653716589fec1101023db9f59dfe288f4158d30cdbf"
+      "bytes": 1454872,
+      "sha256": "17e0249d57e36e5e6c036c0a3f20e3ef7371a7806faa6efd92fd3b1357581a1f"
     }
   ]
 }

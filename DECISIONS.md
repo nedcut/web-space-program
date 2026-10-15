@@ -1261,3 +1261,21 @@ Owner decisions 2026-10-13 (both recommended options).
 - **Map Earth imagery** follows the flight texture setting instead of always Low (2k): Medium+ now gets the bundled
   4k level (farOnly cap), ~+24 MB GPU for the map's own copy; sharing the flight renderer's 8k imagery was not
   done because the flight layer disposes it when Earth is far away.
+
+## Regional ground review, round two (2026-10-14, cx/groundlook)
+
+- Keep the regional BMNG colour resolution. Replace the saturated grey city overlay
+  with imagery-tinted roofs and a softened Natural Earth coverage mask weighted by
+  Black Marble brightness and source water/vegetation colour. The original 384 m
+  repeating grid is replaced by an offline 2048px irregular parcel/street texture
+  over 3072 m: variable blocks, unbuilt parcels and sparse curved arterials.
+  Road lighting is intermittent and density-weighted; individual streets remain
+  illustrative, not geographically surveyed. Explicit gradients filter the detail.
+- Remove the vertex water-mask rejection of the regional pack: it excluded the Cape
+  rural comparison entirely. Regional colour owns the close land handoff even when
+  the coarse global water mask disagrees. The existing distance-based water shading
+  and physical coast geometry remain unchanged. Stop the old procedural emission
+  inside the covered region; its coarse grid created the detached glowing crosses.
+- Bump the regional asset directory to `gulf-v2` so Cache Storage cannot serve the
+  old footprint/detail under new shader semantics. No additional per-frame CPU work.
+- Visual/performance acceptance is still in progress; see the round-two handoff.

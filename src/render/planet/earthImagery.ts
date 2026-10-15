@@ -364,10 +364,10 @@ export class EarthImagery {
     if (this.regionRequested || this.opts.maxLevel || this.opts.quality === 'low' || maxTextureSize() < 4096) return;
     this.regionRequested = true;
     const generation = ++this.regionGeneration;
-    const day = acquireStrips(root() + 'packs/gulf-v1/day.webp', 'day');
-    const urban = acquireStrips(root() + 'packs/gulf-v1/urban.webp', 'water');
-    const night = this.opts.nightLights ? acquireStrips(root() + 'packs/gulf-v1/night.webp', 'night') : null;
-    const detail = acquireStrips(root() + 'packs/gulf-v1/urban-detail.webp', 'regionData');
+    const day = acquireStrips(root() + 'packs/gulf-v2/day.webp', 'day');
+    const urban = acquireStrips(root() + 'packs/gulf-v2/urban.webp', 'water');
+    const night = this.opts.nightLights ? acquireStrips(root() + 'packs/gulf-v2/night.webp', 'night') : null;
+    const detail = acquireStrips(root() + 'packs/gulf-v2/urban-detail.webp', 'regionData');
     const keys = [day.key, urban.key, detail.key, ...(night ? [night.key] : [])];
     this.regionKeys = keys;
     this.loading = true;

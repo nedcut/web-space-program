@@ -19,7 +19,7 @@ async function setup(options = {}, failRegion = false) {
   vi.stubGlobal('caches', undefined);
   const fetcher = vi.fn(async (url: string) => {
     if (url.endsWith('manifest.json')) return new Response(JSON.stringify(manifest));
-    return new Response(new Blob([url]), { status: failRegion && url.includes('gulf-v1') ? 404 : 200 });
+    return new Response(new Blob([url]), { status: failRegion && url.includes('gulf-v2') ? 404 : 200 });
   });
   vi.stubGlobal('fetch', fetcher);
   decoded.decode.mockImplementation(async () => strips());
@@ -57,7 +57,7 @@ it('retains global imagery when the optional pack is unavailable without repeate
   expect(imagery.ready).toBe(true);
   expect(imagery.uniforms.uEarthImagery.value).toBe(1);
   expect(imagery.uniforms.uEarthRegionOn.value).toBe(0);
-  expect(fetcher.mock.calls.filter(([url]) => url.includes('gulf-v1'))).toHaveLength(4);
+  expect(fetcher.mock.calls.filter(([url]) => url.includes('gulf-v2'))).toHaveLength(4);
   imagery.dispose();
 });
 
@@ -65,7 +65,7 @@ it('does not fetch the regional pack for far-only renderers or Low', async () =>
   for (const opts of [{ maxLevel: '4k' }, { quality: 'low' }]) {
     const { imagery, fetcher } = await setup(opts);
     await advance(imagery);
-    expect(fetcher.mock.calls.some(([url]) => url.includes('gulf-v1'))).toBe(false);
+    expect(fetcher.mock.calls.some(([url]) => url.includes('gulf-v2'))).toBe(false);
     imagery.dispose();
   }
 });
@@ -74,7 +74,7 @@ it('releases a pending pack after disposal and never binds its late result', asy
   const { imagery } = await setup();
   const pending: (() => void)[] = [];
   decoded.decode.mockImplementation(async (blob: Blob) => {
-    if ((await blob.text()).includes('gulf-v1')) await new Promise<void>(r => pending.push(r));
+    if ((await blob.text()).includes('gulf-v2')) await new Promise<void>(r => pending.push(r));
     return strips();
   });
   await advance(imagery);
@@ -88,7 +88,7 @@ it('releases a pending pack after disposal and never binds its late result', asy
 });
 
 it('ships the exact derivatives recorded in the regional provenance manifest', () => {
-  const root = new URL('../public/earth/imagery/packs/gulf-v1/', import.meta.url);
+  const root = new URL('../public/earth/imagery/packs/gulf-v2/', import.meta.url);
   const m = JSON.parse(readFileSync(new URL('manifest.json', root), 'utf8'));
   expect(m.bounds).toEqual({ west: -100, east: -60, south: 10, north: 35 });
   expect([m.width, m.height]).toEqual([4096, 2560]);

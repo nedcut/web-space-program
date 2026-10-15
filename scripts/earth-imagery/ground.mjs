@@ -6,7 +6,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 sharp.cache(false); sharp.concurrency(2);
 const cache = new URL('./.cache/ground/', import.meta.url);
-const out = new URL('../../public/earth/imagery/packs/gulf-v1/', import.meta.url);
+const out = new URL('../../public/earth/imagery/packs/gulf-v2/', import.meta.url);
 await mkdir(cache, { recursive: true }); await mkdir(out, { recursive: true });
 const width = 4096, height = 2560;
 const bounds = { west: -100, east: -60, south: 10, north: 35 };
@@ -47,32 +47,63 @@ for (const f of urban.features) {
   }
 }
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="black"/><path d="${paths.join('')}" fill="white" fill-rule="evenodd"/></svg>`;
-const u = await sharp(Buffer.from(svg)).removeAlpha().extractChannel(0).raw().toBuffer();
+const u = await sharp(Buffer.from(svg)).removeAlpha().extractChannel(0).blur(1.6).raw().toBuffer();
 const n = await sharp(night).removeAlpha().greyscale().raw().toBuffer();
 const rgb = await sharp(day).removeAlpha().raw().toBuffer();
 const density = Buffer.alloc(width*height);
-for (let i=0; i<width*height; i++) density[i] = Math.round(u[i] * (0.5 + n[i] / 510));
+for (let i=0; i<width*height; i++) {
+  // Keep blue water and dark vegetation from the source visible inside metropolitan polygons.
+  const land = Math.max(0, Math.min(1, (rgb[i*3+1] - rgb[i*3+2] * 0.95) / 18));
+  density[i] = Math.round(u[i] * (0.2 + 0.8 * Math.pow(n[i] / 255, 0.8)) * land);
+}
 await save('day.webp', await sharp(rgb,{raw:{width,height,channels:3}}).webp({quality:90,effort:6}).toBuffer());
 await save('urban.webp', await sharp(density,{raw:{width,height,channels:1}}).webp({lossless:true,effort:6}).toBuffer());
 await save('night.webp', await sharp(n,{raw:{width,height,channels:1}}).webp({lossless:true,effort:6}).toBuffer());
-// Original repeating urban detail: roofs, green yards and intermittent street lamps. Hardware mips
-// average sub-pixel buildings/lamps without per-fragment grid hashes or analytic filtering.
-const tileSize = 256, tile = Buffer.alloc(tileSize * tileSize * 3);
-const random = (x, y) => { let n = Math.imul(x + 17, 1597334677) ^ Math.imul(y + 23, 3812015801); n = Math.imul(n ^ (n >>> 15), 1597334677); return (n >>> 0) / 4294967296; };
+// Original irregular neighbourhoods, built offline. Split parcels stop streets at different
+// depths; parks interrupt the fabric, and two curved arterials cross the entire tile.
+const tileSize = 2048, tile = Buffer.alloc(tileSize * tileSize * 4);
+let seed = 31247;
+const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+const paint = (x, y, r, g, b, a = 255) => {
+  const i = (((y + tileSize) % tileSize) * tileSize + (x + tileSize) % tileSize) * 4;
+  tile[i] = r; tile[i+1] = g; tile[i+2] = b; tile[i+3] = a;
+};
 for (let y = 0; y < tileSize; y++) for (let x = 0; x < tileSize; x++) {
-  const parcelX = Math.floor(x / 8), parcelY = Math.floor(y / 8);
-  const seed = random(parcelX, parcelY);
-  const px = x % 8, py = y % 8;
-  const road = x % 32 < 2 || y % 32 < 2;
-  const roof = !road && px >= 2 && px < 5 + (seed > 0.6 ? 1 : 0) && py >= 2 && py < 6 && seed > 0.15;
-  const lamp = road && ((x % 32 === 1 && y % 8 === 1) || (y % 32 === 1 && x % 8 === 1));
-  const i = (y * tileSize + x) * 3;
-  tile[i] = Math.round((roof ? 0.35 + seed * 0.6 : road ? 0.12 : 0.2) * 255);
-  tile[i+1] = lamp ? 255 : roof && seed > 0.7 ? 36 : 0;
-  tile[i+2] = roof ? 255 : road ? 100 : 0;
+  const district = 0.55 + 0.18 * Math.sin(x * 0.018 + Math.sin(y * 0.014)) + 0.22 * Math.cos(y * 0.027 - x * 0.009);
+  paint(x, y, 40, 0, 0, Math.round(district * 255));
 }
-await save('urban-detail.webp', await sharp(tile, {raw:{width:tileSize,height:tileSize,channels:3}}).webp({lossless:true,effort:6}).toBuffer());
+function parcel(x, y, w, h, depth) {
+  if (w > 18 && h > 18) {
+    const vertical = w / h > 1.25 || (w / h > 0.8 && random() > 0.5);
+    const span = vertical ? w : h;
+    const split = Math.floor(span * (0.3 + random() * 0.4));
+    const road = depth < 4 ? 3 : depth < 7 ? 2 : 1;
+    const lit = random() > 0.25;
+    for (let t = 0; t < (vertical ? h : w); t++) for (let j = 0; j < road; j++) {
+      const px = vertical ? x + split + j : x + t, py = vertical ? y + t : y + split + j;
+      const i = (py * tileSize + px) * 4;
+      paint(px, py, 28, lit && random() > 0.5 ? Math.round((depth < 4 ? 100 : 55) * random()) : 0, 160, tile[i+3]);
+    }
+    if (vertical) { parcel(x,y,split,h,depth+1); parcel(x+split+road,y,w-split-road,h,depth+1); }
+    else { parcel(x,y,w,split,depth+1); parcel(x,y+split+road,w,h-split-road,depth+1); }
+    return;
+  }
+  if (random() < 0.22) return;
+  const tone = Math.round(70 + random() * 135), inset = 2 + Math.floor(random() * 3);
+  const lamp = random() > 0.7 ? 20 + random() * 35 : 0;
+  for (let py=y+inset; py<y+h-inset; py++) for (let px=x+inset; px<x+w-inset; px++) {
+    const i = (py * tileSize + px) * 4;
+    paint(px, py, tone, random() > 0.97 ? lamp : 0, 220, tile[i+3]);
+  }
+}
+parcel(0, 0, tileSize, tileSize, 0);
+for (let t=0; t<tileSize; t++) for (let j=-2; j<=2; j++) {
+  const bend = Math.round(220 + 90 * Math.sin(t * Math.PI * 2 / tileSize) + 25 * Math.sin(t * Math.PI * 4 / tileSize));
+  paint(t,bend+j,55,random() > 0.4 ? Math.round(60+random()*120) : 0,230);
+  paint((bend+470+j)%tileSize,t,55,random() > 0.4 ? Math.round(50+random()*100) : 0,230);
+}
+await save('urban-detail.webp', await sharp(tile, {raw:{width:tileSize,height:tileSize,channels:4}}).webp({lossless:true,effort:6}).toBuffer());
 await save('manifest.json', Buffer.from(JSON.stringify({version:1,width,height,bounds,
   projection:'EPSG:4326, pixel centres, rows north to south',
   description:'Static NASA GIBS Blue Marble Next Generation regional colour; 2016 Black Marble lights; Natural Earth 5.1.2 urban polygons. Street and land-cover detail in the game is illustrative, not surveyed.',
-  channels:{urban:'urban fraction times (0.5 + 0.5 * night luminance); merged into day alpha at runtime',night:'Black Marble luminance',urbanDetail:{r:'roof tone',g:'lamps',b:'built fraction'}},urbanDetail:'Original procedural 256px tile; not surveyed streets or buildings',sources,files},null,2)+'\n'));
+  channels:{urban:'soft urban coverage times (0.2 + 0.8 * night luminance ^ 0.8); merged into day alpha at runtime',night:'Black Marble luminance',urbanDetail:{r:'roof tone',g:'lamps',b:'built fraction',a:'neighbourhood density'}},urbanDetail:'Original procedural 2048px tile; not surveyed streets or buildings',sources,files},null,2)+'\n'));

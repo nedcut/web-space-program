@@ -18,6 +18,6 @@ Conventions: equirectangular, rows north → south, `u = lon/2π + 0.5`, `v = 0.
 
 Regional flight pack: `node scripts/earth-imagery/ground.mjs` builds the Gulf/Caribbean
 colour and urban/night channels from NASA GIBS and Natural Earth. Sources are cached
-in `.cache/ground/`; output and provenance live in `packs/gulf-v1/`. The colour is a
+in `.cache/ground/`; output and provenance live in `packs/gulf-v2/`. The colour is a
 static composite at ~1 km, independent of the global monthly pyramid. It is fetched
 on demand, not precached with the application.
