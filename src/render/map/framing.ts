@@ -25,3 +25,14 @@ export function patchDrawnNow(patches: readonly { orbit: { body: string } }[], k
   }
   return true;
 }
+
+/**
+ * Camera distance from the focus along the unit direction (`dx`,`dy`,`dz`) that keeps the camera outside a sphere of
+ * radius `clearance` centred at `body` (focus-relative): `distance` itself when that is already outside, else the far
+ * side of the sphere. Rotating, zoom easing and focus changes can each carry the camera inside the reference body.
+ */
+export function clearDistance(distance: number, dx: number, dy: number, dz: number, body: { x: number; y: number; z: number }, clearance: number): number {
+  const along = dx * body.x + dy * body.y + dz * body.z, b2 = body.x * body.x + body.y * body.y + body.z * body.z;
+  const c = b2 - clearance * clearance, inside = distance * distance - 2 * distance * along + c < 0;
+  return inside ? along + Math.sqrt(along * along - c) : distance;
+}

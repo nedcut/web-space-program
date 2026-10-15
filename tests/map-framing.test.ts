@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Orbit, TrajectoryPatch } from '../src/sim/orbit/api';
-import { AutoFramer, NO_TRANSITION, UNDECIDED, firstTransition, orbitFrameDistance, pathFrameDistance } from '../src/flight/map/framing';
-import { patchDrawnNow } from '../src/render/map/framing';
+import { AutoFramer, NO_TRANSITION, UNDECIDED, ascentAngles, ascentFrame, ascentMinDistance, ascentPhase, firstTransition, orbitFrameDistance, pathFrameDistance } from '../src/flight/map/framing';
+import { clearDistance, patchDrawnNow } from '../src/render/map/framing';
 
 const orbit = (body: string, e = 0.1): Orbit => ({ body, a: 7e6, e, i: 0, lan: 0, argPe: 0, m0: 0, epoch: 0, mu: 4e14 });
 const patch = (body: string, endReason: TrajectoryPatch['endReason'], nextBody?: string, startTime = 0): TrajectoryPatch =>
@@ -104,5 +104,82 @@ describe('map trajectory frames', () => {
   it('escapes stay in the present frame; a return from solar orbit is drawn at the arrival', () => {
     const path = [patch('earth', 'soiExit', 'sun'), patch('sun', 'soiEnter', 'earth', 100), patch('earth', 'horizon', undefined, 200)];
     expect(path.map((_, k) => patchDrawnNow(path, k, 'earth', parent))).toEqual([true, true, false]);
+  });
+});
+
+describe('map framing: ascent view', () => {
+  const mu = 3.986e14, R = 6.371e6, clear = R + 7e4;
+  const v3 = (x: number, y: number, z: number) => ({ x, y, z });
+
+  it('holds from the pad until the periapsis clears the atmosphere', () => {
+    const pad = v3(R, 0, 0), spin = v3(0, 465, 0);
+    expect(ascentPhase(false, true, pad, spin, mu, clear)).toBe(true);
+    // Climbing suborbital: stays in the ascent view, including a coast past apoapsis.
+    expect(ascentPhase(true, false, v3(R + 4e4, 0, 0), v3(800, 2000, 0), mu, clear)).toBe(true);
+    expect(ascentPhase(true, false, v3(R + 9e4, 0, 0), v3(-50, 6000, 0), mu, clear)).toBe(true);
+    // Circular orbit above the atmosphere: back to the orbit view.
+    const rOrbit = R + 2e5;
+    expect(ascentPhase(true, false, v3(rOrbit, 0, 0), v3(0, Math.sqrt(mu / rOrbit), 0), mu, clear)).toBe(false);
+    // Straight up (radial, eccentricity 1) is still a suborbital climb; escape always leaves it.
+    expect(ascentPhase(true, false, v3(R + 4e4, 0, 0), v3(3000, 0, 0), mu, clear)).toBe(true);
+    expect(ascentPhase(true, false, v3(R + 4e4, 0, 0), v3(0, 12000, 0), mu, clear)).toBe(false);
+  });
+
+  it('does not start on a descent from orbit', () => {
+    expect(ascentPhase(false, false, v3(R + 6e4, 0, 0), v3(-300, 7600, 0), mu, clear)).toBe(false);
+    expect(ascentPhase(false, false, v3(R + 6e4, 0, 0), v3(300, 3000, 0), mu, clear)).toBe(true);
+  });
+
+  it('centres between the vessel and its apoapsis', () => {
+    const pad = ascentFrame(v3(R, 0, 0), v3(0, 465, 0), mu, R);
+    expect(pad.centre.x).toBeCloseTo(R, -2);
+    expect(pad.distance).toBeCloseTo(0.8 * R, -3);
+    // Straight up at 2 km/s: apoapsis directly overhead, the centre half way to it.
+    const up = ascentFrame(v3(R + 1e4, 0, 0), v3(2000, 0, 0), mu, R);
+    const ra = up.centre.x * 2 - (R + 1e4);
+    expect(ra - R).toBeGreaterThan(2e5);
+    expect(Math.abs(up.centre.y)).toBeLessThan(1);
+    expect(up.distance).toBeCloseTo(0.8 * R, -3);
+    // A high apoapsis widens the frame to keep both in view.
+    const high = ascentFrame(v3(R + 1e4, 0, 0), v3(9000, 0, 0), mu, R);
+    expect(high.distance).toBeCloseTo(1.5 * (high.centre.x * 2 - 2 * (R + 1e4)), -3);
+    expect(high.distance).toBeGreaterThan(0.8 * R);
+  });
+
+  it('looks from beside the ascent plane and above the horizon', () => {
+    const { yaw, pitch } = ascentAngles(v3(R, 0, 0), v3(0, 465, 0));
+    const d = v3(Math.cos(yaw) * Math.cos(pitch), Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch));
+    expect(d.z).toBeGreaterThan(0.9); // the orbit normal
+    expect(d.x).toBeGreaterThan(0.2); // tilted towards local up, so the camera is outside the body at any distance
+  });
+
+  it('keeps the camera outside the body when the apoapsis is far round it', () => {
+    // At periapsis 40 km up, just over circular speed: the apoapsis is on the far side, still in the ascent phase.
+    const r = v3(R + 4e4, 0, 0), v = v3(0, Math.sqrt(mu / (R + 4e4)) * 1.005, 0);
+    expect(ascentPhase(true, false, r, v, mu, clear)).toBe(true);
+    const { centre } = ascentFrame(r, v, mu, R);
+    // On the surface, on the vessel's side of the body.
+    expect(Math.hypot(centre.x, centre.y, centre.z)).toBeCloseTo(R, -1);
+    expect(centre.x).toBeGreaterThan(0.9 * R);
+    const camera = (yaw: number, pitch: number) => {
+      const d = ascentMinDistance(centre, yaw, pitch, R), cp = Math.cos(pitch);
+      return Math.hypot(centre.x + d * Math.cos(yaw) * cp, centre.y + d * Math.sin(yaw) * cp, centre.z + d * Math.sin(pitch));
+    };
+    for (const yaw of [0, 1, 2, 3, 4, 5, 6]) for (const pitch of [-1.5, -0.7, 0, 0.7, 1.5]) expect(camera(yaw, pitch)).toBeGreaterThanOrEqual(R);
+    // From above the centre's horizon the player can still zoom in close.
+    const { yaw, pitch } = ascentAngles(r, v);
+    expect(ascentMinDistance(centre, yaw, pitch, R)).toBeCloseTo(0.15 * R, -3);
+  });
+});
+
+describe('map framing: camera clearance', () => {
+  const body = { x: -10, y: 0, z: 0 };
+  it('keeps a camera outside the body where it is', () => {
+    expect(clearDistance(5, 1, 0, 0, body, 9)).toBe(5);
+    expect(clearDistance(0.5, 0, 0, 1, body, 9)).toBe(0.5);
+  });
+  it('moves a camera inside the body out to its far side', () => {
+    // Looking along -x from 1 unit outside a radius-9 sphere centred 10 units away: exits at 19.
+    expect(clearDistance(3, -1, 0, 0, body, 9)).toBeCloseTo(19, 9);
   });
 });

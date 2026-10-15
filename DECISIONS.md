@@ -1170,6 +1170,14 @@ Owner decisions 2026-10-13 (both recommended options).
   lab, then Mission Control, while funds stay above a reserve of 40 k × multiplier. Standard: Moon landing still
   flight 5, day 6.8 (unchanged); 290 k spent on upgrades, 77 k left after the landing (was 335 k). Tables in
   docs/BALANCE.md.
+- **Night vision and ascent map view (2026-10-14):** Night vision (NIGHT VIS lamp by the altimeter, or F7;
+  off by default, not persisted) is render-only: a camera headlight plus a stronger hemisphere fill, both scaled by
+  `1 − sunVisibility`, so it does nothing in full sun and is safe to leave on. Planet terrain shaders ignore it.
+  The flight map centres between the active vessel and its apoapsis from the ground until the periapsis clears the
+  atmosphere top (the surface on airless bodies) or the path escapes; a suborbital vessel only enters this view
+  while climbing below that height, so deorbits and entries keep the orbit view. Opening the map in this phase looks
+  from beside the orbit plane, tilted above the vessel's horizon (camera outside the body at any zoom); zoom reaches
+  0.15 R from that centre.
 
 ## Stale build after a service-worker update (2026-10-14)
 
@@ -1373,3 +1381,20 @@ Owner decisions 2026-10-13 (both recommended options).
   the unchanged ocean shader; disabling its seabed blend removes them. Keep that
   separate from this night emission fix. Diagnostic captures and GPU/validation
   evidence: `docs/performance/groundlook-r3.md`.
+
+## Editing set-aside pieces (2026-10-14, feat/setaside-editing)
+- **Owner ask**: a better way to edit set-aside pieces, see what is in them and rearrange them.
+- **Set aside list** (staging panel, replaces the one-line count): one card per piece with its root part, part count,
+  mass and part chips (grouped, ×count). Hovering a card or chip highlights it in the hall; clicking a chip picks that
+  part up with what hangs from it. Buttons: Pick up (whole piece), Edit on stand, Delete (Undo toast).
+- **Click in the hall now splits a piece**: clicking a set-aside part takes it and what hangs from it, the rest stays
+  set aside (was: the whole piece, held by the clicked part). Matches "click: pick up with attached" on the craft; the
+  piece's root still takes everything, and hover shows exactly what a click takes. Del deletes the hovered part and
+  what hangs from it. Struts/fuel lines across the split are removed; split symmetry groups are broken.
+- **Edit on stand** swaps a piece with the craft (`CraftEditor.swapDetached`, one undo step) so every tool works on it
+  (attach, offset/rotate, re-root, inspector). The craft is set aside beside it (on the piece's side, bottoms level),
+  keeping its stages and staging mode (`SetAsidePiece.craft`), and its card reads "Swap back". While the craft is set
+  aside, Save and Launch are refused with a "Swap back" action: they would otherwise write or fly the piece under the
+  craft's name (also while the craft is held). Picking the set-aside craft up whole keeps its mark (its staging
+  then resets to automatic); attaching it to the stand merges it and clears the mark. Only one swap at a time (Edit on stand is disabled on other pieces meanwhile).
+- Set-aside pieces are still not saved with the craft (unchanged).

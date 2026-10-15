@@ -50,6 +50,7 @@ const FLIGHT_KEYS: [Action[] | string, string][] = [
   [['flightResults'], 'Flight results (this flight’s report)'],
   [['flightData'], 'Flight data app'],
   [['stressOverlay'], 'Structural stress overlay'],
+  [['nightVision'], 'Night vision (see the vessel in planet shadow)'],
   [['photoMode'], 'Photo mode (single player)'],
   [['perfOverlay'], 'Performance overlay (fps, CPU/GPU breakdown)'],
   ['Mouse drag · wheel', 'Orbit camera · zoom'],
