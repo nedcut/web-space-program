@@ -1207,9 +1207,9 @@ Craft previews in the load dialog now pause/retry after WebGL loss and never cac
   30 km 1.765→1.700; orbit 2.019→2.124. The repeated 10 km regression violates
   the requested budget. M4 Pro / Zen / 120 Hz and cross-branch integration remain
   unverified; the lead must resolve the performance gate before merging.
-- Lint, TypeScript and build pass. Real Firefox day/night views and forced context
-  restoration pass with no errors; restored Orlando is pixel-identical. Full test
-  rerun and final Chrome capture status are recorded in the handoff evidence.
+- Lint, TypeScript and build pass. Full two-worker Vitest: 207 files / 1,910 passed,
+  one skipped. All ten final Chrome views and Firefox day/night views pass with
+  no errors; forced context restoration returns pixel-identical Orlando imagery.
 - Runtime/asset head: `66beca43`; no push or merge. Complete measurement method,
   screenshot pairs, test evidence and remaining limitations:
   [groundlook evidence](docs/performance/groundlook.md).

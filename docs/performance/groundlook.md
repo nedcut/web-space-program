@@ -36,7 +36,11 @@ changes flight terrain imagery, not map UI, simulation heights or launch geometr
 Final lint, standalone TypeScript check and production build passed. Loader,
 fallback, disposal, context restore and asset provenance checks are in
 `tests/earth-ground.test.ts`; the focused terrain/imagery run passed 15 tests.
-The final full two-worker Vitest result is recorded below when complete.
+The final full two-worker Vitest run passed **207 files / 1,910 tests**, with one
+existing skip, in 713.58 s. Log: `/tmp/groundlook-final-full-tests-retry.log`.
+The preceding attempt ended on SIGTERM without a summary; it is not counted as
+a pass. Final command logs: `/tmp/groundlook-packed-lint.log`,
+`/tmp/groundlook-final-tsc.log`, `/tmp/groundlook-packed-build.log`.
 
 Windows Firefox captured Florida at 30 km and 1.2 km and Orlando at 3 km by day
 and night with the regional pack active, with no page/console errors. Forced
@@ -118,7 +122,9 @@ hemisphere. Firefox equivalents use `ff-final-`; restoration is
 - The Medium no-measurable-slowdown requirement is a merge gate; see the final GPU
   result above. The branch should not be called performance-approved without it.
 - M4 Pro, macOS Zen/Firefox and 120 Hz performance have not been measured.
-- Integration with capefix/mapbiomes has not been tested. The circular Cape
+- Integration with capefix/mapbiomes has not been tested (main advanced to
+  `ab4713ed` with mapbiomes during verification; this branch retains `e995b809`
+  as its base). The circular Cape
   plateau and coarse shoreline still appear in this branch's screenshots because
   their geometry is deliberately left to capefix.
 - Close-up urban fabric is a repeating 2D texture, and rural detail remains
