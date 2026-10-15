@@ -152,17 +152,18 @@ export interface EntryReturn {
 
 /**
  * The first predicted patch that comes down into an atmosphere: its periapsis is ahead, inside the patch, and in
- * the air (arrivals: below twice the atmosphere's height). Null when the trajectory does not come down.
+ * the air (arrivals: below 2.5 × the atmosphere's height). Null when the trajectory does not come down.
  */
 export function findEntry(patches: readonly TrajectoryPatch[], body: (id: string) => EntryBody): EntryReturn | null {
   for (let i = 0; i < patches.length; i++) {
     const p = patches[i], b = body(p.orbit.body);
     if (!b.atmosphere) continue;
     const o = p.orbit, rp = periapsisRadius(o);
-    // Arrivals from another sphere of influence (or fast, eccentric returns) are trimmed from up to twice the
-    // atmosphere's height; an ordinary orbit only once its periapsis is in the air (a parking orbit is not an entry).
+    // Arrivals from another sphere of influence (or fast, eccentric returns) are trimmed from up to 2.5 × the
+    // atmosphere's height, clear of the transfer planner's default arrival (twice the height, e.g. at Venus); an
+    // ordinary orbit only once its periapsis is in the air (a parking orbit is not an entry).
     const arriving = o.e >= 0.5 || (i > 0 && (patches[i - 1].endReason === 'soiExit' || patches[i - 1].endReason === 'soiEnter'));
-    if (rp - b.radius > b.atmosphere.height * (arriving ? 2 : 1)) continue;
+    if (rp - b.radius > b.atmosphere.height * (arriving ? 2.5 : 1)) continue;
     const toPe = timeToPeriapsis(o, p.startTime);
     // Outbound hyperbola/ellipse already past periapsis within this patch: not an arrival.
     if (!Number.isFinite(toPe) || (o.e >= 1 && toPe < 0)) continue;

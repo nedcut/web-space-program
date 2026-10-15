@@ -22,40 +22,97 @@ export function awaitContact(w: World, max = 2 * 86400): boolean {
 
 export interface Leg { departure: number; arrival: number; dv: number; trims: number; trimDv: number; contact: boolean }
 
-/** Departure at the planner's window, course corrections on the way, arrival in `target`'s sphere of influence. */
-export function toPlanet(w: World, biomes: Set<string>, target: string, minStage = 0, periapsis?: number): { err: string | null; leg?: Leg } {
-  if (!awaitContact(w)) return { err: 'no ground contact in parking orbit' };
-  debug(`contact; planning ${target}`);
-  const plan = planTransferToBody(w, target, periapsis === undefined ? {} : { periapsisAltitude: periapsis });
-  if (!plan) return { err: `no ${target} transfer found` };
-  const pe = plan.periapsisAltitude, departure = plan.node.time;
-  debug(`${target} window in ${((plan.node.time - w.ut) / 86400).toFixed(1)} d, ${plan.dv.toFixed(0)} m/s, arrival pe ${(pe / 1000).toFixed(0)} km, Δv aboard ${dvLeft(w).toFixed(0)}`);
-  const burn = executeNode(w, plan.node, { minStage });
-  if (!runAutopilot(w, burn, { maxTime: plan.node.time - w.ut + 1e5 })) return { err: `departure: ${burn.error}` };
-  const dv = burn.dvUsed();
-  debug(`departed: ${dv.toFixed(0)} m/s (${burn.status}), e ${w.orbitOf(w.active!).e.toFixed(3)} ap ${(w.orbitSummary(w.active!).ap / 1000).toFixed(0)} km, Δv left ${dvLeft(w).toFixed(0)}`);
-  coastUntil(w, w.ut + 120 * 86400, { stopOnSoi: true });
-  // The map planner's heliocentric correction (Lambert to the planet at the planned arrival, then refined).
-  const arrivalTime = (plan as InterplanetaryPlan).arrivalTime ?? plan.encounterTime;
-  let encounter = plan.encounterTime, trims = 0, trimDv = 0;
-  for (const fraction of [0.05, 0.6, 0.9]) {
-    // A correction is planned now and uploaded now: out of contact the probe cannot receive it.
-    if (!w.canControl()) { debug(`trim ${fraction}: no contact`); continue; }
-    if (w.active!.body !== w.universe.sunId) break;
-    const trim = planCourseCorrectionToBody(w, target, { time: w.ut + (encounter - w.ut) * fraction, arrivalTime, periapsisAltitude: pe, maxDv: 500 });
-    if (!trim) { debug(`trim ${fraction}: none needed/found`); continue; }
-    const t = executeNode(w, trim.node, { minStage });
-    if (!runAutopilot(w, t, { maxTime: trim.node.time - w.ut + 1e5 })) return { err: `course correction: ${t.error}` };
-    trims++; trimDv += t.dvUsed();
-    debug(`trim ${fraction}: ${t.dvUsed().toFixed(1)} m/s (planned ${trim.dv.toFixed(1)}), periapsis ${(trim.periapsisAltitude / 1000).toFixed(0)} km`);
-    encounter = trim.encounterTime;
+/** A transfer the probe has been given: the departure option and what the course corrections aim for. */
+export interface Departure { target: string; time: number; periapsis: number; arrivalTime: number; encounter: number }
+
+/**
+ * In a parking orbit, during a station pass: plan the transfer to `target` with the map planner. Its default is the
+ * earliest option within a few percent of the cheapest; from its options list a player takes the earliest departure
+ * the craft can pay for: departure plus an elliptical capture (about half the listed circular one), else departure
+ * alone (a flyby) when no option leaves enough to capture. `departure` re-plans a chosen option. Leaves one node.
+ */
+export function planDeparture(w: World, target: string, periapsis?: number, departure?: number): Departure | string {
+  if (!awaitContact(w)) return 'no ground contact in parking orbit';
+  for (const n of [...w.nodes]) w.removeNode(n.id);
+  const opts = { ...(periapsis === undefined ? {} : { periapsisAltitude: periapsis }), ...(departure === undefined ? {} : { departure }) };
+  let plan = planTransferToBody(w, target, opts);
+  if (!plan) return `no ${target} transfer found`;
+  if (departure === undefined) {
+    const budget = dvLeft(w) * 0.9, options = [...(plan.windows ?? [])].sort((a, b) => a.departure - b.departure);
+    const pick = options.find(o => o.dv + 0.5 * (o.captureDv ?? 0) <= budget) ?? options.find(o => o.dv <= budget);
+    if (pick && pick.departure < plan.node.time - 30 * 86400) {
+      w.removeNode(plan.node.id);
+      debug(`earlier option: ${((pick.departure - w.ut) / 86400).toFixed(0)} d, ${pick.dv.toFixed(0)} + ${(pick.captureDv ?? 0).toFixed(0)} m/s`);
+      plan = planTransferToBody(w, target, { ...opts, departure: pick.departure }) ?? planTransferToBody(w, target, opts);
+      if (!plan) return `no ${target} transfer found`;
+    }
   }
-  coastUntil(w, encounter + 600, { stopOnSoi: true });
-  if (w.active!.body !== target) return { err: `missed ${target} (in ${w.active!.body})` };
+  debug(`${target} window in ${((plan.node.time - w.ut) / 86400).toFixed(1)} d, ${plan.dv.toFixed(0)} m/s, arrival pe ${(plan.periapsisAltitude / 1000).toFixed(0)} km, Δv aboard ${dvLeft(w).toFixed(0)}`);
+  return { target, time: plan.node.time, periapsis: plan.periapsisAltitude, arrivalTime: (plan as InterplanetaryPlan).arrivalTime ?? plan.encounterTime, encounter: plan.encounterTime };
+}
+
+/** Fly the planned departure node, then coast out of the home sphere of influence. Returns Δv used or an error. */
+export function depart(w: World, minStage = 0): number | string {
+  const node = w.nodes[0];
+  if (!node) return 'no departure node';
+  const burn = executeNode(w, node, { minStage });
+  if (!runAutopilot(w, burn, { maxTime: node.time - w.ut + 1e5 })) return `departure: ${burn.error}`;
+  debug(`departed: ${burn.dvUsed().toFixed(0)} m/s (${burn.status}), e ${w.orbitOf(w.active!).e.toFixed(3)}, Δv left ${dvLeft(w).toFixed(0)}`);
+  return burn.dvUsed();
+}
+
+/** The map planner's heliocentric course correction, planned now (it must be uploaded) for `time`; Δv flown. */
+export function correct(w: World, d: Departure, time: number, minStage = 0): number | string {
+  if (w.active!.body !== w.universe.sunId) return 0;
+  if (!w.canControl()) { debug('trim: no contact'); return 'no contact'; }
+  const trim = planCourseCorrectionToBody(w, d.target, { time, arrivalTime: d.arrivalTime, periapsisAltitude: d.periapsis, maxDv: 500 });
+  if (!trim) { debug('trim: none needed/found'); return 0; }
+  const t = executeNode(w, trim.node, { minStage });
+  if (!runAutopilot(w, t, { maxTime: trim.node.time - w.ut + 1e5 })) return `course correction: ${t.error}`;
+  debug(`trim: ${t.dvUsed().toFixed(1)} m/s (planned ${trim.dv.toFixed(1)}), periapsis ${(trim.periapsisAltitude / 1000).toFixed(0)} km`);
+  d.encounter = trim.encounterTime;
+  return t.dvUsed();
+}
+
+/** Coast into the target's sphere of influence and run the instruments. */
+export function arrive(w: World, biomes: Set<string>, d: Departure): string | null {
+  coastUntil(w, d.encounter + 600, { stopOnSoi: true });
+  if (w.active!.body !== d.target) return `missed ${d.target} (in ${w.active!.body})`;
   doScience(w); trackBiome(w, biomes);
-  const contact = w.canControl();
-  debug(`arrived ${target} day pe ${(w.orbitSummary(w.active!).pe / 1000).toFixed(0)} km contact ${contact} Δv left ${dvLeft(w).toFixed(0)}`);
-  return { err: null, leg: { departure, arrival: w.ut, dv, trims, trimDv, contact } };
+  debug(`arrived ${d.target}: pe ${(w.orbitSummary(w.active!).pe / 1000).toFixed(0)} km, contact ${w.canControl()}, Δv left ${dvLeft(w).toFixed(0)}`);
+  return null;
+}
+
+/** Whole leg for one probe flown alone: plan, depart, three course corrections, arrival. */
+export function toPlanet(w: World, biomes: Set<string>, target: string, minStage = 0, periapsis?: number): { err: string | null; leg?: Leg } {
+  const d = planDeparture(w, target, periapsis);
+  if (typeof d === 'string') return { err: d };
+  const dv = depart(w, minStage);
+  if (typeof dv === 'string') return { err: dv };
+  coastUntil(w, w.ut + 120 * 86400, { stopOnSoi: true });
+  let trims = 0, trimDv = 0;
+  for (const fraction of [0.05, 0.6, 0.9]) {
+    const used = correct(w, d, w.ut + (d.encounter - w.ut) * fraction, minStage);
+    if (typeof used === 'number') { trimDv += used; trims += used > 0 ? 1 : 0; } else if (used !== 'no contact') return { err: used };
+  }
+  const err = arrive(w, biomes, d);
+  if (err) return { err };
+  return { err: null, leg: { departure: d.time, arrival: w.ut, dv, trims, trimDv, contact: w.canControl() } };
+}
+
+/** Flyby: coast through periapsis running the instruments in each new situation, transmitting while in contact. */
+export function flyby(w: World, biomes: Set<string>): number {
+  const before = w.progression.science, o = w.orbitOf(w.active!), tPe = w.ut + timeToPeriapsis(o, w.ut);
+  if (!(tPe > w.ut)) return 0;
+  // Sample the inbound leg ever closer to periapsis (situations change near the planet), then the outbound leg.
+  for (const f of [0.5, 0.8, 0.95, 0.99, 1]) {
+    coastUntil(w, w.ut + (tPe - w.ut) * f, { stopOnSoi: true });
+    if (w.active!.body !== o.body) break;
+    trackBiome(w, biomes);
+    if (doScience(w)) transmitAll(w);
+  }
+  transmitAll(w);
+  return w.progression.science - before;
 }
 
 /** Move the arrival periapsis to `altitude` with a burn along the horizontal velocity ten minutes from now (bisection). */

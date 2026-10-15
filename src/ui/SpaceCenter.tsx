@@ -15,6 +15,7 @@ import { pendingDebrief, setPendingDebrief, type FlightDebrief } from './hub/deb
 import { facilityForBuilding, hubFacilities, type HubFacility, type HubFacilityId } from './hub/facilities';
 import { launchBlocker } from './hub/quickLaunch';
 import { nextGoal } from './hub/nextGoal';
+import { launchSeasons } from './hub/seasons';
 import { FacilitiesCard } from './hub/FacilitiesCard';
 import { FacilityUnblock, LevelPips, upgradableFor } from './hub/FacilityUpgrade';
 import { facilityPerk, ownedLevel } from '../sim/science/facilities';
@@ -44,9 +45,12 @@ export function SpaceCenter() {
   const photo = usePhotoMode().active;
   const scale = useGame(s => s.scalePreset);
   // Program state only changes between visits; recompute on milestones, research and the contract desk.
-  const goal = useMemo(() => p ? nextGoal(p, mode, scale) : null,
+  // Launch season hints for the planet goals: a few milliseconds of Lambert arcs, once per scale and program day.
+  const day = Math.floor(ut / 86400);
+  const seasons = useMemo(() => p?.milestones.includes('first-moon-flyby') ? launchSeasons(scale, day * 86400) : {}, [scale, day, p?.milestones.length]);
+  const goal = useMemo(() => p ? nextGoal(p, mode, scale, seasons) : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [p, mode, scale, p?.milestones.length, p?.unlocked.length, p?.contracts.length, Math.floor(p?.science ?? 0), p?.facilities]);
+    [p, mode, scale, seasons, p?.milestones.length, p?.unlocked.length, p?.contracts.length, Math.floor(p?.science ?? 0), p?.facilities]);
   const career = mode === 'career' && !!p;
   /** Level of the facility behind a hub entry (career, upgradable facilities only). */
   const levelOf = (id: HubFacilityId) => { const f = upgradableFor(id); return career && f ? { level: ownedLevel(p!, f), perk: facilityPerk(f, ownedLevel(p!, f), scale) } : null; };

@@ -26,8 +26,9 @@ export function newProgression(creditsMultiplier = 1): Progression {
   return { science: 0, funds: Math.round(60000 * creditsMultiplier), reputation: 0, unlocked: ['foundation'], archive: {}, nextDataId: 1,
     contracts: [], contractSeed: 20300720, contractBatch: 0, milestones: [], facilities: { ...NEW_PROGRAM_FACILITIES } };
 }
-export interface ContractReadiness { orbit: boolean; lunar: boolean; landing: boolean }
-export const offerKey = (advanced: boolean, r: ContractReadiness) => `${+advanced}${+r.orbit}${+r.lunar}${+r.landing}`;
+/** `planets`: the program can build a probe that keeps contact at Venus and Mars (optional: older callers omit it). */
+export interface ContractReadiness { orbit: boolean; lunar: boolean; landing: boolean; planets?: boolean }
+export const offerKey = (advanced: boolean, r: ContractReadiness) => `${+advanced}${+r.orbit}${+r.lunar}${+r.landing}${r.planets ? 'p' : ''}`;
 /** Same objective: completing one would complete the other with the same flight. */
 export const sameObjective = (a: Contract, b: Contract) => a.kind === b.kind && a.body === b.body && a.biome === b.biome;
 /** Offers follow demonstrated capability; no lunar surface return in a new program. */
@@ -35,11 +36,14 @@ export function generateContracts(seed: number, batch = 0, advanced = false, cre
   readiness: ContractReadiness = { orbit: false, lunar: false, landing: false }, rewardFactor = 1): Contract[] {
   let n = (seed + Math.imul(batch, 2654435761)) >>> 0;
   const random = () => { n = (Math.imul(n, 1664525) + 1013904223) >>> 0; return n / 4294967296; };
-  const bodies = advanced ? ['moon', 'mars', 'titan', 'enceladus'] : readiness.lunar ? ['earth', 'moon'] : ['earth'];
+  const bodies = advanced ? ['moon', 'venus', 'mars', 'titan', 'enceladus'] : readiness.planets ? ['earth', 'moon', 'venus', 'mars'] : readiness.lunar ? ['earth', 'moon'] : ['earth'];
   const body = bodies[Math.floor(random() * bodies.length)];
   const label = (id: string) => id[0].toUpperCase() + id.slice(1);
-  const factor = body === 'earth' ? 1 : body === 'moon' ? 2 : 5;
-  const scienceBody = readiness.landing || advanced ? body : 'earth';
+  const factorOf = (id: string) => id === 'earth' ? 1 : id === 'moon' ? 2 : 5;
+  const factor = factorOf(body);
+  // Before the advanced tier, planets are probe destinations only: surface work there stays on the Moon.
+  const near = advanced || (body !== 'venus' && body !== 'mars') ? body : 'moon';
+  const scienceBody = readiness.landing || advanced ? near : 'earth';
   const scienceBiomes = BIOMES[scienceBody] ?? GENERIC_BIOMES;
   const biome = batch === 0 ? 'Launch Complex' : scienceBiomes[Math.floor(random() * scienceBiomes.length)];
   const offer = (kind: ContractKind, target: string, title: string, f: number, b?: string): Contract => {
@@ -51,13 +55,16 @@ export function generateContracts(seed: number, batch = 0, advanced = false, cre
       reward: Math.round((kind === 'science' ? 10000 : kind === 'flyby' ? 20000 : kind === 'orbit' ? 18000 : 12000) * m * rewardFactor),
       penalty: advance, reputation: 3 * f, landed: false };
   };
-  const expedition = readiness.orbit && !readiness.landing
+  // Probe programs: half the batches offer a visit to Venus or Mars (a flyby counts) instead of the usual expedition.
+  const planet = readiness.planets && !advanced && random() < 0.5 ? (random() < 0.5 ? 'venus' : 'mars') : null;
+  const expedition = planet ? offer('flyby', planet, `Enter the ${label(planet)} sphere of influence`, 5)
+    : readiness.orbit && !readiness.landing
     ? offer('flyby', 'moon', 'Enter the Moon sphere of influence', 2)
     : readiness.landing || advanced
-      ? offer('return', body === 'earth' ? 'moon' : body, `Surface expedition and return · ${label(body === 'earth' ? 'moon' : body)}`, Math.max(2, factor))
+      ? offer('return', near === 'earth' ? 'moon' : near, `Surface expedition and return · ${label(near === 'earth' ? 'moon' : near)}`, Math.max(2, factorOf(near)))
       : offer('return', 'earth', 'Test flight · Earth', 1);
   return [offer('orbit', body, `Establish orbit · ${label(body)}`, factor), expedition,
-    offer('science', scienceBody, `Field survey · ${label(scienceBody)} / ${biome}`, scienceBody === 'earth' ? 1 : factor, biome)];
+    offer('science', scienceBody, `Field survey · ${label(scienceBody)} / ${biome}`, factorOf(scienceBody), biome)];
 }
 /** Repeatable public recovery funding. Available regardless of contract slots or research.
  * Restores a modest flight budget; reputation is the cost, so bankruptcy never blocks play.
