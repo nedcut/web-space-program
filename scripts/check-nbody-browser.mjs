@@ -33,7 +33,7 @@ try {
     const c=window.__flight,p=c.world.numericalPrediction;
     return {precise:c.world.preciseGravity,patches:p.patches.length,samples:window.__nbodySamples,
       markers:c.world.mapGravityMarkers().filter(m=>/ L[1-5]$/.test(m.label)).length,
-      webgl:c.pipeline.renderer.getContext().getError(),lines:c.map.vesselLines.length};
+      webgl:c.pipeline.renderer.getContext().getError(),lines:c.map.lines.vesselLines.length};
   });
   assert.equal(result.precise,true);assert.equal(result.markers,20);assert.ok(result.samples>10);assert.ok(result.lines>0);assert.equal(result.webgl,0);
   const help=page.getByRole('button',{name:'Got it',exact:true});

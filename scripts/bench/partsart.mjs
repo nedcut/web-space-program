@@ -67,7 +67,7 @@ try {
       const THREE = await import('/node_modules/.vite/deps/three.js');
       const root = f.views.get(f.world.active.state.id).root;
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(root.quaternion);
-      const sun = f.sunLight.position.clone().sub(f.sunLight.target.position).normalize();
+      const sun = f.lighting.sunLight.position.clone().sub(f.lighting.sunLight.target.position).normalize();
       if (kind !== 'pad') {
         up.crossVectors(sun, up).normalize();
         const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);

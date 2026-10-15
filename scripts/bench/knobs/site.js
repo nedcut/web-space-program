@@ -8,7 +8,7 @@
   const meshes = []; f.site.root.traverse(o => { if (o.isMesh) meshes.push(o); });
   meshes.forEach(m => { m._rs = m.receiveShadow; m.receiveShadow = false; }); await wait(1500); med(); out.siteNoShadowRecv = +(out.full - med()).toFixed(2);
   meshes.forEach(m => { m.receiveShadow = m._rs; }); await wait(1500); med();
-  const env = sc.environment; f.skyEnv.update = function () { return null; }; sc.environment = null; await wait(1500); med(); out.noEnvAll = +(out.full - med()).toFixed(2);
+  const env = sc.environment; f.lighting.skyEnv.update = function () { return null; }; sc.environment = null; await wait(1500); med(); out.noEnvAll = +(out.full - med()).toFixed(2);
   out.glareVisible = f.glare.mesh.visible;
   out.glare = f.glare.mesh.geometry.type + ' ' + (f.glare.mesh.material.uniforms ? Object.keys(f.glare.mesh.material.uniforms).join('/') : '');
   return out;
