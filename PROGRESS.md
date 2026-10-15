@@ -1,6 +1,6 @@
 # Progress Report
 
-_Last updated: 2026-10-13_
+_Last updated: 2026-10-14_
 
 ## Real lunar probe and Entry trim (2026-10-13, op/lunartrim)
 
@@ -1190,27 +1190,26 @@ Craft previews in the load dialog now pause/retry after WebGL loss and never cac
 - Firefox (Windows, DPR 1, 30 km, ASAP): 3.37–3.46 → 3.30–3.34 ms frame interval; Firefox is CPU-bound there, so parity.
   Details: docs/PERFORMANCE.md "Mid-climb GPU", DECISIONS.md.
 
-## Regional flight ground appearance (2026-10-14, cx/groundlook)
+## Regional flight ground appearance — round two (2026-10-14, cx/groundlook)
 
-- Florida/Gulf/Caribbean flight terrain has a streamed ~1 km static NASA colour
-  patch, imagery-driven rural detail and Natural Earth city footprints with grey
-  roofs/streets by day and finer Black Marble lights at night. Orlando, Miami and
-  Tampa now read as urban areas from a few kilometres up. Streets are illustrative
-  repeating texture; there are no 3D buildings. Global seasonal imagery remains
-  outside the region and at orbital distances. Low and far-only renderers skip it.
-- Added 3.657 MB of tracked public-domain derivatives and provenance; about 67 MiB
-  steady GPU storage. Reuses budgeted imagery streaming and context recovery.
-  Flight shaders/imagery only: capefix owns the still-visible launch plateau, and
-  mapbiomes owns map presentation. No simulation, coastline or map edits here.
-- **Not ready for performance acceptance.** Medium, RTX 3060 Ti, production,
-  DPR 2 paired GPU medians: pad 2.415→2.453 ms; 10 km 2.131→2.253 (+5.7%);
-  30 km 1.765→1.700; orbit 2.019→2.124. The repeated 10 km regression violates
-  the requested budget. M4 Pro / Zen / 120 Hz and cross-branch integration remain
-  unverified; the lead must resolve the performance gate before merging.
-- Lint, TypeScript and build pass. Full two-worker Vitest: 207 files / 1,910 passed,
-  one skipped. All ten final Chrome views and Firefox day/night views pass with
-  no errors; forced context restoration returns pixel-identical Orlando imagery.
-- Runtime/asset head: `66beca43`; no push or merge. Complete measurement method,
-  screenshot pairs, test evidence and remaining limitations:
-  [groundlook evidence](docs/performance/groundlook.md).
-
+- Kept the sharper ~1 km Florida/Gulf/Caribbean NASA imagery. Cities now have soft
+  density-weighted footprints, imagery-tinted varied roofs, parks and irregular
+  streets; warm road lights replace the uniform dot panel. Removed the detached
+  glowing crosses. Fine detail fades with distance to avoid the old screen-door
+  appearance. These are illustrative 2D streets, not real roads or 3D buildings.
+- Cape's rural close view now receives the regional imagery instead of generic
+  sand/green noise. Imagery reveals the old plateau's raised water-coloured rim;
+  rural/coast acceptance still needs capefix integration.
+- **Meets the requested GPU limits on RTX 3060 Ti.** Production Medium paired
+  shader medians: pad 2.410→2.404 ms (−0.23%); 10 km 2.127→2.149 (+1.02%);
+  30 km 1.588→1.607 (+1.20%); orbit 2.022→2.035 (+0.64%). Prewarmed regional
+  shader variants remove inactive cost. No extra draws or per-frame allocations.
+- Pack: 5.159 MB tracked, approximately 88 MiB steady GPU storage. Main mapbiomes
+  integrated. M4 Pro / Zen / 120 Hz, loading peaks and capefix integration remain
+  unverified. Flight controller also rewarms terrain programs after context loss.
+- Lint, TypeScript and build passed; full two-worker suite passed 208 files /
+  1,918 tests, one skipped. Screenshot pairs cover the prior views plus Orlando
+  at 0.5/1/3/10 km by day and night, including Miami at 3 km. Production browser
+  checks confirm terrain switches and context recovery reuse prewarmed programs.
+- Local commits on `cx/groundlook`; no push or merge. Measurement method, media
+  paths, verification and limitations: [groundlook evidence](docs/performance/groundlook.md).

@@ -1,134 +1,140 @@
-# Regional flight ground appearance — cx/groundlook
+# Regional flight ground appearance — round two
 
-Base: `e995b809`. Runtime/asset head: `66beca43`. No push or merge. This branch
-changes flight terrain imagery, not map UI, simulation heights or launch geometry.
+Branch `cx/groundlook`; runtime head `19a895da`. Merged main `ab4713ed` (mapbiomes)
+in `34677a86`. Original shader baseline remains `e995b809`; round-one head was
+`91e97c7c`. Nothing pushed or merged to main.
 
-## Result and decisions
+## Result and owner-visible changes
 
-- Florida/Gulf/Caribbean gets a static 4096×2560 colour patch over 100–60°W,
-  10–35°N. Its north/south sample spacing is about 1.09 km, 4.5× finer than the
-  existing global 8k imagery. This is not a global 500 m upgrade. Global monthly
-  imagery remains visible outside the region and at orbital distances.
-- Natural Earth urban footprints and Black Marble brightness add grey roofs,
-  green suburbs and street texture by day, with intermittent lamps and a diffuse
-  glow at night. Orlando, Miami and Tampa have geographically placed footprints;
-  individual streets/buildings are original procedural texture, not surveyed data.
-- Satellite colour drives restrained field, canopy and damp-green detail. This is
-  a visual approximation, not the simulation's biome classification. The regional
-  contribution fades in between 250 and 750 m viewing distance; below 250 m the
-  existing local surface material remains. It fades out over 0.06–0.16 Earth radii
-  (about 38–102 km in Standard scale).
-- One planar detail lookup replaces coarse triplanar noise in the region's
-  interior. No city meshes, extra draw calls or per-frame CPU allocation were added.
-  Colour and urban density share one RGBA texture; night brightness uses R8.
-- Medium and higher stream the pack after global imagery. Low and capped far-only
-  renderers skip it. Missing downloads leave global imagery intact. Upload/merge
-  work uses the existing per-frame budget, and context restore re-streams the pack.
-  It loads for Earth flight even when the camera is outside the covered region.
-- Added tracked pack size: **3.657 MB** (decimal, including manifest). Steady GPU
-  storage is approximately **67 MiB** including mips, with temporary upload
-  textures and decoded CPU strips in addition during loading. Public-domain NASA
-  and Natural Earth source URLs, licence statements and input/output SHA-256 hashes
-  are recorded in the pack manifest and `public/earth/ATTRIBUTION.md`.
+- Retains the sharper 4096×2560 Florida/Gulf/Caribbean imagery (100–60°W,
+  10–35°N; about 1.09 km source samples). It is a regional improvement, not a
+  global 500 m upgrade. Global monthly imagery remains outside the region.
+- City footprints now soften through Natural Earth coverage, Black Marble density,
+  and imagery water/vegetation colour. Roof tones blend with the source colour.
+  A new original 2048px texture over 3072 game metres supplies variable parcels,
+  parks, fine local streets and sparse curved arterials. Roads and buildings are
+  illustrative, not surveyed. This is still a repeating 2D surface texture.
+- Warm road lights are intermittent and density-weighted. The old procedural
+  emission inside the region caused the detached glowing cross/square artifacts;
+  that contribution is removed. Regional night brightness remains at distance.
+- Rural Cape colour now actually uses the regional imagery: the old vertex water
+  rejection excluded that view. Generic coarse sand/green detail is replaced by
+  imagery and restrained canopy variation. The source is still blurry close up.
+- Fine city detail fades with pixel footprint and from 10–16 km viewing distance;
+  canopy fades from 3–10 km. Colour blends from local material over 250–750 m,
+  stays fully regional to 0.12 Earth radii and fades out by 0.16 radii. Camera
+  altitude fades regional shading in over 50–150 m, preserving pad material.
+- Three prewarmed terrain programs avoid paying regional shader overhead at the
+  pad, outside the Gulf and in orbit. Material switches add no draws. The existing
+  update adds comparisons and one uniform weight, with no per-frame allocation.
+  `flight/controller.ts` is the one cross-area touch: rewarm inactive programs
+  after context restoration and ignore stale warmup completion.
+- Asset namespace is now `gulf-v2` to invalidate the old cached city layout.
+  Tracked pack totals **5,158,630 bytes (5.159 MB)**, about 1.50 MB above round one.
+  Steady regional texture storage is approximately **88 MiB including mipmaps**,
+  up from 67 MiB. Loading uses additional temporary textures/decoded strips.
+  NASA/Natural Earth source licences and input/output hashes are in the manifest
+  and `public/earth/ATTRIBUTION.md`. Low and far-only renderers skip the pack.
+
+Main changed paths: `scripts/earth-imagery/ground.mjs`, `public/earth/imagery/packs/gulf-v2/`,
+`src/render/planet/{earthGround,materials,PlanetRenderer,quadtree}.ts`, the regional
+loader/imagery binding, and `src/flight/controller.ts`. See commits for exact scope.
+
+## Production Medium GPU acceptance
+
+**The requested approximately 1% at 10 km and maximum 2% per scene are met in
+this RTX 3060 Ti run.** This does not establish M4 Pro / Zen performance.
+
+| Scene | Baseline GPU ms | Final GPU ms | Change | Baseline / final F8 CPU ms |
+| --- | ---: | ---: | ---: | ---: |
+| Pad | 2.40984 | 2.40419 | −0.23% | 2.023 / 1.883 |
+| 10 km ascent | 2.12710 | 2.14879 | +1.02% | 2.249 / 2.365 |
+| 30 km ascent | 1.58783 | 1.60696 | +1.20% | 2.033 / 1.933 |
+| Orbit | 2.02175 | 2.03475 | +0.64% | 1.597 / 1.569 |
+
+Windows Chrome CDP on RTX 3060 Ti, frozen production build
+`/home/nedcut/.t3/projects/wsp-traces/groundlook-r2-dist7`, Medium, 1470×920 CSS
+pixels at DPR 2, balanced 0.70 rendering scale, adaptive off. All four cases
+reported no page/console errors. The shared GPU lock serialized browser jobs;
+Node tests overlapped, so CPU numbers are shared-host observations, not isolated
+CPU acceptance. Do not compare this table directly to prior runs' absolute times.
+
+`scripts/bench/groundlook/shader-ab.js` alternates the original baseline vertex
+and fragment sources against the final sources in the same frozen flight scene.
+Eight balanced rounds B/A/A/B/A/B/B/A each contain five timer queries of 30
+full-pipeline draws: twenty samples per variant; the table reports their medians.
+Each round has a 1.5 s ordinary-rendering F8 window, then 120 untimed draws to
+exclude GPU clock ramp-up. CPU numbers are medians of four F8 averages per variant.
+Regional assets remain resident in both cases: this measures steady shader cost,
+not loading/memory differences or frame pacing. Base/detail/far retain the same
+baseline shader defines needed by the original sources for a fair comparison.
+
+Raw evidence: `C:\wsp-tools\shots\groundlook\groundlook-r2-steady7.json`.
+Wrapper: `C:\wsp-tools\drv\groundlook-r2-steady-eval.js`.
+Log: `/tmp/groundlook-r2-steady7.log`. Earlier numbered variants are diagnostic,
+not the final acceptance run. Round one's +5.7% at 10 km was rejected.
+Final commit `19a895da` only adds the global material to hidden warmup proxies;
+rendered shaders/geometry are identical to the measured `724ea3da` build.
 
 ## Verification
 
-Final lint, standalone TypeScript check and production build passed. Loader,
-fallback, disposal, context restore and asset provenance checks are in
-`tests/earth-ground.test.ts`; the focused terrain/imagery run passed 15 tests.
-The final full two-worker Vitest run passed **207 files / 1,910 tests**, with one
-existing skip, in 713.58 s. Log: `/tmp/groundlook-final-full-tests-retry.log`.
-The preceding attempt ended on SIGTERM without a summary; it is not counted as
-a pass. Final command logs: `/tmp/groundlook-packed-lint.log`,
-`/tmp/groundlook-final-tsc.log`, `/tmp/groundlook-packed-build.log`.
-
-Windows Firefox captured Florida at 30 km and 1.2 km and Orlando at 3 km by day
-and night with the regional pack active, with no page/console errors. Forced
-WebGL loss/restoration recovered Orlando; the before/after-restoration PNGs are
-byte-identical. Chrome's final capture set and GPU measurements are described below.
-
-All ten final Chrome captures completed on runtime head `66beca43`, with 8k imagery
-and the regional pack settled and no page/console errors. These overwrite the
-earlier `final-*` captures made during optimization; only the last capture log
-listed below identifies the final set.
-
-## GPU acceptance
-
-**The no-measurable-slowdown gate is not met. Do not merge this as a performance-
-approved change.** Final paired medians show a 0.122 ms / 5.7% regression at 10 km;
-earlier variants also consistently regressed there. The 30 km reduction does not
-offset this requirement. Pad and orbit results vary between runs, and the final
-orbit comparison is also slower.
-
-| Scene | Before GPU ms | After GPU ms | Change | Before / after F8 CPU ms |
-| --- | ---: | ---: | ---: | ---: |
-| Pad | 2.415 | 2.453 | +1.5% | 2.243 / 2.262 |
-| 10 km ascent | 2.131 | 2.253 | +5.7% | 2.420 / 2.376 |
-| 30 km ascent | 1.765 | 1.700 | −3.7% | 2.089 / 2.156 |
-| Orbit | 2.019 | 2.124 | +5.2% | 1.708 / 1.718 |
-
-All four cases had the regional pack active. Further shader optimization, a
-different detail design or an explicitly agreed quality tradeoff remains for the
-lead; this report does not waive the Medium budget.
-
-Measurement uses Windows Chrome on RTX 3060 Ti, production build, Medium,
-1470×920 CSS pixels at DPR 2, balanced 0.70 rendering scale, adaptive off. The
-final build is frozen at `wsp-traces/groundlook-packed-dist`, port 5545. The GPU
-lock serializes browser jobs; the full Node tests overlapped this run, so F8 CPU
-figures are shared-host observations rather than isolated CPU benchmarks.
-
-`scripts/bench/groundlook/shader-ab.js` switches both baseline vertex and fragment
-sources versus final sources in the same frozen flight scene. It performs six
-alternating rounds (before/after/after/before/before/after), each with five
-timer queries of 30 full-pipeline draws. Reported GPU numbers are medians of all
-15 samples per variant. A 1.5 s ordinary-rendering F8 window precedes each batch;
-CPU numbers are medians of its three average CPU times per variant. Regional
-textures stay resident for both variants. Thus this isolates steady shader cost;
-it does not measure loading or memory pressure differences between builds.
-
-Raw final evidence: `C:\wsp-tools\shots\groundlook\groundlook-packed-ab.json`.
-The eval wrapper with baseline sources is
-`C:\wsp-tools\drv\groundlook-exact-eval.js`. An initial separate production
-baseline exists in `groundlook-before.json` at DPR 1; it is not numerically
-comparable to this DPR 2 table. Earlier `after1`, `after2`, `accepted`, `final`,
-`final-fixed` and other diagnostic JSON files describe superseded variants.
+- `npm run lint` passed: `/tmp/groundlook-r2-final-lint.log`.
+- `npx tsc --noEmit` passed: `/tmp/groundlook-r2-final-tsc.log`.
+- `npm run build` passed: `/tmp/groundlook-r2-build8.log` (existing chunk-size warning).
+- `npx vitest run --maxWorkers=2` passed **208 files, 1,918 tests; one skipped**,
+  339.37 s: `/tmp/groundlook-r2-variants-full-tests.log`. This was before the final
+  one-line addition of the base warmup representative; the 17 focused tests, lint
+  and build were repeated afterward (`/tmp/groundlook-r2-final-focused.log`).
+- Focused loader/lifecycle/compile checks passed 17 tests. Real WebGL Float32
+  transform feedback checks 16,261 Gulf positions against exact spherical UVs:
+  maximum projection error **0.141 m Standard / 1.405 m Real**.
+- Production browser smoke passed on `19a895da`: pad → 10 km → 30 km uses
+  base/detail/far without new terrain programs; forced context restoration warms
+  all three, and returning to the pad adds no programs. No page/console errors.
+  Raw evidence: `C:\wsp-tools\shots\groundlook\groundlook-r2-switches3.json`;
+  driver expression: `C:\wsp-tools\drv\groundlook-r2-switches.js`.
+  Frozen final build: `wsp-traces/groundlook-r2-dist8`.
 
 ## Screenshot evidence
 
-All media stays outside Git in `C:\wsp-tools\shots\groundlook\`
-(`/mnt/c/wsp-tools/shots/groundlook/`). The Chrome files pair identical camera,
-season, light and quality settings, with the global 8k level settled:
+Media directory: `/mnt/c/wsp-tools/shots/groundlook/` (Windows equivalent
+`C:\wsp-tools\shots\groundlook\`). Each row has `r2-before-<view>.png`
+and `r2-after-<view>.png`, with identical camera/light/quality and settled global
+8k plus regional assets. The baseline uses the original shader sources. Original
+round-one `final-*` files remain for comparison with the rejected city rendering.
 
-| View | Baseline | Final |
-| --- | --- | --- |
-| Florida, 600 km | `before-fl-600k.png` | `final-fl-600k.png` |
-| Florida, 120 km | `before-fl-120k.png` | `final-fl-120k.png` |
-| Florida, 30 km | `before-fl-30k.png` | `final-fl-30k.png` |
-| Florida, 7.5 km oblique | `before-fl-8k-oblique.png` | `final-fl-8k-oblique.png` |
-| Cape, 1.2 km | `before-fl-1k.png` | `final-fl-1k.png` |
-| Orlando, 3 km day | `before-orlando-day.png` | `final-orlando-day.png` |
-| Orlando, 3 km night | `before-orlando-night.png` | `final-orlando-night.png` |
-| Miami, 3 km day | `before-miami-day.png` | `final-miami-day.png` |
-| Tampa, 3 km day | `before-tampa-day.png` | `final-tampa-day.png` |
+| View suffix | Scene |
+| --- | --- |
+| `fl-600k`, `fl-120k`, `fl-30k` | Same Florida altitude views as round one |
+| `fl-8k-oblique` | Florida 7.5 km, oblique |
+| `fl-1k` | Cape 1.2 km rural close view |
+| `orlando-day`, `orlando-night` | Orlando 3 km |
+| `orlando-1k-day`, `orlando-1k-night` | Orlando 1 km |
+| `orlando-10k-day`, `orlando-10k-night` | Orlando 10 km |
+| `orlando-500m-day`, `orlando-500m-night` | Additional close/detail sampling check |
+| `miami-day`, `tampa-day` | Miami and Tampa 3 km |
+| `dateline` | Opposite hemisphere leakage check |
 
-`final-dateline.png` checks that the regional patch does not appear on the opposite
-hemisphere. Firefox equivalents use `ff-final-`; restoration is
-`ff-restored-orlando.png`. Shot definitions are in
-`C:\wsp-tools\drv\groundlook-final.json`. Chrome's last capture log is
-`/tmp/groundlook-packed-shots.log`; Firefox's is `/tmp/groundlook-firefox-final.log`.
+Definitions: `scripts/bench/groundlook/views.json`; baseline capture log
+`/tmp/groundlook-r2-before-shots.log`; final capture log
+`/tmp/groundlook-r2-after7-shots.log`, with `fl-30k` replaced by the successful
+`/tmp/groundlook-r2-after7-retry.log` capture (the first was interrupted by a dev
+reload). All 16 final captures are ready with no page/console errors. Visual
+inspection covers the softer Orlando edge, irregular warm roads without detached
+crosses, filtered distant detail, retained Florida imagery and the Cape limitation
+below. Browser visuals use the development planet
+preview; the GPU table uses production flight. No media is committed to Git.
 
 ## Remaining acceptance and limitations
 
-- The Medium no-measurable-slowdown requirement is a merge gate; see the final GPU
-  result above. The branch should not be called performance-approved without it.
-- M4 Pro, macOS Zen/Firefox and 120 Hz performance have not been measured.
-- Integration with capefix/mapbiomes has not been tested (main advanced to
-  `ab4713ed` with mapbiomes during verification; this branch retains `e995b809`
-  as its base). The circular Cape
-  plateau and coarse shoreline still appear in this branch's screenshots because
-  their geometry is deliberately left to capefix.
-- Close-up urban fabric is a repeating 2D texture, and rural detail remains
-  stylized. The source colour is static and uses about 1 km samples. No claim of
-  photogrammetric cities, real roads or precise marsh/forest classification.
-- Browser visuals use the development-only planet preview; GPU timing uses the
-  production flight scene. Loading hitch and peak-memory acceptance are unmeasured.
+- M4 Pro, macOS Zen/Firefox, 120 Hz frame pacing, loading hitches and peak memory
+  remain unmeasured. The current CPU data cannot establish CPU equivalence.
+- Main's mapbiomes is integrated. capefix is not integrated in this branch; the
+  Cape plateau/coast geometry remains visible and belongs to that workstream.
+  In `fl-1k`, the generic sand/green noise is gone, but the image-water colour
+  reveals a hard raised rim from the old plateau. Rural/coast visual acceptance
+  therefore still needs capefix integration; this is not a fully resolved shoreline.
+- This is static kilometre-scale imagery plus stylized 2D detail, not
+  photogrammetry, real roads, or precise forest/marsh classification. Sampled
+  views check 0.5, 1, 3, 10 and 30 km; they cannot prove all possible camera angles
+  or every intermediate altitude is alias-free.
