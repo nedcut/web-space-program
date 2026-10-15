@@ -1173,3 +1173,7 @@ Owner decisions 2026-10-13 (both recommended options).
   test and lazy normals (bit-identical, ~5×). Flight holds adaptive resolution until 2 s after `sceneReady`;
   weak GPUs on a ≤ 0.5 render scale start adaptive at 1.0. Numbers and open findings in
   `docs/performance/hd520/README.md`.
+- **Gated audio layers (2026-10-14):** pooled continuous Web Audio layers are disconnected from the mix while
+  silent and reconnected on the first audible update; their filter/pitch params are only automated while
+  connected. Silent connected loops cost ~25 % of a core on an HD 520 laptop. Vegetation LOD skips repacking a
+  level whose cell lies wholly inside its band and was already fully packed.

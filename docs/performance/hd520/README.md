@@ -28,6 +28,15 @@ Medium is GPU-bound (CPU ≈ 6 ms/frame); its pad cost is mostly resolution-inde
   Now held until 2 s after `sceneReady`.
 - **Weak-tier adaptive start** is 1.0 when the preset is already at ≤ 0.5 render scale (Low), not 0.6 (was 0.3
   effective at start).
+- **Silent audio layers leave the Web Audio graph** (`audio/index.ts`, `GameAudio.level`): all ~37 pooled
+  continuous layers (every engine type's roar/rumble/crackle/whine, wind, buffet, plasma, mechanics, neighbour
+  engines) stayed connected at zero gain, and each costs its looping source and biquad every render quantum.
+  The audio render thread used 38–43 % of a core during a plain ascent; now 15–17 % (4 of 37 layers connected).
+  Layers reconnect at the first audible frame. Measured by per-thread `/proc` CPU of the renderer process.
+- **Launch-site vegetation skips unchanged repacks** (`LaunchSite.updateVegetationLod`): a climbing camera moves
+  past the 20 m step every frame, and each LOD level was repacked and re-uploaded although a cell wholly inside
+  one band packs to the same arrays. `packBand` self time in a 10 s ascent 112 → 41 ms.
+- `gpu-bench.mjs --profile 1` saves a CPU profile per measured window (for `cpu-profile-report.mjs`).
 
 ## Open findings (not changed)
 
@@ -38,5 +47,12 @@ Medium is GPU-bound (CPU ≈ 6 ms/frame); its pad cost is mostly resolution-inde
 - Low could default to 0.75 render scale on this GPU class (adaptive still drops it under load).
 - Ascent allocates ~72 MB/min at Low (GC ~19 ms/s); no long tasks.
 - `rails/1e6` is ~2.6 ms/tick: hazard sub-stepping at max warp (`advancePackedHazards`), affordable.
+- First user gesture builds the audio graph synchronously (~125 ms keydown/click on this laptop): assigning the
+  3.5 s stereo reverb impulse to the convolver alone is 115–185 ms, the noise buffers 40–60 ms. In normal play
+  this is the first menu click. Deferring the reverb buffer or a shorter impulse would cut it (the latter
+  changes the music's sound).
+- The music reverb convolver (two threads, ~6 % of a core together) keeps running when music volume is 0.
+- Editor at load: soot still takes ~1.7 s of idle-batch work over the first seconds for a Real-scale craft;
+  steady state is idle.
 - `scripts/bench/run.ts` telemetry/navball section is stale after the controller `systems` refactor (crashes at
   the end; all earlier rows are valid).

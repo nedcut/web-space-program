@@ -228,7 +228,7 @@ export class LaunchSite {
    * Per cell: all instances (root-local matrices/colours/positions) and one mesh per detail level whose instance
    * buffer holds only the instances inside that level's distance band (rewritten when the camera moves ≥ 20 m).
    */
-  private vegetationLods: { levels: { mesh: THREE.InstancedMesh; min: number; max: number }[]; matrices: Float32Array; colors: Float32Array; xyz: Float32Array }[] = [];
+  private vegetationLods: { levels: { mesh: THREE.InstancedMesh; min: number; max: number; full?: boolean }[]; matrices: Float32Array; colors: Float32Array; xyz: Float32Array }[] = [];
   private readonly vegCamera = new THREE.Vector3(Infinity, 0, 0);
   private readonly lodCenter = new THREE.Vector3();
   private wind = { value: 0 };
@@ -1491,12 +1491,18 @@ export class LaunchSite {
     for (const { levels, matrices, colors, xyz } of this.vegetationLods) {
       const bound = levels[0].mesh.boundingSphere!;
       const centre = bound.center.distanceTo(cam);
-      for (const { mesh, min, max } of levels) {
+      for (const level of levels) {
+        const { mesh, min, max } = level;
         // Bands widened by the update step so a stale partition still covers the shader's dither band.
         const lo = Math.max(0, min - STEP), hi = max + STEP;
+        // A cell wholly inside the band packs every instance in order: unchanged since the last full pack (the
+        // common case from a climbing or orbiting camera, which moves past STEP every frame).
+        const inside = centre - bound.radius >= lo && centre + bound.radius < hi;
+        if (inside && level.full) continue;
         const k = centre + bound.radius > lo && centre - bound.radius < hi
           ? packBand(xyz, matrices, colors, cam, lo, hi, mesh.instanceMatrix.array as Float32Array, mesh.instanceColor!.array as Float32Array)
           : 0;
+        level.full = inside && k === xyz.length / 3;
         mesh.visible = k > 0;
         if (k === 0) continue;
         mesh.count = k;

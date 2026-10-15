@@ -63,6 +63,9 @@ export function transonicBuffeting(mach: number): number {
   return Math.exp(-(((positive(mach) - 1) / 0.18) ** 2));
 }
 
+/** Gain below which a continuous layer counts as silent (-80 dB). */
+const SILENT = 1e-4;
+
 interface Layer { gain: GainNode; filter: BiquadFilterNode; source: AudioBufferSourceNode }
 interface EventVoice { body: Layer; snap?: Layer; thump?: { source: OscillatorNode; gain: GainNode }; timer?: ReturnType<typeof setTimeout>; connected: boolean }
 interface EngineVoice { previousThrust?: number; roar: Layer; rumble: Layer; crackle?: Layer; whine?: { source: OscillatorNode; gain: GainNode } }
@@ -115,6 +118,9 @@ export class GameAudio {
   private themeBuses = new Map<MusicTheme, GainNode>();
   private musicDeadline = 0;
   private mechanics = new Map<string, Layer>();
+  /** Continuous layers that leave the graph while silent (see `level`), keyed by their output gain. */
+  private gates = new Map<GainNode, { to: AudioNode; open: boolean; quietUntil: number }>();
+  private gateSweep: ReturnType<typeof setTimeout> | undefined;
   private warningTimes = new Map<string, number>();
   private previousMechanical?: string;
   private previousVessel?: string;
@@ -218,23 +224,22 @@ export class GameAudio {
         this.explosionVoices.push({ body: rumble, snap, thump, connected: false });
       }
       for (const type of Object.keys(TIMBRE) as EngineType[]) {
-        const roar = this.loop(type === 'monoprop' ? 'white' : 'pink', 'lowpass', TIMBRE[type].cutoff);
-        const rumble = this.loop('brown', 'lowpass', TIMBRE[type].rumble);
+        const roar = this.gated(this.loop(type === 'monoprop' ? 'white' : 'pink', 'lowpass', TIMBRE[type].cutoff));
+        const rumble = this.gated(this.loop('brown', 'lowpass', TIMBRE[type].rumble));
         this.voices.set(type, { roar, rumble,
-          crackle: type === 'solid' || type === 'afterburner' ? this.loop('crackle', 'bandpass', 1600) : undefined,
-          whine: ['jet', 'afterburner', 'ion', 'nuclear'].includes(type) ? this.oscillatorLoop(type === 'ion' ? 1800 : 120) : undefined });
+          crackle: type === 'solid' || type === 'afterburner' ? this.gated(this.loop('crackle', 'bandpass', 1600)) : undefined,
+          whine: ['jet', 'afterburner', 'ion', 'nuclear'].includes(type) ? this.gated(this.oscillatorLoop(type === 'ion' ? 1800 : 120)) : undefined });
       }
-      this.wind = this.loop('pink', 'highpass', 450);
-      this.buffet = this.loop('brown', 'lowpass', 35);
-      this.plasma = this.loop('pink', 'bandpass', 1600);
+      this.wind = this.gated(this.loop('pink', 'highpass', 450));
+      this.buffet = this.gated(this.loop('brown', 'lowpass', 35));
+      this.plasma = this.gated(this.loop('pink', 'bandpass', 1600));
       for (const [name, kind, cutoff] of [
         ['wheels', 'brown', 220], ['chute', 'pink', 1300], ['jetpack', 'white', 2600], ['drill', 'crackle', 450],
-      ] as const) this.mechanics.set(name, this.loop(kind, 'bandpass', cutoff));
+      ] as const) this.mechanics.set(name, this.gated(this.loop(kind, 'bandpass', cutoff)));
       for (let i = 0; i < 4; i++) {
-        const layer = this.loop('pink', 'lowpass', 1200);
         const pan = this.track(ctx.createStereoPanner());
-        layer.gain.disconnect(); layer.gain.connect(pan).connect(this.effects);
-        this.spatial.push({ layer, pan });
+        pan.connect(this.effects);
+        this.spatial.push({ layer: this.gated(this.loop('pink', 'lowpass', 1200), pan), pan });
       }
       for (const theme of Object.keys(THEMES) as MusicTheme[]) {
         const bus = this.track(ctx.createGain()); bus.gain.value = 0;
@@ -339,31 +344,30 @@ export class GameAudio {
       const color = Math.max(0.5, Math.min(1.8, (1 + Math.log1p(count) * 0.08) / Math.sqrt(Math.max(0.25, size))));
       const timbre = TIMBRE[type];
       const amplitude = engineLoudness(thrust, state.ambientPressure) * distance * timbre.gain;
-      this.target(voice.roar.gain.gain, amplitude * (0.08 + 0.92 * air) * 0.32, type === 'jet' || type === 'afterburner' ? 0.7 : 0.08);
-      this.target(voice.roar.filter.frequency, 100 + timbre.cutoff * air * (0.25 + thrust * 0.75) * color * pitch);
-      this.target(voice.rumble.gain.gain, amplitude * 0.48);
-      this.target(voice.rumble.filter.frequency, timbre.rumble * (0.7 + thrust * 0.6) * color * pitch);
-      this.target(voice.roar.source.playbackRate, pitch);
-      this.target(voice.rumble.source.playbackRate, pitch);
-      if (voice.crackle) this.target(voice.crackle.source.playbackRate, pitch);
+      if (this.level(voice.roar.gain, amplitude * (0.08 + 0.92 * air) * 0.32, type === 'jet' || type === 'afterburner' ? 0.7 : 0.08)) {
+        this.target(voice.roar.filter.frequency, 100 + timbre.cutoff * air * (0.25 + thrust * 0.75) * color * pitch);
+        this.target(voice.roar.source.playbackRate, pitch);
+      }
+      if (this.level(voice.rumble.gain, amplitude * 0.48)) {
+        this.target(voice.rumble.filter.frequency, timbre.rumble * (0.7 + thrust * 0.6) * color * pitch);
+        this.target(voice.rumble.source.playbackRate, pitch);
+      }
       if (voice.whine) {
         const spool = type === 'jet' || type === 'afterburner' ? 0.7 : 0.15;
-        this.target(voice.whine.source.frequency, (type === 'ion' ? 1400 : type === 'nuclear' ? 55 : 280) * (0.4 + thrust * 1.6) * color * pitch, spool);
-        this.target(voice.whine.gain.gain, amplitude * (type === 'ion' ? 0.12 : 0.08), spool);
+        if (this.level(voice.whine.gain, amplitude * (type === 'ion' ? 0.12 : 0.08), spool))
+          this.target(voice.whine.source.frequency, (type === 'ion' ? 1400 : type === 'nuclear' ? 55 : 280) * (0.4 + thrust * 1.6) * color * pitch, spool);
       }
-      if (voice.crackle) this.target(voice.crackle.gain.gain, amplitude * air * 0.12);
+      if (voice.crackle && this.level(voice.crackle.gain, amplitude * air * 0.12)) this.target(voice.crackle.source.playbackRate, pitch);
     }
     const aero = windGain(state.dynamicPressure) * air * distance;
-    if (this.wind) {
-      this.target(this.wind.gain.gain, aero * 0.25);
+    if (this.wind && this.level(this.wind.gain, aero * 0.25))
       this.target(this.wind.filter.frequency, (250 + Math.min(2500, positive(state.airspeed) * 2)) * colorAir);
-    }
-    if (this.buffet) this.target(this.buffet.gain.gain, aero * (0.16 + transonicBuffeting(state.mach) * 0.55) + unit(state.launchRumble ?? 0) * distance * 0.28);
-    if (this.plasma) this.target(this.plasma.gain.gain, unit(state.reentryHeat) * air * distance * 0.3);
+    if (this.buffet) this.level(this.buffet.gain, aero * (0.16 + transonicBuffeting(state.mach) * 0.55) + unit(state.launchRumble ?? 0) * distance * 0.28);
+    if (this.plasma) this.level(this.plasma.gain, unit(state.reentryHeat) * air * distance * 0.3);
     for (let i = 0; i < this.spatial.length; i++) {
       const voice = this.spatial[i], source = state.neighbors?.[i];
       const range = source ? Math.hypot(source.x, source.y, source.z) : 0;
-      this.target(voice.layer.gain.gain, source ? unit(source.thrust) * air * 0.12 / (1 + range / 70) : 0);
+      if (!this.level(voice.layer.gain, source ? unit(source.thrust) * air * 0.12 / (1 + range / 70) : 0)) continue;
       this.target(voice.pan.pan, source ? Math.max(-1, Math.min(1, source.x / Math.max(1, range))) : 0);
       this.target(voice.layer.filter.frequency, (150 + air * 1500) * colorAir);
     }
@@ -517,16 +521,18 @@ export class GameAudio {
       for (const voice of this.pyroVoices) this.disconnectEvent(voice);
       for (const voice of this.explosionVoices) this.disconnectEvent(voice);
     }
-    for (const voice of this.spatial) this.target(voice.layer.gain.gain, 0);
+    for (const voice of this.spatial) this.level(voice.layer.gain, 0);
     this.previousControls = undefined;
     this.duck = 1;
     if (this.musicGain) this.target(this.musicGain.gain, this.musicLevel(), 1);
 
     for (const voice of this.voices.values()) {
-      for (const layer of [voice.roar, voice.rumble, voice.crackle]) if (layer) this.target(layer.gain.gain, 0);
-      if (voice.whine) this.target(voice.whine.gain.gain, 0);
+      for (const layer of [voice.roar, voice.rumble, voice.crackle, voice.whine]) if (layer) this.level(layer.gain, 0);
     }
-    for (const layer of [...this.mechanics.values(), this.wind, this.buffet, this.plasma]) if (layer) this.target(layer.gain.gain, 0);
+    for (const layer of [...this.mechanics.values(), this.wind, this.buffet, this.plasma]) if (layer) this.level(layer.gain, 0);
+    // Flight no longer calls update(): disconnect the layers once their fades have finished.
+    if (this.gateSweep !== undefined) clearTimeout(this.gateSweep);
+    this.gateSweep = setTimeout(() => this.sweepGates(), 8000);
     this.effectsMix = 1;
     if (this.effects) this.target(this.effects.gain, this.sfxVolume);
     if (this.effectsFilter) this.target(this.effectsFilter.frequency, 18000);
@@ -540,6 +546,9 @@ export class GameAudio {
     this.disposed = true;
     this.unsubscribeSettings?.();
     if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this.visibility);
+    if (this.gateSweep !== undefined) clearTimeout(this.gateSweep);
+    this.gateSweep = undefined;
+    this.gates.clear();
     if (this.musicTimer !== undefined) clearInterval(this.musicTimer);
     this.musicTimer = undefined;
     for (const source of this.sources) {
@@ -563,6 +572,45 @@ export class GameAudio {
   private track<T extends AudioNode>(node: T): T { this.nodes.add(node); return node; }
   private target(param: AudioParam, value: number, smoothing = 0.08): void {
     if (this.context) param.setTargetAtTime(value, this.context.currentTime, smoothing);
+  }
+
+  /** Take a continuous layer out of the graph until `level` makes it audible; it then feeds `to`. */
+  private gated<T extends { gain: GainNode }>(layer: T, to: AudioNode = this.effects!): T {
+    layer.gain.disconnect();
+    this.gates.set(layer.gain, { to, open: false, quietUntil: Infinity });
+    return layer;
+  }
+
+  /**
+   * Fade a gated layer to `value`. A connected loop costs its source and filter every render quantum even at zero
+   * gain (the ~40 pooled layers took ~25% of a core on an old laptop), so a layer leaves the graph once its fade
+   * to silence is over. Returns whether it is connected: callers set its other params only then, so automation
+   * does not pile up on a node the graph is not processing.
+   */
+  private level(gain: GainNode, value: number, smoothing = 0.08): boolean {
+    const gate = this.gates.get(gain);
+    const now = this.context?.currentTime ?? 0;
+    if (gate && value > SILENT) {
+      gate.quietUntil = Infinity;
+      if (!gate.open) {
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(0, now);
+        gain.connect(gate.to);
+        gate.open = true;
+      }
+    } else if (gate) {
+      if (!gate.open) return false;
+      if (gate.quietUntil === Infinity) gate.quietUntil = now + smoothing * 10;
+      else if (now >= gate.quietUntil) { gain.disconnect(); gate.open = false; return false; }
+    }
+    this.target(gain.gain, value, smoothing);
+    return true;
+  }
+
+  private sweepGates(): void {
+    this.gateSweep = undefined;
+    const now = this.context?.currentTime ?? 0;
+    for (const [gain, gate] of this.gates) if (gate.open && now >= gate.quietUntil) { gain.disconnect(); gate.open = false; }
   }
 
   private makeNoise(kind: NoiseKind): AudioBuffer {
@@ -678,8 +726,7 @@ export class GameAudio {
       const amplitude = name === 'wheels' ? Math.sqrt(wheel / (wheel + 25)) * 0.13
         : name === 'chute' ? (state.chuteOpen ? windGain(state.dynamicPressure) * 0.16 : 0)
         : name === 'jetpack' ? (state.jetting ? 0.07 : 0) : state.drilling ? 0.12 : 0;
-      this.target(layer.gain.gain, amplitude * mix);
-      if (name === 'wheels') this.target(layer.filter.frequency, 80 + Math.min(1800, wheel * 18));
+      if (this.level(layer.gain, amplitude * mix) && name === 'wheels') this.target(layer.filter.frequency, 80 + Math.min(1800, wheel * 18));
     }
     if (this.previousVessel !== state.vesselId) {
       this.previousVessel = state.vesselId;

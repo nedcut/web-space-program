@@ -12,6 +12,7 @@
 import { chromium } from 'playwright-core';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
+import { join } from 'node:path';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => {
   if (a.startsWith('--')) acc.push([a.slice(2), all[i + 1] && !all[i + 1].startsWith('--') ? all[i + 1] : 'true']);
@@ -29,6 +30,8 @@ const outDir = args.out ?? (args.local === '1' ? 'docs/performance/perfcpu' : 'C
 const ALL = 'load,menu,pad,ascent,orbit,warp1k,warp100k,map,moon,saturn,editor,tracking,soak,cycles';
 const cases = (args.cases ?? ALL).split(',');
 const trace = args.trace !== '0';
+// --profile 1: also save a sampled CPU profile per window (<out>/<label>-<case>.cpuprofile; see cpu-profile-report.mjs).
+const cpuProfile = args.profile === '1';
 const PRESETS = {
   low: { shadows: false, bloom: false, clouds: false, renderScale: 0.5 },
   medium: { shadows: true, bloom: true, clouds: true, renderScale: 1 },
@@ -236,7 +239,12 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
   });
   const m0 = await metrics(cdp);
   if (trace) await startTrace(cdp);
+  if (cpuProfile) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start'); }
   await page.waitForTimeout(ms);
+  if (cpuProfile) {
+    const { profile } = await cdp.send('Profiler.stop');
+    writeFileSync(join(outDir, `${label}-${name.replace(/[^\w-]/g, '_')}.cpuprofile`), JSON.stringify(profile));
+  }
   const tr = trace ? await stopTrace(cdp, page.url(), name).catch((e) => ({ error: String(e) })) : undefined;
   const m1 = await metrics(cdp);
   const inPage = await page.evaluate(() => {
