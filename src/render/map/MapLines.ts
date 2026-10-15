@@ -53,6 +53,7 @@ export class MapLines {
   private version = 0;
   get patchVersion() { return this.version; }
   private materials: LineMaterial[] = [];
+  /** Viewport (CSS px) last written to every line material's `resolution`. */
   private resolutionWidth = 1;
   private resolutionHeight = 1;
   private commsNodes = new Map<string, Vec3>();
@@ -194,7 +195,7 @@ export class MapLines {
   }
 
   resize(u: MapUpdate) {
-    // Line materials take the viewport at creation (makeLine); existing ones only need it again on resize.
+    // Line materials take the viewport at creation; existing ones only need it again on resize.
     if (u.viewport.width !== this.resolutionWidth || u.viewport.height !== this.resolutionHeight) {
       this.resolutionWidth = u.viewport.width; this.resolutionHeight = u.viewport.height;
       for (const m of this.materials) m.resolution.set(this.resolutionWidth, this.resolutionHeight);

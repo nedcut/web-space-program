@@ -1,6 +1,7 @@
-import { MapLines, WIDTH, snapshotOrbit, sameOrbit, patchColor, place } from './MapLines';
+import { MapMarkers } from './MapMarkers';
+import { MapLines, WIDTH, snapshotOrbit, sameOrbit, place } from './MapLines';
 import { MapFrame } from './MapFrame';
-import type { MapMarkerInput, MapUpdate, ExtraOrbit, MapTarget, MapApproach, MapPick, MapPoint, MapHandlers } from './mapTypes';
+import type { MapUpdate, ExtraOrbit, MapTarget, MapApproach, MapPick, MapPoint, MapHandlers } from './mapTypes';
 import { aimAt, clearDistance, pickSphere, smallBodyVisible } from './framing';
 import { patchState } from '../../sim/orbit/numericalPrediction';
 import { createTerrain } from '../../sim/terrain';
@@ -30,11 +31,11 @@ import {
   wheelZoomFactor,
   type GizmoAxis, type GizmoHandle, type ScreenPolyline,
 } from './maneuverGizmo';
-import { firstPlannedPatch, markerCaption, markerDetail, orbitMarkers, patchDrawnClosed, type OrbitMarker } from './orbitMarkers';
+import { patchDrawnClosed } from './orbitMarkers';
 import { AXIS_COLORS, NODE_COLOR, PLANNED_COLOR, handleTexture, nodeTexture } from './mapIcons';
-import { GLYPH_PX, LABEL_SHADOW, cssHex, glyphForKey, markerGlyphSvg, type MarkerGlyph } from './markerGlyphs';
+import { LABEL_SHADOW, cssHex } from './markerGlyphs';
 import { setPosition, setStyle } from './styleWriter';
-import { coveredIndex, nodeClearSpot, nudgeClear, overlapsAny } from './hudAvoid';
+import { nodeClearSpot } from './hudAvoid';
 import { HudRectCache } from './hudRects';
 import { SurfaceLayers, type BiomeTarget, type LegendEntry } from './surfaceLayers';
 import type { BiomeMap } from '../../sim/science/biomeMap';
@@ -69,7 +70,6 @@ type Drag =
       /** Grab offset, true point minus drawn icon (non-zero when the icon is nudged out from under a HUD panel). */
       offX: number; offY: number };
 
-const EMPTY_MARKERS: MapMarkerInput[] = [];
 const EMPTY_PATCHES: TrajectoryPatch[] = [];
 const EMPTY_NODES: ManeuverNode[] = [];
 const NONE: Hover = { kind: 'none' };
@@ -96,8 +96,6 @@ function altKeyName(): string {
   return typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? 'Option' : 'Alt';
 }
 
-const IMPACT_CSS = '#ff5c5c';
-
 interface BodyVisual {
   body: Body;
   sphere: THREE.Mesh;
@@ -113,26 +111,6 @@ interface BodyVisual {
   lineStyle: number;
 }
 
-/** A marker drawn this frame (pooled). */
-interface ShownMarker {
-  key: string; body: string; position: Vec3; caption: string; color: string; priority: number;
-  orbit?: OrbitMarker; detail?: string; dotOnly?: boolean; time?: number; glyph: MarkerGlyph;
-  /** Body placement time (encounter patches); undefined = now. */
-  frameTime?: number;
-}
-interface MarkerElement {
-  root: HTMLDivElement; dot: HTMLDivElement; text: HTMLDivElement; box: LabelBox; content: string; color: string; glyph: string;
-  /** Thin line from a nudged glyph back to its true point, as last written (rounded to 0.01 rad / 1 px). */
-  leader: HTMLDivElement; leaderA: number; leaderL: number;
-  /** Caption sits left of the glyph (the right side runs under a HUD panel). */
-  flipped: boolean;
-  /** Caption placement box, re-measured only when its text changes. */
-  caption: LabelBox; measured: string; lines: number;
-}
-
-const EMPTY_RECTS: LabelBox[] = [];
-/** A marker within this many px of a HUD block counts as covered by it; a nudged marker stands this far clear. */
-const HUD_COVER_PX = 6, HUD_CLEAR_PX = 10;
 /**
  * Maneuver nodes stand this far clear of HUD blocks (icon radius plus a little); the selected node's whole gizmo
  * (handles at HANDLE_OFFSET plus their icon) does. Closer nodes are drawn at the nearest clear spot with a leader.
@@ -190,6 +168,7 @@ export function pointerOnMap(el: HTMLElement, target: EventTarget | null, x: num
 export class MapView {
   private readonly frame: MapFrame;
   private readonly lines: MapLines;
+  private readonly markers: MapMarkers;
   private field?: AsteroidFieldView;
   private comets = new Map<string, CometEffects>();
   private au = 149597870700;
@@ -199,8 +178,6 @@ export class MapView {
   private labelBoxes: LabelBox[] = [];
   private iconBoxes: LabelBox[] = [];
   private labelCount = 0;
-  /** Accepted labels after marker captions (surface labels place after these). */
-  private markerLabelCount = 0;
   /** Biome overlay, objective highlights and city labels. */
   readonly surface: SurfaceLayers;
   private orderedBodies: BodyVisual[] = [];
@@ -257,21 +234,10 @@ export class MapView {
   private spritePx = .001;
   private lastUpdate: MapUpdate | null = null;
   private frameUpdate: MapUpdate = { t: 0, focus: this.renderFocus, viewport: { width: 1, height: 1 } };
-  private orbitMarks: OrbitMarker[] = [];
-  private orbitMarksKey = '';
-  private shown: ShownMarker[] = [];
-  private shownCount = 0;
-  private markerEls: MarkerElement[] = [];
-  /** Per marker element: its caption won placement this frame. */
-  private captioned: boolean[] = [];
-  private markerScreen: { key: string; x: number; y: number }[] = [];
-  private markerScreenCount = 0;
   private hudRects: HudRectCache | null = null;
-  private readonly nudgeAt = { x: 0, y: 0 };
   /** HUD rectangles measured this frame; `obstacles` also counts the spots reserved by nudged nodes/markers. */
   private hudCount = 0;
   private obstacles = 0;
-  private pinned = new Set<string>();
   private trajectoryPolys: TrajectoryPoly[] = [];
   private polysVersion = -1;
   private polysTime = -Infinity;
@@ -285,14 +251,11 @@ export class MapView {
   private quiet: MapPoint | null = null;
   private element: HTMLElement | null = null;
   private labels: HTMLDivElement;
-  /** Viewport (CSS px) last written to every line material's `resolution`. */
   private sunLight = new THREE.PointLight(0xffffff, 3, 0, 0);
   private extraOrbits: ExtraOrbit[] = [];
   private extras = new Map<string, { icon: THREE.Sprite; line?: Line2; orbit?: Orbit; targeted: boolean }>();
   private target: MapTarget | null = null;
   private highlightedBody: { vis: BodyVisual; color: number; width: number } | null = null;
-  private approach: MapApproach | null = null;
-  private approachLine: THREE.Line;
   private warmObjects: THREE.Object3D[] = [];
 
   /** The node showing the gizmo: the selected node, else the next upcoming one. */
@@ -442,7 +405,7 @@ export class MapView {
 
   /** Closest-approach markers (null hides them). */
   setApproach(a: MapApproach | null) {
-    this.approach = a;
+    this.markers.setApproach(a);
   }
 
   /** Additional fleet conics and icons; positions are heliocentric float64, conics body-relative. */
@@ -632,11 +595,7 @@ export class MapView {
     this.ghost = new THREE.Sprite(new THREE.SpriteMaterial({ map: nodeTexture('ghost'), sizeAttenuation: false, depthTest: false, transparent: true }));
     this.ghost.renderOrder = 14; this.ghost.visible = false;
     this.scene.add(this.ghost);
-    const approachGeometry = new THREE.BufferGeometry();
-    approachGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-    this.approachLine = new THREE.Line(approachGeometry, new THREE.LineBasicMaterial({ color: TARGET_COLOR, transparent: true, opacity: .7, depthTest: false }));
-    this.approachLine.frustumCulled = false; this.approachLine.visible = false; this.approachLine.renderOrder = 13;
-    this.scene.add(this.approachLine);
+    this.markers = new MapMarkers(this.scene, this.labels, bodies, this.frame);
     // Gizmo shafts reuse the orbit-line program; created up front so opening the map never compiles shaders.
     for (const handle of GIZMO_HANDLES) {
       const color = new THREE.Color(AXIS_COLORS[handle.axis]).getHex();
@@ -653,7 +612,7 @@ export class MapView {
       line.material.dashed = true; line.visible = false;
       this.warmObjects.push(line);
     }
-    this.warmObjects.push(this.approachLine, this.ghost, this.surface.warmObject, ...this.gizmo.flatMap(g => [g.line, g.icon]));
+    this.warmObjects.push(this.ghost, this.surface.warmObject, ...this.gizmo.flatMap(g => [g.line, g.icon]));
   }
 
   update(u: MapUpdate) {
@@ -852,9 +811,9 @@ export class MapView {
     this.hudCount = this.obstacles = this.hudRects ? this.hudRects.refresh(this.labels, now) : 0;
     this.updateNodes(u);
     this.updateGizmo(u, dt);
-    this.updateMarkers(u);
+    const markerLabelCount = this.markers.update(u, this.lines.patchVersion, this.labelBoxes, this.labelCount, this.hudRects?.rects, this.hudCount, this.obstacles);
     const frame = this.surfaceFrame;
-    frame.width = w; frame.height = h; frame.pxPerWorld1 = pxPerWorld1; frame.boxes = this.labelBoxes; frame.count = this.markerLabelCount;
+    frame.width = w; frame.height = h; frame.pxPerWorld1 = pxPerWorld1; frame.boxes = this.labelBoxes; frame.count = markerLabelCount;
     this.surface.update(frame);
     if (this.pointer.inside && !this.drag && now - this.lastHoverAt > 100) this.setHover(this.computeHover(this.pointer.x, this.pointer.y));
     else if (this.drag?.kind === 'handle' && now - this.lastHoverAt > 80) this.setHover({ kind: 'handle', index: this.drag.index, nodeId: this.drag.nodeId });
@@ -1090,7 +1049,6 @@ export class MapView {
 
   private readonly scratch = new THREE.Vector3();
   private readonly scratchPoint: MapPoint = { x: 0, y: 0 };
-  private readonly markerCentre: MapPoint = { x: 0, y: 0 };
   /** Closest point of the active trajectory (future only) to a CSS-pixel position. */
   private hitTrajectory(x: number, y: number): { time: number; patch: number; distance: number } | null {
     const u = this.lastUpdate;
@@ -1150,165 +1108,13 @@ export class MapView {
     this.handlers.nodesChanged?.();
   }
 
-  // ---------- Orbit markers ----------
-
-  private bodyName = (id: string) => this.bodies.get(id)?.body.name ?? id;
-  private bodyRadius = { radius: (id: string) => this.bodies.get(id)?.body.radius ?? 0, soi: (id: string) => this.bodies.get(id)?.body.soi ?? Infinity };
-
-  private pushMarker(key: string, body: string, position: Vec3, caption: string, color: string, priority: number, glyph: MarkerGlyph, orbit?: OrbitMarker, detail?: string, dotOnly = false, time?: number) {
-    const m = this.shown[this.shownCount] ??= { key: '', body: '', position, caption: '', color: '', priority: 0, glyph: 'dot' };
-    m.key = key; m.body = body; m.position = position; m.caption = caption; m.color = color; m.priority = priority;
-    m.orbit = orbit; m.detail = detail; m.dotOnly = dotOnly; m.time = time ?? orbit?.time; m.glyph = glyph; m.frameTime = undefined;
-    this.shownCount++;
-    return m;
-  }
-
-  private markerElement(i: number): MarkerElement {
-    let el = this.markerEls[i];
-    if (el) return el;
-    const root = document.createElement('div'), dot = document.createElement('div'), text = document.createElement('div'), leader = document.createElement('div');
-    Object.assign(root.style, { position: 'absolute', left: '0', top: '0', pointerEvents: 'none', display: 'none' });
-    Object.assign(leader.style, { position: 'absolute', left: '0', top: '0', width: '1px', height: '1px', transformOrigin: '0 0', display: 'none', opacity: '.65' });
-    Object.assign(dot.style, { position: 'absolute', left: `${-GLYPH_PX / 2}px`, top: `${-GLYPH_PX / 2}px`, width: `${GLYPH_PX}px`, height: `${GLYPH_PX}px`, lineHeight: '0' });
-    Object.assign(text.style, { position: 'absolute', left: `${GLYPH_PX / 2 + 3}px`, top: '-9px', font: '600 12px system-ui, sans-serif', whiteSpace: 'pre', textShadow: LABEL_SHADOW, lineHeight: '17px', letterSpacing: '.02em' });
-    root.appendChild(leader); root.appendChild(dot); root.appendChild(text);
-    this.labels.appendChild(root);
-    el = { root, dot, text, leader, leaderA: NaN, leaderL: -1, flipped: false, box: { x: 0, y: 0, width: 0, height: 17 }, content: '', color: '', glyph: '', caption: { x: 0, y: 0, width: 0, height: 0 }, measured: '', lines: 0 };
-    this.markerEls[i] = el;
-    return el;
-  }
-
-  private markerDetailText(m: ShownMarker, t: number) {
-    return m.orbit ? markerDetail(m.orbit, t, this.bodyName) : m.detail ?? m.caption;
-  }
-
-  private updateMarkers(u: MapUpdate) {
-    const patches = u.vessel?.patches ?? EMPTY_PATCHES;
-    const key = `${this.lines.patchVersion}:${patches.length ? Math.floor(u.t) : 0}`;
-    if (key !== this.orbitMarksKey) {
-      this.orbitMarksKey = key;
-      try { this.orbitMarks = orbitMarkers(patches, u.t, this.bodyRadius); } catch { this.orbitMarks = []; }
-    }
-    this.shownCount = 0;
-    const planned = firstPlannedPatch(patches);
-    for (const m of this.orbitMarks) {
-      const apsis = m.kind === 'ap' || m.kind === 'pe';
-      // Markers take the colour of the trajectory they sit on; an encounter takes the colour of the patch inside
-      // the encountered body, so marker and arc read as one.
-      const color = m.kind === 'impact' ? IMPACT_CSS : cssHex(patchColor(m.kind === 'encounter' ? m.patch + 1 : m.patch, planned));
-      this.pushMarker(m.key, m.body, m.position, markerCaption(m, this.bodyName), color, apsis ? 1 : 2, m.kind, m).frameTime = this.frame.patchFrameTime(u, patches[m.patch]);
-    }
-    const markers = u.markers ?? EMPTY_MARKERS;
-    for (let i = 0; i < markers.length; i++) {
-      const m = markers[i], key = m.key ?? `ext:${i}`;
-      this.pushMarker(key, m.body, m.position, m.label, m.color, 1, glyphForKey(key), undefined, m.detail, false, m.time);
-    }
-    const a = this.approach && this.bodies.has(this.approach.body) ? this.approach : null;
-    if (a) {
-      this.pushMarker('ca', a.body, a.positionA, a.label, TARGET_CSS, 2, 'approach', undefined, a.detail, false, a.time);
-      this.pushMarker('ca:target', a.body, a.positionB, '', TARGET_CSS, 0, 'dot', undefined, a.detail, true, a.time);
-    }
-    this.approachLine.visible = !!a;
-    if (a) {
-      const pos = this.approachLine.geometry.getAttribute('position') as THREE.BufferAttribute;
-      this.frame.scenePosition(a.positionA, a.body, u, this.scratch); pos.setXYZ(0, this.scratch.x, this.scratch.y, this.scratch.z);
-      this.frame.scenePosition(a.positionB, a.body, u, this.scratch); pos.setXYZ(1, this.scratch.x, this.scratch.y, this.scratch.z);
-      pos.needsUpdate = true;
-    }
-    // Dots for every marker; captions in priority order (pinned first), decluttered against body labels.
-    this.markerScreenCount = 0;
-    const hudCount = this.hudCount, hudRects = this.hudRects?.rects ?? EMPTY_RECTS;
-    let obstacles = this.obstacles;
-    for (let i = 0; i < this.shownCount; i++) {
-      const m = this.shown[i], el = this.markerElement(i);
-      const s = this.frame.toScreen(this.frame.scenePosition(m.position, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.scratchPoint);
-      let on = s.x > -20 && s.y > -20 && s.x < u.viewport.width + 20 && s.y < u.viewport.height + 20;
-      // Apsides of an orbit that is only a few pixels across are noise piled on the body icon: hide them until
-      // the orbit is large enough to tell apart (pinned markers stay).
-      // The focused body's own flyby periapsis always shows (it is what an encounter is planned for).
-      if (on && (m.glyph === 'ap' || m.glyph === 'pe') && !this.pinned.has(m.key) && !(m.glyph === 'pe' && m.body === u.focusId && m.body !== patches[0]?.orbit.body)) {
-        const sx = s.x, sy = s.y, c = this.frame.toScreen(this.frame.scenePosition(ZERO, m.body, u, this.scratch, m.frameTime ?? u.t), u, this.markerCentre);
-        on = !(Math.hypot(c.x - sx, c.y - sy) < 16);
-        s.x = sx; s.y = sy;
-      }
-      setStyle(el.root, 'display', on ? 'block' : 'none');
-      el.box.x = NaN;
-      if (!on) continue;
-      // A marker under a HUD panel moves to the nearest clear spot, joined to its true point by a thin leader line;
-      // the spot is reserved so a second covered marker does not land on top of it.
-      let px = s.x, py = s.y, nudged = false;
-      if (hudCount && coveredIndex(hudRects, hudCount, px, py, HUD_COVER_PX) >= 0
-        && nudgeClear(hudRects, obstacles, px, py, u.viewport.width, u.viewport.height, HUD_CLEAR_PX, this.nudgeAt)) {
-        px = this.nudgeAt.x; py = this.nudgeAt.y; nudged = true;
-        const spot = hudRects[obstacles++] ??= { x: 0, y: 0, width: GLYPH_PX, height: GLYPH_PX };
-        spot.x = px - GLYPH_PX / 2; spot.y = py - GLYPH_PX / 2; spot.width = GLYPH_PX; spot.height = GLYPH_PX;
-      }
-      setPosition(el.root, px, py);
-      if (el.color !== m.color || el.glyph !== m.glyph) {
-        el.color = m.color; el.glyph = m.glyph;
-        el.dot.innerHTML = markerGlyphSvg(m.glyph, m.color); el.text.style.color = m.color; el.leader.style.background = m.color;
-      }
-      setStyle(el.leader, 'display', nudged ? 'block' : 'none');
-      if (nudged) {
-        const dx = s.x - px, dy = s.y - py, a = Math.round(Math.atan2(dy, dx) * 100), len = Math.round(Math.hypot(dx, dy));
-        if (a !== el.leaderA || len !== el.leaderL) { el.leaderA = a; el.leaderL = len; el.leader.style.transform = `rotate(${a / 100}rad) scaleX(${len})`; }
-      }
-      el.box.x = px; el.box.y = py;
-      const hit = this.markerScreen[this.markerScreenCount++] ??= { key: '', x: 0, y: 0 };
-      hit.key = m.key; hit.x = px; hit.y = py;
-    }
-    for (let i = this.shownCount; i < this.markerEls.length; i++) setStyle(this.markerEls[i].root, 'display', 'none');
-    // Captions: shown below only if they win placement this frame.
-    const captioned = this.captioned;
-    captioned.fill(false);
-    let labelCount = this.labelCount;
-    for (let pass = 3; pass >= 0; pass--) for (let i = 0; i < this.shownCount; i++) {
-      const m = this.shown[i], el = this.markerEls[i], pinned = this.pinned.has(m.key);
-      if (Number.isNaN(el.box.x) || (pinned ? 3 : m.priority) !== pass || m.dotOnly && !pinned) continue;
-      const content = pinned ? this.markerDetailText(m, u.t) : m.caption;
-      if (!content) continue;
-      const box = el.caption;
-      if (el.measured !== content) {
-        el.measured = content;
-        let lines = 0, longest = 0;
-        for (let start = 0; start <= content.length; lines++) {
-          let end = content.indexOf('\n', start);
-          if (end < 0) end = content.length;
-          longest = Math.max(longest, end - start);
-          start = end + 1;
-        }
-        box.width = longest * 7 + 12; el.lines = lines;
-      }
-      box.x = el.box.x + GLYPH_PX / 2 + 3; box.y = el.box.y - 9; box.height = el.lines * 17 + (pinned ? 6 : 0);
-      // A caption that would run under a HUD panel flips to the glyph's other side.
-      const flip = hudCount > 0 && overlapsAny(box, hudRects, hudCount, 2);
-      if (flip) box.x = el.box.x - GLYPH_PX / 2 - 3 - box.width;
-      if (!pinned && (!placeLabel(box, this.labelBoxes, labelCount) || (flip && overlapsAny(box, hudRects, hudCount, 2)))) continue;
-      this.labelBoxes[labelCount++] = box;
-      captioned[i] = true;
-      if (el.flipped !== flip) {
-        el.flipped = flip;
-        Object.assign(el.text.style, flip ? { left: 'auto', right: `${GLYPH_PX / 2 + 3}px`, textAlign: 'right' } : { left: `${GLYPH_PX / 2 + 3}px`, right: 'auto', textAlign: 'left' });
-      }
-      if (el.content !== content) { el.content = content; el.text.textContent = content; }
-      setStyle(el.text, 'background', pinned ? '#0a1525dd' : 'none');
-      setStyle(el.text, 'border', pinned ? `1px solid ${m.color}55` : 'none');
-      setStyle(el.text, 'borderRadius', pinned ? '6px' : '0');
-      setStyle(el.text, 'padding', pinned ? '3px 7px' : '0');
-    }
-    for (let i = 0; i < this.markerEls.length; i++) setStyle(this.markerEls[i].text, 'display', i < this.shownCount && captioned[i] ? 'block' : 'none');
-    this.markerLabelCount = labelCount;
-  }
-
   // ---------- Hover, tooltips and gestures ----------
 
   private computeHover(x: number, y: number): Hover {
     const man = this.hitManeuver(x, y);
     if (man.kind !== 'none') return man;
-    for (let i = 0; i < this.markerScreenCount; i++) {
-      const m = this.markerScreen[i];
-      if (Math.hypot(m.x - x, m.y - y) < GLYPH_PX / 2 + 3) return { kind: 'marker', key: m.key };
-    }
+    const marker = this.markers.pick(x, y);
+    if (marker !== null) return { kind: 'marker', key: marker };
     const object = this.pickObject(x, y, false);
     if (object) return { kind: 'object', pick: object };
     const orbit = this.hitTrajectory(x, y);
@@ -1334,10 +1140,7 @@ export class MapView {
         if (!node) return null;
         return `Maneuver · Δv ${Math.hypot(node.prograde, node.normal, node.radial).toFixed(1)} m/s\nT−${formatDuration(node.time - u.t)}\nClick for options · drag along the orbit to move`;
       }
-      case 'marker': {
-        for (let i = 0; i < this.shownCount; i++) if (this.shown[i].key === h.key) return `${this.markerDetailText(this.shown[i], u.t)}\n${this.pinned.has(h.key) ? 'Click to unpin' : 'Click to pin'}`;
-        return null;
-      }
+      case 'marker': return this.markers.tooltip(h.key, u.t);
       case 'object': {
         if (h.pick.kind === 'body') {
           const surface = this.surface.describe(this.pointer.x, this.pointer.y, { camera: this.camera, width: u.viewport.width, height: u.viewport.height });
@@ -1468,7 +1271,7 @@ export class MapView {
       } else if (d.kind === 'camera' && !d.moved) {
         const h = this.computeHover(p.x, p.y);
         if (h.kind === 'marker' && d.button === 0) {
-          if (!this.pinned.delete(h.key)) this.pinned.add(h.key);
+          this.markers.togglePin(h.key);
         } else if (h.kind === 'object' && (d.button === 0 || d.button === 2)) {
           this.quiet = { x: p.x, y: p.y };
           this.handlers.objectMenu?.(h.pick, { x: p.x, y: p.y });
@@ -1476,9 +1279,9 @@ export class MapView {
           const now = performance.now();
           if (now - this.lastPlaced > 450) { this.lastPlaced = now; this.handlers.placeNode?.(h.time); }
         } else if (h.kind === 'marker' && d.button === 2 && this.handlers.markerMenu) {
-          const m = this.shown.slice(0, this.shownCount).find(x => x.key === h.key);
+          const m = this.markers.menu(h.key);
           this.quiet = { x: p.x, y: p.y };
-          if (m) this.handlers.markerMenu({ key: m.key, label: m.orbit ? (m.orbit.kind === 'ap' ? 'Apoapsis' : m.orbit.kind === 'pe' ? 'Periapsis' : markerCaption(m.orbit, this.bodyName)) : m.key.startsWith('ca') ? 'Closest approach' : m.caption, time: m.time, pinned: this.pinned.has(m.key) }, { x: p.x, y: p.y });
+          if (m) this.handlers.markerMenu(m, { x: p.x, y: p.y });
         } else if (h.kind === 'orbit' && d.button === 2 && this.handlers.orbitMenu) {
           this.quiet = { x: p.x, y: p.y };
           this.handlers.orbitMenu(h.time, { x: p.x, y: p.y });
@@ -1543,11 +1346,12 @@ export class MapView {
    * (false), so the first node, gizmo or planned trajectory does not stall on a program compile.
    */
   setWarmup(on: boolean) {
+    this.markers.setWarmup(on);
     for (const o of this.warmObjects) o.visible = on;
   }
 
   /** Pin or unpin an orbit marker's detail label. */
-  togglePin(key: string) { if (!this.pinned.delete(key)) this.pinned.add(key); }
+  togglePin(key: string) { this.markers.togglePin(key); }
 
   /** Show the built-in focus breadcrumb (hosts with their own focus readout turn it off). */
   showBreadcrumb = true;
