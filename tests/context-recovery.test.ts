@@ -92,6 +92,22 @@ describe('ProceduralCubeMap across a context loss', () => {
     map.dispose();
   });
 
+  it('draws no strip until its program has compiled off the main thread', async () => {
+    const { renderer, calls } = fakeRenderer();
+    let linked!: () => void;
+    const compileAsync = vi.fn(() => new Promise<void>((resolve) => { linked = resolve; }));
+    const async = Object.assign(renderer, { compileAsync }) as unknown as THREE.WebGLRenderer;
+    const map = bake();
+    for (let i = 0; i < 5; i++) expect(map.step(async)).toBe(false);
+    expect(compileAsync).toHaveBeenCalledTimes(1);
+    expect(calls.render).toBe(0);
+    linked();
+    await Promise.resolve();
+    expect(map.step(async)).toBe(false);
+    expect(calls.render).toBe(1);
+    map.dispose();
+  });
+
   it('bakes the whole map again after restart', () => {
     const { renderer, calls } = fakeRenderer();
     const map = bake();

@@ -36,6 +36,10 @@ Medium is GPU-bound (CPU ≈ 6 ms/frame); its pad cost is mostly resolution-inde
 - **Launch-site vegetation skips unchanged repacks** (`LaunchSite.updateVegetationLod`): a climbing camera moves
   past the 20 m step every frame, and each LOD level was repacked and re-uploaded although a cell wholly inside
   one band packs to the same arrays. `packBand` self time in a 10 s ascent 112 → 41 ms.
+- **Cube-map bakes compile off the main thread** (`ProceduralCubeMap`): the cloud and Milky Way bakes drew their
+  first strip while the driver was still compiling, blocking on the link status. Scenes whose warm-up skips
+  off-screen passes paid it on screen: the Space Center froze 2.1–3.0 s at reveal in 5 of 5 loads, 0 of 5 now
+  (`onFirstUse` in a 20 s load profile 2.4 s → 0.2 s). Each bake now `compileAsync`s against its target first.
 - `gpu-bench.mjs --profile 1` saves a CPU profile per measured window (for `cpu-profile-report.mjs`).
 
 ## Open findings (not changed)
@@ -51,7 +55,10 @@ Medium is GPU-bound (CPU ≈ 6 ms/frame); its pad cost is mostly resolution-inde
   3.5 s stereo reverb impulse to the convolver alone is 115–185 ms, the noise buffers 40–60 ms. In normal play
   this is the first menu click. Deferring the reverb buffer or a shorter impulse would cut it (the latter
   changes the music's sound).
-- The music reverb convolver (two threads, ~6 % of a core together) keeps running when music volume is 0.
+- The music reverb costs ~11 % of a core in every scene (~5.5 % on the audio thread, ~6 % on its two convolution
+  threads); music oscillators and the UI bus ~4 %. A shorter (the tail past 2.75 s is below −40 dB) or mono
+  impulse, or an algorithmic reverb, would cut it but changes the music's sound. It also runs at music volume 0.
+- Space Center load still has a ~2.2 s task early in loading (behind the loading screen).
 - Editor at load: soot still takes ~1.7 s of idle-batch work over the first seconds for a Real-scale craft;
   steady state is idle.
 - `scripts/bench/run.ts` telemetry/navball section is stale after the controller `systems` refactor (crashes at

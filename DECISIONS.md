@@ -1177,3 +1177,7 @@ Owner decisions 2026-10-13 (both recommended options).
   silent and reconnected on the first audible update; their filter/pitch params are only automated while
   connected. Silent connected loops cost ~25 % of a core on an HD 520 laptop. Vegetation LOD skips repacking a
   level whose cell lies wholly inside its band and was already fully packed.
+- **Procedural cube bakes compile asynchronously (2026-10-14):** `ProceduralCubeMap.step` starts `compileAsync`
+  against its cube target on first use and draws no strip until the program is linked, so no scene blocks on
+  the bake shaders (the Space Center warm-up does not cover off-screen passes; it froze ~2 s at reveal on an
+  HD 520).
