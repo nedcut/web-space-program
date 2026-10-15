@@ -1182,3 +1182,19 @@ Owner decisions 2026-10-13 (both recommended options).
   main menu) instead of crashing. The error boundary renders nothing while that reload runs. A second chunk
   failure within 10 s of such a reload shows the crash screen (offline or broken deploy, not a stale build).
   Mid-flight scenes never auto-reload on the worker change alone.
+
+## Editing set-aside pieces (2026-10-14, feat/setaside-editing)
+- **Owner ask**: a better way to edit set-aside pieces, see what is in them and rearrange them.
+- **Set aside list** (staging panel, replaces the one-line count): one card per piece with its root part, part count,
+  mass and part chips (grouped, ×count). Hovering a card or chip highlights it in the hall; clicking a chip picks that
+  part up with what hangs from it. Buttons: Pick up (whole piece), Edit on stand, Delete (Undo toast).
+- **Click in the hall now splits a piece**: clicking a set-aside part takes it and what hangs from it, the rest stays
+  set aside (was: the whole piece, held by the clicked part). Matches "click: pick up with attached" on the craft; the
+  piece's root still takes everything, and hover shows exactly what a click takes. Del deletes the hovered part and
+  what hangs from it. Struts/fuel lines across the split are removed; split symmetry groups are broken.
+- **Edit on stand** swaps a piece with the craft (`CraftEditor.swapDetached`, one undo step) so every tool works on it
+  (attach, offset/rotate, re-root, inspector). The craft is set aside beside it (on the piece's side, bottoms level),
+  keeping its stages and staging mode (`SetAsidePiece.craft`), and its card reads "Swap back". While the craft is set
+  aside, Save and Launch are refused with a "Swap back" action: they would otherwise write or fly the piece under the
+  craft's name. Only one swap at a time (Edit on stand is disabled on other pieces meanwhile).
+- Set-aside pieces are still not saved with the craft (unchanged).

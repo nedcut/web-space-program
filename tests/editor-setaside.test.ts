@@ -150,3 +150,66 @@ describe('pick up just one part', () => {
     expect(y(ed, uids[5])).toBeCloseTo(-10, 9);
   });
 });
+
+describe('editing set-aside pieces', () => {
+  it('takes a part and what hangs from it off a piece, leaving the rest set aside', () => {
+    const { editor: ed, uids } = rocket();
+    ed.detachSubtree(uids[3]); ed.parkHeld(v3(8, 0, 0));
+    const held = ed.takeFromDetached(0, uids[4]);
+    expect(held.rootUid).toBe(uids[4]);
+    expect(held.parts.map(p => p.uid).sort()).toEqual([uids[4], uids[5]].sort());
+    expect(held.parts.find(p => p.uid === uids[4])!.parent).toBeUndefined();
+    expect(ed.detached).toHaveLength(1);
+    expect(ed.detached[0].parts.map(p => p.uid)).toEqual([uids[3]]);
+    close(ed.detached[0].parts[0].position, v3(8, 0, 0));
+    ed.undo();
+    expect(ed.held).toBeUndefined();
+    expect(ed.detached[0].parts).toHaveLength(3);
+    // The piece's root takes the whole piece.
+    ed.takeFromDetached(0, uids[3]);
+    expect(ed.held!.parts).toHaveLength(3);
+    expect(ed.detached).toHaveLength(0);
+  });
+  it('swaps a piece onto the stand and back, keeping the craft\'s manual staging', () => {
+    const { editor: ed, uids } = rocket();
+    ed.detachSubtree(uids[4]); ed.parkHeld(v3(8, -3, 0));
+    ed.moveStage(0, 1);
+    expect(ed.manualStaging).toBe(true);
+    const craft = ed.craft;
+    ed.swapDetached(0, v3(-10, 0, 0));
+    expect(ed.craft.parts.map(p => p.uid).sort()).toEqual([uids[4], uids[5]].sort());
+    close(ed.craft.parts.find(p => p.uid === uids[4])!.position, v3(0, 0, 0));
+    expect(ed.manualStaging).toBe(false);
+    expect(ed.detached[0].parts.find(p => p.uid === uids[0])!.position.x).toBeCloseTo(-10);
+    expect(ed.detached[0].craft).toEqual({ manualStaging: true });
+    // The piece on the stand edits like any craft.
+    ed.attachPart('fin', uids[4], 'top', 'bottom');
+    ed.swapDetached(0, v3(10, 0, 0));
+    expect(ed.craft).toEqual(craft);
+    expect(ed.manualStaging).toBe(true);
+    expect(ed.detached[0].parts).toHaveLength(3);
+    close(ed.detached[0].parts.find(p => p.uid === uids[4])!.position, v3(10, 0, 0));
+    ed.undo();
+    expect(ed.craft.parts).toHaveLength(3);
+  });
+  it('a set-aside piece takes the stand when the craft is empty', () => {
+    const { editor: ed, uids } = rocket();
+    ed.detachSubtree(uids[0]); ed.parkHeld(v3(5, 0, 0));
+    ed.swapDetached(0, v3(0, 0, 0));
+    expect(ed.craft.parts).toHaveLength(6);
+    expect(ed.detached).toHaveLength(0);
+  });
+});
+
+describe('deleting from set-aside pieces', () => {
+  it('deletes a part and what hangs from it, or the whole piece', () => {
+    const { editor: ed, uids } = rocket();
+    ed.detachSubtree(uids[3]); ed.parkHeld(v3(8, 0, 0));
+    ed.discardDetached(0, uids[5]);
+    expect(ed.detached[0].parts.map(p => p.uid)).toEqual([uids[3], uids[4]]);
+    ed.discardDetached(0);
+    expect(ed.detached).toHaveLength(0);
+    ed.undo(); ed.undo();
+    expect(ed.detached[0].parts).toHaveLength(3);
+  });
+});
