@@ -118,7 +118,7 @@ describe('map presentation', () => {
     };
     // Close above a surface focus, looking down: allowed.
     map.yaw = 0; map.pitch = 0; map.distance = 0.15 * R; frame('ascent:earth', surface);
-    // Near the surface the camera looks down from the local horizon (11°–86°), so it stays close but not overhead.
+    // Looking straight down from 0.15 R: zooming never turns the camera, so it stays where it was put.
     const close = frame('ascent:earth', surface);
     expect(close).toBeGreaterThanOrEqual(1.01);
     expect(close).toBeLessThanOrEqual(1.15 + 1e-3);

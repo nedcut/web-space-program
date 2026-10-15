@@ -32,10 +32,14 @@ export function ascentFrame(r: Vec3, v: Vec3, mu: number, radius: number): { cen
   return { centre, distance: Math.max(radius * 0.8, distance(r, ap) * 1.5) };
 }
 
-/** Map camera yaw/pitch that looks at the ascent from beside its plane and above the vessel's horizon (never from inside the body). */
-export function ascentAngles(r: Vec3, v: Vec3): { yaw: number; pitch: number } {
+/**
+ * Map camera yaw/pitch that looks at the ascent from beside its plane and above the vessel's horizon (never from
+ * inside the body), from the side away from the body's `north` pole, so north is up on screen (the map camera's up is +Z).
+ */
+export function ascentAngles(r: Vec3, v: Vec3, north: Vec3): { yaw: number; pitch: number } {
   const up = normalize(r), h = cross(r, v);
-  const d = normalize(length(h) > 0 ? add(normalize(h), scale(up, 0.3)) : up);
+  const side = length(h) > 0 ? scale(normalize(h), dot(h, north) > 0 ? -1 : 1) : up;
+  const d = normalize(add(side, scale(up, 0.7)));
   return { yaw: Math.atan2(d.y, d.x), pitch: Math.max(-1.55, Math.min(1.55, Math.asin(Math.max(-1, Math.min(1, d.z))))) };
 }
 
