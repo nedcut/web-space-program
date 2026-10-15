@@ -3,6 +3,7 @@ import { add, scale, v3, type Vec3 } from '../../util/vec3';
 import { qRotate } from '../../util/quat';
 import { partBounds, requirePart, type PartCatalog } from './geometry';
 import { fairingMassDelta } from '../../sim/vessel/fairing';
+import { RESOURCES } from '../../data/resources';
 
 export type ResourceDensities = Partial<Record<ResourceId, number>> | ReadonlyMap<ResourceId, number>;
 function partMass(part: PartInstance, catalog: PartCatalog, densities: ResourceDensities): number {
@@ -71,7 +72,9 @@ export function validateCraft(craft: CraftDef, catalog: PartCatalog): CraftWarni
     const seen = new Set<number>();
     while (upstream && !seen.has(upstream.uid)) { sources.push(upstream); seen.add(upstream.uid); upstream = upstream.parent === undefined ? undefined : byUid.get(upstream.parent); }
     for (const module of requirePart(catalog, part.partId).modules) if (module.type === 'engine') {
-      const missing = Object.entries(module.propellants).filter(([, ratio]) => (ratio ?? 0) > 0).map(([id]) => id as ResourceId).filter(id => !sources.some(p => (p.resources?.[id] ?? requirePart(catalog, p.partId).resources[id] ?? 0) > 0));
+      // Vessel-wide resources (xenon, monopropellant, charge) reach the engine from any part, not just its ancestors.
+      const missing = Object.entries(module.propellants).filter(([, ratio]) => (ratio ?? 0) > 0).map(([id]) => id as ResourceId)
+        .filter(id => !(RESOURCES[id].flow === 'all' ? craft.parts : sources).some(p => (p.resources?.[id] ?? requirePart(catalog, p.partId).resources[id] ?? 0) > 0));
       if (missing.length) warnings.push({ code: 'no-fuel', message: `Engine ${part.uid} has no upstream source for ${missing.join(', ')}.`, partUids: [part.uid] });
     }
   }

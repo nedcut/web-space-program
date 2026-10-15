@@ -5,6 +5,7 @@ import { qFromAxisAngle, qRotate, type Quat } from '../util/quat';
 import { v3, type Vec3 } from '../util/vec3';
 import { autoStageByDepth, CraftEditor, type PartCatalog } from './core';
 import { surfaceTransform } from './surface';
+import { spaceStock } from './stock/space';
 
 /**
  * Pre-built stock crafts, assembled programmatically through CraftEditor so attach positions, symmetry
@@ -676,6 +677,8 @@ export const STOCK_CRAFTS: StockCraft[] = ([
   { scale: 'real', id: 'stock-tern-real', name: 'Tern Lunar Probe', blurb: 'Real scale · uncrewed Moon orbiter · transmits its science', build: () => buildRealLunarProbe() },
   { scale: 'real', id: 'stock-selene-real', name: 'Selene Real Expedition', blurb: 'Real scale · five-metre Moon landing and return expedition', build: () => buildRealMoonLander() },
   { scale: 'standard', id: 'stock-firstlight', name: 'Firstlight Orbiter', blurb: 'Starting equipment · Standard-scale orbit', build: () => buildFoundationOrbiter() },
+  // Stock fleet wave, launchers and spacecraft (src/editor/stock/space.ts).
+  ...spaceStock(),
 ] satisfies StockCraft[]).map(stock => ({
   ...stock,
   build: () => wireStockGroups({ ...stock.build(), stockId: stock.id }),
