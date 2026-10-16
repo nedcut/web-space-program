@@ -1899,3 +1899,30 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   spans 60 ms of simulation); target-prograde stays below 0.0029°. See `merged*` screenshots/JSON and `merged-*`
   check logs in the same evidence folders. Main's append-only decision conflict was resolved by preserving
   both sections. Preview 5872 is stopped; no contexts, profile directories or pending runs are left.
+
+## Collision-free auto-dock line-up (2026-10-16, op/dockroute)
+
+- Route the own-COM segment around a target-COM sphere enclosing both vessel radii plus 5 m. Reserve
+  2 m more for visibility and a 5 m outer shell: move radially clear, then pursue short arc waypoints
+  until the standoff is visible. Bound the chord angle for large stations; choose a nonparallel tangent
+  for antipodal starts. Convert back to port-relative guidance. Standoff is now max(15 m, radii + 10 m).
+- Keep existing 10 Hz guidance, speed caps, capture, abort and cancellation rules. Show "Moving clear" /
+  "Circling". Scalar math mutates the existing destination vector; no new per-step objects or sim hooks.
+- The rear-start regression initially made 16 hull contacts and aborted. All five starts now latch with
+  zero contacts in the real World solver: 60 m rear 156.70 s / 16.2800 kg monopropellant; 40 m beside
+  130.30 s / 10.6276 kg; 65 m owner state unchanged 136.10 s / 12.6409 kg; 500 m unchanged 425.20 s /
+  13.8128 kg; extra 8 m beside (radial clearance) 118.20 s / 15.0242 kg. All 14 focused tests pass.
+- Node 24 / shared WSL host, nine interleaved samples: route check 31 ns median (21-36), circling 77 ns
+  (65-91), radial clearance 39 ns (29-44); complete guidance 18.8 us/sample (14.0-25.0). No browser
+  frame-time claim. A separate profile identifies nozzle-force calculations as an existing guidance hot
+  path; warmed heap sampling finds no helper allocation over 1M calls at a 128-byte interval. Raw values,
+  profiles, rerunnable scripts and check logs: `~/.t3/projects/wsp-traces/dockroute/`.
+- Real GPU: CDP Chrome / RTX 3060 Ti, Medium, 1470×900, tutorial relocated 60 m behind. Normal Flight
+  assist progresses Circling → Lining up → Closing → Docked: two 15-part Tenders become one 30-part
+  vessel in about 155.64 s, using 13.0075 kg monopropellant. No page exceptions or WebGL errors; the
+  documented HTTP COOP warning is recorded separately (the initial harness misclassified it, then the
+  corrected repeat passes). Shots: `C:\wsp-tools\shots\dockroute\`; driver/JSON also copied to the trace folder.
+- Final checks pass: lint, `npx tsc --noEmit`, full `npx vitest run --maxWorkers=2` (223 files, 2,075 passed,
+  one skipped; 502.16 s), and production build. Latest main merged before these checks. Preview 5875 is
+  stopped; browser contexts closed, no profile directories created. No PROGRESS.md edits, push or main
+  merge. M-series / Zen / Firefox / live 120 Hz GPU pacing remain unverified.
