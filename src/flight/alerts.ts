@@ -144,6 +144,8 @@ export class AlertTracker {
 
   update(input: AlertInput, now: number): FlightAlert[] {
     // A recovered stopping margin / touchdown clears terrain immediately, not 1.2 seconds later.
+    // An opened (or no longer held) chute clears its caution at once, not after the hold.
+    if (!input.chuteWaiting) this.live.delete('chute');
     if (!input.flying || chutesLand(input) || landingReadout(input.agl, input.verticalSpeed, input.gravity ?? 0, input.brakingAcceleration ?? 0, input.brakingFuelSeconds).canStop) this.live.delete('terrain');
     for (const a of alertConditions(input)) this.live.set(a.id, { alert: a, until: now + HOLD });
     const out: FlightAlert[] = [];

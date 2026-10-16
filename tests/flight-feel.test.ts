@@ -59,6 +59,9 @@ describe('flight cautions', () => {
 
   it('says why an armed parachute is not opening', () => {
     expect(alertConditions({ ...calm, chuteWaiting: { q: 48_400, rating: 25_000 } })).toEqual([{ id: 'chute', level: 'warn', text: 'CHUTE WAITING · TOO FAST 48 / 25 kPa' }]);
+    const t = new AlertTracker();
+    expect(t.update({ ...calm, chuteWaiting: { q: 26_000, rating: 25_000 } }, 0).map(a => a.id)).toEqual(['chute']);
+    expect(t.update({ ...calm, chuteWaiting: null }, 0.1)).toEqual([]);
   });
 
   it('keeps a normal first ascent (about 9.7 g at burnout) amber, with a throttle hint while thrusting', () => {
