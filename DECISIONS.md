@@ -1679,3 +1679,54 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
 ## Veteran audit 2 and playtest kit (2026-10-15, op/audit2)
 - Report only: `docs/audits/2026-10-15-veteran-audit-2.md` re-checks every 2026-10-07 item and ranks a new top 15; `docs/PLAYTEST.md` is the one-page guide and feedback form for outside players. No game code changed.
 - Evidence: real-GPU runs (CDP Chrome, Firefox spot check); screenshots stay outside git in `C:\wsp-tools\shots\audit2\`, logs in `~/.t3/projects/wsp-traces/audit2/`. Docking was not verified hands-on (scripted approach failed) and sound was not listened to.
+
+## Career past the Moon: Venus and Mars (2026-10-15, op/career2)
+- **Petrel Planetary Probe** (`src/editor/stock/probes.ts`; `stock-petrel`, `-challenging`, `-real`). Before it, no
+  stock craft could return science from Mars or Venus on any scale below 640–1,170 science of research: Tern's Thread
+  aerial reaches 2 Gm (the Moon, not the planets), Cinderbloom's Lattice dish leaves with its cruise stage, Duskwing
+  (Challenging) needs 1,170, Real had nothing. Petrel = the Tern bus with an Arcwatch dish (Earth link 200 Gm) on the
+  scale's Meridian launcher; the Wisp kick stage stays aboard for corrections and capture. Research: the scale orbiter,
+  Remote Navigation and Long Range Telemetry (Standard 200, Challenging/Real 450). Fits level-1 pad and hall on every
+  scale. The Real variant carries a second kick tank and a longer upper stage (+0.8 km/s past orbit) so it captures at
+  Venus; a Real Mars capture still needs ~1.35–1.7 km/s it lacks, and the Arcwatch reaches Real Mars only near close
+  approach. A Horizon dish costs the small probe 0.5–0.8 km/s: Real Mars orbit is left to player designs.
+- **Escape burns keep their guidance** (`autopilot.ts`, `GUIDE_MAX_ANGLE_ESCAPE` 150°). The node executor aimed its
+  Lambert guidance up to 175° around the planned orbit; on an escape hyperbola with a departure node before periapsis
+  that point is nearly opposite the burn, and the small out-of-plane offset of a plane-change burn flipped the Lambert
+  plane: a 1.4 km/s Venus departure (Flight assist → Execute next node, or headless) stopped after 359 m/s. Escape plans
+  now aim at most 150° ahead; elliptical plans (Moon transfers) are unchanged.
+- **"Go now" interplanetary plans cost what the options list says** (`interplanetary.ts`). Planning the next-orbit
+  option scored each grid cell by the cheapest ejection within ±half an orbit of its date, partly in the past, then
+  searched the burn time only near that date: the list priced "now" at 2.2 km/s and the plan came out at 3.6–5.4 km/s
+  depending on the minute (and the planner's own default was sometimes that plan). Both now use the reachable next orbit.
+- **Course corrections from solar orbit keep the periapsis above the air** (`planning/arrival.ts`). "Transfer → Mars"
+  while cruising (the planner's route for a mid-course fix) aimed at half the atmosphere height (31 km at Standard
+  Mars, inside the air); it now uses the departure planner's safe arrival (max of 0.1 R, 2 × atmosphere height, 30 km).
+  Entry trim stays the deliberate way into the air, and arrivals up to 2.5 × the atmosphere height now qualify for it
+  (`findEntry`; was 2 ×, exactly the planner's default Venus arrival, so the button came and went with rounding).
+- **Kiln probe has a hull antenna** (`fixed` antenna module: never stows, never torn; 40 % transmission, 2 Gm rating,
+  126 Gm to a ground station) and the shell's 18 m/s crash rating (it inherited the 10 m/s bus rating and broke on
+  11 m/s highland touchdowns). Without the antenna the Cinderbloom's lander could neither run nor send an experiment
+  once the cruise stage left. `retractableModule` replaces the antenna/array checks in tweaks, deployables and stock
+  action groups.
+- **Milestones** (`game/science.ts`, now a table): first Venus / Mars arrival +60 science and +60 k cr, first Venus /
+  Mars landing +80 and +50 k (credits × the D-016 multiplier), next to the Moon (35/40 k, 50/30 k) and Saturn (150/100 k).
+- **Planet commissions.** New readiness `planets` = first Moon arrival + Remote Navigation + Long Range Telemetry (what
+  the Petrel needs). Then half the batches offer "Enter the Venus / Mars sphere of influence" (flyby, factor 5) instead
+  of the expedition, and orbit offers can name Venus or Mars. Surface expeditions and field surveys stay on the Moon
+  until the advanced tier (no crewed "return from Mars" for a probe program). Venus joins the advanced bodies. Draws for
+  programs without planet readiness are unchanged (1,080 seed/batch/readiness combinations compared with main).
+  The offer key gains a `p` suffix only when planets are ready, so existing desks are not reshuffled.
+- **Hub Next goal after the Moon landing:** "Send a probe to Mars" / "… to Venus" (the Petrel, its research, how to fly
+  it), ordered by whichever launch season comes first, with "Next Venus launch season in about N days: time warp in
+  Fleet Tracking"; then "Land on Venus" (Cinderbloom, Standard only); then "Explore the outer planets". Seasons come from
+  `sim/orbit/season.ts` (Hohmann phase angle, then a 25 × 9 Lambert scan weighted like the planner; 2–10 ms, computed
+  on hub render at most once per program day, never per frame). Within ±1–3 weeks of the map planner's window.
+- **Playthrough script.** Facility investing keeps the next planned launch (and its upgrade) in reserve: the Standard
+  route had bought Mission Control 3 and could not pay for the Selene. The free return is retried after 12 h when the
+  planner finds none (about 1 in 8 parking orbits on Challenging). Planet phase in `scripts/career/beyond.ts`, legs in
+  `planets.ts`; it waits for a link before surveying (the Sun or the planet can block it for weeks).
+- **Not changed (owner's call, see report):** Real Mars capture/hardware; the Venus lander's landing side (the stock
+  approach brought it down on the hemisphere facing away from Earth: no link in descent or on the ground, and its heat
+  reserve ends a few minutes after touchdown); a course-correction button (the worker's `correction` operation has no
+  UI; "Transfer → planet" while cruising works but takes ~14 s); the Real Moon grind before the expedition.

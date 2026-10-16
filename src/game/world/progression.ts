@@ -19,6 +19,8 @@ export function refreshContracts(this: World): boolean {
     orbit: p.milestones.includes('first-orbit') && p.unlocked.includes('propulsion-0'),
     lunar: p.milestones.includes('first-moon-flyby') && p.unlocked.includes('propulsion-1'),
     landing: p.milestones.includes('first-moon-flyby') && p.unlocked.includes('structures-1') && p.unlocked.includes('propulsion-1'),
+    // A probe core and a dish that reaches Venus and Mars (the Petrel's research beyond the scale orbiter).
+    planets: p.milestones.includes('first-moon-flyby') && p.unlocked.includes('guidance-1') && p.unlocked.includes('energy-2'),
   };
   const key = offerKey(advanced, readiness);
   const offered = p.contracts.some(c => c.status === 'offered');

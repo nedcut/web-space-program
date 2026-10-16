@@ -4,9 +4,11 @@ import type { CraftDef, PartActionId, PartDef } from '../sim/vessel/types';
 import { qFromAxisAngle, qRotate, type Quat } from '../util/quat';
 import { v3, type Vec3 } from '../util/vec3';
 import { autoStageByDepth, CraftEditor, type PartCatalog } from './core';
+import { retractablePanel } from '../sim/vessel/tweaks';
 import { surfaceTransform } from './surface';
 import { buildCricket, buildFizzwick, buildPackmule, buildSaltstreak, buildSkipjack, buildTrekker } from './stock/fun';
 import { spaceStock } from './stock/space';
+import { probeStock } from './stock/probes';
 
 /**
  * Pre-built stock crafts, assembled programmatically through CraftEditor so attach positions, symmetry
@@ -737,6 +739,8 @@ export const STOCK_CRAFTS: StockCraft[] = ([
     tags: ['eng-radial-rill', 'leg-strider', 'light-area'], tip: 'Hover at about half throttle, drift sideways a few metres, then land back on the legs.', build: () => buildCricket() },
   // Stock fleet wave, launchers and spacecraft (src/editor/stock/space.ts).
   ...spaceStock(),
+  // Venus and Mars probes for the career after the Moon (stock/probes.ts).
+  ...probeStock(),
 ] satisfies StockCraft[]).map(stock => ({
   ...STOCK_GUIDE[stock.id],
   ...stock,
@@ -777,6 +781,6 @@ export function wireStockGroups(craft: CraftDef, catalog: PartCatalog = PART_CAT
       }
     }
   }
-  for (const p of parts) if (def(p).modules.some(m => (m.type === 'solarPanel' && m.tracking) || m.type === 'antenna')) bind(p, 'custom1', 'deploy.toggle');
+  for (const p of parts) if (retractablePanel(def(p))) bind(p, 'custom1', 'deploy.toggle');
   return { ...craft, parts };
 }

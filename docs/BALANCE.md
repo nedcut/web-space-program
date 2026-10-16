@@ -5,6 +5,44 @@ Reproduce the tables with `npx tsx scripts/balance-analysis.ts`. Flight regressi
 `npx vitest run --maxWorkers=2`. No physics parameters, resource densities, engine ratings,
 or deterministic trace fixtures were changed.
 
+## Past the Moon: Venus and Mars — 2026-10-15 (op/career2)
+
+`npx tsx scripts/career/playthrough.ts standard|challenging|real` now continues after the Moon route
+(`… standard moon` stops there). `scripts/career/beyond.ts` researches the scale's planetary probe (grinding the
+route's usual science flight while short), launches each probe a few days before its launch season, parks, departs
+from the planner's options list (earliest option the probe can pay for), flies the planner's heliocentric
+corrections, then captures and surveys (or flies by), transmitting over the live link. Probes to Venus and Mars
+interleave in time like a player's would (a Venus probe cruises while the Mars probe waits in orbit). Hardware is
+picked by stock id, so the same script measures any build: "before" below is main (b6396abc) plus this script.
+
+First arrival per scale (flight number, game day of arrival in the target's sphere of influence, science sent home):
+
+| Scale | Before: Venus | Before: Mars | After: Venus | After: Mars |
+| --- | --- | --- | --- | --- |
+| Standard | not reached: Cinderbloom's departure ran dry (planner "go now" 2,953 m/s, 2,811 aboard) | #8, day 159, orbit, 49 sci (Cinderbloom cruise stage, Lattice link) | #6, day 82, 178×238 km orbit, 193 sci | #7, day 162, 90×119 km orbit, 169 sci |
+| Challenging | not reached (Duskwing needs 880 more science; the grind flyby ran dry) | not reached | #7, day 343, 272×455 km orbit, 49 sci | #6, day 328, 133×258 km orbit, 50 sci |
+| Real | #10, day 445, no signal (Tern's Thread aerial: 2 Gm), no science | missed (no signal for corrections) | #10, day 446, 369 km × 370 Mm orbit, 139 sci | #11, day 606, no signal at arrival: milestone only |
+
+Before, Standard also needed one more Selene landing (#6) to afford the Cinderbloom (610 science); after, the Petrel's
+195 science of research is bought straight after the Moon landing. Standard after adds the Cinderbloom Venus landing
+(#8, day 260; 540 science of research): it lands, but on the hemisphere facing away from Earth, so no reading reaches home.
+
+Science and funds after the planets (end of run): Standard 394 science banked (190 before), 618 k cr (124 k);
+Challenging 252 (204 before, stuck), 2.17 M (1.25 M); Real 434 (300 before), 9.6 M (16.1 M: the Petrels and two
+facility upgrades). Funds still never constrain; science, the link and Δv do. Planet milestones: first Venus / Mars
+arrival +60 science, +60 k cr × the credit multiplier; first landing +80, +50 k.
+
+| Probe | Scale | Research from a new program | Cost | Δv after orbit | Notes |
+| --- | --- | ---: | ---: | ---: | --- |
+| Petrel | Standard | 200 | 13,716 | ~4.3 km/s | Mars 1.1 km/s + capture into low orbit; Venus likewise |
+| Petrel | Challenging | 450 | 45,771 | ~5.5 km/s | Mars 2.0–2.5 km/s, Venus 2.2 km/s, both captured |
+| Petrel | Real | 450 | 87,758 | ~5.3 km/s | Venus 3.5–4.0 km/s + long-ellipse capture; Mars 3.6–3.9 km/s leaves ~1.7 km/s, capture needs 1.35–1.7 |
+
+Link reach (geometric mean with the 8,000 Gm ground stations): Thread 2 Gm (Moon only), Lattice 20 Gm (Standard
+Venus), Arcwatch 200 Gm (Standard and Challenging planets, Real Venus; Real Mars only near close approach),
+Horizon 2,000 Gm. Earth–planet distance at a Hohmann arrival: Standard Venus 8–9 Gm, Mars 15–34 Gm; Challenging
+Venus 23–36, Mars 92–109; Real Venus 72–90, Mars 143–185 (and growing after arrival).
+
 ## Real lunar probe and Entry trim — 2026-10-13 (op/lunartrim)
 
 Real used to stall after orbit: the Meridian Real cannot reach the Moon and the expedition needs 775 science, so

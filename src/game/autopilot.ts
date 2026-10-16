@@ -402,6 +402,12 @@ export interface ExecuteNodeOptions {
 
 /** Farthest transfer angle the guidance aim point may sit at: clear of the singular 180° Lambert arc. */
 const GUIDE_MAX_ANGLE = (175 * Math.PI) / 180;
+/**
+ * Escape (hyperbolic) plans: a departure node before periapsis sweeps toward 180° within the sphere of influence, where
+ * the Lambert plane through two nearly opposite points flips with the small out-of-plane offset of a plane-change
+ * burn (a Venus departure with a 30° normal component turned the guidance 60° away and cut the burn at a quarter).
+ */
+const GUIDE_MAX_ANGLE_ESCAPE = (150 * Math.PI) / 180;
 
 /**
  * Aim point for closed-loop burn guidance: the farthest point of the planned post-burn orbit up to `until` (the
@@ -423,6 +429,7 @@ function guidanceTarget(o: Orbit, node: number, soi: number, until = Infinity): 
     if (length(r) > 0.9 * soi) break;
     const angle = angleBetween(s0.position, r);
     if (angle < (20 * Math.PI) / 180) continue;
+    if (o.e >= 1 && angle > GUIDE_MAX_ANGLE_ESCAPE) break;
     best = { time: t, position: r, normal };
     if (angle >= GUIDE_MAX_ANGLE) break;
   }

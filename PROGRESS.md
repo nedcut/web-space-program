@@ -31,6 +31,13 @@ _Last updated: 2026-10-15_
 
 ## Recent changes
 
+### 2026-10-15 — Career past the Moon
+
+- The career now continues to Venus and Mars on every scale. A new **Petrel Planetary Probe** reaches both, the hub
+  counts down to launch seasons, first arrivals and landings pay milestones, and planet contracts appear.
+- Fixed: Execute next node cut plane-change departures short; the planner's "Go now" cost more than listed; the
+  Venus lander had no antenna. Still open: Real Mars orbit, and the Venus lander landing out of Earth's view.
+
 ### 2026-10-15 — Veteran audit 2 and playtest kit
 
 - The 2026-10-07 gap list is about 85% closed; a Moon round trip with the stock Selene, the planner and the

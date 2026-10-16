@@ -93,7 +93,7 @@ describe('hub next goal', () => {
     expect(nextGoal(p, 'career', 'standard')).toMatchObject({ action: 'research' });
     expect(researchFor('stock-selene', p, 'career').cost).toBe(110);
     p.milestones.push('first-moon-flyby', 'first-moon');
-    expect(nextGoal(p, 'career', 'standard')?.title).toBe('Explore the planets');
+    expect(nextGoal(p, 'career', 'standard')?.title).toBe('Send a probe to Mars');
     expect(nextGoal(p, 'sandbox', 'standard')).toBeNull();
     expect(researchFor('stock-meridian-challenging', newProgression(), 'career').cost).toBe(280);
   });

@@ -253,8 +253,9 @@ export type PartModule =
   | { type: 'generator'; chargeRate: number }
   | { type: 'fuelCell'; chargeRate: number; fuelRate: number; oxidizerRate: number }
   | { type: 'science'; experiment: string }
-  /** `maxQ`: dynamic pressure the extended antenna survives, Pa (see `deployables.ts`). */
-  | { type: 'antenna'; transmission: number; range: number; relay: boolean; maxQ?: number };
+  /** `maxQ`: dynamic pressure the extended antenna survives, Pa (see `deployables.ts`). `fixed`: built into a
+   * rated hull (no boom to stow, always transmitting, never torn off). */
+  | { type: 'antenna'; transmission: number; range: number; relay: boolean; maxQ?: number; fixed?: boolean };
 
 export interface PartDef {
   id: string;
