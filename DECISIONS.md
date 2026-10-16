@@ -1841,3 +1841,12 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   the capture is 60 Hz on this shared machine, not an M-series/120 Hz performance result.
 - **Limits:** M-series, Zen/Firefox and live 120 Hz GPU pacing are unverified; headless 120/144 Hz cases test
   direction stability, not display performance. No PROGRESS.md edits, push, deployment or merge to main.
+- **Final validation:** lint, `npx tsc --noEmit` and the production build pass. The original full-suite process
+  was terminated by SIGTERM (143) before producing a summary; four sequential two-worker Vitest shards then
+  pass all 220 files: 2,042 tests passed, one skipped. After merging main at `44e71255` (including dockassist),
+  lint/typecheck/build and 67 tests across navball, interpolation, flight feel, docking, control and station
+  files pass again. The complete merged suite was not repeated. A fresh merged-build RTX capture has no page
+  errors and maximum target steps 0.010293° in flight / 0.003007° after returning from map (the largest step
+  spans 60 ms of simulation); target-prograde stays below 0.0029°. See `merged*` screenshots/JSON and `merged-*`
+  check logs in the same evidence folders. Main's append-only decision conflict was resolved by preserving
+  both sections. Preview 5872 is stopped; no contexts, profile directories or pending runs are left.
