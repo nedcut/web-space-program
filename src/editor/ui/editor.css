@@ -363,6 +363,7 @@
 .preflight-list { max-height: 180px; overflow: auto; }
 .preflight-list > div { padding-top: 8px; line-height: 1.4; }
 .preflight-list button { display: block; margin-top: 3px; }
+.preflight-list > .note { color: var(--text-dim); }
 
 /* ---------------------------------------------------------------- WP2: tools, staging, subassemblies */
 .vab-ibtn.snap.on { color: var(--accent); }

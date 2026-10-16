@@ -1692,3 +1692,24 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   247 m/s crew lost → 6.9 m/s recovered (chute semi at 3.9 km, full at 1 km); SAS off 291 → 6.9 m/s; SAS prograde
   still lost (294 m/s; holding prograde fights the trim). A shielded pod is unchanged to the printed digit (its
   base is covered by the shield), and `scripts/career/playthrough.ts` output is byte-identical to main.
+- **Pre-flight descent check** (`editor/descent.ts`, item 1a). The piece left after every stage fires that carries
+  the parachutes is dropped from the highest point the craft could reach flown straight up (vacuum Δv less gravity
+  loss, capped at 1.5 atmosphere heights). Its attitude comes from the sim's own aero forces: base first if that is
+  statically stable (capsules), else apex first. A 1-D fall with the `updateParachutes` opening rules predicts the
+  splashdown; above 20 m/s the editor warns with the chute rating, free-fall speed, opening height and impact
+  speed. It matches flight: bare first rocket 6.9 m/s (flown 6.9), Kestrel 7.6 (flown 7.6); before the trim fix
+  it predicted ≈330 m/s (flown 247–315). No stock craft warns except Cricket Hopper, which really would hit at
+  ≈280 m/s if flown high. The launch planet's scaled air reaches the worker from `EditorSession.homeAir()`.
+  Cost: +3–9 ms per edit in the pre-flight worker.
+- **Crew g note** (item 6): a capsule or cockpit stage above 6 g at burnout gets a *note*, listed in Pre-flight
+  without counting toward "to review" or opening the panel (Kestrel 8.2 g, the hand-built first rocket 10.4 g,
+  Homeward 9.3 g would otherwise nag on stock designs). Passenger cabins (`controllable: false`) are excluded.
+- **G-load lamp:** red "G-LOAD" now starts at 10 g (was 9), the entry corridor's steep edge; amber "HIGH G" stays
+  at 6 g, and both add "· THROTTLE DOWN" while the engines are thrusting. Nothing in the sim harms crew by g, so
+  a normal first ascent (≈9.7 g at burnout) reads amber with the remedy instead of red. The g-meter shares the
+  thresholds (`alerts.ts G_WARN/G_BAD`).
+- **Parachute lamp and SINK RATE** (items 4 and 6). A CHUTE lamp next to GEAR shows stowed / ARM / WAIT / SEMI /
+  OPEN / CUT, and an amber "CHUTE WAITING · TOO FAST 48 / 25 kPa" caution names the reason an armed chute stays
+  shut (enough air, airflow above its rating). Deployed canopies count as braking: when their fully open descent
+  rate (√(2mg / ρ·ΣCdA) at the current air density) is ≤ 12 m/s the SINK RATE / TERRAIN cautions are suppressed.
+  Computed in the 10 Hz telemetry pass (one loop over parts); no per-frame work.

@@ -19,7 +19,8 @@ export function StagingPanel({ session, view }: { session: EditorSession; view: 
   useThumbnails();
   const [dragOver, setDragOver] = useState<number | 'new' | null>(null);
   const [dragging, setDragging] = useState<DragItem | null>(null);
-  const { checks, busy } = usePreflightChecks(view.craft, view.stageStats.get(0));
+  const { checks, busy } = usePreflightChecks(view.craft, view.stageStats.get(0), session.homeAir());
+  const notes = checks.filter(c => c.note).length, issues = checks.length - notes;
   const block = useFacilityBlock(view.craft);
   const byUid = new Map(view.craft.parts.map((p) => [p.uid, p]));
   const stages = [...view.stages].reverse();
@@ -78,11 +79,11 @@ export function StagingPanel({ session, view }: { session: EditorSession; view: 
         </div>
       </div>
       {(hasEngine || block) && (
-        <details className="preflight-checks" open={checks.length > 0 || !!block}>
-          <summary title="Advisory checks; you can still launch">Pre-flight · {busy ? 'checking…' : checks.length || block ? `${checks.length + (block ? 1 : 0)} to review` : 'ready'}</summary>
+        <details className="preflight-checks" open={issues > 0 || !!block}>
+          <summary title="Advisory checks; you can still launch">Pre-flight · {busy ? 'checking…' : issues || block ? `${issues + (block ? 1 : 0)} to review` : 'ready'}{!busy && notes > 0 ? ` · ${notes} note${notes === 1 ? '' : 's'}` : ''}</summary>
           <div className="preflight-list">
             {block && <div className="preflight-block"><span>Can't launch: {block.reason}.</span><FacilityUnblock block={block} /></div>}
-            {checks.map(c => <div key={c.id}>
+            {checks.map(c => <div key={c.id} className={c.note ? 'note' : undefined}>
             <span>{c.text}</span>{c.uids.length > 0 && <button className="btn small" title="Highlight these parts in the craft" onClick={() => session.select(c.uids)}>Show me</button>}
           </div>)}</div>
         </details>
