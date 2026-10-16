@@ -67,8 +67,9 @@ function parse(raw: string, max = MAX_MESSAGE_BYTES): Record<string, unknown> {
 function validInput(x: unknown): boolean {
   if (!record(x)) return false;
   if (!['pitch', 'yaw', 'roll', 'translateX', 'translateY', 'translateZ'].every(k => num(x[k], 1))) return false;
+  if (x.targetPortOrientation !== undefined && !vec(x.targetPortOrientation, true)) return false;
   if (!num(x.throttle, 1) || x.throttle < 0 || typeof x.stage !== 'boolean' || typeof x.rcs !== 'boolean') return false;
-  if (!['off', 'stabilityAssist', 'prograde', 'retrograde', 'normal', 'antinormal', 'radialIn', 'radialOut', 'target', 'antiTarget', 'maneuver'].includes(String(x.sas))) return false;
+  if (!['off', 'stabilityAssist', 'prograde', 'retrograde', 'normal', 'antinormal', 'radialIn', 'radialOut', 'target', 'antiTarget', 'portAlign', 'maneuver'].includes(String(x.sas))) return false;
   if (!['gear', 'brakes', 'evaJump', 'evaRun', 'evaFaceView'].every(k => x[k] === undefined || typeof x[k] === 'boolean')) return false;
   if (x.wheelThrottle !== undefined && !num(x.wheelThrottle, 1)) return false;
   if (x.sasReference !== undefined && !['orbit', 'surface', 'target'].includes(String(x.sasReference))) return false;

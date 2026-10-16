@@ -4,7 +4,7 @@ import { memo, type ReactElement } from 'react';
  * Original HUD glyphs. SAS mode glyphs reproduce the navball marker shapes drawn in `navball.ts` (same geometry on
  * a 32-unit grid) so a button and the marker it steers to read as the same symbol.
  */
-export type SasGlyph = 'stabilityAssist' | 'prograde' | 'retrograde' | 'normal' | 'antinormal' | 'radialOut' | 'radialIn' | 'target' | 'antiTarget' | 'maneuver';
+export type SasGlyph = 'stabilityAssist' | 'prograde' | 'retrograde' | 'normal' | 'antinormal' | 'radialOut' | 'radialIn' | 'target' | 'antiTarget' | 'portAlign' | 'maneuver';
 
 /** Marker colours, matching the navball (colour-blind palette follows the navball's too). */
 export const SAS_COLORS: Record<SasGlyph, { normal: string; colourBlind: string }> = {
@@ -17,6 +17,7 @@ export const SAS_COLORS: Record<SasGlyph, { normal: string; colourBlind: string 
   radialIn: { normal: '#4fd8ff', colourBlind: '#56b4e9' },
   target: { normal: '#ff4fb8', colourBlind: '#e69f00' },
   antiTarget: { normal: '#ff4fb8', colourBlind: '#e69f00' },
+  portAlign: { normal: '#64ead7', colourBlind: '#56b4e9' },
   maneuver: { normal: '#3c8cff', colourBlind: '#cc79a7' },
 };
 
@@ -36,6 +37,7 @@ const SAS: Record<SasGlyph, ReactElement> = {
   radialIn: <><circle cx="16" cy="16" r="9" /><path d={[45, 135, 225, 315].map(a => ray(a, 9, 4)).join('')} /></>,
   target: <><circle cx="16" cy="16" r="6.5" /><path d="M6 16h5M21 16h5M16 6v5M16 21v5" /></>,
   antiTarget: <><circle cx="16" cy="16" r="6.5" /><path d="M6 16h5M21 16h5M16 6v5M16 21v5M11.5 11.5l9 9M11.5 20.5l9-9" /></>,
+  portAlign: <><path d="M4 8h7v16H4M28 8h-7v16h7M11 16h10M16 4v5" /><circle cx="16" cy="16" r="2" /></>,
   maneuver: <><circle cx="16" cy="16" r="7" strokeWidth="2.6" /><path d="M16 9V3M10 19.5l-5.5 3.5M22 19.5l5.5 3.5" strokeWidth="2.6" /></>,
 };
 
