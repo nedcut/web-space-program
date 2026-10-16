@@ -10,7 +10,7 @@ import { propagate, period, solveLambertAround, inertialDvToManeuver } from '../
 import { add, cross, dot, length, normalize, scale, sub, type Vec3 } from '../../util/vec3';
 import { nelderMead } from '../../util/nelderMead';
 import { ejectionVelocity } from '../interplanetary';
-import { arrivalPeriapsisAltitude } from './arrival';
+import { arrivalPeriapsisAltitude, isDirectEntry } from './arrival';
 
 /** One departure option. Δv is an estimate (impulsive, aimed at the target's centre or on a direct return). */
 export interface TransferWindow {
@@ -20,7 +20,7 @@ export interface TransferWindow {
   wait: number;
   /** Estimated departure Δv, m/s. */
   dv: number;
-  /** Estimated capture Δv into a circular orbit at arrival, m/s (interplanetary options rank by departure + capture). */
+  /** Estimated circular capture Δv, m/s; zero for direct atmospheric entry. */
   captureDv?: number;
   /** Estimated flight time to the target (its SOI edge for a return), s. */
   timeOfFlight: number;
@@ -63,7 +63,8 @@ function outbound(o: Orbit, world: PlanningWorld, targetId: string, t: number, t
         const c = inertialDvToManeuver(s, dvv);
         const rp = captureRadius ?? target.radius + 30000;
         const excess = length(sub(arc.arrivalVelocity, end.velocity));
-        const capture = Math.sqrt(excess * excess + 2 * target.gm / rp) - Math.sqrt(target.gm / rp);
+        const capture = isDirectEntry(target, rp - target.radius) ? 0
+          : Math.sqrt(excess * excess + 2 * target.gm / rp) - Math.sqrt(target.gm / rp);
         best = { t, dv, tof, capture, seed: [c.prograde, c.normal, c.radial] };
       }
     } catch { /* collinear or unbracketed arc: neighbouring flight times cover it */ }
@@ -77,7 +78,7 @@ function outbound(o: Orbit, world: PlanningWorld, targetId: string, t: number, t
  * and the hyperbolic excess it needs is ejected from the vessel's position at `t`.
  */
 function homeward(o: Orbit, world: PlanningWorld, parentId: string, moonId: string, peGoal: number, t: number, phi: number, radial: number): Sample | null {
-  const u = world.universe, mu = u.body(parentId).gm;
+  const u = world.universe, parent = u.body(parentId), mu = parent.gm;
   const m = u.ephem.getRelativeState(moonId, t);
   const rc = length(m.position);
   const q = normalize(m.position);
@@ -94,7 +95,9 @@ function homeward(o: Orbit, world: PlanningWorld, parentId: string, moonId: stri
   if (!Number.isFinite(dv)) return null;
   const c = inertialDvToManeuver(s, dvv);
   const tof = Math.PI * Math.sqrt(((rc + peGoal) / 2) ** 3 / mu);
-  return { t, dv, tof, capture: Math.sqrt(Math.max(0, dot(need, need) + 2 * mu * (1 / peGoal - 1 / rc))) - Math.sqrt(mu / peGoal), seed: [c.prograde, c.normal, c.radial] };
+  const capture = isDirectEntry(parent, peGoal - parent.radius) ? 0
+    : Math.sqrt(Math.max(0, dot(need, need) + 2 * mu * (1 / peGoal - 1 / rc))) - Math.sqrt(mu / peGoal);
+  return { t, dv, tof, capture, seed: [c.prograde, c.normal, c.radial] };
 }
 
 /** Group samples by revolution: the cheapest of the first revolution is "now"; later local minima are windows. */

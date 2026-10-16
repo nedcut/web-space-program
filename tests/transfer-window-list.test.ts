@@ -40,3 +40,19 @@ it('bounds the Moon go-now option to the next orbit even while polishing, includ
   expect(now.captureDv).toBeGreaterThan(0);
   expect(windows.every(w => w.departure <= world.ut + 300 + 86400)).toBe(true);
 }, 30000);
+
+it.each(['standard', 'challenging', 'real'] as const)('budgets direct Earth entry from lunar orbit without a capture burn (%s)', preset => {
+  const universe = new Universe(preset), ut = DEFAULT_START_UT, moon = universe.body('moon');
+  const radius = moon.radius + 40000, position = v3(radius, 0, 0), velocity = v3(0, Math.sqrt(moon.gm / radius), 0);
+  const orbit = stateToElements(moon.gm, moon.id, position, velocity, ut);
+  const world: PlanningWorld = { universe, ut, active: { body: moon.id }, orbitOf: () => orbit,
+    relativeState: () => ({ position, velocity }), addNode: () => { throw new Error('Window list must not create nodes'); } };
+  const direct = transferWindows(world, 'earth', { earliest: ut + 300, span: period(orbit) });
+  expect(direct.length).toBeGreaterThan(0);
+  expect(direct.every(w => w.captureDv === 0)).toBe(true);
+  // An explicitly requested parking orbit above the air still needs its capture burn.
+  const earth = universe.body('earth');
+  const capture = transferWindows(world, 'earth', { earliest: ut + 300, span: period(orbit), periapsisRadius: earth.radius + earth.atmosphere!.height + 10000 });
+  expect(capture.length).toBeGreaterThan(0);
+  expect(capture.every(w => w.captureDv! > 0)).toBe(true);
+}, 30000);

@@ -4,6 +4,7 @@ import type { TransferWindow as DepartureWindow } from '../../game/planning/wind
 import type { TransferPlan } from '../../game/planning/transfers';
 import { applyEntryTrim, applyPlanningResult } from '../../game/planning/apply';
 import { enteringDragPerMass, findEntry, type EntryTrimPlan } from '../../game/planning/entry';
+import { isDirectEntry } from '../../game/planning/arrival';
 import { TransferWindow } from './TransferWindow';
 import { memo, useEffect, useRef, useState } from 'react';
 import type { World } from '../../game/world';
@@ -103,7 +104,8 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
 
   const installed = (target: string, plan: TransferPlan, captureDv?: number) => {
     const node = world.nodes[0];
-    if (node) setCard({ target, nodeId: node.id, encounterTime: plan.encounterTime, periapsis: plan.periapsisAltitude, captureDv, returnPerigee: plan.returnPerigee });
+    const capture = isDirectEntry(world.universe.body(target), plan.periapsisAltitude) ? 0 : captureDv;
+    if (node) setCard({ target, nodeId: node.id, encounterTime: plan.encounterTime, periapsis: plan.periapsisAltitude, captureDv: capture, returnPerigee: plan.returnPerigee });
     setPlanMsg('');
   };
   const planTransfer = async (id: string, departure?: number, captureDv?: number, freeReturn = false) => {
@@ -168,7 +170,7 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
     const startIn = planNode.time - world.ut - (Number.isFinite(burn) ? burn / 2 : 0);
     cardView = <div className="mp-card" aria-label={`${target} transfer`}>
       <div className="mp-card-head">
-        <span className="mp-card-title">{target} transfer</span>
+        <span className="mp-card-title">{target} {card.captureDv === 0 ? 'direct entry' : 'transfer'}</span>
         <span className="pl-num">{dvText(dv)}</span>
         {map && <button className="btn ghost small pl-icon" title="Show whole transfer" aria-label="Show whole transfer" onClick={() => map.frameTransferOverview(card.target)}><FrameGlyph /></button>}
       </div>

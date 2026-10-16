@@ -1,6 +1,12 @@
 import { sampleAtmosphere } from '../../sim/atmosphere';
 import { length } from '../../util/vec3';
 import type { PlanningWorld } from './context';
+import type { Body } from '../../sim/bodies/types';
+
+/** A periapsis inside air is a direct entry; no circular capture burn belongs in its propellant budget. */
+export function isDirectEntry(target: Body, periapsisAltitude: number): boolean {
+  return !!target.atmosphere && periapsisAltitude < target.atmosphere.height;
+}
 
 /**
  * Dynamic pressure at the vacuum periapsis that captures a capsule in one pass. Capsules trim heat-shield first
