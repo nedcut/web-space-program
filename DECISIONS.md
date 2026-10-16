@@ -1813,8 +1813,14 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
 - Contact tests cover linear/angular momentum, rotated boxes/frusta, orbital precision, distant rejection,
   penetration recovery, aligned 0.3 m/s docking, a 53-degree bump, undocking, re-contact after sibling clearance,
   open-bay payload release and the World hook. A separate checkout combined dockassist's implementation with
-  collision: its nine tests passed, including side-port auto-docking from 65 m and 500 m.
+  collision: its latest eleven tests passed, including side-port auto-docking from 65 m and 500 m.
 - Real GPU evidence: CDP Chrome / RTX 3060 Ti, Medium, 1470 x 900, tutorial docking scene. A scripted 53-degree
   0.3 m/s nudge bumps at about 0.5 s; relative speed becomes 0.124 m/s and the faces part without merging.
   Screenshots/trace: `C:\wsp-tools\shots\shipcontact\`; logs/profiles: `~/.t3/projects/wsp-traces/shipcontact/`.
   These measurements do not establish M-series, Zen/Firefox or 120 Hz performance.
+- Performance (`scripts/bench/vessel-contact.ts`, Node 24, busy 12-core WSL host, nine samples): active craft
+  plus 0 / 1 / 2 neighbours at 60 m spacing costs 11 / 40 / 156 ns per solver call (ranges 8-39 / 26-72 / 90-270 ns).
+  One box-face normal/friction impulse costs 3.36 us (2.24-3.80); deeply overlapping 15-part Tenders cost 0.65 ms
+  (0.58-0.99). A separate CPU profile identifies SAT axis projection as the contact stress limiter. Full World.tick
+  physics with those separated fleets costs 213 / 364 / 470 us per step (ranges 188-446 / 263-379 / 444-616 us).
+  Solver microbenchmarks exclude fleet collection and existing integration/docking; no whole-frame speedup is claimed.
