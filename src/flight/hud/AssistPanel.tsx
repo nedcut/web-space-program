@@ -62,8 +62,8 @@ export function AssistPanel({ active, onStart, onCancel, landingLight, dockingAv
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div className="label">Flight assist</div>
-          {(Object.keys(ASSIST_LABELS) as AssistId[]).map((id) => (
-            <div key={id} hidden={id === 'dock' && !dockingAvailable} style={{ display: id === 'dock' && !dockingAvailable ? 'none' : 'contents' }}>
+          {(Object.keys(ASSIST_LABELS) as AssistId[]).filter(id => id !== 'dock' || dockingAvailable).map((id) => (
+            <div key={id} style={{ display: 'contents' }}>
               <button className="btn small" title={ASSIST_HINTS[id]} onClick={() => onStart(id)}>{ASSIST_LABELS[id]}</button>
               {id === 'land' && light && <LandLight light={light} onStart={onStart} />}
             </div>

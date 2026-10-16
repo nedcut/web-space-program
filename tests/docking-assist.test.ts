@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { RESOURCES } from '../src/data/resources';
+import { vacuumEnv } from '../src/sim/vessel/testing';
 import { PART_CATALOG } from '../src/data/parts';
 import { buildTender } from '../src/editor/stockCrafts';
 import { autoDock, targetPortOrientation, targetedPort } from '../src/game/dockingAssist';
@@ -7,11 +9,12 @@ import { placeInCircularOrbit, spawnRendezvousTarget } from '../src/game/scenari
 import { DEFAULT_START_UT } from '../src/game/store';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
-import { controlFrom, controlRotation, dockedPorts, freePorts, neutralInput, portAlignment, totalResource } from '../src/sim/vessel';
+import { buildVessel, stepVessel, controlFrom, controlRotation, dockedPorts, freePorts, neutralInput, portAlignment, totalResource } from '../src/sim/vessel';
 import { sasTargetDirection } from '../src/sim/vessel/sas';
 import { assistFrame } from '../src/flight/assist';
 import { qConj, qFromAxisAngle, qMul, qRotate } from '../src/util/quat';
 import { add, dot, length, scale, sub, v3 } from '../src/util/vec3';
+import { decodeClient, encode, type ClientMessage } from '../src/net/protocol';
 import { requireIntactFlight } from './helpers/structural';
 
 function setup(distance = 65, side = true) {
@@ -39,6 +42,23 @@ function setup(distance = 65, side = true) {
 }
 
 describe('port alignment and RCS docking assist', () => {
+  it('roundtrips port alignment over the control protocol and rejects invalid frames', () => {
+    const message = { v: 1, type: 'input', vesselId: 'tug', seq: 1, input: neutralInput({ sas: 'portAlign', targetPortOrientation: { x: 0, y: 0, z: 0, w: 1 } }) } satisfies ClientMessage;
+    expect(decodeClient(encode(message))).toEqual(message);
+    message.input.targetPortOrientation = { x: 0, y: 0, z: 0, w: 0 };
+    expect(() => decodeClient(encode(message))).toThrow();
+  });
+
+  it('corrects a roll offset while holding the port axes opposite, entirely in the headless sim', () => {
+    const v = buildVessel(buildTender(), PART_CATALOG, { id: 'roll', resourceDefs: RESOURCES, orientation: qFromAxisAngle(v3(0, 1, 0), 0.7) });
+    const input = neutralInput({ sas: 'portAlign', targetPortOrientation: qFromAxisAngle(v3(0, 0, 1), Math.PI) });
+    const env = vacuumEnv();
+    for (let i = 0; i < 500; i++) stepVessel(v, input, env, i * 0.02, 0.02);
+    expect(dot(qRotate(v.orientation, v3(0, 1, 0)), v3(0, 1, 0))).toBeGreaterThan(0.999);
+    expect(dot(qRotate(v.orientation, v3(0, 0, 1)), v3(0, 0, 1))).toBeGreaterThan(0.999);
+    expect(length(v.angularVelocity)).toBeLessThan(0.001);
+  });
+
   it('uses the reversed target face, including a side-port control frame, and holds roll', () => {
     const { w, active } = setup();
     const port = freePorts(active.state)[0];
@@ -51,19 +71,21 @@ describe('port alignment and RCS docking assist', () => {
     const d = sasTargetDirection(active.state, 'portAlign', input, env, w.ut)!;
     expect(dot(d, targetedPort(w)!.dir)).toBeCloseTo(-1, 10);
     expect(sasTargetDirection(active.state, 'portAlign', neutralInput(), env, w.ut)).toBeNull();
-    let captureAt = -1, maxAfter = 0;
+    let captureAt = -1, maxAfter = 0, maxAfterCapture = 0;
     const start = w.ut;
     for (let i = 0; i < 50 * 30; i++) {
       input.targetPortOrientation = targetPortOrientation(w);
       w.tick(0.02, input);
       const angle = portAlignment(freePorts(active.state)[0], targetedPort(w)!).angle * 180 / Math.PI;
       if (angle < 15 && captureAt < 0) captureAt = w.ut - start;
+      if (captureAt >= 0) maxAfterCapture = Math.max(maxAfterCapture, angle);
       if (i > 50 * 15) maxAfter = Math.max(maxAfter, angle);
     }
     console.log(`side-port 53° alignment: capture ${captureAt.toFixed(2)} s, max after 15 s ${maxAfter.toFixed(4)}°`);
     expect(captureAt).toBeGreaterThan(0);
     expect(captureAt).toBeLessThan(15);
     expect(maxAfter).toBeLessThan(0.5);
+    expect(maxAfterCapture).toBeLessThan(15);
     expect(dot(qRotate(active.state.orientation, v3(0, 0, 1)), qRotate(targetPortOrientation(w)!, v3(0, 0, 1)))).toBeGreaterThan(0.999);
   }, 60000);
 

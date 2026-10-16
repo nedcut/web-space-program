@@ -138,6 +138,8 @@ export class FlightController {
   assist: Autopilot | null = null;
   private assistWarped = false;
   sas: SasMode = 'off';
+  /** Port attitude samples share the existing 10 Hz telemetry cadence; no per-frame geometry allocation. */
+  private portOrientation: ReturnType<typeof targetPortOrientation>;
   /** Warp-to targets and the rails warp ramp. */
   readonly warpDriver = new WarpDriver();
   /** Contextual coaching hints (remembered in the world save). */
@@ -463,6 +465,7 @@ export class FlightController {
     if (this.assist?.cancelOnAnyInput) this.cancelAssist('Auto-dock cancelled: own port changed');
     const p = uid === null ? undefined : this.world.active?.state.cache.byUid.get(uid);
     this.ownPortUid = p ? uid : null;
+    if (this.sasOn && this.sas === 'portAlign') this.setSasMode('portAlign');
     if (p) this.world.message(`Docking from ${p.def.name}`, 'info', 2);
   }
 
@@ -699,6 +702,7 @@ export class FlightController {
       const port = dockingAssistPort(this.world, this.ownPortUid);
       if (!port) return this.world.message('Select a free target port and a free own port', 'warn');
       this.controlFrom(port.part.uid);
+      this.portOrientation = targetPortOrientation(this.world);
     }
     this.sasOn = true;
     this.sas = mode as SasMode;
@@ -971,8 +975,8 @@ export class FlightController {
     // "SAS does nothing"), so fall back to holding attitude like the target modes above.
     if (this.sas === 'maneuver' && !this.world.nodes.length) this.sas = 'stabilityAssist';
     if (wv) this.speedReference.updateWorld(this.world, wv);
-    const portOrientation = this.sas === 'portAlign' ? targetPortOrientation(this.world) : undefined;
-    if (this.sas === 'portAlign' && !portOrientation) this.sas = 'stabilityAssist';
+    const portOrientation = this.sas === 'portAlign' ? this.portOrientation : undefined;
+    if (this.sas === 'portAlign' && !this.assist && (!portOrientation || this.world.targetPortUid === null)) this.sas = 'stabilityAssist';
     const targetState = this.world.targetState();
     // Trim offsets the controls only while SAS is off: SAS would otherwise read it as the pilot steering.
     const trim = this.sasOn || wv?.state.eva ? { pitch: 0, yaw: 0, roll: 0 } : this.input.trim;
@@ -1382,7 +1386,10 @@ export class FlightController {
       ? { vesselId: near.vessel.state.id, podUid: near.pod.uid, distance: near.distance, ready: near.distance <= BOARD_RANGE && near.speed < BOARD_SPEED, boardKey: bindingLabel('board') }
       : null);
   }
-  private telemetry(wv: WorldVessel): Telemetry { return telemetry.telemetry.call(this, this.systems, wv); }
+  private telemetry(wv: WorldVessel): Telemetry {
+    if (this.sas === 'portAlign') this.portOrientation = targetPortOrientation(this.world);
+    return telemetry.telemetry.call(this, this.systems, wv);
+  }
 
   /** Gear / brakes / intake-air readouts for the HUD (null fields when the vessel has no such hardware). */
   private groundTelemetry(wv: WorldVessel): Pick<Telemetry, 'gear' | 'brakes' | 'intakeAir'> { return telemetry.groundTelemetry.call(this, this.systems, wv); }
