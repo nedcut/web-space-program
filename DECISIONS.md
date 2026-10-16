@@ -1793,3 +1793,10 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   the launch body's sphere of influence: the recorder's maximum mixes bodies (37.5 Mm was the distance from Earth on
   the way to the Moon); "Furthest" already says where the craft went. (d) The map's landing-prediction toggle is
   hidden in a stable orbit (periapsis above air and terrain), where there is nothing to predict.
+
+## RCS translation pad (2026-10-16, op/rcspad)
+
+- Add a flight app, “RCS translation”, opened by the toolbar or the rebindable Shift+R shortcut. It uses the existing draggable/resizable app window, session position/size persistence and Escape ownership. First docking opens it automatically; closing it by the toolbar, shortcut, close button or Escape disables `autoShowRcsPad` in persisted settings. Gameplay settings can re-enable that prompt.
+- The cross shows craft-relative Up/Down/Left/Right, with separate Forward/Back controls. Labels subscribe to the live bindings; held physical keys and pad presses share their highlights. RCS and FINE switches use the existing power/control state, including the keyboard's 35% precision authority and input smoothing. Directions describe the craft axes, even when docking from a side-mounted port.
+- Keep pad holds separate from physical keys in `FlightInput`, then combine them before the existing translation-axis calculation. Pointer capture handles mouse/touch/pen; pointerup/cancel/lost capture, blur, disabled controls, panel removal, pause and EVA clear pad holds. Releasing a pointer leaves a physical key held. Button Space/Enter activation consumes those events so it cannot stage the vessel. No simulation, controller frame-loop or telemetry changes, and no new per-frame allocations.
+- Verification: `tests/rcs-pad.test.ts` checks six axes, binding labels, rebound/unbound keys, precision, simultaneous key/pointer intent and cancellation. `scripts/rcs-pad-browser.mjs` connects to existing Windows Chrome CDP for real pointer, touch, pen, keyboard, cancellation, settings/dismissal, window layout and GPU screenshots; artifacts belong outside git. M-series/Zen/120 Hz remain owner-side checks.

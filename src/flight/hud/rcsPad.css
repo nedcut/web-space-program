@@ -1,6 +1,6 @@
-.rcs-pad { padding: 8px; }
+.rcs-pad { padding: 0; }
 .rcs-switches { display: flex; gap: 6px; flex-wrap: wrap; }
-.rcs-switches .btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.rcs-switches .btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 5px 6px; font-size: 10px; white-space: nowrap; }
 .rcs-pad kbd { font: 10px var(--mono); opacity: .85; }
 .rcs-help { margin: 7px 0; color: var(--muted); font-size: 11px; }
 .rcs-status { min-height: 28px; margin-bottom: 0; }

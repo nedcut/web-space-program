@@ -12,9 +12,9 @@ export function RcsPad({ input, rcsOn, precision, enabled, onToggleRcs }: {
   const [offHint, setOffHint] = useState(false);
   useEffect(() => () => input.releaseTranslation(), [input]);
   const setHeld = useCallback((action: TranslationAction, down: boolean) => {
-    if (down && !rcsOn) setOffHint(true);
+    if (down) setOffHint(true);
     input.setTranslation(action, down);
-  }, [input, rcsOn]);
+  }, [input]);
   return <div className="rcs-pad">
     <div className="rcs-switches">
       <button type="button" className={`btn small ${rcsOn ? 'on' : ''}`} aria-pressed={rcsOn} disabled={!enabled}
