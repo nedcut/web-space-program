@@ -1824,3 +1824,6 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   (0.58-0.99). A separate CPU profile identifies SAT axis projection as the contact stress limiter. Full World.tick
   physics with those separated fleets costs 213 / 364 / 470 us per step (ranges 188-446 / 263-379 / 444-616 us).
   Solver microbenchmarks exclude fleet collection and existing integration/docking; no whole-frame speedup is claimed.
+- Final checks pass: `npm run lint`, `npx tsc --noEmit`, `npx vitest run --maxWorkers=2` (220 files;
+  2,051 tests passed, one skipped; 623 s) and `npm run build`. Main is merged into the branch; preview stopped.
+  No PROGRESS.md changes, push, deployment or merge into main.
