@@ -1,3 +1,4 @@
+import { DOCK_ASSIST_RANGE, DOCK_ASSIST_SPEED } from '../game/dockingAssist';
 import { flightEndReady, scheduleFlightEnd } from './lossPresentation';
 import { CrashOverlay } from '../ui/CrashOverlay';
 import { Panel, Button, Kbd } from '../ui/components';
@@ -400,7 +401,7 @@ export default function FlightScene() {
               </Panel>
             ) : undefined,
             onboarding: quickStart && ready && !help && !paused && tele.onSurface && !tele.eva && !tele.mapMode ? <QuickStartCard onClose={() => { markHelpSeen(); setQuickStart(false); }} onHelp={() => { markHelpSeen(); setQuickStart(false); setHelp(true); }} /> : undefined,
-            assist: !tele.eva && !tele.noControl ? <AssistPanel active={tele.assist} onStart={(id, opts) => ctrl.current?.startAssist(id, opts)} onCancel={() => ctrl.current?.cancelAssist()} landingLight={tele.onSurface ? undefined : readLandingLight} /> : undefined,
+            assist: !tele.eva && !tele.noControl ? <AssistPanel dockingAvailable={tele.target?.kind === 'vessel' && tele.target.portUid !== null && tele.target.distance <= DOCK_ASSIST_RANGE && tele.target.relSpeed <= DOCK_ASSIST_SPEED} active={tele.assist} onStart={(id, opts) => ctrl.current?.startAssist(id, opts)} onCancel={() => ctrl.current?.cancelAssist()} landingLight={tele.onSurface ? undefined : readLandingLight} /> : undefined,
             assistActive: !!tele.assist,
             signal: c.world.commsSettings.enabled ? <SignalPanel world={c.world} /> : undefined,
             resources: (tele.mapMode || active?.state.parts.some(p => p.def.modules.some(m => ['drill', 'converter', 'surfaceScanner', 'surveyScanner'].includes(m.type))))

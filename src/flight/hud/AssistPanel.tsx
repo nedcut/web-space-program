@@ -4,6 +4,7 @@ import { DAYLIGHT_ELEVATION, type LandingLight } from '../../game/landingLight';
 import { formatDuration } from '../../ui/format';
 
 const ASSIST_HINTS: Record<AssistId, string> = {
+  dock: 'Stops relative motion, aligns the selected ports, lines up at a standoff and closes using RCS. Any flight input cancels.',
   orbit: 'Flies the ascent and circularizes in a low orbit. Stages automatically.',
   node: 'Turns to the next node, warps to it, stages when nothing is thrusting, starts half the burn early and trims to the plan.',
   land: 'Suicide-burn landing below the current position.',
@@ -42,11 +43,12 @@ function LandLight({ light, onStart }: { light: LandingLight; onStart(id: Assist
 }
 
 /** Flight-assist programs (the Flight assist app in the HUD toolbar). */
-export function AssistPanel({ active, onStart, onCancel, landingLight }: {
+export function AssistPanel({ active, onStart, onCancel, landingLight, dockingAvailable = false }: {
   active: { name: string; status: string } | null;
   onStart(id: AssistId, opts?: AssistOptions): void;
   onCancel(): void;
   landingLight?: () => LandingLight | null;
+  dockingAvailable?: boolean;
 }) {
   const light = useLandingLight(active ? undefined : landingLight);
   return (
@@ -60,7 +62,7 @@ export function AssistPanel({ active, onStart, onCancel, landingLight }: {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div className="label">Flight assist</div>
-          {(Object.keys(ASSIST_LABELS) as AssistId[]).map((id) => (
+          {(Object.keys(ASSIST_LABELS) as AssistId[]).filter(id => id !== 'dock' || dockingAvailable).map((id) => (
             <div key={id} style={{ display: 'contents' }}>
               <button className="btn small" title={ASSIST_HINTS[id]} onClick={() => onStart(id)}>{ASSIST_LABELS[id]}</button>
               {id === 'land' && light && <LandLight light={light} onStart={onStart} />}

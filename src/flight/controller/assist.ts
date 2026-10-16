@@ -1,3 +1,4 @@
+import { dockingAssistPort } from '../../game/dockingAssist';
 import type { WorldVessel } from '../../game/world';
 import type { ControlInput } from '../../sim/vessel/runtime';
 import { assistFrame, createAssist, type AssistId, type AssistOptions } from '../assist';
@@ -9,7 +10,16 @@ export function startAssist(this: FlightController, _internals: FlightController
   if (this.network) return;
   if (!this.world.active || this.world.active.state.eva || !this.world.canControl()) return;
   try {
-    this.assist = createAssist(id, this.world, opts);
+    const port = id === 'dock' ? dockingAssistPort(this.world, this.ownPortUid) : null;
+    this.assist = createAssist(id, this.world, { ...opts, ownPortUid: this.ownPortUid });
+    if (id === 'dock') {
+      this.ownPortUid = port?.part.uid ?? null;
+      this.sasOn = true;
+      this.sas = 'portAlign';
+      this.rcsOn = true;
+      this.dockingMode = true;
+      this.speedMode = 'target';
+    }
     // The program owns time warp from here on: drop any "warp to" so the two never fight. Starting it answers any
     // alarm already holding warp, as changing warp by hand does.
     this.warpDriver.cancel(this.world);

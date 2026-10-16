@@ -1,3 +1,4 @@
+import { autoDock } from '../game/dockingAssist';
 import type { World } from '../game/world';
 import {
   ascentGuidance,
@@ -16,9 +17,10 @@ import { formatDuration } from '../util/format';
  * Flight assist ("autopilot") programs exposed in the HUD. Each is a sequence of autopilot stages built
  * lazily, so later stages are planned from the state the earlier ones leave behind.
  */
-export type AssistId = 'orbit' | 'node' | 'land' | 'circAp' | 'circPe';
+export type AssistId = 'orbit' | 'node' | 'land' | 'circAp' | 'circPe' | 'dock';
 
 export const ASSIST_LABELS: Record<AssistId, string> = {
+  dock: 'Auto-dock',
   orbit: 'Launch to orbit',
   node: 'Execute next node',
   land: 'Land here',
@@ -77,6 +79,8 @@ function waitUntil(until: number, why: string): Autopilot {
 export interface AssistOptions {
   /** Land: seconds to coast before the descent starts (wait for daylight at the touchdown). */
   wait?: number;
+  /** Dock: selected own port; otherwise prefer the controlling free port. */
+  ownPortUid?: number | null;
 }
 
 export function createAssist(id: AssistId, world: World, opts: AssistOptions = {}): Autopilot {
@@ -89,6 +93,7 @@ export function createAssist(id: AssistId, world: World, opts: AssistOptions = {
     return executeNode(w, planCircularization(w, at));
   };
   switch (id) {
+    case 'dock': return autoDock(world, opts.ownPortUid);
     case 'orbit':
       return new Sequence('Launch to orbit', [(w) => ascentGuidance(w, { targetApoapsis: targetAp }), circ('apoapsis')]);
     case 'node':
@@ -153,7 +158,7 @@ export function assistFrame(world: World, assist: Autopilot, pilot: ControlInput
   // Pilot override: attitude input, or any throttle input (`pilotThrottle`: keys or gamepad touched the throttle this
   // frame). A throttle override applies the pilot's throttle this same frame (e.g. an emergency cut).
   if (pilotThrottle) return end('pilot', 'Assist cancelled: manual control', true);
-  if (pilot.pitch || pilot.yaw || pilot.roll) return end('pilot', 'Assist cancelled: manual control');
+  if (pilot.pitch || pilot.yaw || pilot.roll || (assist.cancelOnAnyInput && (pilot.translateX || pilot.translateY || pilot.translateZ || pilot.stage || pilot.commands?.length || pilot.gear !== undefined || pilot.brakes))) return end('pilot', 'Assist cancelled: manual control');
   const step = assist.update(world);
   // A node alarm is the pilot's reminder to fly the burn; the program is flying, so it must not pin warp at 1× (an
   // unacknowledged hold from an earlier node used to keep every later coast at 1×).
