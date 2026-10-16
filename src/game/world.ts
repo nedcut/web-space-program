@@ -17,6 +17,7 @@ import type { ManeuverNode, Orbit, StateVector, TrajectoryPatch } from '../sim/o
 import { newProgression, type GameMode, type ProgressEvent } from '../sim/science/progression';
 import { activateNextStage, applyVesselCommands, expandCommands, MAX_COMMANDS, neutralInput, portInfo, recomputeMassProperties, setGear, stepVessel, WORLD_ACTIONS } from '../sim/vessel';
 import { stepEva } from '../sim/vessel/eva';
+import { ignoreInitialVesselOverlap, stepVesselContacts } from '../sim/vessel/vesselContact';
 import { advanceISRU, isruMachinery } from '../sim/vessel/isru';
 import type { ControlInput, PartState, VesselCommand, VesselEvent, VesselState } from '../sim/vessel/runtime';
 import type { CraftDef, PartDef } from '../sim/vessel/types';
@@ -689,6 +690,8 @@ export class World {
     this.ut += PHYSICS_DT;
   }
 
+  private readonly contactVessels: VesselState[] = [];
+
   private physicsStep(input: ControlInput, inputs?: ReadonlyMap<string, ControlInput>) {
     const t = this.ut;
     let propulsiveDv = 0;
@@ -773,6 +776,7 @@ export class World {
         recomputeMassProperties(nv, false);
         // Stages split at step start; structural/crash fragments split at a substep end.
         nv.position = add(nv.position, scale(nv.velocity, PHYSICS_DT - (res.newVesselTimeOffsets?.[nv.id] ?? 0)));
+        ignoreInitialVesselOverlap(wv.state, nv);
         this.vessels.set(nv.id, { state: nv, mode: 'physics', body: wv.body });
       }
       for (const e of res.events) this.handleEvent(e);
@@ -786,6 +790,10 @@ export class World {
         if (isActive) this.activeId = null;
       }
     }
+    let contactCount = 0;
+    for (const wv of this.vessels.values()) if (wv.mode === 'physics' && !wv.state.destroyed && !wv.state.eva) this.contactVessels[contactCount++] = wv.state;
+    this.contactVessels.length = contactCount;
+    stepVesselContacts(this.contactVessels, PHYSICS_DT);
     crew.collideAstronauts(this);
     this.stepDockingAll();
     this.ut = t + PHYSICS_DT;
