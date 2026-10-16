@@ -9,7 +9,7 @@ export function startAssist(this: FlightController, _internals: FlightController
   if (this.network) return;
   if (!this.world.active || this.world.active.state.eva || !this.world.canControl()) return;
   try {
-    this.assist = createAssist(id, this.world, opts);
+    this.assist = createAssist(id, this.world, { ...opts, ownPortUid: this.ownPortUid });
     // The program owns time warp from here on: drop any "warp to" so the two never fight. Starting it answers any
     // alarm already holding warp, as changing warp by hand does.
     this.warpDriver.cancel(this.world);

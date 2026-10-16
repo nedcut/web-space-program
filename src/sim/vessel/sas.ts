@@ -27,6 +27,7 @@ export function pilotActive(input: ControlInput): boolean {
 
 /** Target pointing direction (inertial unit vector) for directional SAS modes, or null. */
 export function sasTargetDirection(v: VesselState, mode: SasMode, input: ControlInput, env: Environment, t: number): Vec3 | null {
+  if (mode === 'portAlign') return input.targetPortOrientation ? qRotate(input.targetPortOrientation, { x: 0, y: -1, z: 0 }) : null;
   const ref = env.referenceBody?.(v.position, t);
   const r = ref ? sub(v.position, ref.position) : scale(env.gravity(v.position, t), -1);
   let vel: Vec3;
@@ -92,6 +93,9 @@ export function computeSas(v: VesselState, input: ControlInput, env: Environment
     }
     if (!sas.hold && length(w) < 0.02) sas.hold = { ...v.orientation };
     if (sas.hold) theta = attitudeError(v.orientation, sas.hold);
+  } else if (sas.mode === 'portAlign') {
+    // A half-turn about the target port's up axis faces the collars together and preserves a stable roll.
+    if (input.targetPortOrientation) theta = attitudeError(v.orientation, qMul(input.targetPortOrientation, { x: 0, y: 0, z: 1, w: 0 }));
   } else {
     const d = sasTargetDirection(v, sas.mode, input, env, t);
     if (d) theta = pointingError(qRotate(qConj(v.orientation), d));

@@ -1,3 +1,4 @@
+import { dockingAssistPort, targetPortOrientation } from '../game/dockingAssist';
 import { FlightCameraRig, HUD_TOP_PX } from './controller/FlightCameraRig';
 import { FlightLighting } from './controller/FlightLighting';
 import { HUD_BLOCKS } from './hud/hudBlocks';
@@ -459,6 +460,7 @@ export class FlightController {
 
   /** Choose the active vessel's docking port for the approach (null = automatic: the closest free port). */
   setOwnPort(uid: number | null) {
+    if (this.assist?.cancelOnAnyInput) this.cancelAssist('Auto-dock cancelled: own port changed');
     const p = uid === null ? undefined : this.world.active?.state.cache.byUid.get(uid);
     this.ownPortUid = p ? uid : null;
     if (p) this.world.message(`Docking from ${p.def.name}`, 'info', 2);
@@ -537,6 +539,7 @@ export class FlightController {
   cancelAssist(msg = 'Assist cancelled') { return assist.cancelAssist.call(this, this.systems, msg); }
 
   toggleSas() {
+    if (this.assist?.cancelOnAnyInput) this.cancelAssist('Auto-dock cancelled: manual SAS control');
     if (!this.world.canControl()) return this.world.message('SAS command unavailable — check control source and probe signal', 'warn');
     this.sasOn = !this.sasOn;
     if (this.sasOn && this.sas === 'off') this.sas = 'stabilityAssist';
@@ -544,6 +547,7 @@ export class FlightController {
   }
 
   toggleRcs() {
+    if (this.assist?.cancelOnAnyInput) this.cancelAssist('Auto-dock cancelled: manual RCS control');
     if (!this.world.canControl()) return;
     if (this.world.active?.state.eva) {
       this.jetpackOn = !this.jetpackOn;
@@ -689,7 +693,13 @@ export class FlightController {
   }
 
   setSasMode(mode: string) {
+    if (this.assist?.cancelOnAnyInput) this.cancelAssist('Auto-dock cancelled: manual SAS control');
     if (!this.world.canControl()) return;
+    if (mode === 'portAlign') {
+      const port = dockingAssistPort(this.world, this.ownPortUid);
+      if (!port) return this.world.message('Select a free target port and a free own port', 'warn');
+      this.controlFrom(port.part.uid);
+    }
     this.sasOn = true;
     this.sas = mode as SasMode;
   }
@@ -961,6 +971,8 @@ export class FlightController {
     // "SAS does nothing"), so fall back to holding attitude like the target modes above.
     if (this.sas === 'maneuver' && !this.world.nodes.length) this.sas = 'stabilityAssist';
     if (wv) this.speedReference.updateWorld(this.world, wv);
+    const portOrientation = this.sas === 'portAlign' ? targetPortOrientation(this.world) : undefined;
+    if (this.sas === 'portAlign' && !portOrientation) this.sas = 'stabilityAssist';
     const targetState = this.world.targetState();
     // Trim offsets the controls only while SAS is off: SAS would otherwise read it as the pilot steering.
     const trim = this.sasOn || wv?.state.eva ? { pitch: 0, yaw: 0, roll: 0 } : this.input.trim;
@@ -985,6 +997,7 @@ export class FlightController {
       brakes: s.brakes,
       sasReference: this.speedMode === 'surface' ? 'surface' : this.speedMode === 'target' && targetState ? 'target' : 'orbit',
       target: targetState ?? undefined,
+      targetPortOrientation: portOrientation,
       maneuverDirection: maneuverDir ?? undefined,
       commands: this.pendingCommands.length && !wv?.state.eva ? this.pendingCommands : undefined,
     });
