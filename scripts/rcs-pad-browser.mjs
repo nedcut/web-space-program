@@ -97,6 +97,16 @@ try {
   await page.screenshot({ path: `${dir}/docking-1470.png` });
   const overlap = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
   check('pad does not overlap docking or navball at 1470 px', overlap(result.layout.pad, result.layout.docking) || overlap(result.layout.pad, result.layout.navball), false);
+  // The pad must interrupt the integrated docking assist exactly like a physical translation key.
+  await page.evaluate(() => {
+    const f = window.__flight, w = f.world, target = w.vessels.get(w.targetId);
+    const port = target.state.parts.find(p => p.def.modules.some(m => m.type === 'dockingPort'));
+    f.setTarget(target.state.id, port.uid); f.startAssist('dock');
+  });
+  await page.waitForFunction(() => window.__flight.assist?.name === 'Auto-dock');
+  p = await centre(button('right')); await page.mouse.move(p.x, p.y); await page.mouse.down();
+  await page.waitForFunction(() => !window.__flight.assist); await waitAxis([1, 0, 0]);
+  await page.mouse.up(); await waitAxis([0, 0, 0]); result.assertions.push('pad input cancels auto-dock and hands control back');
   // Five alternating closed/open samples; the profiler measures real flight frames, including HUD work.
   await page.evaluate(() => { window.__flight.sasOn = false; window.__perf.enabled = true; });
   result.performance = [];
