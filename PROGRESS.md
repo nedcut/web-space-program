@@ -31,6 +31,15 @@ _Last updated: 2026-10-15_
 
 ## Recent changes
 
+### 2026-10-16 — Playtest blockers fixed
+
+- The hand-built bare-capsule first rocket now survives (capsules trim base-first); the editor warns with numbers
+  when a chute can't open in time. HUD has a parachute lamp and a "too fast" caution; no SINK RATE under an open
+  canopy; red G-LOAD from 10 g with a throttle hint.
+- "Land here" shows day or night at touchdown and can wait for daylight; rovers and EVA get a mission clock.
+- Planner: ★ is the earliest departure within 5% of the cheapest; clear orbits warp at full rails speed (a 7-day
+  wait takes seconds); Moon returns budget "direct entry"; grouped destinations; editor Δv no longer clipped.
+
 ### 2026-10-15 — Career past the Moon
 
 - The career now continues to Venus and Mars on every scale. A new **Petrel Planetary Probe** reaches both, the hub
