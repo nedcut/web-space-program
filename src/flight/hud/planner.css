@@ -10,7 +10,7 @@
 
 .mp { container-type: inline-size; }
 /* Departures take priority over the scrollable staging list, while preserving the navball/SAS clearance. */
-.hud-left > .mp-host:has(.dep) { min-height: min(540px, max(210px, calc(100dvh - 330px))); }
+.hud-left > .mp-host:has(> .panel.mp .dep) { min-height: min(540px, max(210px, calc(100dvh - 330px))); }
 .mp-host:has(.dep) > .panel.mp { flex-grow: 1; }
 .btn.small.mp-head { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .mp-head .pl-chip { margin-left: 0; }
@@ -82,6 +82,7 @@
 .dep-opt.best { border-color: #8cd5ba55; }
 .dep-opt[disabled] { opacity: .5; cursor: progress; }
 .dep-name { grid-area: name; white-space: nowrap; }
+.dep-entry { display: block; font-size: 10px; color: var(--text-dim); }
 .dep-wait { grid-area: wait; color: var(--text-dim); font-size: 11px; text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .dep-dv { grid-area: dv; font-weight: 600; text-align: right; }
 .dep-bar { grid-area: bar; display: flex; height: 4px; border-radius: 2px; overflow: hidden; background: #ffffff0d; }
