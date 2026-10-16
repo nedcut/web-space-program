@@ -17,6 +17,7 @@ import type { ManeuverNode, Orbit, StateVector, TrajectoryPatch } from '../sim/o
 import { newProgression, type GameMode, type ProgressEvent } from '../sim/science/progression';
 import { activateNextStage, applyVesselCommands, expandCommands, MAX_COMMANDS, neutralInput, portInfo, recomputeMassProperties, setGear, stepVessel, WORLD_ACTIONS } from '../sim/vessel';
 import { stepEva } from '../sim/vessel/eva';
+import { stepVesselContacts } from '../sim/vessel/vesselContact';
 import { advanceISRU, isruMachinery } from '../sim/vessel/isru';
 import type { ControlInput, PartState, VesselCommand, VesselEvent, VesselState } from '../sim/vessel/runtime';
 import type { CraftDef, PartDef } from '../sim/vessel/types';
@@ -689,6 +690,8 @@ export class World {
     this.ut += PHYSICS_DT;
   }
 
+  private readonly contactVessels: VesselState[] = [];
+
   private physicsStep(input: ControlInput, inputs?: ReadonlyMap<string, ControlInput>) {
     const t = this.ut;
     let propulsiveDv = 0;
@@ -786,6 +789,9 @@ export class World {
         if (isActive) this.activeId = null;
       }
     }
+    this.contactVessels.length = 0;
+    for (const wv of this.vessels.values()) if (wv.mode === 'physics' && !wv.state.destroyed && !wv.state.eva) this.contactVessels.push(wv.state);
+    stepVesselContacts(this.contactVessels, PHYSICS_DT);
     crew.collideAstronauts(this);
     this.stepDockingAll();
     this.ut = t + PHYSICS_DT;
