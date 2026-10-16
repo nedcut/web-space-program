@@ -254,15 +254,22 @@ export class FlightMap {
     return pathFrameDistance(body.radius, length(w.relativeState(v).position), orbit, reach);
   }
 
-  /** Planning preserves the local orbit; the complete transfer overview is an explicit action. */
-  frameTransfer(_targetId: string) { this.frameOrbit(); this.emit(); }
-
+  /** One overview after a successful plan; subsequent player zoom/focus remains untouched. */
   frameTransferOverview(targetId: string) {
     const w = this.world, active = w.active, target = w.universe.bodies.get(targetId);
     if (!active || !target?.orbit) return;
-    this.focus = { kind: 'body', id: active.body };
-    const reach = target.parent === active.body ? target.orbit.a * (1 + target.orbit.e) + target.soi : w.universe.body(active.body).soi;
-    this.c.map.distance = Math.max(w.universe.body(active.body).radius * 4, reach * 2.6);
+    const origin = w.universe.body(active.body);
+    let primary = origin, reach = origin.soi;
+    if (target.parent === origin.id) reach = target.orbit.a * (1 + target.orbit.e) + target.soi;
+    else if (origin.parent === target.id && origin.orbit) {
+      primary = target;
+      reach = origin.orbit.a * (1 + origin.orbit.e) + origin.soi;
+    } else if (origin.parent && origin.parent === target.parent && origin.orbit) {
+      primary = w.universe.body(origin.parent);
+      reach = Math.max(origin.orbit.a * (1 + origin.orbit.e) + origin.soi, target.orbit.a * (1 + target.orbit.e) + target.soi);
+    }
+    this.focus = { kind: 'body', id: primary.id };
+    this.c.map.distance = Math.max(primary.radius * 4, reach * 2.6);
     this.emit();
   }
 
