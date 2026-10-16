@@ -1724,3 +1724,11 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
 - **Night-side tip:** below 3 km over ground where the Sun is below the horizon, with night vision off, one message
   per descent: "Night side: press F7 for night vision (or C for the lights, if lamps are fitted and off)". Checked in
   the 10 Hz telemetry pass only under 3 km (one Sun-elevation dot product).
+- **Small details (item 9).** (a) Mission clock: rovers (wheels, no wings) and EVA astronauts never "launch", so
+  their MET runs from rollout / leaving the hatch (the flight record's start) instead of "pre-launch"; rockets and
+  aircraft keep the liftoff clock, so it never jumps back. (b) Only a vessel with a command part (crew or probe core)
+  counts as landing: the Kestrel's spent tank and engine splashed down first and completed the Earth test flight's
+  surface objective with the capsule still 2.3 km up. (c) The debrief leaves out "Max altitude" once the flight left
+  the launch body's sphere of influence: the recorder's maximum mixes bodies (37.5 Mm was the distance from Earth on
+  the way to the Moon); "Furthest" already says where the craft went. (d) The map's landing-prediction toggle is
+  hidden in a stable orbit (periapsis above air and terrain), where there is nothing to predict.

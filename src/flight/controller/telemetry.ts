@@ -289,7 +289,12 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   const launchEvent = record?.events.find(e => e.kind === 'launch');
   const propulsionStage = ignited ? currentStage : dvs.find(d => d.thrust > 0);
   const suicide = flying && vs < -1 && internals.predictions.impact ? suicideBurn(info.heightAboveTerrain, vs, gravity, (propulsionStage?.thrust ?? 0) / st.mass) : null;
-  const met = record?.launched ? Math.max(0, w.ut - record.start - (launchEvent?.time ?? 0)) : null; // event times are record-relative
+  // Ground vehicles never "launch" (they never clear the ground) and an astronaut is a new vessel: their clocks run from
+  // rollout / the hatch. Rockets and aircraft keep the liftoff clock.
+  const surfaceMission = !!record && !record.launched && wv.mode !== 'prelaunch'
+    && (!!st.eva || (st.parts.some(p => p.def.modules.some(m => m.type === 'wheel')) && !st.parts.some(p => p.def.modules.some(m => m.type === 'liftingSurface'))));
+  const met = record?.launched ? Math.max(0, w.ut - record.start - (launchEvent?.time ?? 0)) // event times are record-relative
+    : surfaceMission ? Math.max(0, w.ut - record!.start) : null;
   // Inclination against the body's equator (the HUD's orbit strip), not the inertial reference plane.
   const h = cross(rs.position, rs.velocity);
   const pole = qRotate(u.ephem.bodyRotation(wv.body, w.ut), v3(0, 0, 1));

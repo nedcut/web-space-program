@@ -43,6 +43,12 @@ describe('hub debrief', () => {
     expect(buildDebrief(record(), { mode: 'science', ut: 0, before: null, after, crew: [], craft: null }).science).toBeNull();
   });
 
+  it('leaves out max altitude once the flight left home (it would be the distance from Earth on a Moon trip)', () => {
+    const opts = { mode: 'sandbox' as const, ut: 0, before: null, after: { science: 0, funds: 0, reputation: 0 }, crew: [], craft: null };
+    expect(buildDebrief(record({ bodies: ['earth'] }), opts).maxAltitude).toBe(85_200);
+    expect(buildDebrief(record({ bodies: ['earth', 'moon', 'earth'], stats: { maxAltitude: 37_490_000, maxSpeed: 0, maxG: 0, dvSpent: 0, distance: 0 } }), opts)).toMatchObject({ maxAltitude: null, furthest: 'Moon · flyby' });
+  });
+
   it('builds from the world report and keeps a queued notice as a note', () => {
     const world = { latestReportId: 'r1', flightlog: { records: [record()] }, mode: 'sandbox' as const, ut: 200, progression: { science: 0, funds: 0, reputation: 0 } };
     expect(flightDebrief(world, { before: null, crew: [], recoveryValue: null, craft: null, note: 'Save failed' })).toMatchObject({ name: 'Meridian Orbiter', note: 'Save failed', maxAltitude: 85_200 });

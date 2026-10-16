@@ -28,10 +28,13 @@ export function firstRocket(shield = false): CraftDef {
 
 export interface DescentLog { mode: DescentMode; apex: number; touchdown: number; maxG: number; lost: boolean; events: string[] }
 
-/** Launch straight up at full throttle, coast, stage everything at the top, then fall under `mode` attitude. */
-export function flyFirstRocket(mode: DescentMode, shield = false): DescentLog {
-  const w = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT, 'sandbox');
-  w.launch(firstRocket(shield));
+/**
+ * Launch straight up at full throttle, coast, stage everything at the top, then fall under `mode` attitude.
+ * `world`/`craft` fly something else (e.g. a career world); `onTick` runs after every physics step.
+ */
+export function flyFirstRocket(mode: DescentMode, shield = false, opts: { world?: World; craft?: CraftDef; onTick?: (w: World) => void } = {}): DescentLog {
+  const w = opts.world ?? new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT, 'sandbox');
+  w.launch(opts.craft ?? firstRocket(shield));
   const events: string[] = [];
   let apex = 0, maxG = 0, lit = false, staged = false, last = 0;
   const atmo = w.universe.body('earth').atmosphere!.height;
@@ -57,6 +60,7 @@ export function flyFirstRocket(mode: DescentMode, shield = false): DescentLog {
     }
     w.warp = { mode: 'rails', index: 0 };
     w.tick(0.02, input);
+    opts.onTick?.(w);
     if (!w.active) break;
     const g = w.active.state.telemetry.gForce;
     if (staged) maxG = Math.max(maxG, g);

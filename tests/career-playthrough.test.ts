@@ -35,6 +35,17 @@ describe('first flights', () => {
     }
   }, 240_000);
 
+  it("the Earth test flight's surface objective waits for the capsule, not its spent stage", () => {
+    const w = career();
+    const c = w.progression.contracts.find(c => c.kind === 'return' && c.body === 'earth')!;
+    w.acceptContract(c.id);
+    let early = false;
+    const r = flyFirstRocket('retrograde', true, { world: w, craft: buildSoundingRocket(), onTick: w => { if (c.landed && w.active?.state.situation === 'flying') early = true; } });
+    expect(r.lost).toBe(false);
+    expect(early).toBe(false);
+    expect(c.landed).toBe(true);
+  }, 240_000);
+
   it('a splashdown completes the Earth test flight and every scale can launch something at once', () => {
     const w = career();
     const c = w.progression.contracts.find(c => c.kind === 'return')!;

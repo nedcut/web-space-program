@@ -4,7 +4,7 @@ import type { ManeuverNode } from '../../sim/orbit/api';
 import { MapContextMenu, MapInfoCard, clampToParent } from '../../ui/map/MapContextMenu';
 import { landingPredictionApplies, type MapObject } from '../../ui/map/mapActions';
 import { AXIS_COLORS } from '../../render/map/mapIcons';
-import { period } from '../../sim/orbit';
+import { period, periapsisRadius } from '../../sim/orbit';
 import { formatCountdown, formatDistance, formatDuration, formatSpeed } from '../../util/format';
 import { bindingLabel } from '../../input/bindings';
 import { bodyBreadcrumbs } from '../../render/map/presentation';
@@ -84,15 +84,19 @@ function MapReadout({ controller: c }: { controller: FlightController }) {
   const body = focusBody ? w.universe.bodies.get(focusBody) : undefined;
   const path = body ? bodyBreadcrumbs(body, w.universe.bodies).map(b => b.name).join(' › ') : '';
   let orbit: string | null = null;
+  // A stable orbit never comes down: no landing prediction (or its mode toggle) to offer.
+  let stable = false;
   try {
     if (wv && wv.mode !== 'prelaunch' && wv.state.situation === 'flying') {
       const o = w.orbitOf(wv), T = period(o);
       orbit = `${Number.isFinite(T) ? `Period ${formatDuration(T)}` : 'Escape trajectory'} · e ${o.e.toFixed(3)}`;
+      const b = w.universe.body(wv.body);
+      stable = o.e < 1 && periapsisRadius(o) - b.radius > Math.max(b.atmosphere?.height ?? 0, w.universe.terrain(wv.body).maxHeight);
     }
   } catch { /* degenerate orbit */ }
   const title = f ? `Viewing ${ui.name(f)}` : `Viewing ${body?.name ?? 'body'} · ${wv?.state.name ?? 'vessel'}`;
   return <ReadoutView controller={c} title={title} path={path} orbit={orbit} bodyId={focusBody}
-    landing={!landingPredictionApplies(wv) ? 'n/a' : ui.landing.enabled ? ui.landing.attitude : 'off'} status={ui.landing.status} />;
+    landing={!landingPredictionApplies(wv) || stable ? 'n/a' : ui.landing.enabled ? ui.landing.attitude : 'off'} status={ui.landing.status} />;
 }
 
 /** The readout's DOM, re-rendered only when one of its strings changes. */

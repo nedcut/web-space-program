@@ -109,7 +109,9 @@ export function evaluateProgression(w: World) {
   for (const v of w.vessels.values()) {
     if (v.state.destroyed) continue;
     w.onEnteredSoi(v);
-    if (v.mode !== 'prelaunch' && (v.state.situation === 'landed' || v.state.situation === 'splashed')) {
+    // Only a vessel with a command part lands: spent stages splash down first and used to complete the Earth test
+    // flight's surface objective while the capsule was still under its chute.
+    if (v.mode !== 'prelaunch' && (v.state.situation === 'landed' || v.state.situation === 'splashed') && v.state.parts.some(p => p.def.modules.some(m => m.type === 'command'))) {
       w.onLanded(v);
     }
     if (v.mode === 'prelaunch' || v.state.situation !== 'flying') continue;
