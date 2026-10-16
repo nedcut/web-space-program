@@ -48,11 +48,12 @@ export function buildPetrel(preset: ScalePresetId, catalog: PartCatalog = PART_C
 /** Picker entries, registered in STOCK_CRAFTS. */
 export function probeStock(): StockCraft[] {
   const tags = ['antenna-arc', 'probe-pebble', 'eng-wisp', 'wheel-gyre-0'];
-  const tip = 'Plan the transfer in the map\'s Maneuver planner during a ground station pass, keep the kick stage for the cruise trims, and capture into a long ellipse if Δv is short.';
+  const tip = 'Plan the transfer during a ground station pass. The kick stage trims the cruise and captures, in a long ellipse if short.';
+  const realTip = 'Real: the dish reaches Mars only while Earth is near. Pick an early window and survey right after capture.';
   return ([['standard', ''], ['challenging', '-challenging'], ['real', '-real']] as const).map(([scale, suffix]) => ({
     scale, id: `stock-petrel${suffix}`, name: 'Petrel Planetary Probe', needsResearch: true, category: 'worlds' as const,
     blurb: `${scale === 'standard' ? 'Venus and Mars' : `${scale[0].toUpperCase()}${scale.slice(1)} scale · Venus and Mars`} probe · long-range dish · research required`,
-    tags, tip: scale === 'real' ? `${tip} At Mars the dish only just reaches Earth: survey soon after arrival.` : tip,
+    tags, tip: scale === 'real' ? realTip : tip,
     build: () => buildPetrel(scale),
   }));
 }

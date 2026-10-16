@@ -1,7 +1,7 @@
 /**
  * Past the Moon: probes to Venus and Mars at their launch seasons. Each mission launches a few days before its season,
  * waits in a parking orbit, departs, trims and arrives; missions interleave in time order (a Venus probe cruises
- * while the Mars probe waits), switching the active vessel as a player would in the Tracking Station.
+ * while the Mars probe waits), switching the active vessel as a player would in Fleet Tracking.
  * Hardware is picked by stock id from what the build offers (the Petrel planetary probe; on builds without it, the
  * closest stock design), so the same route measures any build.
  */

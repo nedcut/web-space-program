@@ -83,7 +83,7 @@ function seasonNote(planet: Planet, seasons: Seasons): string {
   const days = seasons[planet];
   if (days === undefined) return '';
   const name = planet === 'mars' ? 'Mars' : 'Venus';
-  return days < 3 ? ` The ${name} launch season is now.` : ` Next ${name} launch season in about ${Math.round(days)} days: time warp in the Tracking Station.`;
+  return days < 3 ? ` The ${name} launch season is now.` : ` Next ${name} launch season in about ${Math.round(days)} days: time warp in Fleet Tracking.`;
 }
 
 export function nextGoal(p: Progression, mode: GameMode, scale: ScalePresetId, seasons: Seasons = {}): NextGoal | null {
