@@ -1365,16 +1365,7 @@ export class FlightController {
 
   /** Navball frame for the active vessel (called by the HUD every animation frame). */
   navball = (): { frame: NavballFrame; markers: NavballMarker[] } | null => {
-    // Same interpolated attitude as the 3D view, so the ball turns smoothly between physics steps.
-    const w = this.world;
-    const wv = w.active;
-    if (!wv || this.network || this.mapMode) return navball.navball.call(this, this.systems);
-    const { restore } = w.renderHistory.apply(w.ut, PHYSICS_DT, w.renderAlpha, [wv], w.universe.ephem);
-    try {
-      return navball.navball.call(this, this.systems);
-    } finally {
-      restore();
-    }
+    return navball.navball.call(this, this.systems);
   };
 
   /** Telemetry rate: the hatch the EVA marker points at (nearest free seat in range), or none. */

@@ -1794,6 +1794,18 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   the way to the Moon); "Furthest" already says where the craft went. (d) The map's landing-prediction toggle is
   hidden in a stable orbit (periapsis above air and terrain), where there is nothing to predict.
 
+## RCS translation pad (2026-10-16, op/rcspad)
+
+- Add a flight app, “RCS translation”, opened by the toolbar or the rebindable Shift+R shortcut. It uses the existing draggable/resizable app window, session position/size persistence and Escape ownership. First docking opens it automatically; closing it by the toolbar, shortcut, close button or Escape disables `autoShowRcsPad` in persisted settings. Gameplay settings can re-enable that prompt.
+- The cross shows craft-relative Up/Down/Left/Right, with separate Forward/Back controls. Labels subscribe to the live bindings; held physical keys and pad presses share their highlights. RCS and FINE switches use the existing power/control state, including the keyboard's 35% precision authority and input smoothing. Directions describe the craft axes, even when docking from a side-mounted port.
+- Keep pad holds separate from physical keys in `FlightInput`, then combine them before the existing translation-axis calculation. Pointer capture handles mouse/touch/pen; pointerup/cancel/lost capture, blur, disabled controls, panel removal, pause and EVA clear pad holds. Releasing a pointer leaves a physical key held. Button Space/Enter activation consumes those events so it cannot stage the vessel. No simulation, controller frame-loop or telemetry changes, and no new per-frame allocations.
+- Verification: `tests/rcs-pad.test.ts` checks six axes, binding labels, rebound/unbound keys, precision, simultaneous key/pointer intent and cancellation. `scripts/rcs-pad-browser.mjs` connects to existing Windows Chrome CDP for real pointer, touch, pen, keyboard, cancellation, settings/dismissal, window layout and GPU screenshots; artifacts belong outside git. M-series/Zen/120 Hz remain owner-side checks.
+- Real-GPU evidence (RTX 3060 Ti, CDP Chrome, Medium, 1470 × 920): all 35 browser assertions passed, zero page errors; mouse/capture release, pointercancel, touch cancel, pen, blur, Space without staging, live rebinding and reload dismissal all verified. Default and floated screenshots: `C:\wsp-tools\shots\rcspad\{docked,docking}-1470.png`; floated pad x=887–1173, docking right edge=764, navball right edge=550 (no overlap). Five alternating 2.2 s closed/open samples: 61 → 61 draws; CPU median 3.186 → 3.208 ms (ranges 2.960–4.136 / 3.086–4.196); GPU 1.341 → 1.299 ms (1.155–1.429 / 1.092–1.345). Overlapping ranges establish no measurable change on this shared host; the browser paced at ~16.7 ms and does not verify 120 Hz. Seven interleaved 100k-call Node input samples: 10.651 → 10.591 µs/update, overlapping 9.241–11.500 / 9.569–16.009 ranges, zero output errors; separate CPU profile puts the work in binding/axis evaluation. Drivers, raw samples, profile and check logs: `~/.t3/projects/wsp-traces/rcspad/`. Preview stopped; no browser profile created.
+
+- Final checks: lint, typecheck and build pass. The initial monolithic Vitest run was terminated with signal 143 before its summary; four sequential two-worker shards then passed all 220 files (2,040 passed, one skipped). After merging main at `44e71255`, lint/types/build and 62 relevant input/settings/docking/station tests pass. The fresh merged-build GPU run passes 36 browser assertions with zero page errors, including pad input cancelling Auto-dock and preserving manual translation. Five adjacent closed/open sample medians are CPU 1.672/1.548 ms and GPU 1.289/1.279 ms, with overlapping CPU ranges; median draws are 61/61, with one open-panel endpoint sample at 113 draws (transient not attributed by this measurement). This remains an inconclusive frame-cost comparison, not a performance guarantee. Current screenshot paths above now show the merged build; raw results are `integrated-browser-results.json`. Preview stopped, no PROGRESS.md edits, pushes or merges to main.
+
+- Final base refresh also merges ship-contact main `bd8d553f` without source conflicts. On that combined branch, lint (79 sim modules), typecheck, build and 77 tests across input/settings/docking/station/ship-contact pass. The complete 2,040-test shard run preceded the base refresh; the 36-assertion browser run includes docking assist and preceded the ship-contact merge. No requested feature work remains; Apple/Zen/120 Hz validation remains unverified.
+
 ## Port alignment and RCS docking assist (2026-10-16, op/dockassist)
 
 - `portAlign` SAS faces the controlling port opposite the selected target port and matches port-up for roll. Selecting the mode automatically sends the existing `control` command for the chosen own port (or the controlling/nearest compatible free port). This reuses the established side-port body-frame rebase; ordinary Target SAS retains its line-of-sight meaning. The original twin-collar glyph is disabled with a reason unless both ends have free ports.
@@ -1841,3 +1853,49 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   sections are retained. Merged source is byte-identical to the separately verified integration snapshot
   `09f621f4`. Post-merge lint, typecheck and build pass, plus 105 tests across nine contact, docking, station,
   SAS, assist hand-back and multiplayer files. Full-suite figures above describe the pre-merge run.
+## Near-target navball stability (2026-10-16, op/navfix)
+
+- **Cause:** the flight navball interpolated the active vessel's position back between physics steps, then
+  subtracted it from the target's current physics position (including a selected port face). The common
+  orbital translation across those different instants dwarfed a 65 m docking separation and changed with
+  the render accumulator. Map view used both current positions, so its marker stayed steady. This was
+  mixed sample times, not float32 precision or a floating-origin conversion.
+- **Decision:** retain a reference to the active vessel's current physics position before the temporary
+  interpolation swap, and use that reference for the target/anti-target direction. Target positions and
+  velocities now use the same instant as the 10 Hz telemetry and map. Retain the existing interpolated
+  attitude/local horizon, exact-state map/multiplayer paths and restoration in `finally`. Do not add
+  smoothing or interpolate the target/fleet: the physics-time line of sight advances only millimetres per
+  step at docking speeds, and the fix adds no per-frame objects, ephemeris calls or fleet traversal.
+  The navball interpolation wrapper moves into `controller/navball.ts` so headless tests exercise the
+  same entry point used by the controller; `controller.ts` only forwards to it.
+- **Regression:** six actual-World rendezvous cases at 142 km Earth altitude, 65 m initial separation and
+  0.5 m/s relative speed: vessel/selected-port targets at 60/120/144 Hz. Before the fix all six fail with
+  73–80 degree target jumps; afterward the maximum step is 0.00357 degrees and flight/map disagreement is
+  below 0.000002 degrees. Prograde/retrograde agree with Float64 relative velocity within 0.000002 degrees;
+  anti-target points opposite target, and the original position/orientation/velocity references survive
+  each navball sample. Relative-velocity math needed no change.
+- **Browser evidence:** CDP Chrome at 1470×920, Medium, 65–70 m range and 0.49–0.50 m/s relative speed.
+  Maximum consecutive target-direction step: flight 63.4316 → 0.003504 degrees; flight after returning from
+  map 60.1735 → 0.002950 degrees; map stays 0.003229 → 0.003200 degrees. Target-prograde maximum step stays
+  below 0.003 degrees in every capture. These are direction-stability measurements, not frame-time claims.
+  No page errors. Raw frame sequences, summaries and nine screenshots per build:
+  `C:\wsp-tools\shots\navfix\{before,after}*`; rerunnable driver `C:\wsp-tools\drv\navfix.mjs`.
+  Headless failure/pass logs and builds: `~/.t3/projects/wsp-traces/navfix/`.
+- **Cost check:** five alternating before/after CDP runs, four-second windows after three seconds of settling,
+  RTX 3060 Ti / D3D11, 1470×920 Medium. Navball CPU median 0.229 → 0.216 ms/frame (ranges 0.215–0.256 /
+  0.189–0.226); whole-frame CPU 4.164 → 4.218 ms (3.979–4.844 / 4.078–4.451). Overlapping ranges: no measurable
+  regression or overall speedup claim. Main-scene draws remain 61. Renderer submission and planets dominate
+  whole-frame CPU.
+  All ten runs have zero page errors. Raw samples/summary and the rerunnable driver are in the trace folder;
+  the capture is 60 Hz on this shared machine, not an M-series/120 Hz performance result.
+- **Limits:** M-series, Zen/Firefox and live 120 Hz GPU pacing are unverified; headless 120/144 Hz cases test
+  direction stability, not display performance. No PROGRESS.md edits, push, deployment or merge to main.
+- **Final validation:** lint, `npx tsc --noEmit` and the production build pass. The original full-suite process
+  was terminated by SIGTERM (143) before producing a summary; four sequential two-worker Vitest shards then
+  pass all 220 files: 2,042 tests passed, one skipped. After merging main at `44e71255` (including dockassist),
+  lint/typecheck/build and 67 tests across navball, interpolation, flight feel, docking, control and station
+  files pass again. The complete merged suite was not repeated. A fresh merged-build RTX capture has no page
+  errors and maximum target steps 0.010293° in flight / 0.003007° after returning from map (the largest step
+  spans 60 ms of simulation); target-prograde stays below 0.0029°. See `merged*` screenshots/JSON and `merged-*`
+  check logs in the same evidence folders. Main's append-only decision conflict was resolved by preserving
+  both sections. Preview 5872 is stopped; no contexts, profile directories or pending runs are left.

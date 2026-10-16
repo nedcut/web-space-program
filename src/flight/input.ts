@@ -1,5 +1,6 @@
 import { game } from '../game/store';
 import { getBindings, isFlightChord, isTyping, matches, type Action } from '../input/bindings';
+import { TRANSLATION_CONTROLS, type TranslationAction } from '../input/translation';
 import { mapGamepad } from '../input/gamepad';
 export interface FlightInputState {
   pitch: number;
@@ -39,6 +40,19 @@ export class FlightInput {
   /** Control trim (added to pitch/yaw/roll by the controller while SAS is off). */
   readonly trim = { pitch: 0, yaw: 0, roll: 0 };
   private held = new Set<string>();
+  private padTranslation = new Set<Action>();
+  private translationListeners = new Set<() => void>();
+  subscribeTranslation = (fn: () => void) => { this.translationListeners.add(fn); return () => { this.translationListeners.delete(fn); }; };
+  translationSnapshot = () => TRANSLATION_CONTROLS.reduce((mask, c, i) => mask | (this.down(c.action) ? 1 << i : 0), 0);
+  private translationChanged() { this.translationListeners.forEach(fn => fn()); }
+  setTranslation(action: TranslationAction, held: boolean) {
+    if (held && (!this.enabled || this.evaMode)) return;
+    if (this.padTranslation.has(action) === held) return;
+    if (held) this.padTranslation.add(action); else this.padTranslation.delete(action);
+    this.translationChanged();
+  }
+  releaseTranslation = () => { if (this.padTranslation.size) { this.padTranslation.clear(); this.translationChanged(); } };
+
   /** Keys pressed as part of a bound chord (Alt+L): consumed by that action, they drive no plain-key axis until released. */
   private chordKeys = new Set<string>();
   private listeners = new Set<(a: FlightAction) => void>();
@@ -86,7 +100,7 @@ export class FlightInput {
   };
   onAction(fn: (a: FlightAction) => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
   private emit(a: FlightAction) { this.listeners.forEach(l => l(a)); }
-  private onBlur = () => { this.releaseSasHold(); this.held.clear(); this.chordKeys.clear(); this.mouse = { x: 0, y: 0 }; this.keyRamp = { pitch: 0, yaw: 0, roll: 0 }; this.resetPad(); };
+  private onBlur = () => { const changed = this.held.size || this.padTranslation.size; this.releaseSasHold(); this.held.clear(); this.padTranslation.clear(); if (changed) this.translationChanged(); this.chordKeys.clear(); this.mouse = { x: 0, y: 0 }; this.keyRamp = { pitch: 0, yaw: 0, roll: 0 }; this.resetPad(); };
   private onMouse = (e: PointerEvent) => {
     // Right-button drag remains the camera control; left-button drag is optional flight assist.
     if (this.mouseEnabled && game.get().settings.mouseFlight && e.buttons === 1 && e.target instanceof HTMLCanvasElement) {
@@ -95,6 +109,7 @@ export class FlightInput {
     } else this.mouse = { x: 0, y: 0 };
   };
   private down(a: Action) {
+    if (this.padTranslation.has(a)) return true;
     return getBindings()[a].some(k => {
       const parts = k.split('+');
       const code = parts.pop()!;
@@ -103,7 +118,7 @@ export class FlightInput {
     });
   }
   private onDown = (e: KeyboardEvent) => {
-    if (isTyping(e.target)) { this.held.clear(); return; }
+    if (isTyping(e.target)) { this.onBlur(); return; }
     if (!this.enabled) { this.held.clear(); if (!e.repeat) for (const a of ['menu', 'quickload'] as const) if (matches(a, e)) { e.preventDefault(); this.emit(a); } return; }
     if (e.metaKey) return;
     const actions = (Object.keys(getBindings()) as Action[]).filter(a => !a.startsWith('editor') && matches(a, e));
@@ -111,6 +126,7 @@ export class FlightInput {
     this.held.add(e.code);
     if (isFlightChord(e)) this.chordKeys.add(e.code);
     if (e.repeat) return;
+    this.translationChanged();
     if (actions.includes('precision')) this.precision = !this.precision;
     if (actions.includes('trimReset')) { this.trim.pitch = this.trim.yaw = this.trim.roll = 0; this.emit('trimReset'); }
     for (const a of FLIGHT_ACTIONS) if (actions.includes(a as Action) && (!EVA_ONLY.has(a) || this.evaMode) && !(this.evaMode && (VESSEL_ONLY.has(a) || a.startsWith('actionGroup')))) {
@@ -120,12 +136,14 @@ export class FlightInput {
     if (!this.evaMode && actions.includes('throttleFull')) { this.state.throttle = 1; this.throttleTouched = true; }
     if (!this.evaMode && actions.includes('throttleCut')) { this.state.throttle = 0; this.throttleTouched = true; }
   };
-  private onUp = (e: KeyboardEvent) => { this.held.delete(e.code); this.chordKeys.delete(e.code); if (e.code === this.sasHoldKey) this.releaseSasHold(); };
+  private onUp = (e: KeyboardEvent) => { this.held.delete(e.code); this.chordKeys.delete(e.code); this.translationChanged(); if (e.code === this.sasHoldKey) this.releaseSasHold(); };
   private releaseSasHold() { if (!this.sasHoldKey) return; this.sasHoldKey = null; this.emit('sasHoldRelease'); }
   private resetPad() { this.buttons.clear(); this.stageHeld = this.stageProgress = 0; this.stageConfirmed = false; this.padIndex = null; this.gamepadConnected = false; }
   update(dt: number) {
     const settings = game.get().settings;
+    if (this.evaMode) this.releaseTranslation();
     if (!this.enabled || !this.target.document.hasFocus() || isTyping(this.target.document.activeElement)) {
+      this.releaseTranslation();
       // Start can also resume a paused flight; typing/modal focus blocks all gamepad actions.
       if (!this.enabled && this.target.document.hasFocus() && !isTyping(this.target.document.activeElement)) {
         const pads = settings.gamepadEnabled ? this.target.navigator.getGamepads?.() : undefined;
