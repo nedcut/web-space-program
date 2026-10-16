@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { RESOURCES } from '../src/data/resources';
 import { vacuumEnv } from '../src/sim/vessel/testing';
 import { PART_CATALOG } from '../src/data/parts';
@@ -16,8 +16,9 @@ import { qConj, qFromAxisAngle, qMul, qRotate } from '../src/util/quat';
 import { add, dot, length, scale, sub, v3 } from '../src/util/vec3';
 import { decodeClient, encode, type ClientMessage } from '../src/net/protocol';
 import { requireIntactFlight } from './helpers/structural';
+import * as vesselContact from '../src/sim/vessel/vesselContact';
 
-function setup(distance = 65, side = true) {
+function setup(distance = 65, side = true, placement: 'owner' | 'behind' | 'beside' = 'owner') {
   const w = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
   requireIntactFlight(w);
   const craft = buildTender();
@@ -34,7 +35,8 @@ function setup(distance = 65, side = true) {
   const aligned = qMul(frame, { x: 0, y: 0, z: 1, w: 0 });
   active.state.orientation = qMul(qFromAxisAngle(qRotate(frame, v3(0, 0, 1)), 53 * Math.PI / 180), qMul(aligned, qConj(controlRotation(a.part)!)));
   const right = qRotate(frame, v3(1, 0, 0)), up = qRotate(frame, v3(0, 0, 1));
-  const offset = add(scale(b.dir, Math.sqrt(distance ** 2 - 25 ** 2 - 14 ** 2)), add(scale(right, 25), scale(up, 14)));
+  const offset = placement === 'behind' ? scale(b.dir, -distance) : placement === 'beside' ? scale(right, distance)
+    : add(scale(b.dir, Math.sqrt(distance ** 2 - 25 ** 2 - 14 ** 2)), add(scale(right, 25), scale(up, 14)));
   const face = freePorts(active.state)[0];
   active.state.position = add(active.state.position, sub(add(b.pos, offset), face.pos));
   active.state.velocity = add(b.vel, scale(right, 0.5));
@@ -89,18 +91,37 @@ describe('port alignment and RCS docking assist', () => {
     expect(dot(qRotate(active.state.orientation, v3(0, 0, 1)), qRotate(targetPortOrientation(w)!, v3(0, 0, 1)))).toBeGreaterThan(0.999);
   }, 60000);
 
-  for (const distance of [65, 500]) it(`docks a side-port craft from ${distance} m, 25/14 m offset, 53°, 0.5 m/s`, () => {
-    const { w, active } = setup(distance);
+  for (const [distance, placement] of [[65, 'owner'], [500, 'owner'], [60, 'behind'], [40, 'beside'], [8, 'beside']] as const) it(`docks a side-port craft from ${distance} m (${placement}), 53°, 0.5 m/s without hull contact`, () => {
+    const { w, active } = setup(distance, true, placement);
     const start = w.ut, fuel = totalResource(active.state, 'monopropellant');
     const ap = autoDock(w);
+    const statuses = new Set<string>();
+    const solve = vesselContact.stepVesselContacts;
+    let contacts = 0, collisionSteps = 0;
+    const spy = vi.spyOn(vesselContact, 'stepVesselContacts').mockImplementation((vessels, dt) => {
+      collisionSteps++;
+      const count = solve(vessels, dt);
+      contacts += count;
+      return count;
+    });
     // Count only the tug's resource draw: target propellant becomes part of the merged vessel at latch.
     let consumed = 0, previous = fuel;
-    const ok = runAutopilot(w, ap, { maxTime: 1200, warp: false, onTick() {
-      const remaining = totalResource(active.state, 'monopropellant');
-      if (remaining <= previous) consumed += previous - remaining;
-      previous = remaining;
-    } });
-    console.log(`${distance} m dock: ${ok}, ${(w.ut - start).toFixed(2)} s, ${consumed.toFixed(4)} monopropellant units, status ${ap.status}, error ${ap.error}`);
+    let ok: boolean;
+    try {
+      ok = runAutopilot(w, ap, { maxTime: 1200, warp: false, onTick() {
+        statuses.add(ap.status);
+        const remaining = totalResource(active.state, 'monopropellant');
+        if (remaining <= previous) consumed += previous - remaining;
+        previous = remaining;
+      } });
+    } finally {
+      spy.mockRestore();
+    }
+    console.log(`${distance} m ${placement} dock: ${ok}, ${(w.ut - start).toFixed(2)} s, ${consumed.toFixed(4)} monopropellant units, ${contacts} hull contacts / ${collisionSteps} collision steps, status ${ap.status}, error ${ap.error}`);
+    expect(collisionSteps).toBeGreaterThan(0);
+    expect(contacts).toBe(0);
+    if (placement === 'behind') expect(statuses).toContain('Circling');
+    if (distance === 8) expect(statuses).toContain('Moving clear');
     expect(ap.error).toBeUndefined();
     expect(ok).toBe(true);
     expect(dockedPorts(active.state)).toHaveLength(1);
