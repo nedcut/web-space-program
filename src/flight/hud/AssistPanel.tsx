@@ -34,7 +34,7 @@ function LandLight({ light, onStart }: { light: LandingLight; onStart(id: Assist
       <span>Touchdown: {word} · Sun {deg}°</span>
       {!day && (light.daylightWait !== null && light.daylightWait > 0
         ? <button className="btn small" title="Coast until a descent started then touches down in daylight, then land" onClick={() => onStart('land', { wait: light.daylightWait! })}>
-            Wait {formatDuration(light.daylightWait)}, land in daylight
+            Wait {formatDuration(Math.ceil(light.daylightWait))}, land in daylight
           </button>
         : <span className="assist-light-none">No lit touchdown within one orbit</span>)}
     </div>
