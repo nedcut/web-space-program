@@ -7,7 +7,7 @@ import { RESOURCES } from '../../data/resources';
 import { RESOURCE_COLORS } from '../../ui/inspector/resources';
 import { flightData, flightPredictions } from '../../game/flightData';
 import { cachedStageDeltaV } from '../../game/stageDeltaVCache';
-import { maxRailsIndex, RAILS_WARP, warpLabel, warpRate } from '../../game/timewarp';
+import { maxRailsIndex, warpLabel, warpRate } from '../../game/timewarp';
 import { scienceReady } from '../../game/science';
 import { type WorldVessel } from '../../game/world';
 import { ACTION_GROUP_IDS, controlPartUid, dockedPorts, freePorts, GROUP_LABELS, groupBindings, lightOn, type PortInfo, type StageDeltaV } from '../../sim/vessel';
