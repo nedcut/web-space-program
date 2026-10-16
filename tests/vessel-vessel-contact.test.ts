@@ -5,7 +5,7 @@ import { buildTender } from '../src/editor/stockCrafts';
 import { buildVessel, dockedPorts, freePorts, neutralInput, stepDocking, stepVessel, systemAngularMomentum, undock } from '../src/sim/vessel';
 import type { VesselState } from '../src/sim/vessel/runtime';
 import { TEST_CATALOG, stackCraft, vacuumEnv } from '../src/sim/vessel/testing';
-import { stepVesselContacts } from '../src/sim/vessel/vesselContact';
+import { ignoreInitialVesselOverlap, stepVesselContacts } from '../src/sim/vessel/vesselContact';
 import { qFromAxisAngle, qMul, qRotate } from '../src/util/quat';
 import { add, dot, length, scale, sub, v3 } from '../src/util/vec3';
 import { World } from '../src/game/world';
@@ -93,6 +93,16 @@ describe('loaded vessel contact', () => {
     expect(stepVesselContacts([a, b], DT)).toBe(0);
   });
 
+  it('releases payloads through an open cargo bay instead of colliding with its filled-volume proxy', () => {
+    const bay = buildVessel({ name: 'Bay', version: 1, type: 'VAB', parts: [{ uid: 1, partId: 'bay-cargo-2', position: v3(), rotation: { x: 0, y: 0, z: 0, w: 1 } }] }, PART_CATALOG);
+    const payload = box('payload', 0);
+    bay.parts[0].bayOpen = false;
+    expect(stepVesselContacts([bay, payload], DT)).toBe(1);
+    bay.parts[0].bayOpen = true;
+    expect(stepVesselContacts([bay, payload], DT)).toBe(0);
+    expect(stepVesselContacts([payload, bay], DT)).toBe(0);
+  });
+
   it('ignores destroyed vessels and EVA, which has its own hull solver', () => {
     const a = box('a', 0), b = box('b', 0.99);
     b.destroyed = true;
@@ -106,6 +116,20 @@ describe('loaded vessel contact', () => {
     const a = box('a', 0), b = box('b', 0.1);
     stepVesselContacts([a, b], DT);
     expect(b.velocity.x - a.velocity.x).toBeCloseTo(0.5, 9);
+  });
+
+  it('lets newly separated siblings clear inherited overlaps, then collide normally on return', () => {
+    const a = box('a', 0), b = box('b', 0.99);
+    ignoreInitialVesselOverlap(a, b);
+    b.velocity.x = 0.12;
+    expect(stepVesselContacts([a, b], DT)).toBe(0);
+    expect(stepVesselContacts([b, a], DT)).toBe(0);
+    expect(b.velocity.x).toBe(0.12);
+    b.position.x = 10;
+    expect(stepVesselContacts([b, a], DT)).toBe(0);
+    b.position.x = 0.99; b.velocity.x = -0.3;
+    expect(stepVesselContacts([a, b], DT)).toBe(1);
+    expect(b.velocity.x - a.velocity.x).toBeGreaterThanOrEqual(0);
   });
 
   it('is invariant under a heliocentric translation and orbital velocity', () => {

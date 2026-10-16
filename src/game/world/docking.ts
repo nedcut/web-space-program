@@ -1,4 +1,5 @@
 import { dockedPorts, stepDocking, undock } from '../../sim/vessel';
+import { ignoreInitialVesselOverlap } from '../../sim/vessel/vesselContact';
 import type { VesselState } from '../../sim/vessel/runtime';
 import type { World } from '../world';
 import type { WorldInternals } from './internals';
@@ -45,6 +46,7 @@ export function undockActive(this: World, internals: WorldInternals, portUid?: n
   const nv = undock(wv.state, uid);
   if (!nv) return null;
   if (this.vessels.has(nv.id)) nv.id = `${wv.state.id}.${++wv.state.splitCount}`;
+  ignoreInitialVesselOverlap(wv.state, nv);
   this.vessels.set(nv.id, { state: nv, mode: 'physics', body: wv.body });
   this.inheritFlight(wv, this.vessels.get(nv.id)!);
   this.logFlightEvent(wv, 'separation', `Undocked ${nv.name}`);

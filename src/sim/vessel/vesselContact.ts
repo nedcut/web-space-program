@@ -9,9 +9,18 @@ interface Hull {
   normals: Vec3[];
   edges: Vec3[];
   radius: number;
+  enclosure: boolean;
   port?: { mod: DockingPortModule; position: Vec3; direction: Vec3 };
 }
 const hulls = new WeakMap<PartDef, Hull>();
+const separating = new WeakMap<VesselState, WeakSet<VesselState>>();
+
+/** Splits can inherit intersecting catalogue bounds. Keep the siblings free until their bounds part once. */
+export function ignoreInitialVesselOverlap(a: VesselState, b: VesselState): void {
+  let neighbours = separating.get(a);
+  if (!neighbours) { neighbours = new WeakSet<VesselState>(); separating.set(a, neighbours); }
+  neighbours.add(b);
+}
 
 /** Immutable convex hulls: the same octagonal frusta / box corners used by ground contact. */
 function hull(def: PartDef): Hull {
@@ -32,7 +41,7 @@ function hull(def: PartDef): Hull {
       edges.push(normalize(ring), normalize(side));
     }
   }
-  const result: Hull = { points, normals, edges, radius: shapeRadius(def) };
+  const result: Hull = { points, normals, edges, radius: shapeRadius(def), enclosure: def.modules.some(m => m.type === 'bay') };
   for (const mod of def.modules) if (mod.type === 'dockingPort') {
     const node = def.attachNodes.find(n => n.id === mod.node);
     if (node) result.port = { mod, position: node.position, direction: node.direction };
@@ -52,7 +61,8 @@ const normal = v3(), point = v3(), axis = v3(), tmp = v3(), tmp2 = v3();
 const ra = v3(), rb = v3(), va = v3(), vb = v3(), velocity = v3();
 const torque = v3(), angular = v3(), impulse = v3(), tangent = v3();
 const faceA = v3(), faceB = v3(), dirA = v3(), dirB = v3();
-let depth = 0;
+const scalars = new Float64Array(3);
+const DEPTH = 0, MASS_A = 1, MASS_B = 2;
 
 function rotate(out: Vec3, q: Quat, v: Vec3, inverse = false): void {
   const x = v.x, y = v.y, z = v.z;
@@ -102,8 +112,8 @@ function testAxis(n: Vec3, a: Hull, b: Hull): boolean {
   const forward = amax - bmin, backward = bmax - amin;
   if (forward < 0 || backward < 0) return false;
   const d = Math.min(forward, backward);
-  if (d < depth) {
-    depth = d;
+  if (d < scalars[DEPTH]) {
+    scalars[DEPTH] = d;
     const sign = forward <= backward ? 1 : -1;
     normal.x = nx * sign; normal.y = ny * sign; normal.z = nz * sign;
   }
@@ -120,7 +130,7 @@ function support(out: Vec3, points: Vec3[], count: number, sign: number): void {
   out.x /= n; out.y /= n; out.z /= n;
 }
 function intersect(a: Hull, b: Hull): boolean {
-  depth = Infinity;
+  scalars[DEPTH] = Infinity;
   for (let i = 0; i < a.normals.length; i++) if (!testAxis(fa.normals[i], a, b)) return false;
   for (let i = 0; i < b.normals.length; i++) if (!testAxis(fb.normals[i], a, b)) return false;
   for (let i = 0; i < a.edges.length; i++) for (let j = 0; j < b.edges.length; j++) {
@@ -135,7 +145,7 @@ function intersect(a: Hull, b: Hull): boolean {
 
 function freePort(v: VesselState, p: PartState, node: string): boolean {
   if (p.parent !== null && p.attachNode === node) return false;
-  for (const uid of p.children) if (v.cache.byUid.get(uid)?.parentNode === node) return false;
+  for (let i = 0; i < p.children.length; i++) if (v.cache.byUid.get(p.children[i])?.parentNode === node) return false;
   return true;
 }
 function pointVelocity(out: Vec3, v: VesselState, r: Vec3): void {
@@ -175,10 +185,10 @@ function inverseInertia(out: Vec3, v: VesselState, n: Vec3): void {
   out.z = m[6] * x + m[7] * y + m[8] * z;
   rotate(out, v.orientation, out);
 }
-function angularMass(v: VesselState, r: Vec3, n: Vec3): number {
+function angularMass(v: VesselState, r: Vec3, n: Vec3, slot: number): void {
   crossInto(torque, r, n);
   inverseInertia(angular, v, torque);
-  return dot(torque, angular);
+  scalars[slot] = dot(torque, angular);
 }
 function kick(v: VesselState, r: Vec3, j: Vec3, sign: number): void {
   v.velocity.x += j.x * sign / v.mass; v.velocity.y += j.y * sign / v.mass; v.velocity.z += j.z * sign / v.mass;
@@ -200,9 +210,10 @@ function resolve(a: VesselState, b: VesselState, dt: number): boolean {
   rb.z = point.z - (b.position.z - a.position.z);
   relativeVelocity(a, b);
   const vn = dot(velocity, normal), invMass = 1 / a.mass + 1 / b.mass;
-  const mass = invMass + angularMass(a, ra, normal) + angularMass(b, rb, normal);
+  angularMass(a, ra, normal, MASS_A); angularMass(b, rb, normal, MASS_B);
+  const mass = invMass + scalars[MASS_A] + scalars[MASS_B];
   // Slop prevents chatter; capped recovery prevents a saved overlap from creating an explosive impulse.
-  const bias = Math.min(0.5, 0.15 * Math.max(0, depth - 0.002) / dt);
+  const bias = Math.min(0.5, 0.15 * Math.max(0, scalars[DEPTH] - 0.002) / dt);
   const restitution = vn < -0.2 ? 0.05 : 0;
   const j = Math.max(0, (bias - (1 + restitution) * vn) / mass);
   if (j === 0) return false;
@@ -216,7 +227,8 @@ function resolve(a: VesselState, b: VesselState, dt: number): boolean {
   const speed = Math.sqrt(dot(tangent, tangent));
   if (speed > 1e-9) {
     tangent.x /= speed; tangent.y /= speed; tangent.z /= speed;
-    const jt = Math.min(0.35 * j, speed / (invMass + angularMass(a, ra, tangent) + angularMass(b, rb, tangent)));
+    angularMass(a, ra, tangent, MASS_A); angularMass(b, rb, tangent, MASS_B);
+    const jt = Math.min(0.35 * j, speed / (invMass + scalars[MASS_A] + scalars[MASS_B]));
     impulse.x = -tangent.x * jt; impulse.y = -tangent.y * jt; impulse.z = -tangent.z * jt;
     kick(a, ra, impulse, -1); kick(b, rb, impulse, 1);
   }
@@ -236,13 +248,22 @@ export function stepVesselContacts(vessels: readonly VesselState[], dt: number):
       if (b.destroyed || b.eva) continue;
       const dx = b.position.x - a.position.x, dy = b.position.y - a.position.y, dz = b.position.z - a.position.z;
       const reach = a.cache.boundingRadius + b.cache.boundingRadius;
-      if (dx * dx + dy * dy + dz * dz > reach * reach) continue;
-      for (const pa of a.parts) {
+      if (dx * dx + dy * dy + dz * dz > reach * reach) {
+        separating.get(a)?.delete(b); separating.get(b)?.delete(a);
+        continue;
+      }
+      if (separating.get(a)?.has(b) || separating.get(b)?.has(a)) continue;
+      for (let ai = 0; ai < a.parts.length; ai++) {
+        const pa = a.parts[ai];
         const ha = hull(pa.def);
+        // A bay's catalogue cylinder encloses empty payload space. Open doors must release that space.
+        if (ha.enclosure && pa.bayOpen) continue;
         centre(fa.centre, a, pa, a.position);
         let ready = false;
-        for (const pb of b.parts) {
+        for (let bi = 0; bi < b.parts.length; bi++) {
+          const pb = b.parts[bi];
           const hb = hull(pb.def);
+          if (hb.enclosure && pb.bayOpen) continue;
           centre(fb.centre, b, pb, a.position);
           const x = fb.centre.x - fa.centre.x, y = fb.centre.y - fa.centre.y, z = fb.centre.z - fa.centre.z;
           const r = ha.radius + hb.radius;

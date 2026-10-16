@@ -1793,3 +1793,28 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   the launch body's sphere of influence: the recorder's maximum mixes bodies (37.5 Mm was the distance from Earth on
   the way to the Moon); "Furthest" already says where the craft went. (d) The map's landing-prediction toggle is
   hidden in a stable orbit (periapsis above air and terrain), where there is nothing to predict.
+
+## Loaded vessel contact (2026-10-16, op/shipcontact)
+
+- Resolve loaded non-EVA vessels after their rigid integration and before the docking field. Reject vessel spheres,
+  then part spheres, then use SAT over the existing box / octagonal frustum hull points (face and edge-cross-edge
+  axes). Work in float64 relative to one COM; never form heliocentric hull vertices. Equal/opposite impulses share
+  one contact point and include both inertias; restitution is 0.05, friction 0.35, recovery is 15% of penetration
+  beyond 2 mm per step, capped at 0.5 m/s. This is discrete low-speed contact, without new crash destruction.
+- Only free, same-size port pairs inside the existing capture distance/angle/speed envelope bypass contact. Other
+  hulls still block them. Disarmed facing port pairs can drift apart. World undocking and staging also register
+  sibling separation grace until their bounding spheres part once: split hardware can inherit overlapping coarse
+  bounds (notably the Packmule rover beside its carrier's gear). Grace is transient, pair-specific and does not
+  suppress collisions with other vessels. Open cargo bays omit their filled-volume proxy; deployed door/rail
+  geometry is not modeled by this solver. Other parts retain their catalogue collision geometry.
+- Shape hulls cache once; vectors, scalar slots and the World's filtered vessel array are reused. Scalar results
+  pass through a Float64Array to avoid V8 number boxing. Node heap sampling after 20k warmup calls found no sampled
+  solver allocation over 10k calls with overlapping 15-part Tenders (512-byte sampling interval).
+- Contact tests cover linear/angular momentum, rotated boxes/frusta, orbital precision, distant rejection,
+  penetration recovery, aligned 0.3 m/s docking, a 53-degree bump, undocking, re-contact after sibling clearance,
+  open-bay payload release and the World hook. A separate checkout combined dockassist's implementation with
+  collision: its nine tests passed, including side-port auto-docking from 65 m and 500 m.
+- Real GPU evidence: CDP Chrome / RTX 3060 Ti, Medium, 1470 x 900, tutorial docking scene. A scripted 53-degree
+  0.3 m/s nudge bumps at about 0.5 s; relative speed becomes 0.124 m/s and the faces part without merging.
+  Screenshots/trace: `C:\wsp-tools\shots\shipcontact\`; logs/profiles: `~/.t3/projects/wsp-traces/shipcontact/`.
+  These measurements do not establish M-series, Zen/Firefox or 120 Hz performance.
