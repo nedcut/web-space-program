@@ -17,6 +17,7 @@ const SAS_LAYOUT: { id: SasGlyph; label: string }[] = [
   { id: 'radialOut', label: 'Radial out' },
   { id: 'target', label: 'Target' },
   { id: 'antiTarget', label: 'Anti-target' },
+  { id: 'portAlign', label: 'Align with target port' },
   { id: 'maneuver', label: 'Maneuver: point at the next node burn' },
 ];
 
@@ -29,8 +30,10 @@ export function NavballCluster({ t, cb, navball, precision, speed }: { t: Teleme
   const controls = !t.eva;
   const canControl = !t.noControl;
   const moving = !t.onSurface || t.speed > 1;
+  const portTarget = t.target?.kind === 'vessel' ? t.target : null;
   const available = (id: SasGlyph) => canControl && (
     id === 'stabilityAssist' ? true
+      : id === 'portAlign' ? portTarget?.portUid != null && portTarget.ports.some(p => p.uid === portTarget.portUid) && t.ownPorts.length > 0
       : id === 'target' || id === 'antiTarget' ? !!t.target
         : id === 'maneuver' ? !!t.maneuverBurn
           : moving);
@@ -55,8 +58,8 @@ export function NavballCluster({ t, cb, navball, precision, speed }: { t: Teleme
               const ok = available(m.id);
               const color = SAS_COLORS[m.id][colourBlind ? 'colourBlind' : 'normal'];
               return (
-                <button key={m.id} type="button" className={`nb-mode ${on ? 'on' : ''} ${m.id === 'stabilityAssist' || m.id === 'maneuver' ? 'wide' : ''}`} disabled={!ok} aria-pressed={on}
-                  aria-label={m.label} title={ok ? m.label : `${m.label} — unavailable${m.id === 'maneuver' ? ' (no maneuver node)' : m.id.includes('arget') ? ' (no target)' : ''}`}
+                <button key={m.id} type="button" className={`nb-mode ${on ? 'on' : ''} ${m.id === 'stabilityAssist' || m.id === 'maneuver' || m.id === 'portAlign' ? 'wide' : ''}`} disabled={!ok} aria-pressed={on}
+                  aria-label={m.label} title={ok ? m.label : `${m.label} — unavailable${m.id === 'portAlign' ? ' (select a free target port and fit a free own port)' : m.id === 'maneuver' ? ' (no maneuver node)' : m.id.includes('arget') ? ' (no target)' : ''}`}
                   style={{ ['--mode-color' as string]: color }} onClick={() => cb.onSasMode(m.id)}>
                   <SasIcon mode={m.id} size={20} />
                 </button>

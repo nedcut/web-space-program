@@ -58,6 +58,8 @@ export interface AutopilotStep {
 
 export interface Autopilot {
   readonly name: string;
+  /** Precision programs yield to translation, staging, part commands and flight-control toggles too. */
+  readonly cancelOnAnyInput?: boolean;
   /** Short human-readable phase description (for HUD / logs). */
   status: string;
   done: boolean;
