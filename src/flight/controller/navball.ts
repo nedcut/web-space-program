@@ -1,3 +1,4 @@
+import { PHYSICS_DT } from '../../game/world';
 import { remainingManeuverDv } from '../../sim/orbit';
 import { qRotate } from '../../util/quat';
 import { cross, length, negate, normalize, sub, v3, type Vec3 } from '../../util/vec3';
@@ -5,8 +6,26 @@ import type { FlightController } from '../controller';
 import type { NavballFrame, NavballMarker } from '../hud/navball';
 import type { FlightControllerInternals } from './internals';
 
+type NavballController = Pick<FlightController, 'world' | 'speedMode' | 'mapMode' | 'network'>;
+type NavballInternals = Pick<FlightControllerInternals, 'maneuverDirection'>;
+
 /** Navball frame for the active vessel (called by the HUD every animation frame). */
-export function navball(this: FlightController, internals: FlightControllerInternals): { frame: NavballFrame; markers: NavballMarker[] } | null {
+export function navball(this: NavballController, internals: NavballInternals): { frame: NavballFrame; markers: NavballMarker[] } | null {
+  const w = this.world;
+  const wv = w.active;
+  if (!wv) return null;
+  const position = wv.state.position;
+  if (this.network || this.mapMode) return navballFrame.call(this, internals, position);
+  // Same interpolated attitude as the 3D view, so the ball turns smoothly between physics steps.
+  const { restore } = w.renderHistory.apply(w.ut, PHYSICS_DT, w.renderAlpha, [wv], w.universe.ephem);
+  try {
+    return navballFrame.call(this, internals, position);
+  } finally {
+    restore();
+  }
+}
+
+function navballFrame(this: NavballController, internals: NavballInternals, position: Vec3): { frame: NavballFrame; markers: NavballMarker[] } | null {
   const wv = this.world.active;
   if (!wv) return null;
   const rs = this.world.relativeState(wv);
@@ -24,7 +43,9 @@ export function navball(this: FlightController, internals: FlightControllerInter
   const vel = this.speedMode === 'surface' ? this.world.surfaceVelocity(wv) : targetMode ? sub(wv.state.velocity, ts!.velocity) : rs.velocity;
   const markers: NavballMarker[] = [];
   if (ts) {
-    const toT = sub(ts.position, wv.state.position);
+    // Both positions must come from the same physics instant. Only our attitude/local horizon is interpolated:
+    // subtracting an interpolated own position from a current target can add hundreds of metres of orbital travel.
+    const toT = sub(ts.position, position);
     if (length(toT) > 1e-6) {
       const d = normalize(toT);
       markers.push({ kind: 'target', dir: d }, { kind: 'antiTarget', dir: negate(d) });
