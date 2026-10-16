@@ -1679,3 +1679,8 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
 ## Veteran audit 2 and playtest kit (2026-10-15, op/audit2)
 - Report only: `docs/audits/2026-10-15-veteran-audit-2.md` re-checks every 2026-10-07 item and ranks a new top 15; `docs/PLAYTEST.md` is the one-page guide and feedback form for outside players. No game code changed.
 - Evidence: real-GPU runs (CDP Chrome, Firefox spot check); screenshots stay outside git in `C:\wsp-tools\shots\audit2\`, logs in `~/.t3/projects/wsp-traces/audit2/`. Docking was not verified hands-on (scripted approach failed) and sound was not listened to.
+
+## Playtest planner blockers (2026-10-15, op/plannerfix)
+
+- **Departure recommendation:** ★ is the earliest departure within 5% of the minimum total departure + capture Δv, rather than the absolute cheapest. This avoids waiting days for a 3% saving; a substantially cheaper later window can still win. The tooltip states the rule. The other rows remain selectable and retain their cost order.
+- **Low parking-orbit warp:** a packed Keplerian conic whose periapsis clears both atmosphere and the body's maximum terrain height permits every rails rate, including from the launch assist's 82 km orbit. Read only the existing packed elements (one scalar periapsis calculation, no prediction/allocation); the first packing frame still uses the conservative altitude limit. Unproven paths and precise gravity retain the old clearance limits. Existing rails events still interrupt at SOI change and stop before atmosphere/terrain; alarms still bound the step. Tests exercise seven days through the actual warp-to and Execute-node drivers plus the existing atmosphere/terrain safety cases.

@@ -42,6 +42,13 @@ export interface WarpContext {
   altitude: number;
   bodyRadius: number;
   atmosphereHeight: number;
+  /** Packed conic's periapsis stays above the atmosphere and the highest terrain. */
+  orbitClear?: boolean;
+}
+
+/** A proven clear conic needs no altitude cap: rails events still stop at SOI/atmosphere/terrain boundaries. */
+export function maxRailsIndex(ctx: WarpContext): number {
+  return ctx.landed || ctx.orbitClear ? RAILS_WARP.length - 1 : maxRailsIndexAt(ctx.altitude, ctx.bodyRadius, ctx.atmosphereHeight);
 }
 
 /** Step warp up/down. Rails warp is refused while thrusting / in atmosphere → physics warp instead. */
@@ -54,7 +61,7 @@ export function stepWarp(w: WarpState, delta: number, ctx: WarpContext): WarpSta
       return { mode: idx === 0 && canRails ? 'rails' : 'physics', index: idx };
     }
   }
-  const maxIdx = ctx.landed ? RAILS_WARP.length - 1 : maxRailsIndexAt(ctx.altitude, ctx.bodyRadius, ctx.atmosphereHeight);
+  const maxIdx = maxRailsIndex(ctx);
   const idx = Math.max(0, Math.min(maxIdx, w.index + delta));
   return { mode: 'rails', index: idx };
 }
@@ -63,7 +70,7 @@ export function stepWarp(w: WarpState, delta: number, ctx: WarpContext): WarpSta
 export function clampWarp(w: WarpState, ctx: WarpContext): WarpState {
   if (w.mode !== 'rails' || w.index === 0) return w;
   if (ctx.thrusting) return { mode: 'rails', index: 0 };
-  const maxIdx = ctx.landed ? RAILS_WARP.length - 1 : maxRailsIndexAt(ctx.altitude, ctx.bodyRadius, ctx.atmosphereHeight);
+  const maxIdx = maxRailsIndex(ctx);
   return w.index > maxIdx ? { mode: 'rails', index: maxIdx } : w;
 }
 

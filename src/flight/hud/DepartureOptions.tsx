@@ -6,11 +6,13 @@ import { dvText, shortDate, shortDuration } from './plannerFormat';
 
 const cost = (w: TransferWindow) => w.dv + (w.captureDv ?? 0);
 
-/** Options that are still ahead, "go now" first then cheapest first, and the cheapest of them. */
+/** Go-now first, then cheapest; recommend the earliest departure within 5% of the lowest total Δv. */
 export function liveOptions(windows: readonly TransferWindow[], ut: number): { live: TransferWindow[]; best?: TransferWindow } {
   const live = windows.filter(w => w.departure > ut + 120)
     .sort((a, b) => Number(b.kind === 'now') - Number(a.kind === 'now') || cost(a) - cost(b));
-  return { live, best: live.length ? live.reduce((a, b) => cost(a) < cost(b) ? a : b) : undefined };
+  const cheapest = Math.min(...live.map(cost));
+  const best = live.filter(w => cost(w) <= cheapest * 1.05).sort((a, b) => a.departure - b.departure)[0];
+  return { live, best };
 }
 
 /**
@@ -27,11 +29,11 @@ export function DepartureOptions({ world, options, busy, onPick, tools }: {
   const name = world.universe.body(options.target).name;
   return <div className="dep" aria-label="Departure options">
     <div className="dep-head">
-      <span className="label" title="Estimates ranked by departure + capture Δv. Pick one to verify the encounter and create its node.">Departures · {name}</span>
+      <span className="label" title="Estimates ranked by departure + capture Δv. ★ recommends the earliest departure within 5% of the lowest total Δv. Pick one to verify the encounter and create its node.">Departures · {name}</span>
       {tools}
     </div>
     {live.map(w => {
-      const title = `${w.kind === 'now' ? 'Go now with a plane change, on the next orbit' : 'Transfer window'}${w === best ? ' (lowest Δv)' : ''}\n`
+      const title = `${w.kind === 'now' ? 'Go now with a plane change, on the next orbit' : 'Transfer window'}${w === best ? ' (recommended: earliest within 5% of lowest Δv)' : ''}\n`
         + `Depart ${formatDate(w.departure)} · wait ${formatDuration(w.departure - world.ut)}\n`
         + `Departure ~${dvText(w.dv)} · capture ${w.captureDv === undefined ? '—' : `~${dvText(w.captureDv)}`} · flight ${formatDuration(w.timeOfFlight)}\n`
         + 'Click to verify and create the node';
