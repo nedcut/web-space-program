@@ -325,3 +325,8 @@ html[data-ui-hidden='true'] :is(.tutorial-panel, .scenario-flight, .multiplayer-
 .pause-grid .btn { padding-inline: 8px; }
 .pause-leave { margin-top: 4px; }
 .pause-note { font-size: 11px; color: var(--text-dim); text-align: center; }
+
+/* Flight assist: day or night at the Land-here touchdown. */
+.assist-light { display: flex; flex-direction: column; gap: 3px; margin: -1px 0 3px; font-size: 11px; color: var(--text-dim); }
+.assist-light[data-day="false"] > span:first-child { color: var(--warn); }
+.assist-light-none { font-size: 10.5px; }

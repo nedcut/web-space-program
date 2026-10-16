@@ -10,6 +10,7 @@ import {
 import { RAILS_WARP } from '../game/timewarp';
 import { neutralInput } from '../sim/vessel';
 import type { ControlInput } from '../sim/vessel/runtime';
+import { formatDuration } from '../util/format';
 
 /**
  * Flight assist ("autopilot") programs exposed in the HUD. Each is a sequence of autopilot stages built
@@ -58,7 +59,27 @@ class Sequence implements Autopilot {
   }
 }
 
-export function createAssist(id: AssistId, world: World): Autopilot {
+/** Coast on rails until `until` (e.g. so a landing touches down in daylight). */
+function waitUntil(until: number, why: string): Autopilot {
+  const ap: Autopilot = {
+    name: 'wait',
+    status: why,
+    done: false,
+    update(w) {
+      if (w.ut >= until) ap.done = true;
+      ap.status = `${why} · ${formatDuration(Math.max(0, until - w.ut))}`;
+      return { input: neutralInput({ sas: 'stabilityAssist' }), coastUntil: until };
+    },
+  };
+  return ap;
+}
+
+export interface AssistOptions {
+  /** Land: seconds to coast before the descent starts (wait for daylight at the touchdown). */
+  wait?: number;
+}
+
+export function createAssist(id: AssistId, world: World, opts: AssistOptions = {}): Autopilot {
   const wv = world.active!;
   const body = world.universe.body(wv.body);
   const atmo = body.atmosphere?.height ?? 0;
@@ -83,7 +104,10 @@ export function createAssist(id: AssistId, world: World): Autopilot {
     case 'circPe':
       return new Sequence('Circularize', [circ('periapsis')]);
     case 'land':
-      return new Sequence('Land', [(w) => landingController(w)]);
+      return new Sequence('Land', [
+        ...(opts.wait ? [() => waitUntil(world.ut + opts.wait!, 'waiting for daylight at the touchdown · descent in')] : []),
+        (w: World) => landingController(w),
+      ]);
   }
 }
 

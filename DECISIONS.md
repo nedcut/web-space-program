@@ -1713,3 +1713,14 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   shut (enough air, airflow above its rating). Deployed canopies count as braking: when their fully open descent
   rate (√(2mg / ρ·ΣCdA) at the current air density) is ≤ 12 m/s the SINK RATE / TERRAIN cautions are suppressed.
   Computed in the 10 Hz telemetry pass (one loop over parts); no per-frame work.
+- **Land here shows day or night at the touchdown** (item 2). `game/landingLight.ts` predicts where the Land
+  assist's own deorbit (retrograde to `DEORBIT_PERIAPSIS`, now shared with `landingController`) meets the datum,
+  analytically on the post-burn conic, and the Sun's elevation there. The Flight assist app shows "Touchdown: night ·
+  Sun −46°" and, when dark, "Wait 6m 43s, land in daylight": the Land program coasts on rails until a descent
+  started then touches down with the Sun ≥ 8°, then lands. The search samples 96 deorbit start times over one
+  orbit (≈1 ms). It runs only while the app is open (1 Hz poll from the panel), never per frame. Measured against
+  the real assist from four orbit phases: 2.0–3.4° from the actual touchdown, Sun elevation within 3.4°. Not
+  done: Earthshine or a brighter night ambient on airless bodies (the audit's 2b, M-sized render work).
+- **Night-side tip:** below 3 km over ground where the Sun is below the horizon, with night vision off, one message
+  per descent: "Night side: press F7 for night vision (or C for the lights, if lamps are fitted and off)". Checked in
+  the 10 Hz telemetry pass only under 3 km (one Sun-elevation dot product).

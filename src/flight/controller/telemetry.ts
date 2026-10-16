@@ -24,8 +24,12 @@ import { cross, normalize } from '../../util/vec3';
 import { warpTargets } from './warp';
 import { game } from '../../game/store';
 import { getTutorial } from '../../tutorial/runtime';
+import { sunElevation } from '../../game/landingLight';
 
-const cueStates = new WeakMap<FlightController, { vessel: string; body: string; signal: boolean; throttle: string | null; sas: boolean; soi: boolean; orbit: boolean; situation: string; staged: number }>();
+/** Below this height over dark ground, suggest night vision or lights once per descent, m. */
+const DARK_SUGGEST_AGL = 3000;
+
+const cueStates = new WeakMap<FlightController, { vessel: string; body: string; signal: boolean; throttle: string | null; sas: boolean; soi: boolean; orbit: boolean; situation: string; staged: number; darkTold: boolean }>();
 const throttleTrackers = new WeakMap<FlightController, ThrottleCueTracker>();
 const alertTrackers = new WeakMap<FlightController, AlertTracker>();
 const burnTrackers = new WeakMap<FlightController, BurnTracker>();
@@ -247,7 +251,15 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   // An astronaut's every hop would announce a landing.
   if (previous && previous.situation === 'flying' && st.situation !== 'flying' && !st.eva) w.message(st.situation === 'splashed' ? `Splashed down on ${b.name}` : `Landed on ${b.name}`);
   const soi = changedBody || (previous?.soi ?? false);
-  cueStates.set(this, { vessel: st.id, body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation, staged: this.stagedCount });
+  // Night side close to the ground: the view is black apart from the lit vessel. Say how to see, once per descent.
+  const dark = flying && !st.eva && !this.nightVision && info.heightAboveTerrain < DARK_SUGGEST_AGL && sunElevation(u, wv.body, rs.position, w.ut) < 0;
+  if (dark && !previous?.darkTold) {
+    const lamps = st.parts.filter(p => p.def.modules.some(m => m.type === 'light'));
+    const lightsOff = lamps.length > 0 && !lamps.some(lightOn);
+    w.message(`Night side: press ${bindingLabel('nightVision')} for night vision${lightsOff ? ` or ${bindingLabel('toggleLights')} for the lights` : ''}`, 'info', 8);
+  }
+  const darkTold = dark || (!!previous?.darkTold && info.heightAboveTerrain < 2 * DARK_SUGGEST_AGL);
+  cueStates.set(this, { vessel: st.id, body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation, staged: this.stagedCount, darkTold });
   const propulsionTwr = ((ignited ? currentStage : dvs.find(d => d.thrust > 0))?.thrust ?? 0) / st.mass / gravity;
   const hint = this.hints.update({
     enabled: settings.flightHints && !this.network && !getTutorial() && !game.get().scenarioActive && !this.assist,
