@@ -137,6 +137,7 @@ export function SettingsPanel({ onClose, world }: { onClose: () => void; world?:
       {check('commsOverlay', 'Show comms links in map view')}
       {check('launchCountdown', 'Launch countdown (3-2-1 before clamp release)')}
       {check('flightHints', 'Contextual flight tips (once per save)')}
+      {check('autoShowRcsPad', 'Open RCS translation pad when docking (until dismissed)')}
     </>,
     Accessibility: () => <>
       {range('uiScale', 'UI scale', 0.8, 1.3, 0.05)}{check('highContrast', 'High-contrast HUD')}

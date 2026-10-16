@@ -387,6 +387,7 @@ export default function FlightScene() {
           partScreen={partScreen}
           partScreenInto={partScreenInto}
           shortcutsEnabled={ready && !paused && !help && !showSettings}
+          rcsInput={c.input}
           precision={c.input.precisionActive}
           stageProgress={c.input.stageProgress}
           gamepadConnected={c.input.gamepadConnected}

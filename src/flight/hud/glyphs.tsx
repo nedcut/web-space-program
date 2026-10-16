@@ -50,9 +50,10 @@ export const SasIcon = memo(function SasIcon({ mode, size = 22, color }: { mode:
   );
 });
 
-export type AppGlyph = 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms' | 'orbit' | 'settings' | 'help' | 'map' | 'camera' | 'stage' | 'lock' | 'unlock' | 'docking' | 'menu' | 'alarm' | 'engineering';
+export type AppGlyph = 'rcs' | 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms' | 'orbit' | 'settings' | 'help' | 'map' | 'camera' | 'stage' | 'lock' | 'unlock' | 'docking' | 'menu' | 'alarm' | 'engineering';
 
 const APP: Record<AppGlyph, ReactElement> = {
+  rcs: <path d="M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3" />,
   // Three level gauges.
   resources: <path d="M5 20V9M5 20h3V9H5M10.5 20h3V5h-3zM16 20h3v-7h-3z" />,
   // Dial with needle.

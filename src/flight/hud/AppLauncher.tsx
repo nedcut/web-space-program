@@ -5,7 +5,7 @@ import { isTyping, matches } from '../../input/bindings';
 import { ResizeGrip } from './Resizable';
 import { clampPos, limits as sizeLimits, type SizeLimits, type WinSize } from './windowSize';
 
-export type AppId = 'alarms' | 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms' | 'station';
+export type AppId = 'rcsPad' | 'alarms' | 'resources' | 'flightData' | 'science' | 'crew' | 'assist' | 'target' | 'comms' | 'station';
 
 export interface HudApp {
   id: AppId;
@@ -46,10 +46,11 @@ export function useApps() {
   const [state, setState] = useState<AppState>(loadApps);
   const update = useCallback((fn: (s: AppState) => AppState) => setState(s => { const n = fn(s); saveApps(n); return n; }), []);
   const toggle = useCallback((id: AppId) => update(s => ({ ...s, open: s.open.includes(id) ? s.open.filter(x => x !== id) : [...s.open, id] })), [update]);
+  const open = useCallback((id: AppId) => update(s => s.open.includes(id) ? s : ({ ...s, open: [...s.open, id] })), [update]);
   const close = useCallback((id: AppId) => update(s => ({ ...s, open: s.open.filter(x => x !== id) })), [update]);
   const move = useCallback((id: AppId, x: number, y: number) => update(s => ({ ...s, pos: { ...s.pos, [id]: { x, y } } })), [update]);
   const dock = useCallback((id: AppId) => update(s => { const pos = { ...s.pos }; delete pos[id]; return { ...s, pos }; }), [update]);
-  return { state, toggle, close, move, dock };
+  return { state, toggle, open, close, move, dock };
 }
 
 /** Input that decides whether Esc belongs to the app windows (true) or to the pause menu (false). */
@@ -85,7 +86,7 @@ export function useAppEscape(visible: AppId[], close: (id: AppId) => void): AppI
       if (next !== engagedRef.current) { engagedRef.current = next; setEngaged(next); }
     };
     const pointer = (e: PointerEvent) => apply({ kind: 'pointer', inApps: !!(e.target as Element | null)?.closest?.('.app-win, .app-bar') });
-    const key = (e: KeyboardEvent) => apply({ kind: 'key', key: e.key, typing: isTyping(e.target), appKey: matches('flightData', e) });
+    const key = (e: KeyboardEvent) => apply({ kind: 'key', key: e.key, typing: isTyping(e.target), appKey: matches('flightData', e) || matches('rcsPad', e) });
     window.addEventListener('pointerdown', pointer, true);
     window.addEventListener('keydown', key, true);
     return () => { window.removeEventListener('pointerdown', pointer, true); window.removeEventListener('keydown', key, true); };

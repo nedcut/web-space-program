@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { bindingLabel, isTyping, matches } from '../../input/bindings';
 import { frameProfiler as prof } from '../../util/frameProfiler';
 import type { FlightData } from '../../game/flightData';
-import { useGame } from '../../game/store';
+import { RcsPad } from './RcsPad';
+import type { FlightInput } from '../input';
+import { updateSettings, useGame } from '../../game/store';
 import type { Astronaut } from '../../sim/crew/crew';
 import { formatDistance, formatDuration, formatSpeed } from '../../ui/format';
 import { Panel } from '../../ui/components';
@@ -263,7 +265,8 @@ const ENGINEERING_KEY = 'wsp.hud.engineeringStrip.v1';
 const PLANNER_LIMITS = sizeLimits({ minW: 240, maxW: 480 });
 const ORBIT_KEY = 'wsp.hud.orbitStrip.v1';
 
-export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadConnected, shortcutsEnabled = true, partScreen, partScreenInto }: {
+export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadConnected, shortcutsEnabled = true, rcsInput, partScreen, partScreenInto }: {
+  rcsInput?: FlightInput;
   t: Telemetry; cb: HudCallbacks; navball: ReactNode; dock?: HudDockSlots; precision?: boolean; stageProgress?: number; gamepadConnected?: boolean; shortcutsEnabled?: boolean;
   /** Screen position (CSS px) of an active-vessel part, for the staging-icon highlight. */
   partScreen?: (uid: number) => { x: number; y: number } | null;
@@ -293,12 +296,26 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
     for (const k of cbKeys.split(',')) if (k) out[k] = (...a: unknown[]) => (cbRef.current[k as keyof HudCallbacks] as ((...x: unknown[]) => void) | undefined)?.(...a);
     return out as unknown as HudCallbacks;
   }, [cbKeys]);
-  const toggleApp = apps.toggle;
+  const { close, toggle, state: appState } = apps;
+  const closeApp = useCallback((id: AppId) => {
+    close(id);
+    if (id === 'rcsPad') updateSettings({ autoShowRcsPad: false });
+  }, [close]);
+  const toggleApp = useCallback((id: AppId) => {
+    toggle(id);
+    if (id === 'rcsPad' && appState.open.includes(id)) updateSettings({ autoShowRcsPad: false });
+  }, [toggle, appState.open]);
+  const openApp = apps.open;
+  useEffect(() => {
+    if (t.dockingMode && settings.autoShowRcsPad && rcsInput && !t.eva && !t.noControl) openApp('rcsPad');
+  }, [t.dockingMode, settings.autoShowRcsPad, rcsInput, t.eva, t.noControl, openApp]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (!shortcutsEnabled || e.repeat || isTyping(e.target) || !matches('flightData', e)) return;
+      if (!shortcutsEnabled || e.repeat || isTyping(e.target)) return;
+      const app = matches('flightData', e) ? 'flightData' : matches('rcsPad', e) ? 'rcsPad' : null;
+      if (!app) return;
       e.preventDefault();
-      toggleApp('flightData');
+      toggleApp(app);
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
@@ -328,6 +345,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
     { id: 'crew', title: t.eva ? 'EVA' : `Crew (${t.crew.length})`, icon: 'crew', badge: t.noControl ? 'warn' : null, content: <CrewPanel t={t} cb={cb} /> },
     { id: 'alarms', title: 'Mission alarms', icon: 'alarm', badge: dock?.alarmActive ? 'warn' : null, content: dock?.alarms ?? null },
     { id: 'assist', title: 'Flight assist', icon: 'assist', badge: dock?.assistActive ? 'on' : null, content: dock?.assist ?? null },
+    { id: 'rcsPad', title: `RCS translation (${bindingLabel('rcsPad')})`, icon: 'rcs', width: 286, limits: { minW: 270, minH: 290 }, badge: t.rcsOn ? 'on' : null, content: rcsInput && !t.eva ? <RcsPad input={rcsInput} rcsOn={t.rcsOn} precision={!!precision} enabled={shortcutsEnabled && !t.noControl} onToggleRcs={stableCb.onToggleRcs} /> : null },
     { id: 'target', title: 'Target & docking', icon: 'target', badge: t.target ? 'target' : null, width: 260, shrink: 3, content: <TargetPanel t={t} cb={cb} /> },
     { id: 'station', title: 'Station & modules', icon: 'docking', badge: t.dockedPorts.length ? 'on' : null, width: 300, shrink: 2, content: t.eva ? null : dock?.station ?? null },
     { id: 'comms', title: 'Communications', icon: 'comms', content: dock?.signal ?? null },
@@ -339,7 +357,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
     ...(cb.onHelp ? [{ id: 'help', title: `Controls help (${bindingLabel('help')})`, icon: 'help' as const, onClick: cb.onHelp }] : []),
   ];
   const openApps = apps.state.open.map(id => hudApps.find(a => a.id === id)).filter((a): a is HudApp => !!a && a.content !== null);
-  const escTarget = useAppEscape(openApps.map(a => a.id), apps.close);
+  const escTarget = useAppEscape(openApps.map(a => a.id), closeApp);
   const docked = openApps.filter(a => !apps.state.pos[a.id]);
   const floating = openApps.filter(a => apps.state.pos[a.id]);
   const showOrbit = (orbitStrip || t.mapMode) && !t.eva;
@@ -386,13 +404,13 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
 
       {/* Top-right: application toolbar, its docked windows; bottom-right: crew portraits, map and camera. */}
       <div className={`hud-right${t.mapMode ? ' map' : ''}`}>
-        <AppToolbar apps={hudApps} open={apps.state.open} onToggle={apps.toggle} actions={actions} />
+        <AppToolbar apps={hudApps} open={apps.state.open} onToggle={toggleApp} actions={actions} />
         <div className="app-stack">
-          {docked.map(a => <AppWindow key={a.id} app={a} scale={settings.hudScale} escTarget={a.id === escTarget} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} size={sizes[a.id]} onResize={size => setSize(a.id, size)} />)}
+          {docked.map(a => <AppWindow key={a.id} app={a} scale={settings.hudScale} escTarget={a.id === escTarget} onClose={() => closeApp(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} size={sizes[a.id]} onResize={size => setSize(a.id, size)} />)}
         </div>
         <CrewCards crew={t.crew} eva={t.eva} mapMode={t.mapMode} noControl={t.noControl} cameraMode={t.feel.cameraMode} cb={stableCb} />
       </div>
-      {floating.map(a => <AppWindow key={a.id} app={a} pos={apps.state.pos[a.id]} scale={settings.hudScale} escTarget={a.id === escTarget} onClose={() => apps.close(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} size={sizes[a.id]} onResize={size => setSize(a.id, size)} />)}
+      {floating.map(a => <AppWindow key={a.id} app={a} pos={apps.state.pos[a.id]} scale={settings.hudScale} escTarget={a.id === escTarget} onClose={() => closeApp(a.id)} onMove={(x, y) => apps.move(a.id, x, y)} onDock={() => apps.dock(a.id)} size={sizes[a.id]} onResize={size => setSize(a.id, size)} />)}
 
       {/* Lower-left instruments leave the vessel and its plume in the clear. */}
       {/* Docking mode: the alignment readout sits beside the navball, where the eyes already are. */}
