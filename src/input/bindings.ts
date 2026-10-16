@@ -4,7 +4,7 @@ export const DEFAULT_BINDINGS = {
   translateRight: ['KeyL'], translateLeft: ['KeyJ'], translateForward: ['KeyI'], translateBack: ['KeyK'], translateUp: ['KeyH'], translateDown: ['KeyN'],
   throttleUp: ['ShiftLeft', 'ShiftRight'], throttleDown: ['ControlLeft', 'ControlRight'], throttleFull: ['KeyZ'], throttleCut: ['KeyX'],
   stage: ['Space'], toggleSas: ['KeyT'], toggleRcs: ['KeyR'], map: ['KeyM'], warpUp: ['Period'], warpDown: ['Comma'], warpStop: ['Slash'],
-  menu: ['Escape'], help: ['Shift+F1'], screenshot: ['F1'], hideUi: ['F2'], flightResults: ['F3'], perfOverlay: ['F8'], flightData: ['Shift+F3'], stressOverlay: ['F4'], nightVision: ['F7'], photoMode: ['KeyP'],
+  menu: ['Escape'], help: ['Shift+F1'], screenshot: ['F1'], hideUi: ['F2'], flightResults: ['F3'], perfOverlay: ['F8'], flightData: ['Shift+F3'], rcsPad: ['Shift+KeyR'], stressOverlay: ['F4'], nightVision: ['F7'], photoMode: ['KeyP'],
   focusNext: ['BracketRight'], focusPrev: ['BracketLeft'], toggleCamMode: ['KeyV'], quicksave: ['F5'], quickload: ['F9'], eva: ['KeyO'], board: ['Enter', 'NumpadEnter'], plantFlag: ['KeyF'],
   toggleGear: ['KeyG'], brakes: ['KeyB'], toggleLights: ['KeyU'], abort: ['Backspace'], stageLock: ['Alt+KeyL'], sasHold: ['KeyF'],
   mapFocusNext: ['Tab'], mapFocusHome: ['Home', 'Backquote'],

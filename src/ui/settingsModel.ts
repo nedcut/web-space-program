@@ -24,7 +24,7 @@ export function useSettingVisible(...texts: (string | undefined)[]): boolean {
 export const TAB_SETTINGS: Record<Exclude<SettingsTab, 'Graphics'>, (keyof Settings)[]> = {
   Audio: ['masterVolume', 'musicVolume', 'sfxVolume', 'uiVolume'],
   Controls: ['invertPitch', 'mouseFlight', 'inputSmoothing', 'gamepadEnabled', 'deadZone', 'sensitivity'],
-  Gameplay: ['units', 'navballSize', 'hudScale', 'cameraFov', 'autoSaveInterval', 'commsEnabled', 'commsRestrictControl', 'commsOverlay', 'launchCountdown', 'flightHints'],
+  Gameplay: ['units', 'navballSize', 'hudScale', 'cameraFov', 'autoSaveInterval', 'commsEnabled', 'commsRestrictControl', 'commsOverlay', 'launchCountdown', 'flightHints', 'autoShowRcsPad'],
   Accessibility: ['uiScale', 'highContrast', 'reduceMotion', 'cameraShake', 'colourBlind'],
 };
 export function resetPatch(tab: Exclude<SettingsTab, 'Graphics'>, defaults: Settings): Partial<Settings> {
