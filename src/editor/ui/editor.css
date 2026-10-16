@@ -289,7 +289,7 @@
   .vab-more { display: block; }
   .vab-stats .vab-stat:nth-child(3) { display: none; }
 }
-@media (max-width: 1700px) { .vab-stats .vab-stat:nth-child(3) { display: none; } .vab-name-wrap { width: 200px; } }
+@media (max-width: 1700px) { .vab-stats .vab-stat:nth-child(3) { display: none; } .vab-name-wrap { width: 180px; } }
 @media (max-width: 1100px) {
   .vab-name-wrap { width: 130px; }
   .vab-stats .vab-stat:first-child { display: none; }
