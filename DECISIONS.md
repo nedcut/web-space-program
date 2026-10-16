@@ -1837,3 +1837,7 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
 - Checks before the final main merge pass: `npm run lint`, `npx tsc --noEmit`, `npx vitest run --maxWorkers=2` (220 files;
   2,051 tests passed, one skipped; 623 s) and `npm run build`. The final main merge adds dockassist; combined tests are recorded below. Preview stopped.
   No PROGRESS.md changes, push, deployment or merge into main.
+- Final main merge (`44e71255`, dockassist) required only an append-only DECISIONS conflict resolution; both
+  sections are retained. Merged source is byte-identical to the separately verified integration snapshot
+  `09f621f4`. Post-merge lint, typecheck and build pass, plus 105 tests across nine contact, docking, station,
+  SAS, assist hand-back and multiplayer files. Full-suite figures above describe the pre-merge run.
