@@ -4,6 +4,7 @@ import { bindingLabel } from '../../input/bindings';
 import { formatDuration } from '../../ui/format';
 import { SAS_COLORS, SasIcon, type SasGlyph } from './glyphs';
 import type { HudCallbacks, Telemetry } from './Hud';
+import { G_BAD, G_WARN } from '../alerts';
 
 /** Mode buttons in the classic two-column arrangement: hold on top, opposite pairs side by side, maneuver last. */
 const SAS_LAYOUT: { id: SasGlyph; label: string }[] = [
@@ -113,12 +114,12 @@ function ThrottleArc({ value, size }: { value: number; size: number }) {
 /** Vertical G meter: square-root scale to 10 g, ticks at 1/3/6/9 g. */
 function GMeter({ g, height }: { g: number; height: number }) {
   const f = (x: number) => Math.sqrt(Math.max(0, Math.min(10, x)) / 10);
-  const level = g > 9 ? 'bad' : g > 6 ? 'warn' : 'ok';
+  const level = g >= G_BAD ? 'bad' : g >= G_WARN ? 'warn' : 'ok';
   return (
     <div className="nb-gmeter" title={`G-force ${g.toFixed(2)} g`} data-level={level}>
       <div className="nb-gmeter-bar" style={{ height }}>
         <div className="nb-gmeter-fill" style={{ height: `${f(g) * 100}%` }} />
-        {[1, 3, 6, 9].map(x => <div key={x} className={`nb-gmeter-tick ${x === 1 ? 'one' : ''}`} style={{ bottom: `${f(x) * 100}%` }} />)}
+        {[1, 3, G_WARN].map(x => <div key={x} className={`nb-gmeter-tick ${x === 1 ? 'one' : ''}`} style={{ bottom: `${f(x) * 100}%` }} />)}
       </div>
       <div className="nb-gmeter-label">G</div>
       <div className="nb-gmeter-value">{g.toFixed(1)}</div>

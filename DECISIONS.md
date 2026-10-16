@@ -1740,3 +1740,56 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
 - **Editor Δv and footer:** move the primary Δv readout outside the clipping tool row, beside Launch, with a non-shrinking slot. Secondary readouts keep their existing responsive wrapping; the name field gives back 50 px at medium widths, including room for the career launch price. The bottom hint bar wraps between fixed side-panel margins rather than spanning the window. CDP Chrome at 1600 / 1470 / 1280 px shows the full 4,140 m/s readout with at least 10 px before Launch and 21 px between hints and the Total Δv footer. No new event listener, observer or frame-loop work.
 - **Browser evidence (RTX 3060 Ti, CDP Chrome, Medium):** `C:\wsp-tools\shots\plannerfix\` and drivers `C:\wsp-tools\drv\plannerfix{,-extra}.mjs`. Baseline 82 km Warp-to advanced 474.8 simulated seconds in 10.29 real seconds at 50× (seven days projects to 3.64 h; not waited in full). Fixed: seven days completed in 5.33 s, within 0.48 simulated seconds of the stop. Live Execute-node: seven-day wait + alignment + 20 m/s burn in 45.93 s, 1,000,000× peak, result 0.2 m/s off plan. Return plan at 19.7 km Earth Pe: budget 236+992 → 236 m/s, “Earth direct entry”. Planner height 399 → 538 px; all four departures visible before planning at 1470 px. Six career editor assertions (Firstlight/empty × 1600/1470/1280) pass without clipped controls or footer overlap. Packed `warpContext` median 0.092 → 0.148 µs/call (5 × 100k calls); draws 55 → 55. Overall CPU/GPU samples vary on this shared machine and do not establish a frame-time change; M-series/Zen/120 Hz remain unverified.
 - **Final checks:** `npm run lint`, `npx tsc --noEmit`, `npx vitest run --maxWorkers=2` (215 files, 2,009 tests passed, one skipped, 559 s), and `npm run build` pass. `git merge main` is already up to date. Full test/build logs and browser JSON/drivers are in `~/.t3/projects/wsp-traces/plannerfix/`; preview stopped. No PROGRESS.md changes, pushes or main merges.
+
+## Playtest blockers: chutes, alarms, darkness, mission clock (2026-10-15, op/flightfix)
+
+- **Capsules are blunt bodies with or without a heat shield** (audit 2 item 1). A Lantern I or Harbor III whose
+  base leads now gets the same blunt-face trim as a heat shield (`PartDef.bluntBase`, `aero.ts bluntFace`), at the
+  pod's own axial Cd (0.9 / 0.95, the shield is 1.2), so it falls a little faster than a shielded pod. Reason: a real
+  capsule's base is the aeroshell whether or not ablator is bonded to it; the old model made the bare pod tumble
+  apex-first at 40–60 kPa terminal dynamic pressure, so its 25 kPa chute never opened. Chute ratings, reefing and
+  the cut threshold are unchanged, so a high-q semi-deploy (≈37 g on opening at 60 kPa) was rejected. Measured
+  (`scripts/career/bare-pod.ts`, straight up to ~110 km, everything staged on the way down): SAS retrograde
+  247 m/s crew lost → 6.9 m/s recovered (chute semi at 3.9 km, full at 1 km); SAS off 291 → 6.9 m/s; SAS prograde
+  still lost (294 m/s; holding prograde fights the trim). A shielded pod is unchanged to the printed digit (its
+  base is covered by the shield), and `scripts/career/playthrough.ts` output is byte-identical to main.
+- **Pre-flight descent check** (`editor/descent.ts`, item 1a). The piece left after every stage fires that carries
+  the parachutes is dropped from the highest point the craft could reach flown straight up (vacuum Δv less gravity
+  loss, capped at 1.5 atmosphere heights). Its attitude comes from the sim's own aero forces: base first if that is
+  statically stable (capsules), else apex first. A 1-D fall with the `updateParachutes` opening rules predicts the
+  splashdown; above 20 m/s the editor warns with the chute rating, free-fall speed, opening height and impact
+  speed. It matches flight: bare first rocket 6.9 m/s (flown 6.9), Kestrel 7.6 (flown 7.6); before the trim fix
+  it predicted ≈330 m/s (flown 247–315). No stock craft warns except Cricket Hopper, which really would hit at
+  ≈280 m/s if flown high. The launch planet's scaled air reaches the worker from `EditorSession.homeAir()`.
+  Cost: +3–9 ms per edit in the pre-flight worker.
+- **Crew g note** (item 6): a capsule or cockpit stage above 6 g at burnout gets a *note*, listed in Pre-flight
+  without counting toward "to review" or opening the panel (Kestrel 8.2 g, the hand-built first rocket 10.4 g,
+  Homeward 9.3 g would otherwise nag on stock designs). Passenger cabins (`controllable: false`) are excluded.
+- **G-load lamp:** red "G-LOAD" now starts at 10 g (was 9), the entry corridor's steep edge; amber "HIGH G" stays
+  at 6 g, and both add "· THROTTLE DOWN" while the engines are thrusting. Nothing in the sim harms crew by g, so
+  a normal first ascent (≈9.7 g at burnout) reads amber with the remedy instead of red. The g-meter shares the
+  thresholds (`alerts.ts G_WARN/G_BAD`).
+- **Parachute lamp and SINK RATE** (items 4 and 6). A CHUTE lamp next to GEAR shows stowed / ARM / WAIT / SEMI /
+  OPEN / CUT, and an amber "CHUTE WAITING · TOO FAST 48 / 25 kPa" caution names the reason an armed chute stays
+  shut (enough air, airflow above its rating). Deployed canopies count as braking: when their fully open descent
+  rate (√(2mg / ρ·ΣCdA) at the current air density) is ≤ 12 m/s the SINK RATE / TERRAIN cautions are suppressed.
+  Computed in the 10 Hz telemetry pass (one loop over parts); no per-frame work.
+- **Land here shows day or night at the touchdown** (item 2). `game/landingLight.ts` predicts where the Land
+  assist's own deorbit (retrograde to `DEORBIT_PERIAPSIS`, now shared with `landingController`) meets the datum,
+  analytically on the post-burn conic, and the Sun's elevation there. The Flight assist app shows "Touchdown: night ·
+  Sun −46°" and, when dark, "Wait 6m 43s, land in daylight": the Land program coasts on rails until a descent
+  started then touches down with the Sun ≈ 15° (it lands ≈5° short of the coast's crossing, toward the night: measured 11.7°), then lands. The search samples 96 deorbit start times over one
+  orbit (≈1 ms). It runs only while the app is open (1 Hz poll from the panel), never per frame. Measured against
+  the real assist from four orbit phases: 2.0–3.4° from the actual touchdown, Sun elevation within 3.4°. Not
+  done: Earthshine or a brighter night ambient on airless bodies (the audit's 2b, M-sized render work).
+- **Night-side tip:** below 3 km over ground where the Sun is below the horizon, with night vision off, one message
+  per descent: "Night side: press F7 for night vision (or C for the lights, if lamps are fitted and off)". Checked in
+  the 10 Hz telemetry pass only under 3 km (one Sun-elevation dot product).
+- **Small details (item 9).** (a) Mission clock: rovers (wheels, no wings) and EVA astronauts never "launch", so
+  their MET runs from rollout / leaving the hatch (the flight record's start) instead of "pre-launch"; rockets and
+  aircraft keep the liftoff clock, so it never jumps back. (b) Only a vessel with a command part (crew or probe core)
+  counts as landing: the Kestrel's spent tank and engine splashed down first and completed the Earth test flight's
+  surface objective with the capsule still 2.3 km up. (c) The debrief leaves out "Max altitude" once the flight left
+  the launch body's sphere of influence: the recorder's maximum mixes bodies (37.5 Mm was the distance from Earth on
+  the way to the Moon); "Furthest" already says where the craft went. (d) The map's landing-prediction toggle is
+  hidden in a stable orbit (periapsis above air and terrain), where there is nothing to predict.

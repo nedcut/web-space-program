@@ -16,7 +16,7 @@ export function DebriefCard({ debrief: d, onOpenLog, onLaunchAgain, onDismiss }:
   useEffect(() => focusFirst(ref.current), []);
   const earned = d.funds === null ? null : d.funds - (d.recoveryValue ?? 0);
   const rows: [string, string][] = [
-    ['Max altitude', formatDistance(d.maxAltitude)],
+    ...(d.maxAltitude !== null ? [['Max altitude', formatDistance(d.maxAltitude)] as [string, string]] : []),
     ...(d.furthest ? [['Furthest', d.furthest] as [string, string]] : []),
     ['Flight time', formatDuration(d.duration)],
     ...(d.science !== null && Math.abs(d.science) > 0.05 ? [['Science', signed(d.science, 1)] as [string, string]] : []),

@@ -53,7 +53,8 @@ import { bindingLabel } from '../input/bindings';
 import { HatchMarker, HATCH_MARKER_RANGE } from './hatchMarker';
 import { BOARD_RANGE, BOARD_SPEED } from '../game/world/crew';
 import { cross, dot, length, normalize, sub, type Vec3 } from '../util/vec3';
-import { type AssistId } from './assist';
+import { type AssistId, type AssistOptions } from './assist';
+import { landingLight, type LandingLight } from '../game/landingLight';
 import { cameraModeInfo, FlightCamera } from './camera';
 import { towerAvailable } from './cameraFraming';
 import * as assist from './controller/assist';
@@ -524,7 +525,14 @@ export class FlightController {
   /** Dev/test scenarios (URL ?scenario=): reposition the active vessel. */
   devScenario(name: string) { return scenarios.devScenario.call(this, this.systems, name); }
 
-  startAssist(id: AssistId) { return assist.startAssist.call(this, this.systems, id); }
+  startAssist(id: AssistId, opts?: AssistOptions) { return assist.startAssist.call(this, this.systems, id, opts); }
+
+  /** Day or night where Land here would touch down now (polled by the Flight assist app while it is open). */
+  landingLight(): LandingLight | null {
+    const wv = this.world.active;
+    if (!wv || wv.mode === 'prelaunch' || wv.state.situation !== 'flying' || wv.state.eva) return null;
+    return landingLight(this.world, wv);
+  }
 
   cancelAssist(msg = 'Assist cancelled') { return assist.cancelAssist.call(this, this.systems, msg); }
 

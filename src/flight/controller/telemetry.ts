@@ -18,14 +18,18 @@ import type { FlightController } from '../controller';
 import type { DockingTelemetry, Telemetry } from '../hud/Hud';
 import type { FlightControllerInternals } from './internals';
 
-import { AlertTracker } from '../alerts';
+import { AlertTracker, chuteStatus } from '../alerts';
 import { BurnTracker } from './burn';
 import { cross, normalize } from '../../util/vec3';
 import { warpTargets } from './warp';
 import { game } from '../../game/store';
 import { getTutorial } from '../../tutorial/runtime';
+import { sunElevation } from '../../game/landingLight';
 
-const cueStates = new WeakMap<FlightController, { vessel: string; body: string; signal: boolean; throttle: string | null; sas: boolean; soi: boolean; orbit: boolean; situation: string; staged: number }>();
+/** Below this height over dark ground, suggest night vision or lights once per descent, m. */
+const DARK_SUGGEST_AGL = 3000;
+
+const cueStates = new WeakMap<FlightController, { vessel: string; body: string; signal: boolean; throttle: string | null; sas: boolean; soi: boolean; orbit: boolean; situation: string; staged: number; darkTold: boolean }>();
 const throttleTrackers = new WeakMap<FlightController, ThrottleCueTracker>();
 const alertTrackers = new WeakMap<FlightController, AlertTracker>();
 const burnTrackers = new WeakMap<FlightController, BurnTracker>();
@@ -202,6 +206,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   const upward = dot(qRotate(st.orientation, v3(0, 1, 0)), normalize(rs.position));
   const brakingAcceleration = (currentStage?.thrust ?? 0) / st.mass * Math.max(0, upward);
   const noControl = !w.canControl(st) || (!!this.network && this.network.ownId !== st.id);
+  const chutes = chuteStatus(st.parts, st.telemetry.dynamicPressure, st.telemetry.staticPressure);
   const alerts = tracker.update({
     noControl,
     eva: !!st.eva,
@@ -213,7 +218,9 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     verticalSpeed: vs,
     gravity, brakingAcceleration, brakingFuelSeconds: currentStage?.burnTime ?? 0,
     horizontalSpeed: Math.sqrt(Math.max(0, surfaceSpeed * surfaceSpeed - vs * vs)),
-    chutes: st.parts.some((p) => p.chute?.phase === 'semi' || p.chute?.phase === 'full'),
+    chutes: chutes?.lamp === 'semi' || chutes?.lamp === 'full',
+    chuteDescent: chutes && chutes.openArea > 0 && st.telemetry.airDensity > 0 ? Math.sqrt(2 * st.mass * gravity / (st.telemetry.airDensity * chutes.openArea)) : Number.NaN,
+    chuteWaiting: chutes?.lamp === 'waiting' ? { q: st.telemetry.dynamicPressure, rating: chutes.rating } : null,
     gear: ground.gear,
     thrusting: ignited && this.input.state.throttle > 0,
     stageBurnTime: ignited ? (dvs.find((d) => d.stage === st.nextStage + 1)?.burnTime ?? Number.NaN) : Number.NaN,
@@ -244,13 +251,21 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   // An astronaut's every hop would announce a landing.
   if (previous && previous.situation === 'flying' && st.situation !== 'flying' && !st.eva) w.message(st.situation === 'splashed' ? `Splashed down on ${b.name}` : `Landed on ${b.name}`);
   const soi = changedBody || (previous?.soi ?? false);
-  cueStates.set(this, { vessel: st.id, body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation, staged: this.stagedCount });
+  // Night side close to the ground: the view is black apart from the lit vessel. Say how to see, once per descent.
+  const dark = flying && !st.eva && !this.nightVision && info.heightAboveTerrain < DARK_SUGGEST_AGL && sunElevation(u, wv.body, rs.position, w.ut) < 0;
+  if (dark && !previous?.darkTold) {
+    const lamps = st.parts.filter(p => p.def.modules.some(m => m.type === 'light'));
+    const lightsOff = lamps.length > 0 && !lamps.some(lightOn);
+    w.message(`Night side: press ${bindingLabel('nightVision')} for night vision${lightsOff ? ` or ${bindingLabel('toggleLights')} for the lights` : ''}`, 'info', 8);
+  }
+  const darkTold = dark || (!!previous?.darkTold && info.heightAboveTerrain < 2 * DARK_SUGGEST_AGL);
+  cueStates.set(this, { vessel: st.id, body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation, staged: this.stagedCount, darkTold });
   const propulsionTwr = ((ignited ? currentStage : dvs.find(d => d.thrust > 0))?.thrust ?? 0) / st.mass / gravity;
   const hint = this.hints.update({
     enabled: settings.flightHints && !this.network && !getTutorial() && !game.get().scenarioActive && !this.assist,
     bodyId: b.id, bodyName: b.name, terrainHeight: u.terrain(b.id).maxHeight, boundOrbit: orb.orbit.e < 1, verticalSpeed: vs,
     map: this.mapMode, node: this.mapMode && w.nodes.length > 0, soi, eva: !!st.eva,
-    landing: flying && info.heightAboveTerrain < 10000 && vs < -20 && ignited && !st.parts.some(p => p.chute?.phase === 'semi' || p.chute?.phase === 'full'),
+    landing: flying && info.heightAboveTerrain < 10000 && vs < -20 && ignited && chutes?.lamp !== 'semi' && chutes?.lamp !== 'full',
     flying,
     altitude: info.altitude,
     surfaceSpeed,
@@ -274,7 +289,12 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   const launchEvent = record?.events.find(e => e.kind === 'launch');
   const propulsionStage = ignited ? currentStage : dvs.find(d => d.thrust > 0);
   const suicide = flying && vs < -1 && internals.predictions.impact ? suicideBurn(info.heightAboveTerrain, vs, gravity, (propulsionStage?.thrust ?? 0) / st.mass) : null;
-  const met = record?.launched ? Math.max(0, w.ut - record.start - (launchEvent?.time ?? 0)) : null; // event times are record-relative
+  // Ground vehicles never "launch" (they never clear the ground) and an astronaut is a new vessel: their clocks run from
+  // rollout / the hatch. Rockets and aircraft keep the liftoff clock.
+  const surfaceMission = !!record && !record.launched && wv.mode !== 'prelaunch'
+    && (!!st.eva || (st.parts.some(p => p.def.modules.some(m => m.type === 'wheel')) && !st.parts.some(p => p.def.modules.some(m => m.type === 'liftingSurface'))));
+  const met = record?.launched ? Math.max(0, w.ut - record.start - (launchEvent?.time ?? 0)) // event times are record-relative
+    : surfaceMission ? Math.max(0, w.ut - record!.start) : null;
   // Inclination against the body's equator (the HUD's orbit strip), not the inertial reference plane.
   const h = cross(rs.position, rs.velocity);
   const pole = qRotate(u.ephem.bodyRotation(wv.body, w.ut), v3(0, 0, 1));
@@ -354,6 +374,8 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
       id: g, label: GROUP_LABELS[g], key: bindingLabel(g === 'abort' ? 'abort' : `actionGroup${g.slice(6)}` as 'actionGroup1'),
       count: groupBindings(st, g).length, on: !!st.groupState?.[g],
     })),
+    chute: chutes?.lamp ?? null,
+    chuteRating: chutes?.rating ?? 0,
     lights: st.parts.some(p => p.def.modules.some(m => m.type === 'light')) ? st.parts.some(p => p.def.modules.some(m => m.type === 'light') && lightOn(p)) : null,
     feel: {
       alerts,

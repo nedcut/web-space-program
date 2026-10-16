@@ -3,7 +3,7 @@ import type { Vec3 } from '../../util/vec3';
 import { add, cross, dot, length, scale, sub, v3 } from '../../util/vec3';
 import { qConj, qRotate } from '../../util/quat';
 import type { AtmosphereSample } from '../atmosphere/api';
-import type { LiftingSurfaceModule, ParachuteModule } from './types';
+import type { LiftingSurfaceModule, ParachuteModule, PartDef } from './types';
 import type { PartState, VesselEvent, VesselState } from './runtime';
 import { faceAreas, faceIndex } from './shapes';
 import { deflectionScale } from './tweaks';
@@ -118,15 +118,20 @@ export function computeExposedAreas(v: VesselState, shielding: FairingShielding 
   return out;
 }
 
+/** Whether an axial face (2 = +Y, 3 = -Y) is a blunt aeroshell: either face of a heat shield, a capsule's base. */
+export function bluntFace(def: PartDef, face: number): boolean {
+  return (def.bluntBase === true && face === 3) || def.modules.some(m => m.type === 'heatShield');
+}
+
 /**
- * Heat shields whose axial face is covered only by a spent stack decoupler (decouplers stay with the upper stage):
- * the shield is still the capsule's blunt face, so for drag the decoupler's open far face is folded into it.
- * Returns undefined when no shield qualifies (the common case), so `exposed` is used unchanged.
+ * Blunt faces (heat shields, capsule bases) covered only by a spent stack decoupler (decouplers stay with the upper
+ * stage): the face is still the capsule's blunt face, so for drag the decoupler's open far face is folded into it.
+ * Returns undefined when no face qualifies (the common case), so `exposed` is used unchanged.
  */
 export function bluntShieldExposure(v: VesselState, exposed: Map<number, number[]>): Map<number, number[]> | undefined {
   let out: Map<number, number[]> | undefined;
   for (const p of v.parts) {
-    if (!p.def.modules.some(m => m.type === 'heatShield')) continue;
+    if (!p.def.bluntBase && !p.def.modules.some(m => m.type === 'heatShield')) continue;
     for (const n of v.parts) {
       // Neighbour stacked on the shield, either way round, through an axial node.
       const childOfShield = n.parent === p.uid;
@@ -140,7 +145,7 @@ export function bluntShieldExposure(v: VesselState, exposed: Map<number, number[
       const dDir = n.def.attachNodes.find(a => a.id === otherNode)?.direction;
       if (!sDir || !dDir) continue;
       const sf = faceIndex(sDir), df = faceIndex(dDir), far = df ^ 1;
-      if (sf !== 2 && sf !== 3) continue;
+      if ((sf !== 2 && sf !== 3) || !bluntFace(p.def, sf)) continue;
       const shieldFull = faceAreas(p.def)[sf], farFull = faceAreas(n.def)[far];
       if (farFull <= 0 || (exposed.get(n.uid)?.[far] ?? 0) < 0.5 * farFull) continue;
       out ??= new Map([...exposed].map(([uid, a]) => [uid, [...a]]));
@@ -236,11 +241,11 @@ export function computeAeroForces(v: VesselState, ctx: AeroContext, loads?: Part
     }
 
     let at = v.cache.aeroCentre?.get(p.uid) ?? p.position;
-    // Heat shield leading: a blunt spherical segment. Its drag acts along the flow through the segment's sphere
-    // centre, well behind the face, so a capsule trims heat-shield first like the real thing (the per-part-centre
-    // model made every capsule fly apex-first, too fast for its parachute).
-    if (p.def.modules.some(m => m.type === 'heatShield')) {
-      const front = vp.y > 0 ? 2 : 3;
+    // Heat shield or capsule base leading: a blunt spherical segment. Its drag acts along the flow through the
+    // segment's sphere centre, well behind the face, so a capsule trims base first like the real thing (the
+    // per-part-centre model made every capsule fly apex-first, too fast for its parachute).
+    const front = vp.y > 0 ? 2 : 3;
+    if (bluntFace(p.def, front)) {
       const full = faceAreas(p.def)[front];
       const w = full > 0 && exposed[front] > 0.5 * full ? smoothstep(0.3, 0.7, Math.abs(vp.y) / sp) : 0;
       if (w > 0) {

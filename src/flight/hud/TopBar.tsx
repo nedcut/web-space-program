@@ -5,6 +5,16 @@ import { formatDate, formatSpeed } from '../../ui/format';
 import { WarpToControl } from './FeelHud';
 import { AppIcon } from './glyphs';
 import type { HudCallbacks, Telemetry } from './Hud';
+import type { ChuteLamp } from '../alerts';
+
+const CHUTE_LAMP: Record<ChuteLamp, { label: string; state: 'on' | 'off' | 'warn' | 'bad'; title: string }> = {
+  stowed: { label: 'CHUTE', state: 'off', title: 'stowed; they arm when their stage fires' },
+  armed: { label: 'CHUTE ARM', state: 'warn', title: 'armed; they open in thick enough air' },
+  waiting: { label: 'CHUTE WAIT', state: 'bad', title: 'armed but held shut: falling too fast for the canopy' },
+  semi: { label: 'CHUTE SEMI', state: 'on', title: 'reefed; full canopy low and slow' },
+  full: { label: 'CHUTE OPEN', state: 'on', title: 'fully open' },
+  cut: { label: 'CHUTE CUT', state: 'bad', title: 'torn away by the airflow' },
+};
 
 const CLOCK_KEY = 'wsp.hud.clock.v1';
 /** Locale formatting is slow; the warp level titles never change. */
@@ -83,12 +93,14 @@ export function Altimeter({ t, cb, imperial }: { t: Telemetry; cb: HudCallbacks;
   const custom = t.actionGroups.filter(g => g.id !== 'abort' && g.count > 0);
   const vessel = !t.eva && !t.noControl;
   const lamp = (id: string, label: string, state: 'on' | 'off' | 'warn' | 'bad' | 'na', title: string, onClick?: () => void) => (
-    <button key={id} type="button" className={`lamp ${state}`} title={title} disabled={!onClick || state === 'na'} onClick={onClick}>{label}</button>
+    <button key={id} type="button" className={`lamp ${state}`} data-lamp={id} title={title} disabled={!onClick || state === 'na'} onClick={onClick}>{label}</button>
   );
   return (
     <div className="alt-wrap">
       <div className="alt-lamps left">
         {lamp('gear', 'GEAR', t.gear === null ? 'na' : t.gear === 'moving' ? 'warn' : t.gear === 'down' ? 'on' : 'off', `Landing gear / legs (${bindingLabel('toggleGear')})${t.gear === null ? ' — none fitted' : `: ${t.gear}`}`, vessel ? cb.onToggleGear : undefined)}
+        {t.chute && lamp('chute', CHUTE_LAMP[t.chute].label, CHUTE_LAMP[t.chute].state,
+          `Parachutes: ${CHUTE_LAMP[t.chute].title}${t.chuteRating > 0 ? ` · open below ${(t.chuteRating / 1000).toFixed(0)} kPa of airflow` : ''}`)}
         {lamp('brakes', 'BRAKES', t.brakes === null ? 'na' : t.brakes ? 'bad' : 'off', `Wheel brakes (hold ${bindingLabel('brakes')})${t.brakes === null ? ' — no wheels' : ''}`)}
         {lamp('lights', 'LIGHTS', t.lights === null ? 'na' : t.lights ? 'on' : 'off', `Lights (${bindingLabel('toggleLights')})${t.lights === null ? ' — no lamps fitted' : ''}`, vessel ? cb.onToggleLights : undefined)}
         {lamp('night', 'NIGHT VIS', t.nightVision ? 'on' : 'off', `Night vision (${bindingLabel('nightVision')}): see the vessel when the sun is hidden`, cb.onToggleNightVision)}

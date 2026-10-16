@@ -48,6 +48,7 @@ export default function FlightScene() {
   const photo = usePhotoMode();
   const host = useRef<HTMLDivElement>(null);
   const ctrl = useRef<FlightController | null>(null);
+  const readLandingLight = useCallback(() => ctrl.current?.landingLight() ?? null, []);
   const multiplayer = game.get().multiplayer;
   const [networkReady, setNetworkReady] = useState(false);
   const audioRef = useRef<GameAudio | null>(null);
@@ -398,7 +399,7 @@ export default function FlightScene() {
               </Panel>
             ) : undefined,
             onboarding: quickStart && ready && !help && !paused && tele.onSurface && !tele.eva && !tele.mapMode ? <QuickStartCard onClose={() => { markHelpSeen(); setQuickStart(false); }} onHelp={() => { markHelpSeen(); setQuickStart(false); setHelp(true); }} /> : undefined,
-            assist: !tele.eva && !tele.noControl ? <AssistPanel active={tele.assist} onStart={(id) => ctrl.current?.startAssist(id)} onCancel={() => ctrl.current?.cancelAssist()} /> : undefined,
+            assist: !tele.eva && !tele.noControl ? <AssistPanel active={tele.assist} onStart={(id, opts) => ctrl.current?.startAssist(id, opts)} onCancel={() => ctrl.current?.cancelAssist()} landingLight={tele.onSurface ? undefined : readLandingLight} /> : undefined,
             assistActive: !!tele.assist,
             signal: c.world.commsSettings.enabled ? <SignalPanel world={c.world} /> : undefined,
             resources: (tele.mapMode || active?.state.parts.some(p => p.def.modules.some(m => ['drill', 'converter', 'surfaceScanner', 'surveyScanner'].includes(m.type))))

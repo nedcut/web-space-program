@@ -13,6 +13,7 @@ import { sub, v3, type Vec3 } from '../util/vec3';
 import { CraftEditor, craftStats, descendants, getStageList, type CraftStats, type LinkHit, type PartTransform, type SetAsidePiece, type Stage, type Subassembly } from './core';
 import { STOCK_CRAFTS } from './stockCrafts';
 import { computeStageStats, type StageStats } from './ui/dv';
+import type { HomeAir } from './descent';
 import { saveErrorText } from '../game/storageErrors';
 
 export const CATALOG = PART_CATALOG;
@@ -119,7 +120,7 @@ export class EditorSession {
   editor: CraftEditor;
   private listeners = new Set<() => void>();
   private snap!: SessionView;
-  private reference?: { preset: ReturnType<typeof game.get>['scalePreset']; universe: Universe; bodies: DvBodyOption[] };
+  private reference?: { preset: ReturnType<typeof game.get>['scalePreset']; universe: Universe; bodies: DvBodyOption[]; home: HomeAir | undefined };
   private dvBody = 'earth';
   private launchStats: { craft: CraftDef; stats: Map<number, StageStats> } | null = null;
   private tool: EditorTool = 'place';
@@ -234,7 +235,8 @@ export class EditorSession {
         for (const c of b.children) visit(c);
       };
       visit(universe.sunId);
-      this.reference = { preset, universe, bodies };
+      const earth = universe.body('earth');
+      this.reference = { preset, universe, bodies, home: earth.atmosphere ? { atmosphere: earth.atmosphere, gravity: earth.surfaceGravity } : undefined };
       if (!bodies.some(b => b.id === this.dvBody)) this.dvBody = 'earth';
     }
     return this.reference;
@@ -245,6 +247,11 @@ export class EditorSession {
     if (id === this.dvBody || !this.referenceUniverse().bodies.some(b => b.id === id)) return;
     this.dvBody = id;
     this.refresh();
+  }
+
+  /** Launch planet air for the pre-flight descent check (stable per scale preset). */
+  homeAir(): HomeAir | undefined {
+    return this.referenceUniverse().home;
   }
 
   /** Earth-relative stage stats for launch checks, whatever the readout body is. */

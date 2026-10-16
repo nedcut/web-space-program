@@ -14,7 +14,9 @@ export interface FlightDebrief {
   status: string;
   /** Short kicker matching the Flight Log arrival banner ("Back from flight · recovered"). */
   kicker: string;
-  maxAltitude: number;
+  /** Highest altitude above the launch body; null once the flight left its sphere of influence (the recorder's maximum
+   * then mixes altitudes over different bodies, e.g. the distance from Earth on the way to the Moon). */
+  maxAltitude: number | null;
   /** Most significant body reached and how ("Moon · landed"); null before liftoff. */
   furthest: string | null;
   duration: number;
@@ -75,7 +77,7 @@ export function buildDebrief(r: FlightRecord, opts: {
   return {
     reportId: r.id, name: r.name, outcome, status,
     kicker: `Back from flight · ${outcome === 'flying' ? 'in progress' : outcome}`,
-    maxAltitude: r.stats.maxAltitude,
+    maxAltitude: r.bodies.every(b => b === r.bodies[0]) ? r.stats.maxAltitude : null,
     furthest: furthestReach(r),
     duration: Math.max(0, (r.end ?? opts.ut) - r.start),
     science: opts.mode === 'sandbox' ? null : delta('science'),

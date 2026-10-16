@@ -940,7 +940,7 @@ export function planLandingStage(world: World, wv: WorldVessel, minStage = 0): L
 }
 
 /** Conic time when the coast first reaches radius `rStop` (searched over one period from `t0`), or null. */
-function timeToRadius(o: Orbit, t0: number, rStop: number): number | null {
+export function timeToRadius(o: Orbit, t0: number, rStop: number): number | null {
   const T = period(o);
   const span = Number.isFinite(T) ? T : 1e5;
   const step = Math.max(1, span / 400);
@@ -960,6 +960,9 @@ function timeToRadius(o: Orbit, t0: number, rStop: number): number | null {
   }
   return null;
 }
+
+/** Land's default deorbit target: periapsis this fraction of the body's radius below the datum. */
+export const DEORBIT_PERIAPSIS = -0.04;
 
 /**
  * Powered landing on an airless body from orbit:
@@ -1096,7 +1099,7 @@ export function landingController(world: World, opts: LandingOptions = {}): Auto
         phase = 'deorbit';
       }
       if (phase === 'deorbit') {
-        const peTarget = opts.deorbitPeriapsis ?? -0.04 * body.radius;
+        const peTarget = opts.deorbitPeriapsis ?? DEORBIT_PERIAPSIS * body.radius;
         const pe = periapsisRadius(o) - body.radius;
         const retro = scale(normalize(f.rs.velocity), -1);
         if (pe > peTarget) {

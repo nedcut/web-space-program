@@ -293,6 +293,8 @@ export interface PartDef {
   /** Attachment strength overrides, N and N m. The weaker endpoint wins. */
   breakingForce?: number;
   breakingTorque?: number;
+  /** Capsule whose base (-Y face) is a blunt aeroshell: trims base-first like a heat shield when it leads. */
+  bluntBase?: boolean;
   modules: PartModule[];
   /** Procedural mesh builder id (see src/render/parts). */
   mesh: string;

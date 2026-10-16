@@ -61,6 +61,7 @@
   color: #8193a6; background: #050c15d9; border: 1px solid rgba(155, 195, 222, .2); text-align: center;
 }
 .lamp.small { min-width: 18px; padding: 2px 4px; }
+.lamp[data-lamp="chute"] { min-width: 76px; }
 .lamp:disabled { cursor: default; }
 .lamp.on { color: #062317; background: #8cd5ba; border-color: #c7f2df; box-shadow: 0 0 10px #8cd5ba88; }
 .lamp.warn { color: #241600; background: var(--warn); border-color: #ffe0a0; box-shadow: 0 0 10px #f1c97b88; }
@@ -324,3 +325,8 @@ html[data-ui-hidden='true'] :is(.tutorial-panel, .scenario-flight, .multiplayer-
 .pause-grid .btn { padding-inline: 8px; }
 .pause-leave { margin-top: 4px; }
 .pause-note { font-size: 11px; color: var(--text-dim); text-align: center; }
+
+/* Flight assist: day or night at the Land-here touchdown. */
+.assist-light { display: flex; flex-direction: column; gap: 3px; margin: -1px 0 3px; font-size: 11px; color: var(--text-dim); }
+.assist-light[data-day="false"] > span:first-child { color: var(--warn); }
+.assist-light-none { font-size: 10.5px; }

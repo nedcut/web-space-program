@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AlertTracker, alertConditions, type AlertInput } from '../src/flight/alerts';
+import { AlertTracker, alertConditions, chuteStatus, type AlertInput } from '../src/flight/alerts';
+import { buildVessel } from '../src/sim/vessel/assembly';
 import { HintTracker, hintFor, type HintId, type HintInput } from '../src/flight/hints';
 import { situationBanner } from '../src/flight/situation';
 import { orbitMarkerFrame } from '../src/flight/controller/navball';
@@ -7,7 +8,7 @@ import { sasTargetDirection } from '../src/sim/vessel/sas';
 import { dot } from '../src/util/vec3';
 import { WarpDriver, warpTargets } from '../src/flight/controller/warp';
 import { PART_CATALOG } from '../src/data/parts';
-import { buildOrbiter } from '../src/editor/stockCrafts';
+import { buildOrbiter, buildSoundingRocket } from '../src/editor/stockCrafts';
 import { DEFAULT_START_UT } from '../src/game/store';
 import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
@@ -44,6 +45,44 @@ describe('flight cautions', () => {
     expect(alertConditions({ ...calm, agl: 100, verticalSpeed: -7, chutes: true, gear: 'down' })).toEqual([]);
     expect(alertConditions({ ...calm, flying: false, agl: 0, verticalSpeed: -20 })).toEqual([]);
     expect(alertConditions({ ...calm, eva: true, noControl: true, power: 0 })).toEqual([]);
+  });
+
+  it('treats deployed parachutes as braking, so a normal canopy descent raises no sink-rate caution', () => {
+    // Reefed canopy over the sea at 1.6 km, 60 m/s down: the full canopy will settle at 8 m/s.
+    expect(alertConditions({ ...calm, agl: 1600, verticalSpeed: -60, horizontalSpeed: 5, chutes: true, chuteDescent: 8, thrusting: false })).toEqual([]);
+    // A canopy too small for the craft still warns.
+    expect(alertConditions({ ...calm, agl: 1500, verticalSpeed: -150, chutes: true, chuteDescent: 25 }).map(a => `${a.id}:${a.level}`)).toEqual(['terrain:warn']);
+    const t = new AlertTracker();
+    expect(t.update({ ...calm, agl: 1500, verticalSpeed: -150 }, 0).map(a => a.id)).toEqual(['terrain']);
+    expect(t.update({ ...calm, agl: 1400, verticalSpeed: -140, chutes: true, chuteDescent: 8 }, 0.1)).toEqual([]);
+  });
+
+  it('says why an armed parachute is not opening', () => {
+    expect(alertConditions({ ...calm, chuteWaiting: { q: 48_400, rating: 25_000 } })).toEqual([{ id: 'chute', level: 'warn', text: 'CHUTE WAITING · TOO FAST 48 / 25 kPa' }]);
+    const t = new AlertTracker();
+    expect(t.update({ ...calm, chuteWaiting: { q: 26_000, rating: 25_000 } }, 0).map(a => a.id)).toEqual(['chute']);
+    expect(t.update({ ...calm, chuteWaiting: null }, 0.1)).toEqual([]);
+  });
+
+  it('keeps a normal first ascent (about 9.7 g at burnout) amber, with a throttle hint while thrusting', () => {
+    expect(alertConditions({ ...calm, gForce: 9.7 })).toEqual([{ id: 'g', level: 'warn', text: 'HIGH G 9.7 g · THROTTLE DOWN' }]);
+    expect(alertConditions({ ...calm, gForce: 9.7, thrusting: false })[0].text).toBe('HIGH G 9.7 g');
+    expect(alertConditions({ ...calm, gForce: 10.5 })[0].level).toBe('bad');
+  });
+
+  it('summarises the parachutes for the HUD lamp', () => {
+    const v = buildVessel(buildSoundingRocket(), PART_CATALOG);
+    const chute = v.parts.find(p => p.chute)!.chute!;
+    expect(chuteStatus(v.parts, 0, 101325)).toEqual({ lamp: 'stowed', rating: 0, openArea: 0 });
+    chute.phase = 'armed';
+    expect(chuteStatus(v.parts, 1000, 2000)?.lamp).toBe('armed');
+    expect(chuteStatus(v.parts, 48_000, 2000)?.lamp).toBe('armed'); // too thin to open yet
+    expect(chuteStatus(v.parts, 48_000, 60_000)).toEqual({ lamp: 'waiting', rating: 25_000, openArea: 0 });
+    chute.phase = 'semi';
+    expect(chuteStatus(v.parts, 20_000, 60_000)).toEqual({ lamp: 'semi', rating: 0, openArea: 420 });
+    chute.phase = 'cut';
+    expect(chuteStatus(v.parts, 20_000, 60_000)?.lamp).toBe('cut');
+    expect(chuteStatus(buildVessel({ ...buildSoundingRocket(), parts: buildSoundingRocket().parts.filter(p => p.partId !== 'chute-main') }, PART_CATALOG).parts, 0, 0)).toBeNull();
   });
 
   it('holds alerts briefly so threshold chatter does not flicker, and orders warnings first', () => {
