@@ -1793,3 +1793,41 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   the launch body's sphere of influence: the recorder's maximum mixes bodies (37.5 Mm was the distance from Earth on
   the way to the Moon); "Furthest" already says where the craft went. (d) The map's landing-prediction toggle is
   hidden in a stable orbit (periapsis above air and terrain), where there is nothing to predict.
+
+## Near-target navball stability (2026-10-16, op/navfix)
+
+- **Cause:** the flight navball interpolated the active vessel's position back between physics steps, then
+  subtracted it from the target's current physics position (including a selected port face). The common
+  orbital translation across those different instants dwarfed a 65 m docking separation and changed with
+  the render accumulator. Map view used both current positions, so its marker stayed steady. This was
+  mixed sample times, not float32 precision or a floating-origin conversion.
+- **Decision:** retain a reference to the active vessel's current physics position before the temporary
+  interpolation swap, and use that reference for the target/anti-target direction. Target positions and
+  velocities now use the same instant as the 10 Hz telemetry and map. Retain the existing interpolated
+  attitude/local horizon, exact-state map/multiplayer paths and restoration in `finally`. Do not add
+  smoothing or interpolate the target/fleet: the physics-time line of sight advances only millimetres per
+  step at docking speeds, and the fix adds no per-frame objects, ephemeris calls or fleet traversal.
+  The navball interpolation wrapper moves into `controller/navball.ts` so headless tests exercise the
+  same entry point used by the controller; `controller.ts` only forwards to it.
+- **Regression:** six actual-World rendezvous cases at 142 km Earth altitude, 65 m initial separation and
+  0.5 m/s relative speed: vessel/selected-port targets at 60/120/144 Hz. Before the fix all six fail with
+  73–80 degree target jumps; afterward the maximum step is 0.00357 degrees and flight/map disagreement is
+  below 0.000002 degrees. Prograde/retrograde agree with Float64 relative velocity within 0.000002 degrees;
+  anti-target points opposite target, and the original position/orientation/velocity references survive
+  each navball sample. Relative-velocity math needed no change.
+- **Browser evidence:** CDP Chrome at 1470×920, Medium, 65–70 m range and 0.49–0.50 m/s relative speed.
+  Maximum consecutive target-direction step: flight 63.4316 → 0.003504 degrees; flight after returning from
+  map 60.1735 → 0.002950 degrees; map stays 0.003229 → 0.003200 degrees. Target-prograde maximum step stays
+  below 0.003 degrees in every capture. These are direction-stability measurements, not frame-time claims.
+  No page errors. Raw frame sequences, summaries and nine screenshots per build:
+  `C:\wsp-tools\shots\navfix\{before,after}*`; rerunnable driver `C:\wsp-tools\drv\navfix.mjs`.
+  Headless failure/pass logs and builds: `~/.t3/projects/wsp-traces/navfix/`.
+- **Cost check:** five alternating before/after CDP runs, four-second windows after three seconds of settling,
+  RTX 3060 Ti / D3D11, 1470×920 Medium. Navball CPU median 0.229 → 0.216 ms/frame (ranges 0.215–0.256 /
+  0.189–0.226); whole-frame CPU 4.164 → 4.218 ms (3.979–4.844 / 4.078–4.451). Overlapping ranges: no measurable
+  regression or overall speedup claim. Main-scene draws remain 61. Renderer submission and planets dominate
+  whole-frame CPU.
+  All ten runs have zero page errors. Raw samples/summary and the rerunnable driver are in the trace folder;
+  the capture is 60 Hz on this shared machine, not an M-series/120 Hz performance result.
+- **Limits:** M-series, Zen/Firefox and live 120 Hz GPU pacing are unverified; headless 120/144 Hz cases test
+  direction stability, not display performance. No PROGRESS.md edits, push, deployment or merge to main.
