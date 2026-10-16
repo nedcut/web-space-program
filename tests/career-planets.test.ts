@@ -8,7 +8,7 @@ import { STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { buildCinderbloom } from '../src/editor/stock/space';
 import { buildPetrel } from '../src/editor/stock/probes';
 import { removeEmptyStages } from '../src/editor/core';
-import { executeNode, planTransferToBody, runAutopilot } from '../src/game/autopilot';
+import { coastUntil, executeNode, planTransferToBody, runAutopilot } from '../src/game/autopilot';
 import { generateContracts, newProgression } from '../src/sim/science/progression';
 import { careerScaleMultiplier } from '../src/sim/bodies/scale';
 import { nextGoal, researchFor } from '../src/ui/hub/nextGoal';
@@ -55,6 +55,23 @@ describe('interplanetary "go now"', () => {
     const plan = planTransferToBody(w, 'venus', { periapsisAltitude: pe, departure: now.departure })!;
     expect(plan.node.time - w.ut).toBeLessThan(86400);
     expect(plan.dv).toBeLessThan(now.dv * 1.1);
+  }, 240_000);
+});
+
+describe('mid-cruise transfer', () => {
+  it('re-targeting Mars from solar orbit keeps the periapsis out of the air, like the departure plan', () => {
+    const w = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT + 30 * 86400, 'sandbox');
+    w.launch(buildPetrel('standard'));
+    expect(toOrbit(w, new Set(), 85000, 2)).toBeNull();
+    const first = planTransferToBody(w, 'mars')!;
+    const burn = executeNode(w, first.node, {});
+    expect(runAutopilot(w, burn, { maxTime: first.node.time - w.ut + 1e4 }), burn.error).toBe(true);
+    coastUntil(w, w.ut + 120 * 86400, { stopOnSoi: true });
+    expect(w.active!.body).toBe('sun');
+    // "Transfer → Mars" in the planner while cruising: it used to aim at half the atmosphere height (31 km).
+    const fix = planTransferToBody(w, 'mars')!;
+    expect(fix.dv).toBeLessThan(50);
+    expect(fix.periapsisAltitude).toBeGreaterThan(w.universe.body('mars').atmosphere!.height);
   }, 240_000);
 });
 
