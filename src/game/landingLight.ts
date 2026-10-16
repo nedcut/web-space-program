@@ -4,8 +4,13 @@ import { DEORBIT_PERIAPSIS } from './autopilot';
 import type { Universe } from './universe';
 import type { World, WorldVessel } from './world';
 
-/** Sun at least this high (rad) counts as daylight when looking for a lit touchdown. */
+/** Sun at least this high (rad) at the predicted touchdown reads as daylight. */
 export const DAYLIGHT_ELEVATION = (8 * Math.PI) / 180;
+/**
+ * A wait aims this high: the braking burn lands a few degrees of arc short of the coast's surface crossing, back
+ * toward the night it came from (measured: predicted 9.4°, landed at 5.7°), and the descent itself should be lit.
+ */
+const WAIT_ELEVATION = (15 * Math.PI) / 180;
 /** Deorbit start times tried per orbit when looking for a lit touchdown. */
 const SAMPLES = 96;
 
@@ -49,7 +54,7 @@ export function landHereTouchdown(world: World, wv: WorldVessel, t0 = world.ut):
 export interface LandingLight {
   /** Sun elevation at the predicted touchdown, rad. */
   elevation: number;
-  /** Seconds to wait before starting the descent so it touches down in daylight; null if no start in the next orbit does. */
+  /** Seconds to wait before starting the descent so it touches down well inside daylight; null if no start in the next orbit does. */
   daylightWait: number | null;
 }
 
@@ -64,7 +69,7 @@ export function landingLight(world: World, wv: WorldVessel): LandingLight | null
   for (let i = 1; i <= SAMPLES; i++) {
     const t0 = world.ut + (i * T) / SAMPLES;
     const td = landHereTouchdown(world, wv, t0);
-    if (td && sunElevation(u, wv.body, td.position, td.time) >= DAYLIGHT_ELEVATION) return { elevation, daylightWait: t0 - world.ut };
+    if (td && sunElevation(u, wv.body, td.position, td.time) >= WAIT_ELEVATION) return { elevation, daylightWait: t0 - world.ut };
   }
   return { elevation, daylightWait: null };
 }

@@ -7,7 +7,7 @@ import { DEFAULT_START_UT } from '../src/game/store';
 import { placeInCircularOrbit } from '../src/game/scenarios';
 import { runAutopilot } from '../src/game/autopilot';
 import { createAssist } from '../src/flight/assist';
-import { landHereTouchdown, landingLight, sunElevation } from '../src/game/landingLight';
+import { DAYLIGHT_ELEVATION, landHereTouchdown, landingLight, sunElevation } from '../src/game/landingLight';
 import { neutralInput } from '../src/sim/vessel';
 import { dot, normalize } from '../src/util/vec3';
 
@@ -43,6 +43,6 @@ describe('Land here: day or night at the touchdown', () => {
     expect(runAutopilot(world, land, { maxTime: 1e5 }), land.error).toBe(true);
     expect(world.ut - start).toBeGreaterThan(daylightWait!);
     expect(world.active!.state.situation).toBe('landed');
-    expect(sunElevation(world.universe, 'moon', world.relativeState(world.active!).position, world.ut)).toBeGreaterThan(0);
+    expect(sunElevation(world.universe, 'moon', world.relativeState(world.active!).position, world.ut)).toBeGreaterThan(DAYLIGHT_ELEVATION);
   }, 240_000);
 });

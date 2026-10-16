@@ -1778,7 +1778,7 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   assist's own deorbit (retrograde to `DEORBIT_PERIAPSIS`, now shared with `landingController`) meets the datum,
   analytically on the post-burn conic, and the Sun's elevation there. The Flight assist app shows "Touchdown: night ·
   Sun −46°" and, when dark, "Wait 6m 43s, land in daylight": the Land program coasts on rails until a descent
-  started then touches down with the Sun ≥ 8°, then lands. The search samples 96 deorbit start times over one
+  started then touches down with the Sun ≈ 15° (it lands ≈5° short of the coast's crossing, toward the night: measured 11.7°), then lands. The search samples 96 deorbit start times over one
   orbit (≈1 ms). It runs only while the app is open (1 Hz poll from the panel), never per frame. Measured against
   the real assist from four orbit phases: 2.0–3.4° from the actual touchdown, Sun elevation within 3.4°. Not
   done: Earthshine or a brighter night ambient on airless bodies (the audit's 2b, M-sized render work).
