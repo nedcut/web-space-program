@@ -3,6 +3,7 @@
  * layout, panels opening or moving), at most a few times a second, never per marker per frame.
  */
 import type { LabelBox } from './presentation';
+import { layoutScale } from '../../util/layoutPoint';
 
 const MIN_SCAN_MS = 250;
 
@@ -49,7 +50,8 @@ export class HudRectCache {
     }
     this.count = 0;
     if (!this.root) return 0;
-    const o = origin.getBoundingClientRect(), list = this.root.querySelectorAll(this.selector);
+    // Rects come back in screen px; the map works in `origin` layout px (they differ under the UI scale setting).
+    const o = origin.getBoundingClientRect(), s = layoutScale(o.width, origin.clientWidth), list = this.root.querySelectorAll(this.selector);
     for (let i = 0; i < list.length; i++) {
       const el = list[i], r = el.getBoundingClientRect();
       let x0 = r.left, y0 = r.top, x1 = r.right, y1 = r.bottom;
@@ -59,9 +61,9 @@ export class HudRectCache {
         const c = clip.getBoundingClientRect();
         x0 = Math.max(x0, c.left); y0 = Math.max(y0, c.top); x1 = Math.min(x1, c.right); y1 = Math.min(y1, c.bottom);
       }
-      if (x1 - x0 < 2 || y1 - y0 < 2) continue;
+      if (x1 - x0 < 2 * s || y1 - y0 < 2 * s) continue;
       const box = this.rects[this.count] ??= { x: 0, y: 0, width: 0, height: 0 };
-      box.x = x0 - o.left; box.y = y0 - o.top; box.width = x1 - x0; box.height = y1 - y0;
+      box.x = (x0 - o.left) / s; box.y = (y0 - o.top) / s; box.width = (x1 - x0) / s; box.height = (y1 - y0) / s;
       this.count++;
     }
     return this.count;

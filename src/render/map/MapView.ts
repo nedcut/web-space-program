@@ -37,6 +37,7 @@ import { LABEL_SHADOW, cssHex } from './markerGlyphs';
 import { setPosition, setStyle } from './styleWriter';
 import { nodeClearSpot } from './hudAvoid';
 import { HudRectCache } from './hudRects';
+import { toLayoutPoint } from '../../util/layoutPoint';
 import { SurfaceLayers, type BiomeTarget, type LegendEntry } from './surfaceLayers';
 import type { BiomeMap } from '../../sim/science/biomeMap';
 
@@ -1205,10 +1206,10 @@ export class MapView {
   attachControls(el: HTMLElement, minDistance: () => number, enabled: () => boolean = () => true) {
     this.element = el;
     const local = (e: MouseEvent) => {
-      const r = el.getBoundingClientRect();
-      this.pointer.x = e.clientX - r.left; this.pointer.y = e.clientY - r.top;
+      // Layout px (the UI scale setting CSS-scales the app), the units the map projects into.
+      toLayoutPoint(el, e.clientX, e.clientY, this.pointer);
       this.pointer.clientX = e.clientX; this.pointer.clientY = e.clientY;
-      this.pointer.inside = pointerOnMap(el, e.target, this.pointer.x, this.pointer.y, r.width, r.height);
+      this.pointer.inside = pointerOnMap(el, e.target, this.pointer.x, this.pointer.y, el.clientWidth, el.clientHeight);
       return this.pointer;
     };
     const down = (e: PointerEvent) => {

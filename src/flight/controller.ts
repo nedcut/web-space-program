@@ -28,6 +28,7 @@ import { MultiplayerClient, type MultiplayerConfig } from '../net/client';
 import { RenderPipeline, getQuality, type QualityId } from '../render/core';
 import { compileInSlices } from '../render/core/compileInSlices';
 import { offscreenWarmup } from '../render/core/offscreenWarmup';
+import { toLayoutPoint } from '../util/layoutPoint';
 import type { ExtraOrbit } from '../render/map/MapView';
 import { MapView } from '../render/map/MapView';
 import { FlightMap } from './map/FlightMap';
@@ -665,8 +666,7 @@ export class FlightController {
     let start: { x: number; y: number; button: number; touch: boolean } | null = null;
     let timer = 0;
     const emit = (cx: number, cy: number) => {
-      const r = el.getBoundingClientRect();
-      const uid = this.pickPart(cx - r.left, cy - r.top);
+      const p = toLayoutPoint(el, cx, cy), uid = this.pickPart(p.x, p.y);
       if (uid !== null) this.partPickListeners.forEach(fn => fn(uid));
     };
     const down = (e: PointerEvent) => {
