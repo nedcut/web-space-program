@@ -1803,3 +1803,41 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
 - GPU evidence: CDP Chrome on RTX 3060 Ti, Medium, 1470×900, tutorial docking lesson: the normal Flight assist driver latched the two 15-part Tenders into one 30-part vessel in about 155 simulated seconds, using 5.9301 kg monopropellant. Screenshots: `C:\wsp-tools\shots\dockassist\01-before.png`, `02-Lining-up.png`, `02-Closing.png`, `03-docked.png`. A fresh final-build run (`04-final-controls.png`, `05-manual-cancel.png`, `final.json`) verifies manual port alignment, automatic SAS/RCS indicators and actual L-key cancellation with no page exceptions. The first driver's extra restart probe clicked before the new target telemetry had settled and timed out; the separate fresh-state check passes. HTTP-preview Chrome emits its expected untrustworthy-origin COOP warning.
 - Cost evidence (one live docking run, shared machine): 9,286 program-update calls took 109.8 ms in total (11.82 µs/call); five adjacent five-second windows have median 12.42 µs/call, range 8.56–13.77. These include cached calls between actual 10 Hz guidance samples. Timer granularity and concurrent test jobs limit the measurement; this is an observed controller cost, not a platform speedup or a 120 Hz guarantee. Before/early-approach draws stay at 61; early approach CPU averages 3.24–3.98 ms/frame and GPU 1.05–1.10 ms. The latch changes geometry (53 draws afterward), so before/after total frame time is not a paired performance comparison. Manual port-frame sampling also uses the existing 10 Hz telemetry cadence and cached frame references between samples. M-series/Zen/Firefox/120 Hz remain unverified.
 - Final checks pass: `npm run lint`, `npx tsc --noEmit`, `npx vitest run --maxWorkers=2` (220 files, 2,046 passed, one skipped; 899.21 s with concurrent worktree suites), and `npm run build`. Focused follow-ups pass all 11 docking tests plus multiplayer protocol and assist hand-back tests. Logs are in `~/.t3/projects/wsp-traces/dockassist/`. `git merge main` is up to date; no PROGRESS.md edits, pushes or main merges. Preview port 5871 is stopped; the CDP contexts are closed and no browser profile directories were created.
+
+## Loaded vessel contact (2026-10-16, op/shipcontact)
+
+- Resolve loaded non-EVA vessels after their rigid integration and before the docking field. Reject vessel spheres,
+  then part spheres, then use SAT over the existing box / octagonal frustum hull points (face and edge-cross-edge
+  axes). Work in float64 relative to one COM; never form heliocentric hull vertices. Equal/opposite impulses share
+  one contact point and include both inertias; restitution is 0.05, friction 0.35, recovery is 15% of penetration
+  beyond 2 mm per step, capped at 0.5 m/s. This is discrete low-speed contact, without new crash destruction.
+- Only free, same-size port pairs inside the existing capture distance/angle/speed envelope bypass contact. Other
+  hulls still block them. Disarmed facing port pairs can drift apart. World undocking and staging also register
+  sibling separation grace until their bounding spheres part once: split hardware can inherit overlapping coarse
+  bounds (notably the Packmule rover beside its carrier's gear). Grace is transient, pair-specific and does not
+  suppress collisions with other vessels. Open cargo bays omit their filled-volume proxy; deployed door/rail
+  geometry is not modeled by this solver. Other parts retain their catalogue collision geometry.
+- Shape hulls cache once; vectors, scalar slots and the World's filtered vessel array are reused. Scalar results
+  pass through a Float64Array to avoid V8 number boxing. Node heap sampling after 20k warmup calls found no sampled
+  solver allocation over 10k calls with overlapping 15-part Tenders (512-byte sampling interval).
+- Contact tests cover linear/angular momentum, rotated boxes/frusta, orbital precision, distant rejection,
+  penetration recovery, aligned 0.3 m/s docking, a 53-degree bump, undocking, re-contact after sibling clearance,
+  open-bay payload release and the World hook. A separate checkout combined dockassist's implementation with
+  collision: its latest eleven tests passed, including side-port auto-docking from 65 m and 500 m.
+- Real GPU evidence: CDP Chrome / RTX 3060 Ti, Medium, 1470 x 900, tutorial docking scene. A scripted 53-degree
+  0.3 m/s nudge bumps at about 0.5 s; relative speed becomes 0.124 m/s and the faces part without merging.
+  Screenshots/trace: `C:\wsp-tools\shots\shipcontact\`; logs/profiles: `~/.t3/projects/wsp-traces/shipcontact/`.
+  These measurements do not establish M-series, Zen/Firefox or 120 Hz performance.
+- Performance (`scripts/bench/vessel-contact.ts`, Node 24, busy 12-core WSL host, nine samples): active craft
+  plus 0 / 1 / 2 neighbours at 60 m spacing costs 11 / 40 / 156 ns per solver call (ranges 8-39 / 26-72 / 90-270 ns).
+  One box-face normal/friction impulse costs 3.36 us (2.24-3.80); deeply overlapping 15-part Tenders cost 0.65 ms
+  (0.58-0.99). A separate CPU profile identifies SAT axis projection as the contact stress limiter. Full World.tick
+  physics with those separated fleets costs 213 / 364 / 470 us per step (ranges 188-446 / 263-379 / 444-616 us).
+  Solver microbenchmarks exclude fleet collection and existing integration/docking; no whole-frame speedup is claimed.
+- Checks before the final main merge pass: `npm run lint`, `npx tsc --noEmit`, `npx vitest run --maxWorkers=2` (220 files;
+  2,051 tests passed, one skipped; 623 s) and `npm run build`. The final main merge adds dockassist; combined tests are recorded below. Preview stopped.
+  No PROGRESS.md changes, push, deployment or merge into main.
+- Final main merge (`44e71255`, dockassist) required only an append-only DECISIONS conflict resolution; both
+  sections are retained. Merged source is byte-identical to the separately verified integration snapshot
+  `09f621f4`. Post-merge lint, typecheck and build pass, plus 105 tests across nine contact, docking, station,
+  SAS, assist hand-back and multiplayer files. Full-suite figures above describe the pre-merge run.
