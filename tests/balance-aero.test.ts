@@ -46,11 +46,18 @@ describe('launch stability advisory', () => {
     const withoutChutes = ['stock-swift', 'stock-hearthlight', 'stock-longreach', 'stock-daybreak', 'stock-alembic', 'stock-skipjack', 'stock-saltstreak', 'stock-packmule'];
     // Rovers drive on their wheels: no engine at all.
     const wheelsOnly = ['stock-trekker'];
+    // The Cricket hover rig's capsule sits on its tank: flown high, it would fall nose first too fast for its chute.
+    const fallsTooFast = ['stock-cricket'];
     for (const stock of STOCK_CRAFTS) {
       const c = stock.build();
-      const first = computeStageStats(c, PART_CATALOG, new Universe(stock.scale).body('earth')).get(0);
-      const expected = [...(wheelsOnly.includes(stock.id) ? ['first-engine'] : []), ...(c.type === 'VAB' && first && first.twrAsl < 1 ? ['twr'] : []), ...(withoutChutes.includes(stock.id) ? ['chute'] : [])];
-      expect(preflightChecks(c, PART_CATALOG, first).map(c => c.id), stock.id).toEqual(expected);
+      const earth = new Universe(stock.scale).body('earth');
+      const first = computeStageStats(c, PART_CATALOG, earth).get(0);
+      const expected = [...(wheelsOnly.includes(stock.id) ? ['first-engine'] : []), ...(c.type === 'VAB' && first && first.twrAsl < 1 ? ['twr'] : []), ...(withoutChutes.includes(stock.id) ? ['chute'] : []),
+        ...(fallsTooFast.includes(stock.id) ? ['descent'] : [])];
+      const checks = preflightChecks(c, PART_CATALOG, first, { atmosphere: earth.atmosphere!, gravity: earth.surfaceGravity });
+      expect(checks.filter(c => !c.note).map(c => c.id), stock.id).toEqual(expected);
+      // Notes (not problems): only the crewed burnout g-load.
+      expect(checks.filter(c => c.note).every(c => c.id === 'crew-g'), stock.id).toBe(true);
       if (expected.includes('twr')) expect(first!.twrAsl).toBeLessThan(1);
       if (withoutChutes.includes(stock.id)) expect(c.parts.some(p => PART_CATALOG.get(p.partId)!.modules.some(m => m.type === 'parachute'))).toBe(false);
     }
