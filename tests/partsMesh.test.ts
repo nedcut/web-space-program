@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { PART_DEFS, findModule, landingLegLayout } from '../src/data/parts';
 import { MESH_BUILDERS, buildPartMesh, getExhaustAnchors, setPartDeploy } from '../src/render/parts';
+import { buildJetEngine } from '../src/render/parts/builders/aircraft';
 import type { PartDef } from '../src/sim/vessel/types';
 
 function triCount(o: THREE.Object3D): number {
@@ -28,6 +29,26 @@ function coreBounds(def: PartDef, o: THREE.Object3D): THREE.Box3 {
   };
   visit(o);
   return box;
+}
+
+/** Count front faces whose normal points away from (out) or towards (in) the part axis (Y). */
+function radialFacing(m: THREE.Mesh): { out: number; in: number } {
+  const g = m.geometry;
+  const p = g.getAttribute('position');
+  const idx = g.index!;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const n = { out: 0, in: 0 };
+  for (let t = 0; t < idx.count; t += 3) {
+    a.fromBufferAttribute(p, idx.getX(t));
+    b.fromBufferAttribute(p, idx.getX(t + 1));
+    c.fromBufferAttribute(p, idx.getX(t + 2));
+    const fn = new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a)).normalize();
+    const ctr = a.add(b).add(c).divideScalar(3);
+    const radial = (fn.x * ctr.x + fn.z * ctr.z) / Math.max(1e-9, Math.hypot(ctr.x, ctr.z));
+    if (radial > 0.1) n.out++;
+    else if (radial < -0.1) n.in++;
+  }
+  return n;
 }
 
 describe('part meshes (headless)', () => {
@@ -125,5 +146,19 @@ describe('part meshes (headless)', () => {
     expect(byId('fairing-1').getObjectByName('fairingPanel2')).toBeUndefined();
     expect(byId('fairing-3').getObjectByName('fairingPanel2')?.userData.fairingPanel).toBeDefined();
     expect(byId('leg-stilt').getObjectByName('legUpper')).toBeDefined();
+  });
+
+  it('jet engine shells face outward and duct/nozzle interiors face into the opening', () => {
+    for (const id of ['jet-kittiwake', 'jet-shrike']) {
+      const root = buildJetEngine(PART_DEFS.find((p) => p.id === id)!);
+      for (const name of ['cowl', 'core', 'body', 'reheat', 'bypassDuct', 'nozzle', 'liner']) {
+        const m = root.getObjectByName(name) as THREE.Mesh | undefined;
+        if (!m) continue;
+        const f = radialFacing(m);
+        const shell = ['cowl', 'core', 'body', 'reheat'].includes(name);
+        expect(shell ? f.in : f.out, `${id} ${name} ${JSON.stringify(f)}`).toBe(0);
+        expect(shell ? f.out : f.in, `${id} ${name}`).toBeGreaterThan(0);
+      }
+    }
   });
 });

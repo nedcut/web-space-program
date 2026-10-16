@@ -40,23 +40,27 @@ export function buildJetEngine(def: PartDef): THREE.Object3D {
   if (!afterburner) {
     // Fat turbofan nacelle: cowl, core cowl, and a short hot nozzle with a centre plug.
     const cowlEnd = yB + h * 0.32;
-    const cowl: Profile = [[R * 0.97, yT - 0.06], [R, yT - 0.2], [R, cowlEnd + 0.25], [R * 0.93, cowlEnd + 0.04], [R * 0.9, cowlEnd]];
+    const cowl: Profile = [[R * 0.9, cowlEnd], [R * 0.93, cowlEnd + 0.04], [R, cowlEnd + 0.25], [R, yT - 0.2], [R * 0.97, yT - 0.06]];
     root.add(mk(lathe(cowl, { segments: 56, tile: 0.8 }), M.satinWhite(), 'cowl'));
-    root.add(mk(lathe([[R * 0.9, cowlEnd], [R * 0.86, cowlEnd], [R * 0.86, cowlEnd + 0.02]], { segments: 56 }), M.darkMetal()));
+    // Bypass duct: fan-exit face, inner cowl wall and trailing lip, all facing out of the duct.
+    const duct: Profile = [[R * 0.78, cowlEnd + 0.4], [R * 0.86, cowlEnd + 0.4], [R * 0.86, cowlEnd], [R * 0.9, cowlEnd]];
+    root.add(mk(lathe(duct, { segments: 56 }), M.darkMetal(), 'bypassDuct'));
     // Accent band.
     root.add(mk(cylinder(R + 0.004, R + 0.004, 0.12, { segments: 56, caps: false, y: yT - 0.45 }), M.accent('teal')));
     // Core cowl down to the nozzle.
-    const core: Profile = [[R * 0.78, cowlEnd + 0.02], [R * 0.74, yB + 0.22], [re, yB + 0.04], [re, yB]];
+    const core: Profile = [[re, yB], [re, yB + 0.04], [R * 0.74, yB + 0.22], [R * 0.78, cowlEnd + 0.4]];
     root.add(mk(lathe(core, { segments: 48 }), M.titanium(), 'core'));
-    root.add(mk(lathe([[re, yB], [re * 0.92, yB], [re * 0.92, yB + 0.12]], { segments: 40 }), M.soot()));
+    // Nozzle interior: turbine face around the plug, inner wall, exit lip.
+    const nozzle: Profile = [[re * 0.42, yB + 0.35], [re * 0.85, yB + 0.3], [re * 0.92, yB + 0.12], [re * 0.92, yB], [re, yB]];
+    root.add(mk(lathe(nozzle, { segments: 40 }), M.soot(), 'nozzle'));
     // Centre plug.
     root.add(mk(lathe([[0, yB + 0.02], [re * 0.25, yB + 0.06], [re * 0.42, yB + 0.3], [re * 0.42, yB + 0.4]], { segments: 32 }), M.darkMetal(), 'plug'));
   } else {
     // Slim turbojet with a long reheat pipe and a convergent-divergent petal nozzle.
-    const body: Profile = [[R * 0.97, yT - 0.06], [R, yT - 0.15], [R, yB + h * 0.45], [R * 0.9, yB + h * 0.3]];
+    const body: Profile = [[R * 0.9, yB + h * 0.3], [R, yB + h * 0.45], [R, yT - 0.15], [R * 0.97, yT - 0.06]];
     root.add(mk(lathe(body, { segments: 48, tile: 0.8 }), M.gunmetal(), 'body'));
     root.add(mk(cylinder(R + 0.004, R + 0.004, 0.1, { segments: 48, caps: false, y: yT - 0.35 }), M.accent('orange')));
-    const pipe: Profile = [[R * 0.9, yB + h * 0.3], [R * 0.84, yB + 0.55], [R * 0.82, yB + 0.5]];
+    const pipe: Profile = [[R * 0.82, yB + 0.5], [R * 0.84, yB + 0.55], [R * 0.9, yB + h * 0.3]];
     root.add(mk(lathe(pipe, { segments: 48 }), M.titanium(), 'reheat'));
     const petals = 16;
     for (let i = 0; i < petals; i++) {
@@ -67,7 +71,7 @@ export function buildJetEngine(def: PartDef): THREE.Object3D {
       g.rotateY(a);
       root.add(mk(g, M.darkMetal()));
     }
-    root.add(mk(lathe([[re * 0.95, yB], [re * 0.95, yB + 0.5], [R * 0.6, yB + 0.6], [0, yB + 0.62]], { segments: 40 }), M.soot(), 'liner'));
+    root.add(mk(lathe([[0, yB + 0.62], [R * 0.6, yB + 0.6], [re * 0.95, yB + 0.5], [re * 0.95, yB]], { segments: 40 }), M.soot(), 'liner'));
     // Flame-holder ring.
     root.add(mk(torus(re * 0.55, 0.025, 6, 32).translate(0, yB + 0.45, 0), M.darkMetal()));
   }
