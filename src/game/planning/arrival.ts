@@ -12,11 +12,14 @@ export const ENTRY_DYNAMIC_PRESSURE = 25000;
 /**
  * Default periapsis altitude when planning a transfer from `centralId` to `targetId`. Returning from a moon to an
  * atmospheric parent aims for a one-pass entry: the altitude where the arrival speed gives ENTRY_DYNAMIC_PRESSURE
- * (half the atmosphere height skips out on every scale). Other arrivals keep half the atmosphere height, or 30 km.
+ * (half the atmosphere height skips out on every scale). Arrivals from interplanetary space (a course correction
+ * planned in solar orbit) keep the departure planner's safe periapsis, clear of the air: Entry trim aims into it on
+ * purpose. Other arrivals keep half the atmosphere height, or 30 km.
  */
 export function arrivalPeriapsisAltitude(world: PlanningWorld, centralId: string, targetId: string, t: number): number {
   const u = world.universe;
   const central = u.body(centralId), target = u.body(targetId), atmo = target.atmosphere;
+  if (central.kind === 'star') return Math.max(target.radius * 0.1, (atmo?.height ?? 0) * 2, 30000);
   if (!atmo) return 30000;
   if (central.parent !== targetId) return atmo.height * 0.5;
   // Arrival speed at periapsis from a fall starting at the moon's distance.

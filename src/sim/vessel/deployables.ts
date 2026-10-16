@@ -1,6 +1,6 @@
 import type { PartDef } from './types';
 import type { PartState, VesselState } from './runtime';
-import { autoDeploy, isExtended, retractablePanel } from './tweaks';
+import { autoDeploy, isExtended, retractableModule, retractablePanel } from './tweaks';
 
 /**
  * Retractable solar arrays and antennas: deploy motion, the "extend above atmosphere" automation and aerodynamic
@@ -29,7 +29,7 @@ export const AUTO_STOW_PRESSURE = 1000;
 export function panelMaxQ(def: PartDef): number {
   let limit = Infinity;
   for (const m of def.modules) {
-    if ((m.type === 'solarPanel' && m.tracking) || m.type === 'antenna') limit = Math.min(limit, m.maxQ ?? DEFAULT_PANEL_MAX_Q);
+    if (retractableModule(m)) limit = Math.min(limit, (m.type === 'antenna' ? m.maxQ : undefined) ?? DEFAULT_PANEL_MAX_Q);
   }
   return limit;
 }

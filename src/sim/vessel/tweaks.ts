@@ -27,8 +27,10 @@ export function crossfeedOpen(p: Tweakable): boolean {
   if (isDockingPort(p.def)) return p.tweaks?.crossfeed !== false;
   return true;
 }
+/** Module of a retractable array (tracking solar panel) or antenna boom; fixed antennas are not. */
+export const retractableModule = (m: PartDef['modules'][number]) => (m.type === 'solarPanel' && m.tracking) || (m.type === 'antenna' && !m.fixed);
 /** Retractable solar arrays (tracking panels) and antennas can be stowed; fixed hardware is always "extended". */
-export const retractablePanel = (def: PartDef) => def.modules.some(m => (m.type === 'solarPanel' && m.tracking) || m.type === 'antenna');
+export const retractablePanel = (def: PartDef) => def.modules.some(retractableModule);
 /** Commanded extension. Retractable arrays/antennas default stowed; a torn-off part never counts as extended. */
 export const isExtended = (p: Tweakable & { panelTorn?: boolean }): boolean => !retractablePanel(p.def) || (p.tweaks?.extended === true && !p.panelTorn);
 /** Retractable arrays/antennas extend above the atmosphere and stow in thick air unless the player turns it off. */
@@ -81,7 +83,7 @@ export function tweakDescriptors(def: PartDef): TweakDescriptor[] {
       out.push({ key: 'chuteMinPressure', kind: 'number', label: 'Deploy pressure', flight: true, min: Math.min(10, m.minPressure), max: 80000, step: 10, unit: 'Pa', fallback: m.minPressure });
       out.push({ key: 'chuteDeployAltitude', kind: 'number', label: 'Full deploy height', flight: true, min: Math.min(50, m.deployAltitude), max: 5000, step: 50, unit: 'm', fallback: m.deployAltitude });
     }
-    if ((m.type === 'solarPanel' && m.tracking) || m.type === 'antenna') {
+    if (retractableModule(m)) {
       out.push({ key: 'extended', kind: 'toggle', label: m.type === 'antenna' ? 'Antenna extended at launch' : 'Panels extended at launch', flight: false, fallback: false });
       out.push({ key: 'autoDeploy', kind: 'toggle', label: 'Extend above atmosphere', flight: true, fallback: true });
     }

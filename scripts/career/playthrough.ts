@@ -1,30 +1,45 @@
 /**
  * Headless career playthrough with real flights: npx tsx scripts/career/playthrough.ts [standard|challenging|real]
  * A player-like route (accept what can be done, decline what cannot, research toward the next goal) flown through
- * World and the autopilot building blocks. Prints a ledger row per flight and the program state at the end.
+ * World and the autopilot building blocks: Earth orbit, the Moon, then probes to Venus and Mars at their launch
+ * seasons. Prints a ledger row per flight and the program state at the end.
  */
 import '../earth-data/register';
 import { World } from '../../src/game/world';
 import { Universe } from '../../src/game/universe';
 import { PART_CATALOG } from '../../src/data/parts';
 import { DEFAULT_START_UT } from '../../src/game/store';
-import { TECH_NODES, facilityProblem } from '../../src/data/technology';
-import { contractSlots, ownedLevel, upgradeCost, type FacilityId } from '../../src/sim/science/facilities';
+import { TECH_NODES, facilityProblem, launchCost } from '../../src/data/technology';
+import { contractSlots, costToLevel, ownedLevel, upgradeCost, type FacilityId } from '../../src/sim/science/facilities';
 import { careerScaleMultiplier } from '../../src/sim/bodies/scale';
 import { buildChallengingOrbiter, buildFoundationOrbiter, buildMoonLander, buildOrbiter, buildRealLunarProbe, buildRealOrbiter, buildSoundingRocket } from '../../src/editor/stockCrafts';
 import { researchFor } from '../../src/ui/hub/nextGoal';
 import type { ScalePreset } from '../../src/sim/bodies/scale';
 import type { CraftDef } from '../../src/sim/vessel/types';
-import { freeReturnFlyby, captureMoon, deorbitAndRecover, descend, doScience, hop, landMoon, moonAscent, moonHome, sensor, toMoon, toOrbit, buy, probeLunarOrbit } from './flights';
+import { coastUntil } from '../../src/game/autopilot';
+import { freeReturnFlyby, captureMoon, deorbitAndRecover, doScience, hop, landMoon, moonAscent, moonHome, sensor, toMoon, toOrbit, buy, probeLunarOrbit } from './flights';
+import { planetPhase } from './beyond';
 
 export interface LedgerRow { flight: number; name: string; ok: boolean; note: string; cost: number; funds: number; science: number; reputation: number; days: number; research: string; upgrades: string; contracts: string }
 
-export function playCareer(preset: ScalePreset = 'standard', log = (s: string) => console.log(s)) {
+/** What the route helpers share with the planet phase (`beyond.ts`). */
+export interface Career {
+  w: World; preset: ScalePreset; t0: number; rows: LedgerRow[]; log: (s: string) => void;
+  desk(canDo: (kind: string, body: string, biome?: string) => boolean): void;
+  research(ids: string[]): string[];
+  ready(craft: CraftDef): CraftDef;
+  record(name: string, ok: boolean, note: string, cost: number, got: string[]): void;
+  /** Keep this much (credits) for the next planned launch when investing in facilities. */
+  plan(craft: CraftDef | null): void;
+  /** One more science flight of the kind this scale's route already flies (the grind before the next goal). */
+  grind(): boolean;
+}
+
+export function playCareer(preset: ScalePreset = 'standard', log = (s: string) => console.log(s), opts: { planets?: boolean } = {}) {
   const w = new World(new Universe(preset), PART_CATALOG, DEFAULT_START_UT, 'career');
   const p = w.progression;
   const t0 = w.ut;
   const rows: LedgerRow[] = [];
-  const done = new Set<string>();
   let flight = 0;
 
   // Contract desk: accept anything on offer that is plausible now; decline the rest and ask for more.
@@ -46,9 +61,10 @@ export function playCareer(preset: ScalePreset = 'standard', log = (s: string) =
     return got;
   };
   // Facility upgrades: what a launch needs (bought right before it), then the lab, then Mission Control, with
-  // whatever stays above a reserve for the next big flight. `upgrades` collects purchases since the last row.
+  // whatever stays above a reserve: 40 k × the credit multiplier, or the next planned launch and the upgrade it needs.
   const mult = careerScaleMultiplier(preset);
   let upgrades: string[] = [];
+  let next: CraftDef | null = null;
   const upgrade = (id: FacilityId) => { const cost = upgradeCost(p, id, mult); if (!w.upgradeFacility(id)) return false; upgrades.push(`${id}-${ownedLevel(p, id)} (${cost})`); return true; };
   const ready = (craft: CraftDef) => {
     for (let block = facilityProblem(craft, PART_CATALOG, 'career', p, preset); block; block = facilityProblem(craft, PART_CATALOG, 'career', p, preset))
@@ -56,7 +72,8 @@ export function playCareer(preset: ScalePreset = 'standard', log = (s: string) =
     return craft;
   };
   const invest = () => {
-    const reserve = 40000 * mult;
+    const block = next && facilityProblem(next, PART_CATALOG, 'career', p, preset);
+    const reserve = Math.max(40000 * mult, next ? launchCost(next, PART_CATALOG) + (block ? costToLevel(p, block.facility, block.level, mult) : 0) : 0);
     for (const id of ['lab', 'control'] as const)
       for (let cost = upgradeCost(p, id, mult); cost !== null && p.funds - cost >= reserve; cost = upgradeCost(p, id, mult)) upgrade(id);
   };
@@ -68,7 +85,6 @@ export function playCareer(preset: ScalePreset = 'standard', log = (s: string) =
     upgrades = [];
     rows.push(row);
     log(`#${row.flight} ${name} ${ok ? 'OK' : 'FAIL'} cost ${cost} → funds ${row.funds} sci ${row.science} rep ${row.reputation} day ${row.days} | research ${row.research} | upgrades ${row.upgrades} | ${note} | active: ${active}`);
-    for (const m of w.messages) if (/Contract|Milestone|First|Discovered|science ·/.test(m.text)) done.add(m.text);
   };
   const orbitFlight = (name: string, craft: CraftDef, minStage = 0) => {
     const biomes = new Set<string>();
@@ -78,6 +94,16 @@ export function playCareer(preset: ScalePreset = 'standard', log = (s: string) =
     const err = toOrbit(w, biomes, preset === 'standard' ? 90000 : preset === 'challenging' ? 140000 : 220000, minStage) ?? deorbitAndRecover(w, biomes);
     return { cost, err, biomes };
   };
+  /** The planner finds no free return from some parking orbits (≈1 in 8): coast half a day and ask again, as a player would. */
+  const freeReturn = (biomes: Set<string>, minStage: number) => {
+    let err: string | null = 'no free return found';
+    for (let k = 0; k < 4 && err === 'no free return found'; k++) {
+      if (k) coastUntil(w, w.ut + 12 * 3600);
+      err = freeReturnFlyby(w, biomes, minStage);
+    }
+    return err;
+  };
+  const career: Career = { w, preset, t0, rows, log, desk, research, ready, record, plan: craft => { next = craft; }, grind: () => false };
 
   log(`== ${preset}: funds ${p.funds}, offers: ${p.contracts.map(c => c.title).join(' | ')}`);
   if (preset !== 'standard') {
@@ -100,11 +126,11 @@ export function playCareer(preset: ScalePreset = 'standard', log = (s: string) =
     if (preset === 'real') {
       // Real: the Meridian Real cannot reach the Moon. Remote Navigation's probe core makes the Tern lunar orbiter the
       // next science source; instruments are researched as science allows, then probes fly until the expedition is paid.
-      desk((kind, body) => body === 'earth' || (body === 'moon' && (kind === 'flyby' || kind === 'orbit')));
-      for (let i = 0; i < 6; i++) {
+      const moonDesk = (kind: string, body: string) => body === 'earth' || (body === 'moon' && (kind === 'flyby' || kind === 'orbit'));
+      desk(moonDesk);
+      let tern = 0;
+      const ternFlight = () => {
         const got = research(['guidance-0', 'guidance-1', 'discovery-1', 'discovery-2']);
-        const need = researchFor('stock-selene-real', p, 'career');
-        if (need.cost <= p.science) { log(`expedition affordable: ${need.nodes.join(' ')} (${need.cost})`); break; }
         const craft = sensor(buildRealLunarProbe());
         if (p.unlocked.includes('discovery-1')) sensor(craft, 'sensor-magnetic', 1);
         if (p.unlocked.includes('discovery-2')) sensor(craft, 'sensor-gravity', 2);
@@ -112,65 +138,89 @@ export function playCareer(preset: ScalePreset = 'standard', log = (s: string) =
         const { cost, problem } = buy(w, ready(craft));
         const err = problem ?? probeLunarOrbit(w, biomes, 220000);
         const moon = [...biomes].filter(b => b.startsWith('moon/'));
-        record(`Tern lunar orbiter ${i + 1}`, !err, err ?? `${moon.length} Moon situations/biomes: ${moon.join(', ')}`.slice(0, 220), cost, got);
-        if (err) break;
-        desk((kind, body) => body === 'earth' || (body === 'moon' && (kind === 'flyby' || kind === 'orbit')));
+        record(`Tern lunar orbiter ${++tern}`, !err, err ?? `${moon.length} Moon situations/biomes: ${moon.join(', ')}`.slice(0, 220), cost, got);
+        desk(moonDesk);
+        return !err;
+      };
+      for (let i = 0; i < 6; i++) {
+        const need = researchFor('stock-selene-real', p, 'career');
+        if (need.cost <= p.science) { log(`expedition affordable: ${need.nodes.join(' ')} (${need.cost})`); break; }
+        if (!ternFlight()) break;
       }
+      career.grind = ternFlight;
     } else {
       desk((kind, body) => body === 'earth' || kind === 'flyby');
-      const biomes = new Set<string>();
-      const { cost, problem } = buy(w, ready(sensor(buildChallengingOrbiter())));
-      let err = problem;
-      if (!err) err = toOrbit(w, biomes, 140000, 2) ?? freeReturnFlyby(w, biomes, 0) ?? deorbitAndRecover(w, biomes);
-      record('Scale orbiter Moon flyby', !err, err ?? [...biomes].join(', ').slice(0, 200), cost, research([]));
+      let flybys = 0;
+      const flybyFlight = () => {
+        const craft = sensor(buildChallengingOrbiter());
+        if (p.unlocked.includes('discovery-1')) sensor(craft, 'sensor-magnetic', 1);
+        const biomes = new Set<string>();
+        const { cost, problem } = buy(w, ready(craft));
+        let err = problem;
+        if (!err) err = toOrbit(w, biomes, 140000, 2) ?? freeReturn(biomes, 0) ?? deorbitAndRecover(w, biomes);
+        record(`Scale orbiter Moon flyby${flybys++ ? ` ${flybys}` : ''}`, !err, err ?? [...biomes].join(', ').slice(0, 200), cost, []);
+        desk((kind, body) => body === 'earth' || kind === 'flyby');
+        return !err;
+      };
+      flybyFlight();
+      career.grind = flybyFlight;
     }
     const expedition = preset === 'real' ? 775 : 595;
     const spent = TECH_NODES.filter(n => p.unlocked.includes(n.id)).reduce((n, t) => n + t.cost, 0);
-    log(`end: funds ${Math.round(p.funds)} science ${p.science.toFixed(1)} (spent ${spent}; expedition path needs ${expedition}; still to research ${researchFor(preset === 'real' ? 'stock-selene-real' : 'stock-selene-challenging', p, 'career').cost}) rep ${p.reputation} facilities ${JSON.stringify(p.facilities)} unlocked ${p.unlocked.join(' ')} milestones ${p.milestones.join(' ')}`);
-    return { rows, world: w };
-  }
-  const earthOnly = (kind: string, body: string, biome?: string) => body === 'earth' && (kind !== 'science' || biome === 'Launch Complex' || biome === 'Oceans' || biome === 'Shores');
-  desk(earthOnly);
-
-  // 1–2: sounding hops with the starting thermometer (what a new player can build immediately).
-  for (let i = 0; i < 2; i++) {
-    const r = hop(w, ready(sensor(buildSoundingRocket())));
-    record(`Kestrel hop ${i + 1}`, r.ok, r.note, r.cost, research(i === 0 ? ['propulsion-0', 'energy-0'] : ['discovery-0']));
+    log(`moon phase end: funds ${Math.round(p.funds)} science ${p.science.toFixed(1)} (spent ${spent}; expedition path needs ${expedition}; still to research ${researchFor(preset === 'real' ? 'stock-selene-real' : 'stock-selene-challenging', p, 'career').cost}) rep ${p.reputation}`);
+  } else {
+    const earthOnly = (kind: string, body: string, biome?: string) => body === 'earth' && (kind !== 'science' || biome === 'Launch Complex' || biome === 'Oceans' || biome === 'Shores');
     desk(earthOnly);
-  }
-  // 3: first orbit on starting parts.
-  {
-    const r = orbitFlight('Firstlight orbit', sensor(buildFoundationOrbiter()));
-    record('Firstlight orbit', !r.err, r.err ?? [...r.biomes].join(', '), r.cost, research(['propulsion-0', 'energy-0', 'discovery-0']));
-  }
-  desk((kind, body) => body === 'earth' || kind === 'flyby');
-  // 4: Moon flyby and return with Meridian.
-  {
-    const biomes = new Set<string>();
-    const craft = ready(sensor(buildOrbiter()));
-    const { cost, problem } = buy(w, craft);
-    let err = problem;
-    if (!err) err = toOrbit(w, biomes, 90000, 2) ?? freeReturnFlyby(w, biomes, 0) ?? deorbitAndRecover(w, biomes);
-    record('Meridian Moon flyby', !err, err ?? [...biomes].join(', '), cost, research(['propulsion-1', 'structures-0', 'structures-1', 'guidance-0']));
-  }
-  desk(() => true);
-  // 5: Selene landing and return.
-  {
-    const biomes = new Set<string>();
-    const craft = ready(sensor(buildMoonLander()));
-    const { cost, problem } = buy(w, craft);
-    let err = problem;
-    if (!err) {
-      err = toOrbit(w, biomes, 90000, 4) ?? toMoon(w, biomes, 4) ?? captureMoon(w, biomes, 2);
-      if (!err) { w.stageActive(); w.stageActive(); err = landMoon(w, biomes, 2) ?? moonAscent(w, biomes, 2) ?? moonHome(w, biomes, 0) ?? deorbitAndRecover(w, biomes); }
+
+    // 1–2: sounding hops with the starting thermometer (what a new player can build immediately).
+    for (let i = 0; i < 2; i++) {
+      const r = hop(w, ready(sensor(buildSoundingRocket())));
+      record(`Kestrel hop ${i + 1}`, r.ok, r.note, r.cost, research(i === 0 ? ['propulsion-0', 'energy-0'] : ['discovery-0']));
+      desk(earthOnly);
     }
-    record('Selene Moon landing', !err, err ?? [...biomes].join(', '), cost, research([]));
+    // 3: first orbit on starting parts.
+    {
+      const r = orbitFlight('Firstlight orbit', sensor(buildFoundationOrbiter()));
+      record('Firstlight orbit', !r.err, r.err ?? [...r.biomes].join(', '), r.cost, research(['propulsion-0', 'energy-0', 'discovery-0']));
+    }
+    desk((kind, body) => body === 'earth' || kind === 'flyby');
+    // 4: Moon flyby and return with Meridian.
+    {
+      const biomes = new Set<string>();
+      const craft = ready(sensor(buildOrbiter()));
+      const { cost, problem } = buy(w, craft);
+      let err = problem;
+      if (!err) err = toOrbit(w, biomes, 90000, 2) ?? freeReturn(biomes, 0) ?? deorbitAndRecover(w, biomes);
+      career.plan(buildMoonLander());
+      record('Meridian Moon flyby', !err, err ?? [...biomes].join(', '), cost, research(['propulsion-1', 'structures-0', 'structures-1', 'guidance-0']));
+    }
+    desk(() => true);
+    // 5: Selene landing and return (later: again, to a new region, when science runs short).
+    let landings = 0;
+    const seleneFlight = () => {
+      const biomes = new Set<string>();
+      const craft = ready(sensor(buildMoonLander()));
+      if (p.unlocked.includes('discovery-1')) sensor(craft, 'sensor-magnetic', 1);
+      const { cost, problem } = buy(w, craft);
+      let err = problem;
+      if (!err) {
+        err = toOrbit(w, biomes, 90000, 4) ?? toMoon(w, biomes, 4) ?? captureMoon(w, biomes, 2);
+        if (!err) { w.stageActive(); w.stageActive(); err = landMoon(w, biomes, 2) ?? moonAscent(w, biomes, 2) ?? moonHome(w, biomes, 0) ?? deorbitAndRecover(w, biomes); }
+      }
+      career.plan(null);
+      record(`Selene Moon landing${landings++ ? ` ${landings}` : ''}`, !err, err ?? [...biomes].join(', '), cost, []);
+      desk(() => true);
+      return !err;
+    };
+    seleneFlight();
+    career.grind = seleneFlight;
+    const affordable = TECH_NODES.filter(n => !p.unlocked.includes(n.id) && n.requires.every(r => p.unlocked.includes(r)) && n.cost <= p.science).map(n => n.id);
+    log(`moon phase end: funds ${Math.round(p.funds)} science ${p.science.toFixed(1)} rep ${p.reputation} affordable ${affordable.join(' ')}`);
   }
-  void descend;
-  const affordable = TECH_NODES.filter(n => !p.unlocked.includes(n.id) && n.requires.every(r => p.unlocked.includes(r)) && n.cost <= p.science).map(n => n.id);
-  log(`end: funds ${Math.round(p.funds)} science ${p.science.toFixed(1)} rep ${p.reputation} facilities ${JSON.stringify(p.facilities)} unlocked ${p.unlocked.join(' ')} milestones ${p.milestones.join(' ')} affordable ${affordable.join(' ')}`);
-  log(`contracts: ${p.contracts.map(c => `${c.title}=${c.status}`).join(' | ')}`);
+  if (opts.planets !== false) planetPhase(career);
+  log(`end: funds ${Math.round(p.funds)} science ${p.science.toFixed(1)} rep ${p.reputation} facilities ${JSON.stringify(p.facilities)} unlocked ${p.unlocked.join(' ')} milestones ${p.milestones.join(' ')}`);
+  log(`contracts: ${p.contracts.filter(c => c.status !== 'failed').map(c => `${c.title}=${c.status}`).join(' | ')}`);
   return { rows, world: w };
 }
 
-if (process.argv[1]?.endsWith('playthrough.ts')) playCareer((process.argv[2] as ScalePreset) ?? 'standard');
+if (process.argv[1]?.endsWith('playthrough.ts')) playCareer((process.argv[2] as ScalePreset) ?? 'standard', undefined, { planets: process.argv[3] !== 'moon' });

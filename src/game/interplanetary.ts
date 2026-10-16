@@ -257,8 +257,11 @@ export function planInterplanetaryTransfer(world: PlanningWorld, targetPlanetId:
       try {
         const p = point(world, a.id, b.id, dep.min + (dep.max - dep.min) * i / ((dep.samples ?? 25) - 1),
           tof.min + (tof.max - tof.min) * j / ((tof.samples ?? 25) - 1), parking, b.radius + altitude);
-        // The parking orbit's plane is fixed: score the real ejection from it, not a coplanar departure.
-        const score = ejectionCost(orbit, a.gm, p.departureTime, p.departureExcess, T, 12) + (opts.includeCapture === false ? 0 : p.captureDv);
+        // The parking orbit's plane is fixed: score the real ejection from it, not a coplanar departure. Leaving within
+        // the next orbit, only that orbit is reachable: half a revolution before the date may already be in the past
+        // (the burn search below is clamped to it), which priced "go now" at 2.2 km/s and planned it at 3.6–5.4.
+        const score = (goNow ? ejectionCost(orbit, a.gm, depBounds.min, p.departureExcess, T, 12, true) : ejectionCost(orbit, a.gm, p.departureTime, p.departureExcess, T, 12))
+          + (opts.includeCapture === false ? 0 : p.captureDv);
         if (score < bestScore) { best = p; bestScore = score; }
       } catch { /* Collinear cell; neighbouring cells still cover the transfer window. */ }
     }
@@ -268,8 +271,9 @@ export function planInterplanetaryTransfer(world: PlanningWorld, targetPlanetId:
     tof = { min: Math.max(tofBounds.min, best.timeOfFlight - dt), max: Math.min(tofBounds.max, best.timeOfFlight + dt), samples: 9 };
   }
   const choice = best!;
-  const base = Math.max(depBounds.min, choice.departureTime - T / 2);
-  const end = Math.min(depBounds.max, choice.departureTime + T / 2);
+  // Leaving now: the cheapest point anywhere on the next orbit (the grid scored the whole orbit).
+  const base = goNow ? depBounds.min : Math.max(depBounds.min, choice.departureTime - T / 2);
+  const end = goNow ? depBounds.max : Math.min(depBounds.max, choice.departureTime + T / 2);
   const burn = (t: number) => {
     const p = point(world, a.id, b.id, t, choice.arrivalTime - t, parking, b.radius + altitude);
     const s = propagate(orbit, t);
