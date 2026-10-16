@@ -7,7 +7,7 @@ import { RESOURCES } from '../../data/resources';
 import { RESOURCE_COLORS } from '../../ui/inspector/resources';
 import { flightData, flightPredictions } from '../../game/flightData';
 import { cachedStageDeltaV } from '../../game/stageDeltaVCache';
-import { maxRailsIndexAt, RAILS_WARP, warpLabel, warpRate } from '../../game/timewarp';
+import { maxRailsIndex, warpLabel, warpRate } from '../../game/timewarp';
 import { scienceReady } from '../../game/science';
 import { type WorldVessel } from '../../game/world';
 import { ACTION_GROUP_IDS, controlPartUid, dockedPorts, freePorts, GROUP_LABELS, groupBindings, lightOn, type PortInfo, type StageDeltaV } from '../../sim/vessel';
@@ -38,7 +38,7 @@ const burnTrackers = new WeakMap<FlightController, BurnTracker>();
 function railsWarpLimit(w: FlightController['world']): number {
   const c = w.warpContext();
   if (c.thrusting || (c.inAtmosphere && !c.landed)) return 0;
-  return c.landed ? RAILS_WARP.length - 1 : maxRailsIndexAt(c.altitude, c.bodyRadius, c.atmosphereHeight);
+  return maxRailsIndex(c);
 }
 
 /** Active and target docking ports for the docking indicator (target port if selected, else the closest pair). */

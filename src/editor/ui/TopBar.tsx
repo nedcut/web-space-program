@@ -134,12 +134,13 @@ export function TopBar({ session, view, onLoad, onNew, onImport, onFrame }: { se
           </Button>
         </Group>
         <div className="vab-stats mono">
-          {/* Δv first: narrower windows drop Parts, then Height (media rules count children). */}
-          <Stat label="Δv" value={fmtDv(view.totalDvVac)} accent />
           <Stat label="Mass" value={fmtKg(s.totalMass)} over={block?.facility === 'pad' ? block.reason : undefined} />
           <Stat label="Parts" value={String(s.partCount)} over={block?.facility === 'hall' ? block.reason : undefined} />
           {view.craftType === 'SPH' ? <Stat label="Length" value={`${s.height.toFixed(1)} m`} /> : <Stat label="Height" value={`${s.height.toFixed(1)} m`} />}
         </div>
+      </div>
+      <div className="vab-primary-stat mono">
+        <Stat label="Δv" value={fmtDv(view.totalDvVac)} accent />
       </div>
       <div className="vab-more">
         <Button className={`vab-ibtn ${menu?.id === 'more' ? 'on' : ''} ${view.dirty ? 'pending' : ''}`} data-menu aria-label="More tools" data-tip={view.dirty ? 'File, sharing and overlays · unsaved changes' : 'File, sharing and overlays'} aria-haspopup="menu" aria-expanded={menu?.id === 'more'} onClick={e => openMenu('more', e.currentTarget)}><Icon name="more" /></Button>

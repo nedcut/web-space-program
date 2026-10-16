@@ -40,9 +40,10 @@
 .vab-ibtn.on.cot { color: #d08bff; background: rgba(192, 97, 255, 0.14); border-color: rgba(192, 97, 255, 0.45); }
 .vab-ibtn.sym .mono { font-size: 12px; min-width: 20px; text-align: left; }
 .vab-stats { display: flex; gap: 18px; margin-left: 8px; padding-left: 16px; border-left: 1px solid var(--panel-border); }
-/* Stats that do not fit wrap onto a hidden second line: whole readouts drop out (Δv last), never half-clipped. */
+/* Secondary readouts wrap out of view; primary Δv has reserved space beside Launch. */
 .vab-tools > .vab-stats { flex: 0 1 auto; min-width: 0; flex-wrap: wrap; height: 36px; overflow: hidden; row-gap: 20px; }
-.vab-stat { display: flex; flex-direction: column; gap: 1px; font-size: 14px; white-space: nowrap; }
+.vab-stat { display: flex; flex: 0 0 auto; flex-direction: column; gap: 1px; font-size: 14px; white-space: nowrap; }
+.vab-primary-stat { flex: 0 0 auto; padding-left: 10px; border-left: 1px solid var(--panel-border); }
 .vab-stat .label { font-size: 9.5px; }
 .vab-stat .accent { color: var(--accent); font-weight: 600; }
 .vab-launch { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 18px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
@@ -207,8 +208,8 @@
 
 /* ---------------------------------------------------------------- hints / toasts / welcome */
 .vab-hints {
-  left: 50%; transform: translateX(-50%); bottom: 14px; display: flex; gap: 14px; padding: 7px 14px; font-size: 11.5px;
-  color: var(--text-dim); white-space: nowrap; pointer-events: none;
+  left: 300px; right: 280px; bottom: 14px; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; padding: 7px 14px; font-size: 11.5px;
+  color: var(--text-dim); pointer-events: none;
 }
 .vab-hint { display: inline-flex; align-items: center; gap: 6px; }
 .vab-hint kbd {
@@ -271,7 +272,7 @@
 
 /* The build-tool group (place/offset/rotate/re-root/snap) needs ~200 px: secondary items collapse earlier. */
 @media (max-width: 1800px) {
-  .vab-stats .vab-stat:nth-child(3) { display: none; }
+  .vab-stats .vab-stat:nth-child(2) { display: none; }
   .vab-actions-label { display: none; }
 }
 @media (max-width: 1440px) {
@@ -286,12 +287,12 @@
 @media (max-width: 1500px) {
   .vab-topbar .vab-collapsible { display: none; }
   .vab-more { display: block; }
-  .vab-stats .vab-stat:nth-child(4) { display: none; }
+  .vab-stats .vab-stat:nth-child(3) { display: none; }
 }
-@media (max-width: 1700px) { .vab-stats .vab-stat:nth-child(4) { display: none; } }
+@media (max-width: 1700px) { .vab-stats .vab-stat:nth-child(3) { display: none; } .vab-name-wrap { width: 180px; } }
 @media (max-width: 1100px) {
   .vab-name-wrap { width: 130px; }
-  .vab-stats .vab-stat:nth-child(2) { display: none; }
+  .vab-stats .vab-stat:first-child { display: none; }
   .vab-actions-label { display: none; }
 }
 @media (max-width: 900px) {
@@ -319,7 +320,7 @@
 .vab-card-name { font-size: 11px; line-height: 1.35; min-height: 30px; }
 .vab-stage { background: var(--surface-soft); border-color: var(--panel-border); }
 .vab-search { background: var(--bg); }
-@media (max-width: 1440px) { .vab-name-wrap { width: 155px; } .vab-stats { gap: 10px; } .vab-hints { max-width: calc(100vw - 600px); flex-wrap: wrap; justify-content: center; white-space: normal; gap: 4px 12px; } }
+@media (max-width: 1440px) { .vab-name-wrap { width: 155px; } .vab-stats { gap: 10px; } }
 
 .vab-card { min-width: 0; }
 

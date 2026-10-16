@@ -38,4 +38,16 @@ describe('departure options', () => {
     expect(live.map(x => x.departure)).toEqual([3000, 4000, 5000]);
     expect(best?.departure).toBe(4000);
   });
+  it('does not recommend a seven-day wait to save 3% over the next orbit', () => {
+    const now = w(1500, 980, 'now', 259);
+    const later = w(7 * 86400, 950, 'window', 253);
+    expect(liveOptions([later, now], 0).best).toBe(now);
+  });
+  it('waits for a substantial saving but prefers an earlier nearly equal window', () => {
+    const now = w(1500, 1500, 'now', 300);
+    const early = w(2 * 86400, 970, 'window', 270);
+    const cheapest = w(7 * 86400, 950, 'window', 250);
+    expect(liveOptions([cheapest, now, early], 0).best).toBe(early);
+    expect(liveOptions([], 0).best).toBeUndefined();
+  });
 });
