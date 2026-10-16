@@ -245,7 +245,7 @@ export function spaceStock(): StockCraft[] {
     { scale: 'standard', id: 'stock-cinderbloom', name: 'Cinderbloom Venus Lander', needsResearch: true, build: () => buildCinderbloom(),
       blurb: 'Venus surface lander · pressure shell, no parachutes · research required', category: 'worlds',
       tags: ['probe-kiln', 'shell-kiln', 'shield-2', 'rcs-linear'],
-      tip: 'Aim the Venus periapsis inside the air, drop the cruise stage, hold retrograde and release the shield once below 300 m/s.' },
+      tip: 'Entry trim at Venus, drop the cruise stage, hold retrograde, shield off below 300 m/s. It reports only while Earth is up.' },
     { scale: 'standard', id: 'stock-lamplighter', name: 'Lamplighter Lunar Hopper', needsResearch: true, build: () => buildLamplighter(),
       blurb: 'Crewed Moon landing, hop and return · radial engines, lights, ladder · research required', category: 'worlds',
       tags: ['eng-radial-rill', 'ladder-2', 'light-area', 'sensor-seismic', 'srb-roman-candle'],

@@ -212,7 +212,12 @@ export function atmosphericLanding(w: World, biomes: Set<string>, shieldSpeed = 
   }
   if (!w.active || w.active.state.destroyed) return 'lost on entry';
   if (w.active.state.situation !== 'landed') return 'not landed';
-  doScience(w); trackBiome(w, biomes);
-  transmitAll(w, 3600);
+  trackBiome(w, biomes);
+  // The shell lasts about half an hour: report whenever a link (Earth in view, or a relay overhead) appears.
+  for (let t = 0; t < 1800 && w.active && !w.active.state.destroyed; t += 30) {
+    if (doScience(w) || w.canControl()) transmitAll(w, 600);
+    for (let k = 0; k < 300; k++) w.tick(0.1, neutralInput({ sas: 'stabilityAssist' }));
+  }
+  debug(`surface: control ${w.canControl()}, ${w.active?.state.parts.map(q => q.partId).join(' ')}`);
   return null;
 }
