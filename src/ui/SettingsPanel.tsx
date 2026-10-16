@@ -40,12 +40,20 @@ function BindingRow({ action, bindings, capturing, onCapture, clash }: { action:
   </div>;
 }
 
-/** UI scale rescales the whole app, so applying it mid-drag moves the slider out from under the pointer. Preview the value, apply on release. */
+/**
+ * UI scale rescales the whole app, so applying it mid-drag moves the slider out from under the pointer. Preview the
+ * value, apply on release. Firefox ends the native drag on the mouseup after pointerup and fires one more input from
+ * the pointer's spot on the rescaled slider; `released` drops it.
+ */
 function UiScaleRow({ value }: { value: number }) {
   const [draft, setDraft] = useState<number | null>(null);
+  const released = useRef(false);
   const shown = draft ?? value;
   const commit = () => { if (draft !== null) { updateSettings({ uiScale: draft }); setDraft(null); } };
-  return <Row label="UI scale"><span><Slider aria-label="UI scale" min={0.8} max={1.3} step={0.05} value={shown} onChange={e => setDraft(+e.target.value)} onPointerUp={commit} onKeyUp={commit} onBlur={commit} /> <output>{shown.toFixed(2)}</output></span></Row>;
+  const start = () => { released.current = false; };
+  return <Row label="UI scale"><span><Slider aria-label="UI scale" min={0.8} max={1.3} step={0.05} value={shown}
+    onChange={e => { if (!released.current) setDraft(+e.target.value); }} onPointerDown={start} onKeyDown={start}
+    onPointerUp={() => { released.current = true; commit(); }} onKeyUp={commit} onBlur={commit} /> <output>{shown.toFixed(2)}</output></span></Row>;
 }
 
 export function SettingsPanel({ onClose, world }: { onClose: () => void; world?: World }) {
