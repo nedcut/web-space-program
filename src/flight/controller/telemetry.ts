@@ -18,7 +18,7 @@ import type { FlightController } from '../controller';
 import type { DockingTelemetry, Telemetry } from '../hud/Hud';
 import type { FlightControllerInternals } from './internals';
 
-import { AlertTracker } from '../alerts';
+import { AlertTracker, chuteStatus } from '../alerts';
 import { BurnTracker } from './burn';
 import { cross, normalize } from '../../util/vec3';
 import { warpTargets } from './warp';
@@ -202,6 +202,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   const upward = dot(qRotate(st.orientation, v3(0, 1, 0)), normalize(rs.position));
   const brakingAcceleration = (currentStage?.thrust ?? 0) / st.mass * Math.max(0, upward);
   const noControl = !w.canControl(st) || (!!this.network && this.network.ownId !== st.id);
+  const chutes = chuteStatus(st.parts, st.telemetry.dynamicPressure, st.telemetry.staticPressure);
   const alerts = tracker.update({
     noControl,
     eva: !!st.eva,
@@ -213,7 +214,9 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     verticalSpeed: vs,
     gravity, brakingAcceleration, brakingFuelSeconds: currentStage?.burnTime ?? 0,
     horizontalSpeed: Math.sqrt(Math.max(0, surfaceSpeed * surfaceSpeed - vs * vs)),
-    chutes: st.parts.some((p) => p.chute?.phase === 'semi' || p.chute?.phase === 'full'),
+    chutes: chutes?.lamp === 'semi' || chutes?.lamp === 'full',
+    chuteDescent: chutes && chutes.openArea > 0 && st.telemetry.airDensity > 0 ? Math.sqrt(2 * st.mass * gravity / (st.telemetry.airDensity * chutes.openArea)) : Number.NaN,
+    chuteWaiting: chutes?.lamp === 'waiting' ? { q: st.telemetry.dynamicPressure, rating: chutes.rating } : null,
     gear: ground.gear,
     thrusting: ignited && this.input.state.throttle > 0,
     stageBurnTime: ignited ? (dvs.find((d) => d.stage === st.nextStage + 1)?.burnTime ?? Number.NaN) : Number.NaN,
@@ -250,7 +253,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     enabled: settings.flightHints && !this.network && !getTutorial() && !game.get().scenarioActive && !this.assist,
     bodyId: b.id, bodyName: b.name, terrainHeight: u.terrain(b.id).maxHeight, boundOrbit: orb.orbit.e < 1, verticalSpeed: vs,
     map: this.mapMode, node: this.mapMode && w.nodes.length > 0, soi, eva: !!st.eva,
-    landing: flying && info.heightAboveTerrain < 10000 && vs < -20 && ignited && !st.parts.some(p => p.chute?.phase === 'semi' || p.chute?.phase === 'full'),
+    landing: flying && info.heightAboveTerrain < 10000 && vs < -20 && ignited && chutes?.lamp !== 'semi' && chutes?.lamp !== 'full',
     flying,
     altitude: info.altitude,
     surfaceSpeed,
@@ -354,6 +357,8 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
       id: g, label: GROUP_LABELS[g], key: bindingLabel(g === 'abort' ? 'abort' : `actionGroup${g.slice(6)}` as 'actionGroup1'),
       count: groupBindings(st, g).length, on: !!st.groupState?.[g],
     })),
+    chute: chutes?.lamp ?? null,
+    chuteRating: chutes?.rating ?? 0,
     lights: st.parts.some(p => p.def.modules.some(m => m.type === 'light')) ? st.parts.some(p => p.def.modules.some(m => m.type === 'light') && lightOn(p)) : null,
     feel: {
       alerts,

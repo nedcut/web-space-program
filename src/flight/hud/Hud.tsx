@@ -11,6 +11,7 @@ import { DockingIndicator, TargetPanel } from './TargetPanel';
 import { AlertStack, Countdown, FlightHint, type FeelTelemetry } from './FeelHud';
 import type { WarpTargetId } from '../controller/warp';
 import type { ManeuverBurnTelemetry } from '../controller/burn';
+import type { ChuteLamp } from '../alerts';
 import { FlightDataPanel } from './FlightDataPanel';
 import { CrewPanel } from './CrewPanel';
 import { NavballCluster } from './NavballCluster';
@@ -123,6 +124,9 @@ export interface Telemetry {
   gear: 'up' | 'down' | 'moving' | null;
   /** Wheel brakes held (null = no wheels). */
   brakes: boolean | null;
+  /** Parachute lamp (null = none fitted) and the lowest opening load of armed chutes, Pa. */
+  chute: ChuteLamp | null;
+  chuteRating: number;
   /** Jet intake air supply / demand (null = no air-breathing engine running). */
   intakeAir: number | null;
   target: TargetTelemetry | null;
