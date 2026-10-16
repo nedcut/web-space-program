@@ -1679,3 +1679,16 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
 ## Veteran audit 2 and playtest kit (2026-10-15, op/audit2)
 - Report only: `docs/audits/2026-10-15-veteran-audit-2.md` re-checks every 2026-10-07 item and ranks a new top 15; `docs/PLAYTEST.md` is the one-page guide and feedback form for outside players. No game code changed.
 - Evidence: real-GPU runs (CDP Chrome, Firefox spot check); screenshots stay outside git in `C:\wsp-tools\shots\audit2\`, logs in `~/.t3/projects/wsp-traces/audit2/`. Docking was not verified hands-on (scripted approach failed) and sound was not listened to.
+
+## Playtest blockers: chutes, alarms, darkness, mission clock (2026-10-15, op/flightfix)
+
+- **Capsules are blunt bodies with or without a heat shield** (audit 2 item 1). A Lantern I or Harbor III whose
+  base leads now gets the same blunt-face trim as a heat shield (`PartDef.bluntBase`, `aero.ts bluntFace`), at the
+  pod's own axial Cd (0.9 / 0.95, the shield is 1.2), so it falls a little faster than a shielded pod. Reason: a real
+  capsule's base is the aeroshell whether or not ablator is bonded to it; the old model made the bare pod tumble
+  apex-first at 40–60 kPa terminal dynamic pressure, so its 25 kPa chute never opened. Chute ratings, reefing and
+  the cut threshold are unchanged, so a high-q semi-deploy (≈37 g on opening at 60 kPa) was rejected. Measured
+  (`scripts/career/bare-pod.ts`, straight up to ~110 km, everything staged on the way down): SAS retrograde
+  247 m/s crew lost → 6.9 m/s recovered (chute semi at 3.9 km, full at 1 km); SAS off 291 → 6.9 m/s; SAS prograde
+  still lost (294 m/s; holding prograde fights the trim). A shielded pod is unchanged to the printed digit (its
+  base is covered by the shield), and `scripts/career/playthrough.ts` output is byte-identical to main.

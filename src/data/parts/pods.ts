@@ -24,6 +24,7 @@ export const pods: PartDef[] = [
     dragCoefficient: { axial: 0.9, side: 1.0 },
     maxTemp: 1600,
     crashTolerance: 14,
+    bluntBase: true,
     modules: [
       { type: 'command', crew: 1, sasLevel: 1, ecPerSecond: 0.03 },
       { type: 'reactionWheel', torque: 2000, ecRate: 0.15 },
@@ -47,6 +48,7 @@ export const pods: PartDef[] = [
     dragCoefficient: { axial: 0.95, side: 1.0 },
     maxTemp: 1600,
     crashTolerance: 14,
+    bluntBase: true,
     modules: [
       { type: 'command', crew: 3, sasLevel: 2, ecPerSecond: 0.08 },
       { type: 'reactionWheel', torque: 8000, ecRate: 0.4 },

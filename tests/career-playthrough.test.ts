@@ -11,6 +11,7 @@ import { nextGoal, researchFor } from '../src/ui/hub/nextGoal';
 import { planFreeReturn } from '../src/game/autopilot';
 import { arrivalPeriapsisAltitude } from '../src/game/planning/arrival';
 import { buy, hop, sensor, toOrbit } from '../scripts/career/flights';
+import { flyFirstRocket } from '../scripts/career/bare-pod';
 
 const career = (preset: 'standard' | 'challenging' | 'real' = 'standard') => new World(new Universe(preset), PART_CATALOG, DEFAULT_START_UT, 'career');
 
@@ -22,6 +23,16 @@ describe('first flights', () => {
     expect(r.ok, r.note).toBe(true);
     expect([...r.biomes].some(b => b.includes('/spaceHigh/'))).toBe(true);
     expect(w.progression.science).toBeGreaterThan(40);
+  }, 240_000);
+
+  it('the classic first rocket without a heat shield trims base first and lands under its chute', () => {
+    // Capsule, chute, decoupler, tank, engine: straight up to ~110 km, everything staged on the way down.
+    for (const mode of ['retrograde', 'off'] as const) {
+      const r = flyFirstRocket(mode);
+      expect(r.lost, `${mode}: ${r.events.join('; ')}`).toBe(false);
+      expect(r.touchdown, mode).toBeLessThan(10);
+      expect(r.events.some(e => e.startsWith('full')), mode).toBe(true);
+    }
   }, 240_000);
 
   it('a splashdown completes the Earth test flight and every scale can launch something at once', () => {
