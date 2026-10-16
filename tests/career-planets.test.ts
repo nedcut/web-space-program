@@ -22,20 +22,39 @@ import { capture, toPlanet } from '../scripts/career/planets';
 const career = (preset: 'standard' | 'challenging' | 'real', ut = DEFAULT_START_UT) => new World(new Universe(preset), PART_CATALOG, ut, 'career');
 
 describe('interplanetary departures', () => {
-  it('flies a Venus departure with a plane change to the end (escape guidance stays well-conditioned)', () => {
-    // Day 30, Standard: the planner's best Venus option is "now", 1.4 km/s with a large normal component. The
-    // guidance aimed 174° around the escape hyperbola and its Lambert plane flipped: the burn stopped after 359 m/s.
+  it('flies an escape burn with a large plane change to the end (escape guidance stays well-conditioned)', () => {
+    // A Venus departure planned from a parking orbit in the wrong plane (1.4 km/s, 30° out of plane) stopped after
+    // 359 m/s: the guidance aimed 174° around the escape hyperbola, where the Lambert plane flips with the vessel's
+    // small out-of-plane offset during the burn.
     const w = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT + 30 * 86400, 'sandbox');
     w.launch(buildCinderbloom());
     expect(toOrbit(w, new Set(), 85000, 1)).toBeNull();
-    const plan = planTransferToBody(w, 'venus');
-    expect(plan).not.toBeNull();
-    expect(Math.abs(plan!.node.normal)).toBeGreaterThan(200);
-    const burn = executeNode(w, plan!.node, { minStage: 0 });
-    expect(runAutopilot(w, burn, { maxTime: plan!.node.time - w.ut + 1e4 }), burn.error).toBe(true);
-    expect(burn.dvUsed()).toBeGreaterThan(plan!.dv * 0.95);
-    expect(burn.residual()).toBeLessThan(5);
+    // The planner's "go now" Venus node of that day (before its own fix): 1.4 km/s, 22° normal, 41° radial in.
+    const node = w.addNode(w.ut + 1298.5);
+    node.prograde = 938.6; node.normal = 533.7; node.radial = -930.5;
+    const burn = executeNode(w, node, { minStage: 0 });
+    expect(runAutopilot(w, burn, { maxTime: 1e4 }), burn.error).toBe(true);
+    expect(burn.dvUsed()).toBeGreaterThan(1425 * 0.95);
+    // A course correction absorbs this; before the fix the burn stopped at 359 m/s, 2.9 km/s off.
+    expect(burn.residual()).toBeLessThan(20);
     expect(w.orbitOf(w.active!).e).toBeGreaterThan(1);
+  }, 240_000);
+});
+
+describe('interplanetary "go now"', () => {
+  it('plans the departure the options list priced: the cheapest point on the next orbit, not a dearer one', () => {
+    // Challenging, a Petrel parked 5 days before the Venus season: the list said "now ≈ 2.4 km/s", planning it gave
+    // 3.6 km/s (5.4 km/s minutes later) because the burn search could not reach the cheap half of the orbit.
+    const w = new World(new Universe('challenging'), PART_CATALOG, DEFAULT_START_UT + 269.3 * 86400, 'sandbox');
+    w.launch(buildPetrel('challenging'));
+    expect(toOrbit(w, new Set(), 140000, 2)).toBeNull();
+    const pe = w.universe.body('venus').atmosphere!.height * 1.5;
+    const first = planTransferToBody(w, 'venus', { periapsisAltitude: pe })!;
+    const now = first.windows!.find(o => o.kind === 'now')!;
+    w.removeNode(first.node.id);
+    const plan = planTransferToBody(w, 'venus', { periapsisAltitude: pe, departure: now.departure })!;
+    expect(plan.node.time - w.ut).toBeLessThan(86400);
+    expect(plan.dv).toBeLessThan(now.dv * 1.1);
   }, 240_000);
 });
 

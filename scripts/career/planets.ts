@@ -39,6 +39,7 @@ export function planDeparture(w: World, target: string, periapsis?: number, depa
   if (!plan) return `no ${target} transfer found`;
   if (departure === undefined) {
     const budget = dvLeft(w) * 0.9, options = [...(plan.windows ?? [])].sort((a, b) => a.departure - b.departure);
+    debug(`planner: ${((plan.node.time - w.ut) / 86400).toFixed(1)} d ${plan.dv.toFixed(0)} m/s; options ${options.map(o => `${o.kind} ${(o.wait / 86400).toFixed(1)}d ${o.dv.toFixed(0)}+${(o.captureDv ?? 0).toFixed(0)}`).join(' | ')}`);
     // Flyby only: the earliest option within 10 % of the cheapest affordable departure (not a "go now" plane change,
     // not a season two years out for a few percent).
     const flybys = options.filter(o => o.dv <= budget), cheapest = Math.min(...flybys.map(o => o.dv));
