@@ -33,6 +33,7 @@ export type SasMode =
   | 'radialOut'
   | 'target'
   | 'antiTarget'
+  | 'portAlign'
   | 'maneuver';
 
 export interface ControlInput {
@@ -67,6 +68,8 @@ export interface ControlInput {
   target?: StateVector;
   /** Optional: maneuver burn direction (inertial unit vector) for 'maneuver' mode. */
   maneuverDirection?: Vec3;
+  /** Target port control frame in inertial space; portAlign faces its -Y with matching +Z roll. */
+  targetPortOrientation?: Quat;
   /** Optional one-shot commands (part actions, action groups, flight tweaks), applied once by the authority. */
   commands?: VesselCommand[];
   /** Set by a node-execution program: the id of the maneuver node it flies (a probe's flight computer may fly an
