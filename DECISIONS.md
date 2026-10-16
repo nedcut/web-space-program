@@ -1675,3 +1675,7 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   reused; the lighting collaborator also reuses its sun-direction vector. Module
   responsibilities, precise line delta, validation and limits live in
   [the split report](docs/performance/split.md).
+
+## Veteran audit 2 and playtest kit (2026-10-15, op/audit2)
+- Report only: `docs/audits/2026-10-15-veteran-audit-2.md` re-checks every 2026-10-07 item and ranks a new top 15; `docs/PLAYTEST.md` is the one-page guide and feedback form for outside players. No game code changed.
+- Evidence: real-GPU runs (CDP Chrome, Firefox spot check); screenshots stay outside git in `C:\wsp-tools\shots\audit2\`, logs in `~/.t3/projects/wsp-traces/audit2/`. Docking was not verified hands-on (scripted approach failed) and sound was not listened to.

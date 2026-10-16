@@ -31,6 +31,14 @@ _Last updated: 2026-10-15_
 
 ## Recent changes
 
+### 2026-10-15 — Veteran audit 2 and playtest kit
+
+- The 2026-10-07 gap list is about 85% closed; a Moon round trip with the stock Selene, the planner and the
+  assists now works end to end on the real GPU. [Audit](docs/audits/2026-10-15-veteran-audit-2.md).
+- Before outside players: warn about chutes on capsules without a heat shield, fix the planner's 7-day ★ default
+  and the low-orbit time-warp cap, avoid black night-side Moon landings, fix the clipped editor Δv, and silence
+  SINK RATE under parachutes. Playtest guide for outside players: [PLAYTEST.md](docs/PLAYTEST.md).
+
 ### 2026-10-15 — Shipping pipeline
 
 - GitHub Actions checks Node 24.14.1 builds and retains the main build artifact.
