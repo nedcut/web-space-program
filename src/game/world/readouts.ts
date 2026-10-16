@@ -31,6 +31,9 @@ export function warpContext(this: World): WarpContext {
     altitude: alt,
     bodyRadius: b.radius,
     atmosphereHeight: b.atmosphere?.height ?? 0,
+    // Read the existing packed orbit; never solve another orbit/prediction in the frame loop.
+    orbitClear: !this.preciseGravity && wv.mode === 'rails' && !!wv.orbit && periapsisRadius(wv.orbit) > b.radius
+      + Math.max(b.atmosphere?.height ?? 0, b.solidSurface ? this.universe.terrain(b.id).maxHeight : 0),
   };
 }
 

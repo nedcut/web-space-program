@@ -80,6 +80,28 @@ function orbitMap() {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('map zoom', () => {
+  it('frames Moon outbound, Earth return and planet transfers around their common primary', () => {
+    const m = orbitMap();
+    try {
+      const moon = m.world.universe.body('moon'), mars = m.world.universe.body('mars');
+      m.ui.frameTransferOverview('moon');
+      expect(m.ui.focus).toEqual({ kind: 'body', id: 'earth' });
+      expect(m.map.distance).toBeGreaterThan(moon.orbit!.a * 2);
+      placeInCircularOrbit(m.world, m.world.active!, 'moon', 40000);
+      m.ui.frameTransferOverview('earth');
+      expect(m.ui.focus).toEqual({ kind: 'body', id: 'earth' });
+      expect(m.map.distance).toBeGreaterThan(moon.orbit!.a * 2);
+      placeInCircularOrbit(m.world, m.world.active!, 'earth', 82000);
+      m.ui.frameTransferOverview('mars');
+      expect(m.ui.focus).toEqual({ kind: 'body', id: 'sun' });
+      expect(m.map.distance).toBeGreaterThan(mars.orbit!.a * 2);
+      // Reading subsequent frames never resets a player's zoom after that one overview.
+      m.map.distance *= 0.7;
+      const chosen = m.map.distance;
+      for (let i = 0; i < 10; i++) m.frame();
+      expect(m.map.distance).toBe(chosen);
+    } finally { m.dispose(); }
+  });
   it('picks the ground under a view-plane point and re-aims the camera at it from closer', () => {
     const ground = { x: 0, y: 0, z: 0 };
     // Straight down the view axis from (yaw 0, pitch 0) at 3 R: the near pole of the sphere on +X.
