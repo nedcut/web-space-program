@@ -40,6 +40,14 @@ function BindingRow({ action, bindings, capturing, onCapture, clash }: { action:
   </div>;
 }
 
+/** UI scale rescales the whole app, so applying it mid-drag moves the slider out from under the pointer. Preview the value, apply on release. */
+function UiScaleRow({ value }: { value: number }) {
+  const [draft, setDraft] = useState<number | null>(null);
+  const shown = draft ?? value;
+  const commit = () => { if (draft !== null) { updateSettings({ uiScale: draft }); setDraft(null); } };
+  return <Row label="UI scale"><span><Slider aria-label="UI scale" min={0.8} max={1.3} step={0.05} value={shown} onChange={e => setDraft(+e.target.value)} onPointerUp={commit} onKeyUp={commit} onBlur={commit} /> <output>{shown.toFixed(2)}</output></span></Row>;
+}
+
 export function SettingsPanel({ onClose, world }: { onClose: () => void; world?: World }) {
   const [program] = useState(() => world ?? openProgram());
   const [precise, setPrecise] = useState(program.preciseGravity);
@@ -140,7 +148,7 @@ export function SettingsPanel({ onClose, world }: { onClose: () => void; world?:
       {check('autoShowRcsPad', 'Open RCS translation pad when docking (until dismissed)')}
     </>,
     Accessibility: () => <>
-      {range('uiScale', 'UI scale', 0.8, 1.3, 0.05)}{check('highContrast', 'High-contrast HUD')}
+      <UiScaleRow value={settings.uiScale} />{check('highContrast', 'High-contrast HUD')}
       {check('reduceMotion', 'Reduce motion', systemReducedMotion ? 'Menu and panel animations, camera effects and flicker. Your system already asks for reduced motion, so menu animations are off either way.' : 'Menu and panel animations, camera effects and flicker.')}
       {range('cameraShake', 'Camera shake', 0, 1.5, 0.05)}{check('colourBlind', 'Colour-blind-friendly navball markers')}
     </>,
