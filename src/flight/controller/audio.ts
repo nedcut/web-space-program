@@ -5,6 +5,7 @@ import { type AudioState, type EngineType } from '../../audio';
 import { length } from '../../util/vec3';
 import type { FlightController } from '../controller';
 import type { FlightControllerInternals } from './internals';
+import { shownAlerts } from './telemetry';
 
 const FUEL_RESOURCES = ['liquidFuel', 'oxidizer', 'solidFuel', 'xenon', 'monopropellant'] as const;
 const WARP_RATES = [1, 5, 10, 50, 100, 1000, 10000, 100000, 1000000];
@@ -33,15 +34,10 @@ export function updateAudio(this: FlightController, internals: FlightControllerI
   }
   for (const e of history.engines) { e.thrustFraction = 0; e.count = 0; e.size = 0; }
   let fairings = 0, mechanismChanged = false;
-  let fuel = 0, capacity = 0, temperature = 0, wheelSpeed = 0;
+  let fuel = 0, wheelSpeed = 0;
 
   for (const p of st.parts) {
-    temperature = Math.max(temperature, p.temperature / p.maxTemp);
-    for (const t of p.skinTemperature) temperature = Math.max(temperature, t / p.maxTemp);
-    for (const resource of FUEL_RESOURCES) {
-      fuel += p.resources[resource] ?? 0;
-      capacity += p.maxResources[resource] ?? 0;
-    }
+    for (const resource of FUEL_RESOURCES) fuel += p.resources[resource] ?? 0;
     const deployed = p.leg?.deployed ?? p.wheel?.deployed ?? p.bayOpen ?? p.drillDeployed;
     if (deployed !== undefined) {
       if (history.mechanics.has(p.uid) && history.mechanics.get(p.uid) !== deployed) mechanismChanged = true;
@@ -138,10 +134,8 @@ export function updateAudio(this: FlightController, internals: FlightControllerI
   sample.jetting = st.eva?.jetting;
   sample.drilling = drilling;
   sample.landed = st.situation !== 'flying';
-  sample.fuelFraction = capacity > 0 ? fuel / capacity : undefined;
-  sample.temperatureFraction = temperature;
   sample.gForce = tm.gForce;
   sample.terrainDanger = terrainDanger;
-  sample.noSignal = this.world.commsSettings.enabled && !this.world.connection(st).connected;
+  sample.alerts = shownAlerts(this);
   internals.audio.update(sample);
 }

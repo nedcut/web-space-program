@@ -293,6 +293,40 @@ describe('spatial mix and location themes', () => {
 });
 
 
+describe('alarm tones', () => {
+  it('sound only for alerts on the HUD banner: cautions once, warnings every 8 s', async () => {
+    vi.stubGlobal('AudioContext', ContextDouble);
+    const audio = new GameAudio();
+    try {
+      audio.resume(); await Promise.resolve(); await Promise.resolve();
+      const ctx = ContextDouble.latest;
+      const beeps: number[] = [];
+      vi.spyOn(audio as unknown as { tone: (f: number) => void }, 'tone').mockImplementation((f: number) => { beeps.push(f); });
+      const quiet: AudioState = { ...state, vesselId: 'v', reentryHeat: 0, gForce: 8, terrainDanger: true };
+      const at = (t: number, alerts: AudioState['alerts']) => { ctx.currentTime = t; beeps.length = 0; audio.update({ ...quiet, alerts }); return beeps.length / 2; };
+      // High g and terrain inputs alone, with nothing on the banner, stay silent.
+      expect(at(1, [])).toBe(0);
+      expect(at(20, [])).toBe(0);
+      const caution = [{ id: 'g', level: 'warn' as const }];
+      expect(at(21, caution)).toBe(1);
+      expect(at(40, caution)).toBe(0);
+      expect(at(41, [])).toBe(0);
+      expect(at(42, caution)).toBe(1);
+      const warning = [{ id: 'heat', level: 'bad' as const }];
+      expect(at(50, warning)).toBe(1);
+      expect(at(55, warning)).toBe(0);
+      expect(at(58.1, warning)).toBe(1);
+      // Alerts past the three the banner shows do not sound.
+      const many = (['control', 'heat', 'g', 'fuel'] as const).map(id => ({ id, level: 'warn' as const }));
+      expect(at(70, many)).toBe(3);
+      expect(beeps).not.toContain(440);
+      // A silenced warning stays quiet past its repeat interval.
+      expect(at(80, [{ id: 'terrain', level: 'bad' }])).toBe(1);
+      expect(at(90, [{ id: 'terrain', level: 'bad', silenced: true }])).toBe(0);
+    } finally { audio.dispose(); vi.unstubAllGlobals(); }
+  });
+});
+
 describe('bounded upgraded audio', () => {
   it('runs every engine, mechanical layer and adaptive theme without per-frame node allocation', async () => {
     vi.stubGlobal('AudioContext', ContextDouble);
@@ -310,7 +344,7 @@ describe('bounded upgraded audio', () => {
       expect(ctx.nodes.length).toBe(baseline);
       expect(ctx.nodes.some(n => n.playbackRate.targets.some(v => v < 1))).toBe(true);
       audio.update({ ...upgraded, mechanicalState: '1:true', walking: true,
-        fuelFraction: 0.01, temperatureFraction: 0.95, gForce: 8, terrainDanger: true, noSignal: true });
+        gForce: 8, terrainDanger: true, alerts: [{ id: 'terrain', level: 'bad' }, { id: 'g', level: 'warn' }] });
       expect(ctx.nodes.length).toBeGreaterThan(baseline);
       for (let i = 0; i < 500; i++) { audio.uiClick(); audio.setMusic(i % 2 ? 'titan' : 'saturn'); }
       const nodesWithSound = ctx.nodes.length;

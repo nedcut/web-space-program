@@ -214,6 +214,8 @@ export interface HudCallbacks {
   onWarpTo?(id: WarpTargetId): void;
   onCancelWarpTo?(): void;
   onDismissHint?(): void;
+  /** Click a red alert: silence its repeating alarm tone. */
+  onSilenceAlert?(id: string): void;
 }
 
 export function NavballView({ getFrame }: { getFrame: () => { frame: NavballFrame; markers: NavballMarker[] } | null }) {
@@ -395,7 +397,7 @@ export function Hud({ t, cb, navball, dock, precision, stageProgress, gamepadCon
         <Altimeter t={t} cb={cb} imperial={imperial} />
         {showOrbit && <OrbitStrip t={t} distance={distance} />}
         <div className="hud-messages" role="log" aria-live="polite" aria-relevant="additions" aria-label="Flight notifications">
-          <AlertStack alerts={t.feel.alerts} />
+          <AlertStack alerts={t.feel.alerts} onSilence={cb.onSilenceAlert} />
           {t.messages.map((m) => (
             <Panel key={m.id} className={`hud-msg ${m.level}`}>{m.text}</Panel>
           ))}

@@ -91,6 +91,18 @@ describe('flight cautions', () => {
     expect(t.update({ ...calm, gForce: 5.9 }, 0.5).map((a) => a.id)).toEqual(['heat', 'g']);
     expect(t.update(calm, 2)).toEqual([]);
   });
+
+  it('silences a red warning until it clears, then re-arms it', () => {
+    const t = new AlertTracker();
+    const hot = { ...calm, heatFraction: 0.95, gForce: 7 };
+    t.update(hot, 0);
+    t.silence('g');
+    t.silence('heat');
+    expect(t.current.map(a => `${a.id}:${!!a.silenced}`)).toEqual(['heat:true', 'g:false']);
+    expect(t.update(hot, 0.5).find(a => a.id === 'heat')?.silenced).toBe(true);
+    t.update(calm, 3);
+    expect(t.update(hot, 3.5).find(a => a.id === 'heat')?.silenced).toBeUndefined();
+  });
 });
 
 function orbiting() {

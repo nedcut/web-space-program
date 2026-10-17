@@ -20,14 +20,18 @@ export interface FeelTelemetry {
   hint: Hint | null;
 }
 
-/** Caution/warning lamps: red for immediate danger, amber for attention. Highest priority first. */
-export function AlertStack({ alerts }: { alerts: FlightAlert[] }) {
+/** Caution/warning lamps: red for immediate danger, amber for attention. Highest priority first. A red lamp is a button
+ *  that silences its repeating tone; the lamp itself stays until the danger clears. */
+export function AlertStack({ alerts, onSilence }: { alerts: FlightAlert[]; onSilence?: (id: string) => void }) {
   if (!alerts.length) return null;
   return (
     <div className="feel-alerts" role="alert" aria-live="assertive">
-      {alerts.slice(0, 3).map((a) => (
-        <div key={a.id} className={`feel-alert ${a.level}`}>{a.text}</div>
-      ))}
+      {alerts.slice(0, 3).map((a) => a.level === 'bad' && onSilence
+        ? <button key={a.id} type="button" className={`feel-alert bad${a.silenced ? ' silenced' : ''}`} disabled={a.silenced}
+          title={a.silenced ? 'Alarm silenced until this clears' : 'Click to silence this alarm'} onClick={() => onSilence(a.id)}>
+          {a.text}{a.silenced && ' · MUTED'}
+        </button>
+        : <div key={a.id} className={`feel-alert ${a.level}`}>{a.text}</div>)}
     </div>
   );
 }
