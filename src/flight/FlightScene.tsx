@@ -443,6 +443,7 @@ export default function FlightScene() {
             onWarpTo: (id) => ctrl.current?.warpTo(id),
             onCancelWarpTo: () => ctrl.current && ctrl.current.warpDriver.cancel(ctrl.current.world, 'Warp-to cancelled'),
             onDismissHint: () => ctrl.current?.hints.dismiss(),
+            onSilenceAlert: (id) => ctrl.current?.silenceAlert(id),
           }}
         />
       )}

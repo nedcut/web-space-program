@@ -529,6 +529,8 @@ export class FlightController {
   }
 
   /** Dev/test scenarios (URL ?scenario=): reposition the active vessel. */
+  /** Banner click on a red warning: stop its alarm tone repeating until it clears. */
+  silenceAlert(id: string) { telemetry.silenceAlert(this, id); }
   devScenario(name: string) { return scenarios.devScenario.call(this, this.systems, name); }
 
   startAssist(id: AssistId, opts?: AssistOptions) { return assist.startAssist.call(this, this.systems, id, opts); }

@@ -320,6 +320,9 @@ describe('alarm tones', () => {
       const many = (['control', 'heat', 'g', 'fuel'] as const).map(id => ({ id, level: 'warn' as const }));
       expect(at(70, many)).toBe(3);
       expect(beeps).not.toContain(440);
+      // A silenced warning stays quiet past its repeat interval.
+      expect(at(80, [{ id: 'terrain', level: 'bad' }])).toBe(1);
+      expect(at(90, [{ id: 'terrain', level: 'bad', silenced: true }])).toBe(0);
     } finally { audio.dispose(); vi.unstubAllGlobals(); }
   });
 });

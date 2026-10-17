@@ -29,7 +29,7 @@ export interface AudioState {
   gForce?: number;
   terrainDanger?: boolean;
   /** Alerts on the HUD banner, most severe first. Alarm tones only ever sound for these. */
-  alerts?: readonly { id: string; level: 'warn' | 'bad' }[];
+  alerts?: readonly { id: string; level: 'warn' | 'bad'; silenced?: boolean }[];
   structuralStress?: number;
   launchRumble?: number;
   verticalSpeed?: number;
@@ -789,7 +789,7 @@ export class GameAudio {
       for (let i = 0; i < shown; i++) if (alerts[i].id === id) still = true;
       if (!still) this.alarmTimes.delete(id);
     }
-    for (let i = 0; i < shown; i++) this.alarm(alerts[i].id, alerts[i].level === 'bad');
+    for (let i = 0; i < shown; i++) if (!alerts[i].silenced) this.alarm(alerts[i].id, alerts[i].level === 'bad');
   }
 
   /** Cautions beep once when they appear; warnings repeat while they stay on the banner. */

@@ -17,6 +17,8 @@ export interface FlightAlert {
   id: string;
   level: AlertLevel;
   text: string;
+  /** The pilot silenced this warning's repeating tone; it re-arms once the alert clears. */
+  silenced?: boolean;
 }
 
 export interface AlertInput {
@@ -141,6 +143,7 @@ export function alertConditions(i: AlertInput): FlightAlert[] {
 /** Applies hysteresis and ordering (warnings after cautions, stable order otherwise). */
 export class AlertTracker {
   private live = new Map<string, { alert: FlightAlert; until: number }>();
+  private silenced = new Set<string>();
   /** The list from the latest `update`, which the HUD shows and the alarm tones follow. */
   current: readonly FlightAlert[] = [];
 
@@ -153,14 +156,23 @@ export class AlertTracker {
     const out: FlightAlert[] = [];
     for (const [id, e] of this.live) {
       if (e.until < now) this.live.delete(id);
-      else out.push(e.alert);
+      else out.push(this.silenced.has(id) ? { ...e.alert, silenced: true } : e.alert);
     }
+    for (const id of this.silenced) if (!this.live.has(id)) this.silenced.delete(id);
     this.current = out.sort((a, b) => (a.level === b.level ? 0 : a.level === 'bad' ? -1 : 1));
     return out;
   }
 
+  /** Stops a shown warning's tone from repeating until the alert clears. Cautions only beep once anyway. */
+  silence(id: string) {
+    if (this.live.get(id)?.alert.level !== 'bad') return;
+    this.silenced.add(id);
+    this.current = this.current.map(a => a.id === id ? { ...a, silenced: true } : a);
+  }
+
   clear() {
     this.live.clear();
+    this.silenced.clear();
     this.current = [];
   }
 }

@@ -6,6 +6,8 @@
 }
 .feel-alert.warn { color: #1d1300; background: rgba(241, 201, 123, 0.92); border-color: #ffe0a0; }
 .feel-alert.bad { color: #fff; background: rgba(214, 48, 58, 0.92); border-color: #ff9294; animation: feel-blink 0.9s steps(2, start) infinite; }
+button.feel-alert { pointer-events: auto; cursor: pointer; }
+button.feel-alert.silenced { cursor: default; animation: none; }
 @keyframes feel-blink { 50% { background: rgba(120, 18, 26, 0.92); } }
 
 .feel-cam .mono { color: var(--accent); margin-left: 4px; }

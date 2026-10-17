@@ -34,6 +34,7 @@ const throttleTrackers = new WeakMap<FlightController, ThrottleCueTracker>();
 const alertTrackers = new WeakMap<FlightController, AlertTracker>();
 /** Alerts currently on the HUD banner, refreshed with telemetry. */
 export const shownAlerts = (c: FlightController) => alertTrackers.get(c)?.current ?? [];
+export const silenceAlert = (c: FlightController, id: string) => alertTrackers.get(c)?.silence(id);
 const burnTrackers = new WeakMap<FlightController, BurnTracker>();
 
 /** Highest rails warp index allowed right now (0 = rails warp refused: thrusting or in atmosphere). */
