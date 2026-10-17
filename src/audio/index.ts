@@ -26,11 +26,10 @@ export interface AudioState {
   drilling?: boolean;
   mechanicalState?: string;
   landed?: boolean;
-  fuelFraction?: number;
-  temperatureFraction?: number;
   gForce?: number;
   terrainDanger?: boolean;
-  noSignal?: boolean;
+  /** Alerts on the HUD banner, most severe first. Alarm tones only ever sound for these. */
+  alerts?: readonly { id: string; level: 'warn' | 'bad' }[];
   structuralStress?: number;
   launchRumble?: number;
   verticalSpeed?: number;
@@ -45,6 +44,10 @@ export interface AudioState {
 
 const positive = (v: number): number => Number.isFinite(v) ? Math.max(0, v) : 0;
 const unit = (v: number): number => Math.min(1, positive(v));
+/** Alarm tone per HUD alert id (flight/alerts.ts); unknown ids use a neutral pitch. */
+const ALARM_PITCH: Record<string, number> = { control: 520, heat: 880, g: 740, terrain: 330, structure: 590, fuel: 440, power: 500 };
+/** Alerts the HUD banner displays at once (AlertStack). */
+const SHOWN_ALERTS = 3;
 const atmosphere = (pressure: number): number => Math.sqrt(unit(pressure / 101325));
 
 /** Perceived engine amplitude, including a small structure-borne component in vacuum. */
@@ -122,6 +125,7 @@ export class GameAudio {
   private gates = new Map<GainNode, { to: AudioNode; open: boolean; quietUntil: number }>();
   private gateSweep: ReturnType<typeof setTimeout> | undefined;
   private warningTimes = new Map<string, number>();
+  private alarmTimes = new Map<string, number>();
   private previousMechanical?: string;
   private previousVessel?: string;
   private wasLanded = false;
@@ -741,6 +745,7 @@ export class GameAudio {
       this.previousMechanical = state.mechanicalState;
       this.wasLanded = !!state.landed;
       this.warningTimes.clear();
+      this.alarmTimes.clear();
       this.previousControls = undefined;
     }
     const previous = this.previousControls;
@@ -776,20 +781,25 @@ export class GameAudio {
       this.burst(0.09, 0.035 * distance, 350, 'lowpass', 'brown');
       this.nextStep = ctx.currentTime + 0.48;
     }
-    this.alarm('fuel', state.fuelFraction !== undefined && state.fuelFraction < 0.1, 440);
-    this.alarm('heat', (state.temperatureFraction ?? 0) > 0.85, 880);
-    this.alarm('stress', (state.structuralStress ?? 0) > 0.85, 590);
-    this.alarm('g', (state.gForce ?? 0) > 6, 740);
-    this.alarm('terrain', !!state.terrainDanger, 330);
-    this.alarm('signal', !!state.noSignal, 520);
+    // The banner shows the first SHOWN_ALERTS; a cleared alert re-arms so it beeps again if it returns.
+    const alerts = state.alerts ?? [];
+    const shown = Math.min(alerts.length, SHOWN_ALERTS);
+    for (const id of this.alarmTimes.keys()) {
+      let still = false;
+      for (let i = 0; i < shown; i++) if (alerts[i].id === id) still = true;
+      if (!still) this.alarmTimes.delete(id);
+    }
+    for (let i = 0; i < shown; i++) this.alarm(alerts[i].id, alerts[i].level === 'bad');
   }
 
-  private alarm(name: string, active: boolean, pitch: number): void {
+  /** Cautions beep once when they appear; warnings repeat while they stay on the banner. */
+  private alarm(name: string, repeat: boolean): void {
     const now = this.context!.currentTime;
-    if (!active || now < (this.warningTimes.get(name) ?? 0)) return;
+    if (now < (this.alarmTimes.get(name) ?? 0)) return;
+    const pitch = ALARM_PITCH[name] ?? 620;
     this.tone(pitch, 0.14, 0.07, 'sine', pitch, 0, true);
     this.tone(name === 'terrain' ? pitch * 2 : pitch, 0.14, 0.07, 'sine', pitch, 0.23, true);
-    this.warningTimes.set(name, now + (name === 'terrain' ? 2 : 8));
+    this.alarmTimes.set(name, repeat ? now + (name === 'terrain' ? 2 : 8) : Infinity);
   }
 
   private pad(): void {

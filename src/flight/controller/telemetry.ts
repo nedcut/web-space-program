@@ -32,6 +32,8 @@ const DARK_SUGGEST_AGL = 3000;
 const cueStates = new WeakMap<FlightController, { vessel: string; body: string; signal: boolean; throttle: string | null; sas: boolean; soi: boolean; orbit: boolean; situation: string; staged: number; darkTold: boolean }>();
 const throttleTrackers = new WeakMap<FlightController, ThrottleCueTracker>();
 const alertTrackers = new WeakMap<FlightController, AlertTracker>();
+/** Alerts currently on the HUD banner, refreshed with telemetry. */
+export const shownAlerts = (c: FlightController) => alertTrackers.get(c)?.current ?? [];
 const burnTrackers = new WeakMap<FlightController, BurnTracker>();
 
 /** Highest rails warp index allowed right now (0 = rails warp refused: thrusting or in atmosphere). */

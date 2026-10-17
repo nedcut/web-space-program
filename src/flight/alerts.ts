@@ -141,6 +141,8 @@ export function alertConditions(i: AlertInput): FlightAlert[] {
 /** Applies hysteresis and ordering (warnings after cautions, stable order otherwise). */
 export class AlertTracker {
   private live = new Map<string, { alert: FlightAlert; until: number }>();
+  /** The list from the latest `update`, which the HUD shows and the alarm tones follow. */
+  current: readonly FlightAlert[] = [];
 
   update(input: AlertInput, now: number): FlightAlert[] {
     // A recovered stopping margin / touchdown clears terrain immediately, not 1.2 seconds later.
@@ -153,10 +155,12 @@ export class AlertTracker {
       if (e.until < now) this.live.delete(id);
       else out.push(e.alert);
     }
-    return out.sort((a, b) => (a.level === b.level ? 0 : a.level === 'bad' ? -1 : 1));
+    this.current = out.sort((a, b) => (a.level === b.level ? 0 : a.level === 'bad' ? -1 : 1));
+    return out;
   }
 
   clear() {
     this.live.clear();
+    this.current = [];
   }
 }
