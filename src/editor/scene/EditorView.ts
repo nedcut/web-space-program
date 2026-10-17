@@ -133,6 +133,7 @@ export class EditorView {
   // Set-aside (detached) pieces.
   private detachedGroup = new THREE.Group();
   private detachedObjs: { obj: THREE.Object3D; index: number; uid: number }[] = [];
+  private detachedByUid = new Map<number, THREE.Object3D>();
   private lastDetached: SessionView['detached'] | null = null;
   /** Craft-frame bounds of the set-aside pieces (empty when none). */
   private detachedBox = new THREE.Box3();
@@ -610,6 +611,7 @@ export class EditorView {
   private syncDetached(snap: SessionView) {
     for (const d of this.detachedObjs) d.obj.removeFromParent();
     this.detachedObjs = [];
+    this.detachedByUid.clear();
     this.detachedBox.makeEmpty();
     this.detachedAnchors = [];
     this.hoverDetached = null; this.hoverDetachedUid = null;
@@ -629,6 +631,7 @@ export class EditorView {
         setTint(obj, DETACHED_TINT);
         this.detachedGroup.add(obj);
         this.detachedObjs.push({ obj, index, uid: p.uid });
+        this.detachedByUid.set(p.uid, obj);
         // Bounds in the craft frame (the group sits at the craft origin).
         obj.updateMatrixWorld(true);
         box.union(this.scratchBox.setFromObject(obj).applyMatrix4(toCraft));
@@ -664,7 +667,7 @@ export class EditorView {
   }
 
   private applyDetachedHighlights() {
-    for (const d of this.detachedObjs) setTint(d.obj, this.hoverDetachedSet.has(d.uid) || this.stageSet.has(d.uid) ? HOVER_TINT : DETACHED_TINT);
+    for (const d of this.detachedObjs) setTint(d.obj, this.hoverDetachedSet.has(d.uid) || this.stageSet.has(d.uid) ? HOVER_TINT : this.selectSet.has(d.uid) ? SELECT_TINT : DETACHED_TINT);
   }
 
   // ------------------------------------------------------------------ held assembly
@@ -718,7 +721,7 @@ export class EditorView {
     const snap = this.session.getSnapshot();
     this.snapKey = null;
     this.linkPreview.visible = false;
-    this.clearSplicePreview(snap);
+    this.clearSplicePreview();
     if (this.spliceMarker) this.spliceMarker.mesh.visible = false;
     this.setCursorLabel('');
     if (this.session.isLinkPlacement()) {
@@ -780,9 +783,9 @@ export class EditorView {
         ghosts = this.counterpartGhosts(best.parent.uid, D, T, false);
       } else if (rootDef.surfaceAttachable && !this.altDown && this.mouseInside) {
         // 2) Surface attachment by raycast.
-        const hit = this.surfaceHit(snap.angleSnap);
+        const hit = this.surfaceHit(snap.angleSnap, true);
         if (hit) {
-          const parent = craft.parts.find((p) => p.uid === hit.uid)!;
+          const parent = this.assemblyOf(hit.uid).find((p) => p.uid === hit.uid)!;
           const up = qRotate(parent.rotation, UP);
           const t = surfaceTransform(rootDef, hit.point, hit.normal, up, snap.held.rotation);
           // Held-space root rotation is R_acc * q_root; map it onto the surface orientation.
@@ -825,7 +828,7 @@ export class EditorView {
   /** Symmetry counterparts for a new part (mirrors CraftEditor.addSymmetric). */
   private counterpartGhosts(parentUid: number, D: Quat, T: Vec3, surface: boolean): { q: Quat; p: Vec3 }[] {
     const snap = this.session.getSnapshot();
-    const parts = snap.craft.parts;
+    const parts = this.assemblyOf(parentUid);
     const parent = parts.find((p) => p.uid === parentUid)!;
     const out: { q: Quat; p: Vec3 }[] = [];
     if (parent.symmetryGroup !== undefined) {
@@ -886,11 +889,12 @@ export class EditorView {
   }
 
   /** Undo an insert preview: put the parts it pushed back where the craft has them. */
-  private clearSplicePreview(snap: SessionView) {
+  private clearSplicePreview() {
     if (!this.splicePreview.length) return;
+    const parts = this.assemblyOf(this.splicePreview[0]);
     for (const uid of this.splicePreview) {
-      const p = snap.craft.parts.find(q => q.uid === uid), e = this.partObjs.get(uid);
-      if (p && e) { toV(p.position, e.obj.position); toQ(p.rotation, e.obj.quaternion); }
+      const p = parts.find(q => q.uid === uid), obj = this.partObj(uid);
+      if (p && obj) { toV(p.position, obj.position); toQ(p.rotation, obj.quaternion); }
     }
     this.splicePreview = [];
   }
@@ -900,7 +904,7 @@ export class EditorView {
    * re-attach, on the held part's far node. `D`/`T` place held space in the craft frame.
    */
   private previewSplice(snap: SessionView, parentUid: number, occupantUid: number, through: WorldAttachNode, D: Quat, T: Vec3) {
-    const parts = snap.craft.parts;
+    const parts = this.assemblyOf(parentUid);
     const parent = parts.find(p => p.uid === parentUid)!, occupant = parts.find(p => p.uid === occupantUid)!;
     const at = { position: add(qRotate(D, through.position), T), direction: qRotate(D, through.direction) };
     const sets: { parent: PartInstance; occupant: PartInstance; position: Vec3; direction: Vec3 }[] = [{ parent, occupant, ...at }];
@@ -916,14 +920,22 @@ export class EditorView {
       if (!node) continue;
       const t: Transform = alignNodes(worldNode(set.occupant, node), { ...through, position: set.position, direction: set.direction });
       for (const uid of descendants(parts, set.occupant.uid)) {
-        const p = parts.find(q => q.uid === uid), e = this.partObjs.get(uid);
-        if (!p || !e) continue;
-        toV(add(qRotate(t.rotation, p.position), t.position), e.obj.position);
-        toQ(qNormalize(qMul(t.rotation, p.rotation)), e.obj.quaternion);
+        const p = parts.find(q => q.uid === uid), obj = this.partObj(uid);
+        if (!p || !obj) continue;
+        toV(add(qRotate(t.rotation, p.position), t.position), obj.position);
+        toQ(qNormalize(qMul(t.rotation, p.rotation)), obj.quaternion);
         this.splicePreview.push(uid);
       }
     }
   }
+
+  /** The parts of the craft, or of the set-aside piece, that hold `uid`. */
+  private assemblyOf(uid: number): PartInstance[] {
+    const snap = this.session.getSnapshot();
+    if (!this.detachedByUid.has(uid)) return snap.craft.parts;
+    return snap.detached.find(a => a.parts.some(p => p.uid === uid))?.parts ?? snap.craft.parts;
+  }
+  private partObj(uid: number): THREE.Object3D | undefined { return this.partObjs.get(uid)?.obj ?? this.detachedByUid.get(uid); }
 
   private setCursorLabel(text: string) {
     if (text !== this.cursorText) {
@@ -972,12 +984,12 @@ export class EditorView {
 
   /**
    * Surface hit in craft frame with a clean analytic normal for cylindrical parents.
-   * `grid` snaps cylinder hits to 15° around the axis and 5 cm along it (Shift: 5° / 1 cm).
+   * `withDetached`: set-aside pieces count too. `grid` snaps cylinder hits to 15° around the axis and 5 cm along it (Shift: 5° / 1 cm).
    */
-  private surfaceHit(grid = false): { uid: number; point: Vec3; normal: Vec3 } | null {
-    const pick = this.pickPart();
+  private surfaceHit(grid = false, withDetached = false): { uid: number; point: Vec3; normal: Vec3 } | null {
+    const pick = this.pickPart(withDetached);
     if (!pick) return null;
-    const part = this.session.getSnapshot().craft.parts.find((p) => p.uid === pick.uid);
+    const part = this.assemblyOf(pick.uid).find((p) => p.uid === pick.uid);
     if (!part) return null;
     const def = CATALOG.get(part.partId)!;
     if (!def.allowSurfaceAttachChildren) return null;
@@ -1019,14 +1031,16 @@ export class EditorView {
     for (const m of this.nodeMarkers) m.mesh.removeFromParent();
     this.nodeMarkers = [];
     const snap = this.session.getSnapshot();
-    this.craftNodes = freeAttachNodes(snap.craft, CATALOG).filter(n => n.id !== 'srf');
+    // Set-aside pieces take parts too.
+    this.craftNodes = [snap.craft, ...snap.detached].flatMap(a => freeAttachNodes(a, CATALOG)).filter(n => n.id !== 'srf');
     this.heldNodes = freeAttachNodes({ parts: this.heldParts }, CATALOG).filter(n => n.id !== 'srf');
     this.jointNodes = [];
     this.heldThrough.clear();
     this.spliceMarker = null;
     if (!snap.held || this.session.isLinkPlacement()) return;
-    const byUid = new Map(snap.craft.parts.map(p => [p.uid, p]));
-    for (const c of snap.craft.parts) {
+    const all = [...snap.craft.parts, ...snap.detached.flatMap(a => a.parts)];
+    const byUid = new Map(all.map(p => [p.uid, p]));
+    for (const c of all) {
       if (c.parent === undefined || !c.attachNode || c.attachNode === 'srf' || c.link) continue;
       const parent = byUid.get(c.parent), node = parent && CATALOG.get(parent.partId)?.attachNodes.find(n => n.id === c.parentNode);
       if (parent && node) this.jointNodes.push({ ...worldNode(parent, node), occupant: c.uid });
@@ -1083,7 +1097,7 @@ export class EditorView {
       const handle = this.gizmo?.pick(this.raycaster) ?? null;
       if (this.gizmo?.setHot(handle)) this.visualVersion++;
       this.gizmoHover = handle;
-      const p = handle ? null : this.pickPart(snap.mode === 'build' && snap.tool === 'place');
+      const p = handle ? null : this.pickPart(snap.mode === 'actions' || snap.tool === 'place');
       if (p?.detached !== undefined) { detached = p.detached; detachedUid = p.uid; }
       else if (p) {
         uid = p.uid;
@@ -1102,7 +1116,8 @@ export class EditorView {
     }
     if (detached !== this.hoverDetached || detachedUid !== this.hoverDetachedUid) {
       this.hoverDetached = detached; this.hoverDetachedUid = detachedUid;
-      this.hoverDetachedSet = detached === null || detachedUid === null ? new Set() : descendants(snap.detached[detached].parts, detachedUid);
+      this.hoverDetachedSet = detached === null || detachedUid === null ? new Set()
+        : snap.mode === 'actions' ? new Set([detachedUid]) : descendants(snap.detached[detached].parts, detachedUid);
       this.applyDetachedHighlights(); this.visualVersion++;
     }
     const changed = set.size !== this.hoverSet.size || [...set].some((u) => !this.hoverSet.has(u));
@@ -1187,7 +1202,7 @@ export class EditorView {
       this.longPress = window.setTimeout(() => {
         if (this.drag !== d || d.moved || this.session.getSnapshot().held) return;
         d.moved = true; // consume: no click on release
-        const pick = this.pickPart();
+        const pick = this.pickPart(true);
         if (pick) this.session.openPanel(pick.uid);
       }, 550);
     }
@@ -1222,7 +1237,7 @@ export class EditorView {
     window.clearTimeout(this.longPress);
     if (this.gizmoDrag) { this.endGizmoDrag(!!d?.moved); return; }
     if (d && !d.moved && d.button === 2 && !this.session.getSnapshot().held) {
-      const pick = this.pickPart();
+      const pick = this.pickPart(true);
       if (pick) this.session.openPanel(pick.uid);
       return;
     }
@@ -1262,14 +1277,14 @@ export class EditorView {
       }
       return;
     }
-    const pick = this.pickPart(snap.mode === 'build' && snap.tool === 'place');
+    const pick = this.pickPart(snap.mode === 'actions' || snap.tool === 'place');
+    if (pick && snap.mode === 'actions') { this.session.openPanel(pick.uid); return; }
     if (pick?.detached !== undefined) {
       this.hoverDetached = null; this.hoverDetachedUid = null; this.hoverDetachedSet.clear();
       if (alt) this.session.toast('Pick the piece up, then Alt+click it to copy', 'info');
       else this.session.takeFromDetached(pick.detached, pick.uid);
       return;
     }
-    if (pick && snap.mode === 'actions') { this.session.openPanel(pick.uid); return; }
     if (snap.tool === 'offset' || snap.tool === 'rotate') { this.session.setGizmo(pick?.uid ?? null); return; }
     if (snap.tool === 'reroot') { if (pick) this.session.reRoot(pick.uid); return; }
     if (pick) {
@@ -1281,9 +1296,9 @@ export class EditorView {
 
   /** Screen position (CSS px within the canvas) of a part centre, or null when behind the camera. */
   partScreenPosition(uid: number): { x: number; y: number } | null {
-    const e = this.partObjs.get(uid);
-    if (!e) return null;
-    const v = e.obj.getWorldPosition(new THREE.Vector3()).project(this.camera);
+    const obj = this.partObj(uid);
+    if (!obj) return null;
+    const v = obj.getWorldPosition(new THREE.Vector3()).project(this.camera);
     if (v.z > 1) return null;
     const el = this.renderer.domElement;
     return { x: ((v.x + 1) / 2) * el.clientWidth, y: ((1 - v.y) / 2) * el.clientHeight };

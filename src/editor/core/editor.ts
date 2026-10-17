@@ -12,7 +12,8 @@ export type Symmetry = { mode: 'radial'; count: 1 | 2 | 3 | 4 | 6 | 8 } | { mode
 export interface LinkHit { uid: number; point: Vec3; normal: Vec3 }
 /** `manualStaging`: the player has arranged the stages; edits insert new parts instead of re-staging everything. */
 /** `detached`: assemblies set aside in the hall (craft-frame transforms, no stages). They are not part of the craft:
- * staging, stats and launch ignore them until they are picked up and attached again. */
+ * staging, stats and launch ignore them until they are picked up and attached again. Parts can be attached to them and
+ * their parts' settings changed in place (see `within`). */
 export interface EditorSnapshot { craft: CraftDef; held?: SetAsidePiece; detached?: SetAsidePiece[]; linkStart?: { partId: string; hit: LinkHit }; manualStaging?: boolean }
 /** A set-aside (or held) assembly. `craft`: the craft set aside by `swapDetached` (it keeps its stages and staging
  * mode). Picking it up whole keeps the mark (staging then resets to automatic); attaching it to the stand clears it. */
@@ -129,12 +130,40 @@ export class CraftEditor {
     if (!p) throw new Error(`Unknown part uid: ${uid}`);
     return p;
   }
+  /** The craft's parts while `within` works on a set-aside piece. */
+  private outside: PartInstance[] | null = null;
+  /**
+   * Run `fn` on the assembly that holds `uid`: the craft, or a set-aside piece. For a piece, its parts stand in for
+   * the craft's while `fn` runs, so every craft operation applies to it unchanged; it is refitted but never staged.
+   * Attaching the held craft (picked up whole) to a piece makes the piece carry the craft mark.
+   */
+  private within<T>(uid: number, fn: () => T): T {
+    const piece = this.state.craft.parts.some(p => p.uid === uid) ? undefined : this.state.detached?.find(a => a.parts.some(p => p.uid === uid));
+    if (!piece) return fn();
+    const craft = this.state.craft.parts, mark = this.state.held?.craft;
+    this.outside = craft;
+    this.state.craft.parts = piece.parts;
+    try {
+      const result = fn();
+      piece.parts = this.state.craft.parts;
+      if (mark && !this.state.held) piece.craft = mark;
+      return result;
+    } finally {
+      this.state.craft.parts = craft;
+      this.outside = null;
+    }
+  }
+  /** Every part in the hall: the craft, the held assembly and the set-aside pieces. */
+  private *allParts(): Iterable<PartInstance> {
+    yield* this.state.craft.parts;
+    yield* this.outside ?? [];
+    yield* this.state.held?.parts ?? [];
+    for (const a of this.state.detached ?? []) yield* a.parts;
+  }
   /** Uids stay unique across the craft, the held assembly and the set-aside pieces. */
   private maxUid(): number {
     let max = 0;
-    for (const p of this.state.craft.parts) max = Math.max(max, p.uid);
-    for (const p of this.state.held?.parts ?? []) max = Math.max(max, p.uid);
-    for (const a of this.state.detached ?? []) for (const p of a.parts) max = Math.max(max, p.uid);
+    for (const p of this.allParts()) max = Math.max(max, p.uid);
     return max;
   }
   private nextUid(): number { return 1 + this.maxUid(); }
@@ -162,6 +191,7 @@ export class CraftEditor {
   /** After a structural edit: refit fairing shells, then stage automatically or insert into the manual order. */
   private settle(): void {
     let craft = fitFairings(this.state.craft, this.catalog);
+    if (this.outside) { this.state.craft = craft; return; }
     craft = this.state.manualStaging ? insertIntoStaging(craft, this.catalog, this.stager) : this.stager(craft, this.catalog);
     this.state.craft = craft;
   }
@@ -194,7 +224,7 @@ export class CraftEditor {
     const members = new Map<number, number>();
     for (const p of parts) if (p.symmetryGroup !== undefined) members.set(p.symmetryGroup, (members.get(p.symmetryGroup) ?? 0) + 1);
     const internal = (g?: number) => g !== undefined && (members.get(g) ?? 0) > 1;
-    let nextGroup = 1 + Math.max(0, ...this.state.craft.parts.map(p => p.symmetryGroup ?? 0), ...parts.map(p => p.symmetryGroup ?? 0));
+    let nextGroup = 1 + Math.max(0, ...[...this.allParts()].map(p => p.symmetryGroup ?? 0), ...parts.map(p => p.symmetryGroup ?? 0));
     const across = new Map<number, number>();
     if (copies > 1) for (const p of parts) if (!internal(p.symmetryGroup)) across.set(p.uid, nextGroup++);
     let nextUid = 1 + Math.max(this.maxUid(), ...parts.map(p => p.uid));
@@ -254,28 +284,28 @@ export class CraftEditor {
     return out;
   }
   attachPart(partId: string, parentUid: number, parentNodeId: string, childNodeId: string, rotation: Quat = qIdentity()): PartInstance {
-    return this.update(() => {
+    return this.update(() => this.within(parentUid, () => {
       const parent = this.part(parentUid); this.assertFree(parentUid, parentNodeId);
       const part = this.newPart(partId); part.rotation = qNormalize(rotation);
       const t = alignNodes(worldNode(part, this.node(part, childNodeId)), worldNode(parent, this.node(parent, parentNodeId)));
       part.position = t.position; part.rotation = qNormalize(qMul(t.rotation, part.rotation));
       part.parent = parentUid; part.attachNode = childNodeId; part.parentNode = parentNodeId;
       return this.addSymmetric(part, parent);
-    });
+    }));
   }
   /** positionOnParent and normal are in the parent's LOCAL frame. */
   surfaceAttach(partId: string, parentUid: number, positionOnParent: Vec3, normal: Vec3, rotation: Quat = qIdentity()): PartInstance {
-    const parent = this.part(parentUid);
+    const parent = this.within(parentUid, () => this.part(parentUid));
     return this.surfaceAttachAtHit(partId, parentUid, add(parent.position, qRotate(parent.rotation, positionOnParent)), qRotate(parent.rotation, normal), rotation);
   }
   /** Renderer convenience: point and normal are in CRAFT frame. */
   surfaceAttachAtHit(partId: string, parentUid: number, point: Vec3, normal: Vec3, rotation: Quat = qIdentity()): PartInstance {
-    return this.update(() => {
+    return this.update(() => this.within(parentUid, () => {
       const parent = this.part(parentUid), def = requirePart(this.catalog, partId);
       if (!def.surfaceAttachable || !requirePart(this.catalog, parent.partId).allowSurfaceAttachChildren) throw new Error('Surface attachment is not allowed');
       const part = { ...this.newPart(partId), ...surfacePlacement(def, point, normal, qNormalize(rotation)), parent: parentUid, attachNode: 'srf', parentNode: 'srf' };
       return this.addSymmetric(part, parent);
-    });
+    }));
   }
   beginLink(partId: string, hit: LinkHit): void {
     this.update(() => {
@@ -451,12 +481,12 @@ export class CraftEditor {
   /** Any free node in a held assembly may connect; its tree is rerooted at that part. Symmetric parents (and, for
    * surface mounts, the symmetry setting) re-create the set. */
   attachHeld(parentUid: number, parentNodeId: string, childNodeId: string, childUid?: number): PartInstance {
-    return this.update(() => {
+    return this.update(() => this.within(parentUid, () => {
       const uid = childUid ?? this.requireHeld().rootUid;
       this.placeHeldAt(parentUid, parentNodeId, childNodeId, uid, true);
       this.settle();
       return this.part(uid);
-    });
+    }));
   }
   /** Move the held assembly onto a free parent node and add it (with symmetry copies); returns where copies start. */
   private placeHeldAt(parentUid: number, parentNodeId: string, childNodeId: string, uid: number, skipOccupied: boolean): { start: number; size: number; order: number[] } {
@@ -479,16 +509,16 @@ export class CraftEditor {
    * counterpart's joint the same way. One undo step.
    */
   spliceHeld(t: SpliceTarget): PartInstance {
-    return this.update(() => this.spliceInner(t));
+    return this.update(() => this.within(t.parentUid, () => this.spliceInner(t)));
   }
   /** Insert a new part into an occupied stack joint (see `spliceHeld`). */
   insertPart(partId: string, t: Omit<SpliceTarget, 'childUid' | 'throughUid'>, rotation: Quat = qIdentity()): PartInstance {
-    return this.update(() => {
+    return this.update(() => this.within(t.parentUid, () => {
       if (this.state.held) throw new Error('An assembly is already held');
       const part = this.newPart(partId); part.rotation = qNormalize(rotation);
       this.state.held = { rootUid: part.uid, parts: [part] };
       return this.spliceInner({ ...t, childUid: part.uid, throughUid: part.uid });
-    });
+    }));
   }
   private spliceInner(t: SpliceTarget): PartInstance {
     const held = this.requireHeld();
@@ -629,7 +659,7 @@ export class CraftEditor {
   }
   attachHeldAtSnap(candidate: SnapCandidate): PartInstance { return this.attachHeld(candidate.parent.uid, candidate.parent.id, candidate.child.id, candidate.child.uid); }
   surfaceAttachHeld(parentUid: number, point: Vec3, normal: Vec3, rotation?: Quat): PartInstance {
-    return this.update(() => {
+    return this.update(() => this.within(parentUid, () => {
       const held = this.requireHeld(), parent = this.part(parentUid);
       const root = held.parts.find(p => p.uid === held.rootUid)!;
       const def = requirePart(this.catalog, root.partId);
@@ -643,7 +673,7 @@ export class CraftEditor {
       this.replicate(moved.parts, attached.uid, parent, true);
       this.settle();
       return this.part(attached.uid);
-    });
+    }));
   }
   discardHeld(): void { this.update(() => { this.requireHeld(); delete this.state.held; this.settle(); }); }
   placeHeldAsRoot(): void {
@@ -702,7 +732,7 @@ export class CraftEditor {
   }
   /** Merge player settings; `undefined` clears a key. Keys the part does not offer are rejected. */
   setPartTweaks(uid: number, tweaks: PartTweaks, symmetric = true): void {
-    this.update(() => {
+    this.update(() => this.within(uid, () => {
       for (const p of this.counterparts(uid, symmetric)) {
         const offered = new Set(tweakDescriptors(requirePart(this.catalog, p.partId)).map(d => d.key));
         const next: PartTweaks = { ...p.tweaks };
@@ -716,11 +746,11 @@ export class CraftEditor {
         if (Object.keys(next).length) p.tweaks = next; else delete p.tweaks;
       }
       this.state.craft = fitFairings(this.state.craft, this.catalog);
-    }, `tweak:${uid}:${Object.keys(tweaks).join()}`);
+    }), `tweak:${uid}:${Object.keys(tweaks).join()}`);
   }
   /** Set resource amounts (clamped to capacity; full amounts are stored as the default). */
   setPartResources(uid: number, resources: Partial<Record<ResourceId, number>>, symmetric = true): void {
-    this.update(() => {
+    this.update(() => this.within(uid, () => {
       for (const p of this.counterparts(uid, symmetric)) {
         const capacity = requirePart(this.catalog, p.partId).resources;
         const next: Partial<Record<ResourceId, number>> = { ...p.resources };
@@ -732,11 +762,11 @@ export class CraftEditor {
         }
         if (Object.keys(next).length) p.resources = next; else delete p.resources;
       }
-    }, `res:${uid}:${Object.keys(resources).join()}`);
+    }), `res:${uid}:${Object.keys(resources).join()}`);
   }
   /** Replace the actions a part contributes to an action group. */
   setPartActions(uid: number, group: ActionGroupId, actions: PartActionId[], symmetric = true): void {
-    this.update(() => {
+    this.update(() => this.within(uid, () => {
       for (const p of this.counterparts(uid, symmetric)) {
         const offered = partActions(requirePart(this.catalog, p.partId));
         const list = [...new Set(actions)].filter(a => offered.includes(a));
@@ -744,7 +774,7 @@ export class CraftEditor {
         if (list.length) next[group] = list; else delete next[group];
         if (Object.keys(next).length) p.actions = next; else delete p.actions;
       }
-    });
+    }));
   }
   /** Remove every binding of an action group. */
   clearGroup(group: ActionGroupId): void {
