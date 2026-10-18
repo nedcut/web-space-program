@@ -254,8 +254,9 @@ and horizon/escape/breakup results remain visibly partial. Accurate landing pres
 to one lazy persistent worker. The Earth grid crosses once per worker lifetime. Pending/result identity checks
 reject changes of vessel, SOI, stage, part count, attitude model, thrust or expiry; unavailable workers disable
 automatic prediction rather than run physics in the animation loop. Map geometry changes only when a result
-arrives; samples undo their future body rotation and draw a surface track in the body's orientation at prediction
-start. The cached map marker uses that same endpoint. Coordinates are rebased around a body-relative Float64
+arrives. Samples are body-centred and non-rotating, the frame of the map's conics, so the drag path lies on the
+conic above the air. The map landing marker rotates the body-fixed site to the current UT each map frame and meets
+the path's end at touchdown. Coordinates are rebased around a body-relative Float64
 anchor before Float32 upload. The flight surface
 marker rotates the predicted body-fixed touchdown site to the current UT and projects at 4 Hz.
 

@@ -8,6 +8,7 @@ import { landingPrediction, type LandingRequest } from '../src/game/planning/lan
 import { neutralInput } from '../src/sim/vessel';
 import { add, cross, length, normalize, scale, sub, v3 } from '../src/util/vec3';
 import { qRotate } from '../src/util/quat';
+import { propagate, stateToElements } from '../src/sim/orbit';
 
 function reentry() {
   const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
@@ -41,13 +42,23 @@ it('predicts a seeded 120 km reentry splashdown within 5 km of the actual drag-i
   expect(result.impact).not.toBeNull();
   expect(yields).toBeGreaterThan(5);
   expect(result.points.length).toBeLessThan(440);
-  const mappedSite = world.universe.ephem.toBodyFixed('earth', result.points[result.points.length - 1], result.start);
-  expect(length(sub(mappedSite, result.impact!.fixedPosition))).toBeLessThan(1e-6);
-  // Future body rotation would move the geographic marker by kilometres; the surface track must undo it.
-  expect(length(sub(result.points[result.points.length - 1], result.impact!.position))).toBeGreaterThan(5000);
+  // The path shares the conic's non-rotating frame: it ends at the impact point, which is the site at touchdown time.
+  const end = result.points[result.points.length - 1];
+  expect(end).toEqual(result.impact!.position);
+  expect(length(sub(world.universe.ephem.toBodyFixed('earth', end, result.impact!.time), result.impact!.fixedPosition))).toBeLessThan(1e-6);
+  // Above the air it lies on the drag-free conic the map draws in blue.
+  const u = world.universe, ref0 = u.ephem.getBodyState('earth', result.start);
+  const conic = stateToElements(u.body('earth').gm, 'earth', sub(snapshot.position, ref0.position), sub(snapshot.velocity, ref0.velocity), result.start);
+  const atmosphereTop = u.body('earth').radius + u.body('earth').atmosphere!.height;
+  let coasting = 0;
+  for (let i = 0; i < result.points.length && length(result.points[i]) > atmosphereTop; i++, coasting++)
+    expect(length(sub(result.points[i], propagate(conic, result.times[i]).position))).toBeLessThan(1);
+  expect(coasting).toBeGreaterThan(10);
   const input = neutralInput({ sas: 'retrograde', sasReference: 'surface' });
   let steps = 0;
   while (vessel.state.situation === 'flying' && !vessel.state.destroyed && steps++ < 90000) world.tick(.02, input);
+  const flown = sub(vessel.state.position, world.universe.ephem.getBodyState('earth', world.ut).position);
+  expect(length(sub(flown, end))).toBeLessThan(5000);
   const site = world.universe.surfaceInfo('earth', vessel.state.position, world.ut);
   const miss = length(sub(normalize(result.impact!.fixedPosition), site.fixedDir)) * world.universe.body('earth').radius;
   console.log(`WP4 reentry: ${miss.toFixed(1)} m miss, predicted T+${(result.impact!.time - result.start).toFixed(1)} s, actual T+${(world.ut - result.start).toFixed(1)} s, ${vessel.state.situation}, ${result.steps} worker steps`);
