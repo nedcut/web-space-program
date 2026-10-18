@@ -1407,6 +1407,16 @@ Owner decisions 2026-10-13 (both recommended options).
   craft's name (also while the craft is held). Picking the set-aside craft up whole keeps its mark (its staging
   then resets to automatic); attaching it to the stand merges it and clears the mark. Only one swap at a time (Edit on stand is disabled on other pieces meanwhile).
 - Set-aside pieces are still not saved with the craft (unchanged).
+- **Attach and settings in place (2026-10-17, feat/setaside-edit)**: owner picked "attach + settings only" over full
+  in-place editing or a smoother swap. New parts and held assemblies snap to a piece's free nodes, surface-attach to it
+  (symmetry included) and insert into its joints; right-click (Ctrl+click on macOS, long-press on touch, click in
+  action-group mode) opens a part's settings, resources and action groups. Offset/rotate, re-root, struts/fuel lines
+  and Alt-copy still need Edit on stand. Core: `CraftEditor.within(uid, fn)` runs the craft operation on the
+  assembly holding `uid`, with the piece's parts standing in for the craft's, so each rule (symmetry, node
+  checks, fairing refit) applies to pieces unchanged. Pieces are refitted but never staged. Uids and new symmetry
+  groups are numbered across the whole hall, so attaching a piece to the craft later cannot merge unrelated groups.
+  Attaching the held, set-aside craft to a piece moves the craft mark to that piece, so Swap back still brings the
+  whole craft back.
 
 ## Map zoom and focus are predictable (2026-10-15, op/mapzoom)
 

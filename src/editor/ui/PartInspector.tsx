@@ -26,11 +26,14 @@ function partMass(p: PartInstance, def: PartDef): { wet: number; dry: number } {
 export function EditorInspector({ session, view, getView }: { session: EditorSession; view: SessionView; getView: () => EditorView | null }) {
   const anchor = useCallback((uid: number) => getView()?.partScreenPosition(uid) ?? null, [getView]);
   const content = (uid: number): InspectorContent | null => {
-    const part = view.craft.parts.find(p => p.uid === uid);
+    // A part of the craft or of a set-aside piece (edited in place, but it won't launch).
+    const parts = [view.craft, ...view.detached].find(a => a.parts.some(p => p.uid === uid))?.parts ?? [];
+    const part = parts.find(p => p.uid === uid);
     const def = part && CATALOG.get(part.partId);
     if (!part || !def) return null;
-    const copies = part.symmetryGroup === undefined ? 1 : view.craft.parts.filter(p => p.symmetryGroup === part.symmetryGroup && p.partId === part.partId).length;
-    return { title: def.name, partId: def.id, subtitle: `${def.name} · ${def.manufacturer}${copies > 1 ? ` · symmetry ×${copies}` : ''}`, badge: copies > 1 ? `×${copies}` : undefined,
+    const copies = part.symmetryGroup === undefined ? 1 : parts.filter(p => p.symmetryGroup === part.symmetryGroup && p.partId === part.partId).length;
+    const aside = parts !== view.craft.parts ? ' · set aside' : '';
+    return { title: def.name, partId: def.id, subtitle: `${def.name} · ${def.manufacturer}${copies > 1 ? ` · symmetry ×${copies}` : ''}${aside}`, badge: copies > 1 ? `×${copies}` : undefined,
       body: <EditorPartBody session={session} view={view} part={part} def={def} copies={copies} /> };
   };
   return <InspectorLayer panels={view.panels} anchor={anchor} content={content} onClose={uid => session.closePanel(uid)} onPin={uid => session.togglePin(uid)}

@@ -213,6 +213,86 @@ describe('editing set-aside pieces', () => {
   });
 });
 
+describe('attaching to and tweaking set-aside pieces in place', () => {
+  /** A rocket with its lower half (decoupler, tank, engine) set aside at x = 8. */
+  function parked() {
+    const { editor: ed, uids } = rocket();
+    ed.detachSubtree(uids[3]); ed.parkHeld(v3(8, 0, 0));
+    return { ed, uids, craft: ed.craft };
+  }
+  it('stack-attaches a new part to a piece: the craft and its stages are untouched, the piece stays unstaged', () => {
+    const { ed, uids, craft } = parked();
+    const free = freeAttachNodes(ed.detached[0], catalog());
+    expect(free.some(n => n.uid === uids[5] && n.id === 'bottom')).toBe(true);
+    const added = ed.attachPart('tank', uids[5], 'bottom', 'top');
+    expect(ed.craft).toEqual(craft);
+    const piece = ed.detached[0];
+    expect(piece.parts.map(p => p.uid)).toContain(added.uid);
+    expect(piece.parts.every(p => p.stage === undefined)).toBe(true);
+    const tank = piece.parts.find(p => p.uid === added.uid)!;
+    expect(tank.parent).toBe(uids[5]);
+    close(tank.position, v3(8, -6, 0));
+    // One undo removes it.
+    ed.undo();
+    expect(ed.detached[0].parts).toHaveLength(3);
+  });
+  it('surface-attaches with radial symmetry onto a piece, and new uids stay unique across the hall', () => {
+    const { ed, uids, craft } = parked();
+    ed.setSymmetry({ mode: 'radial', count: 4 });
+    const tankPos = ed.detached[0].parts.find(p => p.uid === uids[4])!.position;
+    ed.surfaceAttachAtHit('fin', uids[4], v3(tankPos.x + 0.5, tankPos.y, tankPos.z), v3(1, 0, 0));
+    expect(ed.craft).toEqual(craft);
+    const fins = ed.detached[0].parts.filter(p => p.partId === 'fin');
+    expect(fins).toHaveLength(4);
+    expect(new Set(fins.map(p => p.symmetryGroup)).size).toBe(1);
+    const all = [...ed.craft.parts, ...ed.detached[0].parts].map(p => p.uid);
+    expect(new Set(all).size).toBe(all.length);
+    // Copies circle the piece's tank, not the craft's axis.
+    for (const f of fins) expect(Math.hypot(f.position.x - tankPos.x, f.position.z - tankPos.z)).toBeGreaterThan(0.4);
+  });
+  it('attaches a held assembly to a piece and inserts a part into a piece\'s joint', () => {
+    const { ed, uids, craft } = parked();
+    ed.detachSubtree(uids[2]);
+    ed.attachHeld(uids[5], 'bottom', 'top', uids[2]);
+    expect(ed.held).toBeUndefined();
+    expect(ed.craft.parts.map(p => p.uid)).toEqual(craft.parts.filter(p => p.uid !== uids[2]).map(p => p.uid));
+    expect(ed.detached[0].parts.find(p => p.uid === uids[2])!.parent).toBe(uids[5]);
+    const below = ed.detached[0].parts.find(p => p.uid === uids[2])!.position.y;
+    const short = ed.insertPart('short', { parentUid: uids[4], parentNodeId: 'bottom', childNodeId: 'top', throughNodeId: 'bottom' });
+    const piece = ed.detached[0];
+    expect(piece.parts.find(p => p.uid === uids[5])!.parent).toBe(short.uid);
+    // Everything below the joint moved down by the short part's length (0.5 m).
+    expect(piece.parts.find(p => p.uid === uids[2])!.position.y).toBeCloseTo(below - 0.5, 9);
+    expect(piece.parts.every(p => p.stage === undefined)).toBe(true);
+  });
+  it('changes settings and resources of a piece\'s part without touching the craft', () => {
+    const { ed, uids, craft } = parked();
+    ed.setPartResources(uids[4], { liquidFuel: 25 });
+    expect(ed.detached[0].parts.find(p => p.uid === uids[4])!.resources).toEqual({ liquidFuel: 25 });
+    ed.setPartActions(uids[5], 'custom1', ['engine.toggle']);
+    expect(ed.detached[0].parts.find(p => p.uid === uids[5])!.actions).toEqual({ custom1: ['engine.toggle'] });
+    expect(ed.craft).toEqual(craft);
+    ed.undo();
+    ed.undo();
+    expect(ed.detached[0].parts.find(p => p.uid === uids[4])!.resources).toBeUndefined();
+  });
+  it('the craft picked up whole and attached to a piece hands the piece the craft mark', () => {
+    const { ed, uids } = parked();
+    ed.detachSubtree(uids[2]); ed.parkHeld(v3(-8, 0, 0)); // a second piece: the engine
+    ed.swapDetached(0, v3(-10, 0, 0)); // the craft (pod, tank) is set aside, marked
+    ed.takeFromDetached(0, uids[0]);
+    expect(ed.held!.craft).toBeDefined();
+    ed.attachHeld(uids[2], 'top', 'bottom', uids[1]);
+    expect(ed.detached).toHaveLength(1);
+    expect(ed.detached[0].craft).toBeDefined();
+    expect(ed.detached[0].parts.map(p => p.uid).sort()).toEqual([uids[0], uids[1], uids[2]].sort());
+    // Swapping it back puts the whole craft on the stand.
+    ed.swapDetached(0, v3(10, 0, 0));
+    expect(ed.craft.parts.some(p => p.uid === uids[0])).toBe(true);
+    expect(ed.detached.some(p => p.craft)).toBe(false);
+  });
+});
+
 describe('deleting from set-aside pieces', () => {
   it('deletes a part and what hangs from it, or the whole piece', () => {
     const { editor: ed, uids } = rocket();

@@ -207,7 +207,7 @@ export class EditorSession {
     for (const s of stageStats.values()) { totalDvVac += s.dvVac; totalDvAsl += s.dvAsl; }
     this.version++;
     // Drop selections/panels of parts that no longer exist (deleted, picked up).
-    const alive = new Set(craft.parts.map(p => p.uid));
+    const alive = new Set([...craft.parts, ...detached.flatMap(a => a.parts)].map(p => p.uid));
     this.selectedUids = this.selectedUids.filter(u => alive.has(u));
     this.panels = this.panels.filter(p => alive.has(p.uid));
     this.snap = {
@@ -721,7 +721,7 @@ export class EditorSession {
         return true;
       }
       if (p.kind === 'splice') {
-        const parent = this.editor.craft.parts.find((x) => x.uid === p.parentUid);
+        const parent = this.findPart(p.parentUid);
         if (parent?.symmetryGroup !== undefined && this.symmetryMode === 'mirror') this.editor.setSymmetry({ mode: 'mirror' });
         else this.editor.setSymmetry({ mode: 'radial', count: 1 });
         const at = { parentUid: p.parentUid, parentNodeId: p.parentNode, childNodeId: p.childNode, throughNodeId: p.throughNode };
@@ -735,7 +735,7 @@ export class EditorSession {
       if (h.kind === 'new') {
         if (p.kind === 'root') this.editor.addRoot(h.partId);
         else if (p.kind === 'stack') {
-          const parent = this.editor.craft.parts.find((x) => x.uid === p.parentUid);
+          const parent = this.findPart(p.parentUid);
           if (parent?.symmetryGroup !== undefined && this.symmetryMode === 'mirror') this.editor.setSymmetry({ mode: 'mirror' });
           else this.editor.setSymmetry({ mode: 'radial', count: parent?.symmetryGroup !== undefined ? this.symmetry : 1 });
           this.editor.attachPart(h.partId, p.parentUid, p.parentNode, p.childNode, h.rotation);
@@ -754,7 +754,7 @@ export class EditorSession {
         if (rotated) this.editor.rotateHeld(h.rotation);
         if (p.kind === 'root') this.editor.placeHeldAsRoot();
         else {
-          const parent = this.editor.craft.parts.find((x) => x.uid === p.parentUid);
+          const parent = this.findPart(p.parentUid);
           if (parent?.symmetryGroup !== undefined && this.symmetryMode === 'mirror') this.editor.setSymmetry({ mode: 'mirror' });
           else this.editor.setSymmetry({ mode: 'radial', count: 1 });
           this.editor.attachHeld(p.parentUid, p.parentNode, p.childNode, p.childUid);
@@ -769,10 +769,15 @@ export class EditorSession {
     }
     if (ok && p.kind === 'park' && !this.parkHintShown) {
       this.parkHintShown = true;
-      this.toast('Set aside: it won\'t launch. Click a part to pick it up with what hangs from it; the Set aside list in the staging panel shows each piece.', 'info');
+      this.toast('Set aside: it won\'t launch. Click a part to pick it up with what hangs from it, attach new parts to it, or right-click a part for its settings. The Set aside list in the staging panel shows each piece.', 'info');
     }
     if (ok && p.kind !== 'park' && typeof document !== 'undefined') document.dispatchEvent(new Event('wsp:part-attach'));
     return !!ok;
+  }
+
+  /** A part of the craft or of a set-aside piece. */
+  private findPart(uid: number): PartInstance | undefined {
+    return this.snap.craft.parts.find(p => p.uid === uid) ?? this.snap.detached.flatMap(a => a.parts).find(p => p.uid === uid);
   }
 
   /** Push the session's symmetry setting into the core for a new surface attachment. */
@@ -849,7 +854,7 @@ export class EditorSession {
   }
   /** Open an inspector for a part (replacing the unpinned one) and select it. */
   openPanel(uid: number) {
-    if (!this.editor.craft.parts.some(p => p.uid === uid)) return;
+    if (!this.findPart(uid)) return;
     this.panels = [...this.panels.filter(p => p.pinned && p.uid !== uid), { uid, pinned: this.panels.find(p => p.uid === uid)?.pinned ?? false }];
     this.selectedUids = [uid];
     this.touch();
@@ -884,7 +889,7 @@ export class EditorSession {
   setPartResources(uid: number, resources: Partial<Record<ResourceId, number>>) { this.guard(() => this.editor.setPartResources(uid, resources)); }
   /** Add or remove one action of a part in the current (or given) group, mirrored across symmetry. */
   toggleGroupAction(uid: number, action: PartActionId, group: ActionGroupId = this.group) {
-    const part = this.editor.craft.parts.find(p => p.uid === uid);
+    const part = this.findPart(uid);
     if (!part) return;
     const list = part.actions?.[group] ?? [];
     this.guard(() => this.editor.setPartActions(uid, group, list.includes(action) ? list.filter(a => a !== action) : [...list, action]));
