@@ -7,6 +7,7 @@ import { earthDataMessage } from '../../game/earthLoader';
 import { periapsisRadius } from '../../sim/orbit';
 import { landingPredictionApplies } from '../../ui/map/mapActions';
 import { warpRate } from '../../game/timewarp';
+import { qRotate } from '../../util/quat';
 
 const EMPTY_MARKERS: MapMarkerInput[] = [];
 
@@ -30,7 +31,13 @@ export class LandingPredictionDriver {
     return this.enabled && r && v && a && a.vessel === v.state.id && a.body === v.body && a.parts === v.state.parts.length && a.stage === v.state.nextStage &&
       r.attitude === this.attitude && v.state.telemetry.thrust === 0 && (!r.impact || r.impact.time >= this.c.world.ut) ? r : null;
   }
-  get displayMarkers() { return this.displayResult ? this.markers : EMPTY_MARKERS; }
+  /** The site turns with the globe, so it reaches the end of the drawn (non-rotating) path at touchdown. */
+  get displayMarkers() {
+    const r = this.displayResult, marker = this.markers[0];
+    if (!r?.impact || !marker) return EMPTY_MARKERS;
+    marker.position = qRotate(this.c.world.universe.ephem.bodyRotation(r.body, this.c.world.ut), r.impact.fixedPosition);
+    return this.markers;
+  }
   private pending?: { id: number; vessel: string; body: string; parts: number; stage: number; attitude: LandingRequest['attitude'] };
   private lastRequest = -Infinity;
   private sampledAttitude: LandingRequest['attitude'] = 'hold';
@@ -74,7 +81,7 @@ export class LandingPredictionDriver {
               this.result = e.data.result as LandingPrediction;
               this.accepted = this.pending;
               const r = this.result, impact = r.impact;
-              this.markers = impact ? [{ key: 'aero-impact', body: r.body, position: r.points[r.points.length - 1], label: 'Predicted landing', color: '#ffac66', time: impact.time,
+              this.markers = impact ? [{ key: 'aero-impact', body: r.body, position: impact.position, label: 'Predicted landing', color: '#ffac66', time: impact.time,
                 detail: `Unpowered · drag + heating · ${r.attitude === 'hold' ? 'hold attitude' : 'surface retrograde'}\n${formatSpeed(impact.speed)} · no future staging` }] : EMPTY_MARKERS;
               this.status = this.result.outcome === 'breakup' ? 'Predicted breakup before landing' : this.result.outcome === 'horizon' ? 'Partial prediction · horizon reached' : '';
             }
