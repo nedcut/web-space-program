@@ -227,6 +227,22 @@ describe('training progression and storage', () => {
     expect(game.get().scene).toBe('training');
     editor.dispose();
   });
+  it('withdraws a building goal when an edit removes the required launch thrust', () => {
+    storage();
+    startLesson('building');
+    const editor = new EditorSession(buildSoundingRocket());
+    tickTutorial({ editor }); advanceTutorial();
+    tickTutorial({ editor }); advanceTutorial();
+    tickTutorial({ editor });
+    expect(getTutorial()!.ready).toBe(true);
+    const craft = editor.currentCraft();
+    editor.load({ ...craft, parts: craft.parts.map(p => p.partId === 'eng-sirocco' ? { ...p, partId: 'eng-wisp' } : p) }, false);
+    tickTutorial({ editor });
+    expect(getTutorial()!.ready).toBe(false);
+    advanceTutorial();
+    expect(getTutorial()!.index).toBe(2);
+    editor.dispose();
+  });
   it('keeps the remembered editor craft intact and retains settings changed during practice', () => {
     const data = storage();
     data.set('wsp.craft.v1', 'previous saved craft');

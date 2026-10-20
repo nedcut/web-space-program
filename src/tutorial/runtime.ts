@@ -39,8 +39,9 @@ export function startLesson(id: string) {
 }
 /** Called once per animation frame; React only receives changes in tutorial status. */
 export function tickTutorial(context = tutorialContext) {
-  if (!run || run.ready || run.finished) return;
-  if (run.lesson.steps[run.index].complete(context)) { run = { ...run, ready: true }; emit(); }
+  if (!run || run.finished || (run.ready && (run.lesson.scene !== 'editor' || !context.editor))) return;
+  const ready = run.lesson.steps[run.index].complete(context);
+  if (ready !== run.ready) { run = { ...run, ready }; emit(); }
 }
 export function advanceTutorial(skip = false) {
   if (!run || run.finished || (!skip && !run.ready)) return;
