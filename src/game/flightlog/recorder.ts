@@ -154,7 +154,7 @@ export function eventLabel(kind: EventKind): string {
   return ({ launch: 'Liftoff', stage: 'Stage activated', separation: 'Hardware separated', soi: 'Sphere of influence changed', orbit: 'Stable orbit achieved', landing: 'Touchdown', splashdown: 'Splashdown', docking: 'Vessels docked', eva: 'Astronaut on EVA', flag: 'Flag planted', partLoss: 'Part lost', recovery: 'Vessel recovered', loss: 'Vessel lost', checkpoint: 'Flight checkpoint', boarding: 'Astronaut boarded', assist: 'Gravity assist', rings: 'Ring plane crossed' } satisfies Record<EventKind, string>)[kind];
 }
 const BODY_NAMES = new Map(BODY_DEFS.map(b => [b.id, b.name]));
-export function bodyLabel(id: string) { return BODY_NAMES.get(id) ?? 'Unknown body'; }
+export function bodyLabel(id: string) { return BODY_NAMES.get(id) ?? id; }
 /** Old saves retain diagnostic detail; player summaries sanitize legacy generated IDs too. */
 export function eventDetail(e: FlightEvent) {
   if (e.kind === 'separation' || e.kind === 'docking') return undefined;

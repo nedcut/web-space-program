@@ -78,6 +78,15 @@ describe('flight recorder', () => {
     expect(summaryText(r)).toContain('Elapsed 0.3 s Liftoff');
     expect(summaryText(r)).not.toContain('T+');
   });
+  it('keeps an activated asteroid identifiable in timeline and shared summary copy', () => {
+    const r = startRecord(newRecorder(), 'asteroid-lander', 'Prospector', 1000);
+    observe(r, observation(1000, { body: 'asteroid-208' }));
+    appendEvent(r, 1001, 'soi', 'asteroid-208');
+    finishRecord(r, 1002, 'recovered');
+    expect(summaryText(r)).toContain('Bodies visited: asteroid-208');
+    expect(summaryText(r)).toContain('Entered asteroid-208 sphere of influence');
+    expect(summaryText(r)).not.toContain('Unknown body');
+  });
   it('reads legacy circular buffers and sanitizes old timeline diagnostics without mutating them', () => {
     const r = startRecord(newRecorder(), 'legacy', 'Kestrel', 1000);
     for (let i = 0; i < 10; i++) observe(r, observation(1000 + i));
