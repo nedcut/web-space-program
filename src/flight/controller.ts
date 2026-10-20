@@ -127,10 +127,11 @@ export class FlightController {
   /** Last refresh of the map's objective biomes (contracts change rarely; checked once a second). */
   private objectivesAt = -Infinity;
   paused = false;
-  /** A modal (the Controls reference) covers the flight: flight input is suspended but the sim keeps running. */
+  /** A modal (the Controls reference) covers the flight: flight input is suspended; the scene also pauses local flight. */
   modalOpen = false;
   /** Applies at once rather than on the next rendered frame, so no key slips through while a slow frame is pending. */
   setModalOpen(open: boolean) {
+    if (open && !this.modalOpen) this.input.releaseHeld();
     this.modalOpen = open;
     this.input.enabled = !this.paused && !open;
   }

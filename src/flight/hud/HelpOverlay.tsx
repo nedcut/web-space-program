@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { bindingLabel, getBindings, subscribeBindings, type Action } from '../../input/bindings';
 import { useEscape } from '../../ui/nav/escape';
 const SEEN_KEY = 'wsp.help.seen.v1';
@@ -69,8 +69,24 @@ const EVA_KEYS: [Action[] | string, string][] = [
 ];
 
 /** First-flight controls cheat sheet (F1 or the "?" button). */
-export function HelpOverlay({ eva, onClose }: { eva: boolean; onClose(): void }) {
+export function HelpOverlay({ eva, multiplayer, onClose }: { eva: boolean; multiplayer: boolean; onClose(): void }) {
   const bindings = useSyncExternalStore(subscribeBindings, getBindings);
+  const dialog = useRef<HTMLDivElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const previous = document.activeElement;
+    closeButton.current?.focus({ preventScroll: true });
+    const containFocus = (e: FocusEvent) => {
+      if (e.target instanceof Node && !dialog.current?.contains(e.target)) closeButton.current?.focus({ preventScroll: true });
+    };
+    document.addEventListener('focusin', containFocus);
+    return () => {
+      document.removeEventListener('focusin', containFocus);
+      // Pause-menu / onboarding openers may unmount while help covers them.
+      const opener = previous instanceof HTMLElement && previous !== document.body && previous.isConnected ? previous : document.querySelector<HTMLElement>('[aria-label^="Controls help"]');
+      opener?.focus({ preventScroll: true });
+    };
+  }, []);
   // Closing returns to whatever it covered (flight or the pause menu).
   useEscape(onClose, true, 'modal');
   // Compact, human key names; only the primary binding per action keeps rows narrow.
@@ -78,15 +94,21 @@ export function HelpOverlay({ eva, onClose }: { eva: boolean; onClose(): void })
   const keyName = (k: string) => k.split('+').map(p => KEY_NAMES[p] ?? p.replace(/Key|Digit|Numpad/g, '').replace(/(Shift|Control|Alt|Meta)(Left|Right)/g, '$1').replace('Control', 'Ctrl')).join('+');
   const keys = (actions: Action[] | string) => typeof actions === 'string' ? actions : actions.map(a => (bindings[a][0] ? keyName(bindings[a][0]) : 'Unbound')).join(' ');
   return (
-    <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="panel help-card" role="dialog" aria-label="Flight controls">
+    <div className="modal-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); onClose(); } }}>
+      <div ref={dialog} className="panel help-card" role="dialog" aria-modal="true" aria-label="Flight controls" onKeyDown={e => {
+        // Got it is the reference card's only interactive control, in either Tab direction.
+        if (e.key === 'Tab') { e.preventDefault(); closeButton.current?.focus({ preventScroll: true }); }
+      }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <div>
             <div className="label">Flight controls</div>
             <div style={{ fontSize: 20, fontWeight: 300, letterSpacing: '0.12em', marginTop: 4 }}>{eva ? 'EVA' : 'FLIGHT'}</div>
           </div>
-          <button className="btn small" onClick={onClose}>Got it</button>
+          <button ref={closeButton} className="btn small" onClick={onClose}>Got it</button>
         </div>
+        <p role="status" style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+          {multiplayer ? 'Flight controls suspended. The shared clock continues.' : 'Flight paused. Closing this reference restores your previous pause and time rate.'}
+        </p>
         {!eva && (
           <p style={{ fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.5, margin: '10px 0 0' }}>
             Quick start: press <span className="kbd">{keys(['toggleSas'])}</span> for SAS, <span className="kbd">{keys(['throttleFull'])}</span> for full throttle, then <span className="kbd">{keys(['stage'])}</span> to

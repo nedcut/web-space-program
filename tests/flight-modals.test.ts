@@ -37,6 +37,26 @@ describe('Controls overlay in flight', () => {
       expect(h.actions).toContain('stage');
     } finally { h.input.dispose(); }
   });
+  it('releases held axes, translation, camera and momentary SAS immediately while retaining throttle', () => {
+    game.set({ settings: { ...settings, gamepadEnabled: false } });
+    const h = harness();
+    try {
+      h.key('keydown', 'KeyZ'); h.key('keydown', 'KeyW'); h.key('keydown', 'KeyF');
+      h.key('keydown', 'ArrowLeft'); h.input.setTranslation('translateForward', true);
+      h.input.update(0.5);
+      expect(h.input.state.pitch).not.toBe(0);
+      expect(h.input.state.ty).not.toBe(0);
+      expect(h.input.camera.yaw).not.toBe(0);
+      h.input.releaseHeld();
+      expect(h.input.state).toMatchObject({ throttle: 1, pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, brakes: false });
+      expect(h.input.camera).toEqual({ yaw: 0, pitch: 0, zoom: 0 });
+      expect(h.actions).toContain('sasHoldRelease');
+      // Even an open/close entirely between animation frames cannot replay held input.
+      h.input.update(0.5);
+      expect(h.input.state).toMatchObject({ throttle: 1, pitch: 0, ty: 0 });
+      expect(h.input.camera.yaw).toBe(0);
+    } finally { h.input.dispose(); }
+  });
   it('opening Controls from the Pause menu keeps the flight paused and returns to the menu', () => {
     expect(pauseMenuVisible({ paused: true, help: true })).toBe(false);
     expect(pauseMenuVisible({ paused: true, help: false })).toBe(true);

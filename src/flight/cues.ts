@@ -19,7 +19,10 @@ export function throttleExplanation(v: VesselState): string | null {
   const engines = v.parts.filter(p => p.engine);
   if (!engines.length) return 'No engine aboard — throttle cannot produce thrust';
   const active = engines.filter(p => p.engine!.ignited);
-  if (!active.length) return engines.some(p => !p.activated)
+  // Burnout turns ignition off too. Offer reactivation only for engines with usable propellant.
+  const fueled = engines.filter(p => hasEngineFuel(v, p));
+  if (!fueled.length) return 'Engine propellant depleted or unreachable — use the next fueled stage, check the fuel path, or coast';
+  if (!active.length) return fueled.some(p => !p.activated)
     ? 'Engines not staged — activate the engine stage first'
     : 'Engines are shut down — activate one in its part menu';
   if (!active.some(p => hasEngineFuel(v, p))) return 'Active engines have no reachable propellant — stage or check the fuel path';
@@ -42,7 +45,7 @@ export class ThrottleCueTracker {
   }
 }
 
-const THROTTLE_TEXT = /^(Engines not staged|Engines are shut down|No engine aboard|Active engines have no reachable propellant|Engine flameout)/;
+const THROTTLE_TEXT = /^(Engines not staged|Engines are shut down|No engine aboard|Active engines have no reachable propellant|Engine propellant depleted|Engine flameout)/;
 const MESSAGE_PRIORITY = { bad: 2, warn: 1, info: 0 };
 
 /** Drop stale throttle explanations and show at most two distinct notifications, danger first. */
