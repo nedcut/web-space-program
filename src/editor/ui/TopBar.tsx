@@ -152,6 +152,7 @@ export function TopBar({ session, view, onLoad, onNew, onImport, onFrame }: { se
       {menu?.id === 'share' && <div className="vab-menu vab-more-menu panel" role="menu" aria-label="Share" style={{ left: menu.left }}>{shareItems}</div>}
       {menu?.id === 'more' && (
         <div className="vab-menu vab-more-menu panel right" role="menu" aria-label="More tools">
+          {block && <FacilityUnblock block={block} compact className="btn small warn" />}
           <div className="vab-more-stats mono">{fmtKg(s.totalMass)} · {s.partCount} parts · {s.height.toFixed(1)} m · <span className="accent">{fmtDv(view.totalDvVac)}</span></div>
           {item('New craft', onNew)}
           {item('Open craft library', onLoad)}

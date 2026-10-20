@@ -41,6 +41,7 @@ export function SpaceCenter() {
   const ut = useGame((s) => s.ut);
   const craft = useGame((s) => launchableCraft(s.craft));
   const [overlay, setOverlay] = useState<Overlay>(null);
+  const [recommendedStockId, setRecommendedStockId] = useState<string>();
   const [highlight, setHighlight] = useState<SiteObjectId | null>(null);
   const photo = usePhotoMode().active;
   const scale = useGame(s => s.scalePreset);
@@ -61,8 +62,8 @@ export function SpaceCenter() {
   const describe = (f: HubFacility) =>
     f.id === 'launch' ? (craft ? `Ready: ${craft.name} · or pick another` : 'Pick a vehicle and fly')
       : f.id === 'research' ? `${(p?.science ?? 0).toFixed(1)} science · ${f.desc}` : f.desc;
-  const enter = (id: HubFacilityId) => {
-    if (id === 'launch') setOverlay('launch');
+  const enter = (id: HubFacilityId, stockId?: string) => {
+    if (id === 'launch') { setRecommendedStockId(stockId); setOverlay('launch'); }
     else game.set({ scene: id });
   };
   const launchAgain = (c: FlightDebrief['craft']) => {
@@ -132,7 +133,7 @@ export function SpaceCenter() {
           <div className="hub-goal-actions">
             {goal.upgrade
               ? <FacilityUnblock block={goal.upgrade} className="btn small primary" onBought={() => setNotice('')} />
-              : <Button className="btn small primary" onClick={() => enter(goal.action)}>{goal.actionLabel}</Button>}
+              : <Button className="btn small primary" onClick={() => enter(goal.action, goal.recommendedStockId)}>{goal.actionLabel}</Button>}
             {goal.aside && <Button className="btn small ghost" onClick={() => enter('missions')}>{goal.aside}</Button>}
           </div>
         </section>}
@@ -169,7 +170,7 @@ export function SpaceCenter() {
         {overlay === 'menu' && <HubMenu onClose={() => setOverlay(null)} act={act} />}
         {overlay === 'settings' && <SettingsPanel onClose={() => setOverlay(null)} />}
         {overlay === 'load' && <Modal title="Load a program" onClose={() => setOverlay(null)} className="hub-load"><SaveLoadDialog onClose={() => setOverlay(null)} /></Modal>}
-        {overlay === 'launch' && <Suspense fallback={null}><LaunchPicker onClose={() => setOverlay(null)} /></Suspense>}
+        {overlay === 'launch' && <Suspense fallback={null}><LaunchPicker recommendedStockId={recommendedStockId} onClose={() => setOverlay(null)} /></Suspense>}
         {overlay === 'save' && <PromptModal title="Save program" label="Save slot name" initial="Program save" onCancel={() => setOverlay(null)}
           onSubmit={name => { setOverlay(null); try { saveNamedWorld(name, openProgram()); setNotice('Program saved.'); } catch (e) { setNotice(saveErrorText(e)); } }} />}
       </div>

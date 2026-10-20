@@ -19,7 +19,7 @@ const SOURCE: Record<LaunchOption['source'], string> = { pad: 'In the Integratio
 const same = (a: CraftDef, b: CraftDef) => JSON.stringify(a) === JSON.stringify(b);
 
 /** Launch straight from the hub: the editor's vehicle, saved designs and stock craft, one click (or Enter) to fly. */
-export default function LaunchPicker({ onClose }: { onClose: () => void }) {
+export default function LaunchPicker({ onClose, recommendedStockId }: { onClose: () => void; recommendedStockId?: string }) {
   const scale = useGame(s => s.scalePreset);
   const mode = useGame(s => s.mode);
   const pad = useGame(s => s.craft);
@@ -65,16 +65,17 @@ export default function LaunchPicker({ onClose }: { onClose: () => void }) {
     void saveLibraryItem({ id: localId(), craft: pad, folder: '', tags: [], updatedAt: Date.now() }).then(() => fly(craft)).catch(e => { setReplace(null); setError(saveErrorText(e)); });
   };
   const edit = (craft: CraftDef) => game.set({ craft, scene: 'editor' });
-  const first = [...own, ...stockGroups.flatMap(g => g.items)].find(o => !o.blocked);
+  const first = visible.find(o => o.key === `stock:${recommendedStockId}` && !o.blocked)
+    ?? [...own, ...stockGroups.flatMap(g => g.items)].find(o => !o.blocked);
   const row = (o: LaunchOption) => {
     const g = guide.get(o.key);
     // Stock designs locked by research name the research nodes rather than one part.
     const blocked = g?.unlock && o.blocked?.startsWith('Research') ? g.unlock : o.blocked;
     return (
       <div key={o.key} className={`hub-launch-item${o.source === 'pad' ? ' pad' : ''}`}>
-        <button type="button" className="hub-launch-row" disabled={!!o.blocked} data-autofocus={o === first ? true : undefined} onClick={() => choose(o)}
+        <button type="button" className="hub-launch-row" disabled={!!o.blocked} data-autofocus={o.key === first?.key ? true : undefined} onClick={() => choose(o)}
           aria-label={`Launch ${o.craft.name}${o.blocked ? ` (unavailable: ${blocked})` : ''}`}>
-          <span className="hub-launch-name"><strong>{o.craft.name}</strong><Badge>{SOURCE[o.source]}</Badge>{o.craft.type === 'SPH' && <Badge>Runway</Badge>}</span>
+          <span className="hub-launch-name"><strong>{o.craft.name}</strong><Badge>{SOURCE[o.source]}</Badge>{o.key === `stock:${recommendedStockId}` && <Badge>Recommended</Badge>}{o.craft.type === 'SPH' && <Badge>Runway</Badge>}</span>
           <span className="mono hub-launch-info">{o.info}</span>
           {g?.tip && <span className="hub-launch-tip">{g.tip}</span>}
           {g && g.features.length > 0 && <span className="hub-launch-features">Features: {g.features.join(' · ')}</span>}
@@ -90,7 +91,7 @@ export default function LaunchPicker({ onClose }: { onClose: () => void }) {
     <Modal title={pad?.type === 'SPH' ? 'Runway' : 'Launch Pad'} onClose={onClose} className="hub-launch">
       <div className="hub-launch-bar">
         <input aria-label="Search vehicles" placeholder="Search vehicles" value={query} onChange={e => setQuery(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && first) choose(first); if (e.key === 'ArrowDown') { e.preventDefault(); e.currentTarget.closest('dialog')?.querySelector<HTMLElement>('.hub-launch-row:not(:disabled)')?.focus(); } }} />
+          onKeyDown={e => { if (e.key === 'Enter' && first) choose(first); if (e.key === 'ArrowDown') { e.preventDefault(); e.currentTarget.closest('dialog')?.querySelector<HTMLElement>('.hub-launch-row[data-autofocus]')?.focus(); } }} />
         <span className="label">Enter flies the highlighted vehicle</span>
       </div>
       {error && <p role="alert" className="hub-launch-error">{error}</p>}
