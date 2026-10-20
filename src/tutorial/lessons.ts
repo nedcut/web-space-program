@@ -11,7 +11,7 @@ import { qRotate, qConj } from '../util/quat';
 export interface TutorialContext {
   world?: World;
   flight?: Pick<FlightController, 'mapMode' | 'sasOn' | 'rcsOn' | 'dockingMode'> & { input: { state: { throttle: number } } };
-  editor?: Pick<EditorSession, 'currentCraft'>;
+  editor?: Pick<EditorSession, 'currentCraft' | 'launchStageStats'>;
 }
 export interface LessonStep {
   id: string;
@@ -28,6 +28,16 @@ export interface Lesson {
 }
 const step = (id: string, text: string, complete: LessonStep['complete'], highlight?: string): LessonStep => ({ id, text, complete, highlight });
 const modulePresent = (type: string) => (c: TutorialContext) => !!c.editor?.currentCraft().parts.some(p => PART_CATALOG.get(p.partId)?.modules.some(m => m.type === type));
+const launchReady = (c: TutorialContext) => {
+  if (!c.editor) return false;
+  let firstIndex = Infinity, twr = 0, dv = 0;
+  for (const [index, stats] of c.editor.launchStageStats()) {
+    if (index < firstIndex && (stats.twrAsl > 0 || stats.dvVac > 0)) {
+      firstIndex = index; twr = stats.twrAsl; dv = stats.dvAsl;
+    }
+  }
+  return twr > 1 && dv > 0;
+};
 const altitude = (c: TutorialContext) => c.world?.active ? length(c.world.relativeState(c.world.active).position) - c.world.universe.body(c.world.active.body).radius : -Infinity;
 const radarAltitude = (c: TutorialContext) => {
   const w = c.world, v = w?.active;
@@ -54,24 +64,24 @@ const map = step('map', 'Press {map} to open the map. The orbit line shows where
 const node = step('node', 'In the maneuver planner choose Circularize → Ap. A node describes a future change in velocity; the burn readout beside the navball counts down to it, and Execute next node in the Flight assist app can fly it.', c => !!c.world?.nodes.length, '[data-tutorial="maneuver"]');
 export const LESSONS: Lesson[] = [
   { id: 'building', title: 'Building your first rocket', description: 'Assemble, stage and launch a small rocket.', scene: 'editor', craft: () => null, steps: [
-    step('pod', 'Welcome! I’m Flight Director Ama Okafor. Pick a command pod from the palette, then click in the building area to place it.', modulePresent('command'), '.vab-palette'),
-    step('tank', 'Attach a liquid fuel tank below the pod. Hover over an open attachment node until the preview snaps into place.', c => !!c.editor?.currentCraft().parts.some(p => (PART_CATALOG.get(p.partId)?.resources?.liquidFuel ?? 0) > 0), '.vab-palette'),
-    step('engine', 'Attach a liquid engine below the tank. A rocket needs thrust, fuel and a pilot working together.', modulePresent('engine'), '.vab-palette'),
-    step('chute', 'Attach a parachute above the pod so your crew can return safely.', modulePresent('parachute'), '.vab-palette'),
+    step('pod', 'Welcome! I’m Flight Director Ama Okafor. Pick the Lantern I Capsule from the palette, then click in the building area to place it.', modulePresent('command'), '.vab-palette'),
+    step('tank', 'Attach a Silo 1 Standard liquid fuel tank below the pod. Hover over an open attachment node until the preview snaps into place.', c => !!c.editor?.currentCraft().parts.some(p => (PART_CATALOG.get(p.partId)?.resources?.liquidFuel ?? 0) > 0), '.vab-palette'),
+    step('engine', 'Attach a Sirocco Lifter below the tank. Check launch thrust-to-weight in pre-flight: it must exceed 1 with fuel available. A Wisp is for vacuum and cannot lift this rocket.', launchReady, '.vab-palette'),
+    step('chute', 'Attach a Bloom Main Parachute above the pod so your crew can return safely.', modulePresent('parachute'), '.vab-palette'),
     step('staging', 'Check the staging list: the engine must fire before the parachute. Drag their chips into separate stages if needed.', c => {
       const parts = c.editor?.currentCraft().parts ?? [];
       const engine = parts.find(p => PART_CATALOG.get(p.partId)?.modules.some(m => m.type === 'engine'));
       const chute = parts.find(p => PART_CATALOG.get(p.partId)?.modules.some(m => m.type === 'parachute'));
-      return engine?.stage !== undefined && chute?.stage !== undefined && engine.stage > chute.stage;
+      return launchReady(c) && engine?.stage !== undefined && chute?.stage !== undefined && engine.stage > chute.stage;
     }, '.vab-staging'),
     step('launch', 'Click Launch. Your design will appear on the pad; you can begin First flight next.', c => !!c.world?.active, '.vab-launch'),
   ] },
   { id: 'first-flight', title: 'First flight', description: 'Lift off, climb to 10 km and return under a chute.', scene: 'flight', craft: buildSoundingRocket, steps: [
-    step('throttle', 'Hold {throttleUp} to raise throttle, or press {throttleFull} for full power. Set at least half throttle before releasing the clamps.', c => (c.flight?.input.state.throttle ?? 0) >= 0.5, '[data-tutorial="throttle"]'),
-    step('stage', 'Press {stage} to activate your engine and release the launch clamps.', c => !!c.world?.active && c.world.active.mode !== 'prelaunch'),
-    step('sas', 'Press {toggleSas} to enable SAS stability assist. It holds your attitude while you climb.', c => !!c.flight?.sasOn, '[data-tutorial="sas"]'),
-    step('climb', 'Keep the nose up and reach 10 km. Press {throttleCut} to cut thrust after the climb; coast back down.', c => altitude(c) >= 10000),
-    step('chute', 'On descent, stage the parachute with {stage}. It arms first, then opens when pressure and speed are safe.', c => !!c.world?.active?.state.parts.some(p => p.chute?.phase === 'semi' || p.chute?.phase === 'full')),
+    step('throttle', 'Stay at NORMAL (1×) time for this practice. Kestrel’s Sirocco is preset to a 45% thrust limit. Press {throttleFull} for full throttle; half throttle cannot lift this limited engine.', c => (c.flight?.input.state.throttle ?? 0) >= 0.99, '[data-tutorial="throttle"]'),
+    step('sas', 'Before ignition, press {toggleSas} to enable SAS stability assist. Keep the nose upright for this short hop.', c => !!c.flight?.sasOn, '[data-tutorial="sas"]'),
+    step('stage', 'Press {stage} to activate your engine and release the launch clamps. Read the next instruction now: cut thrust at 10 km.', c => !!c.world?.active && c.world.active.mode !== 'prelaunch'),
+    step('climb', 'Keep the nose upright. At 10 km altitude press {throttleCut} to cut thrust, then coast. Do not burn all the fuel: a higher vertical hop returns much harder.', c => altitude(c) >= 10000 && (c.flight?.input.state.throttle ?? 1) === 0),
+    step('chute', 'After the highest point, press {stage} to separate the booster, then {stage} again to arm the parachute. Turn SAS off with {toggleSas} and leave steering alone so the capsule settles heat-shield first. The chute opens when pressure and speed are safe.', c => !!c.world?.active?.state.parts.some(p => p.chute?.phase === 'semi' || p.chute?.phase === 'full')),
     step('landing', 'Let the open chute slow the capsule all the way to the surface.', landed),
   ] },
   { id: 'orbit', title: 'Getting to orbit', description: 'Gravity turn, map, apoapsis and circularisation.', scene: 'flight', craft: buildOrbiter, steps: [

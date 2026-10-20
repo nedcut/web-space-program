@@ -105,7 +105,7 @@ export class Builder {
 const add = (a: Vec3, b: Vec3) => v3(a.x + b.x, a.y + b.y, a.z + b.z);
 
 export function buildSoundingRocket(catalog: PartCatalog = PART_CATALOG): CraftDef {
-  const b = new Builder(catalog, 'Kestrel Sounding Rocket', 'Single-stage crewed hop. Up, over, splash. About 2.5 km/s.');
+  const b = new Builder(catalog, 'Kestrel Sounding Rocket', 'Beginner hop: full throttle with the preset 45% thrust limit; cut thrust at 10 km. Coast; on descent separate the booster, stage the chute and turn SAS off.');
   const pod = b.root('pod-lantern-1');
   b.stack(pod, 'chute-main', 'top');
   const shield = b.stack(pod, 'shield-1');
@@ -114,9 +114,11 @@ export function buildSoundingRocket(catalog: PartCatalog = PART_CATALOG): CraftD
   // brand-new Science/Career program can fly it straight away.
   const upper = b.stack(dec, 'tank-1-mid');
   const tank = b.stack(upper, 'tank-1-mid');
-  b.stack(tank, 'eng-sirocco');
+  const engine = b.stack(tank, 'eng-sirocco');
   b.radial(tank, 'fin-keel', 3, -0.95);
-  return b.done();
+  const craft = b.done();
+  craft.parts.find(p => p.uid === engine)!.tweaks = { thrustLimit: 0.45 };
+  return craft;
 }
 
 /** A foundation-only orbital design; demonstrates progression without research dependencies. */
@@ -655,7 +657,7 @@ export function buildPebblecatcher(catalog: PartCatalog = PART_CATALOG): CraftDe
 
 /** Picker presentation for the original stock designs (new entries set these fields inline). */
 const STOCK_GUIDE: Record<string, Pick<StockCraft, 'category' | 'tags' | 'tip'>> = {
-  'stock-kestrel': { category: 'first', tags: ['pod-lantern-1', 'chute-main', 'eng-sirocco', 'fin-keel'], tip: 'Launch straight up, stage the capsule after burnout and let the parachute bring you home.' },
+  'stock-kestrel': { category: 'first', tags: ['pod-lantern-1', 'chute-main', 'eng-sirocco', 'fin-keel'], tip: 'At NORMAL time, use full throttle and SAS upright; the engine is limited to 45%. Cut thrust at 10 km. On descent stage the booster away, stage again to arm the chute and turn SAS off.' },
   'stock-firstlight': { category: 'first', tags: ['eng-gust', 'eng-sirocco', 'shield-1'], tip: 'Lean east from 1 km and keep leaning; coast to an apoapsis above 70 km and burn there to circularize.' },
   'stock-meridian': { category: 'first', tags: ['eng-zephyr', 'solar-fold', 'shield-1'], tip: 'Reach orbit with fuel to spare, stay a few laps, then burn retrograde over the ocean to come home.' },
   'stock-tender': { category: 'orbit', tags: ['dock-1', 'rcs-nudge', 'mono-bagel'], tip: 'Target a docking port, line up from 50 m and close in at under 1 m/s on RCS.' },
@@ -677,8 +679,8 @@ const STOCK_GUIDE: Record<string, Pick<StockCraft, 'category' | 'tags' | 'tip'>>
   'stock-pebblecatcher': { category: 'worlds', tags: ['sensor-sample', 'rcs-nudge', 'leg-stilt'], tip: "Bennu barely pulls: touch down at walking pace with RCS taps, then collect a sample." },
   'stock-ringrunner': { category: 'worlds', tags: ['eng-foehn', 'battery-drum', 'wheel-gyre-1'], tip: 'Pick a Saturn transfer window in the planner before you leave Earth orbit.' },
   'stock-gossamer': { category: 'worlds', tags: ['antenna-horizon', 'generator-isotope', 'fairing-2', 'eng-foehn'], tip: 'Capture into a Saturn orbit that stays above the rings, then relay science home.' },
-  'stock-kestrel-challenging': { category: 'first', tags: ['pod-lantern-1', 'chute-main', 'eng-sirocco', 'fin-keel'], tip: 'Launch straight up, stage the capsule after burnout and let the parachute bring you home.' },
-  'stock-kestrel-real': { category: 'first', tags: ['pod-lantern-1', 'chute-main', 'eng-sirocco', 'fin-keel'], tip: 'Launch straight up, stage the capsule after burnout and let the parachute bring you home.' },
+  'stock-kestrel-challenging': { category: 'first', tags: ['pod-lantern-1', 'chute-main', 'eng-sirocco', 'fin-keel'], tip: 'At NORMAL time, use full throttle and SAS upright; the engine is limited to 45%. Cut thrust at 10 km. On descent stage the booster away, stage again to arm the chute and turn SAS off.' },
+  'stock-kestrel-real': { category: 'first', tags: ['pod-lantern-1', 'chute-main', 'eng-sirocco', 'fin-keel'], tip: 'At NORMAL time, use full throttle and SAS upright; the engine is limited to 45%. Cut thrust at 10 km. On descent stage the booster away, stage again to arm the chute and turn SAS off.' },
   'stock-meridian-challenging': { category: 'first', tags: ['eng-tempest', 'eng-harmattan', 'eng-zephyr'], tip: 'A longer, flatter climb than on Standard: start leaning early and keep the nose near prograde.' },
   'stock-meridian-real': { category: 'first', tags: ['eng-tempest', 'eng-harmattan', 'eng-zephyr'], tip: 'Orbit takes 7.8 km/s here: lean early, keep the nose near prograde and waste nothing.' },
   'stock-selene-challenging': { category: 'worlds', tags: ['srb-thunderclap', 'wheel-reaction-2', 'eng-foehn'], tip: 'Descent and ascent stages are separate: leave the descent stage on the Moon.' },
