@@ -441,7 +441,7 @@
 .preflight-block .btn { margin-top: 4px; }
 
 /* Keep complete build groups below the launch row when the scaled editor is narrow. */
-@container editor (max-width: 1800px) {
+@container editor (max-width: 2000px) {
   .vab-topbar {
     display: grid; grid-template-columns: auto auto minmax(100px, 1fr) auto auto auto auto;
     grid-template-rows: 38px 47px; height: auto; padding: 8px; gap: 6px 8px;
@@ -457,7 +457,7 @@
   .vab-topbar > .vab-unblock { display: none; }
 }
 
-@container editor-shell (max-width: 1800px) {
+@container editor-shell (max-width: 2000px) {
   .tutorial-panel.editor { top: 126px; max-height: calc(50% - 136px); }
   .fullscreen:has(> .tutorial-panel.editor.collapsed) > .vab-root .vab-staging { top: 312px; }
 }
