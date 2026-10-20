@@ -96,7 +96,7 @@ export function nextGoal(p: Progression, mode: GameMode, scale: ScalePresetId, s
   if (mode === 'career' && active === 0 && offered > 0 && !p.milestones.length && !Object.keys(p.archive).length)
     return { title: 'Take your first commissions', detail: 'Accept the offers you can fly: their advances pay for the first rockets, and a field survey at the launch complex can be done on the pad.', action: 'missions', actionLabel: 'Mission Control', aside: null };
   if (!Object.keys(p.archive).length && !p.milestones.length)
-    return { title: 'Fly a sounding rocket', detail: 'Launch the stock Kestrel. When the Science app lights up, open it and run the crew report (and any instruments you fitted): on the pad, in the air and in space. Stage the parachute on the way down, then recover the capsule.', action: 'launch', actionLabel: 'Launch Pad', aside, recommendedStockId: scale === 'standard' ? 'stock-kestrel' : `stock-kestrel-${scale}` };
+    return { title: 'Fly a sounding rocket', detail: 'Launch the stock Kestrel and follow its flight tip for throttle and cutoff. Run the crew report and any fitted instruments on the pad and during flight. On descent separate the booster, arm the parachute and turn SAS off, then recover the capsule.', action: 'launch', actionLabel: 'Launch Pad', aside, recommendedStockId: scale === 'standard' ? 'stock-kestrel' : `stock-kestrel-${scale}` };
   const open = STEPS.filter(s => (!s.milestone || !p.milestones.includes(s.milestone)) && (!s.only || s.only.includes(scale)));
   // Two probe goals open at once: the one whose launch season comes first.
   const step = open[0]?.season && open[1]?.season && (seasons[open[1].season] ?? Infinity) < (seasons[open[0].season] ?? Infinity) ? open[1] : open[0];
