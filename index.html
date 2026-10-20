@@ -3,12 +3,43 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Build original rockets, learn to fly, and explore the real solar system in a free browser spaceflight sandbox." />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Web Space Program" />
+    <meta property="og:description" content="Build original rockets, learn to fly, and explore the real solar system in a free browser spaceflight sandbox." />
+    <meta property="og:url" content="https://web-space-program.pages.dev/" />
+    <meta property="og:image" content="https://web-space-program.pages.dev/menu/saturn.webp" />
+    <meta property="og:image:width" content="3840" />
+    <meta property="og:image:height" content="2400" />
+    <meta property="og:image:alt" content="Saturn and its moons, rendered with Web Space Program’s original planetary renderer" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Web Space Program" />
+    <meta name="twitter:description" content="Build original rockets, learn to fly, and explore the real solar system in a free browser spaceflight sandbox." />
+    <meta name="twitter:image" content="https://web-space-program.pages.dev/menu/saturn.webp" />
+    <meta name="twitter:image:alt" content="Saturn and its moons, rendered with Web Space Program’s original planetary renderer" />
     <link rel="icon" href="/icon.svg" />
     <title>Web Space Program</title>
-    <style>html,body,#root{margin:0;height:100%;overflow:hidden;background:#05070d;color:#e6edf7;font-family:system-ui,sans-serif}</style>
+    <style>html,body,#root{margin:0;height:100%;overflow:hidden;background:#05070d;color:#e6edf7;font-family:system-ui,sans-serif}
+      .startup{min-height:100%;display:grid;place-items:center;box-sizing:border-box;padding:24px}
+      .startup-card{width:min(420px,100%);padding:28px;box-sizing:border-box;background:#101b2b;border:1px solid #40546a;border-radius:12px;line-height:1.5}
+      .startup h1{font-size:24px;font-weight:500;margin:0 0 24px}.startup p{margin:12px 0;color:#c2d0e3}
+      .startup progress{width:100%;accent-color:#85d9ef}.startup button{padding:10px 24px;border:1px solid #85d9ef;border-radius:6px;background:#16394a;color:#e6edf7;font:inherit;cursor:pointer}
+      .startup button:focus-visible{outline:2px solid #e6edf7;outline-offset:4px}.startup-reason{overflow-wrap:anywhere;font-size:13px}
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="startup" aria-label="Starting Web Space Program">
+        <div class="startup-card">
+          <h1>Web Space Program</h1>
+          <p id="startup-status" role="status">Preparing your space program…</p>
+          <progress aria-label="Earth geography received"></progress>
+          <p id="startup-detail">Loading the application and required Earth geography. First visits can take longer.</p>
+          <button type="button" hidden>Retry</button>
+          <noscript><p>JavaScript is required to play. Enable JavaScript, then reload this page.</p></noscript>
+        </div>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

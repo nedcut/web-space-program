@@ -39,3 +39,49 @@ it('falls back to the fetched Blob without isolation (host without COOP/COEP hea
   expect(message.blob!.size).toBe(buffer.byteLength);
   expect(new Int16Array(await message.blob!.arrayBuffer())[123]).toBe(-4321);
 });
+
+it('reports real streamed bytes across all required files before installing terrain', async () => {
+  vi.resetModules();
+  const releases: (() => void)[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const file = EARTH_FILES.find(file => url.endsWith(file.path))!;
+    return new Response(new ReadableStream({ async start(controller) {
+      controller.enqueue(new Uint8Array(8));
+      await new Promise<void>(resolve => releases.push(resolve));
+      controller.enqueue(new Uint8Array(file.bytes - 8));
+      controller.close();
+    } }));
+  }));
+  const loader = await import('../src/game/earthLoader');
+  const data = await import('../src/sim/terrain/earthData');
+  const progress: number[] = [];
+  const pending = loader.loadEarthData((received, total) => {
+    expect(total).toBe(EARTH_DATA_BYTES);
+    progress.push(received);
+  });
+  await vi.waitFor(() => expect(progress.at(-1)).toBe(24));
+  expect(() => data.earthData()).toThrow('Earth data not loaded');
+  releases.forEach(release => release());
+  await pending;
+  expect(progress[0]).toBe(0);
+  expect(progress.at(-1)).toBe(EARTH_DATA_BYTES);
+  expect(progress.every((value, i) => i === 0 || value >= progress[i - 1])).toBe(true);
+  expect(data.earthData().buffer.byteLength).toBe(EARTH_DATA_BYTES);
+});
+
+it.each(['http', 'incomplete', 'network'])('rejects %s failures without installing partial terrain and permits retry', async failure => {
+  vi.resetModules();
+  const fetcher = vi.fn(async (url: string) => {
+    const file = EARTH_FILES.find(file => url.endsWith(file.path))!;
+    if (failure === 'network') throw new TypeError('Failed to fetch');
+    return failure === 'http' ? new Response('', { status: 503 }) : new Response(new Uint8Array(file.bytes - 1));
+  });
+  vi.stubGlobal('fetch', fetcher);
+  const loader = await import('../src/game/earthLoader');
+  const data = await import('../src/sim/terrain/earthData');
+  await expect(loader.loadEarthData()).rejects.toThrow();
+  expect(() => data.earthData()).toThrow('Earth data not loaded');
+  fetcher.mockImplementation(async (url: string) => new Response(new Uint8Array(EARTH_FILES.find(file => url.endsWith(file.path))!.bytes)));
+  await loader.loadEarthData();
+  expect(data.earthData().buffer.byteLength).toBe(EARTH_DATA_BYTES);
+});
