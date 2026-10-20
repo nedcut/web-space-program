@@ -185,7 +185,8 @@ export default function FlightScene() {
       tutorialContext.world = cc.world;
       const mission = getScenarioRun();
       if (mission && mountKey === 0) {
-        cc.cam.pitch = mission.scenario.id === 'ring-skimmer' ? 0.85 : 0.45;
+        cc.cam.pitch = mission.scenario.id === 'ring-skimmer' ? -1.3 : 0.45;
+        if (mission.scenario.id === 'ring-skimmer') { cc.cam.mode = 'locked'; cc.cam.yaw = 0; }
         cc.cam.distance = Math.max(25, cc.world.active!.state.cache.boundingRadius * 4);
         if (mission.scenario.id === 'rendezvous') { cc.speedMode = 'target'; cc.dockingMode = true; }
       }

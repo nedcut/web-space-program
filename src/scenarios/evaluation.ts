@@ -95,6 +95,6 @@ export function scoreMission(scenario: Scenario, state: MissionState): Result {
   const medal: Medal = !success ? 'none' : meets(state, scenario.gold) ? 'gold' : meets(state, scenario.silver) ? 'silver' : 'bronze';
   const finitePenalty = (v: number, limit: number) => Number.isFinite(limit) && limit > 0 ? Math.min(10, v / limit) : 0;
   const b = scenario.gold;
-  const penalty = (scenario.id === 'rendezvous' ? 5000 : 500) * finitePenalty(state.elapsed, b.time) + 5000 * finitePenalty(state.dv, b.dv) + 2000 * finitePenalty(state.landingSpeed, b.speed) + 2000 * finitePenalty(state.precision, b.precision);
+  const penalty = (scenario.id === 'rendezvous' ? 5000 : 500) * finitePenalty(state.elapsed, b.time) + 5000 * finitePenalty(state.dv, b.dv) + 2000 * finitePenalty(state.landingSpeed, b.speed) + (scenario.id === 'ring-skimmer' ? 20000 : 2000) * finitePenalty(state.precision, b.precision);
   return { score: success ? Math.max(1, Math.round(100000 - penalty + (state.scienceBonus ? 5000 : 0))) : 0, medal, elapsed: state.elapsed, dv: state.dv, landingSpeed: Number.isFinite(state.landingSpeed) ? state.landingSpeed : null, precision: Number.isFinite(state.precision) ? state.precision : null, scienceBonus: state.scienceBonus, success };
 }
