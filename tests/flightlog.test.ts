@@ -1,7 +1,7 @@
 import { isBurstEvent } from '../src/render/fx/FlightFx';
 import type { VesselEvent } from '../src/sim/vessel/runtime';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { crossesRingPlane, appendEvent, ARCHIVE_SAMPLE_CAP, HISTORY_CAP, trimHistory, EVENT_CAP, finishRecord, newRecorder, observe, SAMPLE_CAP, orderedSamples, sampleInterval, startRecord, summaryText, type Observation } from '../src/game/flightlog/recorder';
+import { crossesRingPlane, appendEvent, ARCHIVE_SAMPLE_CAP, HISTORY_CAP, trimHistory, EVENT_CAP, finishRecord, newRecorder, observe, SAMPLE_CAP, orderedSamples, sampleInterval, parentReport, eventDetail, startRecord, summaryText, type Observation } from '../src/game/flightlog/recorder';
 import { ACHIEVEMENTS, awardAchievements } from '../src/game/flightlog/achievements';
 import { loadAchievements, saveAchievements } from '../src/game/flightlog/storage';
 import { World } from '../src/game/world';
@@ -19,8 +19,8 @@ describe('flight recorder', () => {
     observe(r, observation(0)); observe(r, observation(0.1));
     expect(r.samples).toHaveLength(1);
     for (let i = 1; i < SAMPLE_CAP + 20; i++) observe(r, observation(i));
-    expect(r.samples).toHaveLength(SAMPLE_CAP);
-    expect(orderedSamples(r)[0][0]).toBe(20);
+    expect(r.samples.length).toBeLessThanOrEqual(SAMPLE_CAP);
+    expect(orderedSamples(r)[0][0]).toBe(0);
     expect(orderedSamples(r).at(-1)![0]).toBe(SAMPLE_CAP + 19);
     for (let i = 0; i < EVENT_CAP + 10; i++) appendEvent(r, i, 'stage', 'earth');
     expect(r.events).toHaveLength(EVENT_CAP);
@@ -54,8 +54,47 @@ describe('flight recorder', () => {
     finishRecord(r, 7, 'recovered'); finishRecord(r, 8, 'recovered');
     expect(r.events.map(e => e.kind)).toEqual(['launch', 'orbit', 'soi', 'landing', 'recovery']);
     expect(r.events.find(e => e.kind === 'landing')).toMatchObject({ speed: 0.5, biome: 'Highlands' });
-    expect(summaryText(r)).toContain('Bodies visited: earth, moon');
+    expect(summaryText(r)).toContain('Bodies visited: Earth, Moon');
     expect(summaryText(r)).toContain('0.50 m/s');
+  });
+  it('preserves a long flight start, burn, sampled peaks, events and final endpoint within both budgets', () => {
+    const r = startRecord(newRecorder(), 'long', 'Kestrel', 1000);
+    observe(r, observation(1000, { flying: false, prelaunch: true }));
+    for (let i = 1; i <= 20000; i++) {
+      if (i === 120) appendEvent(r, 1000 + i / 4, 'stage', 'earth');
+      observe(r, observation(1000 + i / 4, {
+        altitude: i === 200 ? 314800 : 100, speed: i === 150 ? 2500 : 10,
+        g: i === 18000 ? 24.17 : 1, flying: i < 19000,
+      }));
+      expect(r.samples.length).toBeLessThanOrEqual(SAMPLE_CAP);
+    }
+    finishRecord(r, 6100, 'recovered');
+    expect(r.samples.length).toBeLessThanOrEqual(ARCHIVE_SAMPLE_CAP);
+    expect(r.samples[0][0]).toBe(0);
+    expect(r.samples.at(-1)![0]).toBe(5000);
+    for (const time of [0.25, 30, 50, 37.5, 4500, 4750]) expect(r.samples.some(s => s[0] === time)).toBe(true);
+    expect(r.samples.map(s => s[0])).toEqual([...r.samples.map(s => s[0])].sort((a, b) => a - b));
+    expect(summaryText(r)).toContain('Record elapsed (includes pad and recovery time): 5100 s');
+    expect(summaryText(r)).toContain('Elapsed 0.3 s Liftoff');
+    expect(summaryText(r)).not.toContain('T+');
+  });
+  it('reads legacy circular buffers and sanitizes old timeline diagnostics without mutating them', () => {
+    const r = startRecord(newRecorder(), 'legacy', 'Kestrel', 1000);
+    for (let i = 0; i < 10; i++) observe(r, observation(1000 + i));
+    const original = [...r.samples];
+    r.samples = [...original.slice(4), ...original.slice(0, 4)]; r.sampleHead = 6;
+    delete r.launchId; delete r.launchName;
+    appendEvent(r, 1010, 'separation', 'earth', { detail: 'Detached part 4 → vmvh963f5.1' });
+    expect(orderedSamples(r)).toEqual(original);
+    expect(summaryText(r)).toContain('Hardware separated · Earth');
+    expect(summaryText(r)).not.toContain('vmvh963f5.1');
+    expect(r.events.at(-1)!.detail).toContain('vmvh963f5.1');
+    expect(eventDetail({ time: 1, kind: 'soi', body: 'moon', detail: 'earth → moon' })).toContain('Moon');
+    const debris = { ...r, id: 'fragment', name: 'Kestrel Debris' };
+    expect(parentReport(debris, [r, debris])).toBe(r);
+    finishRecord(r, 1020, 'recovered');
+    expect(r.samples).toEqual(original);
+    expect(r.sampleHead).toBe(0);
   });
   it('detects ring-plane crossings and requires a return to the encounter parent for an assist', () => {
     expect(crossesRingPlane({ x: 15, y: 0, z: -4 }, { x: 15, y: 0, z: 4 }, 10, 20)).toBe(true);
@@ -103,6 +142,13 @@ describe('flight recorder', () => {
     for (let i = 0; i < 50; i++) w.tick(0.02, neutralInput({ stage: i === 0, throttle: 1 }));
     expect(w.flightlog.records.some(r => r.events.some(e => e.kind === 'partLoss' && e.detail?.includes('Attachment')))).toBe(true);
     expect(w.flightlog.records.length).toBeGreaterThan(1);
+    const root = w.flightlog.records[0];
+    for (const fragment of w.flightlog.records.slice(1)) {
+      expect(fragment.launchId).toBe(root.id);
+      expect(parentReport(fragment, w.flightlog.records)).toBe(root);
+    }
+    const reloaded = deserializeWorld(serializeWorld(w), PART_CATALOG);
+    expect(reloaded.flightlog).toEqual(w.flightlog);
     expect(effects.some(e => e.type === 'structuralFailure')).toBe(true);
   });
   it('does not integrate stale engine telemetry while packed during time warp', () => {

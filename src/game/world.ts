@@ -189,7 +189,7 @@ export class World {
     const source = recordFor(this.flightlog, parent.state.id);
     if (!source) { this.recordFlight(child, this.ut, true); return; }
     const target = startRecord(this.flightlog, child.state.id, child.state.name, source.start);
-    const identity = { id: target.id, vesselId: target.vesselId, name: target.name };
+    const identity = { id: target.id, vesselId: target.vesselId, name: target.name, launchId: source.launchId ?? source.id, launchName: source.launchName ?? source.name };
     Object.assign(target, structuredClone(source), identity);
   }
   progression = newProgression();
