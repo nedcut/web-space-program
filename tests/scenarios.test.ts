@@ -73,7 +73,31 @@ describe('mission catalog and World setup', () => {
       expect(observeWorld(setup, setup.world.active!.state.parts.length).precision).toBeLessThan(0.1);
     }
   });
-  it.each(['ring-skimmer', 'plume-dive'])('%s coasts through its actual World corridor intact', id => {
+  it.each([0, 3])('Ring Skimmer coast earns Bronze, while a flown trim earns Gold at physics warp index %s', warp => {
+    let coastScore = 0;
+    for (const correct of [false, true]) {
+      const setup = setupScenario(scenario('ring-skimmer')), w = setup.world;
+      let state = initialMission(w.ut);
+      state.previous = observeWorld(setup, w.active!.state.parts.length);
+      w.onSimulationStep = (dt, dv) => { state = evaluateMission('ring-skimmer', state, observeWorld(setup, setup.craft.parts.length), dt, dv); };
+      w.warp = { mode: 'physics', index: warp };
+      for (let i = 0; i < 6000 && state.status === 'flying'; i++) {
+        w.tick(0.02, neutralInput({ sas: 'stabilityAssist', throttle: correct && state.dv < 12 ? 0.1 : 0 }));
+      }
+      const result = scoreMission(scenario('ring-skimmer'), state);
+      expect(result.success, JSON.stringify(result)).toBe(true);
+      expect(result.medal, JSON.stringify(result)).toBe(correct ? 'gold' : 'bronze');
+      expect(result.dv).toBeLessThanOrEqual(15);
+      if (correct) {
+        expect(result.dv).toBeGreaterThan(10);
+        expect(result.score).toBeGreaterThan(coastScore);
+      } else {
+        expect(result.precision).toBeGreaterThan(2500);
+        coastScore = result.score;
+      }
+    }
+  }, 30000);
+  it.each(['plume-dive'])('%s coasts through its actual World corridor intact', id => {
     const setup = setupScenario(scenario(id)), w = setup.world, count = w.active!.state.parts.length;
     let state = initialMission(w.ut); state.previous = observeWorld(setup, count);
     w.onSimulationStep = (dt, dv) => { state = evaluateMission(scenario(id).id, state, observeWorld(setup, count), dt, dv); };
