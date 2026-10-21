@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 const css = readFileSync(new URL('../src/editor/ui/editor.css', import.meta.url), 'utf8');
 const tsx = readFileSync(new URL('../src/editor/ui/TopBar.tsx', import.meta.url), 'utf8');
 const rule = (selector: string, from = css) => from.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
-const media = (px: number) => css.match(new RegExp(`@media \\(max-width: ${px}px\\) \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? '';
+const media = (px: number) => css.match(new RegExp(`@container editor \\(max-width: ${px}px\\) \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? '';
 
 describe('editor toolbar at narrow widths', () => {
   it('keeps Launch and the labelled exit outside the clipping tool area', () => {

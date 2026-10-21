@@ -1,5 +1,6 @@
 /* Integration Hall editor UI */
-.vab-root { background: #0d1117; overflow: hidden; color: var(--text); }
+.vab-root { container: editor / inline-size; background: #0d1117; overflow: hidden; color: var(--text); }
+.fullscreen:has(> .vab-root) { container: editor-shell / inline-size; }
 .vab-canvas { z-index: 0; }
 .vab-vignette { z-index: 1; pointer-events: none; background: radial-gradient(ellipse 75% 70% at 50% 48%, transparent 55%, rgba(4, 7, 12, 0.55) 100%); }
 .vab-root > .panel { position: absolute; z-index: 2; }
@@ -271,31 +272,31 @@
 .vab-saved-info { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
 
 /* The build-tool group (place/offset/rotate/re-root/snap) needs ~200 px: secondary items collapse earlier. */
-@media (max-width: 1800px) {
+@container editor (max-width: 1800px) {
   .vab-stats .vab-stat:nth-child(2) { display: none; }
   .vab-actions-label { display: none; }
 }
-@media (max-width: 1440px) {
+@container editor (max-width: 1440px) {
   .vab-name-wrap { width: 180px; }
   .vab-stats { gap: 12px; margin-left: 2px; padding-left: 10px; }
   .vab-topbar { gap: 8px; }
 }
-@media (max-width: 1300px) {
+@container editor (max-width: 1300px) {
   .vab-name-wrap { width: 150px; }
 }
 /* Responsive toolbar: Launch and Exit stay visible down to 760 px; secondary tools move into the "More tools" menu. */
-@media (max-width: 1500px) {
+@container editor (max-width: 1500px) {
   .vab-topbar .vab-collapsible { display: none; }
   .vab-more { display: block; }
   .vab-stats .vab-stat:nth-child(3) { display: none; }
 }
-@media (max-width: 1700px) { .vab-stats .vab-stat:nth-child(3) { display: none; } .vab-name-wrap { width: 180px; } }
-@media (max-width: 1100px) {
+@container editor (max-width: 1700px) { .vab-stats .vab-stat:nth-child(3) { display: none; } .vab-name-wrap { width: 180px; } }
+@container editor (max-width: 1100px) {
   .vab-name-wrap { width: 130px; }
   .vab-stats .vab-stat:first-child { display: none; }
   .vab-actions-label { display: none; }
 }
-@media (max-width: 900px) {
+@container editor (max-width: 900px) {
   .vab-topbar { gap: 6px; padding: 0 6px; }
   .vab-name-wrap { width: 140px; }
   .vab-stats { display: none; }
@@ -320,7 +321,7 @@
 .vab-card-name { font-size: 11px; line-height: 1.35; min-height: 30px; }
 .vab-stage { background: var(--surface-soft); border-color: var(--panel-border); }
 .vab-search { background: var(--bg); }
-@media (max-width: 1440px) { .vab-name-wrap { width: 155px; } .vab-stats { gap: 10px; } }
+@container editor (max-width: 1440px) { .vab-name-wrap { width: 155px; } .vab-stats { gap: 10px; } }
 
 .vab-card { min-width: 0; }
 
@@ -408,11 +409,10 @@
 .vab-dv-vac { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; color: var(--text-dim); }
 .vab-dv-vac input { margin: 0; }
 
-@media (max-width: 1300px) {
+@container editor (max-width: 1300px) {
   .vab-dirty-text { display: none; }
   .vab-name-wrap.dirty .vab-name { padding-right: 22px; }
 }
-@media (max-width: 1100px) { .vab-exit-label { display: none; } }
 .vab-search-key { font-size: 10px; padding: 0 5px; opacity: 0.6; }
 /* Set-aside pieces: a small badge above each one, and the held part's drop action next to the cursor. */
 .vab-detached-badge, .vab-cursor-label {
@@ -439,3 +439,25 @@
 .vab-unblock { height: 38px; flex-shrink: 0; white-space: nowrap; }
 .preflight-block { color: var(--warn); }
 .preflight-block .btn { margin-top: 4px; }
+
+/* Keep complete build groups below the launch row when the scaled editor is narrow. */
+@container editor (max-width: 2000px) {
+  .vab-topbar {
+    display: grid; grid-template-columns: auto auto minmax(100px, 1fr) auto auto auto auto;
+    grid-template-rows: 38px 47px; height: auto; padding: 8px; gap: 6px 8px;
+  }
+  .vab-name-wrap { width: auto; min-width: 0; }
+  .vab-tools { grid-column: 1 / -1; grid-row: 2; overflow: visible; }
+  .vab-tools > .vab-stats { display: flex; flex: none; height: auto; overflow: visible; flex-wrap: nowrap; }
+  .vab-tools .vab-stats .vab-stat:first-child { display: flex; }
+  .vab-palette, .vab-staging { top: 126px; }
+}
+
+@container editor (max-width: 1100px) {
+  .vab-topbar > .vab-unblock { display: none; }
+}
+
+@container editor-shell (max-width: 2000px) {
+  .tutorial-panel.editor { top: 126px; max-height: calc(50% - 136px); }
+  .fullscreen:has(> .tutorial-panel.editor.collapsed) > .vab-root .vab-staging { top: 312px; }
+}

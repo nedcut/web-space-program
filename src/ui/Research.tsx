@@ -21,6 +21,7 @@ export default function Research() {
   const canResearch = (n: typeof node) => n.requires.every(unlocked) && p.science >= n.cost && !unlocked(n.id);
   const research = (n: typeof node) => { if (!canResearch(n)) return; world.unlockTech(n.id); saveProgram(world); refresh(k => k + 1); };
   const xy = (n: typeof node) => ({ x: 24 + n.column * 188, y: 20 + n.row * 86 });
+  const subjects = Object.keys(p.archive).length;
   const researched = TECH_NODES.filter(n => unlocked(n.id)).length;
   // Keyboard users land on the suggested node: arrows walk the graph, Enter researches.
   useEffect(() => { if (!archive) graph.current?.querySelector<HTMLElement>('.tech-node.selected')?.focus({ preventScroll: false }); }, [archive]);
@@ -30,7 +31,7 @@ export default function Research() {
       onLeave={() => saveProgram(world)} aside={<div className="program-balance"><strong>{p.science.toFixed(1)}</strong><span className="label">available science</span></div>} />
     <nav className="program-tabs"><div className="seg" role="group" aria-label="Research view">
       <Button className={!archive ? 'on' : ''} aria-pressed={!archive} onClick={() => showArchive(false)}>Technology · {researched} / {TECH_NODES.length}</Button>
-      <Button className={archive ? 'on' : ''} aria-pressed={archive} onClick={() => showArchive(true)}>Science archive · {Object.keys(p.archive).length} subjects</Button>
+      <Button className={archive ? 'on' : ''} aria-pressed={archive} onClick={() => showArchive(true)}>Science archive · {subjects} {subjects === 1 ? 'subject' : 'subjects'}</Button>
     </div></nav>
     {archive ? <section className="program-archive panel">
       <h2>Collected knowledge</h2><p>Recorded data earns credit when transmitted or recovered. The archive shows credited science.</p>

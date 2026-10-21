@@ -107,7 +107,7 @@ describe('hub next goal', () => {
     p.contracts[0].status = 'active';
     expect(nextGoal(p, 'career', 'standard')?.title).toBe('Fly a sounding rocket');
     p.archive['temperature/earth/landed/Launch Complex'] = { body: 'earth', biome: 'Launch Complex', situation: 'landed', experiment: 'temperature', runs: 1, science: 8 };
-    expect(nextGoal(p, 'career', 'standard')).toMatchObject({ title: 'Reach orbit', action: 'launch' });
+    expect(nextGoal(p, 'career', 'standard')).toMatchObject({ title: 'Reach orbit', action: 'launch', recommendedStockId: 'stock-firstlight' });
     p.milestones.push('first-orbit');
     expect(nextGoal(p, 'career', 'standard')).toMatchObject({ title: 'Fly to the Moon', action: 'launch' });
     expect(nextGoal(p, 'career', 'standard')!.detail).toMatch(/20 more science/);
