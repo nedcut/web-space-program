@@ -1,3 +1,5 @@
+import { BODY_DEFS } from '../../data/bodies';
+
 /** Compact, DOM-free flight records. Tuple columns are SI, except time (seconds from start). */
 export const SAMPLE_CAP = 1024;
 export const EVENT_CAP = 256;
@@ -18,6 +20,9 @@ export interface Observation {
 }
 export interface FlightRecord {
   id: string; vesselId: string; name: string; start: number; end?: number; outcome?: 'recovered' | 'lost' | 'merged' | 'boarded';
+  /** Root report identity follows separated hardware without changing recoverable vessel reports. */
+  launchId?: string;
+  launchName?: string;
   sampleHead?: number;
   samples: Sample[]; events: FlightEvent[]; bodies: string[]; landedBodies: string[]; orbitBodies: string[];
   stats: { maxAltitude: number; maxSpeed: number; maxG: number; dvSpent: number; distance: number };
@@ -35,7 +40,7 @@ export function recordFor(state: RecorderState, vesselId: string) { return state
 export function startRecord(state: RecorderState, vesselId: string, name: string, ut: number): FlightRecord {
   const existing = recordFor(state, vesselId);
   if (existing) return existing;
-  const record: FlightRecord = { id: `${vesselId}:${ut}:${++state.sequence}`, vesselId, name, start: ut, samples: [], events: [], bodies: [], landedBodies: [], orbitBodies: [], stats: { maxAltitude: 0, maxSpeed: 0, maxG: 0, dvSpent: 0, distance: 0 }, launched: false, stages: 0, hotUnshielded: false, plane: false };
+  const record: FlightRecord = { id: `${vesselId}:${ut}:${++state.sequence}`, vesselId, name, start: ut, launchId: `${vesselId}:${ut}:${state.sequence}`, launchName: name, samples: [], events: [], bodies: [], landedBodies: [], orbitBodies: [], stats: { maxAltitude: 0, maxSpeed: 0, maxG: 0, dvSpent: 0, distance: 0 }, launched: false, stages: 0, hotUnshielded: false, plane: false };
   state.records.push(record);
   // Keep live vessels even when the completed-report budget is full.
   while (state.records.filter(r => r.outcome).length > HISTORY_CAP) state.records.splice(state.records.findIndex(r => r.outcome), 1);
@@ -46,10 +51,46 @@ export function appendEvent(r: FlightRecord, ut: number, kind: EventKind, body: 
   if (r.events.length > EVENT_CAP) r.events.shift();
   if (kind === 'stage') r.stages++;
 }
-/** Circular storage stays O(1) per append; callers request chronological order for charts. */
+/** Also reads circular buffers from older saves. */
 export function orderedSamples(r: FlightRecord): Sample[] {
   const head = r.sampleHead ?? 0;
   return head ? [...r.samples.slice(head), ...r.samples.slice(0, head)] : r.samples;
+}
+/** Compact only when full, retaining endpoints, telemetry peaks and event-nearest samples.
+ * Fill the remaining budget by splitting the largest time gaps across the whole record. */
+export function compactSamples(r: FlightRecord, cap: number): Sample[] {
+  const samples = orderedSamples(r);
+  if (samples.length <= cap) return [...samples];
+  const keep = new Set<number>([0, samples.length - 1]);
+  for (const column of [1, 2, 8, 9, 10] as const) {
+    let peak = 0;
+    for (let i = 1; i < samples.length; i++) if (samples[i][column] > samples[peak][column]) peak = i;
+    keep.add(peak);
+  }
+  for (const event of r.events) {
+    if (keep.size >= cap / 2) break;
+    let nearest = 0;
+    for (let i = 1; i < samples.length; i++) if (Math.abs(samples[i][0] - event.time) < Math.abs(samples[nearest][0] - event.time)) nearest = i;
+    keep.add(nearest);
+  }
+  const indices = [...keep].sort((a, b) => a - b);
+  while (indices.length < cap) {
+    let candidate = -1, insertion = 0, largest = -1;
+    for (let i = 1; i < indices.length; i++) {
+      const left = indices[i - 1], right = indices[i];
+      if (right - left < 2) continue;
+      const gap = samples[right][0] - samples[left][0];
+      if (gap <= largest) continue;
+      largest = gap;
+      insertion = i;
+      const middle = (samples[right][0] + samples[left][0]) / 2;
+      candidate = left + 1;
+      for (let j = left + 2; j < right; j++) if (Math.abs(samples[j][0] - middle) < Math.abs(samples[candidate][0] - middle)) candidate = j;
+    }
+    if (candidate < 0) break;
+    indices.splice(insertion, 0, candidate);
+  }
+  return indices.map(i => samples[i]);
 }
 export function trimHistory(state: RecorderState) {
   while (state.records.filter(r => r.outcome).length > HISTORY_CAP) state.records.splice(state.records.findIndex(r => r.outcome), 1);
@@ -87,8 +128,11 @@ export function observe(r: FlightRecord, o: Observation, force = false, integrat
   if (force || !lastSample || time - lastSample[0] >= sampleInterval(o) || p?.body !== o.body || p?.flying !== o.flying) {
     const finite = (n: number) => Number.isFinite(n) ? n : 0;
     const sample = [time, ...[o.altitude, o.speed, o.vertical, o.horizontal].map(finite), Number.isFinite(o.ap) ? o.ap : null, Number.isFinite(o.pe) ? o.pe : null, ...[o.mach, o.q, o.g, o.temperature, o.mass, o.dv, r.downrange ?? 0].map(finite), o.body] as Sample;
-    if (r.samples.length < SAMPLE_CAP) r.samples.push(sample);
-    else { const head = r.sampleHead ?? 0; r.samples[head] = sample; r.sampleHead = (head + 1) % SAMPLE_CAP; }
+    if (r.sampleHead || r.samples.length >= SAMPLE_CAP) {
+      r.samples = compactSamples(r, SAMPLE_CAP / 2);
+      r.sampleHead = 0;
+    }
+    r.samples.push(sample);
   }
   r.last = { ...o, ap: Number.isFinite(o.ap) ? o.ap : 0, pe: Number.isFinite(o.pe) ? o.pe : 0 };
 }
@@ -96,8 +140,7 @@ export function finishRecord(r: FlightRecord, ut: number, outcome: NonNullable<F
   if (r.outcome) return;
   appendEvent(r, ut, outcome === 'recovered' ? 'recovery' : outcome === 'lost' ? 'loss' : outcome === 'boarded' ? 'boarding' : 'docking', r.last?.body ?? r.bodies.at(-1) ?? 'earth');
   r.end = ut; r.outcome = outcome;
-  const samples = orderedSamples(r);
-  r.samples = samples.length <= ARCHIVE_SAMPLE_CAP ? [...samples] : Array.from({ length: ARCHIVE_SAMPLE_CAP }, (_, i) => samples[Math.round(i * (samples.length - 1) / (ARCHIVE_SAMPLE_CAP - 1))]);
+  r.samples = compactSamples(r, ARCHIVE_SAMPLE_CAP);
   r.sampleHead = 0;
 }
 /** Test a sampled body-fixed segment against a ring annulus. */
@@ -110,6 +153,19 @@ export function crossesRingPlane(from: { x: number; y: number; z: number }, to: 
 export function eventLabel(kind: EventKind): string {
   return ({ launch: 'Liftoff', stage: 'Stage activated', separation: 'Hardware separated', soi: 'Sphere of influence changed', orbit: 'Stable orbit achieved', landing: 'Touchdown', splashdown: 'Splashdown', docking: 'Vessels docked', eva: 'Astronaut on EVA', flag: 'Flag planted', partLoss: 'Part lost', recovery: 'Vessel recovered', loss: 'Vessel lost', checkpoint: 'Flight checkpoint', boarding: 'Astronaut boarded', assist: 'Gravity assist', rings: 'Ring plane crossed' } satisfies Record<EventKind, string>)[kind];
 }
+const BODY_NAMES = new Map(BODY_DEFS.map(b => [b.id, b.name]));
+export function bodyLabel(id: string) { return BODY_NAMES.get(id) ?? id; }
+/** Old saves retain diagnostic detail; player summaries sanitize legacy generated IDs too. */
+export function eventDetail(e: FlightEvent) {
+  if (e.kind === 'separation' || e.kind === 'docking') return undefined;
+  if (e.kind === 'soi') return `Entered ${bodyLabel(e.body)} sphere of influence`;
+  return e.detail;
+}
+export function parentReport(r: FlightRecord, records: FlightRecord[]) {
+  if (r.launchId && r.launchId !== r.id) return records.find(p => p.id === r.launchId);
+  // Legacy fragments inherited the root start and appended " Debris" to its name.
+  return records.find(p => p.id !== r.id && p.start === r.start && r.name === `${p.name} Debris`);
+}
 export function summaryText(r: FlightRecord) {
-  return `${r.name} · ${r.outcome ?? 'In progress'}\nDuration: ${Math.round((r.end ?? r.last?.ut ?? r.start) - r.start)} s\nMaximum altitude: ${Math.round(r.stats.maxAltitude)} m · Speed: ${Math.round(r.stats.maxSpeed)} m/s · G-load: ${r.stats.maxG.toFixed(2)} g\nΔv spent: ${Math.round(r.stats.dvSpent)} m/s · Distance travelled: ${Math.round(r.stats.distance)} m\nBodies visited: ${r.bodies.join(', ')}\n${r.events.map(e => `T+${e.time.toFixed(1)} ${eventLabel(e.kind)} · ${e.body}${e.speed !== undefined ? ` · ${e.speed.toFixed(2)} m/s` : ''}${e.biome ? ` · ${e.biome}` : ''}${e.detail ? ` · ${e.detail}` : ''}`).join('\n')}`;
+  return `${r.name} · ${r.outcome ?? 'In progress'}\nRecord elapsed (includes pad and recovery time): ${Math.round((r.end ?? r.last?.ut ?? r.start) - r.start)} s\nMaximum altitude: ${Math.round(r.stats.maxAltitude)} m · Speed: ${Math.round(r.stats.maxSpeed)} m/s · G-load: ${r.stats.maxG.toFixed(2)} g\nΔv spent: ${Math.round(r.stats.dvSpent)} m/s · Distance travelled: ${Math.round(r.stats.distance)} m\nBodies visited: ${r.bodies.map(bodyLabel).join(', ')}\n${r.events.map(e => `Elapsed ${e.time.toFixed(1)} s ${eventLabel(e.kind)} · ${bodyLabel(e.body)}${e.speed !== undefined ? ` · ${e.speed.toFixed(2)} m/s` : ''}${e.biome ? ` · ${e.biome}` : ''}${eventDetail(e) ? ` · ${eventDetail(e)}` : ''}`).join('\n')}`;
 }
