@@ -26,8 +26,9 @@ export function MultiplayerSetup({ onBack }: { onBack: () => void }) {
       game.set({ multiplayer: { url, room: room.trim().toUpperCase(), name: name.trim() }, scene: 'flight' });
     } catch (e) { setError((e as Error).message); }
   }}>
-    <strong>Multiplayer (experimental)</strong>
-    <p>LAN co-op · up to 4 pilots · shared clock. Run <code>npm run server</code> on the host first. Rooms last only while the server is running.</p>
+    <strong>LAN co-op (experimental)</strong>
+    <p>For up to 4 trusted pilots on a local network, with a shared clock. A player must run a separate server with <code>npm run server</code> and share its host URL. Rooms last only while that server is running.</p>
+    <p>Follow the <a href="https://github.com/nedcut/web-space-program/blob/main/MULTIPLAYER.md" target="_blank" rel="noreferrer">LAN setup guide</a> before joining. The public HTTPS site needs a secure <code>wss://</code> server; the guide also explains local HTTP setup.</p>
     <label>Host URL<input aria-label="Host URL" required value={url} onChange={e => setUrl(e.target.value)} /></label>
     <label>Room code<input aria-label="Room code" maxLength={8} pattern="[a-zA-Z0-9]{4,8}|" placeholder="Empty = create a room" value={room} onChange={e => setRoom(e.target.value)} /></label>
     <label>Display name<input aria-label="Display name" required maxLength={24} value={name} onChange={e => setName(e.target.value)} /></label>

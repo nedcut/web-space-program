@@ -75,13 +75,16 @@ export function MainMenu() {
             {latest && <Button className="btn primary menu-continue" data-menu="continue" onClick={() => resumeSave(latest)}>
               <Icon name="launch" /><span className="menu-continue-text">Continue<small>{programTitle(latest.programId, latest.data.mode).split(' · ')[0]} · {saveWhere(latest)} · {savedAgo(latest.savedAt)}</small></span><span className="menu-go"><Icon name="arrow" /></span>
             </Button>}
-            <Button className={`btn${latest ? '' : ' primary'}`} data-menu="new" onClick={() => open('new')}><Icon name="rocket" />New Game{!latest && <span className="menu-go"><Icon name="arrow" /></span>}</Button>
+            {!latest && <Button className="btn primary menu-training" data-menu="training" onClick={() => game.set({ scene: 'training' })}>
+              <Icon name="science" /><span className="menu-continue-text">Training<small>Start here · learn to build and fly</small></span><span className="menu-go"><Icon name="arrow" /></span>
+            </Button>}
+            <Button className="btn" data-menu="new" onClick={() => open('new')}><Icon name="rocket" />New Game</Button>
             <Button className="btn" data-menu="load" onClick={() => open('load')}><Icon name="load" />Load…</Button>
             <Button className="btn" data-menu="challenges" onClick={() => game.set({ scene: 'scenarios' })}><Icon name="orbit" />Challenges</Button>
-            <Button className="btn" data-menu="training" onClick={() => game.set({ scene: 'training' })}><Icon name="science" />Training</Button>
+            {latest && <Button className="btn" data-menu="training" onClick={() => game.set({ scene: 'training' })}><Icon name="science" />Training</Button>}
             <Button className="btn" data-menu="pedia" onClick={() => void import('./Spacepedia').then(m => m.openPedia('menu'))}><Icon name="book" />Spacepedia</Button>
             <Button className="btn" data-menu="settings" onClick={() => open('settings')}><Icon name="settings" />Settings</Button>
-            <Button className="btn menu-wide" data-menu="multiplayer" onClick={() => open('multiplayer')}><Icon name="orbit" />Multiplayer (experimental)</Button>
+            <Button className="btn menu-wide" data-menu="multiplayer" onClick={() => open('multiplayer')}><Icon name="orbit" />LAN co-op (experimental)</Button>
           </div>
         )}
         {panel === 'root' && <UnsupportedNotice />}

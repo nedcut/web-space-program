@@ -36,7 +36,7 @@ Recommendation: start with **(1) co-op with consensus warp**, 2–4 players.
 ## Prototype status / how to run
 
 The experimental LAN prototype is implemented and **off by default**. Single-player does not open a
-socket. Select **Multiplayer (experimental)** from the main menu to opt in. Rooms use standard-scale
+socket. Select **LAN co-op (experimental)** from the main menu to opt in. Rooms use standard-scale
 sandbox worlds and a shared clock, with at most four pilots and 32 vessels.
 
 1. Install dependencies with `npm install`.
@@ -44,7 +44,7 @@ sandbox worlds and a shared clock, with at most four pilots and 32 vessels.
    `HOST=127.0.0.1 PORT=8788 npm run server`.
 3. In another terminal run `npm run dev -- --host 0.0.0.0`. Open the printed HTTP URL on the host and
    other LAN devices; allow the Vite and server ports through the host firewall.
-4. Choose Multiplayer, enter `ws://<host-LAN-IP>:8787` and a display name, and leave the room code empty
+4. Choose LAN co-op, enter `ws://<host-LAN-IP>:8787` and a display name, and leave the room code empty
    to create a room. Share the displayed six-character code with the other pilots. They enter that
    code and the same host URL. An HTTPS frontend requires a `wss://` endpoint with TLS termination.
 5. Launch a stock craft, the current editor craft, or an imported craft JSON. Pad and runway each have
