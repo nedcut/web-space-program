@@ -6,7 +6,7 @@ import { Universe } from '../src/game/universe';
 import { PART_CATALOG } from '../src/data/parts';
 import { DEFAULT_START_UT, game } from '../src/game/store';
 import { EditorSession } from '../src/editor/session';
-import { buildSoundingRocket } from '../src/editor/stockCrafts';
+import { Builder, buildSoundingRocket } from '../src/editor/stockCrafts';
 import { neutralInput, freePorts, mergeVessels } from '../src/sim/vessel';
 import { placeInCircularOrbit, placeOnSurface } from '../src/game/scenarios';
 import { serializeWorld, deserializeWorld } from '../src/game/persistence';
@@ -38,7 +38,7 @@ describe('training definitions and deterministic scenarios', () => {
     const flight = { mapMode: false, sasOn: false, rcsOn: false, dockingMode: false, input: { state: { throttle: 0 } } };
     const world = setup('moon-transfer');
     expect(predicate('first-flight', 'throttle', { flight })).toBe(false);
-    flight.input.state.throttle = 0.8;
+    flight.input.state.throttle = 1;
     expect(predicate('first-flight', 'throttle', { flight })).toBe(true);
     expect(predicate('first-flight', 'sas', { flight })).toBe(false);
     flight.sasOn = true;
@@ -76,6 +76,31 @@ describe('training definitions and deterministic scenarios', () => {
     editor.load({ ...craft, parts: craft.parts.map(p => ({ ...p, stage: 0 })) }, false);
     expect(predicate('building', 'staging', { editor })).toBe(false);
     editor.dispose();
+  });
+  it('rejects the reported Wisp stack and accepts a fueled surface lifter', () => {
+    const b = new Builder(PART_CATALOG, 'Lesson rocket', 'Regression for launch thrust.');
+    const pod = b.root('pod-lantern-1');
+    const tank = b.stack(pod, 'tank-1-mid');
+    const engine = b.stack(tank, 'eng-wisp');
+    const editor = new EditorSession(b.done());
+    expect(predicate('building', 'engine', { editor })).toBe(false);
+    const craft = editor.currentCraft();
+    editor.load({ ...craft, parts: craft.parts.map(p => p.uid === engine ? { ...p, partId: 'eng-sirocco' } : p) }, false);
+    expect(predicate('building', 'engine', { editor })).toBe(true);
+    editor.load({ ...editor.currentCraft(), parts: editor.currentCraft().parts.map(p => p.uid === tank ? { ...p, resources: { liquidFuel: 0, oxidizer: 0 } } : p) }, false);
+    expect(predicate('building', 'engine', { editor })).toBe(false);
+    editor.dispose();
+  });
+  it('requires full throttle for the limited Kestrel and an actual cutoff after 10 km', () => {
+    const world = setup('first-flight');
+    const flight = { mapMode: false, sasOn: true, rcsOn: false, dockingMode: false, input: { state: { throttle: 0.5 } } };
+    expect(predicate('first-flight', 'throttle', { flight })).toBe(false);
+    flight.input.state.throttle = 1;
+    expect(predicate('first-flight', 'throttle', { flight })).toBe(true);
+    placeInCircularOrbit(world, world.active!, 'earth', 11000);
+    expect(predicate('first-flight', 'climb', { world, flight })).toBe(false);
+    flight.input.state.throttle = 0;
+    expect(predicate('first-flight', 'climb', { world, flight })).toBe(true);
   });
   it('distinguishes a bound safe orbit from atmosphere-crossing and surface states', () => {
     const w = setup('orbit');
@@ -200,6 +225,22 @@ describe('training progression and storage', () => {
     expect(game.get().resumeWorld).toBe(original.resumeWorld);
     expect(game.get().mode).toBe(original.mode);
     expect(game.get().scene).toBe('training');
+    editor.dispose();
+  });
+  it('withdraws a building goal when an edit removes the required launch thrust', () => {
+    storage();
+    startLesson('building');
+    const editor = new EditorSession(buildSoundingRocket());
+    tickTutorial({ editor }); advanceTutorial();
+    tickTutorial({ editor }); advanceTutorial();
+    tickTutorial({ editor });
+    expect(getTutorial()!.ready).toBe(true);
+    const craft = editor.currentCraft();
+    editor.load({ ...craft, parts: craft.parts.map(p => p.partId === 'eng-sirocco' ? { ...p, partId: 'eng-wisp' } : p) }, false);
+    tickTutorial({ editor });
+    expect(getTutorial()!.ready).toBe(false);
+    advanceTutorial();
+    expect(getTutorial()!.index).toBe(2);
     editor.dispose();
   });
   it('keeps the remembered editor craft intact and retains settings changed during practice', () => {

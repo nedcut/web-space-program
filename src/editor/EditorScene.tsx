@@ -1,4 +1,4 @@
-import { tutorialContext, getTutorial } from '../tutorial/runtime';
+import { tutorialContext, getTutorial, useTutorial } from '../tutorial/runtime';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { game } from '../game/store';
 import { listLibrary } from '../game/saves';
@@ -60,6 +60,7 @@ export default function EditorScene() {
     };
   }, [session]);
 
+  const tutorial = useTutorial();
   const held = view.held;
   return (
     <div className="fullscreen vab-root" onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }} onDrop={e => { e.preventDefault(); if (e.dataTransfer.files[0]) setImportSource({ file: e.dataTransfer.files[0] }); }}>
@@ -137,7 +138,7 @@ export default function EditorScene() {
           </>
         )}
       </div>
-      {!view.craft.parts.length && !held && (
+      {!view.craft.parts.length && !held && !tutorial && (
         <div className="vab-welcome panel">
           <div className="label">Integration Hall</div>
           <div className="vab-welcome-title">Start with a command pod or probe core</div>
