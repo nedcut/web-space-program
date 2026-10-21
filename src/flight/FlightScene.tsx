@@ -147,7 +147,7 @@ export default function FlightScene() {
         return;
       }
       const cc = c;
-      cc.paused = pausedRef.current;
+      cc.paused = pausedRef.current || helpRef.current;
       cc.setModalOpen(helpRef.current);
       setLost(false);
       setEndReady(false);
@@ -241,15 +241,18 @@ export default function FlightScene() {
     if (quickStart && onSurface === false) { markHelpSeen(); setQuickStart(false); }
   }, [quickStart, onSurface]);
   const awaitingTelemetry = tele === null;
-  useEffect(() => {
-    if (ctrl.current) ctrl.current.paused = paused || photo.active;
-    audioRef.current?.setPaused(paused || photo.active);
-    if (paused || photo.active) audioRef.current?.silenceFlight();
-  }, [paused, awaitingTelemetry, photo.active]);
-  // The Controls reference blocks flight input; closing it returns to whatever it covered (flight or the Pause menu).
+  // Keep the menu pause independent of help so closing help cannot resume a pre-paused flight.
+  // No warp mutation: the selected rate and any running assist resume from the same simulation instant.
+  // Multiplayer's existing paused path sends neutral input while its authoritative clock keeps running.
   useLayoutEffect(() => {
-    ctrl.current?.setModalOpen(help);
-  }, [help, awaitingTelemetry]);
+    const suspended = paused || help || photo.active;
+    if (ctrl.current) {
+      ctrl.current.paused = suspended;
+      ctrl.current.setModalOpen(help);
+    }
+    audioRef.current?.setPaused(suspended);
+    if (suspended) audioRef.current?.silenceFlight();
+  }, [paused, help, awaitingTelemetry, photo.active]);
 
   // Input reads settings each frame; planet quality, clouds and scattering rebuild from a snapshot.
   useEffect(() => {
@@ -452,7 +455,7 @@ export default function FlightScene() {
       {c && ready && !photo.active && !paused && !uiHidden && <FlightInspector controller={c} panels={panels} setPanels={setPanels} />}
       {settings.showFps && c && !photo.active && !uiHidden && <PerformanceReadout controller={c} />}
       {settings.perfOverlay && c && !photo.active && <PerfOverlay controller={c} />}
-      {help && ready && !photo.active && <HelpOverlay eva={!!tele?.eva} onClose={closeHelp} />}
+      {help && ready && !photo.active && <HelpOverlay eva={!!tele?.eva} multiplayer={!!multiplayer} onClose={closeHelp} />}
       {networkReady && c?.network && <MultiplayerPanel client={c.network} />}
       {pauseMenuVisible({ paused, help }) && multiplayer && (
         <div className="modal-backdrop">

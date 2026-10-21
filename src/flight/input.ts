@@ -101,6 +101,12 @@ export class FlightInput {
   onAction(fn: (a: FlightAction) => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
   private emit(a: FlightAction) { this.listeners.forEach(l => l(a)); }
   private onBlur = () => { const changed = this.held.size || this.padTranslation.size; this.releaseSasHold(); this.held.clear(); this.padTranslation.clear(); if (changed) this.translationChanged(); this.chordKeys.clear(); this.mouse = { x: 0, y: 0 }; this.keyRamp = { pitch: 0, yaw: 0, roll: 0 }; this.resetPad(); };
+  /** Drop momentary intent when a modal opens, even if it closes before the next animation frame. */
+  releaseHeld() {
+    this.onBlur();
+    Object.assign(this.state, { pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, brakes: false });
+    Object.assign(this.camera, { yaw: 0, pitch: 0, zoom: 0 });
+  }
   private onMouse = (e: PointerEvent) => {
     // Right-button drag remains the camera control; left-button drag is optional flight assist.
     if (this.mouseEnabled && game.get().settings.mouseFlight && e.buttons === 1 && e.target instanceof HTMLCanvasElement) {

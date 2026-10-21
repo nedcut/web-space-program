@@ -5,7 +5,8 @@ import { PART_CATALOG } from '../src/data/parts';
 import { STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { computeStageStats } from '../src/editor/ui/dv';
 import { buildVessel } from '../src/sim/vessel/assembly';
-import { stageExplanation, throttleExplanation } from '../src/flight/cues';
+import { flightMessages, stageExplanation, throttleExplanation } from '../src/flight/cues';
+import { igniteEngine, shutdownEngine, stepEngines } from '../src/sim/vessel/engines';
 import { HintTracker } from '../src/flight/hints';
 
 const stage = { locked: false, control: true, eva: false, remaining: true, useful: false, engines: true, fuel: true };
@@ -34,6 +35,33 @@ describe('action explanations', () => {
     expect(throttleExplanation(v)).toContain('propellant');
   });
 });
+it('explains actual liquid-engine burnout before and after ignition shuts off', () => {
+  const craft = STOCK_CRAFTS.find(c => c.id === 'stock-kestrel')!;
+  const v = buildVessel(craft.build(), PART_CATALOG);
+  const p = v.parts.find(p => p.engine)!;
+  p.activated = true;
+  expect(igniteEngine(v, p)).toBe(true);
+  for (const tank of v.parts) if ('liquidFuel' in tank.resources) tank.resources.liquidFuel = 0;
+  const reason = throttleExplanation(v);
+  expect(reason).toContain('propellant depleted or unreachable');
+  stepEngines(v, 1, { x: 0, y: 0, z: 0 }, 0, 0.02, []);
+  expect(p.engine).toMatchObject({ ignited: false, flamedOut: true, thrust: 0 });
+  expect(throttleExplanation(v)).toBe(reason);
+  // Leftover oxidizer does not make the two-propellant engine usable.
+  expect(v.parts.some(t => (t.resources.oxidizer ?? 0) > 0)).toBe(true);
+  expect(flightMessages([{ id: 1, level: 'warn', text: reason! }], null, false)).toEqual([]);
+});
+it('distinguishes fueled unstaged engines from deliberate shutdown', () => {
+  const v = buildVessel(STOCK_CRAFTS.find(c => c.id === 'stock-kestrel')!.build(), PART_CATALOG);
+  const p = v.parts.find(p => p.engine)!;
+  expect(throttleExplanation(v)).toContain('not staged');
+  p.activated = true;
+  expect(igniteEngine(v, p)).toBe(true);
+  expect(throttleExplanation(v)).toBeNull();
+  expect(shutdownEngine(p)).toBe(true);
+  expect(throttleExplanation(v)).toContain('shut down');
+});
+
 it('bounds messages and suppresses repeated notifications after dismissal', () => {
   const msg = { id: 1, text: 'No fuel', level: 'warn' as const, expires: 4000 };
   const first = enqueueNotification([], new Map(), msg, 0);
