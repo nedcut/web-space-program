@@ -1963,3 +1963,18 @@ reconstructs co-rotation. Seeds 288510278 and 905529636 shrink to EVA then save,
 exposing 3.39e-6 and 1.31e-5 m/s differences from the old instantaneous velocity.
 The invariant checks the authoritative fixed-state contract rather than widening
 a before/after velocity tolerance to accommodate each craft.
+
+## Golden mission regression guards (2026-10-30)
+
+- Run the missing Standard Selene round trip inside normal Vitest; strengthen existing bare-pod, Meridian
+  parking-orbit and Petrel Mars-capture tests rather than duplicate flights. Existing stock-fun tests cover
+  aircraft/rover outcomes. Reuse real career helpers, staging, assists, rails and recovery without injecting
+  arrival states or disabling damage. Use default epoch + 11 days for Selene's ocean return.
+- Bound periapsis/apoapsis, vacuum delta-v, elapsed time, crew and surviving parts. Three repeated runs set
+  the baselines (recorded in the PR); roughly 10% altitude/time and 10-35% delta-v headroom tolerates small
+  changes while preserving air/terrain clearance, useful reserves and safe recovery. Exact part counts
+  guard staging topology. Review intentional balance changes against the measured route before rebasing
+  bounds. Log measured outcomes for reproduction; recovery checks run before the real recovery removes it.
+- Reuse the benchmark's serialized fixed-tick hasher for independent repeatability checks across craft and
+  pad/atmosphere/vacuum/landed/rails modes. Freeze and restore only Date.now for generated IDs. Compare runs,
+  not a pinned hash across commits: outcome ranges protect balance while hashes protect determinism.
