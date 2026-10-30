@@ -62,7 +62,7 @@ export function TopBar({ session, view, onLoad, onNew, onImport, onFrame }: { se
   const s = view.stats;
   const save = keyOf('editorSave');
   return (
-    <div className="vab-topbar panel" ref={bar} onPointerOver={tip.over} onPointerOut={tip.out} onFocus={tip.over} onBlur={tip.out} onPointerDown={tip.hide}>
+    <div data-testid="editor-toolbar" className="vab-topbar panel" ref={bar} onPointerOver={tip.over} onPointerOut={tip.out} onFocus={tip.over} onBlur={tip.out} onPointerDown={tip.hide}>
       <Button className="btn ghost small vab-exit" aria-label="Exit to Space Center" data-tip="Back to the Space Center · your craft stays loaded here" onClick={() => session.exit()}>
         <Icon name="arrow" size={14} /><span className="vab-exit-label">Space Center</span>
       </Button>
@@ -257,7 +257,7 @@ function SnapGlyph({ on }: { on: boolean }) {
 
 function Stat({ label, value, accent, over }: { label: string; value: string; accent?: boolean; over?: string }) {
   return (
-    <div className="vab-stat" data-tip={over}>
+    <div className="vab-stat" data-testid={label === 'Δv' ? 'editor-dv' : undefined} data-tip={over}>
       <span className="label">{label}</span>
       <span className={over ? 'over' : accent ? 'accent' : ''}>{value}</span>
     </div>

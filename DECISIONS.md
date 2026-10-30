@@ -1979,6 +1979,19 @@ a before/after velocity tolerance to accommodate each craft.
   pad/atmosphere/vacuum/landed/rails modes. Freeze and restore only Date.now for generated IDs. Compare runs,
   not a pinned hash across commits: outcome ranges protect balance while hashes protect determinism.
 
+## Maintained production browser smoke (2026-10-30)
+
+- Keep browser integration checks in a separate Playwright job, against `vite preview` of the
+  production build. One Chromium SwiftShader worker and no retries make failures reproducible
+  without adding browser time to the required headless `ci` job. Software rendering establishes
+  functional behavior, not real-GPU performance or Firefox/Safari compatibility.
+- Use fresh storage for each test; exercise the actual localStorage program saves and IndexedDB
+  craft library. Stock setup reuses the existing editor hook to avoid rendering the entire stock
+  thumbnail catalogue in each flight test. Toolbar geometry is checked at 1366×768 and 1920×1080.
+- Fail on exceptions, console errors, unexpected context loss, GL errors, failed shader links and
+  blank compositor pixels. Explicit renderer-disposal context loss is expected at scene boundaries.
+  Pixel bounds deliberately detect black/solid output rather than assert an art snapshot.
+
 ## Performance regression proxies (2026-10-30, guard/perf)
 
 Keep performance checks separate from required CI: paired merge-base/head CPU builds
