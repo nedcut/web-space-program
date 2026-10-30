@@ -42,8 +42,8 @@ const settings = { quality, ...PRESETS[quality], scatter: true, adaptiveQuality:
 
 const browser = args.local === '1'
   ? await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
-  : await chromium.connectOverCDP('http://127.0.0.1:9333', { timeout: 30000 });
-const results = { label, base, local: args.local === '1', noRaster: args['cpu-only'] === '1', noSubmission: args.nogpu === '1', dpr, throttle, quality, seconds, size: `${vw}x${vh}`, date: new Date().toISOString(), cases: {} };
+  : await chromium.connectOverCDP((args.cdp ?? 'http://127.0.0.1:9333'), { timeout: 30000 });
+const results = { browser: await browser.version(), label, base, local: args.local === '1', noRaster: args['cpu-only'] === '1', noSubmission: args.nogpu === '1', dpr, throttle, quality, seconds, size: `${vw}x${vh}`, date: new Date().toISOString(), cases: {} };
 const log = (...a) => console.log(...a);
 
 // ---------------------------------------------------------------------------------------------------------
@@ -110,6 +110,19 @@ async function newPage() {
     }
   });
   await context.addInitScript(instrument, settings);
+  if (args.nightly === '1') await context.addInitScript(() => {
+    // Measure the application callback that actually submits a scene, not vsync wait
+    // or the benchmark's own pacing callback. Installed before app rAF registration.
+    const raf = window.requestAnimationFrame.bind(window);
+    const b = window.__work = { cpu: [], gpu: [], sampling: false, rendered: false };
+    window.requestAnimationFrame = callback => raf(timestamp => {
+      b.rendered = false;
+      const start = performance.now();
+      callback(timestamp);
+      const elapsed = performance.now() - start;
+      if (b.sampling && b.rendered) b.cpu.push(elapsed);
+    });
+  });
   const page = await context.newPage();
   page.on('pageerror', (e) => log(`  [pageerror] ${e.message}`));
   const cdp = await context.newCDPSession(page);
@@ -228,6 +241,48 @@ async function stopTrace(cdp, pageUrl, name) {
 // ---------------------------------------------------------------------------------------------------------
 // Measurement window: rAF pacing, frameProfiler, long tasks, React commits, workers, CDP metrics, trace.
 async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
+  if (args.nightly === '1') {
+    await page.bringToFront();
+    await page.evaluate(() => {
+      if (document.visibilityState !== 'visible') throw new Error('Hidden benchmark tab');
+      const b = window.__work, f = window.__flight;
+      const renderer = f?.pipeline.renderer ?? window.__editor.view.renderer;
+      if (!b.installed) {
+        b.installed = true;
+        const render = renderer.render.bind(renderer);
+        if (f) {
+          const timer = f.pipeline.gpuTimer;
+          if (!timer) throw new Error('Hardware timer queries unavailable');
+          const poll = timer.poll.bind(timer);
+          timer.poll = () => {
+            const ms = poll();
+            if (b.sampling && ms !== undefined) b.gpu.push(ms);
+            return ms;
+          };
+          renderer.render = (...a) => { b.rendered = true; return render(...a); };
+        } else {
+          const gl = renderer.getContext(), ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+          if (!ext) throw new Error('Hardware timer queries unavailable');
+          const pending = [];
+          renderer.render = (...a) => {
+            b.rendered = true;
+            const disjoint = gl.getParameter(ext.GPU_DISJOINT_EXT);
+            while (pending.length && gl.getQueryParameter(pending[0], gl.QUERY_RESULT_AVAILABLE)) {
+              const q = pending.shift(), ms = gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6;
+              gl.deleteQuery(q);
+              if (b.sampling && !disjoint) b.gpu.push(ms);
+            }
+            const q = pending.length < 4 ? gl.createQuery() : null;
+            if (q) gl.beginQuery(ext.TIME_ELAPSED_EXT, q);
+            try { return render(...a); }
+            finally { if (q) { gl.endQuery(ext.TIME_ELAPSED_EXT); pending.push(q); } }
+          };
+        }
+      }
+    });
+    await page.waitForTimeout(settleMs);
+    await page.evaluate(() => { const b = window.__work; b.cpu = []; b.gpu = []; b.sampling = true; });
+  }
   await page.evaluate(() => {
     const B = window.__bench;
     B.ltStart = B.lt.length; B.commits0 = B.commits; B.fibers0 = B.fibers;
@@ -249,12 +304,14 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
   const m1 = await metrics(cdp);
   const inPage = await page.evaluate(() => {
     const B = window.__bench; B.raf.on = false;
+    if (window.__work) window.__work.sampling = false;
     const dur = performance.now() - B.raf.start;
     const lt = B.lt.slice(B.ltStart).filter((x) => x[0] >= B.raf.start);
     const w = {}; for (const [k, v] of Object.entries(B.workers)) { const o = B.workers0[k] ?? { created: 0, out: 0, in: 0 }; w[k] = { created: v.created - o.created, out: v.out - o.out, in: v.in - o.in }; }
     const f = window.__flight; const p = f?.pipeline; const info = p?.renderer.info ?? window.__editor?.view?.renderer?.info;
     const s = window.__perf?.enabled && f ? window.__perf.summary() : null;
     return {
+      work: window.__work ? { cpu: window.__work.cpu, gpu: window.__work.gpu, visible: document.visibilityState, focused: document.hasFocus() } : null,
       dur, frames: B.raf.t.slice(1), commits: B.commits - B.commits0, fibers: B.fibers - B.fibers0, workers: w,
       longTasks: lt.length, longTaskMs: lt.reduce((a, x) => a + x[1], 0), longTaskMax: lt.reduce((a, x) => Math.max(a, x[1]), 0),
       prof: s && { cpuAvg: s.cpuMs.avg, cpuP95: s.cpuMs.p95, sections: s.sections },
@@ -267,6 +324,7 @@ async function measure(page, cdp, name, ms = seconds * 1000, extra = {}) {
   const avg = fr.reduce((a, b) => a + b, 0) / n;
   const d = (k) => m1[k] - m0[k];
   const out = {
+    ...(inPage.work ? { cpuFrameP50: r2(pct(inPage.work.cpu, 0.5)), gpuP50: r2(pct(inPage.work.gpu, 0.5)), work: inPage.work } : {}),
     fps: fr.length ? r2(1000 / avg) : null, frames: fr.length, frameP50: r2(pct(fr, 0.5)), frameP95: r2(pct(fr, 0.95)), frameP99: r2(pct(fr, 0.99)), frameMax: r2(Math.max(0, ...fr)),
     hitches25: fr.filter((x) => x > 25).length, hitches50: fr.filter((x) => x > 50).length,
     cpuMs: inPage.prof ? r2(inPage.prof.cpuAvg) : null, cpuP95: inPage.prof ? r2(inPage.prof.cpuP95) : null,
@@ -306,8 +364,11 @@ async function flightCase(name, url, setup, settle = 3000, timing = true) {
     });
     const marks = timing ? await page.evaluate(() => Object.fromEntries([...performance.getEntriesByType('measure'), ...performance.getEntriesByType('mark')].filter((e) => e.name.startsWith('wsp:')).map((e) => [e.name, Math.round(e.startTime + e.duration)]))) : {};
     if (setup) await setup(page);
+    if (args.nightly === '1') await page.evaluate(() => { window.__flight.paused = true; });
+    await page.waitForFunction(() => performance.getEntriesByName('wsp:flight:firstFrame').length > 0);
+
     await page.waitForTimeout(settle);
-    await measure(page, cdp, name, seconds * 1000, { readyMs, marks });
+    await measure(page, cdp, name, seconds * 1000, { readyMs, marks, firstFrameMs: await page.evaluate(() => { const e = performance.getEntriesByName('wsp:flight:firstFrame')[0]; return e ? e.startTime + e.duration : null; }) });
   } catch (e) { log(`!! ${name} failed: ${e.message}`); results.cases[name] = { error: e.message }; } finally { await context.close(); }
 }
 
@@ -359,7 +420,21 @@ if (cases.includes('menu')) {
   catch (e) { log(`!! menu failed: ${e.message}`); } finally { await context.close(); }
 }
 if (cases.includes('pad')) await flightCase('pad', '/?flight=stock-kestrel', undefined, settleMs);
-if (cases.includes('ascent')) {
+if (cases.includes('ascent') && args.nightly === '1') {
+  await flightCase('ascent', '/?flight=stock-meridian', async page => {
+    await page.evaluate(() => {
+      const f = window.__flight, w = f.world, v = w.active;
+      const b = w.universe.ephem.getBodyState(v.body, w.ut);
+      const p = v.state.position;
+      const r = Math.hypot(p.x-b.position.x, p.y-b.position.y, p.z-b.position.z);
+      const radius = w.universe.body(v.body).radius + 10000;
+      for (const k of ['x','y','z']) p[k] = b.position[k] + (p[k]-b.position[k])/r*radius;
+      v.mode = 'physics'; v.fixed = undefined; v.state.situation = 'flying';
+      f.paused = true;
+    });
+  }, settleMs);
+}
+if (cases.includes('ascent') && args.nightly !== '1') {
   // Meridian off the pad at full throttle with physics warp 4×: measured through the dense lower atmosphere (max-Q).
   await flightCase('ascent', '/?flight=stock-meridian', async (page) => {
     await page.keyboard.press('KeyT'); await page.keyboard.press('KeyZ'); await page.keyboard.press('Space');
@@ -387,7 +462,22 @@ if (cases.includes('orbit')) await flightCase('orbit', '/?flight=stock-kestrel&s
 if (cases.includes('warp1k')) await flightCase('warp1k', '/?flight=stock-kestrel&scenario=highorbit', async (page) => { await page.evaluate(() => { window.__flight.world.warp = { mode: 'rails', index: 5 }; }); });
 if (cases.includes('warp100k')) await flightCase('warp100k', '/?flight=stock-kestrel&scenario=highorbit', async (page) => { await page.evaluate(() => { window.__flight.world.warp = { mode: 'rails', index: 7 }; }); });
 if (cases.includes('map')) await flightCase('map', '/?flight=stock-kestrel&scenario=orbit', async (page) => { await page.evaluate(() => window.__flight.toggleMap()); });
-if (cases.includes('moon')) await flightCase('moon', '/?mission=suicide-burn', async (page) => { await page.evaluate(() => { const f = window.__flight; f.input.state.throttle = 0.35; }); }, 2000);
+if (cases.includes('moon') && args.nightly === '1') {
+  await flightCase('moon', '/?flight=stock-selene&scenario=moon', async page => {
+    await page.evaluate(() => {
+      const f = window.__flight, w = f.world, v = w.active, u = w.universe;
+      const q = u.ephem.bodyRotation('moon', w.ut);
+      const up = { x: 1-2*(q.y*q.y+q.z*q.z), y: 2*(q.x*q.y+q.w*q.z), z: 2*(q.x*q.z-q.w*q.y) };
+      const r = u.body('moon').radius + u.terrain('moon').heightAt(1,0,0) + w.bottomOffset(v.state) + 0.05;
+      const b = u.ephem.getBodyState('moon', w.ut);
+      for (const k of ['x','y','z']) v.state.position[k] = b.position[k] + up[k]*r;
+      const h = Math.SQRT1_2;
+      v.state.orientation = { x: h*(q.x-q.y), y: h*(q.y+q.x), z: h*(q.z-q.w), w: h*(q.w+q.z) };
+      v.state.situation = 'landed'; f.paused = true;
+    });
+  }, settleMs);
+}
+if (cases.includes('moon') && args.nightly !== '1') await flightCase('moon', '/?mission=suicide-burn', async (page) => { await page.evaluate(() => { const f = window.__flight; f.input.state.throttle = 0.35; }); }, 2000);
 if (cases.includes('saturn')) await flightCase('saturn', '/?mission=ring-skimmer');
 
 if (cases.includes('editor')) {
@@ -401,11 +491,22 @@ if (cases.includes('editor')) {
     const parts = await page.evaluate(() => window.__editor.session.craft?.parts?.length ?? window.__editor.session.parts?.length ?? null);
     await page.waitForTimeout(3000);
     await measure(page, cdp, 'editor:idle', 5000, { readyMs, parts });
+    if (args.nightly === '1') {
+      // Deterministic camera motion without per-frame CDP input round trips.
+      await page.evaluate(() => {
+        const v = window.__editor.view;
+        const yaw = v.gYaw;
+        const move = () => { v.gYaw = yaw + 0.3 * Math.sin(performance.now() / 1000); requestAnimationFrame(move); };
+        requestAnimationFrame(move);
+      });
+      await measure(page, cdp, 'editor:orbit', seconds * 1000, { parts });
+    } else {
     // Orbit the camera with the mouse (continuous re-render) for the measurement window.
     const box = { x: vw * 0.5, y: vh * 0.5 };
     const drag = (async () => { await page.mouse.move(box.x, box.y); await page.mouse.down({ button: 'right' }); for (let i = 0; i < seconds * 30; i++) { await page.mouse.move(box.x + 200 * Math.sin(i / 20), box.y + 60 * Math.cos(i / 25)); await page.waitForTimeout(33); } await page.mouse.up({ button: 'right' }); })();
     await measure(page, cdp, 'editor:orbit', seconds * 1000, { parts });
     await drag;
+    }
   } catch (e) { log(`!! editor failed: ${e.message}`); } finally { await context.close(); }
 }
 if (cases.includes('tracking')) {

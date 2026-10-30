@@ -1991,3 +1991,22 @@ a before/after velocity tolerance to accommodate each craft.
 - Fail on exceptions, console errors, unexpected context loss, GL errors, failed shader links and
   blank compositor pixels. Explicit renderer-disposal context loss is expected at scene boundaries.
   Pixel bounds deliberately detect black/solid output rather than assert an art snapshot.
+
+## Performance regression proxies (2026-10-30, guard/perf)
+
+Keep performance checks separate from required CI: paired merge-base/head CPU builds
+on one runner with per-operation A/A calibration, plus local real-GPU history under
+the shared GPU lock. CPU >15% fails only below 7.5% A/A spread; noisy operations
+remain informational. GPU history uses compatible browser/hardware/settings cohorts,
+three seed runs and a seven-run rolling median; gates are superseded by "Nightly guard work
+timings" below (CPU/GPU work medians; pacing and cold load informational). Tail percentiles
+remain informational after same-commit editor p99 varied 33.5–50.1 ms with unchanged medians.
+Paused flight shots isolate rendering. Neither RTX nor hosted CPU
+proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifacts/PRs.
+
+## Nightly guard work timings (2026-10-30, guard/perf)
+
+- Gate rendered-frame CPU callback and raw asynchronous GPU query medians, not rAF intervals: display refresh quantizes intervals and masks work increases. Flight reuses its existing disjoint timer; editor adds harness-only queries. No production instrumentation or allocation is added.
+- Keep pacing/hitches as diagnostic evidence. Foreground and warm each shot; move the editor camera inside the page rather than issuing timed CDP mouse calls. CPU covers the rendering callback, not separately scheduled HUD work.
+- Use schema-separated history and a dedicated disposable main checkout behind a stable launcher. Never reset an owner checkout. Hosted CPU gates remain calibrated per operation and per runner; <7.5% A/A spread permits a >15% regression gate.
+- Four same-build captures set initial work thresholds at >30% CPU, >10% flight GPU and >30% editor GPU. Three seed spreads were at most 14.3% / 3.9% / 12.4%; the independent fourth expanded editor variation to about 18%. Cold-load and frame intervals remain informational. These shared-host margins are coarse, not 5% sensitivity.
