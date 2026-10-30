@@ -1954,8 +1954,12 @@ asserted as an instantaneous bound: contact applies 80% positional recovery abov
 5 mm slop, not exact projection. Coverage and unverified cases live in
 `scripts/fuzz/README.md`; per-run evidence belongs in the PR.
 
-Save/load compares resources, part transforms/tree and nodes exactly, but allows
-body-fixed reconstruction noise in vessel poses (0.1 mm position, 10 micrometres/s
-velocity, 1e-12 attitude/angular velocity). The EVA-on-pad seed 288510278 exposed
-syncFixed rebuilding the rotating pose after crew mass removal: 3.39e-6 m/s and
-1.67e-16 quaternion-component differences, not lost persistent state.
+Save/load compares resources, part transforms/tree, modes, fixed anchors and
+nodes exactly, allowing 0.1 mm position and 1e-12 attitude/angular reconstruction
+noise. Free-flight velocity compares before/after within 10 micrometres/s.
+Body-fixed velocity instead compares against ephemeris plus rotation at the saved
+fixed coordinates: EVA moves COM and captures new fixed coordinates, while load
+reconstructs co-rotation. Seeds 288510278 and 905529636 shrink to EVA then save,
+exposing 3.39e-6 and 1.31e-5 m/s differences from the old instantaneous velocity.
+The invariant checks the authoritative fixed-state contract rather than widening
+a before/after velocity tolerance to accommodate each craft.

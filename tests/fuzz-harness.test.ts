@@ -48,7 +48,7 @@ it('actually exercises coasting rails and both warp transitions', async () => {
 });
 
 it('accepts documented body-fixed reconstruction noise after EVA on the pad', () => {
-  expect(() => replay(288510278, [
+  for (const seed of [288510278, 905529636]) expect(() => replay(seed, [
     { kind: 'eva', value: 0 },
     { kind: 'save', value: 0 },
   ])).not.toThrow();

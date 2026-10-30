@@ -44,12 +44,15 @@ Contracts and limits:
   nonzero warp is covered by rails energy, not a misleading displacement limit.
 - Saves rebuild caches/mass and UI history. Round-trip assertions use persistent
   physical fields rather than requiring byte-identical derived caches. Body-fixed
-  pose reconstruction permits 0.1 mm position, 10 micrometres/s velocity and 1e-12
-  attitude/angular velocity error. Seed 288510278 shrank to EVA then save on a
-  prelaunch Firstlight: restoreAfterLoad/syncFixed rebuilds the rotating pose after
-  crew mass removal, changing velocity by 3.39e-6 m/s and quaternion components
-  by at most 1.67e-16. This is reconstruction noise, not lost flight state. Resources,
-  part transforms/tree and nodes still compare exactly.
+  pose reconstruction permits 0.1 mm position and 1e-12 attitude/angular velocity
+  error. Free-flight velocity compares before/after within 10 micrometres/s.
+  For prelaunch/landedRails, fixed coordinates compare exactly and loaded velocity
+  must match body ephemeris velocity plus rotation at that saved fixed position
+  (within 10 micrometres/s). Seeds 288510278 and 905529636 shrink to EVA then save:
+  EVA shifts COM and captures new fixed coordinates, while load reconstructs the
+  rotating velocity. Differences of 3.39e-6 and 1.31e-5 m/s exposed why comparing
+  the old instantaneous velocity is not the body-fixed persistence contract.
+  Resources, part transforms/tree, modes, fixed anchors and nodes compare exactly.
 - Node execution is bounded to 20 frames per action; this tests transitions, not
   successful long mission completion. EVA/docking availability can reject actions.
 
