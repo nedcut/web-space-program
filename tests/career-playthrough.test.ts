@@ -11,6 +11,7 @@ import { nextGoal, researchFor } from '../src/ui/hub/nextGoal';
 import { planFreeReturn } from '../src/game/autopilot';
 import { arrivalPeriapsisAltitude } from '../src/game/planning/arrival';
 import { buy, hop, sensor, toOrbit } from '../scripts/career/flights';
+import { dvLeft } from '../scripts/career/planets';
 import { flyFirstRocket } from '../scripts/career/bare-pod';
 
 const career = (preset: 'standard' | 'challenging' | 'real' = 'standard') => new World(new Universe(preset), PART_CATALOG, DEFAULT_START_UT, 'career');
@@ -28,9 +29,22 @@ describe('first flights', () => {
   it('the classic first rocket without a heat shield trims base first and lands under its chute', () => {
     // Capsule, chute, decoupler, tank, engine: straight up to ~110 km, everything staged on the way down.
     for (const mode of ['retrograde', 'off'] as const) {
-      const r = flyFirstRocket(mode);
+      const w = career();
+      const r = flyFirstRocket(mode, false, { world: w });
+      console.log('GOLDEN bare', mode, JSON.stringify({ ...r, time: w.ut - DEFAULT_START_UT, parts: w.active?.state.parts.length }));
+      expect(w.active?.state.destroyed).toBe(false);
+      expect(w.crewFor()).toHaveLength(1);
+      expect(['landed', 'splashed']).toContain(w.active?.state.situation);
       expect(r.lost, `${mode}: ${r.events.join('; ')}`).toBe(false);
-      expect(r.touchdown, mode).toBeLessThan(10);
+      expect(r.touchdown, mode).toBeGreaterThan(5);
+      expect(r.touchdown, mode).toBeLessThan(9);
+      expect(r.apex, mode).toBeGreaterThan(100000);
+      expect(r.apex, mode).toBeLessThan(120000);
+      expect(r.maxG, mode).toBeGreaterThan(8);
+      expect(r.maxG, mode).toBeLessThan(14);
+      expect(w.ut - DEFAULT_START_UT, mode).toBeGreaterThan(470);
+      expect(w.ut - DEFAULT_START_UT, mode).toBeLessThan(580);
+      expect(w.active!.state.parts).toHaveLength(3);
       expect(r.events.some(e => e.startsWith('full')), mode).toBe(true);
     }
   }, 240_000);
@@ -127,6 +141,19 @@ describe('free return', () => {
     w.progression.unlocked.push('propulsion-0', 'energy-0');
     expect(buy(w, buildOrbiter()).problem).toBeNull();
     expect(toOrbit(w, new Set(), 90000, 2)).toBeNull();
+    console.log('GOLDEN orbit', JSON.stringify({ ...w.orbitSummary(w.active!), dv: dvLeft(w), time: w.ut - DEFAULT_START_UT - 11 * 86400, parts: w.active!.state.parts.length }));
+    const orbit = w.orbitSummary(w.active!);
+    expect(orbit.pe).toBeGreaterThan(80000); // safely above the 70 km atmosphere
+    expect(orbit.pe).toBeLessThan(100000);
+    expect(orbit.ap).toBeGreaterThan(80000);
+    expect(orbit.ap).toBeLessThan(100000);
+    expect(dvLeft(w)).toBeGreaterThan(1200);
+    expect(dvLeft(w)).toBeLessThan(1700);
+    expect(w.ut - DEFAULT_START_UT - 11 * 86400).toBeGreaterThan(250);
+    expect(w.ut - DEFAULT_START_UT - 11 * 86400).toBeLessThan(350);
+    expect(w.active!.state.parts).toHaveLength(9);
+    expect(w.active!.state.destroyed).toBe(false);
+    expect(w.crewFor()).toHaveLength(1);
     const plan = planFreeReturn(w, 'moon');
     expect(plan).not.toBeNull();
     const entry = arrivalPeriapsisAltitude(w, 'moon', 'earth', w.ut);
