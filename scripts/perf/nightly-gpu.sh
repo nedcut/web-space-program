@@ -32,11 +32,13 @@ cleanup() { [[ -z "$pid" ]] || kill "$pid" 2>/dev/null || true; rm -f "$driver";
 trap cleanup EXIT
 node node_modules/vite/bin/vite.js preview --host 0.0.0.0 --port 5568 --strictPort > /tmp/wsp-nightly-server.log 2>&1 &
 pid=$!
+ready=0
 for i in {1..60}; do
   kill -0 "$pid" || { cat /tmp/wsp-nightly-server.log; exit 1; }
-  if curl -fsS http://localhost:5568/ >/dev/null; then break; fi
+  if curl -fsS http://localhost:5568/ >/dev/null 2>&1; then ready=1; break; fi
   sleep 1
 done
+[[ "$ready" == 1 ]] || { cat /tmp/wsp-nightly-server.log; echo "Preview server not ready after 60 s" >&2; exit 1; }
 # Override only for pre-merge harness calibration; normal scheduled runs use main.
 harness_root="${WSP_PERF_HARNESS_ROOT:-$repo}"
 if [[ ! -f "$harness_root/scripts/perf/nightly-gpu.mjs" ]]; then
