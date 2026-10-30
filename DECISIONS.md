@@ -1938,3 +1938,16 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   one skipped; 502.16 s), and production build. Latest main merged before these checks. Preview 5875 is
   stopped; browser contexts closed, no profile directories created. No PROGRESS.md edits, push or main
   merge. M-series / Zen / Firefox / live 120 Hz GPU pacing remain unverified.
+
+## Maintained production browser smoke (2026-10-30)
+
+- Keep browser integration checks in a separate Playwright job, against `vite preview` of the
+  production build. One Chromium SwiftShader worker and no retries make failures reproducible
+  without adding browser time to the required headless `ci` job. Software rendering establishes
+  functional behavior, not real-GPU performance or Firefox/Safari compatibility.
+- Use fresh storage for each test; exercise the actual localStorage program saves and IndexedDB
+  craft library. Stock setup reuses the existing editor hook to avoid rendering the entire stock
+  thumbnail catalogue in each flight test. Toolbar geometry is checked at 1366×768 and 1920×1080.
+- Fail on exceptions, console errors, unexpected context loss, GL errors, failed shader links and
+  blank compositor pixels. Explicit renderer-disposal context loss is expected at scene boundaries.
+  Pixel bounds deliberately detect black/solid output rather than assert an art snapshot.
