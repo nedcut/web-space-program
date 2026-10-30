@@ -1939,6 +1939,31 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   stopped; browser contexts closed, no profile directories created. No PROGRESS.md edits, push or main
   merge. M-series / Zen / Firefox / live 120 Hz GPU pacing remain unverified.
 
+## Seeded headless fuzz guard (2026-10-30)
+
+Use replayable World/editor actions and invariant checks for a short fixed-seed
+CI sample, with fresh-seed 20-minute campaigns in a separate nightly workflow.
+No simulation hot-path instrumentation is added. Reuse benchmark Earth-data
+registration and scenario helpers. Fix the identity clock during synchronous
+replay, then restore it. Retain original failure logs before bounded deletion
+shrinking; a per-seed process watchdog makes hangs visible. Rails conservation
+uses relative 1e-8 / absolute 1e-3 J/kg margins only across same-body rails steps;
+zero-time warp continuity permits 1 cm for heliocentric float64 roundoff. Intake
+air is flow rather than stored capacity. Terrain penetration is deliberately not
+asserted as an instantaneous bound: contact applies 80% positional recovery above
+5 mm slop, not exact projection. Coverage and unverified cases live in
+`scripts/fuzz/README.md`; per-run evidence belongs in the PR.
+
+Save/load compares resources, part transforms/tree, modes, fixed anchors and
+nodes exactly, allowing 0.1 mm position and 1e-12 attitude/angular reconstruction
+noise. Free-flight velocity compares before/after within 10 micrometres/s.
+Body-fixed velocity instead compares against ephemeris plus rotation at the saved
+fixed coordinates: EVA moves COM and captures new fixed coordinates, while load
+reconstructs co-rotation. Seeds 288510278 and 905529636 shrink to EVA then save,
+exposing 3.39e-6 and 1.31e-5 m/s differences from the old instantaneous velocity.
+The invariant checks the authoritative fixed-state contract rather than widening
+a before/after velocity tolerance to accommodate each craft.
+
 ## Performance regression proxies (2026-10-30, guard/perf)
 
 Keep performance checks separate from required CI: paired merge-base/head CPU builds
