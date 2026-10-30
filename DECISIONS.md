@@ -1953,3 +1953,9 @@ air is flow rather than stored capacity. Terrain penetration is deliberately not
 asserted as an instantaneous bound: contact applies 80% positional recovery above
 5 mm slop, not exact projection. Coverage and unverified cases live in
 `scripts/fuzz/README.md`; per-run evidence belongs in the PR.
+
+Save/load compares resources, part transforms/tree and nodes exactly, but allows
+body-fixed reconstruction noise in vessel poses (0.1 mm position, 10 micrometres/s
+velocity, 1e-12 attitude/angular velocity). The EVA-on-pad seed 288510278 exposed
+syncFixed rebuilding the rotating pose after crew mass removal: 3.39e-6 m/s and
+1.67e-16 quaternion-component differences, not lost persistent state.

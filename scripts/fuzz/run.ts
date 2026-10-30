@@ -34,9 +34,10 @@ do {
     count++; if (count % 10 === 0 || !duration) console.log(JSON.stringify({ count, seed: s, hash: first, stats, seconds: (Date.now() - started) / 1000 }));
   } catch (e) {
     mkdirSync('fuzz-repros', { recursive: true });
-    if (e instanceof Failure) writeFileSync(`fuzz-repros/${seed}-original.json`, JSON.stringify({ seed: e.seed, step: e.step, reason: e.reason, actions: e.actions }, null, 2));
+    const artifact = `fuzz-repros/${seed}-${Date.now()}`;
+    if (e instanceof Failure) writeFileSync(`${artifact}-original.json`, JSON.stringify({ seed: e.seed, step: e.step, reason: e.reason, actions: e.actions }, null, 2));
     const detail = e instanceof Failure ? { seed: e.seed, step: e.step, reason: e.reason, actions: shrink(e), original: e.actions } : { seed, reason: String(e) };
-    const file = `fuzz-repros/${seed}.json`; writeFileSync(file, JSON.stringify(detail, null, 2));
+    const file = `${artifact}.json`; writeFileSync(file, JSON.stringify(detail, null, 2));
     console.error(e); console.error(`Minimized replay: npx tsx scripts/fuzz/run.ts --repro ${file}`); process.exitCode = 1; break;
   }
 } while (Date.now() - started < duration * 1000);

@@ -69,6 +69,19 @@ export function invariant(w: World) {
 function snapshot(w: World) {
   return { ut: w.ut, activeId: w.activeId, nodes: w.nodes, vessels: [...w.vessels.values()].map(v => ({ body: v.body, position: v.state.position, velocity: v.state.velocity, orientation: v.state.orientation, angularVelocity: v.state.angularVelocity, parts: v.state.parts.map(p => ({ uid: p.uid, parent: p.parent, partId: p.partId, position: p.position, rotation: p.rotation, resources: p.resources })) })) };
 }
+/** Body-fixed vessels rebuild their pose after load; permit only float64 reconstruction noise. */
+function roundTrip(before: ReturnType<typeof snapshot>, after: ReturnType<typeof snapshot>) {
+  const structural = (s: ReturnType<typeof snapshot>) => ({ ...s, vessels: s.vessels.map(v => ({ ...v, position: undefined, velocity: undefined, orientation: undefined, angularVelocity: undefined })) });
+  check(JSON.stringify(structural(before)) === JSON.stringify(structural(after)), 'save-roundtrip-structure', {});
+  before.vessels.forEach((a, i) => {
+    const b = after.vessels[i];
+    for (const [field, tolerance] of [['position', 1e-4], ['velocity', 1e-5], ['angularVelocity', 1e-12]] as const) {
+      const error = length(sub(a[field], b[field]));
+      check(error <= tolerance, 'save-roundtrip-pose', { vessel: i, field, error, tolerance });
+    }
+    for (const key of ['x', 'y', 'z', 'w'] as const) check(Math.abs(a.orientation[key] - b.orientation[key]) <= 1e-12, 'save-roundtrip-attitude', { vessel: i, key, before: a.orientation[key], after: b.orientation[key] });
+  });
+}
 export class Failure extends Error {
   constructor(readonly seed: number, readonly step: number, readonly actions: Action[], readonly reason: string) { super(`seed=${seed} step=${step} ${reason}\nReplay: npx tsx scripts/fuzz/run.ts --seed ${seed}\n${JSON.stringify(actions)}`); }
 }
@@ -93,7 +106,7 @@ export function replay(seed: number, actions = generate(seed), stats?: RunStats)
     for (step = 0; step < actions.length; step++) {
       const a = actions[step];
       if (a.kind === 'dock') { dockingProperty(seed, a.value); if (stats) stats.docks++; }
-      else if (a.kind === 'save') { const before = JSON.stringify(snapshot(w)); w = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(w))), PART_CATALOG, w.universe); check(JSON.stringify(snapshot(w)) === before, 'save-roundtrip', step); if (stats) stats.saves++; }
+      else if (a.kind === 'save') { const before = snapshot(w); w = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(w))), PART_CATALOG, w.universe); roundTrip(before, snapshot(w)); if (stats) stats.saves++; }
       else if (a.kind === 'warp') { const before = w.active ? { ...w.active.state.position } : undefined; w.warp = { mode: a.mode, index: a.index }; w.tick(0, neutralInput()); if (before && w.active) { const jump = length(sub(before, w.active.state.position)); if (stats) stats.maxWarpJump = Math.max(stats.maxWarpJump, jump); check(jump < .01, 'warp-teleport', { step, jump }); } }
       else if (a.kind === 'eva') { const eva = w.goEva(); if (eva && stats) stats.evas++; }
       else if (a.kind === 'switch') { const ids = [...w.vessels.keys()]; if (ids.length) w.switchTo(ids[Math.floor(a.value * ids.length)]); }

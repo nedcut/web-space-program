@@ -18,8 +18,8 @@ handoff is represented by save/load and vessel switching; there is no DOM scene.
 
 Every frame checks finite vessel runtime state (including temperatures, engine
 state, SAS and inertia), part state and body ephemerides; nonnegative mass; resource bounds;
-unique part IDs and acyclic parent links. Additional checks cover exact save/load
-poses, resources, part tree and nodes, zero-time warp continuity (1 cm), and
+unique part IDs and acyclic parent links. Additional checks cover save/load
+poses, exact resources, part tree and nodes, zero-time warp continuity (1 cm), and
 same-body rails energy (relative 1e-8, absolute 1e-3 J/kg). Docking checks actual
 capture, successful undocking, retained part count and valid trees. Each seed runs
 twice and compares a SHA-256 of UT, active vessel, nodes, serialized vessel
@@ -43,7 +43,13 @@ Contracts and limits:
 - Warp continuity is checked at zero elapsed time. Expected orbital motion during
   nonzero warp is covered by rails energy, not a misleading displacement limit.
 - Saves rebuild caches/mass and UI history. Round-trip assertions use persistent
-  physical fields rather than requiring byte-identical derived caches.
+  physical fields rather than requiring byte-identical derived caches. Body-fixed
+  pose reconstruction permits 0.1 mm position, 10 micrometres/s velocity and 1e-12
+  attitude/angular velocity error. Seed 288510278 shrank to EVA then save on a
+  prelaunch Firstlight: restoreAfterLoad/syncFixed rebuilds the rotating pose after
+  crew mass removal, changing velocity by 3.39e-6 m/s and quaternion components
+  by at most 1.67e-16. This is reconstruction noise, not lost flight state. Resources,
+  part transforms/tree and nodes still compare exactly.
 - Node execution is bounded to 20 frames per action; this tests transitions, not
   successful long mission completion. EVA/docking availability can reject actions.
 

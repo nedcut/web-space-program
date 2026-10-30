@@ -46,3 +46,10 @@ it('actually exercises coasting rails and both warp transitions', async () => {
   ], stats);
   expect(stats.railsChecks).toBe(10);
 });
+
+it('accepts documented body-fixed reconstruction noise after EVA on the pad', () => {
+  expect(() => replay(288510278, [
+    { kind: 'eva', value: 0 },
+    { kind: 'save', value: 0 },
+  ])).not.toThrow();
+});
