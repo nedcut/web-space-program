@@ -81,6 +81,12 @@ async function pixels(page) {
   expect(result.lit, 'Rendered pixels above near-black').toBeGreaterThan(20);
   expect(result.spread, 'Rendered image is not a solid blank').toBeGreaterThan(10);
 }
+async function altitudeAGL(page) {
+  return page.evaluate(() => {
+    const w = window.__flight.world, v = w.active;
+    return w.universe.surfaceInfo(v.body, v.state.position, w.ut).heightAboveTerrain;
+  });
+}
 async function menu(page) {
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'New Game', exact: true })).toBeVisible();
@@ -152,11 +158,11 @@ test('sandbox: startup, hub, stock editor, toolbar, persistence, launch and map'
   await test.step('launch, keyboard throttle and staging produce ascent', async () => {
     await page.getByRole('button', { name: /^Launch/ }).click();
     await page.waitForFunction(() => !!window.__flight && !document.querySelector('.loading-screen'));
-    await page.waitForFunction(() => Number.isFinite(window.__flight.world.active?.state.telemetry.altitudeAGL));
-    const altitude = await page.evaluate(() => window.__flight.world.active.state.telemetry.altitudeAGL);
+    const altitude = await altitudeAGL(page);
+    expect(Number.isFinite(altitude)).toBe(true);
     await page.keyboard.press('z'); await page.keyboard.press('Space');
     await expect.poll(() => page.evaluate(() => window.__flight.input.state.throttle)).toBe(1);
-    await expect.poll(() => page.evaluate(() => window.__flight.world.active.state.telemetry.altitudeAGL), { timeout: 60_000 }).toBeGreaterThan(altitude + 10);
+    await expect.poll(() => altitudeAGL(page), { timeout: 60_000 }).toBeGreaterThan(altitude + 10);
     await pixels(page);
   });
   await test.step('map opens and closes through keyboard', async () => {
