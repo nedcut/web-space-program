@@ -2383,3 +2383,60 @@ runs support rejecting noisy operations, not lowering thresholds or gating all o
 Gate membership is recalibrated on each runner; it is not a permanent allowlist.
 
 Harness verification: `node --test scripts/perf/guards.test.mjs`.
+
+### Revised GPU seed evidence (2026-10-30)
+
+Three captures of main `fff0b10edb686b59dedd434f4bd09597e6326507`, Chrome 156.0.8078.48,
+RTX 3060 Ti / ANGLE D3D11, Medium, 1470×920 DPR2. Values below are run medians;
+spread = (maximum - minimum) / median of the three runs.
+
+| Shot | CPU medians ms | CPU spread | GPU medians ms | GPU spread | >25 ms intervals per 10 s |
+|---|---|---:|---|---:|---|
+| pad | 2.40 / 2.30 / 2.50 | 8.3% | 2.78 / 2.79 / 2.79 | 0.4% | 96 / 99 / 116 |
+| ascent | 2.00 / 2.10 / 2.30 | 14.3% | 2.25 / 2.25 / 2.24 | 0.4% | 87 / 97 / 99 |
+| orbit | 1.80 / 1.90 / 1.90 | 5.3% | 2.37 / 2.37 / 2.38 | 0.4% | 80 / 97 / 90 |
+| moon | 2.10 / 2.20 / 2.10 | 4.8% | 1.52 / 1.52 / 1.58 | 3.9% | 56 / 74 / 57 |
+| map | 1.10 / 1.20 / 1.10 | 9.1% | 0.46 / 0.46 / 0.46 | 0.0% | 0 / 12 / 0 |
+| editor:orbit | 9.30 / 10.30 / 10.60 | 12.6% | 4.55 / 5.00 / 5.17 | 12.4% | 199 / 222 / 226 |
+
+Thresholds: **>30% CPU callback median, >10% flight GPU median, >30% editor GPU median**.
+These exceed twice the largest observed matching spreads (14.3%, 3.9%, 12.4%).
+FPS/interval tails and cold load are informational: same-build first-frame latency
+was 4050.9 / 4741.2 / 4236.1 ms (16.3% spread), so the old 10% load gate was noisy.
+Flagged captures remain in the rolling history; investigate promptly before they move the baseline.
+
+Separate trace diagnostic: pad 84.76% compositor Commit wait versus 14.66%
+main-thread work; moving editor 56.01% wait versus 43.31% work. No long tasks;
+largest GC pauses 4.60 / 4.07 ms. Both tabs were foregrounded, warmed and sampled
+without screenshots. The old 30 Hz editor figure is not 33 ms of application work:
+its rendered callbacks cost 9.3–10.6 ms, GPU 4.55–5.17 ms. Idle editor rAF is 60 Hz
+and deliberately renders only around 2 Hz. These traces implicate Chrome presentation
+back-pressure on this host, not repeated 25–33 ms game-work stalls. The editor's
+higher callback cost is real and remains a separate optimization candidate.
+
+Raw seeds and history: `~/.t3/projects/wsp-traces/perf-history/`; diagnostic traces:
+`C:\wsp-tools\bench\perf-diagnostic\`. The first seed's wrapper was edited while
+running and its post-capture shell step failed; the intact raw JSON was validated
+and appended explicitly with the same SHA/harness hash. Later wrapper runs completed normally.
+
+The exact installed stable command also completed a fourth capture (exit 0), with all
+six shots passing against the three seeds. Editor CPU/GPU medians were 8.9 / 4.29 ms,
+expanding four-run spreads to about 17% / 18%. The 30% thresholds retain margin but
+do not detect small editor changes reliably on this host. Flight GPU spread remains
+below 5%. This is a noise-calibrated coarse regression guard, not a 5% precision claim.
+
+Uncapped diagnostic (separate Chrome port 9347, temporary Playwright profile,
+`--disable-gpu-vsync --disable-frame-rate-limit`; hardware RTX verified): pad
+51.86 fps, interval median 19.2 ms, CPU/GPU medians 2.3/2.78 ms, 43 intervals >25 ms;
+73-part Ringrunner editor 41.66 fps, interval median 23.8 ms, CPU/GPU 9.4/4.59 ms,
+100 intervals >25 ms. Neither has long tasks. Thus removing vsync does not eliminate
+presentation stalls on this host; the remaining visual pacing issue is real here,
+but is not evidence of 25–33 ms application callbacks or GPU renders. The editor's
+~9–11 ms CPU work is a separate real optimization candidate, not fixed by this PR.
+The earlier uncapped trace attempt was interrupted because trace draining extended
+the measurement; it is excluded. The successful no-trace diagnostic is in
+`C:\wsp-tools\bench\perf-uncapped2\uncapped-dpr2.json`. Dedicated Chrome is closed,
+its temporary profile removed, and preview ports 5568/5569/5570 are stopped.
+
+Final local checks: lint, typecheck, all 224 test files (2,102 passed / one skipped;
+1070.94s), build, and `node --test scripts/perf/guards.test.mjs` pass.

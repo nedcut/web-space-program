@@ -31,7 +31,7 @@ for (const name of shots) {
     const values = previous.map(r => r.shots[name][metric]);
     const delta = values.length ? c[metric]/median(values)-1 : 0;
     deltas.push(values.length ? (delta*100).toFixed(1)+'%' : 'seed');
-    if (previous.length >= 3 && delta > (metric === 'cpuFrameP50' ? 0.25 : (name === 'editor:orbit' ? 0.25 : 0.10))) flag = true;
+    if (previous.length >= 3 && delta > (metric === 'cpuFrameP50' ? 0.30 : (name === 'editor:orbit' ? 0.30 : 0.10))) flag = true;
   }
   failed ||= flag;
   report += `| ${name} | ${c.cpuFrameP50} / ${c.gpuP50} | ${c.frameP50} / ${c.frameP95} / ${c.frameP99} | ${c.hitches25} / ${c.hitches50} | ${c.heapMB} | ${deltas.join(' / ')} | ${flag ? 'REGRESSION' : previous.length < 3 ? 'seed' : 'pass'} |\n`;
@@ -40,7 +40,7 @@ const loads = previous.map(r => r.shots.pad.firstFrameMs);
 const loadDelta = loads.length ? record.shots.pad.firstFrameMs/median(loads)-1 : 0;
 const loadFlag = false; // Cold load is diagnostic; network/cache variance is not a rendering regression.
 failed ||= loadFlag;
-report += `\nNavigation to first flight frame: ${record.shots.pad.firstFrameMs.toFixed(1)} ms; change ${(loadDelta*100).toFixed(1)}%; ${loadFlag ? 'REGRESSION' : 'pass/seed'}. Flags: >25% CPU callback median or >10% flight GPU / >25% editor GPU median; pacing and cold load informational; inspect noise before attributing to a commit.\n`;
+report += `\nNavigation to first flight frame: ${record.shots.pad.firstFrameMs.toFixed(1)} ms; change ${(loadDelta*100).toFixed(1)}%; ${loadFlag ? 'REGRESSION' : 'pass/seed'}. Flags: >30% CPU callback median or >10% flight GPU / >30% editor GPU median; pacing and cold load informational; inspect noise before attributing to a commit.\n`;
 record.flagged = failed;
 appendFileSync(file, JSON.stringify(record)+'\n');
 writeFileSync(join(directory, 'latest.md'), report);
