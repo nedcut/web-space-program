@@ -67,8 +67,8 @@ const test = base.extend({
 // Decode a compositor screenshot, not readPixels after a discarded drawing buffer.
 // 64x36 samples must contain lit pixels AND variation; catches black/solid blank canvases.
 async function pixels(page) {
-  const canvas = page.locator('canvas:visible').first();
-  const png = await (await canvas.count() ? canvas.screenshot() : page.screenshot());
+  const canvas = page.locator('canvas[data-engine]:visible').first();
+  const png = await (await canvas.count() ? canvas.screenshot({ style: 'body * { visibility: hidden !important; } canvas[data-engine] { visibility: visible !important; }' }) : page.screenshot());
   const result = await page.evaluate(async b64 => {
     const image = new Image(); image.src = `data:image/png;base64,${b64}`; await image.decode();
     const c = document.createElement('canvas'); c.width = 64; c.height = 36;
