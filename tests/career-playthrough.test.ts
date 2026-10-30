@@ -49,6 +49,27 @@ describe('first flights', () => {
     }
   }, 240_000);
 
+  it('the classic first rocket also comes home on the Challenging and Real scales', () => {
+    // Measured 2026-10-30: Challenging apex 73.0/74.5 km, 15.3/15.7 g; Real 48.1/49.7 km, 7.0/7.3 g; touchdown 6.93 m/s.
+    const bounds = { challenging: { apex: [65000, 85000], g: [12, 19] }, real: { apex: [40000, 60000], g: [5, 10] } } as const;
+    for (const preset of ['challenging', 'real'] as const) for (const mode of ['retrograde', 'off'] as const) {
+      const w = career(preset);
+      const r = flyFirstRocket(mode, false, { world: w });
+      const at = `${preset}/${mode}: ${JSON.stringify({ apex: r.apex, maxG: r.maxG, touchdown: r.touchdown })}`;
+      expect(r.lost, `${at} ${r.events.join('; ')}`).toBe(false);
+      expect(w.active?.state.destroyed, at).toBe(false);
+      expect(w.crewFor(), at).toHaveLength(1);
+      expect(['landed', 'splashed'], at).toContain(w.active?.state.situation);
+      expect(w.active!.state.parts, at).toHaveLength(3);
+      expect(r.touchdown, at).toBeGreaterThan(5);
+      expect(r.touchdown, at).toBeLessThan(9);
+      expect(r.apex, at).toBeGreaterThan(bounds[preset].apex[0]);
+      expect(r.apex, at).toBeLessThan(bounds[preset].apex[1]);
+      expect(r.maxG, at).toBeGreaterThan(bounds[preset].g[0]);
+      expect(r.maxG, at).toBeLessThan(bounds[preset].g[1]);
+    }
+  }, 120_000);
+
   it("the Earth test flight's surface objective waits for the capsule, not its spent stage", () => {
     const w = career();
     const c = w.progression.contracts.find(c => c.kind === 'return' && c.body === 'earth')!;
