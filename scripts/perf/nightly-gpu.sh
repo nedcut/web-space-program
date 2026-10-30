@@ -19,9 +19,13 @@ cd "$repo"
 git fetch origin main
 sha="$(git rev-parse origin/main)"
 git archive "$sha" | tar -x -C "$temp"
-ln -s "$repo/node_modules" "$temp/node_modules"
+if cmp -s "$repo/package-lock.json" "$temp/package-lock.json"; then
+  ln -s "$repo/node_modules" "$temp/node_modules"
+else
+  (cd "$temp" && npm ci)
+fi
 (cd "$temp" && npm run build)
-(cd "$temp" && exec node "$repo/node_modules/vite/bin/vite.js" preview --host 0.0.0.0 --port 5568 --strictPort) >"$temp/server.log" 2>&1 &
+(cd "$temp" && exec node "$temp/node_modules/vite/bin/vite.js" preview --host 0.0.0.0 --port 5568 --strictPort) >"$temp/server.log" 2>&1 &
 pid=$!
 for i in {1..60}; do
   kill -0 "$pid" || { cat "$temp/server.log"; exit 1; }
@@ -35,4 +39,5 @@ host="$(hostname -I | awk '{print $1}')"
 history="$HOME/.t3/projects/wsp-traces/perf-history"
 mkdir -p "$history"
 cp "$output/nightly-dpr2.json" "$history/raw-$(date -u +%Y%m%dT%H%M%S)-$$.json"
-node "$repo/scripts/perf/nightly-gpu.mjs" "$output/nightly-dpr2.json" "$sha" "$history"
+harness="$(sha256sum "$driver" | cut -d" " -f1)"
+node "$repo/scripts/perf/nightly-gpu.mjs" "$output/nightly-dpr2.json" "$sha" "$history" "$harness"

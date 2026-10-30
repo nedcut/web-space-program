@@ -2,7 +2,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { median } from './compare.mjs';
-const [input, sha, directory] = process.argv.slice(2);
+const [input, sha, directory, harness = 'test'] = process.argv.slice(2);
 const run = JSON.parse(readFileSync(input, 'utf8'));
 const shots = ['pad', 'ascent', 'orbit', 'moon', 'map', 'editor:orbit'];
 for (const name of shots) {
@@ -14,10 +14,10 @@ if (!gpu || /swiftshader|llvmpipe|software/i.test(gpu)) throw new Error('Hardwar
 if (!(run.cases.pad.firstFrameMs > 0)) throw new Error('Missing first flight frame timing');
 mkdirSync(directory, { recursive: true });
 const file = join(directory, 'history.jsonl');
-const key = JSON.stringify([1, run.browser, gpu, run.size, run.dpr, run.quality, run.seconds]);
+const key = JSON.stringify([1, harness, run.browser, gpu, run.size, run.dpr, run.quality, run.seconds]);
 const history = existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
 const previous = history.filter(r => r.key === key).slice(-7);
-const record = { schema: 1, sha, date: run.date, key, browser: run.browser, gpu, shots: Object.fromEntries(shots.map(s => [s, run.cases[s]])) };
+const record = { schema: 1, harness, sha, date: run.date, key, browser: run.browser, gpu, shots: Object.fromEntries(shots.map(s => [s, run.cases[s]])) };
 let failed = false;
 let report = `# Nightly GPU: ${sha}\n\n${run.date}; ${run.browser}; ${gpu}. RTX proxy, not M-series / Zen / 120 Hz validation. Fixed paused camera shots exclude simulation progression. Long frames: >25 / >50 ms. Baseline: ${previous.length} of last 7 compatible runs.\n\n| Shot | median / p95 / p99 ms | >25 / >50 ms | Heap MB | Change median / p95 / p99 | Status |\n|---|---:|---:|---:|---|---|\n`;
 for (const name of shots) {
