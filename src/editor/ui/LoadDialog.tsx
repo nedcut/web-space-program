@@ -114,7 +114,7 @@ export function LoadDialog({ session, onClose }: { session: EditorSession; onClo
       <div className="vab-modal-section label">Saved vehicles{saved && library.length > 0 && <span className="vab-lib-count"> · {visible.length === library.length ? library.length : `${visible.length} of ${library.length}`}</span>}</div>
       <div className="vab-saved">
         {visible.map(item => (
-          <div key={item.id} className="vab-saved-row">
+          <div key={item.id} data-testid="saved-craft" className="vab-saved-row">
             <CraftThumbnail craft={item.craft} />
             <div className="vab-saved-main">
               <div className="vab-saved-name">{item.craft.name}</div>
