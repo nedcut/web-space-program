@@ -1950,3 +1950,9 @@ investigation. Tail percentiles remain informational after same-commit editor p9
 varied 33.5–50.1 ms with unchanged medians. Three RTX seed runs had 0% median
 frame spread and 3.1% first-frame load spread, below the 5% / 10% margins. Paused flight shots isolate rendering. Neither RTX nor hosted CPU
 proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifacts/PRs.
+
+## Nightly guard work timings (2026-10-30, guard/perf)
+
+- Gate rendered-frame CPU callback and raw asynchronous GPU query medians, not rAF intervals: display refresh quantizes intervals and masks work increases. Flight reuses its existing disjoint timer; editor adds harness-only queries. No production instrumentation or allocation is added.
+- Keep pacing/hitches as diagnostic evidence. Foreground and warm each shot; move the editor camera inside the page rather than issuing timed CDP mouse calls. CPU covers the rendering callback, not separately scheduled HUD work.
+- Use schema-separated history and a dedicated disposable main checkout behind a stable launcher. Never reset an owner checkout. Hosted CPU gates remain calibrated per operation and per runner; <7.5% A/A spread permits a >15% regression gate.

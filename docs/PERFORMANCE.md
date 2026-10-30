@@ -2337,34 +2337,49 @@ DOM-owned telemetry remains covered by the browser profiler.
 Exact nightly command (WSL, any directory):
 
 ```sh
-bash /home/nedcut/.t3/worktrees/web-space-program/t3-63e9149a/scripts/perf/nightly-gpu.sh
+bash /home/nedcut/.t3/projects/wsp-tools/nightly-gpu.sh
 ```
 
-After merging, schedule the same script from a persistent checkout. It fetches and
-archives origin/main into a temporary directory, builds, serves port 5568 and connects
-to Windows Chrome CDP 9333 (launching the existing C:\wsp-chrome-profile if needed).
-It locks /tmp/wsp-gpu.lock for capture/history and times out after 600 seconds once
-locked. Server/temp build are cleaned up. Requires installed checkout node_modules,
-Windows Node and playwright-core in C:\wsp-tools\drv, and standard Windows Chrome.
+Install/update that launcher by copying `scripts/perf/nightly-gpu.sh` to that path.
+It creates its own disposable clone at `/home/nedcut/.t3/projects/wsp-wt/perf-nightly`,
+fetches origin/main and force-checks out that revision each run. No owner worktree is reset.
+Matching dependencies use the main checkout's node_modules; a changed lockfile uses npm ci.
+The launcher builds and serves port 5568, locks `/tmp/wsp-gpu.lock` through capture/history,
+and stops its server on exit. The lock wait is outside the 600-second run timeout.
+Requires Windows Node/playwright-core in C:\wsp-tools\drv and hardware Chrome CDP 9333.
+Before this PR merges, the installed stable `wsp-tools/perf-nightly-harness/scripts/`
+contains the PR's bench driver and perf aggregator/compare modules; the launcher falls
+back there when main lacks the guard. After merge, it uses main's harness automatically.
+`WSP_PERF_HARNESS_ROOT` is an explicit development override, not needed by the installed command.
 
 Fixed Medium, DPR 2, 1470×920 shots: Kestrel pad, Meridian at 10 km, Kestrel low
 Earth orbit, Selene at Moon terrain, orbital map, Ringrunner editor camera orbit.
-Flight shots pause simulation to isolate rendering; they do not benchmark flight
-dynamics. Each settles then records ten seconds through the existing GPU harness
-and window.__perf: median/p95/p99 frame intervals, >25/>50 ms counts, JS heap,
-browser/GPU identity, navigation-to-first-rendered-flight-frame timing. Adaptive
-quality is disabled.
+Flight shots pause simulation; editor motion runs inside the page, avoiding CDP mouse
+round trips during sampling. Each shot is foregrounded and warmed for ten seconds
+with instrumentation installed before its ten-second sample. No screenshots are taken.
+
+Schema 2 records raw GPU query results and CPU durations for application rAF callbacks
+that submit the main scene. Flight reuses RenderPipeline's unsmoothed timer poll
+(`EXT_disjoint_timer_query_webgl2`); editor wraps its renderer with asynchronous queries.
+CPU measures callback entry to exit, excluding refresh wait and separate HUD/navball callbacks.
+Only callbacks that render count, so editor idle skips do not dilute the median.
+Unsupported timers, insufficient samples, hidden/unfocused captures and missing shots fail.
+Pacing/FPS, >25/>50 ms counts, heap and first-frame latency remain diagnostics.
 
 History: ~/.t3/projects/wsp-traces/perf-history/history.jsonl; report: latest.md;
-raw captures: raw-*.json. Missing shots/software rendering fail without appending.
-Browser version, GPU, settings, capture-harness hash and schema define compatible cohorts. Three initial
-runs seed; later runs compare with the previous seven compatible runs and exit 1
-for >5% median-frame-time or >10% load increases. Tail percentiles remain
-informational: repeated same-commit editor p99 varied 33.5–50.1 ms while medians
-were unchanged; a 5% tail gate would be noisy. Flagged runs stay in history, so
-investigate promptly: persistent regressions eventually move the rolling baseline.
-Three seed samples are preliminary noise evidence, not statistical confidence.
+raw captures: raw-*.json. Schema, harness hash, browser, GPU, dimensions and settings
+isolate compatible cohorts. Three initial runs seed; later runs compare against the
+last seven compatible runs. Three seeds are preliminary noise evidence, not confidence bounds.
 CPU CI and RTX are proxies: **M-series Mac, Zen/Firefox and 120 Hz are unverified**.
-A 60 Hz frame-time floor may hide small changes; inspect raw CPU/GPU timings too.
+
+Hosted CPU calibration (2026-10-30): PR run 41115559775 passed in **3m45s** on
+AMD EPYC 7763; **21/44** operations gated, A/A spreads **0.2–59.6%**.
+Push run 41115550106 passed in **3m02s** on EPYC 9V74; **18/44** gated.
+Every operation's A/A spread and gate status is preserved in
+[PR job summary](performance/guard/hosted-pr.md) and
+[push job summary](performance/guard/hosted-push.md).
+Keep the existing <7.5% calibration ceiling / >15% regression rule: these hosted
+runs support rejecting noisy operations, not lowering thresholds or gating all operations.
+Gate membership is recalibrated on each runner; it is not a permanent allowlist.
 
 Harness verification: `node --test scripts/perf/guards.test.mjs`.
