@@ -43,7 +43,7 @@ const settings = { quality, ...PRESETS[quality], scatter: true, adaptiveQuality:
 const browser = args.local === '1'
   ? await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
   : await chromium.connectOverCDP('http://127.0.0.1:9333', { timeout: 30000 });
-const results = { label, base, local: args.local === '1', noRaster: args['cpu-only'] === '1', noSubmission: args.nogpu === '1', dpr, throttle, quality, seconds, size: `${vw}x${vh}`, date: new Date().toISOString(), cases: {} };
+const results = { browser: await browser.version(), label, base, local: args.local === '1', noRaster: args['cpu-only'] === '1', noSubmission: args.nogpu === '1', dpr, throttle, quality, seconds, size: `${vw}x${vh}`, date: new Date().toISOString(), cases: {} };
 const log = (...a) => console.log(...a);
 
 // ---------------------------------------------------------------------------------------------------------
@@ -306,8 +306,11 @@ async function flightCase(name, url, setup, settle = 3000, timing = true) {
     });
     const marks = timing ? await page.evaluate(() => Object.fromEntries([...performance.getEntriesByType('measure'), ...performance.getEntriesByType('mark')].filter((e) => e.name.startsWith('wsp:')).map((e) => [e.name, Math.round(e.startTime + e.duration)]))) : {};
     if (setup) await setup(page);
+    if (args.nightly === '1') await page.evaluate(() => { window.__flight.paused = true; });
+    await page.waitForFunction(() => performance.getEntriesByName('wsp:flight:firstFrame').length > 0);
+
     await page.waitForTimeout(settle);
-    await measure(page, cdp, name, seconds * 1000, { readyMs, marks });
+    await measure(page, cdp, name, seconds * 1000, { readyMs, marks, firstFrameMs: await page.evaluate(() => { const e = performance.getEntriesByName('wsp:flight:firstFrame')[0]; return e ? e.startTime + e.duration : null; }) });
   } catch (e) { log(`!! ${name} failed: ${e.message}`); results.cases[name] = { error: e.message }; } finally { await context.close(); }
 }
 
@@ -359,7 +362,21 @@ if (cases.includes('menu')) {
   catch (e) { log(`!! menu failed: ${e.message}`); } finally { await context.close(); }
 }
 if (cases.includes('pad')) await flightCase('pad', '/?flight=stock-kestrel', undefined, settleMs);
-if (cases.includes('ascent')) {
+if (cases.includes('ascent') && args.nightly === '1') {
+  await flightCase('ascent', '/?flight=stock-meridian', async page => {
+    await page.evaluate(() => {
+      const f = window.__flight, w = f.world, v = w.active;
+      const b = w.universe.ephem.getBodyState(v.body, w.ut);
+      const p = v.state.position;
+      const r = Math.hypot(p.x-b.position.x, p.y-b.position.y, p.z-b.position.z);
+      const radius = w.universe.body(v.body).radius + 10000;
+      for (const k of ['x','y','z']) p[k] = b.position[k] + (p[k]-b.position[k])/r*radius;
+      v.mode = 'physics'; v.fixed = undefined; v.state.situation = 'flying';
+      f.paused = true;
+    });
+  }, settleMs);
+}
+if (cases.includes('ascent') && args.nightly !== '1') {
   // Meridian off the pad at full throttle with physics warp 4×: measured through the dense lower atmosphere (max-Q).
   await flightCase('ascent', '/?flight=stock-meridian', async (page) => {
     await page.keyboard.press('KeyT'); await page.keyboard.press('KeyZ'); await page.keyboard.press('Space');
@@ -387,7 +404,22 @@ if (cases.includes('orbit')) await flightCase('orbit', '/?flight=stock-kestrel&s
 if (cases.includes('warp1k')) await flightCase('warp1k', '/?flight=stock-kestrel&scenario=highorbit', async (page) => { await page.evaluate(() => { window.__flight.world.warp = { mode: 'rails', index: 5 }; }); });
 if (cases.includes('warp100k')) await flightCase('warp100k', '/?flight=stock-kestrel&scenario=highorbit', async (page) => { await page.evaluate(() => { window.__flight.world.warp = { mode: 'rails', index: 7 }; }); });
 if (cases.includes('map')) await flightCase('map', '/?flight=stock-kestrel&scenario=orbit', async (page) => { await page.evaluate(() => window.__flight.toggleMap()); });
-if (cases.includes('moon')) await flightCase('moon', '/?mission=suicide-burn', async (page) => { await page.evaluate(() => { const f = window.__flight; f.input.state.throttle = 0.35; }); }, 2000);
+if (cases.includes('moon') && args.nightly === '1') {
+  await flightCase('moon', '/?flight=stock-selene&scenario=moon', async page => {
+    await page.evaluate(() => {
+      const f = window.__flight, w = f.world, v = w.active, u = w.universe;
+      const q = u.ephem.bodyRotation('moon', w.ut);
+      const up = { x: 1-2*(q.y*q.y+q.z*q.z), y: 2*(q.x*q.y+q.w*q.z), z: 2*(q.x*q.z-q.w*q.y) };
+      const r = u.body('moon').radius + u.terrain('moon').heightAt(1,0,0) + w.bottomOffset(v.state) + 0.05;
+      const b = u.ephem.getBodyState('moon', w.ut);
+      for (const k of ['x','y','z']) v.state.position[k] = b.position[k] + up[k]*r;
+      const h = Math.SQRT1_2;
+      v.state.orientation = { x: h*(q.x-q.y), y: h*(q.y+q.x), z: h*(q.z-q.w), w: h*(q.w+q.z) };
+      v.state.situation = 'landed'; f.paused = true;
+    });
+  }, settleMs);
+}
+if (cases.includes('moon') && args.nightly !== '1') await flightCase('moon', '/?mission=suicide-burn', async (page) => { await page.evaluate(() => { const f = window.__flight; f.input.state.throttle = 0.35; }); }, 2000);
 if (cases.includes('saturn')) await flightCase('saturn', '/?mission=ring-skimmer');
 
 if (cases.includes('editor')) {

@@ -1,9 +1,7 @@
 import '../earth-data/register';
 /** Run: npx tsx scripts/bench/run.ts [filter]. Reports median/p95 microseconds per operation. */
 import { performance } from 'node:perf_hooks';
-import { readFileSync } from 'node:fs';
 import { cpus } from 'node:os';
-import { transformSync } from 'esbuild';
 import { Universe } from '../../src/game/universe';
 import { World } from '../../src/game/world';
 import { DEFAULT_START_UT } from '../../src/game/store';
@@ -15,9 +13,9 @@ import { advanceISRU } from '../../src/sim/vessel/isru';
 import { scienceContext, evaluateProgression } from '../../src/game/science';
 import { worldNetwork } from '../../src/game/comms';
 import { buildChunk } from '../../src/render/planet/chunkBuilder';
-import { FlightController } from '../../src/flight/controller';
+import { navball } from '../../src/flight/controller/navball';
 import * as vectors from '../../src/util/vec3';
-import { qRotate, qIdentity } from '../../src/util/quat';
+import { qIdentity } from '../../src/util/quat';
 
 const filter = process.argv[2] ?? '';
 const results: { name: string; medianUs: number; p95Us: number }[] = [];
@@ -70,18 +68,11 @@ bench('isru/active', () => {
  v.situation='landed'; v.parts[1].drillDeployed=true; v.parts[1].drillDeploy=1; v.parts[2].converterRunning=true;
  return () => {v.parts[0].resources.regolith=50; v.parts[3].resources.electricCharge=100; v.parts[4].resources.liquidFuel=0; v.parts[4].resources.oxidizer=0; return advanceISRU(v,.5,.02);};
 });
-// Exercise the actual controller assembly without constructing WebGL/audio/input. The arrow
-// property is extracted verbatim and transpiled because it is initialized by the DOM constructor.
-const source=readFileSync(new URL('../../src/flight/controller.ts',import.meta.url),'utf8');
-const navSource=source.slice(source.indexOf('  navball = ')+12,source.indexOf('\n\n  private telemetry'));
-const navJs=transformSync(`const nav = ${navSource}`,{loader:'ts',target:'es2022'}).code;
-function controller(w:World) {
- const c=Object.assign(Object.create(FlightController.prototype), {world:w,network:null,input:{state:{throttle:0,brakes:false}},speedMode:'surface',sas:'off',sasOn:false,rcsOn:false,dockingMode:false,mapMode:false,assist:null});
- c.navball=Function(...Object.keys(vectors),'qRotate',`${navJs};return nav;`).call(c,...Object.values(vectors),qRotate);
- return c;
-}
-for(const id of ['stock-kestrel','stock-selene']) {
- bench(`telemetry/${id}`,()=>{const {w,v}=fixture(id,'pad');const c=controller(w);return ()=>c.telemetry(v);});
- bench(`navball/${id}`,()=>{const {w}=fixture(id);const c=controller(w);return ()=>c.navball();},1000);
+// Exercise the maintained helper directly; DOM-owned telemetry requires a browser fixture.
+for (const id of ['stock-kestrel', 'stock-selene']) {
+ bench(`navball/${id}`, () => {
+  const { w } = fixture(id);
+  return () => navball.call({ world: w, network: null, speedMode: 'surface', mapMode: false }, { maneuverDirection: () => null });
+ }, 1000);
 }
 void sink;

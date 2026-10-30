@@ -2321,3 +2321,48 @@ on, pad, GPU load = composer rendered k× per frame, 70 s:
 **Only the owner's Mac can confirm:** whether Zen's 8.3/16.7 ms alternation is GPU (pixel-bound → adaptive now holds
 120 at ×0.75–0.9) or the compositor (→ adaptive tries, sees no gain and returns to ×1.00), and how much the ~120 fewer
 draw calls save on Firefox's macOS GL path. No true 120 Hz vsync is available on the test PC.
+
+## Maintained regression guards
+
+PR workflow **Performance proxies** builds merge-base and head on one Ubuntu runner,
+using identical head benchmark fixtures. Three alternating A/A pairs calibrate each
+operation, then three A/B pairs compare medians. Operations >=0.1 microseconds with
+A/A range/median <7.5% fail at >15% regression (twice the noise ceiling); others are
+informational. Raw rounds and gzip JS/CSS totals accompany the job summary. Ten-minute
+timeout; **not a required check**. Read-only GITHUB_TOKEN means summary-only, including
+fork PRs. Missing/failed fixtures fail the job. Node render tests measure CPU, not GPU.
+The obsolete controller-text extraction is replaced by the actual navball helper;
+DOM-owned telemetry remains covered by the browser profiler.
+
+Exact nightly command (WSL, any directory):
+
+```sh
+bash /home/nedcut/.t3/worktrees/web-space-program/t3-63e9149a/scripts/perf/nightly-gpu.sh
+```
+
+After merging, schedule the same script from a persistent checkout. It fetches and
+archives origin/main into a temporary directory, builds, serves port 5568 and connects
+to Windows Chrome CDP 9333 (launching the existing C:\wsp-chrome-profile if needed).
+It locks /tmp/wsp-gpu.lock for capture/history and times out after 600 seconds once
+locked. Server/temp build are cleaned up. Requires installed checkout node_modules,
+Windows Node and playwright-core in C:\wsp-tools\drv, and standard Windows Chrome.
+
+Fixed Medium, DPR 2, 1470×920 shots: Kestrel pad, Meridian at 10 km, Kestrel low
+Earth orbit, Selene at Moon terrain, orbital map, Ringrunner editor camera orbit.
+Flight shots pause simulation to isolate rendering; they do not benchmark flight
+dynamics. Each settles then records ten seconds through the existing GPU harness
+and window.__perf: median/p95/p99 frame intervals, >25/>50 ms counts, JS heap,
+browser/GPU identity, navigation-to-first-rendered-flight-frame timing. Adaptive
+quality is disabled.
+
+History: ~/.t3/projects/wsp-traces/perf-history/history.jsonl; report: latest.md;
+raw captures: raw-*.json. Missing shots/software rendering fail without appending.
+Browser version, GPU, settings and schema define compatible cohorts. Three initial
+runs seed; later runs compare with the previous seven compatible runs and exit 1
+for >5% frame-percentile or >10% load increases. Flagged runs stay in history, so
+investigate promptly: persistent regressions eventually move the rolling baseline.
+Three seed samples are preliminary noise evidence, not statistical confidence.
+CPU CI and RTX are proxies: **M-series Mac, Zen/Firefox and 120 Hz are unverified**.
+A 60 Hz frame-time floor may hide small changes; inspect raw CPU/GPU timings too.
+
+Harness verification: `node --test scripts/perf/guards.test.mjs`.

@@ -9,7 +9,7 @@ import { VesselView } from '../../src/render/vessel/VesselView';
 import { Universe } from '../../src/game/universe';
 import { stateToElements, predictTrajectory } from '../../src/sim/orbit';
 // Only MapView's canvas icons/HTML labels need a DOM; no WebGL is constructed.
-const node = () => ({ style: {}, appendChild() {}, remove() {}, getContext: () => ({ beginPath(){}, arc(){}, stroke(){}, fill(){}, moveTo(){}, lineTo(){} }) });
+const node = () => ({ style: {}, appendChild() {}, remove() {}, getContext: () => ({ beginPath(){}, arc(){}, stroke(){}, fill(){}, moveTo(){}, lineTo(){}, createRadialGradient: () => ({ addColorStop() {} }), fillRect(){} }) });
 const u = new Universe('standard');
 for (const craft of [STOCK_CRAFTS[0], STOCK_CRAFTS[2]]) {
  const v=buildVessel(craft.build(), PART_CATALOG), view=new VesselView(v);
@@ -39,7 +39,7 @@ const material=new THREE.MeshBasicMaterial();
 const tree = new Quadtree({terrainKey:'bench',radius:6e5,minHeight:-100,maxHeight:100,res:24,maxLevel:8,ocean:false,pool:new TerrainWorkerPool(0),terrainMaterial:material,maxInFlight:0,buildBudgetMs:0,cacheSize:1000});
 for(let i=0;i<512;i++){
  const n = new ChunkNode({face:0,level:5,ix:i%32,iy:Math.floor(i/32)},6e5);
- n.data={center:[6e5,i,0]} as typeof n.data;n.mesh=new THREE.Mesh(new THREE.BoxGeometry(),material);tree.selected.push(n);
+ n.data={origin:[6e5,i,0]} as typeof n.data;n.mesh=new THREE.Mesh(new THREE.BoxGeometry(),material);tree.selected.push(n);
 }
 const q=new THREE.Quaternion(),m=new THREE.Matrix3();
 const qt=[];for(let r=0;r<9;r++){const start=performance.now();for(let i=0;i<500;i++)tree.place(-6e5,0,0,q,m);qt.push((performance.now()-start)*2);}qt.sort((a,b)=>a-b);

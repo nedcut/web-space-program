@@ -1938,3 +1938,13 @@ and Focus on Earth "doesn't save when I go out of the map and back in".
   one skipped; 502.16 s), and production build. Latest main merged before these checks. Preview 5875 is
   stopped; browser contexts closed, no profile directories created. No PROGRESS.md edits, push or main
   merge. M-series / Zen / Firefox / live 120 Hz GPU pacing remain unverified.
+
+## Performance regression proxies (2026-10-30, guard/perf)
+
+Keep performance checks separate from required CI: paired merge-base/head CPU builds
+on one runner with per-operation A/A calibration, plus local real-GPU history under
+the shared GPU lock. CPU >15% fails only below 7.5% A/A spread; noisy operations
+remain informational. GPU history uses compatible browser/hardware/settings cohorts,
+three seed runs and a seven-run rolling median; >5% frame and >10% load changes flag
+investigation. Paused flight shots isolate rendering. Neither RTX nor hosted CPU
+proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifacts/PRs.

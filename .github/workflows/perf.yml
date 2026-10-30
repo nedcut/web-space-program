@@ -1,0 +1,43 @@
+name: Performance proxies
+on:
+  pull_request:
+  push:
+    branches: [guard/perf]
+permissions:
+  contents: read
+concurrency:
+  group: perf-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Prepare merge-base and identical benchmark fixtures
+        run: |
+          git fetch origin main
+          base=$(git merge-base HEAD origin/main)
+          echo "Base $base; head $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p .tmp/perf-base
+          git archive "$base" | tar -x -C .tmp/perf-base
+          cp scripts/bench/{run,kernels,render}.ts .tmp/perf-base/scripts/bench/
+          cd .tmp/perf-base
+          npm ci
+          npm run build
+      - run: npm run build
+      - run: node --test scripts/perf/guards.test.mjs
+      - run: node scripts/perf/compare.mjs .tmp/perf-base . perf-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-proxies
+          path: perf-results/
