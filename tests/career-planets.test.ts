@@ -16,7 +16,7 @@ import { neutralInput } from '../src/sim/vessel';
 import { length, normalize, scale, add, v3 } from '../src/util/vec3';
 import { qFromTo } from '../src/util/quat';
 import { toOrbit } from '../scripts/career/flights';
-import { capture, toPlanet } from '../scripts/career/planets';
+import { capture, dvLeft, toPlanet } from '../scripts/career/planets';
 
 /** Career past the Moon: interplanetary legs flown through the real World and the flight-assist programs. */
 const career = (preset: 'standard' | 'challenging' | 'real', ut = DEFAULT_START_UT) => new World(new Universe(preset), PART_CATALOG, ut, 'career');
@@ -102,7 +102,19 @@ describe('planetary probes', () => {
     expect(leg.leg!.trimDv).toBeLessThan(100);
     expect(capture(w, biomes, mars.atmosphere!.height * 1.9, 0).err).toBeNull();
     const o = w.orbitSummary(w.active!);
+    console.log('GOLDEN petrel', JSON.stringify({ pe: o.pe, ap: o.ap, dv: dvLeft(w), time: w.ut - DEFAULT_START_UT - 30 * 86400, parts: w.active!.state.parts.length, leg: leg.leg }));
     expect(o.pe).toBeGreaterThan(mars.atmosphere!.height);
+    expect(o.pe).toBeGreaterThan(80000);
+    expect(o.pe).toBeLessThan(110000);
+    expect(o.ap).toBeGreaterThan(100000);
+    expect(o.ap).toBeLessThan(140000);
+    expect(dvLeft(w)).toBeGreaterThan(650);
+    expect(dvLeft(w)).toBeLessThan(1000);
+    expect(w.ut - DEFAULT_START_UT - 30 * 86400).toBeGreaterThan(7e6);
+    expect(w.ut - DEFAULT_START_UT - 30 * 86400).toBeLessThan(8e6);
+    expect(w.active!.state.parts).toHaveLength(10);
+    expect(w.active!.state.destroyed).toBe(false);
+    // Arrival contact is checked above; capture can carry the probe behind Mars.
     expect(w.progression.milestones).toContain('first-mars');
     expect(w.scienceInstruments().some(i => i.available && i.value > 0)).toBe(true);
   }, 300_000);
