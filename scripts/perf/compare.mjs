@@ -2,6 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } f
 import { execFileSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
+import { cpus, platform, arch } from 'node:os';
 
 export const median = a => [...a].sort((a, b) => a - b)[Math.floor(a.length / 2)];
 export function compare(a, b, noise) {
@@ -56,7 +57,7 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
   for (const r of rows) md += `| ${r.name} | ${r.base.toFixed(3)} | ${r.head.toFixed(3)} | ${(r.delta*100).toFixed(1)}% | ${(r.noise*100).toFixed(1)}% | ${r.failed ? 'REGRESSION' : r.stable ? 'pass' : 'informational'} |\n`;
   md += '\n| Gzip assets (sum per file) | Base bytes | Head bytes | Change |\n|---|---:|---:|---:|\n';
   for (const ext of ['js', 'css']) md += `| ${ext} | ${sizes[0][ext]} | ${sizes[1][ext]} | ${sizes[1][ext]-sizes[0][ext]} |\n`;
-  writeFileSync(join(out, 'results.json'), JSON.stringify({ aa, ab, rows, sizes, node: process.version }, null, 2));
+  writeFileSync(join(out, 'results.json'), JSON.stringify({ aa, ab, rows, sizes, node: process.version, cpu: cpus()[0]?.model, platform: platform(), arch: arch() }, null, 2));
   writeFileSync(join(out, 'summary.md'), md);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
   console.log(md);
