@@ -2357,9 +2357,11 @@ quality is disabled.
 
 History: ~/.t3/projects/wsp-traces/perf-history/history.jsonl; report: latest.md;
 raw captures: raw-*.json. Missing shots/software rendering fail without appending.
-Browser version, GPU, settings and schema define compatible cohorts. Three initial
+Browser version, GPU, settings, capture-harness hash and schema define compatible cohorts. Three initial
 runs seed; later runs compare with the previous seven compatible runs and exit 1
-for >5% frame-percentile or >10% load increases. Flagged runs stay in history, so
+for >5% median-frame-time or >10% load increases. Tail percentiles remain
+informational: repeated same-commit editor p99 varied 33.5–50.1 ms while medians
+were unchanged; a 5% tail gate would be noisy. Flagged runs stay in history, so
 investigate promptly: persistent regressions eventually move the rolling baseline.
 Three seed samples are preliminary noise evidence, not statistical confidence.
 CPU CI and RTX are proxies: **M-series Mac, Zen/Firefox and 120 Hz are unverified**.

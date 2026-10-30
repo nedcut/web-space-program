@@ -24,12 +24,14 @@ test('GPU history seeds, compares compatible runs, fails regression and rejects 
     };
     for (let i = 0; i < 3; i++) assert.equal(execute().status, 0);
     run.cases.orbit.frameP95 = 20;
+    assert.equal(execute().status, 0); // tail jitter is informational
+    run.cases.orbit.frameP50 = 20;
     assert.equal(execute().status, 1);
     assert.match(readFileSync(join(dir, 'latest.md'), 'utf8'), /REGRESSION/);
     run.browser = 'different';
     assert.equal(execute().status, 0); // hardware/browser cohorts must not mix
     delete run.cases.moon;
     assert.equal(execute().status, 1);
-    assert.equal(readFileSync(join(dir, 'history.jsonl'), 'utf8').trim().split('\n').length, 5);
+    assert.equal(readFileSync(join(dir, 'history.jsonl'), 'utf8').trim().split('\n').length, 6);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
