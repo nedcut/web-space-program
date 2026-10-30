@@ -72,7 +72,9 @@ bench('isru/active', () => {
 for (const id of ['stock-kestrel', 'stock-selene']) {
  bench(`navball/${id}`, () => {
   const { w } = fixture(id);
-  return () => navball.call({ world: w, network: null, speedMode: 'surface', mapMode: false }, { maneuverDirection: () => null });
+  const controller = { world: w, network: null, speedMode: 'surface' as const, mapMode: false };
+  const internals = { maneuverDirection: () => null };
+  return () => navball.call(controller, internals);
  }, 1000);
 }
 void sink;
