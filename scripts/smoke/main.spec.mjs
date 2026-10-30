@@ -7,6 +7,8 @@ const GPU_ERROR = /WebGL.*(?:error|warning|lost)|context lost|GL_INVALID|INVALID
 const test = base.extend({
   page: async ({ page }, use) => {
     const errors = [];
+    // Failures reach Node immediately, so later disposal or a reload cannot erase them.
+    await page.exposeFunction('__smokeReport', message => errors.push(message));
     page.on('pageerror', error => errors.push(error.stack ?? error.message));
     page.on('console', message => {
       const text = message.text();
@@ -15,8 +17,21 @@ const test = base.extend({
     await page.addInitScript(() => {
       if (!localStorage.getItem('wsp.settings.v1')) localStorage.setItem('wsp.settings.v1', JSON.stringify({ quality: 'low', frameRateCap: 30, graphicsProfile: 99, adaptiveQuality: false, shadows: false, bloom: false, clouds: false, scatter: false, renderScale: 0.5, autoSaveInterval: 0 }));
       localStorage.setItem('wsp.help.seen.v1', '1');
-      const failures = window.__smokeFailures = [];
+      const fail = message => window.__smokeReport(message);
       const contexts = [], programs = [], disposed = new WeakSet();
+      // Check one context's errors and pending shader links; runs before disposal and on every check.
+      function check(gl) {
+        if (disposed.has(gl)) return;
+        if (gl.isContextLost()) fail('Lost GL context');
+        const error = gl.getError();
+        if (error) fail(`GL error ${error}`);
+        for (let i = programs.length - 1; i >= 0; i--) {
+          const [owner, program] = programs[i];
+          if (owner !== gl) continue;
+          programs.splice(i, 1);
+          if (gl.isProgram(program) && !gl.getProgramParameter(program, gl.LINK_STATUS)) fail(gl.getProgramInfoLog(program) || 'Shader link failed');
+        }
+      }
       // three.js deliberately loses contexts on scene disposal. Unexpected losses still fail.
       for (const P of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
         const get = P.getExtension;
@@ -24,7 +39,7 @@ const test = base.extend({
           const ext = get.call(this, name);
           if (name === 'WEBGL_lose_context' && ext && !ext.__smokeWrapped) {
             const lose = ext.loseContext.bind(ext);
-            ext.loseContext = () => { disposed.add(this); lose(); };
+            ext.loseContext = () => { check(this); disposed.add(this); lose(); };
             ext.__smokeWrapped = true;
           }
           return ext;
@@ -36,29 +51,19 @@ const test = base.extend({
         P.linkProgram = function (program) {
           if (!contexts.includes(this)) {
             contexts.push(this);
-            this.canvas.addEventListener('webglcontextlost', () => { if (!disposed.has(this)) failures.push('WebGL context lost'); });
+            this.canvas.addEventListener('webglcontextlost', () => { if (!disposed.has(this)) fail('WebGL context lost'); });
           }
           programs.push([this, program]);
           return link.call(this, program);
         };
       }
-      window.__smokeGPU = () => {
-        for (const gl of contexts) {
-          if (disposed.has(gl)) continue;
-          if (gl.isContextLost()) failures.push('Lost GL context');
-          const error = gl.getError();
-          if (error) failures.push(`GL error ${error}`);
-        }
-        for (const [gl, program] of programs.splice(0)) {
-          if (!disposed.has(gl) && gl.isProgram(program) && !gl.getProgramParameter(program, gl.LINK_STATUS)) failures.push(gl.getProgramInfoLog(program) || 'Shader link failed');
-        }
-        return failures;
-      };
+      window.__smokeGPU = () => { for (const gl of contexts) check(gl); };
+      addEventListener('pagehide', () => window.__smokeGPU());
     });
     await use(page);
     if (!page.isClosed()) {
       await pixels(page);
-      errors.push(...await page.evaluate(() => window.__smokeGPU()));
+      await page.evaluate(() => window.__smokeGPU());
     }
     expect(errors, 'No page, console, shader or WebGL errors').toEqual([]);
   },
@@ -66,8 +71,10 @@ const test = base.extend({
 
 // Decode a compositor screenshot, not readPixels after a discarded drawing buffer.
 // 64x36 samples must contain lit pixels AND variation; catches black/solid blank canvases.
-async function pixels(page) {
+// Scene checkpoints require the renderer canvas; menus may fall back to the whole page.
+async function pixels(page, { scene = false } = {}) {
   const canvas = page.locator('canvas[data-engine]:visible').first();
+  if (scene) await expect(canvas, 'Visible scene canvas').toHaveCount(1);
   const png = await (await canvas.count() ? canvas.screenshot({ style: 'body * { visibility: hidden !important; } canvas[data-engine] { visibility: visible !important; }' }) : page.screenshot());
   const result = await page.evaluate(async b64 => {
     const image = new Image(); image.src = `data:image/png;base64,${b64}`; await image.decode();
@@ -131,7 +138,7 @@ test('sandbox: startup, hub, stock editor, toolbar, persistence, launch and map'
       return { overflow: bar.scrollWidth - bar.clientWidth, outside: buttons.filter(e => { const r = e.getBoundingClientRect(); return r.left < b.left - 1 || r.right > b.right + 1 || r.bottom > b.bottom + 1; }).map(e => e.getAttribute('aria-label') || e.textContent) };
     });
     expect(fit).toEqual({ overflow: 0, outside: [] });
-    await pixels(page);
+    await pixels(page, { scene: true });
   });
   await page.setViewportSize({ width: 1366, height: 768 });
   await test.step('craft IndexedDB and program save survive reload', async () => {
@@ -163,12 +170,12 @@ test('sandbox: startup, hub, stock editor, toolbar, persistence, launch and map'
     await page.keyboard.press('z'); await page.keyboard.press('Space');
     await expect.poll(() => page.evaluate(() => window.__flight.input.state.throttle)).toBe(1);
     await expect.poll(() => altitudeAGL(page), { timeout: 60_000 }).toBeGreaterThan(altitude + 10);
-    await pixels(page);
+    await pixels(page, { scene: true });
   });
   await test.step('map opens and closes through keyboard', async () => {
     await page.keyboard.press('m');
     await page.waitForFunction(() => window.__flight.mapMode);
-    await pixels(page);
+    await pixels(page, { scene: true });
     await page.keyboard.press('m');
     await page.waitForFunction(() => !window.__flight.mapMode);
   });
