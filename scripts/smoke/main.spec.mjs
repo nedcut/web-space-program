@@ -142,7 +142,7 @@ test('sandbox: startup, hub, stock editor, toolbar, persistence, launch and map'
     await page.getByRole('button', { name: /^Continue/ }).click();
     await page.getByRole('button', { name: /Integration Hall/ }).click();
     await openLibrary(page);
-    await page.getByLabel('Search craft library').fill('Smoke persisted craft');
+    await page.getByLabel('Search vehicles').fill('Smoke persisted craft');
     const row = page.getByTestId('saved-craft').filter({ hasText: 'Smoke persisted craft' });
     await row.getByRole('button', { name: 'Load', exact: true }).click();
     await expect(page.getByLabel('Craft name', { exact: true })).toHaveValue('Smoke persisted craft');
@@ -152,6 +152,7 @@ test('sandbox: startup, hub, stock editor, toolbar, persistence, launch and map'
   await test.step('launch, keyboard throttle and staging produce ascent', async () => {
     await page.getByRole('button', { name: /^Launch/ }).click();
     await page.waitForFunction(() => !!window.__flight && !document.querySelector('.loading-screen'));
+    await page.waitForFunction(() => Number.isFinite(window.__flight.world.active?.state.telemetry.altitudeAGL));
     const altitude = await page.evaluate(() => window.__flight.world.active.state.telemetry.altitudeAGL);
     await page.keyboard.press('z'); await page.keyboard.press('Space');
     await expect.poll(() => page.evaluate(() => window.__flight.input.state.throttle)).toBe(1);
@@ -176,7 +177,7 @@ test('quick-start challenge loads a flight', async ({ page }) => {
   await page.getByRole('button', { name: 'Challenges', exact: true }).click();
   await page.getByRole('button', { name: 'Fly challenge', exact: true }).click();
   await page.waitForFunction(() => !!window.__flight && !document.querySelector('.loading-screen'));
-  await expect(page.getByRole('button', { name: 'Challenges', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Scenarios', exact: true })).toBeVisible();
 });
 test('settings UI scale changes and closes', async ({ page }) => {
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -184,7 +185,7 @@ test('settings UI scale changes and closes', async ({ page }) => {
   const scale = page.getByRole('slider', { name: 'UI scale', exact: true });
   await scale.focus(); await page.keyboard.press('ArrowRight'); await scale.blur();
   await expect(scale).toHaveValue('1.05');
-  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Done', exact: true }).first().click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('wsp.settings.v1')).uiScale)).toBe(1.05);
 });
