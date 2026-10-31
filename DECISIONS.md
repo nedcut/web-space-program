@@ -2013,7 +2013,7 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
 
 ## Shell playtest sessions (2026-10-31)
 
-- `npm run play` is a production-build-only CLI backed by one detached daemon,
+- `npm run playtest` is a production-build-only CLI backed by one detached daemon,
   loopback Vite preview and fresh Chromium context per named session. Evidence is
   local and ignored. Player commands use real DOM/keyboard/pointer events; triage
   JavaScript is separate and makes the log ineligible for player replay.

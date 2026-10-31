@@ -210,7 +210,15 @@ try {
   let queue = Promise.resolve();
   server = http.createServer((req, res) => {
     let body = ''; req.on('data', b => body += b);
-    req.on('end', () => { queue = queue.then(async () => {
+    req.on('end', () => {
+      // Stop skips the queue and the page: a hung command must not block shutdown.
+      let stop = false; try { stop = JSON.parse(body).command === 'stop'; } catch { /* handled in the queue */ }
+      if (stop) {
+        void appendFile(path.join(dir, 'actions.jsonl'), JSON.stringify({ version: 1, step: ++step, command: 'stop', args: [], options: {}, ok: true, summary: 'Stopped (evidence retained)', errors: [] }) + '\n')
+          .finally(() => { res.end(JSON.stringify({ ok: true, output: 'Stopped (evidence retained)' })); void close(); });
+        return;
+      }
+      queue = queue.then(async () => {
       const start = Date.now(); let a, output, ok = true;
       try { a = JSON.parse(body); step++; output = await execute(a); }
       catch (e) { ok = false; output = e.message; }
@@ -219,7 +227,6 @@ try {
       if (fresh.length) output = `ERRORS SINCE LAST COMMAND:\n${fresh.join('\n')}\n${output}`;
       await appendFile(path.join(dir, 'actions.jsonl'), JSON.stringify({ version: 1, step, ...a, ...current, ok, summary: output, errors: fresh, wallMs: Date.now() - start }) + '\n');
       res.end(JSON.stringify({ ok, output: a?.command === 'look' ? output : `${output}\n${brief(current)}` }));
-      if (a?.command === 'stop') await close();
     }).catch(e => { res.end(JSON.stringify({ ok: false, output: e.stack })); }); });
   });
   await new Promise(resolve => server.listen(path.join(dir, 'control.sock'), resolve));

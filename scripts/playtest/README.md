@@ -10,9 +10,9 @@ The owner prepares `npm ci`, `npx playwright install --with-deps chromium`, and
 `npm run build`. Start never builds or installs:
 
 ```sh
-npm run play -- start --session first-hour
-npm run play -- look --session first-hour
-npm run play -- stop --session first-hour
+npm run playtest -- start --session first-hour
+npm run playtest -- look --session first-hour
+npm run playtest -- stop --session first-hour
 ```
 
 Each session owns a detached daemon, fresh Chromium context/storage, a Vite preview
@@ -35,20 +35,20 @@ No credentials or production services are needed. Settings and program state sta
 Append `--session <name>` to every command (default name: `default`). Quote text.
 
 ```sh
-npm run play -- click 'New Game'
-npm run play -- click Sandbox
-npm run play -- click Start
-npm run play -- click 'Integration Hall'
-npm run play -- click 'Browse stock vehicles'
-npm run play -- click 'Kestrel Sounding Rocket'
-npm run play -- click Launch
-npm run play -- key z
-npm run play -- key Space
-npm run play -- key Shift --hold 5
-npm run play -- look
-npm run play -- key m
-npm run play -- wait 0.1
-npm run play -- look
+npm run playtest -- click 'New Game'
+npm run playtest -- click Sandbox
+npm run playtest -- click Start
+npm run playtest -- click 'Integration Hall'
+npm run playtest -- click 'Browse stock vehicles'
+npm run playtest -- click 'Kestrel Sounding Rocket'
+npm run playtest -- click Launch
+npm run playtest -- key z
+npm run playtest -- key Space
+npm run playtest -- key Shift --hold 5
+npm run playtest -- look
+npm run playtest -- key m
+npm run playtest -- wait 0.1
+npm run playtest -- look
 ```
 
 - `look`: current scene, rounded SI telemetry (metres/km, seconds, m/s, Δv), visible UI
@@ -96,9 +96,9 @@ use Chromium compositor capture so they do not unfreeze the browser. SwiftShader
 can take much longer than the requested game time; long waits should be split.
 
 ```sh
-npm run play -- replay .playtest/first-hour/actions.jsonl --session repro --until 23
-npm run play -- look --session repro
-npm run play -- stop --session repro
+npm run playtest -- replay .playtest/first-hour/actions.jsonl --session repro --until 23
+npm run playtest -- look --session repro
+npm run playtest -- stop --session repro
 ```
 
 Replay starts with fresh storage on the **current dist build**, executes recorded
@@ -134,6 +134,6 @@ outside required CI. Full repository gate remains lint, typecheck, Vitest, build
 Diagnostics mirror `scripts/smoke/main.spec.mjs`; update both when changing policy.
 
 A trimmed 40-step UI flight is included as `scripts/playtest/examples/flight.jsonl`:
-`npm run play -- replay scripts/playtest/examples/flight.jsonl --session example`.
+`npm run playtest -- replay scripts/playtest/examples/flight.jsonl --session example`.
 It includes observations, throttle/stage, short waits and a map round trip. It is
 not a mission-completion assertion; use the manual e2e for ascent assertions.
