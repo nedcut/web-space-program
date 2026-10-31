@@ -44,8 +44,10 @@ async function main() {
       if (action.options.until && a.step > Number(action.options.until)) break;
       if (['start', 'stop', 'replay'].includes(a.command)) continue;
       console.log(`REPLAY step ${a.step}: ${a.command} ${a.args.join(' ')}`);
-      try { console.log(await request(dir, { command: a.command, args: a.args, options: a.options ?? {} })); }
-      catch (error) { if (a.ok !== false) throw error; console.log(`Expected recorded failure: ${error.message}`); }
+      try {
+        console.log(await request(dir, { command: a.command, args: a.args, options: a.options ?? {} }));
+        if (a.ok === false) console.log(`REPLAY DIVERGED at step ${a.step}: recorded failure now succeeds`);
+      } catch (error) { if (a.ok !== false) throw error; console.log(`Expected recorded failure: ${error.message}`); }
     }
     return console.log(`Replay frozen at final step. Inspect with --session ${action.options.session} look; stop when done.`);
   }
