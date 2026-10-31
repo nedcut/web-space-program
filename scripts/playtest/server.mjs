@@ -109,6 +109,7 @@ try {
     const button = page.getByRole('button', { name: value, exact: true });
     if (await button.count()) return button;
     const testid = page.getByTestId(value); if (await testid.count()) return testid;
+    const label = page.getByLabel(value, { exact: true }); if (await label.count()) return label;
     return page.getByText(value, { exact: true });
   }
   async function execute(a) {
