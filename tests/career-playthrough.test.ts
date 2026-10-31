@@ -13,6 +13,7 @@ import { arrivalPeriapsisAltitude } from '../src/game/planning/arrival';
 import { buy, hop, sensor, toOrbit } from '../scripts/career/flights';
 import { dvLeft } from '../scripts/career/planets';
 import { flyFirstRocket } from '../scripts/career/bare-pod';
+import { neutralInput } from '../src/sim/vessel';
 
 const career = (preset: 'standard' | 'challenging' | 'real' = 'standard') => new World(new Universe(preset), PART_CATALOG, DEFAULT_START_UT, 'career');
 
@@ -80,6 +81,20 @@ describe('first flights', () => {
     expect(early).toBe(false);
     expect(c.landed).toBe(true);
   }, 240_000);
+
+  it('the Earth test flight needs a flight: staging on the pad without lifting off and recovering pays nothing', () => {
+    // Playtest find: stage with the throttle cut, sit on the pad, recover -> "Test flight" completed (12,000 cr).
+    const w = career();
+    const c = w.progression.contracts.find(c => c.kind === 'return' && c.body === 'earth')!;
+    w.acceptContract(c.id);
+    w.launch(buildSoundingRocket());
+    w.stageActive();
+    for (let k = 0; k < 50 * 5; k++) w.tick(0.02, neutralInput({ throttle: 0 }));
+    expect(w.active!.state.situation).toBe('landed');
+    expect(c.landed).toBe(false);
+    w.recoverActive();
+    expect(c.status).toBe('active');
+  });
 
   it('a splashdown completes the Earth test flight and every scale can launch something at once', () => {
     const w = career();
