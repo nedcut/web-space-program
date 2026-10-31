@@ -65,6 +65,37 @@ try {
         warp: t.warpLabel, crew: t.crew.map(({ name, radiationDose }) => ({ name, status: t.eva ? 'EVA' : 'aboard', radiationDose: radiationDose ?? 0 })), messages: t.messages };
     });
   }
+  // Compact, rounded summary for the agent; actions.jsonl keeps the full-precision state.
+  function brief(s) {
+    if (s.gameTime === null) return `Scene: ${s.scene}`;
+    if (s.vessel === 'lost') return `Scene: ${s.scene} | UT ${s.gameTime.toFixed(1)} s | no active vessel`;
+    const d = m => Math.abs(m) < 10000 ? `${m.toFixed(1)} m` : `${(m / 1000).toFixed(1)} km`;
+    const v = m => `${m.toFixed(1)} m/s`;
+    return [`Scene: ${s.scene} | UT ${s.gameTime.toFixed(1)} s | ${s.body}, ${s.situation}`,
+      `Altitude ${d(s.altitude)} (above terrain ${d(s.altitudeAGL)}) | vertical ${v(s.verticalSpeed)}, surface ${v(s.surfaceSpeed)}, orbital ${v(s.orbitalSpeed)}`,
+      `Apoapsis ${d(s.apoapsis)}, periapsis ${d(s.periapsis)} | throttle ${Math.round(s.throttle * 100)}%, stage ${s.stage}, Δv ${Math.round(s.deltaV ?? 0)} m/s`,
+      `SAS ${s.sas[0] ? s.sas[1] : 'off'}, RCS ${s.rcs ? 'on' : 'off'}, warp ${s.warp}`,
+      `Resources: ${s.fuel.map(r => `${r.name} ${Math.round(r.amount)}/${Math.round(r.max)}`).join(', ')}`,
+      `Crew: ${s.crew.map(c => `${c.name} (${c.status})`).join(', ') || 'none'}`,
+      ...(s.messages.length ? [`Messages: ${s.messages.map(m => m.text).join(' | ')}`] : [])].join('\n');
+  }
+  // A person takes a moment after each click or key tap; let the UI react (transitions, timers)
+  // without the agent needing a separate wait. Logged as game time like any other.
+  // Lazy UI chunks load in wall time and then need frames to render, so advance in 50 ms
+  // slices with short real pauses until the DOM structure stops changing (0.25 s min, 1 s max).
+  async function react() {
+    let ms = 0, quiet = 0, last = -1;
+    while (ms < 1500 && (ms < 250 || quiet < 8)) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await page.clock.runFor(50); ms += 50;
+      const n = await page.evaluate(() => {
+        if (!window.__playtestMutations) { window.__playtestMutations = { n: 0 }; new MutationObserver(r => { window.__playtestMutations.n += r.length; }).observe(document.body, { childList: true, subtree: true }); }
+        return window.__playtestMutations.n;
+      });
+      quiet = n === last ? quiet + 1 : 0; last = n;
+    }
+    return ms;
+  }
   async function screenshot() {
     const file = path.join(dir, `${String(step).padStart(4, '0')}.png`);
     const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
@@ -93,7 +124,7 @@ try {
       const id = `e${i + 1}`; refs.set(id, el);
       lines.push(`[${id}] ${await el.evaluate(e => `${e.getAttribute('role') || e.tagName.toLowerCase()} ${e.getAttribute('aria-label') || e.getAttribute('title') || e.textContent || e.getAttribute('placeholder') || ''}`)}`);
     }
-    return `${JSON.stringify(await state(), null, 2)}\n${await page.locator('body').ariaSnapshot()}\nControls (refs valid until UI changes):\n${lines.join('\n')}\n${await screenshot()}`;
+    return `${brief(await state())}\n${await page.locator('body').ariaSnapshot()}\nControls (refs valid until UI changes):\n${lines.join('\n')}\n${await screenshot()}`;
   }
   async function target(value, saved) {
     if (saved) {
@@ -125,7 +156,7 @@ try {
         await page.mouse.wheel(0, Number(args[0])); return 'Scrolled';
       case 'click': {
         if (args.length === 2 && args.every(v => Number.isFinite(Number(v)))) {
-          await page.mouse.click(...args.map(Number)); await settle(); refs.clear(); return 'Clicked viewport coordinates';
+          await page.mouse.click(...args.map(Number)); const ms = await react(); await settle(); refs.clear(); return `Clicked viewport coordinates (+${ms / 1000} s)`;
         }
         if (!args.length) throw new Error('click <ref|text|testid>');
         const el = await target(args.join(' '), options.target);
@@ -135,13 +166,13 @@ try {
         // Frozen rAF cannot satisfy Playwright's stability wait: visibility/uniqueness are
         // checked normally; force skips only the animation stability wait.
         if (!await el.isVisible() || !await el.isEnabled()) throw new Error('Target is hidden or disabled');
-        await el.click({ force: true }); await settle(); refs.clear(); return 'Clicked';
+        await el.click({ force: true }); const ms = await react(); await settle(); refs.clear(); return `Clicked (+${ms / 1000} s)`;
       }
-      case 'type': await page.keyboard.insertText(args.join(' ')); return 'Typed into focused field';
+      case 'type': { await page.keyboard.insertText(args.join(' ')); const ms = await react(); return `Typed into focused field (+${ms / 1000} s)`; }
       case 'key': {
         if (args.length !== 1) throw new Error('key <Playwright key> [--hold seconds]');
-        const ms = options.hold === undefined ? 0 : seconds(options.hold);
-        if (!ms) await page.keyboard.press(args[0]);
+        let ms = options.hold === undefined ? 0 : seconds(options.hold);
+        if (!ms) { await page.keyboard.press(args[0]); ms = await react(); }
         else {
           const keys = args[0].length > 1 ? args[0].split('+') : [args[0]];
           const held = [];
@@ -177,7 +208,7 @@ try {
       const current = await state(); const fresh = errors.splice(0);
       if (fresh.length) output = `ERRORS SINCE LAST COMMAND:\n${fresh.join('\n')}\n${output}`;
       await appendFile(path.join(dir, 'actions.jsonl'), JSON.stringify({ version: 1, step, ...a, ...current, ok, summary: output, errors: fresh, wallMs: Date.now() - start }) + '\n');
-      res.end(JSON.stringify({ ok, output: `${output}\nState: ${JSON.stringify(current)}` }));
+      res.end(JSON.stringify({ ok, output: a?.command === 'look' ? output : `${output}\n${brief(current)}` }));
       if (a?.command === 'stop') await close();
     }).catch(e => { res.end(JSON.stringify({ ok: false, output: e.stack })); }); });
   });

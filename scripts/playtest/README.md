@@ -51,7 +51,7 @@ npm run play -- wait 0.1
 npm run play -- look
 ```
 
-- `look`: current scene, SI telemetry (metres, seconds, m/s, m/s Δv), visible UI
+- `look`: current scene, rounded SI telemetry (metres/km, seconds, m/s, Δv), visible UI
   accessibility tree, refs `[e12]` for visible controls, and a PNG path. Open the
   PNG using your image tool. Flight telemetry includes surface/orbital speeds,
   stage, resources, crew, SAS/RCS and warp; mission/goal text is in the UI tree.
@@ -63,8 +63,8 @@ npm run play -- look
   `key Control+a`, then `type`. `key Enter` commits.
 - `key <key> [--hold <seconds>]`: Playwright key names, e.g. `Space`, `Shift`,
   `Escape`, `ArrowRight`, `Control+s`, `.` and `,`. Always releases the key,
-  including after errors. A key without hold consumes no simulation time;
-  queued actions such as staging take effect on the next `wait`/held key.
+  including after errors. A key tap without hold advances 0.4–1.5 s, like a
+  person's reaction time, so its effect (staging, a menu opening) is visible.
 - `move x y`: hover/place the pointer. `scroll <pixels>` scrolls under it (negative
   is up). For a canvas zoom, move onto the canvas first.
 - `drag x1 y1 x2 y2`: left-button pointer drag (editor camera orbit/gizmos).
@@ -89,8 +89,9 @@ are pumped in 32 ms clock increments until ready (up to 120 s wall time), so sce
 startup can consume neutral game time. This is logged; replay is approximate across
 asynchronous loading, not bit-identical or portable across different builds.
 
-`look`, `shot`, `note`, pointer commands and ordinary key presses consume no game
-time. A map/editor view may need `wait 0.1` to render after a UI action. Screenshots
+`look`, `shot`, `note`, `move`, `scroll` and `drag` consume no game time. `click`,
+`type` and key taps advance 0.4–1.5 s (until the UI stops changing, like a person's
+reaction time); the step reports how much. A slow transition may still need `wait`. Screenshots
 use Chromium compositor capture so they do not unfreeze the browser. SwiftShader
 can take much longer than the requested game time; long waits should be split.
 
