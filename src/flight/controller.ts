@@ -1055,7 +1055,8 @@ export class FlightController {
       if (this.warmup === 'pending') this.startWarmup(renderVessel);
     } else if (renderVessel) {
       const first = this.framesRendered === 0 ? performance.now() : 0;
-      this.render(renderVessel, dt);
+      // Playtest harness fast-forward (scripts/playtest): update the scene but skip the GPU submit.
+      this.render(renderVessel, dt, !(globalThis as { __wspSkipSubmit?: boolean }).__wspSkipSubmit);
       if (first) performance.measure('wsp:flight:firstFrame', { start: first });
       this.framesRendered++;
       if (now >= this.nextPixelRelease && this.sceneReady) {

@@ -1,0 +1,40 @@
+{"version":1,"step":1,"command":"click","args":["New Game"],"ok":true,"options":{"target":{"tag":"button","text":"New Game","label":null,"testid":null,"index":0}}}
+{"version":1,"step":2,"command":"click","args":["Sandbox"],"ok":true,"options":{"target":{"tag":"button","text":"Sandbox","label":null,"testid":null,"index":0}}}
+{"version":1,"step":3,"command":"click","args":["Start"],"ok":true,"options":{"target":{"tag":"button","text":"Start","label":null,"testid":null,"index":0}}}
+{"version":1,"step":4,"command":"click","args":["Integration Hall"],"ok":true,"options":{"target":{"tag":"strong","text":"Integration Hall","label":null,"testid":null,"index":0}}}
+{"version":1,"step":5,"command":"click","args":["Browse stock vehicles"],"ok":true,"options":{"target":{"tag":"button","text":"Browse stock vehicles","label":null,"testid":null,"index":0}}}
+{"version":1,"step":6,"command":"click","args":["Kestrel Sounding Rocket"],"ok":true,"options":{"target":{"tag":"div","text":"Kestrel Sounding Rocket","label":null,"testid":null,"index":5}}}
+{"version":1,"step":7,"command":"click","args":["Launch"],"ok":true,"options":{"target":{"tag":"button","text":"Launch","label":null,"testid":null,"index":0}}}
+{"version":1,"step":8,"command":"look","args":[],"ok":true,"options":{}}
+{"version":1,"step":9,"command":"key","args":["z"],"ok":true,"options":{}}
+{"version":1,"step":10,"command":"key","args":["Space"],"ok":true,"options":{}}
+{"version":1,"step":11,"command":"key","args":["Shift"],"ok":true,"options":{"hold":"5"}}
+{"version":1,"step":12,"command":"look","args":[],"ok":true,"options":{}}
+{"version":1,"step":13,"command":"key","args":["m"],"ok":true,"options":{}}
+{"version":1,"step":14,"command":"wait","args":["0.1"],"ok":true,"options":{}}
+{"version":1,"step":15,"command":"look","args":[],"ok":true,"options":{}}
+{"version":1,"step":16,"command":"key","args":["m"],"ok":true,"options":{}}
+{"version":1,"step":17,"command":"wait","args":["0.1"],"ok":true,"options":{}}
+{"version":1,"step":18,"command":"look","args":[],"ok":true,"options":{}}
+{"version":1,"step":19,"command":"note","args":["Flight observation 19: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":20,"command":"note","args":["Flight observation 20: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":21,"command":"wait","args":["0.04"],"ok":true,"options":{}}
+{"version":1,"step":22,"command":"note","args":["Flight observation 22: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":23,"command":"note","args":["Flight observation 23: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":24,"command":"wait","args":["0.04"],"ok":true,"options":{}}
+{"version":1,"step":25,"command":"note","args":["Flight observation 25: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":26,"command":"note","args":["Flight observation 26: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":27,"command":"wait","args":["0.04"],"ok":true,"options":{}}
+{"version":1,"step":28,"command":"note","args":["Flight observation 28: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":29,"command":"note","args":["Flight observation 29: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":30,"command":"wait","args":["0.04"],"ok":true,"options":{}}
+{"version":1,"step":31,"command":"note","args":["Flight observation 31: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":32,"command":"note","args":["Flight observation 32: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":33,"command":"wait","args":["0.04"],"ok":true,"options":{}}
+{"version":1,"step":34,"command":"note","args":["Flight observation 34: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":35,"command":"note","args":["Flight observation 35: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":36,"command":"wait","args":["0.04"],"ok":true,"options":{}}
+{"version":1,"step":37,"command":"note","args":["Flight observation 37: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":38,"command":"note","args":["Flight observation 38: frozen between decisions"],"ok":true,"options":{}}
+{"version":1,"step":39,"command":"wait","args":["0.04"],"ok":true,"options":{}}
+{"version":1,"step":40,"command":"note","args":["Flight observation 40: frozen between decisions"],"ok":true,"options":{}}
