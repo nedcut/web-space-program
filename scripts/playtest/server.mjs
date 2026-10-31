@@ -182,7 +182,7 @@ try {
     }).catch(e => { res.end(JSON.stringify({ ok: false, output: e.stack })); }); });
   });
   await new Promise(resolve => server.listen(path.join(dir, 'control.sock'), resolve));
-  await appendFile(path.join(dir, 'actions.jsonl'), JSON.stringify({ version: 1, step: 0, command: 'start', args: [], options: {}, ...await state(), ok: true, summary: 'Fresh storage; production build; clock frozen', errors: errors.splice(0) }) + '\n');
+  await appendFile(path.join(dir, 'actions.jsonl'), JSON.stringify({ version: 1, step: 0, command: 'start', args: [], options: {}, ...await state(), ok: true, summary: 'Fresh storage; production build; clock frozen', errors: [...errors] }) + '\n');
   await writeFile(path.join(dir, 'pid'), String(process.pid));
   await writeFile(path.join(dir, 'ready'), `Session ready: ${dir}\nPreview: http://127.0.0.1:${port}\nFrozen between commands. Run look.`);
 } catch (error) {

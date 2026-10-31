@@ -17,7 +17,8 @@ npm run play -- stop --session first-hour
 
 Each session owns a detached daemon, fresh Chromium context/storage, a Vite preview
 on a distinct OS-assigned loopback port, and `.playtest/<name>/`. Names contain
-letters, digits, `_` or `-`. Multiple sessions can coexist. Evidence directories
+letters, digits, `_` or `-`; Unix socket paths must fit 103 bytes, so long checkout
+paths need shorter session names. Multiple sessions can coexist. Evidence directories
 are never overwritten: use a new name each run. `stop` closes Chromium and Vite,
 retaining logs/screenshots. If the daemon has died, retain/rename its directory
 before reusing the name. `pid`, `daemon.log`, `ready`, and `control.sock` identify

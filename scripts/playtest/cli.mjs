@@ -18,6 +18,7 @@ function request(dir, action) {
   });
 }
 async function start(dir) {
+  if (Buffer.byteLength(path.join(dir, 'control.sock')) > 103) throw new Error('Session socket path is too long; choose a shorter session name or checkout path');
   await mkdir(path.dirname(dir), { recursive: true });
   try { await mkdir(dir); } catch { throw new Error(`Session directory exists: ${dir}. Stop it first; keep or rename old evidence before reusing its name.`); }
   const log = await open(path.join(dir, 'daemon.log'), 'a');
