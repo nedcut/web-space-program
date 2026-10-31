@@ -2010,3 +2010,17 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
 - Keep pacing/hitches as diagnostic evidence. Foreground and warm each shot; move the editor camera inside the page rather than issuing timed CDP mouse calls. CPU covers the rendering callback, not separately scheduled HUD work.
 - Use schema-separated history and a dedicated disposable main checkout behind a stable launcher. Never reset an owner checkout. Hosted CPU gates remain calibrated per operation and per runner; <7.5% A/A spread permits a >15% regression gate.
 - Four same-build captures set initial work thresholds at >30% CPU, >10% flight GPU and >30% editor GPU. Three seed spreads were at most 14.3% / 3.9% / 12.4%; the independent fourth expanded editor variation to about 18%. Cold-load and frame intervals remain informational. These shared-host margins are coarse, not 5% sensitivity.
+
+## Shell playtest sessions (2026-10-31)
+
+- `npm run play` is a production-build-only CLI backed by one detached daemon,
+  loopback Vite preview and fresh Chromium context per named session. Evidence is
+  local and ignored. Player commands use real DOM/keyboard/pointer events; triage
+  JavaScript is separate and makes the log ineligible for player replay.
+- Freeze Playwright's browser clock before navigation; advance with `runFor`, not
+  `fastForward`, so the existing main-thread frame loop and fixed-step physics
+  receive every frame. No production simulation hook or runtime overhead. Loading
+  pumps clock frames for asynchronous initialization; worker completion and scene
+  startup remain approximate replay boundaries. Screenshots use compositor capture
+  to avoid waiting for animation frames on a frozen page. Functional SwiftShader
+  checks do not establish real-GPU performance or cross-browser behavior.

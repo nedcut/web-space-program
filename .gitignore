@@ -18,3 +18,5 @@ scripts/earth-data/.cache/
 
 # Paired production CPU benchmark builds.
 dist-cpu-*/
+
+.playtest/

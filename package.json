@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "play": "vite build && vite preview --open",
+    "play": "node scripts/playtest/cli.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:browser": "playwright test --config scripts/playwright.config.mjs",
