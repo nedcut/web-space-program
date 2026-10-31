@@ -4,7 +4,7 @@ import { appendFile, writeFile, unlink, access } from 'node:fs/promises';
 import { preview } from 'vite';
 import { chromium } from '@playwright/test';
 import { browserSetup } from './browser.mjs';
-import { seconds } from './protocol.mjs';
+import { seconds, pngStats } from './protocol.mjs';
 
 const dir = process.argv[2];
 let browser, vite, server, closing = false;
@@ -100,30 +100,30 @@ try {
     const file = path.join(dir, `${String(step).padStart(4, '0')}.png`);
     const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
     await writeFile(file, Buffer.from(data, 'base64'));
-    // Match smoke pixel bounds, using compositor PNG rather than a discarded GL buffer.
+    // Match smoke pixel bounds on a 64-px-wide compositor capture decoded here: decoding the
+    // full PNG inside the frozen page took seconds per look on SwiftShader.
     const canvas = page.locator('canvas[data-engine]:visible').first();
-    const box = await canvas.count() ? await canvas.boundingBox() : null;
-    const sample = box ? (await cdp.send('Page.captureScreenshot', { format: 'png', clip: { ...box, scale: 1 } })).data : data;
-    const pixels = await page.evaluate(async b64 => {
-      const image = new Image(); image.src = `data:image/png;base64,${b64}`; await image.decode();
-      const c = document.createElement('canvas'); c.width = 64; c.height = 36;
-      const ctx = c.getContext('2d'); ctx.drawImage(image, 0, 0, 64, 36);
-      const p = ctx.getImageData(0, 0, 64, 36).data; let lit = 0, min = 255, max = 0;
-      for (let i = 0; i < p.length; i += 4) { const v = Math.max(p[i], p[i + 1], p[i + 2]); if (v > 15) lit++; min = Math.min(min, v); max = Math.max(max, v); }
-      return { lit, spread: max - min };
-    }, sample);
+    const box = await canvas.count() ? await canvas.boundingBox() : { x: 0, y: 0, width: 1366, height: 768 };
+    const tiny = (await cdp.send('Page.captureScreenshot', { format: 'png', clip: { ...box, scale: 64 / box.width } })).data;
+    const pixels = pngStats(Buffer.from(tiny, 'base64'));
     if (pixels.lit <= 20 || pixels.spread <= 10) errors.push(`Blank screenshot: ${JSON.stringify(pixels)}`);
     return `Screenshot: ${file}`;
   }
   async function look() {
     refs.clear();
-    const controls = page.locator('button, input, select, textarea, a, [role="button"], [role="tab"], [role="menuitem"], [role="slider"]');
-    const lines = [];
-    for (let i = 0; i < await controls.count(); i++) {
-      const el = controls.nth(i); if (!await el.isVisible()) continue;
-      const id = `e${i + 1}`; refs.set(id, el);
-      lines.push(`[${id}] ${await el.evaluate(e => `${e.getAttribute('role') || e.tagName.toLowerCase()} ${e.getAttribute('aria-label') || e.getAttribute('title') || e.textContent || e.getAttribute('placeholder') || ''}`)}`);
-    }
+    // One DOM pass: per-element locator calls are O(n²) and stall on long lists (Launch Pad picker).
+    const lines = await page.evaluate(() => {
+      document.querySelectorAll('[data-playtest-ref]').forEach(e => e.removeAttribute('data-playtest-ref'));
+      const out = [];
+      document.querySelectorAll('button, input, select, textarea, a, [role="button"], [role="tab"], [role="menuitem"], [role="slider"]').forEach((e, i) => {
+        const r = e.getBoundingClientRect(), st = getComputedStyle(e);
+        if (!r.width || !r.height || st.visibility === 'hidden' || st.display === 'none' || Number(st.opacity) === 0) return;
+        const id = `e${i + 1}`; e.setAttribute('data-playtest-ref', id);
+        out.push(`[${id}] ${e.getAttribute('role') || e.tagName.toLowerCase()} ${e.getAttribute('aria-label') || e.getAttribute('title') || e.textContent || e.getAttribute('placeholder') || ''}`);
+      });
+      return out;
+    });
+    for (const line of lines) { const id = line.slice(1, line.indexOf(']')); refs.set(id, page.locator(`[data-playtest-ref="${id}"]`)); }
     return `${brief(await state())}\n${await page.locator('body').ariaSnapshot()}\nControls (refs valid until UI changes):\n${lines.join('\n')}\n${await screenshot()}`;
   }
   async function target(value, saved) {
