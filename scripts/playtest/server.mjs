@@ -96,6 +96,16 @@ try {
     }
     return ms;
   }
+  // SwiftShader drawing made flight ~10x slower than game time. Skip the flight GPU submit while
+  // advancing, then draw the last 0.1 s normally so the screen is current. Same split on replay.
+  async function advance(ms) {
+    const fast = Math.max(0, ms - 100);
+    if (fast) {
+      await page.evaluate(() => { globalThis.__wspSkipSubmit = true; });
+      try { await page.clock.runFor(fast); } finally { await page.evaluate(() => { globalThis.__wspSkipSubmit = false; }); }
+    }
+    await page.clock.runFor(ms - fast);
+  }
   async function screenshot() {
     const file = path.join(dir, `${String(step).padStart(4, '0')}.png`);
     const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
@@ -178,12 +188,12 @@ try {
           const held = [];
           try {
             for (const key of keys) { await page.keyboard.down(key); held.push(key); }
-            await page.clock.runFor(ms);
+            await advance(ms);
           } finally { for (const key of held.reverse()) await page.keyboard.up(key); }
         }
         await settle(); return `Key released; advanced ${ms / 1000}s (warp applies)`;
       }
-      case 'wait': { const ms = seconds(args[0]); await page.clock.runFor(ms); await settle(); return `Advanced ${ms / 1000}s (warp applies)`; }
+      case 'wait': { const ms = seconds(args[0]); await advance(ms); await settle(); return `Advanced ${ms / 1000}s (warp applies)`; }
       case 'drag': {
         if (args.length !== 4 || args.some(v => !Number.isFinite(Number(v)))) throw new Error('drag <fromX> <fromY> <toX> <toY> (viewport pixels)');
         const [x, y, tx, ty] = args.map(Number);
