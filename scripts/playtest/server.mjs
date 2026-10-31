@@ -70,6 +70,9 @@ try {
     const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
     await writeFile(file, Buffer.from(data, 'base64'));
     // Match smoke pixel bounds, using compositor PNG rather than a discarded GL buffer.
+    const canvas = page.locator('canvas[data-engine]:visible').first();
+    const box = await canvas.count() ? await canvas.boundingBox() : null;
+    const sample = box ? (await cdp.send('Page.captureScreenshot', { format: 'png', clip: { ...box, scale: 1 } })).data : data;
     const pixels = await page.evaluate(async b64 => {
       const image = new Image(); image.src = `data:image/png;base64,${b64}`; await image.decode();
       const c = document.createElement('canvas'); c.width = 64; c.height = 36;
@@ -77,7 +80,7 @@ try {
       const p = ctx.getImageData(0, 0, 64, 36).data; let lit = 0, min = 255, max = 0;
       for (let i = 0; i < p.length; i += 4) { const v = Math.max(p[i], p[i + 1], p[i + 2]); if (v > 15) lit++; min = Math.min(min, v); max = Math.max(max, v); }
       return { lit, spread: max - min };
-    }, data);
+    }, sample);
     if (pixels.lit <= 20 || pixels.spread <= 10) errors.push(`Blank screenshot: ${JSON.stringify(pixels)}`);
     return `Screenshot: ${file}`;
   }
@@ -137,8 +140,15 @@ try {
       case 'key': {
         if (args.length !== 1) throw new Error('key <Playwright key> [--hold seconds]');
         const ms = options.hold === undefined ? 0 : seconds(options.hold);
-        await page.keyboard.down(args[0]);
-        try { if (ms) await page.clock.runFor(ms); } finally { await page.keyboard.up(args[0]); }
+        if (!ms) await page.keyboard.press(args[0]);
+        else {
+          const keys = args[0].length > 1 ? args[0].split('+') : [args[0]];
+          const held = [];
+          try {
+            for (const key of keys) { await page.keyboard.down(key); held.push(key); }
+            await page.clock.runFor(ms);
+          } finally { for (const key of held.reverse()) await page.keyboard.up(key); }
+        }
         await settle(); return `Key released; advanced ${ms / 1000}s (warp applies)`;
       }
       case 'wait': { const ms = seconds(args[0]); await page.clock.runFor(ms); await settle(); return `Advanced ${ms / 1000}s (warp applies)`; }

@@ -130,3 +130,8 @@ stock craft through the UI, launch/stage, hold throttle, check AGL >10 m, open/c
 the map, inspect browser/GPU diagnostics and stop even on failure. It is deliberately
 outside required CI. Full repository gate remains lint, typecheck, Vitest, build.
 Diagnostics mirror `scripts/smoke/main.spec.mjs`; update both when changing policy.
+
+A trimmed 40-step UI flight is included as `scripts/playtest/examples/flight.jsonl`:
+`npm run play -- replay scripts/playtest/examples/flight.jsonl --session example`.
+It includes observations, throttle/stage, short waits and a map round trip. It is
+not a mission-completion assertion; use the manual e2e for ascent assertions.
