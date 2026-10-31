@@ -177,7 +177,8 @@ try {
         // checked normally; force skips only the animation stability wait.
         if (!await el.isVisible() || !await el.isEnabled()) throw new Error('Target is hidden or disabled');
         // force skips Playwright's hit-target check too: refuse a click an overlay would receive instead.
-        const cover = await el.evaluate(e => { const r = e.getBoundingClientRect(), hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !hit || e.contains(hit) ? null : `${hit.tagName.toLowerCase()}${hit.className && typeof hit.className === 'string' ? '.' + hit.className.split(' ')[0] : ''}`; });
+        // Scroll first (as the forced click would) so clipped list rows are hit-tested where they will be clicked.
+        const cover = await el.evaluate(e => { e.scrollIntoView({ block: 'center', inline: 'center' }); const r = e.getBoundingClientRect(), hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !hit || e.contains(hit) ? null : `${hit.tagName.toLowerCase()}${hit.className && typeof hit.className === 'string' ? '.' + hit.className.split(' ')[0] : ''}`; });
         if (cover) throw new Error(`Target is covered by ${cover}`);
         await el.click({ force: true }); const ms = await react(); await settle(); refs.clear(); return `Clicked (+${ms / 1000} s)`;
       }
