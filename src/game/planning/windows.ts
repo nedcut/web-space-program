@@ -6,7 +6,7 @@
  */
 import type { PlanningWorld } from './context';
 import type { Orbit } from '../../sim/orbit/api';
-import { propagate, period, solveLambertAround, inertialDvToManeuver } from '../../sim/orbit';
+import { propagate, period, solveLambertAround, inertialDvToManeuver, stateToElements, timeToPeriapsis } from '../../sim/orbit';
 import { add, cross, dot, length, normalize, scale, sub, type Vec3 } from '../../util/vec3';
 import { nelderMead } from '../../util/nelderMead';
 import { ejectionVelocity } from '../interplanetary';
@@ -22,7 +22,7 @@ export interface TransferWindow {
   dv: number;
   /** Estimated circular capture Δv, m/s; zero for direct atmospheric entry. */
   captureDv?: number;
-  /** Estimated flight time to the target (its SOI edge for a return), s. */
+  /** Estimated flight time from the burn to periapsis at the target, s. */
   timeOfFlight: number;
   /** 'now' is the cheapest departure within the next revolution; 'window' a later local minimum. */
   kind: 'now' | 'window';
@@ -75,9 +75,10 @@ function outbound(o: Orbit, world: PlanningWorld, targetId: string, t: number, t
 /**
  * Escape estimate from a moon's orbit at `t` back to its parent with the given periapsis radius: the return
  * orbit leaves the moon's distance in any plane through the parent-moon line (angle `phi`) with any radial speed,
- * and the hyperbolic excess it needs is ejected from the vessel's position at `t`.
+ * and the hyperbolic excess it needs is ejected from the vessel's position at `t`. The flight time is worked out only
+ * when `timed` (the polished options): per scan sample it would triple the search's cost.
  */
-function homeward(o: Orbit, world: PlanningWorld, parentId: string, moonId: string, peGoal: number, t: number, phi: number, radial: number): Sample | null {
+function homeward(o: Orbit, world: PlanningWorld, parentId: string, moonId: string, peGoal: number, t: number, phi: number, radial: number, timed = false): (Sample & { phi: number; vr: number }) | null {
   const u = world.universe, parent = u.body(parentId), mu = parent.gm;
   const m = u.ephem.getRelativeState(moonId, t);
   const rc = length(m.position);
@@ -94,10 +95,20 @@ function homeward(o: Orbit, world: PlanningWorld, parentId: string, moonId: stri
   const dv = length(dvv);
   if (!Number.isFinite(dv)) return null;
   const c = inertialDvToManeuver(s, dvv);
-  const tof = Math.PI * Math.sqrt(((rc + peGoal) / 2) ** 3 / mu);
+  // Climb out of the moon's sphere of influence on the escape hyperbola, then fly the return conic to periapsis.
+  const tof = timed ? escapeTime(o.mu, length(s.position), length(excess), u.body(moonId).soi)
+    + timeToPeriapsis(stateToElements(mu, parentId, m.position, need, t), t) : 0;
   const capture = isDirectEntry(parent, peGoal - parent.radius) ? 0
     : Math.sqrt(Math.max(0, dot(need, need) + 2 * mu * (1 / peGoal - 1 / rc))) - Math.sqrt(mu / peGoal);
-  return { t, dv, tof, capture, seed: [c.prograde, c.normal, c.radial] };
+  return { t, dv, tof, capture, seed: [c.prograde, c.normal, c.radial], phi, vr: radial };
+}
+
+/** Time on an escape hyperbola (excess speed `vInf`) from periapsis radius `rp` out to radius `r`, s. */
+function escapeTime(mu: number, rp: number, vInf: number, r: number): number {
+  if (!(r > rp) || !(vInf > 0)) return 0;
+  const a = mu / (vInf * vInf), e = 1 + rp / a;
+  const F = Math.acosh((r / a + 1) / e);
+  return Math.sqrt(a ** 3 / mu) * (e * Math.sinh(F) - F);
 }
 
 /** Group samples by revolution: the cheapest of the first revolution is "now"; later local minima are windows. */
@@ -187,7 +198,7 @@ export function transferWindows(world: PlanningWorld, targetId: string, search: 
       for (let j = 0; j < phis; j++) for (const vr of radials) {
         const phi = (2 * Math.PI * j) / phis;
         const s = homeward(o, world, targetId, central.id, peGoal, t, phi, vr);
-        if (s && (!best || s.dv < best.dv)) best = { ...s, phi, vr };
+        if (s && (!best || s.dv < best.dv)) best = s;
       }
       return best;
     };
@@ -199,7 +210,7 @@ export function transferWindows(world: PlanningWorld, targetId: string, search: 
     }
     const polish = (w: TransferWindow): TransferWindow => {
       const start = samples.reduce((x, y) => (Math.abs(y.t - w.departure) < Math.abs(x.t - w.departure) ? y : x));
-      let best: Sample = start;
+      let best = start;
       const arg = coarse(start.t, true) ?? start;
       if (arg.dv < best.dv) best = arg;
       nelderMead(x => {
@@ -209,6 +220,7 @@ export function transferWindows(world: PlanningWorld, targetId: string, search: 
         if (s && s.dv < best.dv) best = s;
         return s ? s.dv : 1e9;
       }, [0, 0, 0], [T / 96, 0.13, 0.1 * vMoon], 120);
+      best = homeward(o, world, targetId, central.id, peGoal, best.t, best.phi, best.vr, true) ?? best;
       return { ...w, departure: best.t, wait: best.t - world.ut, dv: best.dv, captureDv: best.capture, timeOfFlight: best.tof, seed: best.seed };
     };
     return pickWindows(samples, search.earliest, T, world.ut, max).map(polish);

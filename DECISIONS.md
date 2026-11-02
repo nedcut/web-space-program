@@ -2024,3 +2024,8 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   startup remain approximate replay boundaries. Screenshots use compositor capture
   to avoid waiting for animation frames on a frozen page. Functional SwiftShader
   checks do not establish real-GPU performance or cross-browser behavior.
+
+## Planner arrival times and empty trims (2026-11-02, fix/planner-friction)
+- Transfer flight times, both the departure estimates and the verified timeline, run from the burn to periapsis at the target, not to SOI entry: the estimates aim at the target's centre, so periapsis is the arrival both can measure. Return estimates include the climb out of the moon's SOI. They are worked out only for the polished options, because doing it for every scan sample tripled the search time.
+- Entry trim adds no node when the return already enters inside the corridor and the trim is under 0.05 m/s. Execute next node completes such a node without burning.
+- A departure list belongs to the body and vessel it was listed from. An SOI change or a vessel switch drops it.
