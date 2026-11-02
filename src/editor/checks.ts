@@ -39,7 +39,13 @@ export function preflightChecks(craft: CraftDef, catalog: Map<string, PartDef>, 
   }
   for (const p of engines) {
     const engine = engineModule(p)!;
-    if (Object.entries(engine.propellants).some(([id, ratio]) => ratio && id !== 'intakeAir' && availableResource(v, p.uid, id as ResourceId) <= 1e-9)) add(`fuel-${p.uid}`, `${p.def.name}: no usable fuel path. Check tanks and crossfeed.`, [p.uid]);
+    const missing = Object.entries(engine.propellants).filter(([id, ratio]) => ratio && id !== 'intakeAir' && availableResource(v, p.uid, id as ResourceId) <= 1e-9).map(([id]) => id as ResourceId);
+    if (!missing.length) continue;
+    // Fuel only flows through stack nodes: a tank holding it on a surface mount is the usual cause (F1).
+    const mounted = v.parts.find(t => t.attachNode === 'srf' && t.parent !== null && missing.some(id => (t.resources[id] ?? 0) > 0));
+    const host = mounted && v.cache.byUid.get(mounted.parent!);
+    if (mounted && host) add(`fuel-${p.uid}`, `${p.def.name}: no usable fuel path. ${mounted.def.name} is surface-mounted on ${host.def.name}, and fuel flows only through stack nodes. Pick it up and attach it to a node.`, [p.uid, mounted.uid]);
+    else add(`fuel-${p.uid}`, `${p.def.name}: no usable fuel path. Check tanks and crossfeed.`, [p.uid]);
   }
   for (const p of v.parts.filter(p => p.def.modules.some(m => m.type === 'decoupler'))) {
     const cut = new Set(decouplerCutChildren(v, p));
