@@ -695,6 +695,7 @@ export class FlightController {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', cancel);
+    window.addEventListener('blur', abort);
     el.addEventListener('contextmenu', menu);
     return () => {
       window.clearTimeout(timer);
@@ -702,6 +703,7 @@ export class FlightController {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('blur', abort);
       el.removeEventListener('contextmenu', menu);
     };
   }

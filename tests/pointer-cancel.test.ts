@@ -153,6 +153,18 @@ describe('editor canvas pointer gestures', () => {
     expect(h.internals.altDown).toBe(false);
   });
 
+  it('window blur mid-drag ends the gesture: no click, hovering does not orbit', async () => {
+    const h = await editorHarness();
+    h.fire('pointerdown', { x: 100, y: 100 });
+    h.fire('pointermove', { x: 120, y: 100 });
+    h.win.dispatchEvent(new Event('blur'));
+    const yaw = h.internals.gYaw;
+    h.fire('pointermove', { x: 200, y: 100 });
+    h.fire('pointerup', { x: 200, y: 100 });
+    expect(h.internals.gYaw).toBe(yaw);
+    expect(h.click).not.toHaveBeenCalled();
+  });
+
   it('mouse: drag orbits without a click, a still press clicks', async () => {
     const h = await editorHarness();
     const yaw = h.internals.gYaw;
@@ -209,6 +221,18 @@ describe('flight camera pointer drag', () => {
     h.detach();
   });
 
+  it('window blur mid-drag stops the drag without a fling', () => {
+    const h = cameraHarness();
+    h.down({ button: 2, x: 100, y: 100 });
+    h.win('pointermove', { x: 140, y: 100 });
+    h.win('blur', {});
+    const yaw = h.internals.tYaw;
+    expect(h.internals.yawVel).toBe(0);
+    h.win('pointermove', { x: 300, y: 100 }); // hover after refocus, button long released
+    expect(h.internals.tYaw).toBe(yaw);
+    h.detach();
+  });
+
   it('mouse: drag orbits and a quick release flings', () => {
     const h = cameraHarness();
     const yaw = h.internals.tYaw;
@@ -258,6 +282,19 @@ describe('flight part pick (right-click / long-press)', () => {
     h.down(touch(1, 100, 100));
     h.down(touch(2, 400, 300));
     vi.advanceTimersByTime(1000);
+    expect(h.picked).toEqual([]);
+    h.detach();
+  });
+
+  it('window blur drops a pending pick', async () => {
+    vi.useFakeTimers();
+    const h = await partPickHarness();
+    h.down(touch(1, 100, 100));
+    h.win('blur', {});
+    vi.advanceTimersByTime(1000);
+    h.down({ button: 2, x: 200, y: 50 });
+    h.win('blur', {});
+    h.win('pointerup', { button: 2, x: 200, y: 50 });
     expect(h.picked).toEqual([]);
     h.detach();
   });

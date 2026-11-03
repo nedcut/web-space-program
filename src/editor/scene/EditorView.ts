@@ -1272,9 +1272,13 @@ export class EditorView {
     if (this.gizmoDrag) this.endGizmoDrag(false);
   }
 
-  /** Key-ups are lost while the window is unfocused, so held modifiers would stick. */
+  /** Key-ups and pointer-ups are lost while the window is unfocused, so held modifiers and drags would stick. */
   private onBlur = () => {
     this.altDown = this.shiftDown = this.partOnlyDown = false;
+    const d = this.drag;
+    if (!d) return;
+    this.cancelGesture();
+    try { this.renderer.domElement.releasePointerCapture(d.id); } catch { /* not captured */ }
   };
 
   /** Move the camera target sideways (screen right is positive), within the hall. */

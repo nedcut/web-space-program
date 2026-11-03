@@ -517,12 +517,10 @@ export class FlightCamera {
       if (performance.now() - this.lastMove > 60) this.yawVel = this.pitchVel = 0;
       else { this.yawVel *= 0.35; this.pitchVel *= 0.35; }
     };
-    // The browser took the touch (or the pen left range): stop where we are, no fling.
-    const cancel = (e: PointerEvent) => {
-      if (this.dragPointer !== e.pointerId) return;
-      this.dragPointer = null;
-      this.yawVel = this.pitchVel = 0;
-    };
+    // The browser took the touch (or the pen left range), or the window lost focus mid-drag (its pointerup never
+    // arrives): stop where we are, no fling.
+    const stop = () => { this.dragPointer = null; this.yawVel = this.pitchVel = 0; };
+    const cancel = (e: PointerEvent) => { if (this.dragPointer === e.pointerId) stop(); };
     const wheel = (e: WheelEvent) => {
       if (!enabled()) return;
       e.preventDefault();
@@ -536,6 +534,7 @@ export class FlightCamera {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', cancel);
+    window.addEventListener('blur', stop);
     el.addEventListener('wheel', wheel, { passive: false });
     el.addEventListener('contextmenu', ctx);
     return () => {
@@ -543,6 +542,7 @@ export class FlightCamera {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('blur', stop);
       el.removeEventListener('wheel', wheel);
       el.removeEventListener('contextmenu', ctx);
     };
