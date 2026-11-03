@@ -30,8 +30,14 @@
  */
 export class AdaptiveQuality {
   scale = 1;
-  /** Intentional frame pacing must not be mistaken for GPU overload. */
-  frameRateCap = 0;
+  private cap = 0;
+  /** Intentional frame pacing must not be mistaken for GPU overload. A new cap moves the budget: judge afresh. */
+  get frameRateCap(): number { return this.cap; }
+  set frameRateCap(cap: number) {
+    if (cap === this.cap) return;
+    this.cap = cap;
+    this.restartJudgement();
+  }
   readonly min = 0.5;
   /** Lowest scale used to reach a frame rate above 60 fps (uncapped high-refresh display). */
   readonly highRateMin = 0.75;
@@ -69,9 +75,22 @@ export class AdaptiveQuality {
   /** Ignore frames for the next `ms` of frame time (a known transient stall, not sustained load). */
   hold(ms: number): void {
     this.holdMs = Math.max(this.holdMs, ms);
+    this.restartJudgement();
+  }
+
+  /**
+   * Frames before a discontinuity (context restore, scene load, new frame-rate cap) do not describe the frames
+   * after it: an open reduction episode or full-resolution trial would compare against the wrong means. The scale
+   * and the backoff timers stay.
+   */
+  private restartJudgement(): void {
     this.resetWindow();
     this.bad = 0;
     this.goodMs = 0;
+    this.episode = null;
+    this.probe = null;
+    this.floorWindows = 0;
+    this.floorSum = 0;
   }
 
   /**
@@ -209,7 +228,7 @@ export class AdaptiveQuality {
   }
 
   /** Frame-time goal: the cap's interval (never faster than the display), or the display interval when uncapped. */
-  get targetMs(): number { return this.frameRateCap ? Math.max(this.refreshMs, 1000 / this.frameRateCap) : this.refreshMs; }
+  get targetMs(): number { return this.cap ? Math.max(this.refreshMs, 1000 / this.cap) : this.refreshMs; }
 
   private resetWindow(): void {
     this.elapsed = 0; this.frames = 0; this.slow = 0; this.slow60 = 0; this.gpuSum = 0; this.gpuN = 0; this.cpuSum = 0; this.cpuN = 0;

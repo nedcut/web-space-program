@@ -104,6 +104,8 @@ interface BodyVisual {
   orbitLine?: Line2;
   label: HTMLDivElement;
   renderer?: PlanetRenderer;
+  /** performance.now() of the last frame this body was resolved (drawn as a sphere); see releaseIdleRenderers. */
+  resolvedAt: number;
   resourceMaterial?: THREE.MeshStandardMaterial;
   labelBox: LabelBox;
   iconBox: LabelBox;
@@ -117,6 +119,15 @@ interface BodyVisual {
  * (handles at HANDLE_OFFSET plus their icon) does. Closer nodes are drawn at the nearest clear spot with a leader.
  */
 const NODE_CLEAR_PX = 14, GIZMO_CLEAR_PX = HANDLE_OFFSET + 16;
+
+/**
+ * Body renderers (baked surface texture, sky, imagery) are built the first time a body resolves to a disc. A tour
+ * of many bodies would otherwise keep every one until the map is disposed. Beyond MAP_RENDERERS_KEPT, renderers
+ * of bodies not resolved for MAP_RENDERER_IDLE_MS are released, longest unseen first. The limit is generous: the
+ * pool keeps only a couple of bakes, so going back to a released body shows it plain until a new bake lands (~11 s
+ * at High), as on a first visit. A whole planetary system stays within it.
+ */
+const MAP_RENDERERS_KEPT = 16, MAP_RENDERER_IDLE_MS = 30000;
 
 /** Hover-sampled trajectory polyline (body-relative positions, float64). */
 interface TrajectoryPoly { body: string; patch: number; times: Float64Array; points: Float64Array; count: number }
@@ -245,6 +256,8 @@ export class MapView {
   private screenLine: ScreenPolyline = screenPolyline(1100);
   private hover: Hover = NONE;
   private drag: Drag | null = null;
+  /** Bodies holding a PlanetRenderer (see MAP_RENDERERS_KEPT). */
+  private liveRenderers = 0;
   private pointer = { x: 0, y: 0, inside: false, clientX: 0, clientY: 0 };
   private lastHoverAt = 0;
   private lastPlaced = -Infinity;
@@ -573,7 +586,7 @@ export class MapView {
       sphere.visible = false;
       // Only resolved (drawn) spheres need a current matrix; picking refreshes the rest on demand.
       sphere.matrixAutoUpdate = false;
-      const vis: BodyVisual = { body: b, sphere, icon, label, familyColor: familyColor(b, bodies), lineStyle: -1,
+      const vis: BodyVisual = { body: b, sphere, icon, label, familyColor: familyColor(b, bodies), lineStyle: -1, resolvedAt: 0,
         labelBox: { x: 0, y: 0, width: b.name.length * 7 + 8, height: 18 }, iconBox: { x: 0, y: 0, width: 14, height: 14 } };
       if (b.orbit && b.parent) {
         const parent = bodies.get(b.parent)!;
@@ -706,6 +719,7 @@ export class MapView {
       const ringFade = vis.body.kind === 'moon' && vis.body.id !== identity ? Math.min(1, (orbitPx - moonMin) / (moonMin * 1.5)) : 1;
       vis.sphere.userData.mapVisible = visible;
       const resolved = visible && angular*h > 1.5;
+      if (resolved) vis.resolvedAt = now;
       // Orientation only matters for a sphere that is drawn (or about to be, below).
       const rotation = resolved ? this.ephem.bodyRotation(vis.body.id, t) : undefined;
       if (rotation) {
@@ -722,7 +736,7 @@ export class MapView {
         const sunRadius = this.bodies.get(this.sunId)!.body.radius;
         const scale = { ...SCALE_PRESETS.standard, s: sunRadius / 696340000 };
         vis.renderer = new PlanetRenderer(vis.body, vis.body.solidSurface ? createTerrain(vis.body) : null,
-          { farOnly: true, quality, scale, registerUniforms: false, sunRadiance: 4 });
+          { farOnly: true, releaseBakePixels: true, quality, scale, registerUniforms: false, sunRadiance: 4 });
         // Flight's HDR compositor transforms these shaders; direct map rendering needs its own output transform.
         vis.renderer.root.traverse(object => {
           if (!(object instanceof THREE.Mesh)) return;
@@ -740,6 +754,7 @@ export class MapView {
           }
         });
         this.scene.add(vis.renderer.root);
+        this.liveRenderers++;
       }
       const resource = this.resourceBodies.has(vis.body.id);
       vis.sphere.visible = resolved && resource;
@@ -789,6 +804,7 @@ export class MapView {
     }
     this.labelCount = labelCount;
     this.bodyIcons.finish(iconCount);
+    if (this.liveRenderers > MAP_RENDERERS_KEPT) this.releaseIdleRenderers(now);
     this.updateSoiShells(u);
     const breadcrumbId = u.referenceBody ?? identity;
     const focusBody = this.bodies.get(breadcrumbId);
@@ -990,7 +1006,10 @@ export class MapView {
     // Constant screen size, but never much larger than the orbit the node sits on: zoomed far out a full-size
     // gizmo would bury the very trajectory being planned. Too small to edit: only the node marker remains.
     const at = this.gizmoState!.position, orbitPx = Math.hypot(at.x, at.y, at.z) / worldPerPx;
-    const dragging = drag?.kind === 'handle';
+    // A drag (or hover) belongs to its node: if that node is gone, the node now carrying the gizmo is drawn at rest.
+    const held = drag?.kind === 'handle' && drag.nodeId === node.id ? drag : null;
+    const hovered = this.hover.kind === 'handle' && this.hover.nodeId === node.id ? this.hover.index : -1;
+    const dragging = !!held;
     const show = orbitPx >= GIZMO_MIN_ORBIT_PX || dragging;
     // Constant screen distance at every zoom: zooming out to see the encounter must not crowd the handles onto
     // the node centre (which is what slides the node along the orbit).
@@ -1000,23 +1019,23 @@ export class MapView {
     for (let i = 0; i < this.gizmo.length; i++) {
       const g = this.gizmo[i], d = this.gizmoDirs![g.axis];
       const direction = this.gizmoDirection.set(d.x, d.y, d.z).multiplyScalar(g.sign).normalize();
-      const held = drag?.kind === 'handle' && drag.index === i;
+      const isHeld = held?.index === i;
       // Foreshortened arms (handles pointing towards/away from the camera) are stretched to keep their distance;
       // one still too short points at the camera and is hidden. The held handle keeps its stretch while dragged.
-      if (!held) {
+      if (!isHeld) {
         g.icon.position.copy(base).addScaledVector(direction, offset * worldPerPx);
         const s = this.frame.toScreen(g.icon.position, u, g.screen);
         g.stretch = handleStretch(Math.hypot(s.x - this.gizmoCenter.x, s.y - this.gizmoCenter.y), offset);
       }
-      const px = (offset + (held ? Math.max(-offset * .7, Math.min(130, drag.pull)) : 0)) * g.stretch;
+      const px = (offset + (isHeld ? Math.max(-offset * .7, Math.min(130, held.pull)) : 0)) * g.stretch;
       g.line.position.copy(base);
       g.line.quaternion.copy(this.gizmoQuat.setFromUnitVectors(this.up, direction));
       g.line.scale.set(1, Math.max(1e-9, px * worldPerPx), 1);
       g.icon.position.copy(base).addScaledVector(direction, px * worldPerPx);
-      g.icon.scale.setScalar((held || (this.hover.kind === 'handle' && this.hover.index === i) ? this.gizmoIconPx * 1.25 : this.gizmoIconPx) * this.spritePx);
+      g.icon.scale.setScalar((isHeld || hovered === i ? this.gizmoIconPx * 1.25 : this.gizmoIconPx) * this.spritePx);
       this.frame.toScreen(g.icon.position, u, g.screen);
       const armPx = Math.hypot(g.screen.x - this.gizmoCenter.x, g.screen.y - this.gizmoCenter.y);
-      g.visible = g.line.visible = g.icon.visible = show && (held || armPx >= HANDLE_MIN_PX);
+      g.visible = g.line.visible = g.icon.visible = show && (isHeld || armPx >= HANDLE_MIN_PX);
     }
   }
 
@@ -1377,6 +1396,20 @@ export class MapView {
   setHudBlocks(selector: string) {
     if (selector && !this.hudRects) this.hudRects = new HudRectCache();
     this.hudRects?.setSelector(selector);
+  }
+
+  /** Over MAP_RENDERERS_KEPT: release the renderers of bodies unseen for MAP_RENDERER_IDLE_MS, longest unseen first. */
+  private releaseIdleRenderers(now: number) {
+    while (this.liveRenderers > MAP_RENDERERS_KEPT) {
+      let oldest: BodyVisual | undefined;
+      for (const vis of this.orderedBodies) {
+        if (vis.renderer && now - vis.resolvedAt > MAP_RENDERER_IDLE_MS && (!oldest || vis.resolvedAt < oldest.resolvedAt)) oldest = vis;
+      }
+      if (!oldest) return;
+      oldest.renderer!.dispose(); // also removes its root from the scene
+      oldest.renderer = undefined;
+      this.liveRenderers--;
+    }
   }
 
   dispose() {

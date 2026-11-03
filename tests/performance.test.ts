@@ -161,6 +161,33 @@ describe('adaptive scale', () => {
     run(q, 120, 1.1);
     expect(q.scale).toBeLessThan(1); // sustained slowness after the hold still counts
   });
+  // As the loading-transient case above: the scale sits at the >60 fps floor until a full-resolution trial starts.
+  const startTrial = () => {
+    const q = new AdaptiveQuality();
+    for (let t = 0, i = 0; t < 4000; i++) { const ms = i % 2 ? 24 : 8.33; q.update(ms, true, undefined, 2); t += ms; }
+    for (let t = 0, i = 0; t < 20000 && q.scale < 1; i++) { const ms = i % 6 === 5 ? 16.7 : 8.33; q.update(ms, true, undefined, 2); t += ms; }
+    expect(q.scale).toBe(1);
+    return q;
+  };
+  it('does not judge a full-resolution trial against the budget of a frame-rate cap the player has since changed', () => {
+    const q = startTrial();
+    q.frameRateCap = 60; // a steady 60 fps at full resolution now meets the target
+    for (let t = 0; t < 4000; t += 16.7) q.update(16.7, true, undefined, 2);
+    expect(q.scale).toBe(1);
+  });
+  it('does not judge a trial across a hold (scene load) against the means measured before it', () => {
+    const q = startTrial();
+    q.hold(3000);
+    for (let t = 0; t < 3000; t += 100) q.update(100, true, undefined, 2);
+    // The new scene is pixel-bound: a fifth of the frames miss at full resolution, which only lower scales fix.
+    for (let t = 0, acc = 0; t < 10000;) {
+      acc += 0.2 * q.scale * q.scale;
+      const ms = acc >= 1 ? 16.7 : 8.33;
+      if (acc >= 1) acc -= 1;
+      q.update(ms, true, undefined, 2); t += ms;
+    }
+    expect(q.scale).toBeLessThanOrEqual(0.8);
+  });
 });
 it('batching preserves world bounds, transparent leaves and shared geometry', () => {
   const group=new THREE.Group(), geometry=new THREE.BoxGeometry(), mat=new THREE.MeshBasicMaterial();
