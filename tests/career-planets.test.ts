@@ -16,7 +16,7 @@ import { neutralInput } from '../src/sim/vessel';
 import { length, normalize, scale, add, sub, v3 } from '../src/util/vec3';
 import { qFromTo } from '../src/util/quat';
 import { toOrbit } from '../scripts/career/flights';
-import { capture, dvLeft, survey, toPlanet } from '../scripts/career/planets';
+import { arrive, capture, correct, depart, dvLeft, planDeparture, survey, toPlanet } from '../scripts/career/planets';
 import { createUniverse } from '../src/sim/bodies';
 import { createEphemeris } from '../src/sim/orbit';
 import { nextLaunchSeason } from '../src/sim/orbit/season';
@@ -138,9 +138,25 @@ describe('planetary probes', () => {
     w.launch(craft);
     const biomes = new Set<string>(), mars = w.universe.body('mars');
     expect(toOrbit(w, biomes, 220000, 2)).toBeNull();
-    const leg = toPlanet(w, biomes, 'mars', 0, mars.atmosphere!.height * 1.5);
-    expect(leg.err).toBeNull();
-    expect(leg.leg!.contact).toBe(true);
+    // The player takes the planner's "now" option in this season (the next good one is ~770 days later).
+    const pe = mars.atmosphere!.height * 1.5;
+    const listed = planTransferToBody(w, 'mars', { periapsisAltitude: pe })!;
+    const now = listed.windows!.find(o => o.kind === 'now')!;
+    const d = planDeparture(w, 'mars', pe, now.departure);
+    if (typeof d === 'string') throw new Error(d);
+    expect(d.time - w.ut).toBeLessThan(86400);
+    const dv = depart(w, 0);
+    expect(typeof dv).toBe('number');
+    coastUntil(w, w.ut + 120 * 86400, { stopOnSoi: true });
+    const cruise = w.ut, span = d.encounter - w.ut;
+    let trimDv = 0;
+    for (const f of [0.05, 0.6, 0.9]) {
+      const used = correct(w, d, Math.max(cruise + span * f, w.ut + 600), 0);
+      expect(typeof used === 'number' || used === 'no contact', String(used)).toBe(true);
+      if (typeof used === 'number') trimDv += used;
+    }
+    expect(arrive(w, biomes, d)).toBeNull();
+    expect(w.canControl()).toBe(true);
     const earthGm = () => length(sub(w.universe.ephem.getBodyState('earth', w.ut).position, w.universe.ephem.getBodyState('mars', w.ut).position)) / 1e9;
     const arrival = earthGm();
     const band = Math.max(2 * mars.atmosphere!.height, mars.radius * 0.25) * 0.95;
@@ -148,7 +164,7 @@ describe('planetary probes', () => {
     expect(cap.err).toBeNull();
     const o = w.orbitSummary(w.active!);
     const science = survey(w, biomes, 6);
-    console.log('GOLDEN petrel-real-mars', JSON.stringify({ arrivalEarthGm: arrival, pe: o.pe, ap: o.ap, capture: cap.dv, dvLeft: dvLeft(w), science, leg: leg.leg }));
+    console.log('GOLDEN petrel-real-mars', JSON.stringify({ arrivalEarthGm: arrival, pe: o.pe, ap: o.ap, departure: dv, trimDv, capture: cap.dv, dvLeft: dvLeft(w), science }));
     // Earth 200–283 Gm away: inside the Arcwatch's new reach, outside the old one.
     expect(arrival).toBeGreaterThan(200);
     expect(arrival).toBeLessThan(283);

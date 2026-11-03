@@ -2044,5 +2044,9 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   4.4 km/s, too much with the capture; the planner's options list also offers the next season (~870 days) from the same
   orbit at 3.7 km/s. The Real tip says to take it; the playthrough's departure pick allows 95 % of the Δv aboard (90 %
   rejected that option by 38 m/s; the true need is ~5.5 of 5.76 km/s).
+- **What main could already do:** the third Real season after the Moon (~day 1,770, Earth 180 Gm at arrival, 0.76 km/s
+  capture) works with the old Arcwatch and Petrel; seasons one and two fail (link or capture Δv). This change makes the
+  second (~day 1,030) work and keeps the link through the survey. A guidance-only fix (send players to the third
+  season) was the alternative: no balance change, but a five-year wait that the hub cannot reliably predict.
 - **Playthrough fix:** `descend` returns "lost" when the craft is already gone; on main the Real route crashed when a
   Kestrel hop was destroyed (hops at 45–75° are now lost on descent on main: not investigated here).
