@@ -144,6 +144,7 @@ describe('part actions and action groups', () => {
     expect(v.parts[0].chute!.phase).toBe('armed');
     step(v, [{ kind: 'part', uid: 1, action: 'chute.cut' }]);
     expect(v.parts[0].chute!.phase).toBe('cut');
+    expect(v.parts[0].chute!.cda).toBe(0);
     expect(partActions(TEST_CATALOG.get('leg')!)).toContain('deploy.toggle');
   });
 

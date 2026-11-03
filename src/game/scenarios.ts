@@ -4,6 +4,7 @@ import { propagate, stateToElements } from '../sim/orbit';
 import { add, cross, normalize, scale, sub, v3, type Vec3 } from '../util/vec3';
 import { qRotate } from '../util/quat';
 import { quatFromBasis, type World, type WorldVessel } from './world';
+import { setVesselMode } from './world/vesselMode';
 
 /**
  * Scenario helpers shared by dev URL scenarios (`?scenario=`) and tests.
@@ -19,8 +20,7 @@ export function placeInCircularOrbit(world: World, wv: WorldVessel, bodyId: stri
   const pole = qRotate(u.ephem.bodyRotation(bodyId, t), v3(0, 0, 1));
   const east = normalize(cross(pole, up));
   const vel = scale(east, Math.sqrt(b.gm / (b.radius + altitude)));
-  wv.mode = 'physics';
-  wv.fixed = undefined;
+  setVesselMode(wv, { mode: 'physics' });
   wv.body = bodyId;
   wv.state.position = add(bs.position, scale(up, b.radius + altitude));
   wv.state.velocity = add(bs.velocity, vel);
@@ -90,8 +90,7 @@ export function placeOnSurface(world: World, wv: WorldVessel, bodyId: string, di
   const rel = scale(inertialUp, u.body(bodyId).radius + u.terrain(bodyId).heightAt(up.x, up.y, up.z) + world.bottomOffset(wv.state) + 0.05);
   const bs = u.ephem.getBodyState(bodyId, world.ut);
   wv.body = bodyId;
-  wv.mode = 'physics';
-  wv.fixed = undefined;
+  setVesselMode(wv, { mode: 'physics' });
   wv.state.position = add(bs.position, rel);
   wv.state.velocity = add(bs.velocity, u.ephem.surfaceVelocity(bodyId, rel, world.ut));
   wv.state.orientation = quatFromBasis(east, inertialUp, cross(east, inertialUp));

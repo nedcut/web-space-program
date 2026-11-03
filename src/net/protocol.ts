@@ -30,7 +30,7 @@ export type HazardDelta = Pick<PartState, 'uid' | 'radiationDose' | 'ambientTemp
 export type VesselDelta = { id: string; body: string; hazards?: HazardDelta[]; crewDose?: { id: string; dose: number }[] } & (
   | { mode: 'rails'; orbit: NonNullable<WorldVessel['orbit']>; precise?: WorldVessel['precise'] }
   | { mode: 'landedRails'; fixed: NonNullable<WorldVessel['fixed']>; state?: DynamicState }
-  | { mode: 'physics' | 'prelaunch'; state: DynamicState; fixed?: WorldVessel['fixed'] }
+  | { mode: 'physics' | 'prelaunch'; state: DynamicState; fixed?: WorldVessel['fixed']; holdDown?: WorldVessel['holdDown'] }
 );
 export type NetEvent = VesselEvent | { type: 'flag'; flag: PlantedFlag } | { type: 'chat'; playerId: string; name: string; text: string } | { type: 'join' | 'leave'; playerId: string; name: string };
 export interface RoomState { players: Player[]; rate: number; requestedRate: number; heldBy: string[]; queue: { playerId: string; site: LaunchSite }[] }

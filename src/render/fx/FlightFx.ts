@@ -63,6 +63,8 @@ export class FlightFx {
   private readonly engineLightPosition = new THREE.Vector3();
   private readonly engineLightColor = new THREE.Color();
   private density = 0;
+  /** Vessel the column and the situation edge belong to: another vessel starts its own (no splash, no joined trail). */
+  private vesselId: string | undefined;
   private situation: VesselState['situation'] | undefined;
   private lastStep = 0;
   private readonly torque = new THREE.Vector3();
@@ -107,6 +109,7 @@ export class FlightFx {
     const elapsed = this.lastUt === undefined ? Math.max(0,dt) : Math.max(0,simulationTime-this.lastUt);
     const teleported = this.lastUt !== undefined && this.lastOrigin.distanceToSquared(origin)>1e12;
     this.lastUt = simulationTime; this.lastOrigin.copy(origin);
+    if(v.id!==this.vesselId) { this.vesselId=v.id; this.situation=undefined; this.column.active=false; }
     // Rails/teleports must not stretch old trails across interplanetary distances.
     if(elapsed>1 || teleported) { this.pool.clear(); this.debris.clear(); this.fairingPanels.clear(); this.column.active=false; this.flash=0; }
     const step = Math.min(1,elapsed); this.lastStep=step; this.clock += step;

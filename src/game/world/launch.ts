@@ -13,6 +13,7 @@ import { Universe } from '../universe';
 import type { World, WorldVessel } from '../world';
 import { quatFromBasis } from '../../util/basis';
 import type { WorldInternals } from './internals';
+import { setVesselMode } from './vesselMode';
 const bodyQuat = (u: Universe, id: string, t: number) => u.ephem.bodyRotation(id, t);
 
 /** Lowest point of the vessel along its own -Y axis, measured from the COM (positive number). */
@@ -176,8 +177,7 @@ export function launchRunway(this: World, internals: WorldInternals, craft: Craf
   const wv: WorldVessel = { state, mode: 'prelaunch', body: bodyId, fixed: { pos: scale(up, body.radius + terrainH + height), orient } };
   internals.syncFixed(wv, this.ut);
   // Free on its wheels straight away (no clamps): physics from the first step.
-  wv.mode = 'physics';
-  wv.fixed = undefined;
+  setVesselMode(wv, { mode: 'physics' });
   state.situation = 'landed';
   this.vessels.set(state.id, wv);
   this.activeId = state.id;

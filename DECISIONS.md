@@ -2025,6 +2025,22 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   to avoid waiting for animation frames on a frozen page. Functional SwiftShader
   checks do not establish real-GPU performance or cross-browser behavior.
 
+## Pad hold-down is explicit, saved vessel state (2026-11-03, fix/sm-holddown)
+
+- An engine lit on the pad without staging (part action or action group) is a **static
+  fire**: the vessel is simulated under the clamps (thrust, propellant use, exhaust and pad effects) and is never
+  released on its own. Staging turns it into a launch hold, whose rules are unchanged (liftoff at thrust ≥ weight;
+  release when thrust is zero or settles below weight; 3 s at most). Shutting every engine down ends the static fire.
+  Previously the engine stayed lit but frozen (no thrust) on the pad, and the same vessel launched within 3 s after
+  save/load.
+- `WorldVessel.holdDown` (`{ launch, time, thrust, com }`, `world/vesselMode.ts`) is saved with the vessel, so
+  load resumes the same hold with its clock. Save version stays 1: the field is optional, and an older save with a
+  lit engine on the pad loads as a static fire (the safe reading of an ambiguous state).
+- `setVesselMode` is the one place a vessel changes mode; it keeps `orbit` iff rails, `fixed` iff
+  landedRails/prelaunch and `holdDown` only in prelaunch. `vesselModeProblems` checks this (plus "no lit engine
+  on the pad outside a hold") in tests and every fuzz frame, not at runtime.
+- Pad commands applied before a held step are not applied again inside the step (a toggle used to undo itself).
+
 ## Throttle and SAS across quickload and EVA (2026-11-02)
 
 - Quickload and Load resume the pilot's controls exactly. Saves carry the pilot's throttle lever as optional
@@ -2099,6 +2115,20 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   season) was the alternative: no balance change, but a five-year wait that the hub cannot reliably predict.
 - **Playthrough fix:** `descend` returns "lost" when the craft is already gone; on main the Real route crashed when a
   Kestrel hop was destroyed (hops at 45–75° are now lost on descent on main: not investigated here).
+
+## One active-vessel transition (2026-11-03, fix/sm-vessel-switch)
+
+- `FlightController.syncActiveVessel` is the only place that reacts to a new `world.activeId`, whoever changed it
+  ([ ] keys, map Fly, station list, EVA, boarding, loss). It runs every frame and right after the controller's own
+  switches. Co-op keeps its owned-vessel reset.
+- A vessel nobody flies gets neutral controls, so the pilot's controls do not follow them to the next vessel:
+  throttle 0, SAS and RCS off, momentary SAS hold dropped, trim cleared, docking mode and own-port choice cleared,
+  launch countdown cancelled (with a message), queued stage/gear/jump/commands dropped, alerts cleared. A running
+  assist program is cancelled and its restore commands go to the vessel it flew. Kept: stage lock, precision, map
+  view, and the camera mode unless the new vessel's cycle lacks it (an astronaut gets Auto).
+- Docking mode ends when a target goes away; it can still be switched on without a target. "Target gone → speed
+  mode Auto" lives only in `SpeedModeTracker`.
+- The pad clamps follow the last active vessel still on the pad while another vessel is flown.
 
 ## One session at a time (2026-11-03, fix/sm-scene-session)
 `game.session` (`program | training | scenario`) replaces the separate `trainingActive`/`scenarioActive` flags, which

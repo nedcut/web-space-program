@@ -299,7 +299,32 @@ export interface ChuteContext {
 /** Fraction of the rated load at which a reefed canopy may open fully. */
 const FULL_OPEN_LOAD = 0.2;
 
-/** Advance parachute state machines (arming, semi/full deploy animation, cutting on overload). */
+/**
+ * Arm a stowed parachute (staging or the deploy action): it opens on its own once the air allows. Emits the
+ * 'chute' event. Returns false when the chute is not stowed.
+ */
+export function armChute(v: VesselState, p: PartState, events: VesselEvent[]): boolean {
+  const c = p.chute;
+  if (!c || c.phase !== 'stowed') return false;
+  c.phase = 'armed';
+  events.push({ type: 'chute', vesselId: v.id, partUid: p.uid, phase: 'armed' });
+  return true;
+}
+
+/** Cut an armed or open parachute (the cut action, or overload). Emits the 'chute' event. Cut is final. */
+export function cutChute(v: VesselState, p: PartState, events: VesselEvent[]): boolean {
+  const c = p.chute;
+  if (!c || c.phase === 'stowed' || c.phase === 'cut') return false;
+  c.phase = 'cut';
+  c.cda = 0;
+  events.push({ type: 'chute', vesselId: v.id, partUid: p.uid, phase: 'cut' });
+  return true;
+}
+
+/**
+ * Advance parachute state machines (opening when armed, semi/full deploy animation, cutting on overload). Arming
+ * and cutting by command go through {@link armChute} / {@link cutChute}; `progress` is read only while semi/full.
+ */
 export function updateParachutes(v: VesselState, ctx: ChuteContext, dt: number, events: VesselEvent[]): void {
   for (const p of v.parts) {
     const c = p.chute;
@@ -315,8 +340,8 @@ export function updateParachutes(v: VesselState, ctx: ChuteContext, dt: number, 
       }
     } else if (c.phase === 'semi' || c.phase === 'full') {
       if (overload) {
-        c.phase = 'cut';
-        c.cda = 0;
+        cutChute(v, p, events);
+        continue;
       } else {
         c.progress = Math.min(1, c.progress + dt / CHUTE_DEPLOY_TIME);
         const e = smoothstep(0, 1, c.progress);
