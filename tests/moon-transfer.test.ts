@@ -7,7 +7,7 @@ import { DEFAULT_START_UT } from '../src/game/store';
 import { planTransferToBody } from '../src/game/autopilot';
 import { periapsisRadius, propagate, stateToElements } from '../src/sim/orbit';
 import { latLonToUnit, LAUNCH_SITE } from '../src/sim/terrain';
-import { neutralInput } from '../src/sim/vessel';
+import { neutralInput, setSituation } from '../src/sim/vessel';
 import { add, cross, length, normalize, scale, sub, v3 } from '../src/util/vec3';
 import { requireIntactFlight } from './helpers/structural';
 
@@ -20,7 +20,7 @@ function parkingOrbit(preset: 'standard' | 'real', ut: number, alt: number) {
   const up = latLonToUnit(LAUNCH_SITE.lat, LAUNCH_SITE.lon), east = normalize(cross(v3(0, 0, 1), up));
   const pos = e.fromBodyFixed('earth', scale(up, r), world.ut), vel = scale(e.fromBodyFixed('earth', east, world.ut), Math.sqrt(b.gm / r));
   vessel.state.position = add(bs.position, pos); vessel.state.velocity = add(bs.velocity, vel);
-  vessel.state.situation = 'flying'; vessel.mode = 'rails'; vessel.fixed = undefined;
+  setSituation(vessel.state, 'flying'); vessel.mode = 'rails'; vessel.fixed = undefined;
   vessel.orbit = stateToElements(b.gm, b.id, pos, vel, world.ut);
   return { world, vessel };
 }

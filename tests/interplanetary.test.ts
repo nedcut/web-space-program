@@ -9,6 +9,7 @@ import { porkchopGrid, planInterplanetaryTransfer } from '../src/game/interplane
 import { add, v3 } from '../src/util/vec3';
 import { executeNode, runAutopilot, planTransferToBody } from '../src/game/autopilot';
 import { stateToElements } from '../src/sim/orbit';
+import { setSituation } from '../src/sim/vessel';
 
 function parked() {
   const w = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
@@ -17,7 +18,7 @@ function parked() {
   const r = b.radius + 120000, bs = w.universe.ephem.getBodyState('earth', w.ut);
   const pos = v3(r, 0, 0), vel = v3(0, Math.sqrt(b.gm / r) * Math.cos(0.5), Math.sqrt(b.gm / r) * Math.sin(0.5));
   v.state.position = add(bs.position, pos); v.state.velocity = add(bs.velocity, vel);
-  v.state.situation = 'flying'; v.mode = 'rails'; v.fixed = undefined;
+  setSituation(v.state, 'flying'); v.mode = 'rails'; v.fixed = undefined;
   v.orbit = stateToElements(b.gm, b.id, pos, vel, w.ut);
   return w;
 }

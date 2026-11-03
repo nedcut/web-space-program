@@ -12,7 +12,7 @@ import { deserializeWorld, serializeWorld } from '../src/game/persistence';
 import { placeInCircularOrbit } from '../src/game/scenarios';
 import { buildOrbiter } from '../src/editor/stockCrafts';
 import { EditorSession } from '../src/editor/session';
-import { neutralInput, cloneVessel, splitVessel } from '../src/sim/vessel';
+import { neutralInput, cloneVessel, splitVessel, setSituation } from '../src/sim/vessel';
 import type { CraftDef } from '../src/sim/vessel/types';
 import { qIdentity } from '../src/util/quat';
 import { add, scale, v3 } from '../src/util/vec3';
@@ -91,7 +91,7 @@ describe('science lifecycle', () => {
     expect(ship.state.parts.flatMap(p => p.scienceData ?? [])).toHaveLength(0);
     expect(detached.parts[0].scienceData?.[0].id).toBe(data.id);
     const eva = w.goEva()!;
-    eva.state.situation = 'landed';
+    setSituation(eva.state, 'landed');
     const sample = w.runExperiment(eva.state.parts[0].uid, 'surfaceSample')!;
     expect(sample.value).toBe(30);
     eva.state.parts[0].visitedBodies = ['moon'];
@@ -147,7 +147,7 @@ describe('technology and funding gates', () => {
     w.progression.funds = 0; expect(() => w.launch(craft())).toThrow('Insufficient funds'); expect(w.vessels.size).toBe(0);
     const distant = world(); const v = distant.launch(craft());
     const earth = distant.universe.body('earth');
-    v.state.situation = 'landed'; v.mode = 'physics';
+    setSituation(v.state, 'landed'); v.mode = 'physics';
     v.state.position = add(distant.universe.ephem.getBodyState('earth', distant.ut).position, distant.universe.ephem.fromBodyFixed('earth', scale(latLonToUnit(-LAUNCH_SITE.lat, LAUNCH_SITE.lon + 180), earth.radius), distant.ut));
     distant.recoverActive(); expect(distant.progression.funds).toBeCloseTo(60000 - cost + Math.floor(cost * 0.2), -1);
     const sandbox = world('sandbox'); sandbox.launch(buildOrbiter()); expect(sandbox.progression.funds).toBe(60000);

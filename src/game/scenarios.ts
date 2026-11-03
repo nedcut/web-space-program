@@ -1,5 +1,5 @@
 import type { CraftDef } from '../sim/vessel/types';
-import { freePorts } from '../sim/vessel';
+import { freePorts, setSituation } from '../sim/vessel';
 import { propagate, stateToElements } from '../sim/orbit';
 import { add, cross, normalize, scale, sub, v3, type Vec3 } from '../util/vec3';
 import { qRotate } from '../util/quat';
@@ -24,7 +24,7 @@ export function placeInCircularOrbit(world: World, wv: WorldVessel, bodyId: stri
   wv.body = bodyId;
   wv.state.position = add(bs.position, scale(up, b.radius + altitude));
   wv.state.velocity = add(bs.velocity, vel);
-  wv.state.situation = 'flying';
+  setSituation(wv.state, 'flying');
   const fwd = normalize(vel);
   const side = normalize(cross(fwd, up));
   wv.state.orientation = quatFromBasis(side, fwd, cross(side, fwd));
@@ -96,6 +96,6 @@ export function placeOnSurface(world: World, wv: WorldVessel, bodyId: string, di
   wv.state.velocity = add(bs.velocity, u.ephem.surfaceVelocity(bodyId, rel, world.ut));
   wv.state.orientation = quatFromBasis(east, inertialUp, cross(east, inertialUp));
   wv.state.angularVelocity = v3();
-  wv.state.situation = 'landed';
+  setSituation(wv.state, 'landed');
   for (const part of wv.state.parts) if (part.leg) part.leg.deployed = true;
 }

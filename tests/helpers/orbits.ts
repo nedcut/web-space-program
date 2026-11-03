@@ -7,6 +7,7 @@ import { stateToElements } from '../../src/sim/orbit';
 import { qRotate } from '../../src/util/quat';
 import { add, cross, scale, v3, type Vec3 } from '../../src/util/vec3';
 import { requireIntactFlight } from './structural';
+import { setSituation } from '../../src/sim/vessel';
 
 export interface OrbitSpec {
   /** Periapsis / apoapsis altitude above the body's radius, m (apoapsis defaults to circular). */
@@ -46,7 +47,7 @@ export function placeOnState(world: World, vessel: WorldVessel, body: string, s:
   vessel.body = body;
   vessel.state.position = add(bs.position, s.position);
   vessel.state.velocity = add(bs.velocity, s.velocity);
-  vessel.state.situation = 'flying'; vessel.mode = 'rails'; vessel.fixed = undefined;
+  setSituation(vessel.state, 'flying'); vessel.mode = 'rails'; vessel.fixed = undefined;
   vessel.orbit = stateToElements(b.gm, body, s.position, s.velocity, world.ut);
   vessel.state.angularVelocity = v3();
 }

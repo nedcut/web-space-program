@@ -5,7 +5,7 @@ import { PART_CATALOG } from '../src/data/parts';
 import { RESOURCES, resourceMass } from '../src/data/resources';
 import { concentrationAt } from '../src/sim/resources/deposits';
 import { advanceISRU } from '../src/sim/vessel/isru';
-import { buildVessel, cloneVessel, neutralInput, stepVessel } from '../src/sim/vessel';
+import { buildVessel, cloneVessel, neutralInput, stepVessel, setSituation } from '../src/sim/vessel';
 import { totalResource } from '../src/sim/vessel/resources';
 import { vacuumEnv } from '../src/sim/vessel/testing';
 import { serializeWorld, deserializeWorld } from '../src/game/persistence';
@@ -92,7 +92,7 @@ describe('resource machinery', () => {
     if (source) design.parts.push({ uid: 9, partId: source, parent: 5, attachNode: 'srf', position: v3(), rotation: qIdentity() });
     const w = new World(u, PART_CATALOG, 0); const wv = w.launch(design);
     wv.state.parts[4].resources.liquidFuel = 10; wv.state.parts[4].resources.oxidizer = 20;
-    wv.mode = 'landedRails'; wv.state.situation = 'landed';
+    wv.mode = 'landedRails'; setSituation(wv.state, 'landed');
     wv.state.parts[1].drillDeployed = true; wv.state.parts[1].drillDeploy = 1;
     const v = cloneVessel(wv.state), c = w.localConcentration(wv);
     // Constant inertial test frame, ground contact latches landed each step.
@@ -107,7 +107,7 @@ describe('resource machinery', () => {
     const design = craft();
     design.parts.push({ uid: 9, partId: source, parent: 5, attachNode: 'srf', position: v3(), rotation: qIdentity() });
     const w = new World(u, PART_CATALOG, 0), wv = w.launch(design);
-    wv.mode = 'landedRails'; wv.state.situation = 'landed';
+    wv.mode = 'landedRails'; setSituation(wv.state, 'landed');
     wv.state.parts[1].drillDeployed = true; wv.state.parts[1].drillDeploy = 1;
     for (const p of wv.state.parts) if (p.maxResources.electricCharge) p.resources.electricCharge = 0;
     const tank = wv.state.parts[4]; tank.resources.liquidFuel = 1.2; tank.resources.oxidizer = 2.2;
@@ -170,7 +170,7 @@ describe('resource machinery', () => {
     const w = new World(u, PART_CATALOG, 0); const wv = w.launch(craft());
     expect(w.surveyBody()).toBe(false);
     const b = u.body('moon'), r = b.radius * 1.5, bs = u.ephem.getBodyState(b.id, 0), q = u.ephem.bodyRotation(b.id, 0);
-    wv.body = b.id; wv.mode = 'physics'; wv.state.situation = 'flying';
+    wv.body = b.id; wv.mode = 'physics'; setSituation(wv.state, 'flying');
     wv.state.position = add(bs.position, qRotate(q, v3(r, 0, 0)));
     wv.state.velocity = add(bs.velocity, qRotate(q, v3(0, Math.sqrt(b.gm / r), 0)));
     expect(w.surveyBody()).toBe(false);

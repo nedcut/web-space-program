@@ -3,7 +3,7 @@ import { Universe } from '../src/game/universe';
 import { World } from '../src/game/world';
 import { PART_CATALOG, getPart } from '../src/data/parts';
 import { buildVessel, cloneVessel } from '../src/sim/vessel/assembly';
-import { stepVessel, neutralInput } from '../src/sim/vessel';
+import { stepVessel, neutralInput, setSituation } from '../src/sim/vessel';
 import { vacuumEnv } from '../src/sim/vessel/testing';
 import { radiationRate, hazardAtmosphere, sunExposure } from '../src/sim/hazards/environment';
 import { pressureLimit, stepHazards } from '../src/sim/hazards/vessel';
@@ -63,7 +63,7 @@ describe('environmental hazards', () => {
   it('integrates orbital radiation on rails, including the parent belt inside a moon SOI', () => {
     const world = new World(u, PART_CATALOG, 0), wv = world.launch(craft('probe-cairn'));
     const b = u.body('jupiter'), bs = u.ephem.getBodyState(b.id, 0), r = b.radius * 2.5;
-    wv.body = b.id; wv.mode = 'physics'; wv.fixed = undefined; wv.state.situation = 'flying';
+    wv.body = b.id; wv.mode = 'physics'; wv.fixed = undefined; setSituation(wv.state, 'flying');
     wv.state.position = add(bs.position, u.ephem.fromBodyFixed(b.id, v3(r, 0, 0), 0));
     wv.state.velocity = add(bs.velocity, u.ephem.fromBodyFixed(b.id, v3(0, Math.sqrt(b.gm / r), 0), 0));
     world.advanceRailsTo(900);

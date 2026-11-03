@@ -36,7 +36,7 @@ export function flyFirstRocket(mode: DescentMode, shield = false, opts: { world?
   const w = opts.world ?? new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT, 'sandbox');
   w.launch(opts.craft ?? firstRocket(shield));
   const events: string[] = [];
-  let apex = 0, maxG = 0, lit = false, staged = false, last = 0;
+  let apex = 0, maxG = 0, lit = false, staged = false, last = 0, touchdown = NaN;
   const atmo = w.universe.body('earth').atmosphere!.height;
   const phases = new Map<number, string>();
   for (let k = 0; k < 50 * 3000 && w.active && !w.active.state.destroyed; k++) {
@@ -44,7 +44,8 @@ export function flyFirstRocket(mode: DescentMode, shield = false, opts: { world?
     const v = length(f.surfVel);
     apex = Math.max(apex, f.altitude);
     const s = w.active.state;
-    if ((s.situation === 'landed' || s.situation === 'splashed') && lit && k > 500) break;
+    if (s.situation !== 'flying' && lit && k > 500 && Number.isNaN(touchdown)) touchdown = last;
+    if (s.settledSituation !== 'flying' && lit && k > 500) break;
     const falling = f.surfVel.x * f.up.x + f.surfVel.y * f.up.y + f.surfVel.z * f.up.z < 0;
     let input;
     if (!lit || propulsion(s).thrust > 0) {
@@ -74,7 +75,7 @@ export function flyFirstRocket(mode: DescentMode, shield = false, opts: { world?
     last = v;
   }
   const lost = !w.active || w.active.state.destroyed || !w.active.state.parts.some(p => p.crew?.length);
-  return { mode, apex, touchdown: last, maxG, lost, events };
+  return { mode, apex, touchdown: Number.isNaN(touchdown) ? last : touchdown, maxG, lost, events };
 }
 
 if (process.argv[1]?.endsWith('bare-pod.ts')) {

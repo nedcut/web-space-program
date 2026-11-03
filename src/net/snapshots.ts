@@ -19,6 +19,7 @@ export function vesselDeltas(world: World): VesselDelta[] {
     const state = structuredClone({
       position: s.position, velocity: s.velocity, orientation: s.orientation, angularVelocity: s.angularVelocity,
       mass: s.mass, com: s.com, inertia: s.inertia, invInertia: s.invInertia, nextStage: s.nextStage, situation: s.situation,
+      settledSituation: s.settledSituation, airborneTime: s.airborneTime, contactTime: s.contactTime,
       sas: s.sas, telemetry: s.telemetry, eva: s.eva, destroyed: s.destroyed, groupState: s.groupState,
       parts: s.parts.map(p => ({ uid: p.uid, tweaks: p.tweaks, resources: p.resources, mass: p.mass, temperature: p.temperature,
         skinTemperature: p.skinTemperature, activated: p.activated, engine: p.engine, chute: p.chute, leg: p.leg, wheel: p.wheel,

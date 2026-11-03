@@ -232,7 +232,7 @@ export default function TrackingStation() {
   const terminateVessel = terminate ? world.vessels.get(terminate) : undefined;
   const actions = (e: FleetEntry) => {
     const v = world.vessels.get(e.id);
-    const recoverable = v && v.body === 'earth' && (v.mode === 'prelaunch' || v.state.situation === 'landed' || v.state.situation === 'splashed');
+    const recoverable = v && v.body === 'earth' && (v.mode === 'prelaunch' || v.state.settledSituation !== 'flying');
     return <div className="tracking-actions">
       <Button className="btn small" onClick={() => focusEntry(e)} title="Focus the view (F)">Focus</Button>
       {v && <Button className="btn small primary" onClick={() => fly(e.id)} title="Take control (Enter)">Fly</Button>}

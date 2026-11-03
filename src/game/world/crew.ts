@@ -2,7 +2,7 @@ import { EVA_PART } from '../../data/eva';
 import { RESOURCES } from '../../data/resources';
 import { remoteControlAllowed } from '../../sim/comms/network';
 import { crewIds, generateAstronaut, hasControl, seatCapacity, type Astronaut, type PlantedFlag } from '../../sim/crew/crew';
-import { buildVessel, collideEvaWithHull, recomputeMassProperties, EVA_HEIGHT } from '../../sim/vessel';
+import { buildVessel, collideEvaWithHull, recomputeMassProperties, EVA_HEIGHT, setSituation } from '../../sim/vessel';
 import type { PartState, VesselState } from '../../sim/vessel/runtime';
 import type { Quat } from '../../util/quat';
 import { qConj, qFromAxisAngle, qFromTo, qIdentity, qMul, qRotate } from '../../util/quat';
@@ -202,7 +202,7 @@ function climbDown(world: World, host: WorldVessel, pod: PartState, eva: VesselS
   if (!ground) return;
   eva.position = foot;
   eva.velocity = { ...ground.surfaceVelocity };
-  eva.situation = ground.isWater ? 'splashed' : 'landed';
+  setSituation(eva, ground.isWater ? 'splashed' : 'landed');
   const upright = qMul(qFromTo(qRotate(eva.orientation, v3(0, 1, 0)), up), eva.orientation);
   const toVessel = sub(host.state.position, foot);
   const f = qRotate(upright, v3(0, 0, -1));

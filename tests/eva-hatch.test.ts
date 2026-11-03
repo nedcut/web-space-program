@@ -4,7 +4,7 @@ import { Universe } from '../src/game/universe';
 import { PART_CATALOG } from '../src/data/parts';
 import { STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { DEFAULT_START_UT } from '../src/game/store';
-import { neutralInput } from '../src/sim/vessel';
+import { neutralInput, setSituation } from '../src/sim/vessel';
 import { v3, sub, scale, length, normalize, dot, cross } from '../src/util/vec3';
 
 /** Camera attitude looking along `forward` (−Z) with `up` as screen up. */
@@ -58,7 +58,7 @@ describe('EVA hatch distance', () => {
     const up = normalize(sub(eva.state.position, w.universe.ephem.getBodyState(eva.body, w.ut).position));
     // Lifted 40 m straight up from the exit spot: the hatch (~15 m up) is ~25 m away, not the 0 m of the column.
     eva.state.position = { x: eva.state.position.x + up.x * 40, y: eva.state.position.y + up.y * 40, z: eva.state.position.z + up.z * 40 };
-    eva.state.situation = 'flying';
+    setSituation(eva.state, 'flying');
     const d = distance(w.boardingBlocker());
     const pod = ship.state.parts.find(p => p.crew)!;
     expect(d).toBeCloseTo(length(sub(w.hatchPosition(ship.state, pod), eva.state.position)), 0);

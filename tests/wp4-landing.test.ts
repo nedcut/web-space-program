@@ -5,7 +5,7 @@ import { PART_CATALOG } from '../src/data/parts';
 import { buildOrbiter } from '../src/editor/stockCrafts';
 import { DEFAULT_START_UT } from '../src/game/store';
 import { landingPrediction, type LandingRequest } from '../src/game/planning/landing';
-import { neutralInput } from '../src/sim/vessel';
+import { neutralInput, setSituation } from '../src/sim/vessel';
 import { add, cross, length, normalize, scale, sub, v3 } from '../src/util/vec3';
 import { qRotate } from '../src/util/quat';
 import { propagate, stateToElements } from '../src/sim/orbit';
@@ -19,7 +19,7 @@ function reentry() {
   const east = normalize(cross(qRotate(rotation, v3(0, 0, 1)), up));
   const radius = b.radius + 120000, velocity = add(scale(east, Math.sqrt(b.gm / radius) * .78), scale(up, -160));
   const ref = u.ephem.getBodyState('earth', world.ut);
-  vessel.mode = 'physics'; vessel.fixed = undefined; vessel.state.situation = 'flying';
+  vessel.mode = 'physics'; vessel.fixed = undefined; setSituation(vessel.state, 'flying');
   vessel.state.position = add(ref.position, scale(up, radius)); vessel.state.velocity = add(ref.velocity, velocity);
   const backwards = normalize(scale(velocity, -1)), side = normalize(cross(backwards, up));
   vessel.state.orientation = quatFromBasis(side, backwards, cross(side, backwards));

@@ -386,7 +386,7 @@ export default function FlightScene() {
 
   const c = ctrl.current;
   const active = c?.world.active;
-  const canRecover = !getScenarioRun() && !!active && active.body === 'earth' && (active.mode === 'prelaunch' || active.state.situation !== 'flying');
+  const canRecover = !getScenarioRun() && !!active && active.body === 'earth' && (active.mode === 'prelaunch' || active.state.settledSituation !== 'flying');
   return (
     <div className="fullscreen">
       {/* The controller appends its canvas here; React overlays are later siblings so they stay on top. */}
@@ -405,7 +405,7 @@ export default function FlightScene() {
           dock={multiplayer ? undefined : {
             recovery: canRecover && active && active.mode !== 'prelaunch' && !tele.eva ? (
               <Panel className="feel-hint" role="status">
-                <span style={{ flex: 1 }}>{active.state.situation === 'splashed' ? 'Splashed down' : 'Landed'} on Earth</span>
+                <span style={{ flex: 1 }}>{active.state.settledSituation === 'splashed' ? 'Splashed down' : 'Landed'} on Earth</span>
                 <Button className="btn small" onClick={recover}>Recover vessel</Button>
               </Panel>
             ) : undefined,

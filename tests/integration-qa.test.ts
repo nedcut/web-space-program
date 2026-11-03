@@ -6,7 +6,7 @@ import { TECH_NODES } from '../src/data/technology';
 import { STOCK_CRAFTS, buildTender, buildOrbiter } from '../src/editor/stockCrafts';
 import { serializeWorld, deserializeWorld } from '../src/game/persistence';
 import { game, applyCommsSettings, DEFAULT_START_UT } from '../src/game/store';
-import { cloneVessel, freePorts, mergeVessels, undock, neutralInput, buildVessel } from '../src/sim/vessel';
+import { cloneVessel, freePorts, mergeVessels, undock, neutralInput, buildVessel, setSituation } from '../src/sim/vessel';
 import { stackCraft } from '../src/sim/vessel/testing';
 import { vesselDeltas, applyDeltas, replaceWorld } from '../src/net/snapshots';
 import { advanceISRU } from '../src/sim/vessel/isru';
@@ -150,7 +150,7 @@ describe('communications and multiplayer integration', () => {
     const replica = deserializeWorld(serializeWorld(world), PART_CATALOG, universe);
     for (const mode of ['physics', 'landedRails'] as const) {
       vessel.mode = mode;
-      vessel.state.situation = 'landed';
+      setSituation(vessel.state, 'landed');
       vessel.state.parts.find(p => p.bayOpen !== undefined)!.bayOpen = true;
       vessel.state.parts.find(p => p.def.modules.some(m => m.type === 'dockingPort'))!.dockDisarmed = true;
       Object.assign(vessel.state.parts.find(p => p.def.modules.some(m => m.type === 'drill'))!, { drillDeployed: true, drillDeploy: 1 });

@@ -23,6 +23,7 @@ export {
   decouplerCutChildren,
 } from './assembly';
 export type { BuildOptions } from './assembly';
+export { SETTLE_AIRBORNE_S, SETTLE_CONTACT_S, isGrounded, packsOnOrbit, resetSettled, setSituation, settleSituation } from './settle';
 
 export {
   DEFAULT_RESOURCE_DEFS,

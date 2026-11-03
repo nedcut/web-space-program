@@ -10,6 +10,7 @@ import { localInertia, shapeRadius } from './shapes';
 import { DEFAULT_RESOURCE_DEFS, buildFeedGroups, partMass } from './resources';
 import { computeExposedAreas, bluntShieldExposure, fairingShielding } from './aero';
 import { retractablePanel } from './tweaks';
+import { SETTLE_AIRBORNE_S } from './settle';
 
 export interface BuildOptions {
   id?: string;
@@ -121,6 +122,9 @@ export function buildVessel(craft: CraftDef, partCatalog: Map<string, PartDef>, 
     invInertia: m3Zero(),
     nextStage: -1,
     situation: 'flying',
+    settledSituation: 'flying',
+    airborneTime: SETTLE_AIRBORNE_S,
+    contactTime: 0,
     sas: { mode: 'off', hold: null, integral: v3() },
     resourceDefs: defs,
     splitCount: 0,
