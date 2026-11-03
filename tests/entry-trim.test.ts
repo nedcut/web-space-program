@@ -6,7 +6,7 @@ import { DEFAULT_START_UT } from '../src/game/store';
 import { buildOrbiter, buildMoonLander } from '../src/editor/stockCrafts';
 import { buildVessel } from '../src/sim/vessel/assembly';
 import { cloneVessel } from '../src/sim/vessel/assembly';
-import { entryCorridor, enteringDragPerMass, entryDragPerMass, findEntry, planEntryTrim } from '../src/game/planning/entry';
+import { entryCorridor, enteringDragPerMass, entryDragPerMass, findEntry, MIN_TRIM_DV, planEntryTrim, trimNeeded } from '../src/game/planning/entry';
 import { createPlannerHandler } from '../src/game/planning/handler';
 import { planningSnapshot } from '../src/game/planning/client';
 import { applyEntryTrim } from '../src/game/planning/apply';
@@ -63,6 +63,16 @@ describe('entry corridor model', () => {
 });
 
 describe('entry trim', () => {
+  it('needs no node when the return is already in the corridor and the trim is too small to fly', () => {
+    const corridor = { steep: 5100, shallow: 23700, target: 19700, gLimit: 10 };
+    // The Moon playtest: periapsis 19.9 km in a 5.1–23.7 km corridor, a 0.01 m/s nudge toward the planned point.
+    expect(trimNeeded({ corridor, before: 19900, dv: 0.01 })).toBe(false);
+    expect(trimNeeded({ corridor, before: 19900, dv: MIN_TRIM_DV })).toBe(true);
+    // Outside the corridor any trim is worth flying, however small.
+    expect(trimNeeded({ corridor, before: 24000, dv: 0.01 })).toBe(true);
+    expect(trimNeeded({ corridor, before: 5000, dv: 0.01 })).toBe(true);
+  });
+
   for (const scale of ['standard', 'challenging', 'real'] as const) {
     for (const offset of [15000, -8000]) {
       it(`moves a ${offset > 0 ? 'skipping' : 'steep'} Moon return into the corridor and captures in one pass (${scale})`, () => {

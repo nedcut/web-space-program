@@ -125,7 +125,9 @@ export function lathe(profileIn: Profile, opts: LatheOpts = {}): THREE.BufferGeo
       const b = (i + 1) * n + j;
       const c2 = (i + 1) * n + j + 1;
       const d = i * n + j + 1;
-      idx.push(a, b, d, b, c2, d);
+      // A profile point on the axis collapses its ring to one point: skip the zero-area triangle there.
+      if (profile[j][0] !== 0) idx.push(a, b, d);
+      if (profile[j + 1][0] !== 0) idx.push(b, c2, d);
     }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

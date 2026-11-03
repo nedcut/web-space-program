@@ -2054,6 +2054,52 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   the far side cannot see Earth; a flyby bus would need its own core and a second vessel to fly); a longer-lived shell
   (Venus turns far too slowly). Not done: an "Earth in view at touchdown" readout in the planner.
 
+## Planner arrival times and empty trims (2026-11-02, fix/planner-friction)
+- Transfer flight times, both the departure estimates and the verified timeline, run from the burn to periapsis at the target, not to SOI entry: the estimates aim at the target's centre, so periapsis is the arrival both can measure. Return estimates include the climb out of the moon's SOI. They are worked out only for the polished options, because doing it for every scan sample tripled the search time.
+- Entry trim adds no node when the return already enters inside the corridor and the trim is under 0.05 m/s. Execute next node completes such a node without burning.
+- A departure list belongs to the body and vessel it was listed from. An SOI change or a vessel switch drops it.
+
+## Closed part meshes (2026-11-02, lathe)
+
+- Part materials stay single-sided, so every part mesh must be closed from outside: outer shells face out
+  (`lathe()` profiles run bottom to top), every opening shows an interior surface, and stack faces and nozzle
+  throats are capped. A part can sit alone in the editor, at either end of a stack, or under a smaller neighbour,
+  so no builder may rely on a neighbour to hide an open stack face. Surface-attach backs may stay open (the hull
+  covers them).
+- `tests/partFaces.test.ts` enforces this for every part at High and Low detail and in deployed states by ray tracing
+  each triangle's culled side. Pipe and hose mouths (`pipe()`) are out of scope; slivers below about 0.3% of the part
+  radius between lathes of different segment counts count as closed. Prefer extending a profile or capping it over
+  a double-sided material, which would add a material and draw.
+- `lathe()` skips the zero-area triangle where a profile point lies on the axis; caps and tips cost half as much.
+
+## Real Mars orbit with the stock Petrel (2026-11-02, fix/real-mars-orbit)
+- **Cause (two blockers, both measured headlessly).** Link: at the planner's Real Mars arrivals Earth is 215 Gm
+  (second season after the Moon) to 335 Gm (first season, its affordable option) away; the Arcwatch–ground reach was
+  200 Gm, so the probe arrived without command authority: no capture burn, no science. Δv: the capture into a long
+  ellipse after the planner's transfer costs ~1.75 km/s; the career's Petrel (two instruments aboard) arrived with 1.59.
+  Faster transfers that arrive with Earth nearer (~200 days, 145 Gm) escape southward and cost 11–12 km/s from a
+  parking orbit launched at an arbitrary time of day, so they are no fix a player can use.
+- **Arcwatch rating 5 → 10 Gm** (amends the D-015 ratings): Earth reach 200 → 283 Gm. Standard: every planet out to Saturn
+  was already inside 200 Gm; Uranus (265–315 Gm) is now reachable near close approach. Challenging Jupiter (189–309 Gm)
+  and the main-belt asteroids are now in reach for most of their synodic cycle; on Real, Mercury and Venus at every
+  geometry and Mars from 57 to 283 of its 57–400 Gm. Arcwatch-to-Arcwatch relay range doubles (5 → 10 Gm), and every
+  existing Arcwatch link is stronger, so science transmits faster (rate scales with strength). The Horizon stays the
+  dish for Neptune and beyond on every scale, and for the outer planets outside Standard.
+- **Real Petrel**: a third kick tank and a longer sustainer stage: parking-orbit Δv 5.65 → 6.09 km/s (5.32 → 5.76 with
+  the career's two instruments), 26 parts, 236 t, 91,873 cr (87,758), still level-1 pad and hall. Rejected: the
+  Horizon on the Real Petrel (−0.68 km/s and Deep Space Power, 180 more science), a longer booster (308 t: pad 2), a
+  fourth kick tank or a longer upper stage (the ascent fails).
+- **First Real season still a flyby or a wait.** From the career's parking orbit the first season's departure is
+  4.4 km/s, too much with the capture; the planner's options list also offers the next season (~870 days) from the same
+  orbit at 3.7 km/s. The Real tip says to take it; the playthrough's departure pick allows 95 % of the Δv aboard (90 %
+  rejected that option by 38 m/s; the true need is ~5.5 of 5.76 km/s).
+- **What main could already do:** the third Real season after the Moon (~day 1,770, Earth 180 Gm at arrival, 0.76 km/s
+  capture) works with the old Arcwatch and Petrel; seasons one and two fail (link or capture Δv). This change makes the
+  second (~day 1,030) work and keeps the link through the survey. A guidance-only fix (send players to the third
+  season) was the alternative: no balance change, but a five-year wait that the hub cannot reliably predict.
+- **Playthrough fix:** `descend` returns "lost" when the craft is already gone; on main the Real route crashed when a
+  Kestrel hop was destroyed (hops at 45–75° are now lost on descent on main: not investigated here).
+
 ## One active-vessel transition (2026-11-03, fix/sm-vessel-switch)
 
 - `FlightController.syncActiveVessel` is the only place that reacts to a new `world.activeId`, whoever changed it
