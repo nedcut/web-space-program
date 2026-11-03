@@ -29,6 +29,8 @@ let camera: THREE.PerspectiveCamera | null = null;
 let envRT: StudioEnvironment | null = null;
 let scheduled = false;
 let craftRequests = 0;
+/** Part renders in flight: they await shader compilation and a pause in input, possibly for longer than the idle delay. */
+let partRenders = 0;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function getThumbnail(id: string): string | undefined {
@@ -124,6 +126,11 @@ function teardown() {
 
 async function renderOne(def: PartDef): Promise<Blob> {
   if (idleTimer) clearTimeout(idleTimer);
+  partRenders++;
+  try { return await drawPart(def); } finally { partRenders--; }
+}
+
+async function drawPart(def: PartDef): Promise<Blob> {
   setup();
   const obj = createPartMesh(def);
   const box = new THREE.Box3().setFromObject(obj);
@@ -235,11 +242,14 @@ export function mountPartTurntable(canvas: HTMLCanvasElement, def: PartDef, redu
   return () => { cancelAnimationFrame(raf); resize.disconnect(); visibility.disconnect(); environment.dispose(); r.dispose(); r.forceContextLoss(); };
 }
 
-/** Release the shared context only when neither thumbnail consumer is waiting on it. */
+/** The shared renderer is needed by queued parts, a part render in flight, or a pending craft preview. */
+const rendererInUse = () => queue.length > 0 || partRenders > 0 || craftRequests > 0;
+
+/** Release the shared context only when no thumbnail consumer is using or waiting on it. */
 function scheduleTeardown() {
-  if (queue.length || craftRequests) return;
+  if (rendererInUse()) return;
   if (idleTimer) clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => { if (!queue.length && !craftRequests) teardown(); }, 4000);
+  idleTimer = setTimeout(() => { idleTimer = null; if (!rendererInUse()) teardown(); }, 4000);
 }
 
 /** Whole-craft previews share the idle queue with parts, including retries after a context loss. */

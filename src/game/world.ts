@@ -199,6 +199,9 @@ export class World {
   crew: Astronaut[] = [];
   flags: PlantedFlag[] = [];
   activeId: string | null = null;
+  /** The pilot's throttle lever for the active vessel (0..1), kept current by the flight controller. Saved so a
+   * quickload or Load resumes the flight as it was; an assist program's own throttle is not the lever. */
+  pilotThrottle = 0;
   ut: number;
   warp: WarpState = { mode: 'rails', index: 0 };
   nodes: ManeuverNode[] = [];

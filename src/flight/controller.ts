@@ -20,7 +20,7 @@ import { PART_CATALOG } from '../data/parts';
 import type { Autopilot } from '../game/autopilot';
 import { flightPredictions, targetOrbitState } from '../game/flightData';
 import type { SaveScene } from '../game/saveSlots';
-import { deserializeWorld, loadWorldFromStorage, saveWorldToStorage, serializeWorld, type SavedWorld } from '../game/persistence';
+import { deserializeWorld, loadWorldFromStorage, savedPilotThrottle, saveWorldToStorage, serializeWorld, type SavedWorld } from '../game/persistence';
 import { applyCommsSettings, cameraShakeScale, game } from '../game/store';
 import { Universe } from '../game/universe';
 import { PHYSICS_DT, World, type WorldVessel } from '../game/world';
@@ -57,7 +57,7 @@ import { BOARD_RANGE, BOARD_SPEED } from '../game/world/crew';
 import { cross, dot, length, normalize, sub, type Vec3 } from '../util/vec3';
 import { type AssistId, type AssistOptions } from './assist';
 import { landingLight, type LandingLight } from '../game/landingLight';
-import { cameraModeInfo, FlightCamera } from './camera';
+import { cameraModeCycle, cameraModeInfo, FlightCamera } from './camera';
 import { towerAvailable } from './cameraFraming';
 import * as assist from './controller/assist';
 import * as audio from './controller/audio';
@@ -70,7 +70,7 @@ import { HintTracker } from './hints';
 import type { DockingTelemetry, Telemetry } from './hud/Hud';
 import type { NavballFrame, NavballMarker } from './hud/navball';
 import { FlightInput } from './input';
-import { actionAllowedWhileSuspended } from './modals';
+import { actionAllowedInPhoto, actionAllowedWhileSuspended } from './modals';
 import { saveErrorText } from '../game/storageErrors';
 import { createPlanetLayer, type PlanetLayer } from './planets';
 import { requestBiomeMap } from '../game/biomeMaps';
@@ -150,6 +150,8 @@ export class FlightController {
   stagedCount = 0;
   sasOn = false;
   rcsOn = false;
+  /** The pilot's throttle was cut when the crew went on EVA (explained again on boarding). */
+  private evaThrottleCut = false;
   /** Astronaut jetpack switch (the RCS key on EVA). Each new EVA starts with it on in flight/space, off on the ground. */
   jetpackOn = false;
   private jetpackFor: string | null = null;
@@ -164,6 +166,10 @@ export class FlightController {
   stageLocked = false;
   /** SAS was toggled by a momentary hold (F); releasing the key toggles it back. */
   private sasHeld = false;
+  /** The vessel the pilot state here belongs to; a different `world.activeId` runs `activeVesselChanged` once. */
+  private pilotedId: string | null = null;
+  /** A navigation target was set on the previous frame (docking mode ends when it goes away). */
+  private hadTarget = false;
   private craft: CraftDef | null;
   /** Map conics of non-active vessels, refreshed at most once per second while in physics. */
   private mapOrbits = new Map<string, { orbit?: Orbit; at: number }>();
@@ -191,6 +197,8 @@ export class FlightController {
   private readonly sunDirScratch = new THREE.Vector3();
   /** Reused argument for the launch site's pad equipment (no per-frame object). */
   private readonly padVessel: PadVessel = { state: null as unknown as VesselState, held: false, firing: false };
+  /** Last active vessel that stood on the launch site (prelaunch); the pad equipment keeps holding it after a switch. */
+  private padId: string | null = null;
   private readonly effectPosition = new THREE.Vector3();
   private lastShroudJettison = '';
   private reentry = new ReentryFx();
@@ -257,17 +265,37 @@ export class FlightController {
       this.world = new World(new Universe(preset), PART_CATALOG, ut, mode);
     }
     if (craft && !this.network) this.world.launch(craft);
+    this.pilotedId = this.world.activeId;
+    this.hadTarget = !!this.world.targetId;
     const universe = this.world.universe;
     this.hints = new HintTracker(new Set(this.world.seenTips as import('./hints').HintId[]), seen => { this.world.seenTips = [...seen]; });
     this.input = new FlightInput();
+    // Quickload / Load resume the pilot's throttle and SAS as saved; a new launch into a saved world starts at zero.
+    // The SAS mode (and its held attitude) is in the saved vessel state; the first step would otherwise switch it off.
+    // Holds that need the unsaved speed reference or port selection (prograde … radial, port align) resume as an
+    // attitude hold on the current heading rather than pointing somewhere else.
+    const resumed = saved && !craft && !this.network ? this.world.active : undefined;
+    if (resumed) {
+      this.world.pilotThrottle = this.input.state.throttle = savedPilotThrottle(saved!);
+      const mode = resumed.state.sas.mode;
+      if (mode !== 'off' && !resumed.state.eva) {
+        this.sasOn = true;
+        this.sas = mode === 'target' || mode === 'antiTarget' || mode === 'maneuver' ? mode : 'stabilityAssist';
+      }
+    }
     this.cameraRig = new FlightCameraRig(this.world, this.cam, this.input.camera);
 
     this.pipeline = new RenderPipeline({ quality: getQuality(quality), toneMapping: 'aces', exposure: 1 });
     const canvas = this.pipeline.renderer.domElement;
-    Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block' });
+    // touch-action none: the canvas owns touch drags (camera orbit, map pan); otherwise the browser cancels them.
+    Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block', touchAction: 'none' });
     host.appendChild(canvas);
     this.photo = new PhotoCamera(this.pipeline, this.scene, this.cam.camera, () => new THREE.Vector3(), active => {
-      if (active) { if (this.network || !this.world.active) return false; this.photoWasPaused = this.paused; this.paused = true; this.mapMode = false; this.map.setVisible(false); this.pipeline.setMapMode(false); this.cam.clearLensShift(); }
+      if (active) {
+        if (this.network || !this.world.active) return false;
+        this.photoWasPaused = this.paused; this.paused = true;
+        this.setMapMode(false); this.cam.clearLensShift();
+      }
       else this.paused = this.photoWasPaused;
       return true;
     });
@@ -311,7 +339,7 @@ export class FlightController {
     this.disposers.push(this.attachPartPicking(canvas));
     this.disposers.push(
       this.input.onAction((a) => {
-        if (this.photo.active) return;
+        if (this.photo.active && !actionAllowedInPhoto(a)) return;
         // While paused (pause menu, vessel lost) or under a modal only the menu toggle and quickload are live;
         // a momentary SAS toggle still restores itself when its key is released.
         if ((this.paused || this.modalOpen) && !actionAllowedWhileSuspended(a)) return;
@@ -341,7 +369,7 @@ export class FlightController {
           case 'actionGroup1': case 'actionGroup2': case 'actionGroup3': case 'actionGroup4': case 'actionGroup5':
           case 'actionGroup6': case 'actionGroup7': case 'actionGroup8': case 'actionGroup9': case 'actionGroup10':
             this.fireGroup(`custom${a.slice(11)}` as ActionGroupId, undefined, true); break;
-          case 'quickload': if (!this.network) this.onQuickload?.(); break;
+          case 'quickload': this.onQuickload?.(); break;
           case 'toggleCamMode': this.cycleCameraMode(); break;
           case 'trimReset': this.world.message('Trim cleared', 'info', 1.5); break;
         }
@@ -443,7 +471,6 @@ export class FlightController {
     if (id === null) {
       if (this.world.targetId) this.world.message('Target cleared');
       this.world.setTarget(null);
-      if (this.speedMode === 'target') this.speedReference.select('auto');
       return;
     }
     if (this.world.setTarget(id, portUid)) {
@@ -489,10 +516,12 @@ export class FlightController {
     this.world.message(`${name} moved to ${to.def.name}`, 'info', 2.5);
   }
 
-  /** Fly a specific vessel within physics range (the station overview / target list), instead of cycling with [ ]. */
-  switchToVessel(id: string) {
-    if (this.network?.ownId) return;
-    if (this.world.switchTo(id)) { this.ownPortUid = null; this.world.message(`Switched to ${this.world.active!.state.name}`); }
+  /** Fly a specific vessel within physics range (the station overview / target list / map), instead of cycling with [ ]. */
+  switchToVessel(id: string): boolean {
+    if (this.network?.ownId || !this.world.switchTo(id)) return false;
+    this.syncActiveVessel();
+    this.world.message(`Switched to ${this.world.active!.state.name}`);
+    return true;
   }
 
   /** Undock the active vessel at a port (default: first docked joint). */
@@ -508,9 +537,18 @@ export class FlightController {
   private lossFocusUt = 0;
   private activeLost = false;
 
+  /** Why quicksave/quickload is unavailable in this flight, or null. Practice keeps the program's saves untouched. */
+  quickSaveBlocker(action: 'Quicksave' | 'Quickload'): string | null {
+    if (this.network) return `${action} is not available in co-op`;
+    if (getTutorial()) return `${action} is off during Training`;
+    if (game.get().scenarioActive) return `${action} is off during challenges`;
+    return null;
+  }
+
   /** `scene`: where Load resumes (default: this flight; leaving flight passes the scene being left for). */
   quicksave(slot = 'quicksave', scene: SaveScene = 'flight') {
-    if (this.network || getTutorial() || game.get().scenarioActive) return;
+    const blocked = this.quickSaveBlocker('Quicksave');
+    if (blocked) { if (slot === 'quicksave') this.world.message(blocked); return; }
     try {
       // Periodic autosaves snapshot now and write on idle tasks; a quicksave the player asked for writes immediately.
       const autosave = slot === 'autosave';
@@ -666,34 +704,43 @@ export class FlightController {
   }
   /** Right-click (without dragging the camera) or a touch long-press picks a part. */
   private attachPartPicking(el: HTMLElement) {
-    let start: { x: number; y: number; button: number; touch: boolean } | null = null;
+    let start: { id: number; x: number; y: number; button: number; touch: boolean } | null = null;
     let timer = 0;
     const emit = (cx: number, cy: number) => {
       const p = toLayoutPoint(el, cx, cy), uid = this.pickPart(p.x, p.y);
       if (uid !== null) this.partPickListeners.forEach(fn => fn(uid));
     };
+    const abort = () => { start = null; window.clearTimeout(timer); };
     const down = (e: PointerEvent) => {
+      // A second finger means a multi-touch gesture, not a long-press.
+      if (!e.isPrimary) { abort(); return; }
       if (this.paused || this.photo.active) return;
-      start = { x: e.clientX, y: e.clientY, button: e.button, touch: e.pointerType === 'touch' };
+      start = { id: e.pointerId, x: e.clientX, y: e.clientY, button: e.button, touch: e.pointerType === 'touch' };
       window.clearTimeout(timer);
       if (start.touch) timer = window.setTimeout(() => { if (start) { emit(start.x, start.y); start = null; } }, 550);
     };
-    const move = (e: PointerEvent) => { if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 6) { start = null; window.clearTimeout(timer); } };
+    const move = (e: PointerEvent) => { if (start?.id === e.pointerId && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 6) abort(); };
     const up = (e: PointerEvent) => {
+      if (start && start.id !== e.pointerId) return;
       window.clearTimeout(timer);
       if (start && !start.touch && start.button === 2 && e.button === 2) emit(e.clientX, e.clientY);
       start = null;
     };
+    const cancel = (e: PointerEvent) => { if (start?.id === e.pointerId) abort(); };
     const menu = (e: Event) => e.preventDefault();
     el.addEventListener('pointerdown', down);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('blur', abort);
     el.addEventListener('contextmenu', menu);
     return () => {
       window.clearTimeout(timer);
       el.removeEventListener('pointerdown', down);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('blur', abort);
       el.removeEventListener('contextmenu', menu);
     };
   }
@@ -711,16 +758,25 @@ export class FlightController {
     this.sas = mode as SasMode;
   }
 
-  toggleMap() {
-    this.mapMode = !this.mapMode;
-    this.map.setVisible(this.mapMode);
-    this.pipeline.setMapMode(this.mapMode);
+  toggleMap() { this.setMapMode(!this.mapMode, true); }
+
+  /**
+   * The one flight/map view transition (M, photo mode, vessel loss): map visibility and labels, the pipeline's map
+   * resolution, and the map's focus and menus change together. `animate`: the player's own toggle dips to black and
+   * zooms out.
+   */
+  setMapMode(on: boolean, animate = false) {
+    if (on === this.mapMode) return;
+    this.mapMode = on;
+    this.map.setVisible(on);
+    this.pipeline.setMapMode(on);
     this.mapUi.reset();
+    if (!animate) return;
     this.flashFade();
     // Following the vessel (reset framed its orbit): pull back from just above its body so the switch reads as
     // zooming out, not a cut. A focus the player picked reopens on the view they left.
     const wv = this.world.active;
-    if (this.mapMode && wv && !this.mapUi.focus && !game.get().settings.reduceMotion) this.map.animateFrom(this.world.universe.body(wv.body).radius * 1.6);
+    if (on && wv && !this.mapUi.focus && !game.get().settings.reduceMotion) this.map.animateFrom(this.world.universe.body(wv.body).radius * 1.6);
   }
 
   private fadeEl: HTMLDivElement | null = null;
@@ -755,6 +811,9 @@ export class FlightController {
       this.jetpackOn = !grounded;
       this.cancelAssist();
       this.stagePending = false;
+      // Only the focused vessel gets pilot input, so the craft left behind coasts with its engines cut.
+      this.evaThrottleCut = this.input.state.throttle > 0;
+      if (this.evaThrottleCut) this.world.message('Throttle cut to 0% while you are on EVA', 'info', 4);
       this.input.state.throttle = 0;
       this.sasOn = false;
       this.cam.mode = 'auto';
@@ -768,6 +827,8 @@ export class FlightController {
       this.cancelAssist();
       this.stagePending = false;
       this.input.state.throttle = 0;
+      if (this.evaThrottleCut) this.world.message('Back aboard: throttle is at 0% (cut for EVA)', 'info', 4);
+      this.evaThrottleCut = false;
     }
   }
 
@@ -817,13 +878,64 @@ export class FlightController {
   /** Alt+L / HUD lock button: refuse staging until unlocked. */
   toggleStageLock() {
     this.stageLocked = !this.stageLocked;
-    this.world.message(this.stageLocked ? `Staging locked (${bindingLabel('stageLock')} to unlock)` : 'Staging unlocked', this.stageLocked ? 'warn' : 'info', 2.5);
+    // The countdown ends in a stage: locking stops it (unlocking does not restart it).
+    const counting = this.stageLocked && this.countdown !== null;
+    if (counting) this.countdown = null;
+    this.world.message(this.stageLocked ? `Staging locked (${bindingLabel('stageLock')} to unlock)${counting ? ': launch countdown cancelled' : ''}` : 'Staging unlocked', this.stageLocked ? 'warn' : 'info', 2.5);
   }
 
   /** [ / ]: switch to the previous / next vessel within physics range. */
   switchVessel(direction: 1 | -1) {
     if (this.network?.ownId) return;
-    if (this.world.focusNextNearby(direction)) { this.ownPortUid = null; this.world.message(`Switched to ${this.world.active!.state.name}`); }
+    if (this.world.focusNextNearby(direction)) { this.syncActiveVessel(); this.world.message(`Switched to ${this.world.active!.state.name}`); }
+  }
+
+  /**
+   * Runs `activeVesselChanged` once when the active vessel is no longer the one the pilot state belongs to, whoever
+   * changed it ([ ] keys, map, station list, EVA, boarding, loss). Called every frame after input and right after our
+   * own switches.
+   * Co-op keeps its own reset on a change of owned vessel (frame loop).
+   */
+  syncActiveVessel() {
+    if (this.network || this.world.activeId === this.pilotedId) return;
+    this.activeVesselChanged();
+  }
+
+  /**
+   * The single active-vessel transition. A vessel the pilot is not flying gets neutral controls (no throttle, SAS or
+   * RCS; World.physicsStep), so the controls held for the vessel left behind would be wrong for the next one: they
+   * reset, as does everything aimed at the old vessel (assist program, docking approach, launch countdown, queued
+   * commands, trim, alerts). Pilot preferences carry over: stage lock, precision, map view, the camera mode while the
+   * new vessel can use it.
+   */
+  private activeVesselChanged() {
+    const next = this.world.active;
+    this.pilotedId = this.world.activeId;
+    if (this.assist) this.cancelAssist(next ? 'Assist cancelled: switched vessels' : 'Assist stopped: vessel lost');
+    this.input.state.throttle = 0;
+    this.sasOn = false;
+    this.sas = 'off';
+    this.sasHeld = false;
+    this.rcsOn = false;
+    this.dockingMode = false;
+    this.ownPortUid = null;
+    if (this.countdown !== null && next) this.world.message('Launch countdown cancelled', 'info', 2.5);
+    this.countdown = null;
+    this.stagePending = false;
+    this.evaJumpPending = false;
+    this.gearPending = undefined;
+    this.pendingCommands = [];
+    this.input.trim.pitch = this.input.trim.yaw = this.input.trim.roll = 0;
+    telemetry.activeVesselChanged(this);
+    if (next && !cameraModeCycle(!!next.state.eva, true).includes(this.cam.mode)) this.cam.mode = 'auto';
+  }
+
+  /** Target gone (cleared, docked, destroyed, switched away): docking mode ends with it; target SAS holds fall back. */
+  private syncTarget() {
+    const has = !!this.world.targetId;
+    if (!has && this.hadTarget) this.dockingMode = false;
+    this.hadTarget = has;
+    if (!has && (this.sas === 'target' || this.sas === 'antiTarget')) this.sas = 'stabilityAssist';
   }
 
   /** Open a part's inspector (as a right-click on it would): used by the staging stack icons. */
@@ -952,6 +1064,8 @@ export class FlightController {
     this.input.mouseEnabled = !this.mapMode;
     applyCommsSettings(this.world);
     this.input.update(dt);
+    // After input: a gamepad's EVA / board button switches vessels inside update(), before this frame's controls.
+    this.syncActiveVessel();
     this.tickCountdown(dt);
     if (!this.world.canControl()) {
       this.input.state.throttle = 0;
@@ -964,16 +1078,13 @@ export class FlightController {
     }
     const s = this.input.state;
     const wv = this.world.active;
+    this.world.pilotThrottle = s.throttle;
     if (s.brakes !== this.brakesWere) {
       this.brakesWere = s.brakes;
       if (!this.paused && this.hasBindings('brakes')) this.fireGroup('brakes', s.brakes);
     }
     const maneuverDir = this.maneuverDirection();
-    if (!this.world.targetId) {
-      // Target gone (docked, destroyed, cleared): leave target-relative modes.
-      if (this.speedMode === 'target') this.speedReference.select('auto');
-      if (this.sas === 'target' || this.sas === 'antiTarget') this.sas = 'stabilityAssist';
-    }
+    this.syncTarget();
     // Node executed or deleted: a maneuver hold with nothing to point at would only damp rotation (and read as
     // "SAS does nothing"), so fall back to holding attitude like the target modes above.
     if (this.sas === 'maneuver' && !this.world.nodes.length) this.sas = 'stabilityAssist';
@@ -1024,20 +1135,7 @@ export class FlightController {
       this.world.tick(this.warpDriver.rampDt(this.world, dt), input);
     }
     prof.add('sim', t0);
-    if (!this.network && wv && !this.world.active && !this.activeLost) {
-      this.activeLost = true;
-      this.mapMode = false;
-      // Keep the short debris replay readable even when the impact happened in physics warp.
-      this.warpDriver.cancel(this.world);
-      this.world.warp = { mode: 'rails', index: 0 };
-      const air = this.world.surfaceVelocity(wv);
-      this.lossFocus = { ...wv, state: { ...wv.state, parts: [],
-        position: { ...wv.state.position }, velocity: {
-          x: wv.state.velocity.x-air.x, y: wv.state.velocity.y-air.y, z: wv.state.velocity.z-air.z,
-        } } };
-      this.lossFocusUt = this.world.ut;
-      this.onActiveLost?.();
-    }
+    if (!this.network && wv && !this.world.active && !this.activeLost) this.activeVesselLost(wv);
     if (!this.world.active && this.lossFocus && !this.paused) {
       const st = this.lossFocus.state;
       const span=this.world.ut-this.lossFocusUt; this.lossFocusUt=this.world.ut;
@@ -1084,6 +1182,22 @@ export class FlightController {
     prof.add('telemetry', t0);
     prof.endFrame();
   };
+
+  /** The active vessel `wv` is gone (destroyed): back to the flight view to replay its debris, then the loss UI. */
+  private activeVesselLost(wv: WorldVessel) {
+    this.activeLost = true;
+    this.setMapMode(false);
+    // Keep the short debris replay readable even when the impact happened in physics warp.
+    this.warpDriver.cancel(this.world);
+    this.world.warp = { mode: 'rails', index: 0 };
+    const air = this.world.surfaceVelocity(wv);
+    this.lossFocus = { ...wv, state: { ...wv.state, parts: [],
+      position: { ...wv.state.position }, velocity: {
+        x: wv.state.velocity.x-air.x, y: wv.state.velocity.y-air.y, z: wv.state.velocity.z-air.z,
+      } } };
+    this.lossFocusUt = this.world.ut;
+    this.onActiveLost?.();
+  }
 
   private startWarmup(wv: WorldVessel) {
     this.warmup = 'compiling';
@@ -1249,8 +1363,8 @@ export class FlightController {
       this.scene.add(this.site.root);
     }
     if (wv.body === 'earth' && this.site) {
-      const pv = this.padVessel;
-      pv.state = wv.state; pv.held = wv.mode === 'prelaunch'; pv.firing = wv.mode !== 'prelaunch' || !!wv.holdDown;
+      const pv = this.padVessel, pad = this.padVesselFor(wv);
+      pv.state = pad.state; pv.held = pad.mode === 'prelaunch'; pv.firing = pad.mode !== 'prelaunch' || !!pad.holdDown;
       this.site.update(origin, t, camera.position, pv);
     } else this.site?.hide();
     this.planets.update({ t, origin, camera, sunPos, dt, focusBody: wv.body, viewportHeight: this.pipeline.lodViewportHeight, switchViewportHeight: this.pipeline.lodSwitchViewportHeight });
@@ -1267,6 +1381,18 @@ export class FlightController {
       this.pipeline.render(this.scene, camera);
     }
     prof.add('render', t0);
+  }
+
+  /**
+   * Vessel the pad equipment follows: the active vessel, or, while another one is flown, the last active vessel still
+   * held on the pad (its clamps did not let go because the camera moved to an astronaut or a neighbour).
+   */
+  padVesselFor(wv: WorldVessel): WorldVessel {
+    if (wv.mode === 'prelaunch') { this.padId = wv.state.id; return wv; }
+    const held = this.padId !== null ? this.world.vessels.get(this.padId) : undefined;
+    if (held?.mode === 'prelaunch') return held;
+    this.padId = null;
+    return wv;
   }
 
   /** Map conics/markers for the current frame (also used to build map materials for shader warm-up). */

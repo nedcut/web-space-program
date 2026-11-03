@@ -6,6 +6,14 @@ import { dvText, shortDate, shortDuration } from './plannerFormat';
 
 const cost = (w: TransferWindow) => w.dv + (w.captureDv ?? 0);
 
+/** Departures as listed: from which body, by which vessel, to where. */
+export interface DepartureList { from: string; vessel: string; target: string; windows: TransferWindow[] }
+
+/** The list while the vessel is still where it was listed from; null once it changed body (SOI) or vessel. */
+export function currentDepartures(list: DepartureList | null, active: { body: string; state: { id: string } } | null | undefined): DepartureList | null {
+  return list && active && list.from === active.body && list.vessel === active.state.id ? list : null;
+}
+
 /** Go-now first, then cheapest; recommend the earliest departure within 5% of the lowest total Δv. */
 export function liveOptions(windows: readonly TransferWindow[], ut: number): { live: TransferWindow[]; best?: TransferWindow } {
   const live = windows.filter(w => w.departure > ut + 120)
@@ -21,7 +29,7 @@ export function liveOptions(windows: readonly TransferWindow[], ut: number): { l
  * Estimates stay selectable until the worker verifies an encounter and the existing apply path installs its node.
  */
 export function DepartureOptions({ world, options, busy, onPick, tools }: {
-  world: World; options: { target: string; windows: TransferWindow[] }; busy: boolean; onPick(w: TransferWindow): void; tools?: ReactNode;
+  world: World; options: Pick<DepartureList, 'target' | 'windows'>; busy: boolean; onPick(w: TransferWindow): void; tools?: ReactNode;
 }) {
   const { live, best } = liveOptions(options.windows, world.ut);
   if (!live.length) return null;

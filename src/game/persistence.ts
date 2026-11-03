@@ -56,6 +56,9 @@ export interface SavedWorld {
   vessels: SavedVessel[];
   /** Navigation target (vessel or body id) and optional docking port uid. Absent in older saves. */
   targetId?: string | null;
+  /** The pilot's throttle lever for the active vessel when saved (absent = 0). Read only when a flight resumes from
+   * this save (`savedPilotThrottle`); worlds deserialized for other scenes drop it on their next save. */
+  pilotThrottle?: number;
   targetPortUid?: number | null;
 }
 
@@ -83,6 +86,7 @@ export function serializeWorld(world: World): SavedWorld {
   return {
     ...(world.preciseGravity ? { preciseGravity: true } : {}),
     ...(world.showLagrangePoints ? { showLagrangePoints: true } : {}),
+    ...(world.pilotThrottle > 0 ? { pilotThrottle: world.pilotThrottle } : {}),
     alarms: structuredClone(world.alarmClock.alarms),
     seenTips: [...world.seenTips],
     flightlog: structuredClone(world.flightlog),
@@ -153,6 +157,12 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
   world.setTarget(data.targetId ?? null, data.targetPortUid ?? null);
   world.restoreAfterLoad();
   return world;
+}
+
+/** Throttle to resume a flight from a save with: the saved lever, clamped to 0..1 (0 for older or malformed saves). */
+export function savedPilotThrottle(data: SavedWorld): number {
+  const t = data.pilotThrottle;
+  return typeof t === 'number' && Number.isFinite(t) ? Math.min(1, Math.max(0, t)) : 0;
 }
 
 const KEY_PREFIX = 'wsp.world.v1.';

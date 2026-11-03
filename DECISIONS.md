@@ -2025,14 +2025,92 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   to avoid waiting for animation frames on a frozen page. Functional SwiftShader
   checks do not establish real-GPU performance or cross-browser behavior.
 
-## Render lifecycle bounds (2026-11-03)
+## Throttle and SAS across quickload and EVA (2026-11-02)
 
-- Map body renderers drop their bake's CPU pixels once drawn, and stay bounded: beyond 16, a body not drawn as a
-  disc for 30 s loses its renderer (longest unseen first). A 60-body map tour at High kept 51 renderers (491 MB
-  baked GPU textures, 368 MB CPU pixels, 547 MB JS heap) until the flight ended; now 16 (139 MB, 88 MB, 254 MB).
-  An 8-renderer limit was rejected: the pool caches only about two bakes, so a released body stays plain for ~11 s
-  when revisited, as on a first visit. Pixels are the cheap half (no rebuild); the limit is a backstop.
-- Failed far-LOD bakes retry after 1 s, doubling to 30 s, never every frame. Adaptive resolution forgets an open
-  reduction episode or full-resolution trial at a hold or a frame-rate-cap change; scale and backoff timers stay.
-- No hysteresis on the near/far terrain switch or Earth's regional material switch: a 200 s launch to 137 km
-  crossed each boundary once (camera shake stays under 10 cm), and a material switch only swaps prewarmed programs.
+- Quickload and Load resume the pilot's controls exactly. Saves carry the pilot's throttle lever as optional
+  `SavedWorld.pilotThrottle` (absent = 0, so older saves and zero-throttle saves are unchanged). The controller writes
+  the lever, not the per-tick input, into `World.pilotThrottle`. A node-executor or landing burn therefore resumes
+  at the pilot's lever (usually 0), not at the assist's throttle with no assist left to cut it. SAS on/off and mode come from the
+  saved vessel state; prograde/retrograde/normal/radial and port-align holds resume as stability assist on the current
+  heading, because their speed reference and port selection are not saved. Only a flight resumed from the save reads the field: worlds loaded by the Tracking Station or Space
+  Center drop it when they save again, and a new launch into a saved world starts at 0.
+- EVA keeps cutting the throttle: only the focused vessel receives pilot input, so the craft left behind coasts. The
+  player is told when it happens and again on boarding, instead of restoring thrust next to a returning astronaut.
+- Quicksave/quickload remain off during Training, challenges and co-op (practice isolation); F5/F9 now say so.
+
+## Venus lander lands facing Earth (2026-11-02, fix/venus-lander-contact)
+- **Cause.** A direct entry from the arrival hyperbola cannot land in Earth's view. On an Earth→Venus transfer Earth
+  trails Venus, close to the direction the probe approaches from, and a shallow entry comes down near periapsis, some
+  130–160° round from there. Stock Cinderbloom, Standard: touchdown 158° from the sub-Earth point, no link in the
+  descent or on the ground, and the shell expires with nothing sent (the open item from op/career2).
+- **Mission change, no new parts or UI.** Capture into a low orbit with the cruise stage (~1.0–1.2 of its ~1.6 km/s),
+  then, during a ground station pass, plan the deorbit node opposite Earth that lowers the periapsis to about half the
+  atmosphere's height. The probe flies it as an uploaded node (probe flight computer, D-015 amendment) and reaches the
+  top of the air back in contact, so staging the cruise stage and the shield works. Measured: Earth 44° above the
+  touchdown; burns from the far point to 60° after it all land in view (26–47°); 30° early leaves the entry interface
+  behind Venus, where a disconnected probe cannot stage, hence "late rather than early" in the tip and hub text.
+  Headless: `deorbitFacingEarth` in `scripts/career/planets.ts`; test in `tests/career-planets.test.ts`.
+- **Rejected.** Entry trim aiming the landing (no in-view landing exists on the hyperbola); a relay (a low orbiter over
+  the far side cannot see Earth; a flyby bus would need its own core and a second vessel to fly); a longer-lived shell
+  (Venus turns far too slowly). Not done: an "Earth in view at touchdown" readout in the planner.
+
+## Planner arrival times and empty trims (2026-11-02, fix/planner-friction)
+- Transfer flight times, both the departure estimates and the verified timeline, run from the burn to periapsis at the target, not to SOI entry: the estimates aim at the target's centre, so periapsis is the arrival both can measure. Return estimates include the climb out of the moon's SOI. They are worked out only for the polished options, because doing it for every scan sample tripled the search time.
+- Entry trim adds no node when the return already enters inside the corridor and the trim is under 0.05 m/s. Execute next node completes such a node without burning.
+- A departure list belongs to the body and vessel it was listed from. An SOI change or a vessel switch drops it.
+
+## Closed part meshes (2026-11-02, lathe)
+
+- Part materials stay single-sided, so every part mesh must be closed from outside: outer shells face out
+  (`lathe()` profiles run bottom to top), every opening shows an interior surface, and stack faces and nozzle
+  throats are capped. A part can sit alone in the editor, at either end of a stack, or under a smaller neighbour,
+  so no builder may rely on a neighbour to hide an open stack face. Surface-attach backs may stay open (the hull
+  covers them).
+- `tests/partFaces.test.ts` enforces this for every part at High and Low detail and in deployed states by ray tracing
+  each triangle's culled side. Pipe and hose mouths (`pipe()`) are out of scope; slivers below about 0.3% of the part
+  radius between lathes of different segment counts count as closed. Prefer extending a profile or capping it over
+  a double-sided material, which would add a material and draw.
+- `lathe()` skips the zero-area triangle where a profile point lies on the axis; caps and tips cost half as much.
+
+## Real Mars orbit with the stock Petrel (2026-11-02, fix/real-mars-orbit)
+- **Cause (two blockers, both measured headlessly).** Link: at the planner's Real Mars arrivals Earth is 215 Gm
+  (second season after the Moon) to 335 Gm (first season, its affordable option) away; the Arcwatch–ground reach was
+  200 Gm, so the probe arrived without command authority: no capture burn, no science. Δv: the capture into a long
+  ellipse after the planner's transfer costs ~1.75 km/s; the career's Petrel (two instruments aboard) arrived with 1.59.
+  Faster transfers that arrive with Earth nearer (~200 days, 145 Gm) escape southward and cost 11–12 km/s from a
+  parking orbit launched at an arbitrary time of day, so they are no fix a player can use.
+- **Arcwatch rating 5 → 10 Gm** (amends the D-015 ratings): Earth reach 200 → 283 Gm. Standard: every planet out to Saturn
+  was already inside 200 Gm; Uranus (265–315 Gm) is now reachable near close approach. Challenging Jupiter (189–309 Gm)
+  and the main-belt asteroids are now in reach for most of their synodic cycle; on Real, Mercury and Venus at every
+  geometry and Mars from 57 to 283 of its 57–400 Gm. Arcwatch-to-Arcwatch relay range doubles (5 → 10 Gm), and every
+  existing Arcwatch link is stronger, so science transmits faster (rate scales with strength). The Horizon stays the
+  dish for Neptune and beyond on every scale, and for the outer planets outside Standard.
+- **Real Petrel**: a third kick tank and a longer sustainer stage: parking-orbit Δv 5.65 → 6.09 km/s (5.32 → 5.76 with
+  the career's two instruments), 26 parts, 236 t, 91,873 cr (87,758), still level-1 pad and hall. Rejected: the
+  Horizon on the Real Petrel (−0.68 km/s and Deep Space Power, 180 more science), a longer booster (308 t: pad 2), a
+  fourth kick tank or a longer upper stage (the ascent fails).
+- **First Real season still a flyby or a wait.** From the career's parking orbit the first season's departure is
+  4.4 km/s, too much with the capture; the planner's options list also offers the next season (~870 days) from the same
+  orbit at 3.7 km/s. The Real tip says to take it; the playthrough's departure pick allows 95 % of the Δv aboard (90 %
+  rejected that option by 38 m/s; the true need is ~5.5 of 5.76 km/s).
+- **What main could already do:** the third Real season after the Moon (~day 1,770, Earth 180 Gm at arrival, 0.76 km/s
+  capture) works with the old Arcwatch and Petrel; seasons one and two fail (link or capture Δv). This change makes the
+  second (~day 1,030) work and keeps the link through the survey. A guidance-only fix (send players to the third
+  season) was the alternative: no balance change, but a five-year wait that the hub cannot reliably predict.
+- **Playthrough fix:** `descend` returns "lost" when the craft is already gone; on main the Real route crashed when a
+  Kestrel hop was destroyed (hops at 45–75° are now lost on descent on main: not investigated here).
+
+## One active-vessel transition (2026-11-03, fix/sm-vessel-switch)
+
+- `FlightController.syncActiveVessel` is the only place that reacts to a new `world.activeId`, whoever changed it
+  ([ ] keys, map Fly, station list, EVA, boarding, loss). It runs every frame and right after the controller's own
+  switches. Co-op keeps its owned-vessel reset.
+- A vessel nobody flies gets neutral controls, so the pilot's controls do not follow them to the next vessel:
+  throttle 0, SAS and RCS off, momentary SAS hold dropped, trim cleared, docking mode and own-port choice cleared,
+  launch countdown cancelled (with a message), queued stage/gear/jump/commands dropped, alerts cleared. A running
+  assist program is cancelled and its restore commands go to the vessel it flew. Kept: stage lock, precision, map
+  view, and the camera mode unless the new vessel's cycle lacks it (an astronaut gets Auto).
+- Docking mode ends when a target goes away; it can still be switched on without a target. "Target gone → speed
+  mode Auto" lives only in `SpeedModeTracker`.
+- The pad clamps follow the last active vessel still on the pad while another vessel is flown.
+

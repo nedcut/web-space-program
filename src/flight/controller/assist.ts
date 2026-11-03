@@ -1,10 +1,14 @@
 import { dockingAssistPort } from '../../game/dockingAssist';
 import type { WorldVessel } from '../../game/world';
+import type { Autopilot } from '../../game/autopilot';
+import { applyVesselCommands } from '../../sim/vessel/actions';
 import type { ControlInput } from '../../sim/vessel/runtime';
 import { assistFrame, createAssist, type AssistId, type AssistOptions } from '../assist';
 import type { FlightController } from '../controller';
 import type { FlightControllerInternals } from './internals';
 
+/** Vessel each running program flies: its restore commands go back to that vessel even after a switch. */
+const assistVessels = new WeakMap<Autopilot, string>();
 
 export function startAssist(this: FlightController, _internals: FlightControllerInternals, id: AssistId, opts?: AssistOptions): void {
   if (this.network) return;
@@ -12,6 +16,7 @@ export function startAssist(this: FlightController, _internals: FlightController
   try {
     const port = id === 'dock' ? dockingAssistPort(this.world, this.ownPortUid) : null;
     this.assist = createAssist(id, this.world, { ...opts, ownPortUid: this.ownPortUid });
+    assistVessels.set(this.assist, this.world.active.state.id);
     if (id === 'dock') {
       this.ownPortUid = port?.part.uid ?? null;
       this.sasOn = true;
@@ -34,7 +39,11 @@ export function startAssist(this: FlightController, _internals: FlightController
 export function cancelAssist(this: FlightController, internals: FlightControllerInternals, msg = 'Assist cancelled'): void {
   if (!this.assist) return;
   const restore = this.assist.release?.() ?? [];
-  if (restore.length) this.command(...restore);
+  const owner = assistVessels.get(this.assist);
+  // After a vessel switch the queue feeds the new vessel: undo the program's settings on its own vessel directly.
+  const left = owner !== undefined && owner !== this.world.activeId ? this.world.vessels.get(owner) : undefined;
+  if (left && restore.length) applyVesselCommands(left.state, restore, []);
+  else if (restore.length) this.command(...restore);
   this.assist = null;
   // Never hand back a vessel packed on rails: it would ignore throttle, attitude and SAS until warp changes.
   if (this.world.warp.mode === 'rails' && this.world.warp.index > 0) this.world.warp = { mode: 'rails', index: 0 };
