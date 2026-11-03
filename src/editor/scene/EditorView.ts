@@ -14,6 +14,7 @@ import { alignNodes, counterpartMaps, descendants, freeAttachNodes, mirrorPositi
 import { axisVector, TransformGizmo, type GizmoHandle } from './gizmo';
 import { CATALOG, type EditorSession, type Placement, type SessionView } from '../session';
 import { surfaceTransform } from '../surface';
+import { findStackSnap, type ScreenPoint } from './stackSnap';
 import { StudioEnvironment } from '../../render/core/studioEnv';
 import { onContextRestored } from '../../render/core/contextRecovery';
 import { buildHangar, CAMERA_BOX, type Hangar } from './hangar';
@@ -22,7 +23,6 @@ import { engineShrouds } from '../../sim/vessel/shroud';
 import { partMeshParams, prepareEngineSoot, releaseSoot, setLightAppearance, setPartDetail } from '../../render/parts';
 
 const DEG = Math.PI / 180;
-const SNAP_PX = 64;
 const UP = v3(0, 1, 0);
 /** Key light offset from its target (the craft centre); the shadow frustum follows the craft. */
 const KEY_OFFSET = { x: 26, y: 30, z: 17 } as const;
@@ -760,7 +760,7 @@ export class EditorView {
       const root = this.heldParts.find((p) => p.uid === (snap.held!.kind === 'new' ? -1 : this.session.heldRootUid())) ?? this.heldParts[0];
       const rootDef = CATALOG.get(root.partId)!;
       // 1) Stack snapping in screen space.
-      const best = this.findStackSnap(C);
+      const best = findStackSnap(C, this.heldNodes, this.craftNodes, this.jointNodes, this.heldThrough, this.projectNode);
       if (best?.through && best.occupant !== undefined) {
         const t = alignNodes(best.childAt, best.parent);
         D = t.rotation;
@@ -853,41 +853,6 @@ export class EditorView {
     return out;
   }
 
-  /** Best node to snap to: a free craft node, or an occupied joint to insert into (`through`/`occupant` set). */
-  private findStackSnap(C: Vec3): { child: WorldAttachNode; childAt: WorldAttachNode; parent: WorldAttachNode; through?: WorldAttachNode; occupant?: number } | null {
-    const heldNodes = this.heldNodes;
-    if (!heldNodes.length) return null;
-    const craftNodes = this.craftNodes;
-    let best: { child: WorldAttachNode; childAt: WorldAttachNode; parent: WorldAttachNode; through?: WorldAttachNode; occupant?: number; rank: number } | null = null;
-    const pa = new THREE.Vector2(), pb = new THREE.Vector2();
-    const facing = (a: WorldAttachNode, b: WorldAttachNode) => a.direction.x * b.direction.x + a.direction.y * b.direction.y + a.direction.z * b.direction.z;
-    for (const h of heldNodes) {
-      const childAt: WorldAttachNode = { ...h, position: add(h.position, C) };
-      if (!this.toScreen(childAt.position, pa)) continue;
-      for (const c of craftNodes) {
-        // Keep the player's orientation: only nodes that face each other (within ~60 degrees).
-        if (facing(h, c) > -0.5) continue;
-        if (!this.toScreen(c.position, pb)) continue;
-        const d = pa.distanceTo(pb);
-        if (d > SNAP_PX) continue;
-        const rank = d + (h.size === c.size ? 0 : SNAP_PX * 0.6);
-        if (!best || rank < best.rank) best = { child: h, childAt, parent: c, rank };
-      }
-      // Occupied joints: insert between (a free node at the same distance wins).
-      const through = this.heldThrough.get(h);
-      if (!through) continue;
-      for (const j of this.jointNodes) {
-        if (facing(h, j) > -0.5) continue;
-        if (!this.toScreen(j.position, pb)) continue;
-        const d = pa.distanceTo(pb);
-        if (d > SNAP_PX * 0.75) continue;
-        const rank = d + SNAP_PX * 0.2 + (h.size === j.size ? 0 : SNAP_PX * 0.6);
-        if (!best || rank < best.rank) best = { child: h, childAt, parent: j, through, occupant: j.occupant, rank };
-      }
-    }
-    return best;
-  }
-
   /** Undo an insert preview: put the parts it pushed back where the craft has them. */
   private clearSplicePreview() {
     if (!this.splicePreview.length) return;
@@ -946,11 +911,14 @@ export class EditorView {
     if (text) this.cursorLabel.style.transform = `translate(${this.mousePx.x + 18}px, ${this.mousePx.y + 20}px)`;
   }
 
-  private toScreen(p: Vec3, out: THREE.Vector2): boolean {
+  private readonly projectNode = (p: Vec3, out: ScreenPoint): boolean => this.toScreen(p, out);
+
+  private toScreen(p: Vec3, out: ScreenPoint): boolean {
     const v = this.craftGroup.localToWorld(toV(p)).project(this.camera);
     if (v.z > 1) return false;
     const el = this.renderer.domElement;
-    out.set(((v.x + 1) / 2) * el.clientWidth, ((1 - v.y) / 2) * el.clientHeight);
+    out.x = ((v.x + 1) / 2) * el.clientWidth;
+    out.y = ((1 - v.y) / 2) * el.clientHeight;
     return true;
   }
 
