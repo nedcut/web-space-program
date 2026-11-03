@@ -13,6 +13,7 @@ import type { Quat } from '../util/quat';
 import type { Vec3 } from '../util/vec3';
 import { RESOURCES } from '../data/resources';
 import { World, type VesselMode, type WorldVessel } from './world';
+import type { HoldDown } from './world/vesselMode';
 import { Universe } from './universe';
 import type { ScalePresetId } from '../sim/bodies/scale';
 
@@ -29,6 +30,8 @@ interface SavedVessel {
   body: string;
   orbit?: Orbit;
   fixed?: { pos: Vec3; orient: Quat };
+  /** Prelaunch clamps (static fire or launch hold). Absent in saves from before it was saved: see World.restoreAfterLoad. */
+  holdDown?: HoldDown;
 }
 
 export interface SavedWorld {
@@ -78,6 +81,7 @@ export function serializeWorld(world: World): SavedWorld {
       // Deep: deferred autosaves serialise this snapshot after the world has moved on.
       orbit: wv.orbit ? structuredClone(wv.orbit) : undefined,
       fixed: wv.fixed ? structuredClone(wv.fixed) : undefined,
+      holdDown: wv.holdDown ? structuredClone(wv.holdDown) : undefined,
     });
   }
   return {
@@ -145,7 +149,7 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
     rebuildTopology(state);
     if (!data.crew) world.assignCrew(state);
     recomputeMassProperties(state, false);
-    const wv: WorldVessel = { state, mode: sv.mode, body: sv.body, orbit: sv.orbit, fixed: sv.fixed };
+    const wv: WorldVessel = { state, mode: sv.mode, body: sv.body, orbit: sv.orbit, fixed: sv.fixed, holdDown: sv.mode === 'prelaunch' ? sv.holdDown : undefined };
     world.vessels.set(state.id, wv);
   }
   world.activeId = data.activeId && world.vessels.has(data.activeId) ? data.activeId : null;

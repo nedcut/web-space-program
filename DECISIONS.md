@@ -2024,3 +2024,19 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   startup remain approximate replay boundaries. Screenshots use compositor capture
   to avoid waiting for animation frames on a frozen page. Functional SwiftShader
   checks do not establish real-GPU performance or cross-browser behavior.
+
+## Pad hold-down is explicit, saved vessel state (2026-11-03, fix/sm-holddown)
+
+- An engine lit on the pad without staging (part action or action group) is a **static
+  fire**: the vessel is simulated under the clamps (thrust, propellant use, exhaust and pad effects) and is never
+  released on its own. Staging turns it into a launch hold, whose rules are unchanged (liftoff at thrust ≥ weight;
+  release when thrust is zero or settles below weight; 3 s at most). Shutting every engine down ends the static fire.
+  Previously the engine stayed lit but frozen (no thrust) on the pad, and the same vessel launched within 3 s after
+  save/load.
+- `WorldVessel.holdDown` (`{ launch, time, thrust, com }`, `world/vesselMode.ts`) is saved with the vessel, so
+  load resumes the same hold with its clock. Save version stays 1: the field is optional, and an older save with a
+  lit engine on the pad loads as a static fire (the safe reading of an ambiguous state).
+- `setVesselMode` is the one place a vessel changes mode; it keeps `orbit` iff rails, `fixed` iff
+  landedRails/prelaunch and `holdDown` only in prelaunch. `vesselModeProblems` checks this (plus "no lit engine
+  on the pad outside a hold") in tests and every fuzz frame, not at runtime.
+- Pad commands applied before a held step are not applied again inside the step (a toggle used to undo itself).
