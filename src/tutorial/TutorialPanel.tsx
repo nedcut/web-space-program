@@ -33,10 +33,12 @@ export function TutorialPanel() {
       <div className="label">Training · {run.lesson.title}</div>
       <button className="btn small" aria-expanded={!collapsed} aria-controls="tutorial-instructions" onClick={() => setCollapsedEpoch(collapsed ? null : run.epoch)}>{collapsed ? 'Show instructions' : 'Collapse'}</button>
     </div>
-    <div className="tutorial-progress">Step {run.index + 1} of {run.lesson.steps.length}</div>
-    <div id="tutorial-instructions" hidden={collapsed}>
-      <div className="tutorial-mentor">Flight Director Ama Okafor</div>
-      <p aria-live="polite">{run.finished ? (run.skipped ? 'Practice finished. Repeat without skipping to earn your completion checkmark.' : 'Lesson complete. Nicely flown! Your completion checkmark is saved when browser storage is available.') : bindingText(step.text, bindings)}</p>
+    <div className="tutorial-progress">Step {run.index + 1} of {run.lesson.steps.length} · <span className="tutorial-mentor">Flight Director Ama Okafor</span></div>
+    <div id="tutorial-instructions" className="tutorial-body" hidden={collapsed}>
+      {/* Only the instructions scroll: the goal status and buttons stay visible however short the window is. */}
+      <div className="tutorial-text" key={`${run.epoch}:${run.index}:${run.finished}`}>
+        <p aria-live="polite">{run.finished ? (run.skipped ? 'Practice finished. Repeat without skipping to earn your completion checkmark.' : 'Lesson complete. Nicely flown! Your completion checkmark is saved when browser storage is available.') : bindingText(step.text, bindings)}</p>
+      </div>
       {!run.finished && <div className="tutorial-status">{run.ready ? '✓ Goal reached — continue when ready.' : 'Try the action above to unlock Next.'}</div>}
       <div className="tutorial-actions">
         {!run.finished && <><button className="btn small primary" disabled={!run.ready} onClick={e => { advanceTutorial(); e.currentTarget.blur(); }}>Next</button><button className="btn small" onClick={e => { advanceTutorial(true); e.currentTarget.blur(); }}>Skip step</button></>}
