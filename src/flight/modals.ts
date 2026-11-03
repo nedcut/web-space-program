@@ -8,3 +8,5 @@ import type { FlightAction } from './input';
 export const pauseMenuVisible = (s: { paused: boolean; help: boolean }) => s.paused && !s.help;
 /** While flight input is suspended only the menu toggle (Esc closes the modal) and quickload act; a momentary SAS hold still restores itself. */
 export const actionAllowedWhileSuspended = (a: FlightAction) => a === 'menu' || a === 'quickload' || a === 'sasHoldRelease';
+/** Photo mode takes the keyboard; only the release of a momentary SAS hold still reaches the flight. */
+export const actionAllowedInPhoto = (a: FlightAction) => a === 'sasHoldRelease';
