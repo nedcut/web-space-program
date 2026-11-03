@@ -460,7 +460,8 @@ export function buildProbeCore(def: PartDef): THREE.Object3D {
     const fa = (i: number) => (i * PI) / 4;
     const st = grp('starTracker');
     st.add(mk(cyl(0.055, 0.055, 0.1, 16).rotateX(PI / 2).translate(0, 0, ap + 0.05), M.gunmetal()));
-    st.add(mk(lathe([[0.05, 0], [0.09, 0.09]], { segments: 20 }).rotateX(PI / 2).translate(0, 0, ap + 0.1), M.blackPaint()));
+    // Sun baffle with a lip and an inner wall, so its inside shows from the front.
+    st.add(mk(lathe([[0.05, 0], [0.09, 0.09], [0.085, 0.09], [0.045, 0.002]], { segments: 20 }).rotateX(PI / 2).translate(0, 0, ap + 0.1), M.blackPaint()));
     st.add(mk(new THREE.CircleGeometry(0.04, 20).translate(0, 0, ap + 0.101), M.glass()));
     st.rotation.y = fa(1);
     st.position.y = bodyH * 0.12;

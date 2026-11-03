@@ -2059,6 +2059,19 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
 - Entry trim adds no node when the return already enters inside the corridor and the trim is under 0.05 m/s. Execute next node completes such a node without burning.
 - A departure list belongs to the body and vessel it was listed from. An SOI change or a vessel switch drops it.
 
+## Closed part meshes (2026-11-02, lathe)
+
+- Part materials stay single-sided, so every part mesh must be closed from outside: outer shells face out
+  (`lathe()` profiles run bottom to top), every opening shows an interior surface, and stack faces and nozzle
+  throats are capped. A part can sit alone in the editor, at either end of a stack, or under a smaller neighbour,
+  so no builder may rely on a neighbour to hide an open stack face. Surface-attach backs may stay open (the hull
+  covers them).
+- `tests/partFaces.test.ts` enforces this for every part at High and Low detail and in deployed states by ray tracing
+  each triangle's culled side. Pipe and hose mouths (`pipe()`) are out of scope; slivers below about 0.3% of the part
+  radius between lathes of different segment counts count as closed. Prefer extending a profile or capping it over
+  a double-sided material, which would add a material and draw.
+- `lathe()` skips the zero-area triangle where a profile point lies on the axis; caps and tips cost half as much.
+
 ## Pad hold-down is explicit, saved vessel state (2026-11-03, fix/sm-holddown)
 
 - An engine lit on the pad without staging (part action or action group) is a **static

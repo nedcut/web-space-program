@@ -65,6 +65,8 @@ function bell(o: BellOpts): THREE.Group {
       const s = i / n;
       p.push([bellRadius(s, o.rt, o.re, o.k) * 0.995, -s * o.len]);
     }
+    // Throat plug (faces down the nozzle on this back-side material): the chamber above is an outer shell only.
+    p.push([0, 0]);
     return p;
   };
   g.add(mk(lathe(innerPts(), { segments: Math.max(16, Math.round(seg * 0.6)), uRepeat: 4, tile: 1 }), M.bellInterior(), 'bellInner'));
@@ -158,7 +160,8 @@ function ggExhaust(rt: number, re: number, k: number, yThroat: number, len: numb
   }
   const g = [pipe(pts, pr, 6, 24)];
   const last = pts[pts.length - 1];
-  const out = lathe([[pr * 1.6, -0.12 * len], [pr * 1.05, 0]], { segments: 12 });
+  // Flared outlet; the recessed cone closes it, so looking up the outlet never shows the open pipe end.
+  const out = lathe([[0, -0.04 * len], [pr * 1.6, -0.12 * len], [pr * 1.05, 0]], { segments: 12 });
   out.translate(last[0], last[1], 0);
   g.push(out);
   return g;
@@ -582,10 +585,10 @@ export function buildSrb(def: PartDef): THREE.Object3D {
   const nozLen = nl + aft * 0.55;
   const noz = grp('nozzle');
   noz.position.y = yB + nozLen;
-  noz.add(mk(lathe([[rt * 1.6, 0.06], [rt * 1.2, 0.0]], { segments: 32 }), M.gunmetal()));
+  noz.add(mk(lathe([[rt * 1.2, 0.0], [rt * 1.6, 0.06]], { segments: 32 }), M.gunmetal()));
   const bl = bell({ rt, re, len: nozLen, k: 1.6, outer: M.gunmetal(), segments: 40, rings: 10 });
   noz.add(bl);
-  noz.add(mk(lathe([[r * 0.7, 0.07], [0, 0.07]], { segments: 32 }), M.soot()));
+  noz.add(mk(lathe([[0, 0.07], [r * 0.7, 0.07]], { segments: 32 }), M.soot()));
   noz.add(exhaustAnchor(-nozLen, re));
   root.add(noz);
 
@@ -644,15 +647,16 @@ export function buildIonEngine(def: PartDef): THREE.Object3D {
   root.add(mk(lathe([[r * 0.92, bodyBot], [r * 0.92, bodyTop]], { segments: 40, tile: 0.4 }), M.goldFoil(), 'body'));
   root.add(mk([torus(r * 0.93, 0.012, 6, 40).translate(0, bodyTop - h * 0.2, 0), torus(r * 0.93, 0.012, 6, 40).translate(0, bodyBot + h * 0.15, 0)], M.aluminium(), 'magnetRings'));
   // discharge chamber lip and grid
+  // Listed from the grid rim outwards and up, so the outer wall faces out and the rim faces the grid.
   const lip: Profile = [
-    [r * 0.92, bodyBot],
-    [rBot, bodyBot - 0.01],
-    [rBot, yB + 0.01],
-    [rBot * 0.97, yB],
-    [rBot * 0.97, yB],
-    [re, yB],
-    [re, yB],
     [re, yB + 0.03],
+    [re, yB],
+    [re, yB],
+    [rBot * 0.97, yB],
+    [rBot * 0.97, yB],
+    [rBot, yB + 0.01],
+    [rBot, bodyBot - 0.01],
+    [r * 0.92, bodyBot],
   ];
   root.add(mk(lathe(lip, { segments: 48 }), M.gunmetal(), 'gridHousing'));
   const grid = new THREE.CircleGeometry(re, 48);
