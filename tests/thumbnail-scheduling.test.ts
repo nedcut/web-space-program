@@ -162,3 +162,46 @@ it('cancels a craft preview waiting for restore when the dialog closes', async (
   expect(f.idle).toHaveLength(0);
   expect(ready).not.toHaveBeenCalled();
 });
+
+it('never tears the shared renderer down while a part render waits for the pointer to settle', async () => {
+  vi.resetModules();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance', 'Date'] });
+  try {
+    const idle: IdleRequestCallback[] = [];
+    const input = new EventTarget();
+    vi.stubGlobal('requestIdleCallback', (cb: IdleRequestCallback) => idle.push(cb));
+    vi.stubGlobal('document', { createElement: () => ({}), addEventListener: input.addEventListener.bind(input) });
+    URL.createObjectURL = () => 'blob:x';
+    URL.revokeObjectURL = () => {};
+    mocks.ready.mockReturnValue(new Promise<void>(() => {}));
+    mocks.gl.lost = false;
+    mocks.render.mockReset();
+    const THREE = await import('three');
+    mocks.build.mockImplementation(() => new THREE.Object3D());
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { getThumbnail, requestThumbnails, requestCraftThumbnail, subscribeThumbnails } = await import('../src/editor/scene/thumbnails');
+    const leave = subscribeThumbnails(() => {});
+    requestThumbnails([{ id: 'a', attachNodes: [] } as unknown as PartDef]);
+    await vi.advanceTimersByTimeAsync(0); // preload resolves; the part job is queued
+    // A dialog shows a craft preview; its job waits behind the part job.
+    const craft = { name: 'v', parts: [] } as unknown as import('../src/sim/vessel/types').CraftDef;
+    const cancelCraft = requestCraftThumbnail(craft, new Map(), () => {});
+    idle.shift()!({ didTimeout: false, timeRemaining: () => 50 });
+    input.dispatchEvent(new Event('pointermove')); // the player moves while the shader compiles
+    await vi.advanceTimersByTimeAsync(0); // compiled; now waiting for input to settle
+    expect(mocks.build).toHaveBeenCalledOnce();
+    expect(mocks.render).not.toHaveBeenCalled();
+    cancelCraft(); // a dialog with a craft preview closes: the last craft request ends
+    // The player keeps orbiting for longer than the idle teardown delay.
+    for (let t = 0; t < 5000; t += 200) {
+      input.dispatchEvent(new Event('pointermove'));
+      await vi.advanceTimersByTimeAsync(200);
+    }
+    expect(mocks.render).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(400); // input settles: the render completes on a live renderer
+    expect(warn).not.toHaveBeenCalled();
+    expect(mocks.render).toHaveBeenCalledOnce();
+    expect(getThumbnail('a')).toBe('blob:x');
+    leave();
+  } finally { vi.useRealTimers(); }
+});
