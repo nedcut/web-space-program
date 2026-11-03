@@ -2099,3 +2099,17 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   season) was the alternative: no balance change, but a five-year wait that the hub cannot reliably predict.
 - **Playthrough fix:** `descend` returns "lost" when the craft is already gone; on main the Real route crashed when a
   Kestrel hop was destroyed (hops at 45–75° are now lost on descent on main: not investigated here).
+
+## One active-vessel transition (2026-11-03, fix/sm-vessel-switch)
+
+- `FlightController.syncActiveVessel` is the only place that reacts to a new `world.activeId`, whoever changed it
+  ([ ] keys, map Fly, station list, EVA, boarding, loss). It runs every frame and right after the controller's own
+  switches. Co-op keeps its owned-vessel reset.
+- A vessel nobody flies gets neutral controls, so the pilot's controls do not follow them to the next vessel:
+  throttle 0, SAS and RCS off, momentary SAS hold dropped, trim cleared, docking mode and own-port choice cleared,
+  launch countdown cancelled (with a message), queued stage/gear/jump/commands dropped, alerts cleared. A running
+  assist program is cancelled and its restore commands go to the vessel it flew. Kept: stage lock, precision, map
+  view, and the camera mode unless the new vessel's cycle lacks it (an astronaut gets Auto).
+- Docking mode ends when a target goes away; it can still be switched on without a target. "Target gone → speed
+  mode Auto" lives only in `SpeedModeTracker`.
+- The pad clamps follow the last active vessel still on the pad while another vessel is flown.

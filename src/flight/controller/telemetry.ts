@@ -32,9 +32,20 @@ const DARK_SUGGEST_AGL = 3000;
 const cueStates = new WeakMap<FlightController, { vessel: string; body: string; signal: boolean; throttle: string | null; sas: boolean; soi: boolean; orbit: boolean; situation: string; staged: number; darkTold: boolean }>();
 const throttleTrackers = new WeakMap<FlightController, ThrottleCueTracker>();
 const alertTrackers = new WeakMap<FlightController, AlertTracker>();
+/** The controller's caution & warning tracker (one per flight scene). */
+export function alertTracker(c: FlightController): AlertTracker {
+  let tracker = alertTrackers.get(c);
+  if (!tracker) alertTrackers.set(c, (tracker = new AlertTracker()));
+  return tracker;
+}
 /** Alerts currently on the HUD banner, refreshed with telemetry. */
 export const shownAlerts = (c: FlightController) => alertTrackers.get(c)?.current ?? [];
 export const silenceAlert = (c: FlightController, id: string) => alertTrackers.get(c)?.silence(id);
+/**
+ * A new active vessel starts with no alerts: the old vessel's lingering (1.2 s hold) and silenced warnings are not
+ * its own. The other cue trackers here are keyed to the vessel id already.
+ */
+export const activeVesselChanged = (c: FlightController) => alertTrackers.get(c)?.clear();
 const burnTrackers = new WeakMap<FlightController, BurnTracker>();
 
 /** Highest rails warp index allowed right now (0 = rails warp refused: thrusting or in atmosphere). */
@@ -201,8 +212,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   const ec = totals.get('electricCharge');
   const vs = w.verticalSpeed(wv);
   const surfaceSpeed = length(w.surfaceVelocity(wv));
-  let tracker = alertTrackers.get(this);
-  if (!tracker) alertTrackers.set(this, (tracker = new AlertTracker()));
+  const tracker = alertTracker(this);
   const flying = st.situation === 'flying' && wv.mode !== 'prelaunch';
   const currentStage = ignited ? dvs.find(d => d.stage === st.nextStage + 1) : undefined;
   const gravity = b.gm / (info.r * info.r);
