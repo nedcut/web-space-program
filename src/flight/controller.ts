@@ -20,7 +20,7 @@ import { PART_CATALOG } from '../data/parts';
 import type { Autopilot } from '../game/autopilot';
 import { flightPredictions, targetOrbitState } from '../game/flightData';
 import type { SaveScene } from '../game/saveSlots';
-import { deserializeWorld, loadWorldFromStorage, saveWorldToStorage, serializeWorld, type SavedWorld } from '../game/persistence';
+import { deserializeWorld, loadWorldFromStorage, savedPilotThrottle, saveWorldToStorage, serializeWorld, type SavedWorld } from '../game/persistence';
 import { applyCommsSettings, cameraShakeScale, game } from '../game/store';
 import { Universe } from '../game/universe';
 import { PHYSICS_DT, World, type WorldVessel } from '../game/world';
@@ -150,6 +150,8 @@ export class FlightController {
   stagedCount = 0;
   sasOn = false;
   rcsOn = false;
+  /** The pilot's throttle was cut when the crew went on EVA (explained again on boarding). */
+  private evaThrottleCut = false;
   /** Astronaut jetpack switch (the RCS key on EVA). Each new EVA starts with it on in flight/space, off on the ground. */
   jetpackOn = false;
   private jetpackFor: string | null = null;
@@ -260,6 +262,19 @@ export class FlightController {
     const universe = this.world.universe;
     this.hints = new HintTracker(new Set(this.world.seenTips as import('./hints').HintId[]), seen => { this.world.seenTips = [...seen]; });
     this.input = new FlightInput();
+    // Quickload / Load resume the pilot's throttle and SAS as saved; a new launch into a saved world starts at zero.
+    // The SAS mode (and its held attitude) is in the saved vessel state; the first step would otherwise switch it off.
+    // Holds that need the unsaved speed reference or port selection (prograde … radial, port align) resume as an
+    // attitude hold on the current heading rather than pointing somewhere else.
+    const resumed = saved && !craft && !this.network ? this.world.active : undefined;
+    if (resumed) {
+      this.world.pilotThrottle = this.input.state.throttle = savedPilotThrottle(saved!);
+      const mode = resumed.state.sas.mode;
+      if (mode !== 'off' && !resumed.state.eva) {
+        this.sasOn = true;
+        this.sas = mode === 'target' || mode === 'antiTarget' || mode === 'maneuver' ? mode : 'stabilityAssist';
+      }
+    }
     this.cameraRig = new FlightCameraRig(this.world, this.cam, this.input.camera);
 
     this.pipeline = new RenderPipeline({ quality: getQuality(quality), toneMapping: 'aces', exposure: 1 });
@@ -341,7 +356,7 @@ export class FlightController {
           case 'actionGroup1': case 'actionGroup2': case 'actionGroup3': case 'actionGroup4': case 'actionGroup5':
           case 'actionGroup6': case 'actionGroup7': case 'actionGroup8': case 'actionGroup9': case 'actionGroup10':
             this.fireGroup(`custom${a.slice(11)}` as ActionGroupId, undefined, true); break;
-          case 'quickload': if (!this.network) this.onQuickload?.(); break;
+          case 'quickload': this.onQuickload?.(); break;
           case 'toggleCamMode': this.cycleCameraMode(); break;
           case 'trimReset': this.world.message('Trim cleared', 'info', 1.5); break;
         }
@@ -508,9 +523,18 @@ export class FlightController {
   private lossFocusUt = 0;
   private activeLost = false;
 
+  /** Why quicksave/quickload is unavailable in this flight, or null. Practice keeps the program's saves untouched. */
+  quickSaveBlocker(action: 'Quicksave' | 'Quickload'): string | null {
+    if (this.network) return `${action} is not available in co-op`;
+    if (getTutorial()) return `${action} is off during Training`;
+    if (game.get().scenarioActive) return `${action} is off during challenges`;
+    return null;
+  }
+
   /** `scene`: where Load resumes (default: this flight; leaving flight passes the scene being left for). */
   quicksave(slot = 'quicksave', scene: SaveScene = 'flight') {
-    if (this.network || getTutorial() || game.get().scenarioActive) return;
+    const blocked = this.quickSaveBlocker('Quicksave');
+    if (blocked) { if (slot === 'quicksave') this.world.message(blocked); return; }
     try {
       // Periodic autosaves snapshot now and write on idle tasks; a quicksave the player asked for writes immediately.
       const autosave = slot === 'autosave';
@@ -755,6 +779,9 @@ export class FlightController {
       this.jetpackOn = !grounded;
       this.cancelAssist();
       this.stagePending = false;
+      // Only the focused vessel gets pilot input, so the craft left behind coasts with its engines cut.
+      this.evaThrottleCut = this.input.state.throttle > 0;
+      if (this.evaThrottleCut) this.world.message('Throttle cut to 0% while you are on EVA', 'info', 4);
       this.input.state.throttle = 0;
       this.sasOn = false;
       this.cam.mode = 'auto';
@@ -768,6 +795,8 @@ export class FlightController {
       this.cancelAssist();
       this.stagePending = false;
       this.input.state.throttle = 0;
+      if (this.evaThrottleCut) this.world.message('Back aboard: throttle is at 0% (cut for EVA)', 'info', 4);
+      this.evaThrottleCut = false;
     }
   }
 
@@ -964,6 +993,7 @@ export class FlightController {
     }
     const s = this.input.state;
     const wv = this.world.active;
+    this.world.pilotThrottle = s.throttle;
     if (s.brakes !== this.brakesWere) {
       this.brakesWere = s.brakes;
       if (!this.paused && this.hasBindings('brakes')) this.fireGroup('brakes', s.brakes);
