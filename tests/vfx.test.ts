@@ -187,3 +187,29 @@ it('preserves long-lived column cells through a spark / pad-dust burst without a
   expect(pool.object.geometry.instanceCount).toBe(512);
   pool.dispose();
 });
+
+it('starts a new vessel without the old one’s splash edge or smoke column', () => {
+  const fx=new FlightFx('medium'), a=buildVessel(buildMoonLander(),PART_CATALOG), b=buildVessel(buildMoonLander(),PART_CATALOG);
+  a.id='a'; b.id='b';
+  const zero=new THREE.Vector3(), center=new THREE.Vector3(0,-1000,0);
+  const update=(v: typeof a,ut:number)=>fx.update(v,v.position,center,zero,'earth',5,0,0,zero,.1,500,ut,[[.3,.3,.3]]);
+  a.situation='flying'; b.situation='splashed';
+  update(a,0); update(b,.1);
+  // Switching from a flying vessel to a floating one is not a splashdown.
+  expect(fx.pool.object.visible).toBe(false);
+  b.situation='flying'; update(b,.2); b.situation='splashed'; update(b,.3);
+  expect(fx.pool.object.visible).toBe(true);
+  fx.dispose();
+});
+
+it('never stretches one vessel’s smoke column to another vessel', () => {
+  const fx=new FlightFx('medium'), a=buildVessel(buildMoonLander(),PART_CATALOG), b=buildVessel(buildMoonLander(),PART_CATALOG);
+  a.id='a'; b.id='b'; b.position={x:300,y:0,z:0};
+  for(const v of [a,b]) for(const p of v.parts) if(p.engine) {p.engine.thrust=100000; p.engine.throttle=1;}
+  const zero=new THREE.Vector3(), center=new THREE.Vector3(0,-1000,0);
+  const update=(v: typeof a,ut:number)=>fx.update(v,v.position,center,zero,'earth',1000,1,0,zero,.1,1000,ut,[[.3,.3,.3]]);
+  update(a,0); update(a,.1); update(b,.2);
+  const segment=fx.pool.object.geometry.attributes.segment;
+  for(let i=128;i<136;i++) expect(Math.hypot(segment.getX(i),segment.getY(i),segment.getZ(i))).toBeLessThan(50);
+  fx.dispose();
+});

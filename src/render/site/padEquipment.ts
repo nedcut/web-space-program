@@ -209,7 +209,7 @@ export class PadEquipment {
   }
 
   /**
-   * Advance the equipment for sim time `t`. `vessel` is the active vessel on the pad (or null), with its COM in
+   * Advance the equipment for sim time `t`. `vessel` is the vessel on the pad (or null), with its COM in
    * the pad frame; `held` while the hold-down clamps keep it, `firing` once its launch stage has ignited.
    */
   update(t: number, vessel: { state: VesselState; com: THREE.Vector3; held: boolean; firing: boolean } | null): void {
