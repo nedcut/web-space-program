@@ -2035,4 +2035,4 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
 - Failed far-LOD bakes retry after 1 s, doubling to 30 s, never every frame. Adaptive resolution forgets an open
   reduction episode or full-resolution trial at a hold or a frame-rate-cap change; scale and backoff timers stay.
 - No hysteresis on the near/far terrain switch or Earth's regional material switch: a 200 s launch to 137 km
-  crossed each boundary once (camera shake is ±8 cm), and a material switch only swaps prewarmed programs.
+  crossed each boundary once (camera shake stays under 10 cm), and a material switch only swaps prewarmed programs.
