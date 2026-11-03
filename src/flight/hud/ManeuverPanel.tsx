@@ -1,10 +1,9 @@
 import { usePlanner } from './usePlanner';
-import { DepartureOptions } from './DepartureOptions';
-import type { TransferWindow as DepartureWindow } from '../../game/planning/windows';
+import { DepartureOptions, currentDepartures, type DepartureList } from './DepartureOptions';
 import type { TransferPlan } from '../../game/planning/transfers';
 import { applyEntryTrim, applyPlanningResult } from '../../game/planning/apply';
-import { enteringDragPerMass, findEntry, type EntryTrimPlan } from '../../game/planning/entry';
-import { isDirectEntry } from '../../game/planning/arrival';
+import { enteringDragPerMass, findEntry, trimNeeded, type EntryTrimPlan } from '../../game/planning/entry';
+import { arrivalTime, isDirectEntry } from '../../game/planning/arrival';
 import { TransferWindow } from './TransferWindow';
 import { memo, useEffect, useRef, useState } from 'react';
 import type { World } from '../../game/world';
@@ -29,7 +28,7 @@ function storedOpen(): string | null {
 }
 
 /** The last transfer the planner installed, shown as a timeline card while its node exists. */
-interface PlanCard { target: string; nodeId: number; encounterTime: number; periapsis: number; captureDv?: number; returnPerigee?: number }
+interface PlanCard { target: string; nodeId: number; encounterTime: number; arrivalTime: number; periapsis: number; captureDv?: number; returnPerigee?: number }
 /** The last entry trim the planner installed, shown with its corridor gauge while its node exists. */
 interface TrimCard { nodeId: number; plan: EntryTrimPlan }
 
@@ -53,7 +52,7 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
   const [card, setCard] = useState<PlanCard | null>(null);
   const [trim, setTrim] = useState<TrimCard | null>(null);
   const [transferTarget, setTransferTarget] = useState<string | null>(null);
-  const [options, setOptions] = useState<{ target: string; windows: DepartureWindow[] } | null>(null);
+  const [listed, setListed] = useState<DepartureList | null>(null);
 
   // Node list readouts (and the collapsed header's node count) refresh at 4 Hz. A new plan (no nodes → some) opens
   // the planner so its node list and tools are in view; a later collapse holds until the next new plan.
@@ -63,6 +62,8 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
       const has = world.nodes.length > 0;
       if (has && !hadNodes.current) setOpen(true);
       hadNodes.current = has;
+      // Drop departures listed before an SOI change, so they cannot reappear on a later return to that body.
+      setListed(l => l && !currentDepartures(l, world.active) ? null : l);
       force((x) => (x + 1) % 1e6);
     }, 250);
     return () => window.clearInterval(id);
@@ -106,7 +107,7 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
     const node = world.nodes[0];
     const capture = isDirectEntry(world.universe.body(target), plan.periapsisAltitude) ? 0 : captureDv;
     if (node) {
-      setCard({ target, nodeId: node.id, encounterTime: plan.encounterTime, periapsis: plan.periapsisAltitude, captureDv: capture, returnPerigee: plan.returnPerigee });
+      setCard({ target, nodeId: node.id, encounterTime: plan.encounterTime, arrivalTime: arrivalTime(plan, target), periapsis: plan.periapsisAltitude, captureDv: capture, returnPerigee: plan.returnPerigee });
       map?.selectNode(node.id);
       map?.frameTransferOverview(target);
     }
@@ -120,17 +121,17 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
       if (!plan) { setPlanMsg(freeReturn ? 'No free return found from this orbit. Plan a normal transfer instead.' : departure !== undefined ? 'That departure did not refine to an encounter. Try another option.' : 'No transfer window found'); return; }
       applyPlanningResult(world, snapshot, plan);
       // Keep the option list from the first search when the player picks one of its departures.
-      if (departure === undefined && plan.windows?.length) setOptions({ target: id, windows: plan.windows });
+      if (departure === undefined && plan.windows?.length) setListed({ from: snapshot.vessel!.body, vessel: snapshot.vessel!.id, target: id, windows: plan.windows });
       installed(id, plan, captureDv);
     } catch (e) {
       if ((e as Error).name !== 'AbortError') setPlanMsg((e as Error).message);
     }
   };
   const listDepartures = async (id: string) => {
-    setPlanMsg(''); setOptions(null);
+    setPlanMsg(''); setListed(null);
     try {
-      const { result } = await planner.run('windows', { target: id });
-      setOptions({ target: id, windows: result });
+      const { result, snapshot } = await planner.run('windows', { target: id });
+      setListed({ from: snapshot.vessel!.body, vessel: snapshot.vessel!.id, target: id, windows: result });
       if (!result.length) setPlanMsg('No departure windows found from this orbit.');
     } catch (e) { if ((e as Error).name !== 'AbortError') setPlanMsg((e as Error).message); }
   };
@@ -148,6 +149,7 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
     try {
       const { result: plan, snapshot } = await planner.run('entry', { dragPerMass: enteringDragPerMass(wv.state) });
       if (!plan) { setPlanMsg('No trim found: the return is outside what a small correction can fix.'); return; }
+      if (!trimNeeded(plan)) { setPlanMsg(`Periapsis ${formatDistance(plan.before)} is already in the corridor: no trim needed.`); return; }
       applyEntryTrim(world, snapshot, plan);
       const node = world.nodes.find(n => Math.abs(n.time - plan.node.time) < 1e-6 && n.prograde === plan.node.prograde);
       if (node) { setTrim({ nodeId: node.id, plan }); map?.selectNode(node.id); }
@@ -180,11 +182,11 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
         stops={[
           { label: 'Now' },
           { label: 'Burn', value: Number.isFinite(burn) ? shortDuration(burn) : 'no engine', tone: 'burn', title: `Node ${whenTitle(planNode.time, world.ut)}\nBurn ${Number.isFinite(burn) ? formatDuration(burn) : '— (no active engine)'}, start ${formatCountdown(startIn)}` },
-          { label: target, value: `Pe ${formatDistance(card.periapsis)}`, tone: 'arrive', title: `Encounter ${whenTitle(card.encounterTime, world.ut)}\nPeriapsis ${formatDistance(card.periapsis)}${card.captureDv ? `\nCapture ~${dvText(card.captureDv)} (estimate)` : ''}` },
+          { label: target, value: `Pe ${formatDistance(card.periapsis)}`, tone: 'arrive', title: `Periapsis ${formatDistance(card.periapsis)} ${whenTitle(card.arrivalTime, world.ut)}\nEnters SOI ${whenTitle(card.encounterTime, world.ut)}${card.captureDv ? `\nCapture ~${dvText(card.captureDv)} (estimate)` : ''}` },
           ...(card.returnPerigee !== undefined ? [{ label: world.universe.body(world.universe.body(card.target).parent!).name, value: `Pe ${formatDistance(card.returnPerigee)}`, tone: 'arrive' as const,
             title: `Free return: the flyby bends the path home with no return burn.\nEntry periapsis ${formatDistance(card.returnPerigee)}. Fix small errors with a correction burn on the way.` }] : []),
         ]}
-        gaps={[shortDuration(startIn), shortDuration(card.encounterTime - planNode.time), ...(card.returnPerigee !== undefined ? ['flyby'] : [])]} />
+        gaps={[shortDuration(startIn), shortDuration(card.arrivalTime - planNode.time), ...(card.returnPerigee !== undefined ? ['flyby'] : [])]} />
       {map && <button className="btn small primary" disabled={!!planner.progress} title="Warp to the burn. Flight assist → Execute next node can fly it." onClick={() => map.warpToNode(planNode.id)}>Warp to burn</button>}
     </div>;
   }
@@ -209,6 +211,8 @@ export const ManeuverPanel = memo(function ManeuverPanel({ world, map }: { world
     </div>;
   }
 
+  // Departures listed from another body (an SOI change since) or by another vessel are stale: never offer them.
+  const options = currentDepartures(listed, wv);
   const chartButton = options && charts(options.target) ? <button className="btn ghost small pl-icon" disabled={!!planner.progress} title="Transfer window chart (departure date × flight time)" aria-label="Transfer window chart" onClick={() => setTransferTarget(options.target)}><ChartGlyph /></button> : null;
   const moon = options && world.universe.body(options.target).parent === body.id;
   const freeReturnButton = moon ? <button className="btn small" disabled={!!planner.progress} title="Plan a flyby that swings back home without a return burn (crewed first flights)" onClick={() => planTransfer(options.target, undefined, undefined, true)}>Free return</button> : null;

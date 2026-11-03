@@ -1,11 +1,26 @@
 import { sampleAtmosphere } from '../../sim/atmosphere';
+import { timeToPeriapsis } from '../../sim/orbit';
 import { length } from '../../util/vec3';
 import type { PlanningWorld } from './context';
 import type { Body } from '../../sim/bodies/types';
+import type { TrajectoryPatch } from '../../sim/orbit/api';
 
 /** A periapsis inside air is a direct entry; no circular capture burn belongs in its propellant budget. */
 export function isDirectEntry(target: Body, periapsisAltitude: number): boolean {
   return !!target.atmosphere && periapsisAltitude < target.atmosphere.height;
+}
+
+/**
+ * UT of the periapsis at `targetId` after a transfer enters its sphere of influence: the arrival that departure
+ * estimates measure (they aim at the target's centre). Falls back to the SOI change.
+ */
+export function arrivalTime(plan: { patches: readonly TrajectoryPatch[]; encounterTime: number }, targetId: string): number {
+  const p = plan.patches.find(q => q.orbit.body === targetId && q.startTime >= plan.encounterTime - 1);
+  if (!p) return plan.encounterTime;
+  try {
+    const dt = timeToPeriapsis(p.orbit, p.startTime);
+    return Number.isFinite(dt) ? p.startTime + dt : plan.encounterTime;
+  } catch { return plan.encounterTime; }
 }
 
 /**
