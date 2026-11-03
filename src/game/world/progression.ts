@@ -1,6 +1,6 @@
 import { careerScaleMultiplier } from '../../sim/bodies/scale';
 import { unlockTech as unlockTechModel } from '../../data/technology';
-import { acceptContract as acceptContractModel, failContract, generateContracts, offerKey, requestRecoveryGrant as requestRecoveryGrantModel, sameObjective, type ProgressEvent } from '../../sim/science/progression';
+import { abandonContract as abandonContractModel, acceptContract as acceptContractModel, generateContracts, offerKey, requestRecoveryGrant as requestRecoveryGrantModel, sameObjective, type ProgressEvent } from '../../sim/science/progression';
 import { contractRewardFactor, contractSlots, facilityPerk, upgradeFacility as upgradeFacilityModel, ownedLevel, type FacilityId } from '../../sim/science/facilities';
 import { instruments, progressionEvent, runExperiment as runExperimentModel, scienceContext as scienceContextModel, transmitScience as transmitScienceModel } from '../science';
 import type { World, WorldVessel } from '../world';
@@ -55,12 +55,7 @@ export function upgradeFacility(this: World, id: FacilityId): boolean {
 }
 
 
-export function abandonContract(this: World, id: string) {
-  const c = this.progression.contracts.find(c => c.id === id);
-  if (this.mode !== 'career' || !c) return false;
-  if (c.status === 'offered') { c.status = 'failed'; return true; }
-  return failContract(this.progression, c);
-}
+export function abandonContract(this: World, id: string) { return this.mode === 'career' && abandonContractModel(this.progression, id); }
 
 
 export function unlockTech(this: World, id: string) {

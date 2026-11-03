@@ -1,6 +1,7 @@
 import { ACTION_GROUP_IDS, PART_ACTION_IDS, type ActionGroupId, type PartActionId, type PartDef, type PartGroupActions, type WheelModule } from './types';
 import type { PartState, VesselCommand, VesselEvent, VesselState } from './runtime';
 import { rebuildTopology } from './assembly';
+import { armChute, cutChute } from './aero';
 import { engineModule, igniteEngine, isSolidMotor, shutdownEngine } from './engines';
 import { fireDecoupler, jettisonFairing } from './staging';
 import { controlFrom, transferCrew } from './station';
@@ -185,15 +186,10 @@ export function applyPartAction(v: VesselState, cmd: PartCommand, events: Vessel
     case 'decouple': if (p.activated) return false; fireDecoupler(all, p.uid, events, created); return true;
     case 'fairing.jettison': if (p.activated) return false; jettisonFairing(all, p.uid, events); return true;
     case 'chute.deploy':
-      if (!p.chute || p.chute.phase !== 'stowed') return false;
-      p.chute.phase = 'armed'; p.activated = true;
-      events.push({ type: 'chute', vesselId: owner.id, partUid: p.uid, phase: 'armed' });
+      if (!armChute(owner, p, events)) return false;
+      p.activated = true;
       return true;
-    case 'chute.cut':
-      if (!p.chute || p.chute.phase === 'stowed' || p.chute.phase === 'cut') return false;
-      p.chute.phase = 'cut'; p.chute.cda = 0;
-      events.push({ type: 'chute', vesselId: owner.id, partUid: p.uid, phase: 'cut' });
-      return true;
+    case 'chute.cut': return cutChute(owner, p, events);
     case 'crossfeed.toggle': if (mergeTweaks(p, { crossfeed: want })) rebuildTopology(owner); return true;
     case 'light.toggle': mergeTweaks(p, { lightOn: want }); return true;
     case 'rcs.toggle': mergeTweaks(p, { rcsEnabled: want }); return true;

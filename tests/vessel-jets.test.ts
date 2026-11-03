@@ -4,6 +4,7 @@ import {
 } from '../src/sim/vessel';
 import type { EngineModule, VesselEvent, VesselState } from '../src/sim/vessel';
 import { TEST_CATALOG, flatEarthEnv, planeCraft } from '../src/sim/vessel/testing';
+import { igniteEngine, shutdownEngine } from '../src/sim/vessel/engines';
 import { PART_CATALOG } from '../src/data/parts';
 
 const fixtureJet = TEST_CATALOG.get('jet')!.modules[0] as EngineModule;
@@ -34,6 +35,18 @@ function fly(v: VesselState, seconds: number, throttle = 1, ground = false): Ves
 }
 
 describe('air-breathing engines', () => {
+  it('a starved jet that is shut down is off, not flamed out; it can be lit again', () => {
+    const starved = jetVessel({ intake: false, z: 1000, speed: 100 });
+    fly(starved.v, 3);
+    expect(starved.jet.engine!.flamedOut).toBe(true);
+    expect(shutdownEngine(starved.jet)).toBe(true);
+    expect(starved.jet.engine!.ignited).toBe(false);
+    expect(starved.jet.engine!.flamedOut).toBe(false);
+    expect(igniteEngine(starved.v, starved.jet)).toBe(true);
+    fly(starved.v, 1);
+    expect(starved.jet.engine!.flamedOut).toBe(true);
+  });
+
   it('curve lookup interpolates and clamps', () => {
     const c: [number, number][] = [[0, 1], [1, 2], [2, 0]];
     expect(curveAt(c, -1)).toBe(1);
