@@ -13,10 +13,10 @@ import { generateContracts, newProgression } from '../src/sim/science/progressio
 import { careerScaleMultiplier } from '../src/sim/bodies/scale';
 import { nextGoal, researchFor } from '../src/ui/hub/nextGoal';
 import { neutralInput } from '../src/sim/vessel';
-import { length, normalize, scale, add, v3, dot, sub } from '../src/util/vec3';
+import { length, normalize, scale, add, sub, v3, dot } from '../src/util/vec3';
 import { qFromTo } from '../src/util/quat';
-import { toOrbit } from '../scripts/career/flights';
-import { atmosphericLanding, capture, deorbitFacingEarth, dvLeft, toPlanet } from '../scripts/career/planets';
+import { toOrbit, sensor } from '../scripts/career/flights';
+import { arrive, atmosphericLanding, capture, correct, deorbitFacingEarth, depart, dvLeft, planDeparture, survey, toPlanet } from '../scripts/career/planets';
 import { createUniverse } from '../src/sim/bodies';
 import { createEphemeris } from '../src/sim/orbit';
 import { nextLaunchSeason } from '../src/sim/orbit/season';
@@ -120,6 +120,58 @@ describe('planetary probes', () => {
     // Arrival contact is checked above; capture can carry the probe behind Mars.
     expect(w.progression.milestones).toContain('first-mars');
     expect(w.scienceInstruments().some(i => i.available && i.value > 0)).toBe(true);
+  }, 300_000);
+
+  it('a Real Petrel reaches Mars in contact, captures into a long ellipse and sends science home', () => {
+    // Real Mars was out of the Arcwatch's reach (200 Gm) at the planner's arrivals (215–335 Gm), and the long-ellipse
+    // capture after its transfer (~1.75 km/s) left the career's Petrel, sensors aboard, short. Second Mars season.
+    const bodies = createUniverse('real'), ephem = createEphemeris(bodies);
+    const season = nextLaunchSeason(bodies, ephem, 'earth', 'mars', DEFAULT_START_UT + 900 * 86400)!.departure;
+    const w = career('real', season - 5 * 86400);
+    w.progression.unlocked.push(...researchFor('stock-petrel-real', w.progression, 'career').nodes, 'discovery-1', 'discovery-2');
+    w.progression.funds = 1e8;
+    const craft = buildPetrel('real');
+    // The career route's instruments (what the playthrough fits when researched): the heaviest Petrel it flies.
+    sensor(craft, 'sensor-magnetic', 1); sensor(craft, 'sensor-gravity', 2);
+    expect(facilityProblem(craft, PART_CATALOG, 'career', w.progression, 'real')).toBeNull();
+    w.launch(craft);
+    const biomes = new Set<string>(), mars = w.universe.body('mars');
+    expect(toOrbit(w, biomes, 220000, 2)).toBeNull();
+    // The player takes the planner's "now" option in this season (the next good one is ~770 days later).
+    const pe = mars.atmosphere!.height * 1.5;
+    const listed = planTransferToBody(w, 'mars', { periapsisAltitude: pe })!;
+    const now = listed.windows!.find(o => o.kind === 'now')!;
+    const d = planDeparture(w, 'mars', pe, now.departure);
+    if (typeof d === 'string') throw new Error(d);
+    expect(d.time - w.ut).toBeLessThan(86400);
+    const dv = depart(w, 0);
+    expect(typeof dv).toBe('number');
+    coastUntil(w, w.ut + 120 * 86400, { stopOnSoi: true });
+    const cruise = w.ut, span = d.encounter - w.ut;
+    let trimDv = 0;
+    for (const f of [0.05, 0.6, 0.9]) {
+      const used = correct(w, d, Math.max(cruise + span * f, w.ut + 600), 0);
+      expect(typeof used === 'number' || used === 'no contact', String(used)).toBe(true);
+      if (typeof used === 'number') trimDv += used;
+    }
+    expect(arrive(w, biomes, d)).toBeNull();
+    expect(w.canControl()).toBe(true);
+    const earthGm = () => length(sub(w.universe.ephem.getBodyState('earth', w.ut).position, w.universe.ephem.getBodyState('mars', w.ut).position)) / 1e9;
+    const arrival = earthGm();
+    const band = Math.max(2 * mars.atmosphere!.height, mars.radius * 0.25) * 0.95;
+    const cap = capture(w, biomes, band, 0);
+    expect(cap.err).toBeNull();
+    const o = w.orbitSummary(w.active!);
+    const science = survey(w, biomes, 6);
+    console.log('GOLDEN petrel-real-mars', JSON.stringify({ arrivalEarthGm: arrival, pe: o.pe, ap: o.ap, departure: dv, trimDv, capture: cap.dv, dvLeft: dvLeft(w), science }));
+    // Earth 200–283 Gm away: inside the Arcwatch's new reach, outside the old one.
+    expect(arrival).toBeGreaterThan(200);
+    expect(arrival).toBeLessThan(283);
+    expect(o.pe).toBeGreaterThan(mars.atmosphere!.height);
+    expect(o.ap).toBeLessThan(mars.soi);
+    expect(dvLeft(w)).toBeGreaterThan(150);
+    expect(science).toBeGreaterThan(20);
+    expect(w.progression.milestones).toContain('first-mars');
   }, 300_000);
 
   it('the Kiln lander keeps its link on the Venus surface and sends its reading home', () => {
