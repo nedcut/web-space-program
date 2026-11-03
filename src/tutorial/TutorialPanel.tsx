@@ -36,7 +36,7 @@ export function TutorialPanel() {
     <div className="tutorial-progress">Step {run.index + 1} of {run.lesson.steps.length} · <span className="tutorial-mentor">Flight Director Ama Okafor</span></div>
     <div id="tutorial-instructions" className="tutorial-body" hidden={collapsed}>
       {/* Only the instructions scroll: the goal status and buttons stay visible however short the window is. */}
-      <div className="tutorial-text">
+      <div className="tutorial-text" key={`${run.epoch}:${run.index}:${run.finished}`}>
         <p aria-live="polite">{run.finished ? (run.skipped ? 'Practice finished. Repeat without skipping to earn your completion checkmark.' : 'Lesson complete. Nicely flown! Your completion checkmark is saved when browser storage is available.') : bindingText(step.text, bindings)}</p>
       </div>
       {!run.finished && <div className="tutorial-status">{run.ready ? '✓ Goal reached — continue when ready.' : 'Try the action above to unlock Next.'}</div>}

@@ -5,12 +5,16 @@
 .training-lesson p { color: var(--text-dim); margin: 4px 0 8px; font-size: 13px; line-height: 1.5; }
 /* Training owns this rail; the work view stays clear in the middle. */
 .tutorial-panel { position: absolute; z-index: 15; width: 300px; max-width: calc(100% - 24px); display: flex; flex-direction: column; overflow: auto; padding: 12px; pointer-events: auto; }
-/* Ends 307 px above the bottom (staging room) where there is space. Short windows (UI scale 125-130%) keep up to
-   200 px, enough for the heading, status, buttons and two to three lines of text, ending above the navball's SAS column. */
-.tutorial-panel.flight { left: 10px; top: 158px; max-height: max(calc(100% - 465px), min(200px, calc(100% - 413px))); }
+/* Ends 307 px above the bottom (staging room) where there is space. Short windows (720 px tall, UI scale 125-130%)
+   move the card up toward the time controls (top >= 89px) and keep up to 200 px: heading, status, buttons and two to
+   three lines of text, still ending at least 255 px above the bottom, clear of the navball's SAS column. */
+.tutorial-panel.flight { left: 10px; top: clamp(89px, calc(100% - 465px), 158px);
+  max-height: max(calc(100% - 465px), min(200px, calc(100% - 255px - clamp(89px, calc(100% - 465px), 158px)))); }
 /* Long staging stacks (7-stage Selene) scroll below the open card instead of running under it: the card ends at most
-   at min(100% - 307px, 505px) (longest lesson text) or, on short windows, 358px (HUD scale 1). */
-.fullscreen:has(> .tutorial-panel.flight:not(.collapsed)) .hud-left-bottom { max-height: min(max(289px, calc(100% - 503px)), calc(100% - 356px)); }
+   at min(100% - 307px, 505px) (longest lesson text) or, on short windows, its top + 200px (HUD scale 1; this column
+   is 20px shorter than the screen). */
+.fullscreen:has(> .tutorial-panel.flight:not(.collapsed)) .hud-left-bottom {
+  max-height: min(max(289px, calc(100% - 503px)), calc(100% - 198px - clamp(89px, calc(100% - 445px), 158px))); }
 .tutorial-panel.editor { right: 10px; top: 74px; max-height: calc(50% - 84px); }
 .fullscreen:has(> .tutorial-panel.editor) > .vab-root .vab-staging { top: 50%; }
 .fullscreen:has(> .tutorial-panel.editor.collapsed) > .vab-root .vab-staging { top: 260px; }
