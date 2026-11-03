@@ -2025,6 +2025,19 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   to avoid waiting for animation frames on a frozen page. Functional SwiftShader
   checks do not establish real-GPU performance or cross-browser behavior.
 
+## Throttle and SAS across quickload and EVA (2026-11-02)
+
+- Quickload and Load resume the pilot's controls exactly. Saves carry the pilot's throttle lever as optional
+  `SavedWorld.pilotThrottle` (absent = 0, so older saves and zero-throttle saves are unchanged). The controller writes
+  the lever, not the per-tick input, into `World.pilotThrottle`. A node-executor or landing burn therefore resumes
+  at the pilot's lever (usually 0), not at the assist's throttle with no assist left to cut it. SAS on/off and mode come from the
+  saved vessel state; prograde/retrograde/normal/radial and port-align holds resume as stability assist on the current
+  heading, because their speed reference and port selection are not saved. Only a flight resumed from the save reads the field: worlds loaded by the Tracking Station or Space
+  Center drop it when they save again, and a new launch into a saved world starts at 0.
+- EVA keeps cutting the throttle: only the focused vessel receives pilot input, so the craft left behind coasts. The
+  player is told when it happens and again on boarding, instead of restoring thrust next to a returning astronaut.
+- Quicksave/quickload remain off during Training, challenges and co-op (practice isolation); F5/F9 now say so.
+
 ## Pad hold-down is explicit, saved vessel state (2026-11-03, fix/sm-holddown)
 
 - An engine lit on the pad without staging (part action or action group) is a **static

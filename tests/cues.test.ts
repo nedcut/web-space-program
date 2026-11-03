@@ -4,6 +4,7 @@ import { preflightChecks } from '../src/editor/checks';
 import { PART_CATALOG } from '../src/data/parts';
 import { STOCK_CRAFTS } from '../src/editor/stockCrafts';
 import { computeStageStats } from '../src/editor/ui/dv';
+import type { CraftDef } from '../src/sim/vessel/types';
 import { buildVessel } from '../src/sim/vessel/assembly';
 import { flightMessages, stageExplanation, throttleExplanation } from '../src/flight/cues';
 import { igniteEngine, shutdownEngine, stepEngines } from '../src/sim/vessel/engines';
@@ -84,6 +85,27 @@ describe('preflight checks', () => {
     const checks = preflightChecks(craft, PART_CATALOG);
     expect(checks.filter(c => c.id.startsWith('fuel-')).length).toBeGreaterThan(0);
     expect(checks.filter(c => c.id.startsWith('fuel-')).every(c => c.uids.length > 0)).toBe(true);
+  });
+  it('names a fuel tank surface-mounted where a stack joint was meant (F1)', () => {
+    const q = { x: 0, y: 0, z: 0, w: 1 };
+    const craft: CraftDef = { name: 'F1', version: 1, type: 'VAB', parts: [
+      { uid: 1, partId: 'pod-lantern-1', position: { x: 0, y: 0, z: 0 }, rotation: q },
+      { uid: 2, partId: 'tank-1-mid', position: { x: 0, y: -0.2, z: 0 }, rotation: q, parent: 1, attachNode: 'srf', parentNode: 'srf' },
+      { uid: 3, partId: 'eng-sirocco', position: { x: 0, y: -1.8, z: 0 }, rotation: q, parent: 1, attachNode: 'top', parentNode: 'bottom', stage: 0 },
+    ] };
+    const fuel = preflightChecks(craft, PART_CATALOG).find(c => c.id === 'fuel-3');
+    expect(fuel?.text).toContain('Silo 1 Standard is surface-mounted on Lantern I Capsule');
+    expect(fuel?.uids).toEqual([3, 2]);
+  });
+  it('keeps the generic warning for solid fuel, which never flows between parts', () => {
+    const q = { x: 0, y: 0, z: 0, w: 1 };
+    const craft: CraftDef = { name: 'SRB', version: 1, type: 'VAB', parts: [
+      { uid: 1, partId: 'pod-lantern-1', position: { x: 0, y: 0, z: 0 }, rotation: q },
+      { uid: 2, partId: 'srb-sparkler', position: { x: 0.8, y: -0.5, z: 0 }, rotation: q, parent: 1, attachNode: 'srf', parentNode: 'srf' },
+      { uid: 3, partId: 'srb-sparkler', position: { x: 0, y: -1.5, z: 0 }, rotation: q, parent: 1, attachNode: 'top', parentNode: 'bottom', stage: 0, resources: { solidFuel: 0 } },
+    ] };
+    const fuel = preflightChecks(craft, PART_CATALOG).find(c => c.id === 'fuel-3');
+    expect(fuel?.text).toBe('Sparkler Solid Motor: no usable fuel path. Check tanks and crossfeed.');
   });
   it('handles an empty editor', () => {
     expect(preflightChecks({ name: '', version: 1, type: 'VAB', parts: [] }, PART_CATALOG)).toEqual([]);
