@@ -8,7 +8,7 @@ import { coastUntil, executeNode, localFrame, planTransferToBody, runAutopilot }
 import { planCourseCorrectionToBody, type InterplanetaryPlan } from '../../src/game/interplanetary';
 import { computeStageDeltaV, neutralInput } from '../../src/sim/vessel';
 import { inertialDvToManeuver, period, periapsisRadius, propagate, stateToElements, timeToPeriapsis } from '../../src/sim/orbit';
-import { length, normalize } from '../../src/util/vec3';
+import { dot, length, normalize, sub } from '../../src/util/vec3';
 import { doScience, trackBiome, transmitAll } from './flights';
 
 export const dvLeft = (w: World) => computeStageDeltaV(w.active!.state, 0, 9.81).reduce((a, s) => a + s.dvVac, 0);
@@ -185,6 +185,40 @@ export function survey(w: World, biomes: Set<string>, orbits: number, maxDays = 
   }
   sendHome(w);
   return w.progression.science - before;
+}
+
+/**
+ * From a closed orbit around a planet with air (Cinderbloom at Venus): during a ground station pass, plan a retrograde
+ * deorbit burn at the point of the orbit farthest round from Earth, lowering the periapsis to `periapsis` (m above the
+ * datum). The probe flies the uploaded node out of contact (D-015) and comes down about half an orbit later on the
+ * hemisphere facing Earth, so the descent and the surface keep the link. A direct entry from the arrival hyperbola
+ * cannot: Earth lies behind the probe's approach and the entry lands near periapsis, on the far side.
+ */
+export function deorbitFacingEarth(w: World, periapsis: number, minStage = 0): string | null {
+  if (!awaitContact(w)) return 'no ground contact in orbit';
+  for (const n of [...w.nodes]) w.removeNode(n.id);
+  const o = w.orbitOf(w.active!), body = w.universe.body(o.body), T = period(o);
+  if (!Number.isFinite(T)) return 'not in a closed orbit';
+  const fromEarth = (t: number) => {
+    const at = w.universe.ephem.getBodyState(o.body, t).position, earth = w.universe.ephem.getBodyState('earth', t).position;
+    return -dot(normalize(propagate(o, t).position), normalize(sub(earth, at)));
+  };
+  // The far point in the next orbit, at least ten minutes ahead (time to plan and turn).
+  let t = w.ut + 600, best = -Infinity;
+  for (let i = 0; i < 360; i++) {
+    const ti = w.ut + 600 + (i * T) / 360, f = fromEarth(ti);
+    if (f > best) { best = f; t = ti; }
+  }
+  const s = propagate(o, t);
+  const peWith = (k: number) => periapsisRadius(stateToElements(o.mu, o.body, s.position, { x: s.velocity.x * k, y: s.velocity.y * k, z: s.velocity.z * k }, t)) - body.radius;
+  let lo = 0, hi = 1;
+  for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (peWith(m) > periapsis) hi = m; else lo = m; }
+  const node = w.addNode(t);
+  node.prograde = -(1 - hi) * length(s.velocity);
+  const burn = executeNode(w, node, { minStage, matchEnergy: false });
+  if (!runAutopilot(w, burn, { maxTime: t - w.ut + 1e5 })) return `deorbit: ${burn.error}`;
+  debug(`deorbit ${burn.dvUsed().toFixed(0)} m/s ${(Math.acos(-best) * 180 / Math.PI).toFixed(0)}° from Earth, pe ${(w.orbitSummary(w.active!).pe / 1000).toFixed(0)} km`);
+  return null;
 }
 
 /**

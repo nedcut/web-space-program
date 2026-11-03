@@ -40,7 +40,9 @@ First arrival per scale (flight number, game day of arrival in the target's sphe
 
 Before, Standard also needed one more Selene landing (#6) to afford the Cinderbloom (610 science); after, the Petrel's
 195 science of research is bought straight after the Moon landing. Standard after adds the Cinderbloom Venus landing
-(#8, day 260; 540 science of research): it lands, but on the hemisphere facing away from Earth, so no reading reaches home.
+(#8, day 260; 540 science of research). It used to land on the hemisphere facing away from Earth, so no reading
+reached home; since 2026-11-02 it captures, deorbits from the far side and lands facing Earth (147 science incl. the
+landing milestone; 407 banked at the end instead of 340).
 
 Science and funds after the planets (end of run): Standard 394 science banked (190 before), 618 k cr (124 k);
 Challenging 252 (204 before, stuck), 2.17 M (1.25 M); Real 434 (300 before), 9.6 M (16.1 M: the Petrels and two

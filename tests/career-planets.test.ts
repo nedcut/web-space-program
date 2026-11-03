@@ -13,14 +13,13 @@ import { generateContracts, newProgression } from '../src/sim/science/progressio
 import { careerScaleMultiplier } from '../src/sim/bodies/scale';
 import { nextGoal, researchFor } from '../src/ui/hub/nextGoal';
 import { neutralInput } from '../src/sim/vessel';
-import { length, normalize, scale, add, sub, v3 } from '../src/util/vec3';
+import { length, normalize, scale, add, sub, v3, dot } from '../src/util/vec3';
 import { qFromTo } from '../src/util/quat';
-import { toOrbit } from '../scripts/career/flights';
-import { arrive, capture, correct, depart, dvLeft, planDeparture, survey, toPlanet } from '../scripts/career/planets';
+import { toOrbit, sensor } from '../scripts/career/flights';
+import { arrive, atmosphericLanding, capture, correct, deorbitFacingEarth, depart, dvLeft, planDeparture, survey, toPlanet } from '../scripts/career/planets';
 import { createUniverse } from '../src/sim/bodies';
 import { createEphemeris } from '../src/sim/orbit';
 import { nextLaunchSeason } from '../src/sim/orbit/season';
-import { sensor } from '../scripts/career/flights';
 
 /** Career past the Moon: interplanetary legs flown through the real World and the flight-assist programs. */
 const career = (preset: 'standard' | 'challenging' | 'real', ut = DEFAULT_START_UT) => new World(new Universe(preset), PART_CATALOG, ut, 'career');
@@ -199,6 +198,50 @@ describe('planetary probes', () => {
     expect(w.progression.science - before).toBeGreaterThan(thermal.value * 0.39);
     expect(length(w.surfaceVelocity(w.active!))).toBeLessThan(1);
   }, 240_000);
+});
+
+describe('Venus landing in Earth\'s view', () => {
+  it('the stock Cinderbloom captures, deorbits from the far side and lands facing Earth, sending its reading home', () => {
+    // A direct entry from the arrival hyperbola lands about 160° round from Earth (Earth lies behind the approach, the
+    // entry comes down near periapsis): no link in descent or on the ground. Captured first, the deorbit burn is planned
+    // during a pass for the far side, flown out of contact as an uploaded node, and the shell lands in view.
+    const bodies = createUniverse('standard'), ephem = createEphemeris(bodies);
+    const season = nextLaunchSeason(bodies, ephem, 'earth', 'venus', DEFAULT_START_UT + 200 * 86400)!.departure;
+    const w = career('standard', season - 2 * 86400), p = w.progression;
+    p.unlocked.push(...researchFor('stock-cinderbloom', p, 'career').nodes);
+    p.funds = 1e6;
+    p.facilities = { ...p.facilities!, pad: 2 };
+    w.launch(buildCinderbloom());
+    const biomes = new Set<string>(), venus = w.universe.body('venus');
+    expect(toOrbit(w, biomes, 85000, 1)).toBeNull();
+    const leg = toPlanet(w, biomes, 'venus', 0);
+    expect(leg.err).toBeNull();
+    expect(leg.leg!.contact).toBe(true);
+    expect(capture(w, biomes, 0, 0).err).toBeNull();
+    expect(w.orbitSummary(w.active!).pe).toBeGreaterThan(venus.atmosphere!.height);
+    expect(deorbitFacingEarth(w, venus.atmosphere!.height * 0.5)).toBeNull();
+    // Earth's elevation over the landing site at touchdown (90° = overhead).
+    let elevation = -90;
+    const tick = w.tick.bind(w);
+    w.tick = (dt, input) => {
+      const was = w.active?.state.situation;
+      tick(dt, input);
+      if (w.active && was !== 'landed' && w.active.state.situation === 'landed') {
+        const at = w.universe.ephem.getBodyState('venus', w.ut).position, earth = w.universe.ephem.getBodyState('earth', w.ut).position;
+        const up = normalize(sub(w.active.state.position, at)), toEarth = normalize(sub(earth, at));
+        elevation = Math.asin(dot(up, toEarth)) * 180 / Math.PI;
+      }
+    };
+    expect(atmosphericLanding(w, biomes)).toBeNull();
+    console.log('GOLDEN cinderbloom', JSON.stringify({ elevation, biomes: [...biomes].filter(b => b.startsWith('venus')) }));
+    expect(elevation).toBeGreaterThan(20);
+    expect([...biomes].some(b => b.startsWith('venus/landed/'))).toBe(true);
+    // The surface reading reached home: experiments only run, and the archive only credits, over a live link.
+    const surface = Object.values(p.archive).filter(e => e.body === 'venus' && e.situation === 'landed');
+    expect(surface.length).toBeGreaterThan(0);
+    expect(surface.reduce((a, e) => a + e.science, 0)).toBeGreaterThan(1);
+    expect(p.milestones).toContain('first-venus-landing');
+  }, 300_000);
 });
 
 describe('program milestones and offers past the Moon', () => {
