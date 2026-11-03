@@ -2037,3 +2037,19 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
 - EVA keeps cutting the throttle: only the focused vessel receives pilot input, so the craft left behind coasts. The
   player is told when it happens and again on boarding, instead of restoring thrust next to a returning astronaut.
 - Quicksave/quickload remain off during Training, challenges and co-op (practice isolation); F5/F9 now say so.
+
+## Venus lander lands facing Earth (2026-11-02, fix/venus-lander-contact)
+- **Cause.** A direct entry from the arrival hyperbola cannot land in Earth's view. On an Earth→Venus transfer Earth
+  trails Venus, close to the direction the probe approaches from, and a shallow entry comes down near periapsis, some
+  130–160° round from there. Stock Cinderbloom, Standard: touchdown 158° from the sub-Earth point, no link in the
+  descent or on the ground, and the shell expires with nothing sent (the open item from op/career2).
+- **Mission change, no new parts or UI.** Capture into a low orbit with the cruise stage (~1.0–1.2 of its ~1.6 km/s),
+  then, during a ground station pass, plan the deorbit node opposite Earth that lowers the periapsis to about half the
+  atmosphere's height. The probe flies it as an uploaded node (probe flight computer, D-015 amendment) and reaches the
+  top of the air back in contact, so staging the cruise stage and the shield works. Measured: Earth 44° above the
+  touchdown; burns from the far point to 60° after it all land in view (26–47°); 30° early leaves the entry interface
+  behind Venus, where a disconnected probe cannot stage, hence "late rather than early" in the tip and hub text.
+  Headless: `deorbitFacingEarth` in `scripts/career/planets.ts`; test in `tests/career-planets.test.ts`.
+- **Rejected.** Entry trim aiming the landing (no in-view landing exists on the hyperbola); a relay (a low orbiter over
+  the far side cannot see Earth; a flyby bus would need its own core and a second vessel to fly); a longer-lived shell
+  (Venus turns far too slowly). Not done: an "Earth in view at touchdown" readout in the planner.

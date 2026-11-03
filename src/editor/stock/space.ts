@@ -168,7 +168,7 @@ export function buildKeystone(catalog: PartCatalog = PART_CATALOG): CraftDef {
  */
 export function buildCinderbloom(catalog: PartCatalog = PART_CATALOG): CraftDef {
   const b = new Builder(catalog, 'Cinderbloom Venus Lander',
-    'Fly to Venus and dive straight in, broad shield first. Drop the shield below 1 km/s; the Kiln pressure shell then falls through the crushing air without parachutes and survives about half an hour on the surface.');
+    'Fly to Venus and capture into a low orbit with the cruise stage. During a ground station pass, plan the deorbit burn on the far side of Venus from Earth: the probe flies it on its own and comes down on the side facing Earth, so it keeps the link. Drop the cruise stage at the top of the air and the shield below 300 m/s; the Kiln pressure shell falls through the crushing air without parachutes and survives about half an hour on the surface.');
   const probe = b.root('probe-kiln');
   const shell = b.stack(probe, 'shell-kiln');
   // Mounted upside down so the separation ring leaves with the shield: it is not rated for the surface pressure.
@@ -245,7 +245,7 @@ export function spaceStock(): StockCraft[] {
     { scale: 'standard', id: 'stock-cinderbloom', name: 'Cinderbloom Venus Lander', needsResearch: true, build: () => buildCinderbloom(),
       blurb: 'Venus surface lander · pressure shell, no parachutes · research required', category: 'worlds',
       tags: ['probe-kiln', 'shell-kiln', 'shield-2', 'rcs-linear'],
-      tip: 'Entry trim at Venus, drop the cruise stage, hold retrograde, shield off below 300 m/s. It reports only while Earth is up.' },
+      tip: 'Capture at Venus, then deorbit from the far side (plan it in contact) to land facing Earth. Shield off below 300 m/s.' },
     { scale: 'standard', id: 'stock-lamplighter', name: 'Lamplighter Lunar Hopper', needsResearch: true, build: () => buildLamplighter(),
       blurb: 'Crewed Moon landing, hop and return · radial engines, lights, ladder · research required', category: 'worlds',
       tags: ['eng-radial-rill', 'ladder-2', 'light-area', 'sensor-seismic', 'srb-roman-candle'],
