@@ -517,7 +517,7 @@ export class GameAudio {
     this.chord = 0;
     this.musicDeadline = 0;
     this.pad();
-    if (!this.hidden) this.musicTimer = setInterval(() => this.pad(), 1000);
+    if (!this.hidden && !this.paused) this.musicTimer = setInterval(() => this.pad(), 1000);
   }
 
   /** Used when leaving flight, keeping the shared menu/UI context alive. */

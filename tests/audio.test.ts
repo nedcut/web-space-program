@@ -415,6 +415,8 @@ describe('sound polish regressions', () => {
       expect(ContextDouble.latest.state).toBe('suspended');
       expect(audio.diagnostics().nodes).toBe(count);
       expect(vi.getTimerCount()).toBe(0);
+      audio.setMusic('cruise'); // a theme change while paused must not restart the music clock
+      expect(vi.getTimerCount()).toBe(0);
       audio.setPaused(false); await Promise.resolve();
       expect(ContextDouble.latest.state).toBe('running');
     } finally { audio.dispose(); vi.unstubAllGlobals(); vi.useRealTimers(); }

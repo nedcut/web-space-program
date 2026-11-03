@@ -175,18 +175,7 @@ export class HubScene {
     } catch {
       /* no location */
     }
-    if (craft) {
-      try {
-        const world = new World(this.universe, PART_CATALOG, this.t);
-        const wv = world.launch(craft);
-        const view = new VesselView(wv.state);
-        this.scene.add(view.root);
-        this.vessel = { world, view };
-      } catch (e) {
-        console.warn('Hub: could not place craft on the pad', e);
-        this.vessel = null;
-      }
-    }
+    this.placeCraft(craft);
 
     const onMove = (e: PointerEvent) => {
       this.pointerClient.x = e.clientX;
@@ -224,12 +213,22 @@ export class HubScene {
       this.vessel.view.dispose();
       this.vessel = null;
     }
+    this.placeCraft(craft);
+  }
+
+  /** A craft that cannot be built (bad import, missing part) leaves the pad empty instead of breaking the hub. */
+  private placeCraft(craft: CraftDef | null | undefined) {
     if (!craft) return;
-    const world = new World(this.universe, PART_CATALOG, this.t);
-    const wv = world.launch(craft);
-    const view = new VesselView(wv.state);
-    this.scene.add(view.root);
-    this.vessel = { world, view };
+    try {
+      const world = new World(this.universe, PART_CATALOG, this.t);
+      const wv = world.launch(craft);
+      const view = new VesselView(wv.state);
+      this.scene.add(view.root);
+      this.vessel = { world, view };
+    } catch (e) {
+      console.warn('Hub: could not place craft on the pad', e);
+      this.vessel = null;
+    }
   }
 
   /** Debug: sun elevation/azimuth (deg, azimuth from north toward east) at the pad. */
