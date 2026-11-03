@@ -107,9 +107,23 @@ export class Replica {
   }
 }
 
+/**
+ * Connection lifecycle: connecting until the first room snapshot, then connected. `lost` (unreachable, silent or
+ * misbehaving server) and `closed` (the player left) are final; rejoining makes a new client.
+ */
+export type ConnectionState = 'connecting' | 'connected' | 'lost' | 'closed';
+const STATUS_TEXT: Record<ConnectionState, string> = {
+  connecting: 'Connecting…', connected: 'Connected', lost: 'Connection lost — return to menu to rejoin', closed: 'Disconnected',
+};
+/** A server that accepts the socket but never sends the room within this time counts as unreachable. */
+export const HANDSHAKE_TIMEOUT_MS = 10_000;
+/** A connected server that sends nothing for this long counts as gone (it streams deltas many times a second). */
+export const SILENCE_TIMEOUT_MS = 5000;
+
 export class MultiplayerClient extends Replica {
-  status = 'Connecting…';
-  connected = false;
+  state: ConnectionState = 'connecting';
+  get status() { return STATUS_TEXT[this.state]; }
+  get connected() { return this.state === 'connected'; }
   error = '';
   chat: { name: string; text: string }[] = [];
   private socket: WebSocket;
@@ -117,19 +131,20 @@ export class MultiplayerClient extends Replica {
   private sendTime = 0;
   private lastMessage = performance.now();
   private listeners = new Set<() => void>();
-  private closed = false;
+  private handshake: ReturnType<typeof setTimeout>;
   constructor(config: MultiplayerConfig) {
     super();
     const url = new URL(config.url);
     if (!['ws:', 'wss:'].includes(url.protocol)) throw new Error('Use a ws:// or wss:// server URL');
     this.socket = new WebSocket(url);
+    this.handshake = setTimeout(() => this.transition('lost', `No answer from the server after ${HANDSHAKE_TIMEOUT_MS / 1000} s. Check its URL and that npm run server is running.`), HANDSHAKE_TIMEOUT_MS);
     this.socket.onopen = () => this.send({ v: 1, type: 'join', room: config.room.trim().toUpperCase(), name: config.name.trim() });
     this.socket.onmessage = e => {
       try {
         const m = decodeServer(String(e.data));
         this.lastMessage = performance.now();
         this.receive(m);
-        if (m.type === 'snapshot') { this.connected = true; this.status = 'Connected'; }
+        if (m.type === 'snapshot') this.transition('connected');
         if (m.type === 'error') this.error = m.message;
         if (m.type === 'event') {
           const ev = m.event;
@@ -138,17 +153,30 @@ export class MultiplayerClient extends Replica {
           else if ('vesselId' in ev) this.world.onEvent?.(ev);
         }
         this.notify();
-      } catch (e) { this.error = `Protocol error: ${(e as Error).message}`; this.close(); }
+      } catch (e) { this.transition('lost', `Protocol error: ${(e as Error).message}`); }
     };
-    this.socket.onerror = () => { this.error = 'Cannot reach server. Check its URL and that npm run server is running.'; this.notify(); };
-    this.socket.onclose = () => { this.connected = false; this.status = this.closed ? 'Disconnected' : 'Connection lost — return to menu to rejoin'; this.notify(); };
+    this.socket.onerror = () => this.transition('lost', 'Cannot reach server. Check its URL and that npm run server is running.');
+    this.socket.onclose = () => this.transition('lost');
+  }
+  /** The one place the connection state changes. Leaving `connecting` stops the handshake timer; a final state releases the socket. */
+  private transition(next: ConnectionState, error = '') {
+    const from = this.state;
+    if (from === next || from === 'lost' || from === 'closed') return;
+    this.state = next;
+    if (error) this.error = error;
+    clearTimeout(this.handshake);
+    if (next === 'lost' || next === 'closed') {
+      if (this.socket.readyState === WebSocket.OPEN) this.send({ v: 1, type: 'leave' });
+      this.socket.close();
+    }
+    this.notify();
   }
   subscribe(fn: () => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
   private notify() { this.listeners.forEach(fn => fn()); }
   send(m: ClientMessage) { if (this.socket.readyState === WebSocket.OPEN) this.socket.send(encode(m)); }
   update(dt: number, input: ControlInput) {
     if (!this.connected) return;
-    if (performance.now() - this.lastMessage > 5000) { this.error = 'Server stopped responding'; this.close(); return; }
+    if (performance.now() - this.lastMessage > SILENCE_TIMEOUT_MS) { this.transition('lost', 'Server stopped responding'); return; }
     this.sendTime += dt;
     if (this.ownId && (this.sendTime >= 1 / 30 || input.stage || input.evaJump || input.gear !== undefined || !!input.commands?.length)) {
       this.send({ v: 1, type: 'input', seq: this.seq++, vesselId: this.ownId, input });
@@ -162,11 +190,5 @@ export class MultiplayerClient extends Replica {
     this.send({ v: 1, type: 'warp', rate: WARP_RATES[Math.max(0, Math.min(WARP_RATES.length - 1, index + delta))] });
   }
   action(action: 'eva' | 'board' | 'flag' | 'undock', extra: { uid?: number; astronautId?: string } = {}) { this.send({ v: 1, type: 'action', action, ...extra }); }
-  close() {
-    this.closed = true;
-    this.connected = false;
-    if (this.socket.readyState === WebSocket.OPEN) this.send({ v: 1, type: 'leave' });
-    this.socket.close();
-    this.notify();
-  }
+  close() { this.transition('closed'); }
 }
