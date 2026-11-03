@@ -2032,10 +2032,12 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   ellipse after the planner's transfer costs ~1.75 km/s; the career's Petrel (two instruments aboard) arrived with 1.59.
   Faster transfers that arrive with Earth nearer (~200 days, 145 Gm) escape southward and cost 11–12 km/s from a
   parking orbit launched at an arbitrary time of day, so they are no fix a player can use.
-- **Arcwatch rating 5 → 10 Gm** (amends the D-015 ratings): Earth reach 200 → 283 Gm. Standard is unchanged (every
-  planet out to Saturn was already inside 200 Gm); Challenging Jupiter (189–309 Gm) and the main-belt asteroids are now
-  in reach for most of their synodic cycle; on Real, Mercury and Venus at every geometry and Mars from 57 to 283 of its
-  57–400 Gm. The Horizon stays the outer-planet dish on every scale.
+- **Arcwatch rating 5 → 10 Gm** (amends the D-015 ratings): Earth reach 200 → 283 Gm. Standard: every planet out to Saturn
+  was already inside 200 Gm; Uranus (265–315 Gm) is now reachable near close approach. Challenging Jupiter (189–309 Gm)
+  and the main-belt asteroids are now in reach for most of their synodic cycle; on Real, Mercury and Venus at every
+  geometry and Mars from 57 to 283 of its 57–400 Gm. Arcwatch-to-Arcwatch relay range doubles (5 → 10 Gm), and every
+  existing Arcwatch link is stronger, so science transmits faster (rate scales with strength). The Horizon stays the
+  dish for Neptune and beyond on every scale, and for the outer planets outside Standard.
 - **Real Petrel**: a third kick tank and a longer sustainer stage: parking-orbit Δv 5.65 → 6.09 km/s (5.32 → 5.76 with
   the career's two instruments), 26 parts, 236 t, 91,873 cr (87,758), still level-1 pad and hall. Rejected: the
   Horizon on the Real Petrel (−0.68 km/s and Deep Space Power, 180 more science), a longer booster (308 t: pad 2), a
