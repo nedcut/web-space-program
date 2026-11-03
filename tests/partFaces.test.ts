@@ -93,8 +93,7 @@ describe('part meshes have no see-through faces', () => {
     const problems: string[] = [];
     for (const detail of [1, 0.5]) {
       const root = withDetail(detail, () => MESH_BUILDERS[def.mesh](def));
-      // Deployed states only at High: Low reuses the same deployable geometry.
-      for (const deploy of detail === 1 && hasDeployables(root) ? [0, 1] : [0]) {
+      for (const deploy of hasDeployables(root) ? [0, 1] : [0]) {
         setPartDeploy(root, deploy);
         const exposed = exposedFaces(root, { covers: hullCovers(def), ...tolerances(root, detail) });
         for (const line of describeExposed(exposed)) problems.push(`${detail === 1 ? 'high' : 'low'} deploy=${deploy} ${line}`);
