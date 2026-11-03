@@ -123,10 +123,11 @@ const NODE_CLEAR_PX = 14, GIZMO_CLEAR_PX = HANDLE_OFFSET + 16;
 /**
  * Body renderers (baked surface texture, sky, imagery) are built the first time a body resolves to a disc. A tour
  * of many bodies would otherwise keep every one until the map is disposed. Beyond MAP_RENDERERS_KEPT, renderers
- * of bodies not resolved for MAP_RENDERER_IDLE_MS are released, longest unseen first: a normal session (home
- * planet, its moon, a target) never rebuilds one, since a rebuild re-uploads its texture and may recompile.
+ * of bodies not resolved for MAP_RENDERER_IDLE_MS are released, longest unseen first. The limit is generous: the
+ * pool keeps only a couple of bakes, so going back to a released body shows it plain until a new bake lands (~11 s
+ * at High), as on a first visit. A whole planetary system stays within it.
  */
-const MAP_RENDERERS_KEPT = 8, MAP_RENDERER_IDLE_MS = 30000;
+const MAP_RENDERERS_KEPT = 16, MAP_RENDERER_IDLE_MS = 30000;
 
 /** Hover-sampled trajectory polyline (body-relative positions, float64). */
 interface TrajectoryPoly { body: string; patch: number; times: Float64Array; points: Float64Array; count: number }
@@ -735,7 +736,7 @@ export class MapView {
         const sunRadius = this.bodies.get(this.sunId)!.body.radius;
         const scale = { ...SCALE_PRESETS.standard, s: sunRadius / 696340000 };
         vis.renderer = new PlanetRenderer(vis.body, vis.body.solidSurface ? createTerrain(vis.body) : null,
-          { farOnly: true, quality, scale, registerUniforms: false, sunRadiance: 4 });
+          { farOnly: true, releaseBakePixels: true, quality, scale, registerUniforms: false, sunRadiance: 4 });
         // Flight's HDR compositor transforms these shaders; direct map rendering needs its own output transform.
         vis.renderer.root.traverse(object => {
           if (!(object instanceof THREE.Mesh)) return;

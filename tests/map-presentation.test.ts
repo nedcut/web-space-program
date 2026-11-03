@@ -83,24 +83,24 @@ describe('map presentation', () => {
     const bodies = createUniverse('standard'), ephem = createEphemeris(bodies);
     const map = new MapView(bodies, ephem, host() as unknown as HTMLElement);
     type Vis = { renderer?: { dispose: () => void }; resolvedAt: number };
-    const visuals = [...(map['bodies'] as Map<string, Vis>).values()].slice(0, 12);
+    const visuals = [...(map['bodies'] as Map<string, Vis>).values()].slice(0, 20);
     const now = 100000;
-    // Twelve bodies toured: four seen in the last 30 s, eight longer ago (the oldest first in this list).
+    // Twenty bodies toured: four seen in the last 30 s, sixteen longer ago (the oldest first in this list).
     const renderers = visuals.map((vis, i) => {
       const r = { dispose: vi.fn() };
-      vis.renderer = r; vis.resolvedAt = i < 8 ? now - 60000 + i * 1000 : now - 1000;
+      vis.renderer = r; vis.resolvedAt = i < 16 ? now - 60000 + i * 1000 : now - 1000;
       return r;
     });
-    map['liveRenderers'] = 12;
+    map['liveRenderers'] = 20;
     map['releaseIdleRenderers'](now);
-    expect(renderers.map(r => r.dispose.mock.calls.length)).toEqual([1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
-    expect(visuals.filter(v => v.renderer)).toHaveLength(8);
+    expect(renderers.map(r => r.dispose.mock.calls.length)).toEqual(visuals.map((_, i) => (i < 4 ? 1 : 0)));
+    expect(visuals.filter(v => v.renderer)).toHaveLength(16);
     // Only recently seen bodies above the limit: nothing is released.
     for (const vis of visuals) vis.resolvedAt = now;
     for (const vis of visuals.slice(0, 4)) vis.renderer = { dispose: vi.fn() };
-    map['liveRenderers'] = 12;
+    map['liveRenderers'] = 20;
     map['releaseIdleRenderers'](now + 1000);
-    expect(visuals.filter(v => v.renderer)).toHaveLength(12);
+    expect(visuals.filter(v => v.renderer)).toHaveLength(20);
     for (const vis of visuals) vis.renderer = undefined;
     map.dispose();
   });

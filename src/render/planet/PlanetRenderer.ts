@@ -45,6 +45,8 @@ export interface PlanetRendererOptions {
   batchTerrain?: boolean;
   /** Host renderer: the terrain batch owns GPU buffers on its context. */
   renderer?: THREE.WebGLRenderer;
+  /** No host renderer, but one long-lived renderer draws this body (the map): drop the bake's CPU pixels once it has them. */
+  releaseBakePixels?: boolean;
   /** Map uniforms must not replace the live flight lighting registry. */
   registerUniforms?: boolean;
   quality: QualitySettings;
@@ -160,7 +162,7 @@ export class PlanetRenderer {
   private sunIlluminance: number;
   private sunRadiance: number;
   private readonly terrainKey: string;
-  private readonly hostRenderer?: THREE.WebGLRenderer;
+  private hostRenderer?: THREE.WebGLRenderer;
   private readonly frustum = new THREE.Frustum();
   private readonly tmpM4 = new THREE.Matrix4();
   private readonly inverseRotation = new THREE.Quaternion();
@@ -307,6 +309,7 @@ export class PlanetRenderer {
     this.farSphere.scale.setScalar(this.body.radius);
     this.farSphere.matrixAutoUpdate = false;
     this.farSphere.frustumCulled = false;
+    if (opts.releaseBakePixels) this.farSphere.onBeforeRender = (renderer) => { this.hostRenderer = renderer; };
     this.root.add(this.farSphere);
 
     if (!terrain) return;
