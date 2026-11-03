@@ -5,6 +5,21 @@ Reproduce the tables with `npx tsx scripts/balance-analysis.ts`. Flight regressi
 `npx vitest run --maxWorkers=2`. No physics parameters, resource densities, engine ratings,
 or deterministic trace fixtures were changed.
 
+## Real Mars orbit — 2026-11-02 (fix/real-mars-orbit)
+
+`npx tsx scripts/career/playthrough.ts real`, before → after (Arcwatch 5 → 10 Gm, Real Petrel +0.44 km/s, the
+departure pick allows 95 % of the Δv aboard):
+
+| | Before | After |
+| --- | --- | --- |
+| Mars flight | #16: first season's flyby option (departure day 270, 335-day flight), arrived day 605 with no signal: milestone only | #16: waits in the parking orbit for the next season (departure day 1031), arrives day 1285 in contact, captures into 190 × 344,539 km with 500 m/s left, 278 science sent |
+| Science at the end | 393 | 671 |
+| Venus flight | #15, orbit 369 × 369,775 km, 139 science, 764 m/s left | #15, orbit 373 × 369,793 km, 139 science, 1,191 m/s left |
+
+Earth–Mars distance at the planner's Real arrivals: 215 Gm (second season), 335 Gm (first season's affordable
+option); it grows about 1.2 Gm a day after arrival. Both runs: Kestrel hops 3, 5 and 6 are lost on descent (on main
+the route crashed there; the script now records the loss and flies on).
+
 ## Past the Moon: Venus and Mars — 2026-10-15 (op/career2)
 
 `npx tsx scripts/career/playthrough.ts standard|challenging|real` now continues after the Moon route
@@ -36,10 +51,10 @@ arrival +60 science, +60 k cr × the credit multiplier; first landing +80, +50 k
 | --- | --- | ---: | ---: | ---: | --- |
 | Petrel | Standard | 200 | 13,716 | ~4.3 km/s | Mars 1.1 km/s + capture into low orbit; Venus likewise |
 | Petrel | Challenging | 450 | 45,771 | ~5.5 km/s | Mars 2.0–2.5 km/s, Venus 2.2 km/s, both captured |
-| Petrel | Real | 450 | 87,758 | ~5.3 km/s | Venus 3.5–4.0 km/s + long-ellipse capture; Mars 3.6–3.9 km/s leaves ~1.7 km/s, capture needs 1.35–1.7 |
+| Petrel | Real | 450 | 91,873 | ~6.1 km/s (5.8 with two instruments) | Venus 3.5–4.0 km/s + long-ellipse capture; Mars 3.6 km/s + ~1.75 km/s long-ellipse capture (since 2026-11-02; was 87,758 cr, ~5.3 km/s, short of the capture) |
 
 Link reach (geometric mean with the 8,000 Gm ground stations): Thread 2 Gm (Moon only), Lattice 20 Gm (Standard
-Venus), Arcwatch 200 Gm (Standard and Challenging planets, Real Venus; Real Mars only near close approach),
+Venus), Arcwatch 283 Gm since 2026-11-02 (was 200 Gm: Standard and Challenging planets, Real Venus and Mars arrivals),
 Horizon 2,000 Gm. Earth–planet distance at a Hohmann arrival: Standard Venus 8–9 Gm, Mars 15–34 Gm; Challenging
 Venus 23–36, Mars 92–109; Real Venus 72–90, Mars 143–185 (and growing after arrival).
 

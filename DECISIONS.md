@@ -2024,3 +2024,25 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   startup remain approximate replay boundaries. Screenshots use compositor capture
   to avoid waiting for animation frames on a frozen page. Functional SwiftShader
   checks do not establish real-GPU performance or cross-browser behavior.
+
+## Real Mars orbit with the stock Petrel (2026-11-02, fix/real-mars-orbit)
+- **Cause (two blockers, both measured headlessly).** Link: at the planner's Real Mars arrivals Earth is 215 Gm
+  (second season after the Moon) to 335 Gm (first season, its affordable option) away; the Arcwatch–ground reach was
+  200 Gm, so the probe arrived without command authority: no capture burn, no science. Δv: the capture into a long
+  ellipse after the planner's transfer costs ~1.75 km/s; the career's Petrel (two instruments aboard) arrived with 1.59.
+  Faster transfers that arrive with Earth nearer (~200 days, 145 Gm) escape southward and cost 11–12 km/s from a
+  parking orbit launched at an arbitrary time of day, so they are no fix a player can use.
+- **Arcwatch rating 5 → 10 Gm** (amends the D-015 ratings): Earth reach 200 → 283 Gm. Standard is unchanged (every
+  planet out to Saturn was already inside 200 Gm); Challenging Jupiter (189–309 Gm) and the main-belt asteroids are now
+  in reach for most of their synodic cycle; on Real, Mercury and Venus at every geometry and Mars from 57 to 283 of its
+  57–400 Gm. The Horizon stays the outer-planet dish on every scale.
+- **Real Petrel**: a third kick tank and a longer sustainer stage: parking-orbit Δv 5.65 → 6.09 km/s (5.32 → 5.76 with
+  the career's two instruments), 26 parts, 236 t, 91,873 cr (87,758), still level-1 pad and hall. Rejected: the
+  Horizon on the Real Petrel (−0.68 km/s and Deep Space Power, 180 more science), a longer booster (308 t: pad 2), a
+  fourth kick tank or a longer upper stage (the ascent fails).
+- **First Real season still a flyby or a wait.** From the career's parking orbit the first season's departure is
+  4.4 km/s, too much with the capture; the planner's options list also offers the next season (~870 days) from the same
+  orbit at 3.7 km/s. The Real tip says to take it; the playthrough's departure pick allows 95 % of the Δv aboard (90 %
+  rejected that option by 38 m/s; the true need is ~5.5 of 5.76 km/s).
+- **Playthrough fix:** `descend` returns "lost" when the craft is already gone; on main the Real route crashed when a
+  Kestrel hop was destroyed (hops at 45–75° are now lost on descent on main: not investigated here).
