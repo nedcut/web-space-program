@@ -264,10 +264,16 @@ export class FlightController {
     this.input = new FlightInput();
     // Quickload / Load resume the pilot's throttle and SAS as saved; a new launch into a saved world starts at zero.
     // The SAS mode (and its held attitude) is in the saved vessel state; the first step would otherwise switch it off.
+    // Holds that need the unsaved speed reference or port selection (prograde … radial, port align) resume as an
+    // attitude hold on the current heading rather than pointing somewhere else.
     const resumed = saved && !craft && !this.network ? this.world.active : undefined;
     if (resumed) {
       this.world.pilotThrottle = this.input.state.throttle = savedPilotThrottle(saved!);
-      if (resumed.state.sas.mode !== 'off' && !resumed.state.eva) { this.sasOn = true; this.sas = resumed.state.sas.mode; }
+      const mode = resumed.state.sas.mode;
+      if (mode !== 'off' && !resumed.state.eva) {
+        this.sasOn = true;
+        this.sas = mode === 'target' || mode === 'antiTarget' || mode === 'maneuver' ? mode : 'stabilityAssist';
+      }
     }
     this.cameraRig = new FlightCameraRig(this.world, this.cam, this.input.camera);
 
