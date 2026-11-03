@@ -2,7 +2,7 @@ import { advancePrecise, preciseState, syncPrecise } from './preciseRails';
 import { advancePackedHazards } from './hazards';
 import { period, predictTrajectory, propagate, stateToElements } from '../../sim/orbit';
 import { advanceISRU, isruMachinery } from '../../sim/vessel/isru';
-import { packsOnOrbit } from '../../sim/vessel/settle';
+import { packsOnOrbit, setSituation } from '../../sim/vessel/settle';
 import { qConj, qMul, qNormalize, qRotate } from '../../util/quat';
 import { add, sub, v3 } from '../../util/vec3';
 import { advanceTransmissions, evaluateProgression } from '../science';
@@ -41,6 +41,8 @@ export function pack(this: World, internals: WorldInternals, wv: WorldVessel): v
   if (!packsOnOrbit(wv.state)) {
     internals.captureFixed(wv, this.ut);
     wv.mode = 'landedRails';
+    // Fixed to the surface it has settled, whichever of raw and settled saw the contact: rails time steps neither.
+    setSituation(wv.state, wv.state.situation !== 'flying' ? wv.state.situation : wv.state.settledSituation);
     return;
   }
   const rs = this.relativeState(wv);

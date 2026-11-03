@@ -2070,7 +2070,7 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
 - Readers of game state use settled: flight-log landing/splashdown edges, progression `onLanded`/orbit, recovery,
   touchdown toast, landing-autopilot completion. Physical reactions keep raw: contact physics, ISRU, camera, audio,
   the autopilot's engine cut at first contact. Packing goes on a conic only when raw and settled both say flying;
-  any contact evidence fixes it to the surface (a ground-crossing conic is lost on its rails impact). Warp's
-  `landed` and the out-of-range "lost in atmosphere" check use the same predicate.
+  any contact evidence fixes it to the surface and settles it there (rails time steps neither), since a
+  ground-crossing conic is lost on its rails impact. Warp's `landed` and the out-of-range "lost in atmosphere" check use the same predicate.
 - Spawns and teleports call `setSituation` (raw and settled together); writing `situation` alone leaves the
   settled state behind. Saves without the field take the raw value (pad vessels: landed).

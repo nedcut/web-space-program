@@ -101,12 +101,23 @@ describe('touchdowns settle before they count as landed', () => {
     expect(w.flightlog.records.find(r => r.vesselId === v.state.id)?.outcome).toBeUndefined();
   });
 
-  it('a vessel only goes on a conic when both raw and settled say flying', () => {
-    const { w, v } = lunarDrop(0, 0.05);
-    v.state.settledSituation = 'flying'; v.state.airborneTime = SETTLE_AIRBORNE_S; v.state.contactTime = 0;
-    v.state.situation = 'landed'; // raw: first contact of a touchdown, not settled yet
-    (w as unknown as { pack(wv: WorldVessel): void }).pack(v);
+  it('a touchdown packed before it settled still counts: fixed to the surface is settled', () => {
+    const { w, v } = lunarDrop(4, 6);
+    run(w, 1000, () => v.state.situation === 'landed');
+    expect(v.state.settledSituation).toBe('flying');
+    w.activeId = null;
+    w.advanceRailsTo(w.ut + 60);
     expect(v.mode).toBe('landedRails');
+    expect(v.state.settledSituation).toBe('landed');
+    expect(w.flightlog.records.find(r => r.vesselId === v.state.id)!.events.filter(e => e.kind === 'landing')).toHaveLength(1);
+  });
+
+  it('a chatter-packed vessel is grounded in raw too (a drill on landed rails reads it)', () => {
+    const { w, v } = lunarDrop(0, 0.05);
+    run(w, 3000, () => v.state.situation === 'flying' && v.state.settledSituation === 'landed');
+    w.activeId = null;
+    w.advanceRailsTo(w.ut + 60);
+    expect(v.state.situation).toBe('landed');
   });
 
   it('the landing autopilot flies the descent again after a bounce', () => {
