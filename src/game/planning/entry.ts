@@ -186,6 +186,17 @@ export interface EntryTrimPlan {
   entryTime: number;
 }
 
+/**
+ * Smallest trim worth a node when the return already enters inside the corridor: below it the node list shows
+ * "0.0 m/s" and Execute next node finishes such a node without burning (autopilot.ts), so it could not be flown anyway.
+ */
+export const MIN_TRIM_DV = 0.05;
+
+/** False when the return is already in the corridor and the trim only nudges it by an unflyable amount. */
+export function trimNeeded(plan: Pick<EntryTrimPlan, 'dv' | 'before' | 'corridor'>): boolean {
+  return plan.dv >= MIN_TRIM_DV || corridorZone(plan.corridor, plan.before) !== 'ok';
+}
+
 export interface EntryTrimOptions { dragPerMass: number; gLimit?: number }
 
 /**

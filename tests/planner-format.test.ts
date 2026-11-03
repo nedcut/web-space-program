@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { budgetStages, dvText, shortCountdown, shortDate, shortDuration } from '../src/flight/hud/plannerFormat';
-import { liveOptions } from '../src/flight/hud/DepartureOptions';
+import { currentDepartures, liveOptions } from '../src/flight/hud/DepartureOptions';
 import type { StageDeltaV } from '../src/sim/vessel/staging';
 import type { TransferWindow } from '../src/game/planning/windows';
 
@@ -49,5 +49,15 @@ describe('departure options', () => {
     const cheapest = w(7 * 86400, 950, 'window', 250);
     expect(liveOptions([cheapest, now, early], 0).best).toBe(early);
     expect(liveOptions([], 0).best).toBeUndefined();
+  });
+  it('drops departures listed before an SOI change or by another vessel', () => {
+    const list = { from: 'earth', vessel: 'v1', target: 'moon', windows: [w(5000, 900, 'now')] };
+    const at = (body: string, id = 'v1') => ({ body, state: { id } });
+    expect(currentDepartures(list, at('earth'))).toBe(list);
+    // Captured at the Moon: the Earth-origin windows must not stay pickable.
+    expect(currentDepartures(list, at('moon'))).toBeNull();
+    expect(currentDepartures(list, at('earth', 'v2'))).toBeNull();
+    expect(currentDepartures(list, null)).toBeNull();
+    expect(currentDepartures(null, at('earth'))).toBeNull();
   });
 });

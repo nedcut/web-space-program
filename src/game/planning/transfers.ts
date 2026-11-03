@@ -7,7 +7,7 @@ import { add, sub, scale, length, normalize, type Vec3 } from '../../util/vec3';
 import { nelderMead } from '../../util/nelderMead';
 import { planInterplanetaryTransfer, refine } from '../interplanetary';
 import { transferWindows, type TransferWindow } from './windows';
-import { arrivalPeriapsisAltitude } from './arrival';
+import { arrivalPeriapsisAltitude, arrivalTime } from './arrival';
 
 export interface TransferPlan {
   node: ManeuverNode;
@@ -280,7 +280,7 @@ export function planTransferToBody(world: PlanningWorld, targetId: string, opts:
     const refined: TransferPlan[] = accurate(first) ? [first] : [];
     if (accurate(first) && !windows.some(w => Math.abs(w.departure - first.node.time) < Math.max(3600, (Number.isFinite(T) ? T : 0) / 4))) {
       const n = first.node, wait = n.time - world.ut;
-      offered = [...windows, { departure: n.time, wait, dv: first.dv, timeOfFlight: first.encounterTime - n.time, kind: windows.some(w => w.kind === 'now') ? 'window' as const : 'now' as const, seed: [n.prograde, n.normal, n.radial] as [number, number, number] }]
+      offered = [...windows, { departure: n.time, wait, dv: first.dv, timeOfFlight: arrivalTime(first, targetId) - n.time, kind: windows.some(w => w.kind === 'now') ? 'window' as const : 'now' as const, seed: [n.prograde, n.normal, n.radial] as [number, number, number] }]
         .sort((x, y) => x.departure - y.departure);
     }
     report?.('Refining departure windows', 0.75);
