@@ -2137,3 +2137,15 @@ could both be true and were only cleared by restoring per-module snapshots. The 
 pending launch), `enterProgram` (new game or loaded save) and `enterFlight({ launch | resume | join })`. The lesson and
 challenge runtimes drop their run whenever the session stops being theirs, so every exit path ends them. Plain scene
 moves inside one session still use `game.set({ scene })`.
+
+## Render lifecycle bounds (2026-11-03)
+
+- Map body renderers drop their bake's CPU pixels once drawn, and stay bounded: beyond 16, a body not drawn as a
+  disc for 30 s loses its renderer (longest unseen first). A 60-body map tour at High kept 51 renderers (491 MB
+  baked GPU textures, 368 MB CPU pixels, 547 MB JS heap) until the flight ended; now 16 (139 MB, 88 MB, 254 MB).
+  An 8-renderer limit was rejected: the pool caches only about two bakes, so a released body stays plain for ~11 s
+  when revisited, as on a first visit. Pixels are the cheap half (no rebuild); the limit is a backstop.
+- Failed far-LOD bakes retry after 1 s, doubling to 30 s, never every frame. Adaptive resolution forgets an open
+  reduction episode or full-resolution trial at a hold or a frame-rate-cap change; scale and backoff timers stay.
+- No hysteresis on the near/far terrain switch or Earth's regional material switch: a 200 s launch to 137 km
+  crossed each boundary once (camera shake stays under 10 cm), and a material switch only swaps prewarmed programs.
