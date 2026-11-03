@@ -70,6 +70,8 @@ export default function FlightScene() {
   const [quickStart, setQuickStart] = useState(false);
   /** F2: hide every HUD element except world-space labels. */
   const [uiHidden, setUiHidden] = useState(false);
+  const uiHiddenRef = useRef(false);
+  uiHiddenRef.current = uiHidden;
   /** F3: the active flight's report (does not pause). */
   const [results, setResults] = useState(false);
   const helpRef = useRef(false);
@@ -149,6 +151,8 @@ export default function FlightScene() {
       const cc = c;
       cc.paused = pausedRef.current || helpRef.current;
       cc.setModalOpen(helpRef.current);
+      // A quickload or graphics change builds a new controller under a HUD that F2 may have hidden.
+      cc.uiHidden = uiHiddenRef.current;
       setLost(false);
       setEndReady(false);
       lostAt.current = null;

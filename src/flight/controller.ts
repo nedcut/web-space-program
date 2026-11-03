@@ -70,7 +70,7 @@ import { HintTracker } from './hints';
 import type { DockingTelemetry, Telemetry } from './hud/Hud';
 import type { NavballFrame, NavballMarker } from './hud/navball';
 import { FlightInput } from './input';
-import { actionAllowedWhileSuspended } from './modals';
+import { actionAllowedInPhoto, actionAllowedWhileSuspended } from './modals';
 import { saveErrorText } from '../game/storageErrors';
 import { createPlanetLayer, type PlanetLayer } from './planets';
 import { requestBiomeMap } from '../game/biomeMaps';
@@ -283,7 +283,11 @@ export class FlightController {
     Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block', touchAction: 'none' });
     host.appendChild(canvas);
     this.photo = new PhotoCamera(this.pipeline, this.scene, this.cam.camera, () => new THREE.Vector3(), active => {
-      if (active) { if (this.network || !this.world.active) return false; this.photoWasPaused = this.paused; this.paused = true; this.mapMode = false; this.map.setVisible(false); this.pipeline.setMapMode(false); this.cam.clearLensShift(); }
+      if (active) {
+        if (this.network || !this.world.active) return false;
+        this.photoWasPaused = this.paused; this.paused = true;
+        this.setMapMode(false); this.cam.clearLensShift();
+      }
       else this.paused = this.photoWasPaused;
       return true;
     });
@@ -327,7 +331,7 @@ export class FlightController {
     this.disposers.push(this.attachPartPicking(canvas));
     this.disposers.push(
       this.input.onAction((a) => {
-        if (this.photo.active) return;
+        if (this.photo.active && !actionAllowedInPhoto(a)) return;
         // While paused (pause menu, vessel lost) or under a modal only the menu toggle and quickload are live;
         // a momentary SAS toggle still restores itself when its key is released.
         if ((this.paused || this.modalOpen) && !actionAllowedWhileSuspended(a)) return;
@@ -745,16 +749,25 @@ export class FlightController {
     this.sas = mode as SasMode;
   }
 
-  toggleMap() {
-    this.mapMode = !this.mapMode;
-    this.map.setVisible(this.mapMode);
-    this.pipeline.setMapMode(this.mapMode);
+  toggleMap() { this.setMapMode(!this.mapMode, true); }
+
+  /**
+   * The one flight/map view transition (M, photo mode, vessel loss): map visibility and labels, the pipeline's map
+   * resolution, and the map's focus and menus change together. `animate`: the player's own toggle dips to black and
+   * zooms out.
+   */
+  setMapMode(on: boolean, animate = false) {
+    if (on === this.mapMode) return;
+    this.mapMode = on;
+    this.map.setVisible(on);
+    this.pipeline.setMapMode(on);
     this.mapUi.reset();
+    if (!animate) return;
     this.flashFade();
     // Following the vessel (reset framed its orbit): pull back from just above its body so the switch reads as
     // zooming out, not a cut. A focus the player picked reopens on the view they left.
     const wv = this.world.active;
-    if (this.mapMode && wv && !this.mapUi.focus && !game.get().settings.reduceMotion) this.map.animateFrom(this.world.universe.body(wv.body).radius * 1.6);
+    if (on && wv && !this.mapUi.focus && !game.get().settings.reduceMotion) this.map.animateFrom(this.world.universe.body(wv.body).radius * 1.6);
   }
 
   private fadeEl: HTMLDivElement | null = null;
@@ -856,7 +869,10 @@ export class FlightController {
   /** Alt+L / HUD lock button: refuse staging until unlocked. */
   toggleStageLock() {
     this.stageLocked = !this.stageLocked;
-    this.world.message(this.stageLocked ? `Staging locked (${bindingLabel('stageLock')} to unlock)` : 'Staging unlocked', this.stageLocked ? 'warn' : 'info', 2.5);
+    // The countdown ends in a stage: locking stops it (unlocking does not restart it).
+    const counting = this.stageLocked && this.countdown !== null;
+    if (counting) this.countdown = null;
+    this.world.message(this.stageLocked ? `Staging locked (${bindingLabel('stageLock')} to unlock)${counting ? ': launch countdown cancelled' : ''}` : 'Staging unlocked', this.stageLocked ? 'warn' : 'info', 2.5);
   }
 
   /** [ / ]: switch to the previous / next vessel within physics range. */
@@ -1064,20 +1080,7 @@ export class FlightController {
       this.world.tick(this.warpDriver.rampDt(this.world, dt), input);
     }
     prof.add('sim', t0);
-    if (!this.network && wv && !this.world.active && !this.activeLost) {
-      this.activeLost = true;
-      this.mapMode = false;
-      // Keep the short debris replay readable even when the impact happened in physics warp.
-      this.warpDriver.cancel(this.world);
-      this.world.warp = { mode: 'rails', index: 0 };
-      const air = this.world.surfaceVelocity(wv);
-      this.lossFocus = { ...wv, state: { ...wv.state, parts: [],
-        position: { ...wv.state.position }, velocity: {
-          x: wv.state.velocity.x-air.x, y: wv.state.velocity.y-air.y, z: wv.state.velocity.z-air.z,
-        } } };
-      this.lossFocusUt = this.world.ut;
-      this.onActiveLost?.();
-    }
+    if (!this.network && wv && !this.world.active && !this.activeLost) this.activeVesselLost(wv);
     if (!this.world.active && this.lossFocus && !this.paused) {
       const st = this.lossFocus.state;
       const span=this.world.ut-this.lossFocusUt; this.lossFocusUt=this.world.ut;
@@ -1124,6 +1127,22 @@ export class FlightController {
     prof.add('telemetry', t0);
     prof.endFrame();
   };
+
+  /** The active vessel `wv` is gone (destroyed): back to the flight view to replay its debris, then the loss UI. */
+  private activeVesselLost(wv: WorldVessel) {
+    this.activeLost = true;
+    this.setMapMode(false);
+    // Keep the short debris replay readable even when the impact happened in physics warp.
+    this.warpDriver.cancel(this.world);
+    this.world.warp = { mode: 'rails', index: 0 };
+    const air = this.world.surfaceVelocity(wv);
+    this.lossFocus = { ...wv, state: { ...wv.state, parts: [],
+      position: { ...wv.state.position }, velocity: {
+        x: wv.state.velocity.x-air.x, y: wv.state.velocity.y-air.y, z: wv.state.velocity.z-air.z,
+      } } };
+    this.lossFocusUt = this.world.ut;
+    this.onActiveLost?.();
+  }
 
   private startWarmup(wv: WorldVessel) {
     this.warmup = 'compiling';
