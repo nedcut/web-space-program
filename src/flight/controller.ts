@@ -837,7 +837,8 @@ export class FlightController {
 
   /**
    * Runs `activeVesselChanged` once when the active vessel is no longer the one the pilot state belongs to, whoever
-   * changed it ([ ] keys, map, station list, EVA, boarding, loss). Called every frame and right after our own switches.
+   * changed it ([ ] keys, map, station list, EVA, boarding, loss). Called every frame after input and right after our
+   * own switches.
    * Co-op keeps its own reset on a change of owned vessel (frame loop).
    */
   syncActiveVessel() {
@@ -980,7 +981,6 @@ export class FlightController {
       this.stagePending = false;
       this.sasOn = false;
     }
-    this.syncActiveVessel();
     const settings = game.get().settings;
     this.input.enabled = !this.paused && !this.modalOpen;
     this.cam.baseFov = settings.cameraFov;
@@ -1009,6 +1009,8 @@ export class FlightController {
     this.input.mouseEnabled = !this.mapMode;
     applyCommsSettings(this.world);
     this.input.update(dt);
+    // After input: a gamepad's EVA / board button switches vessels inside update(), before this frame's controls.
+    this.syncActiveVessel();
     this.tickCountdown(dt);
     if (!this.world.canControl()) {
       this.input.state.throttle = 0;
