@@ -341,7 +341,8 @@ export function buildCoupler(def: PartDef): THREE.Object3D {
   const yTop = h / 2, ySplit = -h / 2 + h * 0.42, yBot = -h / 2;
   // Crown: straight barrel, then a domed skirt that hides the socket roots.
   root.add(mk(weather(lathe([[R * 0.995, ySplit + 0.06], [R * 0.995, yTop - f]], { segments: seg, tile: 0.8 }), ySplit, yTop, { soot: 0, streaks: 0.08, seed: 9 }), M.charcoalPanel(), 'body'));
-  root.add(mk(lathe([[R * 0.995, ySplit + 0.06], [R * 0.93, ySplit + 0.015], [R * 0.6, ySplit - 0.01], [0, ySplit - 0.015]], { segments: seg }), M.darkMetal(), 'skirt'));
+  // Underside: listed inner -> outer so it faces down and out.
+  root.add(mk(lathe([[0, ySplit - 0.015], [R * 0.6, ySplit - 0.01], [R * 0.93, ySplit + 0.015], [R * 0.995, ySplit + 0.06]], { segments: seg }), M.darkMetal(), 'skirt'));
   root.add(mk([lathe([[R * 0.99, yTop - f], [R, yTop - f], [R, yTop - 0.006], [R * 0.98, yTop]], { segments: 56 })], M.aluminium(), 'flanges'));
   root.add(mk([bulkhead(R * 0.98, yTop, 1)], M.darkMetal()));
   root.add(mk([...boltRing(R, yTop - f / 2, Math.round(20 * R + 8), 0.009)], M.chrome()));
@@ -353,10 +354,11 @@ export function buildCoupler(def: PartDef): THREE.Object3D {
     const x = n.position.x, z = n.position.z;
     // Up to four sockets share one budget: coarser rings and sparser bolts than a single stack flange.
     const seg = def.attachNodes.length > 4 ? 28 : 36;
-    const body = lathe([[rs * 0.97, yBot + f], [rs * 0.985, ySplit - 0.02], [rs * 0.9, ySplit + 0.02]], { segments: seg });
+    // Closed top: on the quad couplers the sockets stand proud of the crown, so their tops show.
+    const body = lathe([[rs * 0.97, yBot + f], [rs * 0.985, ySplit - 0.02], [rs * 0.9, ySplit + 0.02], [0, ySplit + 0.02]], { segments: seg });
     sockets.push(body.translate(x, 0, z));
     flanges.push(lathe([[rs * 0.98, yBot], [rs, yBot + 0.006], [rs, yBot + f], [rs * 0.97, yBot + f]], { segments: seg }).translate(x, 0, z));
-    heads.push(bulkhead(rs * 0.97, yBot, -1, seg).translate(x, 0, z));
+    heads.push(bulkhead(rs * 0.98, yBot, -1, seg).translate(x, 0, z));
     if (detailLevel() >= 1) for (const b of boltRing(rs, yBot + f / 2, Math.round(10 * rs + 6), 0.008)) bolts.push(b.translate(x, 0, z));
   }
   if (sockets.length) {
@@ -374,6 +376,33 @@ export function buildCoupler(def: PartDef): THREE.Object3D {
 
 // ---------------------------------------------------------------------------------------------
 
+/** Flat strip between a lathe's outer and inner profiles at azimuth a, facing along +/- the azimuth direction. */
+function panelEdge(outer: Profile, inner: Profile, a: number, side: 1 | -1): THREE.BufferGeometry {
+  const s = Math.sin(a), c = Math.cos(a);
+  const nx = side * c, nz = -side * s;
+  const pos: number[] = [], nor: number[] = [], uv: number[] = [];
+  for (let i = 0; i < outer.length; i++) {
+    for (const [r, y] of [outer[i], inner[i]]) {
+      pos.push(r * s, y, r * c);
+      nor.push(nx, 0, nz);
+      uv.push(r, y);
+    }
+  }
+  const idx: number[] = [];
+  for (let i = 0; i < outer.length - 1; i++) {
+    const o0 = 2 * i, i0 = o0 + 1, o1 = o0 + 2, i1 = o0 + 3;
+    // (outer, inner, outer above) winds towards +azimuth; reverse it for the start edge.
+    if (side > 0) idx.push(o0, i0, o1, i0, i1, o1);
+    else idx.push(o0, o1, i0, i0, o1, i1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+
 /** Tangent ogive radius at distance x from the base (0..L). */
 function ogive(R: number, L: number, x: number): number {
   const rho = (R * R + L * L) / (2 * R);
@@ -387,16 +416,16 @@ export function buildNoseCone(def: PartDef): THREE.Object3D {
   const L = h - flange;
   const yb = -h / 2 + flange;
   const steps = 28;
-  const tipStart = 0.86;
+  // Body and tip share the ring at this step; a fractional split left a see-through slot between them.
+  const tipStep = Math.round(0.86 * steps);
   const body: Profile = [];
   const tip: Profile = [];
   for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const x = t * L; // from base upward
+    const x = (i / steps) * L; // from base upward
     const r = ogive(R * 0.995, L, x);
     const pt: [number, number] = [Math.max(r, 0), yb + x];
-    if (t <= tipStart) body.push(pt);
-    if (t >= tipStart - 1e-9) tip.push(pt);
+    if (i <= tipStep) body.push(pt);
+    if (i >= tipStep) tip.push(pt);
   }
   // blunt the tip
   const lastR = 0.015 * R + 0.005;
@@ -487,7 +516,8 @@ export function buildFairing(def: PartDef): THREE.Object3D {
     half.userData.fairingPanel = { azimuth: phi + span / 2, span, radius: rs, baseY: y0, height: H };
     // Three panels keep the two-panel triangle budget (extra rails and livery).
     const segments = n === 3 ? 18 : 32;
-    half.add(mk(lathe(prof, { segments, phiStart: phi + gap, phiLength: span - 2 * gap, tile: 1 }), M.satinWhite()));
+    // Skin plus side faces on both split edges (the panel is thick, and its edges show when it jettisons).
+    half.add(mk([lathe(prof, { segments, phiStart: phi + gap, phiLength: span - 2 * gap, tile: 1 }), panelEdge(prof, inner, phi + gap, -1), panelEdge(prof, inner, phi + span - gap, 1)], M.satinWhite()));
     half.add(mk(lathe(inner, { segments, phiStart: phi + gap, phiLength: span - 2 * gap, tile: 1 }), M.innerLining()));
     // spine rail along the split edges
     const rails: THREE.BufferGeometry[] = [];

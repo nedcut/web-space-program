@@ -250,5 +250,5 @@ renderer.setAnimationLoop(() => {
   labels.render(scene, camera);
 });
 
-// expose for automated screenshots
-(window as unknown as { __previewReady: boolean }).__previewReady = true;
+// expose for automated screenshots (camera/controls let drivers pick views; floor/pedestals can be hidden to look up nozzles)
+Object.assign(window as unknown as Record<string, unknown>, { __previewReady: true, __preview: { scene, camera, controls, floor, cells, spin: (v: number) => { spinAngle = v; } } });
