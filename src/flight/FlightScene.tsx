@@ -171,7 +171,8 @@ export default function FlightScene() {
         setPaused((p) => !p);
       };
       cc.onQuickload = () => {
-        if (cc.network || getTutorial() || getScenarioRun()) return;
+        const blocked = cc.quickSaveBlocker('Quickload') ?? (getScenarioRun() ? 'Quickload is off during challenges' : null);
+        if (blocked) return cc.world.message(blocked);
         const data = FlightController.loadSlot('quicksave');
         if (!data) return cc.world.message('No quicksave yet (F5 to save)', 'warn');
         game.set({ resumeWorld: data, mode: data.mode ?? 'sandbox', scalePreset: data.preset, launchPending: false });
