@@ -1,5 +1,5 @@
 import './menu.css';
-import { game } from '../game/store';
+import { endSession } from '../game/store';
 import { browserSupport } from './browserSupport';
 
 const isFirefox = typeof navigator !== 'undefined' && /firefox/i.test(navigator.userAgent);
@@ -14,8 +14,9 @@ export function UnsupportedScreen() {
       <WebglHelp />
       {reason && <details><summary>Browser message</summary><pre className="unsupported-reason">{reason}</pre></details>}
       <div className="unsupported-actions">
-        <button className="btn primary" onClick={() => game.set({ scene: 'spaceCenter', launchPending: false })}>Back to Space Center</button>
-        <button className="btn" onClick={() => game.set({ scene: 'menu', launchPending: false })}>Main menu</button>
+        {/* Both exits end any lesson, challenge or room; a lesson or challenge returns to its own menu. */}
+        <button className="btn primary" onClick={() => endSession()}>Back to Space Center</button>
+        <button className="btn" onClick={() => endSession('menu')}>Main menu</button>
         <button className="btn" onClick={() => location.reload()}>Reload</button>
       </div>
     </section>

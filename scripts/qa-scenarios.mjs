@@ -114,7 +114,7 @@ try {
         const u=world.universe,up=vec.normalize(vec.v3(0.7,0.2,0.68)),bs=u.ephem.getBodyState('titan',world.ut),rel=vec.scale(up,u.body('titan').radius+60000),position=vec.add(bs.position,rel),env=u.createEnvironment(()=>'titan');
         Object.assign(v,{body:'titan',mode:'physics',fixed:undefined});Object.assign(v.state,{position,velocity:vec.add(env.air(position,world.ut).windVelocity,vec.scale(up,-1200)),orientation:quat.qFromTo(vec.v3(0,1,0),up),situation:'flying'});
       }
-      game.set({scene:'flight',craft,mode:'sandbox',trainingActive:false,multiplayer:null,launchPending:false,resumeWorld:serializeWorld(world)});
+      game.set({scene:'flight',craft,mode:'sandbox',session:'program',multiplayer:null,launchPending:false,resumeWorld:serializeWorld(world)});
     },{id,setup});await flightReady();await page.evaluate(()=>window.__flight.paused=true);
   };
   await check('Docking scenario: capture and undock',async()=>{

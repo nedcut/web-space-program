@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { game, DEFAULT_START_UT, type GameState } from '../game/store';
+import { game, DEFAULT_START_UT, beginPractice, endSession } from '../game/store';
 import { World } from '../game/world';
 import { Universe } from '../game/universe';
 import { serializeWorld } from '../game/persistence';
@@ -18,23 +18,28 @@ export function saveCompletion(id: string) {
 }
 export interface TutorialRun { lesson: Lesson; index: number; ready: boolean; skipped: boolean; finished: boolean; epoch: number }
 let run: TutorialRun | null = null;
-let prior: GameState | null = null;
 let epoch = 0;
 const listeners = new Set<() => void>();
 export const tutorialContext: TutorialContext = {};
 const emit = () => listeners.forEach(l => l());
+const clearRun = () => {
+  run = null;
+  delete tutorialContext.world; delete tutorialContext.flight; delete tutorialContext.editor;
+  emit();
+};
+// The store owns the session: whatever ends it (a challenge, a new program, any exit) ends the lesson too.
+game.subscribe(() => { if (run && game.get().session !== 'training') clearRun(); });
 export function getTutorial() { return run; }
 export function useTutorial() { return useSyncExternalStore(l => { listeners.add(l); return () => { listeners.delete(l); }; }, getTutorial); }
 export function startLesson(id: string) {
   const lesson = LESSONS.find(l => l.id === id);
   if (!lesson) throw new Error(`Unknown lesson: ${id}`);
-  if (!prior) prior = game.get();
   const craft = lesson.craft();
   const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
   if (craft && lesson.scene === 'flight') { world.launch(craft); lesson.setup?.(world); }
   delete tutorialContext.world; delete tutorialContext.flight; delete tutorialContext.editor;
   run = { lesson, index: 0, ready: false, skipped: false, finished: false, epoch: ++epoch };
-  game.set({ trainingActive: true, notice: null, saveId: null, scene: lesson.scene, craft, mode: 'sandbox', scalePreset: 'standard', ut: DEFAULT_START_UT, resumeWorld: craft && lesson.scene === 'flight' ? serializeWorld(world) : null, launchPending: false });
+  beginPractice('training', { scene: lesson.scene, craft, mode: 'sandbox', scalePreset: 'standard', ut: DEFAULT_START_UT, resumeWorld: craft && lesson.scene === 'flight' ? serializeWorld(world) : null });
   emit();
 }
 /** Called once per animation frame; React only receives changes in tutorial status. */
@@ -52,10 +57,8 @@ export function advanceTutorial(skip = false) {
   } else run = { ...run, index: run.index + 1, ready: false, skipped };
   emit();
 }
+/** Leave the lesson for the Training menu, restoring the program it interrupted. */
 export function endTutorial() {
-  run = null;
-  delete tutorialContext.world; delete tutorialContext.flight; delete tutorialContext.editor;
-  if (prior) game.set({ ...prior, settings: game.get().settings, scene: 'training' });
-  prior = null;
-  emit();
+  if (game.get().session === 'training') endSession('training');
+  else if (run) clearRun();
 }

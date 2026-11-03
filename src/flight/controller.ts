@@ -510,7 +510,7 @@ export class FlightController {
 
   /** `scene`: where Load resumes (default: this flight; leaving flight passes the scene being left for). */
   quicksave(slot = 'quicksave', scene: SaveScene = 'flight') {
-    if (this.network || getTutorial() || game.get().scenarioActive) return;
+    if (this.network || getTutorial() || game.get().session === 'scenario') return;
     try {
       // Periodic autosaves snapshot now and write on idle tasks; a quicksave the player asked for writes immediately.
       const autosave = slot === 'autosave';

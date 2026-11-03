@@ -125,12 +125,12 @@ describe('cross-feature save and vessel integration', () => {
 describe('communications and multiplayer integration', () => {
   it('does not apply local difficulty overrides to server replicas or tutorial practice', () => {
     game.set({ settings: { ...original.settings, commsEnabled: true, commsRestrictControl: true } });
-    for (const patch of [{ multiplayer: { url: 'ws://localhost', room: '', name: 'Pilot' }, trainingActive: false }, { multiplayer: null, trainingActive: true }]) {
+    for (const patch of [{ multiplayer: { url: 'ws://localhost', room: '', name: 'Pilot' }, session: 'program' as const }, { multiplayer: null, session: 'training' as const }]) {
       game.set(patch);
       const world = makeWorld(); applyCommsSettings(world);
       expect(world.commsSettings.enabled).toBe(false);
     }
-    game.set({ multiplayer: null, trainingActive: false });
+    game.set({ multiplayer: null, session: 'program' });
     const world = makeWorld(); applyCommsSettings(world);
     expect(world.commsSettings.enabled).toBe(true);
   });

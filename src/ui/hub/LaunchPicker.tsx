@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { game, useGame } from '../../game/store';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { enterFlight, game, useGame } from '../../game/store';
 import { listLibrary, saveLibraryItem, type LibraryCraft } from '../../game/saves';
 import { saveErrorText } from '../../game/storageErrors';
 import { Universe } from '../../game/universe';
@@ -58,11 +58,21 @@ export default function LaunchPicker({ onClose, recommendedStockId }: { onClose:
   // The editor draft lives only in the Integration Hall; launching something else replaces it there.
   const draftAtRisk = (craft: CraftDef) => !!pad?.parts.length && craft !== pad && saved !== null
     && !saved.some(s => same(s.craft, pad)) && !stock.some(s => same(s.craft, pad));
-  const fly = (craft: CraftDef) => game.set({ craft, scene: 'flight', launchPending: true });
+  const fly = (craft: CraftDef) => enterFlight({ launch: craft });
   const choose = (o: LaunchOption) => { if (o.blocked) return; if (draftAtRisk(o.craft)) setReplace(o.craft); else fly(o.craft); };
+  // "Save draft and launch" runs once at a time; Cancel or closing the picker drops a save still in progress, so it never launches.
+  const [saving, setSaving] = useState(false);
+  const saveRun = useRef(0);
+  useEffect(() => () => { saveRun.current++; }, []);
+  const cancelReplace = () => { saveRun.current++; setSaving(false); setReplace(null); };
   const saveDraftThenFly = (craft: CraftDef) => {
-    if (!pad) return;
-    void saveLibraryItem({ id: localId(), craft: pad, folder: '', tags: [], updatedAt: Date.now() }).then(() => fly(craft)).catch(e => { setReplace(null); setError(saveErrorText(e)); });
+    if (!pad || saving) return;
+    const run = ++saveRun.current;
+    setSaving(true);
+    void saveLibraryItem({ id: localId(), craft: pad, folder: '', tags: [], updatedAt: Date.now() }).then(() => { if (run === saveRun.current) fly(craft); }, e => {
+      if (run !== saveRun.current) return;
+      setSaving(false); setReplace(null); setError(saveErrorText(e));
+    });
   };
   const edit = (craft: CraftDef) => game.set({ craft, scene: 'editor' });
   const first = visible.find(o => o.key === `stock:${recommendedStockId}` && !o.blocked)
@@ -108,12 +118,12 @@ export default function LaunchPicker({ onClose, recommendedStockId }: { onClose:
         {saved === null && <div className="hub-launch-empty">Reading the craft library…</div>}
         {saved !== null && !matching.length && <div className="hub-launch-empty">{options.length ? 'No vehicles match.' : 'No vehicles yet.'}</div>}
       </div>
-      {replace && <Modal title="Replace the Integration Hall draft?" onClose={() => setReplace(null)} className="ui-modal-small">
+      {replace && <Modal title="Replace the Integration Hall draft?" onClose={cancelReplace} className="ui-modal-small">
         <div className="ui-modal-body">“{pad?.name}” is not in your craft library. Launching “{replace.name}” replaces it in the {facilityLabel('editor')}.</div>
         <div className="ui-modal-actions">
-          <Button className="btn" onClick={() => setReplace(null)}>Cancel</Button>
-          <Button className="btn" onClick={() => fly(replace)}>Launch without saving</Button>
-          <Button className="btn primary" data-autofocus onClick={() => saveDraftThenFly(replace)}>Save draft and launch</Button>
+          <Button className="btn" onClick={cancelReplace}>Cancel</Button>
+          <Button className="btn" disabled={saving} onClick={() => fly(replace)}>Launch without saving</Button>
+          <Button className="btn primary" data-autofocus disabled={saving} onClick={() => saveDraftThenFly(replace)}>{saving ? 'Saving…' : 'Save draft and launch'}</Button>
         </div>
       </Modal>}
     </Modal>

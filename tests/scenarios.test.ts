@@ -198,7 +198,7 @@ describe('isolated flight runtime and physics scoring', () => {
     try {
       startScenario('grand-tour'); expect(getScenarioRun()!.state.visited).toContain('titan');
       startScenario('ring-skimmer'); const first = getScenarioRun()!;
-      expect(game.get().scenarioActive).toBe(true); expect(game.get().trainingActive).toBe(false);
+      expect(game.get().session).toBe('scenario');
       startScenario('ring-skimmer'); expect(getScenarioRun()!.epoch).toBeGreaterThan(first.epoch);
       expect(getScenarioRun()!.state.dv).toBe(0); expect(getScenarioRun()!.setup.world.ut).toBe(first.setup.world.ut);
       const run = getScenarioRun()!; const detach = attachScenarioWorld(run.setup.world, () => {});

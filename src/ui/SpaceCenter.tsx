@@ -6,7 +6,7 @@ import { saveNamedWorld } from '../game/persistence';
 import { saveErrorText } from '../game/storageErrors';
 import { newProgression } from '../sim/science/progression';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { game, launchableCraft, useGame } from '../game/store';
+import { game, enterFlight, launchableCraft, useGame } from '../game/store';
 import type { SiteObjectId } from '../render/site/LaunchSite';
 import { HubBackdrop, type BuildingLabel } from './hub/HubBackdrop';
 import { DebriefCard } from './hub/DebriefCard';
@@ -70,7 +70,7 @@ export function SpaceCenter() {
     if (!c) return;
     const problem = launchBlocker(c, mode, p ?? newProgression(), scale);
     if (problem) { setDebrief(null); setNotice(`${c.name}: ${problem}`); }
-    else game.set({ craft: c, scene: 'flight', launchPending: true });
+    else enterFlight({ launch: c });
   };
 
   // Latest values for the 3D scene's callbacks and the key listener (registered once).

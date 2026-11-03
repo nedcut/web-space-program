@@ -13,16 +13,31 @@ export function CraftImportDialog({ session, initial = '', file, onClose }: { se
   const [dragging, setDragging] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
-  async function inspect(text: string, json = false) {
+  // Only the newest preview may report back: a later preview, editing the code or closing the dialog drops older ones.
+  const request = useRef(0);
+  useEffect(() => () => { request.current++; }, []);
+  async function preview(read: () => Promise<unknown>) {
+    const id = ++request.current;
     setBusy(true); setError(''); setResult(null);
-    try { if (text.length > MAX_CRAFT_BYTES * 1.4) throw new Error('Craft exceeds size limit.'); setResult(validateCraft(json ? JSON.parse(text) : await decodeCraft(text), PART_CATALOG)); }
-    catch (e) { setError((e as Error).message); }
-    finally { setBusy(false); }
+    try { const checked = validateCraft(await read(), PART_CATALOG); if (id === request.current) setResult(checked); }
+    catch (e) { if (id === request.current) setError((e as Error).message); }
+    finally { if (id === request.current) setBusy(false); }
   }
-  async function readFile(f: File) {
-    if (f.size > MAX_CRAFT_BYTES) { setError('Craft file exceeds size limit.'); return; }
-    await inspect(await f.text(), true);
-  }
+  const inspect = (text: string) => preview(() => {
+    if (text.length > MAX_CRAFT_BYTES * 1.4) throw new Error('Craft exceeds size limit.');
+    return decodeCraft(text);
+  });
+  const readFile = (f: File) => preview(async () => {
+    if (f.size > MAX_CRAFT_BYTES) throw new Error('Craft file exceeds size limit.');
+    return JSON.parse(await f.text()) as unknown;
+  });
+  /** A preview describes the code it was made from: editing the code clears it. */
+  const edit = (text: string) => {
+    setCode(text);
+    if (!result && !error && !busy) return;
+    request.current++;
+    setBusy(false); setError(''); setResult(null);
+  };
   useEffect(() => {
     if (file) void readFile(file); else if (initial) void inspect(initial);
     // Initial imports are inspected once on opening the dialog.
@@ -32,11 +47,11 @@ export function CraftImportDialog({ session, initial = '', file, onClose }: { se
   const problems = result ? [...result.errors, ...(result.unknownParts.length ? [`Unknown parts: ${result.unknownParts.join(', ')}`] : [])] : [];
   return <Modal title="Import vehicle" onClose={onClose} className="vab-import">
     <div className={`vab-dropzone ${dragging ? 'over' : ''}`}
-      onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
-      onDrop={e => { e.preventDefault(); e.stopPropagation(); setDragging(false); if (e.dataTransfer.files[0]) void readFile(e.dataTransfer.files[0]); }}>
+      onDragOver={e => { e.preventDefault(); if (!busy) setDragging(true); }} onDragLeave={() => setDragging(false)}
+      onDrop={e => { e.preventDefault(); e.stopPropagation(); setDragging(false); if (!busy && e.dataTransfer.files[0]) void readFile(e.dataTransfer.files[0]); }}>
       <label className="ui-field"><span>Share code or link</span>
         <textarea data-autofocus className="vab-share-code mono" aria-label="Craft share code" value={code} rows={4} placeholder="Paste a share code or a link containing #craft=…"
-          onChange={e => setCode(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void inspect(code); } }} />
+          onChange={e => edit(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void inspect(code); } }} />
       </label>
       <div className="vab-import-row">
         <Button className="btn" disabled={busy || !code.trim()} onClick={() => void inspect(code)}>Preview code</Button>

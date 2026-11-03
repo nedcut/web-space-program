@@ -1,5 +1,5 @@
 import { localId } from '../util/localId';
-import { draftForSave, game, loadLastCraft, reportSaveError } from './store';
+import { draftForSave, enterProgram, game, loadLastCraft, reportSaveError } from './store';
 import { SLOTS_KEY, commitSaveSlot, deferSaveWrite, flushSaveWrites, listSaveSlots, sceneForSave, saveSlotJson, type SaveScene, type SaveSlot } from './saveSlots';
 import { careerScaleMultiplier } from '../sim/bodies/scale';
 import { newProgression, type GameMode, type Progression } from '../sim/science/progression';
@@ -173,7 +173,7 @@ export function saveWorldToStorage(slot: string, world: World, displayName?: str
   const data = serializeWorld(world), savedAt = Date.now();
   const programId = game.get().saveId ?? 'legacy-program';
   // The editor draft travels with the program save so Load restores this program's craft.
-  const craft = game.get().trainingActive || game.get().scenarioActive ? loadLastCraft(programId) : game.get().craft;
+  const craft = game.get().session !== 'program' ? loadLastCraft(programId) : game.get().craft;
   const saved: SaveSlot = { id: slot === 'autosave' ? localId() : `${programId}:${slot}`, programId, name: displayName ?? (slot === 'autosave' ? 'Autosave' : slot === 'quicksave' ? 'Quicksave' : slot), kind: slot === 'autosave' ? 'auto' : 'manual', savedAt, data, craft, scene: options.scene ?? (game.get().scene === 'flight' ? 'flight' : 'spaceCenter') };
   let dataJson = '', failed = false;
   const steps = [
@@ -255,5 +255,5 @@ export function saveNamedWorld(name: string, world: World) {
 
 /** Resume a save: straight into the flight it was made in, else the Space Center. */
 export function resumeSave(slot: SaveSlot) {
-  game.set({ saveId: slot.programId, resumeWorld: slot.data, mode: slot.data.mode ?? 'sandbox', scalePreset: slot.data.preset, ut: slot.data.ut, launchPending: false, craft: draftForSave(slot), scene: sceneForSave(slot) });
+  enterProgram({ saveId: slot.programId, resumeWorld: slot.data, mode: slot.data.mode ?? 'sandbox', scalePreset: slot.data.preset, ut: slot.data.ut, craft: draftForSave(slot), scene: sceneForSave(slot) });
 }

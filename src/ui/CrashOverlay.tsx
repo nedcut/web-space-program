@@ -1,26 +1,22 @@
 import { useState } from 'react';
-import { game } from '../game/store';
+import { game, endSession, enterFlight } from '../game/store';
 import { hasSave, loadWorldFromStorage } from '../game/persistence';
-import { getTutorial, endTutorial } from '../tutorial/runtime';
-import { getScenarioRun, endScenario } from '../scenarios/runtime';
 
 /** Recovery never serializes the potentially broken world over a good save. */
 export function CrashOverlay({ error, onRecover }: { error: Error; onRecover: () => void }) {
   const [copyStatus, setCopyStatus] = useState('Copy report');
   const [loadError, setLoadError] = useState('');
-  const canLoad = !game.get().multiplayer && !getTutorial() && !getScenarioRun() && safeHasQuicksave();
+  const canLoad = !game.get().multiplayer && game.get().session === 'program' && safeHasQuicksave();
   const report = `Web Space Program runtime report\n${new Date().toISOString()}\n${navigator.userAgent}\nScene: ${game.get().scene}\n${errorText(error)}`;
   const home = () => {
-    if (getTutorial()) endTutorial();
-    else if (getScenarioRun()) endScenario();
-    else game.set({ scene: 'spaceCenter', multiplayer: null, launchPending: false });
+    endSession();
     onRecover();
   };
   const reload = () => {
     try {
       const saved = loadWorldFromStorage('quicksave')?.data;
       if (!saved) return setLoadError('The quicksave could not be read. You can return to the Space Center.');
-      game.set({ scene: 'flight', resumeWorld: saved, mode: saved.mode ?? 'sandbox', scalePreset: saved.preset, launchPending: false });
+      enterFlight({ resume: saved });
       onRecover();
     } catch { setLoadError('The quicksave could not be read. You can return to the Space Center.'); }
   };

@@ -4,7 +4,7 @@ import { setEarthDataSource } from './render/planet/earthSource';
 import { Profiler } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RootErrorBoundary } from './ui/ErrorBoundary';
-import { game } from './game/store';
+import { game, enterFlight } from './game/store';
 import { autoConfigureGraphics, GRAPHICS_PROFILE } from './render/core/quality';
 import { preloadTextureCache } from './render/core/textureCache';
 import { showStartup } from './ui/startup';
@@ -41,7 +41,7 @@ async function start() {
   if (flight) {
     import('./editor/stockCrafts').then(({ STOCK_CRAFTS }) => {
       const sc = STOCK_CRAFTS.find((c) => c.id === flight) ?? STOCK_CRAFTS[1];
-      game.set({ craft: sc.build(), scene: 'flight', launchPending: true });
+      enterFlight({ launch: sc.build() });
     });
   }
 
