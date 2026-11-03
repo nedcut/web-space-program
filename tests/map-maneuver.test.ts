@@ -219,6 +219,37 @@ describe('map view maneuver picking', () => {
     map.dispose();
     expect(placed).toEqual([]);
   });
+
+  it('draws the held handle pose only on the node being dragged, not on a node that replaces it', () => {
+    vi.stubGlobal('document', { createElement: host });
+    const bodies = createUniverse('standard'), ephem = createEphemeris(bodies);
+    const map = new MapView(bodies, ephem, host() as unknown as HTMLElement);
+    const sun = bodies.get('sun')!;
+    const orbit: Orbit = { body: 'sun', mu: sun.gm, a: 1.2e11, e: 0.05, i: 0.3, lan: 0, argPe: 0, m0: 0, epoch: 0 };
+    map.handlers = { placeNode: () => {}, nodesChanged: () => {} };
+    map.distance = 4e11;
+    const position = { ...ephem.getBodyState('sun', 0).position };
+    const vessel = { id: 'ship', position, nodes: [{ id: 7, time: period(orbit) * 0.3, prograde: 0, normal: 0, radial: 0 }],
+      patches: [{ orbit, startTime: 0, endTime: period(orbit) * 1.02, endReason: 'horizon' as const }] };
+    const input = { t: 0, focusId: 'vessel:ship', focus: position, viewport: { width: 1280, height: 800 }, vessel };
+    map.update(input); map.update(input);
+    const gizmo = map['gizmo'];
+    const pose = () => gizmo.map(g => [g.icon.scale.x, g.line.scale.y / g.stretch]);
+    const rest = pose();
+    // Pulling handle 0 of node 7 out: that handle grows and its arm lengthens.
+    map['drag'] = { kind: 'handle', nodeId: 7, index: 0, x: 0, y: 0, dirX: 0, dirY: -1, pull: 0 };
+    map.update(input);
+    map['drag'] = { kind: 'handle', nodeId: 7, index: 0, x: 0, y: 0, dirX: 0, dirY: -1, pull: 100 };
+    map.update(input);
+    expect(pose()[0][0]).toBeGreaterThan(rest[0][0]);
+    // Node 7 is deleted mid-drag (a shortcut, or it was executed) and node 8 takes the gizmo: drawn at rest.
+    vessel.nodes = [{ id: 8, time: period(orbit) * 0.3, prograde: 0, normal: 0, radial: 0 }];
+    map.update(input); map.update(input);
+    const after = pose();
+    expect(after[0][0]).toBeCloseTo(after[2][0]);
+    expect(after[0][1]).toBeCloseTo(rest[0][1], 3);
+    map.dispose();
+  });
 });
 
 describe('map zoom and handle spacing', () => {
