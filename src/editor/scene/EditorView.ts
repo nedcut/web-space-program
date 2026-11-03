@@ -294,10 +294,13 @@ export class EditorView {
     el.addEventListener('pointermove', this.onPointerMove);
     el.addEventListener('pointerup', this.onPointerUp);
     el.addEventListener('pointerleave', this.onPointerLeave);
+    el.addEventListener('pointercancel', this.onPointerCancel);
+    el.addEventListener('lostpointercapture', this.onPointerCancel);
     el.addEventListener('wheel', this.onWheel, { passive: false });
     el.addEventListener('contextmenu', preventDefault);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('blur', this.onBlur);
 
     this.unsub = session.subscribe(() => this.sync());
     this.sync();
@@ -1187,6 +1190,11 @@ export class EditorView {
   }
 
   private onPointerDown = (e: PointerEvent) => {
+    if (this.drag && this.drag.id !== e.pointerId) {
+      // A second finger is ignored (and is not a long-press); a new primary pointer means the old gesture is gone.
+      if (!e.isPrimary) { window.clearTimeout(this.longPress); return; }
+      this.cancelGesture();
+    }
     this.updateMouse(e);
     this.mouseInside = true;
     this.renderer.domElement.setPointerCapture(e.pointerId);
@@ -1209,9 +1217,10 @@ export class EditorView {
   };
 
   private onPointerMove = (e: PointerEvent) => {
+    const d = this.drag;
+    if (d && d.id !== e.pointerId) return;
     this.updateMouse(e);
     this.mouseInside = true;
-    const d = this.drag;
     if (!d) return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
     if (!d.moved && Math.hypot(dx, dy) > 4) d.moved = true;
@@ -1230,8 +1239,9 @@ export class EditorView {
   };
 
   private onPointerUp = (e: PointerEvent) => {
-    this.updateMouse(e);
     const d = this.drag;
+    if (d && d.id !== e.pointerId) return;
+    this.updateMouse(e);
     this.drag = null;
     try { this.renderer.domElement.releasePointerCapture(e.pointerId); } catch { /* not captured */ }
     window.clearTimeout(this.longPress);
@@ -1247,6 +1257,24 @@ export class EditorView {
 
   private onPointerLeave = () => {
     if (!this.drag) this.mouseInside = false;
+  };
+
+  /** The browser took the pointer (pointercancel) or capture was lost before release: drop the gesture. */
+  private onPointerCancel = (e: PointerEvent) => {
+    if (this.drag?.id === e.pointerId) this.cancelGesture();
+  };
+
+  /** End the current gesture without acting on it: no click, no long-press, gizmo edits reverted. */
+  private cancelGesture() {
+    this.drag = null;
+    this.mouseInside = false;
+    window.clearTimeout(this.longPress);
+    if (this.gizmoDrag) this.endGizmoDrag(false);
+  }
+
+  /** Key-ups are lost while the window is unfocused, so held modifiers would stick. */
+  private onBlur = () => {
+    this.altDown = this.shiftDown = this.partOnlyDown = false;
   };
 
   /** Move the camera target sideways (screen right is positive), within the hall. */
@@ -1516,12 +1544,15 @@ export class EditorView {
     this.ro.disconnect();
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('blur', this.onBlur);
     // three keeps disposed renderers reachable from shared materials; the canvas must not pin this view.
     const el = this.renderer.domElement;
     el.removeEventListener('pointerdown', this.onPointerDown);
     el.removeEventListener('pointermove', this.onPointerMove);
     el.removeEventListener('pointerup', this.onPointerUp);
     el.removeEventListener('pointerleave', this.onPointerLeave);
+    el.removeEventListener('pointercancel', this.onPointerCancel);
+    el.removeEventListener('lostpointercapture', this.onPointerCancel);
     el.removeEventListener('wheel', this.onWheel);
     el.removeEventListener('contextmenu', preventDefault);
     this.unwatchContext();
