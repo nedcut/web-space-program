@@ -51,7 +51,7 @@ const STEPS: Step[] = [
   { milestone: 'first-mars', title: 'Send a probe to Mars', craft: PETREL, season: 'mars', how: probeHow('Mars') },
   { milestone: 'first-venus', title: 'Send a probe to Venus', craft: PETREL, season: 'venus', how: probeHow('Venus') },
   { milestone: 'first-venus-landing', title: 'Land on Venus', craft: { standard: 'stock-cinderbloom' }, season: 'venus', only: ['standard'],
-    how: 'Use the planner\'s Entry trim to bring the arrival into the air, drop the cruise stage at the top of the atmosphere, hold retrograde and release the shield below 300 m/s. The Kiln shell reports from the surface.' },
+    how: 'Capture into a low orbit with the cruise stage. During a ground station pass, place a retrograde node on the far side of Venus, opposite Earth (late rather than early), that lowers the periapsis to about half the atmosphere\'s height: the probe flies it out of contact and comes down facing Earth. Drop the cruise stage at the top of the air, hold retrograde and release the shield below 300 m/s; the Kiln shell reports from the surface.' },
 ];
 
 /** Research nodes (with prerequisites) still needed to fly `stockId`, and their science cost. */
