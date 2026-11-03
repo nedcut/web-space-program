@@ -10,6 +10,7 @@ import { engineModule, igniteEngine, ispAtPressure, isSolidMotor, maxMassFlow, p
 import { availableResource, drawPropellants, drawResource } from './resources';
 import { ejectionScale, thrustLimit } from './tweaks';
 import { runActionGroup } from './actions';
+import { armChute } from './aero';
 import type { DrawLedger } from './resources';
 
 /** Distinct stage numbers not yet activated, in firing order (highest first). */
@@ -39,10 +40,7 @@ export function activateStage(v: VesselState, stage: number, events: VesselEvent
   for (const p of parts) {
     p.activated = true;
     if (p.engine) igniteEngine(v, p, events);
-    if (p.chute && p.chute.phase === 'stowed') {
-      p.chute.phase = 'armed';
-      events.push({ type: 'chute', vesselId: v.id, partUid: p.uid, phase: 'armed' });
-    }
+    armChute(v, p, events);
     if (p.def.modules.some((m) => m.type === 'decoupler')) decouplers.push(p.uid);
     if (p.def.modules.some((m) => m.type === 'fairing')) fairings.push(p.uid);
   }

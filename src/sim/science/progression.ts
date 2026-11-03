@@ -85,6 +85,14 @@ export function failContract(p: Progression, c: Contract): boolean {
   if (c.status !== 'active') return false;
   c.status = 'failed'; p.funds -= c.penalty; p.reputation -= c.reputation; return true;
 }
+/** Decline an offer (no penalty) or abandon an active contract (its penalty, see {@link failContract}). */
+export function abandonContract(p: Progression, id: string): boolean {
+  const c = p.contracts.find(c => c.id === id);
+  if (!c) return false;
+  // A declined offer is recorded as failed without a deadline (it was never accepted).
+  if (c.status === 'offered') { c.status = 'failed'; return true; }
+  return failContract(p, c);
+}
 export function evaluateContracts(p: Progression, event: ProgressEvent): string[] {
   const messages: string[] = [];
   for (const c of p.contracts) {

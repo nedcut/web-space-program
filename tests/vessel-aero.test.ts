@@ -3,7 +3,7 @@ import { qIdentity } from '../src/util/quat';
 import {
   activateNextStage, buildVessel, computeAeroForces, liftingCoefficients, machDragMultiplier, neutralInput, stepVessel,
 } from '../src/sim/vessel';
-import type { CraftDef } from '../src/sim/vessel';
+import type { CraftDef, VesselEvent } from '../src/sim/vessel';
 import { TEST_CATALOG, flatEarthEnv, stackCraft, NOSE_UP } from '../src/sim/vessel/testing';
 
 describe('drag model', () => {
@@ -133,13 +133,15 @@ describe('parachutes', () => {
     const v = buildVessel(stackCraft([{ partId: 'chute', stage: 0 }, 'capsule']), TEST_CATALOG, {
       orientation: NOSE_UP, position: { x: 0, y: 0, z: 5000 }, velocity: { x: 0, y: 0, z: -300 },
     });
-    activateNextStage(v);
+    const chuteEvents = (events: VesselEvent[]) => events.filter(e => e.type === 'chute').map(e => e.type === 'chute' && e.phase);
+    expect(chuteEvents(activateNextStage(v).events)).toEqual(['armed']);
     stepVessel(v, neutralInput(), env, 0);
     expect(v.parts[0].chute!.phase).toBe('armed');
     // force a deployed chute into an overload
     v.parts[0].chute!.phase = 'full';
     v.parts[0].chute!.progress = 1;
-    stepVessel(v, neutralInput(), env, 0.02);
+    expect(chuteEvents(stepVessel(v, neutralInput(), env, 0.02).events)).toEqual(['cut']);
     expect(v.parts[0].chute!.phase).toBe('cut');
+    expect(v.parts[0].chute!.cda).toBe(0);
   });
 });

@@ -163,6 +163,13 @@ describe('contracts, events and persistence', () => {
     expect(w.progression.funds).toBe(60000 + c.advance);
     expect(w.abandonContract(c.id)).toBe(true); expect(w.abandonContract(c.id)).toBe(false);
     expect(w.progression.funds).toBe(60000 + c.advance - c.penalty);
+    // Declining an offer costs nothing and leaves it failed without a deadline (never accepted).
+    const offer = w.progression.contracts.find(o => o.status === 'offered')!, funds = w.progression.funds, rep = w.progression.reputation;
+    expect(w.abandonContract(offer.id)).toBe(true);
+    expect(offer.status).toBe('failed');
+    expect(offer.deadline).toBeUndefined();
+    expect([w.progression.funds, w.progression.reputation]).toEqual([funds, rep]);
+    expect(w.abandonContract(offer.id)).toBe(false);
   });
   it('detects orbit through physics ticks, awards a contract and milestone only once', () => {
     const w = world(); const c = w.progression.contracts.find(c => c.kind === 'orbit')!;
