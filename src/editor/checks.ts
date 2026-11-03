@@ -1,5 +1,5 @@
 import { buildVessel, decouplerCutChildren } from '../sim/vessel/assembly';
-import { availableResource } from '../sim/vessel/resources';
+import { availableResource, buildFeedGroups } from '../sim/vessel/resources';
 import { engineModule } from '../sim/vessel/engines';
 import { panelMaxQ } from '../sim/vessel/deployables';
 import { aeroControlMargin } from './aeroStability';
@@ -42,7 +42,10 @@ export function preflightChecks(craft: CraftDef, catalog: Map<string, PartDef>, 
     const missing = Object.entries(engine.propellants).filter(([id, ratio]) => ratio && id !== 'intakeAir' && availableResource(v, p.uid, id as ResourceId) <= 1e-9).map(([id]) => id as ResourceId);
     if (!missing.length) continue;
     // Fuel only flows through stack nodes: a tank holding it on a surface mount is the usual cause (F1).
-    const mounted = v.parts.find(t => t.attachNode === 'srf' && t.parent !== null && missing.some(id => (t.resources[id] ?? 0) > 0));
+    // Only stack-flow fuel, and only a tank whose host this engine can draw through (not behind a decoupler).
+    const stackMissing = missing.filter(id => v.resourceDefs[id].flow === 'stack');
+    const reach = stackMissing.length ? new Set(buildFeedGroups(v, p.uid).flat()) : undefined;
+    const mounted = reach && v.parts.find(t => t.attachNode === 'srf' && t.parent !== null && reach.has(t.parent) && stackMissing.some(id => (t.resources[id] ?? 0) > 0));
     const host = mounted && v.cache.byUid.get(mounted.parent!);
     if (mounted && host) add(`fuel-${p.uid}`, `${p.def.name}: no usable fuel path. ${mounted.def.name} is surface-mounted on ${host.def.name}, and fuel flows only through stack nodes. Pick it up and attach it to a node.`, [p.uid, mounted.uid]);
     else add(`fuel-${p.uid}`, `${p.def.name}: no usable fuel path. Check tanks and crossfeed.`, [p.uid]);

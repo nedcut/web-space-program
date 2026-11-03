@@ -33,21 +33,23 @@ export function findStackSnap(
   const cursorOn = project(C, pc);
   for (const h of heldNodes) {
     const childAt: WorldAttachNode = { ...h, position: add(h.position, C) };
-    if (!project(childAt.position, pa)) continue;
+    // A held node behind the camera can still cursor-snap; it just can't use the held-node rules.
+    const heldOn = project(childAt.position, pa);
+    if (!heldOn && !cursorOn) continue;
     for (const c of craftNodes) {
       // Keep the player's orientation: only nodes that face each other (within ~60 degrees).
       if (facing(h, c) > -0.5) continue;
       if (!project(c.position, pb)) continue;
-      const dh = dist(pa, pb), dc = cursorOn ? dist(pc, pb) : Infinity;
+      const dh = heldOn ? dist(pa, pb) : Infinity, dc = cursorOn ? dist(pc, pb) : Infinity;
       const d = dh <= SNAP_PX ? Math.min(dh, dc) : dc <= CURSOR_SNAP_PX ? dc : Infinity;
       if (d === Infinity) continue;
       // The held-node distance breaks ties between held nodes that the cursor rule rates the same.
-      const rank = d + (h.size === c.size ? 0 : SNAP_PX * 0.6) + dh * 1e-3;
+      const rank = d + (h.size === c.size ? 0 : SNAP_PX * 0.6) + (heldOn ? dh * 1e-3 : 0);
       if (rank < bestRank) { best = { child: h, childAt, parent: c }; bestRank = rank; }
     }
     // Occupied joints: insert between (a free node at the same distance wins).
     const through = heldThrough.get(h);
-    if (!through) continue;
+    if (!through || !heldOn) continue;
     for (const j of jointNodes) {
       if (facing(h, j) > -0.5) continue;
       if (!project(j.position, pb)) continue;

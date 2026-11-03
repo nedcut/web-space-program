@@ -41,6 +41,14 @@ describe('editor stack snap choice', () => {
     expect(snap?.parent).toBe(podBottom);
   });
 
+  it('cursor-snaps even when the held node is behind the camera', () => {
+    // Projection fails for any point above y = 0.5 m (the held tank's top node), as if it were behind the camera.
+    const partial: ProjectFn = (p, out) => p.y > 0.5 ? false : project(p, out);
+    const snap = findStackSnap(v3(0, -0.05, 0), tank, [podBottom], noJoints, none, partial);
+    expect(snap?.parent).toBe(podBottom);
+    expect(snap?.child).toBe(tankTop);
+  });
+
   it('keeps orientation: the cursor rule needs a facing held node', () => {
     const podTop = node(1, 'top', v3(0, 0, 0), UP);
     const upOnly = [node(-1, 'top', v3(0, 0.75, 0), UP)];

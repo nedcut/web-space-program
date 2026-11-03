@@ -97,6 +97,16 @@ describe('preflight checks', () => {
     expect(fuel?.text).toContain('Silo 1 Standard is surface-mounted on Lantern I Capsule');
     expect(fuel?.uids).toEqual([3, 2]);
   });
+  it('keeps the generic warning for solid fuel, which never flows between parts', () => {
+    const q = { x: 0, y: 0, z: 0, w: 1 };
+    const craft: CraftDef = { name: 'SRB', version: 1, type: 'VAB', parts: [
+      { uid: 1, partId: 'pod-lantern-1', position: { x: 0, y: 0, z: 0 }, rotation: q },
+      { uid: 2, partId: 'srb-sparkler', position: { x: 0.8, y: -0.5, z: 0 }, rotation: q, parent: 1, attachNode: 'srf', parentNode: 'srf' },
+      { uid: 3, partId: 'srb-sparkler', position: { x: 0, y: -1.5, z: 0 }, rotation: q, parent: 1, attachNode: 'top', parentNode: 'bottom', stage: 0, resources: { solidFuel: 0 } },
+    ] };
+    const fuel = preflightChecks(craft, PART_CATALOG).find(c => c.id === 'fuel-3');
+    expect(fuel?.text).toBe('Sparkler Solid Motor: no usable fuel path. Check tanks and crossfeed.');
+  });
   it('handles an empty editor', () => {
     expect(preflightChecks({ name: '', version: 1, type: 'VAB', parts: [] }, PART_CATALOG)).toEqual([]);
   });
