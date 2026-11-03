@@ -109,6 +109,11 @@ export interface EngineState {
   /** Index of the EngineModule in def.modules. */
   moduleIndex: number;
   ignited: boolean;
+  /**
+   * No thrust for want of supply. Lit (`ignited`): an air-breathing engine starved of intake air, which relights by
+   * itself when air returns. Not lit: the engine ran dry and its ignition ended (rockets, solids). Cleared by a new
+   * ignition, or by shutting down a starved engine.
+   */
   flamedOut: boolean;
   /** Actual (spooled) throttle 0..1 — fraction of max mass flow. */
   throttle: number;

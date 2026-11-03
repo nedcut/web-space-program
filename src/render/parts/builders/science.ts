@@ -1,12 +1,25 @@
 import * as THREE from 'three';
 import type { PartDef } from '../../../sim/vessel/types';
 import { decals } from '../decals';
-import { around, box, cyl, grp, lathe, mk, pipe, rod, sphere, torus, type Profile } from '../geom';
+import { around, box, cyl, grp, lathe, merge, mk, pipe, rod, sphere, torus, type Profile } from '../geom';
 import { M } from '../materials';
 import { boxDims, srfMount } from './common';
 import { Markings } from './markings';
 
 const PI = Math.PI;
+
+/** Reverse winding and normals of an indexed geometry (turns a flat cap round). */
+function flipFaces(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const idx = g.index!;
+  for (let i = 0; i < idx.count; i += 3) {
+    const b = idx.getX(i + 1);
+    idx.setX(i + 1, idx.getX(i + 2));
+    idx.setX(i + 2, b);
+  }
+  const n = g.getAttribute('normal');
+  for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+  return g;
+}
 
 /**
  * Radial science instruments and antennas. Every design sits on a bolted mount plate whose back
@@ -156,7 +169,10 @@ const DESIGNS: Record<string, (c: Ctx) => void> = {
     const cups = around(cyl(0.016, 0.014, 0.012, 10).rotateX(PI / 2), 6, R * 0.65, 0).map((g) => g.rotateX(PI / 2).translate(-c.w * 0.1, -c.h * 0.02, zf + c.d * 0.185));
     c.root.add(mk(cups, M.darkMetal(), 'cups'));
     c.root.add(mk([rod([c.w * 0.3, -c.h * 0.3, zf + 0.01], [c.w * 0.3, c.h * 0.25, zf + 0.03], 0.008, 6)], M.gunmetal(), 'arm'));
-    const scoop = lathe([[0, 0], [0.02, 0.005], [0.028, 0.03], [0.026, 0.04]], { segments: 12, phiLength: PI });
+    // Half-cup with an inner wall so the inside of the scoop shows, and flat caps on its two cut edges.
+    const cupProfile: Profile = [[0, 0], [0.02, 0.005], [0.028, 0.03], [0.026, 0.04], [0.022, 0.038], [0.017, 0.009], [0, 0.004]];
+    const edge = new THREE.ShapeGeometry(new THREE.Shape(cupProfile.map(([r, y]) => new THREE.Vector2(r, y)))).rotateY(-PI / 2);
+    const scoop = merge([lathe(cupProfile, { segments: 12, phiLength: PI }), edge, flipFaces(edge.clone().rotateY(PI))]);
     scoop.translate(c.w * 0.3, c.h * 0.26, zf + 0.03);
     c.root.add(mk(scoop, M.steel(), 'scoop'));
   },
@@ -264,12 +280,14 @@ function dish(c: Ctx, large: boolean) {
     struts.push(rod([Math.cos(a) * R * 0.92, Math.sin(a) * R * 0.92, zPost + 0.03 + depth * 0.95], [0, 0, zFeed - 0.02], 0.005, 5));
   }
   c.root.add(mk(struts, M.aluminium(), 'feedStruts'));
-  const horn = lathe([[0.012, 0], [0.03, 0.06], [0.034, 0.065]], { segments: 16 });
+  // Horn: closed back, outer wall, lip, inner wall and a throat facing the dish.
+  const horn = lathe([[0, 0], [0.012, 0], [0.03, 0.06], [0.034, 0.065], [0.028, 0.062], [0.01, 0.006], [0, 0.006]], { segments: 16 });
   horn.rotateX(-PI / 2);
   horn.translate(0, 0, zFeed);
   c.root.add(mk(horn, M.gunmetal(), 'feedHorn'));
   if (large) {
-    const sub = lathe([[0, 0], [R * 0.12, -0.012], [R * 0.13, -0.006]], { segments: 24 });
+    // Closed back so the sub-reflector is solid from the front of the dish too.
+    const sub = lathe([[0, 0], [R * 0.12, -0.012], [R * 0.13, -0.006], [R * 0.12, 0], [0, 0.006]], { segments: 24 });
     sub.rotateX(PI / 2);
     sub.translate(0, 0, zFeed + 0.01);
     c.root.add(mk(sub, M.chrome(), 'subReflector'));

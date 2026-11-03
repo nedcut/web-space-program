@@ -35,8 +35,10 @@ export function buildJetEngine(def: PartDef): THREE.Object3D {
   const re = num(def, 'exitRadius', 0.42);
   const afterburner = str(def, 'style', 'turbofan') === 'afterburner';
   const root = grp('jetEngine');
-  // Mounting flange at the top node.
-  root.add(mk(lathe([[R * 0.9, yT - 0.06], [R, yT - 0.05], [R, yT], [R * 0.9, yT]], { segments: 48 }), M.gunmetal(), 'flange'));
+  // Mounting flange at the top node, with its inner wall down to the fan face.
+  root.add(mk(lathe([[R * 0.9, yT - 0.06], [R, yT - 0.05], [R, yT], [R * 0.9, yT], [R * 0.9, yT - 0.06]], { segments: 48 }), M.gunmetal(), 'flange'));
+  // Fan face closes the front of the nacelle (the top node is often free or smaller than the engine).
+  root.add(mk(lathe([[R * 0.9, yT - 0.06], [0, yT - 0.06]], { segments: 48 }), M.darkMetal(), 'fanFace'));
   if (!afterburner) {
     // Fat turbofan nacelle: cowl, core cowl, and a short hot nozzle with a centre plug.
     const cowlEnd = yB + h * 0.32;
@@ -71,7 +73,8 @@ export function buildJetEngine(def: PartDef): THREE.Object3D {
       g.rotateY(a);
       root.add(mk(g, M.darkMetal()));
     }
-    root.add(mk(lathe([[0, yB + 0.62], [R * 0.6, yB + 0.6], [re * 0.95, yB + 0.5], [re * 0.95, yB]], { segments: 40 }), M.soot(), 'liner'));
+    // Liner: inside faces the nozzle; it wraps round the exit lip so it is solid seen between the petals too.
+    root.add(mk(lathe([[0, yB + 0.62], [R * 0.6, yB + 0.6], [re * 0.95, yB + 0.5], [re * 0.95, yB], [re, yB], [re, yB + 0.5], [R * 0.82, yB + 0.5]], { segments: 40 }), M.soot(), 'liner'));
     // Flame-holder ring.
     root.add(mk(torus(re * 0.55, 0.025, 6, 32).translate(0, yB + 0.45, 0), M.darkMetal()));
   }
@@ -92,10 +95,11 @@ function buildInlineIntake(def: PartDef): THREE.Object3D {
   const yB = -h / 2, yT = h / 2;
   const root = grp('intake');
   const lip = rTop * 0.92;
-  root.add(mk(lathe([[rBot, yB], [rBot, yB + 0.1], [rTop, yT - 0.08], [rTop * 0.98, yT - 0.02], [lip, yT]], { segments: 56, tile: 0.8 }), M.satinWhite(), 'cowl'));
+  root.add(mk(lathe([[0, yB], [rBot, yB], [rBot, yB + 0.1], [rTop, yT - 0.08], [rTop * 0.98, yT - 0.02], [lip, yT]], { segments: 56, tile: 0.8 }), M.satinWhite(), 'cowl'));
   root.add(mk(lathe([[lip, yT], [lip * 0.97, yT - 0.01], [lip * 0.9, yT - 0.12]], { segments: 56 }), M.titanium(), 'lip'));
   // Duct interior (dark) and the compressor face.
-  root.add(mk(lathe([[lip * 0.9, yT - 0.12], [lip * 0.8, yB + 0.2], [lip * 0.78, yB + 0.15]], { segments: 40 }), M.innerLining(), 'duct'));
+  // Bottom -> top: inner lining is a back-side material, so it shows from inside the duct.
+  root.add(mk(lathe([[lip * 0.78, yB + 0.15], [lip * 0.8, yB + 0.2], [lip * 0.9, yT - 0.12]], { segments: 40 }), M.innerLining(), 'duct'));
   root.add(mk(cyl(lip * 0.8, lip * 0.8, 0.02, 40, yB + 0.16), M.darkMetal()));
   // Translating spike.
   root.add(mk(lathe([[rTop * 0.42, yB + 0.2], [rTop * 0.42, yT - 0.35], [0.02, yT + 0.12], [0, yT + 0.13]], { segments: 40 }), M.titanium(), 'spike'));
@@ -153,7 +157,7 @@ export function buildCockpit(def: PartDef): THREE.Object3D {
     const r = rTop + (R - rTop) * Math.sqrt(Math.max(0, 1 - Math.pow(t, 1.7)));
     prof.push([r, y]);
   }
-  root.add(mk(lathe([[R, yB], ...prof.slice(1)], { segments: 56, tile: 0.8 }), M.satinWhite(), 'nose'));
+  root.add(mk(lathe([[0, yB], [R, yB], ...prof.slice(1)], { segments: 56, tile: 0.8 }), M.satinWhite(), 'nose'));
   root.add(mk(lathe([[rTop, yT - 0.12], [rTop * 0.8, yT - 0.05], [0, yT]], { segments: 32 }), M.blackPaint(), 'radome'));
   root.add(mk(cylinder(R + 0.004, R + 0.004, 0.08, { segments: 56, caps: false, y: yB + 0.12 }), M.accent('blue')));
   // Bubble canopy and its frame.
@@ -184,7 +188,7 @@ export function buildFuselage(def: PartDef): THREE.Object3D {
       const t = i / 10;
       prof.push([rBot + (rTop - rBot) * Math.sin((t * PI) / 2), yB + t * h]);
     }
-    root.add(mk(lathe([[0, yB], [rBot, yB], ...prof], { segments: 48, tile: 0.8 }), M.satinWhite(), 'cone'));
+    root.add(mk(lathe([[0, yB], [rBot, yB], ...prof, [0, yT]], { segments: 48, tile: 0.8 }), M.satinWhite(), 'cone'));
     root.add(mk(lathe([[rBot * 0.7, yB - 0.0], [rBot, yB]], { segments: 24 }), M.darkMetal()));
     root.add(mk(cylinder(rTop + 0.004, rTop + 0.004, 0.06, { segments: 48, caps: false, y: yT - 0.05 }), M.charcoalPanel()));
     return root;

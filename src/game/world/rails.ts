@@ -9,6 +9,7 @@ import { advanceTransmissions, evaluateProgression } from '../science';
 import { Universe } from '../universe';
 import type { World, WorldVessel } from '../world';
 import type { WorldInternals } from './internals';
+import { setVesselMode } from './vesselMode';
 const bodyQuat = (u: Universe, id: string, t: number) => u.ephem.bodyRotation(id, t);
 
 /** Update a body-fixed vessel's inertial state from its fixed coordinates. */
@@ -40,14 +41,13 @@ export function pack(this: World, internals: WorldInternals, wv: WorldVessel): v
   if (wv.mode === 'rails' || wv.mode === 'landedRails' || wv.mode === 'prelaunch') return;
   if (!packsOnOrbit(wv.state)) {
     internals.captureFixed(wv, this.ut);
-    wv.mode = 'landedRails';
+    setVesselMode(wv, { mode: 'landedRails', fixed: wv.fixed! });
     // Fixed to the surface it has settled, whichever of raw and settled saw the contact: rails time steps neither.
     setSituation(wv.state, wv.state.situation !== 'flying' ? wv.state.situation : wv.state.settledSituation);
     return;
   }
   const rs = this.relativeState(wv);
-  wv.orbit = stateToElements(this.universe.body(wv.body).gm, wv.body, rs.position, rs.velocity, this.ut);
-  wv.mode = 'rails';
+  setVesselMode(wv, { mode: 'rails', orbit: stateToElements(this.universe.body(wv.body).gm, wv.body, rs.position, rs.velocity, this.ut) });
   wv.state.angularVelocity = v3();
   internals.predictRailsEvent(wv);
 }
@@ -90,10 +90,7 @@ export function unpack(this: World, internals: WorldInternals, wv: WorldVessel):
   } else if (wv.mode === 'landedRails') {
     internals.syncFixed(wv, this.ut);
   } else return;
-  wv.precise = undefined;
-  wv.mode = 'physics';
-  wv.orbit = undefined;
-  wv.railsEvent = undefined;
+  setVesselMode(wv, { mode: 'physics' });
 }
 
 /** Advance an unattended world, packing vessels first and processing the normal rails events.

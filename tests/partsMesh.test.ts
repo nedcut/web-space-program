@@ -151,7 +151,8 @@ describe('part meshes (headless)', () => {
   it('jet engine shells face outward and duct/nozzle interiors face into the opening', () => {
     for (const id of ['jet-kittiwake', 'jet-shrike']) {
       const root = buildJetEngine(PART_DEFS.find((p) => p.id === id)!);
-      for (const name of ['cowl', 'core', 'body', 'reheat', 'bypassDuct', 'nozzle', 'liner']) {
+      // The Shrike liner now also wraps outside the nozzle; partFaces.test.ts checks it (and every other part) by ray tracing.
+      for (const name of ['cowl', 'core', 'body', 'reheat', 'bypassDuct', 'nozzle']) {
         const m = root.getObjectByName(name) as THREE.Mesh | undefined;
         if (!m) continue;
         const f = radialFacing(m);

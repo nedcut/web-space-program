@@ -13,7 +13,7 @@ export const antennas: PartDef[] = [0, 1].map(i => ({
 
 // Larger relay arrays share the radial mount contract, with distinct procedural dish meshes.
 for (const [id, name, range, mass, cost, size, maxQ] of [
-  ['antenna-arc', 'Arcwatch Relay Dish', 5e9, 90, 3600, 0.65, 2000],
+  ['antenna-arc', 'Arcwatch Relay Dish', 1e10, 90, 3600, 0.65, 2000],
   ['antenna-horizon', 'Horizon Relay Reflector', 5e11, 220, 9000, 1.1, 1200],
 ] as const) antennas.push({
   ...antennas[1], id, name, dryMass: mass, cost,

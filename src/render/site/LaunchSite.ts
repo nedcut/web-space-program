@@ -190,7 +190,7 @@ export interface LaunchSiteOptions {
   steamParticles?: number;
 }
 
-/** The active vessel, for the pad equipment and the deluge steam (flight only). */
+/** The vessel on the pad (the active one, or one still held there while another is flown), for the pad equipment and the deluge steam (flight only). */
 export interface PadVessel {
   state: VesselState;
   /** Held by the hold-down clamps (prelaunch). */

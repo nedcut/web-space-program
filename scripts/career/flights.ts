@@ -80,6 +80,7 @@ function coastToEntry(w: World) {
 
 /** Hold retrograde (surface) and fall to the ground or sea; stages everything once descending in air. Skips warp. */
 export function descend(w: World, biomes: Set<string>, maxTime = 4000, sas = true): boolean {
+  if (!w.active) return false;
   const atmo = w.universe.body(w.active!.body).atmosphere?.height ?? 0;
   let staged = false;
   const down = (w: World) => {

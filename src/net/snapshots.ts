@@ -5,6 +5,7 @@ import type { VesselDelta } from './protocol';
 import { isruMachinery } from '../sim/vessel/isru';
 import { recomputeMassProperties, rebuildTopology } from '../sim/vessel';
 import { isFairingDef } from '../sim/vessel/fairing';
+import { setVesselMode } from '../game/world/vesselMode';
 
 export function vesselDeltas(world: World): VesselDelta[] {
   return [...world.vessels.values()].map(v => {
@@ -27,7 +28,7 @@ export function vesselDeltas(world: World): VesselDelta[] {
         converterRecipe: p.converterRecipe, processTemperature: p.processTemperature, dockDisarmed: p.dockDisarmed, link: p.link, linkFatigue: p.linkFatigue, structuralFatigue: p.structuralFatigue })),
     });
     if (v.mode === 'landedRails' && v.fixed) return { ...base, mode: 'landedRails', fixed: structuredClone(v.fixed), state };
-    return { ...base, mode: v.mode === 'prelaunch' ? 'prelaunch' : 'physics', fixed: structuredClone(v.fixed), state };
+    return { ...base, mode: v.mode === 'prelaunch' ? 'prelaunch' : 'physics', fixed: structuredClone(v.fixed), holdDown: structuredClone(v.holdDown), state };
   });
 }
 export function applyDeltas(world: World, ut: number, deltas: VesselDelta[]) {
@@ -45,16 +46,16 @@ export function applyDeltas(world: World, ut: number, deltas: VesselDelta[]) {
         if (electricCharge !== undefined) p.resources.electricCharge = electricCharge;
       }
     }
-    v.mode = d.mode;
+    setVesselMode(v, d.mode === 'rails' ? { mode: 'rails', orbit: structuredClone(d.orbit) }
+      : d.mode === 'physics' ? { mode: 'physics' }
+      : { mode: d.mode, fixed: structuredClone(d.fixed!), holdDown: d.mode === 'prelaunch' ? structuredClone(d.holdDown) : undefined });
     v.body = d.body;
-    v.orbit = d.mode === 'rails' ? structuredClone(d.orbit) : undefined;
     v.precise = d.mode === 'rails' ? structuredClone(d.precise) : undefined;
     if (v.precise) {
       const ref = world.universe.ephem.getBodyState(v.precise.frame,ut);
       v.state.position = add(ref.position,v.precise.state.position);
       v.state.velocity = add(ref.velocity,v.precise.state.velocity);
     }
-    v.fixed = d.mode !== 'rails' ? structuredClone(d.fixed) : undefined;
     if ('state' in d && d.state) {
       const { parts, ...state } = structuredClone(d.state);
       Object.assign(v.state, state);

@@ -374,7 +374,7 @@ export class FlightMap {
         break;
       }
       case 'switch':
-        if (w.switchTo(obj.id)) { this.focus = null; c.map.selectedNodeId = null; w.message(`Switched to ${w.active!.state.name}`); }
+        if (c.switchToVessel(obj.id)) { this.focus = null; c.map.selectedNodeId = null; }
         break;
       case 'info': this.menus = { ...this.menus, info: obj }; break;
     }

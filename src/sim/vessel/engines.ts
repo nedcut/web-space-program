@@ -168,6 +168,9 @@ export function igniteEngine(v: VesselState, p: PartState, events?: VesselEvent[
 export function shutdownEngine(p: PartState): boolean {
   const m = engineModule(p);
   if (!p.engine || !m || isSolidMotor(m)) return false;
+  // A starved jet is still lit (it relights when air returns): shut down, it is just off. An engine that is not lit
+  // keeps its flameout (a rocket that ran dry), which only a new ignition clears.
+  if (p.engine.ignited) p.engine.flamedOut = false;
   p.engine.ignited = false;
   p.engine.throttle = 0;
   p.engine.thrust = 0;

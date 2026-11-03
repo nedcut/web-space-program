@@ -1,5 +1,6 @@
 import { placeInCircularOrbit, spawnRendezvousTarget } from '../../game/scenarios';
 import { quatFromBasis } from '../../game/world';
+import { setVesselMode } from '../../game/world/vesselMode';
 import { setSituation } from '../../sim/vessel';
 import { spawnTestOutpost } from '../stationFixture';
 import { bindingLabel } from '../../input/bindings';
@@ -59,8 +60,7 @@ export function devScenario(this: FlightController, internals: FlightControllerI
     const omega = (2 * Math.PI) / b.rotationPeriod;
     vel = add(scale(cross(pole, surfaceDir), omega * (b.radius + alt)), scale(surfaceDir, 70));
   }
-  wv.mode = 'physics';
-  wv.fixed = undefined;
+  setVesselMode(wv, { mode: 'physics' });
   wv.body = bodyId;
   wv.state.position = add(bs.position, scale(surfaceDir, b.radius + alt));
   wv.state.velocity = add(bs.velocity, vel);
