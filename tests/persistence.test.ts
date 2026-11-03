@@ -4,7 +4,7 @@ import { World } from '../src/game/world';
 import { PART_CATALOG } from '../src/data/parts';
 import { buildOrbiter } from '../src/editor/stockCrafts';
 import { neutralInput } from '../src/sim/vessel';
-import { serializeWorld, deserializeWorld } from '../src/game/persistence';
+import { serializeWorld, deserializeWorld, savedPilotThrottle, type SavedWorld } from '../src/game/persistence';
 import { DEFAULT_START_UT } from '../src/game/store';
 
 describe('world persistence', () => {
@@ -25,4 +25,32 @@ describe('world persistence', () => {
     expect(Math.abs(a.position.x - b.position.x)).toBeLessThan(1e-3);
     expect(Math.abs(a.mass - b.mass)).toBeLessThan(1e-6);
   }, 60000);
+
+  it('saves the pilot throttle so a quickload resumes the burn', () => {
+    const u = new Universe('standard');
+    const w = new World(u, PART_CATALOG, DEFAULT_START_UT);
+    w.launch(buildOrbiter());
+    w.pilotThrottle = 1;
+    const saved = JSON.parse(JSON.stringify(serializeWorld(w))) as SavedWorld;
+    expect(savedPilotThrottle(saved)).toBe(1);
+    w.pilotThrottle = 0.35;
+    expect(savedPilotThrottle(JSON.parse(JSON.stringify(serializeWorld(w))))).toBe(0.35);
+    // Zero leaves the save unchanged, and older saves resume at zero.
+    w.pilotThrottle = 0;
+    const idle = serializeWorld(w);
+    expect('pilotThrottle' in idle).toBe(false);
+    expect(savedPilotThrottle(idle)).toBe(0);
+  });
+
+  it('drops the saved throttle when a world is re-saved by another scene, and clamps malformed values', () => {
+    const u = new Universe('standard');
+    const w = new World(u, PART_CATALOG, DEFAULT_START_UT);
+    w.launch(buildOrbiter());
+    w.pilotThrottle = 1;
+    const saved = JSON.parse(JSON.stringify(serializeWorld(w))) as SavedWorld;
+    // Tracking Station / Space Center load the world, time may pass, and they save again: no stale burn returns.
+    expect(savedPilotThrottle(serializeWorld(deserializeWorld(saved, PART_CATALOG, u)))).toBe(0);
+    for (const [value, expected] of [[2, 1], [-1, 0], [Number.NaN, 0], ['1', 0], [null, 0]] as const)
+      expect(savedPilotThrottle({ ...saved, pilotThrottle: value as unknown as number })).toBe(expected);
+  });
 });

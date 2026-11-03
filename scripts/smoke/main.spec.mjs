@@ -185,6 +185,15 @@ test('first training lesson starts', async ({ page }) => {
   await page.getByRole('button', { name: /Building your first rocket/ }).click();
   await expect(page.getByLabel('Craft name', { exact: true })).toBeVisible();
   await expect(page.locator('.tutorial-panel')).toContainText('Building your first rocket');
+  // Every lesson control sits inside the card and receives clicks (they were clipped below its edge at 1366x768).
+  const clipped = await page.locator('.tutorial-panel').evaluate(panel => {
+    const p = panel.getBoundingClientRect();
+    return [...panel.querySelectorAll('button')].filter(b => {
+      const r = b.getBoundingClientRect(), hit = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+      return r.top < p.top || r.bottom > p.bottom || r.left < p.left || r.right > p.right || !b.contains(hit);
+    }).map(b => b.textContent);
+  });
+  expect(clipped).toEqual([]);
 });
 test('quick-start challenge loads a flight', async ({ page }) => {
   await page.getByRole('button', { name: 'Challenges', exact: true }).click();
