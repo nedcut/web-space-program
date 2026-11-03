@@ -141,6 +141,7 @@ export class EditorSession {
   private showCoL = false;
   private toasts: Toast[] = [];
   private toastId = 0;
+  private toastTimers = new Set<ReturnType<typeof setTimeout>>();
   private hoverUid: number | null = null;
   private highlightUids: number[] = [];
   private selectedUids: number[] = [];
@@ -298,12 +299,28 @@ export class EditorSession {
     this.listeners.forEach((l) => l());
   }
 
+  /**
+   * The only writer of `held`. Holding implies the place tool in build mode (no gizmo); an assembly shows and places
+   * with its own symmetry, and the player's setting returns when the assembly leaves the hand.
+   */
+  private setHeld(next: HeldState | null) {
+    const was = this.held;
+    this.held = next;
+    if (next && !was) {
+      this.tool = 'place';
+      this.mode = 'build';
+      this.gizmoUid = null;
+    }
+    if (next?.kind === 'assembly' && was?.kind !== 'assembly') this.adoptHeldSymmetry();
+    else if (was?.kind === 'assembly' && next?.kind !== 'assembly') this.restoreSymmetry();
+  }
+
   /** Keep local hold state consistent with the core (undo/redo can create or remove a held assembly). */
   private syncHeld() {
-    if (this.editor.linkStart) this.held = { kind: 'new', partId: this.editor.linkStart.partId, rotation: qIdentity() };
+    if (this.editor.linkStart) this.setHeld({ kind: 'new', partId: this.editor.linkStart.partId, rotation: qIdentity() });
     const coreHeld = !!this.editor.held;
-    if (coreHeld && this.held?.kind !== 'assembly') this.held = { kind: 'assembly', rotation: qIdentity() };
-    if (!coreHeld && this.held?.kind === 'assembly') { this.held = null; this.restoreSymmetry(); }
+    if (coreHeld && this.held?.kind !== 'assembly') this.setHeld({ kind: 'assembly', rotation: qIdentity() });
+    if (!coreHeld && this.held?.kind === 'assembly') this.setHeld(null);
   }
 
   /** Holding a set: show (and place with) its symmetry; the player's setting returns afterwards. */
@@ -324,10 +341,12 @@ export class EditorSession {
     const id = ++this.toastId;
     this.toasts = [...this.toasts.slice(-3), { id, text, tone, ...(action ? { action } : {}) }];
     this.touch();
-    setTimeout(() => {
+    const timer = setTimeout(() => {
+      this.toastTimers.delete(timer);
       this.toasts = this.toasts.filter((t) => t.id !== id);
       this.touch();
     }, Math.max(action ? 6000 : 3200, text.length * 55));
+    this.toastTimers.add(timer);
   }
   dismissToast(id: number) {
     this.toasts = this.toasts.filter(t => t.id !== id);
@@ -353,9 +372,14 @@ export class EditorSession {
     });
     if (!ok) return;
     this.name = craft.name || 'Untitled Craft';
-    this.held = null;
+    this.setHeld(null);
     this.savedSymmetry = null;
+    // Part uids are per-craft small integers: the old craft's selection would point at unrelated parts of this one.
     this.gizmoUid = null;
+    this.selectedUids = [];
+    this.panels = [];
+    this.hoverUid = null;
+    this.highlightUids = [];
     this.applyTypeDefaults(this.editor.craft.type);
     this.loadCounter++;
     this.clean = { craft: this.editor.craft, name: this.name };
@@ -393,8 +417,10 @@ export class EditorSession {
     if (this.craftSwappedOut('save')) return;
     try {
       const baseline = { craft: this.editor.craft, name: this.name };
+      const loads = this.loadCounter;
       await saveCraft(craft);
-      this.clean = baseline;
+      // A craft loaded while saving has its own baseline.
+      if (loads === this.loadCounter) this.clean = baseline;
       this.toast(`Saved "${craft.name}"`, 'good');
     } catch (e) {
       this.toast(saveErrorText(e), 'bad');
@@ -460,7 +486,7 @@ export class EditorSession {
     if (!partUnlocked(partId, g.mode, g.resumeWorld?.progression ?? newProgression())) return this.toast('Research this part first', 'warn');
     if (this.held?.kind === 'assembly') this.cancelHeld();
     this.editor.cancelLink();
-    this.held = { kind: 'new', partId, rotation: qIdentity() };
+    this.setHeld({ kind: 'new', partId, rotation: qIdentity() });
     this.touch();
   }
 
@@ -477,7 +503,7 @@ export class EditorSession {
       return true;
     });
     if (ok && started) {
-      this.held = null; this.touch();
+      this.setHeld(null); this.touch();
       if (typeof document !== 'undefined') document.dispatchEvent(new Event('wsp:part-attach'));
     } else if (ok) this.toast(held.partId === 'fuel-line' ? 'Choose the receiving part · maximum 5 m' : 'Choose the second anchor · maximum 5 m');
     return !!ok;
@@ -495,19 +521,19 @@ export class EditorSession {
       partOnly = false;
     }
     // Core marks the change; syncHeld() converts it into an 'assembly' hold. A symmetric set comes up together.
-    if (this.guard(() => partOnly ? this.editor.detachPart(uid, true) : this.editor.detachSubtree(uid, true))) { this.adoptHeldSymmetry(); this.touch(); }
+    if (this.guard(() => partOnly ? this.editor.detachPart(uid, true) : this.editor.detachSubtree(uid, true))) this.touch();
   }
   canPickUpPartOnly(uid: number): boolean { return this.editor.canDetachPart(uid); }
 
   /** Pick a set-aside piece up again (`uid`: the part clicked becomes the held root). */
   pickUpDetached(index: number, uid?: number) {
     if (this.held) return;
-    if (this.guard(() => this.editor.pickUpDetached(index, uid))) { this.adoptHeldSymmetry(); this.touch(); }
+    if (this.guard(() => this.editor.pickUpDetached(index, uid))) this.touch();
   }
   /** Take a part and what hangs from it off a set-aside piece (its root takes the whole piece). */
   takeFromDetached(index: number, uid: number) {
     if (this.held) return;
-    if (this.guard(() => this.editor.takeFromDetached(index, uid))) { this.adoptHeldSymmetry(); this.touch(); }
+    if (this.guard(() => this.editor.takeFromDetached(index, uid))) this.touch();
   }
   /**
    * Put a set-aside piece on the stand to edit it with every tool; the craft is set aside beside it, on the side the
@@ -563,7 +589,7 @@ export class EditorSession {
     const g = game.get();
     const locked = this.editor.craft.parts.find(p => [...descendants(this.editor.craft.parts, uid)].includes(p.uid) && !partUnlocked(p.partId, g.mode, g.resumeWorld?.progression ?? newProgression()));
     if (locked) return this.toast('Research every part in the copy first', 'warn');
-    if (this.guard(() => this.editor.copySubtree(uid))) { this.adoptHeldSymmetry(); this.touch(); }
+    if (this.guard(() => this.editor.copySubtree(uid))) this.touch();
   }
 
   /** Pick a saved subassembly from the drawer. */
@@ -572,7 +598,7 @@ export class EditorSession {
     if (sub.parts.some(p => !partUnlocked(p.partId, g.mode, g.resumeWorld?.progression ?? newProgression()))) return this.toast('This subassembly uses parts you have not researched', 'warn');
     if (this.held) this.cancelHeld();
     this.editor.cancelLink();
-    if (this.guard(() => this.editor.holdAssembly(sub))) { this.adoptHeldSymmetry(); this.touch(); }
+    if (this.guard(() => this.editor.holdAssembly(sub))) this.touch();
   }
 
   /** Merge another craft: it is held (root first, no stage numbers) for attaching to this one. */
@@ -609,7 +635,7 @@ export class EditorSession {
     if (!this.held) return;
     if (this.held.kind === 'new') {
       this.editor.cancelLink();
-      this.held = null;
+      this.setHeld(null);
       this.touch();
       return;
     }
@@ -625,7 +651,7 @@ export class EditorSession {
     if (!this.held) return;
     if (this.held.kind === 'new') {
       this.editor.cancelLink();
-      this.held = null;
+      this.setHeld(null);
       this.touch();
       return;
     }
@@ -678,13 +704,13 @@ export class EditorSession {
 
   rotateHeld(axis: Vec3, angle: number) {
     if (!this.held) return;
-    this.held = { ...this.held, rotation: qNormalize(qMul(qFromAxisAngle(axis, angle), this.held.rotation)) };
+    this.setHeld({ ...this.held, rotation: qNormalize(qMul(qFromAxisAngle(axis, angle), this.held.rotation)) });
     this.touch();
   }
 
   resetHeldRotation() {
     if (!this.held) return;
-    this.held = { ...this.held, rotation: qIdentity() };
+    this.setHeld({ ...this.held, rotation: qIdentity() });
     this.touch();
   }
 
@@ -763,8 +789,7 @@ export class EditorSession {
       return true;
     });
     if (ok && h.kind === 'new') {
-      // Keep holding the same part when Shift is held? Simpler: KSP drops it. Clear the hold.
-      this.held = null;
+      this.setHeld(null);
       this.touch();
     }
     if (ok && p.kind === 'park' && !this.parkHintShown) {
@@ -826,24 +851,36 @@ export class EditorSession {
 
   undo() {
     if (this.editor.linkStart) {
-      this.held = null; this.editor.undo(); this.touch(); return;
+      this.setHeld(null); this.editor.undo(); this.touch(); return;
     }
     if (this.held?.kind === 'new') {
       this.editor.cancelLink();
-      this.held = null;
+      this.setHeld(null);
       this.touch();
       return;
     }
     if (this.held?.kind === 'assembly') return this.cancelHeld();
     // Picking up/copying and placing is one action: never stop in a holding state.
-    this.editor.undo();
-    for (let i = 0; i < 8 && this.editor.held && this.editor.canUndo; i++) this.editor.undo();
+    this.keepToolThroughHolds(() => {
+      this.editor.undo();
+      for (let i = 0; i < 8 && this.editor.held && this.editor.canUndo; i++) this.editor.undo();
+    });
   }
   redo() {
-    if (this.held?.kind === 'new') { this.held = null; this.touch(); }
+    if (this.held?.kind === 'new') { this.setHeld(null); this.touch(); }
     if (this.held?.kind === 'assembly') return;
-    this.editor.redo();
-    for (let i = 0; i < 8 && this.editor.held && this.editor.canRedo; i++) this.editor.redo();
+    this.keepToolThroughHolds(() => {
+      this.editor.redo();
+      for (let i = 0; i < 8 && this.editor.held && this.editor.canRedo; i++) this.editor.redo();
+    });
+  }
+  /** Undo/redo step through holding states on the way; unless one remains, the player's tool and mode stay. */
+  private keepToolThroughHolds(step: () => void) {
+    const { tool, mode, gizmoUid } = this;
+    step();
+    if (this.held || (tool === this.tool && mode === this.mode && gizmoUid === this.gizmoUid)) return;
+    this.tool = tool; this.mode = mode; this.gizmoUid = gizmoUid;
+    this.touch();
   }
 
   // ------------------------------------------------------------------ selection, inspector panels, part settings
@@ -904,6 +941,8 @@ export class EditorSession {
   autoStage() { this.guard(() => this.editor.autoStage()); }
 
   dispose() {
+    for (const timer of this.toastTimers) clearTimeout(timer);
+    this.toastTimers.clear();
     this.unsub();
     this.listeners.clear();
   }

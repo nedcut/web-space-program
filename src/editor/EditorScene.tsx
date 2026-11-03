@@ -57,6 +57,7 @@ export default function EditorScene() {
       if (tutorialContext.editor === session) delete tutorialContext.editor;
       viewRef.current = null;
       if (window.__editor?.session === session) delete window.__editor;
+      session.dispose();
     };
   }, [session]);
 
