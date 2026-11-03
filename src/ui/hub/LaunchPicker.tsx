@@ -61,16 +61,19 @@ export default function LaunchPicker({ onClose, recommendedStockId }: { onClose:
   const fly = (craft: CraftDef) => enterFlight({ launch: craft });
   const choose = (o: LaunchOption) => { if (o.blocked) return; if (draftAtRisk(o.craft)) setReplace(o.craft); else fly(o.craft); };
   // "Save draft and launch" runs once at a time; Cancel or closing the picker drops a save still in progress, so it never launches.
+  // The ref guards clicks that land before React re-renders; `saving` only drives the buttons.
   const [saving, setSaving] = useState(false);
-  const saveRun = useRef(0);
-  useEffect(() => () => { saveRun.current++; }, []);
-  const cancelReplace = () => { saveRun.current++; setSaving(false); setReplace(null); };
+  const saveRun = useRef({ id: 0, busy: false });
+  useEffect(() => () => { saveRun.current.id++; }, []);
+  const cancelReplace = () => { saveRun.current = { id: saveRun.current.id + 1, busy: false }; setSaving(false); setReplace(null); };
   const saveDraftThenFly = (craft: CraftDef) => {
-    if (!pad || saving) return;
-    const run = ++saveRun.current;
+    if (!pad || saveRun.current.busy) return;
+    const run = ++saveRun.current.id;
+    saveRun.current.busy = true;
     setSaving(true);
-    void saveLibraryItem({ id: localId(), craft: pad, folder: '', tags: [], updatedAt: Date.now() }).then(() => { if (run === saveRun.current) fly(craft); }, e => {
-      if (run !== saveRun.current) return;
+    void saveLibraryItem({ id: localId(), craft: pad, folder: '', tags: [], updatedAt: Date.now() }).then(() => { if (run === saveRun.current.id) fly(craft); }, e => {
+      if (run !== saveRun.current.id) return;
+      saveRun.current.busy = false;
       setSaving(false); setReplace(null); setError(saveErrorText(e));
     });
   };
