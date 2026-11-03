@@ -279,7 +279,8 @@ export class FlightController {
 
     this.pipeline = new RenderPipeline({ quality: getQuality(quality), toneMapping: 'aces', exposure: 1 });
     const canvas = this.pipeline.renderer.domElement;
-    Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block' });
+    // touch-action none: the canvas owns touch drags (camera orbit, map pan); otherwise the browser cancels them.
+    Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block', touchAction: 'none' });
     host.appendChild(canvas);
     this.photo = new PhotoCamera(this.pipeline, this.scene, this.cam.camera, () => new THREE.Vector3(), active => {
       if (active) { if (this.network || !this.world.active) return false; this.photoWasPaused = this.paused; this.paused = true; this.mapMode = false; this.map.setVisible(false); this.pipeline.setMapMode(false); this.cam.clearLensShift(); }
@@ -690,34 +691,43 @@ export class FlightController {
   }
   /** Right-click (without dragging the camera) or a touch long-press picks a part. */
   private attachPartPicking(el: HTMLElement) {
-    let start: { x: number; y: number; button: number; touch: boolean } | null = null;
+    let start: { id: number; x: number; y: number; button: number; touch: boolean } | null = null;
     let timer = 0;
     const emit = (cx: number, cy: number) => {
       const p = toLayoutPoint(el, cx, cy), uid = this.pickPart(p.x, p.y);
       if (uid !== null) this.partPickListeners.forEach(fn => fn(uid));
     };
+    const abort = () => { start = null; window.clearTimeout(timer); };
     const down = (e: PointerEvent) => {
+      // A second finger means a multi-touch gesture, not a long-press.
+      if (!e.isPrimary) { abort(); return; }
       if (this.paused || this.photo.active) return;
-      start = { x: e.clientX, y: e.clientY, button: e.button, touch: e.pointerType === 'touch' };
+      start = { id: e.pointerId, x: e.clientX, y: e.clientY, button: e.button, touch: e.pointerType === 'touch' };
       window.clearTimeout(timer);
       if (start.touch) timer = window.setTimeout(() => { if (start) { emit(start.x, start.y); start = null; } }, 550);
     };
-    const move = (e: PointerEvent) => { if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 6) { start = null; window.clearTimeout(timer); } };
+    const move = (e: PointerEvent) => { if (start?.id === e.pointerId && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 6) abort(); };
     const up = (e: PointerEvent) => {
+      if (start && start.id !== e.pointerId) return;
       window.clearTimeout(timer);
       if (start && !start.touch && start.button === 2 && e.button === 2) emit(e.clientX, e.clientY);
       start = null;
     };
+    const cancel = (e: PointerEvent) => { if (start?.id === e.pointerId) abort(); };
     const menu = (e: Event) => e.preventDefault();
     el.addEventListener('pointerdown', down);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('blur', abort);
     el.addEventListener('contextmenu', menu);
     return () => {
       window.clearTimeout(timer);
       el.removeEventListener('pointerdown', down);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('blur', abort);
       el.removeEventListener('contextmenu', menu);
     };
   }
