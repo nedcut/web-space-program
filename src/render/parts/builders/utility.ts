@@ -52,11 +52,15 @@ export function buildParachute(def: PartDef): THREE.Object3D {
     const plate = box(rc * 1.4, h * 0.9, 0.02);
     plate.translate(0, 0, zm + 0.01);
     root.add(mk(plate, M.gunmetal()));
-    const body = cylinder(rc, rc, h * 0.75, { segments: 32, caps: false });
-    body.translate(0, -h * 0.1, zc);
+    // Canister runs from the base ring up inside the cap, so no open slot shows under the cap.
+    const capY = h / 2 - h * 0.16 - 0.005;
+    const canBot = -h * 0.475;
+    const canTop = capY + h * 0.04;
+    const body = cylinder(rc, rc, canTop - canBot, { segments: 32, caps: false });
+    body.translate(0, (canTop + canBot) / 2, zc);
     root.add(mk(body, M.satinWhite(), 'canister'));
     const cap = lathe([[rc * 1.02, 0], [rc * 1.02, h * 0.08], [rc * 0.8, h * 0.14], [0, h * 0.16]], { segments: 32 });
-    cap.translate(0, h / 2 - h * 0.16 - 0.005, zc);
+    cap.translate(0, capY, zc);
     root.add(mk(cap, capMat, 'cap'));
     root.add(mk(lathe([[0, -h / 2], [rc * 1.02, -h / 2], [rc * 1.02, -h / 2 + 0.03]], { segments: 32 }).translate(0, 0, zc), M.gunmetal()));
     const straps = box(0.02, h * 0.74, 0.008);
@@ -306,14 +310,15 @@ export function buildLight(def: PartDef): THREE.Object3D {
   root.add(mk(yoke, M.gunmetal(), 'yoke'));
   const rl = w * 0.36;
   const zc = zm + d * 0.58;
-  const housing = lathe([[rl * 0.6, -d * 0.3], [rl, -d * 0.1], [rl, d * 0.3], [rl * 0.95, d * 0.34]], { segments: 28 });
+  const housing = lathe([[0, -d * 0.3], [rl * 0.6, -d * 0.3], [rl, -d * 0.1], [rl, d * 0.3], [rl * 0.95, d * 0.34]], { segments: 28 });
   housing.rotateX(PI / 2);
   housing.translate(0, 0, zc);
   root.add(mk(housing, M.darkMetal(), 'housing'));
   const fins: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 4; i++) fins.push(torus(rl * 0.98, 0.004, 4, 24).rotateX(PI / 2).translate(0, 0, zc - d * 0.12 + i * 0.012));
   root.add(mk(fins, M.gunmetal()));
-  const lens = new THREE.CircleGeometry(rl * 0.92, 28);
+  // Lens meets the housing's front chamfer (a smaller lens left a see-through ring round it).
+  const lens = new THREE.CircleGeometry(rl * 0.96, 28);
   lens.translate(0, 0, zc + d * 0.33);
   root.add(mk(lens, M.lamp(), 'lightLens'));
   const anchor = new THREE.Object3D();
@@ -409,8 +414,8 @@ export function buildReactionWheel(def: PartDef): THREE.Object3D {
   root.add(
     mk(
       [
-        lathe([[r * 0.97, h / 2 - fl], [r, h / 2 - fl], [r, h / 2 - 0.004], [r * 0.98, h / 2]], { segments: 48 }),
-        lathe([[r * 0.98, -h / 2], [r, -h / 2 + 0.004], [r, -h / 2 + fl], [r * 0.97, -h / 2 + fl]], { segments: 48 }),
+        lathe([[r * 0.93, h / 2 - fl], [r, h / 2 - fl], [r, h / 2 - 0.004], [r * 0.98, h / 2]], { segments: 48 }),
+        lathe([[r * 0.98, -h / 2], [r, -h / 2 + 0.004], [r, -h / 2 + fl], [r * 0.93, -h / 2 + fl]], { segments: 48 }),
       ],
       M.aluminium(),
       'flanges',
@@ -450,7 +455,7 @@ export function buildDockingPort(def: PartDef): THREE.Object3D {
   const rRing = rTop * 0.84;
   const rTunnel = rTop * 0.56;
   // Base flange + bolt heads.
-  root.add(mk(lathe([[r * 0.97, y0], [r, y0 + 0.004], [r, y0 + fl], [r * 0.95, y0 + fl]], { segments: seg }), M.aluminium(), 'flange'));
+  root.add(mk(lathe([[0, y0], [r * 0.97, y0], [r, y0 + 0.004], [r, y0 + fl], [r * 0.95, y0 + fl]], { segments: seg }), M.aluminium(), 'flange'));
   const bolt = cyl(0.008 + 0.005 * r, 0.008 + 0.005 * r, 0.012, 6);
   bolt.rotateX(PI / 2);
   root.add(mk(around(bolt, Math.round(14 * r + 8), r * 0.995, 0, y0 + fl / 2), M.chrome(), 'bolts'));

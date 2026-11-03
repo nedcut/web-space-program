@@ -13,10 +13,13 @@ import { generateContracts, newProgression } from '../src/sim/science/progressio
 import { careerScaleMultiplier } from '../src/sim/bodies/scale';
 import { nextGoal, researchFor } from '../src/ui/hub/nextGoal';
 import { neutralInput } from '../src/sim/vessel';
-import { length, normalize, scale, add, v3 } from '../src/util/vec3';
+import { length, normalize, scale, add, sub, v3, dot } from '../src/util/vec3';
 import { qFromTo } from '../src/util/quat';
-import { toOrbit } from '../scripts/career/flights';
-import { capture, dvLeft, toPlanet } from '../scripts/career/planets';
+import { toOrbit, sensor } from '../scripts/career/flights';
+import { arrive, atmosphericLanding, capture, correct, deorbitFacingEarth, depart, dvLeft, planDeparture, survey, toPlanet } from '../scripts/career/planets';
+import { createUniverse } from '../src/sim/bodies';
+import { createEphemeris } from '../src/sim/orbit';
+import { nextLaunchSeason } from '../src/sim/orbit/season';
 
 /** Career past the Moon: interplanetary legs flown through the real World and the flight-assist programs. */
 const career = (preset: 'standard' | 'challenging' | 'real', ut = DEFAULT_START_UT) => new World(new Universe(preset), PART_CATALOG, ut, 'career');
@@ -119,6 +122,58 @@ describe('planetary probes', () => {
     expect(w.scienceInstruments().some(i => i.available && i.value > 0)).toBe(true);
   }, 300_000);
 
+  it('a Real Petrel reaches Mars in contact, captures into a long ellipse and sends science home', () => {
+    // Real Mars was out of the Arcwatch's reach (200 Gm) at the planner's arrivals (215–335 Gm), and the long-ellipse
+    // capture after its transfer (~1.75 km/s) left the career's Petrel, sensors aboard, short. Second Mars season.
+    const bodies = createUniverse('real'), ephem = createEphemeris(bodies);
+    const season = nextLaunchSeason(bodies, ephem, 'earth', 'mars', DEFAULT_START_UT + 900 * 86400)!.departure;
+    const w = career('real', season - 5 * 86400);
+    w.progression.unlocked.push(...researchFor('stock-petrel-real', w.progression, 'career').nodes, 'discovery-1', 'discovery-2');
+    w.progression.funds = 1e8;
+    const craft = buildPetrel('real');
+    // The career route's instruments (what the playthrough fits when researched): the heaviest Petrel it flies.
+    sensor(craft, 'sensor-magnetic', 1); sensor(craft, 'sensor-gravity', 2);
+    expect(facilityProblem(craft, PART_CATALOG, 'career', w.progression, 'real')).toBeNull();
+    w.launch(craft);
+    const biomes = new Set<string>(), mars = w.universe.body('mars');
+    expect(toOrbit(w, biomes, 220000, 2)).toBeNull();
+    // The player takes the planner's "now" option in this season (the next good one is ~770 days later).
+    const pe = mars.atmosphere!.height * 1.5;
+    const listed = planTransferToBody(w, 'mars', { periapsisAltitude: pe })!;
+    const now = listed.windows!.find(o => o.kind === 'now')!;
+    const d = planDeparture(w, 'mars', pe, now.departure);
+    if (typeof d === 'string') throw new Error(d);
+    expect(d.time - w.ut).toBeLessThan(86400);
+    const dv = depart(w, 0);
+    expect(typeof dv).toBe('number');
+    coastUntil(w, w.ut + 120 * 86400, { stopOnSoi: true });
+    const cruise = w.ut, span = d.encounter - w.ut;
+    let trimDv = 0;
+    for (const f of [0.05, 0.6, 0.9]) {
+      const used = correct(w, d, Math.max(cruise + span * f, w.ut + 600), 0);
+      expect(typeof used === 'number' || used === 'no contact', String(used)).toBe(true);
+      if (typeof used === 'number') trimDv += used;
+    }
+    expect(arrive(w, biomes, d)).toBeNull();
+    expect(w.canControl()).toBe(true);
+    const earthGm = () => length(sub(w.universe.ephem.getBodyState('earth', w.ut).position, w.universe.ephem.getBodyState('mars', w.ut).position)) / 1e9;
+    const arrival = earthGm();
+    const band = Math.max(2 * mars.atmosphere!.height, mars.radius * 0.25) * 0.95;
+    const cap = capture(w, biomes, band, 0);
+    expect(cap.err).toBeNull();
+    const o = w.orbitSummary(w.active!);
+    const science = survey(w, biomes, 6);
+    console.log('GOLDEN petrel-real-mars', JSON.stringify({ arrivalEarthGm: arrival, pe: o.pe, ap: o.ap, departure: dv, trimDv, capture: cap.dv, dvLeft: dvLeft(w), science }));
+    // Earth 200–283 Gm away: inside the Arcwatch's new reach, outside the old one.
+    expect(arrival).toBeGreaterThan(200);
+    expect(arrival).toBeLessThan(283);
+    expect(o.pe).toBeGreaterThan(mars.atmosphere!.height);
+    expect(o.ap).toBeLessThan(mars.soi);
+    expect(dvLeft(w)).toBeGreaterThan(150);
+    expect(science).toBeGreaterThan(20);
+    expect(w.progression.milestones).toContain('first-mars');
+  }, 300_000);
+
   it('the Kiln lander keeps its link on the Venus surface and sends its reading home', () => {
     const full = buildCinderbloom();
     const shell = full.parts.find(p => p.partId === 'shell-kiln')!.uid;
@@ -143,6 +198,50 @@ describe('planetary probes', () => {
     expect(w.progression.science - before).toBeGreaterThan(thermal.value * 0.39);
     expect(length(w.surfaceVelocity(w.active!))).toBeLessThan(1);
   }, 240_000);
+});
+
+describe('Venus landing in Earth\'s view', () => {
+  it('the stock Cinderbloom captures, deorbits from the far side and lands facing Earth, sending its reading home', () => {
+    // A direct entry from the arrival hyperbola lands about 160° round from Earth (Earth lies behind the approach, the
+    // entry comes down near periapsis): no link in descent or on the ground. Captured first, the deorbit burn is planned
+    // during a pass for the far side, flown out of contact as an uploaded node, and the shell lands in view.
+    const bodies = createUniverse('standard'), ephem = createEphemeris(bodies);
+    const season = nextLaunchSeason(bodies, ephem, 'earth', 'venus', DEFAULT_START_UT + 200 * 86400)!.departure;
+    const w = career('standard', season - 2 * 86400), p = w.progression;
+    p.unlocked.push(...researchFor('stock-cinderbloom', p, 'career').nodes);
+    p.funds = 1e6;
+    p.facilities = { ...p.facilities!, pad: 2 };
+    w.launch(buildCinderbloom());
+    const biomes = new Set<string>(), venus = w.universe.body('venus');
+    expect(toOrbit(w, biomes, 85000, 1)).toBeNull();
+    const leg = toPlanet(w, biomes, 'venus', 0);
+    expect(leg.err).toBeNull();
+    expect(leg.leg!.contact).toBe(true);
+    expect(capture(w, biomes, 0, 0).err).toBeNull();
+    expect(w.orbitSummary(w.active!).pe).toBeGreaterThan(venus.atmosphere!.height);
+    expect(deorbitFacingEarth(w, venus.atmosphere!.height * 0.5)).toBeNull();
+    // Earth's elevation over the landing site at touchdown (90° = overhead).
+    let elevation = -90;
+    const tick = w.tick.bind(w);
+    w.tick = (dt, input) => {
+      const was = w.active?.state.situation;
+      tick(dt, input);
+      if (w.active && was !== 'landed' && w.active.state.situation === 'landed') {
+        const at = w.universe.ephem.getBodyState('venus', w.ut).position, earth = w.universe.ephem.getBodyState('earth', w.ut).position;
+        const up = normalize(sub(w.active.state.position, at)), toEarth = normalize(sub(earth, at));
+        elevation = Math.asin(dot(up, toEarth)) * 180 / Math.PI;
+      }
+    };
+    expect(atmosphericLanding(w, biomes)).toBeNull();
+    console.log('GOLDEN cinderbloom', JSON.stringify({ elevation, biomes: [...biomes].filter(b => b.startsWith('venus')) }));
+    expect(elevation).toBeGreaterThan(20);
+    expect([...biomes].some(b => b.startsWith('venus/landed/'))).toBe(true);
+    // The surface reading reached home: experiments only run, and the archive only credits, over a live link.
+    const surface = Object.values(p.archive).filter(e => e.body === 'venus' && e.situation === 'landed');
+    expect(surface.length).toBeGreaterThan(0);
+    expect(surface.reduce((a, e) => a + e.science, 0)).toBeGreaterThan(1);
+    expect(p.milestones).toContain('first-venus-landing');
+  }, 300_000);
 });
 
 describe('program milestones and offers past the Moon', () => {

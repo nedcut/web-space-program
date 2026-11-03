@@ -16,8 +16,9 @@ export function buildPetrel(preset: ScalePresetId, catalog: PartCatalog = PART_C
   const real = preset === 'real';
   const core = b.root('probe-pebble');
   const wheel = b.stack(core, 'wheel-gyre-0');
-  // Real: a second kick tank and a longer upper stage (+0.8 km/s past orbit) pay for a Mars capture into a long ellipse.
-  const kick = real ? b.stack(b.stack(wheel, 'tank-0-long'), 'tank-0-long') : b.stack(wheel, 'tank-0-long');
+  // Real: three kick tanks and a longer sustainer stage (~6.1 km/s in a parking orbit, 5.8 with two
+  // instruments) pay for the planner's Mars transfer and the ~1.75 km/s capture into a long ellipse after it.
+  const kick = real ? b.stack(b.stack(b.stack(wheel, 'tank-0-long'), 'tank-0-long'), 'tank-0-long') : b.stack(wheel, 'tank-0-long');
   b.radial(core, 'battery-brick', 1, 0, 0);
   b.radial(core, 'antenna-arc', 1, 0, 180);
   b.radial(core, 'sensor-thermal', 1, 0, 90);
@@ -36,7 +37,7 @@ export function buildPetrel(preset: ScalePresetId, catalog: PartCatalog = PART_C
     return b.done();
   }
   const wide1 = b.stack(sep1, 'adapt-1-2');
-  const middle = b.stack(wide1, real ? 'tank-2-long' : 'tank-2-mid');
+  const middle = real ? b.stack(b.stack(wide1, 'tank-2-long'), 'tank-2-mid') : b.stack(wide1, 'tank-2-mid');
   const sustainer = b.stack(middle, 'eng-harmattan');
   const sep2 = b.stack(sustainer, 'dec-2');
   const wide2 = b.stack(sep2, 'adapt-2-3');
@@ -49,7 +50,7 @@ export function buildPetrel(preset: ScalePresetId, catalog: PartCatalog = PART_C
 export function probeStock(): StockCraft[] {
   const tags = ['antenna-arc', 'probe-pebble', 'eng-wisp', 'wheel-gyre-0'];
   const tip = 'Plan the transfer during a ground station pass. The kick stage trims the cruise and captures, in a long ellipse if short.';
-  const realTip = 'Real: the dish reaches Mars only while Earth is near. Pick an early window and survey right after capture.';
+  const realTip = 'Real: Mars takes ~3.7 km/s to leave and ~1.8 to capture. If the planner asks more, take its next season. Survey at once.';
   return ([['standard', ''], ['challenging', '-challenging'], ['real', '-real']] as const).map(([scale, suffix]) => ({
     scale, id: `stock-petrel${suffix}`, name: 'Petrel Planetary Probe', needsResearch: true, category: 'worlds' as const,
     blurb: `${scale === 'standard' ? 'Venus and Mars' : `${scale[0].toUpperCase()}${scale.slice(1)} scale · Venus and Mars`} probe · long-range dish · research required`,

@@ -12,8 +12,8 @@ import { createEphemeris } from '../../src/sim/orbit';
 import { nextLaunchSeason } from '../../src/sim/orbit/season';
 import { coastUntil } from '../../src/game/autopilot';
 import type { ScalePreset } from '../../src/sim/bodies/scale';
-import { buy, entryTrim, sensor, toOrbit } from './flights';
-import { arrive, atmosphericLanding, capture, correct, depart, dvLeft, flyby, planDeparture, survey, type Departure } from './planets';
+import { buy, sensor, toOrbit } from './flights';
+import { arrive, atmosphericLanding, capture, correct, deorbitFacingEarth, depart, dvLeft, flyby, planDeparture, survey, type Departure } from './planets';
 import type { Career } from './playthrough';
 
 const DAY = 86400;
@@ -135,9 +135,13 @@ export function planetPhase(c: Career) {
       const arrivedDay = ((w.ut - c.t0) / DAY).toFixed(1);
       if (!w.canControl()) { finish(m, true, `arrived day ${arrivedDay}, no signal (dish out of range): no capture, no science`); continue; }
       if (m.target === 'venus-landing' || (m.craft === 'stock-cinderbloom' && m.target === 'venus')) {
-        const trim = entryTrim(w, 0);
-        const landed = trim.err ?? atmosphericLanding(w, m.biomes);
-        finish(m, !landed, `arrived day ${arrivedDay}, ${landed ? `entry: ${landed}` : `landed on Venus (${w.active?.state.parts.map(q => q.partId).join(' ')})`}`);
+        // Capture into a circular orbit at the arrival periapsis, then deorbit from the far side of Venus (an uploaded
+        // node) so the shell comes down facing Earth: a direct entry lands on the far side, out of contact.
+        const before = w.progression.science;
+        const cap = capture(w, m.biomes, 0, 0);
+        const landed = cap.err ?? deorbitFacingEarth(w, atmo('venus') * 0.5, 0) ?? atmosphericLanding(w, m.biomes);
+        const sent = w.progression.science - before;
+        finish(m, !landed, `arrived day ${arrivedDay}, ${landed ? `landing: ${landed}` : `landed on Venus, ${sent.toFixed(0)} science sent`}`);
         continue;
       }
       // Capture into the low-space band when the kick stage can pay; otherwise science on the flyby.

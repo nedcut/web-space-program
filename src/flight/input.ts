@@ -157,7 +157,8 @@ export class FlightInput {
         const start = pad?.buttons[9]?.pressed ?? false;
         if (start && !this.buttons.has(9)) this.emit('menu');
         this.buttons = start ? new Set([9]) : new Set();
-        this.held.clear(); this.mouse = { x: 0, y: 0 }; this.stageHeld = this.stageProgress = 0; this.stageConfirmed = true;
+        // Keys are forgotten while disabled (a key-up may never arrive): a momentary SAS hold is released with them.
+        this.releaseSasHold(); this.held.clear(); this.mouse = { x: 0, y: 0 }; this.stageHeld = this.stageProgress = 0; this.stageConfirmed = true;
       } else this.onBlur();
       Object.assign(this.state, { pitch: 0, yaw: 0, roll: 0, tx: 0, ty: 0, tz: 0, brakes: false });
       Object.assign(this.camera, { yaw: 0, pitch: 0, zoom: 0 });
