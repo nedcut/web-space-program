@@ -2054,6 +2054,24 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   the far side cannot see Earth; a flyby bus would need its own core and a second vessel to fly); a longer-lived shell
   (Venus turns far too slowly). Not done: an "Earth in view at touchdown" readout in the planner.
 
+## Planner arrival times and empty trims (2026-11-02, fix/planner-friction)
+- Transfer flight times, both the departure estimates and the verified timeline, run from the burn to periapsis at the target, not to SOI entry: the estimates aim at the target's centre, so periapsis is the arrival both can measure. Return estimates include the climb out of the moon's SOI. They are worked out only for the polished options, because doing it for every scan sample tripled the search time.
+- Entry trim adds no node when the return already enters inside the corridor and the trim is under 0.05 m/s. Execute next node completes such a node without burning.
+- A departure list belongs to the body and vessel it was listed from. An SOI change or a vessel switch drops it.
+
+## Closed part meshes (2026-11-02, lathe)
+
+- Part materials stay single-sided, so every part mesh must be closed from outside: outer shells face out
+  (`lathe()` profiles run bottom to top), every opening shows an interior surface, and stack faces and nozzle
+  throats are capped. A part can sit alone in the editor, at either end of a stack, or under a smaller neighbour,
+  so no builder may rely on a neighbour to hide an open stack face. Surface-attach backs may stay open (the hull
+  covers them).
+- `tests/partFaces.test.ts` enforces this for every part at High and Low detail and in deployed states by ray tracing
+  each triangle's culled side. Pipe and hose mouths (`pipe()`) are out of scope; slivers below about 0.3% of the part
+  radius between lathes of different segment counts count as closed. Prefer extending a profile or capping it over
+  a double-sided material, which would add a material and draw.
+- `lathe()` skips the zero-area triangle where a profile point lies on the axis; caps and tips cost half as much.
+
 ## Real Mars orbit with the stock Petrel (2026-11-02, fix/real-mars-orbit)
 - **Cause (two blockers, both measured headlessly).** Link: at the planner's Real Mars arrivals Earth is 215 Gm
   (second season after the Moon) to 335 Gm (first season, its affordable option) away; the Arcwatch–ground reach was

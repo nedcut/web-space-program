@@ -176,7 +176,8 @@ export class FlightCamera {
   private pitchVel = 0;
   minDistance = 3;
   maxDistance = 5000;
-  private dragging = false;
+  /** Pointer that owns the current drag-to-orbit gesture (null when not dragging). Other pointers are ignored. */
+  private dragPointer: number | null = null;
   private lx = 0;
   private ly = 0;
   private lastMove = 0;
@@ -272,7 +273,7 @@ export class FlightCamera {
     this.tYaw += this.drive.yaw * rate * dt;
     this.tPitch += this.drive.pitch * rate * dt;
     if (this.drive.zoom) { this.tDist *= Math.exp(this.drive.zoom * 1.6 * dt); this.zoomTau = ZOOM_TAU; this.dollyT = -1; }
-    if (!this.dragging) {
+    if (this.dragPointer === null) {
       this.tYaw += this.yawVel * dt;
       this.tPitch += this.pitchVel * dt;
       const decay = Math.exp(-dt / 0.18);
@@ -485,14 +486,17 @@ export class FlightCamera {
       if (!enabled()) return;
       if (e.button !== 2 && e.button !== 0) return;
       if (game.get().settings.mouseFlight && e.button === 0) return;
-      this.dragging = true;
+      // A second finger joins the gesture without taking it over; a new primary pointer means the old one is gone.
+      if (this.dragPointer !== null && this.dragPointer !== e.pointerId && !e.isPrimary) return;
+      this.dragPointer = e.pointerId;
       this.yawVel = this.pitchVel = 0;
       this.lx = e.clientX;
       this.ly = e.clientY;
       this.lastMove = performance.now();
     };
     const move = (e: PointerEvent) => {
-      if (!this.dragging || !enabled()) { this.dragging = false; return; }
+      if (this.dragPointer !== e.pointerId) return;
+      if (!enabled()) { this.dragPointer = null; return; }
       const dx = (e.clientX - this.lx) * 0.005;
       const dy = (e.clientY - this.ly) * 0.005;
       this.tYaw += dx;
@@ -506,13 +510,17 @@ export class FlightCamera {
       this.lx = e.clientX;
       this.ly = e.clientY;
     };
-    const up = () => {
-      if (!this.dragging) return;
-      this.dragging = false;
+    const up = (e: PointerEvent) => {
+      if (this.dragPointer !== e.pointerId) return;
+      this.dragPointer = null;
       // Holding still before release means "stop here", not "fling".
       if (performance.now() - this.lastMove > 60) this.yawVel = this.pitchVel = 0;
       else { this.yawVel *= 0.35; this.pitchVel *= 0.35; }
     };
+    // The browser took the touch (or the pen left range), or the window lost focus mid-drag (its pointerup never
+    // arrives): stop where we are, no fling.
+    const stop = () => { this.dragPointer = null; this.yawVel = this.pitchVel = 0; };
+    const cancel = (e: PointerEvent) => { if (this.dragPointer === e.pointerId) stop(); };
     const wheel = (e: WheelEvent) => {
       if (!enabled()) return;
       e.preventDefault();
@@ -525,12 +533,16 @@ export class FlightCamera {
     el.addEventListener('pointerdown', down);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('blur', stop);
     el.addEventListener('wheel', wheel, { passive: false });
     el.addEventListener('contextmenu', ctx);
     return () => {
       el.removeEventListener('pointerdown', down);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('blur', stop);
       el.removeEventListener('wheel', wheel);
       el.removeEventListener('contextmenu', ctx);
     };
