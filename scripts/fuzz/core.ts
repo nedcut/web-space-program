@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { World } from '../../src/game/world';
+import { vesselModeProblems } from '../../src/game/world/vesselMode';
 import { Universe } from '../../src/game/universe';
 import { DEFAULT_START_UT } from '../../src/game/store';
 import { PART_CATALOG } from '../../src/data/parts';
@@ -47,6 +48,8 @@ export function invariant(w: World) {
       finite(value, `${s.id}.telemetry.${key}`);
     }
     check(s.mass >= 0, 'mass', s.mass);
+    const modeProblems = vesselModeProblems(v);
+    check(!modeProblems.length, 'vessel-mode', { vessel: s.id, modeProblems });
     const ids = new Set(s.parts.map(p => p.uid));
     check(ids.size === s.parts.length, 'duplicate-part', s.id);
     if (!s.destroyed) {
@@ -67,7 +70,7 @@ export function invariant(w: World) {
   }
 }
 function snapshot(w: World) {
-  return { ut: w.ut, activeId: w.activeId, nodes: w.nodes, vessels: [...w.vessels.values()].map(v => ({ body: v.body, mode: v.mode, fixed: v.fixed, position: v.state.position, velocity: v.state.velocity, orientation: v.state.orientation, angularVelocity: v.state.angularVelocity, parts: v.state.parts.map(p => ({ uid: p.uid, parent: p.parent, partId: p.partId, position: p.position, rotation: p.rotation, resources: p.resources })) })) };
+  return { ut: w.ut, activeId: w.activeId, nodes: w.nodes, vessels: [...w.vessels.values()].map(v => ({ body: v.body, mode: v.mode, fixed: v.fixed, holdDown: v.holdDown, position: v.state.position, velocity: v.state.velocity, orientation: v.state.orientation, angularVelocity: v.state.angularVelocity, parts: v.state.parts.map(p => ({ uid: p.uid, parent: p.parent, partId: p.partId, position: p.position, rotation: p.rotation, resources: p.resources })) })) };
 }
 /** Body-fixed vessels rebuild their pose after load; permit only float64 reconstruction noise. */
 function roundTrip(before: ReturnType<typeof snapshot>, after: ReturnType<typeof snapshot>, world: World) {

@@ -18,7 +18,7 @@ handoff is represented by save/load and vessel switching; there is no DOM scene.
 
 Every frame checks finite vessel runtime state (including temperatures, engine
 state, SAS and inertia), part state and body ephemerides; nonnegative mass; resource bounds;
-unique part IDs and acyclic parent links. Additional checks cover save/load
+unique part IDs and acyclic parent links; vessel mode invariants (`vesselModeProblems`). Additional checks cover save/load
 poses, exact resources, part tree and nodes, zero-time warp continuity (1 cm), and
 same-body rails energy (relative 1e-8, absolute 1e-3 J/kg). Docking checks actual
 capture, successful undocking, retained part count and valid trees. Each seed runs
