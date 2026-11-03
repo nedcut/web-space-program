@@ -7,6 +7,12 @@ import type { SavedWorld } from './persistence';
 import { saveFailure, type SaveFailure } from './storageErrors';
 
 export type Scene = 'scenarios' | 'flightlog' | 'pedia' | 'training' | 'menu' | 'spaceCenter' | 'editor' | 'flight' | 'tracking' | 'research' | 'missions';
+/**
+ * Whose world is loaded: the player's program, a training lesson or a quick-start challenge. Exactly one at a time;
+ * lessons and challenges never write program drafts or apply program preferences. Change it only through the
+ * transitions below (beginPractice, endSession, enterProgram, enterFlight).
+ */
+export type Session = 'program' | 'training' | 'scenario';
 export type QualityPreset = 'low' | 'medium' | 'high' | 'ultra';
 
 export interface Settings {
@@ -48,10 +54,8 @@ export interface GameState {
   /** Opt-in LAN mode; null keeps single-player behavior. Never persisted. */
   multiplayer: MultiplayerConfig | null;
   scene: Scene;
-  /** Practice scenes must not overwrite the saved editor craft. */
-  trainingActive: boolean;
-  /** Quick-start missions suspend program persistence independently of lessons. */
-  scenarioActive: boolean;
+  /** Lessons and challenges must not overwrite the saved editor craft or program saves. */
+  session: Session;
   mode: GameMode;
   saveId: string | null;
   scalePreset: ScalePresetId;
@@ -122,8 +126,7 @@ function initialScene(): Scene {
 export const game = createStore<GameState>({
   scene: initialScene(),
   multiplayer: null,
-  trainingActive: false,
-  scenarioActive: false,
+  session: 'program',
   mode: 'sandbox',
   saveId: null,
   scalePreset: 'standard',
@@ -156,10 +159,49 @@ export function useGame<R>(selector: (s: GameState) => R): R {
   return useSyncExternalStore(game.subscribe, () => selector(game.get()));
 }
 
+// ------------------------------------------------------------------ session transitions
+/** The program a lesson or challenge interrupted; restored when that session ends. */
+let interrupted: GameState | null = null;
+/** Where each session returns when it ends without a chosen destination. */
+const SESSION_HOME: Record<Session, Scene> = { program: 'spaceCenter', training: 'training', scenario: 'scenarios' };
+
+/** Start or restart a lesson or challenge with `patch` as its world. The interrupted program comes back when it ends. */
+export function beginPractice(session: Exclude<Session, 'program'>, patch: Partial<GameState>) {
+  const s = game.get();
+  if (s.session === 'program') interrupted = { ...s, multiplayer: null };
+  game.set({ ...patch, session, multiplayer: null, saveId: null, notice: null, launchPending: false });
+}
+
+/**
+ * Leave the lesson, challenge or multiplayer room and go to `scene` (default: the session's own menu, or the
+ * Space Center for a program). A lesson or challenge restores the program it interrupted; settings changed
+ * meanwhile stay.
+ */
+export function endSession(scene: Scene = SESSION_HOME[game.get().session]) {
+  const s = game.get();
+  const prior = s.session === 'program' ? null : interrupted;
+  interrupted = null;
+  game.set({ ...prior, settings: s.settings, saveError: s.saveError, session: 'program', multiplayer: null, launchPending: false, scene });
+}
+
+/** Make `patch` the current program (new game, loaded save), dropping any lesson, challenge or room without restoring what they interrupted. */
+export function enterProgram(patch: Partial<GameState>) {
+  interrupted = null;
+  game.set({ multiplayer: null, launchPending: false, ...patch, session: 'program' });
+}
+
+/** How flight starts: put a craft on the pad, reopen a saved world, or join a multiplayer room. */
+export type FlightEntry = { launch: CraftDef } | { resume: SavedWorld } | { join: MultiplayerConfig };
+export function enterFlight(entry: FlightEntry) {
+  if ('launch' in entry) game.set({ craft: entry.launch, launchPending: true, scene: 'flight' });
+  else if ('resume' in entry) game.set({ resumeWorld: entry.resume, mode: entry.resume.mode ?? 'sandbox', scalePreset: entry.resume.preset, launchPending: false, scene: 'flight' });
+  else enterProgram({ multiplayer: entry.join, scene: 'flight' });
+}
+
 /** UI preferences override a world's saved difficulty only when explicitly selected. */
 export function applyCommsSettings(world: import('./world').World) {
   // Room rules belong to the server; practice lessons use their deterministic sandbox rules.
-  if (game.get().multiplayer || game.get().trainingActive || game.get().scenarioActive) return;
+  if (game.get().multiplayer || game.get().session !== 'program') return;
   const settings = game.get().settings;
   if (settings.commsEnabled !== null) world.commsSettings.enabled = settings.commsEnabled;
   if (settings.commsRestrictControl !== null) world.commsSettings.restrictControl = settings.commsRestrictControl;
@@ -173,7 +215,7 @@ export const LEGACY_PROGRAM_ID = 'legacy-program';
 export const programCraftKey = (programId: string | null) => (programId && programId !== LEGACY_PROGRAM_ID ? `${CRAFT_KEY}.${programId}` : CRAFT_KEY);
 let lastCraft: CraftDef | null = game.get().craft;
 game.subscribe(() => {
-  if (game.get().trainingActive || game.get().scenarioActive) return;
+  if (game.get().session !== 'program') return;
   const { craft, saveId } = game.get();
   if (craft === lastCraft) return;
   lastCraft = craft;

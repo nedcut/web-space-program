@@ -275,7 +275,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   cueStates.set(this, { vessel: st.id, body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation, staged: this.stagedCount, darkTold });
   const propulsionTwr = ((ignited ? currentStage : dvs.find(d => d.thrust > 0))?.thrust ?? 0) / st.mass / gravity;
   const hint = this.hints.update({
-    enabled: settings.flightHints && !this.network && !getTutorial() && !game.get().scenarioActive && !this.assist,
+    enabled: settings.flightHints && !this.network && !getTutorial() && game.get().session !== 'scenario' && !this.assist,
     bodyId: b.id, bodyName: b.name, terrainHeight: u.terrain(b.id).maxHeight, boundOrbit: orb.orbit.e < 1, verticalSpeed: vs,
     map: this.mapMode, node: this.mapMode && w.nodes.length > 0, soi, eva: !!st.eva,
     landing: flying && info.heightAboveTerrain < 10000 && vs < -20 && ignited && chutes?.lamp !== 'semi' && chutes?.lamp !== 'full',

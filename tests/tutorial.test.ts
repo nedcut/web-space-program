@@ -247,11 +247,11 @@ describe('training progression and storage', () => {
     const data = storage();
     data.set('wsp.craft.v1', 'previous saved craft');
     startLesson('plane');
-    expect(game.get().trainingActive).toBe(true);
+    expect(game.get().session).toBe('training');
     expect(data.get('wsp.craft.v1')).toBe('previous saved craft');
     game.set({ settings: { ...game.get().settings, masterVolume: 0.25 } });
     endTutorial();
-    expect(game.get().trainingActive).toBe(false);
+    expect(game.get().session).toBe('program');
     expect(data.get('wsp.craft.v1')).toBe('previous saved craft');
     expect(game.get().settings.masterVolume).toBe(0.25);
   });

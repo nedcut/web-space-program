@@ -156,7 +156,7 @@ try {
       for (let i = 0; i < 64; i++) { const t = DEFAULT_START_UT + u.body('titan').rotationPeriod * i / 64; const light = dot(u.ephem.fromBodyFixed('titan', latLonToUnit(76, 40), t), normalize(scale(u.ephem.getBodyState('titan', t).position, -1))); if (light > best) { best = light; w.ut = t; } }
       const up = u.ephem.fromBodyFixed('titan', latLonToUnit(76, 40), w.ut), rel = scale(up, u.body('titan').radius + u.terrain('titan').liquid.level + 30);
       const v = spawnRelative(w, craft, 'titan', rel, add(u.ephem.surfaceVelocity('titan', rel, w.ut), scale(up, -1)), up); v.state.situation = 'flying';
-      game.set({ scene: 'flight', craft, launchPending: false, resumeWorld: serializeWorld(w), scenarioActive: false, trainingActive: false });
+      game.set({ scene: 'flight', craft, launchPending: false, resumeWorld: serializeWorld(w), session: 'program' });
     }); await ready();
     const result = await page.evaluate(async () => {
       const c = window.__flight, w = c.world; c.paused = true; c.cam.pitch = 0.7; c.cam.distance = 40; const v = w.active;

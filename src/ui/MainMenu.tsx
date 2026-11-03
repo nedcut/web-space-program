@@ -5,14 +5,11 @@ import { MultiplayerSetup } from '../net/MultiplayerPanel';
 import { SettingsPanel } from './SettingsPanel';
 export { SettingsPanel } from './SettingsPanel';
 import type { GameMode } from '../sim/science/progression';
-import { World } from '../game/world';
-import { Universe } from '../game/universe';
-import { PART_CATALOG } from '../data/parts';
-import { saveProgram } from '../game/program';
+import { startProgram } from '../game/program';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEscape } from './nav/escape';
 import { arrowNav, focusFirst } from './nav/arrowNav';
-import { game, DEFAULT_START_UT } from '../game/store';
+import { game } from '../game/store';
 import { SCALE_PRESETS, careerScaleMultiplier, type ScalePresetId } from '../sim/bodies/scale';
 import { MenuBackdrop } from './MenuBackdrop';
 import { UnsupportedNotice } from './Unsupported';
@@ -32,16 +29,6 @@ const MODE_INFO: Record<GameMode, string> = {
   science: 'Explore, collect science and unlock new technology. Unlimited construction.',
   career: 'Grow a funded program through research, contracts and expeditions.',
 };
-
-function startProgram(mode: GameMode, scale: ScalePresetId) {
-  const world = new World(new Universe(scale), PART_CATALOG, DEFAULT_START_UT, mode);
-  // Program-scoped lookups isolate old quicksaves; retain them for legacy migration.
-  // Clear the editor with the program switch so neither the first autosave nor the
-  // new program's draft inherits the previous program's craft.
-  game.set({ saveId: `${mode}-${Date.now()}`, craft: null });
-  saveProgram(world);
-  game.set({ mode, scalePreset: scale, craft: null, launchPending: false, ut: DEFAULT_START_UT, scene: 'spaceCenter' });
-}
 
 export function MainMenu() {
   const [panel, setPanel] = useState<'root' | 'new' | 'settings' | 'multiplayer' | 'load'>('root');

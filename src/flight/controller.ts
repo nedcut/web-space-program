@@ -541,7 +541,7 @@ export class FlightController {
   quickSaveBlocker(action: 'Quicksave' | 'Quickload'): string | null {
     if (this.network) return `${action} is not available in co-op`;
     if (getTutorial()) return `${action} is off during Training`;
-    if (game.get().scenarioActive) return `${action} is off during challenges`;
+    if (game.get().session === 'scenario') return `${action} is off during challenges`;
     return null;
   }
 

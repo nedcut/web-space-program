@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { game } from '../game/store';
+import { game, endSession, enterFlight } from '../game/store';
 import { STOCK_CRAFTS } from '../editor/stockCrafts';
 import { WARP_RATES, validCraft } from './protocol';
 import type { MultiplayerClient } from './client';
@@ -23,7 +23,7 @@ export function MultiplayerSetup({ onBack }: { onBack: () => void }) {
       if (!['ws:', 'wss:'].includes(new URL(url).protocol)) throw new Error('Use ws:// or wss://');
       if (!name.trim()) throw new Error('Enter a display name');
       try { localStorage.setItem(LAST_KEY, JSON.stringify({ url, name: name.trim() })); } catch { /* storage unavailable */ }
-      game.set({ multiplayer: { url, room: room.trim().toUpperCase(), name: name.trim() }, scene: 'flight' });
+      enterFlight({ join: { url, room: room.trim().toUpperCase(), name: name.trim() } });
     } catch (e) { setError((e as Error).message); }
   }}>
     <strong>LAN co-op (experimental)</strong>
@@ -90,6 +90,6 @@ export function MultiplayerPanel({ client }: { client: MultiplayerClient }) {
     <form className="mp-row" onSubmit={e => { e.preventDefault(); if (chat.trim()) { client.send({ v: 1, type: 'chat', text: chat.trim() }); setChat(''); } }}>
       <input aria-label="Chat message" placeholder="Chat with crew…" maxLength={300} value={chat} onChange={e => setChat(e.target.value)} /><button className="btn small" disabled={!client.connected || !chat.trim()}>Send</button>
     </form>
-    <button className="btn small" onClick={() => game.set({ multiplayer: null, scene: 'menu' })}>Disconnect to menu</button>
+    <button className="btn small" onClick={() => endSession('menu')}>Disconnect to menu</button>
   </aside>;
 }

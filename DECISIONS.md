@@ -2130,6 +2130,14 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   mode Auto" lives only in `SpeedModeTracker`.
 - The pad clamps follow the last active vessel still on the pad while another vessel is flown.
 
+## One session at a time (2026-11-03, fix/sm-scene-session)
+`game.session` (`program | training | scenario`) replaces the separate `trainingActive`/`scenarioActive` flags, which
+could both be true and were only cleared by restoring per-module snapshots. The store owns the transitions:
+`beginPractice` (snapshots the interrupted program once), `endSession` (restores it, clears any multiplayer room and
+pending launch), `enterProgram` (new game or loaded save) and `enterFlight({ launch | resume | join })`. The lesson and
+challenge runtimes drop their run whenever the session stops being theirs, so every exit path ends them. Plain scene
+moves inside one session still use `game.set({ scene })`.
+
 ## Render lifecycle bounds (2026-11-03)
 
 - Map body renderers drop their bake's CPU pixels once drawn, and stay bounded: beyond 16, a body not drawn as a
