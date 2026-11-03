@@ -78,6 +78,32 @@ describe('map presentation', () => {
     flight.dispose(); await Promise.resolve(); expect(dispose).toHaveBeenCalledOnce();
     pool.dispose();
   });
+  it('keeps a few body renderers and releases the longest-unseen idle ones after a long tour', () => {
+    vi.stubGlobal('document', { createElement: host });
+    const bodies = createUniverse('standard'), ephem = createEphemeris(bodies);
+    const map = new MapView(bodies, ephem, host() as unknown as HTMLElement);
+    type Vis = { renderer?: { dispose: () => void }; resolvedAt: number };
+    const visuals = [...(map['bodies'] as Map<string, Vis>).values()].slice(0, 12);
+    const now = 100000;
+    // Twelve bodies toured: four seen in the last 30 s, eight longer ago (the oldest first in this list).
+    const renderers = visuals.map((vis, i) => {
+      const r = { dispose: vi.fn() };
+      vis.renderer = r; vis.resolvedAt = i < 8 ? now - 60000 + i * 1000 : now - 1000;
+      return r;
+    });
+    map['liveRenderers'] = 12;
+    map['releaseIdleRenderers'](now);
+    expect(renderers.map(r => r.dispose.mock.calls.length)).toEqual([1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(visuals.filter(v => v.renderer)).toHaveLength(8);
+    // Only recently seen bodies above the limit: nothing is released.
+    for (const vis of visuals) vis.resolvedAt = now;
+    for (const vis of visuals.slice(0, 4)) vis.renderer = { dispose: vi.fn() };
+    map['liveRenderers'] = 12;
+    map['releaseIdleRenderers'](now + 1000);
+    expect(visuals.filter(v => v.renderer)).toHaveLength(12);
+    for (const vis of visuals) vis.renderer = undefined;
+    map.dispose();
+  });
   it('retains conics, picks instanced body icons, and supports overlays and target changes', () => {
     vi.stubGlobal('document', { createElement: host });
     const bodies = createUniverse('standard'), ephem = createEphemeris(bodies);
