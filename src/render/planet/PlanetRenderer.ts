@@ -85,6 +85,9 @@ export type PlanetKind = 'star' | 'gas' | 'solid';
 const lightSources = new Map<PlanetRenderer, PlanetLightSource>();
 
 const AU = 149597870700;
+/** First retry delay after a failed far-LOD bake, doubling up to BAKE_RETRY_MAX_MS (a failing worker must not be re-sent the bake every frame). */
+const BAKE_RETRY_MS = 1000;
+const BAKE_RETRY_MAX_MS = 30000;
 
 /**
  * Renders one celestial body: quadtree terrain + ocean (solid bodies), baked far sphere, banded gas
@@ -119,7 +122,12 @@ export class PlanetRenderer {
   private farTexture: THREE.DataTexture | null = null;
   /** The last update wanted near (quadtree) terrain: until its roots are built, the far sphere is a stand-in. */
   private wantNear = false;
+  /** Quadtree terrain (not the far sphere) was drawn by the last update: readiness, independent of `stats`. */
+  private nearDrawn = false;
   private bakeRequested = false;
+  /** After a failed far-LOD bake: no new attempt before this time (performance.now ms); the delay doubles per failure. */
+  private bakeRetryAt = 0;
+  private bakeRetryMs = BAKE_RETRY_MS;
   private surfaceBake?: ReturnType<typeof acquireSurfaceBake>;
   private disposed = false;
   private sky: THREE.Mesh | null = null;
@@ -591,7 +599,7 @@ export class PlanetRenderer {
     if (this.kind !== 'solid') return;
 
     // Far LOD texture bake (once, lazily).
-    if (this.terrain && !this.bakeRequested && this.pool) {
+    if (this.terrain && !this.bakeRequested && this.pool && (this.bakeRetryAt === 0 || performance.now() >= this.bakeRetryAt)) {
       this.bakeRequested = true;
       this.surfaceBake = acquireSurfaceBake(this.pool, this.terrainKey, this.quality.bakedTextureWidth);
       this.surfaceBake.promise.then((res) => {
@@ -603,7 +611,12 @@ export class PlanetRenderer {
           this.farMaterial.uniforms.uHasMap.value = 1;
           this.farMaterial.uniforms.uHRange.value.set(res.minHeight, res.maxHeight);
         }
-      }).catch(() => { if (!this.disposed) { this.surfaceBake?.release(); this.surfaceBake = undefined; this.bakeRequested = false; } });
+      }).catch(() => {
+        if (this.disposed) return;
+        this.surfaceBake?.release(); this.surfaceBake = undefined; this.bakeRequested = false;
+        this.bakeRetryAt = performance.now() + this.bakeRetryMs;
+        this.bakeRetryMs = Math.min(BAKE_RETRY_MAX_MS, this.bakeRetryMs * 2);
+      });
     }
 
     // The far-LOD bake lives on the GPU once drawn: drop its CPU pixels (32 MB per body at Ultra).
@@ -632,13 +645,14 @@ export class PlanetRenderer {
       if (qt.rootsReady) {
         qt.place(bx, by, bz, this.rotQ, this.rotM);
         this.farSphere!.visible = false;
-        this.stats.mode = 'near';
+        this.nearDrawn = true;
       } else {
         qt.hideAll();
         this.farSphere!.visible = true;
         placeWhole(this.farSphere!, R);
-        this.stats.mode = 'far';
+        this.nearDrawn = false;
       }
+      this.stats.mode = this.nearDrawn ? 'near' : 'far';
       qt.evict(this.frame);
       Object.assign(this.stats, { chunks: qt.stats.selected, meshes: qt.stats.meshes, inflight: qt.stats.inflight, queued: qt.stats.queued });
     } else {
@@ -646,6 +660,7 @@ export class PlanetRenderer {
       if (qt) { qt.pump(); qt.evict(this.frame, true); }
       this.farSphere!.visible = true;
       placeWhole(this.farSphere!, R);
+      this.nearDrawn = false;
       this.stats.mode = 'far';
     }
     // Earth has a complete opaque terrain/far-sphere surface. Cutouts have a
@@ -653,7 +668,7 @@ export class PlanetRenderer {
     // lowest terrain AND triangle sag; the visible horizon/negative land remains untouched.
     if (this.sky && this.body.id === 'earth') {
       let angle = 2 * Math.PI / this.quality.sphereSegments;
-      if (this.stats.mode === 'near' && qt?.selected.length) {
+      if (this.nearDrawn && qt?.selected.length) {
         let level = Infinity;
         for (const n of qt.selected) level = Math.min(level, n.key.level);
         // Cube-face step incl. diagonal/stretch: a conservative cone, not the mean arc length.
@@ -674,7 +689,7 @@ export class PlanetRenderer {
     const bakeDone = (!this.terrain || !!this.farTexture) && this.imageryIdle;
     if (!bakeDone) return false;
     // Far mode is final only when near terrain is not wanted; otherwise it is the stand-in shown while roots build.
-    return !this.quadtree || (this.wantNear ? this.stats.mode === 'near' && this.quadtree.idle : true);
+    return !this.quadtree || (this.wantNear ? this.nearDrawn && this.quadtree.idle : true);
   }
 
   /** Fully settled, including decoration (screenshots/tests can still wait for this). */
