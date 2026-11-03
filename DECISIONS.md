@@ -2024,3 +2024,17 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
   startup remain approximate replay boundaries. Screenshots use compositor capture
   to avoid waiting for animation frames on a frozen page. Functional SwiftShader
   checks do not establish real-GPU performance or cross-browser behavior.
+
+## One active-vessel transition (2026-11-03, fix/sm-vessel-switch)
+
+- `FlightController.syncActiveVessel` is the only place that reacts to a new `world.activeId`, whoever changed it
+  ([ ] keys, map Fly, station list, EVA, boarding, loss). It runs every frame and right after the controller's own
+  switches. Co-op keeps its owned-vessel reset.
+- A vessel nobody flies gets neutral controls, so the pilot's controls do not follow them to the next vessel:
+  throttle 0, SAS and RCS off, momentary SAS hold dropped, trim cleared, docking mode and own-port choice cleared,
+  launch countdown cancelled (with a message), queued stage/gear/jump/commands dropped, alerts cleared. A running
+  assist program is cancelled and its restore commands go to the vessel it flew. Kept: stage lock, precision, map
+  view, and the camera mode unless the new vessel's cycle lacks it (an astronaut gets Auto).
+- Docking mode ends when a target goes away; it can still be switched on without a target. "Target gone → speed
+  mode Auto" lives only in `SpeedModeTracker`.
+- The pad clamps follow the last active vessel still on the pad while another vessel is flown.
