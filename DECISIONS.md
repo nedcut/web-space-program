@@ -2075,6 +2075,22 @@ proxies establish the owner's M-series/120 Hz target. Evidence belongs in artifa
 - Entry trim adds no node when the return already enters inside the corridor and the trim is under 0.05 m/s. Execute next node completes such a node without burning.
 - A departure list belongs to the body and vessel it was listed from. An SOI change or a vessel switch drops it.
 
+## Touchdowns settle before they count as landed (2026-11-03, fix/sm-landed-settle)
+
+- `VesselState.situation` stays the raw contact of the last physics step (physics needs it; it chatters: resting
+  legs blip to flying for one step every second or two, touchdowns bounce and rock). `settledSituation` is the
+  game-facing state, owned by `sim/vessel/settle.ts` and advanced once per World physics step: grounded after 1 s of
+  contact (counted across short hops), flying after 3 s with no contact (the 3 s from PR #22's test-flight rule,
+  which now reads it). Landed <-> splashed follows the raw value while grounded. Prelaunch holds it at landed.
+  No relative-speed condition: rollouts and rovers are landed, and a sliding vessel must still pack to the surface.
+- Readers of game state use settled: flight-log landing/splashdown edges, progression `onLanded`/orbit, recovery,
+  touchdown toast, landing-autopilot completion. Physical reactions keep raw: contact physics, ISRU, camera, audio,
+  the autopilot's engine cut at first contact. Packing goes on a conic only when raw and settled both say flying;
+  any contact evidence fixes it to the surface and settles it there (rails time steps neither), since a
+  ground-crossing conic is lost on its rails impact. Warp's `landed` and the out-of-range "lost in atmosphere" check use the same predicate.
+- Spawns and teleports call `setSituation` (raw and settled together); writing `situation` alone leaves the
+  settled state behind. Saves without the field take the raw value (pad vessels: landed).
+
 ## Closed part meshes (2026-11-02, lathe)
 
 - Part materials stay single-sided, so every part mesh must be closed from outside: outer shells face out

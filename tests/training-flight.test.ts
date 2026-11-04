@@ -21,7 +21,7 @@ describe('Kestrel beginner recipe', () => {
     for (let k = 0; k < 30000 && w.active && !w.active.state.destroyed; k++) {
       const f = localFrame(w, w.active);
       apex = Math.max(apex, f.altitude);
-      if (lit && k > 500 && w.active.state.situation !== 'flying') break;
+      if (lit && k > 500 && w.active.state.settledSituation !== 'flying') break;
       if (f.altitude >= 10000) cut = true;
       // The lesson teaches booster separation and then chute arming after the highest point.
       if (!separated && cut && w.verticalSpeed(w.active) < -1) {
@@ -41,7 +41,7 @@ describe('Kestrel beginner recipe', () => {
     expect(peakG).toBeLessThan(6);
     expect(fullChute).toBe(true);
     expect(w.active?.state.destroyed).toBe(false);
-    expect(w.active?.state.situation).toMatch(/^(landed|splashed)$/);
+    expect(w.active?.state.settledSituation).toMatch(/^(landed|splashed)$/);
     expect(w.active?.state.parts.some(p => !!p.crew?.length)).toBe(true);
     expect(length(w.surfaceVelocity(w.active!))).toBeLessThan(10);
     expect(w.recoverActive()).toBe(true);

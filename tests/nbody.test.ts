@@ -14,7 +14,7 @@ import { integrateAdaptive } from '../src/sim/orbit/adaptive';
 import { lagrangePoints, LAGRANGE_PAIRS } from '../src/sim/orbit/lagrange';
 import { NumericalPrediction, patchState } from '../src/sim/orbit/numericalPrediction';
 import { add, addScaled, cross, dot, length, scale, sub, v3 } from '../src/util/vec3';
-import { neutralInput } from '../src/sim/vessel';
+import { neutralInput, setSituation } from '../src/sim/vessel';
 import type { StateVector } from '../src/sim/orbit/api';
 
 function circularPair() {
@@ -32,7 +32,7 @@ function circularPair() {
 }
 function worldOrbit(radius=4e6) {
   const u=new Universe('standard'),world=new World(u,PART_CATALOG,0),v=world.launch(buildOrbiter()),b=u.ephem.getBodyState('earth',0);
-  v.mode='physics';v.fixed=undefined;v.state.situation='flying';
+  v.mode='physics';v.fixed=undefined;setSituation(v.state, 'flying');
   v.state.position=add(b.position,v3(radius,0,0));v.state.velocity=add(b.velocity,v3(0,Math.sqrt(u.body('earth').gm/radius),0));
   return {world,v,u};
 }

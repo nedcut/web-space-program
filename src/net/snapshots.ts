@@ -9,7 +9,8 @@ import { setVesselMode } from '../game/world/vesselMode';
 
 export function vesselDeltas(world: World): VesselDelta[] {
   return [...world.vessels.values()].map(v => {
-    const base = { id: v.state.id, body: v.body,
+    const { situation, settledSituation, airborneTime, contactTime } = v.state;
+    const base = { id: v.state.id, body: v.body, settle: { situation, settledSituation, airborneTime, contactTime },
       crewDose: world.crew.filter(c => v.state.eva?.astronautId === c.id || v.state.parts.some(p => p.crew?.includes(c.id))).map(c => ({ id: c.id, dose: c.radiationDose ?? 0 })),
       hazards: v.state.parts.map(p => ({ uid: p.uid, electricCharge: p.resources.electricCharge,
       radiationDose: p.radiationDose, ambientTemperature: p.ambientTemperature, pressureExposure: p.pressureExposure,
@@ -19,7 +20,7 @@ export function vesselDeltas(world: World): VesselDelta[] {
     const s = v.state;
     const state = structuredClone({
       position: s.position, velocity: s.velocity, orientation: s.orientation, angularVelocity: s.angularVelocity,
-      mass: s.mass, com: s.com, inertia: s.inertia, invInertia: s.invInertia, nextStage: s.nextStage, situation: s.situation,
+      mass: s.mass, com: s.com, inertia: s.inertia, invInertia: s.invInertia, nextStage: s.nextStage,
       sas: s.sas, telemetry: s.telemetry, eva: s.eva, destroyed: s.destroyed, groupState: s.groupState,
       parts: s.parts.map(p => ({ uid: p.uid, tweaks: p.tweaks, resources: p.resources, mass: p.mass, temperature: p.temperature,
         skinTemperature: p.skinTemperature, activated: p.activated, engine: p.engine, chute: p.chute, leg: p.leg, wheel: p.wheel,
@@ -37,6 +38,7 @@ export function applyDeltas(world: World, ut: number, deltas: VesselDelta[]) {
   for (const d of deltas) {
     const v = world.vessels.get(d.id);
     if (!v) continue; // Topology always arrives in a preceding full snapshot, on the same ordered socket.
+    Object.assign(v.state, d.settle); // Packed vessels send no `state`, and packing can land between deltas.
     for (const dose of d.crewDose ?? []) { const c = world.crew.find(c => c.id === dose.id); if (c) c.radiationDose = dose.dose; }
     for (const { electricCharge, ...hazard } of d.hazards ?? []) {
       const p = v.state.cache.byUid.get(hazard.uid);

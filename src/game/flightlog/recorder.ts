@@ -15,7 +15,10 @@ export interface Observation {
   displaySpeed?: number;
   ut: number; body: string; altitude: number; speed: number; vertical: number; horizontal: number;
   ap: number; pe: number; mach: number; q: number; g: number; temperature: number; mass: number; dv: number;
-  thrustAcceleration: number; flying: boolean; prelaunch: boolean; stableOrbit: boolean; parts: number;
+  /** Settled situation (sim/vessel/settle.ts): landing and splashdown events fire on its edges, once per touchdown. */
+  thrustAcceleration: number; flying: boolean; prelaunch: boolean;
+  /** Raw contact this step; liftoff is logged from it so the launch time is not delayed by settling. Defaults to `flying`. */
+  rawFlying?: boolean; stableOrbit: boolean; parts: number;
   shield: boolean; plane: boolean; biome?: string; splashed: boolean; ringPass: boolean;
 }
 export interface FlightRecord {
@@ -114,7 +117,7 @@ export function observe(r: FlightRecord, o: Observation, force = false, integrat
     if (r.encounter?.body === p.body && r.encounter.parent === o.body && (o.inertialSpeed ?? o.speed) > r.encounter.speed + 100 && r.stats.dvSpent - r.encounter.dv < 10) appendEvent(r, o.ut, 'assist', p.body, { detail: 'Unpowered flyby gained >100 m/s in the parent frame' });
     r.encounter = { body: o.body, parent: p.body, speed: p.inertialSpeed ?? p.speed, dv: r.stats.dvSpent };
   }
-  if (!r.launched && !o.prelaunch && o.flying && (o.clearance ?? o.altitude) > 5) {
+  if (!r.launched && !o.prelaunch && (o.rawFlying ?? o.flying) && (o.clearance ?? o.altitude) > 5) {
     r.launched = true; appendEvent(r, o.ut, 'launch', o.body);
   }
   if (o.stableOrbit && !r.orbitBodies.includes(o.body)) { r.orbitBodies.push(o.body); appendEvent(r, o.ut, 'orbit', o.body); }

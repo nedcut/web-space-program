@@ -333,7 +333,17 @@ export interface VesselState {
   invInertia: Mat3;
   /** Highest stage number not yet activated (-1 = none). */
   nextStage: number;
+  /**
+   * Raw contact of the last physics step. It chatters while legs settle and during bounces: game state reads
+   * {@link VesselState.settledSituation} instead (see `settle.ts`).
+   */
   situation: Situation;
+  /** `situation` once it has held (settle.ts owns it with `airborneTime`/`contactTime`). */
+  settledSituation: Situation;
+  /** Seconds since the last raw contact, capped at (and exactly equal to, once reached) SETTLE_AIRBORNE_S. */
+  airborneTime: number;
+  /** Seconds of raw contact since the vessel was last settled flying, capped at SETTLE_CONTACT_S. */
+  contactTime: number;
   sas: SasState;
   resourceDefs: Record<ResourceId, ResourceDef>;
   /** Counter for deterministic child vessel ids. */

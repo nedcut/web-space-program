@@ -9,7 +9,7 @@ import { Universe } from '../src/game/universe';
 import { PART_CATALOG } from '../src/data/parts';
 import { buildOrbiter } from '../src/editor/stockCrafts';
 import { deserializeWorld, serializeWorld } from '../src/game/persistence';
-import { neutralInput } from '../src/sim/vessel';
+import { neutralInput, setSituation } from '../src/sim/vessel';
 import { add, scale } from '../src/util/vec3';
 const observation = (ut: number, patch: Partial<Observation> = {}): Observation => ({ ut, body: 'earth', altitude: 100, speed: 10, vertical: 8, horizontal: 6, ap: 1000, pe: -1000, mach: 0.1, q: 100, g: 1, temperature: 300, mass: 1000, dv: 500, thrustAcceleration: 2, flying: true, prelaunch: false, stableOrbit: false, parts: 10, shield: false, plane: false, splashed: false, ringPass: false, ...patch });
 afterEach(() => vi.unstubAllGlobals());
@@ -173,7 +173,7 @@ describe('flight recorder', () => {
     const w = new World(new Universe('standard'), PART_CATALOG, 1000);
     const v = w.launch(buildOrbiter());
     const earth = w.universe.body('earth'), bs = w.universe.ephem.getBodyState('earth', w.ut), radius = earth.radius + 30_000_000;
-    v.mode = 'physics'; v.state.situation = 'flying';
+    v.mode = 'physics'; setSituation(v.state, 'flying');
     // A slow high coast (a lunar return's apoapsis): its surface-frame speed is dominated by Earth's rotation.
     v.state.position = add(bs.position, { x: radius, y: 0, z: 0 });
     v.state.velocity = add(bs.velocity, { x: 0, y: 100, z: 0 });
@@ -184,14 +184,14 @@ describe('flight recorder', () => {
     const w = new World(new Universe('standard'), PART_CATALOG, 1000);
     const v = w.launch(buildOrbiter());
     const earth = w.universe.body('earth'), bs = w.universe.ephem.getBodyState('earth', w.ut), radius = earth.radius + earth.atmosphere!.height + 10000;
-    v.mode = 'physics'; v.state.situation = 'flying';
+    v.mode = 'physics'; setSituation(v.state, 'flying');
     v.state.position = add(bs.position, { x: radius, y: 0, z: 0 });
     v.state.velocity = add(bs.velocity, { x: 0, y: Math.sqrt(earth.gm / radius), z: 0 });
     w.recordFlight(v, w.ut + 1, true);
     const moon = w.universe.body('moon'), ms = w.universe.ephem.getBodyState('moon', w.ut);
     v.body = 'moon'; v.state.position = add(ms.position, { x: moon.radius + 1000, y: 0, z: 0 });
     v.state.velocity = add(ms.velocity, scale({ x: 1, y: 0, z: 0 }, 0.4));
-    w.recordFlight(v, w.ut + 2, true); v.state.situation = 'landed'; w.recordFlight(v, w.ut + 3, true);
+    w.recordFlight(v, w.ut + 2, true); setSituation(v.state, 'landed'); w.recordFlight(v, w.ut + 3, true);
     expect(w.flightlog.records[0].events.map(e => e.kind)).toContain('orbit');
     expect(w.flightlog.records[0].landedBodies).toContain('moon');
     expect(w.achievementProfile.unlocked['moon-land']).toBeDefined();

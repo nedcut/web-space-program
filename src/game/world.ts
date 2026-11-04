@@ -15,7 +15,7 @@ import { hasControl, type Astronaut, type PlantedFlag } from '../sim/crew/crew';
 import { maneuverToInertialDv, period, predictTrajectory, propagate, stateAfterManeuver, stateToElements, trajectoryClosestApproach, validAnchor, type TrajectoryApproach } from '../sim/orbit';
 import type { ManeuverNode, Orbit, StateVector, TrajectoryPatch } from '../sim/orbit/api';
 import { newProgression, type GameMode, type ProgressEvent } from '../sim/science/progression';
-import { activateNextStage, applyVesselCommands, expandCommands, MAX_COMMANDS, neutralInput, portInfo, recomputeMassProperties, setGear, stepVessel, WORLD_ACTIONS } from '../sim/vessel';
+import { activateNextStage, applyVesselCommands, expandCommands, MAX_COMMANDS, neutralInput, portInfo, packsOnOrbit, recomputeMassProperties, resetSettled, setGear, SETTLE_AIRBORNE_S, settleSituation, stepVessel, WORLD_ACTIONS } from '../sim/vessel';
 import { stepEva } from '../sim/vessel/eva';
 import { ignoreInitialVesselOverlap, stepVesselContacts } from '../sim/vessel/vesselContact';
 import { advanceISRU, isruMachinery } from '../sim/vessel/isru';
@@ -375,7 +375,8 @@ export class World {
 
   recoverVessel(id: string): boolean {
     const wv = this.vessels.get(id);
-    if (!wv || wv.state.destroyed || wv.body !== 'earth' || (wv.mode !== 'prelaunch' && wv.state.situation === 'flying')) return false;
+    // Settled, like the landing progression it pays out on: not mid-bounce, and not before the touchdown counted.
+    if (!wv || wv.state.destroyed || wv.body !== 'earth' || (wv.mode !== 'prelaunch' && wv.state.settledSituation === 'flying')) return false;
     this.finishFlight(wv, 'recovered');
     recoverScience(this, wv);
     this.vessels.delete(wv.state.id);
@@ -736,7 +737,7 @@ export class World {
           // Out of the physics bubble: pack (debris in atmosphere is removed).
           const b = this.universe.body(wv.body);
           const alt = length(this.relativeState(wv).position) - b.radius;
-          if (b.atmosphere && alt < b.atmosphere.height && wv.state.situation === 'flying') { this.finishFlight(wv, 'lost'); this.vessels.delete(wv.state.id); }
+          if (b.atmosphere && alt < b.atmosphere.height && packsOnOrbit(wv.state)) { this.finishFlight(wv, 'lost'); this.vessels.delete(wv.state.id); }
           else {
             this.pack(wv);
             if (wv.mode === 'landedRails' || wv.mode === 'prelaunch') advanceISRU(wv.state, isruMachinery(wv.state).length ? this.localConcentration(wv) : 0, PHYSICS_DT);
@@ -781,9 +782,11 @@ export class World {
       // A disconnected probe holds its attitude with SAS, but cannot command thrust or stage.
       const ctrl = isActive ? vesselInput : neutralInput({ sas: 'off' });
       const flight = recordFor(this.flightlog, wv.state.id);
-      if (flight && wv.state.situation === 'flying' && wv.state.telemetry.altitudeAGL < 100) flight.touchdownSpeed = length(this.surfaceVelocity(wv));
+      // Speed before the first contact of a touchdown: a bounce must not overwrite it (settle.ts).
+      if (flight && wv.state.situation === 'flying' && wv.state.airborneTime >= SETTLE_AIRBORNE_S && wv.state.telemetry.altitudeAGL < 100) flight.touchdownSpeed = length(this.surfaceVelocity(wv));
       advanceCrewDose(this, wv, PHYSICS_DT);
       const res = wv.state.eva ? stepEva(wv.state, ctrl, env, t, PHYSICS_DT) : stepVessel(wv.state, ctrl, env, t, PHYSICS_DT);
+      if (wv.mode === 'prelaunch') resetSettled(wv.state, 'landed'); else settleSituation(wv.state, PHYSICS_DT);
       if (isActive) propulsiveDv += res.propulsiveDv ?? 0;
       for (const nv of res.newVessels) {
         if (nv.destroyed) continue;

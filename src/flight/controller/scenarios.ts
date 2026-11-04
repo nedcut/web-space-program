@@ -1,6 +1,7 @@
 import { placeInCircularOrbit, spawnRendezvousTarget } from '../../game/scenarios';
 import { quatFromBasis } from '../../game/world';
 import { setVesselMode } from '../../game/world/vesselMode';
+import { setSituation } from '../../sim/vessel';
 import { spawnTestOutpost } from '../stationFixture';
 import { bindingLabel } from '../../input/bindings';
 import { qRotate } from '../../util/quat';
@@ -63,7 +64,7 @@ export function devScenario(this: FlightController, internals: FlightControllerI
   wv.body = bodyId;
   wv.state.position = add(bs.position, scale(surfaceDir, b.radius + alt));
   wv.state.velocity = add(bs.velocity, vel);
-  wv.state.situation = 'flying';
+  setSituation(wv.state, 'flying');
   // Point retrograde-ish for re-entry, prograde otherwise.
   const fwd = name === 'reentry' ? normalize(scale(vel, -1)) : normalize(vel);
   const side = normalize(cross(fwd, up));

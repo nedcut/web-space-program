@@ -261,8 +261,8 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
   if (changedBody) w.message(`Entering ${b.name}'s sphere of influence`);
   const orbit = flying && orb.orbit.e < 1 && orb.pe > Math.max(b.atmosphere?.height ?? 0, w.universe.terrain(wv.body).maxHeight);
   if (previous && !previous.orbit && orbit) w.message(`Orbit achieved around ${b.name}`);
-  // An astronaut's every hop would announce a landing.
-  if (previous && previous.situation === 'flying' && st.situation !== 'flying' && !st.eva) w.message(st.situation === 'splashed' ? `Splashed down on ${b.name}` : `Landed on ${b.name}`);
+  // Once per touchdown (settled situation, not each bounce); an astronaut's every hop would announce a landing.
+  if (previous && previous.situation === 'flying' && st.settledSituation !== 'flying' && !st.eva) w.message(st.settledSituation === 'splashed' ? `Splashed down on ${b.name}` : `Landed on ${b.name}`);
   const soi = changedBody || (previous?.soi ?? false);
   // Night side close to the ground: the view is black apart from the lit vessel. Say how to see, once per descent.
   const dark = flying && !st.eva && !this.nightVision && info.heightAboveTerrain < DARK_SUGGEST_AGL && sunElevation(u, wv.body, rs.position, w.ut) < 0;
@@ -272,7 +272,7 @@ export function telemetry(this: FlightController, internals: FlightControllerInt
     w.message(`Night side: press ${bindingLabel('nightVision')} for night vision${lightsOff ? ` or ${bindingLabel('toggleLights')} for the lights` : ''}`, 'info', 8);
   }
   const darkTold = dark || (!!previous?.darkTold && info.heightAboveTerrain < 2 * DARK_SUGGEST_AGL);
-  cueStates.set(this, { vessel: st.id, body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.situation, staged: this.stagedCount, darkTold });
+  cueStates.set(this, { vessel: st.id, body: wv.body, signal, throttle, sas: noTorque, soi, orbit, situation: st.settledSituation, staged: this.stagedCount, darkTold });
   const propulsionTwr = ((ignited ? currentStage : dvs.find(d => d.thrust > 0))?.thrust ?? 0) / st.mass / gravity;
   const hint = this.hints.update({
     enabled: settings.flightHints && !this.network && !getTutorial() && game.get().session !== 'scenario' && !this.assist,

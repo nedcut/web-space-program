@@ -13,6 +13,7 @@ import { applyPlanningResult } from '../src/game/planning/apply';
 import type { PlannerEvent, PlannerMessage, PlanningRequest } from '../src/game/planning/protocol';
 import { stateToElements, propagate, period } from '../src/sim/orbit';
 import { add, v3 } from '../src/util/vec3';
+import { setSituation } from '../src/sim/vessel';
 
 function parked() {
   const world = new World(new Universe('standard'), PART_CATALOG, DEFAULT_START_UT);
@@ -21,7 +22,7 @@ function parked() {
   const r = b.radius + 120000, bs = world.universe.ephem.getBodyState('earth', world.ut);
   const pos = v3(r, 0, 0), vel = v3(0, Math.sqrt(b.gm / r) * Math.cos(0.5), Math.sqrt(b.gm / r) * Math.sin(0.5));
   vessel.state.position = add(bs.position, pos); vessel.state.velocity = add(bs.velocity, vel);
-  vessel.state.situation = 'flying'; vessel.mode = 'rails'; vessel.fixed = undefined;
+  setSituation(vessel.state, 'flying'); vessel.mode = 'rails'; vessel.fixed = undefined;
   vessel.orbit = stateToElements(b.gm, b.id, pos, vel, world.ut);
   return world;
 }

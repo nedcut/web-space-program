@@ -85,7 +85,7 @@ export function descend(w: World, biomes: Set<string>, maxTime = 4000, sas = tru
   let staged = false;
   const down = (w: World) => {
     const s = w.active!.state;
-    return (s.situation === 'landed' || s.situation === 'splashed') && length(localFrame(w, w.active!).surfVel) < 0.5;
+    return s.settledSituation !== 'flying' && length(localFrame(w, w.active!).surfVel) < 0.5;
   };
   for (let pass = 0; pass < 4 && w.active; pass++) {
     const ok = fly(w, maxTime, (w) => {
@@ -285,7 +285,7 @@ export function landMoon(w: World, biomes: Set<string>, minStage = 0): string | 
   const land = landingController(w, { minStage });
   if (!runAutopilot(w, land, { maxTime: 1e5, onTick: (w) => { if (tick() % 50 === 0) { doScience(w); trackBiome(w, biomes); } } })) return `landing: ${land.error}`;
   doScience(w); trackBiome(w, biomes);
-  return w.active!.state.situation === 'landed' ? null : 'not landed';
+  return w.active!.state.settledSituation === 'landed' ? null : 'not landed';
 }
 
 export function moonAscent(w: World, biomes: Set<string>, minStage = 0): string | null {

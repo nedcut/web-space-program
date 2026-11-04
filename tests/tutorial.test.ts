@@ -7,7 +7,7 @@ import { PART_CATALOG } from '../src/data/parts';
 import { DEFAULT_START_UT, game } from '../src/game/store';
 import { EditorSession } from '../src/editor/session';
 import { Builder, buildSoundingRocket } from '../src/editor/stockCrafts';
-import { neutralInput, freePorts, mergeVessels } from '../src/sim/vessel';
+import { neutralInput, freePorts, mergeVessels, setSituation } from '../src/sim/vessel';
 import { placeInCircularOrbit, placeOnSurface } from '../src/game/scenarios';
 import { serializeWorld, deserializeWorld } from '../src/game/persistence';
 import { dot, normalize, sub, v3 } from '../src/util/vec3';
@@ -124,7 +124,7 @@ describe('training definitions and deterministic scenarios', () => {
     expect(predicate('first-flight', 'chute', { world })).toBe(false);
     chute.chute!.phase = 'full';
     expect(predicate('first-flight', 'chute', { world })).toBe(true);
-    world.active!.state.situation = 'landed';
+    setSituation(world.active!.state, 'landed');
     expect(predicate('first-flight', 'landing', { world })).toBe(true);
     world.active!.state.destroyed = true;
     expect(predicate('first-flight', 'landing', { world })).toBe(false);
@@ -192,7 +192,7 @@ describe('training definitions and deterministic scenarios', () => {
     expect(predicate('eva', 'board', { world })).toBe(false);
     world.active!.state.parts[0].resources.monopropellant = 4;
     expect(predicate('eva', 'jetpack', { world })).toBe(true);
-    world.active!.state.situation = 'landed';
+    setSituation(world.active!.state, 'landed');
     world.plantFlag();
     expect(predicate('eva', 'flag', { world })).toBe(true);
     expect(world.boardEva()).toBe(true);

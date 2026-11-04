@@ -113,10 +113,10 @@ export function scienceReady(w: World, v: WorldVessel): number {
 }
 /**
  * A landing only counts after a flight: staging on the pad used to complete the test flight. A staged vessel
- * resting on the pad flickers between flying and landed every step, so airborne means 3 s off the ground.
+ * resting on the pad flickers between flying and landed every step, so airborne means settled flying
+ * (3 s off the ground, sim/vessel/settle.ts).
  */
-const AIRBORNE_S = 3;
-const offGroundSince = new WeakMap<WorldVessel, number>(), airborne = new WeakSet<WorldVessel>();
+const airborne = new WeakSet<WorldVessel>();
 /** Called after every fixed physics step and after rails propagation. */
 export function evaluateProgression(w: World) {
   if (w.mode === 'sandbox') return;
@@ -126,14 +126,12 @@ export function evaluateProgression(w: World) {
     w.onEnteredSoi(v);
     // Only a vessel with a command part lands: spent stages splash down first and used to complete the Earth test
     // flight's surface objective while the capsule was still under its chute.
-    const grounded = v.state.situation === 'landed' || v.state.situation === 'splashed';
-    if (v.mode === 'prelaunch' || grounded) offGroundSince.delete(v);
-    else if (!offGroundSince.has(v)) offGroundSince.set(v, w.ut);
-    else if (w.ut - offGroundSince.get(v)! >= AIRBORNE_S) airborne.add(v);
+    const grounded = v.state.settledSituation !== 'flying';
+    if (v.mode !== 'prelaunch' && !grounded) airborne.add(v);
     if (airborne.has(v) && grounded && v.state.parts.some(p => p.def.modules.some(m => m.type === 'command'))) {
       w.onLanded(v);
     }
-    if (v.mode === 'prelaunch' || v.state.situation !== 'flying') continue;
+    if (v.mode === 'prelaunch' || grounded) continue;
     const orbit = w.orbitOf(v), body = w.universe.body(v.body);
     if (orbit.e < 1 && orbit.a * (1 - orbit.e) > body.radius + Math.max(body.atmosphere?.height ?? 0, w.universe.terrain(v.body).maxHeight)) w.onReachedOrbit(v);
   }

@@ -4,7 +4,7 @@ import { Universe } from '../src/game/universe';
 import { World, type WorldVessel } from '../src/game/world';
 import { PART_CATALOG } from '../src/data/parts';
 import { buildOrbiter } from '../src/editor/stockCrafts';
-import { neutralInput } from '../src/sim/vessel';
+import { neutralInput, setSituation } from '../src/sim/vessel';
 import { add, length, normalize, scale, sub } from '../src/util/vec3';
 import { DEFAULT_START_UT } from '../src/game/store';
 
@@ -15,7 +15,7 @@ function spawnCoasting(world: World, body: string, relPos: { x: number; y: numbe
   wv.mode = 'physics';
   wv.fixed = undefined;
   wv.body = body;
-  wv.state.situation = 'flying';
+  setSituation(wv.state, 'flying');
   wv.state.angularVelocity = { x: 0, y: 0, z: 0 };
   wv.state.position = add(bs.position, relPos);
   wv.state.velocity = add(bs.velocity, relVel);

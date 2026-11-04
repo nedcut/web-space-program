@@ -1,7 +1,7 @@
 import { RESOURCES } from '../../data/resources';
 import { launchCost, launchProblem } from '../../data/technology';
 import { latLonToUnit, LAUNCH_SITE, RUNWAY, siteLocalToUnit } from '../../sim/terrain';
-import { buildVessel } from '../../sim/vessel';
+import { buildVessel, setSituation } from '../../sim/vessel';
 import { wheelContactPoint } from '../../sim/vessel/contact';
 import type { VesselState } from '../../sim/vessel/runtime';
 import { hullPoints } from '../../sim/vessel/shapes';
@@ -137,6 +137,7 @@ export function launch(this: World, internals: WorldInternals, craft: CraftDef, 
   this.assignCrew(state);
   const bottom = this.bottomOffset(state);
   const posFixed = scale(up, body.radius + terrainH + bottom + 0.05);
+  setSituation(state, 'landed');
   const wv: WorldVessel = { state, mode: 'prelaunch', body: bodyId, fixed: { pos: posFixed, orient: orientFixed } };
   internals.syncFixed(wv, this.ut);
   this.vessels.set(state.id, wv);
@@ -178,7 +179,7 @@ export function launchRunway(this: World, internals: WorldInternals, craft: Craf
   internals.syncFixed(wv, this.ut);
   // Free on its wheels straight away (no clamps): physics from the first step.
   setVesselMode(wv, { mode: 'physics' });
-  state.situation = 'landed';
+  setSituation(state, 'landed');
   this.vessels.set(state.id, wv);
   this.activeId = state.id;
   this.nodes = [];

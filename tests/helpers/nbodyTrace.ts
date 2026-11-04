@@ -2,13 +2,13 @@ import { World } from '../../src/game/world';
 import { Universe } from '../../src/game/universe';
 import { PART_CATALOG } from '../../src/data/parts';
 import { buildOrbiter } from '../../src/editor/stockCrafts';
-import { neutralInput } from '../../src/sim/vessel';
+import { neutralInput, setSituation } from '../../src/sim/vessel';
 import { add, v3 } from '../../src/util/vec3';
 
 export function gravityOffTrace() {
   const u = new Universe('standard'), w = new World(u,PART_CATALOG,0);
   const v = w.launch(buildOrbiter()), b=u.ephem.getBodyState('earth',0), r=u.body('earth').radius+200000;
-  v.mode='physics'; v.fixed=undefined; v.state.situation='flying';
+  v.mode='physics'; v.fixed=undefined; setSituation(v.state, 'flying');
   v.state.position=add(b.position,v3(r,0,0));
   v.state.velocity=add(b.velocity,v3(0,Math.sqrt(u.body('earth').gm/r),0));
   const trace: unknown[]=[];

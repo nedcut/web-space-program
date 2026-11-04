@@ -7,7 +7,7 @@ import { LEGACY_FACILITIES } from '../sim/science/facilities';
 import type { Astronaut, PlantedFlag } from '../sim/crew/crew';
 import type { VesselState } from '../sim/vessel/runtime';
 import type { PartDef } from '../sim/vessel/types';
-import { rebuildTopology, recomputeMassProperties, retractablePanel } from '../sim/vessel';
+import { rebuildTopology, recomputeMassProperties, resetSettled, retractablePanel } from '../sim/vessel';
 import type { ManeuverNode, Orbit } from '../sim/orbit/api';
 import type { Quat } from '../util/quat';
 import type { Vec3 } from '../util/vec3';
@@ -150,6 +150,8 @@ export function deserializeWorld(data: SavedWorld, catalog: Map<string, PartDef>
       return { ...p, def };
     });
     const state = { ...sv.state, parts, resourceDefs: RESOURCES, cache: undefined } as unknown as VesselState;
+    // Saves from before the settled situation: take the raw one as settled (a pad vessel is on the ground).
+    if (state.settledSituation === undefined) resetSettled(state, sv.mode === 'prelaunch' ? 'landed' : state.situation);
     rebuildTopology(state);
     if (!data.crew) world.assignCrew(state);
     recomputeMassProperties(state, false);

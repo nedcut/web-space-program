@@ -8,7 +8,7 @@ import { DEFAULT_START_UT } from '../src/game/store';
 import { serializeWorld, deserializeWorld } from '../src/game/persistence';
 import { placeInCircularOrbit } from '../src/game/scenarios';
 import { overPadPit } from '../src/game/world/crew';
-import { buildVessel, neutralInput, recomputeMassProperties, freePorts, mergeVessels, undock, dockedPorts } from '../src/sim/vessel';
+import { buildVessel, neutralInput, recomputeMassProperties, freePorts, mergeVessels, undock, dockedPorts, setSituation } from '../src/sim/vessel';
 import { stepEva, EVA_HEIGHT, EVA_EXHAUST_SPEED } from '../src/sim/vessel/eva';
 import { vacuumEnv } from '../src/sim/vessel/testing';
 import { generateAstronaut, crewIds } from '../src/sim/crew/crew';
@@ -51,7 +51,7 @@ function lunarSurface() {
   eva.state.position = add(g.surfacePoint,scale(g.normal,EVA_HEIGHT));
   eva.state.velocity = { ...g.surfaceVelocity };
   eva.state.orientation = qFromTo(v3(0,1,0),normalize(rel));
-  eva.state.situation = 'landed';
+  setSituation(eva.state, 'landed');
   return { w, ship, eva, env };
 }
 
@@ -213,9 +213,9 @@ describe('human crew and EVA', () => {
     const hatch = { ...eva.state.position };
     // Standing 4.9 m below the hatch, as after stepping off the stock lander's pod.
     eva.state.position = sub(hatch, scale(up, 4.9));
-    eva.state.situation = 'flying';
+    setSituation(eva.state, 'flying');
     expect(w.boardingTarget()).toBeNull();
-    eva.state.situation = 'landed';
+    setSituation(eva.state, 'landed');
     expect(w.boardingBlocker()).toBeNull();
     // Climbing does not extend the horizontal reach, and stops at the climb limit.
     eva.state.position = add(sub(hatch, scale(up, 4.9)), scale(side, 3.5));

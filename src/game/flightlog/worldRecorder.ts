@@ -21,7 +21,8 @@ export function recordVessel(w: World, v: WorldVessel, ut = w.ut, force = false)
   const displaySpeed = radius - b.radius < (b.atmosphere?.height || b.radius * 0.05) ? speed : length(relative.velocity);
   r.stats.maxSpeed = Math.max(r.stats.maxSpeed, displaySpeed);
 
-  if (!force && last && last.body === v.body && last.flying === (s.situation === 'flying') && last.prelaunch === (v.mode === 'prelaunch') && ut - last.ut < sampleInterval({ ...last, thrustAcceleration: telemetry.thrust / Math.max(1, s.mass), q: telemetry.dynamicPressure })) {
+  const flying = s.settledSituation === 'flying';
+  if (!force && last && last.body === v.body && last.flying === flying && last.prelaunch === (v.mode === 'prelaunch') && ut - last.ut < sampleInterval({ ...last, thrustAcceleration: telemetry.thrust / Math.max(1, s.mass), q: telemetry.dynamicPressure })) {
     // Capture short-lived peak loads and integrate thrust at the actual physics rate.
     r.stats.maxG = Math.max(r.stats.maxG, telemetry.gForce);
     if (speed > 1500 && telemetry.dynamicPressure > 100 && !last.shield) r.hotUnshielded ||= s.parts.some(p => p.temperature > 1000 || p.skinTemperature.some(t => t > 1000));
@@ -56,9 +57,9 @@ export function recordVessel(w: World, v: WorldVessel, ut = w.ut, force = false)
   observe(r, { inertialSpeed: length(relative.velocity), displaySpeed, clearance, ut, body: v.body, altitude: radius - b.radius, speed, vertical, horizontal: Math.sqrt(Math.max(0, speed * speed - vertical * vertical)), ap: o.ap, pe: o.pe, mach: telemetry.mach, q: telemetry.dynamicPressure, g: telemetry.gForce, temperature, mass: s.mass,
     dv,
     thrustAcceleration: telemetry.thrust / Math.max(1, s.mass),
-    flying: s.situation === 'flying', prelaunch: v.mode === 'prelaunch', stableOrbit: s.situation === 'flying' && orbit.e < 1 && o.pe > Math.max(b.atmosphere?.height ?? 0, w.universe.terrain(b.id).maxHeight), parts: s.parts.length,
+    flying, rawFlying: s.situation === 'flying', prelaunch: v.mode === 'prelaunch', stableOrbit: flying && orbit.e < 1 && o.pe > Math.max(b.atmosphere?.height ?? 0, w.universe.terrain(b.id).maxHeight), parts: s.parts.length,
     shield: s.parts.some(p => p.def.modules.some(m => m.type === 'heatShield')), plane: s.parts.some(p => p.def.modules.some(m => m.type === 'liftingSurface')),
-    splashed: s.situation === 'splashed', biome: s.situation !== 'flying' ? scienceContext(w, v).biome : undefined,
+    splashed: s.settledSituation === 'splashed', biome: !flying ? scienceContext(w, v).biome : undefined,
     ringPass,
   }, force, false);
   // Preserve the current thrust for adaptive scheduling without integrating it twice.

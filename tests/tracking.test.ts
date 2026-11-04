@@ -5,6 +5,7 @@ import { PART_CATALOG } from '../src/data/parts';
 import { buildOrbiter } from '../src/editor/stockCrafts';
 import { deserializeWorld, serializeWorld } from '../src/game/persistence';
 import { add, v3, length, sub } from '../src/util/vec3';
+import { setSituation } from '../src/sim/vessel';
 
 it('advances an empty tracking world and preserves time through serialization', () => {
   const w = new World(new Universe('standard'), PART_CATALOG, 1000);
@@ -27,7 +28,7 @@ it('packs and propagates unattended orbiters while keeping surface vessels body-
   const r = earth.radius * 4;
   const bs = u.ephem.getBodyState('earth', w.ut);
   vessel.mode = 'physics';
-  vessel.state.situation = 'flying';
+  setSituation(vessel.state, 'flying');
   vessel.state.position = add(bs.position, v3(r, 0, 0));
   vessel.state.velocity = add(bs.velocity, v3(0, Math.sqrt(earth.gm / r), 0));
   vessel.fixed = undefined;

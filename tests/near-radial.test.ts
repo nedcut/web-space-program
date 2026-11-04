@@ -5,7 +5,7 @@ import { DEFAULT_START_UT } from '../src/game/store';
 import { PART_CATALOG } from '../src/data/parts';
 import { buildOrbiter } from '../src/editor/stockCrafts';
 import { flightPredictions } from '../src/game/flightData';
-import { neutralInput } from '../src/sim/vessel';
+import { neutralInput, setSituation } from '../src/sim/vessel';
 import { elementsToState, stateToElements } from '../src/sim/orbit';
 import { warpTargets } from '../src/flight/controller/warp';
 import { distance, length, v3 } from '../src/util/vec3';
@@ -36,7 +36,7 @@ describe('near-radial trajectories', () => {
       const moon = u.body('moon'), m = u.ephem.getBodyState('moon', world.ut), e = u.ephem.getBodyState('earth', world.ut);
       const d = v3(e.position.x - m.position.x, e.position.y - m.position.y, e.position.z - m.position.z);
       const n = length(d), r = moon.soi + 20000, tn = Math.hypot(d.x, d.y);
-      v.mode = 'physics'; v.body = 'earth'; v.fixed = undefined; v.orbit = undefined; v.state.situation = 'flying';
+      v.mode = 'physics'; v.body = 'earth'; v.fixed = undefined; v.orbit = undefined; setSituation(v.state, 'flying');
       for (const k of ['x', 'y', 'z'] as const) {
         const tangent = k === 'x' ? -d.y : k === 'y' ? d.x : 0;
         v.state.position[k] = m.position[k] + d[k] / n * r;

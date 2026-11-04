@@ -978,10 +978,13 @@ export const DEORBIT_PERIAPSIS = -0.04;
  *     point (surface-retrograde constant-throttle burn) sits `stopHeight` above the terrain under it;
  *  4. terminal — pick the nearest spot with a gentle enough slope (divert if needed), then a velocity-tracking
  *     descent: fly over the site, sink at a rate proportional to radar altitude down to `touchdownSpeed`;
- *  5. landed — engine off once the legs carry the vessel and it has settled. Contact that costs parts (or the
- *     vessel) is a crash: `error` says so instead of reporting a landing.
+ *  5. landed — engine off at first contact; done once the vessel has settled (settled situation, sim/vessel/settle.ts)
+ *     and stopped. A bounce that stays off the ground for `BOUNCE_S` goes back to terminal. Contact that costs parts
+ *     (or the vessel) is a crash: `error` says so instead of reporting a landing.
  * `touchdown` reports the surface-relative speed at first ground contact.
  */
+/** Seconds off the ground after touchdown that count as a bounce (the landing autopilot resumes its descent). */
+const BOUNCE_S = 1;
 export function landingController(world: World, opts: LandingOptions = {}): Autopilot & { touchdown: { speed: number; time: number } | null } {
   const minStage = opts.minStage ?? 0;
   const stager = new AutoStager(minStage);
@@ -1071,7 +1074,7 @@ export function landingController(world: World, opts: LandingOptions = {}): Auto
       };
 
       if (phase === 'plan') {
-        if (v.situation !== 'flying') phase = 'terminal';
+        if (v.situation !== 'flying' || v.settledSituation !== 'flying') phase = 'terminal';
         else {
           const plan = planLandingStage(w, wv, minStage);
           if (plan.error) return fail(plan.error, 'cannot land with this craft');
@@ -1171,7 +1174,8 @@ export function landingController(world: World, opts: LandingOptions = {}): Auto
           phase = 'landed';
         } else {
           lastFlyingSpeed = length(f.surfVel);
-          partsAtContact = v.parts.length;
+          // After a bounce, parts lost at the first contact still make it a crash.
+          if (!ap.touchdown) partsAtContact = v.parts.length;
           const u = w.universe;
           const info = u.surfaceInfo(wv.body, v.position, w.ut);
           if (!site) site = findLandingSite(w, wv.body, info.fixedDir, maxSlope, opts.divertRadius ?? 400) ?? info.fixedDir;
@@ -1219,8 +1223,10 @@ export function landingController(world: World, opts: LandingOptions = {}): Auto
         const lost = partsAtContact - v.parts.length;
         const speed = ap.touchdown?.speed ?? lastFlyingSpeed;
         if (lost > 0) return fail(`crashed: hit the ground at ${speed.toFixed(1)} m/s and lost ${lost} part${lost === 1 ? '' : 's'}`, `crashed · ${speed.toFixed(1)} m/s · ${lost} part${lost === 1 ? '' : 's'} lost`);
+        // Bounced clear of the ground: fly the descent again rather than fall with the engine off.
+        if (v.airborneTime >= BOUNCE_S) { phase = 'terminal'; settled = 0; return input(f.up, 0); }
         ap.status = `touchdown · ${speed.toFixed(1)} m/s · settling`;
-        settled = length(f.surfVel) < 0.3 && v.situation !== 'flying' ? settled + dt : 0;
+        settled = length(f.surfVel) < 0.3 && v.settledSituation !== 'flying' ? settled + dt : 0;
         if (settled > 3) {
           if (dot(noseDirection(v), f.up) < 0.5) return fail(`landed at ${speed.toFixed(1)} m/s but tipped over`, 'tipped over');
           phase = 'done';

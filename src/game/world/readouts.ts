@@ -1,5 +1,6 @@
 import { apoapsisRadius, periapsisRadius, stateToElements, timeToApoapsis, timeToPeriapsis } from '../../sim/orbit';
 import type { Orbit, StateVector } from '../../sim/orbit/api';
+import { packsOnOrbit } from '../../sim/vessel/settle';
 import { dot, length, normalize, sub, type Vec3 } from '../../util/vec3';
 import { type WarpContext } from '../timewarp';
 import type { World, WorldVessel } from '../world';
@@ -27,7 +28,8 @@ export function warpContext(this: World): WarpContext {
   return {
     thrusting,
     inAtmosphere: !!b.atmosphere && alt < b.atmosphere.height,
-    landed: wv.state.situation !== 'flying' || wv.mode === 'prelaunch',
+    // Must agree with `pack`, which rails warp runs next.
+    landed: !packsOnOrbit(wv.state) || wv.mode === 'prelaunch',
     altitude: alt,
     bodyRadius: b.radius,
     atmosphereHeight: b.atmosphere?.height ?? 0,
